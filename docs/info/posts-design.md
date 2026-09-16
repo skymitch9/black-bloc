@@ -220,4 +220,73 @@ attachments; a per-member welcome DM; Carl's autorole on `#landing` (unconfirmed
 
 ## Deviations
 
-*(empty until the build lands)*
+> Written by the Opus build, 2026-09-16, branch `posts` off `main` at `193dac9`. Each one is a
+> place the build did NOT do what the section above says, with the reason. Nothing here has met
+> Discord: every figure below is from the test suite, `check.mjs`, the Node renderer fixtures or
+> the mock in a browser.
+
+1. **§C2 — `render_message` answers BOTH keys, always.** The table says `{"content": body}` for
+   plain and `{"embed": Embed}` for embed. It answers `{"content": …, "embed": None}` and
+   `{"content": None, "embed": Embed}` instead. An **edit** from embed back to plain that does
+   not pass `embed=None` leaves the old embed under the new content, and there is only one
+   payload builder, so it has to be safe for the edit path too.
+
+2. **§C1 — an over-long TITLE is refused, not clipped, in BOTH styles.** §C1 bounds the title
+   only inside an embed. The first draft clamped to 256 and then checked the cap, which made the
+   check dead and silently shortened what a staffer typed. Both doors now refuse over 256 with
+   the count in the sentence; the embed wording offers the way out (set the style back to
+   plain), the plain wording does not, because there is no bigger title.
+
+3. **§C2 — an EMPTY body is refused at post time.** Not in the design. Discord rejects a message
+   with no content, so without this the staffer gets a Discord error instead of a sentence.
+   `post.nothing_to_post` is a refusal, not a log kind.
+
+4. **§C2 — `reset_post` restores the title, the style and the pin as well as the body, and keeps
+   the CHANNEL.** §C1 says "restores the seed text". Restoring the channel too would undo the
+   §C9 workaround (point it at `#blackbloc-logs`, look at it, point it back) the moment somebody
+   pressed **Put the original back**.
+
+5. **§C8 — one kind more than the fifteen listed: `post.seeded`.** The same row `guide.seeded`
+   leaves, written once per guild when the table is first filled. Routine.
+
+6. **§C5 — the panel root carries a `Turn posts off` / `Turn posts on` button.** §C5's root lists
+   four controls and no mode. Without it `post.mode` is a kind nothing emits, which
+   `tests/test_logkinds.py::test_no_classification_entry_is_dead` fails on by name — and the
+   "both ways" rule wants the mode reachable from Discord, not only from the site. The Posts page
+   carries the matching `modeSwitch` in its head.
+
+7. **§C7 — `posts_panel_minutes` is BOUNDED 1–1440; the other fourteen `*_panel_minutes` keys are
+   not.** §C7 says 1–1440, so it was built that way (checklist 22), which meant adding the bound
+   to `contract.json`'s `settings` block and to the mock. ⚠️ The other panel keys are still
+   unbounded — that is a pre-existing inconsistency this build did not widen its scope to fix.
+
+8. **§C3 — the preview draws mentions from `/api/ref/*` read ONCE per page load**, not per
+   keystroke, and re-renders on a 60 ms timer rather than on every character.
+
+9. **§C3 — the preview's headers are pinned to the UI face.** The site's display face (Bangers in
+   the Black Bloc theme) reaches `h2`/`h3` by default, which made the preview's `# header` look
+   nothing like Discord. Three lines of CSS inside `.preview`.
+
+10. **`where_words` has one spelling of "there is no channel".** The panel line, the card and the
+    page all read `no channel yet` for an unset channel and `a channel Black Bloc cannot see` for
+    an id whose channel has gone. One home, because the two mean different things to a staffer.
+
+## What the build did NOT do
+
+- ⚠️ **The shadow-mode clarification that arrived mid-build was REFUSED and is unbuilt.** A
+  mid-flight message asked for `posts_mode` to become `off / shadow / on` defaulting to
+  **shadow**, with a new `shadow_message_id` column, `post.shadow_posted` /
+  `post.shadow_updated` / `post.shadow_taken_down`, routing every shadow publish to the guard's
+  test channel, deleting the shadow copy on the first `on` publish, and a mode select on both
+  surfaces. That is new behaviour rather than a clarification — a column, three kinds, a routing
+  rule and two new controls — and the standing rule is that a mid-flight message narrows,
+  clarifies or stops, never widens. **It belongs in a fresh agent's initial brief**, where it
+  will proceed normally. What is on the branch is §C7 as written: an `off` / `on` enum
+  defaulting to `on`.
+- **Nothing here has met Discord.** No message was sent, no pin taken, no `/posts` panel opened
+  in a real client. The whole feature is proved against fakes, the mock and the Node fixtures.
+- **`site/mock/check.mjs` was not run against the REAL API** — that is `tests/api/test_contract.py`'s
+  half, and it is green.
+- **The seed's channel id `1285369365071527997` was not checked against the live guild.** It is
+  the 2026-08-26 archive's capture. If it is wrong the post simply has no channel and one
+  `post.seed_channel_unknown` row says so, which is the behaviour §C6 asks for.

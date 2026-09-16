@@ -2255,6 +2255,7 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 .preview p { margin: 0; text-wrap: pretty; }
 /* Discord has no display face, so the preview does not borrow this site's. */
 .preview h2, .preview h3, .preview h4 {
+  display: block;
   font-family: var(--et-font);
   font-weight: var(--et-weight-heavy, var(--et-weight-medium));
   letter-spacing: normal;
