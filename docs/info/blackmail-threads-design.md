@@ -122,6 +122,33 @@ leaves only the link; the dynamic item resolves after a fresh view registry (res
 channel card carries no moves, checklist 35), the requests guide in `guides_seed.json` (a staff step: *press a move on
 the post*), sweeps rows `RP-a…`.
 
+## G. A post somebody starts by hand in the requests forum becomes a request (owner, 2026-09-17 12:4x)
+
+Owner, verbatim: *"If someone makes a thread in the request area, does that link to a request"* → no → *"Make it so
+we don't create a gap but it'll be hopefully under utilized"*.
+
+**Rule.** When a thread is created in the forum `request_forum_channel_id` points at and it is NOT one the bot made
+(no row carries its id as `thread_id`, and the starter message's author is not the bot), the bot files a request on
+the starter's behalf: `what` = the post's title, `why` = the starter message's text (blank → *"(filed from a forum
+post)"*), filer = the post's author, `source` = a new value `forum` (⚠️ check whether `requests` has a source column;
+if not, add one with a migration — schema 41 → 42 — defaulting `panel` for old rows, and say so). The row takes that
+thread as its `thread_id` (no second post is made), the bot replies IN the post with the filed card + the staff move
+buttons (the same first-message shape `open_forum_post` makes, as a reply since the starter message is not the
+bot's), applies the `open` tag, and DMs the filer the usual filed notice. Everything after that is a normal request.
+Who may file this way follows `request_who_can_file` — a post by somebody it excludes gets one reply in words
+(what happened, what it needs, how to get it: *"file it with `/request`, or ask staff"*) and the post is left alone,
+not deleted. The bot's own posts, and posts with a row, are ignored (idempotent on `on_thread_create` firing twice
+after a restart — check the row by `thread_id` first).
+
+**Key.** `request_forum_adopts_posts` — bool, **default true**, help: *"true turns a post somebody starts by hand in
+the requests forum into a request filed by them; false leaves such posts alone"*. Registry + mock row + label.
+
+**Tests.** A hand-made post → a row with `thread_id` = that thread, the card + buttons replied, the tag, the DM, one
+`request.filed` row with `via = forum`; the bot's own post is ignored; a second `on_thread_create` for the same thread
+is ignored; a filer `request_who_can_file` excludes gets the reply and no row; key off = nothing. Both orders.
+
+**Docs.** `code-notes.md`, this doc's `## Deviations` (`### §G`), the requests guide (a fact line), sweeps `RA-a…`.
+
 ## Deviations
 
 > Written by the build, **2026-09-17**, on branch `blackmail-threads` off `main` `905982b`.
