@@ -518,9 +518,10 @@ def test_the_card_says_who_it_is_when_it_opened_and_how_much_has_been_said():
 
     assert lines[0] == "<@900> — Alice"
     assert lines[1] == "**opened** — 2026-09-05T10:00:00+00:00"
-    assert lines[2] == "**mode** — channel"
-    assert lines[3] == "**messages** — 3 from them · 2 sent · 1 note(s)"
-    assert len(lines) == 4
+    assert lines[2] == "**came in by** — a DM to Black Bloc"
+    assert lines[3] == "**mode** — channel"
+    assert lines[4] == "**messages** — 3 from them · 2 sent · 1 note(s)"
+    assert len(lines) == 5
 
 
 def test_a_blocked_member_is_said_on_the_card_and_a_practice_ticket_says_it_is_fake():

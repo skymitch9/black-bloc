@@ -1163,7 +1163,8 @@ async def test_the_panel_lists_the_open_tickets_and_the_resolved_staff(cog, bot,
     assert said["embed"].title == modmail_cog.PANEL_TITLE
     assert f"**#{ticket['id']}**" in said["embed"].description
     assert "Lead" in said["embed"].description
-    assert labels(said["view"])[:3] == ["Setup…", "Blocked…", "Snippets…"]
+    assert labels(said["view"])[:2] == ["Open a ticket", "Open a ticket with…"]
+    assert labels(said["view"])[2:5] == ["Setup…", "Blocked…", "Snippets…"]
     assert {"Logs", "Refresh"} <= set(labels(said["view"]))
     assert "/modmail status" not in said["embed"].description
 
@@ -1368,7 +1369,21 @@ async def test_a_panel_that_goes_quiet_disables_every_button_and_writes_the_foot
     assert interaction.edits[-1]["embeds"][0].footer.text == modmail_cog.PANEL_TIMEOUT_FOOTER
 
 
-async def test_a_non_staff_caller_gets_the_sentence_and_no_panel_at_all(cog, bot, member):
+async def test_a_member_sees_the_open_a_ticket_row_and_nothing_else(cog, bot, member):
+    interaction = await open_panel(cog, bot, member)
+
+    said = interaction.response.messages[0]
+    assert said["ephemeral"] is True
+    assert said["embed"].title == modmail_cog.MEMBER_TITLE
+    assert labels(said["view"]) == ["Open a ticket"]
+    assert placeholders(said["view"]) == []
+
+
+async def test_the_member_half_turned_off_is_the_old_refusal_and_no_panel_at_all(
+    cog, bot, member
+):
+    await bot.store.set(GUILD, "modmail_member_command", False)
+
     interaction = await open_panel(cog, bot, member)
 
     assert interaction.view is None
@@ -1962,7 +1977,7 @@ async def test_a_ticket_select_is_drawn_only_once_something_is_open(cog, bot, me
     listed = await open_panel(cog, bot, lead)
 
     picker = control(listed.view, modmail_cog.PICK_A_TICKET)
-    assert picker.row == 0
+    assert picker.row == modmail_cog.ROOT_ROW_SELECT
     assert [one.value for one in picker.options] == [str(ticket["id"])]
     assert picker.options[0].label == f"#{ticket['id']} · channel · Alice"
 

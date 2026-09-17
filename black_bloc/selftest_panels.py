@@ -83,7 +83,7 @@ async def built(one: Run, door: PanelDoor) -> tuple[Any, Any]:
         cog = one.bot.get_cog("Modmail")
         if cog is None:
             raise CheckFailed(NO_COG.format(name="Modmail"))
-        found = builder(one.bot, one.guild, cog)
+        found = builder(one.bot, one.guild, cog, actor=actor, staff=True)
     else:
         found = builder(one.bot, one.guild, actor)
     if hasattr(found, "__await__"):

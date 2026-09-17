@@ -101,8 +101,11 @@ def ticket_channel_name(user_name: Any, ticket_id: Any) -> str:
     return slug or f"ticket-{ticket_id}"
 
 
-def ticket_topic(user_id: Any, ticket_id: Any) -> str:
-    return TOPIC_TEMPLATE.format(user_id=int(user_id), ticket_id=int(ticket_id))
+def ticket_topic(user_id: Any, ticket_id: Any, subject: Any = None) -> str:
+    """What the member called it goes first; `parse_topic` still finds the ids behind it."""
+    line = TOPIC_TEMPLATE.format(user_id=int(user_id), ticket_id=int(ticket_id))
+    said = clamp(str(subject or "").strip(), NAME_LIMIT)
+    return f"{said} — {line}" if said else line
 
 
 def parse_topic(topic: Any) -> tuple[int, int] | None:
@@ -465,7 +468,11 @@ PANEL_TEXT_KEY = "modmail_panel_text"
 
 MEMBER_TITLE = "Modmail"
 MEMBER_INTRO = "Modmail is how you reach staff privately. Nobody else sees what you write."
-MEMBER_TICKET_OPEN = "Your ticket is open: <#{where}>. Staff answer there, and by DM."
+MEMBER_TICKET_OPEN = (
+    "**Your ticket is open.** Staff can see it, and their replies come back as a DM from Black "
+    "Bloc. Anything you DM Black Bloc is added to the same ticket."
+)
+MEMBER_TICKET_SEEN = "**Your ticket is open:** <#{where}>. Staff answer there, and by DM."
 TICKET_BUTTON_TITLE = "The Open a ticket button"
 PICK_A_MEMBER = "Who to open a ticket with…"
 
