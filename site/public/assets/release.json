@@ -1,10 +1,8 @@
 {
-  "release": "v117",
-  "commit": "65f0931",
+  "release": "v118",
+  "commit": "1894bdc",
   "changed_features": [
-    "golive",
     "guides",
-    "modmail",
-    "tempvoice"
+    "poll"
   ]
 }
