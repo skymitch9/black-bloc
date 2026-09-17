@@ -198,7 +198,7 @@ roles. The onboarding limits go into `## Deviations` as measured numbers. Sweep 
 - **F-PR1 — the Streamer prompt in onboarding. ✅ DECIDED 2026-09-16 22:50, owner verbatim "A".** (a) Yes, capped at Discord's limit, most-followed
   first — recommended: it is the "turn our roles into Discord's prompts" the owner asked for. (b) Only
   the three shared opt-ins in onboarding; streamers stay on `/pings`.
-- **F-PR2 — who lands on the streamer list.** (a) Anyone Discord shows streaming — recommended
+- **F-PR2 — who lands on the streamer list. ✅ DECIDED 2026-09-16 22:51, owner verbatim "A".** (a) Anyone Discord shows streaming — recommended
   (that is the listener as asked). (b) Only linked members.
 - **F-PR3 — role lifetime.** (a) Made on first follow, pruned when unworn 30 days — recommended.
   (b) Made for every listed streamer, never pruned (simple, but the guild role cap is 250).
