@@ -1487,9 +1487,15 @@ not deployed, and nothing in it has met Discord**). What changed underneath ever
 `poll_mode` is now **off / shadow / on**, a poll is **pinned while it is open**, and the `/poll`
 preview's **Where** dropdown opens on `poll_channel_id` rather than on whatever channel the command
 was run in. Schema **39 → 40** (`polls.shadow_message_id`) — ⚠️ **migrate before deploy**; registry
-**225 → 227** (`poll_pin`, `poll_shadow_note`); tests **5998 → 6047**; mock *19 pages, 175 routes,
+**227 → 229** (`poll_pin`, `poll_shadow_note`) measured on the BRANCH; tests **5998 → 6047**;
+mock *19 pages, 175 routes,
 14 core settings, all keys present* (unchanged — the two new keys are unbounded, so `contract.json`
 does not name them).
+
+⚠️ **`main` moved under this branch while it built.** It was cut from `905982b`; `main` is now
+`8b161af` (**v117**, the `golive-end` merge) with **230** keys and schema **39**. The merge will
+therefore land at **232** keys and schema **40** — re-measure at the landing rather than quoting
+the branch figures above.
 
 🔴 **`poll_mode` and `poll_channel_id` are the conductor's to set after the deploy**, not this
 build's: nothing here flipped the mode to `shadow` and nothing pointed `poll_channel_id` at

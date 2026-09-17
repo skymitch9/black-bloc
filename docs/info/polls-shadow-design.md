@@ -86,6 +86,9 @@ shadow); `docs/access/sweeps.md` rows `PS2-a…`; `docs/info/architecture.md` sc
 > every `site/public/assets/*.js` parses as an ES module, `node site/mock/check.mjs` **ok — 19 pages,
 > 175 routes, 14 core settings, all keys present**, `node site/mock/discordmd.test.mjs` ok.
 > ⚠️ **Nothing here has met Discord**: no poll has been posted, no pin taken, no dropdown opened.
+> ⚠️ **`main` moved while this built:** the branch is off `905982b` (227 registry keys, schema 39) and
+> ends at **229 keys / schema 40**; `main` is now `8b161af` (**v117**, the `golive-end` merge) at **230
+> keys / schema 39**, so the merge lands at **232 / 40**. Re-measure at the landing.
 
 1. ⚠️ **The §B fork: the rehearsal's id goes in BOTH `message_id` and `shadow_message_id`.** §B
    offered two readings and asked which was taken. Taken: `message_id` carries the copy's id (so
