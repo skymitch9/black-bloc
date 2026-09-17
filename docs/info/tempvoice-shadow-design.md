@@ -1,8 +1,6 @@
 # Temp voice — a shadow mode: the lobby hidden from members until it is switched on, then un-hidden and synced by the bot
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `tempvoice-shadow`
-> (off `main` `c56962f`), NOT merged and NOT deployed** — the `## Deviations` foot is the truth where the build
-> departed from §A–§F, and it is what a reviewer reads first. Planned as v125, beside `front-door`.
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v124** — merge `211b378`, release `9733d69`, deployed **2026-09-17 14:11** Phoenix; `tempvoice_mode` = shadow since 14:11; the `## Deviations` foot is the truth where it departs from §A–§F; sweeps **516–523** are the owner's (519 is the flip). Was: 🔨 BUILT, planned as v125.
 > **Last verified: 2026-09-17 14:0x** by the build: `TEMPVOICE_MODES` is now `("off", "shadow", "on")`,
 > `makes_rooms` is the one mode predicate, `apply_mode` / `hide_lobby` / `show_lobby` /
 > `install_mode_hook` are in `cogs/community/tempvoice.py`, the mock row and `labels.js` carry the third

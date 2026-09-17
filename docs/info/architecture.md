@@ -76,7 +76,7 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
-> | What | v123 (`main`, 2026-09-17) | Where it is measured |
+> | What | v124 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
 > | Cogs | **20** (v113: `cogs/community/posts.py`) | `bot.py:COGS` |
 > | Top-level slash commands | **30** — 15 staff-locked, 15 member-visible (`/modmail` became member-visible at v114) | `tree.get_commands()` |
@@ -86,8 +86,8 @@
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **19 pages / 178 routes / 15 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **6223** | the v123 deploy gate |
-> | Deploys | **120**, last `2f1c609` (v123) at 2026-09-17 13:15 | `../deploys.log` |
+> | Tests | **6166** | the v124 deploy gate (a parametrize dimension went at v124) |
+> | Deploys | **121**, last `9733d69` (v124) at 2026-09-17 14:11 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -107,6 +107,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v124 `9733d69`, 2026-09-17** | **20** | **30** | **42** | **178** | **6166** |
 > | **v123 `2f1c609`, 2026-09-17** | **20** | **30** | **42** | **178** | **6223** |
 > | **v122 `672c608`, 2026-09-17** | **20** | **30** | **41** | **178** | **6196** |
 > | **v121 `9f003d5`, 2026-09-17** | **20** | **30** | **41** | **178** | **6175** |
