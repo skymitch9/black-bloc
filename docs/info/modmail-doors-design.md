@@ -72,8 +72,16 @@ re-posts.~~ SINCE v117** (2026-09-17, branch `blackmail-threads`) it ALSO re-pos
 named by `modmail_panel_follows_post` (**`welcome`** by default) lands under the button in the same
 channel, so the button keeps sitting directly beneath the rules — a second reason, its own log kind
 `modmail.panel_below_post`, and `none` to switch it off. The owner asked for it: *"I want it posted
-right after the rules"*; the design is `blackmail-threads-design.md` §C. Under `TEST_MODE` the guard
-refuses any channel but the test channel in words (`modmail.would_post_panel`). Pressing the button runs `TicketModal` with
+right after the rules"*; the design is `blackmail-threads-design.md` §C. ~~Under `TEST_MODE` the guard
+refuses any channel but the test channel in words (`modmail.would_post_panel`).~~
+**Reversed 2026-09-17 by the rehearsal home (v129, `info/rehearsal-home-design.md`):** the guard still
+refuses the real channel, but the REAL Open-a-ticket message is now posted into the rehearsal home
+(`shadow_channel_id`, blank = the guard's own channel) with one `rehearsal_note` line above it, kept
+current by the same five-minute sweep and remembered in `modmail_panel_shadow_message_id` /
+`modmail_panel_shadow_hash`; `modmail.panel_posted_shadow` / `panel_updated_shadow` /
+`panel_taken_down_shadow` are its rows. `modmail.would_post_panel` is left for the one case that has
+nowhere to rehearse at all. The reason for the flip is the owner's 2026-09-17 ask: the mods have to be
+able to REVIEW the button before the cutover, and a would-row cannot be reviewed. Pressing the button runs `TicketModal` with
 `source = panel`. The bot's reply is ephemeral, so nobody else in the channel learns who pressed.
 
 ### C4. Staff: Open a ticket with…

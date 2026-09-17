@@ -1810,6 +1810,22 @@ https://blackbloc.heygabi.ai/modmail.html · https://blackbloc.heygabi.ai/settin
 | **552** (was `ST-j`) | Repeat `ST-g` and press **No, keep it private** as the member | Nothing is filed, the ticket says *@them said no*, and staff can ask again — the two moves are drawn on the card as before |
 | **553** (was `ST-k`) | Press **Open a ticket with them…** on a request's post | A ticket opens with the requester, quoting the request as the first staff message. The request is left exactly where it was — this one is a conversation, not a move. ⚠️ It works even with `modmail_open_with_button` off, which is deliberate |
 
+## The rehearsal home (v129, branch `rehearsal-home`) — run these AFTER `shadow_channel_id` is set to `#welcome-test`
+
+| Row | Do | Expect |
+|---|---|---|
+| **RH-a** | Settings page ▸ **core** ▸ **Where rehearsals go while a feature is in shadow** → `#welcome-test`, save | The key saves. Within five minutes `#welcome-test` gains the front door's card and (unless the door replaces it) the **Open a ticket** message, each with one line above it reading *Rehearsal — this is where it would go: #welcome* |
+| **RH-b** | Read the front door's card in `#welcome-test` | It is the REAL card: the heading, the line and all three buttons with their configured labels. `#welcome` still has nothing from Black Bloc |
+| **RH-c** | Press **Ask staff privately** on that card | The ticket form opens, privately, and submitting it really opens a ticket. Same for **Request something**; **Propose an event** opens a small private card with the real **Propose an event** button on it |
+| **RH-d** | Posts page ▸ **welcome** ▸ **Post it** | The rules message lands in `#welcome-test`. Within five minutes the front door is re-posted UNDER it (log row `frontdoor.below_post`), so the order matches what `#welcome` will show. ⚠️ The copy that was in `#blackbloc-logs` is left there — delete it by hand |
+| **RH-e** | Settings ▸ **modmail** ▸ change the front door's heading, save, wait five minutes | The card in `#welcome-test` is EDITED in place — same message, new heading, one `frontdoor.updated_shadow` row. No second card |
+| **RH-f** | Delete the front door's card in `#welcome-test` by hand, wait five minutes | It comes back (`frontdoor.gone`, then `frontdoor.posted_shadow`) |
+| **RH-g** | Set `shadow_channel_id` to another channel staff can see, wait five minutes | The front door's and the ticket button's copies MOVE to it; the old ones are deleted. (The welcome post's copy does NOT move — press **Post it** again for that) |
+| **RH-h** | Put `shadow_channel_id` back to `#welcome-test`, then Settings ▸ **modmail** ▸ turn `frontdoor_mode` off, wait five minutes | The card goes, and so does the copy (`frontdoor.taken_down_shadow`). Turn it back on and it returns |
+| **RH-i** | With `frontdoor_replaces_ticket_button` on, watch `#welcome-test` for ten minutes | There is exactly ONE door there — the front door — and the **Open a ticket** message stays down. It must never flicker in and out |
+| **RH-j** | Try `/ask` in `#welcome-test` | It is refused in words: the rehearsal home lets Black Bloc SPEAK there, not take commands there. Run it in `#blackbloc-logs` instead |
+| **RH-k** | Clear `shadow_channel_id`, wait five minutes | Everything rehearses in `#blackbloc-logs` again, and Black Bloc is refused in `#welcome-test` from that moment |
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is

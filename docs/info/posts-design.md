@@ -155,7 +155,7 @@ a staff edit. **Never posted by the seed** — posting is a person's press.
 
 | Key | Type | Default | Help |
 |---|---|---|---|
-| `posts_mode` | enum off/shadow/on | **shadow** | ~~enum on/off, default on~~ **changed 2026-09-16 15:4x, owner: "lets have all the test work go to blackbloc-logs until we're ready to go live, another shadow mode"** — `shadow` sends and edits the message in the shadow channel (the guard's test channel while `TEST_MODE`, else `log_channel_id`) whatever the post's own channel says, tracked in `shadow_message_id`; `on` posts to the post's channel and removes the shadow copy on the first real post; `off` refuses and hides `/posts` |
+| `posts_mode` | enum off/shadow/on | **shadow** | ~~enum on/off, default on~~ **changed 2026-09-16 15:4x, owner: "lets have all the test work go to blackbloc-logs until we're ready to go live, another shadow mode"** — `shadow` sends and edits the message in the shadow channel (~~the guard's test channel while `TEST_MODE`, else `log_channel_id`~~ **changed 2026-09-17, v129: `shadow_channel_id` FIRST when it is set, then the guard's test channel, then `log_channel_id` — `black_bloc/shadow.py` is the one home and posts follows it for free; `info/rehearsal-home-design.md`**) whatever the post's own channel says, tracked in `shadow_message_id`; `on` posts to the post's channel and removes the shadow copy on the first real post; `off` refuses and hides `/posts` |
 | `posts_panel_minutes` | int 1–1440 | **10** | how long the `/posts` panel stays live |
 | `posts_log_level` | the log-level family | family default | generated |
 
@@ -326,6 +326,13 @@ attachments; a per-member welcome DM; Carl's autorole on `#landing` (unconfirmed
    one canonical implementation, which is what the checklist asks for everywhere else.
 
 3. **⚠️ A shadow copy is hunted through SEVERAL channels, not the one resolution picks.**
+   ⚠️ **v129 note:** the hunt is now `shadow.find_copy` and `shadow_channel_id` is the first
+   channel in it, so a copy left in `#blackbloc-logs` when the key moves is still found, edited
+   and deleted. ⚠️ **It is NOT moved:** the next **Post it** posts a fresh copy in the new home,
+   writes one `post.shadow_message_gone` row about the old one (which is not gone, only
+   elsewhere) and leaves it where it was. The front door's and the ticket button's copies DO
+   move themselves, because they reconcile on a sweep and a post does not. Deleting the
+   stranded copy is a hand step — sweeps row **RH-d**.
    `shadow_channel_id` (singular) is where a rehearsal GOES; `shadow_channel_ids` (plural) is
    where one already IS — the guard's channel, `settings.test_channel_id`, and
    `log_channel_id`. Not in the brief, and it is the only place the build went wider than asked.
