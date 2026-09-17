@@ -195,7 +195,7 @@ roles. The onboarding limits go into `## Deviations` as measured numbers. Sweep 
 
 ## G. Forks — one at a time to the owner, recommendation first
 
-- **F-PR1 — the Streamer prompt in onboarding.** (a) Yes, capped at Discord's limit, most-followed
+- **F-PR1 — the Streamer prompt in onboarding. ✅ DECIDED 2026-09-16 22:50, owner verbatim "A".** (a) Yes, capped at Discord's limit, most-followed
   first — recommended: it is the "turn our roles into Discord's prompts" the owner asked for. (b) Only
   the three shared opt-ins in onboarding; streamers stay on `/pings`.
 - **F-PR2 — who lands on the streamer list.** (a) Anyone Discord shows streaming — recommended
