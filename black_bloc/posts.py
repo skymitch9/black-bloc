@@ -10,10 +10,10 @@ from typing import Any
 
 import discord
 
+from . import shadow as shadow_home
 from .actionlog import log_action
 from .logkinds import FEATURE_PAGES, VIA_BOOT, VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
-from . import shadow
 
 log = logging.getLogger(__name__)
 
@@ -736,12 +736,12 @@ def as_channel_id(value: Any) -> int | None:
 
 def shadow_channel_id(bot: Any, guild: Any) -> int | None:
     """Where a rehearsal GOES — one home, `black_bloc/shadow.py`."""
-    return shadow.channel_id(bot, guild, log_key=LOG_CHANNEL_KEY)
+    return shadow_home.channel_id(bot, guild, log_key=LOG_CHANNEL_KEY)
 
 
 def shadow_channel_ids(bot: Any, guild: Any) -> list[int]:
     """Where a rehearsal already IS — one home, `black_bloc/shadow.py`."""
-    return shadow.channel_ids(bot, guild, log_key=LOG_CHANNEL_KEY)
+    return shadow_home.channel_ids(bot, guild, log_key=LOG_CHANNEL_KEY)
 
 
 def shadow_words(bot: Any, guild: Any, row: Any) -> str:
