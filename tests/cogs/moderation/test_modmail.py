@@ -2552,7 +2552,7 @@ async def test_the_ticket_button_is_posted_moved_and_taken_down(cog, bot, lead, 
     posted = await post_the_button(cog, bot, lead)
 
     assert bot.store.get(GUILD, "modmail_panel_channel_id") == TEST_CHANNEL
-    message_id = bot.store.get(GUILD, "modmail_panel_message_id")
+    message_id = int(bot.store.get(GUILD, "modmail_panel_message_id"))
     button = next(one for one in test_channel.messages if one.id == message_id)
     assert button.kwargs["embed"].title == "Need a moderator?"
     assert [one.item.label for one in button.kwargs["view"].children] == ["Open a ticket"]
@@ -2590,13 +2590,13 @@ async def test_the_guard_refuses_any_channel_but_the_test_one_in_words(cog, bot,
 async def test_the_reconciler_puts_back_a_button_deleted_by_hand(cog, bot, lead, db):
     bot.guard = FakeGuard()
     await post_the_button(cog, bot, lead)
-    first = bot.store.get(GUILD, "modmail_panel_message_id")
+    first = int(bot.store.get(GUILD, "modmail_panel_message_id"))
     channel = bot.guild.channels[TEST_CHANNEL]
     channel.messages = [one for one in channel.messages if one.id != first]
 
     await cog.reconcile_tickets()
 
-    second = bot.store.get(GUILD, "modmail_panel_message_id")
+    second = int(bot.store.get(GUILD, "modmail_panel_message_id"))
     assert second and second != first
     kinds = await action_kinds(db)
     assert kinds.count("modmail.panel_gone") == 1

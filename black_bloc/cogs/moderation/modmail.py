@@ -1989,7 +1989,7 @@ async def post_ticket_panel(
         return refusal(PANEL_STUCK, "panel_stuck", 500)
     by = getattr(actor, "id", actor)
     await store.set(guild.id, PANEL_CHANNEL_KEY, channel.id, by=by)
-    await store.set(guild.id, PANEL_MESSAGE_KEY, message.id, by=by)
+    await store.set(guild.id, PANEL_MESSAGE_KEY, str(message.id), by=by)
     moved = (old_id is not None) if moving is None else moving
     if moved and old_channel is not None and old_id:
         await drop_panel_message(bot, guild, old_channel, old_id)

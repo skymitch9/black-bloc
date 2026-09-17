@@ -1464,7 +1464,7 @@ KEY_TYPES.update(
     {
         MODMAIL_MEMBER_COMMAND: "bool",
         MODMAIL_PANEL_CHANNEL: "channel",
-        MODMAIL_PANEL_MESSAGE: "int",
+        MODMAIL_PANEL_MESSAGE: "text",
         MODMAIL_PANEL_TITLE: "text",
         MODMAIL_PANEL_TEXT: "text",
     }
@@ -1481,8 +1481,9 @@ KEY_HELP.update(
         ),
         MODMAIL_PANEL_MESSAGE: (
             "the Open a ticket message Black Bloc posted, so it can be moved, taken down and "
-            "put back after somebody deletes it. Written by the bot; there is no reason to set "
-            "it by hand"
+            "put back after somebody deletes it. Written by the bot as TEXT, because a "
+            "snowflake does not survive a JavaScript number; there is no reason to set it by "
+            "hand"
         ),
         MODMAIL_PANEL_TITLE: "the heading on the posted Open a ticket message",
         MODMAIL_PANEL_TEXT: "what the posted Open a ticket message says under its heading",
