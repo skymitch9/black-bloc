@@ -51,12 +51,16 @@ class FakeMessage:
 
 
 class FakeChannel:
-    def __init__(self, channel_id, name):
+    """Message ids never repeat across channels, the way a snowflake does not: a shadow copy
+    is hunted BY ID through the channels it could be in, and a collision would find the
+    wrong message."""
+
+    def __init__(self, channel_id, name, first_id=9000):
         self.id = channel_id
         self.name = name
         self.sent = []
         self.messages = {}
-        self.next_id = 9000
+        self.next_id = first_id
         self.send_raises = None
         self.fetch_raises = None
 
@@ -103,8 +107,9 @@ class FakeGuild:
 
 
 class FakeGuard:
-    def __init__(self, allowed=TEST_CHANNEL):
+    def __init__(self, allowed=TEST_CHANNEL, test_channel_id=TEST_CHANNEL):
         self.allowed = allowed
+        self.test_channel_id = test_channel_id
 
     def allows_channel(self, channel_id):
         return int(channel_id or 0) == self.allowed
@@ -121,10 +126,10 @@ class FakeBot:
         self.guard = None
         self.channels = {
             TEST_CHANNEL: FakeChannel(TEST_CHANNEL, "blackbloc-logs"),
-            WELCOME_CHANNEL: FakeChannel(WELCOME_CHANNEL, "welcome"),
+            WELCOME_CHANNEL: FakeChannel(WELCOME_CHANNEL, "welcome", first_id=8000),
             # The log channel is its own, so a `post.posted` EMBED never lands in the count
             # of what the post itself sent.
-            LOG_CHANNEL: FakeChannel(LOG_CHANNEL, "bot-log"),
+            LOG_CHANNEL: FakeChannel(LOG_CHANNEL, "bot-log", first_id=7000),
         }
         self.guilds = [FakeGuild(self)]
 
@@ -678,3 +683,289 @@ async def test_a_website_write_carries_via_and_the_web_head(bot, guild):
     rows = await logged(bot.db)
     assert [one["kind"] for one in rows] == ["web.post.saved"]
     assert json.loads(rows[0]["details"])["via"] == VIA_WEBSITE
+
+
+# --- shadow (§C7, §C9) ------------------------------------------------------------------------
+
+
+async def shadow_post(bot, guild, **fields):
+    """A post aimed at #welcome, in shadow, which is the shape the cutover actually has."""
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.SHADOW)
+    bot.guard = FakeGuard()
+    return await a_post(bot, guild, channel_id=WELCOME_CHANNEL, **fields)
+
+
+async def test_shadow_sends_to_the_shadow_channel_and_never_to_the_rows_own(bot, guild):
+    """The owner's whole ask: the test work goes to #blackbloc-logs until we are ready."""
+    row = await shadow_post(bot, guild)
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert found.ok
+    assert bot.channels[WELCOME_CHANNEL].sent == []
+    assert len(bot.channels[TEST_CHANNEL].sent) == 1
+    assert "#blackbloc-logs" in found.message and "shadow copy" in found.message
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["message_id"] is None
+    assert fresh["shadow_message_id"] == 9001
+    assert posts.posted_where(fresh) == posts.SHADOW
+    assert posts.status_words(fresh)[0] == posts.STATUS_POSTED_SHADOW
+    assert posts.changes_pending(fresh) is False
+    assert await kinds(bot.db) == ["post.shadow_posted", "post.pinned"]
+
+
+async def test_a_second_shadow_press_edits_the_copy_and_never_sends_again(bot, guild):
+    row = await shadow_post(bot, guild)
+    await posts.publish_post(bot, guild, row, STAFF)
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+    await posts.save_post(bot, guild, row, STAFF, body="Changed.")
+    changed = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert posts.changes_pending(changed) is True
+
+    found = await posts.publish_post(bot, guild, changed, STAFF)
+
+    assert found.ok and "is updated in #blackbloc-logs" in found.message
+    assert len(bot.channels[TEST_CHANNEL].sent) == 1, "shadow keeps ONE copy, edited in place"
+    assert bot.channels[TEST_CHANNEL].messages[9001].edits[-1]["content"] == "Changed."
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["shadow_message_id"] == 9001 and posts.changes_pending(fresh) is False
+    assert await kinds(bot.db) == [
+        "post.shadow_posted",
+        "post.pinned",
+        "post.saved",
+        "post.shadow_updated",
+    ]
+
+
+async def test_the_flip_to_on_posts_for_real_and_takes_the_shadow_copy_down(bot, guild):
+    """The go-live. §C9: the next Post it reaches #welcome and the rehearsal is removed."""
+    row = await shadow_post(bot, guild)
+    await posts.publish_post(bot, guild, row, STAFF)
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.ON)
+    bot.guard = None
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert found.ok and "#welcome" in found.message
+    assert len(bot.channels[WELCOME_CHANNEL].sent) == 1
+    assert bot.channels[TEST_CHANNEL].messages == {}, "the rehearsal is gone"
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["message_id"] and fresh["shadow_message_id"] is None
+    assert posts.posted_where(fresh) == posts.CHANNEL
+    assert "post.shadow_taken_down" in await kinds(bot.db)
+
+
+async def test_a_shadow_copy_that_will_not_delete_never_takes_the_real_post_with_it(bot, guild):
+    """Checklist 12: the real message is up and written down before the cosmetics are tried."""
+    row = await shadow_post(bot, guild)
+    await posts.publish_post(bot, guild, row, STAFF)
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.ON)
+    bot.guard = None
+    bot.channels[TEST_CHANNEL].messages[9001].delete = _refuses
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert found.ok
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["message_id"], "the real post stands"
+    assert fresh["shadow_message_id"] == 9001, "the id is kept, so the next press tries again"
+    said = await kinds(bot.db)
+    assert "post.post_failed" in said and "post.shadow_taken_down" not in said
+
+
+async def _refuses():
+    raise Refused("Missing Permissions")
+
+
+async def test_a_shadow_copy_somebody_deleted_is_written_down_and_sent_again(bot, guild):
+    row = await shadow_post(bot, guild, pin=False)
+    await posts.publish_post(bot, guild, row, STAFF)
+    bot.channels[TEST_CHANNEL].messages.clear()
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert found.ok
+    assert await kinds(bot.db) == [
+        "post.shadow_posted",
+        "post.shadow_message_gone",
+        "post.shadow_posted",
+    ]
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["shadow_message_id"] == 9002
+
+
+async def test_posts_off_refuses_the_publish_in_words_and_sends_nothing(bot, guild):
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.OFF)
+    bot.guard = FakeGuard()
+    row = await a_post(bot, guild)
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert not found.ok and found.code == "posts_off" and found.status == 409
+    assert "Settings page" in found.message
+    assert bot.channels[TEST_CHANNEL].sent == []
+    assert await kinds(bot.db) == []
+
+
+async def test_taking_it_down_removes_both_copies_and_clears_both_ids(bot, guild):
+    row = await shadow_post(bot, guild)
+    await posts.publish_post(bot, guild, row, STAFF)
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.ON)
+    bot.guard = None
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+    # Put a shadow copy back beside the real one, which is what a mode flip back and forth
+    # leaves behind.
+    await posts.publish_post(bot, guild, row, STAFF)
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.SHADOW)
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+    await posts.publish_post(bot, guild, row, STAFF)
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert row["message_id"] and row["shadow_message_id"]
+
+    found = await posts.take_down_post(bot, guild, row, STAFF)
+
+    assert found.ok
+    assert bot.channels[WELCOME_CHANNEL].messages == {}
+    assert bot.channels[TEST_CHANNEL].messages == {}
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["message_id"] is None and fresh["shadow_message_id"] is None
+    assert fresh["posted_hash"] is None and fresh["body"] == "Hello."
+    assert posts.status_words(fresh) == [posts.STATUS_NOT_POSTED]
+
+
+async def test_taking_down_a_shadow_only_post_clears_it(bot, guild):
+    row = await shadow_post(bot, guild)
+    await posts.publish_post(bot, guild, row, STAFF)
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+
+    found = await posts.take_down_post(bot, guild, row, STAFF)
+
+    assert found.ok
+    assert bot.channels[TEST_CHANNEL].messages == {}
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["shadow_message_id"] is None and fresh["posted_hash"] is None
+    said = await details_of(bot.db, "post.taken_down")
+    assert said["shadow_message_id"] == 9001 and said["message_id"] is None
+
+
+async def test_with_no_guard_the_shadow_copy_goes_to_the_log_channel(bot, guild):
+    """Off the test bench there is no guard, so the shadow channel is log_channel_id."""
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.SHADOW)
+    bot.guard = None
+    bot.settings.test_channel_id = None
+    row = await a_post(bot, guild, channel_id=WELCOME_CHANNEL)
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert found.ok and "#bot-log" in found.message
+    # The log channel also carries the action-log embed, so it is the POST that is counted.
+    assert [one for one in bot.channels[LOG_CHANNEL].sent if one.get("content")] == [
+        {
+            "content": "Hello.",
+            "embed": None,
+            "allowed_mentions": bot.channels[LOG_CHANNEL].sent[0]["allowed_mentions"],
+        }
+    ]
+    assert bot.channels[WELCOME_CHANNEL].sent == []
+
+
+async def test_shadow_with_nowhere_to_put_the_copy_refuses_in_words(bot, guild):
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.SHADOW)
+    await bot.store.clear(GUILD, "log_channel_id")
+    bot.guard = None
+    bot.settings.test_channel_id = None
+    row = await a_post(bot, guild, channel_id=WELCOME_CHANNEL)
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert not found.ok and found.code == "no_shadow_channel"
+    assert "log_channel_id" in found.message
+    assert await kinds(bot.db) == []
+
+
+async def test_a_post_with_no_channel_of_its_own_can_still_be_rehearsed(bot, guild):
+    """Shadow never touches the row's channel, so refusing for want of one would be a
+    refusal about something shadow does not do."""
+    await bot.store.set(GUILD, posts.MODE_KEY, posts.SHADOW)
+    bot.guard = FakeGuard()
+    row = await a_post(bot, guild, channel_id=None)
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert found.ok and len(bot.channels[TEST_CHANNEL].sent) == 1
+    assert posts.shadow_words(bot, guild, row) == posts.SHADOW_LINE_NOWHERE.format(
+        shadow="#blackbloc-logs"
+    )
+
+
+async def test_the_shadow_line_names_the_shadow_channel_and_the_posts_own(bot, guild):
+    bot.guard = FakeGuard()
+    row = await a_post(bot, guild, channel_id=WELCOME_CHANNEL)
+
+    assert posts.shadow_words(bot, guild, row) == (
+        "shadow — this goes to #blackbloc-logs, not #welcome, until posts are on."
+    )
+
+
+async def test_a_post_already_aimed_at_the_shadow_channel_is_not_told_not_to_go_there(bot, guild):
+    """§C9's OLD workaround was to point a post at #blackbloc-logs to see it, so this is a
+    row staff really have; `not #blackbloc-logs` about #blackbloc-logs is nonsense."""
+    bot.guard = FakeGuard()
+    row = await a_post(bot, guild, channel_id=TEST_CHANNEL)
+
+    assert posts.shadow_words(bot, guild, row) == (
+        "shadow — this goes to #blackbloc-logs, which is where it was going anyway."
+    )
+
+
+async def test_the_sweep_forgets_a_shadow_copy_somebody_deleted_by_hand(bot, guild):
+    row = await shadow_post(bot, guild, pin=False)
+    await posts.publish_post(bot, guild, row, STAFF)
+    bot.channels[TEST_CHANNEL].messages.clear()
+
+    done = await posts.reconcile_posts(bot)
+
+    assert done["gone"] == 1
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert fresh["shadow_message_id"] is None and fresh["posted_hash"] is None
+    assert "post.shadow_message_gone" in await kinds(bot.db)
+
+
+async def test_the_sweep_re_pins_a_shadow_copy_somebody_unpinned(bot, guild):
+    row = await shadow_post(bot, guild)
+    await posts.publish_post(bot, guild, row, STAFF)
+    bot.channels[TEST_CHANNEL].messages[9001].pinned = False
+
+    done = await posts.reconcile_posts(bot)
+
+    assert done["pinned"] == 1
+    assert bot.channels[TEST_CHANNEL].messages[9001].pinned is True
+
+
+async def test_the_mode_key_answers_three_values_and_an_unknown_one_reads_as_shadow(bot, guild):
+    assert posts.MODES == ("off", "shadow", "on")
+    for value in posts.MODES:
+        await bot.store.set(GUILD, posts.MODE_KEY, value)
+        assert posts.mode_of(bot.store, GUILD) == value
+    assert posts.posts_are_off(bot.store, GUILD) is False
+    # The registry refuses a fourth value, so an unknown one can only arrive from a hand-edited
+    # row — and it reads as the safe mode rather than as `on`.
+    assert posts.mode_of(SimpleNamespace(get=lambda *a: "nonsense"), GUILD) == posts.SHADOW
+    assert posts.mode_of(SimpleNamespace(get=lambda *a: None), GUILD) == posts.SHADOW
+
+
+async def test_set_mode_answers_in_words_for_each_of_the_three(bot, guild):
+    bot.guard = FakeGuard()
+
+    off = await posts.set_mode(bot, guild, STAFF, "off")
+    shadow = await posts.set_mode(bot, guild, STAFF, "shadow")
+    on = await posts.set_mode(bot, guild, STAFF, "on")
+
+    assert off == posts.MODE_OFF_SAID
+    assert "#blackbloc-logs" in shadow and "nothing reaches members" in shadow
+    assert on == posts.MODE_ON_SAID
+    assert await kinds(bot.db) == ["post.mode", "post.mode", "post.mode"]
+    assert bot.store.get(GUILD, posts.MODE_KEY) == "on"

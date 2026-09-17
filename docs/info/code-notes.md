@@ -6553,10 +6553,11 @@ seed happens, not `cog_load`: at `cog_load` the gateway has handed over no guild
 `bot.guilds` is empty and `seed_posts` has nothing to resolve `#welcome` against. Same shape as
 `cogs/core.py`'s `guides_loop`. The loop also carries the five-minute reconcile (checklist 25).
 
-**`black_bloc/cogs/community/posts.py` — `ModeButton`.** `/posts` is hidden when
-`posts_mode` is off, so the panel's own button can only ever turn it OFF in practice; turning it
-back on is `/settings` ▸ **Turn a feature back on…** or the Posts page's own switch. That is
-the same shape every other `HIDDEN_WHEN_OFF` feature has.
+~~**`black_bloc/cogs/community/posts.py` — `ModeButton`.**~~ **Retired 2026-09-16 by the
+shadow build: the button is a `ModePick` SELECT now — see `# Posts — shadow` below.** What it
+said stays true of the key: `/posts` is hidden when `posts_mode` is **off** only, so the panel's
+own control can never bring it back from there; that is `/settings` ▸ **Turn a feature back
+on…** or the Posts page's own switch, the same shape every other `HIDDEN_WHEN_OFF` feature has.
 
 **`site/public/assets/discordmd.js` — the order of the passes.** `escapeHtml` runs FIRST and
 everything after it works on escaped text. That is why the mention patterns read
@@ -6582,3 +6583,89 @@ re-rendered on a 60 ms timer so a fast typist does not run the renderer per char
 half, so its fixtures are a Node file rather than a pytest one. It reads
 `black_bloc/posts_seed.json` directly, which is what makes "the seed still renders its header
 and its three quotes" a real assertion rather than a copy of the text.
+
+
+# Posts — shadow (branch `posts-shadow`, off `main` at `440c0c6`)
+
+> Keyed by NAME, not by line: this branch moves most of `posts.py` and every number would be
+> wrong at the merge. Why each call was made is [`posts-design.md`](posts-design.md)'s
+> `## Shadow-mode deviations` foot; it is not repeated here.
+
+**`black_bloc/posts.py` — `mode_of`.** An unknown value reads as **shadow**, not as `on` and
+not as `off`. The registry refuses a fourth value, so an unknown one can only arrive from a
+hand-edited row or a restore — and the safe reading of "I do not know what this says" is the
+one that keeps the message off members' screens while still letting staff see it. `off` would
+have been wrong for the opposite reason: it would silently hide `/posts`.
+
+**`black_bloc/posts.py` — `shadow_channel_id` vs `shadow_channel_ids`.** Two functions on
+purpose, and they are NOT interchangeable. The singular is where a rehearsal GOES: the guard's
+own channel while it is installed, else `log_channel_id`. The plural is where a rehearsal
+already IS, and it is a LIST because the cutover (`cutover-plan.md` P5) **lifts the guard**
+between the rehearsal and the real post — resolve once at delete time and the copy in
+`#blackbloc-logs` is stranded for ever with its id cleared off the row. Checklist 3: a thing
+that was done must be undoable whatever the mode says at reversal time. `_shadow_message`
+hunts the id through all of them; `_drop_shadow`, `take_down_post` and `reconcile_posts` all
+go through it, and only `publish_post`'s send uses the singular.
+
+**`black_bloc/posts.py` — `is_posted` now means "a copy is up SOMEWHERE".** It answers true
+for a real message, a shadow copy, or both. That one change is what carries `changes_pending`,
+`status_words`, `move_label` and `remove_post`'s "take it down first" refusal into shadow
+without a second hash column: there is still exactly one `posted_hash`, and `posted_where`
+(`"channel"` / `"shadow"` / `None`) says which copy it describes. The alternative —
+`shadow_posted_hash` — would have been a second column, a second write path and a second way
+for the pill to disagree with itself.
+
+**`black_bloc/posts.py` — `forget_message` vs `clear_posted`.** `forget_message` drops ONE
+id and only clears the posted stamp once neither id is left, because the stamp belongs to
+whichever copy is still up. `clear_posted` is the take-down: everything goes at once. A 404 on
+either copy goes through `forget_message`, so losing the rehearsal never blanks the hash that
+describes the real message.
+
+**`black_bloc/posts.py` — `_drop_shadow` keeps the id when the delete FAILS.** The real post
+is already sent and written down (checklist 12), so the failure is logged as `post.post_failed`
+with the reason and the function returns without clearing `shadow_message_id`. Clearing it
+would strand a message nobody can now find; keeping it means the next **Post it** tries the
+delete again. The success and the 404 are different kinds on purpose — `post.shadow_taken_down`
+and `post.shadow_message_gone` — because the owner's verification method is reading the log.
+
+**`black_bloc/posts.py` — `publish_post` refuses `off` from the MODULE, not from the cog.**
+The panel already gated on the mode; the website's **Post it** did not, and only carried an
+amber note. One gate in the shared move closes both doors and is what `post.mode` off means.
+
+**`black_bloc/posts.py` — shadow does NOT require the post's own channel.** `no_channel` is
+only raised on `on`. Shadow never touches `channel_id`, so refusing for want of one would be a
+refusal about something shadow does not do — and the whole point of the default is that a
+staffer can see the message before deciding where it goes.
+
+**`black_bloc/posts.py` — `SHADOW_LINE` / `SHADOW_LINE_NOWHERE` / `SHADOW_LINE_SAME`, and
+their JS twins.** Three spellings because two of them would read as nonsense: a post with no
+channel cannot be told "not #nothing", and a post already aimed AT `#blackbloc-logs` — which is
+exactly what §C9's old workaround told staff to do — must not read `not #blackbloc-logs`. The
+same three sentences exist in `page-posts.js` as `WILL_SHADOW*`, which is the base build's own
+split (Discord's card is written in Python, the site's line is written live from the draft) and
+is held together by a test on each side rather than by a shared payload.
+
+**`black_bloc/logkinds.py` — why the four shadow kinds are not silenced.** `SHADOW` in that
+module is the string `".would_"`, not the word "shadow", so `post.shadow_posted` is free to be
+IMPORTANT. It should be: a shadow publish is a real message really sent, unlike a `would_` line,
+which is a thing that did not happen.
+
+**`black_bloc/cogs/community/posts.py` — `ModePick` sits at row 2, and the root lost a
+button.** Three values do not fit a two-state button, so it is the golive-shaped select
+(`cogs/content/golive.py` `ModePick`) with `Posts are: {mode}`. Discord allows five action rows
+and one select each: root row 0 is the three buttons plus the site link, row 1 is **A post…**,
+so the mode goes to row 2.
+
+**`site/mock/check.mjs` — `seed()` turns `posts_mode` ON, and `checkPostsModes()` is separate.**
+Every contract route and every `web.post.*` kind is the `on` shape, and the GUARDED entry for
+`/publish` only means anything when the post's own channel is the target — in shadow it reaches
+the channel the guard allows and answers 200. `tests/api/test_contract.py`'s seeded fixture does
+the same thing for the same reason, and `tests/api/tools/test_posts.py` has an autouse fixture
+that does it per test. All three are the same decision in three places because the three
+fixtures are separate; shadow has its own tests in each.
+
+**`tests/test_posts.py` — `FakeChannel(first_id=…)`.** Message ids no longer repeat across
+the fake channels. A shadow copy is hunted BY ID through several channels, and with every
+channel starting at 9000 the hunt found the ACTION LOG's own message in `#bot-log` and reported
+the rehearsal alive. Discord's snowflakes are globally unique, so the fake was the thing that
+was wrong — but it was wrong in a way that made a real bug look fixed.

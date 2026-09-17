@@ -1694,8 +1694,8 @@ KEY_HELP.update(
 # Posts (§C7) — the two decisions the Posts page and `/posts` introduce; the third is the log
 # level, generated with every other feature's. Its own block so a parallel branch merges
 # textually.
-POSTS_MODES = ("off", "on")
-POSTS_MODE_DEFAULT = "on"
+POSTS_MODES = ("off", "shadow", "on")
+POSTS_MODE_DEFAULT = "shadow"
 POSTS_PANEL_MINUTES_DEFAULT = 10
 POSTS_PANEL_MIN_MINUTES = 1
 POSTS_PANEL_MAX_MINUTES = 1440
@@ -1714,10 +1714,12 @@ KEY_MAX_REASON["posts_panel_minutes"] = (
 KEY_HELP.update(
     {
         "posts_mode": (
-            "on to let staff write the server's standing messages on the dashboard's Posts page "
-            "and push them with `/posts`; off hides `/posts` and refuses both doors in words. "
-            "Every word already written is kept either way, and a message already posted stays "
-            "in Discord until somebody presses Take it down"
+            "off, shadow (Post it sends the real message into the shadow channel — the test "
+            "channel while test mode is on, otherwise the log channel — and keeps it edited "
+            "there, whatever channel the post names) or on (Post it goes to the post's own "
+            "channel, and the first real post removes the shadow copy). Shadow is the default, "
+            "so nothing reaches members until a Lead turns posts on. Off hides `/posts` and "
+            "refuses both doors in words; every word already written is kept in all three"
         ),
         "posts_panel_minutes": (
             "minutes the /posts panel stays live before its buttons disable themselves; 10 by "

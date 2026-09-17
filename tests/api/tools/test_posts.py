@@ -28,6 +28,12 @@ async def a_post(web, wf, *, slug="notice", body="Hello.", channel=True, **field
     )
 
 
+@pytest.fixture(autouse=True)
+async def mode_is_on(web, wf):
+    """Shadow is the key's default; every test that does not say otherwise is `on`."""
+    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "on")
+
+
 async def seeded_post(web, guild, wf):
     """The shipped post, with its channel pointed at one this guild actually has."""
     await posts.seed_posts(web, guild)
@@ -73,6 +79,69 @@ async def test_the_list_carries_the_pills_the_page_draws(client, sign_in, web, w
     assert [one["style"] for one in found["styles"]] == ["plain", "embed"]
     assert found["guard"]["test_mode"] is False and found["guard"]["said"] is None
     assert found["notes"] == []
+
+
+async def test_shadow_says_where_the_copy_goes_and_names_the_shadow_channel(
+    client, sign_in, web, guild, wf
+):
+    """§C9: the page has to be able to say `not #welcome, #blackbloc-logs` before anybody
+    presses anything."""
+    sign_in(client)
+    await a_post(web, wf)
+    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "shadow")
+    web.guard = wf.Guard()
+
+    found = client.get("/api/posts").json()
+
+    assert found["mode"] == "shadow"
+    assert found["shadow"] == {
+        "channel_id": str(wf.TEST_CHANNEL_ID),
+        "channel_name": "blackbloc-logs",
+    }
+    assert found["notes"] and "#blackbloc-logs" in found["notes"][0]
+    assert "nothing reaches members yet" in found["notes"][0]
+
+
+async def test_a_shadow_publish_names_the_shadow_channel_and_marks_the_row(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client)
+    await a_post(web, wf, channel=False)
+    await posts.set_post_fields(
+        web.db,
+        int((await posts.get_post(web.db, wf.GUILD_ID, "notice"))["id"]),
+        channel_id=wf.OTHER_CHANNEL_ID,
+    )
+    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "shadow")
+    web.guard = wf.Guard()
+
+    found = client.post("/api/posts/notice/publish", json={}).json()
+
+    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
+    assert len(guild.get_channel(wf.TEST_CHANNEL_ID).messages) == 1
+    assert "#blackbloc-logs" in found["message"] and "shadow copy" in found["message"]
+    assert found["post"]["message_id"] is None
+    assert found["post"]["shadow_message_id"]
+    assert found["post"]["posted_where"] == "shadow"
+    assert found["post"]["status"][0] == "posted (shadow)"
+    assert found["post"]["move"] == "Update the post"
+    assert [kind for kind, _ in await wf.web_rows_in(web.db)] == [
+        "web.post.shadow_posted",
+        "web.post.pinned",
+    ]
+
+
+async def test_posts_off_refuses_the_publish_in_words(client, sign_in, web, wf):
+    sign_in(client)
+    await a_post(web, wf)
+    await web.store.set(wf.GUILD_ID, posts.MODE_KEY, "off")
+
+    response = client.post("/api/posts/notice/publish", json={})
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "posts_off"
+    assert "Settings page" in response.json()["message"]
+    assert await wf.web_rows_in(web.db) == []
 
 
 async def test_the_page_is_told_in_words_when_posts_are_off(client, sign_in, web, wf):

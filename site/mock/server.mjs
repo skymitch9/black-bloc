@@ -486,7 +486,7 @@ const SETTING_SPECS = [
   ["default_timezone", "text", "America/Phoenix", "America/Phoenix", "the `Region/City` zone times are read in for anybody who has never picked their own — the Time zone button on `/event` is how a member changes theirs"],
   ["timezone_choices", "text", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "America/Phoenix, America/Los_Angeles, America/Denver, America/Chicago, America/New_York, America/Anchorage, Pacific/Honolulu, America/Toronto, America/Vancouver, America/Mexico_City, America/Sao_Paulo, Europe/London, Europe/Paris, Europe/Berlin, Europe/Madrid, Europe/Moscow, Asia/Tokyo, Asia/Seoul, Asia/Shanghai, Asia/Kolkata, Asia/Dubai, Australia/Sydney, Australia/Perth, Pacific/Auckland", "the zones the Time zone dropdown offers, `Region/City` names separated by commas, up to 24 of them; a name Black Bloc cannot resolve is dropped, and Other — type it… always sits at the bottom of the list for the rest"],
   // Posts (§C7) — black_bloc/settings_store.py owns them; these are the mock's copy.
-  ['posts_mode', 'enum', 'on', 'on', 'on to let staff write the server’s standing messages on the dashboard’s Posts page and push them with `/posts`; off hides `/posts` and refuses both doors in words. Every word already written is kept either way, and a message already posted stays in Discord until somebody presses Take it down', ['off', 'on']],
+  ['posts_mode', 'enum', 'shadow', 'shadow', "off, shadow (Post it sends the real message into the shadow channel — the test channel while test mode is on, otherwise the log channel — and keeps it edited there, whatever channel the post names) or on (Post it goes to the post's own channel, and the first real post removes the shadow copy). Shadow is the default, so nothing reaches members until a Lead turns posts on. Off hides `/posts` and refuses both doors in words; every word already written is kept in all three", ['off', 'shadow', 'on']],
   ['posts_panel_minutes', 'int', 10, 10, "minutes the /posts panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440, 1],
   // Guides (G1) — black_bloc/settings_store.py owns them; these are the mock's copy.
   ['guides_mode', 'enum', 'on', 'on', 'on to give members the Guides page and to put a guide link beside a command in /help; off hides both. Staff can still open a guide\u2019s web address while it is off, and the page says so. There is no slash command to hide either way', ['off', 'on']],
@@ -757,6 +757,7 @@ function seedState() {
       style: 'plain',
       pin: true,
       message_id: null,
+      shadow_message_id: null,
       posted_hash: null,
       posted_at: null,
       posted_by: null,
@@ -773,6 +774,7 @@ function seedState() {
       style: 'embed',
       pin: false,
       message_id: '810000000000000004',
+      shadow_message_id: null,
       // Deliberately the hash of something else, so this one wears "changes not yet posted"
       // the moment the page opens — the pill has to be visible in the mock to be looked at.
       posted_hash: 'not-what-the-row-says-now',
@@ -791,6 +793,7 @@ function seedState() {
       style: 'plain',
       pin: true,
       message_id: null,
+      shadow_message_id: null,
       posted_hash: null,
       posted_at: null,
       posted_by: null,
@@ -1950,6 +1953,11 @@ const POST_SLUG_TAKEN = 'There is already a post at **{slug}**, so nothing was m
 const POST_SLUG_NEEDED = 'A post needs a title Black Bloc can turn into a web address, and that one came out empty, so nothing was made. Use some letters or numbers in the title.';
 const POSTS_ARE_OFF = 'Posts are off for this server, so **Post it** and **Take it down** refuse in words and `/posts` is hidden. Every word written here is kept — a Lead turns them back on from the Settings page under **posts**.';
 const POST_TEST_MODE_NOTE = `Black Bloc is in test mode, so a post only reaches #${TEST_CHANNEL_NAME} or a channel it made itself. **Post it** on anything else writes down what it would have sent and sends nothing.`;
+const POSTS_ARE_SHADOW = 'Posts are in **shadow**: **Post it** sends the real message to {where} and keeps it edited there, whatever channel a post names, so nothing reaches members yet. Turning posts **on** is the go-live — the next **Post it** goes to the post\u2019s own channel and the shadow copy is removed.';
+const POST_NO_SHADOW_CHANNEL = 'Posts are in **shadow**, so **{title}** goes to the shadow channel rather than its own — and this server has neither a test channel nor a log channel, so there is nowhere to put it. A Lead sets **log_channel_id** on the Settings page, or turns posts on.';
+// The shadow channel: the guard's own while test mode is on, otherwise log_channel_id. The
+// mock has no guard object, so it reads the same two places the bot does.
+const POST_SHADOW_CHANNEL = '800000000000000003';
 
 function postCap(style) {
   return POST_CAPS[style] || POST_CAPS.plain;
@@ -1959,16 +1967,34 @@ function postHash(row) {
   return JSON.stringify([row.style, row.title, row.body]);
 }
 
+function postIsUp(row) {
+  return Boolean(row.message_id) || Boolean(row.shadow_message_id);
+}
+
+function postWhere(row) {
+  if (row.message_id) return 'channel';
+  return row.shadow_message_id ? 'shadow' : null;
+}
+
 function postPending(row) {
-  return Boolean(row.message_id) && row.posted_hash !== postHash(row);
+  return postIsUp(row) && row.posted_hash !== postHash(row);
 }
 
 function postStatus(row) {
-  if (!row.message_id) return ['not posted'];
-  const found = ['posted'];
+  if (!postIsUp(row)) return ['not posted'];
+  const found = [postWhere(row) === 'shadow' ? 'posted (shadow)' : 'posted'];
   if (row.pin) found.push('pinned');
   if (postPending(row)) found.push('changes not yet posted');
   return found;
+}
+
+function postsMode() {
+  const found = String(state.settings.get('posts_mode') || 'shadow');
+  return ['off', 'shadow', 'on'].includes(found) ? found : 'shadow';
+}
+
+function postShadowChannel() {
+  return testMode ? POST_SHADOW_CHANNEL : (state.settings.get('log_channel_id') || null);
 }
 
 function postTooLong(count, limit, style, doing) {
@@ -1994,12 +2020,14 @@ function postRow(row) {
     pin: Boolean(row.pin),
     channel_id: row.channel_id ? String(row.channel_id) : null,
     channel_name: postChannelName(row.channel_id),
-    posted: Boolean(row.message_id),
-    pinned: Boolean(row.message_id) && Boolean(row.pin),
+    posted: postIsUp(row),
+    posted_where: postWhere(row),
+    pinned: postIsUp(row) && Boolean(row.pin),
     changes_pending: postPending(row),
     status: postStatus(row),
-    move: row.message_id ? 'Update the post' : 'Post it',
+    move: postIsUp(row) ? 'Update the post' : 'Post it',
     message_id: row.message_id ? String(row.message_id) : null,
+    shadow_message_id: row.shadow_message_id ? String(row.shadow_message_id) : null,
     posted_at: row.posted_at,
     posted_by: row.posted_by ? String(row.posted_by) : null,
     posted_by_name: row.posted_by ? memberName(row.posted_by) : null,
@@ -2026,12 +2054,21 @@ function postGuard() {
   };
 }
 
-function postsAreOn() {
-  return String(state.settings.get('posts_mode') || 'on') === 'on';
+function postShadow() {
+  const channel_id = postShadowChannel();
+  return {
+    channel_id: channel_id ? String(channel_id) : null,
+    channel_name: channel_id ? postChannelName(channel_id) : null,
+  };
 }
 
 function postNotes() {
-  return postsAreOn() ? [] : [POSTS_ARE_OFF];
+  const mode = postsMode();
+  if (mode === 'off') return [POSTS_ARE_OFF];
+  if (mode !== 'shadow') return [];
+  const where = postShadowChannel();
+  if (!where) return [POST_NO_SHADOW_CHANNEL.split('{title}').join('a post')];
+  return [POSTS_ARE_SHADOW.split('{where}').join(`#${postChannelName(where)}`)];
 }
 
 function postWhole(row, said) {
@@ -2039,6 +2076,8 @@ function postWhole(row, said) {
     post: postRow(row),
     styles: postStyles(),
     guard: postGuard(),
+    mode: postsMode(),
+    shadow: postShadow(),
     notes: postNotes(),
     read_at: now(),
   };
@@ -2065,10 +2104,11 @@ route('GET', '/api/posts', (context) => {
   requireStaff(context.session);
   return {
     posts: state.posts.map(postRow),
-    mode: state.settings.get('posts_mode') || 'on',
+    mode: postsMode(),
     may_edit: true,
     styles: postStyles(),
     guard: postGuard(),
+    shadow: postShadow(),
     notes: postNotes(),
     checked_at: now(),
   };
@@ -2093,6 +2133,7 @@ route('POST', '/api/posts', async (context) => {
     style: 'plain',
     pin: true,
     message_id: null,
+    shadow_message_id: null,
     posted_hash: null,
     posted_at: null,
     posted_by: null,
@@ -2142,27 +2183,53 @@ route('PUT', '/api/posts/:slug', async (context) => {
 route('POST', '/api/posts/:slug/publish', (context) => {
   requireStaff(context.session);
   const row = wantedPost(context.params.slug);
-  if (!row.channel_id) throw new Refused(409, 'no_channel', POST_NO_CHANNEL.split('{title}').join(row.title));
+  const mode = postsMode();
+  if (mode === 'off') throw new Refused(409, 'posts_off', POSTS_ARE_OFF);
+  const shadow = mode === 'shadow';
+  if (!shadow && !row.channel_id) throw new Refused(409, 'no_channel', POST_NO_CHANNEL.split('{title}').join(row.title));
   if (!row.body.trim()) throw new Refused(409, 'nothing_to_post', POST_NOTHING_TO_POST.split('{title}').join(row.title));
   if (row.body.length > postCap(row.style)) {
     throw new Refused(400, 'body_too_long', postTooLong(row.body.length, postCap(row.style), row.style, 'posted'));
   }
-  if (testMode && String(row.channel_id) !== '800000000000000003') {
+  const target = shadow ? postShadowChannel() : row.channel_id;
+  if (shadow && !target) throw new Refused(409, 'no_shadow_channel', POST_NO_SHADOW_CHANNEL.split('{title}').join(row.title));
+  if (testMode && String(target) !== '800000000000000003') {
     logAction('web.post.would_post', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
     throw new Refused(409, 'test_mode', GUARD);
   }
-  const updating = Boolean(row.message_id);
-  if (!updating) row.message_id = String(state.nextPostMessage++);
+  const column = shadow ? 'shadow_message_id' : 'message_id';
+  const updating = Boolean(row[column]);
+  if (!updating) row[column] = String(state.nextPostMessage++);
   row.posted_hash = postHash(row);
   row.posted_at = now();
   row.posted_by = STAFF.id;
-  logAction(updating ? 'web.post.updated' : 'web.post.posted', {
-    details: { slug: row.slug, post_id: row.id, message_id: row.message_id, via: 'website' },
+  const kinds = shadow
+    ? ['web.post.shadow_updated', 'web.post.shadow_posted']
+    : ['web.post.updated', 'web.post.posted'];
+  logAction(updating ? kinds[0] : kinds[1], {
+    details: { slug: row.slug, post_id: row.id, message_id: row[column], via: 'website' },
   });
+  // The first real post takes the rehearsal back down; a failure here would be logged and
+  // not abort, which the mock has no way to produce.
+  if (!shadow && row.shadow_message_id) {
+    const was = row.shadow_message_id;
+    row.shadow_message_id = null;
+    logAction('web.post.shadow_taken_down', {
+      details: { slug: row.slug, post_id: row.id, message_id: was, via: 'website' },
+    });
+  }
   if (row.pin) {
     logAction('web.post.pinned', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
   }
-  const where = `#${postChannelName(row.channel_id)}`;
+  const where = `#${postChannelName(target)}`;
+  if (shadow) {
+    return postWhole(
+      row,
+      updating
+        ? `**${row.title}** is updated in ${where} — the shadow copy, because posts are in shadow. Nothing went to its own channel.`
+        : `**${row.title}** is posted in ${where} — the shadow copy, because posts are in shadow. Nothing went to its own channel.`,
+    );
+  }
   return postWhole(
     row,
     updating
@@ -2174,17 +2241,24 @@ route('POST', '/api/posts/:slug/publish', (context) => {
 route('POST', '/api/posts/:slug/takedown', (context) => {
   requireStaff(context.session);
   const row = wantedPost(context.params.slug);
-  if (!row.message_id) throw new Refused(409, 'not_posted', POST_NOT_POSTED.split('{title}').join(row.title));
-  if (testMode && String(row.channel_id) !== '800000000000000003') {
-    logAction('web.post.would_take_down', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
-    throw new Refused(409, 'test_mode', GUARD);
+  if (!postIsUp(row)) throw new Refused(409, 'not_posted', POST_NOT_POSTED.split('{title}').join(row.title));
+  const copies = [];
+  if (row.message_id) copies.push([row.channel_id, row.message_id]);
+  if (row.shadow_message_id) copies.push([postShadowChannel(), row.shadow_message_id]);
+  for (const [where] of copies) {
+    if (testMode && String(where) !== '800000000000000003') {
+      logAction('web.post.would_take_down', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
+      throw new Refused(409, 'test_mode', GUARD);
+    }
   }
   const was = row.message_id;
+  const ghost = row.shadow_message_id;
   row.message_id = null;
+  row.shadow_message_id = null;
   row.posted_hash = null;
   row.posted_at = null;
   row.posted_by = null;
-  logAction('web.post.taken_down', { details: { slug: row.slug, post_id: row.id, message_id: was, via: 'website' } });
+  logAction('web.post.taken_down', { details: { slug: row.slug, post_id: row.id, message_id: was, shadow_message_id: ghost, via: 'website' } });
   return postWhole(row, `**${row.title}** is taken down. Every word is still here.`);
 });
 
@@ -2205,7 +2279,7 @@ route('DELETE', '/api/posts/:slug', (context) => {
   requireStaff(context.session);
   const row = wantedPost(context.params.slug);
   if (row.seeded) throw new Refused(409, 'seeded_post', POST_SEEDED.split('{slug}').join(row.slug));
-  if (row.message_id) throw new Refused(409, 'still_posted', POST_STILL_POSTED.split('{title}').join(row.title));
+  if (postIsUp(row)) throw new Refused(409, 'still_posted', POST_STILL_POSTED.split('{title}').join(row.title));
   state.posts = state.posts.filter((one) => one.id !== row.id);
   logAction('web.post.deleted', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
   return { deleted: row.slug, message: `**${row.title}** is gone.` };

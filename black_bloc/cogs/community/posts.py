@@ -27,6 +27,8 @@ from ...posts import (
     CAPS,
     DO_NOT_PIN_IT,
     EMBED,
+    MODE_SHADOW_SAID,
+    MODES,
     NO_SUCH_POST,
     PANEL_EMPTY,
     PANEL_INTRO,
@@ -43,13 +45,15 @@ from ...posts import (
     cap_for,
     count_posts,
     get_post,
+    in_shadow,
     is_posted,
     is_seeded,
     list_posts,
     make_post,
+    mode_of,
     move_label,
     panel_minutes,
-    posts_are_on,
+    posts_are_off,
     preview_of,
     publish_post,
     reconcile_posts,
@@ -60,6 +64,8 @@ from ...posts import (
     save_post,
     seed_posts,
     set_mode,
+    shadow_channel_id,
+    shadow_words,
     site_page_url,
     status_words,
     take_down_post,
@@ -83,8 +89,8 @@ PICK_A_STYLE = "Style…"
 DELETE_THIS_POST = "Delete this post"
 DELETE_YES = "Yes, delete it"
 RESET_YES = "Yes, put it back"
-TURN_OFF = "Turn posts off"
-TURN_ON = "Turn posts on"
+MODE_PICK = "Posts are: off / shadow / on"
+MODE_OPTION = "Posts are: {mode}"
 BACK = "Back"
 LOGS = "Logs"
 STYLE_LABELS: dict[str, str] = {
@@ -112,17 +118,20 @@ def option_label(guild: Any, row: Any) -> str:
 
 async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, PostsView]:
     rows = await list_posts(bot.db, guild.id)
-    on = posts_are_on(bot.store, guild.id)
+    mode = mode_of(bot.store, guild.id)
     lines = [PANEL_INTRO]
     lines.extend(line_for(guild, row) for row in rows)
     if not rows:
         lines.append(PANEL_EMPTY)
-    if not on:
+    if posts_are_off(bot.store, guild.id):
         lines.append(POSTS_OFF)
+    elif in_shadow(bot.store, guild.id):
+        lines.append(
+            MODE_SHADOW_SAID.format(where=where_words(guild, shadow_channel_id(bot, guild)))
+        )
     embed = discord.Embed(title=PANEL_TITLE, description=clamped(lines))
     view = PostsView(panel_minutes(bot.store, guild.id))
     view.add_item(NewPostButton())
-    view.add_item(ModeButton(on))
     view.add_item(LogsButton())
     page = site_page_url(getattr(bot.settings, "origin", ""))
     if page:
@@ -131,6 +140,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
                 style=discord.ButtonStyle.link, label=SITE_BUTTON, url=page, row=0
             )
         )
+    view.add_item(ModePick(mode))
     if rows:
         view.add_item(PostPick(guild, rows))
     return embed, view
@@ -138,6 +148,8 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
 
 def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, PostsView]:
     lines = [line_for(guild, row)]
+    if in_shadow(bot.store, guild.id):
+        lines.append(shadow_words(bot, guild, row))
     body = preview_of(row)
     lines.append(body or NOT_POSTED_YET)
     embed = discord.Embed(title=row["title"], description=clamped(lines))
@@ -200,7 +212,7 @@ async def run_move(
         return
     bot = interaction.client
     guild = interaction.guild
-    if not posts_are_on(bot.store, guild.id):
+    if posts_are_off(bot.store, guild.id):
         await render_card(interaction, slug, previous, POSTS_OFF)
         return
     row = await get_post(bot.db, guild.id, slug)
@@ -226,20 +238,26 @@ class NewPostButton(discord.ui.Button):
         await interaction.response.send_modal(NewPostModal(self.view))
 
 
-class ModeButton(discord.ui.Button):
-    def __init__(self, on: bool) -> None:
+class ModePick(discord.ui.Select):
+    def __init__(self, current: str) -> None:
         super().__init__(
-            label=TURN_OFF if on else TURN_ON,
-            style=discord.ButtonStyle.secondary,
-            row=0,
+            placeholder=MODE_PICK,
+            options=[
+                discord.SelectOption(
+                    label=MODE_OPTION.format(mode=name), value=name, default=name == current
+                )
+                for name in MODES
+            ],
+            min_values=1,
+            max_values=1,
+            row=2,
         )
-        self.wanted = "off" if on else "on"
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction):
             return
         said = await set_mode(
-            interaction.client, interaction.guild, interaction.user, self.wanted
+            interaction.client, interaction.guild, interaction.user, self.values[0]
         )
         await render_panel(interaction, self.view)
         await interaction.followup.send(
@@ -585,7 +603,7 @@ __all__ = [
     "EditButton",
     "EditPostModal",
     "LogsButton",
-    "ModeButton",
+    "ModePick",
     "MoveButton",
     "NewPostButton",
     "NewPostModal",

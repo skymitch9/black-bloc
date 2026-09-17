@@ -24,6 +24,17 @@ POSTS_ARE_OFF = (
     "`/posts` is hidden. Every word written here is kept — a Lead turns them back on from the "
     "Settings page under **posts**."
 )
+POSTS_ARE_SHADOW = (
+    "Posts are in **shadow**: **Post it** sends the real message to {where} and keeps it edited "
+    "there, whatever channel a post names, so nothing reaches members yet. Turning posts **on** "
+    "is the go-live — the next **Post it** goes to the post's own channel and the shadow copy "
+    "is removed."
+)
+NO_SHADOW_CHANNEL_NOTE = (
+    "Posts are in **shadow** and there is nowhere to put a shadow copy: this server has neither "
+    "a test channel nor a log channel, so **Post it** refuses. Set **log_channel_id** on the "
+    "Settings page, or turn posts on."
+)
 
 
 def now() -> str:
@@ -51,6 +62,7 @@ def post_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
         "channel_id": str(channel_id) if channel_id else None,
         "channel_name": posts.channel_name(guild, channel_id),
         "posted": posts.is_posted(row),
+        "posted_where": posts.posted_where(row),
         "pinned": posts.is_posted(row) and bool(posts.row_value(row, "pin")),
         "changes_pending": posts.changes_pending(row),
         "status": posts.status_words(row),
@@ -58,6 +70,7 @@ def post_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
         "message_id": str(posts.row_value(row, "message_id"))
         if posts.row_value(row, "message_id")
         else None,
+        "shadow_message_id": str(posts.shadow_id(row)) if posts.shadow_id(row) else None,
         "posted_at": posts.row_value(row, "posted_at"),
         "posted_by": str(posts.row_value(row, "posted_by"))
         if posts.row_value(row, "posted_by")
@@ -81,6 +94,15 @@ def guard_line(bot: Any, guild: Any) -> dict[str, Any]:
         "test_mode": testing,
         "test_channel": name,
         "said": TEST_MODE_NOTE.format(channel=name or "the test channel") if testing else None,
+    }
+
+
+def shadow_line(bot: Any, guild: Any) -> dict[str, Any]:
+    """Where a shadow copy goes, so the page can say it beside every post."""
+    channel_id = posts.shadow_channel_id(bot, guild)
+    return {
+        "channel_id": str(channel_id) if channel_id else None,
+        "channel_name": posts.channel_name(guild, channel_id),
     }
 
 
@@ -120,13 +142,22 @@ def build_router(bot: Any) -> APIRouter:
         return row
 
     def _notes(guild: Any) -> list[str]:
-        return [] if posts.posts_are_on(bot.store, guild.id) else [POSTS_ARE_OFF]
+        if posts.posts_are_off(bot.store, guild.id):
+            return [POSTS_ARE_OFF]
+        if not posts.in_shadow(bot.store, guild.id):
+            return []
+        where = posts.shadow_channel_id(bot, guild)
+        if not where:
+            return [NO_SHADOW_CHANNEL_NOTE]
+        return [POSTS_ARE_SHADOW.format(where=posts.where_words(guild, where))]
 
     def _whole(guild: Any, row: Any, said: str | None = None) -> dict[str, Any]:
         found = {
             "post": post_row(bot, guild, row),
             "styles": styles(),
             "guard": guard_line(bot, guild),
+            "mode": posts.mode_of(bot.store, guild.id),
+            "shadow": shadow_line(bot, guild),
             "notes": _notes(guild),
             "read_at": now(),
         }
@@ -150,10 +181,11 @@ def build_router(bot: Any) -> APIRouter:
         rows = await posts.list_posts(bot.db, guild.id)
         return {
             "posts": [post_row(bot, guild, row) for row in rows],
-            "mode": bot.store.get(guild.id, posts.MODE_KEY),
+            "mode": posts.mode_of(bot.store, guild.id),
             "may_edit": True,
             "styles": styles(),
             "guard": guard_line(bot, guild),
+            "shadow": shadow_line(bot, guild),
             "notes": _notes(guild),
             "checked_at": now(),
         }
@@ -217,4 +249,4 @@ def build_router(bot: Any) -> APIRouter:
     return router
 
 
-__all__ = ["build_router", "guard_line", "post_row", "styles"]
+__all__ = ["build_router", "guard_line", "post_row", "shadow_line", "styles"]

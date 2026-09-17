@@ -177,6 +177,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "role.extended",
         "post.posted",
         "post.updated",
+        "post.shadow_posted",
+        "post.shadow_updated",
         "post.taken_down",
     }
 )
@@ -407,6 +409,8 @@ ROUTINE: frozenset[str] = frozenset(
         "post.pinned",
         "post.reset",
         "post.saved",
+        "post.shadow_message_gone",
+        "post.shadow_taken_down",
         "post.seeded",
         "post.seed_channel_unknown",
     }
