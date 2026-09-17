@@ -45,6 +45,7 @@ PANELS: tuple[PanelDoor, ...] = (
     PanelDoor("rolemenu", "rolemenu", "black_bloc.cogs.community.role_menus", "build_panel"),
     PanelDoor("voice", "tempvoice", "black_bloc.cogs.community.tempvoice", "build_panel"),
     PanelDoor("request", "request", "black_bloc.cogs.community.requests", "build_panel"),
+    PanelDoor("ask", "modmail", "black_bloc.cogs.community.frontdoor", "build_panel"),
     PanelDoor("apply", "applications", "black_bloc.cogs.community.applications", "build_panel"),
     PanelDoor("chat", "chat", "black_bloc.cogs.content.chat", "build_panel"),
     PanelDoor("memory", "chat", "black_bloc.cogs.content.chat_memory", "build_panel", HOME),

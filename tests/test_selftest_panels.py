@@ -170,12 +170,12 @@ async def a_run(bot, guild):
 
 
 def test_every_command_that_opens_a_panel_has_a_door_and_nothing_else_does():
-    """The table is the whole claim: 18 of the 29 commands open a panel, and the other 11
+    """The table is the whole claim: 19 of the 31 commands open a panel, and the other 12
     take an argument and act (`/ban`) or answer one line (`/ping`)."""
     commands = {door.command for door in selftest_panels.PANELS}
 
-    assert len(selftest_panels.PANELS) == 18
-    assert len(commands) == 18
+    assert len(selftest_panels.PANELS) == 19
+    assert len(commands) == 19
     assert commands == {
         "settings",
         "automod",
@@ -188,6 +188,7 @@ def test_every_command_that_opens_a_panel_has_a_door_and_nothing_else_does():
         "rolemenu",
         "voice",
         "request",
+        "ask",
         "apply",
         "chat",
         "memory",

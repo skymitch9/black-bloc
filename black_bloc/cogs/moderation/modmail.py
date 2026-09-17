@@ -18,6 +18,7 @@ from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
 from ...events import clamp
+from ...frontdoor import door_takes_over
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
@@ -180,8 +181,7 @@ from ...panels import (
     site_page_url,
     still_staff,
 )
-from ...posts import get_post as get_the_post
-from ...posts import shadow_channel_id, shadow_id
+from ...posted import drop_message, message_is_there, overtaken_by
 from ...settings_store import (
     CHANNEL_MODE,
     DB_UNAVAILABLE,
@@ -2200,38 +2200,13 @@ def panel_where(bot: Any, guild: Any) -> tuple[Any, int | None]:
 
 
 async def panel_is_there(channel: Any, message_id: int) -> bool:
-    """A button somebody deleted by hand reads as gone; anything else leaves it alone."""
-    try:
-        await channel.fetch_message(message_id)
-    except discord.NotFound:
-        return False
-    except Exception as exc:
-        log.info("modmail: could not look up the ticket button %s: %s", message_id, exc)
-        return True
-    return True
+    return await message_is_there(channel, message_id)
 
 
-async def drop_panel_message(bot: Any, guild: Any, channel: Any, message_id: int) -> None:
-    """Deleting a MESSAGE is a side effect `guard.py` never sees, so this one asks by hand."""
-    guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_channel(channel.id):
-        await log_action(
-            bot,
-            guild,
-            "modmail.would_take_down_panel",
-            details={"channel_id": channel.id, "message_id": message_id},
-        )
-        return
-    partial = getattr(channel, "get_partial_message", None)
-    try:
-        if partial is None:
-            await (await channel.fetch_message(message_id)).delete()
-        else:
-            await partial(message_id).delete()
-    except discord.NotFound:
-        return
-    except Exception as exc:
-        log.info("modmail: the old ticket button %s stayed where it was: %s", message_id, exc)
+async def drop_panel_message(bot: Any, guild: Any, channel: Any, message_id: int) -> bool:
+    return await drop_message(
+        bot, guild, channel, message_id, would_kind="modmail.would_take_down_panel"
+    )
 
 
 def followed_slug(store: Any, guild_id: int) -> str:
@@ -2241,28 +2216,9 @@ def followed_slug(store: Any, guild_id: int) -> str:
 
 
 async def post_below_button(bot: Any, guild: Any, channel: Any, message_id: Any) -> int | None:
-    """The followed post's message when it has landed UNDER the ticket button.
-
-    A snowflake counts up with the clock, so the newer id is the message further down. In
-    `posts_mode = shadow` the rehearsal is the copy that counts, because that is the one in
-    the guard's channel beside the button."""
-    slug = followed_slug(bot.store, guild.id)
-    if not slug or channel is None or not message_id:
-        return None
-    if not getattr(bot.db, "is_connected", False):
-        return None
-    row = await get_the_post(bot.db, guild.id, slug)
-    if row is None:
-        return None
-    for where, found in (
-        (field_of(row, "channel_id"), field_of(row, "message_id")),
-        (shadow_channel_id(bot, guild), shadow_id(row)),
-    ):
-        if not where or not found:
-            continue
-        if int(where) == int(channel.id) and int(found) > int(message_id):
-            return int(found)
-    return None
+    return await overtaken_by(
+        bot, guild, channel, message_id, followed_slug(bot.store, guild.id)
+    )
 
 
 async def post_ticket_panel(
@@ -2643,6 +2599,8 @@ class Modmail(commands.Cog):
         bot = self.bot
         channel, message_id = panel_where(bot, guild)
         if not bot.store.get(guild.id, PANEL_CHANNEL_KEY) or channel is None:
+            return
+        if door_takes_over(bot.store, guild.id) == int(channel.id):
             return
         overtaken = await post_below_button(bot, guild, channel, message_id)
         if overtaken is None and message_id and await panel_is_there(channel, message_id):
