@@ -869,6 +869,13 @@ def ticket_card_embed(
     )
 
 
+def first_message(subject: Any, text: Any) -> str:
+    """The subject is a heading on the paragraph, so the transcript keeps both."""
+    said = clamp(str(subject or "").strip(), NAME_LIMIT)
+    body = clamp(str(text or "").strip(), MESSAGE_LIMIT)
+    return f"**{said}**\n{body}" if said else body
+
+
 def ticket_button_embed(title: Any, text: Any) -> discord.Embed:
     """The one message that sits in a channel with the Open a ticket button under it."""
     return discord.Embed(

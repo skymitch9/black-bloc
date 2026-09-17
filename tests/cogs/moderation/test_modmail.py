@@ -2439,3 +2439,306 @@ async def test_a_stored_message_keeps_its_direction_and_anonymity(db):
 
     row = (await ticket_messages(db, 1))[0]
     assert row["anonymous"] == 1 and row["direction"] == OUT
+
+
+# --- the doors: /modmail's member half, the posted button, and staff opening one ---------------
+
+
+async def fill_ticket_modal(modal, bot, who, subject="", body="the mods took my role"):
+    modal.subject._value = subject
+    modal.body._value = body
+    interaction = FakeInteraction(bot, who)
+    await modal.on_submit(interaction)
+    return interaction
+
+
+async def open_through_the_panel(cog, bot, who, subject="", body="the mods took my role"):
+    panel = await open_panel(cog, bot, who)
+    pressed = await press(panel.view, "Open a ticket", bot, who)
+    return await fill_ticket_modal(pressed.response.modals[-1], bot, who, subject, body)
+
+
+async def post_the_button(cog, bot, lead, channel=None):
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    where = await press(setup.view, "Ticket button…", bot, lead)
+    move = "Move it…" if has(where.view, "Move it…") else "Post it…"
+    picking = await press(where.view, move, bot, lead)
+    return await choose(
+        picking.view,
+        modmail_cog.PICK_A_CHANNEL,
+        [channel or bot.guild.channels[TEST_CHANNEL]],
+        bot,
+        lead,
+    )
+
+
+async def test_a_member_with_a_ticket_open_sees_the_line_and_no_button(cog, bot, member):
+    await open_one(cog, bot, member)
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert labels(interaction.view) == []
+    assert "Your ticket is open" in interaction.embed.description
+
+
+async def test_the_member_half_opens_a_ticket_on_the_dm_paths_own_rails(cog, bot, member, db):
+    bot.guard = FakeGuard()
+
+    said = await open_through_the_panel(cog, bot, member, subject="my role")
+
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    assert ticket is not None and ticket["source"] == "command"
+    rows = await ticket_messages(db, ticket["id"])
+    assert [row["direction"] for row in rows] == [IN]
+    assert rows[0]["content"] == "**my role**\nthe mods took my role"
+    assert bot.guild.created[0].topic.startswith("my role — ")
+    assert parse_topic(bot.guild.created[0].topic) == (member.id, ticket["id"])
+    assert "modmail.opened" in await action_kinds(db)
+    assert said.response.messages[-1]["ephemeral"] is True
+    assert f"#{ticket['id']}" in said.sent
+
+
+async def test_every_answer_the_member_door_gives_is_ephemeral(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    panel = await open_panel(cog, bot, member)
+    pressed = await press(panel.view, "Open a ticket", bot, member)
+    said = await fill_ticket_modal(pressed.response.modals[-1], bot, member)
+
+    everything = (
+        panel.response.messages + pressed.response.messages + said.response.messages
+    )
+    speaking = [one for one in everything if one.get("content") is not None]
+
+    assert speaking and all(one["ephemeral"] is True for one in speaking)
+
+
+async def test_a_second_go_links_the_open_ticket_and_opens_nothing(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    await open_through_the_panel(cog, bot, member)
+    made = len(bot.guild.created)
+
+    again = await open_panel(cog, bot, member)
+    refused = await modmail_cog.open_a_ticket(
+        bot, bot.guild, member, source="command", text="again"
+    )
+
+    assert labels(again.view) == []
+    assert not refused.ok and refused.code == "already_open"
+    assert len(bot.guild.created) == made
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets")
+    assert (await cur.fetchone())["n"] == 1
+    assert "modmail.open_refused" in await action_kinds(db)
+
+
+async def test_a_member_is_told_why_when_modmail_is_off_or_they_are_blocked(
+    cog, bot, member, lead, db
+):
+    await bot.store.set(GUILD, "modmail_enabled", False)
+    off = await open_panel(cog, bot, member)
+
+    await bot.store.set(GUILD, "modmail_enabled", True)
+    await block_member(bot, bot.guild, lead, member, "abuse")
+    blocked = await open_panel(cog, bot, member)
+
+    assert labels(off.view) == [] and "not answering modmail" in off.embed.description
+    assert labels(blocked.view) == [] and "stopped Black Bloc" in blocked.embed.description
+
+
+async def test_the_ticket_button_is_posted_moved_and_taken_down(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    test_channel = bot.guild.channels[TEST_CHANNEL]
+
+    posted = await post_the_button(cog, bot, lead)
+
+    assert bot.store.get(GUILD, "modmail_panel_channel_id") == TEST_CHANNEL
+    message_id = bot.store.get(GUILD, "modmail_panel_message_id")
+    button = next(one for one in test_channel.messages if one.id == message_id)
+    assert button.kwargs["embed"].title == "Need a moderator?"
+    assert [one.item.label for one in button.kwargs["view"].children] == ["Open a ticket"]
+    assert "is up in" in posted.response.messages[-1]["content"]
+
+    moved = await post_the_button(cog, bot, lead)
+
+    assert "old message is gone" in moved.response.messages[-1]["content"]
+    assert message_id in test_channel.deleted_messages
+    kinds = await action_kinds(db)
+    assert "modmail.panel_posted" in kinds and "modmail.panel_moved" in kinds
+
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    where = await press(setup.view, "Ticket button…", bot, lead)
+    down = await press(where.view, "Take it down", bot, lead)
+
+    assert bot.store.get(GUILD, "modmail_panel_channel_id") is None
+    assert bot.store.get(GUILD, "modmail_panel_message_id") is None
+    assert "is down" in down.response.messages[-1]["content"]
+    assert "modmail.panel_taken_down" in await action_kinds(db)
+
+
+async def test_the_guard_refuses_any_channel_but_the_test_one_in_words(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+
+    refused = await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+
+    assert bot.store.get(GUILD, "modmail_panel_channel_id") is None
+    assert "test mode" in refused.response.messages[-1]["content"]
+    assert "modmail.would_post_panel" in await action_kinds(db)
+    assert bot.guild.channels[LOG_CHANNEL].messages == []
+
+
+async def test_the_reconciler_puts_back_a_button_deleted_by_hand(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    await post_the_button(cog, bot, lead)
+    first = bot.store.get(GUILD, "modmail_panel_message_id")
+    channel = bot.guild.channels[TEST_CHANNEL]
+    channel.messages = [one for one in channel.messages if one.id != first]
+
+    await cog.reconcile_tickets()
+
+    second = bot.store.get(GUILD, "modmail_panel_message_id")
+    assert second and second != first
+    kinds = await action_kinds(db)
+    assert kinds.count("modmail.panel_gone") == 1
+    assert kinds.count("modmail.panel_posted") == 2
+
+
+async def test_the_reconciler_leaves_a_button_that_is_still_there_alone(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    await post_the_button(cog, bot, lead)
+    first = bot.store.get(GUILD, "modmail_panel_message_id")
+
+    await cog.reconcile_tickets()
+
+    assert bot.store.get(GUILD, "modmail_panel_message_id") == first
+    assert "modmail.panel_gone" not in await action_kinds(db)
+
+
+async def test_taking_it_down_stays_down_through_the_reconciler(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    await post_the_button(cog, bot, lead)
+    await modmail_cog.take_panel_down(bot, bot.guild, lead)
+
+    await cog.reconcile_tickets()
+
+    assert bot.store.get(GUILD, "modmail_panel_channel_id") is None
+    assert bot.store.get(GUILD, "modmail_panel_message_id") is None
+
+
+async def test_pressing_the_posted_button_opens_a_ticket_and_answers_only_the_presser(
+    cog, bot, lead, member, db
+):
+    bot.guard = FakeGuard()
+    await post_the_button(cog, bot, lead)
+    channel = bot.guild.channels[TEST_CHANNEL]
+    button = channel.messages[-1].kwargs["view"].children[0]
+
+    pressed = FakeInteraction(bot, member, channel=channel)
+    await button.callback(pressed)
+    said = await fill_ticket_modal(pressed.response.modals[-1], bot, member)
+
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    assert ticket is not None and ticket["source"] == "panel"
+    assert [row["direction"] for row in await ticket_messages(db, ticket["id"])] == [IN]
+    assert said.response.messages[-1]["ephemeral"] is True
+    assert said.edits == []
+
+
+async def open_with(cog, bot, lead, who):
+    root = await open_panel(cog, bot, lead)
+    picking = await press(root.view, "Open a ticket with…", bot, lead)
+    return await choose(picking.view, modmail_cog.PICK_A_MEMBER, [who], bot, lead)
+
+
+async def test_staff_open_a_ticket_with_a_member_and_the_paragraph_is_the_first_reply(
+    cog, bot, lead, member, db
+):
+    bot.guard = FakeGuard()
+
+    picked = await open_with(cog, bot, lead, member)
+    said = await fill_ticket_modal(
+        picked.response.modals[-1], bot, lead, subject="your appeal", body="we need a word"
+    )
+
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    assert ticket["source"] == "staff" and ticket["opened_by"] == lead.id
+    rows = await ticket_messages(db, ticket["id"])
+    assert [row["direction"] for row in rows] == [OUT]
+    assert rows[0]["content"] == "**your appeal**\nwe need a word"
+    assert member.dms[-1]["embed"].description == "**your appeal**\nwe need a word"
+    kinds = await action_kinds(db)
+    assert "modmail.opened_by_staff" in kinds and "modmail.opened" not in kinds
+    assert said.response.messages[-1]["ephemeral"] is True
+
+    card = await card_for(cog, bot, ticket)
+    assert "opened by staff" in card.kwargs["embed"].description
+    assert f"<@{lead.id}>" in card.kwargs["embed"].description
+
+
+async def test_staff_opening_with_a_blocked_member_is_refused_and_offered_the_undo(
+    cog, bot, lead, member, db
+):
+    bot.guard = FakeGuard()
+    await block_member(bot, bot.guild, lead, member, "abuse")
+
+    picked = await open_with(cog, bot, lead, member)
+
+    assert picked.response.modals == []
+    assert "blocked" in picked.sent
+    assert has(picked.view, "Unblock them")
+    assert await open_ticket_for(db, GUILD, member.id) is None
+
+
+async def test_staff_opening_with_somebody_who_already_has_one_links_it(
+    cog, bot, lead, member, db
+):
+    ticket = await open_one(cog, bot, member)
+
+    picked = await open_with(cog, bot, lead, member)
+
+    assert picked.response.modals == []
+    assert f"<#{ticket['channel_id']}>" in picked.sent
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets")
+    assert (await cur.fetchone())["n"] == 1
+
+
+async def test_staff_opening_with_a_bot_is_refused_in_words(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    robot = FakeUser(bot.guild, user_id=4040, display_name="Helper")
+    robot.bot = True
+
+    picked = await open_with(cog, bot, lead, robot)
+
+    assert picked.response.modals == []
+    assert "is a bot" in picked.sent
+    cur = await db.conn.execute("SELECT COUNT(*) AS n FROM modmail_tickets")
+    assert (await cur.fetchone())["n"] == 0
+
+
+async def test_a_member_with_dms_shut_still_gets_a_ticket_and_the_card_says_so(
+    cog, bot, lead, member, db
+):
+    bot.guard = FakeGuard()
+    member.dm_raises = discord.Forbidden(_Response(403), "cannot send")
+
+    picked = await open_with(cog, bot, lead, member)
+    said = await fill_ticket_modal(picked.response.modals[-1], bot, lead, body="we need a word")
+
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    assert ticket is not None
+    assert "did not reach them" in said.sent
+    assert "modmail.dm_failed" in await action_kinds(db)
+    card = await card_for(cog, bot, ticket)
+    assert "did not reach them" in card.kwargs["embed"].description
+
+
+async def test_a_member_door_that_cannot_reach_a_dm_still_opens_the_ticket(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    member.dm_raises = discord.Forbidden(_Response(403), "cannot send")
+
+    said = await open_through_the_panel(cog, bot, member)
+
+    assert await open_ticket_for(db, GUILD, member.id) is not None
+    assert "could not DM you" in said.sent

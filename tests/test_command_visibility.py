@@ -8,7 +8,13 @@ import pytest
 from black_bloc import command_visibility as cv
 from black_bloc.bot import COGS, BlackBlocBot
 from black_bloc.config import load_settings
-from black_bloc.settings_store import KEY_CHOICES, KEY_TYPES, SettingsStore, parse_value
+from black_bloc.settings_store import (
+    KEY_CHOICES,
+    KEY_TYPES,
+    SettingsStore,
+    is_staff_command,
+    parse_value,
+)
 
 GUILD = 4242
 TEST_CHANNEL = 555
@@ -268,6 +274,29 @@ async def test_the_fifteen_features_that_hide_each_map_to_one_command():
         "youtube_mode": ("youtube",),
     }
     assert "modmail_mode" not in cv.HIDDEN_WHEN_OFF
+
+
+async def test_modmail_lost_its_lock_because_anybody_may_open_a_ticket(tmp_path, monkeypatch):
+    """The doors build: /modmail is member-visible now, and `/help` must not call it staff.
+    /reply keeps the lock — it answers a ticket, which is still staff's alone."""
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(
+        _env_file=None,
+        dev_guild_id=GUILD,
+        test_mode=True,
+        test_channel_id=TEST_CHANNEL,
+        database_path=tmp_path / "doors.sqlite3",
+    )
+    black_bloc = BlackBlocBot(settings)
+    for name in COGS:
+        await black_bloc.load_extension(name)
+    found = {one.name: one for one in black_bloc.tree.get_commands()}
+    await black_bloc.close()
+
+    assert found["modmail"].default_permissions is None
+    assert is_staff_command(found["modmail"]) is False
+    assert found["reply"].default_permissions == cv.STAFF_ONLY
+    assert "modmail_member_command" in KEY_TYPES
 
 
 async def test_shadow_is_not_off_so_a_shadowed_feature_keeps_its_command(bot):

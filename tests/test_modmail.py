@@ -17,8 +17,10 @@ from black_bloc.modmail import (
     LOGS,
     NOTE,
     OUT,
+    PANEL_HEADING_DEFAULT,
     PANEL_MINUTES_KEY,
     PANEL_MOVES,
+    PANEL_TEXT_DEFAULT,
     PRACTICE_MARK,
     REFRESH,
     SITE,
@@ -28,6 +30,7 @@ from black_bloc.modmail import (
     SNIPPET_REMOVE_NO,
     SNIPPET_REMOVE_YES,
     SOURCES,
+    TICKET_SOURCES,
     TRUNCATED_MARK,
     UNBLOCK,
     UNDELIVERED_MARK,
@@ -39,11 +42,14 @@ from black_bloc.modmail import (
     clamp_bytes,
     closing_dm,
     count_directions,
+    door_buttons,
     dump_attachments,
+    first_message,
     forget_buttons,
     header_embed,
     is_note,
     is_practice,
+    last_reply_missed,
     load_attachments,
     mentions,
     modes_sentence,
@@ -59,10 +65,13 @@ from black_bloc.modmail import (
     staff_ping,
     thread_invite,
     thread_name,
+    ticket_button_buttons,
+    ticket_button_embed,
     ticket_card_embed,
     ticket_card_lines,
     ticket_channel_name,
     ticket_label,
+    ticket_source,
     ticket_topic,
     transcript_embed,
     transcript_filename,
@@ -616,3 +625,118 @@ def test_the_panels_copy_of_the_card_draws_the_cards_own_four_moves_and_a_back()
 def test_a_ticket_reads_as_one_select_option_with_its_number_mode_and_member():
     assert ticket_label(a_ticket(), "Alice") == "#4 · channel · Alice"
     assert ticket_label(a_ticket()) == "#4 · channel · 900"
+
+
+# --- the doors (modmail-doors-design.md §C) ----------------------------------------------------
+
+
+def test_a_ticket_that_predates_the_column_came_in_the_only_way_there_was():
+    assert ticket_source(a_ticket()) == "dm"
+    assert ticket_source(a_ticket(source="panel")) == "panel"
+    assert ticket_source(a_ticket(source="sideways")) == "dm"
+    assert set(TICKET_SOURCES) == {"dm", "command", "panel", "staff", "practice"}
+
+
+def test_the_reply_sources_and_the_ticket_sources_are_two_lists_on_purpose():
+    """A reply comes from a card or a command; a TICKET comes from a door. `command` is the
+    one word both use, and the four reply sources are still exactly the four."""
+    assert SOURCES == ("card", "typed", "command", "web")
+    assert set(SOURCES) & set(TICKET_SOURCES) == {"command"}
+
+
+def test_the_first_row_is_the_same_question_for_a_member_and_for_a_lead():
+    member = door_buttons(may_open=True, staff=False)
+    staff = door_buttons(may_open=True, staff=True)
+
+    assert [move.label for move in member] == ["Open a ticket"]
+    assert [move.label for move in staff] == ["Open a ticket", "Open a ticket with…"]
+    assert [move.label for move in door_buttons(may_open=False, staff=False)] == []
+    assert [move.label for move in door_buttons(may_open=False, staff=True)] == [
+        "Open a ticket with…"
+    ]
+    assert all(move.row == 0 for move in staff)
+
+
+def test_picking_somebody_hides_the_door_that_raised_the_picker():
+    picking = door_buttons(may_open=True, staff=True, picking=True)
+    refused = door_buttons(may_open=True, staff=True, blocked_pick=True)
+
+    assert [move.label for move in picking] == ["Open a ticket"]
+    assert "Unblock them" in [move.label for move in refused]
+
+
+def test_the_ticket_button_offers_post_while_nothing_is_up_and_move_once_it_is():
+    nothing = ticket_button_buttons(posted=False, picking=False)
+    posted = ticket_button_buttons(posted=True, picking=False)
+    picking = ticket_button_buttons(posted=True, picking=True)
+
+    assert [move.label for move in nothing] == ["Post it…", "Back", "Refresh"]
+    assert [move.label for move in posted] == ["Move it…", "Take it down", "Back", "Refresh"]
+    assert "Move it…" not in [move.label for move in picking]
+    assert "Take it down" in [move.label for move in picking]
+
+
+def test_setup_gains_the_ticket_button_and_still_fits_inside_five_a_row():
+    labels = [move.label for move in setup_buttons(enabled=True)]
+
+    assert "Ticket button…" in labels
+    rows: dict[int, int] = {}
+    for move in setup_buttons(enabled=True):
+        rows[move.row] = rows.get(move.row, 0) + 1
+    assert max(rows.values()) <= 5
+
+
+def test_the_root_leaves_row_nought_to_the_doors_and_row_one_to_the_select():
+    found = root_buttons(has_forget=True, has_site=True, has_practice=True)
+
+    assert all(move.row in (2, 3) for move in found)
+    rows: dict[int, int] = {}
+    for move in found:
+        rows[move.row] = rows.get(move.row, 0) + 1
+    assert max(rows.values()) <= 5
+
+
+def test_the_card_says_where_a_ticket_came_in_and_who_opened_it():
+    staff = ticket_card_lines(
+        a_ticket(source="staff", opened_by=1), None, label="Alice"
+    )
+    panel = ticket_card_lines(a_ticket(source="panel"), None, label="Alice")
+
+    assert "**opened by staff** — <@1>" in staff
+    assert "**came in by** — staff" in staff
+    assert "**came in by** — the Open a ticket button" in panel
+    assert not [line for line in panel if line.startswith("**opened by staff**")]
+
+
+def test_the_card_says_when_the_last_reply_never_arrived():
+    rows = [
+        {"direction": "out", "delivered": 1},
+        {"direction": "in", "delivered": 1},
+        {"direction": "out", "delivered": 0},
+    ]
+
+    assert last_reply_missed(rows) is True
+    assert last_reply_missed(rows[:2]) is False
+    assert last_reply_missed([{"direction": "in", "delivered": 1}]) is False
+    assert last_reply_missed([]) is False
+    said = ticket_card_lines(a_ticket(), None, label="Alice", not_reached=True)
+    assert "did not reach them" in " ".join(said)
+
+
+def test_the_subject_heads_the_paragraph_and_the_topic_still_parses():
+    assert first_message("my role", "they took it") == "**my role**\nthey took it"
+    assert first_message("", "they took it") == "they took it"
+    assert first_message(None, "  they took it  ") == "they took it"
+    topic = ticket_topic(900, 4, "my role")
+    assert topic.startswith("my role — ")
+    assert parse_topic(topic) == (900, 4)
+    assert parse_topic(ticket_topic(900, 4)) == (900, 4)
+
+
+def test_the_posted_message_wears_the_two_keys_and_falls_back_to_its_defaults():
+    said = ticket_button_embed("Need a hand?", "Press it.")
+    empty = ticket_button_embed("", None)
+
+    assert said.title == "Need a hand?" and said.description == "Press it."
+    assert empty.title == PANEL_HEADING_DEFAULT
+    assert empty.description == PANEL_TEXT_DEFAULT

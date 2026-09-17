@@ -119,6 +119,7 @@ from ...modmail import (
     door_buttons,
     dump_attachments,
     field_of,
+    first_message,
     forget_buttons,
     header_embed,
     is_note,
@@ -1887,13 +1888,6 @@ async def open_a_ticket(
         return Outcome(
             True, said if why_not is None else said + DMS_ARE_SHUT, value=ticket["id"]
         )
-
-
-def first_message(subject: Any, text: Any) -> str:
-    """The subject is a heading on the paragraph, so the transcript keeps both."""
-    said = clamp(str(subject or "").strip(), NAME_LIMIT)
-    body = clamp(str(text or "").strip(), MESSAGE_LIMIT)
-    return f"**{said}**\n{body}" if said else body
 
 
 def ticket_panel_custom_id(guild_id: Any) -> str:
