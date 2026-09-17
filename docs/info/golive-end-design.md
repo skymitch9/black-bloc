@@ -91,7 +91,8 @@ matches; blank template → old behaviour. This doc's `## Deviations` foot. NOT 
 
 *(the build agent writes here what it had to do differently, dated)*
 
-*(the build, 2026-09-17, branch `golive-end` off `main` `fb1600b`. Everything §A–§E asks for is
+*(the build, 2026-09-17, branch `golive-end`, cut off `main` `fb1600b` and rebased onto `main`
+`905982b` once the modmail-hide and tempvoice-lobby merges landed. Everything §A–§E asks for is
 built; these are the places the build had to decide something the design left open, or depart.)*
 
 1. **`keep_mention` governs the BLANK template too.** §A says a blank `golive_end_template`

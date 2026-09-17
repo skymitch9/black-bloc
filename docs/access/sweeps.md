@@ -1487,8 +1487,9 @@ rest have never been run anywhere. What is new: `golive_end_template` (ships as
 *"**{name}** was streaming **{game}** — the stream has ended. {url}"*), `golive_end_author`
 (*"{name} was live on {platform}"*) and `golive_end_keep_mention` (**off**), a **Wording** card on
 the Go-live page that renders both messages through the bot's own functions, and
-`GET /api/golive/preview`. Registry **225 → 228**; schema **unchanged**; mock *19 pages, 176
-routes*. 🔴 **`golive_end_mode` is still `off`** — `GE-a` is the row that turns it on and every
+`GET /api/golive/preview`. Registry **227 → 230** (measured on this branch after it was rebased onto `main` `905982b`,
+which carries the modmail-hide and tempvoice-lobby merges); schema **unchanged**; mock *19 pages,
+176 routes*. 🔴 **`golive_end_mode` is still `off`** — `GE-a` is the row that turns it on and every
 row after it depends on it. The owner numbers these at the landing.
 
 | # | Do this | Expect |
