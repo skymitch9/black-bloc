@@ -1448,6 +1448,47 @@ KEY_HELP.update(
     }
 )
 
+# Modmail doors — the member half of `/modmail` and the posted Open-a-ticket button, in their
+# own block so the sibling wave-4 branches merge textually.
+MODMAIL_MEMBER_COMMAND = "modmail_member_command"
+MODMAIL_PANEL_CHANNEL = "modmail_panel_channel_id"
+MODMAIL_PANEL_MESSAGE = "modmail_panel_message_id"
+MODMAIL_PANEL_TITLE = "modmail_panel_title"
+MODMAIL_PANEL_TEXT = "modmail_panel_text"
+MODMAIL_PANEL_TITLE_DEFAULT = "Need a moderator?"
+MODMAIL_PANEL_TEXT_DEFAULT = (
+    "Press the button and tell us what is happening. Only staff see it."
+)
+
+KEY_TYPES.update(
+    {
+        MODMAIL_MEMBER_COMMAND: "bool",
+        MODMAIL_PANEL_CHANNEL: "channel",
+        MODMAIL_PANEL_MESSAGE: "int",
+        MODMAIL_PANEL_TITLE: "text",
+        MODMAIL_PANEL_TEXT: "text",
+    }
+)
+KEY_HELP.update(
+    {
+        MODMAIL_MEMBER_COMMAND: (
+            "true when anybody running /modmail gets the Open a ticket panel; false leaves "
+            "/modmail to staff, as it was before, and a member's only door is a DM"
+        ),
+        MODMAIL_PANEL_CHANNEL: (
+            "where the Open a ticket message with its button is posted; blank means no button "
+            "is up anywhere. Post it from /modmail ▸ Setup… ▸ Ticket button…"
+        ),
+        MODMAIL_PANEL_MESSAGE: (
+            "the Open a ticket message Black Bloc posted, so it can be moved, taken down and "
+            "put back after somebody deletes it. Written by the bot; there is no reason to set "
+            "it by hand"
+        ),
+        MODMAIL_PANEL_TITLE: "the heading on the posted Open a ticket message",
+        MODMAIL_PANEL_TEXT: "what the posted Open a ticket message says under its heading",
+    }
+)
+
 
 # Mod cases panel (wave 4) — the one decision `/mod`'s panel introduces, in its own block
 # so the parallel wave-4 branches merge textually.
@@ -2439,6 +2480,12 @@ class SettingsStore:
             return 10
         if key == "modmail_reply_style":
             return MODMAIL_BOTH
+        if key == MODMAIL_MEMBER_COMMAND:
+            return True
+        if key == MODMAIL_PANEL_TITLE:
+            return MODMAIL_PANEL_TITLE_DEFAULT
+        if key == MODMAIL_PANEL_TEXT:
+            return MODMAIL_PANEL_TEXT_DEFAULT
         if key == "mod_panel_minutes":
             return 10
         if key == SETTINGS_PANEL_MINUTES:

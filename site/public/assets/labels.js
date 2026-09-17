@@ -141,6 +141,11 @@ export const LABELS = {
   modmail_staff_channel_id: 'Where ticket threads are made',
   modmail_log_channel_id: 'Where a finished ticket’s transcript goes',
   modmail_log_level: 'How much of modmail is repeated into Discord',
+  modmail_member_command: 'Whether anybody can open a ticket with /modmail',
+  modmail_panel_channel_id: 'Where the Open a ticket button is posted',
+  modmail_panel_message_id: 'The posted Open a ticket message, written by the bot',
+  modmail_panel_title: 'The heading on the Open a ticket message',
+  modmail_panel_text: 'What the Open a ticket message says',
 
   automod_mode: 'Whether automod is watching',
   automod_rules: 'The rule book automod reads',
