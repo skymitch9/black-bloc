@@ -36,6 +36,10 @@ const LINKED_MS = 2000;
 
 const SETTINGS_NOTE = 'Whether requests are open, who may file one, where the bot says a request ' +
   'arrived, where it says one moved, and whether it DMs the person who asked each time.';
+const FORUM_NOTE = 'With a forum, every request is a post of its own — the card is its first ' +
+  'message, every move lands in the same post, and the post is tagged for wherever the request ' +
+  'has got to. Make the forum puts one under the Blackmail category with that category’s own ' +
+  'permissions. Leave it unmade and requests behave exactly as they do today.';
 const OPEN_NOTE = 'Filed and not picked up, longest wait first. Every button here tells the ' +
   'person who asked — picking one up, putting it on hold, and declining it.';
 const BOARD_NOTE = 'Being worked on. The buttons here save as you press them — there is no ' +
@@ -85,6 +89,7 @@ const SETTING_KEYS = [
   'request_who_can_file',
   'request_notify_channel_id',
   'request_status_channel_id',
+  'request_forum_channel_id',
   'request_dm_on_decision',
   'request_channel_moves',
   'request_review_by_other',
@@ -1257,6 +1262,9 @@ async function loadStaff() {
   const fileSay = sayAgain('file', notice());
 
   const settingsBox = section('Settings', SETTINGS_NOTE, { count: specs.length || null });
+  settingsBox.body.append(requestForumCard(
+    (specs.find((spec) => spec.key === 'request_forum_channel_id') || {}).value ?? null,
+  ));
   settingsBox.body.append(await settingsPanel(specs, {
     where: 'Settings',
     empty: 'The bot registers no request settings yet.',
@@ -1277,6 +1285,31 @@ async function loadStaff() {
   keepTyping(typed);
   remeasure();
   await honourTheLink(true, cardFor);
+}
+
+function requestForumCard(forumId) {
+  const say = notice();
+  const make = button('Make the forum', async () => {
+    const done = await run(
+      say,
+      () => send('/api/requests/forum', 'POST', {}),
+      (found) => found?.message || 'The request forum is up.',
+    );
+    if (done.ok) {
+      keepSaying('request', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  return card('Request forum', [
+    el('p', { text: FORUM_NOTE }),
+    forumId
+      ? sayNothing('Every request gets its own post there.')
+      : sayNothing('There is no request forum yet, so cards go to the channels below.'),
+    forumId
+      ? sayNothing('Clear request_forum_channel_id below to let go of it.')
+      : bar([make]),
+    say,
+  ]);
 }
 
 async function load(me) {

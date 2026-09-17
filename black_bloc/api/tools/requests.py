@@ -12,6 +12,7 @@ from ...cogs.community.requests import (
     accept,
     apply_decision,
     ask_check,
+    make_forum,
     mark_ready,
     notify,
     resume_request,
@@ -394,6 +395,21 @@ def build_router(bot: Any) -> APIRouter:
         return {
             "request": await _shown(guild, fresh),
             "message": FILED_SAID.format(request_id=request_id),
+        }
+
+    @router.post("/forum")
+    async def request_forum_make(request: Request) -> dict[str, Any]:
+        """**Make the forum**, from the website — the same one path `/request` presses."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await make_forum(bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE)
+        if not outcome.ok:
+            raise Refused(outcome.status or 400, outcome.code, outcome.message)
+        return {
+            "made": True,
+            "channel_id": str(outcome.value),
+            "message": outcome.message,
         }
 
     @router.get("/mine")

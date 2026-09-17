@@ -291,6 +291,17 @@ class WebGuild:
         self.created.append(channel)
         return channel
 
+    async def create_forum(self, name, **kwargs):
+        channel = WebChannel(
+            780 + len(self.created), name, kind="forum", position=len(self.channels)
+        )
+        channel.kwargs = kwargs
+        channel.available_tags = list(kwargs.get("available_tags") or ())
+        channel.guild = self
+        self.channels.append(channel)
+        self.created.append(channel)
+        return channel
+
 
 class WebGuard:
     """The real guard's answers without patching an HTTP client."""

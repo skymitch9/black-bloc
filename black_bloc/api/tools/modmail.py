@@ -12,6 +12,7 @@ from ...cogs.moderation.modmail import (
     close_ticket,
     drop_snippet,
     get_ticket,
+    make_forum,
     may_remove,
     panel_where,
     post_ticket_panel,
@@ -276,6 +277,23 @@ def build_router(bot: Any) -> APIRouter:
             "posted": True,
             "channel_id": str(target.id),
             "message_id": str(outcome.value),
+            "message": outcome.message,
+        }
+
+    @router.post("/forum")
+    async def modmail_forum_make(request: Request) -> dict[str, Any]:
+        """Setup's **Make the forum**, from the website — the same one path Discord presses."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await make_forum(
+            bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE
+        )
+        if not outcome.ok:
+            raise Refused(outcome.status or 400, outcome.code, outcome.message)
+        return {
+            "made": True,
+            "channel_id": str(outcome.value),
             "message": outcome.message,
         }
 

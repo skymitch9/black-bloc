@@ -5176,6 +5176,21 @@ route('DELETE', '/api/modmail/panel', (context) => {
   return { taken_down: true, channel_id: String(channelId), message_id: messageId === null || messageId === undefined ? null : String(messageId), message: 'The **Open a ticket** button is down. Nothing else changed.' };
 });
 
+route('POST', '/api/modmail/forum', (context) => {
+  requireStaff(context.session);
+  const known = state.settings.get('modmail_forum_channel_id');
+  if (known) {
+    throw new Refused(409, 'forum_exists', `<#${known}> is already the ticket forum, so nothing was made. **Forget…** → **The ticket forum** lets go of it first if you want a new one.`);
+  }
+  if (!state.settings.get('modmail_category_id')) {
+    throw new Refused(409, 'no_category', '**modmail_category_id** is not pointed at a category Black Bloc can see, so there is nowhere to make the forum. **Setup…** → **Ticket category…** points it at one first.');
+  }
+  const channelId = String(Date.now());
+  state.settings.set('modmail_forum_channel_id', channelId);
+  logAction('web.modmail.forum_made', { target_id: channelId, details: { channel_id: channelId } });
+  return { made: true, channel_id: channelId, message: `<#${channelId}> is up: a forum under the ticket category, with its overwrites, and with an **open** and a **closed** tag.` };
+});
+
 route('GET', '/api/modmail/snippets', (context) => {
   requireStaff(context.session);
   return state.snippets.map((row) => ({
@@ -6202,6 +6217,21 @@ route('POST', '/api/requests', async (context) => {
   state.asks.push(made);
   logAction('web.request.filed', { actor_id: mine, target_id: mine, details: { request_id: made.id } });
   return { request: askRow(made), message: `Filed as **#${made.id}** — staff will see it on this page.` };
+});
+
+route('POST', '/api/requests/forum', (context) => {
+  requireStaff(context.session);
+  const known = state.settings.get('request_forum_channel_id');
+  if (known) {
+    throw new Refused(409, 'forum_exists', `<#${known}> is already the request forum, so nothing was made. Clear **request_forum_channel_id** on the Settings page first if you want a new one.`);
+  }
+  if (!state.settings.get('modmail_category_id')) {
+    throw new Refused(409, 'no_category', '**modmail_category_id** is not pointed at a category Black Bloc can see, so there is nowhere under Blackmail to make the forum. Point it at one with `/modmail` ▸ **Setup…** ▸ **Ticket category…** first.');
+  }
+  const channelId = String(Date.now());
+  state.settings.set('request_forum_channel_id', channelId);
+  logAction('web.request.forum_made', { target_id: channelId, details: { channel_id: channelId } });
+  return { made: true, channel_id: channelId, message: `<#${channelId}> is up: a forum under the Blackmail category, with its overwrites, and one tag for each place a request can be.` };
 });
 
 route('GET', '/api/requests/mine', (context) => {

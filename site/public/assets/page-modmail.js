@@ -39,6 +39,10 @@ const SOURCE_LABEL = {
 const BUTTON_HELP = 'One message with an Open a ticket button under it. Pressing it asks what is '
   + 'happening and opens a ticket — the same one a DM opens. Its heading and wording are the '
   + 'modmail_panel_title and modmail_panel_text settings below.';
+const FORUM_HELP = 'In forum mode every ticket is a post of its own, tagged open while it is '
+  + 'running and closed when it ends, so the list never grows without end. Make the forum puts '
+  + 'one under the ticket category with that category’s own permissions; modmail_mode below is '
+  + 'what starts using it.';
 
 function messageNode(message) {
   const direction = message.direction === 'note' ? 'note' : message.direction === 'out' ? 'out' : 'in';
@@ -231,12 +235,43 @@ async function ticketButtonCard(placed) {
   ]);
 }
 
+function ticketForumCard(forumId) {
+  const say = notice();
+  const make = button('Make the forum', async () => {
+    const done = await run(
+      say,
+      () => send('/api/modmail/forum', 'POST', {}),
+      (found) => found?.message || 'The ticket forum is up.',
+    );
+    if (done.ok) {
+      keepSaying('modmail', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  return card('Ticket forum', [
+    el('p', { text: FORUM_HELP }),
+    forumId
+      ? el('p', {}, ['Ticket posts go in ', nameNode(forumId), '.'])
+      : sayNothing('There is no ticket forum yet, so forum mode would have nowhere to post.'),
+    forumId
+      ? sayNothing('Clear modmail_forum_channel_id below to let go of it.')
+      : bar([make]),
+    say,
+  ]);
+}
+
 async function panelSettings() {
   const specs = settingsNamespace(await settings(true), 'modmail');
   const value = (key) => (specs.find((spec) => spec.key === key) || {}).value ?? null;
   const channelId = value('modmail_panel_channel_id');
-  if (channelId) await names([String(channelId)]);
-  return { channel_id: channelId, message_id: value('modmail_panel_message_id') };
+  const forumId = value('modmail_forum_channel_id');
+  const known = [channelId, forumId].filter(Boolean).map(String);
+  if (known.length) await names(known);
+  return {
+    channel_id: channelId,
+    message_id: value('modmail_panel_message_id'),
+    forum_channel_id: forumId,
+  };
 }
 
 async function load() {
@@ -297,7 +332,9 @@ async function load() {
   three.body.append(blocksCard(blocks));
 
   const four = section('Ticket button', 'The posted Open a ticket message, and where it lives.');
-  four.body.append(await ticketButtonCard(await panelSettings()));
+  const placed = await panelSettings();
+  four.body.append(await ticketButtonCard(placed));
+  four.body.append(ticketForumCard(placed.forum_channel_id));
 
   document.getElementById('dash').replaceChildren(
     ...nodes,
