@@ -76,6 +76,7 @@ SKIN_TONE_KEY = "emoji_skin_tone"
 RULES_KEY = "automod_rules"
 MEMORY_MODE_KEY = "chat_memory_mode"
 MODMAIL_ENABLED_KEY = "modmail_enabled"
+ROLEMENU_MODE_KEY = "rolemenu_mode"
 
 CORE_CHANNEL_KEYS: tuple[str, ...] = (
     STAFF_CHANNEL_KEY,
@@ -106,6 +107,7 @@ EXTRA_MODES: tuple[FeatureMode, ...] = (
     FeatureMode(
         MODMAIL_ENABLED_KEY, "modmail", "Modmail", (MODMAIL_ANSWERING, MODMAIL_NOT_ANSWERING)
     ),
+    FeatureMode(ROLEMENU_MODE_KEY, "rolemenu", FEATURE_LABELS["rolemenu"]),
 )
 
 

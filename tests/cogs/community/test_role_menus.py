@@ -522,7 +522,10 @@ async def test_a_click_changes_nothing_while_role_menus_are_off(bot, db, clicker
     assert "role_menu.update" not in await action_kinds(db)
 
 
-async def test_the_staff_select_changes_nothing_while_role_menus_are_off(bot, db, lead):
+async def test_the_staff_select_still_hands_a_role_over_while_role_menus_are_off(bot, db, lead):
+    """Pings remake §C6, reversing this test's own earlier assertion: `rolemenu_mode` governs
+    members picking from a posted panel. Staff handing a role over by name has no onboarding
+    equivalent, so the mode going off must not take it away."""
     menu_id = await staff_menu(db)
     target = FakeMember(bot.guild, user_id=900, roles=(10,))
     select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
@@ -532,9 +535,9 @@ async def test_the_staff_select_changes_nothing_while_role_menus_are_off(bot, db
 
     await select.callback(interaction)
 
-    assert interaction.sent == ROLE_MENUS_OFF
-    assert target.edits == []
-    assert "role_menu.assign" not in await action_kinds(db)
+    assert interaction.sent != ROLE_MENUS_OFF
+    assert target.edits == [[11]]
+    assert "role_menu.assign" in await action_kinds(db)
 
 
 def test_seed_summary_is_the_one_wording_both_doors_show():
@@ -1056,6 +1059,23 @@ async def test_a_staff_assign_starts_the_menus_clock(bot, db, lead):
     assert grant["source"] == "staff" and grant["granted_by"] == lead.id
 
 
+async def test_a_staff_assign_still_lands_while_the_mode_is_off(bot, db, lead):
+    """Pings remake §C6: `rolemenu_mode` off used to refuse this in words, which left the
+    staff-assigned sets with no door at all once the owner turned the menus off."""
+    await bot.store.set(GUILD, MODE_KEY, "off")
+    menu_id = await create_menu(db, GUILD, "timed", "Timed", None, "staff", expires_days=7)
+    await add_option(db, menu_id, 10, "Runner")
+    target = FakeMember(bot.guild, user_id=902)
+    select = assign_pick(menu_id, await get_options(db, menu_id), target, remove=False)
+    select._values = ["10"]
+
+    interaction = FakeInteraction(bot, lead)
+    await select.callback(interaction)
+
+    assert ROLE_MENUS_OFF not in interaction.sent
+    assert await grants.open_grant(db, GUILD, 902, 10) is not None
+
+
 async def test_a_deleted_menu_takes_its_pending_requests_with_it(bot, db, clicker):
     menu_id = await approval_menu(db)
     await pick(bot, db, menu_id, clicker, ["10"])
@@ -1419,14 +1439,16 @@ async def test_post_it_is_missing_on_a_staff_menu_and_the_card_says_why(bot, db,
     assert "Hand roles out…" in labels(interaction.view)
 
 
-async def test_post_it_and_handing_out_are_gone_while_the_mode_is_off(bot, db, lead):
+async def test_post_it_goes_while_the_mode_is_off_and_handing_out_stays(bot, db, lead):
+    """Pings remake §C6: the mode is about members picking for themselves, so it takes
+    **Post it** away and leaves staff's **Hand roles out…** exactly where it was."""
     await self_serve_menu(db)
     await bot.store.set(GUILD, MODE_KEY, "off")
 
     interaction = await open_a_menu(bot, lead, "pronouns")
 
     assert menus.POST_LABEL not in labels(interaction.view)
-    assert "Hand roles out…" not in labels(interaction.view)
+    assert "Hand roles out…" in labels(interaction.view)
     assert "Words…" in labels(interaction.view) and "Delete it" in labels(interaction.view)
     assert menus.PICKING_IS_OFF in interaction.body
 

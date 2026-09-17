@@ -32,7 +32,8 @@ NO_MENUS_LINE = (
 )
 PICKING_IS_OFF = (
     "Members cannot pick roles from the posted panels right now, so the panels are down and "
-    "**Post it** and **Hand roles out…** are missing from every menu. Nobody has lost a role."
+    "**Post it** is missing from every menu. Nobody has lost a role, and staff still hand "
+    "roles over with **Hand roles out…** and **Grants…**."
 )
 MENU_LIST_LINE = "**{name}** — {count} role(s), {mode}, {posted}"
 NO_ROLES_YET = "No roles on it yet — **Add a role…** puts the first one on."
@@ -222,7 +223,7 @@ def menu_buttons(
         found.append(post_move(posted))
     if posted:
         found.append(TAKE_DOWN_MOVE)
-    if picking_on and options:
+    if options:
         found.append(HAND_OUT_MOVE)
     found.append(DELETE_MOVE)
     found.append(BACK_MOVE)

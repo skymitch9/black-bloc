@@ -255,7 +255,7 @@ async def test_every_command_in_the_table_is_a_real_top_level_command(real_tree)
     assert named.isdisjoint(cv.NEVER_HIDDEN)
 
 
-async def test_the_fifteen_features_that_hide_each_map_to_one_command():
+async def test_the_fourteen_features_that_hide_each_map_to_one_command():
     assert cv.HIDDEN_WHEN_OFF == {
         "applications_mode": ("apply",),
         "automod_mode": ("automod",),
@@ -269,11 +269,11 @@ async def test_the_fifteen_features_that_hide_each_map_to_one_command():
         "posts_mode": ("posts",),
         "raidtrain_mode": ("raidtrain",),
         "request_mode": ("request",),
-        "rolemenu_mode": ("rolemenu",),
         "tempvoice_mode": ("voice",),
         "youtube_mode": ("youtube",),
     }
     assert "modmail_mode" not in cv.HIDDEN_WHEN_OFF
+    assert "rolemenu" in cv.NEVER_HIDDEN
 
 
 async def test_modmail_lost_its_lock_because_anybody_may_open_a_ticket(tmp_path, monkeypatch):
@@ -368,18 +368,19 @@ async def test_every_hidden_feature_can_still_be_turned_back_on_from_discord():
         assert "shadow" not in KEY_CHOICES[key] or parse_value(key, "shadow") == "shadow"
 
 
-async def test_apply_and_rolemenu_hide_with_the_rest_but_memory_stays(bot):
-    """Supersedes two earlier per-feature carve-outs — owner, 2026-09-03: `/apply` "Visible",
-    and `/rolemenu` kept because hiding it hid the only way back; `/settings` ▸ **Turn a
-    feature back on…** plus `hide_commands_when_off` are the ways back now. `/memory` KEEPS its
-    carve-out (fork I-M1, "open it"): turning memory off deletes nothing, the site is
-    staff-only, so the panel is a member's only door to notes held about them (KI-14)."""
+async def test_apply_hides_with_the_rest_but_memory_and_rolemenu_stay(bot):
+    """`/apply` hides — owner, 2026-09-03: "Visible". `/memory` KEEPS its carve-out (fork
+    I-M1, "open it"): turning memory off deletes nothing, the site is staff-only, so the panel
+    is a member's only door to notes held about them (KI-14). `/rolemenu` took the same
+    carve-out back at the pings remake (§C6): the mode governs who MEMBERS may pick from, and
+    Grants…, the timed grants and Hand roles out… have no onboarding equivalent, so hiding the
+    command took staff's only door to them away."""
     assert "chat_memory_mode" not in cv.HIDDEN_WHEN_OFF
     assert all("memory" not in names for names in cv.HIDDEN_WHEN_OFF.values())
-    for key, name in (
-        ("applications_mode", "apply"),
-        ("rolemenu_mode", "rolemenu"),
-    ):
+    assert "rolemenu_mode" not in cv.HIDDEN_WHEN_OFF
+    assert bot.store.get(GUILD, "rolemenu_mode") == "off"
+    assert "rolemenu" not in cv.hidden_names(bot, GUILD)
+    for key, name in (("applications_mode", "apply"),):
         assert bot.store.get(GUILD, key) == "off"
         assert name in cv.hidden_names(bot, GUILD)
         await bot.store.set(GUILD, key, "on", by=5)

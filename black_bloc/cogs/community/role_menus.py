@@ -2480,10 +2480,6 @@ async def run_assign(interaction: discord.Interaction, select: Any, previous: An
         return
     bot = interaction.client
     guild = interaction.guild
-    if not picking_is_on(bot, guild.id):
-        await render_menu(interaction, previous.menu_name, previous)
-        await answer(interaction, ROLE_MENUS_OFF)
-        return
     menu = await get_menu_by_id(bot.db, select.menu_id)
     _, said = await staff_assign(
         bot,
