@@ -85,6 +85,37 @@ order: the button lands after the welcome message and re-posts after a **Post it
 the decided bullets they change); the modmail and requests guides in `guides_seed.json`; `docs/access/sweeps.md`
 rows `BT-a…`; `architecture.md` schema line; this doc's `## Deviations`. NOT `TODO.md` / `DONE.md` / `deploys.log`.
 
+## F. The request post carries the staff moves (owner, 2026-09-17 12:1x)
+
+Owner, verbatim: *"On the request thread there aren't buttons to edit it or anything / Why is that"* → shown the two
+homes (the `/request` panel's staff card and the website) → *"Yes I want staff, mainly me to be able to interact
+with request in discord too"*.
+
+**Rule.** The forum post's FIRST message (the one `open_forum_post` makes) carries, under the filed card, the same
+staff move buttons the `/request` panel's card draws for that status — `requests.card_buttons(status, ...)` rendered
+by the SAME `CardMoveButton` class, one row, staff-gated on press (a member's press answers in words naming the role
+it needs; nothing is hidden by rendering because a forum post is one message for everybody) — plus the **Open on the
+site** link as the last item of the row or a second row (Discord: five per row). Every move a staff member makes on
+the post edits that same first message's buttons to the new status's set (the card already re-renders on
+`notify_move`; the buttons ride along) and posts the move line into the post as today. A decision (done / declined)
+leaves NO move buttons on the message (the link stays) and archives the post as today. **Persistence:** a press must
+survive a restart — register the button as a `DynamicItem` (custom id `request:<id>:<move>`) the way the posted
+ticket button and the rolemenu panels do, so the post is pressable for as long as it exists; the panel's own
+`CardMoveButton` may stay a panel item if it is not already dynamic — one class, two registrations is fine, two
+classes is not.
+
+**Keys.** `request_post_buttons` — bool, **default true**, help: *"true draws the staff move buttons on each
+request's forum post (and edits them as the request moves); false leaves the post a notice with the site link"*.
+Registry + mock row + label.
+
+**Tests (mirror the package).** The post's first message carries the status's buttons + the link; a staff press moves
+the request, edits the buttons and posts the move line into the post; a member's press is refused in words; a decision
+leaves only the link; the dynamic item resolves after a fresh view registry (restart); key off = today. Both orders.
+
+**Docs.** `code-notes.md`, this doc's `## Deviations`, `requests-panel-design.md` (strike the bullet that says the
+channel card carries no moves, checklist 35), the requests guide in `guides_seed.json` (a staff step: *press a move on
+the post*), sweeps rows `RP-a…`.
+
 ## Deviations
 
 > Written by the build, **2026-09-17**, on branch `blackmail-threads` off `main` `905982b`.
