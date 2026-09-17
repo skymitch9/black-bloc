@@ -233,16 +233,15 @@ class Core(commands.Cog):
         self.last_guides_error = None
 
     async def _seed_guides(self, guild: Any) -> None:
-        if await guides.count_guides(self.bot.db, guild.id) == 0:
-            made = await guides.seed_guides(self.bot.db, guild.id)
-            if made:
-                await log_action(
-                    self.bot,
-                    guild,
-                    "guide.seeded",
-                    details={"count": made, "via": VIA_BOOT},
-                )
-            return
+        """A guide the seed gained later is inserted; the ones already there refresh."""
+        made = await guides.seed_guides(self.bot.db, guild.id)
+        if made:
+            await log_action(
+                self.bot,
+                guild,
+                "guide.seeded",
+                details={"count": made, "via": VIA_BOOT},
+            )
         changed = await guides.refresh_seeds(self.bot.db, guild.id)
         if changed:
             await log_action(

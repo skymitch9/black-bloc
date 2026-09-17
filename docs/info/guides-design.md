@@ -537,3 +537,13 @@ verification is `pytest`, `ruff`, `check.mjs` and one browser pass over the MOCK
 7. **The mock seed gains a SECOND picture, on `house-rules`, NOT stale.** The one seeded
    picture was already stale, so the mock could only ever answer *"Every screenshot was
    already marked."* and no browser pass could see the sentence that matters.
+
+### Found at the v125 landing (conductor, 2026-09-17 15:0x, v127)
+
+The `front-door` guide (seeded at v125, guides 17 → 18 in the file) never reached the live database: `Core._seed_guides`
+called `seed_guides` only when a guild had NO guides at all, and `refresh_seeds` never inserts. Every guide added to the
+seed after a guild's first seeding was invisible — the youtube-live build had named the same limitation for steps and
+faults (its deviation 11). Fixed: `seed_guides` (idempotent by slug) runs on every guides tick and logs `guide.seeded`
+with the count of what it added; `refresh_seeds` follows as before. One test. Steps and faults added to an EXISTING
+guide still reach a fresh seed only — that stays a known limit (**Reset the whole guide** brings them in).
+

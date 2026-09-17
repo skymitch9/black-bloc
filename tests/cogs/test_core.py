@@ -1454,6 +1454,25 @@ async def test_help_links_the_guide_for_a_command_that_has_one_and_nothing_else(
     assert "**/here** — Only this guild has it" in said
 
 
+async def test_a_guide_the_seed_gained_later_is_inserted_on_the_next_tick(bot, cog):
+    from black_bloc import guides
+
+    await seed_guides_for(bot)
+    before = await guides.count_guides(bot.db, bot.guild.id)
+    await bot.db.conn.execute("DELETE FROM guides WHERE slug = ?", ("front-door",))
+    await bot.db.conn.commit()
+    assert await guides.count_guides(bot.db, bot.guild.id) == before - 1
+
+    await cog._seed_guides(bot.guild)
+
+    assert await guides.count_guides(bot.db, bot.guild.id) == before
+    rows = await bot.db.conn.execute_fetchall(
+        "SELECT kind, details FROM action_log WHERE kind = 'guide.seeded' "
+        "ORDER BY id DESC LIMIT 1"
+    )
+    assert rows and '"count": 1' in rows[0][1]
+
+
 async def test_a_command_with_a_seeded_guide_carries_the_link(bot, cog, member):
     from black_bloc import guides
 
