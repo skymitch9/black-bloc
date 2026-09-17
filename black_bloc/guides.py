@@ -43,6 +43,7 @@ SYMPTOM_MAX = 120
 ANSWER_MAX = 400
 CAPTION_MAX = 200
 SLUG_MAX = 60
+REASON_MAX = 200
 
 MEDIA_BYTES_MAX = 2 * 1024 * 1024
 MEDIA_SIDE_MAX = 1600
@@ -1004,6 +1005,21 @@ async def mark_stale(db: Any, guild_id: int, release: str, wanted: list[str]) ->
     return len(rows)
 
 
+async def mark_all_stale(db: Any, guild_id: int) -> int:
+    """Every picture in the guild, whatever feature or release it belongs to."""
+    cur = await db.conn.execute(
+        "SELECT id FROM guide_media WHERE guild_id = ? AND stale = 0", (int(guild_id),)
+    )
+    rows = list(await cur.fetchall())
+    at = now()
+    for row in rows:
+        await db.conn.execute(
+            "UPDATE guide_media SET stale = 1, stale_since = ? WHERE id = ?", (at, int(row["id"]))
+        )
+    await db.conn.commit()
+    return len(rows)
+
+
 async def reconcile_releases(bot: Any) -> dict[str, Any] | None:
     """§C4.3 — one `guide.shots_stale` row per release, and nothing at all without the file."""
     db = getattr(bot, "db", None)
@@ -1255,6 +1271,7 @@ __all__ = [
     "PAGE",
     "PROBES",
     "PROBE_LABELS",
+    "REASON_MAX",
     "SEEDED_CANNOT_BE_DELETED",
     "SLUG_NEEDED",
     "SLUG_TAKEN",
@@ -1286,6 +1303,7 @@ __all__ = [
     "links_for",
     "list_guides",
     "load_seed",
+    "mark_all_stale",
     "media_kind",
     "media_of",
     "media_path",
