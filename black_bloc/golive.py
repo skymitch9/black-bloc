@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -32,6 +33,18 @@ ANNOUNCEMENT_LEFT = "left"
 END_TRIM = " \t—–-·|,;:"
 LIVE_VERB = "is now live"
 ENDED_VERB = "was live"
+DURATION_SHORT = "under a minute"
+DURATION_MINUTES = "{minutes} min"
+DURATION_HOURS = "{hours} h"
+DURATION_BOTH = "{hours} h {minutes} min"
+SUMMARY_CHARS = 40
+MENTION_PREFIX = re.compile(r"^(?:<@&\d+>[ \t]*)+")
+EMPTY_BRACKETS = re.compile(r"\([ \t]*\)|\[[ \t]*\]")
+DANGLING = re.compile(
+    r"[ \t]+(?:for|on|in|at|—|–|·)(?=[ \t]*(?:[.,;:!?)\]]|$))", re.IGNORECASE | re.MULTILINE
+)
+DOUBLE_SPACE = re.compile(r"[ \t]{2,}")
+SPACE_BEFORE_STOP = re.compile(r"[ \t]+([.,;:!?])")
 AUTHOR_LIMIT = 256
 TITLE_LIMIT = 256
 FIELD_LIMIT = 1024
@@ -225,12 +238,133 @@ def ended_footer(footer: str, suffix: str | None) -> str:
     return f"{footer} {tail}" if footer else tail
 
 
+def tidy(text: str) -> str:
+    """The gaps an empty placeholder leaves: no `()`, no doubled space, no dangling `for`."""
+    cleaned = EMPTY_BRACKETS.sub("", text)
+    cleaned = DANGLING.sub("", cleaned)
+    cleaned = DOUBLE_SPACE.sub(" ", cleaned)
+    return SPACE_BEFORE_STOP.sub(r"\1", cleaned).strip()
+
+
+def humanise_duration(started_at: Any, ended_at: Any) -> str:
+    """How long a stream ran, in words; a missing or unreadable stamp renders as nothing."""
+    began = parse_ts(started_at)
+    over = parse_ts(ended_at)
+    if began is None or over is None:
+        return ""
+    minutes = int((over - began).total_seconds()) // 60
+    if minutes < 1:
+        return DURATION_SHORT
+    hours, left = divmod(minutes, 60)
+    if not hours:
+        return DURATION_MINUTES.format(minutes=left)
+    return (
+        DURATION_HOURS.format(hours=hours)
+        if not left
+        else DURATION_BOTH.format(hours=hours, minutes=left)
+    )
+
+
+def as_info(source: Any) -> StreamInfo:
+    """A StreamInfo whether the caller holds one or a `golive_sessions` row."""
+    if isinstance(source, StreamInfo):
+        return source
+    wanted = ("url", "game", "title", "platform")
+    return StreamInfo(**{name: _row_field(source, name) for name in wanted})
+
+
+def _row_field(source: Any, key: str) -> Any:
+    if source is None:
+        return None
+    try:
+        return source[key]
+    except (IndexError, KeyError, TypeError):
+        return getattr(source, key, None)
+
+
+def mention_prefix(content: Any) -> str:
+    """The role mentions `render` put at the very front of an announcement, if any."""
+    found = MENTION_PREFIX.match(str(content or ""))
+    return found.group(0) if found else ""
+
+
+def without_mention(content: Any) -> str:
+    return MENTION_PREFIX.sub("", str(content or ""))
+
+
+def ended_fields(info: Any, name: str, duration: str) -> dict[str, str]:
+    stream = as_info(info)
+    return _Fields(
+        name=name,
+        game=stream.game or GAME_FALLBACK,
+        title=stream.title or "",
+        url=stream.url or "",
+        platform=stream.platform or "",
+        duration=duration or "",
+    )
+
+
+def ended_render(
+    template: Any,
+    info_or_row: Any,
+    name: str,
+    *,
+    content: Any = "",
+    suffix: Any = GOLIVE_END_SUFFIX,
+    duration: str = "",
+    keep_mention: bool = False,
+) -> str:
+    """The announcement once the stream is over; blank or unreadable wording keeps the suffix."""
+    prefix = mention_prefix(content) if keep_mention else ""
+    plain = without_mention(content)
+    wanted = str(template or "").strip()
+    if not wanted:
+        return prefix + ended_text(plain, suffix)
+    try:
+        return prefix + tidy(wanted.format_map(ended_fields(info_or_row, name, duration)))
+    except Exception as exc:
+        log.warning(
+            "go-live: end wording %r could not be rendered (%s); using the suffix", template, exc
+        )
+        return prefix + ended_text(plain, suffix)
+
+
+def ended_author(
+    template: Any, name: str, platform: str | None, *, duration: str = ""
+) -> str:
+    """The card's top line once the stream is over; blank wording keeps 'was live on'."""
+    wanted = str(template or "").strip()
+    if wanted:
+        try:
+            line = tidy(
+                wanted.format_map(
+                    _Fields(name=name, platform=platform or "", duration=duration or "")
+                )
+            )
+        except Exception as exc:
+            log.warning(
+                "go-live: end author %r could not be rendered (%s); using the default",
+                template,
+                exc,
+            )
+            line = ""
+        if line:
+            return _clip(line, AUTHOR_LIMIT)
+    return author_line(name, platform, ended=True)
+
+
 def ended_embed(
-    embed: Any, name: str, platform: str | None, suffix: str | None = GOLIVE_END_SUFFIX
+    embed: Any,
+    name: str,
+    platform: str | None,
+    suffix: str | None = GOLIVE_END_SUFFIX,
+    *,
+    author: Any = "",
+    duration: str = "",
 ) -> discord.Embed:
     """The same card once the stream is over; the art and the link stay put."""
     finished = discord.Embed.from_dict(embed.to_dict())
-    finished.set_author(name=author_line(name, platform, ended=True))
+    finished.set_author(name=ended_author(author, name, platform, duration=duration))
     footer = _text(getattr(getattr(embed, "footer", None), "text", None)) or ""
     finished.set_footer(text=ended_footer(footer, suffix) or None)
     return finished
@@ -332,11 +466,16 @@ def end_details(end_mode: Any) -> dict[str, str]:
     return {} if edits_on_end(end_mode) else {"announcement": ANNOUNCEMENT_LEFT}
 
 
-def end_summary(end_mode: Any, suffix: str | None = GOLIVE_END_SUFFIX) -> str:
+def end_summary(
+    end_mode: Any, suffix: str | None = GOLIVE_END_SUFFIX, template: Any = ""
+) -> str:
     """One phrase for the staff panel: what happens to an announcement once the stream ends."""
-    if edits_on_end(end_mode):
-        return f'{GOLIVE_END_EDIT} ("{suffix or ""}")'
-    return f"{end_mode} (left as posted)"
+    if not edits_on_end(end_mode):
+        return f"{end_mode} (left as posted)"
+    wanted = str(template or "").strip()
+    if wanted:
+        return f'{GOLIVE_END_EDIT} (rewritten: "{_clip(wanted, SUMMARY_CHARS)}")'
+    return f'{GOLIVE_END_EDIT} (suffix "{suffix or ""}")'
 
 
 def ended_text(text: str, suffix: str | None = GOLIVE_END_SUFFIX) -> str:

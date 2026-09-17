@@ -12,6 +12,7 @@ ROUTES = [
     ("POST", "/api/golive/optouts"),
     ("DELETE", "/api/golive/optouts/7"),
     ("GET", "/api/golive/sessions"),
+    ("GET", "/api/golive/preview"),
 ]
 
 
@@ -217,3 +218,79 @@ async def test_the_website_never_says_a_link_it_did_not_check_was_checked(
     assert "did not check" in body["message"]
     assert (await get_link(web.db, 21))["twitch_user_id"] is None
     assert (await wf.one_web_row(web.db, "web.golive.link"))["checked"] is False
+
+
+async def test_the_preview_renders_both_wordings_through_the_bots_own_functions(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 7, name="ada", staff=True)
+    sign_in(client)
+
+    found = client.get("/api/golive/preview").json()
+
+    assert found["live"]["author"] == "Ada is now live on Twitch!"
+    assert "Ada" in found["live"]["text"] and "Celeste" in found["live"]["text"]
+    assert found["ended"]["text"] == (
+        "**Ada** was streaming **Celeste** — the stream has ended. "
+        "https://www.twitch.tv/blackbloc"
+    )
+    assert found["ended"]["author"] == "Ada was live on Twitch"
+    assert found["ended"]["footer"] == "Black Bloc · via Twitch · stream ended"
+
+
+async def test_the_preview_reads_the_wording_this_guild_saved(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 7, name="ada", staff=True)
+    await web.store.set(wf.GUILD_ID, "golive_end_template", "{name} streamed for {duration}")
+    await web.store.set(wf.GUILD_ID, "golive_end_author", "that was {platform}")
+    sign_in(client)
+
+    found = client.get("/api/golive/preview").json()
+
+    assert found["ended"]["text"] == "Ada streamed for 2 h 10 min"
+    assert found["ended"]["author"] == "that was Twitch"
+
+
+async def test_a_blank_end_wording_previews_the_suffix_the_old_way(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 7, name="ada", staff=True)
+    await web.store.set(wf.GUILD_ID, "golive_end_template", "")
+    sign_in(client)
+
+    found = client.get("/api/golive/preview").json()
+
+    assert found["ended"]["text"] == found["live"]["text"] + " — stream ended"
+
+
+async def test_the_preview_drops_the_ping_unless_the_guild_keeps_it(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 7, name="ada", staff=True)
+    await web.store.set(wf.GUILD_ID, "golive_ping_role_id", 4242)
+    sign_in(client)
+
+    found = client.get("/api/golive/preview").json()
+    assert found["live"]["text"].startswith("<@&4242> ")
+    assert not found["ended"]["text"].startswith("<@&4242> ")
+
+    await web.store.set(wf.GUILD_ID, "golive_end_keep_mention", True)
+    kept = client.get("/api/golive/preview").json()
+    assert kept["ended"]["text"].startswith("<@&4242> ")
+
+
+def test_the_preview_refuses_a_member_in_words(client, sign_in):
+    sign_in(client, uid=1234, staff=False)
+
+    response = client.get("/api/golive/preview")
+
+    assert response.status_code == 403
+    assert "does not hold a staff role" in response.json()["message"]
+    assert response.json()["message"] != "403"
+
+
+def test_the_preview_writes_nothing(client, sign_in):
+    sign_in(client)
+    assert client.get("/api/golive/preview").status_code == 200
+    assert client.post("/api/golive/preview").status_code in (404, 405)

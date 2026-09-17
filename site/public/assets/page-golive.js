@@ -21,6 +21,7 @@ import {
   keepSaying,
   sayAgain,
   section,
+  sentenceFor,
   table,
   templateEditor,
   when,
@@ -31,17 +32,24 @@ let refresh = () => {};
 const TEMPLATE_KEY = 'golive_template';
 const PING_KEY = 'golive_ping_role_id';
 const END_MODE_KEY = 'golive_end_mode';
-const END_SUFFIX_KEY = 'golive_end_suffix';
 const END_EDIT = 'edit';
 const GAME_FALLBACK = 'something';
 const DEFAULT_TEMPLATE = 'the default wording';
 
-const END_LEAD = 'And once the stream has ended:';
-const END_LEFT = 'Announcements are left as posted when a stream ends — turn golive_end_mode to '
-  + 'edit to mark them.';
 const END_UNKNOWN = 'The bot did not report a golive_end_mode key, so what happens once a stream '
   + 'ends is not shown rather than guessed at.';
-const END_HELP = 'edit adds the wording below to the announcement; off leaves it as posted.';
+const END_HELP = 'edit rewrites the announcement once the stream is over; off leaves it as '
+  + 'posted. The Wording card below shows both.';
+
+const WORDING_TITLE = 'Wording';
+const WORDING_NOTE = 'Both messages as the bot itself renders them — the same functions Discord '
+  + 'gets, not a copy living on this page. The sample is a two-hour stream of Celeste.';
+const WORDING_LEFT = 'golive_end_mode is off, so an announcement is left exactly as posted. This '
+  + 'is what edit would write instead.';
+const WORDING_STALE = 'Saved the wording above with its own Save bar? Press Refresh — this card '
+  + 'reads what the bot has stored.';
+const WHILE_LIVE = 'while live';
+const AFTER_THE_STREAM = 'after the stream';
 
 const SAMPLE = {
   name: 'Casey',
@@ -109,20 +117,9 @@ function optoutCard(say) {
   return card('Opt somebody out', [picker.node, bar([go])]);
 }
 
-async function wordingCard(spec, prefix, endSpec, endSuffix) {
+async function wordingCard(spec, prefix, endSpec, onEndMode) {
   const shown = el('p', { class: 'preview' });
-  const ended = el('p', { class: 'preview' });
-  const lead = el('p', { class: 'field-help', text: END_LEAD });
-  const otherwise = el('p', { class: 'field-help', text: endSpec ? END_LEFT : END_UNKNOWN });
   const playing = el('input', { class: 'input switch', type: 'checkbox', checked: true });
-
-  let endMode = endSpec ? String(endSpec.value ?? '') : null;
-  const showEnd = () => {
-    const editing = endMode === END_EDIT;
-    lead.hidden = !editing;
-    ended.hidden = !editing;
-    otherwise.hidden = editing;
-  };
 
   const made = await templateEditor(spec, {
     controls: [playing],
@@ -131,18 +128,13 @@ async function wordingCard(spec, prefix, endSpec, endSuffix) {
       shown.textContent = filled === null
         ? `Black Bloc would post ${DEFAULT_TEMPLATE} instead.`
         : `${prefix}${filled}`;
-      ended.textContent = filled === null ? '' : `${prefix}${filled}${endSuffix}`;
     },
   });
 
   const end = endSpec === null ? null : modeSwitch(endSpec, {
     label: 'The stream-end wording',
-    onSaved: (key, value) => {
-      endMode = String(value);
-      showEnd();
-    },
+    onSaved: (key, value) => onEndMode(String(value)),
   });
-  showEnd();
 
   const preview = card('What an announcement looks like', [
     el('div', { class: 'formrow' }, [
@@ -150,13 +142,72 @@ async function wordingCard(spec, prefix, endSpec, endSuffix) {
       end ? field('When a stream ends', end.node, END_HELP) : null,
     ]),
     shown,
-    lead,
-    ended,
-    otherwise,
+    end ? null : el('p', { class: 'field-help', text: END_UNKNOWN }),
     end ? end.say : null,
     made.say,
-  ]);
+  ].filter(Boolean));
   return [made.row.node, preview];
+}
+
+/** One rendered message, in the shape the modmail tab already draws a bot line in. */
+function botLine(mark, line, text, footer) {
+  return el('li', { class: 'msg', 'data-direction': 'out' }, [
+    el('div', { class: 'msg-head' }, [
+      badge(mark, mark === WHILE_LIVE ? 'ok' : 'quiet'),
+      el('span', { text: line }),
+    ]),
+    el('p', { class: 'msg-body', text }),
+    footer ? el('p', { class: 'msg-head', text: footer }) : null,
+  ].filter(Boolean));
+}
+
+/** `<@&123>` reads as the role's name here; the bot sends the id, Discord draws the name. */
+function withRoleNames(text, roles) {
+  return String(text || '').replace(/<@&(\d+)>/g, (whole, id) => {
+    const role = roles.find((one) => String(one.id) === id);
+    return role ? `@${role.name}` : whole;
+  });
+}
+
+/** C: the Wording card — both renderings, read from the bot, never rendered here. */
+async function wordingPreview(say, endMode) {
+  const list = el('ul', { class: 'msglist' });
+  const left = el('p', { class: 'field-help', text: WORDING_LEFT });
+  let roles = [];
+  const paint = async () => {
+    try {
+      const found = await api('/api/golive/preview');
+      list.replaceChildren(
+        botLine(WHILE_LIVE, found.live.author, withRoleNames(found.live.text, roles)),
+        botLine(
+          AFTER_THE_STREAM,
+          found.ended.author,
+          withRoleNames(found.ended.text, roles),
+          found.ended.footer,
+        ),
+      );
+      say.say('');
+    } catch (error) {
+      const said = sentenceFor(error);
+      say.say(said.text, said.tone);
+    }
+  };
+  try {
+    roles = await refRoles();
+  } catch (error) {
+    roles = [];
+  }
+  await paint();
+  const node = card(WORDING_TITLE, [
+    el('p', { class: 'field-help', text: WORDING_NOTE }),
+    list,
+    left,
+    el('p', { class: 'field-help', text: WORDING_STALE }),
+    say,
+  ], { actions: [button('Refresh', () => paint(), { tone: 'quiet' })] });
+  const showEnd = (mode) => { left.hidden = String(mode) === END_EDIT; };
+  showEnd(endMode);
+  return { node, paint, showEnd };
 }
 
 async function wordingSection(specs) {
@@ -170,10 +221,15 @@ async function wordingSection(specs) {
     return wording.node;
   }
   const prefix = await pingPrefix(specs);
-  const suffix = specs.find((one) => one.key === END_SUFFIX_KEY);
   const endSpec = specs.find((one) => one.key === END_MODE_KEY) || null;
+  const preview = await wordingPreview(notice(), endSpec ? endSpec.value : null);
+  const onEndMode = (mode) => {
+    preview.showEnd(mode);
+    preview.paint();
+  };
   wording.body.append(
-    ...await wordingCard(spec, prefix, endSpec, suffix ? String(suffix.value || '') : ''),
+    ...await wordingCard(spec, prefix, endSpec, onEndMode),
+    preview.node,
   );
   return wording.node;
 }

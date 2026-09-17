@@ -865,6 +865,29 @@
       ]
     },
     {
+      "method": "GET",
+      "path": "/api/golive/preview",
+      "read_by": [
+        "page-golive.js wordingCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "live",
+        "ended"
+      ],
+      "nested": {
+        "live": [
+          "text",
+          "author"
+        ],
+        "ended": [
+          "text",
+          "author",
+          "footer"
+        ]
+      }
+    },
+    {
       "method": "DELETE",
       "path": "/api/golive/links/{member_id}",
       "read_by": [
