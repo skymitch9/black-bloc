@@ -198,3 +198,12 @@ site/public/assets/release.json could not be written`. The line now travels in
 `$env:BB_LAST_DEPLOY_LINE` and the script takes two arguments. Do not put the line back on the
 command line, and do not stop writing quotes in deploys.log — the log is prose.
 
+## A token-bucket test that drains with real time is a CI flake (incident, run 35171511021, 2026-09-16)
+
+`test_the_read_bucket_still_says_slow_down_when_it_is_empty` drained the member read bucket with 301
+`take()` calls and then expected 429. On a slow GitHub runner (the suite took 174 s that run) the
+bucket — 300 a minute, refilled continuously — earned tokens back between the drain and the probe, and
+the probe answered 200. Locally it never failed. The fix pins the drained key's stamp a full window
+into the future, so no wall-clock gap can refill it. Any test that asserts "the bucket is empty" must
+do the same or pass `now=` explicitly; never rely on the drain and the probe being fast.
+
