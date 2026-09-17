@@ -118,6 +118,15 @@ The panel re-renders in place (`interaction.response.edit_message`) as:
   request has got to and archived once it is finished. A blank key is still exactly the two
   channels. The owner asked for it: *"have request be one of those thread channels"*; the design
   is `blackmail-threads-design.md` §B.
+  ⚠️ **~~And the card in that place carries no moves, only the site link — the buttons below are
+  the PANEL's.~~ SINCE v122** (2026-09-17, branch `request-post-buttons`, design
+  `blackmail-threads-design.md` §F) the forum post's FIRST message carries the same button table
+  as the panel card, drawn from the same `card_buttons(status)` and re-drawn by `notify_move` as
+  the request moves; a decision leaves the link alone on it. The owner asked for it: *"Yes I want
+  staff, mainly me to be able to interact with request in discord too"*. The moves are the same,
+  the gate is the same (`still_staff`) and the shared functions are the same — what differs is
+  that a post is one message for everybody, so nothing is hidden by rendering and `may_accept` is
+  asked on the press instead. `request_post_buttons` (bool, default true) turns it off.
 - **Buttons — ONLY the moves valid from the row's status**, computed from
   `moves_from(status)` plus the guards the shared functions apply, so the panel never
   offers a move the function would refuse:
@@ -149,6 +158,14 @@ embed footer says "This panel has gone quiet — run /request again". The panel 
 and not persistent: after a bot restart its buttons answer "This interaction failed" from
 Discord — accepted, the panel is a moment, not a post (a `KNOWN_ISSUES` entry, WATCHING,
 "what would change it: a persistent `DynamicItem` panel if staff ask").
+
+⚠️ **And it MUST stay that way, which is a stronger statement than "accepted" since v122**
+(`blackmail-threads-design.md` §F, deviation 1): measured in `discord.py` 2.7.1,
+`ViewStore.remove_view` pops a view's dynamic TEMPLATES out of the process-wide registry and
+`View.stop()` calls it — so a `DynamicItem` on a view that times out or is retired would
+de-register itself for every OTHER message carrying that template, silently. The request posts'
+buttons are dynamic; the panel's are not, and making the panel persistent now means moving it to
+`timeout=None` rather than adding a dynamic item to the view it has.
 
 ### Settings (checklist 33 — every decision configurable both ways)
 
@@ -239,7 +256,9 @@ specified.
    `Back` — Discord's 5-per-row cap — so a site link has nowhere to go without a
    second row; the design's own button table lists no site link on the card,
    only on the top-level panel and the channel/DM cards, so this reads as
-   intentional rather than an omission.
+   intentional rather than an omission. ⚠️ **Still true of the PANEL card, no
+   longer true of the forum post** (v122, §F): the post draws both, and puts
+   the link on a second row exactly where `review`'s five moves fill the first.
 6. **Every component/modal action re-checks `bot.db.is_connected` after its own
    `defer()`** (`db_ready`), not only the top-level `/request` command. The
    design names the database-down gate once, at the command; extending the same

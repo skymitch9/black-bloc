@@ -1,6 +1,12 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-17** — rows **`RP-a` … `RP-h`** added at the foot for the REQUEST POSTS build (branch
+> `request-post-buttons`, off `main` `f7cd19d`; design `info/blackmail-threads-design.md` §F;
+> ⚠️ **not merged, not deployed, no button in it has been pressed in Discord**): every request's
+> forum post carries the staff move buttons on its first message and re-draws them as the request
+> moves (`request_post_buttons`, default **true**). ⚠️ **`RP-g` is the row that matters** — it is
+> the only proof the buttons survive a restart. Before that,
 > **2026-09-17** — rows **`SR-a` … `SR-i`** added at the foot for the STAFF REACH build (branch
 > `staff-reach`, off `main` `4da192c`; ⚠️ **not merged, not deployed, nothing in it has met
 > Discord or a browser**): the staff roles get view + manage (+ connect for voice) on every channel
@@ -1642,6 +1648,31 @@ https://blackbloc.heygabi.ai/settings.html.
 | **496** (was `SR-j`) | **Go-live** page ▸ **Announcement wording**. Under the live editor: **What the announcement says once the stream is over** and, under it, **What the card's top line says once the stream is over** | Both are editable here, with the same docked save bar (it says *Once the stream is over*) and a **What the ending looks like** card that fills in as you type, with a two-hour `{duration}`. Empty either box and its preview says what blank means rather than showing nothing |
 | **497** (was `SR-k`) | Change one of them and press **Save Changes**, then watch the **Wording** card below | It repaints itself — no Refresh press. Refresh is still there for a change made from the Settings page or from Discord. ⚠️ The two settings rows on the right still write the same keys; they are the same fact, not a second one |
 | **498** (was `SR-l`) | In Discord: `/settings` ▸ **A setting group…** ▸ **golive** ▸ *golive_end_template* ▸ **The words…**, clear the box and submit | ⚠️ **This is the row that proves KI-28 closed.** Discord accepts the empty submit, the card comes back reading *not set*, and the Wording card on the site shows the live sentence with ` — stream ended` on the end. Try the same on *golive_template*: Discord itself refuses to submit it empty, which is right |
+
+## REQUEST POSTS — the staff moves ride on the post itself (`RP-a` … `RP-h`)
+
+Added 2026-09-17 by branch `request-post-buttons` (design `info/blackmail-threads-design.md` §F,
+owner: *"Yes I want staff, mainly me to be able to interact with request in discord too"*). The key
+is `request_post_buttons`, **true** out of the box, in **Settings ▸ request** and on the
+**Requests** page. ⚠️ **Nothing below has been pressed in Discord — every claim is the test
+suite's.** These rows need `request_forum_channel_id` set (sweep row **487**); with it blank there
+is no post and nothing here applies. Review links:
+https://blackbloc.heygabi.ai/request.html and https://blackbloc.heygabi.ai/settings.html.
+
+| # | Do this | Expect |
+|---|---|---|
+| `RP-a` | File a request from a second account, then open its post in the requests forum | The first message is the **New request #N** card, and under it **Pick up · Hold · Decline · Open on the site** — one row. The tag is **open** |
+| `RP-b` | As staff, press **Pick up** on the post | An ephemeral line only you see, *"Request #N is now being worked on"*. The post gains a **Request #N is being worked on** card, the tag becomes **picked up**, and the FIRST message's buttons become **Ready to check · Hold · Decline · Open on the site**. ⚠️ The card that says so is a new message; the buttons are on the old one |
+| `RP-c` | Press **Ready to check**, fill the box, then look at the first message again | Five moves plus the link, and ⚠️ **the link has moved to a SECOND row** — `review` fills Discord's five-per-row on its own. The tag reads **ready to check** |
+| `RP-d` | From the SAME staff account that pressed Ready to check, press **Accept** (with `request_review_by_other` on) | Refused in words naming who may accept — the button is drawn for everybody because a post is one message for everybody, and the gate is on the press. With the key off it just works |
+| `RP-e` | Press **Accept** (or **Decline**) and watch the post | The move card lands, the first message keeps **Open on the site** and NO moves, the tag reads **done** / **declined**, and the post is archived. ⚠️ Check in that order — the buttons must change BEFORE the archive |
+| `RP-f` | From a NON-staff account, press any move on an open request's post | *"That command is for staff only…"*, ephemeral, naming Manage Server or a role that can see the staff channel and saying to ask an admin. Nothing moves, and no `request.*` row appears on the Logs page |
+| `RP-g` | ⚠️ **The row this build exists to prove.** Note a request's post, then `flyctl apps restart black-bloc` (or wait for the next deploy). When it is back, press a move on that same post | It works. The buttons are a `DynamicItem` with custom id `request:<id>:<move>`, registered at `cog_load`, so they outlive the process that drew them. A dead button answers *"This interaction failed"* — that is the failure to look for |
+| `RP-h` | Set **request_post_buttons** to false (Settings ▸ request, or the Requests page), file one more request, then set it back | The new post is exactly what v121 shipped: the card and **Open on the site**, nothing else, and moves still land in it as cards. ⚠️ Posts made while it was ON keep their buttons — the key decides what is DRAWN, and an old post is only re-drawn when the request next moves |
+
+⚠️ **Known gap, not a bug (KI-29, one surface wider):** a request the member WITHDRAWS keeps the
+moves for whatever status it was in, because `withdraw_request` still reaches no Discord surface at
+all. Sweep row **483** is the one that finds it.
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

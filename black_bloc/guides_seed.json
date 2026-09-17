@@ -173,17 +173,20 @@
       "steps": [
         {"do": "Type **/request** and press **File a request**.", "expect": "A box for what you want and why."},
         {"do": "Submit the box.", "expect": "A card lands where staff watch — the requests channel, or a post of its own in the requests forum — and you are DMed the number. Staff move it from there."},
+        {"do": "Staff: press a move on the post itself — Pick up, Hold, Decline, then Ready to check and Accept.", "expect": "The moves sit on the first message of the post, under the card, and re-draw themselves for wherever the request has got to. The same moves are on /request and on the website; a decision leaves only the Open on the site link and archives the post."},
         {"do": "When staff press **Ask them to check**, read the DM and try the work.", "expect": "The DM says what was built and how to test it. Reply in the server with how it went."}
       ],
       "faults": [
         {"symptom": "You want it withdrawn", "answer": "Type **/request**, use **Take one back…**, press **Yes, take it back**."},
         {"symptom": "You cannot see your requests on the panel", "answer": "The list is staff-only unless a Lead turns request_panel_own_list on. The website's Requests page shows yours."},
         {"symptom": "No DM arrived", "answer": "Your DMs are closed to server members. The bot pings you in the requests channel instead."},
+        {"symptom": "A button on the post says it is for staff only", "answer": "A forum post is one message for everybody, so the moves are drawn for everybody and refused on the press. Pressing one needs Manage Server or a role that can see the staff channel — ask a Lead."},
         {"symptom": "You cannot find the card again", "answer": "With a requests forum, your request is a post called #<number> and what you asked for, tagged for wherever it has got to. Without one, every card is in the requests channel."}
       ],
       "facts": [
         {"kind": "setting", "ref": "request_mode"},
         {"kind": "setting", "ref": "request_who_can_file"},
+        {"kind": "setting", "ref": "request_post_buttons"},
         {"kind": "probe", "ref": "requests.open_count"}
       ]
     },
