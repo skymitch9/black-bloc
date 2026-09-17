@@ -76,24 +76,21 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
-> | What | v124 (`main`, 2026-09-17) | Where it is measured |
+> | What | v125 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
-> | Cogs | **21** (`cogs/community/frontdoor.py`, branch `front-door`; 20 at v113) | `bot.py:COGS` |
-> | Top-level slash commands | **31** — 15 staff-locked, 16 member-visible (`/ask`, branch `front-door`; `/modmail` became member-visible at v114) | `tree.get_commands()` |
+> | Cogs | **21** (`cogs/community/frontdoor.py` at v125; 20 at v113) | `bot.py:COGS` |
+> | Top-level slash commands | **31** — 15 staff-locked, 16 member-visible (`/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
 > | Schema version | **42** (v123, `requests.source`; 41 at v119, 40 at v118, 39 at v116) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **240** (was 239 at v122) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Registry keys | **250** (was 240 at v123; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **19 pages / 178 routes / 15 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **6166** | the v124 deploy gate (a parametrize dimension went at v124) |
-> | Deploys | **121**, last `9733d69` (v124) at 2026-09-17 14:11 | `../deploys.log` |
+> | Mock contract | **19 pages / 180 routes / 15 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
+> | Tests | **6247** | the v125 deploy gate |
+> | Deploys | **122**, last `e8042a5` (v125) at 2026-09-17 14:38 | `../deploys.log` |
 > | Schema version | **41** (v119, requests forum: `requests.thread_id`; 40 at v118, 39 at v116) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **250** on branch `front-door` (239 at v122) — still **25 namespaces**: the eleven `frontdoor_*` keys are `NAMESPACE_OVERRIDE`'d onto `modmail` precisely because 26 would silently drop one group off the `/settings` select | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **19 pages / 180 routes / 15 core settings** on branch `front-door`, re-run 2026-09-17 (178 at v122; 17/150 at v108) | `node site/mock/check.mjs` |
-> | Tests | **6276** on branch `front-door` (6196 at the v122 deploy gate) | `pytest -n auto`, both orders |
 > | Deploys | **119**, last `672c608` (v122) at 2026-09-17 12:38 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
@@ -114,6 +111,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v125 `e8042a5`, 2026-09-17** | **21** | **31** | **42** | **180** | **6247** |
 > | **v124 `9733d69`, 2026-09-17** | **20** | **30** | **42** | **178** | **6166** |
 > | **v123 `2f1c609`, 2026-09-17** | **20** | **30** | **42** | **178** | **6223** |
 > | **v122 `672c608`, 2026-09-17** | **20** | **30** | **41** | **178** | **6196** |

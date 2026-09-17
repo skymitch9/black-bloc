@@ -1,7 +1,6 @@
 # The front door — one message and one command that route a member to a ticket, a request or an event
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT on branch `front-door`**, off `main`
-> `0cee997` (v122) — **NOT merged, NOT deployed**; read the `## Deviations` foot before the sections above, thirteen
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v125** — merge `ae6eecb`, release `e8042a5`, deployed **2026-09-17 14:38** Phoenix; `frontdoor_channel_id` = #welcome since 14:38; sweeps **524–533** are the owner's. Was: ✅ BUILT on branch `front-door`, off `main` `0cee997` (v122); read the `## Deviations` foot before the sections above, thirteen
 > things differ from what is written here. No schema change; registry **239 → 250**; mock **178 → 180 routes**;
 > `pytest` **6196 → 6276**, both orders green. **Last verified: 2026-09-17 12:5x** against `main`
 > `5e92e41`: the posted ticket button (`cogs/moderation/modmail.py` `TicketButton`, keys `modmail_panel_*`,
