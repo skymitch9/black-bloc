@@ -111,11 +111,15 @@ EXTRA_MODES: tuple[FeatureMode, ...] = (
 )
 
 
+MODE_LABELS: dict[str, str] = {"frontdoor": "The front door"}
+
+
 def _hidden_when_off_modes() -> tuple[FeatureMode, ...]:
     found: list[FeatureMode] = []
     for key, names in HIDDEN_WHEN_OFF.items():
         feature = key.removesuffix("_mode")
-        found.append(FeatureMode(key, names[0], FEATURE_LABELS.get(feature, feature)))
+        label = MODE_LABELS.get(feature) or FEATURE_LABELS.get(feature, feature)
+        found.append(FeatureMode(key, names[0], label))
     return tuple(found)
 
 

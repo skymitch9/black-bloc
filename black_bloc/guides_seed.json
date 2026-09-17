@@ -2,6 +2,40 @@
   "version": 1,
   "guides": [
     {
+      "slug": "front-door",
+      "title": "Not sure which one you want? Use the front door",
+      "goal": "One window with three buttons. Pick the one that fits and Black Bloc takes it from there.",
+      "audience": "member",
+      "feature": "modmail",
+      "command": "/ask",
+      "sort": 5,
+      "steps": [
+        {
+          "do": "Type **/ask**, or find the message a Lead has posted in a channel and look at the three buttons on it.",
+          "expect": "A window only you can see: a heading, one line, and **Ask staff privately**, **Request something** and **Propose an event**."
+        },
+        {
+          "do": "Press the one that fits. Something private and about a person is **Ask staff privately**; something you want built or bought is **Request something**; something with a day and a time is **Propose an event**.",
+          "expect": "The same form you would get from /modmail, /request or /event opens. Nothing new is built behind the buttons — the door only points you at the right one."
+        },
+        {
+          "do": "Fill it in and submit.",
+          "expect": "Exactly what that feature always does: a ticket staff answer by DM, a request card for staff to decide on, or an event proposal staff look over. A feature that is switched off says so in its own words and the window stays."
+        }
+      ],
+      "faults": [
+        {"symptom": "/ask is not in the picker", "answer": "A Lead has frontdoor_mode off, which hides it. Every other way in still works: DM the bot, or run /modmail, /request or /event."},
+        {"symptom": "A button answered that the feature is switched off", "answer": "That is that feature's own gate, not the door's. A Lead turns request_mode, events_mode or modmail_enabled back on."},
+        {"symptom": "The posted message has gone", "answer": "Black Bloc puts it back within five minutes, and moves it back under the rules whenever the welcome post is posted again."},
+        {"symptom": "The Open a ticket button disappeared from that channel", "answer": "One door per channel: the front door stands in for it. Ask staff privately does the same thing, and the old button comes back if the front door moves elsewhere or comes down."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "frontdoor_mode"},
+        {"kind": "setting", "ref": "frontdoor_channel_id"},
+        {"kind": "setting", "ref": "frontdoor_replaces_ticket_button"}
+      ]
+    },
+    {
       "slug": "golive-announce",
       "title": "Get your stream announced in #live-now",
       "goal": "Link your Twitch channel once. Black Bloc posts whenever Discord shows you streaming.",

@@ -84,19 +84,19 @@ async def rows(db, sql, *args):
 # --- the seed ---------------------------------------------------------------------------------
 
 
-def test_the_shipped_seed_is_seventeen_guides_with_a_slug_each():
+def test_the_shipped_seed_is_eighteen_guides_with_a_slug_each():
     entries = guides.seed_entries()
 
-    assert len(entries) == 17
-    assert len({one["slug"] for one in entries}) == 17
+    assert len(entries) == 18
+    assert len({one["slug"] for one in entries}) == 18
     assert {one["audience"] for one in entries} == {"member", "staff"}
 
 
-async def test_seeding_a_guild_writes_seventeen_guides_and_no_pictures(bot, db):
+async def test_seeding_a_guild_writes_eighteen_guides_and_no_pictures(bot, db):
     made = await guides.seed_guides(db, GUILD)
 
-    assert made == 17
-    assert await guides.count_guides(db, GUILD) == 17
+    assert made == 18
+    assert await guides.count_guides(db, GUILD) == 18
     assert len(await rows(db, "SELECT * FROM guide_media")) == 0
     steps = await rows(db, "SELECT * FROM guide_steps")
     assert steps and all(row["seed_do"] == row["do_text"] for row in steps)
@@ -392,7 +392,7 @@ async def test_links_for_names_every_published_guide_by_its_command(bot, db):
         one["command"] for one in guides.seed_entries() if one["audience"] == "member"
     }
     # Nine since `pings-follow` went `staff` with `pings_mode` at the pings remake.
-    assert len(found) == len(member_commands) == 9
+    assert len(found) == len(member_commands) == 10
     assert "/pings" not in found, "the pings guide is staff-only until the mode goes back on"
     assert found["/golive"] == "https://blackbloc.test/guides.html#golive-announce"
     assert "/settings" not in found, "a staff guide is not a link a member can follow"
@@ -439,8 +439,8 @@ async def test_two_guilds_keep_their_own_guides(bot, db):
     await guides.seed_guides(db, GUILD)
     await guides.seed_guides(db, OTHER_GUILD)
 
-    assert await guides.count_guides(db, GUILD) == 17
-    assert await guides.count_guides(db, OTHER_GUILD) == 17
+    assert await guides.count_guides(db, GUILD) == 18
+    assert await guides.count_guides(db, OTHER_GUILD) == 18
     assert (await guides.get_guide(db, OTHER_GUILD, "golive-announce"))["published"] == 1
 
 
@@ -529,7 +529,7 @@ async def test_a_saved_picture_lands_beside_the_database_and_is_dropped_with_its
 def test_the_seed_is_read_from_the_package_and_never_reworded():
     raw = guides.SEED_FILE.read_text(encoding="utf-8")
 
-    assert json.loads(raw)["guides"][0]["slug"] == "golive-announce"
+    assert json.loads(raw)["guides"][0]["slug"] == "front-door"
     assert guides.load_seed()["version"] >= 1
     assert guides.seed_hash({"a": 1}) != guides.seed_hash({"a": 2})
 

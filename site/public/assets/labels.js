@@ -164,6 +164,18 @@ export const LABELS = {
   modmail_log_on_open: 'Whether a new ticket is announced in the transcripts channel',
   modmail_panel_follows_post: 'Which post the Open a ticket button sits under',
 
+  frontdoor_mode: 'Whether the front door is up',
+  frontdoor_channel_id: 'Where the front-door message is posted',
+  frontdoor_message_id: 'The posted front-door message, written by the bot',
+  frontdoor_title: 'The heading on the front door',
+  frontdoor_text: 'What the front door says under its heading',
+  frontdoor_ticket_label: 'What the Ask staff privately button is called',
+  frontdoor_request_label: 'What the Request something button is called',
+  frontdoor_event_label: 'What the Propose an event button is called',
+  frontdoor_follows_post: 'Which post the front door sits under',
+  frontdoor_replaces_ticket_button: 'Whether the front door replaces the ticket button',
+  frontdoor_panel_minutes: 'How long the /ask panel stays live',
+
   automod_mode: 'Whether automod is watching',
   automod_rules: 'The rule book automod reads',
   automod_exempt_role_ids: 'Which roles automod ignores',

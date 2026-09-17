@@ -146,7 +146,7 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_three_hand_added_rows():
     joined the hand-added three at the pings remake (§C6) — it stopped hiding its command."""
     from black_bloc.settings_panel import FEATURE_MODES
 
-    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 17
+    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 18
     assert "rolemenu_mode" in {row.key for row in EXTRA_MODES}
     assert {row.key for row in FEATURE_MODES} == set(HIDDEN_WHEN_OFF) | {
         row.key for row in EXTRA_MODES
@@ -160,7 +160,8 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     lines = mode_lines(store, GUILD)
     said = "\n".join(lines)
 
-    assert len(lines) == 17
+    assert len(lines) == 18
+    assert any(line.startswith("**The front door** —") and "`/ask`" in line for line in lines)
     assert f"**Modmail** — {MODMAIL_ANSWERING} · `/modmail` to change" in lines
     assert "**YouTube uploads** — shadow · `/youtube` to change" in lines
 
@@ -179,7 +180,7 @@ def test_every_key_lands_in_exactly_one_of_the_twenty_four_groups():
 
 def test_chat_is_the_only_group_over_the_cap_and_find_is_what_reaches_the_rest():
     over = [group for group in groups() if needs_find(group)]
-    assert over == ["chat"]
+    assert over == ["chat", "modmail"]
 
     every = editable_options("chat")
     assert len(every.keys) == SELECT_LIMIT
@@ -267,7 +268,7 @@ def test_row_two_never_grows_past_the_five_controls_discord_allows():
 
 @pytest.mark.parametrize(
     "hidden,expected",
-    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 14)],
+    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 15)],
 )
 def test_turn_a_feature_back_on_lists_exactly_what_is_hidden_and_never_more(hidden, expected):
     values = {HIDE_COMMANDS_WHEN_OFF: True}
@@ -308,7 +309,7 @@ def test_every_log_level_fits_one_select_and_shows_the_level_it_is_on():
 def test_every_panel_minutes_key_fits_one_select_including_the_panels_own():
     found = panel_minutes_keys()
     assert "settings_panel_minutes" in found
-    assert len(found) == 19 <= SELECT_LIMIT
+    assert len(found) == 20 <= SELECT_LIMIT
 
     store = FakeStore(defaults=dict.fromkeys(found, 10))
     assert all(label.endswith("— 10 minute(s)") for _, label in panel_minutes_options(store, GUILD))

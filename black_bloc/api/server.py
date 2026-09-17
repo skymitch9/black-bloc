@@ -22,6 +22,7 @@ from .tools import (
     chat,
     chat_memory,
     events,
+    frontdoor,
     golive,
     guides,
     honeypot,
@@ -181,6 +182,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(mod.build_router(bot))
     app.include_router(members.build_router(bot))
     app.include_router(modmail.build_router(bot))
+    app.include_router(frontdoor.build_router(bot))
     app.include_router(chat.build_router(bot))
     app.include_router(chat_memory.build_router(bot))
     app.include_router(requests.build_router(bot))

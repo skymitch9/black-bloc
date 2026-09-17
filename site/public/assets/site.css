@@ -1534,6 +1534,17 @@ dialog.drawer::backdrop { background: var(--bb-scrim); }
 }
 .msg-body { margin: 4px 0 0; white-space: pre-wrap; text-wrap: pretty; }
 
+/* The Front door card's little mock-up of the message the bot posts. */
+.door-preview {
+  margin: 6px 0;
+  padding: 10px 12px;
+  border: var(--et-border-w) dashed var(--et-hairline);
+  border-radius: var(--et-radius);
+  font-size: var(--et-ui-sm);
+}
+.door-preview p { margin: 0 0 6px; text-wrap: pretty; }
+.door-preview-title { font-weight: var(--et-weight-medium); }
+
 .preview {
   margin: 4px 0 0;
   padding: 10px 12px;

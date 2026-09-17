@@ -1528,7 +1528,7 @@ async def test_an_unpublished_guide_leaves_its_command_unlinked(bot, cog, member
     assert "[guide](" not in said
 
 
-async def test_seventeen_guide_links_keep_every_help_page_under_discords_limit(settings, bot):
+async def test_eighteen_guide_links_keep_every_help_page_under_discords_limit(settings, bot):
     """Measured rather than assumed: the longest page with a link on every line."""
     from black_bloc import guides
     from black_bloc.modcases import PAGE_LIMIT, pages_under_limit
@@ -1545,7 +1545,7 @@ async def test_seventeen_guide_links_keep_every_help_page_under_discords_limit(s
         for one in guides.seed_entries()
         if one["command"]
     }
-    assert len(links) == 16
+    assert len(links) == 17
 
     pages = pages_under_limit([core_cog.HELP_HEADER, *help_lines(entries, "", links)])
     longest = max(len(page) for page in pages)

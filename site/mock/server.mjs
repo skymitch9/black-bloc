@@ -383,6 +383,17 @@ const SETTING_SPECS = [
   ['modmail_forum_tags', 'bool', true, true, 'true keeps the open / closed tags on each ticket post in forum mode; false leaves every post untagged and the forum’s own tag list alone'],
   ['modmail_log_on_open', 'bool', true, true, "true posts a New-ticket card to the transcripts channel the moment a ticket opens (what the old ModMail bot's log did); false logs opens only in the action log"],
   ['modmail_panel_follows_post', 'text', 'welcome', 'welcome', 'the slug of the post the Open a ticket button sits under — welcome by default, so the button lands right after the rules and is put back there whenever that post is posted again. none never moves the button for that reason'],
+  ['frontdoor_mode', 'enum', 'on', 'on', 'off hides /ask and takes the posted front door down; on posts it where it is pointed and shows /ask. The three flows behind it (modmail, requests, events) keep their own modes either way', ['off', 'on']],
+  ['frontdoor_channel_id', 'channel', null, null, 'where the front-door message is posted; blank posts nothing, and the /ask command still works. Post it from the Modmail page’s Front door card'],
+  ['frontdoor_message_id', 'text', null, null, 'the front-door message Black Bloc posted, so it can be moved, taken down and put back after somebody deletes it. Written by the bot as TEXT, because a snowflake does not survive a JavaScript number; there is no reason to set it by hand'],
+  ['frontdoor_title', 'text', 'Need something?', 'Need something?', 'the heading on the posted front-door message and on the /ask panel'],
+  ['frontdoor_text', 'text', 'Pick the one that fits and Black Bloc takes it from there. Staff only see what you write.', 'Pick the one that fits and Black Bloc takes it from there. Staff only see what you write.', 'the line under that heading, on both'],
+  ['frontdoor_ticket_label', 'text', 'Ask staff privately', 'Ask staff privately', 'what the button that opens a private modmail ticket is called, at most 80 characters, which is Discord’s own cap; blank restores the shipped wording'],
+  ['frontdoor_request_label', 'text', 'Request something', 'Request something', 'what the button that files a request is called, at most 80 characters; blank restores the shipped wording'],
+  ['frontdoor_event_label', 'text', 'Propose an event', 'Propose an event', 'what the button that starts an event proposal is called, at most 80 characters; blank restores the shipped wording'],
+  ['frontdoor_follows_post', 'text', 'welcome', 'welcome', 'the slug of the post the front door sits directly under — welcome by default, so the door lands right after the rules and is put back there whenever that post is posted again. none never moves the door for that reason'],
+  ['frontdoor_replaces_ticket_button', 'bool', true, true, 'true takes the posted Open-a-ticket message down while the front door is up in the same channel — one door per channel. modmail_panel_channel_id keeps its value, so moving the front door elsewhere or taking it down puts the ticket button back'],
+  ['frontdoor_panel_minutes', 'int', 10, 10, "minutes the /ask panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['automod_mode', 'enum', 'shadow', 'off', 'off, shadow (log what it would do) or on (delete, warn and time out)', ['off', 'shadow', 'on']],
   ['automod_rules', 'json', null, null, 'the automod rule book; the Automod tab is what changes it'],
   ['automod_exempt_role_ids', 'roles', ['900000000000000001', '900000000000000002'], [], 'roles automod ignores'],
@@ -1287,6 +1298,17 @@ const NAMESPACE_OVERRIDE = {
   default_timezone: 'events',
   timezone_choices: 'events',
   time_step_minutes: 'events',
+  frontdoor_mode: 'modmail',
+  frontdoor_channel_id: 'modmail',
+  frontdoor_message_id: 'modmail',
+  frontdoor_title: 'modmail',
+  frontdoor_text: 'modmail',
+  frontdoor_ticket_label: 'modmail',
+  frontdoor_request_label: 'modmail',
+  frontdoor_event_label: 'modmail',
+  frontdoor_follows_post: 'modmail',
+  frontdoor_replaces_ticket_button: 'modmail',
+  frontdoor_panel_minutes: 'modmail',
 };
 
 function namespaceOf(key) {
@@ -5232,6 +5254,39 @@ route('DELETE', '/api/modmail/panel', (context) => {
   state.settings.set('modmail_panel_message_id', null);
   logAction('web.modmail.panel_taken_down', { target_id: channelId, details: { channel_id: channelId, message_id: messageId } });
   return { taken_down: true, channel_id: String(channelId), message_id: messageId === null || messageId === undefined ? null : String(messageId), message: 'The **Open a ticket** button is down. Nothing else changed.' };
+});
+
+route('POST', '/api/frontdoor/panel', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const channelId = body.channel_id ? String(body.channel_id) : state.settings.get('frontdoor_channel_id');
+  if (!channelId || !CHANNELS.some((one) => one.id === channelId)) {
+    throw new Refused(400, 'no_such_channel', 'That is not a channel Black Bloc can see, so the front door was not posted. Pick one from the list and try again.');
+  }
+  guard('putting the front door up');
+  const moving = Boolean(state.settings.get('frontdoor_message_id'));
+  const messageId = String(Date.now());
+  state.settings.set('frontdoor_channel_id', channelId);
+  state.settings.set('frontdoor_message_id', messageId);
+  if (state.settings.get('frontdoor_replaces_ticket_button') && state.settings.get('modmail_panel_channel_id') === channelId) {
+    state.settings.set('modmail_panel_message_id', null);
+    logAction('frontdoor.ticket_button_hidden', { target_id: channelId, details: { channel_id: channelId } });
+  }
+  logAction(moving ? 'web.frontdoor.moved' : 'web.frontdoor.posted', { target_id: channelId, details: { channel_id: channelId, message_id: messageId } });
+  return { posted: true, channel_id: channelId, message_id: messageId, message: `The front door is up in <#${channelId}>.` };
+});
+
+route('DELETE', '/api/frontdoor/panel', (context) => {
+  requireStaff(context.session);
+  const channelId = state.settings.get('frontdoor_channel_id');
+  const messageId = state.settings.get('frontdoor_message_id');
+  if (!channelId) {
+    return { taken_down: false, channel_id: null, message_id: null, message: 'There is no front door posted anywhere, so nothing was taken down. **Post the front door** on the Modmail page is what puts one up.' };
+  }
+  state.settings.set('frontdoor_channel_id', null);
+  state.settings.set('frontdoor_message_id', null);
+  logAction('web.frontdoor.taken_down', { target_id: channelId, details: { channel_id: channelId, message_id: messageId } });
+  return { taken_down: true, channel_id: String(channelId), message_id: messageId === null || messageId === undefined ? null : String(messageId), message: 'The front door is down. Nothing else changed, and `/ask` still works.' };
 });
 
 route('POST', '/api/modmail/forum', (context) => {

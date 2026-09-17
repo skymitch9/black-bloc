@@ -39,6 +39,14 @@ const SOURCE_LABEL = {
 const BUTTON_HELP = 'One message with an Open a ticket button under it. Pressing it asks what is '
   + 'happening and opens a ticket — the same one a DM opens. Its heading and wording are the '
   + 'modmail_panel_title and modmail_panel_text settings below.';
+const DOOR_HELP = 'One message with three buttons: Ask staff privately opens a ticket, Request '
+  + 'something files a request, and Propose an event starts an event proposal. Each press opens '
+  + 'the flow that already exists, so each one answers with its own words when it is switched '
+  + 'off. Its heading, wording and the three button labels are the frontdoor_ settings below.';
+const DOOR_ONE_PER_CHANNEL = 'While the front door is up in the ticket button’s channel, that '
+  + 'button is taken down — one door per channel. Moving the front door elsewhere, or taking it '
+  + 'down, puts the ticket button back within five minutes. frontdoor_replaces_ticket_button '
+  + 'below is what switches that off.';
 const FORUM_HELP = 'In forum mode every ticket is a post of its own, tagged open while it is '
   + 'running and closed when it ends, so the list never grows without end. Make the forum puts '
   + 'one under the ticket category with that category’s own permissions; modmail_mode below is '
@@ -260,17 +268,92 @@ function ticketForumCard(forumId) {
   ]);
 }
 
+function doorPreview(door) {
+  const buttons = [door.ticket_label, door.request_label, door.event_label];
+  return el('div', { class: 'door-preview' }, [
+    el('p', { class: 'door-preview-title', text: door.title }),
+    el('p', { text: door.text }),
+    bar(buttons.map((label) => button(label, () => {}, { tone: 'quiet', disabled: true }))),
+  ]);
+}
+
+async function frontDoorCard(door) {
+  const say = notice();
+  const posted = door.channel_id;
+  const where = await channelSelect(posted || null);
+  const post = button(posted ? 'Move the front door' : 'Post the front door', async () => {
+    const channelId = readSelect(where, false);
+    if (!channelId) {
+      say.say('Pick the channel the front door goes in first.', 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send('/api/frontdoor/panel', 'POST', { channel_id: channelId }),
+      (found) => found?.message || 'The front door is up.',
+    );
+    if (done.ok) {
+      keepSaying('modmail', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  const down = button('Take it down', async () => {
+    const sure = await ask({
+      title: 'Take the front door down?',
+      body: [
+        'The message goes, and nobody can reach those three flows from that channel.',
+        '/ask still works, and so does every other way in. The ticket button comes back where it was.',
+      ],
+      confirmLabel: 'Take it down',
+    });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => api('/api/frontdoor/panel', { method: 'DELETE' }),
+      (found) => found?.message || 'The front door is down.',
+    );
+    if (done.ok) {
+      keepSaying('modmail', say);
+      refresh();
+    }
+  }, { tone: 'danger' });
+  return card('Front door', [
+    el('p', { text: DOOR_HELP }),
+    door.mode === 'on'
+      ? null
+      : sayNothing('frontdoor_mode is off, so /ask is hidden and no front door stays posted.'),
+    posted
+      ? el('p', {}, ['It is in ', nameNode(posted), '.'])
+      : sayNothing('No front door is posted anywhere. /ask still opens the same three buttons.'),
+    doorPreview(door),
+    el('p', { class: 'muted', text: DOOR_ONE_PER_CHANNEL }),
+    el('div', { class: 'formrow' }, [field('Put it in', where), bar(posted ? [post, down] : [post])]),
+    say,
+  ].filter(Boolean));
+}
+
 async function panelSettings() {
   const specs = settingsNamespace(await settings(true), 'modmail');
   const value = (key) => (specs.find((spec) => spec.key === key) || {}).value ?? null;
   const channelId = value('modmail_panel_channel_id');
   const forumId = value('modmail_forum_channel_id');
-  const known = [channelId, forumId].filter(Boolean).map(String);
+  const doorId = value('frontdoor_channel_id');
+  const known = [channelId, forumId, doorId].filter(Boolean).map(String);
   if (known.length) await names(known);
   return {
     channel_id: channelId,
     message_id: value('modmail_panel_message_id'),
     forum_channel_id: forumId,
+    door: {
+      mode: value('frontdoor_mode'),
+      channel_id: doorId,
+      message_id: value('frontdoor_message_id'),
+      title: value('frontdoor_title'),
+      text: value('frontdoor_text'),
+      ticket_label: value('frontdoor_ticket_label'),
+      request_label: value('frontdoor_request_label'),
+      event_label: value('frontdoor_event_label'),
+    },
   };
 }
 
@@ -331,8 +414,9 @@ async function load() {
   });
   three.body.append(blocksCard(blocks));
 
-  const four = section('Ticket button', 'The posted Open a ticket message, and where it lives.');
+  const four = section('Doors', 'The messages Black Bloc keeps posted, and where they live.');
   const placed = await panelSettings();
+  four.body.append(await frontDoorCard(placed.door));
   four.body.append(await ticketButtonCard(placed));
   four.body.append(ticketForumCard(placed.forum_channel_id));
 

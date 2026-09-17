@@ -1675,6 +1675,97 @@ KEY_HELP.update(
 )
 
 
+# The front door — one posted message and `/ask`, routing to modmail, requests and events.
+# Every key is NAMESPACE_OVERRIDE'd onto `modmail` so both doors sit in one group.
+FRONTDOOR_MODE = "frontdoor_mode"
+FRONTDOOR_CHANNEL = "frontdoor_channel_id"
+FRONTDOOR_MESSAGE = "frontdoor_message_id"
+FRONTDOOR_TITLE = "frontdoor_title"
+FRONTDOOR_TEXT = "frontdoor_text"
+FRONTDOOR_TICKET_LABEL = "frontdoor_ticket_label"
+FRONTDOOR_REQUEST_LABEL = "frontdoor_request_label"
+FRONTDOOR_EVENT_LABEL = "frontdoor_event_label"
+FRONTDOOR_FOLLOWS_POST = "frontdoor_follows_post"
+FRONTDOOR_REPLACES_TICKET_BUTTON = "frontdoor_replaces_ticket_button"
+FRONTDOOR_PANEL_MINUTES = "frontdoor_panel_minutes"
+FRONTDOOR_FOLLOWS_NOTHING = "none"
+FRONTDOOR_MODES = ("off", "on")
+FRONTDOOR_MODE_DEFAULT = "on"
+FRONTDOOR_TITLE_DEFAULT = "Need something?"
+FRONTDOOR_TEXT_DEFAULT = (
+    "Pick the one that fits and Black Bloc takes it from there. Staff only see what you write."
+)
+FRONTDOOR_TICKET_LABEL_DEFAULT = "Ask staff privately"
+FRONTDOOR_REQUEST_LABEL_DEFAULT = "Request something"
+FRONTDOOR_EVENT_LABEL_DEFAULT = "Propose an event"
+FRONTDOOR_FOLLOWS_POST_DEFAULT = "welcome"
+
+KEY_TYPES.update(
+    {
+        FRONTDOOR_MODE: "enum",
+        FRONTDOOR_CHANNEL: "channel",
+        FRONTDOOR_MESSAGE: "text",
+        FRONTDOOR_TITLE: "text",
+        FRONTDOOR_TEXT: "text",
+        FRONTDOOR_TICKET_LABEL: "text",
+        FRONTDOOR_REQUEST_LABEL: "text",
+        FRONTDOOR_EVENT_LABEL: "text",
+        FRONTDOOR_FOLLOWS_POST: "text",
+        FRONTDOOR_REPLACES_TICKET_BUTTON: "bool",
+        FRONTDOOR_PANEL_MINUTES: "int",
+    }
+)
+KEY_CHOICES.update({FRONTDOOR_MODE: FRONTDOOR_MODES})
+KEY_HELP.update(
+    {
+        FRONTDOOR_MODE: (
+            "off hides /ask and takes the posted front door down; on posts it where it is "
+            "pointed and shows /ask. The three flows behind it (modmail, requests, events) "
+            "keep their own modes either way"
+        ),
+        FRONTDOOR_CHANNEL: (
+            "where the front-door message is posted; blank posts nothing, and the /ask command "
+            "still works. Post it from the Modmail page's Front door card"
+        ),
+        FRONTDOOR_MESSAGE: (
+            "the front-door message Black Bloc posted, so it can be moved, taken down and put "
+            "back after somebody deletes it. Written by the bot as TEXT, because a snowflake "
+            "does not survive a JavaScript number; there is no reason to set it by hand"
+        ),
+        FRONTDOOR_TITLE: "the heading on the posted front-door message and on the /ask panel",
+        FRONTDOOR_TEXT: "the line under that heading, on both",
+        FRONTDOOR_TICKET_LABEL: (
+            "what the button that opens a private modmail ticket is called, at most 80 "
+            "characters, which is Discord's own cap; blank restores the shipped wording"
+        ),
+        FRONTDOOR_REQUEST_LABEL: (
+            "what the button that files a request is called, at most 80 characters; blank "
+            "restores the shipped wording"
+        ),
+        FRONTDOOR_EVENT_LABEL: (
+            "what the button that starts an event proposal is called, at most 80 characters; "
+            "blank restores the shipped wording"
+        ),
+        FRONTDOOR_FOLLOWS_POST: (
+            "the slug of the post the front door sits directly under — welcome by default, so "
+            "the door lands right after the rules and is put back there whenever that post is "
+            "posted again. none never moves the door for that reason"
+        ),
+        FRONTDOOR_REPLACES_TICKET_BUTTON: (
+            "true takes the posted Open-a-ticket message down while the front door is up in the "
+            "same channel — one door per channel. modmail_panel_channel_id keeps its value, so "
+            "moving the front door elsewhere or taking it down puts the ticket button back"
+        ),
+        FRONTDOOR_PANEL_MINUTES: (
+            "minutes the /ask panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while "
+            "Discord's 15-minute interaction window is still open, so 15 or more means the "
+            "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
+
+
 # Mod cases panel (wave 4) — the one decision `/mod`'s panel introduces, in its own block
 # so the parallel wave-4 branches merge textually.
 KEY_TYPES.update({"mod_panel_minutes": "int"})
@@ -1997,6 +2088,17 @@ NAMESPACE_OVERRIDE = {
     DEFAULT_TIMEZONE_KEY: "events",
     TIMEZONE_CHOICES_KEY: "events",
     TIME_STEP_KEY: "events",
+    FRONTDOOR_MODE: "modmail",
+    FRONTDOOR_CHANNEL: "modmail",
+    FRONTDOOR_MESSAGE: "modmail",
+    FRONTDOOR_TITLE: "modmail",
+    FRONTDOOR_TEXT: "modmail",
+    FRONTDOOR_TICKET_LABEL: "modmail",
+    FRONTDOOR_REQUEST_LABEL: "modmail",
+    FRONTDOOR_EVENT_LABEL: "modmail",
+    FRONTDOOR_FOLLOWS_POST: "modmail",
+    FRONTDOOR_REPLACES_TICKET_BUTTON: "modmail",
+    FRONTDOOR_PANEL_MINUTES: "modmail",
 }
 
 
@@ -2727,6 +2829,24 @@ class SettingsStore:
             return True
         if key == MODMAIL_PANEL_FOLLOWS_POST:
             return MODMAIL_PANEL_FOLLOWS_POST_DEFAULT
+        if key == FRONTDOOR_MODE:
+            return FRONTDOOR_MODE_DEFAULT
+        if key == FRONTDOOR_TITLE:
+            return FRONTDOOR_TITLE_DEFAULT
+        if key == FRONTDOOR_TEXT:
+            return FRONTDOOR_TEXT_DEFAULT
+        if key == FRONTDOOR_TICKET_LABEL:
+            return FRONTDOOR_TICKET_LABEL_DEFAULT
+        if key == FRONTDOOR_REQUEST_LABEL:
+            return FRONTDOOR_REQUEST_LABEL_DEFAULT
+        if key == FRONTDOOR_EVENT_LABEL:
+            return FRONTDOOR_EVENT_LABEL_DEFAULT
+        if key == FRONTDOOR_FOLLOWS_POST:
+            return FRONTDOOR_FOLLOWS_POST_DEFAULT
+        if key == FRONTDOOR_REPLACES_TICKET_BUTTON:
+            return True
+        if key == FRONTDOOR_PANEL_MINUTES:
+            return 10
         if key == "mod_panel_minutes":
             return 10
         if key == SETTINGS_PANEL_MINUTES:

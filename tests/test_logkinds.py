@@ -43,6 +43,31 @@ ROOT = PACKAGE.parent
 # A call site the table does not cover fails `test_every_dynamic_kind_is_enumerated`
 # by name, which is what stops a new kind going quietly unclassified.
 KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
+    # `posted.py` deletes a message for whoever asked, and the caller names the shadow kind
+    # it writes when test mode refuses the channel — two callers, three kinds.
+    "black_bloc/posted.py::would_kind": (
+        "modmail.would_take_down_panel",
+        "frontdoor.would_take_down",
+        "frontdoor.would_hide_ticket_button",
+    ),
+    # The front door's kinds are module constants so the cog, the route and the tests name
+    # them once; the four a website door can also write are listed in both spellings.
+    "black_bloc/cogs/community/frontdoor.py::POSTED": ("frontdoor.posted", "web.frontdoor.posted"),
+    "black_bloc/cogs/community/frontdoor.py::MOVED": ("frontdoor.moved", "web.frontdoor.moved"),
+    "black_bloc/cogs/community/frontdoor.py::TAKEN_DOWN": (
+        "frontdoor.taken_down",
+        "web.frontdoor.taken_down",
+    ),
+    "black_bloc/cogs/community/frontdoor.py::WOULD_POST": (
+        "frontdoor.would_post",
+        "web.frontdoor.would_post",
+    ),
+    "black_bloc/cogs/community/frontdoor.py::GONE": ("frontdoor.gone",),
+    "black_bloc/cogs/community/frontdoor.py::BELOW_POST": ("frontdoor.below_post",),
+    "black_bloc/cogs/community/frontdoor.py::POST_FAILED": ("frontdoor.post_failed",),
+    "black_bloc/cogs/community/frontdoor.py::TICKET_BUTTON_HIDDEN": (
+        "frontdoor.ticket_button_hidden",
+    ),
     "black_bloc/api/writes.py::kind": (
         "web.birthday.clear",
         "web.birthday.import",

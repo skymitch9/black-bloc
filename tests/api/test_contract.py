@@ -837,6 +837,30 @@ def test_the_real_settings_index_bounds_exactly_what_the_contract_says(client, s
     assert {key: row["min"] for key, row in rows.items() if "min" in row} == block["min"]
 
 
+def test_the_mock_groups_a_key_the_way_the_registry_does():
+    """A key the mock files under a group of its own is a settings page that disagrees with
+    the real one, and nothing else catches it — the front door was filed twice before this."""
+    import re
+
+    from black_bloc.settings_store import NAMESPACE_OVERRIDE
+
+    mock = (CONTRACT.parent / "server.mjs").read_text(encoding="utf-8")
+    block = mock.split("const NAMESPACE_OVERRIDE = {", 1)[1].split("};", 1)[0]
+    theirs = dict(re.findall(r"(\w+):\s*'([a-z]+)'", block))
+
+    assert theirs == NAMESPACE_OVERRIDE, sorted(
+        set(theirs.items()) ^ set(NAMESPACE_OVERRIDE.items())
+    )
+
+
+def test_the_front_door_settings_sit_beside_modmails_own(web, wf):
+    found = grouped(web.store, wf.GUILD_ID)
+    modmail = {row["key"] for row in found["modmail"]}
+
+    assert {"frontdoor_mode", "frontdoor_channel_id", "frontdoor_title"} <= modmail
+    assert "frontdoor" not in found
+
+
 def test_the_moderation_settings_all_live_in_the_automod_namespace(web, wf):
     """modlog and mod were one-key namespaces of their own; they are moderation keys."""
     found = grouped(web.store, wf.GUILD_ID)

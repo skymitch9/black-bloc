@@ -1,7 +1,9 @@
 # The front door — one message and one command that route a member to a ticket, a request or an event
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatching to Opus 2026-09-17 13:0x as
-> branch `front-door`** (v124, behind `request-forum-adopt`). **Last verified: 2026-09-17 12:5x** against `main`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT on branch `front-door`**, off `main`
+> `0cee997` (v122) — **NOT merged, NOT deployed**; read the `## Deviations` foot before the sections above, thirteen
+> things differ from what is written here. No schema change; registry **239 → 250**; mock **178 → 180 routes**;
+> `pytest` **6196 → 6276**, both orders green. **Last verified: 2026-09-17 12:5x** against `main`
 > `5e92e41`: the posted ticket button (`cogs/moderation/modmail.py` `TicketButton`, keys `modmail_panel_*`,
 > `modmail_panel_follows_post`), the request modal (`cogs/community/requests.py` `FileButton`), the event draft
 > (`cogs/community/events.py`, the **Propose** draft panel per `when-picker-design.md`), `bot.py:COGS`. ⚠️ Secret NAMES only.
@@ -79,4 +81,119 @@ must post the door's card too: add it to the self-test's panel list); `/help` li
 
 ## Deviations
 
-*(the build agent writes here what it had to do differently, dated)*
+> Written by the build, **2026-09-17**, on branch `front-door` off `main` `0cee997` (v122).
+> Everything below is a place the build did NOT do what §A–§E said, and why. ⚠️ **Nothing here
+> has met Discord**: no boot, no token, no button pressed in a client, no DM, no deploy, and
+> `TEST_MODE` was never flipped. The whole verification is `pytest -n auto` (**6196 → 6276**,
+> forward and under `BB_REVERSE=1`), `ruff check .`, the ES-module parse of all 32
+> `site/public/assets/*.js`, `node site/mock/check.mjs` (*19 pages, 180 routes, 15 core
+> settings, all keys present*), `node site/mock/discordmd.test.mjs`, `node site/mock/labels.test.mjs`,
+> and one pass over the **Front door** card on the MOCK in a browser.
+
+1. ⚠️ **The event button on the POSTED door opens a one-button private card first, not the
+   draft.** §A says each press opens the existing flow. It does — but `ProposeButton.callback`
+   reaches `open_draft` → `panels.opened` → `interaction.response.defer()`, which for a component
+   press is `deferred_message_update`, so `render_draft`'s `edit_original_response` edits **the
+   message the button sits on**. On the ephemeral `/ask` panel that is exactly right: the panel
+   becomes the draft, as it does on `/event`. On the public posted message it would draw one
+   member's half-filled event draft over the front door, for the whole channel. So the posted
+   **Propose an event** answers with an ephemeral `EventHandoff` card carrying the real
+   `ProposeButton`, and the draft opens over THAT. One extra press, on one of three buttons, on
+   one of two faces. The ticket and request doors need no such thing because a modal is already
+   private. Not a decision the design could have known: it is a fact about `discord.py` 2.7.1.
+
+2. **`frontdoor_panel_minutes` is an eleventh key.** §C's table names ten. `panels.Panel`
+   takes a timeout, and KI-20 is the reason all eighteen panels own one at **10** rather than
+   sharing: fifteen or more silently loses the "this panel has gone quiet" footer. Reusing
+   `modmail_panel_minutes` would make one number govern two panels.
+
+3. ⚠️ **The eleven keys are filed under the `modmail` namespace, not a `frontdoor` one — and
+   the reason is a latent bug this build nearly shipped.** `settings_panel.groups()` was at
+   **exactly 25** and `cogs/core.py:GroupPick` builds its select from `sp.groups()[:
+   sp.SELECT_LIMIT]`, Discord's own hard cap. A 26th group would have silently dropped
+   **`youtube`** off `/settings` ▸ **A setting group…** — every youtube key unreachable from
+   Discord, with nothing anywhere to say so. `NAMESPACE_OVERRIDE` instead: no new group, the
+   keys sit with the ticket button's (which is where the website card is and where the log
+   kinds head), and `modmail` becomes the second group over 25, which is what **Find a
+   setting…** exists for. ⚠️ **The cap itself is still unguarded for the NEXT feature** —
+   `tests/test_settings_panel.py::test_chat_is_the_only_group_over_the_cap…` was widened to
+   `["chat", "modmail"]`, but nothing yet asserts `len(groups()) <= SELECT_LIMIT`. Worth a
+   `KNOWN_ISSUES` entry or a one-line guard in the next build that touches `settings_panel`.
+
+4. **`HEADS["frontdoor"] = "modmail"`, so the door is not a `FEATURES` entry.** A feature of
+   its own would mean a `frontdoor_log_level` key, a `FEATURE_PAGES` row and a Logs-page filter
+   for three buttons. `modmail_log_level` governs the door's rows and they land on the Modmail
+   page beside the ticket button's, which is where §C puts the card.
+
+5. **§A's table names `open_ticket_button` as the ticket door's press path; the real one is
+   `open_ticket_modal`.** `open_ticket_button` is the STAFF sub-panel that posts the ticket
+   button. `TicketButton.on_click` calls `open_ticket_modal(interaction)`, and so does the
+   front door — with `previous=None`, because the one caller that passes a view
+   (`MoveButton(TICKET_OPEN)`) makes `run_open_ticket` redraw the **modmail** root over
+   whatever raised it. A ticket opened through either face of the door therefore stores
+   `source = panel`, which is true of both.
+
+6. **The one-door-per-channel takedown clears `modmail_panel_message_id` and needs two lines
+   inside `Modmail._repanel`.** §B says the ticket button's keys keep their values and the
+   door's reconcile takes it down. Both halves are true, but modmail's own five-minute sweep
+   would re-post the button within five minutes of every takedown — the two reconcilers would
+   alternate forever, posting and deleting a message in a real channel. `_repanel` now returns
+   early while `frontdoor.door_takes_over(store, guild_id)` names its channel. The CHANNEL key
+   is left alone, so moving the door away or taking it down makes `door_takes_over` answer
+   `None`, `_repanel` stops returning early, finds a channel with no message, and posts the
+   button back on its own next sweep. Nothing new is stored to make that reversible.
+
+7. **`black_bloc/posted.py` DID fall out cleanly, as §B hoped.** Three helpers —
+   `message_is_there`, `drop_message`, `overtaken_by` — with modmail's `panel_is_there`,
+   `drop_panel_message` and `post_below_button` now one-line delegates keeping their names and
+   signatures, so no existing caller or test moved. `drop_message` takes the shadow kind as
+   `would_kind` (the caller owns its own log vocabulary) and now **returns a bool**, which is
+   what stops `hide_ticket_button` clearing a key while the guard has refused the delete.
+
+8. **No `preview` route.** §C asks the website card for post / move / take down / **preview**.
+   The preview is drawn client-side from the stored wording — heading, line and the three
+   labels as disabled buttons — so it needs no round trip and cannot disagree with what the
+   bot would post, because both read the same keys. Two routes, not three.
+
+9. **The website card is on the Modmail page as §C's own second thought asks**, in a section
+   renamed **Doors** (was *Ticket button*) holding the front door, the ticket button and the
+   ticket forum. Both doors sit together, which is the reason §C gave for picking that page.
+
+10. ⚠️ **`site/mock/server.mjs` keeps its own copy of `NAMESPACE_OVERRIDE`, and nothing
+    compared it to the registry's.** Found in a browser, not by a test: the eleven keys drew a
+    **Front door** group on the mock Settings page while the real API files them under modmail.
+    The mock now carries the same table and
+    `tests/api/test_contract.py::test_the_mock_groups_a_key_the_way_the_registry_does` fails
+    the next time one drifts.
+
+11. **The self-test posts the door's card as `panel.ask`** (§E asks for it so the capture
+    runbook can shoot the posted message). `PANELS` is **18 → 19** and the check is built from
+    the same `build_panel` the command calls, never a copy.
+
+12. **`/help` needed no line.** It is generated from the command tree, so `/ask` appeared by
+    itself; the guide link comes from the `front-door` guide's own `command` field. The
+    `personas.py` member-command block is hand-written and DID need one — that file is what the
+    conversational model reads, and `tests/test_personas.py` fails when a member command is
+    missing from it.
+
+13. **`docs/TODO.md`, `docs/DONE.md` and `docs/deploys.log` were not touched**, as the brief
+    said. The 🔀 TRIAGE item and the landing entry are the conductor's.
+
+### What was NOT verified
+
+- **Nothing met Discord.** No boot, no token, no press in a client, no modal submitted, no
+  message posted or deleted in a real channel. Every button, sweep and takedown is proved
+  against fakes.
+- **The posted door has never survived a real restart.** `DoorButton` is registered in
+  `cog_load` and rebuilt from a regex match in a test; no gateway has re-delivered a press.
+- **The ticket-button takeover has never run beside the real modmail cog on a live bot** —
+  the test drives `Modmail._repanel` directly with the same fakes.
+- **No browser saw the real site**, only `site/mock` at `127.0.0.1:8788`, signed in as staff.
+  The card's *posted* state (**It is in #…** plus **Move** / **Take it down**) was **not**
+  seen in the browser: the mock refuses every panel post while its guard is on, and a
+  guard-off write did not survive the page's own reseed. That state is proved by
+  `tests/api/tools/test_frontdoor.py` only.
+- **The guide's picture slot is empty** — `front-door` is seeded with no screenshot, which
+  reads exactly like a freshly re-shot one (`access/guides-capture.md` §1, the `count: 0`
+  trap). The capture runbook's first-population pass is what fills it.
+- **No migration was needed and none was run** — eleven registry keys, no schema change.
