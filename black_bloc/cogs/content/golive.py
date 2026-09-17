@@ -662,10 +662,9 @@ class GoLive(commands.Cog):
         """The streamer list, fed by BOTH doors: one upsert per go-live, never a second row."""
         login = _row_value(await get_link(self.bot.db, member.id), "twitch_login")
         login = login or twitch_login_from_url(getattr(info, "url", None))
+        platform = getattr(info, "platform", None) or (TWITCH if login else None)
         try:
-            await pings.saw_streaming(
-                self.bot, member.guild, member, getattr(info, "platform", None), login
-            )
+            await pings.saw_streaming(self.bot, member.guild, member, platform, login)
         except Exception as exc:
             log.warning(
                 "go-live: could not put %s on the streamer list — %s: %s",

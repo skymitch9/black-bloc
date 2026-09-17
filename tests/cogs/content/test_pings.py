@@ -16,6 +16,9 @@ from black_bloc.cogs.content.pings import (
     MAKE_THE_ROLE,
     NAMES_BUTTON,
     NOT_A_NUMBER,
+    NUMBERS_BUTTON,
+    ONBOARDING_TITLE,
+    RAID_TITLE,
     ROLE_PLACEHOLDER,
     SET_IT_UP,
     SITE_BUTTON,
@@ -266,7 +269,15 @@ def picker(view, kind):
     return next(one for one in view.children if isinstance(one, kind))
 
 
+async def a_streamer(bot, member, login=None):
+    """Nobody is added to the list by hand — going live is what puts somebody on it."""
+    await helpers.saw_streaming(bot, bot.guild, member, "twitch", login)
+    return member
+
+
 async def a_fan_role(bot, member):
+    """A fan role belongs to somebody Black Bloc has seen streaming, so list them too."""
+    await a_streamer(bot, member)
     outcome = await helpers.ensure_fan_role(bot, bot.guild, member, by=STAFF, staff=True)
     return bot.guild.get_role(outcome.role_id)
 
@@ -335,10 +346,12 @@ async def test_staff_see_every_staff_control_and_a_counts_line(bot, streamer, le
 
     embed, view = await build_panel(bot, bot.guild, lead)
 
-    assert "1** streamer(s)" in embed.description
-    assert labels(view)[-5:] == [
+    assert "1** streamer(s) seen" in embed.description
+    assert labels(view)[-7:] == [
         "Streamers…",
         "Set up the Events role",
+        "Set up the raid-train role",
+        "Onboarding…",
         "Settings",
         "Logs",
         SITE_BUTTON,
@@ -402,8 +415,15 @@ async def test_every_state_renders_exactly_its_row_of_the_button_table(
 
     _embed, view = await build_panel(bot, bot.guild, member)
 
+    streamers = await helpers.all_streamers(db, GUILD)
     state = helpers.panel_state(
-        bot, bot.guild, member, await helpers.all_fan_roles(db, GUILD), streams=streams
+        bot,
+        bot.guild,
+        member,
+        await helpers.all_fan_roles(db, GUILD),
+        streams=streams,
+        streamers=streamers,
+        mine=helpers.row_for(streamers, member.id),
     )
     wanted = [move.label for move in helpers.panel_buttons(state, staff=staff)]
     assert labels(view) == wanted + ([SITE_BUTTON] if staff else [])
@@ -466,12 +486,17 @@ async def test_the_embed_says_why_there_is_no_fan_button(bot, fan):
     assert "Start my own ping role" not in labels(view)
 
 
-async def test_a_member_who_never_streamed_is_told_how_to_link(bot, fan):
+async def test_a_member_who_never_streamed_is_offered_no_list_switch_at_all(bot, fan):
+    """C4: the list switch is for somebody Black Bloc has SEEN streaming — nobody else needs
+    telling how to get on a list they land on by themselves."""
     staff_is(bot, False)
 
-    embed, _view = await build_panel(bot, bot.guild, fan)
+    embed, view = await build_panel(bot, bot.guild, fan)
 
-    assert "**Link my Twitch channel**" in embed.description
+    assert "You are **on** the streamer list" not in embed.description
+    assert "You are **off** the streamer list" not in embed.description
+    assert "Take me off the streamer list" not in labels(view)
+    assert "Put me back on the list" not in labels(view)
     assert "/twitch link" not in embed.description
 
 
@@ -486,17 +511,26 @@ async def test_the_panel_never_names_a_subcommand_that_is_gone(bot, streamer, le
         assert dead not in embed.description
 
 
-async def test_a_capped_select_names_the_streamer_pings_panels_not_the_site(bot, fan):
-    staff_is(bot, False)
+async def test_a_capped_select_names_onboarding_for_a_member_and_the_site_for_staff(
+    bot, fan, lead
+):
+    """P10, and C4's two spellings of the cap: a member is sent to Discord's own screen,
+    staff to the dashboard, because the site half of pings is staff-only."""
     for spot in range(30):
-        await a_fan_role(bot, FakeMember(bot.guild, 5000 + spot, f"streamer{spot:02d}"))
+        await a_streamer(bot, FakeMember(bot.guild, 5000 + spot, f"streamer{spot:02d}"))
 
+    staff_is(bot, False)
     _embed, view = await build_panel(bot, bot.guild, fan)
-
     pick = picker(view, FollowPick)
     assert len(pick.options) == 25
-    assert pick.placeholder == "25 of 30 — the rest are on the *Streamer pings* panels"
+    assert pick.placeholder == "25 of 30 — the rest are on Discord's onboarding screen"
     assert "site" not in pick.placeholder
+
+    staff_is(bot)
+    _embed, staff_view = await build_panel(bot, bot.guild, lead)
+    assert picker(staff_view, FollowPick).placeholder == (
+        "25 of 30 — the rest are on the dashboard's Go-live tab"
+    )
 
 
 # --- the member moves ----------------------------------------------------------------------------
@@ -535,12 +569,14 @@ async def test_unfollow_takes_it_off_even_with_the_mode_turned_off(bot, streamer
 
 
 async def test_a_stale_follow_select_refuses_in_words_and_writes_nothing(bot, streamer, fan, db):
+    """C1/C2: the select is over the LIST now, so the stale case is somebody who came OFF it
+    between the render and the press — a role tidied away in the meantime is simply remade."""
     staff_is(bot, False)
     await a_fan_role(bot, streamer)
     _embed, view = await build_panel(bot, bot.guild, fan)
     pick = picker(view, FollowPick)
     pick._values = [str(STREAMER)]
-    await helpers.remove_fan_role(bot, bot.guild, STREAMER, by=STAFF)
+    await helpers.hide_streamer(bot, bot.guild, STREAMER, by=STREAMER)
     before = len(await kinds(db))
     interaction = FakeInteraction(bot, fan)
 
@@ -548,6 +584,24 @@ async def test_a_stale_follow_select_refuses_in_words_and_writes_nothing(bot, st
 
     assert "Press **Refresh**" in interaction.said
     assert len(await kinds(db)) == before
+    assert fan.roles == []
+
+
+async def test_a_role_tidied_away_between_the_render_and_the_press_is_simply_remade(
+    bot, streamer, fan, db
+):
+    staff_is(bot, False)
+    await a_fan_role(bot, streamer)
+    _embed, view = await build_panel(bot, bot.guild, fan)
+    pick = picker(view, FollowPick)
+    pick._values = [str(STREAMER)]
+    await helpers.remove_fan_role(bot, bot.guild, STREAMER, by=STAFF)
+    interaction = FakeInteraction(bot, fan)
+
+    await pick.callback(interaction)
+
+    row = await helpers.get_fan_role(db, GUILD, STREAMER)
+    assert row is not None and [one.id for one in fan.roles] == [int(row["role_id"])]
 
 
 async def test_the_events_toggle_moves_the_role_both_ways(bot, fan, db):
@@ -647,17 +701,30 @@ async def test_streamers_lists_everybody_and_offers_the_two_ways_in(bot, streame
 
     embed, view = await build_streamers(bot, bot.guild)
 
-    assert "SuperNamu pings" in embed.description
+    assert "**SuperNamu**" in embed.description
+    assert "listed" in embed.description
     assert "0 follower(s)" in embed.description
     assert placeholders(view) == [STREAMER_PLACEHOLDER, GIVE_PLACEHOLDER]
 
 
-async def test_streamers_with_nobody_on_it_says_how_to_start_one(bot, lead):
+async def test_a_listed_streamer_with_no_role_yet_is_still_on_the_staff_list(bot, streamer, lead):
+    """C1: the list is who has STREAMED, not who has a role — the role is a column on it."""
+    staff_is(bot)
+    await a_streamer(bot, streamer)
+
+    embed, view = await build_streamers(bot, bot.guild)
+
+    assert "**SuperNamu**" in embed.description
+    assert helpers.NO_ROLE_WORD in embed.description
+    assert placeholders(view) == [STREAMER_PLACEHOLDER, GIVE_PLACEHOLDER]
+
+
+async def test_streamers_with_nobody_on_it_says_nobody_is_added_by_hand(bot, lead):
     staff_is(bot)
 
     embed, view = await build_streamers(bot, bot.guild)
 
-    assert "**Give somebody a ping role…**" in embed.description
+    assert "Nobody is added by hand" in embed.description
     assert placeholders(view) == [GIVE_PLACEHOLDER]
 
 
@@ -671,8 +738,34 @@ async def test_picking_a_streamer_opens_their_card(bot, streamer, lead):
 
     await pick.callback(interaction)
 
-    assert "SuperNamu pings" in interaction.embed.description
+    assert "**SuperNamu**" in interaction.embed.description
+    assert "seen live 1 time(s)" in interaction.embed.description
     assert "Remove their ping role" in labels(interaction.view)
+    assert "Hide them from the list" in labels(interaction.view)
+
+
+async def test_staff_hide_and_restore_from_the_card_and_the_button_flips(bot, streamer, lead, db):
+    """Staff final say: every stored decision here has a staff move that reverses it."""
+    staff_is(bot)
+    await a_streamer(bot, streamer)
+    _embed, view = await build_streamers(bot, bot.guild)
+    pick = picker(view, StreamerPick)
+    pick._values = [str(STREAMER)]
+    opened = FakeInteraction(bot, lead)
+    await pick.callback(opened)
+
+    hid = FakeInteraction(bot, lead)
+    await button(opened.view, "Hide them from the list").callback(hid)
+
+    assert (await helpers.get_streamer(db, GUILD, STREAMER))["listed"] == 0
+    assert "pings.streamer_hidden" in await kinds(db)
+    assert "Put them back on the list" in labels(hid.view)
+
+    back = FakeInteraction(bot, lead)
+    await button(hid.view, "Put them back on the list").callback(back)
+
+    assert (await helpers.get_streamer(db, GUILD, STREAMER))["listed"] == 1
+    assert "pings.streamer_restored" in await kinds(db)
 
 
 async def test_a_demoted_staffer_moves_nothing_on_the_streamers_panel(bot, streamer, lead):
@@ -837,8 +930,16 @@ async def test_the_settings_panel_shows_every_pings_value(bot, lead):
 
     assert "**mode** — on" in embed.description
     assert "**this panel stays live** — 10 minute(s)" in embed.description
-    assert placeholders(view) == ["Mode…", "Who may start one…", "On unlink…"]
+    assert "**days on the list without a go-live** — 90" in embed.description
+    assert "**days an unworn ping role survives** — 30" in embed.description
+    assert "**streamers on the onboarding prompt** — 25" in embed.description
+    assert placeholders(view) == [
+        "Mode…",
+        "When a streamer's role is made…",
+        "On unlink…",
+    ]
     assert NAMES_BUTTON in labels(view) and DELETE_ON in labels(view)
+    assert NUMBERS_BUTTON in labels(view)
 
 
 async def test_a_settings_select_writes_the_key_and_leaves_one_log_row(bot, lead, db):
@@ -954,3 +1055,284 @@ async def test_a_re_render_retires_the_view_it_replaced(bot, streamer, fan):
 
     assert view.replaced is True
     assert interaction.view is not view
+
+
+# --- the streamer list on the panel (C1/C4) ------------------------------------------------------
+
+
+async def test_the_list_switch_asks_first_and_then_takes_you_off(bot, streamer, db):
+    staff_is(bot, False)
+    await a_streamer(bot, streamer)
+    _embed, view = await build_panel(bot, bot.guild, streamer)
+
+    asked = FakeInteraction(bot, streamer)
+    await button(view, "Take me off the streamer list").callback(asked)
+    assert "Are you sure?" in [field.name for field in asked.embed.fields]
+
+    gone = FakeInteraction(bot, streamer)
+    await button(asked.view, helpers.LIST_OUT_YES).callback(gone)
+
+    assert (await helpers.get_streamer(db, GUILD, STREAMER))["listed"] == 0
+    assert "pings.streamer_hidden" in await kinds(db)
+    assert "Put me back on the list" in labels(gone.view)
+
+
+async def test_putting_yourself_back_on_the_list_needs_no_confirmation(bot, streamer, db):
+    staff_is(bot, False)
+    await a_streamer(bot, streamer)
+    await helpers.hide_streamer(bot, bot.guild, STREAMER, by=STREAMER)
+    _embed, view = await build_panel(bot, bot.guild, streamer)
+
+    back = FakeInteraction(bot, streamer)
+    await button(view, "Put me back on the list").callback(back)
+
+    assert (await helpers.get_streamer(db, GUILD, STREAMER))["listed"] == 1
+    assert "Take me off the streamer list" in labels(back.view)
+
+
+async def test_taking_yourself_off_the_list_works_with_the_mode_off(bot, streamer, db):
+    staff_is(bot, False)
+    await a_streamer(bot, streamer)
+    await bot.store.set(GUILD, "pings_mode", "off")
+    _embed, view = await build_panel(bot, bot.guild, streamer)
+
+    asked = FakeInteraction(bot, streamer)
+    await button(view, "Take me off the streamer list").callback(asked)
+    gone = FakeInteraction(bot, streamer)
+    await button(asked.view, helpers.LIST_OUT_YES).callback(gone)
+
+    assert (await helpers.get_streamer(db, GUILD, STREAMER))["listed"] == 0
+
+
+async def test_the_follow_select_offers_somebody_with_no_role_yet(bot, streamer, fan, db):
+    staff_is(bot, False)
+    await a_streamer(bot, streamer)
+
+    _embed, view = await build_panel(bot, bot.guild, fan)
+    pick = picker(view, FollowPick)
+    assert [one.value for one in pick.options] == [str(STREAMER)]
+    assert pick.options[0].label == "SuperNamu"
+
+    pick._values = [str(STREAMER)]
+    interaction = FakeInteraction(bot, fan)
+    await pick.callback(interaction)
+
+    row = await helpers.get_fan_role(db, GUILD, STREAMER)
+    assert row is not None and [one.id for one in fan.roles] == [int(row["role_id"])]
+    assert "pings.fan_role_created" in await kinds(db)
+
+
+async def test_the_follow_select_never_offers_you_yourself(bot, streamer):
+    staff_is(bot, False)
+    await a_streamer(bot, streamer)
+
+    _embed, view = await build_panel(bot, bot.guild, streamer)
+
+    assert not [one for one in view.children if isinstance(one, FollowPick)]
+
+
+# --- the raid-train role (C3/C4) -----------------------------------------------------------------
+
+
+async def test_set_up_the_raid_train_role_makes_one_and_points_the_key_at_it(bot, lead, db):
+    staff_is(bot)
+    _embed, view = await build_panel(bot, bot.guild, lead)
+
+    opened = FakeInteraction(bot, lead)
+    await button(view, "Set up the raid-train role").callback(opened)
+    assert opened.embed.title == RAID_TITLE
+
+    done = FakeInteraction(bot, lead)
+    await button(opened.view, SET_IT_UP).callback(done)
+
+    role_id = bot.store.get(GUILD, "raidtrain_ping_role_id")
+    assert role_id and bot.guild.get_role(role_id).name == "Raid trains"
+    assert "pings.raidtrain_setup" in await kinds(db)
+    assert "Turn raid-train pings on" in labels(done.view)
+
+
+async def test_the_raid_train_toggle_moves_the_role_both_ways(bot, fan, db):
+    staff_is(bot, False)
+    await helpers.setup_raidtrain_role(bot, bot.guild, by=STAFF)
+    role = bot.guild.get_role(bot.store.get(GUILD, "raidtrain_ping_role_id"))
+    _embed, view = await build_panel(bot, bot.guild, fan)
+
+    on = FakeInteraction(bot, fan)
+    await button(view, "Turn raid-train pings on").callback(on)
+    assert fan.roles == [role]
+
+    off = FakeInteraction(bot, fan)
+    await button(on.view, "Turn raid-train pings off").callback(off)
+    assert fan.roles == []
+
+
+# --- the onboarding sub-panel (C5) ---------------------------------------------------------------
+
+
+async def test_the_onboarding_card_says_there_is_no_community_server(bot, lead):
+    staff_is(bot)
+    _embed, view = await build_panel(bot, bot.guild, lead)
+
+    opened = FakeInteraction(bot, lead)
+    await button(view, "Onboarding…").callback(opened)
+
+    assert opened.embed.title == ONBOARDING_TITLE
+    assert "not a Community server" in opened.embed.description
+    assert "Sync now" not in labels(opened.view)
+    assert "Stop managing onboarding" in labels(opened.view)
+
+
+async def test_sync_now_refuses_in_words_without_the_community_feature(bot, lead, db):
+    staff_is(bot)
+    bot.guild.features = ["COMMUNITY"]
+    _embed, view = await build_panel(bot, bot.guild, lead)
+    opened = FakeInteraction(bot, lead)
+    await button(view, "Onboarding…").callback(opened)
+    bot.guild.features = []
+
+    pressed = FakeInteraction(bot, lead)
+    await button(opened.view, "Sync now").callback(pressed)
+
+    assert "not a Community server" in pressed.said
+    assert not [one for one in await kinds(db) if one.startswith("pings.onboarding")]
+
+
+async def test_stop_managing_onboarding_flips_the_key_and_the_button(bot, lead, db):
+    staff_is(bot)
+    _embed, view = await build_panel(bot, bot.guild, lead)
+    opened = FakeInteraction(bot, lead)
+    await button(view, "Onboarding…").callback(opened)
+
+    stopped = FakeInteraction(bot, lead)
+    await button(opened.view, "Stop managing onboarding").callback(stopped)
+
+    assert bot.store.get(GUILD, helpers.ONBOARDING_MANAGED_KEY) is False
+    assert "will not write" in stopped.said
+    assert "not** managing" in stopped.embed.description
+    assert "Manage onboarding again" in labels(stopped.view)
+
+    started = FakeInteraction(bot, lead)
+    await button(stopped.view, "Manage onboarding again").callback(started)
+
+    assert bot.store.get(GUILD, helpers.ONBOARDING_MANAGED_KEY) is True
+
+
+# --- the numbers modal (C7) ----------------------------------------------------------------------
+
+
+async def test_the_numbers_modal_saves_the_three_days_and_caps(bot, lead, db):
+    staff_is(bot)
+    _embed, view = build_settings(bot, bot.guild)
+    opened = FakeInteraction(bot, lead)
+    await button(view, NUMBERS_BUTTON).callback(opened)
+    modal = opened.response.modals[-1]
+    assert str(modal.stale_days.default) == "90"
+
+    modal.stale_days._value = "30"
+    modal.empty_days._value = "7"
+    modal.cap._value = "40"
+    await modal.on_submit(FakeInteraction(bot, lead))
+
+    assert bot.store.get(GUILD, helpers.STALE_DAYS_KEY) == 30
+    assert bot.store.get(GUILD, helpers.EMPTY_ROLE_DAYS_KEY) == 7
+    assert bot.store.get(GUILD, helpers.ONBOARDING_CAP_KEY) == 40
+
+
+async def test_one_bad_number_saves_none_of_them(bot, lead, db):
+    staff_is(bot)
+    _embed, view = build_settings(bot, bot.guild)
+    opened = FakeInteraction(bot, lead)
+    await button(view, NUMBERS_BUTTON).callback(opened)
+    modal = opened.response.modals[-1]
+
+    modal.stale_days._value = "30"
+    modal.empty_days._value = "soon"
+    modal.cap._value = "40"
+    said = FakeInteraction(bot, lead)
+    await modal.on_submit(said)
+
+    assert "is not a whole number" in said.said
+    assert bot.store.get(GUILD, helpers.STALE_DAYS_KEY) == 90
+    assert bot.store.get(GUILD, helpers.ONBOARDING_CAP_KEY) == 25
+
+
+async def test_a_number_outside_its_bounds_is_refused_in_words(bot, lead, db):
+    staff_is(bot)
+    _embed, view = build_settings(bot, bot.guild)
+    opened = FakeInteraction(bot, lead)
+    await button(view, NUMBERS_BUTTON).callback(opened)
+    modal = opened.response.modals[-1]
+
+    modal.stale_days._value = "2"
+    modal.empty_days._value = "7"
+    modal.cap._value = "40"
+    said = FakeInteraction(bot, lead)
+    await modal.on_submit(said)
+
+    assert "cannot be less than 7" in said.said
+    assert bot.store.get(GUILD, helpers.STALE_DAYS_KEY) == 90
+
+
+# --- the sweep (C1/C2/C5 on one clock) -----------------------------------------------------------
+
+
+async def test_the_sweep_takes_a_quiet_streamer_off_the_list_and_their_unworn_role_with_it(
+    bot, cog, streamer, db
+):
+    """The stale prune gets there first, so the role goes with the listing rather than
+    waiting out its own clock — one log row, not two."""
+    await a_fan_role(bot, streamer)
+    await bot.db.conn.execute(
+        "UPDATE streamers SET last_live_at = '2020-01-01T00:00:00+00:00' WHERE guild_id = ?",
+        (GUILD,),
+    )
+    await bot.db.conn.commit()
+
+    await cog.sweep_guild(bot.guild)
+
+    assert (await helpers.get_streamer(db, GUILD, STREAMER))["listed"] == 0
+    assert await helpers.get_fan_role(db, GUILD, STREAMER) is None
+    found = await kinds(db)
+    assert "pings.streamer_pruned" in found and "pings.role_pruned" not in found
+
+
+async def test_the_sweep_prunes_an_unworn_role_of_somebody_still_on_the_list(
+    bot, cog, streamer, db
+):
+    await a_fan_role(bot, streamer)
+    await bot.db.conn.execute(
+        "UPDATE golive_fan_roles SET unworn_since = '2020-01-01T00:00:00+00:00' "
+        "WHERE guild_id = ?",
+        (GUILD,),
+    )
+    await bot.db.conn.commit()
+
+    await cog.sweep_guild(bot.guild)
+
+    assert (await helpers.get_streamer(db, GUILD, STREAMER))["listed"] == 1
+    assert await helpers.get_fan_role(db, GUILD, STREAMER) is None
+    assert "pings.role_pruned" in await kinds(db)
+
+
+async def test_the_sweep_leaves_a_worn_role_and_a_recent_streamer_alone(
+    bot, cog, streamer, fan, db
+):
+    role = await a_fan_role(bot, streamer)
+    await fan.add_roles(role)
+
+    await cog.sweep_guild(bot.guild)
+    await cog.sweep_guild(bot.guild)
+
+    assert (await helpers.get_streamer(db, GUILD, STREAMER))["listed"] == 1
+    assert await helpers.get_fan_role(db, GUILD, STREAMER) is not None
+    assert role.deleted is False
+
+
+async def test_the_sweep_skips_a_guild_discord_says_is_unavailable(bot, cog, streamer, db):
+    await a_streamer(bot, streamer)
+    bot.guild.unavailable = True
+    before = len(await kinds(db))
+
+    await cog.sweep()
+
+    assert len(await kinds(db)) == before

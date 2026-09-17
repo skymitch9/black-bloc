@@ -1046,6 +1046,88 @@
     },
     {
       "method": "GET",
+      "path": "/api/pings/list",
+      "read_by": [
+        "page-golive.js streamerList"
+      ],
+      "shape": "list",
+      "keys": [
+        "member_id",
+        "member",
+        "listed",
+        "hidden_by",
+        "hidden_by_name",
+        "hidden_at",
+        "first_live_at",
+        "last_live_at",
+        "live_count",
+        "platform",
+        "login",
+        "role_id",
+        "role",
+        "followers"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/pings/list/{ping_member_id}",
+      "body": {
+        "listed": true
+      },
+      "read_by": [
+        "page-golive.js streamerList"
+      ],
+      "shape": "object",
+      "keys": [
+        "member_id",
+        "member",
+        "listed",
+        "hidden_by",
+        "hidden_by_name",
+        "hidden_at",
+        "first_live_at",
+        "last_live_at",
+        "live_count",
+        "platform",
+        "login",
+        "role_id",
+        "role",
+        "followers",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/pings/raidtrain-role",
+      "body": {},
+      "read_by": [
+        "page-golive.js setupCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "role_id",
+        "created",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/pings/onboarding",
+      "read_by": [
+        "page-golive.js onboardingCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "community",
+        "managed",
+        "last_synced_at",
+        "more_on_pings",
+        "foreign_prompts",
+        "prompts"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/events?status=pending",
       "read_by": [
         "page-events.js"
@@ -4692,6 +4774,9 @@
     "web.pings.setup",
     "web.pings.fan_role_created",
     "web.pings.fan_role_removed",
+    "web.pings.raidtrain_setup",
+    "web.pings.streamer_hidden",
+    "web.pings.streamer_restored",
     "web.event.approved",
     "web.event.denied",
     "web.event.cancelled",

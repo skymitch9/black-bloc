@@ -179,17 +179,45 @@ async function wordingSection(specs) {
 }
 
 const PINGS_MODE_KEY = 'pings_mode';
-const PINGS_NOTE = 'One opt-in role for go-live and event pings, and a role per streamer that '
-  + 'only their followers wear. Members pick them from the Notifications and Streamer pings '
-  + 'panels, or with /pings.';
+const PINGS_NOTE = 'One opt-in role for go-live and event pings, one for raid trains, and a '
+  + 'role per streamer that only their followers wear. Members pick them with /pings, or from '
+  + 'Discord’s onboarding screen once this is a Community server.';
 const PINGS_NO_MODE = 'The bot did not report a pings_mode key, so the switch is not shown '
   + 'rather than guessed at.';
 const NO_STREAMERS = 'Nobody has a ping role yet. Start one below, or a streamer starts their '
   + 'own from /pings.';
+const NO_LISTED = 'The bot has not seen anybody streaming here yet. Nobody is added by hand — '
+  + 'going live is what puts somebody on this list.';
 const ROLE_GONE = 'deleted by hand';
+const NO_ROLE_YET = 'none yet';
+const HIDDEN = 'hidden';
+const LISTED = 'listed';
 const SETUP_HELP = 'Makes (or reuses) the Events role, points both feeds at it and puts it on '
   + 'the Notifications panel. Post that panel from the Role menus tab.';
+const RAID_HELP = 'Makes (or reuses) the Raid trains role and points raidtrain_ping_role_id at '
+  + 'it, so a member opts in from /pings instead of asking staff.';
 const MODE_HELP = 'off stops every opt-in and every fan-role ping; nobody loses a role.';
+
+const LIST_NOTE = 'Everybody the bot has ever seen streaming here. Hiding somebody stops new '
+  + 'followers and stops a later go-live putting them back; it never takes a role off anybody '
+  + 'who is wearing one.';
+const HIDE_TITLE = 'Take {name} off the streamer list?';
+const HIDE_BODY = 'Nobody new can follow them, and going live does not put them back. Their '
+  + 'ping role goes too if nobody is wearing it.';
+
+const ONBOARDING_NOTE = 'The bot keeps two of Discord’s onboarding prompts in step with these '
+  + 'roles: what should ping you, and which streamers. It never touches a prompt it did not '
+  + 'make, and it never turns onboarding itself on or off.';
+const ONBOARDING_NO_COMMUNITY = 'This server is not a Community server, so Discord has no '
+  + 'onboarding screen. Turn Community on in Server Settings ▸ Enable Community; until then '
+  + 'the Notifications role menu is the fallback.';
+const ONBOARDING_OFF = 'The bot is not managing onboarding. The prompts stay exactly as '
+  + 'somebody left them.';
+const ONBOARDING_NEVER = 'Not written yet.';
+const ONBOARDING_NOTHING = 'Nothing to put on the screen yet — set up the Events role or the '
+  + 'raid-train role first.';
+const ONBOARDING_WHERE = 'Whether the bot manages them at all is '
+  + 'pings_onboarding_managed in the settings below, and Stop managing onboarding on /pings.';
 
 /** D3: one button for the whole Events-role set-up, beside the role field it fills in. */
 function setupCard(say) {
@@ -204,10 +232,120 @@ function setupCard(say) {
       refresh();
     }
   }, { tone: 'warn' });
-  return card('The Events role', [
+  const train = button('Set up the raid-train role', async () => {
+    const done = await run(
+      say,
+      () => send('/api/pings/raidtrain-role', 'POST', {}),
+      (found) => found?.message || 'The raid-train role is set up.',
+    );
+    if (done.ok) {
+      keepSaying('pings.raidtrain_setup', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  return card('The shared roles', [
     el('p', { class: 'field-help', text: SETUP_HELP }),
-    bar([go]),
+    el('p', { class: 'field-help', text: RAID_HELP }),
+    bar([go, train]),
   ]);
+}
+
+/** C9: the streamer list, which the bot writes and staff only ever hide or restore from. */
+function streamerList(say, rows) {
+  return table([
+    { label: 'Streamer', cell: (row) => nameNode(row.member_id, row.member) },
+    {
+      label: 'On the list',
+      cell: (row) => (row.listed ? LISTED : badge(HIDDEN, 'warn')),
+    },
+    {
+      label: 'Role',
+      cell: (row) => (row.role || (row.role_id ? badge(ROLE_GONE, 'warn') : NO_ROLE_YET)),
+    },
+    {
+      label: 'Followers',
+      cell: (row) => (row.followers === null ? '—' : String(row.followers)),
+      className: 'mono',
+    },
+    { label: 'Last live', cell: (row) => when(row.last_live_at), className: 'mono' },
+    { label: 'Go-lives', cell: (row) => String(row.live_count), className: 'mono' },
+    {
+      label: '',
+      cell: (row) => button(row.listed ? 'Hide' : 'Restore', async () => {
+        if (row.listed) {
+          const sure = await ask({
+            title: HIDE_TITLE.replace('{name}', row.member || row.member_id),
+            body: [HIDE_BODY],
+            confirmLabel: 'Hide',
+          });
+          if (!sure) return;
+        }
+        const done = await run(
+          say,
+          () => send(`/api/pings/list/${encodeURIComponent(row.member_id)}`, 'POST', {
+            listed: !row.listed,
+          }),
+          (found) => found?.message || 'Done.',
+        );
+        if (done.ok) {
+          keepSaying('pings.streamer', say);
+          refresh();
+        }
+      }, { tone: row.listed ? 'danger' : 'warn' }),
+    },
+  ], rows, { empty: NO_LISTED });
+}
+
+function onboardingLines(found) {
+  if (!found) return [ONBOARDING_NO_COMMUNITY];
+  const lines = [];
+  if (!found.managed) lines.push(ONBOARDING_OFF);
+  if (!found.community) lines.push(ONBOARDING_NO_COMMUNITY);
+  if (lines.length) return lines;
+  if (!(found.prompts || []).length) return [ONBOARDING_NOTHING];
+  for (const prompt of found.prompts) {
+    lines.push(`${prompt.title} — ${(prompt.options || []).join(', ') || 'nothing yet'}`);
+  }
+  if (found.more_on_pings) lines.push(`${found.more_on_pings} more streamer(s) are on /pings.`);
+  if (found.foreign_prompts) {
+    lines.push(`${found.foreign_prompts} prompt(s) belong to somebody else and are left alone.`);
+  }
+  return lines;
+}
+
+/** C9: what the bot's prompts hold and when they were last written. The managed switch is
+    `pings_onboarding_managed` in the settings block below — one fact, one control. */
+function onboardingCard(say, found) {
+  const lines = onboardingLines(found).map(
+    (text) => el('p', { class: 'field-help', text }),
+  );
+  const last = el('p', {
+    class: 'field-help mono',
+    text: found && found.last_synced_at
+      ? `Last written: ${found.last_synced_at}`
+      : ONBOARDING_NEVER,
+  });
+  const controls = [];
+  if (found && found.community && found.managed) {
+    controls.push(button('Sync now', async () => {
+      const done = await run(
+        say,
+        () => send('/api/pings/onboarding/sync', 'POST', {}),
+        (one) => one?.message || 'Onboarding is in step.',
+      );
+      if (done.ok) {
+        keepSaying('pings.onboarding', say);
+        refresh();
+      }
+    }, { tone: 'warn' }));
+  }
+  return card('Discord onboarding', [
+    el('p', { class: 'field-help', text: ONBOARDING_NOTE }),
+    ...lines,
+    last,
+    el('p', { class: 'field-help', text: ONBOARDING_WHERE }),
+    controls.length ? bar(controls) : null,
+  ].filter(Boolean));
 }
 
 /** D1: staff may start a streamer's role whatever pings_fan_role_creation says. */
@@ -242,9 +380,9 @@ async function streamerCard(say) {
   ]);
 }
 
-async function pingsSection(specs, streamers) {
+async function pingsSection(specs, streamers, listing, onboarding) {
   const say = notice();
-  const group = section('Pings', PINGS_NOTE, { count: streamers.length });
+  const group = section('Pings', PINGS_NOTE, { count: listing.length });
   const spec = specs.find((one) => one.key === PINGS_MODE_KEY);
   const mode = spec ? modeSwitch(spec, { say, onSaved: () => refresh() }) : null;
 
@@ -290,9 +428,12 @@ async function pingsSection(specs, streamers) {
     mode
       ? el('div', { class: 'formrow' }, [field('Ping roles', mode.node, MODE_HELP)])
       : el('p', { class: 'say-nothing', text: PINGS_NO_MODE }),
+    el('p', { class: 'field-help', text: LIST_NOTE }),
+    streamerList(say, listing),
     rows,
     setupCard(say),
     await streamerCard(say),
+    onboardingCard(say, onboarding),
     sayAgain('pings.streamers', sayAgain('pings.setup', say)),
   ].filter(Boolean));
   return group.node;
@@ -445,6 +586,8 @@ async function load() {
     optoutPayload,
     sessionPayload,
     streamerPayload,
+    listingPayload,
+    onboardingPayload,
     uploadLinkPayload,
     uploadVideoPayload,
     uploadStatus,
@@ -454,6 +597,8 @@ async function load() {
     api('/api/golive/optouts'),
     api('/api/golive/sessions?limit=50'),
     api('/api/pings/streamers'),
+    api('/api/pings/list'),
+    api('/api/pings/onboarding'),
     api('/api/youtube/links'),
     api('/api/youtube/videos?limit=50'),
     api('/api/youtube/status'),
@@ -463,6 +608,7 @@ async function load() {
   const optouts = listOf(optoutPayload, 'optouts');
   const sessions = listOf(sessionPayload, 'sessions');
   const streamers = listOf(streamerPayload, 'streamers');
+  const listing = listOf(listingPayload, 'streamers');
   const uploadLinks = listOf(uploadLinkPayload, 'links');
   const uploads = listOf(uploadVideoPayload, 'videos');
   await names(idsIn(links, ['user_id'])
@@ -470,6 +616,7 @@ async function load() {
     .concat(idsIn(sessions, ['user_id']))
     .concat(idsIn(uploadLinks, ['user_id']))
     .concat(idsIn(uploads, ['user_id']))
+    .concat(idsIn(listing, ['member_id', 'hidden_by']))
     .concat(idsIn(streamers, ['member_id', 'created_by'])));
 
   const say = notice();
@@ -553,7 +700,7 @@ async function load() {
       omit: [UPLOADS_MODE_KEY],
     }),
     await logsSection('youtube', { title: 'Upload logs' }),
-    await pingsSection(pings, streamers),
+    await pingsSection(pings, streamers, listing, onboardingPayload),
     await namespaceSettings('pings', {
       title: 'Ping role settings',
       onSaved: () => refresh(),

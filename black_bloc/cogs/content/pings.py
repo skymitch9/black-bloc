@@ -165,8 +165,10 @@ def add_site_button(view: Any, bot: Any, row: int) -> None:
 
 
 async def streams_now(bot: Any, guild: Any, user_id: int) -> bool:
-    """A linked channel, or a stream Black Bloc has already seen, counts as streaming here."""
+    """A linked channel, a seen stream, or a place on the streamer list all count here."""
     if await get_link(bot.db, user_id) is not None:
+        return True
+    if await pings.get_streamer(bot.db, guild.id, user_id) is not None:
         return True
     return await latest_session(bot.db, guild.id, user_id) is not None
 
@@ -1127,6 +1129,8 @@ class Pings(commands.Cog):
         self.bot = bot
         self.last_ok_at: str = ""
         self.last_error: str = ""
+
+    async def cog_load(self) -> None:
         self.sweep.start()
 
     async def cog_unload(self) -> None:

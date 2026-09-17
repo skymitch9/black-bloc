@@ -322,10 +322,13 @@ async def take_over(bot: Any, guild: Any, *, by: int | None, via: str) -> bool:
 
 def card_lines(guild: Any, result: Result, *, managed_now: bool, last: Any = None) -> list[str]:
     """What the staff sub-panel says: what the prompts hold, and what is NOT Black Bloc's."""
-    if not is_community(guild):
-        return [CARD_NO_COMMUNITY]
+    said: list[str] = []
     if not managed_now:
-        return [CARD_NOT_MANAGED]
+        said.append(CARD_NOT_MANAGED)
+    if not is_community(guild):
+        said.append(CARD_NO_COMMUNITY)
+    if said:
+        return said
     lines = [CARD_MANAGED.format(count=len(result.wanted))]
     for one in result.wanted:
         lines.append(

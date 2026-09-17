@@ -465,6 +465,47 @@ async def test_an_opted_out_member_is_never_announced(cog, bot, member, db):
     assert await action_kinds(db) == ["pings.streamer_seen"]
 
 
+async def test_a_first_go_live_lists_the_streamer_and_a_second_adds_no_row(cog, bot, member, db):
+    """C1: the listener is the door, and `_go_live_once` is the ONE place both doors meet."""
+    from black_bloc import pings
+
+    info = StreamInfo(url="https://twitch.tv/casey", game="Celeste")
+    await cog._go_live(member, info, "presence")
+
+    rows = await pings.all_streamers(db, GUILD)
+    assert len(rows) == 1 and rows[0]["user_id"] == USER
+    assert rows[0]["live_count"] == 1 and rows[0]["listed"] == 1
+    assert rows[0]["login"] == "casey" and rows[0]["platform"] == "Twitch"
+
+    await cog._go_live(member, StreamInfo(url="https://twitch.tv/casey", game="Hades"), "twitch")
+
+    rows = await pings.all_streamers(db, GUILD)
+    assert len(rows) == 1 and rows[0]["live_count"] == 2
+    assert (await action_kinds(db)).count("pings.streamer_seen") == 1
+
+
+async def test_a_hidden_streamer_stays_hidden_across_a_go_live(cog, bot, member, db):
+    from black_bloc import pings
+
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+    await pings.hide_streamer(bot, bot.guild, USER, by=USER)
+
+    await cog._go_live(member, StreamInfo(url="u", game="Hades"), "presence")
+
+    row = await pings.get_streamer(db, GUILD, USER)
+    assert row["listed"] == 0 and row["live_count"] == 2
+
+
+async def test_the_go_live_mode_being_off_lists_nobody(cog, bot, member, db):
+    from black_bloc import pings
+
+    await bot.store.set(GUILD, "golive_mode", "off")
+
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+
+    assert await pings.all_streamers(db, GUILD) == []
+
+
 async def test_the_ignore_role_filter_applies(cog, bot, db):
     await bot.store.set(GUILD, "golive_ignore_role_id", 5)
     member = FakeMember(bot.guild, roles=(5,))

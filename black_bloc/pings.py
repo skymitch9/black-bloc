@@ -973,7 +973,7 @@ def panel_buttons(state: PanelState, *, staff: bool = False) -> tuple[PanelMove,
             mine.append(events_move(feed, True))
         elif wear == NOT_WORN and state.mode_on:
             mine.append(events_move(feed, False))
-    if state.mode_on and not state.own_role and state.creation in (SELF, AUTO) and state.streams:
+    if state.mode_on and not state.own_role and state.creation != STAFF and state.streams:
         mine.append(OWN_ADD_MOVE)
     if state.own_role:
         mine.append(OWN_DROP_MOVE)
