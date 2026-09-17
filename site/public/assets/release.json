@@ -1,8 +1,8 @@
 {
-  "release": "v113",
-  "commit": "34b86a5",
+  "release": "v114",
+  "commit": "04de842",
   "changed_features": [
-    "guides",
-    "posts"
+    "modmail",
+    "selftest"
   ]
 }
