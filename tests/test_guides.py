@@ -391,7 +391,9 @@ async def test_links_for_names_every_published_guide_by_its_command(bot, db):
     member_commands = {
         one["command"] for one in guides.seed_entries() if one["audience"] == "member"
     }
-    assert len(found) == len(member_commands) == 10
+    # Nine since `pings-follow` went `staff` with `pings_mode` at the pings remake.
+    assert len(found) == len(member_commands) == 9
+    assert "/pings" not in found, "the pings guide is staff-only until the mode goes back on"
     assert found["/golive"] == "https://blackbloc.test/guides.html#golive-announce"
     assert "/settings" not in found, "a staff guide is not a link a member can follow"
 
