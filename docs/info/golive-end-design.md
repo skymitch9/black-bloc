@@ -1,7 +1,6 @@
 # Go-live, once the stream is over — the announcement rewritten in the past tense
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatching to Opus as branch
-> `golive-end`.** **Last verified: 2026-09-17 08:4x** against `main` `fb1600b`: `black_bloc/golive.py`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v117** — merge `65f0931`, release `7d5d6ad`, deployed **2026-09-17 09:53** Phoenix; `golive_end_mode` = edit since then; the `## Deviations` foot is the truth where it departs from the body; sweeps **449–457** are the owner's; KI-28 for the blank-from-Discord gap. Was: 📐 DESIGN, dispatching to Opus as branch `golive-end`. **Last verified: 2026-09-17 08:4x** against `main` `fb1600b`: `black_bloc/golive.py`
 > (`render`, `ended_text`, `ended_embed`, `author_line`, `end_summary`), `black_bloc/cogs/content/golive.py`
 > (`_end_live`, `_mark_ended`, `_ended_embed`, lines ~750–806), the `golive_sessions` table
 > (`storage/db.py:134–147`), the live keys read off the dashboard, and both wordings rendered with the server's

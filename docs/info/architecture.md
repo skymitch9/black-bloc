@@ -55,18 +55,18 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
-> | What | v116 (`main`, 2026-09-17) | Where it is measured |
+> | What | v117 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
 > | Cogs | **20** (v113: `cogs/community/posts.py`) | `bot.py:COGS` |
 > | Top-level slash commands | **30** — 15 staff-locked, 15 member-visible (`/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
 > | Schema version | **39** (v116, pings remake: `streamers`, `golive_fan_roles.unworn_since`) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **225** (was 220 at v114) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Registry keys | **230** (was 225 at v116) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **19 pages / 175 routes / 14 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **5986** | the v116 deploy gate |
-> | Deploys | **113**, last `29c77b6` (v116) at 2026-09-17 00:28 | `../deploys.log` |
+> | Mock contract | **19 pages / 176 routes / 14 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
+> | Tests | **6037** | the v117 deploy gate |
+> | Deploys | **114**, last `7d5d6ad` (v117) at 2026-09-17 09:53 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -86,6 +86,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v117 `7d5d6ad`, 2026-09-17** | **20** | **30** | **39** | **176** | **6037** |
 > | **v116 `29c77b6`, 2026-09-17** | **20** | **30** | **39** | **175** | **5986** |
 > | **v115 `64b69ce`, 2026-09-16** | **20** | **30** | **38** | **171** | **5889** |
 > | **v114 `c279676`, 2026-09-16** | **20** | **30** | **38** | **170** | **5880** |

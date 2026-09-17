@@ -82,6 +82,13 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
+## KI-28 — A blank `golive_end_template` / `golive_end_author` cannot be set from Discord — `ACCEPTED`
+
+**Symptom.** The go-live end wording has a "blank = keep the live sentence and append the suffix" shape (v117, `info/golive-end-design.md` §A). From the dashboard it is reachable (the **Wording** card's *Just add the ending instead* button sends `PUT ""`). From Discord it is not: `/settings` ▸ the key card's modal is a `discord.ui.TextInput` with `required=True` (`cogs/core.py:1284`), so Discord itself refuses an empty submit, and **Clear** restores the shipped default rather than blanking.
+**Status.** `ACCEPTED` 2026-09-17.
+**Why tolerated.** The modal is shared by every text key; letting two keys submit empty means a per-key "may be blank" flag through that modal, which the go-live build was told not to touch while two other builds were in the file. The dashboard reaches the shape, and checklist 33's "both ways" holds for every VALUE except the empty one.
+**What would change it.** `settings_store.TEXT_MAY_BE_BLANK` already names the two keys; teaching the key modal to read it (required = key not in that tuple) is the whole fix — one line in `cogs/core.py`, one test. Do it in the next build that touches `cogs/core.py`.
+
 ## KI-27 — Guide wording and screenshots are edited on the WEBSITE only; there is no Discord door — `WAIVED`
 
 **Symptom:** the "every decision configurable BOTH ways" rule (`CLAUDE.md`, checklist 33) has a
