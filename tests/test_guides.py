@@ -314,6 +314,54 @@ async def test_a_release_naming_golive_flips_the_go_live_shots_and_no_other(bot,
     assert other not in stale and fresh not in stale
 
 
+async def test_mark_all_stale_takes_every_picture_a_release_never_could(bot, db):
+    """The cutover: a mode flip and a channel rename are not deploys, so nothing else reaches
+    a shot whose own feature has not changed."""
+    await guides.seed_guides(db, GUILD)
+    golive = await guides.get_guide(db, GUILD, "golive-announce")
+    poll = await guides.get_guide(db, GUILD, "poll-vote-make")
+    shot = await guides.save_media(
+        bot, GUILD, golive["id"], b"\x89PNG\r\n\x1a\n" + b"\x00" * 40, shot_release="v111"
+    )
+    other = await guides.save_media(
+        bot, GUILD, poll["id"], b"\x89PNG\r\n\x1a\n" + b"\x00" * 40, shot_release="v111"
+    )
+
+    assert await guides.mark_all_stale(db, GUILD) == 2
+
+    stale = {int(row["id"]) for row in await guides.stale_media(db, GUILD)}
+    assert stale == {shot, other}
+    assert all(row["stale_since"] for row in await guides.stale_media(db, GUILD))
+
+
+async def test_mark_all_stale_counts_only_what_was_not_marked_already(bot, db):
+    await guides.seed_guides(db, GUILD)
+    golive = await guides.get_guide(db, GUILD, "golive-announce")
+    first = await guides.save_media(bot, GUILD, golive["id"], b"\x89PNG\r\n\x1a\n" + b"\x00" * 40)
+    await guides.mark_all_stale(db, GUILD)
+    was = [row["stale_since"] for row in await guides.stale_media(db, GUILD)]
+    second = await guides.save_media(bot, GUILD, golive["id"], b"\x89PNG\r\n\x1a\n" + b"\x00" * 40)
+
+    assert await guides.mark_all_stale(db, GUILD) == 1
+    assert await guides.mark_all_stale(db, GUILD) == 0
+
+    rows = {int(row["id"]): row["stale_since"] for row in await guides.stale_media(db, GUILD)}
+    assert sorted(rows) == sorted([first, second])
+    assert rows[first] == was[0]
+
+
+async def test_mark_all_stale_leaves_another_guilds_pictures_alone(bot, db):
+    await guides.seed_guides(db, GUILD)
+    await guides.seed_guides(db, OTHER_GUILD)
+    mine = await guides.get_guide(db, GUILD, "golive-announce")
+    theirs = await guides.get_guide(db, OTHER_GUILD, "golive-announce")
+    await guides.save_media(bot, GUILD, mine["id"], b"\x89PNG\r\n\x1a\n" + b"\x00" * 40)
+    await guides.save_media(bot, OTHER_GUILD, theirs["id"], b"\x89PNG\r\n\x1a\n" + b"\x00" * 40)
+
+    assert await guides.mark_all_stale(db, GUILD) == 1
+    assert len(await guides.stale_media(db, OTHER_GUILD)) == 0
+
+
 async def test_the_same_release_is_read_once_and_leaves_one_row(bot, db):
     await guides.seed_guides(db, GUILD)
     write_release(bot, "v112", ["golive"])

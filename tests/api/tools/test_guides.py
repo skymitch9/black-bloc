@@ -556,6 +556,73 @@ async def test_the_stale_list_is_staff_only_and_names_the_guide_each_shot_belong
     assert as_staff.get("/api/guides").json()["stale"] == 1
 
 
+async def test_mark_every_screenshot_stale_takes_them_all_and_says_the_count(
+    client, sign_in, people, web, wf
+):
+    as_staff = become(client, sign_in, LEAD, staff=True)
+    for slug in ("golive-announce", "poll-vote-make"):
+        as_staff.post(f"/api/guides/{slug}/media", json=upload(png(), shot_release="v111"))
+
+    answered = as_staff.post("/api/guides/stale/all", json={"reason": "shadow mode is off"})
+
+    assert answered.status_code == 200
+    assert answered.json()["marked"] == 2
+    assert answered.json()["message"].startswith("2 screenshots are marked for re-shooting.")
+    assert "capture runbook" in answered.json()["message"]
+    assert as_staff.get("/api/guides/stale").json()["count"] == 2
+    left = [one for one in await wf.web_rows_in(web.db) if one[0] == "web.guide.shots_stale"]
+    assert len(left) == 1
+    details = left[0][1]
+    assert details["count"] == 2 and details["features"] == ["all"]
+    assert details["reason"] == "shadow mode is off"
+    assert details["release"] == (pure.read_release(web) or {}).get("release")
+
+
+async def test_a_second_press_says_every_screenshot_was_already_marked(as_staff):
+    as_staff.post("/api/guides/golive-announce/media", json=upload(png(), shot_release="v111"))
+    first = as_staff.post("/api/guides/stale/all", json={})
+
+    again = as_staff.post("/api/guides/stale/all", json={})
+
+    assert first.json()["marked"] == 1
+    assert first.json()["message"].startswith("1 screenshot is marked for re-shooting.")
+    assert again.status_code == 200
+    assert again.json() == {"marked": 0, "message": "Every screenshot was already marked."}
+
+
+async def test_a_member_may_not_mark_every_screenshot_stale(as_member):
+    refused = as_member.post("/api/guides/stale/all", json={})
+
+    assert refused.status_code == 403
+    assert refused.json()["error"] == "not_staff"
+    assert "staff role" in refused.json()["message"]
+
+
+async def test_marking_them_all_obeys_guides_who_edits_the_way_a_save_does(
+    client, sign_in, people, web, wf
+):
+    await web.store.set(wf.GUILD_ID, "guides_who_edits", "manage_guild", by=ADMIN)
+    become(client, sign_in, LEAD, staff=True)
+
+    refused = client.post("/api/guides/stale/all", json={})
+
+    assert refused.status_code == 403
+    assert refused.json()["error"] == "not_a_lead"
+    assert "Manage Server" in refused.json()["message"]
+
+    become(client, sign_in, ADMIN, staff=True)
+    assert client.post("/api/guides/stale/all", json={}).status_code == 200
+
+
+async def test_stale_all_is_never_read_as_a_guide_called_stale(as_staff):
+    """It is registered before the `/{slug}` routes; read as a slug it would 404 in words."""
+    assert as_staff.post("/api/guides/stale/all", json={}).status_code == 200
+    assert as_staff.get("/api/guides/stale").status_code == 200
+    missing = as_staff.get("/api/guides/stale/all")
+    assert missing.status_code in (404, 405)
+    assert as_staff.get("/api/guides/stale-all").status_code == 404
+
+
 # --- G2: what the page reads ------------------------------------------------------------------
 
 
