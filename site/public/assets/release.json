@@ -1,10 +1,5 @@
 {
-  "release": "v119",
-  "commit": "f0db051",
-  "changed_features": [
-    "guides",
-    "modmail",
-    "posts",
-    "request"
-  ]
+  "release": "v120",
+  "commit": "4c92a0b",
+  "changed_features": []
 }
