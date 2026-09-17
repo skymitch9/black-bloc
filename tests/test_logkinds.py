@@ -62,7 +62,25 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "frontdoor.would_post",
         "web.frontdoor.would_post",
     ),
+    # The rehearsal copy's three: the door writes them from the sweep and from either door,
+    # so the website spelling is listed beside the bare one.
+    "black_bloc/cogs/community/frontdoor.py::POSTED_SHADOW": (
+        "frontdoor.posted_shadow",
+        "web.frontdoor.posted_shadow",
+    ),
+    "black_bloc/cogs/community/frontdoor.py::UPDATED_SHADOW": (
+        "frontdoor.updated_shadow",
+        "web.frontdoor.updated_shadow",
+    ),
+    "black_bloc/cogs/community/frontdoor.py::TAKEN_DOWN_SHADOW": (
+        "frontdoor.taken_down_shadow",
+        "web.frontdoor.taken_down_shadow",
+    ),
     "black_bloc/cogs/community/frontdoor.py::GONE": ("frontdoor.gone",),
+    "black_bloc/cogs/community/frontdoor.py::moved_or_gone": (
+        "frontdoor.below_post",
+        "frontdoor.gone",
+    ),
     "black_bloc/cogs/community/frontdoor.py::BELOW_POST": ("frontdoor.below_post",),
     "black_bloc/cogs/community/frontdoor.py::POST_FAILED": ("frontdoor.post_failed",),
     "black_bloc/cogs/community/frontdoor.py::TICKET_BUTTON_HIDDEN": (

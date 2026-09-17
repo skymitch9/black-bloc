@@ -1773,6 +1773,8 @@ KEY_HELP.update(
 FRONTDOOR_MODE = "frontdoor_mode"
 FRONTDOOR_CHANNEL = "frontdoor_channel_id"
 FRONTDOOR_MESSAGE = "frontdoor_message_id"
+FRONTDOOR_SHADOW_MESSAGE = "frontdoor_shadow_message_id"
+FRONTDOOR_SHADOW_HASH = "frontdoor_shadow_hash"
 FRONTDOOR_TITLE = "frontdoor_title"
 FRONTDOOR_TEXT = "frontdoor_text"
 FRONTDOOR_TICKET_LABEL = "frontdoor_ticket_label"
@@ -1798,6 +1800,8 @@ KEY_TYPES.update(
         FRONTDOOR_MODE: "enum",
         FRONTDOOR_CHANNEL: "channel",
         FRONTDOOR_MESSAGE: "text",
+        FRONTDOOR_SHADOW_MESSAGE: "text",
+        FRONTDOOR_SHADOW_HASH: "text",
         FRONTDOOR_TITLE: "text",
         FRONTDOOR_TEXT: "text",
         FRONTDOOR_TICKET_LABEL: "text",
@@ -1824,6 +1828,17 @@ KEY_HELP.update(
             "the front-door message Black Bloc posted, so it can be moved, taken down and put "
             "back after somebody deletes it. Written by the bot as TEXT, because a snowflake "
             "does not survive a JavaScript number; there is no reason to set it by hand"
+        ),
+        FRONTDOOR_SHADOW_MESSAGE: (
+            "the rehearsal copy of the front door Black Bloc posted in the rehearsal home while "
+            "test mode refuses the real channel, so it can be kept current, moved with "
+            "shadow_channel_id and taken down. Written by the bot as TEXT; there is no reason "
+            "to set it by hand"
+        ),
+        FRONTDOOR_SHADOW_HASH: (
+            "a fingerprint of the wording the rehearsal copy is showing, so a sweep edits it "
+            "only when the heading, the line or a button label has actually changed. Written "
+            "by the bot; there is no reason to set it by hand"
         ),
         FRONTDOOR_TITLE: "the heading on the posted front-door message and on the /ask panel",
         FRONTDOOR_TEXT: "the line under that heading, on both",
@@ -2206,6 +2221,8 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_MODE: "modmail",
     FRONTDOOR_CHANNEL: "modmail",
     FRONTDOOR_MESSAGE: "modmail",
+    FRONTDOOR_SHADOW_MESSAGE: "modmail",
+    FRONTDOOR_SHADOW_HASH: "modmail",
     FRONTDOOR_TITLE: "modmail",
     FRONTDOOR_TEXT: "modmail",
     FRONTDOOR_TICKET_LABEL: "modmail",
@@ -2352,7 +2369,7 @@ TEXT_CHECKS: dict[str, Any] = {
     RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
 }
 
-TEXT_MAY_BE_BLANK = ("golive_end_template", "golive_end_author")
+TEXT_MAY_BE_BLANK = ("golive_end_template", "golive_end_author", REHEARSAL_NOTE)
 
 
 def coerce_value(key: str, value: Any) -> Any:

@@ -172,6 +172,8 @@ export const LABELS = {
   frontdoor_mode: 'Whether the front door is up',
   frontdoor_channel_id: 'Where the front-door message is posted',
   frontdoor_message_id: 'The posted front-door message, written by the bot',
+  frontdoor_shadow_message_id: 'The front door’s rehearsal copy, written by the bot',
+  frontdoor_shadow_hash: 'What the rehearsal copy is showing, written by the bot',
   frontdoor_title: 'The heading on the front door',
   frontdoor_text: 'What the front door says under its heading',
   frontdoor_ticket_label: 'What the Ask staff privately button is called',

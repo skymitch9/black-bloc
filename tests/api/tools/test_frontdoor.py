@@ -76,10 +76,26 @@ def test_the_front_door_needs_a_channel_the_bot_can_see(client, sign_in):
     assert "Pick one from the list" in refused["message"]
 
 
-async def test_the_front_door_is_refused_outside_the_test_channel_in_test_mode(
+async def test_the_front_door_rehearses_in_the_home_when_test_mode_refuses_its_channel(
     client, sign_in, web, guild, wf
 ):
     web.guard = wf.Guard()
+    sign_in(client)
+
+    posted = client.post("/api/frontdoor/panel", json={"channel_id": str(wf.OTHER_CHANNEL_ID)})
+
+    assert posted.status_code == 200
+    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
+    assert guild.get_channel(wf.TEST_CHANNEL_ID).messages
+    assert web.store.get(wf.GUILD_ID, "frontdoor_channel_id") == wf.OTHER_CHANNEL_ID
+    assert web.store.get(wf.GUILD_ID, "frontdoor_shadow_message_id")
+    assert "web.frontdoor.posted_shadow" in await wf.kinds_in(web.db)
+
+
+async def test_the_front_door_is_refused_in_words_when_there_is_no_rehearsal_home_at_all(
+    client, sign_in, web, guild, wf
+):
+    web.guard = wf.Guard(test_channel_id=0)
     sign_in(client)
 
     refused = client.post("/api/frontdoor/panel", json={"channel_id": str(wf.OTHER_CHANNEL_ID)})
