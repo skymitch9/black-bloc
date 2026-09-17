@@ -71,6 +71,13 @@ the test channel in words (`modmail.would_post_panel`). Pressing the button runs
 
 ### C4. Staff: Open a ticket with…
 
+⚠️ **~~Drawn on every staff root.~~ HIDDEN BY DEFAULT since v117** (2026-09-17, branch
+`modmail-hide`) — the owner asked for the door kept but hidden (*"Let's keep but hide the open a
+ticket with option on the bot. Toggleable of course."*). Everything below is what the door does
+**once `modmail_open_with_button` is on**; off is the default and the button is not drawn. The
+code is untouched, which is the point of a toggle rather than a deletion. See *Hide toggle
+(v117)* in `## Deviations`.
+
 On the staff root, **Open a ticket with…** → a `UserSelect` → the same modal (the subject becomes the
 ticket's first line; the paragraph is sent to the member as the FIRST staff reply through
 `send_reply`, `source = staff`) → the ticket opens with `source = staff`, the member is DMed the
@@ -89,8 +96,9 @@ reached — read `modmail.py:668` and say which it does today.
 | `modmail_panel_message_id` | int | blank | the posted message (written by the bot) |
 | `modmail_panel_title` | text | `Need a moderator?` | the panel's heading |
 | `modmail_panel_text` | text | `Press the button and tell us what is happening. Only staff see it.` | the panel's body |
+| `modmail_open_with_button` | bool | **false** (v117) | true draws **Open a ticket with…** on the staff row of `/modmail`; false hides that door and leaves every other way in untouched |
 
-Per-ticket `source` needs no key. Registry +5.
+Per-ticket `source` needs no key. Registry +5, and **+1** at v117 (the hide toggle).
 
 ### C6. Log kinds
 
@@ -220,6 +228,49 @@ doors`; the `modmail-panel-design.md` §B row that says "no member half" struck 
     and the flag plus the sentence keep the two apart.
 15. **The mock's ticket rows carry a `source` each** (`dm`, `panel`, `staff`) so the page's new
     column has something to show, and the seed's staff row carries `opened_by`.
+
+### Hide toggle (v117) — written 2026-09-17 on branch `modmail-hide` off `main` `91bee8a` (v116)
+
+Owner, 2026-09-17 08:3x, verbatim: *"Let's keep but hide the open a ticket with option on the
+bot. Toggleable of course."* One key, `modmail_open_with_button` (bool, **default false**,
+namespace `modmail`, registry 225 → **226**). What it changes, and the three things it does not:
+
+1. **`door_buttons` gained `open_with: bool = False`** rather than reading the store itself —
+   `black_bloc/modmail.py` is the pure half and stays pure, so the flag is tested both ways with
+   no fakes. `build_root` is the one caller that reads the key, through
+   `cogs/moderation/modmail.py:open_with_on(store, guild_id)` — one reader, so the button, the
+   picker and the modal cannot disagree.
+2. ⚠️ **Three stale windows, not one.** A panel opened while the door was on keeps its button; a
+   `UserSelect` already on screen keeps answering; and a `TicketModal` already open submits into
+   `open_a_ticket`. All three are gated, in that order: `run_open_with` (the press),
+   `open_with_refusal` (the pick, ahead of the bot / disabled / blocked answers) and
+   `open_a_ticket` itself (`staff_door and not open_with_on` → `refuse_open`, reason word
+   `open_with_off`, so it leaves the usual quiet `modmail.open_refused` row). The last one is the
+   only gate a ticket could otherwise slip past, because a modal is on the member's screen for as
+   long as they leave it there.
+3. **The refusal names the key and both doors back to it.** `OPEN_WITH_OFF` says what happened
+   (the door is switched off), what it needs (`modmail_open_with_button` on) and how to get it
+   (the dashboard's Settings page under **modmail**, or `/settings` ▸ **A setting group…** ▸
+   modmail) — never a bare refusal, and never a button that would refuse (P3): with the key off
+   the staff root simply does not draw it.
+4. **Nothing was deleted and no web route moved.** `OPEN_WITH_MOVE`, `MemberPick`, `TicketModal`
+   and the `staff` ticket source are all untouched; `open_a_ticket(source=SOURCE_STAFF)` has no
+   caller outside this cog, so there is no website door to gate. The mock gained the settings row
+   and `labels.js` the label, which is the dashboard half of checklist 33; the Discord half is
+   the generated key card, proved by
+   `tests/test_settings_panel.py::test_every_registry_key_resolves_to_exactly_one_control[modmail_open_with_button]`.
+5. **`modmail-ticket` in `guides_seed.json` was NOT touched** — no step, fault or fact in it
+   names **Open a ticket with…** (it is the ticket-card guide: Reply, Reply as Staff, note,
+   close), so there was no sentence to qualify. The brief's "(only when `modmail_open_with_button`
+   is on)" clause has no home today; if a guide ever names that door, it needs one.
+
+⚠️ **NOT verified, this change:** nothing met Discord — no boot, no token, no press, no DM;
+`TEST_MODE` was never flipped and nothing was deployed. No browser saw the Settings page, real or
+mock; the mock was exercised only by `node site/mock/check.mjs` (*19 pages, 175 routes, 14 core
+settings, all keys present*). Sweep rows 422 and 428–430 in `../access/sweeps.md` still tell the
+owner to press **Open a ticket with…** on a staff `/modmail`; with the key shipping **off** he
+must turn it on first, and those four rows were left for the conductor's landing ritual rather
+than rewritten here.
 
 ### What was NOT verified
 
