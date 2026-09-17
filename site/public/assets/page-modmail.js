@@ -1,4 +1,4 @@
-import { api, listOf, names, send } from './api.js';
+import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
 import {
@@ -7,13 +7,16 @@ import {
   bar,
   button,
   card,
+  channelSelect,
   el,
   field,
   idsIn,
+  keepSaying,
   memberPicker,
   nameNode,
   namespaceSettings,
   notice,
+  readSelect,
   run,
   sayNothing,
   section,
@@ -26,6 +29,16 @@ const state = { status: 'open', open: null };
 let refresh = () => {};
 
 const DIRECTION_LABEL = { in: 'from the member', out: 'from staff', note: 'staff note — the member never sees this' };
+const SOURCE_LABEL = {
+  dm: 'a DM to the bot',
+  command: '/modmail',
+  panel: 'the ticket button',
+  staff: 'staff',
+  practice: 'practice',
+};
+const BUTTON_HELP = 'One message with an Open a ticket button under it. Pressing it asks what is '
+  + 'happening and opens a ticket — the same one a DM opens. Its heading and wording are the '
+  + 'modmail_panel_title and modmail_panel_text settings below.';
 
 function messageNode(message) {
   const direction = message.direction === 'note' ? 'note' : message.direction === 'out' ? 'out' : 'in';
@@ -171,6 +184,61 @@ function blocksCard(rows) {
   return card('Blocks', [list, picker.node, field('Why', reason), bar([add]), say]);
 }
 
+async function ticketButtonCard(placed) {
+  const say = notice();
+  const posted = placed.channel_id;
+  const where = await channelSelect(posted || null);
+  const post = button(posted ? 'Move the ticket button' : 'Post the ticket button', async () => {
+    const channelId = readSelect(where, false);
+    if (!channelId) {
+      say.say('Pick the channel the button goes in first.', 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send('/api/modmail/panel', 'POST', { channel_id: channelId }),
+      (found) => found?.message || 'The ticket button is up.',
+    );
+    if (done.ok) {
+      keepSaying('modmail', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  const down = button('Take it down', async () => {
+    const sure = await ask({
+      title: 'Take the ticket button down?',
+      body: ['The message goes, and nobody can open a ticket from that channel. Tickets already open are untouched, and a DM still opens one.'],
+      confirmLabel: 'Take it down',
+    });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => api('/api/modmail/panel', { method: 'DELETE' }),
+      (found) => found?.message || 'The ticket button is down.',
+    );
+    if (done.ok) {
+      keepSaying('modmail', say);
+      refresh();
+    }
+  }, { tone: 'danger' });
+  return card('Ticket button', [
+    el('p', { text: BUTTON_HELP }),
+    posted
+      ? el('p', {}, ['It is in ', nameNode(posted), '.'])
+      : sayNothing('No ticket button is posted anywhere.'),
+    el('div', { class: 'formrow' }, [field('Put it in', where), bar(posted ? [post, down] : [post])]),
+    say,
+  ]);
+}
+
+async function panelSettings() {
+  const specs = settingsNamespace(await settings(true), 'modmail');
+  const value = (key) => (specs.find((spec) => spec.key === key) || {}).value ?? null;
+  const channelId = value('modmail_panel_channel_id');
+  if (channelId) await names([String(channelId)]);
+  return { channel_id: channelId, message_id: value('modmail_panel_message_id') };
+}
+
 async function load() {
   const query = state.status ? `?status=${encodeURIComponent(state.status)}` : '';
   const [ticketPayload, snippetPayload, blockPayload] = await Promise.all([
@@ -198,6 +266,7 @@ async function load() {
     { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
     { label: 'Opened', cell: (row) => when(row.opened_at), className: 'mono' },
     { label: 'Status', cell: (row) => badge(row.status, row.status === 'open' ? 'ok' : null) },
+    { label: 'Came in by', cell: (row) => SOURCE_LABEL[row.source] || row.source || 'a DM to the bot' },
     {
       label: '',
       cell: (row) => button('Open', () => {
@@ -227,10 +296,14 @@ async function load() {
   });
   three.body.append(blocksCard(blocks));
 
+  const four = section('Ticket button', 'The posted Open a ticket message, and where it lives.');
+  four.body.append(await ticketButtonCard(await panelSettings()));
+
   document.getElementById('dash').replaceChildren(
     ...nodes,
     two.node,
     three.node,
+    four.node,
     await namespaceSettings('modmail'),
     await logsSection('modmail'),
   );

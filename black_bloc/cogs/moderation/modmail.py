@@ -1939,8 +1939,12 @@ async def drop_panel_message(bot: Any, guild: Any, channel: Any, message_id: int
             details={"channel_id": channel.id, "message_id": message_id},
         )
         return
+    partial = getattr(channel, "get_partial_message", None)
     try:
-        await channel.get_partial_message(message_id).delete()
+        if partial is None:
+            await (await channel.fetch_message(message_id)).delete()
+        else:
+            await partial(message_id).delete()
     except discord.NotFound:
         return
     except Exception as exc:
