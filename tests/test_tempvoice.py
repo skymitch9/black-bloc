@@ -11,6 +11,7 @@ from black_bloc.tempvoice import (
     OWNER,
     VOICE_REGIONS,
     card_buttons,
+    makes_rooms,
     named_regions,
     panel_minutes,
     panel_state,
@@ -77,9 +78,8 @@ def test_the_owner_being_gone_is_what_separates_a_claim_from_a_visit():
 @pytest.mark.parametrize("hidden", [False, True])
 @pytest.mark.parametrize("has_prefs", [False, True])
 @pytest.mark.parametrize("staff", [False, True])
-@pytest.mark.parametrize("mode_on", [False, True])
 def test_every_state_renders_exactly_its_row_of_the_table(
-    state, locked, hidden, has_prefs, staff, mode_on
+    state, locked, hidden, has_prefs, staff
 ):
     """Checklist 3 and 12: the table is data, and no state may render a move it forbids."""
     found = card_buttons(
@@ -88,7 +88,6 @@ def test_every_state_renders_exactly_its_row_of_the_table(
         hidden=hidden,
         has_prefs=has_prefs,
         staff=staff,
-        mode_on=mode_on,
         has_lobbies=staff,
     )
     said = labels(found)
@@ -101,10 +100,8 @@ def test_every_state_renders_exactly_its_row_of_the_table(
     assert ("Forget my settings" in said) == (has_prefs and state != BLOCKED)
     assert ("Rename" in said) == (state == OWNER)
     assert "Refresh" in said
-    for staff_label in ("Setup", "Forget a lobby…", "Logs"):
+    for staff_label in ("Setup", "Forget a lobby…", "Logs", "Mode…"):
         assert (staff_label in said) == staff
-    assert ("Turn join-to-create off" in said) == (staff and mode_on)
-    assert ("Turn join-to-create on" in said) == (staff and not mode_on)
     assert all(move in CARD_BUTTONS or move.action in {m.action for m in CARD_BUTTONS}
                for move in found)
 
@@ -147,6 +144,15 @@ def test_every_undo_option_carries_the_word_for_its_own_kind():
         (3, helpers.UNBAN_KIND),
     ]
     assert undo_options(None, None) == []
+
+
+def test_shadow_counts_as_working_everywhere_the_mode_is_read():
+    """Shadow only hides the lobby — spawning, the panel and the reconcile treat it as on."""
+    assert makes_rooms("shadow") is True
+    assert makes_rooms("on") is True
+    assert makes_rooms("off") is False
+    assert makes_rooms(None) is False
+    assert set(helpers.MODE_MEANS) == {"off", "shadow", "on"}
 
 
 def test_the_panel_minutes_key_reads_the_registry_and_the_site_page_is_the_shared_one():

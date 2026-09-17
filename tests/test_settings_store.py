@@ -56,6 +56,7 @@ from black_bloc.settings_store import (
     RAIDTRAIN_SCHEDULED_NAME_KEY,
     RAIDTRAIN_SCHEDULED_NAME_TEMPLATE,
     REQUEST_CARD_MOVES,
+    TEMPVOICE_MODES,
     TEMPVOICE_NAME_TEMPLATE,
     THREAD_MODE,
     TIME_STEP_KEY,
@@ -382,6 +383,14 @@ async def test_tempvoice_defaults(store):
     assert store.get(1, "tempvoice_name_template") == TEMPVOICE_NAME_TEMPLATE
     assert store.get(1, "tempvoice_allowed_role_id") == MEMBER_ROLE_ID
     assert store.get(1, "tempvoice_creator_ids") == []
+
+
+async def test_tempvoice_has_a_shadow_between_off_and_on(store):
+    """The lobby is staff-only in shadow, so the enum has to carry all three."""
+    assert TEMPVOICE_MODES == ("off", "shadow", "on")
+    assert await store.set(1, "tempvoice_mode", "shadow") == "shadow"
+    with pytest.raises(SettingError, match="off, shadow, on"):
+        coerce_value("tempvoice_mode", "sideways")
 
 
 async def test_role_menus_ship_turned_off(store):

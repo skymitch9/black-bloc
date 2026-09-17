@@ -323,7 +323,7 @@ const SETTING_SPECS = [
   ['pings_onboarding_managed', 'bool', true, true, 'true to let Black Bloc keep its two Discord onboarding prompts in step with the Events, raid-train and streamer roles; false leaves the prompts exactly as they are and Black Bloc never writes to onboarding again. Only does anything on a Community server'],
   ['pings_onboarding_prompt_title', 'text', 'What should ping you?', 'What should ping you?', 'what Black Bloc’s first onboarding prompt is called; it is also how Black Bloc knows which prompts are its own, so changing it makes a fresh pair and leaves the old ones for somebody to delete by hand'],
   ['pings_onboarding_option_cap', 'int', 25, 25, 'how many streamers the **Which streamers?** onboarding prompt lists before it says how many more are on `/pings`. Discord publishes no number for this, so 25 is Black Bloc’s own conservative cap — raise it and Discord refuses in words if it is too high', null, 50, 1],
-  ['tempvoice_mode', 'enum', 'on', 'off', 'off, or on (join-to-create makes a temporary voice channel)', ['off', 'on']],
+  ['tempvoice_mode', 'enum', 'on', 'off', 'off, shadow (join-to-create works, but only staff can see the lobby — the rooms it spawns follow it), or on (the lobby is visible to whoever its category shows)', ['off', 'shadow', 'on']],
   ['tempvoice_creator_ids', 'channels', ['800000000000000009'], [], 'the join-to-create channels; Setup on /voice fills this in'],
   ['tempvoice_name_template', 'text', "{user}'s room", "{user}'s room", 'what a spawned channel is called; {user} is the member'],
   ['tempvoice_creator_name', 'text', 'join to create a channel', 'join to create a channel', 'what the join-to-create channel is called'],
