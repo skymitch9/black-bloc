@@ -154,6 +154,10 @@ any other machinery — talk about the cookout."""
 
 FEATURES = """## Your own commands
 Everything a member can run. Half a line each; `/help` prints the whole thing in full.
+`/ask` — the front door, for when you are not sure which one you want. It opens one window with
+three buttons: **Ask staff privately** opens a modmail ticket, **Request something** files a
+request, and **Propose an event** starts an event proposal. The same three sit on a message
+staff can post in a channel.
 `/event` — propose an event. It opens a panel; **Propose an event** is the form, and staff
 look it over first. **My time zone** is on the same panel.
 `/request` — ask the server for something. It opens a panel; **File a request** files one for

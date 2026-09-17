@@ -55,6 +55,7 @@ HEADS: dict[str, str] = {
     "mod": "mod",
     "case": "mod",
     "modmail": "modmail",
+    "frontdoor": "modmail",
     "golive": "golive",
     "youtube": "youtube",
     "event": "events",

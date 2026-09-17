@@ -255,13 +255,14 @@ async def test_every_command_in_the_table_is_a_real_top_level_command(real_tree)
     assert named.isdisjoint(cv.NEVER_HIDDEN)
 
 
-async def test_the_fourteen_features_that_hide_each_map_to_one_command():
+async def test_the_fifteen_features_that_hide_each_map_to_one_command():
     assert cv.HIDDEN_WHEN_OFF == {
         "applications_mode": ("apply",),
         "automod_mode": ("automod",),
         "birthday_mode": ("birthday",),
         "chat_mode": ("chat",),
         "events_mode": ("event",),
+        "frontdoor_mode": ("ask",),
         "golive_mode": ("golive",),
         "honeypot_mode": ("honeypot",),
         "pings_mode": ("pings",),
