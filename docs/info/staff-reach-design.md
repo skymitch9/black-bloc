@@ -1,7 +1,6 @@
 # Staff reach — every channel the bot makes is the staff's to see and delete, and the BlackMail log
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatch queued behind
-> the `modmail-hide` and `tempvoice-lobby` builds** (both touch the same files). **Last verified: 2026-09-17
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatching to Opus 2026-09-17 10:5x as branch `staff-reach`** (v120; §C added 10:5x — three site items the owner asked for the same morning). **Last verified: 2026-09-17
 > 08:3x** against `main` `91bee8a`: the three overwrite builders named in §A were read in full
 > (`cogs/community/tempvoice.py:382–420`, `events.py:1060–1076`, `cogs/moderation/modmail.py:691–701`), the
 > role list and the two categories were read off the live guild by the bot token. ⚠️ Secret NAMES only.
@@ -74,6 +73,12 @@ action log"*. Registry + mock contract row. The action-log row `modmail.opened` 
 **Tests.** A ticket opened through each door with the key on posts the card once (and once only — the DM and the
 staff doors share `open_ticket`; assert on the call count); with the key off nothing is posted; under the guard the
 would-row is written and nothing sent; a refused send is a log row, not an exception, and the ticket still opens.
+
+## C. Three site items folded in (owner, 2026-09-17 09:3x–10:0x)
+
+1. **Every channel picker shows the category** (owner rule, verbatim: *"Yes good fix. All channel drop-selects should include a category for less confusion."* — after he saved the wrong of two `modmail-log`s). One home: `site/public/assets/ui.js` `channelLabel` reads `#name · Category` (the kind glyph as today, then the name, then ` · ` and the parent category's name from `/api/ref/channels`' `parent_id`; a channel with no category shows the name alone; a category row itself is unchanged). Every `channelSelect` caller inherits it — check `page-polls.js`, the posts target, the guides editor, the settings rows, the tempvoice/honeypot pickers — and the `keepUnlisted` fallback label stays `<said> · <id>`. One test in whatever covers `ui.js` labels (if none exists, a small `site/mock` check that the label contains ` · ` for a channel with a parent).
+2. **The ended go-live wording gets the same editor as the live one** (owner: *"i see how to edit the go live but not how to edit the eding stream message"*). On `golive.html` under **Announcement wording**, a second `templateEditor` block **Once the stream is over** for `golive_end_template` and, beneath it, a one-line editor for `golive_end_author`, both with the placeholder list (`{name} {game} {title} {url} {platform} {duration}`), the same save bar and the same as-you-type preview the live block has; the **Wording** card sits directly under both and refreshes on their save (hook `templateEditor`'s save through the `onSaved` it lacks — add it, that is the gap the golive-end build's deviation 8 named). The two settings rows on the right stay (they write the same keys).
+3. **KI-28 — blank from Discord.** In `cogs/core.py` the key modal's `TextInput` is `required = key not in settings_store.TEXT_MAY_BE_BLANK`; an empty submit for those keys stores `""` through the same PUT path the website uses. One test. Close KI-28 in `KNOWN_ISSUES.md` (keep the entry, mark `CLOSED` with the date and the commit).
 
 ## Deviations
 
