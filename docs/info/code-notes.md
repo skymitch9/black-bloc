@@ -6669,3 +6669,81 @@ the fake channels. A shadow copy is hunted BY ID through several channels, and w
 channel starting at 9000 the hunt found the ACTION LOG's own message in `#bot-log` and reported
 the rehearsal alive. Discord's snowflakes are globally unique, so the fake was the thing that
 was wrong — but it was wrong in a way that made a real bug look fixed.
+
+
+# Modmail doors (branch `modmail-doors`, off `main` at `4d60f68`)
+
+⚠️ **Keyed by NAME, not by line** — this block was written against a branch that had not merged,
+so every key below is the construct's name in its file. `docs/info/modmail-doors-design.md`
+`## Deviations` carries the fifteen places the build differs from its design.
+
+**`black_bloc/cogs/moderation/modmail.py` — `open_or_find` / `make_place` / `post_header` /
+`record_inbound` came OUT of the cog, and that is the whole safety argument.** Three new doors
+had to reach the path a DM takes. They were `Modmail._open_or_find`, `._make_place`,
+`._post_header` and `._relay_inbound` — methods, so a module-level door could not call them
+without a cog instance. They are module functions now and the methods are one-line delegates;
+`_inbound` is unchanged in behaviour, and **every DM test in `tests/cogs/moderation/test_modmail.py`
+passed unedited**, which is the proof the relay did not move.
+
+**`black_bloc/cogs/moderation/modmail.py` — `open_a_ticket` is the only door body.** The command,
+the posted button and **Open a ticket with…** all call it: bot → off → blocked → already open →
+`open_or_find` → the first message. The member doors write the paragraph as an INBOUND row
+(`record_inbound`, the same three calls `_relay_inbound` makes); the staff door sends it as the
+first staff reply through `send_reply`, so a staff-opened ticket's first line is already in the
+member's DMs. Every refusal leaves one quiet `modmail.open_refused` row carrying the reason word.
+
+**`black_bloc/cogs/moderation/modmail.py` — `open_with_refusal` asks the three questions BEFORE
+the modal.** A modal cannot be refused politely: Discord has already taken the paragraph by the
+time `on_submit` runs. So the `UserSelect`'s callback asks bot / off / blocked / already-open
+first, and only then sends the modal. The same checks stay inside `open_a_ticket` for the race,
+and the refusal path re-renders the root with **Unblock them** on it (staff final say).
+
+**`black_bloc/cogs/moderation/modmail.py` — `_repanel` and `_panel_shadowed`.** The reconciler's
+third job: a posted ticket button somebody deleted by hand gets another. It logs `modmail.panel_gone`
+only when it is actually about to re-post, and its `modmail.would_post_panel` is written ONCE per
+guild per process, because a five-minute loop that cannot post would otherwise write that row
+forever. The deliberate doors log every time — somebody is waiting for that answer.
+
+**`black_bloc/cogs/moderation/modmail.py` — `post_ticket_panel` writes the new id before deleting
+the old message.** Checklist 12, the same contract `post_card` keeps: if the delete fails the
+guild has two buttons and both work (the `custom_id` carries the guild id, not the message);
+if the write failed first, the old message would be an orphan nothing could ever take down.
+`drop_panel_message` asks `guard.allows_channel` by hand, because deleting a MESSAGE is a side
+effect `guard.py` never sees.
+
+**`black_bloc/cogs/moderation/modmail.py` — `TicketButton`'s `custom_id` carries the GUILD id.**
+`modmail:ticket:{guild_id}`, one button per guild, so re-posting it is free and a message that
+survived a deploy still works. It is registered in `cog_load` beside `TicketCardButton`.
+
+**`black_bloc/modmail.py` — `TICKET_SOURCES` is not `SOURCES`.** `SOURCES` is what a REPLY
+carries in its log details; `TICKET_SOURCES` is which door a TICKET came in by. `command` is in
+both and means the same thing in each. `ticket_source()` answers `dm` for any row older than the
+column, which is right: the DM was the only door there was.
+
+**`black_bloc/modmail.py` — `door_buttons` is the row the owner asked for.** *"basically for
+modmail, anyone can make it, if youre a staff when you do a /modmail you see more than just
+create"* (2026-09-16). One table, one row 0, and staff get the same first control a member does
+plus **Open a ticket with…**. `root_buttons` re-rows its own moves to 2 and 3 so the select can
+have row 1 to itself.
+
+**`black_bloc/modmail.py` — `last_reply_missed` reads the NEWEST out row, not any of them.** A
+ticket where one reply bounced a week ago and three have landed since is not a ticket that cannot
+be reached. The card's ⚠️ line is about the last thing that was tried.
+
+**`black_bloc/settings_store.py` — `modmail_panel_message_id` is `text`.** A message id is a
+snowflake (~1.4e18) and `Number.MAX_SAFE_INTEGER` is 9.0e15, so an `int` key hands the dashboard a
+mangled id — `api/settings_api.py` `as_json` already says exactly this about channel and role ids.
+While it was `int` the settings row also sat permanently CHANGED with *"1 change pending"*, the
+third instance of the family `# Settings editor — the false "1 change pending"` above records.
+
+**`black_bloc/cogs/moderation/modmail.py` — `/modmail` carries `extras={"staff_only": False}`.**
+Dropping `default_permissions` is what Discord shows; `is_staff_command` is what `/help` reads,
+and it answers True for anything whose callback mentions `require_staff` — which this one still
+does, for the branch where `modmail_member_command` is off. The `extras` entry is checked first,
+so `/help` stops calling a command anybody can run a staff command.
+
+**`site/public/assets/page-modmail.js` — `panelSettings()` asks for the settings FRESH.** The
+Ticket button card reads `modmail_panel_channel_id` out of the settings payload, and the two
+routes write that key server-side without going through `saveSetting`, which is what usually
+clears the cache. `settings(true)` is the one place that matters; without it the card says the
+button is still where it was.

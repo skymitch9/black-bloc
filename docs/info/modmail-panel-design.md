@@ -247,9 +247,19 @@ land first, so the build **re-measures** `tests/test_bot.py:179` and edits it to
 - Nothing changes in `HIDDEN_WHEN_OFF` (§A).
 
 **Root panel** — `build_panel(bot, guild, actor)`, one ephemeral embed + a `Panel` subclass (P2).
-**There is no member half:** every path here is `require_staff` today, so a non-staffer gets
+~~**There is no member half:** every path here is `require_staff` today, so a non-staffer gets
 `still_staff`'s refusal and no panel at all (P9 — the sentence, never a dead button). The member's
-surface is their DM, and it does not change.
+surface is their DM, and it does not change.~~ ⚠️ **REVERSED 2026-09-16** by the Modmail doors
+build (branch `modmail-doors`, off `main` `4d60f68`; design:
+[`modmail-doors-design.md`](modmail-doors-design.md)). **Owner, 2026-09-16, verbatim:** *"is there
+a way for a user to do /modmail to start a mod mail?"* and *"basically for modmail, anyone can
+make it, if youre a staff when you do a /modmail you see more than just create and a modal with
+header and comment and stuff, you also see the other settings"*. **`/modmail` lost
+`default_permissions` and splits on `store.is_staff`**: the first row is the same for everybody —
+**Open a ticket** (a two-field modal) or the line naming the ticket they already have — a member
+sees ONE ephemeral panel with just that, and staff see that row plus everything below plus
+**Open a ticket with…**. The member half is the `modmail_member_command` key, `true` by default;
+`false` is exactly the behaviour struck above. The DM door did not change.
 
 ### The panel's states
 
@@ -893,8 +903,12 @@ file's last row and starts after it. The Phase 7 block at `:239–247` is rewrit
 
 **Settled first, by the standing rules, so they are NOT put to him:**
 
-- ✅ **`/modmail` stays `STAFF_ONLY`, and there is no member panel.** Every one of the fifteen
-  commands is staff-gated today; the member's surface is their DM.
+- ~~✅ **`/modmail` stays `STAFF_ONLY`, and there is no member panel.** Every one of the fifteen
+  commands is staff-gated today; the member's surface is their DM.~~ ⚠️ **REVERSED 2026-09-16** —
+  see §B. The owner asked for the member half outright, and `/modmail` is member-visible now
+  (`extras={"staff_only": False}`, no `default_permissions`); `/reply` keeps the lock. The
+  reasoning above was right about what EXISTED and wrong as a decision: the DM door is the one a
+  member cannot always reach — a member with DMs shut could not open a ticket at all.
 - ✅ **`/modmail` is never hidden by `hide_commands_when_off`** — `modmail_mode` has no `off` and
   `modmail_enabled` is a bool (§A). Nothing to decide.
 - ✅ **The card is a persistent `DynamicItem`, not a timed `View`** — program §7 and P14: a post

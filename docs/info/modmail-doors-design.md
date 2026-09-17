@@ -1,7 +1,10 @@
 # Modmail doors — a member half of `/modmail`, a posted Open-a-ticket button, and staff opening a ticket with a member
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatch queued behind
-> the Posts build** (both touch `settings_store`, `logkinds`, `contract.json`, `tests/test_bot.py`).
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-16 on branch
+> `modmail-doors`, off `main` `4d60f68` (v113) — NOT merged, NOT deployed, and nothing in it has met
+> Discord.** Schema **37 → 38** (`modmail_tickets.source`, `.opened_by`) — ⚠️ **migrate before deploy**.
+> Registry **+5**; mock **168 → 170 routes**; `pytest` **5839 → 5880**, both orders green. Read the
+> `## Deviations` foot before the sections above: fifteen things differ from what is written here.
 > Owner, 2026-09-16 16:1x–16:3x, verbatim: *"is there a way for a user to do /modmail to start a mod
 > mail? can we also have a channel where the modmail can be started with a ticket button like some bots
 > have"* → *"let mods also be able to make a modmail with /modmail make it a button"*. Research and
@@ -131,4 +134,106 @@ doors`; the `modmail-panel-design.md` §B row that says "no member half" struck 
 
 ## Deviations
 
-*(empty until the build lands)*
+> Written by the build, 2026-09-16, on branch `modmail-doors` off `main` `4d60f68` (v113).
+> Everything below is a place the build did NOT do what §A–§F said, and why. ⚠️ **Nothing here
+> has met Discord**: the whole verification is `pytest` (**5839 → 5880**, both orders), `ruff`,
+> `node site/mock/check.mjs` (*19 pages, 170 routes, 14 core settings, all keys present*) and one
+> pass over the Modmail page on the MOCK in a browser.
+
+1. ⚠️ **A ticket had no `source` column, so this build is a MIGRATION — schema 37 → 38.** §A's
+   table says *"Tickets carry a `source` (`dm`, `practice`)"* and the research doc says *"No
+   schema change expected (the `source` column exists)"*. **Measured: false.** `modmail_tickets`
+   carried `practice` and nothing else; `SOURCES` in `black_bloc/modmail.py` is the vocabulary a
+   **reply** carries in its log details (`card` / `typed` / `command` / `web`), not a column.
+   Two additive columns through the existing `ADDED_COLUMNS` / PRAGMA pattern:
+   `source TEXT NOT NULL DEFAULT 'dm'` and `opened_by INTEGER`. **Migrate before deploy.** Every
+   ticket older than the migration reads `dm`, which is right for every real one — the DM was the
+   only door — and wrong only for old PRACTICE rows, which the `practice` flag still identifies.
+2. **`SOURCES` was not widened; `TICKET_SOURCES` is a second tuple.** §C1 says the three new words
+   are *"added to `SOURCES`"*. `tests/test_modmail.py::test_the_four_sources_a_reply_can_come_from_are_named_once`
+   asserts `SOURCES == ("card", "typed", "command", "web")` by name, and a reply source and a
+   ticket source answer different questions. So `TICKET_SOURCES = (dm, command, panel, staff,
+   practice)` sits beside it, `command` is the one word both use, and the reply test is unchanged
+   — which is the proof nothing moved.
+3. **`modmail_panel_message_id` is a `text` key, not `int`** (§C5's table says int). Two reasons,
+   the second found in a browser: `api/settings_api.py:66` already says *"Ids leave as strings,
+   because a snowflake does not survive a JavaScript number"* — a message id is ~1.4e18 and
+   `Number.MAX_SAFE_INTEGER` is 9.0e15, so an `int` key would hand the dashboard a mangled id;
+   and while it was `int`, the mock returned the value as a string, the int editor read it back
+   with `Number()`, and the row sat permanently **CHANGED** with *"1 change pending"* on every
+   load — the third instance of the family `code-notes.md` `# Settings editor — the false "1 change
+   pending"` records. The bot writes `str(message.id)`; `panel_where` is the one place it is
+   `int()`ed back.
+4. **The member's reply carries no channel mention, the staff one does.** §C1's sentence is
+   *"Your ticket is open: <#…>"*. A ticket channel's overwrites deny `@everyone`, so for a member
+   that mention renders as an unclickable unknown channel — a dead link is worse than no link.
+   A member is told the ticket number and that replies come back by DM; **Open a ticket with…**
+   and *"they already have one"* keep the mention, because staff can see it.
+5. **The member panel does not draw a button the modal would refuse.** §C1 orders the modal's
+   refusals (off → blocked → already open). It keeps all three, because a door can close while a
+   panel is open — but P3 says no state renders a control whose shared function would refuse it,
+   so the panel itself draws **Open a ticket** only when modmail is on, the member is not blocked
+   and has no ticket, and says which of the three it is in words instead.
+6. **A member door also DMs the opening line, and says so when the DM bounces.** The DM path
+   sends `opening_dm` when it opens a ticket; the command and the button do the same through the
+   same `deliver_dm`. ⚠️ **A member whose DMs are shut still gets a ticket** — that is the point
+   the research doc asked about — and the ephemeral reply then carries *"Black Bloc could not DM
+   you, so open DMs from this server or staff's replies will not reach you."*, because a ticket
+   whose replies can never arrive is worth saying out loud.
+7. ⚠️ **`deliver_dm`, the line §C4 told the build to confirm.** `cogs/moderation/modmail.py`
+   `deliver_dm` **returns the reason as a string and raises nothing**; `ticket_dm` wraps it
+   (a practice ticket short-circuits to `None`) and `send_reply` does the rest: the row is marked
+   `delivered = 0`, `modmail.dm_failed` is logged, and a `⚠️ Black Bloc could not DM the member`
+   line is spoken **into the ticket**. So a staff-opened ticket with DMs shut **opens, keeps the
+   words, and reports the failure** — nothing rolls back. The card now says so too: `last_reply_missed`
+   reads the newest OUT row and `ticket_card_lines` adds *"⚠️ The last reply did not reach them"*.
+8. **The staff door writes `modmail.opened_by_staff` INSTEAD of `modmail.opened`, not beside it.**
+   §C6 lists both. One act leaves one row (checklist 34's whole point); the two kinds carry the
+   same details, and the staff one is IMPORTANT while `modmail.opened` is ROUTINE — which is the
+   only reason the second kind exists.
+9. **Ticket button… is its own sub-panel, not a select on `Setup…`.** §C3 says Setup gains
+   **Ticket button…** → a `ChannelSelect`. Setup's own rows already hold five and four buttons;
+   adding a select plus **Move it…** plus **Take it down** does not fit inside Discord's five per
+   row. It is the `Blocked…` / `Snippets…` shape instead: **Ticket button…** opens a surface
+   that says where the button is and what it says, and draws **Post it…** *or* **Move it…** +
+   **Take it down** — never both spellings of one move.
+10. **Take it down clears BOTH keys.** §C3 says it *"deletes it and clears the id"*. Clearing only
+    the message id leaves the channel pointed, and the five-minute reconciler would put the button
+    straight back — "down" would last five minutes. Both keys go; posting again names a channel.
+11. **The reconciler's guard refusal is logged ONCE per guild per process.** Checklist 1 wants a
+    `would_` row where a side effect is refused, but the reconciler runs every five minutes, so a
+    button that cannot be re-posted under `TEST_MODE` would write `modmail.would_post_panel`
+    twelve times an hour forever. The cog keeps a `_panel_shadowed` set, cleared the moment a post
+    succeeds. The deliberate doors (Setup…, the website) log every time, because somebody is
+    waiting for the answer.
+12. **The root panel's rows moved down one.** The doors row is row 0 (**Open a ticket**, **Open a
+    ticket with…**), the ticket select is row 1, today's five moves are row 2 and the tail
+    (Logs · Refresh · Open on the site) is row 3 — four rows of at most five, measured by a test.
+    `root_buttons` re-rows its own moves, so the label table still has one home.
+13. **A subject heads the paragraph AND prefixes the channel topic.** §C1 asks for the topic-line
+    prefix, which only channel mode has. `first_message` makes the stored message
+    `**{subject}**\n{paragraph}` so a thread-mode ticket and the transcript keep it too, and
+    `ticket_topic(user_id, ticket_id, subject)` puts it in front of the topic — `parse_topic`
+    uses `search`, so the ids are still found (asserted).
+14. **The website's Ticket button is its own card above the settings rows**, not a pair of buttons
+    inside the Setup section — the Modmail page has no Setup section, it has `namespaceSettings('modmail')`,
+    which generates the five new rows for free. `DELETE /api/modmail/panel` answers **200** with
+    `taken_down: false` when nothing is up, rather than a 404: taking down nothing is not an error,
+    and the flag plus the sentence keep the two apart.
+15. **The mock's ticket rows carry a `source` each** (`dm`, `panel`, `staff`) so the page's new
+    column has something to show, and the seed's staff row carries `opened_by`.
+
+### What was NOT verified
+
+- **Nothing met Discord.** No boot, no token, no ticket opened, no button pressed in a client, no
+  DM sent. `TEST_MODE` was never flipped and nothing was deployed.
+- **The migration was not run against a copy of the live database.** `tests/storage/test_db.py`
+  migrates a schema-29 file and reads `source == 'dm'` on a row written before the column, which
+  is the same ALTER through the same pattern — but the live file was not touched.
+- **The posted button has never survived a real restart.** `TicketButton` is registered in
+  `cog_load` beside `TicketCardButton` and the reconciler re-posts a deleted message; both are
+  tested with fakes only.
+- **No browser saw the real site** — only `site/mock` at `127.0.0.1:8790`, as staff.
+- **`/help`'s rendering of a member-visible `/modmail` was not looked at**, only asserted:
+  `is_staff_command` answers False through the command's `extras`, which is what `cogs/core.py`
+  reads for its staff suffix.

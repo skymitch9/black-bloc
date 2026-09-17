@@ -1,7 +1,16 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-16** — rows **PS-a … PS-l** added at the foot for the POSTS SHADOW build (branch
+> **2026-09-16** — rows **MD-a … MD-o** added at the foot for the MODMAIL DOORS build (branch
+> `modmail-doors`, off `main` `4d60f68`; ⚠️ **not merged, not deployed, nothing in it has met
+> Discord**). What changed underneath every M row: **`/modmail` is member-visible** — anybody can
+> run it and the first row is the same for everybody — there is a posted **Open a ticket** button
+> staff place from **Setup…**, and staff can open a ticket WITH somebody. Schema **37 → 38**
+> (`modmail_tickets.source`, `.opened_by`) — ⚠️ **migrate before deploy**; registry **215 → 220**;
+> mock *19 pages, 170 routes, 14 core settings, all keys present*. ⚠️ **Row M1 above is now
+> STALE in one word**: the `/modmail` panel it describes is the STAFF half, and a member running
+> the same command gets the small panel `MD-a` describes instead. Earlier that day —
+> rows **PS-a … PS-l** added at the foot for the POSTS SHADOW build (branch
 > `posts-shadow`, off `main` `440c0c6`; ⚠️ **not merged, not deployed, and nothing in it has met
 > Discord**). What changed underneath the P rows: `posts_mode` is now **off / shadow / on** and
 > **shadow is the default**, so **Post it** sends the real message into `#blackbloc-logs` whatever
@@ -1401,6 +1410,31 @@ is `https://blackbloc.heygabi.ai/guides.html`.
 | **PS-j** | With a shadow copy up, delete that message in `#blackbloc-logs` by hand and wait five minutes | The list goes back to **not posted**, every word is kept, and the Logs page carries `post.shadow_message_gone`. Press **Post it** and a fresh copy goes up |
 | **PS-k** | With a shadow copy up, unpin it by hand in Discord and wait five minutes | Black Bloc pins the SHADOW copy again and the Logs page carries a second `post.pinned` |
 | **PS-l** | 🔴 **Never run until the cutover.** With BOTH a real message and a shadow copy up (flip to `on`, post, flip back to `shadow`, post), press **Take it down** | Both messages go, the row reads **not posted**, every word is kept, and the Logs page carries one `post.taken_down` naming both ids |
+
+### Modmail doors — rows `MD-a` … `MD-o` (branch `modmail-doors`, off `main` `4d60f68`)
+
+⚠️ **Nothing below has met Discord.** The build's whole verification is `pytest`, `ruff`,
+`check.mjs` and one browser pass over the Modmail page on the MOCK. ⚠️ **Schema 37 → 38 —
+migrate before the deploy.** `/modmail` is member-visible now: **anybody in the server can run
+it**, so row `MD-a` is the one to try from a second, non-staff account.
+
+| # | Do this | Expect |
+|---|---|---|
+| **MD-a** | From a **non-staff** account, run `/modmail` in `#blackbloc-logs` | One ephemeral panel titled **Modmail**: the line *"Modmail is how you reach staff privately"* and ONE button, **Open a ticket**. ⚠️ No list, no Logs, no site link, no Setup — a member sees the first row and nothing else |
+| **MD-b** | Press **Open a ticket**, put `my role` in the first box and a sentence in the second | A ticket opens in the test category, the paragraph is in it as **From the member** with **my role** bold on top, the ticket channel's topic starts `my role — `, and the reply is ephemeral and names the ticket number. ⚠️ Black Bloc also DMs you the usual opening line |
+| **MD-c** | Run `/modmail` again on that account | The panel says **Your ticket is open** and draws **no button at all** — the second press cannot make a second ticket |
+| **MD-d** | On a Lead account, run `/modmail` | The staff panel, with the SAME first row on top — **Open a ticket** (or the line naming yours) and **Open a ticket with…** — then today's Setup… · Blocked… · Snippets… · Forget… · Try a fake ticket, then Logs · Refresh · Open on the site |
+| **MD-e** | **Setup…** → **Ticket button…** → **Post it…** → pick `#blackbloc-logs` | One message appears there: **Need a moderator?** with **Open a ticket** under it. The panel re-renders saying where it is, and the Logs page carries `modmail.panel_posted`. ⚠️ Any channel but the test one is refused in words while test mode is on, and writes `modmail.would_post_panel` |
+| **MD-f** | Press that posted **Open a ticket** as the non-staff account, after closing the ticket from `MD-b` | The two-field form, then a ticket. ⚠️ **Nobody else in the channel sees anything** — the bot's answer is ephemeral, which is the whole reason the door is safe in a public channel. The ticket's card says *came in by — the Open a ticket button* |
+| **MD-g** | **Setup…** → **Ticket button…** → **Move it…** → pick `#blackbloc-logs` again | A new message goes up, the old one is deleted, and the Logs page carries `modmail.panel_moved` — not a second `panel_posted` |
+| **MD-h** | Delete the posted message by hand and wait five minutes | Black Bloc puts another one up on its own; the Logs page carries `modmail.panel_gone` then `modmail.panel_posted`. This is the role-menu behaviour, and it is what makes the button survive a deploy |
+| **MD-i** | **Setup…** → **Ticket button…** → **Take it down** | The message goes and **both** keys are cleared, so the reconciler leaves it down. `modmail.panel_taken_down` on the Logs page |
+| **MD-j** | On the Lead account: **Open a ticket with…** → pick the second account → write a sentence | The ticket opens with the card saying *came in by — staff* and *opened by staff — @you*, and the member gets your sentence **as a DM straight away** — it is the ticket's first staff reply, not an inbound row |
+| **MD-k** | **Open a ticket with…** → pick somebody who is **blocked** | It refuses in a sentence naming them, opens no ticket, and the panel comes back with **Unblock them** on it. Press it and the block goes — staff always get the final say |
+| **MD-l** | **Open a ticket with…** → pick somebody who **already has a ticket**, then pick a **bot** | Both refuse in words; the first one links the open ticket (`<#…>`) and neither opens anything |
+| **MD-m** | Turn your own DMs off for the server, then have a Lead do **MD-j** to you | ⚠️ **The ticket still opens.** The Lead's reply says the DM did not reach you, the ticket carries a `⚠️ Black Bloc could not DM the member` line, and the sticky card says *"The last reply did not reach them"*. The Logs page carries `modmail.dm_failed` |
+| **MD-n** | On the Modmail page on the site: read the **Came in by** column, then the **Ticket button** card | Every ticket says which door it came in by. The card names the channel the button is in and offers **Move the ticket button** / **Take it down**; with nothing up it says so and offers **Post the ticket button**. Both write `web.modmail.panel_*` lines and ⚠️ **one line each, never two** |
+| **MD-o** | `/settings set-value modmail_member_command false`, then run `/modmail` from the non-staff account | The old refusal sentence and no panel at all — the member half is one key, off and on, both ways |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
