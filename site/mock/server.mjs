@@ -494,6 +494,7 @@ const SETTING_SPECS = [
   ["logs_count", "int", 10, 10, "how many lines a Logs button shows to begin with, from 1 to 50; 10 by default. Show more adds the same number again, and stops being offered once the log has run out or 50 lines are shown", null, 50, 1],
   ["logs_important_only", "bool", false, false, "true to open every Logs button already filtered to the lines that matter — refusals, errors and staff moves — with Show everything beside the list to see the rest; false opens on everything, which is what it did before"],
   ["operator_read_log", "bool", true, true, "true to write one Core log line for every read a Claude session makes with the operator token, saying which path it read; false reads the same data and leaves no row. The token itself is the on/off switch \u2014 unset it and there are no reads at all"],
+  ["spawned_channels_staff_reach", "bool", true, true, "true gives the staff roles view + manage on every channel Black Bloc makes (temp voice rooms and the lobby, event rooms, ticket channels), so a hidden room is still theirs to open or delete by hand; false leaves each builder's own permissions"],
   ["poll_creator_may_end", "bool", true, true, "true to let whoever started a poll close it early from the /poll panel; staff can always close one either way"],
   ["poll_draft_days", "int", 14, 14, "days a saved poll draft is kept before Black Bloc drops it, up to 365; 0 keeps it for ever", null, 365],
   ["poll_drafts", "bool", true, true, "true to let somebody save a half-written poll from the /poll panel and come back to it; false hides Save for later and Resume draft, and the drafts already saved are kept, not deleted"],
@@ -1272,7 +1273,7 @@ function seedActions() {
 
 let state = seedState();
 
-const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url'];
+const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url'];
 const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',

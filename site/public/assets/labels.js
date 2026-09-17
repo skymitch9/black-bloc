@@ -13,6 +13,7 @@ export const LABELS = {
   status_prefix: 'What the bot’s status says',
   operator_read_log: 'Whether an operator-token read leaves a log line',
   hide_commands_when_off: 'Whether a turned-off feature’s slash command disappears',
+  spawned_channels_staff_reach: 'Whether staff can see and delete every channel the bot makes',
   emoji_skin_tone: 'Which skin tone the bot’s emoji wear',
 
   logs_count: 'How many lines a Logs button shows to begin with',

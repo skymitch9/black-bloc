@@ -89,6 +89,7 @@ from black_bloc.settings_store import (
     TEMPVOICE_CREATOR_NAME,
     SettingsStore,
 )
+from black_bloc.spawned import STAFF_REACH_KEY
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -1606,6 +1607,80 @@ async def test_a_hidden_channel_still_lets_black_bloc_post_its_panel(cog, bot, m
     assert made.given_overwrites[bot.guild.default_role].view_channel is False
     assert made.given_overwrites[bot.guild.me].view_channel is True
     assert len(made.messages) == 1
+
+
+async def test_a_hidden_locked_room_is_still_the_staff_s_to_open_and_delete(cog, bot, member, db):
+    category = FakeCategory(50)
+    _, staff_role = staffed(bot, category)
+    bot.guard = FakeGuard()
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=1))
+    await save_prefs(db, member.id, hidden=True, locked=True)
+
+    await cog._maybe_create(member, creator)
+
+    given = bot.guild.created[0].given_overwrites
+    assert given[bot.guild.default_role].view_channel is False
+    assert given[bot.guild.default_role].connect is False
+    assert given[staff_role].view_channel is True
+    assert given[staff_role].connect is True
+    assert given[staff_role].manage_channels is True
+
+
+async def test_with_the_reach_key_off_a_room_keeps_the_permissions_it_had(cog, bot, member):
+    category = FakeCategory(50)
+    member_role, staff_role = staffed(bot, category)
+    await bot.store.set(GUILD, STAFF_REACH_KEY, False)
+    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=4))
+
+    await cog._maybe_create(member, creator)
+
+    given = bot.guild.created[0].given_overwrites
+    assert given[staff_role].view_channel is True and given[staff_role].connect is True
+    assert given[staff_role].manage_channels is None
+    assert given[member_role].manage_channels is None
+
+
+async def test_the_lobby_is_the_staff_s_to_manage_too(cog, bot, lead):
+    category = FakeCategory(50)
+    member_role, staff_role = staffed(bot, category)
+    bot.guard = FakeGuard()
+
+    await run_setup(FakeInteraction(bot, lead), None)
+
+    given = bot.guild.created[0].given_overwrites
+    assert given[staff_role].manage_channels is True
+    assert given[member_role].manage_channels is None
+
+
+async def test_a_repair_puts_the_staff_allow_back_on_the_lobby(cog, bot, lead):
+    category = FakeCategory(50)
+    _, staff_role = staffed(bot, category)
+    bot.guard = FakeGuard()
+    lobby = bot.guild.add(
+        FakeVoice(CREATOR, bot.guild, category=category, position=4, name="join")
+    )
+
+    await run_setup(FakeInteraction(bot, lead), None)
+
+    assert lobby.overwrites[staff_role].manage_channels is True
+
+
+def test_the_staff_allow_goes_on_last_so_a_remembered_member_cannot_take_it_off():
+    guild = FakeGuild()
+    member = FakeMember(guild)
+    staff_role = FakeRole(555)
+
+    given = apply_remembered_members(
+        owner_overwrites(guild, member, locked=True, hidden=True, staff=[staff_role]),
+        guild,
+        [],
+        [],
+        member.id,
+    )
+
+    assert given[staff_role].view_channel is True
+    assert given[staff_role].connect is True
+    assert given[staff_role].manage_channels is True
 
 
 async def test_an_allowed_role_that_no_longer_exists_is_left_out(cog, bot, lead):

@@ -48,6 +48,7 @@ from .settings_store import (
     staff_roles_sentence,
     where_alias_table,
 )
+from .spawned import reach_roles, staff_reach
 from .timezones import (
     AMBIGUOUS,
     DEFAULT_TZ,
@@ -1058,7 +1059,7 @@ def card_for(row: Any) -> discord.Embed:
 
 
 def review_overwrites(
-    guild: Any, staff_roles: Any, me: Any = None, requester: Any = None
+    guild: Any, staff_roles: Any, me: Any = None, requester: Any = None, *, reach: Any = ()
 ) -> dict[Any, Any]:
     overwrites: dict[Any, Any] = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False)
@@ -1073,7 +1074,7 @@ def review_overwrites(
         overwrites[requester] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, read_message_history=True
         )
-    return overwrites
+    return staff_reach(overwrites, reach, voice=False)
 
 
 def events_category(bot: Any, guild: Any) -> tuple[Any, str]:
@@ -1769,7 +1770,13 @@ async def make_review_channel(bot: Any, guild: Any, row: Any, actor: Any, catego
         room = await guild.create_text_channel(
             channel_name(PENDING, getattr(actor, "display_name", str(actor)), row["title"]),
             category=category,
-            overwrites=review_overwrites(guild, staff, getattr(guild, "me", None), actor),
+            overwrites=review_overwrites(
+                guild,
+                staff,
+                getattr(guild, "me", None),
+                actor,
+                reach=reach_roles(bot, guild, staff),
+            ),
             reason=f"Black Bloc event {row['id']}",
         )
     except NETWORK_ERRORS as exc:

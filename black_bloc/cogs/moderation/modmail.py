@@ -196,6 +196,7 @@ from ...settings_store import (
     require_staff,
     staff_roles_sentence,
 )
+from ...spawned import reach_roles, staff_reach
 
 log = logging.getLogger(__name__)
 
@@ -802,7 +803,9 @@ def place_refusal(bot: Any, guild: Any, mode: str) -> str | None:
     return None
 
 
-def ticket_overwrites(guild: Any, staff_roles: Any, me: Any = None) -> dict[Any, Any]:
+def ticket_overwrites(
+    guild: Any, staff_roles: Any, me: Any = None, *, reach: Any = ()
+) -> dict[Any, Any]:
     overwrites: dict[Any, Any] = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False)
     }
@@ -812,7 +815,7 @@ def ticket_overwrites(guild: Any, staff_roles: Any, me: Any = None) -> dict[Any,
         overwrites[me] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, manage_channels=True
         )
-    return overwrites
+    return staff_reach(overwrites, reach, voice=False)
 
 
 def ticket_place(bot: Any, guild: Any, ticket: Any) -> Any:
@@ -1865,7 +1868,12 @@ async def make_place(
                 ticket_channel_name(getattr(user, "name", user), ticket_id),
                 category=category,
                 topic=ticket_topic(user.id, ticket_id, subject),
-                overwrites=ticket_overwrites(guild, staff, getattr(guild, "me", None)),
+                overwrites=ticket_overwrites(
+                    guild,
+                    staff,
+                    getattr(guild, "me", None),
+                    reach=reach_roles(bot, guild, staff),
+                ),
                 reason=f"Black Bloc modmail ticket {ticket_id}",
             ),
             None,

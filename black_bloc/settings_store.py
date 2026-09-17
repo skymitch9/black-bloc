@@ -1710,6 +1710,21 @@ KEY_HELP.update(
 )
 
 
+# The staff allow on every channel Black Bloc makes — one decision, one key.
+SPAWNED_STAFF_REACH = "spawned_channels_staff_reach"
+SPAWNED_STAFF_REACH_DEFAULT = True
+KEY_TYPES.update({SPAWNED_STAFF_REACH: "bool"})
+KEY_HELP.update(
+    {
+        SPAWNED_STAFF_REACH: (
+            "true gives the staff roles view + manage on every channel Black Bloc makes (temp "
+            "voice rooms and the lobby, event rooms, ticket channels), so a hidden room is still "
+            "theirs to open or delete by hand; false leaves each builder's own permissions"
+        )
+    }
+)
+
+
 # Hiding a feature's slash command while its mode is off — the one decision that switch makes.
 HIDE_COMMANDS_WHEN_OFF = "hide_commands_when_off"
 HIDE_COMMANDS_WHEN_OFF_DEFAULT = True
@@ -1945,6 +1960,7 @@ CORE_KEYS = (
     "bot_bio",
     "status_prefix",
     "operator_read_log",
+    SPAWNED_STAFF_REACH,
     SETTINGS_PANEL_MINUTES,
     SETTINGS_CORE_KEYS_ADMIN_ONLY,
     SELFTEST_ON_BOOT,
@@ -2544,6 +2560,8 @@ class SettingsStore:
             return STATUS_PREFIX
         if key == "operator_read_log":
             return True
+        if key == SPAWNED_STAFF_REACH:
+            return SPAWNED_STAFF_REACH_DEFAULT
         if key == "rolemenu_mode":
             return "off"
         if key == "request_mode":

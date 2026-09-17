@@ -20,6 +20,7 @@ from black_bloc.cogs.moderation.modmail import (
 from black_bloc.config import load_settings
 from black_bloc.modmail import COLOURS, IN, NOTE, OUT, UNDELIVERED_MARK, parse_topic
 from black_bloc.settings_store import CHANNEL_MODE, THREAD_MODE, SettingsStore
+from black_bloc.spawned import STAFF_REACH_KEY
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -788,6 +789,34 @@ async def test_the_ticket_channel_is_hidden_from_everyone_and_shown_to_staff(cog
     overwrites = bot.guild.created[0].given_overwrites
     assert overwrites[bot.guild.default_role].view_channel is False
     assert any(getattr(key, "id", None) == STAFF_ROLE for key in overwrites)
+
+
+def staff_overwrite(channel):
+    given = channel.given_overwrites
+    return next(value for key, value in given.items() if getattr(key, "id", None) == STAFF_ROLE)
+
+
+async def test_the_ticket_channel_is_the_staff_s_to_delete_by_hand(cog, bot, member):
+    await live(bot)
+    bot.guild.channels[TEST_CHANNEL].visible_to = {STAFF_ROLE}
+
+    await cog.on_message(dm_from(member))
+
+    staff = staff_overwrite(bot.guild.created[0])
+    assert staff.view_channel is True and staff.send_messages is True
+    assert staff.manage_channels is True
+
+
+async def test_with_the_reach_key_off_the_ticket_channel_is_as_it_was(cog, bot, member):
+    await live(bot)
+    bot.guild.channels[TEST_CHANNEL].visible_to = {STAFF_ROLE}
+    await bot.store.set(GUILD, STAFF_REACH_KEY, False)
+
+    await cog.on_message(dm_from(member))
+
+    staff = staff_overwrite(bot.guild.created[0])
+    assert staff.view_channel is True and staff.send_messages is True
+    assert staff.manage_channels is None
 
 
 async def test_reply_from_the_test_channel_finds_the_only_open_ticket(cog, bot, member, lead, db):
