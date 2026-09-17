@@ -1479,6 +1479,30 @@ proof the onboarding half (§C5) will ever have; everything about it today is fa
 | **447** (was `PR-m`) | 🔴 **The §C6 regression rows — press these with `rolemenu_mode` still `off`.** Run `/rolemenu` | ⚠️ **The command is THERE.** Before this build it was hidden with its mode. Open a menu with roles on it: **Post it** is missing and the card says picking is off, but **Hand roles out…** IS there. Press it, pick somebody, give them a role — ⚠️ **the role actually moves** and the Logs page carries `role_menu.assign`. **Grants…** on the root works the same |
 | **448** (was `PR-n`) | On the Go-live page's **Pings** section as staff | The streamer table lists everybody the bot has seen streaming, with *listed* / **hidden**, the role or *none yet*, followers, last live and go-lives. **Hide** asks first; **Restore** does not. Both write ONE `web.pings.streamer_*` line, never two. The **Discord onboarding** card says what the prompts hold and when they were last written, and the **Sync now** button is absent until this is a Community server |
 
+## GE — the go-live announcement, once the stream is over (branch `golive-end`, off `main` `fb1600b`)
+
+⚠️ **Not merged, not deployed, and nothing below has met Discord.** Built against
+`info/golive-end-design.md`; `GE-a` and `GE-g` were exercised against the MOCK in a browser, the
+rest have never been run anywhere. What is new: `golive_end_template` (ships as
+*"**{name}** was streaming **{game}** — the stream has ended. {url}"*), `golive_end_author`
+(*"{name} was live on {platform}"*) and `golive_end_keep_mention` (**off**), a **Wording** card on
+the Go-live page that renders both messages through the bot's own functions, and
+`GET /api/golive/preview`. Registry **225 → 228**; schema **unchanged**; mock *19 pages, 176
+routes*. 🔴 **`golive_end_mode` is still `off`** — `GE-a` is the row that turns it on and every
+row after it depends on it. The owner numbers these at the landing.
+
+| # | Do this | Expect |
+|---|---|---|
+| `GE-a` | On the Go-live page, open **Announcement wording** and set **When a stream ends** to `edit` | The **Wording** card below it repaints on the press: two lines, *while live* and *after the stream*, each with the card's top line above it. The "golive_end_mode is off" note disappears. ⚠️ The *after the stream* line must read in the PAST tense — *"**you** was streaming **something** — the stream has ended"* with your own display name |
+| `GE-b` | Go live for real, with `golive_mode` on. Wait for the announcement in `#blackbloc-logs`, then stop the stream and wait two minutes | ⚠️ **The same message** is edited in place — no second post. It now reads the past tense, the card's top line reads *"you was live on Twitch"*, and the footer ends *· stream ended*. The Logs page carries one `golive.end` with no `announcement: left` in its details |
+| `GE-c` | Put `{duration}` in `golive_end_template` — e.g. *"{name} streamed {game} for {duration}. {url}"* — and do `GE-b` again | The edited message names how long you streamed: `48 min`, `2 h 10 min`, or *under a minute* for a very short one. ⚠️ **End a stream that never really started** (go live and stop inside a minute): it must read *"streamed Celeste for under a minute."*, never *"for 0 min"* and never *"for ."* |
+| `GE-d` | Clear `golive_end_author` (empty the row and save — the default comes back), then write *"{name} streamed for {duration}"* and end another stream | The card's top line follows the wording, not the constant. ⚠️ Then end a stream Discord shows with **no platform** (a presence-only go-live): with the shipped author line the card reads *"you was live"* — the dangling *"on"* must be gone |
+| `GE-e` | With `golive_ping_role_id` set to a role, go live and end it | The live post starts with the role mention; ⚠️ **the edited one does not** — no `@Events` text at the front. Nobody is pinged by the edit either way. Turn `golive_end_keep_mention` on and do it again: the mention is back at the front, and still nobody is pinged |
+| `GE-f` | In the **Wording** card press **Just add the ending instead**, confirm, then end a stream | The announcement keeps its present-tense sentence with ` — stream ended` on the end, exactly as it behaved before this build, and the card's *after the stream* line says the same. The button now reads **Rewrite it instead**; press it and the shipped past-tense wording comes back |
+| `GE-g` | Compare the **Wording** card against what actually landed in `#blackbloc-logs` | Word for word the same, allowing for the sample (Celeste, *Any% attempts*, 2 h 10 min) standing in for the real stream. ⚠️ **After editing the wording with its own Save bar, press the card's Refresh** — that editor saves without telling the card |
+| `GE-h` | Type a broken wording into `golive_end_template` — *"{name} is {"* — save it, and end a stream | ⚠️ **Nothing is lost.** The announcement is edited to the old suffix shape instead, and the Fly log carries *"go-live: end wording … could not be rendered"*. The message must never show `{name}` or an empty sentence |
+| `GE-i` | Run `/golive` as a Lead and read the **stream end** line | It says which of the three shapes is in force: `off (left as posted)`, `edit (rewritten: "…")` with the first 40 characters of your wording, or `edit (suffix " — stream ended")` when the wording is blank |
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is
