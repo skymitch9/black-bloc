@@ -174,6 +174,56 @@ class FakeText(Speaks):
             self.guild.channels.pop(self.id, None)
 
 
+class FakeForumPost(FakeThread):
+    def __init__(self, thread_id, parent, name, **kwargs):
+        super().__init__(thread_id, parent, name, **kwargs)
+        self.applied_tags = list(kwargs.get("applied_tags") or ())
+
+    async def edit(self, **kwargs):
+        if "applied_tags" in kwargs:
+            self.applied_tags = list(kwargs["applied_tags"] or ())
+        await super().edit(**kwargs)
+
+
+class FakeForum(Speaks):
+    def __init__(self, channel_id, guild=None, category=None, name="modmail", **kwargs):
+        self.id = channel_id
+        self.guild = guild
+        self.name = name
+        self.mention = f"<#{channel_id}>"
+        self.category = category
+        self.category_id = category.id if category else None
+        self.available_tags = list(kwargs.get("available_tags") or ())
+        self.topic = kwargs.get("topic")
+        self.given_overwrites = kwargs.get("overwrites")
+        self.kwargs = kwargs
+        self.messages = []
+        self.deleted_messages = []
+        self.posts = []
+        self.thread_raises = None
+        self.deleted = False
+
+    async def create_thread(self, *, name, **kwargs):
+        if self.thread_raises is not None:
+            raise self.thread_raises
+        self.guild._next_id += 1
+        post = FakeForumPost(self.guild._next_id, self, name, **kwargs)
+        starter = {k: v for k, v in kwargs.items() if k != "content"}
+        content = kwargs.get("content")
+        if content is not None or kwargs.get("embed") is not None:
+            post.messages.append(
+                FakeMessage(post.next_message_id(), content or "", post, **starter)
+            )
+        self.posts.append(post)
+        self.guild.threads[post.id] = post
+        return discord.channel.ThreadWithMessage(
+            thread=post, message=post.messages[-1] if post.messages else None
+        )
+
+    async def delete(self, reason=None):
+        self.deleted = True
+
+
 class FakeGuild:
     def __init__(self):
         self.id = GUILD
@@ -213,6 +263,16 @@ class FakeGuild:
         self.add(channel)
         self.created.append(channel)
         return channel
+
+    async def create_forum(self, name, **kwargs):
+        if self.create_raises is not None:
+            raise self.create_raises
+        self._next_id += 1
+        category = kwargs.pop("category", None)
+        forum = FakeForum(self._next_id, self, category, name=name, **kwargs)
+        self.add(forum)
+        self.created.append(forum)
+        return forum
 
 
 class FakeUser:
@@ -2806,3 +2866,426 @@ async def test_a_member_door_that_cannot_reach_a_dm_still_opens_the_ticket(
 
     assert await open_ticket_for(db, GUILD, member.id) is not None
     assert "could not DM you" in said.sent
+
+
+# --- forum mode (blackmail-threads §A) -------------------------------------------------------
+
+
+FORUM = 4242
+
+
+async def make_the_forum(cog, bot, lead):
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    return await press(setup.view, "Make the forum", bot, lead)
+
+
+def forum_of(bot):
+    return bot.guild.channels[bot.store.get(GUILD, "modmail_forum_channel_id")]
+
+
+async def point_at_a_forum(bot, *, claimed=True, tags=True):
+    """The forum staff already have; claimed is what Setup's own press would have done."""
+    category = bot.guild.channels[CATEGORY]
+    made = modmail_cog.forum_tags() if tags else []
+    forum = bot.guild.add(FakeForum(FORUM, bot.guild, category, available_tags=made))
+    await bot.store.set(GUILD, "modmail_forum_channel_id", forum.id)
+    await bot.store.set(GUILD, "modmail_mode", modmail_cog.FORUM_MODE)
+    if claimed and bot.guard is not None:
+        bot.guard.own_channel(forum)
+    return forum
+
+
+async def test_setup_makes_the_forum_under_the_ticket_category_with_both_tags(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+
+    said = await make_the_forum(cog, bot, lead)
+
+    forum = forum_of(bot)
+    assert isinstance(forum, FakeForum)
+    assert forum.name == "modmail" and forum.category is bot.guild.channels[CATEGORY]
+    assert [tag.name for tag in forum.available_tags] == ["open", "closed"]
+    assert forum.kwargs["default_auto_archive_duration"] == 1440
+    assert bot.guard.owns_channel(forum)
+    assert "test mode" in said.sent and "claims it for this run" in said.sent
+    assert "modmail.forum_made" in await action_kinds(db)
+
+
+async def test_the_made_forum_carries_the_category_overwrites_plus_the_bots_own(cog, bot, lead):
+    bot.guard = FakeGuard()
+    category = bot.guild.channels[CATEGORY]
+    category.overwrites = {FakeRole(STAFF_ROLE): "staff see it"}
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+
+    await make_the_forum(cog, bot, lead)
+
+    given = forum_of(bot).given_overwrites
+    assert [getattr(who, "id", who) for who in given] == [STAFF_ROLE, bot.guild.me.id]
+    assert given[bot.guild.me].manage_threads is True
+
+
+async def test_making_the_forum_twice_refuses_in_words_and_makes_nothing(cog, bot, lead):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+    await make_the_forum(cog, bot, lead)
+    made = len(bot.guild.created)
+
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+
+    assert not has(setup.view, "Make the forum")
+    said = await modmail_cog.make_forum(bot, bot.guild, lead)
+    assert said.ok is False and "already the ticket forum" in said.message
+    assert len(bot.guild.created) == made
+
+
+async def test_the_forum_cannot_be_made_without_a_ticket_category_and_says_so(cog, bot, lead):
+    bot.guard = FakeGuard()
+    await bot.store.clear(GUILD, "modmail_category_id")
+
+    said = await make_the_forum(cog, bot, lead)
+
+    assert "modmail_category_id" in said.sent and "Ticket category…" in said.sent
+    assert bot.store.get(GUILD, "modmail_forum_channel_id") is None
+
+
+async def test_a_refused_forum_is_said_in_words_and_logged(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+    bot.guild.create_raises = refused()
+
+    said = await make_the_forum(cog, bot, lead)
+
+    assert "could not make the forum" in said.sent
+    assert bot.store.get(GUILD, "modmail_forum_channel_id") is None
+    assert "modmail.forum_failed" in await action_kinds(db)
+
+
+async def test_forum_mode_opens_one_post_per_ticket_wearing_the_open_tag(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+
+    await cog.on_message(dm_from(member))
+
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    assert ticket["mode"] == modmail_cog.FORUM_MODE
+    post = forum.posts[0]
+    assert ticket["thread_id"] == post.id and ticket["channel_id"] == forum.id
+    assert post.name == "Alice · #1"
+    assert [tag.name for tag in post.applied_tags] == ["open"]
+    assert post.kwargs["auto_archive_duration"] == 1440
+    assert f"<@&{STAFF_ROLE}>" in post.messages[0].content
+
+
+async def test_a_forum_ticket_relays_the_member_and_the_reply_into_its_own_post(
+    cog, bot, member, lead, db
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    await cog.on_message(dm_from(member, "my ban was unfair"))
+    ticket = await open_ticket_for(db, GUILD, member.id)
+
+    await modmail_cog.send_reply(bot, bot.guild, ticket, lead, "we are looking at it")
+
+    post = forum.posts[0]
+    titles = [m.kwargs.get("embed").title for m in post.messages if m.kwargs.get("embed")]
+    assert titles == ["Ticket #1", "From the member", "Sent to the member"]
+    rows = await ticket_messages(db, ticket["id"])
+    assert [row["direction"] for row in rows] == [IN, OUT]
+
+
+async def test_closing_a_forum_ticket_tags_it_closed_and_archives_the_post(
+    cog, bot, member, lead, db
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    await bot.store.set(GUILD, "modmail_log_channel_id", TEST_CHANNEL)
+    await cog.on_message(dm_from(member))
+    ticket = await open_ticket_for(db, GUILD, member.id)
+
+    await close_from_card(cog, bot, lead, ticket, reason="sorted")
+
+    post = forum.posts[0]
+    assert [tag.name for tag in post.applied_tags] == ["closed"]
+    assert post.archived is True and post.locked is True and post.deleted is False
+    assert (await get_ticket(db, ticket["id"]))["status"] == "closed"
+
+
+async def test_forum_tags_off_leaves_every_post_untagged(cog, bot, member, lead, db):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    await bot.store.set(GUILD, "modmail_forum_tags", False)
+    await bot.store.set(GUILD, "modmail_log_channel_id", TEST_CHANNEL)
+
+    await cog.on_message(dm_from(member))
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    assert forum.posts[0].applied_tags == []
+
+    await close_from_card(cog, bot, lead, ticket, reason="sorted")
+
+    assert forum.posts[0].applied_tags == []
+    assert forum.posts[0].archived is True
+
+
+async def test_a_forum_with_no_open_tag_still_opens_the_ticket(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot, tags=False)
+
+    await cog.on_message(dm_from(member))
+
+    assert await open_ticket_for(db, GUILD, member.id) is not None
+    assert forum.posts[0].applied_tags == []
+
+
+async def test_forum_mode_with_no_forum_tells_staff_what_to_press(cog, bot, lead, member, db):
+    bot.guard = FakeGuard()
+    await show_the_open_with_door(bot)
+    await bot.store.set(GUILD, "modmail_mode", modmail_cog.FORUM_MODE)
+
+    picked = await open_with(cog, bot, lead, member)
+    said = await fill_ticket_modal(picked.response.modals[-1], bot, lead, body="a word")
+
+    assert "Make the forum" in said.sent and "Mode…" in said.sent
+    assert await open_ticket_for(db, GUILD, member.id) is None
+    assert "modmail.open_failed" in await action_kinds(db)
+
+
+async def test_a_forum_the_guard_has_not_claimed_refuses_and_names_the_reason(
+    cog, bot, lead, member, db
+):
+    """A claim lives in the process that made it, so a fresh one must not post silently."""
+    bot.guard = FakeGuard()
+    await show_the_open_with_door(bot)
+    await point_at_a_forum(bot, claimed=False)
+
+    picked = await open_with(cog, bot, lead, member)
+    said = await fill_ticket_modal(picked.response.modals[-1], bot, lead, body="a word")
+
+    assert "test mode" in said.sent and "next sweep" in said.sent
+    assert await open_ticket_for(db, GUILD, member.id) is None
+
+
+async def test_the_sweep_takes_the_ticket_forum_back_after_a_restart(cog, bot, member, db):
+    forum = await point_at_a_forum(bot, claimed=False)
+    bot.guard = FakeGuard()
+
+    await cog.reconcile_tickets()
+    await cog.on_message(dm_from(member))
+
+    assert bot.guard.owns_channel(forum)
+    ticket = await open_ticket_for(db, GUILD, member.id)
+    assert ticket is not None and ticket["thread_id"] == forum.posts[0].id
+
+
+async def test_the_sweep_leaves_the_forum_alone_while_the_mode_is_not_forum(cog, bot):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot, claimed=False)
+    await bot.store.set(GUILD, "modmail_mode", CHANNEL_MODE)
+
+    await cog.reconcile_tickets()
+
+    assert not bot.guard.owns_channel(forum)
+
+
+async def test_a_deleted_forum_is_forgotten_rather_than_kept_as_a_dead_id(cog, bot, db):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+
+    await cog.on_guild_channel_delete(forum)
+
+    assert bot.store.get(GUILD, "modmail_forum_channel_id") is None
+    assert "modmail.forum_forgotten" in await action_kinds(db)
+
+
+async def test_the_forum_is_one_of_the_places_setup_names_and_forget_can_drop(cog, bot, lead):
+    bot.guard = FakeGuard()
+    await point_at_a_forum(bot)
+
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+
+    assert f"**ticket forum** — <#{FORUM}>" in setup.embed.description
+    assert "new tickets are **posts** in the modmail forum" in setup.embed.description
+    assert modmail_cog.FORGET_LABELS["modmail_forum_channel_id"] == "The ticket forum"
+
+
+async def test_the_forum_channel_picker_offers_forums_and_writes_the_key(cog, bot, lead):
+    bot.guard = FakeGuard()
+    category = bot.guild.channels[CATEGORY]
+    forum = bot.guild.add(FakeForum(FORUM, bot.guild, category))
+
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    picking = await press(setup.view, "Forum channel…", bot, lead)
+    picker = control(picking.view, modmail_cog.PICK_A_FORUM)
+    assert picker.channel_types == [discord.ChannelType.forum]
+
+    await pick(picker, [forum], FakeInteraction(bot, lead))
+
+    assert bot.store.get(GUILD, "modmail_forum_channel_id") == FORUM
+
+
+async def test_the_ticket_button_card_names_the_settings_doors_that_still_exist(cog, bot, lead):
+    """The retired `/settings set-value` was still on this card until blackmail-threads."""
+    bot.guard = FakeGuard()
+
+    root = await open_panel(cog, bot, lead)
+    setup = await press(root.view, "Setup…", bot, lead)
+    where = await press(setup.view, "Ticket button…", bot, lead)
+
+    said = where.embed.description
+    assert "set-value" not in said
+    assert "Settings" in said and "A setting group…" in said
+
+
+# --- the ticket button sits under the rules (blackmail-threads §C) ----------------------------
+
+
+async def a_welcome_post(bot, channel_id, *, slug="welcome", shadow=False):
+    """One `posts` row that has been posted, so the button has something to sit under."""
+    await bot.db.conn.execute(
+        "INSERT INTO posts(guild_id, slug, title, channel_id, body, style, updated_at) "
+        "VALUES (?, ?, 'The rules', ?, 'be kind', 'plain', '2026-09-17T00:00:00+00:00')",
+        (GUILD, slug, channel_id),
+    )
+    await bot.db.conn.commit()
+    return slug
+
+
+async def post_the_rules(bot, channel, *, slug="welcome", shadow=False):
+    """The rules message itself — always NEWER than whatever is already in the channel."""
+    message = await channel.send("**The rules**")
+    column = "shadow_message_id" if shadow else "message_id"
+    await bot.db.conn.execute(
+        f"UPDATE posts SET {column} = ? WHERE guild_id = ? AND slug = ?",
+        (message.id, GUILD, slug),
+    )
+    await bot.db.conn.commit()
+    return message
+
+
+def button_message_id(bot):
+    return int(bot.store.get(GUILD, modmail_cog.PANEL_MESSAGE_KEY))
+
+
+async def test_the_button_is_posted_again_once_the_rules_land_under_it(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    first = button_message_id(bot)
+    await a_welcome_post(bot, TEST_CHANNEL)
+    await post_the_rules(bot, channel)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) > first
+    assert first in channel.deleted_messages
+    assert channel.messages[-1].id == button_message_id(bot)
+    kinds = await action_kinds(db)
+    assert "modmail.panel_below_post" in kinds and "modmail.panel_gone" not in kinds
+
+
+async def test_a_button_already_under_the_rules_is_left_exactly_where_it_is(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await a_welcome_post(bot, TEST_CHANNEL)
+    await post_the_rules(bot, channel)
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) == was
+    assert "modmail.panel_below_post" not in await action_kinds(db)
+
+
+async def test_pressing_post_it_on_the_rules_moves_the_button_straight_away(cog, bot, lead, db):
+    """The posts feature dispatches; the modmail cog answers without waiting for the sweep."""
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    first = button_message_id(bot)
+    await a_welcome_post(bot, TEST_CHANNEL)
+    await post_the_rules(bot, channel)
+    row = await (await db.conn.execute("SELECT * FROM posts WHERE slug = 'welcome'")).fetchone()
+
+    await cog.on_post_published(bot.guild, row)
+
+    assert button_message_id(bot) > first
+    assert channel.messages[-1].id == button_message_id(bot)
+
+
+async def test_another_posts_slug_never_moves_the_ticket_button(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+    await a_welcome_post(bot, TEST_CHANNEL, slug="hello")
+    await post_the_rules(bot, channel, slug="hello")
+    row = await (await db.conn.execute("SELECT * FROM posts WHERE slug = 'hello'")).fetchone()
+
+    await cog.on_post_published(bot.guild, row)
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) == was
+
+
+async def test_a_follows_key_of_none_leaves_the_button_where_the_rules_overtook_it(
+    cog, bot, lead, db
+):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+    await bot.store.set(GUILD, "modmail_panel_follows_post", "none")
+    await a_welcome_post(bot, TEST_CHANNEL)
+    await post_the_rules(bot, channel)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) == was
+    assert "modmail.panel_below_post" not in await action_kinds(db)
+
+
+async def test_rules_posted_in_another_channel_never_move_the_button(cog, bot, lead):
+    bot.guard = FakeGuard()
+    elsewhere = bot.guild.add(FakeText(7788, name="rules"))
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+    await a_welcome_post(bot, elsewhere.id)
+    await post_the_rules(bot, elsewhere)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) == was
+
+
+async def test_a_shadow_rehearsal_of_the_rules_moves_the_button_too(cog, bot, lead):
+    """`posts_mode = shadow` puts both messages in the guard's channel, in that order."""
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    first = button_message_id(bot)
+    await a_welcome_post(bot, LOG_CHANNEL)
+    await post_the_rules(bot, channel, shadow=True)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) > first
+    assert channel.messages[-1].id == button_message_id(bot)
+
+
+async def test_the_button_is_still_put_back_when_somebody_deletes_it(cog, bot, lead, db):
+    """The older promise, unchanged: gone is gone, and that is a different log line."""
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+    channel.messages = [one for one in channel.messages if one.id != was]
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) != was
+    kinds = await action_kinds(db)
+    assert "modmail.panel_gone" in kinds and "modmail.panel_below_post" not in kinds

@@ -158,6 +158,9 @@ export const LABELS = {
   modmail_panel_title: 'The heading on the Open a ticket message',
   modmail_panel_text: 'What the Open a ticket message says',
   modmail_open_with_button: 'Whether staff see Open a ticket with… on /modmail',
+  modmail_forum_channel_id: 'Where ticket posts are made, in forum mode',
+  modmail_forum_tags: 'Whether a ticket post wears an open or a closed tag',
+  modmail_panel_follows_post: 'Which post the Open a ticket button sits under',
 
   automod_mode: 'Whether automod is watching',
   automod_rules: 'The rule book automod reads',
@@ -206,6 +209,7 @@ export const LABELS = {
   request_who_can_file: 'Who may file a request',
   request_notify_channel_id: 'Where a new request is announced',
   request_status_channel_id: 'Where a request’s status changes are announced',
+  request_forum_channel_id: 'The forum where every request gets its own post',
   request_dm_on_decision: 'Whether the asker is DMed on every status change',
   request_channel_moves: 'Which moves put a card in the request channel',
   request_review_by_other: 'Whether somebody else has to check a request before it is done',

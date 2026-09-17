@@ -44,8 +44,14 @@ from ...modmail import (
     ENABLE,
     FORGET,
     FORGET_TITLE,
+    FORUM,
+    FORUM_CHANNEL_NAME,
+    FORUM_CLOSED_TAG,
+    FORUM_OPEN_TAG,
+    FORUM_TOPIC,
     IN,
     LOGS,
+    MAKE_FORUM,
     MEMBER_COMMAND_KEY,
     MEMBER_INTRO,
     MEMBER_TICKET_OPEN,
@@ -70,6 +76,7 @@ from ...modmail import (
     PICK_A_BLOCK,
     PICK_A_CATEGORY,
     PICK_A_CHANNEL,
+    PICK_A_FORUM,
     PICK_A_MEMBER,
     PICK_A_MODE,
     PICK_A_PLACE,
@@ -103,6 +110,7 @@ from ...modmail import (
     SOURCE_STAFF,
     SOURCE_TYPED,
     STAFF_CHANNEL,
+    THREADED_MODES,
     TICKET_BUTTON,
     TICKET_BUTTON_TITLE,
     TICKET_MOVE,
@@ -110,6 +118,7 @@ from ...modmail import (
     TICKET_SURFACE,
     TRANSCRIPTS,
     UNBLOCK,
+    applied_tags,
     attachment_urls,
     blocked_buttons,
     blocked_lines,
@@ -121,6 +130,7 @@ from ...modmail import (
     field_of,
     first_message,
     forget_buttons,
+    forum_tags,
     header_embed,
     is_note,
     is_practice,
@@ -168,12 +178,19 @@ from ...panels import (
     site_page_url,
     still_staff,
 )
+from ...posts import get_post as get_the_post
+from ...posts import shadow_channel_id, shadow_id
 from ...settings_store import (
     CHANNEL_MODE,
     DB_UNAVAILABLE,
+    FORUM_MODE,
     GUILD_ONLY,
+    MODMAIL_FORUM_CHANNEL,
+    MODMAIL_FORUM_TAGS,
     MODMAIL_MODES,
     MODMAIL_OPEN_WITH_BUTTON,
+    MODMAIL_PANEL_FOLLOWS_NOTHING,
+    MODMAIL_PANEL_FOLLOWS_POST,
     MODMAIL_REPLY_STYLES,
     THREAD_MODE,
     require_staff,
@@ -197,6 +214,7 @@ GONE_STRIKES = 2
 FORGETTABLE = {
     "category": "modmail_category_id",
     "staff": "modmail_staff_channel_id",
+    "forum": MODMAIL_FORUM_CHANNEL,
     "log": "modmail_log_channel_id",
 }
 RELAY_TYPES = (discord.MessageType.default, discord.MessageType.reply)
@@ -230,6 +248,42 @@ NO_STAFF_CHANNEL = (
     "Black Bloc has nowhere to put ticket threads, so nothing was opened. A Lead points it at a "
     "channel with `/modmail` → **Setup…** → **Staff channel…**, or switches back to channel mode "
     "with **Setup…** → **Mode…**."
+)
+NO_FORUM_CHANNEL = (
+    "Black Bloc has no forum to put ticket posts in, so nothing was opened. A Lead presses "
+    "`/modmail` → **Setup…** → **Make the forum**, or points **Forum channel…** at one that "
+    "already exists — or switches back with **Setup…** → **Mode…**."
+)
+FORUM_NOT_CLAIMED = (
+    "Black Bloc is in **test mode** and has not claimed <#{where}> yet, so no ticket post was "
+    "made. It claims the ticket forum on its next sweep — about five minutes — as long as "
+    "**Setup…** → **Mode…** is on forum. Try again then, or press **Make the forum**."
+)
+NO_FORUM_CATEGORY = (
+    "**modmail_category_id** is not pointed at a category Black Bloc can see, so there is "
+    "nowhere to make the forum. **Setup…** → **Ticket category…** points it at one first."
+)
+FORUM_EXISTS = (
+    "<#{where}> is already the ticket forum, so nothing was made. **Forget…** → **The ticket "
+    "forum** lets go of it first if you want a new one."
+)
+FORUM_UNSUPPORTED = (
+    "This server cannot be given a forum channel by Black Bloc — the library it runs on offers "
+    "no way to make one here. Make a forum by hand and point **Forum channel…** at it."
+)
+FORUM_FAILED = (
+    "Black Bloc could not make the forum — {reason}. Check it has **Manage Channels** on the "
+    "ticket category and try again; the log says `modmail.forum_failed`."
+)
+FORUM_MADE = (
+    "<#{where}> is up: a forum under the ticket category, with its overwrites, and with an "
+    "**open** and a **closed** tag. **Setup…** → **Mode…** → forum starts putting tickets in it."
+)
+FORUM_MADE_GUARDED = (
+    " ⚠️ Black Bloc is in **test mode** and this forum is OUTSIDE the test channel — making a "
+    "channel is not something the guard can see, so it was made anyway. Black Bloc claims it for "
+    "this run so it may post and tidy there; a restart forgets the claim and forum tickets are "
+    "refused in words until **Make the forum** is pressed again or test mode goes."
 )
 NO_TICKET_HERE = (
     "This channel is not a modmail ticket, so nothing was sent. Run the command inside a ticket, "
@@ -411,8 +465,8 @@ PANEL_GUARDED = (
     "button in is the test channel. Nothing was posted; the log says `modmail.would_post_panel`."
 )
 PANEL_LINES = (
-    "**heading** — {title}\n**says** — {text}\nStaff change both on the Settings page, or with "
-    "`/settings set-value modmail_panel_title`."
+    "**heading** — {title}\n**says** — {text}\nStaff change both on the dashboard's Settings "
+    "page under **modmail**, or with `/settings` ▸ **A setting group…** ▸ modmail."
 )
 
 
@@ -695,6 +749,59 @@ def thread_parent(bot: Any, guild: Any) -> tuple[Any, str]:
     return channel, "staff_channel"
 
 
+def forum_parent(bot: Any, guild: Any) -> tuple[Any, str]:
+    """Where ticket posts go; a forum outside the test channel needs the guard's own claim."""
+    channel_id = bot.store.get(guild.id, MODMAIL_FORUM_CHANNEL)
+    if not channel_id:
+        return None, "no_forum_channel"
+    forum = guild.get_channel(channel_id) or bot.get_channel(channel_id)
+    if forum is None:
+        return None, "no_forum_channel"
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(forum.id):
+        return None, "forum_not_claimed"
+    return forum, "forum"
+
+
+def claim_forum(bot: Any, guild: Any) -> Any:
+    """A guard claim lives in the process that made it, so every sweep takes the forum back.
+
+    Both keys have to be pointed at it deliberately, which is the act that widens test mode."""
+    guard = getattr(bot, "guard", None)
+    if guard is None or bot.store.get(guild.id, "modmail_mode") != FORUM_MODE:
+        return None
+    channel_id = bot.store.get(guild.id, MODMAIL_FORUM_CHANNEL)
+    forum = (guild.get_channel(channel_id) or bot.get_channel(channel_id)) if channel_id else None
+    if forum is not None:
+        guard.own_channel(forum)
+    return forum
+
+
+def forum_category(bot: Any, guild: Any) -> Any:
+    """Where the forum is MADE: Blackmail itself, test mode or not — creation is not gated."""
+    category_id = bot.store.get(guild.id, "modmail_category_id")
+    if not category_id:
+        return None
+    return guild.get_channel(category_id)
+
+
+def forum_tags_wanted(bot: Any, guild: Any) -> bool:
+    return bool(bot.store.get(guild.id, MODMAIL_FORUM_TAGS))
+
+
+def place_refusal(bot: Any, guild: Any, mode: str) -> str | None:
+    """Why a new ticket had nowhere to go, in the words a staffer can act on."""
+    if mode == FORUM_MODE:
+        _, why = forum_parent(bot, guild)
+        if why == "forum_not_claimed":
+            return FORUM_NOT_CLAIMED.format(where=bot.store.get(guild.id, MODMAIL_FORUM_CHANNEL))
+        return NO_FORUM_CHANNEL if why == "no_forum_channel" else None
+    if mode == THREAD_MODE:
+        _, why = thread_parent(bot, guild)
+        return {"no_staff_channel": NO_STAFF_CHANNEL, "no_test_channel": NO_TEST_CHANNEL}.get(why)
+    return None
+
+
 def ticket_overwrites(guild: Any, staff_roles: Any, me: Any = None) -> dict[Any, Any]:
     overwrites: dict[Any, Any] = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False)
@@ -729,8 +836,9 @@ def may_remove(bot: Any, place: Any) -> bool:
     channel = test_channel(bot)
     if channel is None:
         return False
-    if getattr(place, "parent_id", None) is not None:
-        return place.parent_id == channel.id
+    parent_id = getattr(place, "parent_id", None)
+    if parent_id is not None:
+        return parent_id == channel.id or guard.owns_channel(parent_id)
     return getattr(place, "category_id", None) == getattr(channel, "category_id", None)
 
 
@@ -1185,7 +1293,7 @@ async def close_ticket(
                 "modmail.place_kept",
                 details={"ticket_id": fresh["id"], "reason": why_not},
             )
-        if is_practice(fresh):
+        if is_practice(fresh) or fresh["mode"] == FORUM_MODE:
             await disown_place(bot, guild, fresh)
         return True, why_not
 
@@ -1268,6 +1376,12 @@ async def post_transcript(
     return message.id, None
 
 
+def closing_tags(bot: Any, guild: Any, place: Any) -> list[Any]:
+    """The `closed` tag a finished post wears, read off the forum the post is actually in."""
+    forum = getattr(place, "parent", None) or bot.get_channel(getattr(place, "parent_id", 0) or 0)
+    return applied_tags(forum, FORUM_CLOSED_TAG, wanted=forum_tags_wanted(bot, guild))
+
+
 async def remove_place(bot: Any, guild: Any, ticket: Any) -> None:
     place, _ = await resolve_place(bot, guild, ticket)
     if place is None:
@@ -1281,7 +1395,11 @@ async def remove_place(bot: Any, guild: Any, ticket: Any) -> None:
         )
         return
     try:
-        if ticket["thread_id"]:
+        if ticket["mode"] == FORUM_MODE:
+            await place.edit(
+                applied_tags=closing_tags(bot, guild, place), archived=True, locked=True
+            )
+        elif ticket["thread_id"]:
             await place.edit(archived=True, locked=True)
         else:
             await place.delete(reason=f"Black Bloc modmail ticket {ticket['id']} closed")
@@ -1624,12 +1742,102 @@ async def set_reply_style(
     return Outcome(True, reply_style_sentence(style), value=style)
 
 
+async def make_forum_post(
+    bot: Any, guild: Any, user: Any, ticket_id: int
+) -> tuple[Any, str | None]:
+    """One post per ticket; the starter message is the staff line thread mode already writes."""
+    forum, where = forum_parent(bot, guild)
+    if forum is None:
+        return None, where
+    role_ids = [role.id for role in bot.store.staff_roles(guild)]
+    label = getattr(user, "display_name", getattr(user, "name", user))
+    try:
+        made = await forum.create_thread(
+            name=thread_name(label, ticket_id),
+            content=thread_invite(role_ids, ticket_id, label),
+            applied_tags=applied_tags(
+                forum, FORUM_OPEN_TAG, wanted=forum_tags_wanted(bot, guild)
+            ),
+            auto_archive_duration=AUTO_ARCHIVE_MINUTES,
+            allowed_mentions=mentions(role_ids),
+            reason=f"Black Bloc modmail ticket {ticket_id}",
+        )
+    except discord.HTTPException as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+    post = getattr(made, "thread", made)
+    guard = getattr(bot, "guard", None)
+    if guard is not None:
+        guard.own_channel(post)
+    return post, None
+
+
+async def make_forum(bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD) -> Outcome:
+    """Setup's **Make the forum**: one forum under the ticket category, tagged and claimed."""
+    known = bot.store.get(guild.id, MODMAIL_FORUM_CHANNEL)
+    if known and (guild.get_channel(known) or bot.get_channel(known)) is not None:
+        return refusal(FORUM_EXISTS.format(where=known), "forum_exists", 409)
+    category = forum_category(bot, guild)
+    if category is None:
+        return refusal(NO_FORUM_CATEGORY, "no_category", 409)
+    create = getattr(guild, "create_forum", None)
+    if create is None:
+        return refusal(FORUM_UNSUPPORTED, "no_forum_api", 409)
+    overwrites = dict(getattr(category, "overwrites", None) or {})
+    me = getattr(guild, "me", None)
+    if me is not None:
+        overwrites[me] = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            manage_channels=True,
+            manage_threads=True,
+            send_messages_in_threads=True,
+        )
+    try:
+        forum = await create(
+            FORUM_CHANNEL_NAME,
+            category=category,
+            topic=FORUM_TOPIC,
+            overwrites=overwrites,
+            available_tags=forum_tags(),
+            default_auto_archive_duration=AUTO_ARCHIVE_MINUTES,
+            reason="Black Bloc modmail forum",
+        )
+    except Exception as exc:
+        log.warning("modmail: could not make the ticket forum: %s", exc)
+        await log_action(
+            bot,
+            guild,
+            "modmail.forum_failed",
+            actor=actor,
+            details={"category_id": category.id, "reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return refusal(FORUM_FAILED.format(reason=exc), "forum_failed", 500)
+    guard = getattr(bot, "guard", None)
+    said = FORUM_MADE.format(where=forum.id)
+    if guard is not None:
+        guard.own_channel(forum)
+        said += FORUM_MADE_GUARDED
+    await bot.store.set(
+        guild.id, MODMAIL_FORUM_CHANNEL, forum.id, by=getattr(actor, "id", actor)
+    )
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.forum_made", via),
+        actor=actor,
+        details={"channel_id": forum.id, "category_id": category.id, "via": via},
+    )
+    return Outcome(True, said, value=forum.id)
+
+
 async def make_place(
     bot: Any, guild: Any, user: Any, ticket_id: int, mode: str, *, subject: Any = None
 ) -> tuple[Any, str | None]:
-    """Where a new ticket lives: a channel in the category, or a private thread."""
+    """Where a new ticket lives: a channel, a private thread, or a post in the forum."""
     if not bot.store.staff_roles(guild):
         return None, "no_staff_roles"
+    if mode == FORUM_MODE:
+        return await make_forum_post(bot, guild, user, ticket_id)
     if mode == THREAD_MODE:
         parent, where = thread_parent(bot, guild)
         if parent is None:
@@ -1741,7 +1949,7 @@ async def open_or_find(
         bot.db,
         ticket_id,
         place.id if mode == CHANNEL_MODE else getattr(place, "parent_id", place.id),
-        place.id if mode == THREAD_MODE else None,
+        place.id if mode in THREADED_MODES else None,
     )
     ticket = await get_ticket(bot.db, ticket_id)
     await log_action(
@@ -1879,9 +2087,13 @@ async def open_a_ticket(
             via=via,
         )
         if ticket is None:
+            said = CANNOT_OPEN_SAID
+            if staff_door:
+                said = (
+                    place_refusal(bot, guild, bot.store.get(guild.id, "modmail_mode")) or said
+                )
             return await refuse_open(
-                bot, guild, user, "cannot_open", CANNOT_OPEN_SAID, status=500, actor=actor,
-                via=via,
+                bot, guild, user, "cannot_open", said, status=500, actor=actor, via=via
             )
         body = first_message(subject, text)
         if staff_door:
@@ -1959,6 +2171,37 @@ async def drop_panel_message(bot: Any, guild: Any, channel: Any, message_id: int
         return
     except Exception as exc:
         log.info("modmail: the old ticket button %s stayed where it was: %s", message_id, exc)
+
+
+def followed_slug(store: Any, guild_id: int) -> str:
+    """The post the ticket button sits under; `none` never moves the button for that reason."""
+    found = str(store.get(guild_id, MODMAIL_PANEL_FOLLOWS_POST) or "").strip()
+    return "" if found.casefold() == MODMAIL_PANEL_FOLLOWS_NOTHING else found
+
+
+async def post_below_button(bot: Any, guild: Any, channel: Any, message_id: Any) -> int | None:
+    """The followed post's message when it has landed UNDER the ticket button.
+
+    A snowflake counts up with the clock, so the newer id is the message further down. In
+    `posts_mode = shadow` the rehearsal is the copy that counts, because that is the one in
+    the guard's channel beside the button."""
+    slug = followed_slug(bot.store, guild.id)
+    if not slug or channel is None or not message_id:
+        return None
+    if not getattr(bot.db, "is_connected", False):
+        return None
+    row = await get_the_post(bot.db, guild.id, slug)
+    if row is None:
+        return None
+    for where, found in (
+        (field_of(row, "channel_id"), field_of(row, "message_id")),
+        (shadow_channel_id(bot, guild), shadow_id(row)),
+    ):
+        if not where or not found:
+            continue
+        if int(where) == int(channel.id) and int(found) > int(message_id):
+            return int(found)
+    return None
 
 
 async def post_ticket_panel(
@@ -2327,18 +2570,21 @@ class Modmail(commands.Cog):
         for guild in list(getattr(self.bot, "guilds", ())):
             if getattr(guild, "unavailable", False):
                 continue
+            claim_forum(self.bot, guild)
             for row in await open_tickets(self.bot.db, guild.id):
                 await self._recheck(guild, row, now)
             await self._repanel(guild)
         self.last_ok_at = now_iso()
 
     async def _repanel(self, guild: Any) -> None:
-        """The posted button belongs to the room, so one deleted by hand is put back."""
+        """The posted button belongs to the room: one deleted by hand is put back, and one the
+        rules message has overtaken is posted again so it stays directly under the rules."""
         bot = self.bot
         channel, message_id = panel_where(bot, guild)
         if not bot.store.get(guild.id, PANEL_CHANNEL_KEY) or channel is None:
             return
-        if message_id and await panel_is_there(channel, message_id):
+        overtaken = await post_below_button(bot, guild, channel, message_id)
+        if overtaken is None and message_id and await panel_is_there(channel, message_id):
             self._panel_shadowed.discard(guild.id)
             return
         guard = getattr(bot, "guard", None)
@@ -2352,16 +2598,39 @@ class Modmail(commands.Cog):
                     details={"channel_id": channel.id, "reason": "reconcile"},
                 )
             return
-        if message_id:
+        if overtaken is not None:
+            await log_action(
+                bot,
+                guild,
+                "modmail.panel_below_post",
+                details={
+                    "channel_id": channel.id,
+                    "message_id": message_id,
+                    "post_message_id": overtaken,
+                    "slug": followed_slug(bot.store, guild.id),
+                },
+            )
+        elif message_id:
             await log_action(
                 bot,
                 guild,
                 "modmail.panel_gone",
                 details={"channel_id": channel.id, "message_id": message_id},
             )
-        outcome = await post_ticket_panel(bot, guild, None, channel, moving=False)
+        outcome = await post_ticket_panel(
+            bot, guild, None, channel, moving=overtaken is not None
+        )
         if outcome.ok:
             self._panel_shadowed.discard(guild.id)
+
+    @commands.Cog.listener()
+    async def on_post_published(self, guild: Any, row: Any) -> None:
+        """A re-posted rules message moves what follows it, at once and on the next sweep."""
+        if not self.bot.db.is_connected:
+            return
+        if str(field_of(row, "slug", "")) != followed_slug(self.bot.store, guild.id):
+            return
+        await self._repanel(guild)
 
     async def _recheck(self, guild: Any, row: Any, now: datetime) -> None:
         if not row["channel_id"]:
@@ -2373,6 +2642,9 @@ class Modmail(commands.Cog):
         place, missing = await resolve_place(self.bot, guild, row)
         if place is not None or missing != "gone":
             self._gone.pop(row["id"], None)
+            guard = getattr(self.bot, "guard", None)
+            if guard is not None and place is not None and row["mode"] == FORUM_MODE:
+                guard.own_channel(place)
             await self._recard(guild, row, place)
             return
         seen = self._gone.get(row["id"], 0) + 1
@@ -2399,6 +2671,7 @@ class Modmail(commands.Cog):
         for key, kind in (
             ("modmail_category_id", "modmail.category_forgotten"),
             ("modmail_staff_channel_id", "modmail.staff_channel_forgotten"),
+            (MODMAIL_FORUM_CHANNEL, "modmail.forum_forgotten"),
             ("modmail_log_channel_id", "modmail.log_channel_forgotten"),
         ):
             if channel.id == self.bot.store.get(guild.id, key):
@@ -2514,6 +2787,7 @@ SELECT_CAP = 25
 FORGET_LABELS = {
     "modmail_category_id": "The ticket category",
     "modmail_staff_channel_id": "The staff channel",
+    MODMAIL_FORUM_CHANNEL: "The ticket forum",
     "modmail_log_channel_id": "The transcripts channel",
 }
 INCUMBENT_LINE = (
@@ -2571,11 +2845,13 @@ def setup_lines(bot: Any, guild: Any) -> list[str]:
     category_id = store.get(guild.id, "modmail_category_id")
     log_id = store.get(guild.id, "modmail_log_channel_id")
     parent_id = staff_parent_id(store, guild.id)
+    forum_id = store.get(guild.id, MODMAIL_FORUM_CHANNEL)
     return [
         f"**answering DMs** — {store.get(guild.id, 'modmail_enabled')}",
         f"**mode** — {mode} · {modes_sentence(mode)}",
         "**ticket category** — " + (f"<#{category_id}>" if category_id else "not set"),
         "**staff channel** — " + (f"<#{parent_id}>" if parent_id else "not set"),
+        "**ticket forum** — " + (f"<#{forum_id}>" if forum_id else "not made yet"),
         "**transcripts** — " + (f"<#{log_id}>" if log_id else "not set"),
         f"**reply style** — {store.get(guild.id, REPLY_STYLE_KEY)}",
         f"**this panel stays live** — {minutes_for(bot, guild.id)} minute(s)",
@@ -2699,13 +2975,18 @@ def build_setup(
         view.add_item(PlacePick(CATEGORY, "modmail_category_id"))
     elif picker == STAFF_CHANNEL:
         view.add_item(PlacePick(STAFF_CHANNEL, "modmail_staff_channel_id"))
+    elif picker == FORUM:
+        view.add_item(PlacePick(FORUM, MODMAIL_FORUM_CHANNEL))
     elif picker == TRANSCRIPTS:
         view.add_item(PlacePick(TRANSCRIPTS, "modmail_log_channel_id"))
     elif picker == MODE:
         view.add_item(ModePick(bot.store.get(guild.id, "modmail_mode")))
     elif picker == REPLY_STYLE:
         view.add_item(ReplyStylePick(bot.store.get(guild.id, REPLY_STYLE_KEY)))
-    for move in setup_buttons(enabled=bool(bot.store.get(guild.id, "modmail_enabled"))):
+    for move in setup_buttons(
+        enabled=bool(bot.store.get(guild.id, "modmail_enabled")),
+        has_forum=bool(bot.store.get(guild.id, MODMAIL_FORUM_CHANNEL)),
+    ):
         view.add_item(MoveButton(move))
     return (embed, view)
 
@@ -3083,6 +3364,13 @@ async def run_enabled(interaction: discord.Interaction, previous: Any = None) ->
     await open_setup_again(interaction, previous, outcome)
 
 
+async def run_make_forum(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await make_forum(interaction.client, interaction.guild, interaction.user)
+    await open_setup_again(interaction, previous, outcome)
+
+
 async def run_forget(interaction: discord.Interaction, key: str, previous: Any = None) -> None:
     if not await opened(interaction):
         return
@@ -3213,8 +3501,11 @@ class MoveButton(discord.ui.Button):
         if action == PRACTICE_NO:
             await open_root(interaction, view)
             return
-        if action in (CATEGORY, STAFF_CHANNEL, TRANSCRIPTS, MODE, REPLY_STYLE):
+        if action in (CATEGORY, STAFF_CHANNEL, FORUM, TRANSCRIPTS, MODE, REPLY_STYLE):
             await open_setup(interaction, view, action)
+            return
+        if action == MAKE_FORUM:
+            await run_make_forum(interaction, view)
             return
         if action in (ENABLE, DISABLE):
             await run_enabled(interaction, view)
@@ -3293,13 +3584,14 @@ class SiteButton(discord.ui.Button):
 
 class PlacePick(discord.ui.ChannelSelect):
     def __init__(self, action: str, key: str) -> None:
-        kinds = (
-            [discord.ChannelType.category]
-            if action == CATEGORY
-            else [discord.ChannelType.text]
-        )
+        kinds = {
+            CATEGORY: [discord.ChannelType.category],
+            FORUM: [discord.ChannelType.forum],
+        }.get(action, [discord.ChannelType.text])
         super().__init__(
-            placeholder=PICK_A_CATEGORY if action == CATEGORY else PICK_A_CHANNEL,
+            placeholder={CATEGORY: PICK_A_CATEGORY, FORUM: PICK_A_FORUM}.get(
+                action, PICK_A_CHANNEL
+            ),
             channel_types=kinds,
             min_values=1,
             max_values=1,

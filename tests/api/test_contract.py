@@ -251,6 +251,9 @@ async def seed_world(client, web, guild, wf) -> dict:
     await sign_in_staff(client, db, wf)
 
     web.cogs["Contract"] = FakeCog()
+    # Both **Make the forum** routes need somewhere to make it; the forum keys stay blank so
+    # each entry makes its own and neither is refused as already there.
+    await web.store.set(guild_id, "modmail_category_id", wf.CATEGORY_ID, by=7)
     await web.store.set(guild_id, "events_create_scheduled", False, by=7)
     await web.store.set(guild_id, "rolemenu_mode", "on", by=7)
     await web.store.set(guild_id, "pings_mode", "on", by=7)

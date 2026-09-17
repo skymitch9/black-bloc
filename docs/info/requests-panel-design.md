@@ -111,7 +111,13 @@ The panel re-renders in place (`interaction.response.edit_message`) as:
 - **Embed:** `request_embed(row, move=<look for the row's status>, origin, guild)` — the
   same builder and the same seven looks the channel gets; the look for a status is the
   status itself except `open → FILED_LOOK`. A card on the panel and a card in the channel
-  must never be two shapes.
+  must never be two shapes. ⚠️ **~~"the channel" is `request_notify_channel_id` /
+  `request_status_channel_id`.~~ SINCE v117** (2026-09-17, branch `blackmail-threads`) it is the
+  request's OWN forum post whenever `request_forum_channel_id` is set: the same builder, the same
+  looks, the same shapes — only the PLACE moves, and the post is also tagged for wherever the
+  request has got to and archived once it is finished. A blank key is still exactly the two
+  channels. The owner asked for it: *"have request be one of those thread channels"*; the design
+  is `blackmail-threads-design.md` §B.
 - **Buttons — ONLY the moves valid from the row's status**, computed from
   `moves_from(status)` plus the guards the shared functions apply, so the panel never
   offers a move the function would refuse:

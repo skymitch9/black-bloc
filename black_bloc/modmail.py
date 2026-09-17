@@ -12,6 +12,7 @@ from .golive import parse_ts
 from .panels import KEEP_IT
 from .settings_store import (
     CHANNEL_MODE,
+    FORUM_MODE,
     MODMAIL_BOTH,
     MODMAIL_BUTTONS,
     MODMAIL_PANEL_TEXT_DEFAULT,
@@ -379,7 +380,48 @@ def thread_invite(role_ids: Any, ticket_id: Any, user_label: Any) -> str:
 def modes_sentence(mode: str) -> str:
     if mode == THREAD_MODE:
         return "new tickets are **private threads** in the staff channel"
+    if mode == FORUM_MODE:
+        return "new tickets are **posts** in the modmail forum"
     return "new tickets are **channels** in the modmail category"
+
+
+THREADED_MODES = (THREAD_MODE, FORUM_MODE)
+
+FORUM_OPEN_TAG = "open"
+FORUM_CLOSED_TAG = "closed"
+FORUM_TAG_NAMES = (FORUM_OPEN_TAG, FORUM_CLOSED_TAG)
+FORUM_TAG_EMOJI: dict[str, str] = {
+    FORUM_OPEN_TAG: "\N{LARGE GREEN CIRCLE}",
+    FORUM_CLOSED_TAG: "\N{MEDIUM BLACK CIRCLE}",
+}
+FORUM_CHANNEL_NAME = "modmail"
+FORUM_TOPIC = (
+    "Black Bloc modmail — one post per ticket. Only staff can see this; the member never does."
+)
+
+
+def forum_tags(names: Any = FORUM_TAG_NAMES) -> list[discord.ForumTag]:
+    """The tags a modmail forum is made with; their ids live in the forum, never in a key."""
+    return [
+        discord.ForumTag(name=name, emoji=discord.PartialEmoji(name=FORUM_TAG_EMOJI[name]))
+        for name in names
+    ]
+
+
+def tag_named(forum: Any, name: str) -> Any:
+    """The forum's own tag by NAME, because a tag id is Discord's to hand out, not ours."""
+    for tag in getattr(forum, "available_tags", None) or ():
+        if str(getattr(tag, "name", "")).lower() == name.lower():
+            return tag
+    return None
+
+
+def applied_tags(forum: Any, name: str, *, wanted: bool = True) -> list[Any]:
+    """The one tag a ticket post wears, or nothing at all when tags are off or absent."""
+    if not wanted:
+        return []
+    found = tag_named(forum, name)
+    return [found] if found is not None else []
 
 
 PANEL_MINUTES_KEY = "modmail_panel_minutes"
@@ -401,6 +443,7 @@ PICK_A_MODE = "How new tickets are made…"
 PICK_A_REPLY_STYLE = "How staff answer a ticket…"
 PICK_A_CHANNEL = "Pick a channel…"
 PICK_A_CATEGORY = "Pick a category…"
+PICK_A_FORUM = "Pick a forum…"
 PICK_SOMEBODY = "Who to block…"
 
 SOURCE_CARD = "card"
@@ -441,6 +484,8 @@ SITE = "site"
 BACK = "back"
 CATEGORY = "category"
 STAFF_CHANNEL = "staff_channel"
+FORUM = "forum"
+MAKE_FORUM = "make_forum"
 TRANSCRIPTS = "transcripts"
 MODE = "mode"
 REPLY_STYLE = "reply_style"
@@ -500,6 +545,8 @@ SITE_MOVE = ModmailMove(SITE, "Open on the site", "link", 2)
 
 CATEGORY_MOVE = ModmailMove(CATEGORY, "Ticket category…", "secondary", 1)
 STAFF_CHANNEL_MOVE = ModmailMove(STAFF_CHANNEL, "Staff channel…", "secondary", 1)
+FORUM_MOVE = ModmailMove(FORUM, "Forum channel…", "secondary", 3)
+MAKE_FORUM_MOVE = ModmailMove(MAKE_FORUM, "Make the forum", "primary", 3)
 TRANSCRIPTS_MOVE = ModmailMove(TRANSCRIPTS, "Transcripts…", "secondary", 1)
 MODE_MOVE = ModmailMove(MODE, "Mode…", "secondary", 1)
 ANSWER_ON_MOVE = ModmailMove(ENABLE, "Answer DMs on", "primary", 1)
@@ -562,6 +609,8 @@ PANEL_MOVES = (
     SITE_MOVE,
     CATEGORY_MOVE,
     STAFF_CHANNEL_MOVE,
+    FORUM_MOVE,
+    MAKE_FORUM_MOVE,
     TRANSCRIPTS_MOVE,
     MODE_MOVE,
     ANSWER_ON_MOVE,
@@ -632,7 +681,7 @@ def root_buttons(
     )
 
 
-def setup_buttons(*, enabled: bool) -> tuple[ModmailMove, ...]:
+def setup_buttons(*, enabled: bool, has_forum: bool = False) -> tuple[ModmailMove, ...]:
     """One button that names its own effect, never two spellings of the same switch."""
     return (
         CATEGORY_MOVE,
@@ -644,6 +693,8 @@ def setup_buttons(*, enabled: bool) -> tuple[ModmailMove, ...]:
         TICKET_BUTTON_MOVE,
         SETUP_BACK_MOVE,
         SETUP_REFRESH_MOVE,
+        FORUM_MOVE,
+        *(() if has_forum else (MAKE_FORUM_MOVE,)),
     )
 
 

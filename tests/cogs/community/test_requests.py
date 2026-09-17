@@ -90,21 +90,80 @@ class FakeText:
         return message
 
 
+class FakeForumPost(FakeText):
+    def __init__(self, thread_id, parent, name, **kwargs):
+        super().__init__(thread_id, name=name)
+        self.parent = parent
+        self.parent_id = parent.id
+        self.applied_tags = list(kwargs.get("applied_tags") or ())
+        self.kwargs = kwargs
+        self.archived = False
+
+    async def edit(self, **kwargs):
+        if "applied_tags" in kwargs:
+            self.applied_tags = list(kwargs["applied_tags"] or ())
+        self.archived = kwargs.get("archived", self.archived)
+
+
+class FakeForum:
+    def __init__(self, channel_id, guild=None, category=None, name="requests", **kwargs):
+        self.id = channel_id
+        self.guild = guild
+        self.name = name
+        self.mention = f"<#{channel_id}>"
+        self.category = category
+        self.available_tags = list(kwargs.get("available_tags") or ())
+        self.topic = kwargs.get("topic")
+        self.given_overwrites = kwargs.get("overwrites")
+        self.kwargs = kwargs
+        self.posts = []
+        self.thread_raises = None
+
+    async def create_thread(self, *, name, **kwargs):
+        if self.thread_raises is not None:
+            raise self.thread_raises
+        post = FakeForumPost(7000 + len(self.posts), self, name, **kwargs)
+        starter = {k: v for k, v in kwargs.items() if k != "content"}
+        message = FakeMessage(9000 + len(self.posts), kwargs.get("content") or "", **starter)
+        post.messages.append(message)
+        self.posts.append(post)
+        if self.guild is not None:
+            self.guild.threads[post.id] = post
+        return discord.channel.ThreadWithMessage(thread=post, message=message)
+
+
 class FakeGuild:
     def __init__(self):
         self.id = GUILD
         self.name = "Black in a Flash!"
         self.channels = {}
+        self.threads = {}
         self.members = {}
         self.roles = [FakeRole(STAFF_ROLE, "Lead")]
+        self.me = FakeRole(99, "Black Bloc")
+        self.create_raises = None
+        self._next_id = 6000
 
     def get_channel(self, channel_id):
-        return self.channels.get(channel_id)
+        return self.channels.get(channel_id) or self.threads.get(channel_id)
+
+    def get_thread(self, thread_id):
+        return self.threads.get(thread_id)
 
     def get_member(self, user_id):
         return self.members.get(user_id)
 
+    async def create_forum(self, name, **kwargs):
+        if self.create_raises is not None:
+            raise self.create_raises
+        self._next_id += 1
+        category = kwargs.pop("category", None)
+        forum = FakeForum(self._next_id, self, category, name=name, **kwargs)
+        self.add(forum)
+        return forum
+
     def add(self, channel):
+        channel.guild = self
         self.channels[channel.id] = channel
         return channel
 
@@ -131,9 +190,20 @@ class FakeMember:
 class FakeGuard:
     def __init__(self, test_channel_id=TEST_CHANNEL):
         self.test_channel_id = test_channel_id
+        self.owned_channel_ids = set()
+
+    def own_channel(self, channel):
+        self.owned_channel_ids.add(int(getattr(channel, "id", channel)))
+
+    def disown_channel(self, channel):
+        self.owned_channel_ids.discard(int(getattr(channel, "id", channel)))
+
+    def owns_channel(self, channel):
+        return int(getattr(channel, "id", channel)) in self.owned_channel_ids
 
     def allows_channel(self, channel):
-        return int(getattr(channel, "id", channel)) == self.test_channel_id
+        here = int(getattr(channel, "id", channel))
+        return here == self.test_channel_id or here in self.owned_channel_ids
 
     def refusal_message(self):
         return "Black Bloc is in **test mode**"
@@ -1484,3 +1554,275 @@ async def test_a_staffer_demoted_while_the_review_card_is_open_asks_nobody(
     assert "staff only" in interaction.sent
     assert member.dms == []
     assert await check_rows(db) == []
+
+
+# --- the request forum (blackmail-threads §B) ------------------------------------------------
+
+
+BLACKMAIL = 5050
+FORUM = 5151
+
+
+async def make_the_forum(cog, bot, lead):
+    opened = await open_panel(cog, bot, lead)
+    item = find_item(panel_view(opened), requests_cog.MAKE_THE_FORUM)
+    return await click(bot, lead, item)
+
+
+def forum_of(bot):
+    return bot.guild.get_channel(bot.store.get(GUILD, "request_forum_channel_id"))
+
+
+async def point_at_a_forum(bot, *, tags=True):
+    """The forum staff already have, with the tags Make-the-forum would have given it."""
+    made = pure.forum_tags() if tags else []
+    forum = bot.guild.add(FakeForum(FORUM, bot.guild, available_tags=made))
+    await bot.store.set(GUILD, "request_forum_channel_id", forum.id)
+    if bot.guard is not None:
+        bot.guard.own_channel(forum)
+    return forum
+
+
+def tags_on(post):
+    return [tag.name for tag in post.applied_tags]
+
+
+async def test_a_filed_request_opens_its_own_post_tagged_open(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+
+    await file_one(cog, bot, member, what="a request board")
+
+    post = forum.posts[0]
+    assert post.name == "#1 a request board"
+    assert tags_on(post) == ["open"]
+    assert post.kwargs["auto_archive_duration"] == 1440
+    row = await pure.get_request(db, 1)
+    assert row["thread_id"] == post.id and row["message_id"] == post.messages[0].id
+    assert card_of(post.messages[0])["title"] == "New request #1"
+
+
+async def test_a_forum_post_carries_the_cards_link_button(cog, bot, member):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+
+    await file_one(cog, bot, member)
+
+    assert link_of(forum.posts[0].messages[0]) is not None
+
+
+async def test_every_move_lands_in_the_requests_own_post_not_the_status_channel(
+    cog, bot, member, lead, db
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    await bot.store.set(GUILD, "request_notify_channel_id", TEST_CHANNEL)
+    await file_one(cog, bot, member)
+
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.IN_PROGRESS, lead)
+
+    post = forum.posts[0]
+    assert [card_of(one)["title"] for one in post.messages] == [
+        "New request #1",
+        "Request #1 is being worked on",
+    ]
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+    assert tags_on(post) == ["picked up"]
+
+
+async def test_a_request_moving_through_the_board_re_tags_its_own_post_each_time(
+    cog, bot, member, lead
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    await file_one(cog, bot, member)
+    post = forum.posts[0]
+
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.IN_PROGRESS, lead)
+    assert tags_on(post) == ["picked up"]
+
+    await requests_cog.mark_ready(bot, bot.guild, 1, lead, "a board", "press it")
+    assert tags_on(post) == ["ready to check"]
+
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.HOLD, lead, reason="waiting")
+    assert tags_on(post) == ["on hold"]
+    assert post.archived is False
+
+
+async def test_a_done_request_is_tagged_done_and_its_post_archived(cog, bot, member, lead):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    await file_one(cog, bot, member)
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.IN_PROGRESS, lead)
+    await requests_cog.mark_ready(bot, bot.guild, 1, lead, "a board", "press it")
+
+    await requests_cog.accept(bot, bot.guild, 1, lead)
+
+    post = forum.posts[0]
+    assert tags_on(post) == ["done"] and post.archived is True
+    assert not bot.guard.owns_channel(post)
+    # `done` is not in `request_channel_moves` by default, so the tag is the only record.
+    assert card_of(post.messages[-1])["title"] == "Request #1 is ready to check 🔎"
+
+
+async def test_a_declined_request_is_tagged_declined_and_its_post_archived(
+    cog, bot, member, lead
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    await file_one(cog, bot, member)
+
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.DECLINED, lead, reason="no")
+
+    post = forum.posts[0]
+    assert tags_on(post) == ["declined"] and post.archived is True
+
+
+async def test_a_forum_with_no_matching_tag_still_posts_and_still_archives(
+    cog, bot, member, lead
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot, tags=False)
+    await file_one(cog, bot, member)
+
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.DECLINED, lead, reason="no")
+
+    post = forum.posts[0]
+    assert post.applied_tags == [] and post.archived is True
+
+
+async def test_a_blank_forum_key_keeps_todays_notify_channel(cog, bot, member, lead, db):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "request_notify_channel_id", TEST_CHANNEL)
+
+    await file_one(cog, bot, member)
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.IN_PROGRESS, lead)
+
+    titles = [card_of(one)["title"] for one in bot.guild.get_channel(TEST_CHANNEL).messages]
+    assert titles == ["New request #1", "Request #1 is being worked on"]
+    assert (await pure.get_request(db, 1))["thread_id"] is None
+
+
+async def test_a_forum_the_guard_refuses_is_skipped_in_the_log_not_posted(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    bot.guild.add(FakeForum(FORUM, bot.guild, available_tags=pure.forum_tags()))
+    await bot.store.set(GUILD, "request_forum_channel_id", FORUM)
+
+    await file_one(cog, bot, member)
+
+    assert bot.guild.get_channel(FORUM).posts == []
+    assert (await pure.get_request(db, 1))["thread_id"] is None
+    assert "request.notify_skipped_test_mode" in await action_kinds(db)
+
+
+async def test_a_forum_discord_refuses_leaves_the_request_filed_and_says_so_in_the_log(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    forum.thread_raises = refused()
+
+    await file_one(cog, bot, member)
+
+    row = await pure.get_request(db, 1)
+    assert row is not None and row["thread_id"] is None
+    assert "request.notify_failed" in await action_kinds(db)
+
+
+async def test_the_post_is_claimed_again_whenever_black_bloc_writes_to_it(
+    cog, bot, member, lead
+):
+    """A guard claim dies with the process; a restart must not drop the move cards."""
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    await file_one(cog, bot, member)
+    post = forum.posts[0]
+    bot.guard.owned_channel_ids = {forum.id}
+
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.IN_PROGRESS, lead)
+
+    assert len(post.messages) == 2 and tags_on(post) == ["picked up"]
+
+
+async def test_staff_make_the_request_forum_under_blackmail_with_every_tag(
+    cog, bot, lead, db
+):
+    bot.guard = FakeGuard()
+    category = bot.guild.add(FakeText(BLACKMAIL, name="Blackmail"))
+    category.overwrites = {FakeRole(STAFF_ROLE): "staff see it"}
+    await bot.store.set(GUILD, "modmail_category_id", BLACKMAIL)
+
+    said = await make_the_forum(cog, bot, lead)
+
+    forum = forum_of(bot)
+    assert forum.name == "requests" and forum.category is category
+    assert [tag.name for tag in forum.available_tags] == [
+        "open",
+        "picked up",
+        "ready to check",
+        "on hold",
+        "done",
+        "declined",
+    ]
+    assert [getattr(who, "id", who) for who in forum.given_overwrites] == [
+        STAFF_ROLE,
+        bot.guild.me.id,
+    ]
+    assert "test mode" in said.sent and "request.forum_made" in await action_kinds(db)
+
+
+async def test_the_make_the_forum_button_goes_once_the_forum_is_there(cog, bot, lead):
+    bot.guard = FakeGuard()
+    await point_at_a_forum(bot)
+
+    opened = await open_panel(cog, bot, lead)
+
+    labels = [getattr(one, "label", None) for one in panel_view(opened).children]
+    assert requests_cog.MAKE_THE_FORUM not in labels
+
+
+async def test_a_member_is_never_offered_make_the_forum(cog, bot, member):
+    bot.guard = FakeGuard()
+
+    opened = await open_panel(cog, bot, member)
+
+    labels = [getattr(one, "label", None) for one in panel_view(opened).children]
+    assert requests_cog.MAKE_THE_FORUM not in labels
+
+
+async def test_the_request_forum_needs_the_blackmail_category_and_says_which_key(
+    cog, bot, lead
+):
+    bot.guard = FakeGuard()
+
+    said = await make_the_forum(cog, bot, lead)
+
+    assert "modmail_category_id" in said.sent and "Ticket category…" in said.sent
+    assert bot.store.get(GUILD, "request_forum_channel_id") is None
+
+
+async def test_a_refused_request_forum_is_said_in_words_and_logged(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    bot.guild.add(FakeText(BLACKMAIL, name="Blackmail"))
+    await bot.store.set(GUILD, "modmail_category_id", BLACKMAIL)
+    bot.guild.create_raises = refused()
+
+    said = await make_the_forum(cog, bot, lead)
+
+    assert "could not make the forum" in said.sent
+    assert bot.store.get(GUILD, "request_forum_channel_id") is None
+    assert "request.forum_failed" in await action_kinds(db)
+
+
+async def test_a_deleted_request_forum_is_forgotten_rather_than_kept_as_a_dead_id(
+    cog, bot, db
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+
+    await cog.on_guild_channel_delete(forum)
+
+    assert bot.store.get(GUILD, "request_forum_channel_id") is None
+    assert "request.forum_forgotten" in await action_kinds(db)

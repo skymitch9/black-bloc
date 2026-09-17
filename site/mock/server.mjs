@@ -368,7 +368,7 @@ const SETTING_SPECS = [
   ['birthday_role_id', 'role', '900000000000000004', null, 'role given for the day and taken back the next'],
   ['birthday_show_age', 'bool', false, false, 'true to put {age} in reach for people who stored a birth year'],
   ['modmail_enabled', 'bool', true, false, 'true when Black Bloc answers DMs'],
-  ['modmail_mode', 'enum', 'thread', 'channel', 'channel (one channel per ticket) or thread (private threads in one channel)', ['channel', 'thread']],
+  ['modmail_mode', 'enum', 'thread', 'channel', 'channel (one channel per ticket), thread (private threads in the staff channel) or forum (one post per ticket in the forum channel — the list never grows past the forum’s own archive)', ['channel', 'thread', 'forum']],
   ['modmail_category_id', 'channel', '800000000000000011', null, 'the category ticket channels are made in, in channel mode'],
   ['modmail_staff_channel_id', 'channel', '800000000000000005', null, 'the channel ticket threads are made in, in thread mode'],
   ['modmail_log_channel_id', 'channel', '800000000000000004', null, 'where a closed ticket’s transcript is posted'],
@@ -378,6 +378,9 @@ const SETTING_SPECS = [
   ['modmail_panel_title', 'text', 'Need a moderator?', 'Need a moderator?', 'the heading on the posted Open a ticket message'],
   ['modmail_panel_text', 'text', 'Press the button and tell us what is happening. Only staff see it.', 'Press the button and tell us what is happening. Only staff see it.', 'what the posted Open a ticket message says under its heading'],
   ['modmail_open_with_button', 'bool', false, false, 'true draws Open a ticket with… on the staff row of /modmail, so staff can start a ticket for somebody else; false hides that door and leaves every other way in untouched. The door is only hidden, never removed — turning this back on brings it straight back, and a press on a panel that was open when it went off is refused in words'],
+  ['modmail_forum_channel_id', 'channel', null, null, 'the forum channel tickets are posted in, in forum mode; Setup on /modmail makes one under the ticket category'],
+  ['modmail_forum_tags', 'bool', true, true, 'true keeps the open / closed tags on each ticket post in forum mode; false leaves every post untagged and the forum’s own tag list alone'],
+  ['modmail_panel_follows_post', 'text', 'welcome', 'welcome', 'the slug of the post the Open a ticket button sits under — welcome by default, so the button lands right after the rules and is put back there whenever that post is posted again. none never moves the button for that reason'],
   ['automod_mode', 'enum', 'shadow', 'off', 'off, shadow (log what it would do) or on (delete, warn and time out)', ['off', 'shadow', 'on']],
   ['automod_rules', 'json', null, null, 'the automod rule book; the Automod tab is what changes it'],
   ['automod_exempt_role_ids', 'roles', ['900000000000000001', '900000000000000002'], [], 'roles automod ignores'],
@@ -426,6 +429,7 @@ const SETTING_SPECS = [
   ['request_who_can_file', 'enum', 'everyone', 'everyone', 'who may file a request: everyone, or staff only', ['everyone', 'staff']],
   ['request_notify_channel_id', 'channel', '800000000000000003', null, 'where one line goes when a request is filed; blank tells nobody and the site is the only place they show up'],
   ['request_status_channel_id', 'channel', null, null, 'where a line goes each time staff move a request — picked up, on hold, done, declined; blank uses request_notify_channel_id, so one channel carries both'],
+  ['request_forum_channel_id', 'channel', null, null, 'a forum channel where every request is its own post; blank posts the card into request_notify_channel_id as before. /request ▸ Make the forum… makes one under the ticket category'],
   ['request_dm_on_decision', 'bool', true, true, 'true to DM the person who asked every time staff move their request — picked up, on hold, done or declined'],
   ['request_channel_moves', 'enums', ['filed', 'in_progress', 'review', 'sent_back', 'hold', 'declined'], ['filed', 'in_progress', 'review', 'sent_back', 'hold', 'declined'], 'which moves put a card in the request channel: filed, in_progress, review, sent_back, done, hold, declined, check_asked; every one but done and check_asked by default (the done card repeats what the site log already says, and the check card is a DM to one person), and an empty list posts nothing at all', ['filed', 'in_progress', 'review', 'sent_back', 'done', 'hold', 'declined', 'check_asked']],
   ['request_review_by_other', 'bool', false, false, 'true to make somebody other than the staffer who marked a request ready to check be the one who accepts it'],
@@ -5225,6 +5229,21 @@ route('DELETE', '/api/modmail/panel', (context) => {
   return { taken_down: true, channel_id: String(channelId), message_id: messageId === null || messageId === undefined ? null : String(messageId), message: 'The **Open a ticket** button is down. Nothing else changed.' };
 });
 
+route('POST', '/api/modmail/forum', (context) => {
+  requireStaff(context.session);
+  const known = state.settings.get('modmail_forum_channel_id');
+  if (known) {
+    throw new Refused(409, 'forum_exists', `<#${known}> is already the ticket forum, so nothing was made. **Forget…** → **The ticket forum** lets go of it first if you want a new one.`);
+  }
+  if (!state.settings.get('modmail_category_id')) {
+    throw new Refused(409, 'no_category', '**modmail_category_id** is not pointed at a category Black Bloc can see, so there is nowhere to make the forum. **Setup…** → **Ticket category…** points it at one first.');
+  }
+  const channelId = String(Date.now());
+  state.settings.set('modmail_forum_channel_id', channelId);
+  logAction('web.modmail.forum_made', { target_id: channelId, details: { channel_id: channelId } });
+  return { made: true, channel_id: channelId, message: `<#${channelId}> is up: a forum under the ticket category, with its overwrites, and with an **open** and a **closed** tag.` };
+});
+
 route('GET', '/api/modmail/snippets', (context) => {
   requireStaff(context.session);
   return state.snippets.map((row) => ({
@@ -6251,6 +6270,21 @@ route('POST', '/api/requests', async (context) => {
   state.asks.push(made);
   logAction('web.request.filed', { actor_id: mine, target_id: mine, details: { request_id: made.id } });
   return { request: askRow(made), message: `Filed as **#${made.id}** — staff will see it on this page.` };
+});
+
+route('POST', '/api/requests/forum', (context) => {
+  requireStaff(context.session);
+  const known = state.settings.get('request_forum_channel_id');
+  if (known) {
+    throw new Refused(409, 'forum_exists', `<#${known}> is already the request forum, so nothing was made. Clear **request_forum_channel_id** on the Settings page first if you want a new one.`);
+  }
+  if (!state.settings.get('modmail_category_id')) {
+    throw new Refused(409, 'no_category', '**modmail_category_id** is not pointed at a category Black Bloc can see, so there is nowhere under Blackmail to make the forum. Point it at one with `/modmail` ▸ **Setup…** ▸ **Ticket category…** first.');
+  }
+  const channelId = String(Date.now());
+  state.settings.set('request_forum_channel_id', channelId);
+  logAction('web.request.forum_made', { target_id: channelId, details: { channel_id: channelId } });
+  return { made: true, channel_id: channelId, message: `<#${channelId}> is up: a forum under the Blackmail category, with its overwrites, and one tag for each place a request can be.` };
 });
 
 route('GET', '/api/requests/mine', (context) => {

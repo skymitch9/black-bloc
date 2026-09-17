@@ -172,13 +172,14 @@
       "sort": 70,
       "steps": [
         {"do": "Type **/request** and press **File a request**.", "expect": "A box for what you want and why."},
-        {"do": "Submit the box.", "expect": "A card lands in the requests channel and you are DMed the number. Staff move it from there."},
+        {"do": "Submit the box.", "expect": "A card lands where staff watch — the requests channel, or a post of its own in the requests forum — and you are DMed the number. Staff move it from there."},
         {"do": "When staff press **Ask them to check**, read the DM and try the work.", "expect": "The DM says what was built and how to test it. Reply in the server with how it went."}
       ],
       "faults": [
         {"symptom": "You want it withdrawn", "answer": "Type **/request**, use **Take one back…**, press **Yes, take it back**."},
         {"symptom": "You cannot see your requests on the panel", "answer": "The list is staff-only unless a Lead turns request_panel_own_list on. The website's Requests page shows yours."},
-        {"symptom": "No DM arrived", "answer": "Your DMs are closed to server members. The bot pings you in the requests channel instead."}
+        {"symptom": "No DM arrived", "answer": "Your DMs are closed to server members. The bot pings you in the requests channel instead."},
+        {"symptom": "You cannot find the card again", "answer": "With a requests forum, your request is a post called #<number> and what you asked for, tagged for wherever it has got to. Without one, every card is in the requests channel."}
       ],
       "facts": [
         {"kind": "setting", "ref": "request_mode"},
@@ -296,17 +297,19 @@
         {"do": "Type **/modmail** and press **Try a fake ticket**, then **Yes, open one**.", "expect": "A private thread with the same card a real ticket carries. Nobody is DMed."},
         {"do": "In a ticket, press **Reply** and type your answer.", "expect": "The member gets it as a DM from you. **Reply as Staff** sends it with no name."},
         {"do": "Press **Private note** to write something the member never sees.", "expect": "A note embed in the ticket. No DM."},
-        {"do": "Press **Close…** and type a reason.", "expect": "The member is DMed, the transcript is filed, the channel goes."}
+        {"do": "Press **Close…** and type a reason.", "expect": "The member is DMed, the transcript is filed, and the ticket is tidied away — a channel goes, a thread is archived, and in forum mode the post is tagged **closed** and archived."}
       ],
       "faults": [
         {"symptom": "The card is in the spam channel, not the ticket", "answer": "Test mode redirects real tickets' cards there. The practice thread shows it in place."},
         {"symptom": "A typed message did not reach the member", "answer": "modmail_reply_style is buttons. Set it to typing or both under **Setup…** ▸ **Reply style…**."},
-        {"symptom": "You want to block somebody", "answer": "**Blocked…** ▸ **Block someone…** ▸ pick them ▸ a reason. **Unblock them** reverses it."}
+        {"symptom": "You want to block somebody", "answer": "**Blocked…** ▸ **Block someone…** ▸ pick them ▸ a reason. **Unblock them** reverses it."},
+        {"symptom": "The ticket list scrolls for ever", "answer": "Press **Setup…** ▸ **Make the forum**, then **Setup…** ▸ **Mode…** ▸ forum. Every ticket is then a post of its own, tagged open while it runs and closed when it ends."}
       ],
       "facts": [
         {"kind": "setting", "ref": "modmail_enabled"},
         {"kind": "setting", "ref": "modmail_mode"},
-        {"kind": "setting", "ref": "modmail_reply_style"}
+        {"kind": "setting", "ref": "modmail_reply_style"},
+        {"kind": "setting", "ref": "modmail_forum_channel_id"}
       ]
     },
     {

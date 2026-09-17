@@ -13,6 +13,7 @@ import discord
 from .actionlog import log_action
 from .logkinds import FEATURE_PAGES, VIA_BOOT, VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
+from . import shadow
 
 log = logging.getLogger(__name__)
 
@@ -734,28 +735,13 @@ def as_channel_id(value: Any) -> int | None:
 
 
 def shadow_channel_id(bot: Any, guild: Any) -> int | None:
-    """Where a rehearsal GOES: the guard's own channel while it is installed, else the log."""
-    guard = getattr(bot, "guard", None)
-    wanted = getattr(guard, "test_channel_id", None) if guard is not None else None
-    if not wanted:
-        wanted = bot.store.get(int(getattr(guild, "id", 0) or 0), LOG_CHANNEL_KEY)
-    return as_channel_id(wanted)
+    """Where a rehearsal GOES — one home, `black_bloc/shadow.py`."""
+    return shadow.channel_id(bot, guild, log_key=LOG_CHANNEL_KEY)
 
 
 def shadow_channel_ids(bot: Any, guild: Any) -> list[int]:
-    """Where a rehearsal already IS. Checklist 3: the cutover LIFTS the guard between the
-    rehearsal and the real post, so the copy outlives the channel that resolution picks."""
-    found: list[int] = []
-    guard = getattr(bot, "guard", None)
-    for wanted in (
-        getattr(guard, "test_channel_id", None) if guard is not None else None,
-        getattr(getattr(bot, "settings", None), "test_channel_id", None),
-        bot.store.get(int(getattr(guild, "id", 0) or 0), LOG_CHANNEL_KEY),
-    ):
-        value = as_channel_id(wanted)
-        if value is not None and value not in found:
-            found.append(value)
-    return found
+    """Where a rehearsal already IS — one home, `black_bloc/shadow.py`."""
+    return shadow.channel_ids(bot, guild, log_key=LOG_CHANNEL_KEY)
 
 
 def shadow_words(bot: Any, guild: Any, row: Any) -> str:
@@ -926,6 +912,9 @@ async def publish_post(
         await _drop_shadow(bot, guild, row, actor, via)
     await _pin(bot, guild, row, message, actor, via)
     fresh = await get_post_by_id(bot.db, int(row["id"]))
+    dispatch = getattr(bot, "dispatch", None)
+    if dispatch is not None:
+        dispatch("post_published", guild, fresh)
     return Outcome(
         True, said.format(title=title, where=where_words(guild, target)), value=fresh
     )

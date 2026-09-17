@@ -26,6 +26,7 @@ ROUTES = [
     ("DELETE", "/api/modmail/blocks/21", None),
     ("POST", "/api/modmail/panel", {"channel_id": "1"}),
     ("DELETE", "/api/modmail/panel", None),
+    ("POST", "/api/modmail/forum", {}),
 ]
 
 
@@ -314,3 +315,41 @@ async def test_a_ticket_says_which_door_it_came_in_by(client, sign_in, web, guil
     row = client.get(f"/api/modmail/tickets/{ticket_id}").json()
 
     assert row["source"] == "dm" and row["opened_by_id"] is None
+
+
+async def test_the_website_makes_the_ticket_forum_and_leaves_one_web_row(
+    client, sign_in, web, guild, wf
+):
+    await web.store.set(wf.GUILD_ID, "modmail_category_id", wf.CATEGORY_ID)
+    sign_in(client, uid=7)
+
+    made = client.post("/api/modmail/forum", json={})
+
+    assert made.status_code == 200 and made.json()["made"] is True
+    forum = guild.created[-1]
+    assert forum.name == "modmail" and forum.type.name == "forum"
+    assert [tag.name for tag in forum.available_tags] == ["open", "closed"]
+    assert web.store.get(wf.GUILD_ID, "modmail_forum_channel_id") == forum.id
+    assert made.json()["channel_id"] == str(forum.id)
+    kinds = await wf.kinds_in(web.db)
+    assert "web.modmail.forum_made" in kinds and "modmail.forum_made" not in kinds
+
+
+async def test_the_website_refuses_a_second_ticket_forum_in_words(client, sign_in, web, wf):
+    await web.store.set(wf.GUILD_ID, "modmail_category_id", wf.CATEGORY_ID)
+    sign_in(client, uid=7)
+    client.post("/api/modmail/forum", json={})
+
+    again = client.post("/api/modmail/forum", json={})
+
+    assert again.status_code == 409
+    assert "already the ticket forum" in again.json()["message"]
+
+
+def test_the_website_says_which_key_a_ticket_forum_needs(client, sign_in):
+    sign_in(client, uid=7)
+
+    refused = client.post("/api/modmail/forum", json={})
+
+    assert refused.status_code == 409
+    assert "modmail_category_id" in refused.json()["message"]

@@ -2351,6 +2351,19 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/modmail/forum",
+      "read_by": [
+        "page-modmail.js ticketForumCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "made",
+        "channel_id",
+        "message"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/chat/intents",
       "read_by": [
@@ -2861,6 +2874,19 @@
           "done_at"
         ]
       }
+    },
+    {
+      "method": "POST",
+      "path": "/api/requests/forum",
+      "read_by": [
+        "page-requests.js requestForumCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "made",
+        "channel_id",
+        "message"
+      ]
     },
     {
       "method": "GET",

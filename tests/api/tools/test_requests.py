@@ -739,3 +739,51 @@ async def test_a_request_filed_in_another_server_is_not_found_here(as_staff, cli
 
     assert client.get("/api/requests/1").status_code == 404
     assert client.get("/api/requests").json()["total"] == 0
+
+
+async def test_the_website_makes_the_request_forum_and_leaves_one_web_row(
+    as_staff, web, guild, wf
+):
+    await web.store.set(wf.GUILD_ID, "modmail_category_id", wf.CATEGORY_ID)
+
+    made = as_staff.post("/api/requests/forum", json={})
+
+    assert made.status_code == 200 and made.json()["made"] is True
+    forum = guild.created[-1]
+    assert forum.name == "requests" and forum.type.name == "forum"
+    assert [tag.name for tag in forum.available_tags] == [
+        "open",
+        "picked up",
+        "ready to check",
+        "on hold",
+        "done",
+        "declined",
+    ]
+    assert web.store.get(wf.GUILD_ID, "request_forum_channel_id") == forum.id
+    found = await kinds(web, wf)
+    assert "web.request.forum_made" in found and "request.forum_made" not in found
+
+
+async def test_the_website_refuses_a_second_request_forum_in_words(as_staff, web, wf):
+    await web.store.set(wf.GUILD_ID, "modmail_category_id", wf.CATEGORY_ID)
+    as_staff.post("/api/requests/forum", json={})
+
+    again = as_staff.post("/api/requests/forum", json={})
+
+    assert again.status_code == 409
+    assert "already the request forum" in again.json()["message"]
+
+
+async def test_the_website_says_which_key_a_request_forum_needs(as_staff):
+    refused = as_staff.post("/api/requests/forum", json={})
+
+    assert refused.status_code == 409
+    assert "modmail_category_id" in refused.json()["message"]
+
+
+def test_making_the_request_forum_needs_a_session(client):
+    assert client.post("/api/requests/forum", json={}).status_code == 401
+
+
+def test_making_the_request_forum_refuses_a_member(as_member):
+    assert as_member.post("/api/requests/forum", json={}).status_code == 403

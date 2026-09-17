@@ -12,11 +12,13 @@ from ...command_errors import NETWORK_ERRORS, AnswersErrors
 from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import (
     KEEP_IT,
+    Outcome,
     Panel,
     answer,
     confirm,
     confirm_items,
     opened,
+    refusal,
     retire,
     still_staff,
 )
@@ -34,6 +36,10 @@ from ...requests import (
     EMBED_COLOURS,
     FILED,
     FILED_LOOK,
+    FORUM_AUTO_ARCHIVE_MINUTES,
+    FORUM_CHANNEL_KEY,
+    FORUM_CHANNEL_NAME,
+    FORUM_TOPIC,
     HOLD,
     HOW_TO_TEST_LIMIT,
     IN_PROGRESS,
@@ -68,6 +74,7 @@ from ...requests import (
     WHY_LIMIT,
     WITHDRAWABLE,
     RequestError,
+    archives_at,
     card_buttons,
     card_footer_override,
     card_will_post,
@@ -81,6 +88,8 @@ from ...requests import (
     create_request,
     dms_on_decision,
     everyone_may_file,
+    forum_channel_id,
+    forum_tags,
     get_request,
     list_requests,
     look_for_status,
@@ -93,6 +102,7 @@ from ...requests import (
     panel_minutes,
     panel_shows_own_list,
     pick_placeholder,
+    post_title,
     posts_a_card,
     request_embed,
     requests_are_on,
@@ -102,13 +112,15 @@ from ...requests import (
     set_fields,
     set_message,
     set_status,
+    set_thread,
     site_page_url,
     site_view,
     status_channel_id,
     summary_line,
+    tags_for_status,
     withdraw_request,
 )
-from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY
+from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY, MODMAIL_CATEGORY_KEY
 
 log = logging.getLogger(__name__)
 
@@ -154,6 +166,35 @@ BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
     "danger": discord.ButtonStyle.danger,
 }
 COG_NAME = "Requests"
+MAKE_THE_FORUM = "Make the forum"
+FORUM_EXISTS = (
+    "<#{where}> is already the request forum, so nothing was made. Clear "
+    "**request_forum_channel_id** on the Settings page first if you want a new one."
+)
+FORUM_NO_CATEGORY = (
+    "**modmail_category_id** is not pointed at a category Black Bloc can see, so there is "
+    "nowhere under Blackmail to make the forum. Point it at one with `/modmail` ▸ **Setup…** ▸ "
+    "**Ticket category…** first."
+)
+FORUM_UNSUPPORTED = (
+    "This server cannot be given a forum channel by Black Bloc — the library it runs on offers "
+    "no way to make one here. Make a forum by hand and point **request_forum_channel_id** at it "
+    "on the Settings page."
+)
+FORUM_FAILED_SAID = (
+    "Black Bloc could not make the forum — {reason}. Check it has **Manage Channels** on the "
+    "Blackmail category and try again; the log says `request.forum_failed`."
+)
+FORUM_MADE = (
+    "<#{where}> is up: a forum under the Blackmail category, with its overwrites, and one tag "
+    "for each place a request can be. Every request filed from now on gets its own post there."
+)
+FORUM_MADE_GUARDED = (
+    " ⚠️ Black Bloc is in **test mode** and this forum is OUTSIDE the test channel — making a "
+    "channel is not something the guard can see, so it was made anyway. Black Bloc claims each "
+    "post in it — when it opens one and again whenever it writes to one — so the cards land "
+    "there and nowhere else."
+)
 
 
 def guard_allows(bot: Any, channel: Any) -> bool:
@@ -271,10 +312,130 @@ async def post_line(
         return None
 
 
+def forum_of(bot: Any, guild: Any) -> Any:
+    """The forum every request gets a post in, or None while the key is blank."""
+    channel_id = forum_channel_id(bot.store, guild.id)
+    if not channel_id:
+        return None
+    return bot.get_channel(channel_id) or guild.get_channel(channel_id)
+
+
+def thread_of(bot: Any, guild: Any, row: Any) -> Any:
+    """This request's own post — claimed back on the way out, because a guard claim dies with
+    the process that made it and a restart would otherwise drop every move card in silence."""
+    thread_id = row_value(row, "thread_id")
+    if not thread_id:
+        return None
+    finder = getattr(guild, "get_thread", None)
+    thread = (finder(int(thread_id)) if finder is not None else None) or bot.get_channel(
+        int(thread_id)
+    )
+    guard = getattr(bot, "guard", None)
+    forum = forum_of(bot, guild)
+    if guard is None or thread is None or forum is None:
+        return thread
+    parent = getattr(thread, "parent_id", None) or getattr(
+        getattr(thread, "parent", None), "id", None
+    )
+    if parent == forum.id:
+        guard.own_channel(thread)
+    return thread
+
+
+def moves_land_in(bot: Any, guild: Any, row: Any) -> Any:
+    """Where a move card goes: this request's post when it has one, else the status channel."""
+    thread = thread_of(bot, guild, row)
+    return thread.id if thread is not None else status_channel_id(bot.store, guild.id)
+
+
+async def open_forum_post(bot: Any, guild: Any, row: Any, embed: Any, view: Any) -> Any:
+    """One post per request; the filed card and its buttons are its first message."""
+    forum = forum_of(bot, guild)
+    if forum is None:
+        return None
+    if not guard_allows(bot, forum.id):
+        log.warning("requests: test mode, so the forum never heard request %s", row["id"])
+        await log_action(
+            bot,
+            guild,
+            NOTIFY_SKIPPED_KIND,
+            details={
+                "request_id": row["id"],
+                "move": FILED_LOOK,
+                "channel_id": int(forum.id),
+            },
+        )
+        return None
+    extra = {} if view is None else {"view": view}
+    try:
+        made = await forum.create_thread(
+            name=post_title(row),
+            content=move_line(row, FILED_LOOK),
+            embed=embed,
+            applied_tags=tags_for_status(forum, row_value(row, "status")),
+            auto_archive_duration=FORUM_AUTO_ARCHIVE_MINUTES,
+            allowed_mentions=discord.AllowedMentions.none(),
+            reason=f"Black Bloc request {row['id']}",
+            **extra,
+        )
+    except NETWORK_ERRORS as exc:
+        log.warning("requests: could not open a post for %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            NOTIFY_FAILED_KIND,
+            details={
+                "request_id": row["id"],
+                "move": FILED_LOOK,
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        return None
+    post = getattr(made, "thread", made)
+    guard = getattr(bot, "guard", None)
+    if guard is not None:
+        guard.own_channel(post)
+    await set_thread(bot.db, row["id"], post.id)
+    starter = getattr(made, "message", None)
+    if starter is not None:
+        await set_message(bot.db, row["id"], starter.id)
+    return post
+
+
+async def retag_post(bot: Any, guild: Any, row: Any, thread: Any) -> None:
+    """The post's own state: one tag for the status, and an archive once it is finished."""
+    forum = getattr(thread, "parent", None) or forum_of(bot, guild)
+    status = row_value(row, "status")
+    wanted: dict[str, Any] = {"applied_tags": tags_for_status(forum, status)}
+    if archives_at(status):
+        wanted["archived"] = True
+    try:
+        await thread.edit(**wanted)
+    except NETWORK_ERRORS as exc:
+        log.warning("requests: could not re-tag the post for %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            NOTIFY_FAILED_KIND,
+            details={
+                "request_id": row["id"],
+                "move": str(status),
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        return
+    guard = getattr(bot, "guard", None)
+    if archives_at(status) and guard is not None:
+        guard.disown_channel(thread)
+
+
 async def notify(bot: Any, guild: Any, row: Any, who: Any) -> None:
     if not posts_a_card(bot.store, guild.id, FILED_LOOK):
         return
     embed, view = card(bot, guild, row, FILED_LOOK)
+    if forum_of(bot, guild) is not None:
+        await open_forum_post(bot, guild, row, embed, view)
+        return
     message = await post_line(
         bot,
         guild,
@@ -290,20 +451,24 @@ async def notify(bot: Any, guild: Any, row: Any, who: Any) -> None:
 
 
 async def notify_move(bot: Any, guild: Any, row: Any, look: str) -> None:
-    """The channel hears every staff move, not only the filing (owner, 2026-09-02)."""
-    if look not in MOVE_LOOKS or not posts_a_card(bot.store, guild.id, look):
-        return
-    embed, view = card(bot, guild, row, look)
-    await post_line(
-        bot,
-        guild,
-        status_channel_id(bot.store, guild.id),
-        row,
-        move_line(row, look),
-        look,
-        embed=embed,
-        view=view,
-    )
+    """The channel hears every staff move, not only the filing (owner, 2026-09-02).
+
+    With a forum, that channel is the request's own post — the card first, then the tag."""
+    thread = thread_of(bot, guild, row)
+    if look in MOVE_LOOKS and posts_a_card(bot.store, guild.id, look):
+        embed, view = card(bot, guild, row, look)
+        await post_line(
+            bot,
+            guild,
+            thread.id if thread is not None else status_channel_id(bot.store, guild.id),
+            row,
+            move_line(row, look),
+            look,
+            embed=embed,
+            view=view,
+        )
+    if thread is not None:
+        await retag_post(bot, guild, row, thread)
 
 
 async def apply_decision(
@@ -507,7 +672,7 @@ async def ask_check(
             posted = await post_line(
                 bot,
                 guild,
-                status_channel_id(bot.store, guild.id),
+                moves_land_in(bot, guild, fresh),
                 fresh,
                 move_line(fresh, CHECK_ASKED),
                 CHECK_ASKED,
@@ -531,6 +696,66 @@ async def ask_check(
         CHECK_SAID[told].format(request_id=request_id, who=mention(wanted)),
         fresh,
     )
+
+
+async def make_forum(
+    bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """`/request`'s **Make the forum**: one forum under Blackmail, with a tag per place."""
+    known = forum_channel_id(bot.store, guild.id)
+    if known and (bot.get_channel(known) or guild.get_channel(known)) is not None:
+        return refusal(FORUM_EXISTS.format(where=known), "forum_exists", 409)
+    category_id = bot.store.get(guild.id, MODMAIL_CATEGORY_KEY)
+    category = guild.get_channel(category_id) if category_id else None
+    if category is None:
+        return refusal(FORUM_NO_CATEGORY, "no_category", 409)
+    create = getattr(guild, "create_forum", None)
+    if create is None:
+        return refusal(FORUM_UNSUPPORTED, "no_forum_api", 409)
+    overwrites = dict(getattr(category, "overwrites", None) or {})
+    me = getattr(guild, "me", None)
+    if me is not None:
+        overwrites[me] = discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True,
+            manage_channels=True,
+            manage_threads=True,
+            send_messages_in_threads=True,
+        )
+    try:
+        forum = await create(
+            FORUM_CHANNEL_NAME,
+            category=category,
+            topic=FORUM_TOPIC,
+            overwrites=overwrites,
+            available_tags=forum_tags(),
+            default_auto_archive_duration=FORUM_AUTO_ARCHIVE_MINUTES,
+            reason="Black Bloc request forum",
+        )
+    except Exception as exc:
+        log.warning("requests: could not make the forum: %s", exc)
+        await log_action(
+            bot,
+            guild,
+            "request.forum_failed",
+            actor=actor,
+            details={"category_id": category.id, "reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return refusal(FORUM_FAILED_SAID.format(reason=exc), "forum_failed", 500)
+    said = FORUM_MADE.format(where=forum.id)
+    if getattr(bot, "guard", None) is not None:
+        said += FORUM_MADE_GUARDED
+    await bot.store.set(
+        guild.id, FORUM_CHANNEL_KEY, forum.id, by=getattr(actor, "id", None)
+    )
+    await log_action(
+        bot,
+        guild,
+        kind_via("request.forum_made", via),
+        actor=actor,
+        details={"channel_id": forum.id, "category_id": category.id, "via": via},
+    )
+    return Outcome(True, said, value=forum.id)
 
 
 MOVE_FUNCS: dict[str, Any] = {
@@ -612,6 +837,8 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         view.add_item(RequestPick(staff_rows, total_open))
     if staff:
         view.add_item(LogsButton())
+    if staff and not forum_channel_id(store, guild.id):
+        view.add_item(MakeForumButton())
     return embed, view
 
 
@@ -827,6 +1054,24 @@ class LogsButton(discord.ui.Button):
         await send_logs(interaction, "request")
 
 
+class MakeForumButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label=MAKE_THE_FORUM, style=discord.ButtonStyle.secondary, row=3)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await opened(interaction, staff=False):
+            return
+        outcome = await make_forum(
+            interaction.client, interaction.guild, interaction.user
+        )
+        await render_panel(interaction, self.view)
+        await interaction.followup.send(
+            outcome.message, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+
+
 class BackButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=1)
@@ -959,6 +1204,19 @@ class Requests(commands.Cog):
             return False
         return await self._database_ready(interaction)
 
+    @commands.Cog.listener()
+    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel) -> None:
+        """Checklist 26: a forum somebody deleted is forgotten, never kept as a dead id."""
+        if not self.bot.db.is_connected:
+            return
+        guild = channel.guild
+        if channel.id != forum_channel_id(self.bot.store, guild.id):
+            return
+        await self.bot.store.clear(guild.id, FORUM_CHANNEL_KEY)
+        await log_action(
+            self.bot, guild, "request.forum_forgotten", details={"channel_id": channel.id}
+        )
+
     @app_commands.command(
         name="request", description="Ask the server for something, or manage requests"
     )
@@ -1080,6 +1338,7 @@ __all__ = [
     "CardMoveButton",
     "FileButton",
     "LogsButton",
+    "MakeForumButton",
     "NoteModal",
     "ReadyModal",
     "RefreshButton",
@@ -1097,11 +1356,17 @@ __all__ = [
     "card",
     "confirm_withdraw",
     "finish_card",
+    "forum_of",
     "guard_allows",
+    "make_forum",
     "mark_ready",
+    "moves_land_in",
     "notify",
     "notify_move",
     "open_card",
+    "open_forum_post",
+    "retag_post",
+    "thread_of",
     "open_withdraw_confirm",
     "opened",
     "person_told",

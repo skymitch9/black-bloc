@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 40
+        assert SCHEMA_VERSION == 41
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -22,6 +22,7 @@ async def test_connect_bootstraps_schema(tmp_path):
             "sent_back_reason",
             "check_asked_by",
             "check_asked_at",
+            "thread_id",
         } <= {r["name"] for r in await cur.fetchall()}
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
@@ -1683,20 +1684,20 @@ async def test_two_posts_cannot_share_a_slug_and_only_the_two_styles_are_storabl
         await db.close()
 
 
-async def test_an_open_poll_gains_a_shadow_message_id_column_on_an_older_file(tmp_path):
-    """Schema 39 -> 40: a poll written before shadow mode has no rehearsal, and the row that
-    carries a real poll is not touched by the upgrade."""
-    path = tmp_path / "old.sqlite3"
+async def test_a_schema_40_file_gains_requests_thread_id_and_keeps_its_rows(tmp_path):
+    """Schema 41 is additive: a request filed before the forum keeps its card and reads the
+    new column as nothing, so the old status channel goes on carrying it."""
+    path = tmp_path / "old40.sqlite3"
     db = Database(path)
     await db.connect()
-    await db.conn.execute("ALTER TABLE polls DROP COLUMN shadow_message_id")
+    await db.conn.execute("ALTER TABLE requests DROP COLUMN thread_id")
     await db.conn.execute(
-        "INSERT INTO polls(id, guild_id, creator_id, question, channel_id, message_id, "
-        "status, created_at) VALUES (1, 7, 9, 'now?', 55, 66, 'open', "
-        "'2026-09-17T00:00:00+00:00')"
+        "INSERT INTO requests(id, guild_id, user_id, what, why, status, created_at, message_id) "
+        "VALUES (1, 7, 9, 'a request forum', 'so it stops scrolling', 'open', "
+        "'2026-09-17T00:00:00+00:00', 4242)"
     )
     await db.conn.execute(
-        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '39')"
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '40')"
     )
     await db.conn.commit()
     await db.close()
@@ -1704,27 +1705,16 @@ async def test_an_open_poll_gains_a_shadow_message_id_column_on_an_older_file(tm
     again = Database(path)
     await again.connect()
     try:
-        cur = await again.conn.execute("PRAGMA table_info(polls)")
-        assert "shadow_message_id" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("PRAGMA table_info(requests)")
+        assert "thread_id" in {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute(
-            "SELECT channel_id, message_id, shadow_message_id FROM polls WHERE id = 1"
+            "SELECT status, message_id, thread_id FROM requests WHERE id = 1"
         )
         row = await cur.fetchone()
-        assert (row["channel_id"], row["message_id"]) == (55, 66)
-        assert row["shadow_message_id"] is None
+        assert (row["status"], row["message_id"], row["thread_id"]) == ("open", 4242, None)
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )
-        assert (await cur.fetchone())["value"] == "40"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()
-
-
-async def test_a_fresh_database_carries_the_shadow_message_id_column(tmp_path):
-    db = Database(tmp_path / "new.sqlite3")
-    await db.connect()
-    try:
-        cur = await db.conn.execute("PRAGMA table_info(polls)")
-        assert "shadow_message_id" in {row["name"] for row in await cur.fetchall()}
-    finally:
-        await db.close()
