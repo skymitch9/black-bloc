@@ -8,6 +8,27 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-17 (Blackmail — modmail and requests as FORUM channels, and the ticket button under the rules, branch `blackmail-threads` off `905982b`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord):**
+> schema **40 → 41** (measured: `SCHEMA_VERSION`) — `requests` gains `thread_id INTEGER` through the
+> additive `ADDED_COLUMNS` / PRAGMA pattern, no backfill. ⚠️ **The number is written as though the
+> polls build has already taken 40**; if that build does not land, `black_bloc/storage/db.py:11` and
+> `tests/storage/test_db.py:16` are the two lines that carry it. Registry keys **227 → 231**
+> (`modmail_forum_channel_id` channel blank, `modmail_forum_tags` bool **true**,
+> `modmail_panel_follows_post` text **`welcome`** / `none`, `request_forum_channel_id` channel blank);
+> mock **19 pages, 175 → 177 routes**, 14 core settings (`POST /api/modmail/forum`,
+> `POST /api/requests/forum`). ⚠️ **No new module.** `modmail_mode` gains a third value, **`forum`**,
+> under which a ticket is a post made by `ForumChannel.create_thread` (a `ThreadWithMessage` in
+> discord.py 2.7.1 — measured off the installed library) and the whole existing thread path carries
+> every reply, note, close and transcript. Tags are `ForumTag` objects looked up **by name** on the
+> forum's own `available_tags`, never by a stored id. Setup on `/modmail` gains **Forum channel…** and
+> **Make the forum**; `/request`'s panel and both dashboard pages gain the same **Make the forum**.
+> Under `TEST_MODE` a forum is made outside the test category (creation is not something the guard
+> sees, and the reply says so) and the guard CLAIMS it — the modmail sweep re-claims it every five
+> minutes while `modmail_mode` is `forum`, because a claim dies with the process that made it. New
+> log kinds: `modmail.forum_made` / `.forum_failed` / `.forum_forgotten` / `.panel_below_post`, and
+> `request.forum_made` / `.forum_failed` / `.forum_forgotten`. Tests **5998 → 6058**, both orders.
+> Before that:
+>
 > **2026-09-11 (Event rooms — the event's posts live in its own room and staff get a Delete button, branch `event-rooms` off `bd0b31d`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord):**
 > schema **unchanged at 34** — no migration and no backfill; registry keys **202 → 206** (`events_posts_where` enum room/announce/both default **room**, `events_room_delete_who` enum staff/approver default **staff**, `events_approver_role_id` role blank→staff, `events_room_notice` bool **true** — all events group by prefix); mock routes **150 → 151** (`POST /api/events/{event_id}/room/delete`). ⚠️ **No new module.** `make_review_channel` now calls `guard.own_channel`, which is the whole reason the posts move: the room joins the guard's owned set, so `card_channel` stops redirecting the review card to the test channel and the new `events.post_to_room` may speak there — `TEST_MODE` itself is untouched and still refuses every channel Black Bloc did not make. `events.post_event` fans the announce and go-live posts out over the two doors, and the room additionally gets the ended, cancelled and denied lines; only the announce channel's message id is stored (the room is deleted with the event). `events.delete_room` is the one canonical removal, reached from the persistent **Delete this room** button (`DECISION_TEMPLATE` grew a third action) and from the website route with `via=VIA_WEBSITE`; it cancels an open event FIRST so `on_guild_channel_delete` cannot settle it twice, and it cannot hold `event_lock` because `cancel_event` takes that same non-reentrant lock. Reconcile re-owns every room it can still see and `forget_room` clears a swept row's dead `review_channel_id` once (`event.room_forgotten`, TODO finding (h)). Five new log kinds by shape (`event.*_room`, `event.would_*_room`, `event.*_room_failed`) plus `event.room_forgotten`, `event.room_notice_failed`, `event.room_delete_failed`; tests **5546 → 5593**. Before that:
 >

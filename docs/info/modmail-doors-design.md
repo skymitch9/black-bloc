@@ -65,8 +65,13 @@ one persistent button **Open a ticket** (`TicketButton(DynamicItem)`, `custom_id
 id). Stored as `modmail_panel_channel_id` + `modmail_panel_message_id` (two keys, both doors).
 **Move it…** re-posts and deletes the old message; **Take it down** deletes it and clears the id;
 `reconcile` on the 5-minute loop re-posts a message that was deleted by hand (`modmail.panel_gone` then
-`modmail.panel_posted`) — the role-menu behaviour. Under `TEST_MODE` the guard refuses any channel but
-the test channel in words (`modmail.would_post_panel`). Pressing the button runs `TicketModal` with
+`modmail.panel_posted`) — the role-menu behaviour. ⚠️ **~~That deletion is the only reason it
+re-posts.~~ SINCE v117** (2026-09-17, branch `blackmail-threads`) it ALSO re-posts when the post
+named by `modmail_panel_follows_post` (**`welcome`** by default) lands under the button in the same
+channel, so the button keeps sitting directly beneath the rules — a second reason, its own log kind
+`modmail.panel_below_post`, and `none` to switch it off. The owner asked for it: *"I want it posted
+right after the rules"*; the design is `blackmail-threads-design.md` §C. Under `TEST_MODE` the guard
+refuses any channel but the test channel in words (`modmail.would_post_panel`). Pressing the button runs `TicketModal` with
 `source = panel`. The bot's reply is ephemeral, so nobody else in the channel learns who pressed.
 
 ### C4. Staff: Open a ticket with…

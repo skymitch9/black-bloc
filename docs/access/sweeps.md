@@ -1,6 +1,17 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-17** — rows **`BT-a` … `BT-p`** added at the foot for the BLACKMAIL THREADS build (branch
+> `blackmail-threads`, off `main` `905982b`; ⚠️ **not merged, not deployed, nothing in it has met
+> Discord**). What changes underneath them, and only once the conductor sets the keys: `modmail_mode`
+> gains **`forum`**, so a ticket becomes a post in `modmail_forum_channel_id` tagged open/closed;
+> `request_forum_channel_id` turns every request into a post of its own, tagged for wherever it has
+> got to; and the posted **Open a ticket** button re-posts whenever the post named by
+> `modmail_panel_follows_post` (`welcome`) lands under it. Schema **40 → 41** (`requests.thread_id`)
+> — ⚠️ **migrate before deploy**; registry **227 → 231**; mock *19 pages, 177 routes, 14 core
+> settings, all keys present*. ⚠️ **No row below has been walked by anybody**, and `BT-a` / `BT-h`
+> make a real channel in the real Blackmail category even in test mode — that is deliberate and the
+> bot says so in its own reply. Before that,
 > **2026-09-16** — rows **MD-a … MD-o** added at the foot for the MODMAIL DOORS build (branch
 > `modmail-doors`, off `main` `4d60f68`; ⚠️ **not merged, not deployed, nothing in it has met
 > Discord**). What changed underneath every M row: **`/modmail` is member-visible** — anybody can
@@ -1478,6 +1489,40 @@ proof the onboarding half (§C5) will ever have; everything about it today is fa
 | **446** (was `PR-l`) | Book a raid train with two slots, put two linked streamers in them, start the first stream | The *"the train moves"* line in the thread mentions **the on-air streamer's fan role** and **Raid trains**, each once and nothing else. ⚠️ **Check by eye that nobody else was pinged** — a display name on that line must never ping. The Logs page carries `raidtrain.moved_pinged` beside `raidtrain.checkin` |
 | **447** (was `PR-m`) | 🔴 **The §C6 regression rows — press these with `rolemenu_mode` still `off`.** Run `/rolemenu` | ⚠️ **The command is THERE.** Before this build it was hidden with its mode. Open a menu with roles on it: **Post it** is missing and the card says picking is off, but **Hand roles out…** IS there. Press it, pick somebody, give them a role — ⚠️ **the role actually moves** and the Logs page carries `role_menu.assign`. **Grants…** on the root works the same |
 | **448** (was `PR-n`) | On the Go-live page's **Pings** section as staff | The streamer table lists everybody the bot has seen streaming, with *listed* / **hidden**, the role or *none yet*, followers, last live and go-lives. **Hide** asks first; **Restore** does not. Both write ONE `web.pings.streamer_*` line, never two. The **Discord onboarding** card says what the prompts hold and when they were last written, and the **Sync now** button is absent until this is a Community server |
+
+## BLACKMAIL — forums for modmail and requests, and the button under the rules (`BT-a` … `BT-p`)
+
+Added 2026-09-17 by the BLACKMAIL THREADS build (branch `blackmail-threads`, off `main`
+`905982b`; ⚠️ **not merged, not deployed, and nothing in it has met Discord**). Schema **40 → 41**
+(`requests.thread_id`) — ⚠️ **migrate before deploy**, and the number assumes the polls build takes
+40. Registry **227 → 231**; mock *19 pages, 177 routes, 14 core settings, all keys present*.
+
+⚠️ **Nothing here does anything until the keys are set, and the conductor sets them after the
+deploy** — `modmail_mode` is still `channel` and both forum keys are still blank. Rows `BT-a`
+onwards assume you have run `BT-a` first.
+
+⚠️ **`BT-a` and `BT-h` make a real channel in the real Blackmail category, in test mode.** That is
+deliberate and the bot says so in its own reply: making a channel is not something the test-mode
+guard can see. Delete the forum by hand afterwards if you were only trying it.
+
+| # | Do this | Expect |
+|---|---|---|
+| `BT-a` | `/modmail` ▸ **Setup…**. Read the **ticket forum** line, then press **Make the forum** | The line said *not made yet*. A forum called **modmail** appears under **Blackmail** with the category's own permissions and two tags, **🟢 open** and **⚫ closed**. The reply names it AND warns that it is outside the test channel and claimed for this run. The Logs page carries `modmail.forum_made`. ⚠️ **Make the forum is now gone from Setup** and the line reads the channel |
+| `BT-b` | Press **Setup…** ▸ **Mode…** and pick **forum** | *"New tickets from now on: new tickets are **posts** in the modmail forum."* The count of tickets already open is named and they are untouched |
+| `BT-c` | DM Black Bloc from a second account | A post appears in the forum called **<their name> · #<number>**, tagged **open**, with the staff role pinged in its first message and the ticket dossier under it. ⚠️ **The member's words land IN THE POST**, not in `#blackbloc-logs` — that is the guard claim doing its job |
+| `BT-d` | In that post, press **Reply** on the card and send something | The member gets the DM; the post gets the *Sent to the member* embed and the card moves to the bottom, exactly as a channel ticket does |
+| `BT-e` | Press **Close…**, type a reason | The member is DMed, the transcript is filed in the transcripts channel, and ⚠️ **the post is re-tagged ⚫ closed and archived — never deleted.** The post is still readable; the tag is the only thing that moved |
+| `BT-f` | ⚠️ **Restart the bot** (`fly machine restart`, or wait for the next deploy), then DM again from the second account | A new post appears as before. The claim that made `BT-c` work died with the old process; the five-minute sweep took it back. If you are quick enough to beat the sweep you get a sentence naming it instead — that is the row's other half |
+| `BT-g` | Set **modmail_forum_tags** to false on the Settings page, DM again, close it | The post is made and archived with **no tag at all**, and the forum's own tag list is untouched. Set it back to true |
+| `BT-h` | `/request` as a Lead. Press **Make the forum** | A forum called **requests** appears under **Blackmail** with six tags — open, picked up, ready to check, on hold, done, declined — and the reply names it. `request.forum_made` on the Logs page. ⚠️ **The button is gone from `/request` now** |
+| `BT-i` | File a request from a second account | A post called **#<number> <what they asked for>** appears, tagged **🟢 open**, with the filed card and its **Open on the site** button as its first message. ⚠️ **Nothing lands in the requests channel** |
+| `BT-j` | Pick it up, then mark it ready to check | Both cards land **in that same post**, and the tag goes **open → 🟡 picked up → 🔎 ready to check**. The requests channel stays empty |
+| `BT-k` | Accept it | The tag becomes **✅ done** and the post is **archived but not locked** — write in it and it comes back. ⚠️ By default there is no *done* card (`request_channel_moves` leaves `done` out), so the tag is the only record of the accept in Discord |
+| `BT-l` | Decline a different one with a reason | **❌ declined**, archived, and the decline card in the post. The person who asked still gets their DM |
+| `BT-m` | Withdraw one of your own | ⚠️ **The post keeps whatever tag it had and is NOT archived.** That is a known gap — see the design's `## Deviations` — and the fix is to close the post by hand |
+| `BT-n` | On the dashboard: **Modmail** page ▸ **Ticket forum** card, and **Requests** page ▸ **Request forum** card | Each names the forum it already has and says which key to clear; neither draws **Make the forum** any more. Press one anyway through a second browser tab opened before `BT-a`: refused in words, *"already the ticket forum"*, and NO second forum |
+| `BT-o` | Point `modmail_panel_channel_id` at `#blackbloc-logs`, `/modmail` ▸ **Setup…** ▸ **Ticket button…** ▸ **Post it…** ▸ that channel. Then `/posts` ▸ **welcome** ▸ **Post it** | The rules message lands, and ⚠️ **within five minutes the ticket button is posted AGAIN underneath it and the old one is deleted.** The Logs page carries `modmail.panel_below_post` naming the slug — NOT `modmail.panel_gone`, which is the other reason and a different event |
+| `BT-p` | Set `modmail_panel_follows_post` to `none`, press **Post it** on the welcome post again | The button stays exactly where it is and no `modmail.panel_below_post` line is written. Set it back to `welcome` |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
