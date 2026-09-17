@@ -142,18 +142,21 @@
       "steps": [
         {"do": "To vote, press an answer on the poll message.", "expect": "Your vote counts once. On an anonymous poll nobody sees who chose what."},
         {"do": "To make one, type **/poll** and press **Create**.", "expect": "A box with the question, the options one per line or split by |, the hours, and the kind."},
-        {"do": "Submit the box and check the preview. Pick a channel, then press **Post it**.", "expect": "Nothing is written until Post it. The poll appears in the channel you picked."},
+        {"do": "Submit the box and check the preview. The **Where** dropdown starts on the server's poll channel — change it if this one belongs somewhere else — then press **Post it**.", "expect": "Nothing is written until Post it. The poll appears in the channel Where names, and stays pinned there until it closes."},
         {"do": "To finish early, type **/poll**, pick your poll, press **End**.", "expect": "The result posts in the channel and the poll closes."}
       ],
       "faults": [
         {"symptom": "No Create button", "answer": "Creating is staff-only on this server. The panel says who may."},
         {"symptom": "Your poll is waiting on a decision", "answer": "Review is on. Staff approve it from /poll and you are DMed."},
-        {"symptom": "You want to finish later", "answer": "Press **Save the draft** on the preview. /poll offers **Resume the draft** next time. One draft per person."}
+        {"symptom": "You want to finish later", "answer": "Press **Save the draft** on the preview. /poll offers **Resume the draft** next time. One draft per person."},
+        {"symptom": "The poll went to the log channel, not the one you picked", "answer": "Polls are in **shadow**: every poll is posted for real, but into the log channel, with a line saying where it would have gone. It is a rehearsal — staff turn polls **on** when the server is ready."}
       ],
       "facts": [
         {"kind": "setting", "ref": "poll_mode"},
         {"kind": "setting", "ref": "poll_who_can_create"},
         {"kind": "setting", "ref": "poll_review_mode"},
+        {"kind": "setting", "ref": "poll_pin"},
+        {"kind": "setting", "ref": "poll_shadow_note"},
         {"kind": "probe", "ref": "polls.open_count"}
       ]
     },

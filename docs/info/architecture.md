@@ -60,7 +60,7 @@
 > | Cogs | **20** (v113: `cogs/community/posts.py`) | `bot.py:COGS` |
 > | Top-level slash commands | **30** — 15 staff-locked, 15 member-visible (`/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **39** (v116, pings remake: `streamers`, `golive_fan_roles.unworn_since`) | `storage/db.py:SCHEMA_VERSION` |
+> | Schema version | **39** live (v116, pings remake: `streamers`, `golive_fan_roles.unworn_since`); **40** on branch `polls-shadow` (`polls.shadow_message_id`) — ⚠️ not merged, not deployed, so 39 is still what runs | `storage/db.py:SCHEMA_VERSION` |
 > | Registry keys | **225** (was 220 at v114) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
