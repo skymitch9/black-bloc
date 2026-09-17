@@ -44,7 +44,7 @@
 | **YAGPDB** | `#live-now` go-live feed (~8/day, 30 streamers); reaction polls; timezone conversions in `#mod-central`. Automod OFF. No role menus despite the dashboard's "7 role commands". | F1, (polls → F15 future), F4's HammerTime replaces the tz habit |
 | **Carl-bot** | 5 reaction-role panels in `#roles` (23 roles); modlog to `#carlbot-logs`; automod with ONE armed rule (mention-spam 5/30s); welcome text in `#welcome`; reminders. 7 warn cases in 2 years. | F16 role menus, F7 moderation |
 | **ModMail** | Channel-per-user tickets; staff talk privately inside a ticket by prefixing `=`. 5 open. | F11 |
-| **Birthday Bot** | Embed in `#return-of-the-gen` at each member's own midnight; 39 birthdays on file; free tier, vote-gated. | F6 |
+| **Birthday Bot** | Embed in `#general-chat` (was `#return-of-the-gen`, renamed) at each member's own midnight; 39 birthdays on file; free tier, vote-gated. | F6 |
 | `Verification Bot`, `baf`, `Black Block` | Dormant (the last two are earlier attempts at this project). | none — kick later |
 | `Wordle` | Discord built-in activity webhook, 422-day streak. | leave alone |
 
