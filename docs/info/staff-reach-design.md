@@ -1,4 +1,4 @@
-# Staff reach — every channel the bot makes is the staff's to see and delete, and the Blackmail log
+# Staff reach — every channel the bot makes is the staff's to see and delete, and the BlackMail log
 
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatch queued behind
 > the `modmail-hide` and `tempvoice-lobby` builds** (both touch the same files). **Last verified: 2026-09-17
@@ -25,7 +25,7 @@
 | Ticket channels | `ticket_overwrites`: same shape as review rooms |
 | Incumbent **ModMail** category | `1442613057628012594`: Aunties / Uncles allow `117824` (view, send, react, embed, attach, history), `@everyone` deny view. Channels: `#modmail-log` + one channel per open ticket (topic *"ModMail Channel <user> <thread> (Please do not change this)"*) |
 | Incumbent `#modmail-log` | 6 messages, all by the ModMail bot, all one shape: embed **New Ticket**, footer `<name> \| <user id>`, no fields. Nothing else is logged there (closes go nowhere visible, or those six tickets are all still open — all six ticket channels exist) |
-| **Blackmail** | made 08:3x as `1550166808869478420`, overwrites cloned from ModMail; `#modmail-log` inside it `1550167775694037075`, overwrites cloned from the incumbent's log. `modmail_category_id` → Blackmail (set by the session). ⚠️ `modmail_log_channel_id` is **still `#blackbloc-logs`** — the session's write was refused by its own permission classifier, so the owner sets it on the Settings page (modmail ▸ *The transcripts channel* → Blackmail's `#modmail-log`); it is safe under `TEST_MODE` because `post_transcript` writes a `modmail.would_post_transcript` row instead of sending while the guard refuses the channel |
+| **BlackMail** | made 08:3x as `1550166808869478420`, overwrites cloned from ModMail; `#modmail-log` inside it `1550167775694037075`, overwrites cloned from the incumbent's log. `modmail_category_id` → BlackMail (set by the session). ⚠️ `modmail_log_channel_id` is **still `#blackbloc-logs`** — the session's write was refused by its own permission classifier, so the owner sets it on the Settings page (modmail ▸ *The transcripts channel* → BlackMail's `#modmail-log`); it is safe under `TEST_MODE` because `post_transcript` writes a `modmail.would_post_transcript` row instead of sending while the guard refuses the channel |
 
 ## A. Staff reach on every channel the bot makes
 
@@ -54,10 +54,10 @@ returns the overwrites untouched).
 for voice; the member-facing denies are unchanged) and off (unchanged from today); the lock/hide/unhide paths keep
 the staff allow. Tests mirror the package.
 
-**Not in scope.** Channels the bot did not make (the Blackmail category itself was made by hand with the token —
+**Not in scope.** Channels the bot did not make (the BlackMail category itself was made by hand with the token —
 its overwrites already allow the role). Changing what "staff" means (that is `staff_channel_id`).
 
-## B. The Blackmail log — parity with the incumbent, which is one card
+## B. The BlackMail log — parity with the incumbent, which is one card
 
 **Rule.** When a ticket opens (any door: DM, `/modmail`, the posted button, staff *Open a ticket with…*), post one
 card to `modmail_log_channel_id`: title **New ticket #<id>**, the member's display name and id, the door

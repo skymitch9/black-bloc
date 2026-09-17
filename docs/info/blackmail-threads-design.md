@@ -1,11 +1,11 @@
-# Blackmail — requests and modmail as forum channels, one thread each; the ticket button under the rules
+# BlackMail — requests and modmail as forum channels, one thread each; the ticket button under the rules
 
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatching to Opus as branch
 > `blackmail-threads`.** **Last verified: 2026-09-17 09:2x** against `main` `e6bd6ac`: `black_bloc/cogs/moderation/modmail.py`
 > (`open_place` ~1628: channel mode makes a text channel in `modmail_category_id`, thread mode a **private thread**
 > in `modmail_staff_channel_id`, `AUTO_ARCHIVE_MINUTES` 1440), `black_bloc/cogs/community/requests.py` (`notify`
 > ~276 posts the filed card into `request_notify_channel_id`; `status_channel_id` falls back to it), the live
-> Blackmail category `1550166808869478420` with `#modmail-log` `1550167775694037075`, the live keys. ⚠️ Secret NAMES only.
+> BlackMail category `1550166808869478420` with `#modmail-log` `1550167775694037075`, the live keys. ⚠️ Secret NAMES only.
 
 ## Owner asks, verbatim (2026-09-17 09:0x, prompt boxes)
 
@@ -37,7 +37,7 @@ every guild since 2022; only *announcement* channels and onboarding need Communi
   reverse. Tags are made once by **Setup** (`open` 🟢 / `closed` ⚫) and their ids kept in the forum's own tag list —
   never in a key; look them up by name each time.
 - **Setup** on `/modmail` (and the site's modmail page) gains **Make the forum**: creates `#modmail` as a forum under
-  `modmail_category_id` (Blackmail) with the category's overwrites + the bot's, writes the key, makes the two tags.
+  `modmail_category_id` (BlackMail) with the category's overwrites + the bot's, writes the key, makes the two tags.
   Under `TEST_MODE` this creates a channel outside the test category — allowed (creation is not gated), and the
   forum is owned (`guard.own_channel`) so the bot may post and delete there; say so in the reply.
 - The PANEL_LINES defect the hide-toggle build found — the line naming the retired `/settings set-value
@@ -55,7 +55,7 @@ every guild since 2022; only *announcement* channels and onboarding need Communi
   line goes INTO that thread instead of the status channel; a decision (done / declined) edits the tag and archives
   the post. `request_status_channel_id` keeps working when no forum is set.
 - **Setup** on `/request`'s staff panel and the site's requests page gain **Make the forum**: `#requests` under
-  Blackmail, same overwrites rule, tags `open` / `picked up` / `on hold` / `done` / `declined` matching `LOOKS`.
+  BlackMail, same overwrites rule, tags `open` / `picked up` / `on hold` / `done` / `declined` matching `LOOKS`.
 
 ## C. The ticket button right after the rules
 
