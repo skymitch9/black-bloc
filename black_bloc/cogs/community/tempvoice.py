@@ -163,7 +163,7 @@ LOBBY_FORGOTTEN = (
 MODE_SET = "Join-to-create is now **{mode}**."
 NOT_A_MODE = (
     "**{given}** is not a setting Black Bloc knows for join-to-create, so nothing was changed. "
-    "It is either **off** or **on**."
+    "It is **off**, **shadow** or **on**."
 )
 HANDED_OVER_DM = (
     "An Auntie/Uncle handed the temporary voice channel **{channel}** to **{who}**, so it is not "
@@ -201,6 +201,9 @@ LOBBY_INTRO = (
     "The channels Black Bloc treats as join-to-create. Forgetting one leaves the Discord channel "
     "alone; it just stops making anybody a temporary channel."
 )
+HIDE_REASON = "Black Bloc temp voice: shadow — the lobby is staff-only"
+SHOW_REASON = "Black Bloc temp voice: shadow is off — syncing the lobby with its category"
+ALLOW_REASON = "Black Bloc temp voice: shadow is off — giving the allowed role its view back"
 LOBBY_GONE = "not on the server any more"
 CHANNEL_LEFT = "gone from the server"
 SITE_BUTTON = "Open on the site"
@@ -215,6 +218,7 @@ PEOPLE_VIEW = "people"
 REGION_VIEW = "region"
 HAND_OVER_VIEW = "hand_over"
 LOBBY_VIEW = "lobbies"
+MODE_VIEW = "mode"
 STAFF_CARD_VIEW = "staff_card"
 CONFIRM_VIEW = "confirm"
 
@@ -731,6 +735,156 @@ def join_roles(bot: Any, guild: Any) -> list[Any]:
     return [allowed, *found]
 
 
+def mode_of(bot: Any, guild: Any) -> str:
+    return str(bot.store.get(guild.id, "tempvoice_mode") or "")
+
+
+def shadow_targets(bot: Any, guild: Any) -> list[Any]:
+    """Who shadow takes the lobby away from: everyone, and the role that may otherwise join."""
+    found = [getattr(guild, "default_role", None)]
+    role_id = bot.store.get(guild.id, "tempvoice_allowed_role_id")
+    if role_id:
+        found.append(guild.get_role(role_id))
+    return [target for target in found if target is not None]
+
+
+def hide_from_members(overwrites: dict[Any, Any], targets: Any) -> dict[Any, Any]:
+    """Shadow's mask: those targets cannot see the lobby; every other allow is left alone."""
+    for target in targets:
+        overwrite = overwrites.get(target) or discord.PermissionOverwrite()
+        overwrite.view_channel = False
+        overwrites[target] = overwrite
+    return overwrites
+
+
+def hidden_already(channel: Any, targets: Any) -> bool:
+    found = getattr(channel, "overwrites", None) or {}
+    return all(getattr(found.get(target), "view_channel", None) is False for target in targets)
+
+
+def lobby_overwrites(bot: Any, guild: Any, category: Any, allow: Any) -> dict[Any, Any]:
+    """The lobby's overwrites as Setup builds them, with shadow's mask on top while shadow."""
+    found = creator_overwrites(
+        category, allow, getattr(guild, "me", None), staff=reach_roles(bot, guild)
+    )
+    if mode_of(bot, guild) == helpers.SHADOW_MODE:
+        hide_from_members(found, shadow_targets(bot, guild))
+    return found
+
+
+def live_lobbies(bot: Any, guild: Any) -> list[Any]:
+    """Every written-down lobby the guild still has."""
+    ids = bot.store.get(guild.id, "tempvoice_creator_ids") or []
+    found = (guild.get_channel(channel_id) for channel_id in ids)
+    return [channel for channel in found if channel is not None]
+
+
+async def lobby_failed(bot: Any, guild: Any, channel: Any, exc: Any, doing: str) -> None:
+    log.warning("temp voice: could not %s the lobby %s: %s", doing, channel.id, exc)
+    await log_action(
+        bot,
+        guild,
+        "tempvoice.lobby_failed",
+        details={
+            "channel_id": channel.id,
+            "doing": doing,
+            "reason": f"{type(exc).__name__}: {exc}",
+        },
+    )
+
+
+async def hide_lobby(bot: Any, guild: Any, channel: Any) -> bool:
+    """One lobby taken away from members, or False when it already says that."""
+    targets = shadow_targets(bot, guild)
+    if not targets or hidden_already(channel, targets):
+        return False
+    try:
+        await channel.edit(
+            overwrites=hide_from_members(category_overwrites(channel), targets),
+            reason=HIDE_REASON,
+        )
+    except discord.HTTPException as exc:
+        await lobby_failed(bot, guild, channel, exc, "hide")
+        return False
+    await log_action(
+        bot,
+        guild,
+        "tempvoice.lobby_hidden",
+        details={
+            "channel_id": channel.id,
+            "denied": [getattr(target, "id", None) for target in targets],
+        },
+    )
+    return True
+
+
+async def show_lobby(bot: Any, guild: Any, channel: Any, actor: Any = None) -> bool:
+    """Discord's own Sync now, then the allowed role, the bot and staff put back on top."""
+    try:
+        await channel.edit(sync_permissions=True, reason=SHOW_REASON)
+    except discord.HTTPException as exc:
+        await lobby_failed(bot, guild, channel, exc, "sync")
+        return False
+    allow = join_roles(bot, guild)
+    try:
+        await channel.edit(
+            overwrites=lobby_overwrites(bot, guild, channel.category, allow), reason=ALLOW_REASON
+        )
+    except discord.HTTPException as exc:
+        await lobby_failed(bot, guild, channel, exc, "show")
+        return False
+    await log_action(
+        bot,
+        guild,
+        "tempvoice.lobby_shown",
+        actor=actor,
+        details={
+            "channel_id": channel.id,
+            "synced_with": getattr(channel.category, "id", None),
+            "allowed": [getattr(role, "id", None) for role in allow],
+        },
+    )
+    return True
+
+
+def mode_memory(bot: Any) -> dict[int, str]:
+    found = getattr(bot, "tempvoice_last_mode", None)
+    if found is None:
+        found = {}
+        bot.tempvoice_last_mode = found
+    return found
+
+
+async def apply_mode(bot: Any, guild: Any, actor: Any = None) -> str:
+    """Shadow hides every lobby; the flip out of shadow into on syncs and un-hides them once."""
+    mode = mode_of(bot, guild)
+    was = mode_memory(bot).get(guild.id)
+    mode_memory(bot)[guild.id] = mode
+    if mode == helpers.SHADOW_MODE:
+        done = [one for one in live_lobbies(bot, guild) if await hide_lobby(bot, guild, one)]
+        return "hidden" if done else "nothing"
+    if mode == helpers.ON_MODE and was == helpers.SHADOW_MODE:
+        done = [
+            one for one in live_lobbies(bot, guild) if await show_lobby(bot, guild, one, actor)
+        ]
+        return "shown" if done else "nothing"
+    return "nothing"
+
+
+def install_mode_hook(bot: Any) -> None:
+    """One trigger path: every `tempvoice_mode` write, noticed where it is written."""
+    if getattr(bot, "tempvoice_mode_hook", False):
+        return
+
+    async def flipped(guild_id: int, _key: str, _value: Any, by: Any) -> None:
+        guild = bot.get_guild(guild_id)
+        if guild is not None:
+            await apply_mode(bot, guild, by)
+
+    bot.store.on_change("tempvoice_mode", flipped)
+    bot.tempvoice_mode_hook = True
+
+
 async def repair_creator_channel(
     bot: Any,
     guild: Any,
@@ -752,12 +906,7 @@ async def repair_creator_channel(
     try:
         await channel.edit(
             name=wanted,
-            overwrites=creator_overwrites(
-                channel.category,
-                allow,
-                getattr(guild, "me", None),
-                staff=reach_roles(bot, guild),
-            ),
+            overwrites=lobby_overwrites(bot, guild, channel.category, allow),
             reason="Black Bloc temp voice: repairing the join-to-create channel",
         )
     except discord.HTTPException as exc:
@@ -817,7 +966,7 @@ async def make_creator_channel(
     else:
         wanted = bot.store.get(guild.id, "tempvoice_creator_name")
     ids = list(bot.store.get(guild.id, "tempvoice_creator_ids") or [])
-    live = [guild.get_channel(cid) for cid in ids if guild.get_channel(cid) is not None]
+    live = live_lobbies(bot, guild)
     if live:
         return await repair_creator_channel(bot, guild, actor, live, wanted, via=via)
     category, position, where = creator_spot(bot, guild)
@@ -832,9 +981,7 @@ async def make_creator_channel(
             wanted,
             category=category,
             position=position,
-            overwrites=creator_overwrites(
-                category, allow, getattr(guild, "me", None), staff=reach_roles(bot, guild)
-            ),
+            overwrites=lobby_overwrites(bot, guild, category, allow),
             reason="Black Bloc temp voice: join-to-create",
         )
     except discord.HTTPException as exc:
@@ -1383,6 +1530,8 @@ def status_lines(bot: Any, guild: Any, rows: Any) -> list[str]:
         f"**last reconcile** — {last_ok or 'not yet'}",
         f"**last error** — {last_error or 'none'}",
     ]
+    if mode_of(bot, guild) == helpers.SHADOW_MODE:
+        lines.append(helpers.SHADOW_LINE)
     unknown = stray_lobbies(bot, guild)
     if unknown:
         lines.append(
@@ -1470,7 +1619,7 @@ def panel_lines(bot: Any, guild: Any, facts: Facts) -> list[str]:
         lines.append(
             NO_OWNED_CHANNEL.format(lobby=store.get(guild.id, "tempvoice_creator_name"))
         )
-        if store.get(guild.id, "tempvoice_mode") != "on":
+        if not helpers.makes_rooms(store.get(guild.id, "tempvoice_mode")):
             lines.append(helpers.MODE_OFF_LINE)
     if facts.staff and not facts.has_role and role_id:
         lines.append(helpers.STAFF_WITHOUT_ROLE.format(role_id=role_id))
@@ -1501,7 +1650,6 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         hidden=hidden,
         has_prefs=facts.prefs is not None,
         staff=facts.staff,
-        mode_on=bot.store.get(guild.id, "tempvoice_mode") == "on",
         has_lobbies=bool(lobby_choices(bot, guild)),
     ):
         view.add_item(MoveButton(move))
@@ -1575,6 +1723,18 @@ def build_hand_over(
     view.where = HAND_OVER_VIEW
     view.channel_id = channel_id
     view.add_item(NewOwnerPick(row=0))
+    view.add_item(MoveButton(helpers.BACK_MOVE._replace(row=1)))
+    return (embed, view)
+
+
+def build_mode(bot: Any, guild: Any) -> tuple[discord.Embed, VoicePanel]:
+    embed = discord.Embed(
+        title=helpers.MODE_TITLE,
+        description=clamped([helpers.MODE_INTRO] + status_lines(bot, guild, ())),
+    )
+    view = VoicePanel(minutes_for(bot, guild.id))
+    view.where = MODE_VIEW
+    view.add_item(ModePick(mode_of(bot, guild), row=0))
     view.add_item(MoveButton(helpers.BACK_MOVE._replace(row=1)))
     return (embed, view)
 
@@ -1726,6 +1886,15 @@ async def open_lobbies(interaction: discord.Interaction, previous: Any = None) -
     await render(interaction, embed, view, previous)
 
 
+async def open_mode(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await ready_to_move(interaction):
+        return
+    embed, view = build_mode(interaction.client, interaction.guild)
+    await render(interaction, embed, view, previous)
+
+
 async def open_staff_card(
     interaction: discord.Interaction, channel_id: Any, previous: Any = None
 ) -> None:
@@ -1849,14 +2018,12 @@ async def run_forget_prefs(interaction: discord.Interaction, previous: Any = Non
     await answer(interaction, str(said))
 
 
-async def run_mode(interaction: discord.Interaction, previous: Any = None) -> None:
+async def run_mode(interaction: discord.Interaction, wanted: Any, previous: Any = None) -> None:
     if not await still_staff(interaction):
         return
     if not await ready_to_move(interaction):
         return
-    store = interaction.client.store
-    now = store.get(interaction.guild.id, "tempvoice_mode")
-    said = await set_mode(interaction, "off" if now == "on" else "on")
+    said = await set_mode(interaction, wanted)
     await render_panel(interaction, previous)
     await answer(interaction, str(said))
 
@@ -1942,7 +2109,7 @@ class MoveButton(discord.ui.Button):
             )
             return
         if action == helpers.MODE:
-            await run_mode(interaction, view)
+            await open_mode(interaction, view)
             return
         if action == helpers.LOBBIES:
             await open_lobbies(interaction, view)
@@ -2097,6 +2264,28 @@ class ChannelPick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_staff_card(interaction, int(self.values[0]), self.view)
+
+
+class ModePick(discord.ui.Select):
+    def __init__(self, current: Any, row: int) -> None:
+        super().__init__(
+            placeholder=helpers.PICK_MODE,
+            options=[
+                discord.SelectOption(
+                    label=mode,
+                    value=mode,
+                    description=helpers.MODE_MEANS.get(mode),
+                    default=(mode == current),
+                )
+                for mode in TEMPVOICE_MODES
+            ],
+            min_values=1,
+            max_values=1,
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_mode(interaction, self.values[0], self.view)
 
 
 class LobbyPick(discord.ui.Select):
@@ -2350,6 +2539,7 @@ class TempVoice(commands.Cog):
 
     async def cog_load(self) -> None:
         self.bot.add_view(TempVoicePanel())
+        install_mode_hook(self.bot)
         if not self.bot.db.is_connected:
             return
         await self.reconcile_channels()
@@ -2391,9 +2581,10 @@ class TempVoice(commands.Cog):
             self._reconcile_loop.start()
 
     async def reconcile_channels(self) -> None:
-        """Forget rows whose channel is gone, and delete temp channels nobody is in."""
+        """Keep the lobbies matching the mode, forget dead rows, delete rooms nobody is in."""
         now = datetime.now(UTC)
         for guild in list(getattr(self.bot, "guilds", ())):
+            await apply_mode(self.bot, guild)
             for row in await rows_for_guild(self.bot.db, guild.id):
                 channel = guild.get_channel(row["channel_id"])
                 if channel is None:
@@ -2460,7 +2651,7 @@ class TempVoice(commands.Cog):
     async def _maybe_create(self, member: Any, channel: Any) -> None:
         guild = member.guild
         store = self.bot.store
-        if store.get(guild.id, "tempvoice_mode") != "on":
+        if not helpers.makes_rooms(store.get(guild.id, "tempvoice_mode")):
             return
         if channel.id not in (store.get(guild.id, "tempvoice_creator_ids") or []):
             return

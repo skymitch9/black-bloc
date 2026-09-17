@@ -598,5 +598,22 @@ channel's category.
 owner's/conductor's step after v117 boots, and no room was ever spawned, deleted or looked at in a
 client — every claim here is from the test suite. `TEST_MODE=true` was never touched.
 
+⚠️ **CORRECTED 2026-09-17 (v125, branch `tempvoice-shadow`) — checklist 35.** The owner's ask
+~~*"keep its visibility **staff only**"*~~ was reported back as done, and it was not. Measured off
+the live guild at 13:18 that day, the moved lobby carried a Member **view + connect allow** —
+`creator_overwrites` adds `tempvoice_allowed_role_id` through `allow_join`, and *"kept its
+overwrites"* kept that one too — so members could see it in the main voice area. The owner set
+Member **view → DENY** by hand. Everything above describes the *intent*; only the paragraph
+beginning *"Not done, and why"* was true about permissions. **What makes it true now:**
+`tempvoice_mode` gained a third value, **`shadow`**, and while it is set the reconcile and
+Setup/repair keep `view = False` for `@everyone` **and** for the allowed role
+([`tempvoice-shadow-design.md`](tempvoice-shadow-design.md) §A–§C) — the deny *masks* the allow
+rather than removing it, so nothing about `creator_overwrites` had to change. Two consequences for
+this page: **`tempvoice_room_overwrites = lobby` is what makes the rooms staff-only too** (it was
+already the v117 default, and that clause is now load-bearing rather than incidental), and
+`repair_creator_channel`, still left refusing outside the test category, now re-applies the mask
+when it does run — so **Setup is no longer a way to un-hide the lobby.** The mode flip is
+(cutover **P5a**).
+
 Tests **5986 → 5991**, forward and under `BB_REVERSE=1`; `ruff check .` clean; `node
 site/mock/check.mjs` **19 pages / 175 routes / 14 core settings, all keys present**.

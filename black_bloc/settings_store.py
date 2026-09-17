@@ -90,7 +90,7 @@ PINGS_OPTION_CAP_MAX = 50
 MEMBER_ROLE_ID = 1073741054563602532
 TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
 TEMPVOICE_CREATOR_NAME = "join to create a channel"
-TEMPVOICE_MODES = ("off", "on")
+TEMPVOICE_MODES = ("off", "shadow", "on")
 TEMPVOICE_ROOM_OVERWRITES = ("lobby", "category")
 HONEYPOT_MODES = ("off", "shadow", "on")
 HONEYPOT_PURGE_MAX_DAYS = 7
@@ -757,7 +757,10 @@ KEY_HELP: dict[str, str] = {
         "many more are on `/pings`. Discord publishes no number for this, so 25 is Black Bloc's "
         "own conservative cap — raise it and Discord refuses in words if it is too high"
     ),
-    "tempvoice_mode": "off, or on (join-to-create makes a temporary voice channel)",
+    "tempvoice_mode": (
+        "off, shadow (join-to-create works, but only staff can see the lobby — the rooms it "
+        "spawns follow it), or on (the lobby is visible to whoever its category shows)"
+    ),
     "tempvoice_creator_ids": "the join-to-create channels; Setup on /voice fills this in",
     "tempvoice_name_template": "what a spawned channel is called; {user} is the member",
     "tempvoice_creator_name": "what the join-to-create channel itself is called",

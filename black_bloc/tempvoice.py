@@ -51,6 +51,10 @@ MODE_OFF_LINE = (
     "Join-to-create is **off** for this server at the moment, so joining the lobby makes no "
     "channel. Channels that already exist keep working."
 )
+SHADOW_LINE = (
+    "The lobby is hidden from members while temp voice is in **shadow** — staff can still see "
+    "it, and a room it makes is hidden the same way."
+)
 ORPHAN_LINE = (
     "You are in <@{owner_id}>'s channel and they have left it, so **Claim** makes it yours."
 )
@@ -74,9 +78,21 @@ PICK_BAN = "Keep someone out…"
 PICK_KICK = "Move someone out…"
 PICK_UNDO = "Undo for…"
 PICK_NEW_OWNER = "Who should own it?"
+PICK_MODE = "What join-to-create should do…"
+
+OFF_MODE = "off"
+SHADOW_MODE = "shadow"
+ON_MODE = "on"
+MODE_MEANS: dict[str, str] = {
+    OFF_MODE: "Joining the lobby makes nothing. Rooms that exist keep working.",
+    SHADOW_MODE: "It works, but only staff see the lobby — and a room it makes follows it.",
+    ON_MODE: "The lobby is visible to whoever its category shows.",
+}
+MODE_INTRO = "What joining the lobby does, and who can see it."
 
 PEOPLE_TITLE = "Who may be in your channel"
 REGION_TITLE = "Where the audio goes"
+MODE_TITLE = "What join-to-create does"
 HAND_OVER_TITLE = "Hand your channel over"
 LOBBY_TITLE = "Join-to-create lobbies"
 STAFF_CARD_TITLE = "A temporary voice channel"
@@ -147,8 +163,7 @@ BACK_MOVE = VoiceMove(BACK, "Back", row=4)
 AUTOMATIC_MOVE = VoiceMove(AUTOMATIC, "Automatic", "primary", row=1)
 SETUP_MOVE = VoiceMove(SETUP, "Setup", row=2)
 LOBBIES_MOVE = VoiceMove(LOBBIES, "Forget a lobby…", row=2)
-MODE_OFF_MOVE = VoiceMove(MODE, "Turn join-to-create off", row=2)
-MODE_ON_MOVE = VoiceMove(MODE, "Turn join-to-create on", row=2)
+MODE_MOVE = VoiceMove(MODE, "Mode…", row=2)
 LOGS_MOVE = VoiceMove(LOGS, "Logs", row=2)
 STAFF_TRANSFER_MOVE = VoiceMove(TRANSFER, "Hand it over…", row=0)
 
@@ -168,10 +183,14 @@ CARD_BUTTONS = (
     CLAIM_MOVE,
     SETUP_MOVE,
     LOBBIES_MOVE,
-    MODE_OFF_MOVE,
-    MODE_ON_MOVE,
+    MODE_MOVE,
     LOGS_MOVE,
 )
+
+
+def makes_rooms(mode: Any) -> bool:
+    """Shadow works exactly like on — it only changes who can see the lobby."""
+    return str(mode or "") in (SHADOW_MODE, ON_MODE)
 
 
 def named_regions() -> tuple[str, ...]:
@@ -208,7 +227,6 @@ def card_buttons(
     hidden: bool = False,
     has_prefs: bool = False,
     staff: bool = False,
-    mode_on: bool = True,
     has_lobbies: bool = False,
 ) -> tuple[VoiceMove, ...]:
     """The state table as data — no state offers a move the shared function would refuse."""
@@ -237,7 +255,7 @@ def card_buttons(
         found.append(SETUP_MOVE)
         if has_lobbies:
             found.append(LOBBIES_MOVE)
-        found.append(MODE_OFF_MOVE if mode_on else MODE_ON_MOVE)
+        found.append(MODE_MOVE)
         found.append(LOGS_MOVE)
     return tuple(found)
 
@@ -294,9 +312,15 @@ __all__ = [
     "LOCK",
     "LOGS",
     "MODE",
+    "MODE_INTRO",
+    "MODE_MEANS",
+    "MODE_MOVE",
     "MODE_OFF_LINE",
+    "MODE_TITLE",
     "NONE",
     "NOTHING_TO_SEE",
+    "OFF_MODE",
+    "ON_MODE",
     "ORPHAN",
     "ORPHAN_LINE",
     "OWNER",
@@ -311,6 +335,7 @@ __all__ = [
     "PICK_CHANNEL",
     "PICK_KICK",
     "PICK_LOBBY",
+    "PICK_MODE",
     "PICK_NEW_OWNER",
     "PICK_PERMIT",
     "PICK_REGION",
@@ -321,6 +346,8 @@ __all__ = [
     "RENAME",
     "SELECT_CAP",
     "SETUP",
+    "SHADOW_LINE",
+    "SHADOW_MODE",
     "SHOW",
     "SITE_FEATURE",
     "STAFF_CARD_TITLE",
@@ -334,6 +361,7 @@ __all__ = [
     "VOICE_REGIONS",
     "VoiceMove",
     "card_buttons",
+    "makes_rooms",
     "named_regions",
     "panel_minutes",
     "panel_state",

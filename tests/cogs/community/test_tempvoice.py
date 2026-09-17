@@ -17,6 +17,7 @@ from black_bloc.cogs.community.tempvoice import (
     ChannelPick,
     LimitModal,
     LobbyPick,
+    ModePick,
     NewOwnerPick,
     RegionPick,
     RenameModal,
@@ -50,6 +51,7 @@ from black_bloc.cogs.community.tempvoice import (
     get_row_by_panel,
     guild_bitrate_ceiling,
     id_list,
+    install_mode_hook,
     is_lobby,
     is_panel_owner,
     is_stale,
@@ -87,6 +89,7 @@ from black_bloc.settings_store import (
     DB_UNAVAILABLE,
     MEMBER_ROLE_ID,
     TEMPVOICE_CREATOR_NAME,
+    TEMPVOICE_MODES,
     SettingsStore,
 )
 from black_bloc.spawned import STAFF_REACH_KEY
@@ -205,6 +208,11 @@ class FakeVoice:
         self.edits.append(kwargs)
         if "name" in kwargs:
             self.name = kwargs["name"]
+        if kwargs.get("sync_permissions"):
+            self.overwrites = {
+                target: discord.PermissionOverwrite(**dict(overwrite))
+                for target, overwrite in (getattr(self.category, "overwrites", None) or {}).items()
+            }
         if "overwrites" in kwargs:
             self.overwrites = dict(kwargs["overwrites"])
         for key in ("user_limit", "bitrate", "rtc_region"):
@@ -347,6 +355,9 @@ class FakeBot:
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
+
+    def get_guild(self, guild_id):
+        return self.guild if guild_id == self.guild.id else None
 
     def get_cog(self, name):
         return self.cogs.get(name)
@@ -1665,7 +1676,166 @@ async def test_a_repair_puts_the_staff_allow_back_on_the_lobby(cog, bot, lead):
     assert lobby.overwrites[staff_role].manage_channels is True
 
 
-def test_the_staff_allow_goes_on_last_so_a_remembered_member_cannot_take_it_off():
+def shadowed(bot, *, extra=None):
+    """A lobby in a category, with the roles the shadow rules have to leave alone."""
+    install_mode_hook(bot)
+    category = FakeCategory(50)
+    member_role, staff_role = staffed(bot, category)
+    category.overwrites = {
+        bot.guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=True),
+        member_role: discord.PermissionOverwrite(view_channel=True, connect=True),
+        staff_role: discord.PermissionOverwrite(view_channel=True, connect=True),
+    }
+    lobby = bot.guild.add(
+        FakeVoice(
+            CREATOR,
+            bot.guild,
+            category=category,
+            position=4,
+            name=TEMPVOICE_CREATOR_NAME,
+            overwrites=dict(category.overwrites)
+            | ({extra: discord.PermissionOverwrite(view_channel=True)} if extra else {}),
+        )
+    )
+    return category, member_role, staff_role, lobby
+
+
+async def test_shadow_takes_the_lobby_off_everyone_and_the_allowed_role_and_nobody_else(
+    cog, bot, db
+):
+    extra = FakeRole(777)
+    _category, member_role, staff_role, lobby = shadowed(bot, extra=extra)
+
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+
+    assert lobby.overwrites[bot.guild.default_role].view_channel is False
+    assert lobby.overwrites[member_role].view_channel is False
+    assert lobby.overwrites[member_role].connect is True
+    assert lobby.overwrites[staff_role].view_channel is True
+    assert lobby.overwrites[extra].view_channel is True
+    assert "tempvoice.lobby_hidden" in await action_kinds(db)
+
+
+async def test_a_lobby_that_already_says_that_is_not_edited_again(cog, bot, db):
+    _category, _member_role, _staff_role, lobby = shadowed(bot)
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+    lobby.edits.clear()
+
+    await cog.reconcile_channels()
+    await cog.reconcile_channels()
+
+    assert lobby.edits == []
+    assert (await action_kinds(db)).count("tempvoice.lobby_hidden") == 1
+
+
+async def test_the_reconcile_hides_a_lobby_somebody_un_hid_by_hand(cog, bot):
+    _category, member_role, _staff_role, lobby = shadowed(bot)
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+    lobby.overwrites[member_role] = discord.PermissionOverwrite(view_channel=True, connect=True)
+
+    await cog.reconcile_channels()
+
+    assert lobby.overwrites[member_role].view_channel is False
+
+
+async def test_the_flip_to_on_syncs_the_category_then_puts_the_allows_back_in_one_edit(
+    cog, bot, lead, db
+):
+    _category, member_role, staff_role, lobby = shadowed(bot)
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+    lobby.edits.clear()
+
+    await bot.store.set(GUILD, "tempvoice_mode", "on", by=lead.id)
+
+    assert [one.get("sync_permissions") for one in lobby.edits] == [True, None]
+    assert list(lobby.edits[1]) == ["overwrites", "reason"]
+    assert lobby.overwrites[member_role].view_channel is True
+    assert lobby.overwrites[member_role].connect is True
+    assert lobby.overwrites[staff_role].manage_channels is True
+    assert lobby.overwrites[bot.guild.me].manage_channels is True
+    assert "tempvoice.lobby_shown" in await action_kinds(db)
+
+
+async def test_shadow_on_shadow_puts_the_lobby_back_where_it_started(cog, bot, lead):
+    _category, member_role, _staff_role, lobby = shadowed(bot)
+
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+    hidden = lobby.overwrites[member_role].view_channel
+    await bot.store.set(GUILD, "tempvoice_mode", "on", by=lead.id)
+    shown = lobby.overwrites[member_role].view_channel
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow", by=lead.id)
+
+    assert (hidden, shown) == (False, True)
+    assert lobby.overwrites[member_role].view_channel is False
+
+
+async def test_off_changes_no_permission_at_all(cog, bot, lead, db):
+    _category, _member_role, _staff_role, lobby = shadowed(bot)
+    before = dict(lobby.overwrites)
+
+    await bot.store.set(GUILD, "tempvoice_mode", "off", by=lead.id)
+    await cog.reconcile_channels()
+
+    assert lobby.edits == [] and lobby.overwrites == before
+    assert await action_kinds(db) == []
+
+
+async def test_going_straight_from_off_to_on_syncs_nothing(cog, bot, lead, db):
+    _category, _member_role, _staff_role, lobby = shadowed(bot)
+    await bot.store.set(GUILD, "tempvoice_mode", "off", by=lead.id)
+
+    await bot.store.set(GUILD, "tempvoice_mode", "on", by=lead.id)
+
+    assert lobby.edits == []
+    assert "tempvoice.lobby_shown" not in await action_kinds(db)
+
+
+async def test_a_refused_hide_is_a_log_row_and_never_an_exception(cog, bot, db):
+    _category, _member_role, _staff_role, lobby = shadowed(bot)
+    lobby.edit_raises = refused()
+
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+
+    kinds = await action_kinds(db)
+    assert "tempvoice.lobby_failed" in kinds and "tempvoice.lobby_hidden" not in kinds
+
+
+async def test_setup_in_shadow_builds_the_lobby_already_hidden(cog, bot, lead):
+    category = FakeCategory(50)
+    member_role, staff_role = staffed(bot, category)
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "tempvoice_creator_ids", [])
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+
+    await run_setup(FakeInteraction(bot, lead), None)
+
+    given = bot.guild.created[0].given_overwrites
+    assert given[bot.guild.default_role].view_channel is False
+    assert given[member_role].view_channel is False
+    assert given[member_role].connect is True
+    assert given[staff_role].view_channel is True
+
+
+async def test_the_flip_is_noticed_because_cog_load_registers_the_one_hook(cog, bot):
+    await cog.cog_load()
+    install_mode_hook(bot)
+    await cog.cog_unload()
+
+    assert len(bot.store._hooks["tempvoice_mode"]) == 1
+
+
+async def test_shadow_spawns_rooms_and_says_so_on_the_staff_block(cog, bot, creator, member, lead):
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+
+    await cog._maybe_create(member, creator)
+    embed, _view = await panel_for(bot, lead)
+
+    assert bot.guild.created
+    assert voice.SHADOW_LINE in embed.description
+    assert voice.MODE_OFF_LINE not in embed.description
+
+
+async def test_the_staff_allow_goes_on_last_so_a_remembered_member_cannot_take_it_off():
     guild = FakeGuild()
     member = FakeMember(guild)
     staff_role = FakeRole(555)
@@ -2227,7 +2397,7 @@ async def test_the_command_refuses_a_direct_message_and_a_database_that_is_down(
     assert down.response.messages[0].get("embed") is None
 
 
-@pytest.mark.parametrize("mode", ["off", "on"])
+@pytest.mark.parametrize("mode", ["off", "shadow", "on"])
 @pytest.mark.parametrize("state", ["blocked", "none", "owner", "orphan", "guest"])
 @pytest.mark.parametrize("staff", [False, True])
 async def test_every_state_renders_exactly_its_row_of_the_button_table(
@@ -2261,7 +2431,6 @@ async def test_every_state_renders_exactly_its_row_of_the_button_table(
             state if state != "blocked" or not staff else "blocked",
             has_prefs=await get_prefs(db, actor.id) is not None,
             staff=staff,
-            mode_on=mode == "on",
             has_lobbies=True,
         )
     ]
@@ -2285,9 +2454,8 @@ async def test_a_member_is_never_offered_the_staff_half_or_the_site(cog, bot, cr
 
     _embed, view = await panel_for(bot, member)
 
-    for staff_only in ("Setup", "Forget a lobby…", "Logs", SITE_BUTTON):
+    for staff_only in ("Setup", "Forget a lobby…", "Logs", "Mode…", SITE_BUTTON):
         assert staff_only not in labels(view)
-    assert "Turn join-to-create off" not in labels(view)
     assert not [one for one in view.children if isinstance(one, ChannelPick)]
 
 
@@ -2427,7 +2595,7 @@ async def test_a_staffer_demoted_while_a_card_is_open_moves_nothing(cog, bot, le
     _embed, view = await panel_for(bot, lead)
     bot.store.is_staff = lambda who: False
 
-    for label in ("Setup", "Turn join-to-create off", "Forget a lobby…"):
+    for label in ("Setup", "Mode…", "Forget a lobby…"):
         refused = await press(bot, lead, view, label)
         assert "staff only" in refused.sent
 
@@ -2435,17 +2603,19 @@ async def test_a_staffer_demoted_while_a_card_is_open_moves_nothing(cog, bot, le
     assert await action_kinds(db) == []
 
 
-async def test_the_mode_button_says_what_it_will_do_and_logs_which_door_asked(cog, bot, lead, db):
+async def test_the_mode_card_offers_all_three_and_logs_which_door_asked(cog, bot, lead, db):
     _embed, view = await panel_for(bot, lead)
-    assert "Turn join-to-create off" in labels(view)
+    assert "Mode…" in labels(view)
 
-    said = await press(bot, lead, view, "Turn join-to-create off")
+    opened = await press(bot, lead, view, "Mode…")
+    assert [one.value for one in picker(opened.view, ModePick).options] == list(TEMPVOICE_MODES)
+    said = await choose(bot, lead, opened.view, ModePick, "off")
 
     assert bot.store.get(GUILD, "tempvoice_mode") == "off"
     assert "off" in said.sent
     assert "tempvoice.mode" in await action_kinds(db)
     _embed, again = await panel_for(bot, lead)
-    assert "Turn join-to-create on" in labels(again)
+    assert "Mode…" in labels(again)
 
 
 async def test_setup_defers_before_it_creates_a_channel(cog, bot, lead):
@@ -2618,7 +2788,8 @@ async def test_every_panel_move_leaves_a_discord_row_and_never_a_website_one(
     _embed, view = await panel_for(bot, member)
     await press(bot, member, view, "Lock")
     _embed, staff = await panel_for(bot, lead)
-    await press(bot, lead, staff, "Turn join-to-create off")
+    opened = await press(bot, lead, staff, "Mode…")
+    await choose(bot, lead, opened.view, ModePick, "off")
 
     kinds = await action_kinds(db)
     assert not [one for one in kinds if one.startswith("web.")]

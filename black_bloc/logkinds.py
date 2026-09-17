@@ -387,6 +387,8 @@ ROUTINE: frozenset[str] = frozenset(
         "tempvoice.hide",
         "tempvoice.kick",
         "tempvoice.limit",
+        "tempvoice.lobby_hidden",
+        "tempvoice.lobby_shown",
         "tempvoice.lock",
         "tempvoice.mode",
         "tempvoice.panel_elsewhere",

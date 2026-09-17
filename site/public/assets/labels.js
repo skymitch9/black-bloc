@@ -78,7 +78,7 @@ export const LABELS = {
   selftest_purge_minutes: 'How long the self-test’s cards stay before the bot deletes them',
   selftest_log_level: 'How much of the self-test is repeated into Discord',
 
-  tempvoice_mode: 'Whether people can make their own voice rooms',
+  tempvoice_mode: 'Whether people can make their own voice rooms, and who sees the lobby',
   tempvoice_creator_ids: 'Which channels people join to get a room',
   tempvoice_name_template: 'What a new room is called',
   tempvoice_creator_name: 'What the join-to-create channel is called',

@@ -1,6 +1,14 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-17** — rows **`TS-a` … `TS-h`** added at the foot for the TEMP VOICE SHADOW build
+> (branch `tempvoice-shadow`, off `main` `c56962f`; design `info/tempvoice-shadow-design.md`;
+> ⚠️ **not merged, not deployed, and nothing in it has met Discord — no lobby has been hidden and
+> no Sync now has been run**): `tempvoice_mode` gains **`shadow`**, in which only staff can see the
+> join-to-create lobby, and the flip to `on` makes the bot sync the lobby with its category and give
+> the allowed role its view back. ⚠️ **`TS-d` is the row that matters** — it is the whole feature in
+> one press, and the only proof Discord's own **Sync now** really ran. ⚠️ These are the only rows on
+> this page that change permissions on a live channel. Before that,
 > **2026-09-17** — rows **`RA-a` … `RA-i`** added at the foot for the REQUEST FORUM ADOPT build
 > (branch `request-forum-adopt`, off `main` `5e92e41`; design `info/blackmail-threads-design.md` §G;
 > ⚠️ **not merged, not deployed, no post has ever been started by hand in the live forum**): a post
@@ -1704,6 +1712,24 @@ https://blackbloc.heygabi.ai/settings.html.
 | **513** (was `RA-g`) | With `request_forum_adopts_posts` set to **false**, start another post by hand. Set it back afterwards | Nothing at all happens: no reply, no tag, no row. The post is an ordinary forum post |
 | **514** (was `RA-h`) | File a request the ordinary way (`/request` ▸ **File a request**) and watch the post the bot makes | Exactly ONE card in it — the bot must not adopt its own post. If a second **New request** card appears under the first, that is the bug this row is for |
 | **515** (was `RA-i`) | After `RA-a`, restart the bot (`flyctl apps restart black-bloc`) and look at the adopted post again | Still one request, still one card. A restart re-delivers no `on_thread_create` for an old post, and the row's `thread_id` is what makes it a no-op if one ever arrives |
+
+## TEMP VOICE SHADOW — the lobby hidden from members until it is switched on (`TS-a` … `TS-h`)
+
+⚠️ **Do `TS-a` FIRST and do not skip it** — every row below assumes the mode is `shadow`, and
+setting it is what hides the lobby. ⚠️ **`TS-d` is the row that matters:** it is the whole feature
+in one press, and the only proof Discord's **Sync now** really ran. These are the only rows on this
+page that change permissions on a live channel, so do them in one sitting and finish on `TS-h`.
+
+| # | Do this | Expect |
+|---|---|---|
+| `TS-a` | On the Settings page ▸ **tempvoice**, set **tempvoice_mode** to `shadow` (or `/voice` ▸ **Mode…** ▸ *shadow*) | Within seconds, **Join To Create A Channel** disappears from the channel list for anybody who is only a **Member** — check from a second account that has no staff role. You still see it. Logs ▸ Voice carries one `tempvoice.lobby_hidden` row |
+| `TS-b` | From that second account (it has the Member role), ask somebody who CAN see the lobby to join it | Join-to-create still works: a room appears and they are moved into it. ⚠️ **Shadow does not stop the feature** — it only hides the lobby, so a member who reaches it any other way still gets a room. The room is staff-only too, because `tempvoice_room_overwrites` is `lobby` |
+| `TS-c` | Type `/voice` as a staffer and read the staff block at the bottom | **mode — shadow**, and under the rows the line *"The lobby is hidden from members while temp voice is in shadow…"*. A member typing `/voice` does **not** see that line and is not told join-to-create is off |
+| `TS-d` | ⚠️ **The row this build exists for.** Set **tempvoice_mode** to `on` — Settings ▸ tempvoice, or `/voice` ▸ **Mode…** ▸ *on*. Do nothing in Discord | The lobby comes back for members within seconds, with **exactly the permissions the *Voice Channels* category has** — that is Discord's own **Sync now**, run by the bot — plus the Member role's view and connect, the bot's manage and the staff allow put back on top. Logs ▸ Voice carries one `tempvoice.lobby_shown` row naming the channel. **Nothing was done by hand** |
+| `TS-e` | Open the lobby's ▸ **Edit Channel** ▸ **Permissions** and look at the list | `@everyone` reads whatever the category says; **Member** has view **and** connect allowed; the Aunties/Uncles and the bot still carry their allows including **Manage Channel**. Nothing is left denied from the shadow mask |
+| `TS-f` | Set **tempvoice_mode** back to `shadow`, wait, then set it to `on` again | It hides and un-hides each time, cleanly, with one `lobby_hidden` and one `lobby_shown` row per flip. A round trip must leave the lobby looking exactly as it did before — if anything is missing after the second `on`, that is the bug this row is for |
+| `TS-g` | With the mode on `shadow`, un-hide the lobby by hand (give **Member** view), then wait **five minutes** | The bot puts the deny back on its own, without being asked — that is the reconcile enforcing shadow. ⚠️ Only ONE further `tempvoice.lobby_hidden` row appears, not one every five minutes; a row per sweep means the compare-before-writing broke |
+| `TS-h` | With the mode on `shadow`, press **Setup** on `/voice` | It answers the usual *outside the test category* refusal while test mode is on. ⚠️ **After test mode lifts**, Setup rebuilds the lobby's overwrites from its category AND re-applies the shadow mask — so Setup can no longer un-hide the lobby. The mode flip (`TS-d`) is the only door. Finish this sweep with the mode wherever you want it left |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
