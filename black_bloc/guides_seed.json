@@ -123,7 +123,7 @@
         {"do": "Leave the room when you are done.", "expect": "It deletes itself once empty."}
       ],
       "faults": [
-        {"symptom": "No creator channel", "answer": "Temp voice is off or not set up. Ask a Lead."},
+        {"symptom": "No creator channel", "answer": "Temp voice is off or not set up, or it is in **shadow** — while temp voice is in shadow only staff see the lobby. Ask a Lead."},
         {"symptom": "You cannot claim a room", "answer": "The owner is still in it. Ask them for **Hand it over…**."},
         {"symptom": "A bitrate was refused", "answer": "It is above the server's boost level. The panel names the ceiling."}
       ],
