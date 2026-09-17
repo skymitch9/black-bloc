@@ -23,8 +23,9 @@ HOLD = "hold"
 DONE = "done"
 DECLINED = "declined"
 WITHDRAWN = "withdrawn"
+MOVED = "moved"
 
-STATUSES = (OPEN, IN_PROGRESS, REVIEW, HOLD, DONE, DECLINED, WITHDRAWN)
+STATUSES = (OPEN, IN_PROGRESS, REVIEW, HOLD, DONE, DECLINED, WITHDRAWN, MOVED)
 
 TRANSITIONS: dict[str, frozenset[str]] = {
     OPEN: frozenset({IN_PROGRESS, HOLD, DECLINED}),
@@ -34,6 +35,7 @@ TRANSITIONS: dict[str, frozenset[str]] = {
     DONE: frozenset(),
     DECLINED: frozenset(),
     WITHDRAWN: frozenset(),
+    MOVED: frozenset(),
 }
 WITHDRAWABLE = (OPEN, HOLD)
 STAFF_STATUSES = tuple(
@@ -46,8 +48,19 @@ NEEDS_A_REASON = (HOLD, DECLINED)
 FILED_LOOK = "filed"
 SENT_BACK = "sent_back"
 CHECK_ASKED = "check_asked"
-LOOKS = (FILED_LOOK, IN_PROGRESS, REVIEW, SENT_BACK, DONE, HOLD, DECLINED, CHECK_ASKED)
+LOOKS = (
+    FILED_LOOK,
+    IN_PROGRESS,
+    REVIEW,
+    SENT_BACK,
+    DONE,
+    HOLD,
+    DECLINED,
+    MOVED,
+    CHECK_ASKED,
+)
 DM_LOOKS = (IN_PROGRESS, HOLD, DONE, DECLINED)
+CHANNEL_LOOKS = tuple(one for one in LOOKS if one != MOVED)
 CHANNEL_MOVES_KEY = "request_channel_moves"
 REVIEW_BY_OTHER_KEY = "request_review_by_other"
 PANEL_MINUTES_KEY = "request_panel_minutes"
@@ -84,6 +97,7 @@ STATUS_WORDS: dict[str, str] = {
     DONE: "done",
     DECLINED: "declined",
     WITHDRAWN: "withdrawn",
+    MOVED: "moved",
 }
 
 REQUESTS_OFF = (
@@ -219,6 +233,7 @@ MOVE_LINE: dict[str, str] = {
     DONE: "Request **#{request_id}** from {who} is done: {what}",
     HOLD: "Request **#{request_id}** from {who} is on hold — {reason}",
     DECLINED: "Request **#{request_id}** from {who} was declined — {reason}",
+    MOVED: "Request **#{request_id}** from {who} moved on: {what}",
     CHECK_ASKED: (
         "Request **#{request_id}** from {who} — they have been asked to check it: {what}"
     ),
@@ -238,6 +253,7 @@ FORUM_READY_TAG = "ready to check"
 FORUM_HOLD_TAG = "on hold"
 FORUM_DONE_TAG = "done"
 FORUM_DECLINED_TAG = "declined"
+FORUM_MOVED_TAG = "moved"
 FORUM_TAG_NAMES = (
     FORUM_OPEN_TAG,
     FORUM_PICKED_UP_TAG,
@@ -245,6 +261,7 @@ FORUM_TAG_NAMES = (
     FORUM_HOLD_TAG,
     FORUM_DONE_TAG,
     FORUM_DECLINED_TAG,
+    FORUM_MOVED_TAG,
 )
 FORUM_TAG_EMOJI: dict[str, str] = {
     FORUM_OPEN_TAG: "\N{LARGE GREEN CIRCLE}",
@@ -253,6 +270,7 @@ FORUM_TAG_EMOJI: dict[str, str] = {
     FORUM_HOLD_TAG: "\N{DOUBLE VERTICAL BAR}",
     FORUM_DONE_TAG: "\N{WHITE HEAVY CHECK MARK}",
     FORUM_DECLINED_TAG: "\N{CROSS MARK}",
+    FORUM_MOVED_TAG: "\N{BLACK RIGHTWARDS ARROW}",
 }
 FORUM_TAG_FOR: dict[str, str] = {
     OPEN: FORUM_OPEN_TAG,
@@ -261,12 +279,15 @@ FORUM_TAG_FOR: dict[str, str] = {
     HOLD: FORUM_HOLD_TAG,
     DONE: FORUM_DONE_TAG,
     DECLINED: FORUM_DECLINED_TAG,
+    MOVED: FORUM_MOVED_TAG,
 }
-FORUM_ARCHIVE_STATUSES = (DONE, DECLINED)
+FORUM_ARCHIVE_STATUSES = (DONE, DECLINED, MOVED)
 FORUM_AUTO_ARCHIVE_MINUTES = 1440
 ADOPTS_POSTS_KEY = "request_forum_adopts_posts"
 SOURCE_PANEL = "panel"
 SOURCE_FORUM = "forum"
+SOURCE_EVENT = "event"
+SOURCE_TICKET = "ticket"
 ADOPTED_WHY = "(filed from a forum post)"
 ADOPTED_NOT_YOURS_TO_FILE = (
     "{who} — this post was not turned into a request, because only staff may file one on this "
@@ -287,6 +308,7 @@ EMBED_COLOURS: dict[str, int] = {
     DONE: 0x57F287,
     HOLD: 0x99AAB5,
     DECLINED: 0xED4245,
+    MOVED: 0x9B59B6,
     CHECK_ASKED: 0x3498DB,
 }
 EMBED_TITLES: dict[str, str] = {
@@ -297,6 +319,7 @@ EMBED_TITLES: dict[str, str] = {
     DONE: "Request #{request_id} is done ✅",
     HOLD: "Request #{request_id} is on hold",
     DECLINED: "Request #{request_id} was declined",
+    MOVED: "Request #{request_id} moved on",
     CHECK_ASKED: "Request #{request_id} is ready for you to try 🙌",
 }
 EMBED_FIELDS: dict[str, tuple[str, ...]] = {
@@ -307,6 +330,7 @@ EMBED_FIELDS: dict[str, tuple[str, ...]] = {
     DONE: ("what", "built", "how_to_test", "accepted_by", "requester", "asked"),
     HOLD: ("what", "waiting", "was", "requester"),
     DECLINED: ("what", "reason", "requester"),
+    MOVED: ("what", "moved_to", "requester"),
     CHECK_ASKED: ("what", "built", "how_to_test", "ready_by", "asked_by"),
 }
 FIELD_LABELS: dict[str, str] = {
@@ -317,6 +341,7 @@ FIELD_LABELS: dict[str, str] = {
     "needs_doing": "What needs doing",
     "waiting": "Why it is waiting",
     "reason": "Why",
+    "moved_to": "Now",
     "requester": "Requested by",
     "assignee": "Assignee",
     "ready_by": "Marked ready by",
@@ -502,6 +527,7 @@ CARD_BUTTONS: dict[str, tuple[MoveButton, ...]] = {
     DONE: (),
     DECLINED: (),
     WITHDRAWN: (),
+    MOVED: (),
 }
 
 
@@ -667,8 +693,8 @@ def post_title(row: Any) -> str:
 def channel_moves(store: Any, guild_id: int) -> tuple[str, ...]:
     found = store.get(guild_id, CHANNEL_MOVES_KEY)
     if not isinstance(found, list | tuple):
-        return LOOKS
-    return tuple(str(one) for one in found if str(one) in LOOKS)
+        return CHANNEL_LOOKS
+    return tuple(str(one) for one in found if str(one) in CHANNEL_LOOKS)
 
 
 def posts_a_card(store: Any, guild_id: int, look: str) -> bool:
@@ -752,9 +778,20 @@ def asked_stamp(row: Any) -> str:
     return f"{mention(row_value(row, 'check_asked_by'))} · <t:{int(at.timestamp())}:R>"
 
 
+def moved_words(row: Any) -> str:
+    """Where a moved request went, as the card says it; nothing readable reads as nothing."""
+    from .handoff import EVENT, REQUEST, read_trail
+
+    found = read_trail(row_value(row, "moved_to"))
+    if found is None or found.kind not in (EVENT, REQUEST):
+        return ""
+    return f"{found.kind} **#{found.ident}**"
+
+
 def field_value(row: Any, name: str) -> str:
     """One field's text; an empty one is left off the card rather than printed as nothing."""
     found = {
+        "moved_to": moved_words(row),
         "what": row_value(row, "what"),
         "why": row_value(row, "why"),
         "built": row_value(row, "built"),
@@ -1150,6 +1187,7 @@ async def withdraw_request(
 
 __all__ = [
     "CARD_BUTTONS",
+    "CHANNEL_LOOKS",
     "CHECK_ASKED",
     "CHECK_ASKED_CHANNEL",
     "CHECK_ASKED_DESCRIPTION",
@@ -1169,6 +1207,7 @@ __all__ = [
     "LOOKS",
     "MOVE_ACTIONS",
     "MOVE_BY_ACTION",
+    "MOVED",
     "MOVE_LINE",
     "MoveButton",
     "NEEDS_A_REASON",
@@ -1188,6 +1227,8 @@ __all__ = [
     "SELECT_CAP",
     "SELECT_OPTION_LIMIT",
     "SENT_BACK",
+    "SOURCE_EVENT",
+    "SOURCE_TICKET",
     "STAFF_STATUSES",
     "STATUSES",
     "STATUS_WORDS",
@@ -1226,6 +1267,7 @@ __all__ = [
     "look_of",
     "may_accept",
     "mention",
+    "moved_words",
     "move_line",
     "moves_from",
     "moves_sentence",

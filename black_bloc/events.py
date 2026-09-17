@@ -815,6 +815,9 @@ class EventDraft:
     where: Where = WHERE_UNSET
     duration: str = ""
     where_note: str = ""
+    requester_id: int | None = None
+    from_request: int | None = None
+    from_ticket: int | None = None
 
 
 def draft_check(draft: EventDraft, now: datetime) -> tuple[EventFields | None, str]:
@@ -1830,16 +1833,18 @@ async def submit_event(
     *,
     review_view: Any = None,
     room_view: Any = None,
+    requester: Any = None,
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """One proposal, whichever door it came through: a row, a room, a card and the sentence."""
     category, where = events_category(bot, guild)
     if where in CATEGORY_TROUBLE:
         return (CATEGORY_TROUBLE[where], None)
+    whose = actor if requester is None else requester
     event_id = await create_event(
         bot.db,
         guild.id,
-        getattr(actor, "id", actor),
+        getattr(whose, "id", whose),
         title=fields.title,
         description=fields.description,
         where=fields.where,
@@ -1847,7 +1852,7 @@ async def submit_event(
         finishes_at=ends_at(fields.starts, fields.minutes),
     )
     row = await get_event(bot.db, event_id)
-    channel = await make_review_channel(bot, guild, row, actor, category)
+    channel = await make_review_channel(bot, guild, row, whose, category)
     if channel is None:
         return (CANNOT_CREATE, None)
     await set_review(bot.db, event_id, channel.id, None)
@@ -1856,7 +1861,7 @@ async def submit_event(
         guild,
         kind_via("event.created", via),
         actor=actor,
-        target=actor,
+        target=whose,
         details={
             "event_id": event_id,
             "title": fields.title,

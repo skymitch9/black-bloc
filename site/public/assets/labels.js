@@ -236,6 +236,8 @@ export const LABELS = {
   request_forum_adopts_posts: 'Whether a post started by hand in the requests forum becomes a request',
   request_panel_minutes: 'How long the /request panel stays live',
   request_panel_own_list: 'Whether a member sees their own requests on /request',
+  handoff_mode: 'Whether staff can send a request, event or ticket somewhere else',
+  handoff_confirm_hours: 'How long a member has to answer a file-my-ticket DM',
   request_log_level: 'How much of requests is repeated into Discord',
 
   cost_hosting_usd: 'What hosting costs a month, off the invoice',

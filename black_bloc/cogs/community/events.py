@@ -156,6 +156,8 @@ from ...events import (
     set_zone as store_zone,
 )
 from ...golive import now_iso, parse_ts
+from ...handoff import REQUEST as HANDOFF_REQUEST
+from ...handoff import prefilled, request_to_event
 from ...linkcheck import LINK_OK, link_answers
 from ...loops import wait_ready
 from ...panels import (
@@ -757,6 +759,36 @@ async def open_draft(
     await render_draft(interaction, fields, previous)
 
 
+def handed_over(fields: EventDraft) -> bool:
+    return bool(fields.from_request or fields.from_ticket)
+
+
+def proposer(guild: Any, fields: EventDraft) -> Any:
+    """Whose name an event is filed in: the member a hand-off names, else whoever pressed."""
+    if not fields.requester_id:
+        return None
+    return guild.get_member(int(fields.requester_id)) or int(fields.requester_id)
+
+
+async def open_request_draft(
+    interaction: discord.Interaction, row: Any, previous: Any = None
+) -> None:
+    """Send to events… — the `/event` draft, pre-filled and proposed in the requester's name."""
+    bot = interaction.client
+    title, description = prefilled(row, kind=HANDOFF_REQUEST)
+    await render_draft(
+        interaction,
+        EventDraft(
+            duration=duration_for(default_minutes(bot.store, interaction.guild.id)),
+            title=title,
+            description=description,
+            requester_id=int(row["user_id"]),
+            from_request=int(row["id"]),
+        ),
+        previous,
+    )
+
+
 async def submit_draft(interaction: discord.Interaction, previous: Any) -> None:
     """The Submit button and nothing else: `checked_fields` onward, exactly as the modal did."""
     fields = previous.fields
@@ -779,14 +811,35 @@ async def submit_draft(interaction: discord.Interaction, previous: Any) -> None:
         checked,
         review_view=review_view,
         room_view=room_notice_view,
+        requester=proposer(interaction.guild, fields),
     )
     if row is None:
         await render_draft(interaction, fields, previous)
         await answer(interaction, said)
         return
+    trail = await close_what_it_came_from(interaction, fields, row)
     await render_panel(interaction, previous)
-    await answer(interaction, f"{said} {when_line(checked.starts, fields.when.zone)}")
-    await dm(interaction.user, f"Submitted on **{interaction.guild.name}**.", card_for(row))
+    await answer(
+        interaction, f"{said} {when_line(checked.starts, fields.when.zone)}{trail}"
+    )
+    if not handed_over(fields):
+        await dm(interaction.user, f"Submitted on **{interaction.guild.name}**.", card_for(row))
+
+
+async def close_what_it_came_from(
+    interaction: discord.Interaction, fields: EventDraft, row: Any
+) -> str:
+    """A hand-off's second half: the request closes as moved, or the ticket gains its link."""
+    if fields.from_request:
+        line, _ = await request_to_event(
+            interaction.client,
+            interaction.guild,
+            int(fields.from_request),
+            row,
+            interaction.user,
+        )
+        return f" {line}"
+    return ""
 
 
 async def open_where_panel(

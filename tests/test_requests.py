@@ -109,9 +109,10 @@ def test_one_table_says_where_a_request_may_go_and_every_path_asks_it():
     assert pure.moves_from(pure.DONE) == ()
     assert pure.moves_from(pure.DECLINED) == ()
     assert pure.moves_from(pure.WITHDRAWN) == ()
+    assert pure.moves_from(pure.MOVED) == ()
     assert pure.can_move(pure.OPEN, pure.DONE) is False
     assert pure.can_move(pure.HOLD, pure.IN_PROGRESS) is True
-    assert pure.FINAL_STATUSES == (pure.DONE, pure.DECLINED, pure.WITHDRAWN)
+    assert pure.FINAL_STATUSES == (pure.DONE, pure.DECLINED, pure.WITHDRAWN, pure.MOVED)
 
 
 def test_done_is_reachable_only_from_review_and_nothing_else_reaches_it():
@@ -495,6 +496,7 @@ CARD_ROW = {
     "decided_at": "2026-09-03T02:00:00+00:00",
     "check_asked_by": STAFFER,
     "check_asked_at": "2026-09-03T02:30:00+00:00",
+    "moved_to": "event:12",
 }
 
 CARD_FIELDS = {
@@ -519,6 +521,7 @@ CARD_FIELDS = {
     ],
     pure.HOLD: ["Asked for", "Why it is waiting", "Was", "Requested by"],
     pure.DECLINED: ["Asked for", "Why", "Requested by"],
+    pure.MOVED: ["Asked for", "Now", "Requested by"],
     pure.CHECK_ASKED: [
         "Asked for",
         "What was built",
@@ -530,7 +533,7 @@ CARD_FIELDS = {
 
 
 @pytest.mark.parametrize("look", pure.LOOKS)
-def test_one_builder_draws_each_of_the_eight_looks_with_its_own_title_colour_and_fields(look):
+def test_one_builder_draws_each_of_the_nine_looks_with_its_own_title_colour_and_fields(look):
     card = pure.request_embed(
         CARD_ROW, move=look, origin="https://blackbloc.test", guild=None
     ).to_dict()
@@ -734,7 +737,9 @@ async def test_asking_again_overwrites_who_asked_and_when_rather_than_stacking_r
 
 
 def test_every_move_posts_a_card_until_the_server_says_otherwise():
-    assert pure.channel_moves(Store(), GUILD) == pure.LOOKS
+    # `moved` is not on the list: a hand-off leaves its own trail line, never a second card.
+    assert pure.channel_moves(Store(), GUILD) == pure.CHANNEL_LOOKS
+    assert pure.MOVED not in pure.CHANNEL_LOOKS and pure.MOVED in pure.LOOKS
     assert pure.posts_a_card(Store(), GUILD, pure.REVIEW) is True
 
     picked = Store(request_channel_moves=["done", "declined", "not a look"])
@@ -769,6 +774,7 @@ def test_every_status_maps_to_the_move_buttons_the_panel_design_names(status):
         pure.DONE: [],
         pure.DECLINED: [],
         pure.WITHDRAWN: [],
+        pure.MOVED: [],
     }[status]
     assert actions == expected
     for spec in found:

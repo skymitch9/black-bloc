@@ -10,6 +10,9 @@ from discord.ext import commands
 
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
+from ...handoff import EVENT as HANDOFF_EVENT
+from ...handoff import SEND_TO_EVENTS
+from ...handoff import refusal_for_request as handoff_refusal
 from ...logkinds import VIA_DISCORD, VIA_FORUM, kind_via
 from ...panels import (
     KEEP_IT,
@@ -51,6 +54,7 @@ from ...requests import (
     LOOKS,
     MOVE_ACTIONS,
     MOVE_BY_ACTION,
+    MOVED,
     NO_SUCH_REQUEST,
     NOT_ON_HOLD,
     NOT_READY_TO_CHECK,
@@ -135,6 +139,7 @@ from ...requests import (
     withdraw_request,
 )
 from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY, MODMAIL_CATEGORY_KEY
+from .events import open_request_draft
 
 log = logging.getLogger(__name__)
 
@@ -181,6 +186,17 @@ BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
 }
 COG_NAME = "Requests"
 MOVE_TEMPLATE = rf"request:(?P<request_id>[0-9]+):(?P<action>{'|'.join(MOVE_ACTIONS)})"
+HANDOFF_ACTIONS = (HANDOFF_EVENT,)
+HANDOFF_LABELS: dict[str, str] = {HANDOFF_EVENT: SEND_TO_EVENTS}
+HANDOFF_TEMPLATE = (
+    rf"handoff:request:(?P<request_id>[0-9]+):(?P<action>{'|'.join(HANDOFF_ACTIONS)})"
+)
+
+
+def handoff_custom_id(request_id: Any, action: str) -> str:
+    return f"handoff:request:{int(request_id)}:{action}"
+
+
 MAKE_THE_FORUM = "Make the forum"
 FORUM_EXISTS = (
     "<#{where}> is already the request forum, so nothing was made. Clear "
@@ -283,6 +299,7 @@ async def post_line(
     embed: Any = None,
     view: Any = None,
     ping: Any = None,
+    content: Any = None,
 ) -> Any:
     """One guarded card where staff watch; a channel the guard refuses is skipped, not raised."""
     if not channel_id:
@@ -307,7 +324,7 @@ async def post_line(
     )
     try:
         return await channel.send(
-            content=mention(ping) if ping else None,
+            content=content or (mention(ping) if ping else None),
             embed=embed,
             view=view,
             allowed_mentions=allowed,
@@ -421,6 +438,13 @@ async def open_forum_post(bot: Any, guild: Any, row: Any, embed: Any, view: Any)
     return post
 
 
+def handoff_actions(bot: Any, guild: Any, row: Any) -> tuple[str, ...]:
+    """The Send to… moves this request can offer right now; a final one offers none."""
+    if handoff_refusal(bot.store, guild.id, row):
+        return ()
+    return HANDOFF_ACTIONS
+
+
 def post_view(bot: Any, guild: Any, row: Any) -> Any:
     """The post's own buttons: the moves legal from where the request is, then the site link."""
     origin = str(getattr(getattr(bot, "settings", None), "origin", "") or "")
@@ -428,10 +452,13 @@ def post_view(bot: Any, guild: Any, row: Any) -> Any:
     if not post_buttons_on(bot.store, guild.id):
         return site_view(origin, request_id)
     moves = card_buttons(row_value(row, "status"))
+    extra = handoff_actions(bot, guild, row)
     view = discord.ui.View(timeout=None)
     for spec in moves:
         view.add_item(PostMoveButton(request_id, spec))
-    link = site_button(origin, request_id, row=1 if len(moves) >= ROW_CAP else 0)
+    for action in extra:
+        view.add_item(PostHandoffButton(request_id, action))
+    link = site_button(origin, request_id, row=1 if extra or len(moves) >= ROW_CAP else 0)
     if link is not None:
         view.add_item(link)
     return view if view.children else None
@@ -630,6 +657,13 @@ async def notify(bot: Any, guild: Any, row: Any, who: Any) -> None:
     )
     if message is not None:
         await set_message(bot.db, row["id"], message.id)
+
+
+async def say_in_channel(bot: Any, guild: Any, row: Any, said: str) -> Any:
+    """One plain line beside a request — the trail a hand-off leaves where the card lives."""
+    return await post_line(
+        bot, guild, moves_land_in(bot, guild, row), row, said, MOVED, content=said
+    )
 
 
 async def notify_move(bot: Any, guild: Any, row: Any, look: str) -> None:
@@ -960,6 +994,8 @@ def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embe
     view = RequestView(panel_minutes(bot.store, guild.id))
     for spec in card_buttons(status, may_accept_here=may_accept_here):
         view.add_item(CardMoveButton(row_value(row, "id"), spec))
+    for action in handoff_actions(bot, guild, row):
+        view.add_item(CardHandoffButton(row_value(row, "id"), action))
     view.add_item(BackButton())
     return embed, view
 
@@ -1192,6 +1228,57 @@ async def run_move(
     await finished(interaction, request_id, said, fresh, previous, on_post)
 
 
+async def handoff_row(
+    interaction: discord.Interaction, request_id: int, on_post: bool
+) -> Any:
+    """The row a Send to… press moves, or None once the presser has been answered in words."""
+    if not await still_staff(interaction):
+        return None
+    if not await opened_here(interaction, on_post):
+        return None
+    bot = interaction.client
+    row = await get_request(bot.db, request_id)
+    said = (
+        NO_SUCH_REQUEST.format(request_id=request_id)
+        if row is None or row["guild_id"] != interaction.guild.id
+        else handoff_refusal(bot.store, interaction.guild.id, row)
+    )
+    if not said:
+        return row
+    await interaction.followup.send(
+        said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+    return None
+
+
+async def send_to_events(
+    interaction: discord.Interaction,
+    request_id: int,
+    previous: Any = None,
+    *,
+    on_post: bool = False,
+) -> None:
+    """Send to events… — the one implementation, from the panel's card and from the post."""
+    row = await handoff_row(interaction, request_id, on_post)
+    if row is None:
+        return
+    await open_request_draft(interaction, row, None if on_post else previous)
+
+
+HANDOFF_MOVES: dict[str, Any] = {HANDOFF_EVENT: send_to_events}
+
+
+async def handoff_pressed(
+    interaction: discord.Interaction,
+    request_id: int,
+    action: str,
+    previous: Any = None,
+    *,
+    on_post: bool = False,
+) -> None:
+    await HANDOFF_MOVES[action](interaction, request_id, previous, on_post=on_post)
+
+
 async def move_pressed(
     interaction: discord.Interaction,
     request_id: int,
@@ -1353,6 +1440,45 @@ class PostMoveButton(
         await move_pressed(interaction, self.request_id, self.spec, on_post=True)
 
 
+class CardHandoffButton(discord.ui.Button):
+    """A Send to… move on the ephemeral panel card, where a draft may replace the panel."""
+
+    def __init__(self, request_id: int, action: str) -> None:
+        super().__init__(
+            label=HANDOFF_LABELS[action], style=discord.ButtonStyle.secondary, row=1
+        )
+        self.request_id = request_id
+        self.action = action
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await handoff_pressed(interaction, self.request_id, self.action, self.view)
+
+
+class PostHandoffButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=HANDOFF_TEMPLATE
+):
+    """The same move on the request's own post, which outlives the process that drew it."""
+
+    def __init__(self, request_id: Any, action: str) -> None:
+        self.request_id = int(request_id)
+        self.action = action
+        super().__init__(
+            discord.ui.Button(
+                label=HANDOFF_LABELS[action],
+                style=discord.ButtonStyle.secondary,
+                custom_id=handoff_custom_id(request_id, action),
+            ),
+            row=1,
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: Any):
+        return cls(int(match["request_id"]), str(match["action"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        await handoff_pressed(interaction, self.request_id, self.action, on_post=True)
+
+
 class RequestModal(AnswersErrors, discord.ui.Modal, title="Ask for something"):
     what = discord.ui.TextInput(
         label="What are you asking for?",
@@ -1457,7 +1583,7 @@ class Requests(commands.Cog):
         self.adopting = asyncio.Lock()
 
     async def cog_load(self) -> None:
-        self.bot.add_dynamic_items(PostMoveButton)
+        self.bot.add_dynamic_items(PostMoveButton, PostHandoffButton)
 
     async def _database_ready(self, interaction: discord.Interaction) -> bool:
         if self.bot.db.is_connected:

@@ -3936,3 +3936,186 @@ async def test_the_delete_button_is_the_same_registration_the_card_buttons_use(c
     assert match["event_id"] == "12" and match["action"] == "delete_room"
     assert rebuilt.event_id == 12 and rebuilt.item.label == "Delete this room"
     assert re.fullmatch(events_cog.DECISION_TEMPLATE, decision_id(12, "deny"))["action"] == "deny"
+
+
+# --- Send to events… — the second half of a request → event hand-off (send-to-design §A) -------
+
+
+async def a_request(bot, member, **fields):
+    from black_bloc import requests as requests_pure
+
+    return await requests_pure.create_request(
+        bot.db,
+        GUILD,
+        member.id,
+        what=fields.get("what", "a games night"),
+        why=fields.get("why", "there is nothing to do on Tuesdays"),
+        due_on=None,
+    )
+
+
+async def handed_over_draft(bot, lead, request_id):
+    """What staff see after Send to events…: the `/event` draft, already filled in."""
+    from black_bloc import requests as requests_pure
+
+    row = await requests_pure.get_request(bot.db, request_id)
+    opening = FakeInteraction(bot, lead)
+    await events_cog.open_request_draft(opening, row)
+    return opening, card_view(opening)
+
+
+def pick_a_time(view, start=None):
+    when = draft_fields(start=start or future_start()).when
+    view.fields.when = when
+    return view
+
+
+async def submit_the_draft(bot, lead, view):
+    interaction = FakeInteraction(bot, lead)
+    await submit_draft(interaction, view)
+    return interaction
+
+
+async def test_send_to_events_opens_the_draft_filled_in_from_the_request(bot, lead, member, db):
+    request_id = await a_request(bot, member)
+
+    opening, view = await handed_over_draft(bot, lead, request_id)
+
+    assert card_embed(opening).title == DRAFT_TITLE
+    assert view.fields.title == "a games night"
+    assert f"Filed as request #{request_id} by <@{member.id}>" in view.fields.description
+    assert "there is nothing to do on Tuesdays" in view.fields.description
+    assert view.fields.requester_id == member.id and view.fields.from_request == request_id
+    assert view.fields.when.day is None
+    assert not has_item(view, "Submit")
+
+
+async def test_the_event_a_hand_off_makes_is_filed_in_the_members_name_not_the_staffers(
+    cog, bot, lead, member, db
+):
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    rows = await events_by_status(db, GUILD, (PENDING,))
+    assert len(rows) == 1
+    assert rows[0]["requester_id"] == member.id
+    assert rows[0]["title"] == "a games night"
+
+
+async def test_submitting_a_handed_over_draft_closes_the_request_as_moved_with_the_trail(
+    cog, bot, lead, member, db
+):
+    from black_bloc import requests as requests_pure
+
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    said = await submit_the_draft(bot, lead, pick_a_time(view))
+
+    event = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    row = await requests_pure.get_request(db, request_id)
+    assert row["status"] == requests_pure.MOVED
+    assert row["moved_to"] == f"event:{event['id']}"
+    assert f"event **#{event['id']}**" in said.response.messages[-1]["content"]
+
+
+async def test_a_hand_off_leaves_exactly_one_row_naming_both_ends(cog, bot, lead, member, db):
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    event = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    kinds = await action_kinds(db)
+    assert kinds.count("handoff.request_to_event") == 1
+    cur = await db.conn.execute(
+        "SELECT actor_id, target_id, details FROM action_log WHERE kind = ?",
+        ("handoff.request_to_event",),
+    )
+    logged = await cur.fetchone()
+    details = json.loads(logged["details"])
+    assert (logged["actor_id"], logged["target_id"]) == (lead.id, member.id)
+    assert details["request_id"] == request_id and details["event_id"] == event["id"]
+
+
+async def test_the_member_is_told_by_dm_that_their_request_is_now_an_event(
+    cog, bot, lead, member, db
+):
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    event = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    said = member.dms[-1]["content"]
+    assert f"#{request_id}" in said and f"#{event['id']}" in said
+    assert "staff will review it there" in said
+
+
+async def test_a_member_whose_dms_are_shut_leaves_a_row_rather_than_silence(
+    cog, bot, lead, member, db
+):
+    request_id = await a_request(bot, member)
+    member.dm_raises = refused()
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    assert "request.dm_failed" in await action_kinds(db)
+
+
+async def test_the_staffer_who_handed_it_over_is_not_dmed_as_though_they_proposed_it(
+    cog, bot, lead, member, db
+):
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    assert lead.dms == []
+    assert member.dms
+
+
+async def test_leaving_the_draft_alone_leaves_the_request_exactly_where_it_was(
+    cog, bot, lead, member, db
+):
+    """Cancel on the draft is Back: nothing is created and nothing is closed (§A)."""
+    from black_bloc import requests as requests_pure
+
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await click(bot, lead, find_item(view, "Back"))
+
+    row = await requests_pure.get_request(db, request_id)
+    assert row["status"] == requests_pure.OPEN and row["moved_to"] is None
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+
+
+async def test_a_draft_that_cannot_be_submitted_yet_changes_nothing_either(
+    cog, bot, lead, member, db
+):
+    from black_bloc import requests as requests_pure
+
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    said = await submit_the_draft(bot, lead, view)
+
+    assert "Pick a day" in card_embed(said).description
+    row = await requests_pure.get_request(db, request_id)
+    assert row["status"] == requests_pure.OPEN and row["moved_to"] is None
+
+
+async def test_an_ordinary_proposal_is_untouched_by_the_hand_off_path(cog, bot, member, db):
+    """No `from_request` means no trail, no second DM and the proposer is whoever pressed."""
+    said = await submit(cog, bot, member)
+
+    rows = await events_by_status(db, GUILD, (PENDING,))
+    assert rows[0]["requester_id"] == member.id
+    assert "handoff.request_to_event" not in await action_kinds(db)
+    assert member.dms and "Submitted on" in member.dms[-1]["content"]
+    assert "review it" in said.response.messages[-1]["content"]
+    assert "event **#" not in said.response.messages[-1]["content"]
