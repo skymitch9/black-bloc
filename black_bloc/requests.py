@@ -779,13 +779,11 @@ def asked_stamp(row: Any) -> str:
 
 
 def moved_words(row: Any) -> str:
-    """Where a moved request went, as the card says it; nothing readable reads as nothing."""
-    from .handoff import EVENT, REQUEST, read_trail
+    """Where a moved request went, bolded for a card; `handoff` owns the words."""
+    from .handoff import moved_words as said
 
-    found = read_trail(row_value(row, "moved_to"))
-    if found is None or found.kind not in (EVENT, REQUEST):
-        return ""
-    return f"{found.kind} **#{found.ident}**"
+    found = said(row_value(row, "moved_to"))
+    return found.replace("#", "**#") + "**" if found else ""
 
 
 def field_value(row: Any, name: str) -> str:

@@ -822,7 +822,12 @@ async def test_the_review_card_carries_approve_and_deny_buttons_keyed_by_the_eve
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     posted = bot.guild.created[0].messages[0]
     ids = [item.custom_id for item in posted.kwargs["view"].children]
-    assert ids == [decision_id(row["id"], "approve"), decision_id(row["id"], "deny")]
+    # `handoff_mode` ships on, so the room also carries Not an event — make it a request.
+    assert ids == [
+        decision_id(row["id"], "approve"),
+        decision_id(row["id"], "deny"),
+        decision_id(row["id"], events_cog.MAKE_REQUEST),
+    ]
     assert posted.kwargs["view"].timeout is None
     assert posted.kwargs["allowed_mentions"].everyone is False
 
@@ -4119,3 +4124,171 @@ async def test_an_ordinary_proposal_is_untouched_by_the_hand_off_path(cog, bot, 
     assert member.dms and "Submitted on" in member.dms[-1]["content"]
     assert "review it" in said.response.messages[-1]["content"]
     assert "event **#" not in said.response.messages[-1]["content"]
+
+
+# --- Not an event — make it a request (send-to-design §A) --------------------------------------
+
+
+async def hand_it_back(bot, lead, event_id, message=None):
+    interaction = FakeInteraction(bot, lead, message=message)
+    await DecisionButton(event_id, events_cog.MAKE_REQUEST).callback(interaction)
+    return interaction
+
+
+async def a_pending_event(cog, bot, member, **fields):
+    await submit(cog, bot, member, **fields)
+    return (await events_by_status(bot.db, GUILD, (PENDING,)))[0]
+
+
+async def test_the_review_room_offers_the_move_only_while_the_key_is_on(cog, bot, member, db):
+    await bot.store.set(GUILD, "handoff_mode", "off")
+
+    await submit(cog, bot, member)
+
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    ids = [item.custom_id for item in bot.guild.created[0].messages[0].kwargs["view"].children]
+    assert ids == [decision_id(row["id"], "approve"), decision_id(row["id"], "deny")]
+
+
+async def test_making_it_a_request_files_one_in_the_requesters_name_from_the_events_words(
+    cog, bot, member, lead, db
+):
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member, title="Games night", description="on Tuesdays")
+
+    await hand_it_back(bot, lead, row["id"])
+
+    filed = await requests_pure.list_requests(db, GUILD)
+    assert len(filed) == 1
+    assert filed[0]["user_id"] == member.id
+    assert (filed[0]["what"], filed[0]["why"]) == ("Games night", "on Tuesdays")
+    assert filed[0]["source"] == requests_pure.SOURCE_EVENT
+    assert filed[0]["status"] == requests_pure.OPEN
+
+
+async def test_an_event_with_no_description_still_files_a_request_with_a_why(
+    cog, bot, member, lead, db
+):
+    """`why` is NOT NULL and the modal makes it required, so the hand-off owes one."""
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member, description="")
+
+    await hand_it_back(bot, lead, row["id"])
+
+    filed = (await requests_pure.list_requests(db, GUILD))[0]
+    assert filed["why"] == f"(filed from event #{row['id']})"
+
+
+async def test_the_event_is_cancelled_with_the_trail_pointing_at_the_request(
+    cog, bot, member, lead, db
+):
+    row = await a_pending_event(cog, bot, member)
+
+    said = await hand_it_back(bot, lead, row["id"])
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["status"] == CANCELLED
+    assert fresh["moved_to"] == "request:1"
+    assert "request **#1**" in said.response.messages[-1]["content"]
+
+
+async def test_the_cancel_dm_names_the_request_it_became(cog, bot, member, lead, db):
+    row = await a_pending_event(cog, bot, member)
+
+    await hand_it_back(bot, lead, row["id"])
+
+    said = member.dms[-1]["content"]
+    assert "filed it as a request instead" in said
+    assert "The reason given was: filed as request #1 instead" in said
+
+
+async def test_the_hand_off_leaves_exactly_one_row_naming_both_ends(cog, bot, member, lead, db):
+    row = await a_pending_event(cog, bot, member)
+
+    await hand_it_back(bot, lead, row["id"])
+
+    kinds = await action_kinds(db)
+    assert kinds.count("handoff.event_to_request") == 1
+    cur = await db.conn.execute(
+        "SELECT actor_id, target_id, details FROM action_log WHERE kind = ?",
+        ("handoff.event_to_request",),
+    )
+    logged = await cur.fetchone()
+    details = json.loads(logged["details"])
+    assert (logged["actor_id"], logged["target_id"]) == (lead.id, member.id)
+    assert (details["event_id"], details["request_id"]) == (row["id"], 1)
+    # Nothing else the cancel does changes: its own row is still written beside ours.
+    assert "event.cancelled" in kinds
+
+
+async def test_the_rooms_card_closes_and_the_room_keeps_the_link(cog, bot, member, lead, db):
+    row = await a_pending_event(cog, bot, member)
+    room = bot.guild.created[0]
+    card = room.messages[0]
+
+    await hand_it_back(bot, lead, row["id"], message=card)
+
+    assert card.kwargs["view"] is None
+    fields = card.kwargs["embed"].to_dict()["fields"]
+    assert {"name": "Now", "value": "request **#1**", "inline": False} in fields
+    assert "→ request **#1**" in [one.content for one in room.messages]
+
+
+async def test_a_second_press_on_a_card_nobody_refreshed_refuses_rather_than_filing_twice(
+    cog, bot, member, lead, db
+):
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member)
+    await hand_it_back(bot, lead, row["id"])
+
+    again = await hand_it_back(bot, lead, row["id"])
+
+    assert "already" in again.response.messages[-1]["content"]
+    assert len(await requests_pure.list_requests(db, GUILD)) == 1
+
+
+async def test_a_press_after_the_key_went_off_refuses_in_words_and_files_nothing(
+    cog, bot, member, lead, db
+):
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member)
+    await bot.store.set(GUILD, "handoff_mode", "off")
+
+    said = await hand_it_back(bot, lead, row["id"])
+
+    assert "handoff_mode" in said.response.messages[-1]["content"]
+    assert await requests_pure.list_requests(db, GUILD) == []
+    assert (await get_event(db, row["id"]))["status"] == PENDING
+
+
+async def test_a_member_pressing_make_it_a_request_is_told_which_role_it_needs(
+    cog, bot, member, db
+):
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member)
+
+    said = await hand_it_back(bot, member, row["id"])
+
+    assert "staff" in said.response.messages[-1]["content"].lower()
+    assert await requests_pure.list_requests(db, GUILD) == []
+
+
+async def test_the_filed_request_reaches_the_request_channel_like_any_other(
+    cog, bot, member, lead, db
+):
+    await bot.store.set(GUILD, "request_notify_channel_id", TEST_CHANNEL)
+    row = await a_pending_event(cog, bot, member)
+
+    await hand_it_back(bot, lead, row["id"])
+
+    posted = bot.guild.channels[TEST_CHANNEL].messages
+    assert any(
+        one.kwargs.get("embed") is not None
+        and one.kwargs["embed"].to_dict()["title"] == "New request #1"
+        for one in posted
+    )

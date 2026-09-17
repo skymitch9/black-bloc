@@ -127,6 +127,7 @@ from ...events import (
     read_where,
     rename_channel,
     review_channel_url,
+    room_of,
     rooms_lines,
     set_review,
     set_status,
@@ -156,8 +157,15 @@ from ...events import (
     set_zone as store_zone,
 )
 from ...golive import now_iso, parse_ts
+from ...handoff import (
+    NOT_AN_EVENT,
+    event_to_request,
+    handoff_on,
+    prefilled,
+    refusal_for_event,
+    request_to_event,
+)
 from ...handoff import REQUEST as HANDOFF_REQUEST
-from ...handoff import prefilled, request_to_event
 from ...linkcheck import LINK_OK, link_answers
 from ...loops import wait_ready
 from ...panels import (
@@ -199,12 +207,16 @@ from ...when_picker import ZoneModal as WhenZoneModal
 
 log = logging.getLogger(__name__)
 
-DECISION_TEMPLATE = r"event:(?P<event_id>[0-9]+):(?P<action>approve|deny|delete_room)"
+DECISION_TEMPLATE = (
+    r"event:(?P<event_id>[0-9]+):(?P<action>approve|deny|delete_room|make_request)"
+)
 DELETE_ROOM = "delete_room"
+MAKE_REQUEST = "make_request"
 DECISION_LABELS: dict[str, str] = {
     "approve": "Approve",
     "deny": "Deny",
     DELETE_ROOM: ROOM_DELETE_BUTTON,
+    MAKE_REQUEST: NOT_AN_EVENT,
 }
 GOLIVE_MINUTES = 1
 RECONCILE_MINUTES = 5
@@ -239,6 +251,12 @@ BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
     "success": discord.ButtonStyle.success,
     "danger": discord.ButtonStyle.danger,
 }
+DECISION_STYLES: dict[str, discord.ButtonStyle] = {
+    "approve": discord.ButtonStyle.success,
+    "deny": discord.ButtonStyle.danger,
+    DELETE_ROOM: discord.ButtonStyle.danger,
+    MAKE_REQUEST: discord.ButtonStyle.secondary,
+}
 NOTE_TITLES: dict[str, str] = {"deny": "Why not?", "cancel": "Why is it off?"}
 NOTE_LABELS: dict[str, str] = {
     "deny": "One line the requester will be sent",
@@ -257,11 +275,19 @@ def decision_id(event_id: int, action: str) -> str:
     return f"event:{event_id}:{action}"
 
 
-def review_view(event_id: int) -> discord.ui.View:
+def review_view(event_id: int, *, handoff: bool = False) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     view.add_item(DecisionButton(event_id, "approve"))
     view.add_item(DecisionButton(event_id, "deny"))
+    if handoff:
+        view.add_item(DecisionButton(event_id, MAKE_REQUEST))
     return view
+
+
+def handoff_review_view(bot: Any, guild: Any) -> Any:
+    """`submit_event` takes a one-argument factory; the store is read here, not inside it."""
+    on = handoff_on(bot.store, guild.id)
+    return lambda event_id: review_view(event_id, handoff=on)
 
 
 def room_notice_view(event_id: int) -> discord.ui.View:
@@ -279,6 +305,37 @@ async def decide(
     if fresh is not None:
         await close_card(interaction, fresh)
     await answer(interaction, said)
+
+
+async def make_it_a_request(interaction: discord.Interaction, event_id: int) -> None:
+    """Not an event — make it a request: the review room's own hand-off (send-to-design §A)."""
+    row = await decision_context(interaction, event_id)
+    if row is None:
+        return
+    refused = refusal_for_event(interaction.client.store, interaction.guild.id, row)
+    if refused:
+        await answer(interaction, refused)
+        return
+    await interaction.response.defer(ephemeral=True)
+    said, fresh = await event_to_request(
+        interaction.client, interaction.guild, row, interaction.user
+    )
+    if fresh is not None:
+        await close_card(interaction, fresh)
+        await say_in_the_room(interaction.client, interaction.guild, fresh, said)
+    await answer(interaction, said)
+
+
+async def say_in_the_room(bot: Any, guild: Any, row: Any, said: str) -> None:
+    """The trail line the review room keeps beside the card it just closed."""
+    room = room_of(guild, row)
+    guard = getattr(bot, "guard", None)
+    if room is None or (guard is not None and not guard.allows_channel(room.id)):
+        return
+    try:
+        await room.send(said, allowed_mentions=discord.AllowedMentions.none())
+    except NETWORK_ERRORS as exc:
+        log.warning("events: could not leave the hand-off line for %s: %s", row["id"], exc)
 
 
 async def close_card(interaction: discord.Interaction, row: Any) -> None:
@@ -809,7 +866,7 @@ async def submit_draft(interaction: discord.Interaction, previous: Any) -> None:
         interaction.guild,
         interaction.user,
         checked,
-        review_view=review_view,
+        review_view=handoff_review_view(bot, interaction.guild),
         room_view=room_notice_view,
         requester=proposer(interaction.guild, fields),
     )
@@ -1533,11 +1590,10 @@ class DecisionButton(
     def __init__(self, event_id: int, action: str) -> None:
         self.event_id = event_id
         self.action = action
-        approving = action == "approve"
         super().__init__(
             discord.ui.Button(
                 label=DECISION_LABELS[action],
-                style=discord.ButtonStyle.success if approving else discord.ButtonStyle.danger,
+                style=DECISION_STYLES[action],
                 custom_id=decision_id(event_id, action),
             )
         )
@@ -1549,6 +1605,9 @@ class DecisionButton(
     async def on_click(self, interaction: discord.Interaction) -> None:
         if self.action == DELETE_ROOM:
             await ask_to_delete_room(interaction, self.event_id)
+            return
+        if self.action == MAKE_REQUEST:
+            await make_it_a_request(interaction, self.event_id)
             return
         row = await decision_context(interaction, self.event_id)
         if row is None:

@@ -4135,6 +4135,14 @@ function checkedWhere(body) {
   return { kind: channel.type, channel_id: given, text: '' };
 }
 
+// Send to... — `moved_to` is `kind:id`; `handoff.moved_words` is the wording it reads as.
+function movedWord(movedTo) {
+  const [kind, ident] = String(movedTo || '').split(':');
+  return (kind === 'event' || kind === 'request') && /^\d+$/.test(ident || '')
+    ? `${kind} #${ident}`
+    : '';
+}
+
 function eventRow(row) {
   const minutes = eventMinutes(row);
   const where = eventWhere(row);
@@ -4160,6 +4168,8 @@ function eventRow(row) {
     decided_by_name: memberName(row.decided_by),
     decided_at: row.decided_at,
     deny_reason: row.deny_reason,
+    moved_to: row.moved_to === undefined ? null : row.moved_to,
+    moved_word: movedWord(row.moved_to),
     review_channel_id: row.review_channel_id === undefined ? null : row.review_channel_id,
     created_at: row.created_at,
   };
@@ -6128,6 +6138,8 @@ function askRow(row) {
     due_on: row.due_on,
     status: row.status,
     status_word: REQUEST_STATUS_WORDS[row.status] || row.status,
+    moved_to: row.moved_to === undefined ? null : row.moved_to,
+    moved_word: movedWord(row.moved_to),
     priority: row.priority,
     notes: row.notes,
     requester: askPerson(row.user_id),

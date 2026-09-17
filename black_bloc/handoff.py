@@ -39,6 +39,7 @@ BODY_LIMIT = 1000
 
 FILED_AS = "Filed as request #{request_id} by <@{user_id}>"
 FROM_TICKET = "Filed from ticket #{ticket_id} by <@{user_id}>"
+FROM_EVENT = "(filed from event #{event_id})"
 
 REQUEST_TO_EVENT_DM = (
     "Your request **#{request_id}** on **{guild}** is now event **#{event_id}** — staff will "
@@ -236,6 +237,14 @@ def clamp(text: Any, limit: int) -> str:
     return str(text or "").strip()[:limit]
 
 
+def moved_words(moved_to: Any) -> str:
+    """Where a handed-off thing went, in words; a cell nothing wrote reads as nothing."""
+    found = read_trail(moved_to)
+    if found is None or found.kind not in (EVENT, REQUEST):
+        return ""
+    return f"{found.kind} #{found.ident}"
+
+
 def refusal_for_request(store: Any, guild_id: int, row: Any) -> str:
     """Why this request cannot be sent anywhere — empty when it can."""
     from .requests import FINAL_STATUSES, STATUS_WORDS, row_value
@@ -303,6 +312,46 @@ async def request_to_event(
     return (REQUEST_MOVED_LINE.format(event_id=event_id), fresh)
 
 
+async def event_to_request(
+    bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
+    """Not an event — make it a request: the row is filed, then the event's own cancel runs."""
+    from .cogs.community.requests import notify
+    from .events import HANDED_OFF, cancel_for, cell, get_event
+    from .requests import SOURCE_EVENT, WHAT_LIMIT, WHY_LIMIT, create_request, get_request
+
+    event_id = int(cell(row, "id"))
+    member_id = int(cell(row, "requester_id"))
+    request_id = await create_request(
+        bot.db,
+        guild.id,
+        member_id,
+        what=clamp(cell(row, "title"), WHAT_LIMIT),
+        why=clamp(cell(row, "description"), WHY_LIMIT) or FROM_EVENT.format(event_id=event_id),
+        due_on=None,
+        source=SOURCE_EVENT,
+    )
+    filed = await get_request(bot.db, request_id)
+    said, fresh = await cancel_for(
+        bot,
+        guild,
+        row,
+        actor,
+        note=EVENT_TO_REQUEST_WHY.format(request_id=request_id),
+        reason=HANDED_OFF,
+        via=via,
+    )
+    if fresh is None:
+        return (said, None)
+    await set_moved_to(bot.db, EVENT, event_id, trail(REQUEST, request_id))
+    await log_handoff(
+        bot, guild, EVENT, event_id, REQUEST, request_id, actor=actor, member=member_id, via=via
+    )
+    member = guild.get_member(member_id) or bot.get_user(member_id)
+    await notify(bot, guild, filed, member)
+    return (EVENT_MOVED_LINE.format(request_id=request_id), await get_event(bot.db, event_id))
+
+
 async def tell(bot: Any, guild: Any, member: Any, said: str, *, request_id: Any = None) -> None:
     """The one DM a hand-off owes the member; a shut inbox is logged, never silent."""
     from .cogs.community.requests import dm
@@ -359,6 +408,7 @@ __all__ = [
     "EVENT_TO_REQUEST_DM",
     "EVENT_TO_REQUEST_WHY",
     "FILED_AS",
+    "FROM_EVENT",
     "FROM_TICKET",
     "HANDOFF_OFF",
     "KINDS",
@@ -393,7 +443,9 @@ __all__ = [
     "handoff_on",
     "log_handoff",
     "mode",
+    "moved_words",
     "prefilled",
+    "event_to_request",
     "refusal_for_request",
     "refusal_for_event",
     "request_to_event",

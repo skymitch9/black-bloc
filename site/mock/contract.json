@@ -1195,7 +1195,9 @@
         "created_at",
         "where_kind",
         "where_channel_id",
-        "where_label"
+        "where_label",
+        "moved_to",
+        "moved_word"
       ]
     },
     {
@@ -1221,7 +1223,9 @@
           "scheduled",
           "where_kind",
           "where_channel_id",
-          "where_label"
+          "where_label",
+          "moved_to",
+          "moved_word"
         ]
       }
     },
@@ -1257,7 +1261,9 @@
           "duration",
           "where_kind",
           "where_channel_id",
-          "where_label"
+          "where_label",
+          "moved_to",
+          "moved_word"
         ]
       }
     },
@@ -2985,6 +2991,8 @@
           "due_on",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "requester",
           "comment_count",
           "created_at"
@@ -3010,6 +3018,8 @@
           "due_on",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "priority",
           "notes",
           "requester",
@@ -3064,6 +3074,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "decline_reason",
           "held_from",
           "held_word",
@@ -3090,6 +3102,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "held_from",
           "moves",
           "decided_by",
@@ -3117,6 +3131,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "decline_reason",
           "decided_by",
           "decided_at"
@@ -3144,6 +3160,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "built",
           "how_to_test",
           "ready_by",
@@ -3172,6 +3190,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "built",
           "how_to_test",
           "ready_by",
@@ -3202,6 +3222,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "sent_back_reason",
           "ready_by",
           "moves",
@@ -3227,6 +3249,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "built",
           "how_to_test",
           "moves",
@@ -3256,6 +3280,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "priority",
           "notes",
           "assignee"
