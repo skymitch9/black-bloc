@@ -20,7 +20,11 @@
 > [`golive-panel-design.md`](golive-panel-design.md). This doc is NOT rewritten.
 
 > **Audience:** the Opus builder first, reviewers second, the owner for the
-> decisions table. **Status:** TRACKED · ✅ **LIVE since 2026-09-02** (shipped with
+> decisions table. **Status:** TRACKED · 🔴 **D1 and D7 were REVERSED 2026-09-17** by
+> [`pings-remake-design.md`](pings-remake-design.md) — both rows below carry the new decision
+> beside the struck one. The Events role (§A) is unchanged and gained a sibling,
+> `raidtrain_ping_role_id`, set up the same way.
+> ✅ **LIVE since 2026-09-02** (shipped with
 > `pings_mode` **off**, D6) — ~~DESIGN~~ deployed `2026-09-02T17:43:16-07:00` as `d777f57`
 > (schema 21 `golive_fan_roles`, 2714 tests, 15 cogs incl. `content.pings` loaded);
 > `DONE.md` → "2026-09-02 — Phase 15: ping roles (F14), NEXT WAVE item 1". ⚠️ Fly release
@@ -67,13 +71,13 @@ into the same render + mentions, with member-facing opt-in surfaces.
 
 | # | Question | Default chosen 2026-09-02 | Key |
 |---|---|---|---|
-| D1 | Who may create a streamer's fan role? | **`self`** — a linked streamer opts their own role in with `/pings fans on`; staff can always do it for anyone | `pings_fan_role_creation` = `self` / `staff` / `auto` (auto = created at `/twitch link` and at the dashboard link) |
+| D1 | ~~Who may create a streamer's fan role?~~ **WHEN is it created?** | ~~**`self`** — a linked streamer opts their own role in; staff can always do it for anyone~~ 🔴 **REVERSED 2026-09-17** (branch `pings-remake`, §C2/F-PR3, owner verbatim "A"): the default is **`follow`** — the FIRST person to follow a streamer on `/pings` is what makes the role, and a role nobody wears for `pings_empty_role_days` is deleted again. The reason is the 250-role guild cap: under `self` a role existed because somebody once pressed a button, not because anybody wanted it. `self`, `staff` and `auto` all still work and mean exactly what they meant. | `pings_fan_role_creation` = `self` / `staff` / `auto` / **`follow`** (default) |
 | D2 | Fan-role name | **`{name} pings`** (display name at creation) | `pings_fan_role_template` |
 | D3 | One Events role for both feeds, or two? | **One** — `/pingroles setup` creates "Events" and sets BOTH `golive_ping_role_id` and `events_ping_role_id`; the keys stay separate so the owner can split later on the Go-live / Events pages | `pings_events_role_name` = `Events` |
 | D4 | What happens to a fan role on `/twitch unlink` or `/golive optout`? | **`keep`** the role, stop pinging (no announcement → no ping anyway) | `pings_fan_role_on_unlink` = `keep` / `delete` |
 | D5 | Removing a fan role by staff: delete the Discord role too? | **yes** | `pings_fan_role_delete` bool |
 | D6 | Feature mode | **`off`** at deploy (cutover ladder); the Fable session flips it `on` via the dashboard for the test sweep | `pings_mode` = `off` / `on` (no shadow — nothing here posts; role creation/assignment is the only member-affecting act and it is opt-in by the member) |
-| D7 | Where members opt in | **all three**: `/pings follow` (autocomplete), the auto-maintained "Streamers" role-menu panels, and the Events role on a "Notifications" menu | — |
+| D7 | Where members opt in | ~~**all three**: `/pings follow` (autocomplete), the auto-maintained "Streamers" role-menu panels, and the Events role on a "Notifications" menu~~ 🔴 **SUPERSEDED 2026-09-17** (`pings-remake` §C4/§C5): the `/pings` PANEL and, on a Community server, two Discord onboarding prompts the bot keeps in step. The "Streamers" panels stay until the menus retire; the "Notifications" post is taken down the first time onboarding is written. | — |
 
 ## A. The Events role (D3)
 
@@ -184,7 +188,7 @@ half is now the `/settings` **panel**, v84, 2026-09-05; both doors still exist*)
 | `pings_mode` | mode (off/on) | `off` | the whole feature |
 | `pings_log_level` | level | `important` | Discord log lines |
 | `pings_events_role_name` | str | `Events` | name `/pingroles setup` creates |
-| `pings_fan_role_creation` | choice self/staff/auto | `self` | D1 |
+| `pings_fan_role_creation` | choice self/staff/auto/**follow** | ~~`self`~~ **`follow`** | D1 (reversed 2026-09-17) |
 | `pings_fan_role_template` | str | `{name} pings` | D2; `{name}` only |
 | `pings_fan_role_on_unlink` | choice keep/delete | `keep` | D4 |
 | `pings_fan_role_delete` | bool | `true` | D5 |
