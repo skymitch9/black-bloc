@@ -9,6 +9,13 @@
 > the allowed role its view back. ⚠️ **`TS-d` is the row that matters** — it is the whole feature in
 > one press, and the only proof Discord's own **Sync now** really ran. ⚠️ These are the only rows on
 > this page that change permissions on a live channel. Before that,
+> **2026-09-17** — rows **`YL-a` … `YL-i`** added at the foot for the YOUTUBE LIVE build (branch
+> `youtube-live`, off `main` `9c08936`; design `info/youtube-live-design.md`; ⚠️ **not merged, not
+> deployed, and nothing in it has ever met real YouTube — the page markers were read off exactly ONE
+> real channel on one day, which is KI-30**): a linked YouTube channel going live is announced through
+> the go-live feed as `source=youtube` (`youtube_live_mode`, default **off**). ⚠️ **`YL-c` is the row
+> that matters** — the card itself, which is the only proof the keyless shape (title *Live now*, game
+> *something*, footer *via YouTube*) reads as intended to a person. Before that,
 > **2026-09-17** — rows **`RA-a` … `RA-i`** added at the foot for the REQUEST FORUM ADOPT build
 > (branch `request-forum-adopt`, off `main` `5e92e41`; design `info/blackmail-threads-design.md` §G;
 > ⚠️ **not merged, not deployed, no post has ever been started by hand in the live forum**): a post
@@ -1748,6 +1755,30 @@ ships **on** and `frontdoor_channel_id` ships **blank**, so nothing is posted an
 | **531** (was `FD-h`) | Delete the posted front-door message by hand and wait five minutes | It comes back. The Logs page shows `frontdoor.gone` then `frontdoor.posted` |
 | **532** (was `FD-i`) | Re-post the **welcome** post (`/posts` ▸ the welcome post ▸ **Post it**) into the door's channel | The front door is posted again UNDER it, so it still sits directly below the rules: `frontdoor.below_post` then `frontdoor.moved`. Set `frontdoor_follows_post` to `none` and repeat — nothing moves |
 | **533** (was `FD-j`) | Set **frontdoor_mode** to `off` (Settings ▸ modmail, or `/settings` ▸ **A setting group…** ▸ modmail), wait five minutes, then run `/ask` | The posted door is taken down (`frontdoor.taken_down`), and `/ask` disappears from the picker while `hide_commands_when_off` is on. With hiding off, `/ask` answers in words, names `frontdoor_mode` and says both ways to turn it back on. Set it back to `on` and re-post from the card |
+## YouTube LIVE — a linked channel going live is announced through the go-live feed (`YL-a` … `YL-i`)
+
+Added 2026-09-17 by branch `youtube-live` (design [`../info/youtube-live-design.md`](../info/youtube-live-design.md),
+owner: *"pawpette is currently live on youtube, it didnt seem to grab that"* → *"can we do a youtube grabber
+for live?"*). The key is `youtube_live_mode`, **off** out of the box, in **Settings ▸ youtube**, on the
+**Go-live** page and on `/youtube` as **Live streams are…**. ⚠️ **Nothing below has been done against real
+YouTube — every claim is the test suite's, and the page markers were checked against exactly ONE real
+channel on one day (KI-30).** These rows need somebody who actually streams on YouTube AND has linked that
+channel (`/youtube` ▸ **Link my channel**); with nobody linked there is nothing to probe. They also need
+row 3 of the cutover plan — go-live itself — because a YouTube stream comes out of that feed.
+Review links: https://blackbloc.heygabi.ai/golive.html (the **How live streams are spotted** card) and
+https://blackbloc.heygabi.ai/settings.html.
+
+| # | Do this | Expect |
+|---|---|---|
+| `YL-a` | With `youtube_live_mode` **off** (the default), have the linked streamer go live on YouTube and wait ten minutes | Nothing at all: no post, no row, no probe. This is the shipped state, and it is the control for every row below |
+| `YL-b` | Set **Live streams are…** to `shadow` on `/youtube`, then go live on YouTube and wait `youtube_live_poll_minutes` (5) | On the dashboard's **Logs** ▸ YouTube: one `youtube.would_live_seen` row naming the channel, the video id and the watch URL. With `golive_mode` on you ALSO get the real go-live post — shadow here shadows this half's own row, not the announcement. ⚠️ If the post is what you did not want yet, leave `golive_mode` on shadow too |
+| `YL-c` | Open the go-live post the run above made | ⚠️ **The row this build exists to prove.** It is the ordinary go-live card — the ping role, the fan role, the streamer's name — with the YouTube watch link, the video's thumbnail, a red edge, and the footer **Black Bloc · via YouTube**. With NO `YOUTUBE_API_KEY` set the title reads **Live now** and the game reads **something**; both are the designed keyless shape, not a bug |
+| `YL-d` | Check **Logs** ▸ Go-live for the same minute | ONE `golive.announce` (or `golive.would_announce`) row whose details read `source: youtube`, and ONE `golive_sessions` row on the Go-live page's **Recent streams** table with **How** = `youtube` and **Ended** = *live now*. If there are TWO sessions, the presence door and the probe both fired and the lock did not hold — that is a bug, report it |
+| `YL-e` | Leave the stream running for twenty minutes and keep watching the logs | Still exactly one post and one session. `youtube.live_seen` is written once per broadcast, not once per probe — a second row for the same video id is a bug |
+| `YL-f` | End the stream and wait `youtube_live_poll_minutes × youtube_live_end_misses` (10 minutes at the defaults) | The announcement is rewritten in the past tense, exactly as a Twitch stream's is (needs `golive_end_mode` = `edit`; with it `off` the post is left as posted, which is also correct). A `golive.end` row with `source: youtube`. ⚠️ It must NOT end after the FIRST quiet probe — that is what `youtube_live_end_misses` is for |
+| `YL-g` | On the **Go-live** page, find the **How live streams are spotted** card | Live streams = the mode you set, Probe = running, **Last probe** a minute or two old, Last probe error = none, **Channels probed** = how many are linked, **Quota used today** = 0 with no key set (1 unit per stream detected with one). ⚠️ A **Last probe** that never moves means the loop stopped — the Health tab's `live_poller` row is the other place that shows it |
+| `YL-h` | Restart the bot (`flyctl apps restart black-bloc`) WHILE the streamer is live, then look at the post and the Recent streams table | Still one session, still open, and the post is NOT re-announced. The reconcile asks YouTube whether they are still live before closing anything. ⚠️ If the post gets rewritten as ended and then a second post appears, the reconcile answered *offline* for somebody who was live |
+| `YL-i` | ⚠️ Set `youtube_live_poll_minutes` to **1** on the Settings page | It is refused **in words**, naming 2 as the floor and why. Same for `youtube_live_end_misses` at 0 or 6. Nothing is saved |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

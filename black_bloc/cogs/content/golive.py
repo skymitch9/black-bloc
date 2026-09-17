@@ -605,6 +605,8 @@ class GoLive(commands.Cog):
         member = guild.get_member(row["user_id"])
         if member is not None and extract_stream(getattr(member, "activities", ())) is not None:
             return True
+        if row["source"] == "youtube":
+            return await self._still_live_on_youtube(row)
         if row["source"] != "twitch" or self.helix is None:
             return False
         login = _row_value(await get_link(self.bot.db, row["user_id"]), "twitch_login")
@@ -620,6 +622,21 @@ class GoLive(commands.Cog):
                 exc,
             )
             return True
+
+    async def _still_live_on_youtube(self, row: Any) -> bool:
+        """An unanswerable probe leaves the session open, exactly as an unanswerable Helix does."""
+        cog = self.bot.get_cog("YouTube") if callable(getattr(self.bot, "get_cog", None)) else None
+        asker = getattr(cog, "is_live_now", None)
+        if asker is None:
+            return False
+        live = await asker(row["user_id"])
+        if live is None:
+            log.warning(
+                "go-live: YouTube did not say whether %s is still live; leaving the session open",
+                row["user_id"],
+            )
+            return True
+        return bool(live)
 
     async def _close_session(self, guild: Any, row: Any, reason: str) -> None:
         member = guild.get_member(row["user_id"])
@@ -661,6 +678,13 @@ class GoLive(commands.Cog):
     async def _go_live(self, member: Any, info: StreamInfo, source: str) -> None:
         async with self._lock(member.id):
             await self._go_live_once(member, info, source)
+
+    async def go_live(self, member: Any, info: StreamInfo, source: str) -> None:
+        """The door another cog's poller comes in by — `source=youtube` today."""
+        await self._go_live(member, info, source)
+
+    async def end_live(self, guild: Any, member: Any, source: str | None) -> None:
+        await self._end_live(guild, member, source)
 
     async def _note_streaming(self, member: Any, info: StreamInfo) -> None:
         """The streamer list, fed by BOTH doors: one upsert per go-live, never a second row."""

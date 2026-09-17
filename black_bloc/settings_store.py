@@ -1446,6 +1446,59 @@ KEY_HELP.update(
 )
 
 
+# YouTube live (v126) — a linked channel going live is announced through the go-live feature, in
+# its own block so the parallel branches merge textually. Design: info/youtube-live-design.md §C.
+YOUTUBE_LIVE_MODES = ("off", "shadow", "on")
+YOUTUBE_LIVE_POLL_MINUTES = 5
+YOUTUBE_LIVE_POLL_MIN_MINUTES = 2
+YOUTUBE_LIVE_POLL_MAX_MINUTES = 60
+YOUTUBE_LIVE_END_MISSES = 2
+YOUTUBE_LIVE_END_MISSES_MIN = 1
+YOUTUBE_LIVE_END_MISSES_MAX = 5
+KEY_TYPES.update(
+    {
+        "youtube_live_mode": "enum",
+        "youtube_live_poll_minutes": "int",
+        "youtube_live_end_misses": "int",
+    }
+)
+KEY_CHOICES["youtube_live_mode"] = YOUTUBE_LIVE_MODES
+KEY_MIN["youtube_live_poll_minutes"] = YOUTUBE_LIVE_POLL_MIN_MINUTES
+KEY_MAX["youtube_live_poll_minutes"] = YOUTUBE_LIVE_POLL_MAX_MINUTES
+KEY_MIN["youtube_live_end_misses"] = YOUTUBE_LIVE_END_MISSES_MIN
+KEY_MAX["youtube_live_end_misses"] = YOUTUBE_LIVE_END_MISSES_MAX
+KEY_MIN_REASON["youtube_live_poll_minutes"] = (
+    "Probing a channel more often than every {limit} minutes asks YouTube for the same page "
+    "again and finds nobody live any sooner."
+)
+KEY_MAX_REASON["youtube_live_poll_minutes"] = (
+    "A gap longer than {limit} minutes means a short stream can start and finish between two "
+    "probes and never be announced at all."
+)
+KEY_MIN_REASON["youtube_live_end_misses"] = (
+    "Ending a stream on {limit} quiet probe means one hiccup on YouTube's side rewrites the "
+    "announcement while the stream is still running."
+)
+KEY_MAX_REASON["youtube_live_end_misses"] = (
+    "Waiting for {limit} quiet probes leaves an announcement saying somebody is live long after "
+    "they have stopped."
+)
+KEY_HELP.update(
+    {
+        "youtube_live_mode": (
+            "off, shadow (log what would be announced), or on — a linked YouTube channel going "
+            "live is announced through the go-live feature, exactly like a Twitch stream"
+        ),
+        "youtube_live_poll_minutes": (
+            "how often linked YouTube channels are probed for a live stream"
+        ),
+        "youtube_live_end_misses": (
+            "how many probes in a row must read offline before a stream is treated as ended"
+        ),
+    }
+)
+
+
 # Pings panel (wave 2) — the one decision `/pings`'s panel introduces, in its own block so the
 # parallel wave-2 branches merge textually.
 KEY_TYPES.update({"pings_panel_minutes": "int"})
@@ -2795,6 +2848,12 @@ class SettingsStore:
             return 10
         if key == "youtube_unlink_dms_them":
             return True
+        if key == "youtube_live_mode":
+            return "off"
+        if key == "youtube_live_poll_minutes":
+            return YOUTUBE_LIVE_POLL_MINUTES
+        if key == "youtube_live_end_misses":
+            return YOUTUBE_LIVE_END_MISSES
         if key == "pings_panel_minutes":
             return 10
         if key == "voice_panel_minutes":

@@ -1483,6 +1483,34 @@ async def test_whether_staff_unlinking_somebody_dms_them_is_a_setting_not_a_cons
         coerce_value("youtube_unlink_dms_them", "yes")
 
 
+async def test_the_live_half_ships_off_and_is_reachable_from_both_doors(store):
+    """Checklist 33: the three decisions youtube-live adds are registry keys, not constants."""
+    from black_bloc.settings_panel import reachable_on_the_panel
+
+    assert store.get(7, "youtube_live_mode") == "off"
+    assert store.get(7, "youtube_live_poll_minutes") == 5
+    assert store.get(7, "youtube_live_end_misses") == 2
+    for key in ("youtube_live_mode", "youtube_live_poll_minutes", "youtube_live_end_misses"):
+        assert KEY_HELP[key] and reachable_on_the_panel(key)
+        assert namespace_of(key) == "youtube"
+    assert KEY_CHOICES["youtube_live_mode"] == ("off", "shadow", "on")
+
+
+async def test_the_live_probe_gap_and_the_quiet_probe_count_are_both_bounded(store):
+    """A one-minute probe fetches the same page twice; one quiet probe ends a live stream."""
+    for key, low, high in (
+        ("youtube_live_poll_minutes", 2, 60),
+        ("youtube_live_end_misses", 1, 5),
+    ):
+        assert coerce_value(key, low) == low and coerce_value(key, high) == high
+        with pytest.raises(SettingError):
+            coerce_value(key, low - 1)
+        with pytest.raises(SettingError):
+            coerce_value(key, high + 1)
+    with pytest.raises(SettingError):
+        coerce_value("youtube_live_mode", "sometimes")
+
+
 async def test_the_seven_youtube_keys_the_panel_only_reads_keep_their_defaults(store):
     """The panel changed the door, not the room: no `youtube_*` default moved."""
     assert store.get(7, "youtube_mode") == "off"

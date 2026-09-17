@@ -12,6 +12,7 @@ from ...cogs.content.youtube import (
     get_link,
     latest_video,
     link_channel,
+    live_health,
     recent_videos,
     unlink_channel,
 )
@@ -163,10 +164,13 @@ def build_router(bot: Any) -> APIRouter:
 
     @router.get("/status")
     async def youtube_status() -> dict[str, Any]:
-        """The key, the sweep's health and how many fetches came back unchanged."""
+        """The key, both sweeps' health and how many fetches came back unchanged."""
         db = require_db(bot)
+        guild = require_guild(bot)
         cog = bot.get_cog(COG) if callable(getattr(bot, "get_cog", None)) else None
         totals = await counts(db)
+        live = await live_health(bot, guild)
+        live_loop = getattr(cog, "live_poller", None)
         fetches = int(getattr(cog, "fetches", 0) or 0)
         unchanged = int(getattr(cog, "unchanged", 0) or 0)
         return {
@@ -181,6 +185,15 @@ def build_router(bot: Any) -> APIRouter:
             "links": totals["links"],
             "videos": totals["videos"],
             "announced": totals["announced"],
+            "live_mode": live["mode"],
+            "live_minutes": live["minutes"],
+            "live_end_misses": live["misses"],
+            "live_running": bool(live_loop is not None and live_loop.is_running()),
+            "last_probe_at": live["last_probe_at"],
+            "last_probe_error": live["last_probe_error"],
+            "probed": live["probed"],
+            "quota_today": live["quota"],
+            "live_now": live["open"],
         }
 
     return router

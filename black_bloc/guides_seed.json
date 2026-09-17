@@ -46,22 +46,25 @@
       "steps": [
         {"do": "Type **/golive** in any channel.", "expect": "A panel only you can see, with **Link my Twitch channel** on it."},
         {"do": "Press **Link my Twitch channel** and type the part after twitch.tv/.", "expect": "The panel reads twitch.tv/your-name. A name somebody else holds is refused without naming them."},
-        {"do": "Start your stream with Discord showing you as **Streaming** (Discord ▸ Settings ▸ Connections ▸ Twitch, Display on profile on).", "expect": "The announcement posts in the go-live channel with your fans pinged. In shadow, nothing posts and the bot logs what it would have said."},
+        {"do": "Start your stream with Discord showing you as **Streaming** (Discord ▸ Settings ▸ Connections ▸ Twitch, Display on profile on).", "expect": "The announcement posts in the go-live channel with your fans pinged. In shadow, nothing posts and the bot logs what it would have said. A YouTube stream is announced the same way once you have linked that channel with /youtube — same post, same pings, same ending."},
         {"do": "Stop your stream and wait a minute.", "expect": "The same post is rewritten in the past tense — nothing is posted twice, and nobody is pinged again. What it says is set under Announcement wording on the site."},
-        {"do": "Press **Stop announcing my streams** to pause.", "expect": "The button becomes **Announce my streams again**. Your link is kept."}
+        {"do": "Press **Stop announcing my streams** to pause.", "expect": "The button becomes **Announce my streams again**. Your link is kept."},
+        {"do": "If you also stream on YouTube, type **/youtube** and press **Link my channel**.", "expect": "One link does both: your uploads AND your live streams are announced. Black Bloc checks the channel every few minutes and a live stream comes out of this same feed, so there is nothing else to switch on. With no YouTube API key set the post's title reads Live now."}
       ],
       "faults": [
         {"symptom": "The post still reads as if you are live", "answer": "A Lead turns golive_end_mode to edit on the Go-live page. Once the stream is over, right under the live wording, is where the ending is written, and the Wording card below both shows what the bot has stored before anybody streams."},
         {"symptom": "Nothing posted", "answer": "Announcements are in shadow. The panel's Announcements line says so; a Lead flips it."},
         {"symptom": "Discord does not show you streaming", "answer": "Reconnect Twitch under Discord's Connections and turn Display on profile on. The bot reads Discord, not Twitch."},
         {"symptom": "You went live twice in a short time", "answer": "The second one waits for the cooldown shown above."},
-        {"symptom": "Your game shows as \"something\"", "answer": "Twitch had no category set. Set one and go live again."}
+        {"symptom": "Your game shows as \"something\"", "answer": "Twitch had no category set. Set one and go live again. A YouTube stream always reads something — YouTube has no category to read."},
+        {"symptom": "You went live on YouTube and nothing posted", "answer": "Either that channel is not linked (/youtube ▸ Link my channel) or a Lead has youtube_live_mode off — the /youtube panel's Live streams line says which. It also needs go-live announcements to be on, because a YouTube stream comes out of this feed."}
       ],
       "facts": [
         {"kind": "setting", "ref": "golive_mode"},
         {"kind": "setting", "ref": "golive_channel_id"},
         {"kind": "setting", "ref": "golive_cooldown_minutes"},
-        {"kind": "probe", "ref": "golive.linked_count"}
+        {"kind": "probe", "ref": "golive.linked_count"},
+        {"kind": "setting", "ref": "youtube_live_mode"}
       ]
     },
     {

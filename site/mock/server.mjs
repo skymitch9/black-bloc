@@ -478,6 +478,9 @@ const SETTING_SPECS = [
   ['voice_panel_minutes', 'int', 10, 10, "minutes the /voice panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['chat_panel_minutes', 'int', 10, 10, "minutes the /chat panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['youtube_unlink_dms_them', 'bool', true, true, 'true to DM a member the reason when STAFF forget their YouTube channel for them; a member unlinking their own channel is never DMed'],
+  ['youtube_live_mode', 'enum', 'off', 'off', 'off, shadow (log what would be announced), or on — a linked YouTube channel going live is announced through the go-live feature, exactly like a Twitch stream', ['off', 'shadow', 'on']],
+  ['youtube_live_poll_minutes', 'int', 5, 5, 'how often linked YouTube channels are probed for a live stream', null, 60, 2],
+  ['youtube_live_end_misses', 'int', 2, 2, 'how many probes in a row must read offline before a stream is treated as ended', null, 5, 1],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['automod_arm_needs_confirm', 'bool', true, true, 'true to ask a second time before automod is turned on from the panel, naming what will start happening; turning it off or back to shadow is always one press'],
   ['raidtrain_panel_minutes', 'int', 10, 10, "minutes the /raidtrain panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -3551,6 +3554,15 @@ route('GET', '/api/youtube/status', (context) => {
     links: state.youtube.links.length,
     videos: state.youtube.videos.length,
     announced: state.youtube.videos.filter((row) => row.announced_at && row.mode === 'on').length,
+    live_mode: keyRow('youtube_live_mode').value ?? keyRow('youtube_live_mode').default,
+    live_minutes: keyRow('youtube_live_poll_minutes').default,
+    live_end_misses: keyRow('youtube_live_end_misses').default,
+    live_running: true,
+    last_probe_at: minutesAgo(3),
+    last_probe_error: null,
+    probed: state.youtube.links.length,
+    quota_today: 0,
+    live_now: 0,
   };
 });
 

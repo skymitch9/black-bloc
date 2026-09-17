@@ -28,6 +28,8 @@ EMBED_GAME_FIELD = "Game"
 EMBED_FOOTER = "Black Bloc · via {source}"
 EMBED_SOURCE_TWITCH = "Twitch"
 EMBED_SOURCE_PRESENCE = "Discord activity"
+EMBED_SOURCE_YOUTUBE = "YouTube"
+EMBED_SOURCES = {"twitch": EMBED_SOURCE_TWITCH, "youtube": EMBED_SOURCE_YOUTUBE}
 EMBED_END_MARK = "·"
 ANNOUNCEMENT_LEFT = "left"
 END_TRIM = " \t—–-·|,;:"
@@ -200,7 +202,7 @@ def embed_colour(platform: str | None) -> int:
 
 
 def embed_footer(source: str | None) -> str:
-    named = EMBED_SOURCE_TWITCH if source == "twitch" else EMBED_SOURCE_PRESENCE
+    named = EMBED_SOURCES.get(str(source or ""), EMBED_SOURCE_PRESENCE)
     return EMBED_FOOTER.format(source=named)
 
 

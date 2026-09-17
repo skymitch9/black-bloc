@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 import discord
@@ -30,6 +31,8 @@ from ...panels import site_page_url as library_site_page_url
 from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
+    YOUTUBE_LIVE_MODES,
+    YOUTUBE_LIVE_POLL_MINUTES,
     YOUTUBE_MODES,
     YOUTUBE_POLL_MIN_MINUTES,
     SettingError,
@@ -66,10 +69,19 @@ from ...youtube import (
     status_lines,
     where_words,
 )
+from ...youtube_live import (
+    LIVE_URL,
+    UNREADABLE_EVERY_SECONDS,
+    after_probe,
+    is_over,
+    stream_info,
+)
 
 log = logging.getLogger(__name__)
 
 COG_NAME = "YouTube"
+GOLIVE_COG = "GoLive"
+YOUTUBE_SOURCE = "youtube"
 POLL_FAILURES_BEFORE_DEGRADED = 3
 NO_KEY = (
     "youtube: no YOUTUBE_API_KEY, so uploads run on the public feed alone — Shorts are still "
@@ -126,6 +138,25 @@ MODE_OFF_LINE = (
     "changes it with **Announcements are…** on this panel."
 )
 MODE_SET = "Upload announcements are now **{mode}**."
+LIVE_MODE_SET = "Live-stream announcements are now **{mode}**."
+LIVE_MODE_PLACEHOLDER = "Live streams are…"
+LIVE_MODE_LABELS = {
+    "off": "off — linked channels are not checked for live streams",
+    "shadow": "shadow — the probe runs and logs, nothing else changes",
+    "on": "on — a linked channel going live is announced",
+}
+LIVE_NO_GOLIVE_CHANNEL = (
+    "A live stream is announced through the go-live feature, and `golive_channel_id` is not set, "
+    "so there is nowhere to post one yet. **Setup** on `/golive` picks a channel."
+)
+LIVE_GOLIVE_NOT_ON = (
+    "Go-live announcements are **{mode}** at the moment, and a YouTube stream is announced "
+    "through them — so nothing is posted until `golive_mode` is on."
+)
+LIVE_COG_MISSING = (
+    "The go-live feature is not loaded right now, so a linked channel going live cannot be "
+    "announced. Tell a Lead — the bot needs a restart."
+)
 SETUP_DONE = "Upload announcements now go to {where}{ping}."
 SETUP_NOTHING = "Nothing was given, so nothing changed."
 NO_CHANNEL = (
@@ -536,6 +567,31 @@ async def set_mode(
     return (MODE_SET.format(mode=value) + extra, None)
 
 
+async def set_live_mode(
+    bot: Any, guild: Any, actor: Any, value: str, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
+    """The live half's own switch; go-live still decides whether anything is posted."""
+    try:
+        await bot.store.set(guild.id, "youtube_live_mode", value, by=id_of(actor) or None)
+    except SettingError as exc:
+        return (str(exc), None)
+    extra = ""
+    if value != "off":
+        golive_mode = bot.store.get(guild.id, "golive_mode")
+        if not bot.store.get(guild.id, "golive_channel_id"):
+            extra = f" {LIVE_NO_GOLIVE_CHANNEL}"
+        elif golive_mode != "on":
+            extra = f" {LIVE_GOLIVE_NOT_ON.format(mode=golive_mode)}"
+    await log_action(
+        bot,
+        guild,
+        kind_via("youtube.live_mode", via),
+        actor=actor,
+        details={"mode": value, "via": via},
+    )
+    return (LIVE_MODE_SET.format(mode=value) + extra, None)
+
+
 async def save_setup(
     bot: Any, guild: Any, actor: Any, changes: Any, *, via: str = VIA_DISCORD
 ) -> tuple[str, Any]:
@@ -581,8 +637,18 @@ class YouTube(commands.Cog):
         self.poll_failures = 0
         self.fetches = 0
         self.unchanged = 0
+        self.last_probe_at: str | None = None
+        self.last_probe_error: str | None = None
+        self.probed = 0
+        self.confirms = 0
+        self.confirms_day = ""
+        self.live_misses: dict[str, int] = {}
+        self.live_video: dict[str, str] = {}
+        self.unreadable_at: dict[str, datetime] = {}
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
+        if name == "live_poller":
+            return (self.last_probe_at, self.last_probe_error)
         if name != "poller":
             return (None, None)
         return (self.last_poll_ok_at, self.last_poll_error)
@@ -593,9 +659,11 @@ class YouTube(commands.Cog):
         if not self.bot.db.is_connected:
             return
         self.poller.start()
+        self.live_poller.start()
 
     async def cog_unload(self) -> None:
         self.poller.cancel()
+        self.live_poller.cancel()
         await self.client.close()
 
     # --- the poll ---------------------------------------------------------------------------
@@ -655,6 +723,222 @@ class YouTube(commands.Cog):
             await self._poll_failed(failures)
             return
         self._poll_worked()
+
+    # --- the live probe ----------------------------------------------------------------------
+
+    @tasks.loop(minutes=1)
+    async def live_poller(self) -> None:
+        try:
+            await self.probe_all()
+        except Exception as exc:
+            self.last_probe_error = f"{type(exc).__name__}: {exc}"
+            log.exception("youtube: the live probe failed")
+        self._retime_live()
+
+    @live_poller.before_loop
+    async def _before_live_poller(self) -> None:
+        if await wait_ready(self.bot, self._live_poller_stopped):
+            self._retime_live()
+
+    @live_poller.error
+    async def _live_poller_stopped(self, exc: BaseException) -> None:
+        """The loop stops for the life of the process unless it is started again."""
+        self.last_probe_error = f"{type(exc).__name__}: {exc}"
+        log.error("youtube: the live probe stopped; restarting it", exc_info=exc)
+        self.live_poller.restart()
+
+    def _retime_live(self) -> None:
+        wanted = self._live_minutes()
+        if self.live_poller.minutes != wanted:
+            self.live_poller.change_interval(minutes=wanted)
+
+    def _live_minutes(self) -> int:
+        guild = next(iter(getattr(self.bot, "guilds", ()) or ()), None)
+        if guild is None:
+            return YOUTUBE_LIVE_POLL_MINUTES
+        return max(1, int(self.bot.store.get(guild.id, "youtube_live_poll_minutes")))
+
+    async def probe_all(self) -> None:
+        """One live sweep of every linked channel whose server has the live half switched on."""
+        if not self.bot.db.is_connected:
+            return
+        worked = 0
+        failed: str | None = None
+        for row in await self._pollable():
+            member = self._find_member(int(row["user_id"]))
+            if member is None:
+                continue
+            mode = self._live_mode(member.guild.id)
+            if mode == "off":
+                continue
+            channel_id = str(row["channel_id"])
+            try:
+                probe = await self.client.probe_live(channel_id)
+            except YouTubeError as exc:
+                failed = str(exc)
+                log.warning("youtube: could not probe %s for a live stream: %s", channel_id, exc)
+                continue
+            worked += 1
+            self.probed += 1
+            await self._probed(member, channel_id, probe, mode)
+        if worked:
+            self.last_probe_at = now_iso()
+        self.last_probe_error = failed
+
+    async def _probed(self, member: Any, channel_id: str, probe: Any, mode: str) -> None:
+        if not probe.readable:
+            await self._unreadable(member, channel_id)
+        if probe.announceable:
+            await self._live_now(member, channel_id, probe, mode)
+            return
+        await self._not_live(member, channel_id)
+
+    async def _unreadable(self, member: Any, channel_id: str) -> None:
+        """A page that changed shape says so once an hour and reads as offline — never a raise."""
+        now = datetime.now(UTC)
+        last = self.unreadable_at.get(channel_id)
+        if last is not None and (now - last).total_seconds() < UNREADABLE_EVERY_SECONDS:
+            return
+        self.unreadable_at[channel_id] = now
+        log.warning(
+            "youtube: %s's live page was not the shape the probe reads; taking it as offline",
+            channel_id,
+        )
+        await log_action(
+            self.bot,
+            member.guild,
+            "youtube.probe_unreadable",
+            target=member,
+            details={
+                "channel_id": channel_id,
+                "url": LIVE_URL.format(channel_id=channel_id),
+            },
+        )
+
+    async def _live_now(self, member: Any, channel_id: str, probe: Any, mode: str) -> None:
+        self.live_misses[channel_id] = 0
+        if self.live_video.get(channel_id) == probe.video_id:
+            return
+        guild = member.guild
+        if await self._any_open_session(guild, member) is not None:
+            self.live_video[channel_id] = probe.video_id
+            return
+        confirmed = await self._confirm(guild, member, probe.video_id)
+        self.live_video[channel_id] = probe.video_id
+        if confirmed is not None and not confirmed.live:
+            return
+        info = stream_info(
+            probe.video_id,
+            getattr(confirmed, "title", ""),
+            getattr(confirmed, "thumbnail", ""),
+        )
+        await log_action(
+            self.bot,
+            guild,
+            "youtube.live_seen" if mode == "on" else "youtube.would_live_seen",
+            target=member,
+            details={
+                "channel_id": channel_id,
+                "video_id": probe.video_id,
+                "url": info.url,
+                "title": info.title,
+                "confirmed": confirmed is not None,
+                "mode": mode,
+            },
+        )
+        await self._go_live(guild, member, info)
+
+    async def _not_live(self, member: Any, channel_id: str) -> None:
+        guild = member.guild
+        misses = after_probe(self.live_misses.get(channel_id), False)
+        self.live_misses[channel_id] = misses
+        if not is_over(misses, self._end_misses(guild.id)):
+            return
+        self.live_misses[channel_id] = 0
+        self.live_video.pop(channel_id, None)
+        await self._end_live(guild, member)
+
+    async def _confirm(self, guild: Any, member: Any, video_id: Any) -> Any:
+        """One unit, only where a key exists; a refusal is said out loud and announced anyway."""
+        if not getattr(self.client, "keyed", False):
+            return None
+        self._spent()
+        try:
+            return await self.client.confirm_live(video_id)
+        except YouTubeError as exc:
+            log.warning("youtube: could not confirm the live stream %s: %s", video_id, exc)
+            await log_action(
+                self.bot,
+                guild,
+                "youtube.live_confirm_failed",
+                target=member,
+                details={"video_id": str(video_id), "reason": str(exc)},
+            )
+            return None
+
+    def _spent(self) -> None:
+        today = datetime.now(UTC).date().isoformat()
+        if self.confirms_day != today:
+            self.confirms_day = today
+            self.confirms = 0
+        self.confirms += 1
+
+    async def _go_live(self, guild: Any, member: Any, info: Any) -> None:
+        goer = getattr(self._golive(), "go_live", None)
+        if goer is None:
+            log.warning(
+                "youtube: the go-live cog is not loaded; %s's stream is not announced", member.id
+            )
+            await log_action(
+                self.bot,
+                guild,
+                "youtube.live_announce_failed",
+                target=member,
+                details={"url": info.url, "reason": "golive_cog_missing"},
+            )
+            return
+        await goer(member, info, YOUTUBE_SOURCE)
+
+    async def _end_live(self, guild: Any, member: Any) -> None:
+        ender = getattr(self._golive(), "end_live", None)
+        if ender is None:
+            log.warning(
+                "youtube: the go-live cog is not loaded; %s's session is left open", member.id
+            )
+            return
+        await ender(guild, member, YOUTUBE_SOURCE)
+
+    def _golive(self) -> Any:
+        getter = getattr(self.bot, "get_cog", None)
+        return getter(GOLIVE_COG) if callable(getter) else None
+
+    async def _any_open_session(self, guild: Any, member: Any) -> Any:
+        from .golive import open_session_for
+
+        return await open_session_for(self.bot.db, guild.id, member.id)
+
+    async def is_live_now(self, user_id: Any) -> bool | None:
+        """Go-live's reconcile asks this; None means the probe could not answer, not 'offline'."""
+        row = await get_link(self.bot.db, int(user_id))
+        channel_id = _row_value(row, "channel_id")
+        if not channel_id:
+            return False
+        try:
+            probe = await self.client.probe_live(str(channel_id))
+        except YouTubeError as exc:
+            log.warning(
+                "youtube: could not check whether %s is still live (%s)", channel_id, exc
+            )
+            return None
+        return probe.announceable if probe.readable else None
+
+    def _live_mode(self, guild_id: int) -> str:
+        return self.bot.store.get(guild_id, "youtube_live_mode")
+
+    def _end_misses(self, guild_id: int) -> int:
+        return int(self.bot.store.get(guild_id, "youtube_live_end_misses"))
+
+    # --- the uploads sweep, continued ----------------------------------------------------------
 
     async def _pollable(self) -> list[Any]:
         """One row per channel; a channel linked twice is polled for the first member only."""
@@ -1012,6 +1296,34 @@ def names_of(guild: Any, rows: Any) -> dict[int, str]:
     return found
 
 
+async def live_health(bot: Any, guild: Any) -> dict[str, Any]:
+    """One reading, read by the panel and by the site, so the two cannot say different things."""
+    from .golive import open_sessions
+
+    cog = cog_of(bot)
+    store = bot.store
+    open_now = 0
+    if getattr(bot.db, "is_connected", False):
+        open_now = len(
+            [
+                row
+                for row in await open_sessions(bot.db, guild.id)
+                if str(_row_value(row, "source") or "") == YOUTUBE_SOURCE
+            ]
+        )
+    return {
+        "mode": store.get(guild.id, "youtube_live_mode"),
+        "minutes": store.get(guild.id, "youtube_live_poll_minutes"),
+        "misses": store.get(guild.id, "youtube_live_end_misses"),
+        "last_probe_at": getattr(cog, "last_probe_at", None),
+        "last_probe_error": getattr(cog, "last_probe_error", None)
+        or (None if cog is not None else FEATURE_MISSING),
+        "probed": int(getattr(cog, "probed", 0) or 0),
+        "quota": int(getattr(cog, "confirms", 0) or 0),
+        "open": open_now,
+    }
+
+
 async def staff_lines(bot: Any, guild: Any, rows: Any, names: dict[int, str]) -> list[str]:
     cog = cog_of(bot)
     client = getattr(cog, "client", None)
@@ -1026,6 +1338,7 @@ async def staff_lines(bot: Any, guild: Any, rows: Any, names: dict[int, str]) ->
             last_error=getattr(cog, "last_poll_error", None),
             failures=int(getattr(cog, "poll_failures", 0) or 0),
             totals=await counts(bot.db),
+            live=await live_health(bot, guild),
         )
     )
     if not getattr(client, "keyed", False):
@@ -1066,6 +1379,8 @@ async def build_panel(
         view.add_item(ModePick(bot.store.get(guild.id, "youtube_mode")))
     if staff and picking:
         view.add_item(WhoPick())
+    elif staff:
+        view.add_item(LiveModePick(bot.store.get(guild.id, "youtube_live_mode")))
     return (embed, view)
 
 
@@ -1301,6 +1616,20 @@ async def run_mode(
     await answer(interaction, said)
 
 
+async def run_live_mode(
+    interaction: discord.Interaction, value: str, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction, staff=False):
+        return
+    said, _row = await set_live_mode(
+        interaction.client, interaction.guild, interaction.user, value
+    )
+    await render_panel(interaction, previous)
+    await answer(interaction, said)
+
+
 async def run_setup(
     interaction: discord.Interaction,
     changes: dict[str, Any],
@@ -1430,6 +1759,27 @@ class ModePick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await run_mode(interaction, self.values[0], self.view)
+
+
+class LiveModePick(discord.ui.Select):
+    """Row 4 is the picker's row, so this stands down while staff are choosing a member."""
+
+    def __init__(self, current: str) -> None:
+        super().__init__(
+            placeholder=LIVE_MODE_PLACEHOLDER,
+            options=[
+                discord.SelectOption(
+                    label=LIVE_MODE_LABELS[name], value=name, default=(name == current)
+                )
+                for name in YOUTUBE_LIVE_MODES
+            ],
+            min_values=1,
+            max_values=1,
+            row=4,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_live_mode(interaction, self.values[0], self.view)
 
 
 class WhoPick(discord.ui.UserSelect):
@@ -1650,6 +2000,7 @@ __all__ = [
     "LinkModal",
     "LinkRefused",
     "LinkedPick",
+    "LiveModePick",
     "ModePick",
     "MoveButton",
     "NumbersModal",
@@ -1670,11 +2021,13 @@ __all__ = [
     "latest_video",
     "link_channel",
     "link_owner",
+    "live_health",
     "recent_videos",
     "remove_link",
     "render_panel",
     "save_setup",
     "set_link",
+    "set_live_mode",
     "set_mode",
     "setup_view",
     "setup_words",
