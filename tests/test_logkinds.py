@@ -70,6 +70,9 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     ),
     # Every hand-off writes one row naming both ends; `handoff.py` builds the kind from
     # the two words so the five moves have one home rather than five literals.
+    # The question and the member's no are constants so the cog and the tests name them once.
+    "black_bloc/handoff.py::ASKED_KIND": ("handoff.asked",),
+    "black_bloc/handoff.py::REFUSED_KIND": ("handoff.refused",),
     "black_bloc/handoff.py::handoff_kind(source, target)": (
         "handoff.event_to_request",
         "handoff.request_to_event",

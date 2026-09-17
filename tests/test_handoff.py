@@ -199,3 +199,88 @@ async def test_the_trail_column_is_written_through_one_allow_listed_table(db, ki
 async def test_a_table_nobody_named_cannot_be_written_through_the_trail(db):
     with pytest.raises(KeyError):
         await pure.set_moved_to(db, "polls", 1, "event:1")
+
+
+# --- the ticket half: what may be asked, and where the asked wording is kept -------------------
+
+
+class FakeGuild:
+    name = "Black in a Flash!"
+
+
+def a_ticket(**fields):
+    return {"id": 5, "user_id": MEMBER, "guild_id": GUILD, "moved_to": None} | fields
+
+
+def test_a_ticket_nobody_has_asked_about_can_be_sent_anywhere():
+    assert pure.refusal_for_ticket(ON, GUILD, a_ticket()) == ""
+
+
+def test_the_move_being_off_refuses_a_ticket_by_name_too():
+    said = pure.refusal_for_ticket(Store(), GUILD, a_ticket())
+
+    assert "handoff_mode" in said and "A setting group" in said
+
+
+def test_a_ticket_waiting_on_an_answer_refuses_and_names_who_and_when():
+    until = datetime.now(UTC) + timedelta(hours=4)
+    ticket = a_ticket(moved_to=pure.asked_trail(pure.REQUEST, until))
+
+    said = pure.refusal_for_ticket(ON, GUILD, ticket)
+
+    assert "already asked" in said and f"<@{MEMBER}>" in said
+    assert f"<t:{int(until.timestamp())}:f>" in said
+
+
+def test_a_question_that_has_run_out_stops_blocking_the_ticket():
+    stale = pure.asked_trail(pure.REQUEST, datetime(2020, 1, 1, tzinfo=UTC))
+
+    assert pure.refusal_for_ticket(ON, GUILD, a_ticket(moved_to=stale)) == ""
+
+
+def test_a_yes_that_still_owes_a_date_points_staff_at_the_button_that_finishes_it():
+    said = pure.refusal_for_ticket(ON, GUILD, a_ticket(moved_to=pure.yes_trail(pure.EVENT)))
+
+    assert "already said yes" in said and pure.MAKE_THE_EVENT.rstrip("…") in said
+
+
+def test_a_ticket_already_filed_says_what_it_became():
+    said = pure.refusal_for_ticket(ON, GUILD, a_ticket(moved_to=pure.trail(pure.REQUEST, 12)))
+
+    assert "#5" in said and "request" in said and "12" in said
+
+
+def test_the_confirm_card_says_what_would_be_filed_and_reads_straight_back():
+    """One card, one copy of the wording — nothing else stores what staff typed."""
+    embed = pure.confirm_embed(FakeGuild(), a_ticket(), pure.EVENT, "Block party", "on Tuesdays")
+
+    assert embed.title == pure.CONFIRM_TITLE
+    assert "Block party" in embed.description and "#5" in embed.description
+    assert pure.read_ask(embed) == ("Block party", "on Tuesdays")
+
+
+def test_a_card_with_nothing_in_a_field_reads_back_as_nothing_rather_than_a_dash():
+    embed = pure.confirm_embed(FakeGuild(), a_ticket(), pure.REQUEST, "a thing", "")
+
+    assert pure.read_ask(embed) == ("a thing", "")
+
+
+def test_a_card_that_is_not_one_of_ours_reads_back_as_nothing_at_all():
+    assert pure.read_ask(None) == ("", "")
+    assert pure.read_ask(object()) == ("", "")
+
+
+def test_the_wording_a_card_carries_is_cut_to_what_discord_will_take():
+    embed = pure.confirm_embed(FakeGuild(), a_ticket(), pure.REQUEST, "a" * 400, "b" * 4000)
+
+    assert len(embed.title) <= 256
+    for field in embed.fields:
+        assert len(field.value) <= 1024
+    assert len(embed.description) <= 4096
+
+
+def test_where_a_thing_went_is_said_one_way_for_every_surface():
+    assert pure.moved_words("event:12") == "event #12"
+    assert pure.moved_words("request:3") == "request #3"
+    for nothing in (None, "", "ticket:1", "asked:event:x", "yes:event"):
+        assert pure.moved_words(nothing) == ""

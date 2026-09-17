@@ -11,7 +11,8 @@ from discord.ext import commands
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...handoff import EVENT as HANDOFF_EVENT
-from ...handoff import SEND_TO_EVENTS
+from ...handoff import OPEN_A_TICKET, SEND_TO_EVENTS, request_to_ticket
+from ...handoff import TICKET as HANDOFF_TICKET
 from ...handoff import refusal_for_request as handoff_refusal
 from ...logkinds import VIA_DISCORD, VIA_FORUM, kind_via
 from ...panels import (
@@ -186,8 +187,11 @@ BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
 }
 COG_NAME = "Requests"
 MOVE_TEMPLATE = rf"request:(?P<request_id>[0-9]+):(?P<action>{'|'.join(MOVE_ACTIONS)})"
-HANDOFF_ACTIONS = (HANDOFF_EVENT,)
-HANDOFF_LABELS: dict[str, str] = {HANDOFF_EVENT: SEND_TO_EVENTS}
+HANDOFF_ACTIONS = (HANDOFF_EVENT, HANDOFF_TICKET)
+HANDOFF_LABELS: dict[str, str] = {
+    HANDOFF_EVENT: SEND_TO_EVENTS,
+    HANDOFF_TICKET: OPEN_A_TICKET,
+}
 HANDOFF_TEMPLATE = (
     rf"handoff:request:(?P<request_id>[0-9]+):(?P<action>{'|'.join(HANDOFF_ACTIONS)})"
 )
@@ -1265,7 +1269,27 @@ async def send_to_events(
     await open_request_draft(interaction, row, None if on_post else previous)
 
 
-HANDOFF_MOVES: dict[str, Any] = {HANDOFF_EVENT: send_to_events}
+async def open_a_ticket_with_them(
+    interaction: discord.Interaction,
+    request_id: int,
+    previous: Any = None,
+    *,
+    on_post: bool = False,
+) -> None:
+    """A ticket beside a request is a conversation, not a move: the request is left alone."""
+    row = await handoff_row(interaction, request_id, on_post)
+    if row is None:
+        return
+    outcome = await request_to_ticket(
+        interaction.client, interaction.guild, row, interaction.user
+    )
+    await finished(interaction, request_id, outcome.message, None, previous, on_post)
+
+
+HANDOFF_MOVES: dict[str, Any] = {
+    HANDOFF_EVENT: send_to_events,
+    HANDOFF_TICKET: open_a_ticket_with_them,
+}
 
 
 async def handoff_pressed(

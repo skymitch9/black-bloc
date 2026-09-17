@@ -720,7 +720,11 @@ EXPECTED_BUTTONS = {
 # `handoff_mode` ships on, so every state a request can still move from also carries the
 # Send to... row; a final one carries none, which is what refuses a stale press.
 HANDOFF_BUTTONS = {
-    status: ([] if status in pure.FINAL_STATUSES else [pure_handoff.SEND_TO_EVENTS])
+    status: (
+        []
+        if status in pure.FINAL_STATUSES
+        else [pure_handoff.SEND_TO_EVENTS, pure_handoff.OPEN_A_TICKET]
+    )
     for status in pure.STATUSES
 }
 
@@ -1913,6 +1917,7 @@ async def test_the_posts_first_message_carries_the_moves_for_where_the_request_i
         "Hold",
         "Decline",
         pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
         pure.SITE_BUTTON,
     ]
     assert site_link_of(post.messages[0]) is not None
@@ -1928,7 +1933,7 @@ async def test_the_posts_buttons_are_the_same_table_the_panel_card_draws(cog, bo
     _, card = requests_cog.build_card(bot, bot.guild, row, lead)
 
     on_the_card = [one.label for one in card.children if hasattr(one, "spec")]
-    assert post_labels(post.messages[0])[:-2] == on_the_card
+    assert post_labels(post.messages[0])[:-3] == on_the_card
 
 
 async def test_a_staff_press_on_the_post_moves_the_request_and_answers_only_them(
@@ -1958,6 +1963,7 @@ async def test_a_staff_press_re_draws_the_first_messages_buttons_for_the_new_sta
         "Hold",
         "Decline",
         pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
         pure.SITE_BUTTON,
     ]
 
@@ -2017,6 +2023,7 @@ async def test_a_move_that_needs_a_note_opens_the_modal_and_finishes_on_the_post
         "Resume",
         "Decline",
         pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
         pure.SITE_BUTTON,
     ]
     assert said.response.messages[-1]["ephemeral"] is True
@@ -2083,7 +2090,7 @@ async def test_the_review_row_puts_the_site_link_on_a_second_row(cog, bot, membe
     await requests_cog.mark_ready(bot, bot.guild, 1, lead, "a board", "press it")
 
     view = view_of(post.messages[0])
-    assert len(post_labels(post.messages[0])) == 7
+    assert len(post_labels(post.messages[0])) == 8
     assert [one.row for one in view.children][-1] == 1
 
 
@@ -2179,6 +2186,7 @@ async def test_the_bot_replies_in_the_post_with_the_filed_card_and_the_staff_mov
         "Hold",
         "Decline",
         pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
         pure.SITE_BUTTON,
     ]
     assert (await pure.get_request(db, 1))["message_id"] == reply.id
@@ -2354,6 +2362,7 @@ async def test_an_adopted_request_moves_exactly_like_any_other_one(cog, bot, mem
         "Hold",
         "Decline",
         pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
         pure.SITE_BUTTON,
     ]
     assert tags_on(post) == ["picked up"]
@@ -2423,6 +2432,7 @@ async def test_the_panel_card_carries_send_to_events_on_its_second_row(cog, bot,
 
     button = handoff_button(view)
     assert button.row == 1 and button.action == pure_handoff.EVENT
+    assert handoff_button(view, pure_handoff.OPEN_A_TICKET).row == 1
     assert [one.row for one in view.children if one.row == 0] == [0, 0, 0]
 
 
@@ -2560,3 +2570,115 @@ async def test_the_move_template_never_answers_for_a_status_move_and_the_other_w
 
     assert re.fullmatch(requests_cog.MOVE_TEMPLATE, handoff_id) is None
     assert re.fullmatch(requests_cog.HANDOFF_TEMPLATE, move_id) is None
+
+
+# --- Open a ticket with them… — a conversation beside a request, never a move (§A) -------------
+
+
+def fake_door(calls, *, ok=True, said="Opened."):
+    async def open_a_ticket(bot, guild, user, **kwargs):
+        from black_bloc.panels import Outcome, refusal
+
+        calls.append({"user": user, **kwargs})
+        return Outcome(True, said, value=77) if ok else refusal(said, "blocked", 409)
+
+    return open_a_ticket
+
+
+async def test_the_card_and_the_post_both_carry_open_a_ticket_with_them(cog, bot, member, lead):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+    row = await pure.get_request(bot.db, 1)
+
+    _embed, card = requests_cog.build_card(bot, bot.guild, row, lead)
+
+    assert pure_handoff.OPEN_A_TICKET in [one.label for one in card.children]
+    assert pure_handoff.OPEN_A_TICKET in post_labels(post.messages[0])
+
+
+async def test_the_door_quotes_the_request_and_ignores_the_hide_toggle(
+    cog, bot, member, lead, db, monkeypatch
+):
+    """A hand-off is a staff decision, so `modmail_open_with_button` does not gate it (§A)."""
+    calls = []
+    monkeypatch.setattr(
+        "black_bloc.cogs.moderation.modmail.open_a_ticket", fake_door(calls)
+    )
+    await bot.store.set(GUILD, "modmail_open_with_button", False)
+    request_id = await request_at(bot, member, lead, pure.OPEN)
+    panel = await open_panel(cog, bot, lead)
+    select = next(item for item in panel_view(panel).children if isinstance(item, RequestPick))
+    select._values = [str(request_id)]
+    opened = await click(bot, lead, select)
+
+    pressed = await click(bot, lead, handoff_button(card_view(opened), pure_handoff.OPEN_A_TICKET))
+
+    assert len(calls) == 1
+    asked = calls[0]
+    assert asked["user"].id == member.id
+    assert asked["source"] == "staff" and asked["check_toggle"] is False
+    assert asked["subject"] == f"Request #{request_id}"
+    assert "a request board" in asked["text"] and "because" in asked["text"]
+    assert "Opened." in pressed.sent
+
+
+async def test_the_door_leaves_the_request_exactly_where_it_was(
+    cog, bot, member, lead, db, monkeypatch
+):
+    monkeypatch.setattr("black_bloc.cogs.moderation.modmail.open_a_ticket", fake_door([]))
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    await click(bot, lead, post_button(post.messages[0], pure_handoff.OPEN_A_TICKET))
+
+    row = await pure.get_request(db, 1)
+    assert row["status"] == pure.OPEN and row["moved_to"] is None
+
+
+async def test_the_door_leaves_one_row_naming_the_request_and_the_ticket(
+    cog, bot, member, lead, db, monkeypatch
+):
+    monkeypatch.setattr("black_bloc.cogs.moderation.modmail.open_a_ticket", fake_door([]))
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    await click(bot, lead, post_button(post.messages[0], pure_handoff.OPEN_A_TICKET))
+
+    kinds = await action_kinds(db)
+    assert kinds.count("handoff.request_to_ticket") == 1
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ?", ("handoff.request_to_ticket",)
+    )
+    details = json.loads((await cur.fetchone())["details"])
+    assert (details["request_id"], details["ticket_id"]) == (1, 77)
+
+
+async def test_a_door_that_refuses_says_so_and_leaves_no_hand_off_row(
+    cog, bot, member, lead, db, monkeypatch
+):
+    monkeypatch.setattr(
+        "black_bloc.cogs.moderation.modmail.open_a_ticket",
+        fake_door([], ok=False, said="They are blocked."),
+    )
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    pressed = await click(bot, lead, post_button(post.messages[0], pure_handoff.OPEN_A_TICKET))
+
+    assert "They are blocked." in pressed.sent
+    assert "handoff.request_to_ticket" not in await action_kinds(db)
+
+
+async def test_a_requester_who_has_left_is_named_rather_than_crashed_into(
+    cog, bot, lead, db, monkeypatch
+):
+    monkeypatch.setattr("black_bloc.cogs.moderation.modmail.open_a_ticket", fake_door([]))
+    request_id = await pure.create_request(
+        bot.db, GUILD, 4040, what="a board", why="because", due_on=None
+    )
+    interaction = FakeInteraction(bot, lead)
+
+    await requests_cog.open_a_ticket_with_them(interaction, request_id, on_post=True)
+
+    assert "not somebody Black Bloc can see" in interaction.sent
+    assert "handoff.request_to_ticket" not in await action_kinds(db)

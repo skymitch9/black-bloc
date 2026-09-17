@@ -62,6 +62,30 @@ TICKET_SAID_YES_EVENT = (
     "{who} said yes. **{title}** still needs a date — press **Make the event…** to pick one."
 )
 
+ASKED_KIND = "handoff.asked"
+REFUSED_KIND = "handoff.refused"
+ASK_TITLE_FIELD = "What staff would file"
+ASK_BODY_FIELD = "In your words"
+ASK_FOOTER = "Black Bloc · nothing is filed unless you say yes"
+ASK_DASH = "—"
+ASKED_SAID = "{who} has been asked by DM whether this may be filed as a {what}."
+CONFIRM_COLOUR = 0x5865F2
+ASK_TITLE_LABEL = "What should it be called?"
+ASK_BODY_LABEL = "What should it say? (the member sees this before they answer)"
+ASK_MODAL_TITLE = {
+    REQUEST: "File this ticket as a request",
+    EVENT: "File this ticket as an event",
+}
+NO_SUCH_MEMBER = (
+    "<@{user_id}> is not somebody Black Bloc can see on this server any more, so no ticket was "
+    "opened. They may have left."
+)
+TICKET_SUBJECT = "Request #{request_id}"
+TICKET_QUOTE = (
+    "This is about your request **#{request_id}** — *{what}*\n\n> {why}\n\nTell us anything "
+    "that would help."
+)
+
 CONFIRM_TITLE = "Staff would like to file your ticket"
 CONFIRM_BODY = (
     "Staff on **{guild}** would like to file your ticket **#{ticket_id}** as a {what} in your "
@@ -259,6 +283,34 @@ def refusal_for_request(store: Any, guild_id: int, row: Any) -> str:
     return ""
 
 
+def refusal_for_ticket(store: Any, guild_id: int, ticket: Any, now: Any = None) -> str:
+    """Why nothing more can be filed from this ticket right now — empty when it can."""
+    from .modmail import field_of
+
+    if not handoff_on(store, guild_id):
+        return HANDOFF_OFF
+    cell = field_of(ticket, "moved_to")
+    at = now or datetime.now(UTC)
+    found = read_trail(cell)
+    if found is None:
+        return ""
+    if found.kind == ASKED:
+        if waiting_on(cell, at) is None:
+            return ""
+        return ALREADY_ASKED.format(
+            who=mention(field_of(ticket, "user_id")), when=until_stamp(cell)
+        )
+    if found.kind == YES:
+        return ALREADY_SAID_YES.format(who=mention(field_of(ticket, "user_id")))
+    return ALREADY_MOVED.format(
+        ticket_id=field_of(ticket, "id"), what=found.kind, ident=found.ident
+    )
+
+
+def mention(user_id: Any) -> str:
+    return f"<@{int(user_id)}>" if user_id else "somebody"
+
+
 def refusal_for_event(store: Any, guild_id: int, row: Any) -> str:
     """Why this event cannot be sent anywhere — empty when it can."""
     from .events import OPEN_STATUSES, cell
@@ -350,6 +402,247 @@ async def event_to_request(
     member = guild.get_member(member_id) or bot.get_user(member_id)
     await notify(bot, guild, filed, member)
     return (EVENT_MOVED_LINE.format(request_id=request_id), await get_event(bot.db, event_id))
+
+
+async def request_to_ticket(
+    bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> Any:
+    """Open a ticket with them… — the staff door, quoting the request; nothing is MOVED."""
+    from .cogs.moderation.modmail import open_a_ticket
+    from .modmail import SOURCE_STAFF
+    from .panels import refusal
+    from .requests import row_value
+
+    request_id = row_value(row, "id")
+    member_id = int(row_value(row, "user_id") or 0)
+    member = guild.get_member(member_id) or bot.get_user(member_id)
+    if member is None:
+        return refusal(NO_SUCH_MEMBER.format(user_id=member_id), "no_member", 404)
+    outcome = await open_a_ticket(
+        bot,
+        guild,
+        member,
+        source=SOURCE_STAFF,
+        subject=TICKET_SUBJECT.format(request_id=request_id),
+        text=TICKET_QUOTE.format(
+            request_id=request_id,
+            what=clamp(row_value(row, "what"), TITLE_LIMIT),
+            why=clamp(row_value(row, "why"), BODY_LIMIT),
+        ),
+        actor=actor,
+        check_toggle=False,
+        via=via,
+    )
+    if outcome.ok:
+        await log_handoff(
+            bot,
+            guild,
+            REQUEST,
+            request_id,
+            TICKET,
+            outcome.value,
+            actor=actor,
+            member=member_id,
+            via=via,
+        )
+    return outcome
+
+
+def confirm_embed(guild: Any, ticket: Any, kind: str, title: str, body: str) -> Any:
+    """What the member is DMed — and, read back, the only place that wording is kept."""
+    import discord
+
+    from .modmail import field_of
+
+    embed = discord.Embed(
+        title=CONFIRM_TITLE,
+        description=CONFIRM_BODY.format(
+            guild=guild.name,
+            ticket_id=field_of(ticket, "id"),
+            what=kind,
+            title=clamp(title, TITLE_LIMIT),
+        ),
+        colour=discord.Colour(CONFIRM_COLOUR),
+    )
+    embed.add_field(
+        name=ASK_TITLE_FIELD, value=clamp(title, TITLE_LIMIT) or ASK_DASH, inline=False
+    )
+    embed.add_field(name=ASK_BODY_FIELD, value=clamp(body, BODY_LIMIT) or ASK_DASH, inline=False)
+    embed.set_footer(text=ASK_FOOTER)
+    return embed
+
+
+def read_ask(embed: Any) -> tuple[str, str]:
+    """The title and body read back off the card carrying them; no second row stores them."""
+    found = {
+        str(getattr(field, "name", "")): str(getattr(field, "value", ""))
+        for field in (getattr(embed, "fields", None) or ())
+    }
+    kept = [found.get(ASK_TITLE_FIELD, ""), found.get(ASK_BODY_FIELD, "")]
+    return tuple("" if one == ASK_DASH else one for one in kept)
+
+
+async def reread(bot: Any, ticket_id: Any) -> Any:
+    from .cogs.moderation.modmail import get_ticket
+
+    return await get_ticket(bot.db, int(ticket_id))
+
+
+async def ask_the_member(
+    bot: Any,
+    guild: Any,
+    ticket: Any,
+    kind: str,
+    title: str,
+    body: str,
+    actor: Any,
+    *,
+    view: Any = None,
+    via: str = VIA_DISCORD,
+) -> Any:
+    """A ticket is private, so nothing is filed until the member has said so (design §A)."""
+    from .cogs.moderation.modmail import speak, ticket_dm
+    from .modmail import field_of
+    from .panels import Outcome, refusal
+
+    ticket_id = int(field_of(ticket, "id"))
+    who = mention(field_of(ticket, "user_id"))
+    until = deadline(bot.store, guild.id)
+    why_not = await ticket_dm(
+        bot,
+        guild,
+        ticket,
+        embed=confirm_embed(guild, ticket, kind, title, body),
+        view=view,
+    )
+    if why_not is not None:
+        return refusal(CONFIRM_DM_FAILED.format(who=who), "dms_shut", 409)
+    await set_moved_to(bot.db, TICKET, ticket_id, asked_trail(kind, until))
+    await log_action(
+        bot,
+        guild,
+        kind_via(ASKED_KIND, via),
+        actor=actor,
+        target=field_of(ticket, "user_id"),
+        details={"ticket_id": ticket_id, "what": kind, "until": until.isoformat(), "via": via},
+    )
+    await speak(
+        bot,
+        guild,
+        ticket,
+        content=TICKET_ASKED_LINE.format(
+            who=who, what=kind, when=until_stamp(asked_trail(kind, until))
+        ),
+    )
+    return Outcome(True, ASKED_SAID.format(who=who, what=kind))
+
+
+async def ticket_became(
+    bot: Any,
+    guild: Any,
+    ticket_id: int,
+    kind: str,
+    ident: Any,
+    actor: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> str:
+    """The trail a filed ticket keeps: one cell, one log row, one line in the ticket itself."""
+    from .cogs.moderation.modmail import speak
+    from .modmail import field_of
+
+    ticket = await reread(bot, ticket_id)
+    if ticket is None:
+        return NO_SUCH_TICKET
+    await set_moved_to(bot.db, TICKET, ticket_id, trail(kind, ident))
+    await log_handoff(
+        bot,
+        guild,
+        TICKET,
+        ticket_id,
+        kind,
+        ident,
+        actor=actor,
+        member=field_of(ticket, "user_id"),
+        via=via,
+    )
+    said = TICKET_MOVED_LINE.format(
+        what=kind, ident=ident, who=mention(field_of(ticket, "user_id"))
+    )
+    await speak(bot, guild, ticket, content=said)
+    return said
+
+
+async def member_said_yes(
+    bot: Any,
+    guild: Any,
+    ticket: Any,
+    kind: str,
+    title: str,
+    body: str,
+    *,
+    make_event_view: Any = None,
+    via: str = VIA_DISCORD,
+) -> str:
+    """Yes files a request outright; an event still owes a date, so staff are handed the draft."""
+    from .cogs.community.requests import notify
+    from .cogs.moderation.modmail import speak
+    from .modmail import field_of
+    from .requests import SOURCE_TICKET, WHAT_LIMIT, WHY_LIMIT, create_request, get_request
+
+    ticket_id = int(field_of(ticket, "id"))
+    member_id = int(field_of(ticket, "user_id"))
+    member = guild.get_member(member_id) or bot.get_user(member_id)
+    if kind == EVENT:
+        await set_moved_to(bot.db, TICKET, ticket_id, yes_trail(EVENT))
+        await speak(
+            bot,
+            guild,
+            ticket,
+            content=TICKET_SAID_YES_EVENT.format(
+                who=mention(member_id), title=clamp(title, TITLE_LIMIT)
+            ),
+            embed=confirm_embed(guild, ticket, kind, title, body),
+            view=make_event_view,
+        )
+        return CONFIRM_YES_SAID
+    request_id = await create_request(
+        bot.db,
+        guild.id,
+        member_id,
+        what=clamp(title, WHAT_LIMIT),
+        why=clamp(body, WHY_LIMIT) or FROM_TICKET.format(ticket_id=ticket_id, user_id=member_id),
+        due_on=None,
+        source=SOURCE_TICKET,
+    )
+    await ticket_became(bot, guild, ticket_id, REQUEST, request_id, member, via=via)
+    await notify(bot, guild, await get_request(bot.db, request_id), member)
+    return CONFIRM_YES_SAID
+
+
+async def member_said_no(
+    bot: Any, guild: Any, ticket: Any, kind: str, *, via: str = VIA_DISCORD
+) -> str:
+    """No files nothing, clears the question so staff may ask again, and says so in the ticket."""
+    from .cogs.moderation.modmail import speak
+    from .modmail import field_of
+
+    ticket_id = int(field_of(ticket, "id"))
+    await set_moved_to(bot.db, TICKET, ticket_id, None)
+    await log_action(
+        bot,
+        guild,
+        kind_via(REFUSED_KIND, via),
+        target=field_of(ticket, "user_id"),
+        details={"ticket_id": ticket_id, "what": kind, "via": via},
+    )
+    await speak(
+        bot,
+        guild,
+        ticket,
+        content=TICKET_SAID_NO_LINE.format(who=mention(field_of(ticket, "user_id"))),
+    )
+    return CONFIRM_NO_SAID
 
 
 async def tell(bot: Any, guild: Any, member: Any, said: str, *, request_id: Any = None) -> None:
@@ -450,6 +743,27 @@ __all__ = [
     "refusal_for_event",
     "request_to_event",
     "tell",
+    "ASKED_KIND",
+    "ASKED_SAID",
+    "ASK_BODY_FIELD",
+    "ASK_BODY_LABEL",
+    "ASK_DASH",
+    "ASK_MODAL_TITLE",
+    "ASK_TITLE_FIELD",
+    "ASK_TITLE_LABEL",
+    "NO_SUCH_MEMBER",
+    "REFUSED_KIND",
+    "TICKET_QUOTE",
+    "TICKET_SUBJECT",
+    "ask_the_member",
+    "confirm_embed",
+    "member_said_no",
+    "member_said_yes",
+    "read_ask",
+    "refusal_for_ticket",
+    "reread",
+    "request_to_ticket",
+    "ticket_became",
     "read_trail",
     "set_moved_to",
     "trail",

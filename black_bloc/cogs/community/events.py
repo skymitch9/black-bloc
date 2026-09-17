@@ -157,6 +157,7 @@ from ...events import (
     set_zone as store_zone,
 )
 from ...golive import now_iso, parse_ts
+from ...handoff import EVENT as HANDOFF_EVENT
 from ...handoff import (
     NOT_AN_EVENT,
     event_to_request,
@@ -164,8 +165,11 @@ from ...handoff import (
     prefilled,
     refusal_for_event,
     request_to_event,
+    reread,
+    ticket_became,
 )
 from ...handoff import REQUEST as HANDOFF_REQUEST
+from ...handoff import TICKET as HANDOFF_TICKET
 from ...linkcheck import LINK_OK, link_answers
 from ...loops import wait_ready
 from ...panels import (
@@ -846,6 +850,25 @@ async def open_request_draft(
     )
 
 
+async def open_ticket_draft(
+    interaction: discord.Interaction, ticket: Any, title: str, body: str, previous: Any = None
+) -> None:
+    """The same draft, raised from a ticket the member has already said yes to."""
+    bot = interaction.client
+    _, head = prefilled(ticket, kind=HANDOFF_TICKET)
+    await render_draft(
+        interaction,
+        EventDraft(
+            duration=duration_for(default_minutes(bot.store, interaction.guild.id)),
+            title=clamp(title, TITLE_LIMIT),
+            description=f"{head}\n{body}".strip(),
+            requester_id=int(ticket["user_id"]),
+            from_ticket=int(ticket["id"]),
+        ),
+        previous,
+    )
+
+
 async def submit_draft(interaction: discord.Interaction, previous: Any) -> None:
     """The Submit button and nothing else: `checked_fields` onward, exactly as the modal did."""
     fields = previous.fields
@@ -895,6 +918,21 @@ async def close_what_it_came_from(
             row,
             interaction.user,
         )
+        return f" {line}"
+    if fields.from_ticket:
+        from ..moderation.modmail import bump_card
+
+        line = await ticket_became(
+            interaction.client,
+            interaction.guild,
+            int(fields.from_ticket),
+            HANDOFF_EVENT,
+            row["id"],
+            interaction.user,
+        )
+        ticket = await reread(interaction.client, int(fields.from_ticket))
+        if ticket is not None:
+            await bump_card(interaction.client, interaction.guild, ticket)
         return f" {line}"
     return ""
 

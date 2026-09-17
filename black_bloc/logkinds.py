@@ -201,6 +201,8 @@ IMPORTANT: frozenset[str] = frozenset(
 ROUTINE: frozenset[str] = frozenset(
     {
         "birthday.add_role",
+        "handoff.asked",
+        "handoff.refused",
         "birthday.announce",
         "birthday.clear",
         "birthday.import",
