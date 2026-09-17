@@ -34,7 +34,7 @@
 
 | Layer | Command | Proves | Needs |
 |---|---|---|---|
-| Hermetic | `pytest -q -n auto` | every module, every route shape, every panel card, against fakes — **5,833 tests, ~30 s** (2026-09-16, v113 gate) | nothing but the venv — ⚠️ and a CLEAN environment: a shell that exports the real `.env` names (`POLL_VOTE_SECRET`, `DEV_GUILD_ID`, `TWITCH_*`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`…) turns **nine** "no key" tests red; see `../info/gotchas.md` |
+| Hermetic | `pytest -q -n auto` | every module, every route shape, every panel card, against fakes — **5,880 tests, ~36 s** (2026-09-16, v114 gate) | nothing but the venv — ⚠️ and a CLEAN environment: a shell that exports the real `.env` names (`POLL_VOTE_SECRET`, `DEV_GUILD_ID`, `TWITCH_*`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`…) turns **nine** "no key" tests red; see `../info/gotchas.md` |
 | Mock | `node site/mock/server.mjs` then `node site/mock/check.mjs` | the PAGES' half of the contract: the mock answers the same shapes the real routers do | node |
 | Live | `pytest -m live tests/live` | the DEPLOYED host answers, the bot is connected, a self-test run really exercises Discord and cleans up | two env names, below |
 | Live, in Discord | `/settings` ▸ **Self-test…** ▸ **Run the self-test** | the only thing no test can: what a card LOOKS like in the client | staff, in the test channel |

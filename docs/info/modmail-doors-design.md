@@ -1,8 +1,6 @@
 # Modmail doors — a member half of `/modmail`, a posted Open-a-ticket button, and staff opening a ticket with a member
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-16 on branch
-> `modmail-doors`, off `main` `4d60f68` (v113) — NOT merged, NOT deployed, and nothing in it has met
-> Discord.** Schema **37 → 38** (`modmail_tickets.source`, `.opened_by`) — ⚠️ **migrate before deploy**.
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v114** — merge `04de842`, release `c279676`, deployed **2026-09-16 18:38** Phoenix (`../deploys.log`); landing entry in [`../DONE.md`](../DONE.md) (*"2026-09-16 — MODMAIL DOORS"*); the `## Deviations` foot is the truth where it departs from the body; sweeps **419–433** are the owner's; ⚠️ nothing in it has met Discord by a person. Was: ✅ BUILT on branch `modmail-doors`, off `main` `4d60f68` — NOT merged, NOT deployed.** Schema **37 → 38** (`modmail_tickets.source`, `.opened_by`) — ⚠️ **migrate before deploy**.
 > Registry **+5**; mock **168 → 170 routes**; `pytest` **5839 → 5880**, both orders green. Read the
 > `## Deviations` foot before the sections above: fifteen things differ from what is written here.
 > Owner, 2026-09-16 16:1x–16:3x, verbatim: *"is there a way for a user to do /modmail to start a mod
