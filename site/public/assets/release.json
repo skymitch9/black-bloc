@@ -1,8 +1,11 @@
 {
-  "release": "v124",
-  "commit": "211b378",
+  "release": "v125",
+  "commit": "ae6eecb",
   "changed_features": [
+    "core",
     "guides",
+    "modmail",
+    "selftest",
     "tempvoice"
   ]
 }
