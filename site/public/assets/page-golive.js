@@ -51,6 +51,17 @@ const WORDING_STALE = 'Saved the wording above with its own Save bar? Press Refr
 const WHILE_LIVE = 'while live';
 const AFTER_THE_STREAM = 'after the stream';
 
+const END_TEMPLATE_KEY = 'golive_end_template';
+const SUFFIX_ONLY = 'Just add the ending instead';
+const REWRITE_IT = 'Rewrite it instead';
+const SUFFIX_ASK_TITLE = 'Leave the sentence alone and just add the ending?';
+const SUFFIX_ASK_BODY = 'The announcement keeps its present-tense sentence and golive_end_suffix '
+  + 'is added to the end of it, the way it worked before. The wording you have written is '
+  + 'forgotten, so write it again to go back.';
+const REWRITE_ASK_TITLE = 'Rewrite the whole announcement once the stream ends?';
+const REWRITE_ASK_BODY = 'The past-tense wording Black Bloc ships with comes back, and you can '
+  + 'edit it in golive_end_template below.';
+
 const SAMPLE = {
   name: 'Casey',
   game: 'Lethal Company',
@@ -169,8 +180,31 @@ function withRoleNames(text, roles) {
   });
 }
 
+/** The one control for "rewrite it" against "just add the ending": a blank golive_end_template
+    is the second shape, and emptying a settings row restores the default rather than blanking it. */
+function shapeButton(say, endTemplate) {
+  const rewriting = String(endTemplate || '').trim() !== '';
+  return button(rewriting ? SUFFIX_ONLY : REWRITE_IT, async () => {
+    const sure = await ask({
+      title: rewriting ? SUFFIX_ASK_TITLE : REWRITE_ASK_TITLE,
+      body: [rewriting ? SUFFIX_ASK_BODY : REWRITE_ASK_BODY],
+      confirmLabel: rewriting ? 'Just add the ending' : 'Rewrite it',
+    });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => (rewriting
+        ? send(`/api/settings/${END_TEMPLATE_KEY}`, 'PUT', { value: '' })
+        : api(`/api/settings/${END_TEMPLATE_KEY}`, { method: 'DELETE' })),
+      rewriting ? 'Saved — the ending is added to the live sentence again.' : 'Saved — the '
+        + 'announcement is rewritten once the stream ends.',
+    );
+    if (done.ok) refresh();
+  }, { tone: 'quiet' });
+}
+
 /** C: the Wording card — both renderings, read from the bot, never rendered here. */
-async function wordingPreview(say, endMode) {
+async function wordingPreview(say, endMode, endTemplate) {
   const list = el('ul', { class: 'msglist' });
   const left = el('p', { class: 'field-help', text: WORDING_LEFT });
   let roles = [];
@@ -204,7 +238,12 @@ async function wordingPreview(say, endMode) {
     left,
     el('p', { class: 'field-help', text: WORDING_STALE }),
     say,
-  ], { actions: [button('Refresh', () => paint(), { tone: 'quiet' })] });
+  ], {
+    actions: [
+      shapeButton(say, endTemplate),
+      button('Refresh', () => paint(), { tone: 'quiet' }),
+    ],
+  });
   const showEnd = (mode) => { left.hidden = String(mode) === END_EDIT; };
   showEnd(endMode);
   return { node, paint, showEnd };
@@ -222,7 +261,12 @@ async function wordingSection(specs) {
   }
   const prefix = await pingPrefix(specs);
   const endSpec = specs.find((one) => one.key === END_MODE_KEY) || null;
-  const preview = await wordingPreview(notice(), endSpec ? endSpec.value : null);
+  const endTemplate = specs.find((one) => one.key === END_TEMPLATE_KEY);
+  const preview = await wordingPreview(
+    notice(),
+    endSpec ? endSpec.value : null,
+    endTemplate ? (endTemplate.value ?? endTemplate.default) : '',
+  );
   const onEndMode = (mode) => {
     preview.showEnd(mode);
     preview.paint();
