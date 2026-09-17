@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 37
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -775,6 +775,7 @@ CREATE TABLE IF NOT EXISTS posts (
                 CHECK (style IN ('plain', 'embed')),
     pin         INTEGER NOT NULL DEFAULT 1,
     message_id  INTEGER,
+    shadow_message_id INTEGER,
     posted_hash TEXT,
     posted_at   TEXT,
     posted_by   INTEGER,
@@ -825,6 +826,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("requests", "sent_back_reason", "TEXT"),
     ("requests", "check_asked_by", "INTEGER"),
     ("requests", "check_asked_at", "TEXT"),
+    ("posts", "shadow_message_id", "INTEGER"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")
