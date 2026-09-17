@@ -151,9 +151,9 @@ NOT_A_LOBBY = (
     "forgotten. `/voice` lists the ones it knows about."
 )
 OUTSIDE_TEST_ROOM = (
-    "**{name}** sits outside the test channel's category, so test mode stopped that change and "
-    "nothing happened. Black Bloc only edits temporary channels made from a lobby in that "
-    "category while test mode is on — turn test mode off to reach the rest."
+    "**{name}** sits outside the test channel's category and Black Bloc did not make it, so test "
+    "mode stopped that change and nothing happened. Black Bloc only edits the temporary channels "
+    "it made itself while test mode is on — turn test mode off to reach the rest."
 )
 LOBBY_FORGOTTEN = (
     "Black Bloc has forgotten **{channel_id}** — joining it no longer makes anybody a temporary "
@@ -357,10 +357,10 @@ def connected_ids(channel: Any) -> set[int]:
     return {int(user_id) for user_id in getattr(channel, "voice_states", {})}
 
 
-def category_overwrites(category: Any) -> dict[Any, Any]:
-    """A copy of the category's own overwrites, so a new channel keeps what the category says."""
+def category_overwrites(source: Any) -> dict[Any, Any]:
+    """A copy of a category's or a channel's own overwrites, so a new channel keeps what it says."""
     found: dict[Any, Any] = {}
-    for target, overwrite in (getattr(category, "overwrites", None) or {}).items():
+    for target, overwrite in (getattr(source, "overwrites", None) or {}).items():
         found[target] = discord.PermissionOverwrite(**dict(overwrite))
     return found
 
@@ -392,11 +392,11 @@ def owner_overwrites(
     *,
     locked: bool = False,
     hidden: bool = False,
-    category: Any = None,
+    source: Any = None,
     allow: Any = (),
     me: Any = None,
 ) -> Any:
-    found = category_overwrites(category)
+    found = category_overwrites(source)
     everyone = found.get(guild.default_role) or discord.PermissionOverwrite()
     if locked:
         everyone.connect = False
@@ -679,10 +679,34 @@ def may_act_in(bot: Any, channel: Any) -> bool:
     guard = getattr(bot, "guard", None)
     if guard is None:
         return True
+    if guard.owns_channel(getattr(channel, "id", channel)):
+        return True
     test_channel = bot.get_channel(guard.test_channel_id) if guard.test_channel_id else None
     if test_channel is None:
         return False
     return getattr(channel, "category_id", None) == getattr(test_channel, "category_id", None)
+
+
+def is_lobby(bot: Any, channel: Any) -> bool:
+    """A join-to-create channel this guild has written down."""
+    guild = getattr(channel, "guild", None)
+    store = getattr(bot, "store", None)
+    if guild is None or store is None:
+        return False
+    written = store.get(guild.id, "tempvoice_creator_ids") or []
+    return getattr(channel, "id", None) in written
+
+
+def may_spawn_from(bot: Any, channel: Any) -> bool:
+    """A room made from a lobby is Black Bloc's own, so test mode lets any written-down lobby."""
+    return is_lobby(bot, channel) or may_act_in(bot, channel)
+
+
+def room_source(store: Any, guild_id: int, creator: Any) -> Any:
+    """What a new room's permissions are copied from: the lobby itself, or its category."""
+    if store.get(guild_id, "tempvoice_room_overwrites") == "category":
+        return getattr(creator, "category", None)
+    return creator
 
 
 def join_roles(bot: Any, guild: Any) -> list[Any]:
@@ -2429,7 +2453,7 @@ class TempVoice(commands.Cog):
             return
         if channel.id not in (store.get(guild.id, "tempvoice_creator_ids") or []):
             return
-        if not self._may_act_in(channel):
+        if not self._may_spawn_from(channel):
             log.warning(
                 "temp voice: TEST MODE — ignoring the creator channel %s outside the test "
                 "channel's category",
@@ -2467,7 +2491,7 @@ class TempVoice(commands.Cog):
                 member,
                 locked=bool(pref(prefs, "locked")),
                 hidden=bool(pref(prefs, "hidden")),
-                category=creator.category,
+                source=room_source(store, guild.id, creator),
                 allow=self._join_roles(guild),
                 me=getattr(guild, "me", None),
             ),
@@ -2584,6 +2608,9 @@ class TempVoice(commands.Cog):
 
     def _may_act_in(self, channel: Any) -> bool:
         return may_act_in(self.bot, channel)
+
+    def _may_spawn_from(self, channel: Any) -> bool:
+        return may_spawn_from(self.bot, channel)
 
     def _creator_spot(self, guild: Any) -> tuple[Any, int, str]:
         return creator_spot(self.bot, guild)

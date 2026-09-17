@@ -50,9 +50,12 @@ from black_bloc.cogs.community.tempvoice import (
     get_row_by_panel,
     guild_bitrate_ceiling,
     id_list,
+    is_lobby,
     is_panel_owner,
     is_stale,
     lobbies_by_name,
+    may_act_in,
+    may_spawn_from,
     may_use_voice,
     member_lists,
     not_owner_message,
@@ -64,6 +67,7 @@ from black_bloc.cogs.community.tempvoice import (
     pick_row,
     privacy_of,
     remembered_lines,
+    room_source,
     rows_for_guild,
     run_claim,
     run_forget_lobby,
@@ -161,7 +165,16 @@ class FakeText:
 
 
 class FakeVoice:
-    def __init__(self, channel_id, guild, category=None, position=0, members=(), name="voice"):
+    def __init__(
+        self,
+        channel_id,
+        guild,
+        category=None,
+        position=0,
+        members=(),
+        name="voice",
+        overwrites=None,
+    ):
         self.id = channel_id
         self.guild = guild
         self.name = name
@@ -177,7 +190,7 @@ class FakeVoice:
         self.edits = []
         self.permissions = []
         self.messages = []
-        self.overwrites = {}
+        self.overwrites = dict(overwrites or {})
         self.send_raises = None
         self.edit_raises = None
 
@@ -665,7 +678,7 @@ async def test_a_channel_that_is_not_a_creator_is_ignored(cog, bot, member, db):
     assert bot.guild.created == [] and await action_kinds(db) == []
 
 
-async def test_test_mode_only_acts_in_the_test_channel_s_category(cog, bot, member):
+async def test_test_mode_lets_a_lobby_outside_the_test_category_make_rooms(cog, bot, member):
     category = FakeCategory(50)
     bot.guild.add(FakeText(TEST_CHANNEL, category=category))
     bot.guard = FakeGuard()
@@ -674,10 +687,25 @@ async def test_test_mode_only_acts_in_the_test_channel_s_category(cog, bot, memb
     await bot.store.set(GUILD, "tempvoice_creator_ids", [inside.id, outside.id])
 
     await cog._maybe_create(member, outside)
-    assert bot.guild.created == []
+    assert len(bot.guild.created) == 1
+    assert bot.guard.owns_channel(bot.guild.created[0].id)
 
     await cog._maybe_create(member, inside)
-    assert len(bot.guild.created) == 1
+    assert len(bot.guild.created) == 2
+
+
+def test_test_mode_still_holds_a_channel_black_bloc_neither_made_nor_was_given(bot):
+    category = FakeCategory(50)
+    bot.guild.add(FakeText(TEST_CHANNEL, category=category))
+    bot.guard = FakeGuard()
+    stranger = bot.guild.add(FakeVoice(777, bot.guild, category=FakeCategory(51)))
+
+    assert is_lobby(bot, stranger) is False
+    assert may_act_in(bot, stranger) is False
+    assert may_spawn_from(bot, stranger) is False
+
+    bot.guard.own_channel(stranger.id)
+    assert may_act_in(bot, stranger) is True
 
 
 async def test_in_test_mode_the_panel_goes_in_the_voice_channel_s_own_chat(cog, bot, member, db):
@@ -1488,11 +1516,17 @@ async def test_a_repair_puts_those_overwrites_on_the_lobby_it_already_has(cog, b
 
 
 async def test_a_spawned_channel_lets_the_allowed_role_and_staff_in_too(cog, bot, member):
-    category = FakeCategory(
-        50, overwrites={bot.guild.default_role: discord.PermissionOverwrite(connect=False)}
-    )
+    category = FakeCategory(50)
     member_role, staff_role = staffed(bot, category)
-    creator = bot.guild.add(FakeVoice(CREATOR, bot.guild, category=category, position=4))
+    creator = bot.guild.add(
+        FakeVoice(
+            CREATOR,
+            bot.guild,
+            category=category,
+            position=4,
+            overwrites={bot.guild.default_role: discord.PermissionOverwrite(connect=False)},
+        )
+    )
 
     await cog._maybe_create(member, creator)
 
@@ -1502,6 +1536,61 @@ async def test_a_spawned_channel_lets_the_allowed_role_and_staff_in_too(cog, bot
     assert given[member].manage_channels is True
     assert given[bot.guild.me].view_channel is True
     assert given[bot.guild.me].manage_channels is True
+
+
+async def test_a_room_starts_from_the_lobby_s_own_permissions_not_the_category_s(cog, bot, member):
+    category = FakeCategory(
+        50, overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=True)}
+    )
+    staffed(bot, category)
+    creator = bot.guild.add(
+        FakeVoice(
+            CREATOR,
+            bot.guild,
+            category=category,
+            position=4,
+            overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=False)},
+        )
+    )
+
+    await cog._maybe_create(member, creator)
+
+    given = bot.guild.created[0].given_overwrites
+    assert given[bot.guild.default_role].view_channel is False
+
+
+async def test_the_category_setting_puts_a_room_back_on_the_category_s_permissions(
+    cog, bot, member
+):
+    category = FakeCategory(
+        50, overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=True)}
+    )
+    staffed(bot, category)
+    creator = bot.guild.add(
+        FakeVoice(
+            CREATOR,
+            bot.guild,
+            category=category,
+            position=4,
+            overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=False)},
+        )
+    )
+    await bot.store.set(GUILD, "tempvoice_room_overwrites", "category")
+
+    await cog._maybe_create(member, creator)
+
+    given = bot.guild.created[0].given_overwrites
+    assert given[bot.guild.default_role].view_channel is True
+
+
+async def test_the_room_source_is_the_lobby_by_default_and_the_category_when_asked(bot):
+    category = FakeCategory(50)
+    creator = FakeVoice(CREATOR, bot.guild, category=category)
+
+    assert room_source(bot.store, GUILD, creator) is creator
+
+    await bot.store.set(GUILD, "tempvoice_room_overwrites", "category")
+    assert room_source(bot.store, GUILD, creator) is category
 
 
 async def test_a_hidden_channel_still_lets_black_bloc_post_its_panel(cog, bot, member, db):

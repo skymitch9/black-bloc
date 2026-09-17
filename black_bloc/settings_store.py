@@ -87,6 +87,7 @@ MEMBER_ROLE_ID = 1073741054563602532
 TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
 TEMPVOICE_CREATOR_NAME = "join to create a channel"
 TEMPVOICE_MODES = ("off", "on")
+TEMPVOICE_ROOM_OVERWRITES = ("lobby", "category")
 HONEYPOT_MODES = ("off", "shadow", "on")
 HONEYPOT_PURGE_MAX_DAYS = 7
 
@@ -282,6 +283,7 @@ KEY_TYPES: dict[str, str] = {
     "tempvoice_name_template": "text",
     "tempvoice_creator_name": "text",
     "tempvoice_allowed_role_id": "role",
+    "tempvoice_room_overwrites": "enum",
     "honeypot_mode": "enum",
     "honeypot_channel_ids": "channels",
     "honeypot_purge_days": "int",
@@ -397,6 +399,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "pings_fan_role_creation": PINGS_CREATORS,
     "pings_fan_role_on_unlink": PINGS_ON_UNLINK,
     "tempvoice_mode": TEMPVOICE_MODES,
+    "tempvoice_room_overwrites": TEMPVOICE_ROOM_OVERWRITES,
     "honeypot_mode": HONEYPOT_MODES,
     "events_mode": EVENTS_MODES,
     EVENTS_POSTS_WHERE_KEY: EVENTS_POSTS_WHERES,
@@ -736,6 +739,10 @@ KEY_HELP: dict[str, str] = {
     "tempvoice_name_template": "what a spawned channel is called; {user} is the member",
     "tempvoice_creator_name": "what the join-to-create channel itself is called",
     "tempvoice_allowed_role_id": "only members with this role get a temporary channel",
+    "tempvoice_room_overwrites": (
+        "what a new room's permissions start from: lobby (the join-to-create channel's own — "
+        "a staff-only lobby makes staff-only rooms) or category (the category's, as before)"
+    ),
     "honeypot_mode": "off, shadow (log only) or on (ban whoever posts in the trap)",
     "honeypot_channel_ids": "the trap channels; Setup… on /honeypot fills this in",
     "honeypot_purge_days": (
@@ -2313,6 +2320,8 @@ class SettingsStore:
             return TEMPVOICE_CREATOR_NAME
         if key == "tempvoice_allowed_role_id":
             return MEMBER_ROLE_ID
+        if key == "tempvoice_room_overwrites":
+            return TEMPVOICE_ROOM_OVERWRITES[0]
         if key == "chat_visibility_role_id":
             return MEMBER_ROLE_ID
         if key == "honeypot_mode":
