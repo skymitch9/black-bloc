@@ -10,6 +10,14 @@ from xml.etree import ElementTree
 from .panels import KEEP_IT as KEEP_IT
 from .panels import panel_minutes as _panel_minutes
 from .settings_store import YOUTUBE_TEMPLATE
+from .youtube_live import (
+    LIVE_URL,
+    PROBE_REFUSED,
+    Confirm,
+    Probe,
+    read_confirm,
+    read_page,
+)
 
 log = logging.getLogger(__name__)
 
@@ -331,6 +339,29 @@ class YouTubeClient:
             return ""
         return feed_title(body) if status == 200 else ""
 
+    async def probe_live(self, channel_id: str) -> Probe:
+        """The quota-free `/live` page: two facts, a tolerant parse, no key and no units."""
+        status, _headers, body = await self._request(
+            "GET",
+            LIVE_URL.format(channel_id=channel_id),
+            headers={"User-Agent": BROWSER_AGENT},
+        )
+        if status != 200:
+            raise YouTubeError(
+                PROBE_REFUSED.format(status=status, channel=channel_id), network=True
+            )
+        return read_page(body)
+
+    async def confirm_live(self, video_id: Any) -> Confirm | None:
+        """One unit of quota; without a key nothing is claimed, so it answers None."""
+        wanted = str(video_id or "").strip()
+        if not wanted or not self.keyed:
+            return None
+        payload = await self._api(
+            "videos", {"part": "snippet,liveStreamingDetails", "id": wanted}
+        )
+        return read_confirm(payload, wanted)
+
     async def classify(self, video_ids: Any) -> dict[str, str]:
         """Kind per video id from the API; without a key nothing is claimed, so it answers empty."""
         wanted = [str(one) for one in video_ids or () if str(one or "").strip()]
@@ -357,6 +388,10 @@ SELECT_CAP = 25
 
 NOT_SEEDED_YET = "not checked yet"
 NOBODY_LINKED = "Nobody has linked a YouTube channel yet."
+LIVE_NO_KEY = (
+    "**quota used today** — none; with no YOUTUBE_API_KEY a live stream is announced from the "
+    "page alone, so its title reads *Live now*"
+)
 
 LINK = "link"
 RELINK = "relink"
@@ -462,8 +497,9 @@ def health_lines(
     last_error: Any,
     failures: int,
     totals: dict[str, int],
+    live: dict[str, Any] | None = None,
 ) -> list[str]:
-    return [
+    lines = [
         f"**mode** — {mode}",
         f"**channel** — {f'<#{channel_id}>' if channel_id else 'not set'}",
         f"**every** — {minutes} minute(s)",
@@ -474,6 +510,26 @@ def health_lines(
         f"**links** — {totals['links']} · **videos seen** — {totals['videos']} · "
         f"**announced** — {totals['announced']}",
     ]
+    return lines + live_lines(live, keyed=keyed)
+
+
+def live_lines(live: dict[str, Any] | None, *, keyed: bool = False) -> list[str]:
+    """What the live poller is doing; the quota line only exists where a key does."""
+    if not live:
+        return []
+    lines = [
+        f"**live streams** — {live.get('mode')}",
+        f"**probed every** — {live.get('minutes')} minute(s)",
+        f"**last probe** — {live.get('last_probe_at') or 'never'}",
+        f"**last probe error** — {live.get('last_probe_error') or 'none'}",
+        f"**channels probed** — {live.get('probed') or 0}",
+        f"**live now** — {live.get('open') or 0}",
+    ]
+    if keyed:
+        lines.append(f"**quota used today** — {live.get('quota') or 0} unit(s)")
+    else:
+        lines.append(LIVE_NO_KEY)
+    return lines
 
 
 def link_lines(rows: Any, names: dict[int, str] | None = None) -> list[str]:

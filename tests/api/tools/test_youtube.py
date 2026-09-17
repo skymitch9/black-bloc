@@ -38,8 +38,13 @@ class FakeCog:
         self.db = db
         self.client = SimpleNamespace(keyed=keyed, resolve=self._resolve)
         self.poller = SimpleNamespace(is_running=lambda: True)
+        self.live_poller = SimpleNamespace(is_running=lambda: True)
         self.last_poll_ok_at = "2026-09-02T00:00:00+00:00"
         self.last_poll_error = None
+        self.last_probe_at = "2026-09-17T13:00:00+00:00"
+        self.last_probe_error = None
+        self.probed = 3
+        self.confirms = 0
         self.poll_failures = 0
         self.fetches = 8
         self.unchanged = 2
@@ -284,6 +289,24 @@ async def test_status_says_whether_the_key_is_set_and_how_the_sweep_is_doing(
     assert body["last_error"] is None
     assert body["unchanged_ratio"] == 0.25
     assert body["links"] == 1 and body["videos"] == 1 and body["announced"] == 1
+    assert body["live_mode"] == "off" and body["live_minutes"] == 5
+    assert body["live_end_misses"] == 2 and body["live_running"] is True
+    assert body["last_probe_at"] == "2026-09-17T13:00:00+00:00"
+    assert body["last_probe_error"] is None
+    assert body["probed"] == 3 and body["quota_today"] == 0 and body["live_now"] == 0
+
+
+async def test_status_says_what_the_live_probe_is_doing_when_the_cog_is_loaded(
+    client, sign_in, web, guild, wf
+):
+    """§D: the site and the panel read one health function, so they cannot disagree."""
+    await web.store.set(guild.id, "youtube_live_mode", "shadow")
+    web.cogs["YouTube"] = FakeCog(web.db, keyed=True)
+    sign_in(client)
+
+    body = client.get("/api/youtube/status").json()
+
+    assert body["live_mode"] == "shadow"
 
 
 def test_status_with_no_cog_loaded_reports_it_rather_than_pretending(client, sign_in, web):
@@ -293,5 +316,7 @@ def test_status_with_no_cog_loaded_reports_it_rather_than_pretending(client, sig
 
     assert body["api_key_set"] is False
     assert body["running"] is False
+    assert body["live_running"] is False
+    assert body["live_mode"] == "off"
     assert body["last_ok_at"] is None
     assert body["unchanged_ratio"] is None

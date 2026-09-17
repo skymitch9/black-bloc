@@ -609,6 +609,11 @@ const KEY_UNSET = 'No YOUTUBE_API_KEY is set. Shorts are still told apart by the
   + 'live stream is only spotted while the member has a YouTube go-live session open.';
 
 const UPLOAD_STATES = { announced: 'ok', would: 'warn', skipped: 'quiet' };
+const LIVE_NOTE = 'A linked channel going live is announced through the go-live feed above, as '
+  + 'source youtube. youtube_live_mode below switches the probe on; golive_mode still decides '
+  + 'whether anything is posted.';
+const LIVE_KEY_UNSET = 'With no YOUTUBE_API_KEY the stream is announced from the page alone, so '
+  + 'its title reads Live now and no quota is spent.';
 
 /** F3: what the uploads sweep is actually doing, health first. */
 function uploadsStatus(status) {
@@ -624,6 +629,27 @@ function uploadsStatus(status) {
       typeof value === 'string' ? el('p', { class: 'preview', text: value }) : value
     )))),
     status.api_key_set ? null : el('p', { class: 'field-help', text: KEY_UNSET }),
+  ].filter(Boolean));
+}
+
+/** The live half's own two lines, on the same card the uploads sweep reports from. */
+function liveStatus(status) {
+  if (!status) return null;
+  const rows = [
+    ['Live streams', badge(status.live_mode || 'off', status.live_mode === 'on' ? 'ok' : 'warn')],
+    ['Probe', status.live_running ? badge('running', 'ok') : badge('stopped', 'warn')],
+    ['Last probe', status.last_probe_at ? when(status.last_probe_at) : 'never'],
+    ['Last probe error', status.last_probe_error || 'none'],
+    ['Channels probed', `${status.probed || 0}, every ${status.live_minutes} minute(s)`],
+    ['Live now', `${status.live_now || 0}, ended after ${status.live_end_misses} quiet probe(s)`],
+    ['Quota used today', `${status.quota_today || 0} unit(s)`],
+  ];
+  return card('How live streams are spotted', [
+    el('p', { class: 'field-help', text: LIVE_NOTE }),
+    el('div', { class: 'formrow' }, rows.map(([label, value]) => field(label, (
+      typeof value === 'string' ? el('p', { class: 'preview', text: value }) : value
+    )))),
+    status.api_key_set ? null : el('p', { class: 'field-help', text: LIVE_KEY_UNSET }),
   ].filter(Boolean));
 }
 
@@ -724,6 +750,7 @@ async function uploadsSection(specs, links, videos, status) {
       ? el('div', { class: 'formrow' }, [field('Upload announcements', mode.node, UPLOADS_MODE_HELP)])
       : el('p', { class: 'say-nothing', text: UPLOADS_NO_MODE }),
     uploadsStatus(status),
+    liveStatus(status),
     links.some((row) => !row.seeded) ? el('p', { class: 'field-help', text: NOT_SEEDED }) : null,
     linkTable,
     uploadsLinkCard(say),

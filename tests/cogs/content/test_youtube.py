@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,10 +9,13 @@ import discord
 import pytest
 
 from black_bloc.cogs.content import youtube as youtube_cog
+from black_bloc.cogs.content.golive import GoLive
 from black_bloc.cogs.content.youtube import (
     FANS_ON,
+    FEATURE_MISSING,
     FORGET_BUTTON,
     LINK_LABEL,
+    LIVE_MODE_PLACEHOLDER,
     MODE_PLACEHOLDER,
     NOT_LINKED,
     NUMBERS_BUTTON,
@@ -26,6 +30,7 @@ from black_bloc.cogs.content.youtube import (
     ForgetPick,
     LinkedPick,
     LinkModal,
+    LiveModePick,
     ModePick,
     NumbersModal,
     UploadChannelPick,
@@ -37,18 +42,22 @@ from black_bloc.cogs.content.youtube import (
     counts,
     get_link,
     known_ids,
+    live_health,
     recent_videos,
     run_link,
+    run_live_mode,
     run_setup,
     save_setup,
     set_link,
+    set_live_mode,
     set_mode,
     setup_embed,
     setup_view,
     unlink_channel,
 )
 from black_bloc.config import load_settings
-from black_bloc.logkinds import FEATURE_PAGES
+from black_bloc.golive import EMBED_NO_TITLE, EMBED_SOURCE_YOUTUBE
+from black_bloc.logkinds import FEATURE_PAGES, is_important
 from black_bloc.settings_store import DB_UNAVAILABLE, SettingsStore
 from black_bloc.youtube import (
     CANNOT_RESOLVE,
@@ -65,6 +74,7 @@ from black_bloc.youtube import (
     card_buttons,
     parse_feed,
 )
+from black_bloc.youtube_live import UNREADABLE_EVERY_SECONDS, Confirm, read_page
 
 FEED = (Path(__file__).resolve().parents[2] / "fixtures" / "youtube_feed.xml").read_text(
     encoding="utf-8"
@@ -822,7 +832,7 @@ async def test_staff_see_the_health_lines_who_is_linked_and_every_staff_control(
         "Logs",
         SITE_BUTTON,
     ]
-    assert placeholders(view) == [PICK_A_CHANNEL, MODE_PLACEHOLDER]
+    assert placeholders(view) == [PICK_A_CHANNEL, MODE_PLACEHOLDER, LIVE_MODE_PLACEHOLDER]
 
 
 async def test_a_member_is_never_told_who_else_has_a_channel_linked(bot, cog, db, member):
@@ -1491,3 +1501,396 @@ def test_the_site_link_is_the_shared_one_and_no_origin_is_still_an_empty_string(
     )
     assert youtube_cog.site_page_url("") == ""
     assert youtube_cog.site_page_url(None) == ""
+
+
+# --- the live probe: youtube-live-design.md §A–§E ------------------------------------------------
+
+
+LIVE_PAGE = (Path(__file__).resolve().parents[2] / "fixtures" / "youtube_live_page.html").read_text(
+    encoding="utf-8"
+)
+OFFLINE_PAGE = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "youtube_not_live_page.html"
+).read_text(encoding="utf-8")
+UPCOMING_PAGE = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "youtube_upcoming_page.html"
+).read_text(encoding="utf-8")
+LIVE_VIDEO = "3PFJ9SETS4M"
+LIVE_WATCH = f"https://www.youtube.com/watch?v={LIVE_VIDEO}"
+UNREADABLE_PAGE = "<html><body>maintenance</body></html>"
+
+
+class _Live:
+    """A stand-in YouTubeClient for the probe: canned pages, canned confirms, nothing fetched."""
+
+    def __init__(self, *pages, keyed=False, confirms=None):
+        self.pages = list(pages)
+        self.keyed = keyed
+        self.confirms = list(confirms or [])
+        self.probed = []
+        self.confirmed = []
+        self.closed = False
+
+    async def probe_live(self, channel_id):
+        self.probed.append(channel_id)
+        reply = self.pages.pop(0) if self.pages else OFFLINE_PAGE
+        if isinstance(reply, Exception):
+            raise reply
+        return read_page(reply)
+
+    async def confirm_live(self, video_id):
+        self.confirmed.append(video_id)
+        reply = self.confirms.pop(0) if self.confirms else None
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    async def fetch_feed(self, channel_id, etag=None):
+        return (200, None, [])
+
+    async def classify(self, video_ids):
+        return {}
+
+    async def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def golive(bot):
+    made = GoLive(bot)
+    bot.cogs["GoLive"] = made
+    return made
+
+
+async def live_on(bot, mode="on", golive_mode="on"):
+    await bot.store.set(GUILD, "youtube_live_mode", mode)
+    await bot.store.set(GUILD, "golive_mode", golive_mode)
+
+
+async def live_linked(db, cog, *pages, keyed=False, confirms=None):
+    await set_link(db, STREAMER, CHANNEL, None, "Kurzgesagt")
+    await db.conn.execute("UPDATE youtube_links SET seeded = 1 WHERE user_id = ?", (STREAMER,))
+    await db.conn.commit()
+    cog.client = _Live(*pages, keyed=keyed, confirms=confirms)
+    return cog.client
+
+
+async def sessions(db):
+    cur = await db.conn.execute("SELECT * FROM golive_sessions ORDER BY id")
+    return list(await cur.fetchall())
+
+
+async def test_a_linked_channel_going_live_is_announced_once_through_the_go_live_path(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE)
+
+    await cog.probe_all()
+
+    rows = await sessions(db)
+    assert len(rows) == 1
+    assert rows[0]["source"] == "youtube" and rows[0]["platform"] == "YouTube"
+    assert rows[0]["url"] == LIVE_WATCH
+    posts = bot.guild.get_channel(GOLIVE_CHANNEL).posts
+    assert len(posts) == 1 and LIVE_WATCH in posts[0]["content"]
+    assert (await details_logged(db, "golive.announce"))[0]["source"] == "youtube"
+
+
+async def test_a_second_probe_while_the_stream_is_live_announces_nothing_more(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE, LIVE_PAGE, LIVE_PAGE)
+
+    await cog.probe_all()
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert len(await sessions(db)) == 1
+    assert len(bot.guild.get_channel(GOLIVE_CHANNEL).posts) == 1
+
+
+async def test_one_quiet_probe_does_not_end_a_stream_and_two_do(bot, cog, golive, db, member):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE, OFFLINE_PAGE, OFFLINE_PAGE)
+
+    await cog.probe_all()
+    await cog.probe_all()
+    assert (await sessions(db))[0]["ended_at"] is None
+
+    await cog.probe_all()
+
+    assert (await sessions(db))[0]["ended_at"] is not None
+    assert "golive.end" in await kinds_logged(db)
+
+
+async def test_how_many_quiet_probes_end_a_stream_is_a_setting(bot, cog, golive, db, member):
+    await live_on(bot)
+    await bot.store.set(GUILD, "youtube_live_end_misses", 1)
+    await live_linked(db, cog, LIVE_PAGE, OFFLINE_PAGE)
+
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert (await sessions(db))[0]["ended_at"] is not None
+
+
+async def test_without_a_key_nothing_is_confirmed_and_the_card_title_is_live_now(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    client = await live_linked(db, cog, LIVE_PAGE, keyed=False)
+
+    await cog.probe_all()
+
+    assert client.confirmed == []
+    assert (await sessions(db))[0]["title"] is None
+    embed = bot.guild.get_channel(GOLIVE_CHANNEL).posts[0]["embed"]
+    assert embed.title == EMBED_NO_TITLE
+    assert embed.footer.text.endswith(EMBED_SOURCE_YOUTUBE)
+    assert cog.confirms == 0
+
+
+async def test_with_a_key_one_unit_is_spent_and_the_card_carries_the_real_title(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    client = await live_linked(
+        db,
+        cog,
+        LIVE_PAGE,
+        keyed=True,
+        confirms=[Confirm(started=True, title="lofi radio", thumbnail="https://i/x.jpg")],
+    )
+
+    await cog.probe_all()
+
+    assert client.confirmed == [LIVE_VIDEO]
+    assert cog.confirms == 1
+    assert (await sessions(db))[0]["title"] == "lofi radio"
+    assert bot.guild.get_channel(GOLIVE_CHANNEL).posts[0]["embed"].title == "lofi radio"
+
+
+async def test_a_broadcast_the_api_says_has_already_ended_is_not_announced(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(
+        db, cog, LIVE_PAGE, keyed=True, confirms=[Confirm(started=True, ended=True)]
+    )
+
+    await cog.probe_all()
+
+    assert await sessions(db) == []
+    assert bot.guild.get_channel(GOLIVE_CHANNEL).posts == []
+
+
+async def test_a_confirm_that_refuses_is_said_out_loud_and_the_stream_is_still_announced(
+    bot, cog, golive, db, member
+):
+    """Checklist 10: a check that could not run is named, never quietly claimed."""
+    await live_on(bot)
+    await live_linked(
+        db, cog, LIVE_PAGE, keyed=True, confirms=[YouTubeError("quota exceeded", network=True)]
+    )
+
+    await cog.probe_all()
+
+    assert "youtube.live_confirm_failed" in await kinds_logged(db)
+    assert len(await sessions(db)) == 1
+    assert (await details_logged(db, "youtube.live_seen"))[0]["confirmed"] is False
+
+
+async def test_with_the_live_half_off_nothing_is_probed_at_all(bot, cog, golive, db, member):
+    await live_on(bot, mode="off")
+    client = await live_linked(db, cog, LIVE_PAGE)
+
+    await cog.probe_all()
+
+    assert client.probed == []
+    assert await sessions(db) == []
+
+
+async def test_in_shadow_the_go_live_path_still_runs_and_the_probe_row_is_a_would_row(
+    bot, cog, golive, db, member
+):
+    """C: youtube_live_mode shadows its OWN row; golive_mode decides whether anything posts."""
+    await live_on(bot, mode="shadow", golive_mode="shadow")
+    await live_linked(db, cog, LIVE_PAGE)
+
+    await cog.probe_all()
+
+    kinds = await kinds_logged(db)
+    assert "youtube.would_live_seen" in kinds and "youtube.live_seen" not in kinds
+    assert "golive.would_announce" in kinds
+    assert len(await sessions(db)) == 1
+    assert bot.guild.get_channel(GOLIVE_CHANNEL).posts == []
+
+
+async def test_an_upcoming_stream_is_not_announced(bot, cog, golive, db, member):
+    await live_on(bot)
+    await live_linked(db, cog, UPCOMING_PAGE)
+
+    await cog.probe_all()
+
+    assert await sessions(db) == []
+
+
+async def test_a_page_that_changed_shape_says_so_once_an_hour_and_never_raises(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(db, cog, UNREADABLE_PAGE, UNREADABLE_PAGE)
+
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert (await kinds_logged(db)).count("youtube.probe_unreadable") == 1
+    assert await sessions(db) == []
+    assert is_important("youtube.probe_unreadable")
+
+
+async def test_an_unreadable_page_says_so_again_once_the_hour_is_up(bot, cog, golive, db, member):
+    await live_on(bot)
+    await live_linked(db, cog, UNREADABLE_PAGE, UNREADABLE_PAGE)
+
+    await cog.probe_all()
+    cog.unreadable_at[CHANNEL] = datetime.now(UTC) - timedelta(
+        seconds=UNREADABLE_EVERY_SECONDS + 1
+    )
+    await cog.probe_all()
+
+    assert (await kinds_logged(db)).count("youtube.probe_unreadable") == 2
+
+
+async def test_a_probe_that_cannot_be_reached_is_not_a_quiet_probe(bot, cog, golive, db, member):
+    """A hiccup is not an ending: an unreachable page leaves the session exactly as it was."""
+    await live_on(bot)
+    await live_linked(
+        db,
+        cog,
+        LIVE_PAGE,
+        YouTubeError("youtube unreachable", network=True),
+        YouTubeError("youtube unreachable", network=True),
+        YouTubeError("youtube unreachable", network=True),
+    )
+
+    for _ in range(4):
+        await cog.probe_all()
+
+    assert (await sessions(db))[0]["ended_at"] is None
+    assert cog.last_probe_error == "youtube unreachable"
+
+
+async def test_the_go_live_cog_missing_is_a_failure_row_not_a_silent_skip(bot, cog, db, member):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE)
+
+    await cog.probe_all()
+
+    assert "youtube.live_announce_failed" in await kinds_logged(db)
+    assert await sessions(db) == []
+
+
+async def test_the_probe_gap_follows_the_setting(bot, cog):
+    await bot.store.set(GUILD, "youtube_live_poll_minutes", 30)
+
+    cog._retime_live()
+
+    assert cog.live_poller.minutes == 30
+
+
+async def test_closing_the_cog_stops_the_live_probe(bot, cog):
+    cog.client = _Live()
+
+    await cog.cog_unload()
+
+    assert cog.live_poller.is_running() is False
+
+
+async def test_the_live_probe_reports_its_own_health(bot, cog, golive, db, member):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE)
+
+    await cog.probe_all()
+    health = await live_health(bot, bot.guild)
+
+    assert health["mode"] == "on" and health["probed"] == 1 and health["open"] == 1
+    assert health["last_probe_at"] and health["last_probe_error"] is None
+
+
+async def test_the_health_lines_answer_even_with_the_cog_unloaded(bot, db):
+    found = await live_health(bot, bot.guild)
+
+    assert found["mode"] == "off" and found["last_probe_error"] == FEATURE_MISSING
+
+
+async def test_the_staff_panel_says_what_the_live_probe_is_doing(bot, cog, golive, db, member):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE)
+    _staff(bot)
+
+    embed, view = await build_panel(bot, bot.guild, member)
+
+    assert "**live streams** — on" in embed.description
+    assert "**last probe** — never" in embed.description
+    assert any(isinstance(one, LiveModePick) for one in view.children)
+
+
+async def test_the_live_mode_select_writes_the_key_and_leaves_one_row(bot, cog, db, member):
+    _staff(bot)
+    interaction = FakeInteraction(bot, member)
+
+    await run_live_mode(interaction, "shadow")
+
+    assert bot.store.get(GUILD, "youtube_live_mode") == "shadow"
+    assert (await kinds_logged(db)).count("youtube.live_mode") == 1
+    assert "**shadow**" in interaction.sent
+
+
+async def test_switching_the_live_half_on_says_when_go_live_would_not_post(bot, cog, db, member):
+    await bot.store.set(GUILD, "golive_mode", "shadow")
+
+    said, _row = await set_live_mode(bot, bot.guild, member, "on")
+
+    assert "shadow" in said and "golive_mode" in said
+
+
+async def test_go_lives_reconcile_asks_youtube_before_closing_a_youtube_session(
+    bot, cog, golive, db, member
+):
+    """Checklist 4: a deploy inside a stream must not strand the session or re-announce it."""
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE, LIVE_PAGE)
+    await cog.probe_all()
+
+    await golive.reconcile_open_sessions()
+    assert (await sessions(db))[0]["ended_at"] is None
+
+    cog.client = _Live(OFFLINE_PAGE)
+    await golive.reconcile_open_sessions()
+
+    assert (await sessions(db))[0]["ended_at"] is not None
+
+
+async def test_an_unanswerable_probe_leaves_a_session_open_on_reconcile(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE)
+    await cog.probe_all()
+    cog.client = _Live(YouTubeError("youtube unreachable", network=True))
+
+    await golive.reconcile_open_sessions()
+
+    assert (await sessions(db))[0]["ended_at"] is None
+
+
+async def test_a_member_nobody_can_see_is_not_probed(bot, cog, db):
+    await live_on(bot)
+    client = await live_linked(db, cog, LIVE_PAGE)
+
+    await cog.probe_all()
+
+    assert client.probed == []
