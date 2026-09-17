@@ -22,8 +22,12 @@ FEATURE = "posts"
 
 MODE_KEY = "posts_mode"
 PANEL_MINUTES_KEY = "posts_panel_minutes"
+LOG_CHANNEL_KEY = "log_channel_id"
 ON = "on"
 OFF = "off"
+SHADOW = "shadow"
+MODES = (OFF, SHADOW, ON)
+CHANNEL = "channel"
 
 PLAIN = "plain"
 EMBED = "embed"
@@ -49,6 +53,10 @@ MESSAGE_GONE = "post.message_gone"
 RESET = "post.reset"
 CREATED = "post.created"
 DELETED = "post.deleted"
+SHADOW_POSTED = "post.shadow_posted"
+SHADOW_UPDATED = "post.shadow_updated"
+SHADOW_TAKEN_DOWN = "post.shadow_taken_down"
+SHADOW_MESSAGE_GONE = "post.shadow_message_gone"
 
 NO_SUCH_POST = (
     "There is no post called **{slug}**, so nothing was done. It may have been renamed — open "
@@ -89,6 +97,11 @@ NOT_POSTED = (
     "**{title}** is not posted anywhere right now, so there is nothing to take down. Press Post "
     "it first."
 )
+NO_SHADOW_CHANNEL = (
+    "Posts are in **shadow**, so **{title}** goes to the shadow channel rather than its own — "
+    "and this server has neither a test channel nor a log channel, so there is nowhere to put "
+    "it. A Lead sets **log_channel_id** on the Settings page, or turns posts on."
+)
 CHANNEL_GONE = "the channel is not one Black Bloc can see any more"
 NO_CHANNEL_WORD = "no channel yet"
 CHANNEL_UNSEEN = "a channel Black Bloc cannot see"
@@ -124,15 +137,33 @@ SLUG_NEEDED = (
 )
 TITLE_NEEDED = "A post needs a title, so nothing was saved. Fill it in and save again."
 
+SHADOW_LINE = "shadow — this goes to {shadow}, not {where}, until posts are on."
+SHADOW_LINE_NOWHERE = (
+    "shadow — this goes to {shadow}. It has no channel of its own yet, and nothing reaches one "
+    "until posts are on."
+)
+
 SAVED_SAID = "**{title}** is saved."
 CREATED_SAID = "**{title}** is made. Nothing is in Discord until you press Post it."
 POSTED_SAID = "**{title}** is posted in {where}."
 UPDATED_SAID = "**{title}** is updated where it was already posted, in {where}."
+SHADOW_POSTED_SAID = (
+    "**{title}** is posted in {where} — the shadow copy, because posts are in shadow. Nothing "
+    "went to its own channel."
+)
+SHADOW_UPDATED_SAID = (
+    "**{title}** is updated in {where} — the shadow copy, because posts are in shadow. Nothing "
+    "went to its own channel."
+)
 TAKEN_DOWN_SAID = "**{title}** is taken down. Every word is still here."
 RESET_SAID = "**{title}** is back to the words it shipped with."
 DELETED_SAID = "**{title}** is gone."
 MODE_ON_SAID = "Posts are on. Staff can post from the site and from `/posts`."
 MODE_OFF_SAID = "Posts are off. `/posts` disappears within about a minute; the text is all kept."
+MODE_SHADOW_SAID = (
+    "Posts are in shadow. Post it sends the message to {where} and keeps it edited there, "
+    "whatever channel a post names; nothing reaches members until posts are on."
+)
 
 PANEL_TITLE = "Posts"
 PANEL_INTRO = "The messages Black Bloc keeps current in this server."
@@ -147,6 +178,7 @@ PIN_IT = "Pin it"
 DO_NOT_PIN_IT = "Do not pin it"
 
 STATUS_POSTED = "posted"
+STATUS_POSTED_SHADOW = "posted (shadow)"
 STATUS_PINNED = "pinned"
 STATUS_NOT_POSTED = "not posted"
 STATUS_PENDING = "changes not yet posted"
@@ -197,8 +229,20 @@ def hash_of(row: Any) -> str:
     )
 
 
+def shadow_id(row: Any) -> Any:
+    return row_value(row, "shadow_message_id")
+
+
 def is_posted(row: Any) -> bool:
-    return bool(row_value(row, "message_id"))
+    """A copy is up somewhere — its own channel, the shadow channel, or both."""
+    return bool(row_value(row, "message_id")) or bool(shadow_id(row))
+
+
+def posted_where(row: Any) -> str | None:
+    """Which copy `posted_hash` describes, so one hash can answer for either."""
+    if row_value(row, "message_id"):
+        return CHANNEL
+    return SHADOW if shadow_id(row) else None
 
 
 def changes_pending(row: Any) -> bool:
@@ -240,8 +284,22 @@ def refused_title(title: Any, style: str) -> str | None:
     return said.format(limit=TITLE_MAX, count=count, over=over, s="" if over == 1 else "s")
 
 
+def mode_of(store: Any, guild_id: int) -> str:
+    """One reading of the three-value key; anything unknown reads as the safe one."""
+    text = str(store.get(guild_id, MODE_KEY) or "").strip().lower()
+    return text if text in MODES else SHADOW
+
+
 def posts_are_on(store: Any, guild_id: int) -> bool:
-    return str(store.get(guild_id, MODE_KEY)) == ON
+    return mode_of(store, guild_id) == ON
+
+
+def posts_are_off(store: Any, guild_id: int) -> bool:
+    return mode_of(store, guild_id) == OFF
+
+
+def in_shadow(store: Any, guild_id: int) -> bool:
+    return mode_of(store, guild_id) == SHADOW
 
 
 def panel_minutes(store: Any, guild_id: int) -> int:
@@ -270,7 +328,7 @@ def status_words(row: Any) -> list[str]:
     """The pills both doors wear, in one place so they cannot be spelled two ways."""
     if not is_posted(row):
         return [STATUS_NOT_POSTED]
-    found = [STATUS_POSTED]
+    found = [STATUS_POSTED_SHADOW if posted_where(row) == SHADOW else STATUS_POSTED]
     if row_value(row, "pin"):
         found.append(STATUS_PINNED)
     if changes_pending(row):
@@ -338,7 +396,10 @@ async def list_posts(db: Any, guild_id: int) -> list[Any]:
 
 
 async def posted_posts(db: Any) -> list[Any]:
-    cur = await db.conn.execute("SELECT * FROM posts WHERE message_id IS NOT NULL ORDER BY id")
+    cur = await db.conn.execute(
+        "SELECT * FROM posts WHERE message_id IS NOT NULL OR shadow_message_id IS NOT NULL "
+        "ORDER BY id"
+    )
     return list(await cur.fetchall())
 
 
@@ -415,10 +476,38 @@ async def set_posted(
     await db.conn.commit()
 
 
+async def set_shadow_posted(
+    db: Any, post_id: int, message_id: int, digest: str, *, by: int | None = None
+) -> None:
+    await db.conn.execute(
+        "UPDATE posts SET shadow_message_id = ?, posted_hash = ?, posted_at = ?, posted_by = ? "
+        "WHERE id = ?",
+        (int(message_id), str(digest), now(), by, int(post_id)),
+    )
+    await db.conn.commit()
+
+
+async def forget_message(db: Any, post_id: int, *, shadow: bool = False) -> None:
+    """One copy's id goes; the posted stamp goes only once no copy is left anywhere."""
+    column = "shadow_message_id" if shadow else "message_id"
+    await db.conn.execute(
+        f"UPDATE posts SET {column} = NULL WHERE id = ?", (int(post_id),)
+    )
+    await db.conn.commit()
+    row = await get_post_by_id(db, int(post_id))
+    if row_value(row, "message_id") or row_value(row, "shadow_message_id"):
+        return
+    await db.conn.execute(
+        "UPDATE posts SET posted_hash = NULL, posted_at = NULL, posted_by = NULL WHERE id = ?",
+        (int(post_id),),
+    )
+    await db.conn.commit()
+
+
 async def clear_posted(db: Any, post_id: int) -> None:
     await db.conn.execute(
-        "UPDATE posts SET message_id = NULL, posted_hash = NULL, posted_at = NULL, "
-        "posted_by = NULL WHERE id = ?",
+        "UPDATE posts SET message_id = NULL, shadow_message_id = NULL, posted_hash = NULL, "
+        "posted_at = NULL, posted_by = NULL WHERE id = ?",
         (int(post_id),),
     )
     await db.conn.commit()
@@ -636,6 +725,47 @@ def guard_refusal(bot: Any) -> str:
     return guard.refusal_message() if guard is not None else ""
 
 
+def as_channel_id(value: Any) -> int | None:
+    try:
+        return int(value) if value else None
+    except (TypeError, ValueError):
+        return None
+
+
+def shadow_channel_id(bot: Any, guild: Any) -> int | None:
+    """Where a rehearsal GOES: the guard's own channel while it is installed, else the log."""
+    guard = getattr(bot, "guard", None)
+    wanted = getattr(guard, "test_channel_id", None) if guard is not None else None
+    if not wanted:
+        wanted = bot.store.get(int(getattr(guild, "id", 0) or 0), LOG_CHANNEL_KEY)
+    return as_channel_id(wanted)
+
+
+def shadow_channel_ids(bot: Any, guild: Any) -> list[int]:
+    """Where a rehearsal already IS. Checklist 3: the cutover LIFTS the guard between the
+    rehearsal and the real post, so the copy outlives the channel that resolution picks."""
+    found: list[int] = []
+    guard = getattr(bot, "guard", None)
+    for wanted in (
+        getattr(guard, "test_channel_id", None) if guard is not None else None,
+        getattr(getattr(bot, "settings", None), "test_channel_id", None),
+        bot.store.get(int(getattr(guild, "id", 0) or 0), LOG_CHANNEL_KEY),
+    ):
+        value = as_channel_id(wanted)
+        if value is not None and value not in found:
+            found.append(value)
+    return found
+
+
+def shadow_words(bot: Any, guild: Any, row: Any) -> str:
+    """One spelling of what shadow does to this post, for the card, the page and the panel."""
+    channel_id = row_value(row, "channel_id")
+    shadow = where_words(guild, shadow_channel_id(bot, guild))
+    if not channel_id:
+        return SHADOW_LINE_NOWHERE.format(shadow=shadow)
+    return SHADOW_LINE.format(shadow=shadow, where=where_words(guild, channel_id))
+
+
 def channel_of(bot: Any, guild: Any, channel_id: Any) -> Any:
     if not channel_id:
         return None
@@ -645,17 +775,73 @@ def channel_of(bot: Any, guild: Any, channel_id: Any) -> Any:
     return found
 
 
-async def _existing_message(bot: Any, guild: Any, row: Any, channel: Any, actor: Any, via: str):
-    """The message this row already has, or None once a 404 has been written down."""
-    message_id = row_value(row, "message_id")
+async def _existing_message(
+    bot: Any,
+    guild: Any,
+    row: Any,
+    channel: Any,
+    actor: Any,
+    via: str,
+    *,
+    shadow: bool = False,
+):
+    """The copy this row already has, real or shadow, or None once a 404 is written down."""
+    message_id = shadow_id(row) if shadow else row_value(row, "message_id")
     if not message_id:
         return None
     try:
         return await channel.fetch_message(int(message_id))
     except discord.NotFound:
-        await clear_posted(bot.db, int(row["id"]))
-        await note(bot, guild, row, MESSAGE_GONE, actor, via=via, message_id=int(message_id))
+        await forget_message(bot.db, int(row["id"]), shadow=shadow)
+        await note(
+            bot,
+            guild,
+            row,
+            SHADOW_MESSAGE_GONE if shadow else MESSAGE_GONE,
+            actor,
+            via=via,
+            message_id=int(message_id),
+        )
         return None
+
+
+async def _shadow_message(bot: Any, guild: Any, message_id: Any) -> Any:
+    """The rehearsal, hunted through every channel it could be sitting in."""
+    for channel_id in shadow_channel_ids(bot, guild):
+        channel = channel_of(bot, guild, channel_id)
+        if channel is None:
+            continue
+        try:
+            return await channel.fetch_message(int(message_id))
+        except discord.NotFound:
+            continue
+        except discord.HTTPException as exc:
+            log.warning("posts: a shadow copy could not be re-read — %s", exc)
+    return None
+
+
+async def _drop_shadow(bot: Any, guild: Any, row: Any, actor: Any, via: str) -> None:
+    """Checklist 12: the real post is already written down; losing the rehearsal never aborts it."""
+    message_id = shadow_id(row)
+    if not message_id:
+        return
+    message = await _shadow_message(bot, guild, message_id)
+    if message is not None:
+        try:
+            await message.delete()
+        except discord.HTTPException as exc:
+            await note(bot, guild, row, POST_FAILED, actor, via=via, reason=str(exc))
+            return
+    await forget_message(bot.db, int(row["id"]), shadow=True)
+    await note(
+        bot,
+        guild,
+        row,
+        SHADOW_TAKEN_DOWN if message is not None else SHADOW_MESSAGE_GONE,
+        actor,
+        via=via,
+        message_id=int(message_id),
+    )
 
 
 async def _pin(bot: Any, guild: Any, row: Any, message: Any, actor: Any, via: str) -> None:
@@ -673,27 +859,39 @@ async def _pin(bot: Any, guild: Any, row: Any, message: Any, actor: Any, via: st
 async def publish_post(
     bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    """Post it the first time, edit it in place every time after — never a second copy."""
+    """Post it the first time, edit it in place every time after — never a second copy.
+
+    In shadow the copy goes to the shadow channel whatever the row says; the first real
+    post on `on` takes that copy back down."""
+    mode = mode_of(bot.store, guild.id)
+    if mode == OFF:
+        return refusal(POSTS_OFF, "posts_off", 409)
+    shadow = mode == SHADOW
     title = str(row_value(row, "title", ""))
     channel_id = row_value(row, "channel_id")
-    if not channel_id:
+    if not shadow and not channel_id:
         return refusal(NO_CHANNEL_YET.format(title=title), "no_channel", 409)
     body = str(row_value(row, "body", "") or "")
     style = wanted_style(row_value(row, "style", PLAIN))
     if not body.strip():
         return refusal(NOTHING_TO_POST.format(title=title), "nothing_to_post", 409)
-    said = refused_title(title, style)
-    if said is not None:
-        return refusal(said, "title_too_long", 400)
-    said = refused_body(body, style, "posted")
-    if said is not None:
-        return refusal(said, "body_too_long", 400)
-    if not guard_allows(bot, channel_id):
+    refused = refused_title(title, style)
+    if refused is not None:
+        return refusal(refused, "title_too_long", 400)
+    refused = refused_body(body, style, "posted")
+    if refused is not None:
+        return refusal(refused, "body_too_long", 400)
+    target = shadow_channel_id(bot, guild) if shadow else channel_id
+    if shadow and not target:
+        return refusal(
+            NO_SHADOW_CHANNEL.format(title=title), "no_shadow_channel", 409
+        )
+    if not guard_allows(bot, target):
         await note(
-            bot, guild, row, WOULD_POST, actor, via=via, channel=where_words(guild, channel_id)
+            bot, guild, row, WOULD_POST, actor, via=via, channel=where_words(guild, target)
         )
         return refusal(guard_refusal(bot), "test_mode", 409)
-    channel = channel_of(bot, guild, channel_id)
+    channel = channel_of(bot, guild, target)
     if channel is None:
         await note(bot, guild, row, POST_FAILED, actor, via=via, reason=CHANNEL_GONE)
         return refusal(
@@ -702,38 +900,48 @@ async def publish_post(
     payload = render_message(row) | {
         "allowed_mentions": allowed_mentions_for(guild, body, actor)
     }
-    message = await _existing_message(bot, guild, row, channel, actor, via)
+    message = await _existing_message(bot, guild, row, channel, actor, via, shadow=shadow)
     try:
         if message is not None:
+            kind = SHADOW_UPDATED if shadow else UPDATED
+            said = SHADOW_UPDATED_SAID if shadow else UPDATED_SAID
             await message.edit(**payload)
-            kind, said = UPDATED, UPDATED_SAID
         else:
+            kind = SHADOW_POSTED if shadow else POSTED
+            said = SHADOW_POSTED_SAID if shadow else POSTED_SAID
             message = await channel.send(**payload)
-            kind, said = POSTED, POSTED_SAID
     except discord.HTTPException as exc:
         await note(bot, guild, row, POST_FAILED, actor, via=via, reason=str(exc))
         return refusal(
             POST_FAILED_SAID.format(title=title, reason=str(exc)), "post_failed", 409
         )
-    await set_posted(bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor))
+    write = set_shadow_posted if shadow else set_posted
+    await write(bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor))
     await note(bot, guild, row, kind, actor, via=via, message_id=int(message.id))
+    if not shadow:
+        await _drop_shadow(bot, guild, row, actor, via)
     await _pin(bot, guild, row, message, actor, via)
     fresh = await get_post_by_id(bot.db, int(row["id"]))
     return Outcome(
-        True, said.format(title=title, where=where_words(guild, channel_id)), value=fresh
+        True, said.format(title=title, where=where_words(guild, target)), value=fresh
     )
 
 
 async def take_down_post(
     bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    """The message goes; every word stays on the row."""
+    """Whichever copies exist go — real, shadow or both; every word stays on the row."""
     title = str(row_value(row, "title", ""))
-    message_id = row_value(row, "message_id")
-    if not message_id:
+    real = row_value(row, "message_id")
+    ghost = shadow_id(row)
+    if not real and not ghost:
         return refusal(NOT_POSTED.format(title=title), "not_posted", 409)
-    channel_id = row_value(row, "channel_id")
-    if not guard_allows(bot, channel_id):
+    for where, message_id in (
+        (row_value(row, "channel_id"), real),
+        (shadow_channel_id(bot, guild), ghost),
+    ):
+        if not message_id or guard_allows(bot, where):
+            continue
         await note(
             bot,
             guild,
@@ -742,23 +950,47 @@ async def take_down_post(
             actor,
             via=via,
             message_id=int(message_id),
-            channel=where_words(guild, channel_id),
+            channel=where_words(guild, where),
         )
         return refusal(guard_refusal(bot), "test_mode", 409)
-    channel = channel_of(bot, guild, channel_id)
-    if channel is not None:
+    found: list[Any] = []
+    if real:
+        channel = channel_of(bot, guild, row_value(row, "channel_id"))
+        if channel is not None:
+            try:
+                found.append(await channel.fetch_message(int(real)))
+            except discord.NotFound:
+                log.info("posts: %s had already lost its message", row_value(row, "slug"))
+            except discord.HTTPException as exc:
+                await note(bot, guild, row, POST_FAILED, actor, via=via, reason=str(exc))
+                return refusal(
+                    TAKE_DOWN_FAILED_SAID.format(title=title, reason=str(exc)),
+                    "post_failed",
+                    409,
+                )
+    if ghost:
+        rehearsal = await _shadow_message(bot, guild, ghost)
+        if rehearsal is not None:
+            found.append(rehearsal)
+    for message in found:
         try:
-            message = await channel.fetch_message(int(message_id))
             await message.delete()
-        except discord.NotFound:
-            log.info("posts: %s had already lost its message", row_value(row, "slug"))
         except discord.HTTPException as exc:
             await note(bot, guild, row, POST_FAILED, actor, via=via, reason=str(exc))
             return refusal(
                 TAKE_DOWN_FAILED_SAID.format(title=title, reason=str(exc)), "post_failed", 409
             )
     await clear_posted(bot.db, int(row["id"]))
-    await note(bot, guild, row, TAKEN_DOWN, actor, via=via, message_id=int(message_id))
+    await note(
+        bot,
+        guild,
+        row,
+        TAKEN_DOWN,
+        actor,
+        via=via,
+        message_id=int(real) if real else None,
+        shadow_message_id=int(ghost) if ghost else None,
+    )
     fresh = await get_post_by_id(bot.db, int(row["id"]))
     return Outcome(True, TAKEN_DOWN_SAID.format(title=title), value=fresh)
 
@@ -806,15 +1038,23 @@ async def remove_post(
 async def set_mode(
     bot: Any, guild: Any, actor: Any, value: Any, *, via: str = VIA_DISCORD
 ) -> str:
-    await bot.store.set(guild.id, MODE_KEY, value, by=actor_id(actor))
+    text = str(value or "").strip().lower()
+    wanted = text if text in MODES else SHADOW
+    await bot.store.set(guild.id, MODE_KEY, wanted, by=actor_id(actor))
     await log_action(
         bot,
         guild,
         kind_via("post.mode", via),
         actor=actor,
-        details={"mode": value, "via": via},
+        details={"mode": wanted, "via": via},
     )
-    return MODE_ON_SAID if value == ON else MODE_OFF_SAID
+    if wanted == ON:
+        return MODE_ON_SAID
+    if wanted == OFF:
+        return MODE_OFF_SAID
+    return MODE_SHADOW_SAID.format(
+        where=where_words(guild, shadow_channel_id(bot, guild))
+    )
 
 
 # --- the sweep --------------------------------------------------------------------------------
@@ -831,46 +1071,73 @@ async def reconcile_posts(bot: Any) -> dict[str, int]:
         guild = known.get(int(row["guild_id"]))
         if guild is None or bool(getattr(guild, "unavailable", False)):
             continue
-        channel = channel_of(bot, guild, row_value(row, "channel_id"))
-        if channel is None:
-            continue
-        try:
-            message = await channel.fetch_message(int(row["message_id"]))
-        except discord.NotFound:
-            await clear_posted(db, int(row["id"]))
-            await note(
-                bot,
-                guild,
-                row,
-                MESSAGE_GONE,
-                None,
-                via=VIA_BOOT,
-                message_id=int(row["message_id"]),
-            )
-            done["gone"] += 1
-            continue
-        except discord.HTTPException as exc:
-            log.warning("posts: %s could not be re-read — %s", row_value(row, "slug"), exc)
-            continue
-        if row_value(row, "pin") and not bool(getattr(message, "pinned", False)):
-            before = done["pinned"]
-            await _pin(bot, guild, row, message, None, VIA_BOOT)
-            done["pinned"] = before + (1 if bool(getattr(message, "pinned", False)) else 0)
+        for shadow in (False, True):
+            message_id = shadow_id(row) if shadow else row_value(row, "message_id")
+            if not message_id:
+                continue
+            if shadow:
+                message = await _shadow_message(bot, guild, message_id)
+                if message is None:
+                    await forget_message(db, int(row["id"]), shadow=True)
+                    await note(
+                        bot,
+                        guild,
+                        row,
+                        SHADOW_MESSAGE_GONE,
+                        None,
+                        via=VIA_BOOT,
+                        message_id=int(message_id),
+                    )
+                    done["gone"] += 1
+                    continue
+            else:
+                channel = channel_of(bot, guild, row_value(row, "channel_id"))
+                if channel is None:
+                    continue
+                try:
+                    message = await channel.fetch_message(int(message_id))
+                except discord.NotFound:
+                    await forget_message(db, int(row["id"]), shadow=False)
+                    await note(
+                        bot,
+                        guild,
+                        row,
+                        MESSAGE_GONE,
+                        None,
+                        via=VIA_BOOT,
+                        message_id=int(message_id),
+                    )
+                    done["gone"] += 1
+                    continue
+                except discord.HTTPException as exc:
+                    log.warning(
+                        "posts: %s could not be re-read — %s", row_value(row, "slug"), exc
+                    )
+                    continue
+            if row_value(row, "pin") and not bool(getattr(message, "pinned", False)):
+                before = done["pinned"]
+                await _pin(bot, guild, row, message, None, VIA_BOOT)
+                done["pinned"] = before + (1 if bool(getattr(message, "pinned", False)) else 0)
     return done
 
 
 __all__ = [
     "CAPS",
+    "CHANNEL",
     "CREATED",
     "DELETED",
     "EMBED",
+    "EMBED_TITLE_TOO_LONG",
     "MESSAGE_GONE",
+    "MODES",
     "MODE_KEY",
     "MODE_OFF_SAID",
     "MODE_ON_SAID",
-    "NOT_POSTED",
+    "MODE_SHADOW_SAID",
     "NOTHING_TO_POST",
+    "NOT_POSTED",
     "NO_CHANNEL_YET",
+    "NO_SHADOW_CHANNEL",
     "NO_SUCH_POST",
     "OFF",
     "ON",
@@ -892,12 +1159,19 @@ __all__ = [
     "PUT_THE_ORIGINAL_BACK",
     "RESET",
     "SAVED",
-    "EMBED_TITLE_TOO_LONG",
     "SEEDED_CANNOT_BE_DELETED",
+    "SHADOW",
+    "SHADOW_LINE",
+    "SHADOW_LINE_NOWHERE",
+    "SHADOW_MESSAGE_GONE",
+    "SHADOW_POSTED",
+    "SHADOW_TAKEN_DOWN",
+    "SHADOW_UPDATED",
     "SITE_BUTTON",
     "SLUG_NEEDED",
     "SLUG_TAKEN",
     "STATUS_PENDING",
+    "STATUS_POSTED_SHADOW",
     "STYLES",
     "TAKEN_DOWN",
     "TAKE_IT_DOWN",
@@ -918,20 +1192,25 @@ __all__ = [
     "count_posts",
     "create_post",
     "delete_post",
+    "forget_message",
     "get_post",
     "get_post_by_id",
     "guard_allows",
     "guard_refusal",
     "hash_of",
+    "in_shadow",
     "is_posted",
     "is_seeded",
     "known_channel",
     "list_posts",
     "load_seed",
     "make_post",
+    "mode_of",
     "move_label",
     "panel_minutes",
     "posted_posts",
+    "posted_where",
+    "posts_are_off",
     "posts_are_on",
     "preview_of",
     "publish_post",
@@ -951,6 +1230,11 @@ __all__ = [
     "set_mode",
     "set_post_fields",
     "set_posted",
+    "set_shadow_posted",
+    "shadow_channel_id",
+    "shadow_channel_ids",
+    "shadow_id",
+    "shadow_words",
     "site_page_url",
     "slugify",
     "status_words",
