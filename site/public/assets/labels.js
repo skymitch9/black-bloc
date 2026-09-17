@@ -161,6 +161,8 @@ export const LABELS = {
   modmail_member_command: 'Whether anybody can open a ticket with /modmail',
   modmail_panel_channel_id: 'Where the Open a ticket button is posted',
   modmail_panel_message_id: 'The posted Open a ticket message, written by the bot',
+  modmail_panel_shadow_message_id: 'The ticket button’s rehearsal copy, written by the bot',
+  modmail_panel_shadow_hash: 'What that rehearsal copy is showing, written by the bot',
   modmail_panel_title: 'The heading on the Open a ticket message',
   modmail_panel_text: 'What the Open a ticket message says',
   modmail_open_with_button: 'Whether staff see Open a ticket with… on /modmail',

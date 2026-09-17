@@ -86,6 +86,24 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/community/frontdoor.py::TICKET_BUTTON_HIDDEN": (
         "frontdoor.ticket_button_hidden",
     ),
+    # The ticket button's rehearsal copy: three constants, each written from the sweep and
+    # from either door, so the website spelling is listed beside the bare one.
+    "black_bloc/cogs/moderation/modmail.py::PANEL_POSTED_SHADOW": (
+        "modmail.panel_posted_shadow",
+        "web.modmail.panel_posted_shadow",
+    ),
+    "black_bloc/cogs/moderation/modmail.py::PANEL_UPDATED_SHADOW": (
+        "modmail.panel_updated_shadow",
+        "web.modmail.panel_updated_shadow",
+    ),
+    "black_bloc/cogs/moderation/modmail.py::PANEL_TAKEN_DOWN_SHADOW": (
+        "modmail.panel_taken_down_shadow",
+        "web.modmail.panel_taken_down_shadow",
+    ),
+    "black_bloc/cogs/moderation/modmail.py::moved_or_gone": (
+        "modmail.panel_below_post",
+        "modmail.panel_gone",
+    ),
     # Every hand-off writes one row naming both ends; `handoff.py` builds the kind from
     # the two words so the five moves have one home rather than five literals.
     # The question and the member's no are constants so the cog and the tests name them once.

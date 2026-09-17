@@ -40,10 +40,12 @@ from ...frontdoor import (
     label_for,
     rehearsal_copy,
     rehearsal_stamp,
+    rehearsal_takes_over,
 )
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
+from ...modmail import panel_rehearsal_copy
 from ...panels import Outcome, Panel, answer, panel_minutes, refusal
 from ...posted import drop_message, message_is_there, overtaken_by
 from ...posts import row_value, where_words
@@ -55,6 +57,8 @@ from ...settings_store import (
     FRONTDOOR_SHADOW_MESSAGE,
     GUILD_ONLY,
     MODMAIL_PANEL_MESSAGE,
+    MODMAIL_PANEL_SHADOW_HASH,
+    MODMAIL_PANEL_SHADOW_MESSAGE,
 )
 from ..community.events import ProposeButton
 from ..community.requests import FileButton
@@ -243,6 +247,35 @@ async def hide_ticket_button(bot: Any, guild: Any) -> int | None:
     return message_id
 
 
+async def hide_rehearsed_ticket_button(bot: Any, guild: Any) -> int | None:
+    """One door per channel holds in the rehearsal home: the mods see the rules post, then
+    the front door under it, exactly as #welcome will show them."""
+    store = bot.store
+    if not rehearsal_takes_over(store, guild.id):
+        return None
+    message_id = panel_rehearsal_copy(store, guild.id)
+    if not message_id:
+        return None
+    where, _ = await shadow.find_copy(bot, guild, message_id)
+    if where is not None and not await drop_message(
+        bot, guild, where, message_id, would_kind=WOULD_HIDE_TICKET_BUTTON
+    ):
+        return None
+    await store.clear(guild.id, MODMAIL_PANEL_SHADOW_MESSAGE)
+    await store.clear(guild.id, MODMAIL_PANEL_SHADOW_HASH)
+    await log_action(
+        bot,
+        guild,
+        TICKET_BUTTON_HIDDEN,
+        details={
+            "channel_id": getattr(where, "id", None),
+            "message_id": message_id,
+            "rehearsal": True,
+        },
+    )
+    return message_id
+
+
 def rehearsal_payload(bot: Any, guild: Any, wanted: Any) -> dict[str, Any]:
     """The real card, with one line above it saying where the real one is aimed."""
     note = shadow.note_line(bot, guild, where_words(guild, getattr(wanted, "id", wanted)))
@@ -313,7 +346,7 @@ async def rehearse_door(
     by = getattr(actor, "id", actor)
     if here and overtaken is None:
         if rehearsal_stamp(store, guild.id) == stamp:
-            await hide_ticket_button(bot, guild)
+            await hide_rehearsed_ticket_button(bot, guild)
             return Outcome(True, said, value=int(message.id))
         try:
             await message.edit(**payload)
@@ -332,7 +365,7 @@ async def rehearse_door(
                 "via": via,
             },
         )
-        await hide_ticket_button(bot, guild)
+        await hide_rehearsed_ticket_button(bot, guild)
         return Outcome(True, said, value=int(message.id))
     moved_or_gone = BELOW_POST if overtaken is not None else GONE
     if overtaken is not None or (copy_id and message is None):
@@ -367,7 +400,7 @@ async def rehearse_door(
             "via": via,
         },
     )
-    await hide_ticket_button(bot, guild)
+    await hide_rehearsed_ticket_button(bot, guild)
     return Outcome(True, said, value=int(fresh.id))
 
 
@@ -653,6 +686,7 @@ __all__ = [
     "door_view",
     "drop_rehearsal",
     "event_handoff",
+    "hide_rehearsed_ticket_button",
     "hide_ticket_button",
     "open_the_event",
     "open_the_request",

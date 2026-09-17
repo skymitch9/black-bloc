@@ -1679,6 +1679,8 @@ KEY_HELP.update(
 MODMAIL_MEMBER_COMMAND = "modmail_member_command"
 MODMAIL_PANEL_CHANNEL = "modmail_panel_channel_id"
 MODMAIL_PANEL_MESSAGE = "modmail_panel_message_id"
+MODMAIL_PANEL_SHADOW_MESSAGE = "modmail_panel_shadow_message_id"
+MODMAIL_PANEL_SHADOW_HASH = "modmail_panel_shadow_hash"
 MODMAIL_PANEL_TITLE = "modmail_panel_title"
 MODMAIL_PANEL_TEXT = "modmail_panel_text"
 MODMAIL_OPEN_WITH_BUTTON = "modmail_open_with_button"
@@ -1692,6 +1694,8 @@ KEY_TYPES.update(
         MODMAIL_MEMBER_COMMAND: "bool",
         MODMAIL_PANEL_CHANNEL: "channel",
         MODMAIL_PANEL_MESSAGE: "text",
+        MODMAIL_PANEL_SHADOW_MESSAGE: "text",
+        MODMAIL_PANEL_SHADOW_HASH: "text",
         MODMAIL_PANEL_TITLE: "text",
         MODMAIL_PANEL_TEXT: "text",
         MODMAIL_OPEN_WITH_BUTTON: "bool",
@@ -1712,6 +1716,17 @@ KEY_HELP.update(
             "put back after somebody deletes it. Written by the bot as TEXT, because a "
             "snowflake does not survive a JavaScript number; there is no reason to set it by "
             "hand"
+        ),
+        MODMAIL_PANEL_SHADOW_MESSAGE: (
+            "the rehearsal copy of the Open a ticket message Black Bloc posted in the rehearsal "
+            "home while test mode refuses the real channel, so it can be kept current, moved "
+            "with shadow_channel_id and taken down. Written by the bot as TEXT; there is no "
+            "reason to set it by hand"
+        ),
+        MODMAIL_PANEL_SHADOW_HASH: (
+            "a fingerprint of the wording that rehearsal copy is showing, so a sweep edits it "
+            "only when the heading or the line under it has actually changed. Written by the "
+            "bot; there is no reason to set it by hand"
         ),
         MODMAIL_PANEL_TITLE: "the heading on the posted Open a ticket message",
         MODMAIL_PANEL_TEXT: "what the posted Open a ticket message says under its heading",

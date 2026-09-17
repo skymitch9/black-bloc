@@ -14,11 +14,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import shadow
 from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
 from ...events import clamp
-from ...frontdoor import door_takes_over
+from ...frontdoor import door_takes_over, rehearsal_takes_over
 from ...golive import now_iso, parse_ts
 from ...handoff import (
     ASK_BODY_LABEL,
@@ -97,6 +98,8 @@ from ...modmail import (
     PANEL_MESSAGE_KEY,
     PANEL_MOVE_TO,
     PANEL_POST,
+    PANEL_SHADOW_HASH_KEY,
+    PANEL_SHADOW_MESSAGE_KEY,
     PANEL_TEXT_KEY,
     PANEL_TIMEOUT_FOOTER,
     PANEL_TITLE,
@@ -168,7 +171,9 @@ from ...modmail import (
     open_embed,
     opening_dm,
     panel_card_buttons,
+    panel_hash,
     panel_minutes,
+    panel_rehearsal_copy,
     relay_embed,
     relays_typing,
     reply_style_sentence,
@@ -208,6 +213,7 @@ from ...panels import (
     still_staff,
 )
 from ...posted import drop_message, message_is_there, overtaken_by
+from ...posts import where_words
 from ...settings_store import (
     CHANNEL_MODE,
     DB_UNAVAILABLE,
@@ -507,9 +513,23 @@ PANEL_STUCK = (
     "can write in that channel and try again."
 )
 PANEL_GUARDED = (
-    "Black Bloc is in **test mode**, so the only channel it may post the **Open a ticket** "
-    "button in is the test channel. Nothing was posted; the log says `modmail.would_post_panel`."
+    "Black Bloc is in **test mode**, so the only channels it may post the **Open a ticket** "
+    "button in are its test channel and the rehearsal home — and this server has neither, so "
+    "nothing was posted. Set **shadow_channel_id** on the Settings page to the channel the "
+    "mods should review it in, or turn test mode off; the log says "
+    "`modmail.would_post_panel`."
 )
+PANEL_REHEARSING_SAID = (
+    "Black Bloc is in test mode, so the **Open a ticket** button is rehearsing in <#{where}> "
+    "instead of <#{wanted}> — the real message, the real button, in the one channel test mode "
+    "lets it speak in. It moves to <#{wanted}> by itself when test mode is lifted."
+)
+PANEL_REHEARSAL_DOWN_SAID = (
+    "The **Open a ticket** button is down, and so is the rehearsal copy. Nothing else changed."
+)
+PANEL_POSTED_SHADOW = "modmail.panel_posted_shadow"
+PANEL_UPDATED_SHADOW = "modmail.panel_updated_shadow"
+PANEL_TAKEN_DOWN_SHADOW = "modmail.panel_taken_down_shadow"
 PANEL_LINES = (
     "**heading** — {title}\n**says** — {text}\nStaff change both on the dashboard's Settings "
     "page under **modmail**, or with `/settings` ▸ **A setting group…** ▸ modmail."
@@ -2276,6 +2296,149 @@ async def post_below_button(bot: Any, guild: Any, channel: Any, message_id: Any)
     )
 
 
+def panel_rehearsal_payload(bot: Any, guild: Any, wanted: Any) -> dict[str, Any]:
+    """The real Open-a-ticket card, with one line above it saying where it is aimed."""
+    store = bot.store
+    note = shadow.note_line(bot, guild, where_words(guild, getattr(wanted, "id", wanted)))
+    return {
+        "content": note or None,
+        "embed": ticket_button_embed(
+            store.get(guild.id, PANEL_HEADING_KEY), store.get(guild.id, PANEL_TEXT_KEY)
+        ),
+        "view": ticket_panel_view(guild.id),
+        "allowed_mentions": discord.AllowedMentions.none(),
+    }
+
+
+def panel_rehearsal_hash(bot: Any, guild: Any, wanted: Any) -> str:
+    note = shadow.note_line(bot, guild, where_words(guild, getattr(wanted, "id", wanted)))
+    return panel_hash(bot.store, guild.id, note)
+
+
+async def drop_panel_rehearsal(bot: Any, guild: Any, actor: Any = None, *, via: str = VIA_DISCORD):
+    """The rehearsal copy goes wherever it ended up, and its two keys go with it."""
+    message_id = panel_rehearsal_copy(bot.store, guild.id)
+    if not message_id:
+        return None
+    where, _ = await shadow.find_copy(bot, guild, message_id)
+    if where is not None and not await drop_panel_message(bot, guild, where, message_id):
+        return None
+    await bot.store.clear(guild.id, PANEL_SHADOW_MESSAGE_KEY)
+    await bot.store.clear(guild.id, PANEL_SHADOW_HASH_KEY)
+    await log_action(
+        bot,
+        guild,
+        kind_via(PANEL_TAKEN_DOWN_SHADOW, via),
+        actor=actor,
+        details={
+            "channel_id": getattr(where, "id", None),
+            "message_id": message_id,
+            "found": where is not None,
+            "via": via,
+        },
+    )
+    return message_id
+
+
+async def rehearse_panel(
+    bot: Any, guild: Any, actor: Any, wanted: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Test mode refuses the real channel, so the real button goes to the rehearsal home.
+
+    The caller owns the would-row, exactly as the front door's does."""
+    store = bot.store
+    guard = getattr(bot, "guard", None)
+    home_id = shadow.channel_id(bot, guild)
+    home = shadow.channel_of(bot, guild, home_id)
+    if home is None or (guard is not None and not guard.allows_channel(home_id)):
+        return refusal(PANEL_GUARDED, "test_mode", 409)
+    copy_id = panel_rehearsal_copy(store, guild.id)
+    where, message = await shadow.find_copy(bot, guild, copy_id)
+    here = message is not None and int(where.id) == int(home.id)
+    overtaken = (
+        await post_below_button(bot, guild, home, copy_id) if here else None
+    )
+    payload = panel_rehearsal_payload(bot, guild, wanted)
+    stamp = panel_rehearsal_hash(bot, guild, wanted)
+    said = PANEL_REHEARSING_SAID.format(where=home.id, wanted=getattr(wanted, "id", wanted))
+    by = getattr(actor, "id", actor)
+    if here and overtaken is None:
+        if str(store.get(guild.id, PANEL_SHADOW_HASH_KEY) or "") == stamp:
+            return Outcome(True, said, value=int(message.id))
+        try:
+            await message.edit(**payload)
+        except Exception as exc:
+            return await _panel_rehearsal_stuck(bot, guild, actor, home, exc)
+        await store.set(guild.id, PANEL_SHADOW_HASH_KEY, stamp, by=by)
+        await log_action(
+            bot,
+            guild,
+            kind_via(PANEL_UPDATED_SHADOW, via),
+            actor=actor,
+            details={
+                "channel_id": home.id,
+                "wanted_channel_id": getattr(wanted, "id", wanted),
+                "message_id": int(message.id),
+                "via": via,
+            },
+        )
+        return Outcome(True, said, value=int(message.id))
+    moved_or_gone = (
+        "modmail.panel_below_post" if overtaken is not None else "modmail.panel_gone"
+    )
+    if overtaken is not None or (copy_id and message is None):
+        await log_action(
+            bot,
+            guild,
+            moved_or_gone,
+            details={
+                "channel_id": getattr(where, "id", home.id),
+                "message_id": copy_id,
+                "post_message_id": overtaken,
+                "rehearsal": True,
+            },
+        )
+    try:
+        fresh = await home.send(**payload)
+    except Exception as exc:
+        return await _panel_rehearsal_stuck(bot, guild, actor, home, exc)
+    if message is not None:
+        await drop_panel_message(bot, guild, where, int(message.id))
+    await store.set(guild.id, PANEL_SHADOW_MESSAGE_KEY, str(fresh.id), by=by)
+    await store.set(guild.id, PANEL_SHADOW_HASH_KEY, stamp, by=by)
+    await log_action(
+        bot,
+        guild,
+        kind_via(PANEL_POSTED_SHADOW, via),
+        actor=actor,
+        details={
+            "channel_id": home.id,
+            "wanted_channel_id": getattr(wanted, "id", wanted),
+            "message_id": fresh.id,
+            "via": via,
+        },
+    )
+    return Outcome(True, said, value=int(fresh.id))
+
+
+async def _panel_rehearsal_stuck(
+    bot: Any, guild: Any, actor: Any, home: Any, exc: Exception
+) -> Outcome:
+    log.warning("modmail: could not put the ticket button's rehearsal copy up: %s", exc)
+    await log_action(
+        bot,
+        guild,
+        "modmail.panel_failed",
+        actor=actor,
+        details={
+            "channel_id": home.id,
+            "rehearsal": True,
+            "reason": f"{type(exc).__name__}: {exc}",
+        },
+    )
+    return refusal(PANEL_STUCK, "panel_stuck", 500)
+
+
 async def post_ticket_panel(
     bot: Any,
     guild: Any,
@@ -2290,14 +2453,20 @@ async def post_ticket_panel(
         return refusal(PANEL_STUCK, "no_such_channel", 400)
     guard = getattr(bot, "guard", None)
     if guard is not None and not guard.allows_channel(channel.id):
-        await log_action(
-            bot,
-            guild,
-            kind_via("modmail.would_post_panel", via),
-            actor=actor,
-            details={"channel_id": channel.id, "via": via},
-        )
-        return refusal(PANEL_GUARDED, "test_mode", 409)
+        outcome = await rehearse_panel(bot, guild, actor, channel, via=via)
+        if outcome.ok:
+            await bot.store.set(
+                guild.id, PANEL_CHANNEL_KEY, channel.id, by=getattr(actor, "id", actor)
+            )
+        else:
+            await log_action(
+                bot,
+                guild,
+                kind_via("modmail.would_post_panel", via),
+                actor=actor,
+                details={"channel_id": channel.id, "via": via},
+            )
+        return outcome
     old_channel, old_id = panel_where(bot, guild)
     store = bot.store
     try:
@@ -2340,10 +2509,13 @@ async def take_panel_down(
 ) -> Outcome:
     """Down means down: the message goes and both keys are cleared, so nothing puts it back."""
     channel, message_id = panel_where(bot, guild)
-    if not bot.store.get(guild.id, PANEL_CHANNEL_KEY):
+    if not bot.store.get(guild.id, PANEL_CHANNEL_KEY) and not panel_rehearsal_copy(
+        bot.store, guild.id
+    ):
         return refusal(PANEL_NOT_UP, "no_panel", 404)
     if channel is not None and message_id:
         await drop_panel_message(bot, guild, channel, message_id)
+    rehearsed = await drop_panel_rehearsal(bot, guild, actor, via=via)
     await bot.store.clear(guild.id, PANEL_MESSAGE_KEY)
     await bot.store.clear(guild.id, PANEL_CHANNEL_KEY)
     await log_action(
@@ -2357,7 +2529,9 @@ async def take_panel_down(
             "via": via,
         },
     )
-    return Outcome(True, PANEL_DOWN_SAID, value=message_id)
+    return Outcome(
+        True, PANEL_REHEARSAL_DOWN_SAID if rehearsed else PANEL_DOWN_SAID, value=message_id
+    )
 
 
 class Modmail(commands.Cog):
@@ -2659,13 +2833,14 @@ class Modmail(commands.Cog):
             return
         if door_takes_over(bot.store, guild.id) == int(channel.id):
             return
-        overtaken = await post_below_button(bot, guild, channel, message_id)
-        if overtaken is None and message_id and await panel_is_there(channel, message_id):
-            self._panel_shadowed.discard(guild.id)
-            return
         guard = getattr(bot, "guard", None)
         if guard is not None and not guard.allows_channel(channel.id):
-            if guild.id not in self._panel_shadowed:
+            if rehearsal_takes_over(bot.store, guild.id):
+                return
+            outcome = await rehearse_panel(bot, guild, None, channel)
+            if outcome.ok:
+                self._panel_shadowed.discard(guild.id)
+            elif outcome.code == "test_mode" and guild.id not in self._panel_shadowed:
                 self._panel_shadowed.add(guild.id)
                 await log_action(
                     bot,
@@ -2673,6 +2848,11 @@ class Modmail(commands.Cog):
                     "modmail.would_post_panel",
                     details={"channel_id": channel.id, "reason": "reconcile"},
                 )
+            return
+        await drop_panel_rehearsal(bot, guild, None)
+        overtaken = await post_below_button(bot, guild, channel, message_id)
+        if overtaken is None and message_id and await panel_is_there(channel, message_id):
+            self._panel_shadowed.discard(guild.id)
             return
         if overtaken is not None:
             await log_action(
