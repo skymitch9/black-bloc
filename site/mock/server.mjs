@@ -1297,6 +1297,17 @@ const NAMESPACE_OVERRIDE = {
   default_timezone: 'events',
   timezone_choices: 'events',
   time_step_minutes: 'events',
+  frontdoor_mode: 'modmail',
+  frontdoor_channel_id: 'modmail',
+  frontdoor_message_id: 'modmail',
+  frontdoor_title: 'modmail',
+  frontdoor_text: 'modmail',
+  frontdoor_ticket_label: 'modmail',
+  frontdoor_request_label: 'modmail',
+  frontdoor_event_label: 'modmail',
+  frontdoor_follows_post: 'modmail',
+  frontdoor_replaces_ticket_button: 'modmail',
+  frontdoor_panel_minutes: 'modmail',
 };
 
 function namespaceOf(key) {
