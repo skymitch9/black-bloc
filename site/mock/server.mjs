@@ -288,6 +288,8 @@ const LOG_LEVEL_FEATURES = [
 
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
+  ['shadow_channel_id', 'channel', null, null, 'where every rehearsal goes while a feature is in shadow — the welcome post, the front door, the ticket button, polls; blank means the bot’s own log channel. Setting it is the deliberate act that lets test mode speak in that one channel as well, so pick a channel only the people reviewing can see'],
+  ['rehearsal_note', 'text', 'Rehearsal — this is where it would go: {channel}', 'Rehearsal — this is where it would go: {channel}', 'the line the front door and the ticket button carry at the top of their rehearsal copy; {channel} is replaced with the channel the real one is aimed at. Blank leaves the copy with no note at all'],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
   ['role_menu_channel_id', 'channel', '800000000000000002', null, 'the channel /rolemenu offers first when a menu is posted'],
   ['golive_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post go-live announcements)', ['off', 'shadow', 'on']],
@@ -376,6 +378,8 @@ const SETTING_SPECS = [
   ['modmail_member_command', 'bool', true, true, 'true when anybody running /modmail gets the Open a ticket panel; false leaves /modmail to staff, as it was before, and a member’s only door is a DM'],
   ['modmail_panel_channel_id', 'channel', null, null, 'where the Open a ticket message with its button is posted; blank means no button is up anywhere. Post it from /modmail ▸ Setup… ▸ Ticket button…'],
   ['modmail_panel_message_id', 'text', null, null, 'the Open a ticket message Black Bloc posted, so it can be moved, taken down and put back after somebody deletes it. Written by the bot as TEXT, because a snowflake does not survive a JavaScript number; there is no reason to set it by hand'],
+  ['modmail_panel_shadow_message_id', 'text', null, null, 'the rehearsal copy of the Open a ticket message Black Bloc posted in the rehearsal home while test mode refuses the real channel, so it can be kept current, moved with shadow_channel_id and taken down. Written by the bot as TEXT; there is no reason to set it by hand'],
+  ['modmail_panel_shadow_hash', 'text', null, null, 'a fingerprint of the wording that rehearsal copy is showing, so a sweep edits it only when the heading or the line under it has actually changed. Written by the bot; there is no reason to set it by hand'],
   ['modmail_panel_title', 'text', 'Need a moderator?', 'Need a moderator?', 'the heading on the posted Open a ticket message'],
   ['modmail_panel_text', 'text', 'Press the button and tell us what is happening. Only staff see it.', 'Press the button and tell us what is happening. Only staff see it.', 'what the posted Open a ticket message says under its heading'],
   ['modmail_open_with_button', 'bool', false, false, 'true draws Open a ticket with… on the staff row of /modmail, so staff can start a ticket for somebody else; false hides that door and leaves every other way in untouched. The door is only hidden, never removed — turning this back on brings it straight back, and a press on a panel that was open when it went off is refused in words'],
@@ -386,6 +390,8 @@ const SETTING_SPECS = [
   ['frontdoor_mode', 'enum', 'on', 'on', 'off hides /ask and takes the posted front door down; on posts it where it is pointed and shows /ask. The three flows behind it (modmail, requests, events) keep their own modes either way', ['off', 'on']],
   ['frontdoor_channel_id', 'channel', null, null, 'where the front-door message is posted; blank posts nothing, and the /ask command still works. Post it from the Modmail page’s Front door card'],
   ['frontdoor_message_id', 'text', null, null, 'the front-door message Black Bloc posted, so it can be moved, taken down and put back after somebody deletes it. Written by the bot as TEXT, because a snowflake does not survive a JavaScript number; there is no reason to set it by hand'],
+  ['frontdoor_shadow_message_id', 'text', null, null, 'the rehearsal copy of the front door Black Bloc posted in the rehearsal home while test mode refuses the real channel, so it can be kept current, moved with shadow_channel_id and taken down. Written by the bot as TEXT; there is no reason to set it by hand'],
+  ['frontdoor_shadow_hash', 'text', null, null, 'a fingerprint of the wording the rehearsal copy is showing, so a sweep edits it only when the heading, the line or a button label has actually changed. Written by the bot; there is no reason to set it by hand'],
   ['frontdoor_title', 'text', 'Need something?', 'Need something?', 'the heading on the posted front-door message and on the /ask panel'],
   ['frontdoor_text', 'text', 'Pick the one that fits and Black Bloc takes it from there. Staff only see what you write.', 'Pick the one that fits and Black Bloc takes it from there. Staff only see what you write.', 'the line under that heading, on both'],
   ['frontdoor_ticket_label', 'text', 'Ask staff privately', 'Ask staff privately', 'what the button that opens a private modmail ticket is called, at most 80 characters, which is Discord’s own cap; blank restores the shipped wording'],
@@ -1293,7 +1299,7 @@ function seedActions() {
 
 let state = seedState();
 
-const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url'];
+const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url'];
 const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
@@ -1306,6 +1312,8 @@ const NAMESPACE_OVERRIDE = {
   frontdoor_mode: 'modmail',
   frontdoor_channel_id: 'modmail',
   frontdoor_message_id: 'modmail',
+  frontdoor_shadow_message_id: 'modmail',
+  frontdoor_shadow_hash: 'modmail',
   frontdoor_title: 'modmail',
   frontdoor_text: 'modmail',
   frontdoor_ticket_label: 'modmail',

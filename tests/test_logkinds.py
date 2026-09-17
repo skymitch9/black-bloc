@@ -62,11 +62,47 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "frontdoor.would_post",
         "web.frontdoor.would_post",
     ),
+    # The rehearsal copy's three: the door writes them from the sweep and from either door,
+    # so the website spelling is listed beside the bare one.
+    "black_bloc/cogs/community/frontdoor.py::POSTED_SHADOW": (
+        "frontdoor.posted_shadow",
+        "web.frontdoor.posted_shadow",
+    ),
+    "black_bloc/cogs/community/frontdoor.py::UPDATED_SHADOW": (
+        "frontdoor.updated_shadow",
+        "web.frontdoor.updated_shadow",
+    ),
+    "black_bloc/cogs/community/frontdoor.py::TAKEN_DOWN_SHADOW": (
+        "frontdoor.taken_down_shadow",
+        "web.frontdoor.taken_down_shadow",
+    ),
     "black_bloc/cogs/community/frontdoor.py::GONE": ("frontdoor.gone",),
+    "black_bloc/cogs/community/frontdoor.py::moved_or_gone": (
+        "frontdoor.below_post",
+        "frontdoor.gone",
+    ),
     "black_bloc/cogs/community/frontdoor.py::BELOW_POST": ("frontdoor.below_post",),
     "black_bloc/cogs/community/frontdoor.py::POST_FAILED": ("frontdoor.post_failed",),
     "black_bloc/cogs/community/frontdoor.py::TICKET_BUTTON_HIDDEN": (
         "frontdoor.ticket_button_hidden",
+    ),
+    # The ticket button's rehearsal copy: three constants, each written from the sweep and
+    # from either door, so the website spelling is listed beside the bare one.
+    "black_bloc/cogs/moderation/modmail.py::PANEL_POSTED_SHADOW": (
+        "modmail.panel_posted_shadow",
+        "web.modmail.panel_posted_shadow",
+    ),
+    "black_bloc/cogs/moderation/modmail.py::PANEL_UPDATED_SHADOW": (
+        "modmail.panel_updated_shadow",
+        "web.modmail.panel_updated_shadow",
+    ),
+    "black_bloc/cogs/moderation/modmail.py::PANEL_TAKEN_DOWN_SHADOW": (
+        "modmail.panel_taken_down_shadow",
+        "web.modmail.panel_taken_down_shadow",
+    ),
+    "black_bloc/cogs/moderation/modmail.py::moved_or_gone": (
+        "modmail.panel_below_post",
+        "modmail.panel_gone",
     ),
     # Every hand-off writes one row naming both ends; `handoff.py` builds the kind from
     # the two words so the five moves have one home rather than five literals.

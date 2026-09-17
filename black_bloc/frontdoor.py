@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import discord
@@ -16,6 +17,8 @@ from .settings_store import (
     FRONTDOOR_REPLACES_TICKET_BUTTON,
     FRONTDOOR_REQUEST_LABEL,
     FRONTDOOR_REQUEST_LABEL_DEFAULT,
+    FRONTDOOR_SHADOW_HASH,
+    FRONTDOOR_SHADOW_MESSAGE,
     FRONTDOOR_TEXT,
     FRONTDOOR_TEXT_DEFAULT,
     FRONTDOOR_TICKET_LABEL,
@@ -63,8 +66,10 @@ DOOR_NOT_UP = (
     "door** on the Modmail page is what puts one up."
 )
 DOOR_GUARDED = (
-    "Black Bloc is in test mode, so it only posts in its own test channel. The front door was "
-    "not posted. Turn test mode off, or point `frontdoor_channel_id` at the test channel."
+    "Black Bloc is in test mode, so it only posts in its own test channel and in the "
+    "rehearsal home — and this server has neither, so the front door was not posted. Set "
+    "**shadow_channel_id** on the Settings page to the channel the mods should review it "
+    "in, or turn test mode off."
 )
 DOOR_NO_CHANNEL = (
     "That is not a channel Black Bloc can see, so the front door was not posted. Pick one from "
@@ -75,6 +80,15 @@ DOOR_STUCK = (
     "**Send Messages** and **Embed Links** there — give it those and try again."
 )
 DOOR_POSTED_SAID = "The front door is up in <#{where}>."
+DOOR_REHEARSING_SAID = (
+    "Black Bloc is in test mode, so the front door is rehearsing in <#{where}> instead of "
+    "<#{wanted}> — the real card, the real buttons, in the one channel test mode lets it "
+    "speak in. It moves to <#{wanted}> by itself when test mode is lifted."
+)
+DOOR_REHEARSAL_DOWN_SAID = (
+    "The front door is down, and so is the rehearsal copy. Nothing else changed, and `/ask` "
+    "still works."
+)
 DOOR_MOVED_SAID = "The front door has moved to <#{where}>."
 DOOR_DOWN_SAID = "The front door is down. Nothing else changed, and `/ask` still works."
 
@@ -148,6 +162,37 @@ def door_takes_over(store: Any, guild_id: int) -> int | None:
     return channel_id if channel_id and message_id else None
 
 
+def rehearsal_copy(store: Any, guild_id: int) -> int | None:
+    """The rehearsal copy of the door, if one is up somewhere."""
+    found = store.get(guild_id, FRONTDOOR_SHADOW_MESSAGE)
+    try:
+        return int(found) if found else None
+    except (TypeError, ValueError):
+        return None
+
+
+def rehearsal_stamp(store: Any, guild_id: int) -> str:
+    return str(store.get(guild_id, FRONTDOOR_SHADOW_HASH) or "")
+
+
+def rehearsal_takes_over(store: Any, guild_id: int) -> bool:
+    """One door per channel holds in the rehearsal home too, where both copies land."""
+    if not door_is_on(store, guild_id) or not replaces_ticket_button(store, guild_id):
+        return False
+    return rehearsal_copy(store, guild_id) is not None
+
+
+def door_hash(store: Any, guild_id: int, note: str = "") -> str:
+    """Everything a copy draws, in one string, so a sweep edits only what has changed."""
+    drawn = [
+        note,
+        door_title(store, guild_id),
+        door_text(store, guild_id),
+        *(label_for(store, guild_id, kind) for kind in KINDS),
+    ]
+    return hashlib.sha256("".join(drawn).encode("utf-8")).hexdigest()
+
+
 __all__ = [
     "CUSTOM_ID_TEMPLATE",
     "DOOR_COLOUR",
@@ -158,6 +203,8 @@ __all__ = [
     "DOOR_NO_CHANNEL",
     "DOOR_OFF",
     "DOOR_POSTED_SAID",
+    "DOOR_REHEARSAL_DOWN_SAID",
+    "DOOR_REHEARSING_SAID",
     "DOOR_STUCK",
     "EVENT",
     "EVENT_HANDOFF_TEXT",
@@ -174,6 +221,7 @@ __all__ = [
     "TICKET",
     "custom_id",
     "door_embed",
+    "door_hash",
     "door_is_on",
     "door_takes_over",
     "door_text",
@@ -182,5 +230,8 @@ __all__ = [
     "followed_slug",
     "label_for",
     "labels",
+    "rehearsal_copy",
+    "rehearsal_stamp",
+    "rehearsal_takes_over",
     "replaces_ticket_button",
 ]

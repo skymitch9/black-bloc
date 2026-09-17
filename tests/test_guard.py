@@ -205,3 +205,78 @@ async def test_the_channel_gate_takes_a_channel_object_as_well_as_an_id(guarded_
     assert g.allows_channel(_Channel(OTHER_CH)) is False
     assert g.allows_channel(None) is False
     await guarded_bot.close()
+
+
+HOME_CH = 555
+
+
+async def test_the_rehearsal_home_is_allowed_for_sends_while_the_key_names_it(
+    guarded_bot, monkeypatch
+):
+    seen = []
+    g = guarded_bot.guard
+    monkeypatch.setattr(g, "_original_send", lambda cid, *a, **k: seen.append(cid))
+    monkeypatch.setattr(g, "_original_edit", lambda cid, *a, **k: seen.append(cid))
+
+    with pytest.raises(TestModeViolation):
+        guarded_bot.http.send_message(HOME_CH, params=None)
+
+    g.rehearse_in(1, HOME_CH)
+
+    guarded_bot.http.send_message(HOME_CH, params=None)
+    guarded_bot.http.edit_message(HOME_CH, 1, params=None)
+    assert seen == [HOME_CH, HOME_CH]
+    assert g.allows_channel(HOME_CH) is True
+    assert g.rehearses_in(HOME_CH) is True
+    await guarded_bot.close()
+
+
+async def test_clearing_the_key_refuses_the_rehearsal_home_again(guarded_bot):
+    g = guarded_bot.guard
+    g.rehearse_in(1, HOME_CH)
+    g.rehearse_in(1, None)
+
+    assert g.allows_channel(HOME_CH) is False
+    with pytest.raises(TestModeViolation):
+        guarded_bot.http.send_message(HOME_CH, params=None)
+    await guarded_bot.close()
+
+
+async def test_moving_the_key_leaves_only_the_new_home_allowed(guarded_bot):
+    g = guarded_bot.guard
+    g.rehearse_in(1, HOME_CH)
+    g.rehearse_in(1, OTHER_CH)
+
+    assert g.allows_channel(OTHER_CH) is True
+    assert g.allows_channel(HOME_CH) is False
+    await guarded_bot.close()
+
+
+async def test_the_rehearsal_home_never_widens_what_may_be_deleted(guarded_bot):
+    _cache(guarded_bot, _Channel(TEST_CH, category_id=CATEGORY), _Channel(HOME_CH, category_id=99))
+    g = guarded_bot.guard
+    g.rehearse_in(1, HOME_CH)
+
+    assert g.allows_place(_Channel(HOME_CH, category_id=99)) is False
+    with pytest.raises(TestModeViolation):
+        guarded_bot.http.delete_channel(HOME_CH)
+    await guarded_bot.close()
+
+
+async def test_the_rehearsal_home_does_not_let_a_slash_command_run_there(guarded_bot):
+    g = guarded_bot.guard
+    g.rehearse_in(1, HOME_CH)
+
+    assert not g.allows_interaction(_Interaction(guild_id=1, channel_id=HOME_CH))
+    await guarded_bot.close()
+
+
+async def test_one_guild_one_home_and_a_second_guild_keeps_its_own(guarded_bot):
+    g = guarded_bot.guard
+    g.rehearse_in(1, HOME_CH)
+    g.rehearse_in(2, OWN_CH)
+
+    assert g.rehearsal_channel_ids == {1: HOME_CH, 2: OWN_CH}
+    assert g.allows_channel(HOME_CH) and g.allows_channel(OWN_CH)
+    assert not g.owns_channel(HOME_CH)
+    await guarded_bot.close()

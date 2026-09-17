@@ -2301,3 +2301,42 @@ def test_the_poll_mode_help_names_all_three_words_it_takes():
 
     assert all(word in said for word in ("off", "shadow", "on"))
     assert KEY_CHOICES["poll_mode"] == ("off", "shadow", "on")
+
+
+async def test_the_rehearsal_home_is_a_core_key_reachable_from_both_doors(store):
+    """Checklist 33, and the 25-group cap: `shadow_` would have been a group of its own."""
+    for key in (settings_store.SHADOW_CHANNEL, settings_store.REHEARSAL_NOTE):
+        assert key in KEY_TYPES and KEY_HELP.get(key)
+        assert key in settings_store.CORE_KEYS
+        assert namespace_of(key) == "core"
+    assert KEY_TYPES[settings_store.SHADOW_CHANNEL] == "channel"
+    assert KEY_TYPES[settings_store.REHEARSAL_NOTE] == "text"
+
+
+async def test_the_rehearsal_home_ships_blank_and_the_note_ships_written(store):
+    assert store.get(7, settings_store.SHADOW_CHANNEL) is None
+    assert store.get(7, settings_store.REHEARSAL_NOTE) == settings_store.REHEARSAL_NOTE_DEFAULT
+    assert "{channel}" in store.get(7, settings_store.REHEARSAL_NOTE)
+
+
+async def test_the_rehearsal_home_help_says_it_widens_test_mode(store):
+    said = KEY_HELP[settings_store.SHADOW_CHANNEL]
+
+    assert "test mode" in said and "one channel" in said
+
+
+async def test_stored_values_finds_every_guild_that_set_a_key(store):
+    assert store.stored_values(settings_store.SHADOW_CHANNEL) == {}
+
+    await store.set(7, settings_store.SHADOW_CHANNEL, 4242)
+    await store.set(8, settings_store.SHADOW_CHANNEL, 99)
+
+    assert store.stored_values(settings_store.SHADOW_CHANNEL) == {7: 4242, 8: 99}
+
+    await store.clear(7, settings_store.SHADOW_CHANNEL)
+    assert store.stored_values(settings_store.SHADOW_CHANNEL) == {8: 99}
+
+
+async def test_stored_values_refuses_a_key_that_is_not_a_setting(store):
+    with pytest.raises(settings_store.SettingError):
+        store.stored_values("never_heard_of_it")

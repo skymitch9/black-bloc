@@ -312,6 +312,16 @@ class WebGuard:
     def __init__(self, test_channel_id: int = TEST_CHANNEL_ID) -> None:
         self.test_channel_id = test_channel_id
         self.owned: set[int] = set()
+        self.rehearsal_channel_ids: dict[int, int] = {}
+
+    def rehearse_in(self, guild_id: Any, channel: Any) -> None:
+        if channel is None:
+            self.rehearsal_channel_ids.pop(int(guild_id), None)
+            return
+        self.rehearsal_channel_ids[int(guild_id)] = int(channel)
+
+    def rehearses_in(self, channel: Any) -> bool:
+        return int(getattr(channel, "id", channel)) in self.rehearsal_channel_ids.values()
 
     def own_channel(self, channel: Any) -> None:
         self.owned.add(int(getattr(channel, "id", channel)))
@@ -324,7 +334,7 @@ class WebGuard:
 
     def allows_channel(self, channel: Any) -> bool:
         found = int(getattr(channel, "id", channel))
-        return found == self.test_channel_id or found in self.owned
+        return found == self.test_channel_id or found in self.owned or self.rehearses_in(found)
 
     def allows_place(self, channel: Any) -> bool:
         here = int(getattr(channel, "id", channel))

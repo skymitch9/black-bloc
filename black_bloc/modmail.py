@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import UTC, datetime
@@ -546,6 +547,8 @@ PANEL_DOWN = "panel_down"
 MEMBER_COMMAND_KEY = "modmail_member_command"
 PANEL_CHANNEL_KEY = "modmail_panel_channel_id"
 PANEL_MESSAGE_KEY = "modmail_panel_message_id"
+PANEL_SHADOW_MESSAGE_KEY = "modmail_panel_shadow_message_id"
+PANEL_SHADOW_HASH_KEY = "modmail_panel_shadow_hash"
 PANEL_HEADING_KEY = "modmail_panel_title"
 PANEL_TEXT_KEY = "modmail_panel_text"
 
@@ -995,6 +998,25 @@ def first_message(subject: Any, text: Any) -> str:
     said = clamp(str(subject or "").strip(), NAME_LIMIT)
     body = clamp(str(text or "").strip(), MESSAGE_LIMIT)
     return f"**{said}**\n{body}" if said else body
+
+
+def panel_rehearsal_copy(store: Any, guild_id: int) -> int | None:
+    """The rehearsal copy of the ticket button, if one is up somewhere."""
+    found = store.get(guild_id, PANEL_SHADOW_MESSAGE_KEY)
+    try:
+        return int(found) if found else None
+    except (TypeError, ValueError):
+        return None
+
+
+def panel_hash(store: Any, guild_id: int, note: str = "") -> str:
+    """Everything the copy draws, in one string, so a sweep edits only what has changed."""
+    drawn = [
+        note,
+        str(store.get(guild_id, PANEL_HEADING_KEY) or ""),
+        str(store.get(guild_id, PANEL_TEXT_KEY) or ""),
+    ]
+    return hashlib.sha256("\x1f".join(drawn).encode("utf-8")).hexdigest()
 
 
 def ticket_button_embed(title: Any, text: Any) -> discord.Embed:

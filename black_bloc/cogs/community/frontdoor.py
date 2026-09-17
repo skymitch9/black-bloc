@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import shadow
 from ...actionlog import log_action
 from ...command_errors import SafeDynamicItem
 from ...frontdoor import (
@@ -19,6 +20,8 @@ from ...frontdoor import (
     DOOR_NOT_UP,
     DOOR_OFF,
     DOOR_POSTED_SAID,
+    DOOR_REHEARSAL_DOWN_SAID,
+    DOOR_REHEARSING_SAID,
     DOOR_STUCK,
     EVENT,
     EVENT_HANDOFF_TEXT,
@@ -30,23 +33,32 @@ from ...frontdoor import (
     TICKET,
     custom_id,
     door_embed,
+    door_hash,
     door_is_on,
     door_takes_over,
     followed_slug,
     label_for,
+    rehearsal_copy,
+    rehearsal_stamp,
+    rehearsal_takes_over,
 )
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
+from ...modmail import panel_rehearsal_copy
 from ...panels import Outcome, Panel, answer, panel_minutes, refusal
 from ...posted import drop_message, message_is_there, overtaken_by
-from ...posts import row_value
+from ...posts import row_value, where_words
 from ...settings_store import (
     FRONTDOOR_CHANNEL,
     FRONTDOOR_MESSAGE,
     FRONTDOOR_PANEL_MINUTES,
+    FRONTDOOR_SHADOW_HASH,
+    FRONTDOOR_SHADOW_MESSAGE,
     GUILD_ONLY,
     MODMAIL_PANEL_MESSAGE,
+    MODMAIL_PANEL_SHADOW_HASH,
+    MODMAIL_PANEL_SHADOW_MESSAGE,
 )
 from ..community.events import ProposeButton
 from ..community.requests import FileButton
@@ -67,6 +79,9 @@ WOULD_POST = "frontdoor.would_post"
 WOULD_TAKE_DOWN = "frontdoor.would_take_down"
 WOULD_HIDE_TICKET_BUTTON = "frontdoor.would_hide_ticket_button"
 TICKET_BUTTON_HIDDEN = "frontdoor.ticket_button_hidden"
+POSTED_SHADOW = "frontdoor.posted_shadow"
+UPDATED_SHADOW = "frontdoor.updated_shadow"
+TAKEN_DOWN_SHADOW = "frontdoor.taken_down_shadow"
 
 
 async def open_the_ticket(interaction: discord.Interaction) -> None:
@@ -232,6 +247,181 @@ async def hide_ticket_button(bot: Any, guild: Any) -> int | None:
     return message_id
 
 
+async def hide_rehearsed_ticket_button(bot: Any, guild: Any) -> int | None:
+    """One door per channel holds in the rehearsal home: the mods see the rules post, then
+    the front door under it, exactly as #welcome will show them."""
+    store = bot.store
+    if not rehearsal_takes_over(store, guild.id):
+        return None
+    message_id = panel_rehearsal_copy(store, guild.id)
+    if not message_id:
+        return None
+    where, _ = await shadow.find_copy(bot, guild, message_id)
+    if where is not None and not await drop_message(
+        bot, guild, where, message_id, would_kind=WOULD_HIDE_TICKET_BUTTON
+    ):
+        return None
+    await store.clear(guild.id, MODMAIL_PANEL_SHADOW_MESSAGE)
+    await store.clear(guild.id, MODMAIL_PANEL_SHADOW_HASH)
+    await log_action(
+        bot,
+        guild,
+        TICKET_BUTTON_HIDDEN,
+        details={
+            "channel_id": getattr(where, "id", None),
+            "message_id": message_id,
+            "rehearsal": True,
+        },
+    )
+    return message_id
+
+
+def rehearsal_payload(bot: Any, guild: Any, wanted: Any) -> dict[str, Any]:
+    """The real card, with one line above it saying where the real one is aimed."""
+    note = shadow.note_line(bot, guild, where_words(guild, getattr(wanted, "id", wanted)))
+    return {
+        "content": note or None,
+        "embed": door_embed(bot.store, guild.id),
+        "view": door_view(bot, guild),
+        "allowed_mentions": discord.AllowedMentions.none(),
+    }
+
+
+def rehearsal_hash(bot: Any, guild: Any, wanted: Any) -> str:
+    note = shadow.note_line(bot, guild, where_words(guild, getattr(wanted, "id", wanted)))
+    return door_hash(bot.store, guild.id, note)
+
+
+async def drop_rehearsal(bot: Any, guild: Any, actor: Any = None, *, via: str = VIA_DISCORD):
+    """The rehearsal copy goes wherever it ended up, and its two keys go with it."""
+    message_id = rehearsal_copy(bot.store, guild.id)
+    if not message_id:
+        return None
+    where, _ = await shadow.find_copy(bot, guild, message_id)
+    if where is not None and not await drop_message(
+        bot, guild, where, message_id, would_kind=WOULD_TAKE_DOWN
+    ):
+        return None
+    await bot.store.clear(guild.id, FRONTDOOR_SHADOW_MESSAGE)
+    await bot.store.clear(guild.id, FRONTDOOR_SHADOW_HASH)
+    await log_action(
+        bot,
+        guild,
+        kind_via(TAKEN_DOWN_SHADOW, via),
+        actor=actor,
+        details={
+            "channel_id": getattr(where, "id", None),
+            "message_id": message_id,
+            "found": where is not None,
+            "via": via,
+        },
+    )
+    return message_id
+
+
+async def rehearse_door(
+    bot: Any, guild: Any, actor: Any, wanted: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Test mode refuses the real channel, so the real card goes to the rehearsal home.
+
+    The caller owns the would-row: a person who pressed hears about it every time, the
+    five-minute sweep says it once."""
+    store = bot.store
+    guard = getattr(bot, "guard", None)
+    home_id = shadow.channel_id(bot, guild)
+    home = shadow.channel_of(bot, guild, home_id)
+    if home is None or (guard is not None and not guard.allows_channel(home_id)):
+        return refusal(DOOR_GUARDED, "test_mode", 409)
+    copy_id = rehearsal_copy(store, guild.id)
+    where, message = await shadow.find_copy(bot, guild, copy_id)
+    here = message is not None and int(where.id) == int(home.id)
+    overtaken = (
+        await overtaken_by(bot, guild, home, copy_id, followed_slug(store, guild.id))
+        if here
+        else None
+    )
+    payload = rehearsal_payload(bot, guild, wanted)
+    stamp = rehearsal_hash(bot, guild, wanted)
+    said = DOOR_REHEARSING_SAID.format(where=home.id, wanted=getattr(wanted, "id", wanted))
+    by = getattr(actor, "id", actor)
+    if here and overtaken is None:
+        if rehearsal_stamp(store, guild.id) == stamp:
+            await hide_rehearsed_ticket_button(bot, guild)
+            return Outcome(True, said, value=int(message.id))
+        try:
+            await message.edit(**payload)
+        except Exception as exc:
+            return await _rehearsal_stuck(bot, guild, actor, home, exc)
+        await store.set(guild.id, FRONTDOOR_SHADOW_HASH, stamp, by=by)
+        await log_action(
+            bot,
+            guild,
+            kind_via(UPDATED_SHADOW, via),
+            actor=actor,
+            details={
+                "channel_id": home.id,
+                "wanted_channel_id": getattr(wanted, "id", wanted),
+                "message_id": int(message.id),
+                "via": via,
+            },
+        )
+        await hide_rehearsed_ticket_button(bot, guild)
+        return Outcome(True, said, value=int(message.id))
+    moved_or_gone = BELOW_POST if overtaken is not None else GONE
+    if overtaken is not None or (copy_id and message is None):
+        await log_action(
+            bot,
+            guild,
+            moved_or_gone,
+            details={
+                "channel_id": getattr(where, "id", home.id),
+                "message_id": copy_id,
+                "post_message_id": overtaken,
+                "rehearsal": True,
+            },
+        )
+    try:
+        fresh = await home.send(**payload)
+    except Exception as exc:
+        return await _rehearsal_stuck(bot, guild, actor, home, exc)
+    if message is not None:
+        await drop_message(bot, guild, where, int(message.id), would_kind=WOULD_TAKE_DOWN)
+    await store.set(guild.id, FRONTDOOR_SHADOW_MESSAGE, str(fresh.id), by=by)
+    await store.set(guild.id, FRONTDOOR_SHADOW_HASH, stamp, by=by)
+    await log_action(
+        bot,
+        guild,
+        kind_via(POSTED_SHADOW, via),
+        actor=actor,
+        details={
+            "channel_id": home.id,
+            "wanted_channel_id": getattr(wanted, "id", wanted),
+            "message_id": fresh.id,
+            "via": via,
+        },
+    )
+    await hide_rehearsed_ticket_button(bot, guild)
+    return Outcome(True, said, value=int(fresh.id))
+
+
+async def _rehearsal_stuck(
+    bot: Any, guild: Any, actor: Any, home: Any, exc: Exception
+) -> Outcome:
+    log.warning("frontdoor: could not put the rehearsal copy up: %s", exc)
+    await log_action(
+        bot,
+        guild,
+        POST_FAILED,
+        actor=actor,
+        details={
+            "channel_id": home.id,
+            "rehearsal": True,
+            "reason": f"{type(exc).__name__}: {exc}",
+        },
+    )
+    return refusal(DOOR_STUCK, "door_stuck", 500)
+
+
 async def post_door(
     bot: Any,
     guild: Any,
@@ -246,14 +436,20 @@ async def post_door(
         return refusal(DOOR_NO_CHANNEL, "no_such_channel", 400)
     guard = getattr(bot, "guard", None)
     if guard is not None and not guard.allows_channel(channel.id):
-        await log_action(
-            bot,
-            guild,
-            kind_via(WOULD_POST, via),
-            actor=actor,
-            details={"channel_id": channel.id, "via": via},
-        )
-        return refusal(DOOR_GUARDED, "test_mode", 409)
+        outcome = await rehearse_door(bot, guild, actor, channel, via=via)
+        if outcome.ok:
+            await bot.store.set(
+                guild.id, FRONTDOOR_CHANNEL, channel.id, by=getattr(actor, "id", actor)
+            )
+        else:
+            await log_action(
+                bot,
+                guild,
+                kind_via(WOULD_POST, via),
+                actor=actor,
+                details={"channel_id": channel.id, "via": via},
+            )
+        return outcome
     old_channel, old_id = where_the_door_is(bot, guild)
     store = bot.store
     try:
@@ -295,10 +491,13 @@ async def take_door_down(
 ) -> Outcome:
     """Down means down: the message goes and both keys are cleared, so nothing puts it back."""
     channel, message_id = where_the_door_is(bot, guild)
-    if not bot.store.get(guild.id, FRONTDOOR_CHANNEL):
+    if not bot.store.get(guild.id, FRONTDOOR_CHANNEL) and not rehearsal_copy(
+        bot.store, guild.id
+    ):
         return refusal(DOOR_NOT_UP, "no_door", 404)
     if channel is not None and message_id:
         await drop_message(bot, guild, channel, message_id, would_kind=WOULD_TAKE_DOWN)
+    rehearsed = await drop_rehearsal(bot, guild, actor, via=via)
     await bot.store.clear(guild.id, FRONTDOOR_MESSAGE)
     await bot.store.clear(guild.id, FRONTDOOR_CHANNEL)
     await log_action(
@@ -312,7 +511,9 @@ async def take_door_down(
             "via": via,
         },
     )
-    return Outcome(True, DOOR_DOWN_SAID, value=message_id)
+    return Outcome(
+        True, DOOR_REHEARSAL_DOWN_SAID if rehearsed else DOOR_DOWN_SAID, value=message_id
+    )
 
 
 class FrontDoor(commands.Cog):
@@ -380,23 +581,20 @@ class FrontDoor(commands.Cog):
         """A door deleted by hand is put back, and one the rules message has overtaken is
         posted again so it stays directly under the rules."""
         bot = self.bot
+        store = bot.store
         channel, message_id = where_the_door_is(bot, guild)
-        if not door_is_on(bot.store, guild.id):
-            if bot.store.get(guild.id, FRONTDOOR_CHANNEL):
+        if not door_is_on(store, guild.id):
+            if store.get(guild.id, FRONTDOOR_CHANNEL) or rehearsal_copy(store, guild.id):
                 await take_door_down(bot, guild, None)
             return
-        if not bot.store.get(guild.id, FRONTDOOR_CHANNEL) or channel is None:
-            return
-        overtaken = await overtaken_by(
-            bot, guild, channel, message_id, followed_slug(bot.store, guild.id)
-        )
-        if overtaken is None and message_id and await message_is_there(channel, message_id):
-            self._shadowed.discard(guild.id)
-            await hide_ticket_button(bot, guild)
+        if not store.get(guild.id, FRONTDOOR_CHANNEL) or channel is None:
             return
         guard = getattr(bot, "guard", None)
         if guard is not None and not guard.allows_channel(channel.id):
-            if guild.id not in self._shadowed:
+            outcome = await rehearse_door(bot, guild, None, channel)
+            if outcome.ok:
+                self._shadowed.discard(guild.id)
+            elif outcome.code == "test_mode" and guild.id not in self._shadowed:
                 self._shadowed.add(guild.id)
                 await log_action(
                     bot,
@@ -404,6 +602,14 @@ class FrontDoor(commands.Cog):
                     WOULD_POST,
                     details={"channel_id": channel.id, "reason": "reconcile"},
                 )
+            return
+        await drop_rehearsal(bot, guild, None)
+        overtaken = await overtaken_by(
+            bot, guild, channel, message_id, followed_slug(store, guild.id)
+        )
+        if overtaken is None and message_id and await message_is_there(channel, message_id):
+            self._shadowed.discard(guild.id)
+            await hide_ticket_button(bot, guild)
             return
         if overtaken is not None:
             await log_action(
@@ -460,9 +666,12 @@ __all__ = [
     "MOVED",
     "OPENERS",
     "POSTED",
+    "POSTED_SHADOW",
     "POST_FAILED",
     "TAKEN_DOWN",
+    "TAKEN_DOWN_SHADOW",
     "TICKET_BUTTON_HIDDEN",
+    "UPDATED_SHADOW",
     "WOULD_HIDE_TICKET_BUTTON",
     "WOULD_POST",
     "WOULD_TAKE_DOWN",
@@ -475,12 +684,17 @@ __all__ = [
     "TicketDoor",
     "build_panel",
     "door_view",
+    "drop_rehearsal",
     "event_handoff",
+    "hide_rehearsed_ticket_button",
     "hide_ticket_button",
     "open_the_event",
     "open_the_request",
     "open_the_ticket",
     "post_door",
+    "rehearsal_hash",
+    "rehearsal_payload",
+    "rehearse_door",
     "take_door_down",
     "where_the_door_is",
 ]

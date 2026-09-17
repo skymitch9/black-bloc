@@ -83,6 +83,14 @@ class FakeMessage:
     async def add_reaction(self, emoji):
         self.reactions.append(emoji)
 
+    async def edit(self, **kwargs):
+        self.kwargs = {**self.kwargs, **kwargs}
+        if 'content' in kwargs:
+            self.content = kwargs['content'] or ''
+        embed = kwargs.get('embed')
+        if embed is not None:
+            self.embeds = [embed]
+
 
 class FakePartialMessage:
     def __init__(self, channel, message_id):
@@ -320,6 +328,13 @@ class FakeGuard:
         self.test_channel_id = test_channel_id
         self.dm_ids = set(dm_ids)
         self.owned_channel_ids = set()
+        self.rehearsal_channel_ids = {}
+
+    def rehearse_in(self, guild_id, channel):
+        if channel is None:
+            self.rehearsal_channel_ids.pop(int(guild_id), None)
+            return
+        self.rehearsal_channel_ids[int(guild_id)] = int(channel)
 
     def own_channel(self, channel):
         self.owned_channel_ids.add(getattr(channel, "id", channel))
@@ -332,6 +347,8 @@ class FakeGuard:
 
     def allows_channel(self, channel_id):
         if channel_id in self.owned_channel_ids:
+            return True
+        if channel_id in self.rehearsal_channel_ids.values():
             return True
         return channel_id == self.test_channel_id or channel_id in self.dm_ids
 
@@ -2800,8 +2817,35 @@ async def test_the_ticket_button_is_posted_moved_and_taken_down(cog, bot, lead, 
     assert "modmail.panel_taken_down" in await action_kinds(db)
 
 
-async def test_the_guard_refuses_any_channel_but_the_test_one_in_words(cog, bot, lead, db):
+async def test_a_channel_the_guard_refuses_is_rehearsed_in_the_home_instead(cog, bot, lead, db):
+    """The mods review the real Open-a-ticket message where test mode lets the bot speak."""
     bot.guard = FakeGuard()
+    home = bot.guild.channels[TEST_CHANNEL]
+
+    said = await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+
+    assert "rehearsing" in said.response.messages[-1]["content"]
+    assert bot.guild.channels[LOG_CHANNEL].messages == []
+    assert home.messages
+    assert bot.store.get(GUILD, "modmail_panel_channel_id") == LOG_CHANNEL
+    assert not bot.store.get(GUILD, "modmail_panel_message_id")
+    assert bot.store.get(GUILD, "modmail_panel_shadow_message_id") == str(home.messages[-1].id)
+    assert "modmail.panel_posted_shadow" in await action_kinds(db)
+
+
+async def test_the_rehearsal_copy_carries_the_note_naming_the_real_channel(cog, bot, lead):
+    bot.guard = FakeGuard()
+    home = bot.guild.channels[TEST_CHANNEL]
+
+    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+
+    assert home.messages[-1].content.startswith("Rehearsal \u2014 this is where it would go:")
+
+
+async def test_with_no_rehearsal_home_at_all_the_button_only_writes_a_would_row(
+    cog, bot, lead, db
+):
+    bot.guard = FakeGuard(test_channel_id=0)
 
     refused = await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
 
@@ -2809,6 +2853,90 @@ async def test_the_guard_refuses_any_channel_but_the_test_one_in_words(cog, bot,
     assert "test mode" in refused.response.messages[-1]["content"]
     assert "modmail.would_post_panel" in await action_kinds(db)
     assert bot.guild.channels[LOG_CHANNEL].messages == []
+
+
+async def test_the_rehearsed_button_is_left_alone_while_its_wording_is_unchanged(
+    cog, bot, lead, db
+):
+    bot.guard = FakeGuard()
+    home = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+    before = home.messages[-1].id
+
+    await cog.reconcile_tickets()
+
+    assert len(home.messages) == 1 and home.messages[-1].id == before
+    assert "modmail.panel_updated_shadow" not in await action_kinds(db)
+
+
+async def test_rewording_the_button_edits_the_rehearsal_copy_in_place(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    home = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+    before = home.messages[-1].id
+    await bot.store.set(GUILD, "modmail_panel_title", "Need a mod?")
+
+    await cog.reconcile_tickets()
+
+    assert len(home.messages) == 1 and home.messages[-1].id == before
+    assert "modmail.panel_updated_shadow" in await action_kinds(db)
+
+
+async def test_a_rehearsed_button_deleted_by_hand_is_put_back(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    home = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+    home.messages.clear()
+
+    await cog.reconcile_tickets()
+
+    assert home.messages
+    assert bot.store.get(GUILD, "modmail_panel_shadow_message_id") == str(home.messages[-1].id)
+
+
+async def test_taking_the_button_down_takes_its_rehearsal_copy_with_it(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    home = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+
+    await modmail_cog.take_panel_down(bot, bot.guild, lead)
+
+    assert not home.messages
+    assert not bot.store.get(GUILD, "modmail_panel_shadow_message_id")
+    assert "modmail.panel_taken_down_shadow" in await action_kinds(db)
+
+
+async def test_the_front_doors_rehearsal_copy_takes_the_buttons_rehearsal_copy_down(
+    cog, bot, lead, db
+):
+    """One door per channel holds in the rehearsal home, so the mods see the real order."""
+    from black_bloc.cogs.community.frontdoor import hide_rehearsed_ticket_button
+
+    bot.guard = FakeGuard()
+    home = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+    await bot.store.set(GUILD, "frontdoor_shadow_message_id", "4242")
+
+    gone = await hide_rehearsed_ticket_button(bot, bot.guild)
+
+    assert gone and not home.messages
+    assert not bot.store.get(GUILD, "modmail_panel_shadow_message_id")
+    assert "frontdoor.ticket_button_hidden" in await action_kinds(db)
+
+
+async def test_the_button_stays_down_in_the_home_while_the_door_rehearses_there(
+    cog, bot, lead, db
+):
+    bot.guard = FakeGuard()
+    home = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+    home.messages.clear()
+    await bot.store.clear(GUILD, "modmail_panel_shadow_message_id")
+    await bot.store.set(GUILD, "frontdoor_shadow_message_id", "4242")
+
+    await cog.reconcile_tickets()
+
+    assert not home.messages
 
 
 async def test_the_reconciler_puts_back_a_button_deleted_by_hand(cog, bot, lead, db):

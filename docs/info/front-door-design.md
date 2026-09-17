@@ -38,8 +38,16 @@ sees the three buttons whatever the gates say; a press that is refused answers i
    say so). It follows the welcome post the way the ticket button does (`frontdoor_follows_post`, default `welcome`).
    ⚠️ **One door per channel:** when the front door is posted in the channel the ticket button is in, the ticket
    button's message is taken down by the same reconcile (its keys keep their values; posting the door again
-   re-takes it down) — key `frontdoor_replaces_ticket_button`, default **true**. Under `TEST_MODE` the door posts
-   into the guard's channel exactly as the ticket button does today.
+   re-takes it down) — key `frontdoor_replaces_ticket_button`, default **true**. ~~Under `TEST_MODE` the door posts
+   into the guard's channel exactly as the ticket button does today.~~ ⚠️ **This sentence was wrong when
+   it was written and is now true for a different reason.** At v125 the door under `TEST_MODE` wrote
+   `frontdoor.would_post` and posted NOTHING (so did the ticket button). **Changed 2026-09-17 by the
+   rehearsal home (v129, `info/rehearsal-home-design.md`):** while the guard refuses
+   `frontdoor_channel_id` the door posts its REAL card into the rehearsal home (`shadow_channel_id`,
+   blank = the guard's own channel) with one `rehearsal_note` line above it, remembered in
+   `frontdoor_shadow_message_id` / `frontdoor_shadow_hash` and kept by the same reconcile — re-posted
+   if deleted, edited when the wording changes, moved when the key moves, taken down when the mode goes
+   off. `frontdoor.would_post` is left for the case with no rehearsal home at all.
 2. **The command.** `/ask` (member-visible, `NEVER_HIDDEN` while `frontdoor_mode` is on; hidden when off per the
    hide-when-off rule) → an ephemeral panel: the same title + text + three buttons. `/help` lists it with a guide link.
 
@@ -50,6 +58,8 @@ sees the three buttons whatever the gates say; a press that is refused answers i
 | `frontdoor_mode` | enum `off`/`on` | **on** | *"off hides /ask and takes the posted door down; on posts it where it is pointed and shows /ask"* |
 | `frontdoor_channel_id` | channel | blank | *"where the front-door message is posted; blank posts nothing (the /ask command still works)"* |
 | `frontdoor_message_id` | text | blank | (the posted message's id, written by the bot — TEXT, a snowflake does not survive a JavaScript number) |
+| `frontdoor_shadow_message_id` | text | blank | **added v129** — the rehearsal copy's id, written by the bot |
+| `frontdoor_shadow_hash` | text | blank | **added v129** — what that copy is showing, so a sweep edits it only when something drawn has changed |
 | `frontdoor_title` | text | `Need something?` | *"the posted message's heading"* |
 | `frontdoor_text` | text | `Pick the one that fits and Black Bloc takes it from there. Staff only see what you write.` | *"the line under the heading"* |
 | `frontdoor_ticket_label` / `frontdoor_request_label` / `frontdoor_event_label` | text | `Ask staff privately` / `Request something` / `Propose an event` | the three button labels (≤ 80 chars, Discord's cap) |

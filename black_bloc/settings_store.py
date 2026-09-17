@@ -45,6 +45,9 @@ from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
 from .polls import MODES as POLL_MODES
 from .polls import SHADOW_NOTE as POLL_SHADOW_NOTE
+from .shadow import NOTE_DEFAULT as REHEARSAL_NOTE_DEFAULT
+from .shadow import NOTE_KEY as REHEARSAL_NOTE
+from .shadow import REHEARSAL_KEY as SHADOW_CHANNEL
 from .storage.db import Database
 from .timezones import DEFAULT_TZ, is_known, suggest
 
@@ -1676,6 +1679,8 @@ KEY_HELP.update(
 MODMAIL_MEMBER_COMMAND = "modmail_member_command"
 MODMAIL_PANEL_CHANNEL = "modmail_panel_channel_id"
 MODMAIL_PANEL_MESSAGE = "modmail_panel_message_id"
+MODMAIL_PANEL_SHADOW_MESSAGE = "modmail_panel_shadow_message_id"
+MODMAIL_PANEL_SHADOW_HASH = "modmail_panel_shadow_hash"
 MODMAIL_PANEL_TITLE = "modmail_panel_title"
 MODMAIL_PANEL_TEXT = "modmail_panel_text"
 MODMAIL_OPEN_WITH_BUTTON = "modmail_open_with_button"
@@ -1689,6 +1694,8 @@ KEY_TYPES.update(
         MODMAIL_MEMBER_COMMAND: "bool",
         MODMAIL_PANEL_CHANNEL: "channel",
         MODMAIL_PANEL_MESSAGE: "text",
+        MODMAIL_PANEL_SHADOW_MESSAGE: "text",
+        MODMAIL_PANEL_SHADOW_HASH: "text",
         MODMAIL_PANEL_TITLE: "text",
         MODMAIL_PANEL_TEXT: "text",
         MODMAIL_OPEN_WITH_BUTTON: "bool",
@@ -1709,6 +1716,17 @@ KEY_HELP.update(
             "put back after somebody deletes it. Written by the bot as TEXT, because a "
             "snowflake does not survive a JavaScript number; there is no reason to set it by "
             "hand"
+        ),
+        MODMAIL_PANEL_SHADOW_MESSAGE: (
+            "the rehearsal copy of the Open a ticket message Black Bloc posted in the rehearsal "
+            "home while test mode refuses the real channel, so it can be kept current, moved "
+            "with shadow_channel_id and taken down. Written by the bot as TEXT; there is no "
+            "reason to set it by hand"
+        ),
+        MODMAIL_PANEL_SHADOW_HASH: (
+            "a fingerprint of the wording that rehearsal copy is showing, so a sweep edits it "
+            "only when the heading or the line under it has actually changed. Written by the "
+            "bot; there is no reason to set it by hand"
         ),
         MODMAIL_PANEL_TITLE: "the heading on the posted Open a ticket message",
         MODMAIL_PANEL_TEXT: "what the posted Open a ticket message says under its heading",
@@ -1770,6 +1788,8 @@ KEY_HELP.update(
 FRONTDOOR_MODE = "frontdoor_mode"
 FRONTDOOR_CHANNEL = "frontdoor_channel_id"
 FRONTDOOR_MESSAGE = "frontdoor_message_id"
+FRONTDOOR_SHADOW_MESSAGE = "frontdoor_shadow_message_id"
+FRONTDOOR_SHADOW_HASH = "frontdoor_shadow_hash"
 FRONTDOOR_TITLE = "frontdoor_title"
 FRONTDOOR_TEXT = "frontdoor_text"
 FRONTDOOR_TICKET_LABEL = "frontdoor_ticket_label"
@@ -1795,6 +1815,8 @@ KEY_TYPES.update(
         FRONTDOOR_MODE: "enum",
         FRONTDOOR_CHANNEL: "channel",
         FRONTDOOR_MESSAGE: "text",
+        FRONTDOOR_SHADOW_MESSAGE: "text",
+        FRONTDOOR_SHADOW_HASH: "text",
         FRONTDOOR_TITLE: "text",
         FRONTDOOR_TEXT: "text",
         FRONTDOOR_TICKET_LABEL: "text",
@@ -1821,6 +1843,17 @@ KEY_HELP.update(
             "the front-door message Black Bloc posted, so it can be moved, taken down and put "
             "back after somebody deletes it. Written by the bot as TEXT, because a snowflake "
             "does not survive a JavaScript number; there is no reason to set it by hand"
+        ),
+        FRONTDOOR_SHADOW_MESSAGE: (
+            "the rehearsal copy of the front door Black Bloc posted in the rehearsal home while "
+            "test mode refuses the real channel, so it can be kept current, moved with "
+            "shadow_channel_id and taken down. Written by the bot as TEXT; there is no reason "
+            "to set it by hand"
+        ),
+        FRONTDOOR_SHADOW_HASH: (
+            "a fingerprint of the wording the rehearsal copy is showing, so a sweep edits it "
+            "only when the heading, the line or a button label has actually changed. Written "
+            "by the bot; there is no reason to set it by hand"
         ),
         FRONTDOOR_TITLE: "the heading on the posted front-door message and on the /ask panel",
         FRONTDOOR_TEXT: "the line under that heading, on both",
@@ -2152,9 +2185,31 @@ KEY_HELP.update(
     }
 )
 
+# The rehearsal home — one channel every shadow copy lands in, so staff review before the
+# cutover. Core, beside `log_channel_id`: the `/settings` group select is at its cap of 25.
+KEY_TYPES.update({SHADOW_CHANNEL: "channel", REHEARSAL_NOTE: "text"})
+KEY_HELP.update(
+    {
+        SHADOW_CHANNEL: (
+            "where every rehearsal goes while a feature is in shadow — the welcome post, the "
+            "front door, the ticket button, polls; blank means the bot's own log channel. "
+            "Setting it is the deliberate act that lets test mode speak in that one channel "
+            "as well, so pick a channel only the people reviewing can see"
+        ),
+        REHEARSAL_NOTE: (
+            "the line the front door and the ticket button carry at the top of their rehearsal "
+            "copy; {channel} is replaced with the channel the real one is aimed at. Blank "
+            "leaves the copy with no note at all"
+        ),
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
+    SHADOW_CHANNEL,
+    REHEARSAL_NOTE,
     "staff_channel_id",
     "role_menu_channel_id",
     "bot_bio",
@@ -2181,6 +2236,8 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_MODE: "modmail",
     FRONTDOOR_CHANNEL: "modmail",
     FRONTDOOR_MESSAGE: "modmail",
+    FRONTDOOR_SHADOW_MESSAGE: "modmail",
+    FRONTDOOR_SHADOW_HASH: "modmail",
     FRONTDOOR_TITLE: "modmail",
     FRONTDOOR_TEXT: "modmail",
     FRONTDOOR_TICKET_LABEL: "modmail",
@@ -2327,7 +2384,7 @@ TEXT_CHECKS: dict[str, Any] = {
     RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
 }
 
-TEXT_MAY_BE_BLANK = ("golive_end_template", "golive_end_author")
+TEXT_MAY_BE_BLANK = ("golive_end_template", "golive_end_author", REHEARSAL_NOTE)
 
 
 def coerce_value(key: str, value: Any) -> Any:
@@ -2576,7 +2633,17 @@ class SettingsStore:
                     "settings hook for %s failed — %s: %s", key, type(exc).__name__, exc
                 )
 
+    def stored_values(self, key: str) -> dict[int, Any]:
+        """Every guild that has this key stored, for a sweep that runs before any guild is up."""
+        if key not in KEY_TYPES:
+            raise SettingError(f"{key!r} is not a Black Bloc setting.")
+        return {
+            guild_id: value for (guild_id, name), value in self._cache.items() if name == key
+        }
+
     def default(self, key: str) -> Any:
+        if key == REHEARSAL_NOTE:
+            return REHEARSAL_NOTE_DEFAULT
         if key == "staff_channel_id":
             return self.settings.test_channel_id
         if key == "log_channel_id":

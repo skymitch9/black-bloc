@@ -6,6 +6,8 @@
 
 export const LABELS = {
   log_channel_id: 'Where the bot writes its log',
+  shadow_channel_id: 'Where rehearsals go while a feature is in shadow',
+  rehearsal_note: 'The line a rehearsal copy carries at the top',
   staff_channel_id: 'Which channel decides who counts as staff',
   role_menu_channel_id: 'Where role menus are posted',
   core_log_level: 'How much of the dashboard’s own work is repeated into Discord',
@@ -159,6 +161,8 @@ export const LABELS = {
   modmail_member_command: 'Whether anybody can open a ticket with /modmail',
   modmail_panel_channel_id: 'Where the Open a ticket button is posted',
   modmail_panel_message_id: 'The posted Open a ticket message, written by the bot',
+  modmail_panel_shadow_message_id: 'The ticket button’s rehearsal copy, written by the bot',
+  modmail_panel_shadow_hash: 'What that rehearsal copy is showing, written by the bot',
   modmail_panel_title: 'The heading on the Open a ticket message',
   modmail_panel_text: 'What the Open a ticket message says',
   modmail_open_with_button: 'Whether staff see Open a ticket with… on /modmail',
@@ -170,6 +174,8 @@ export const LABELS = {
   frontdoor_mode: 'Whether the front door is up',
   frontdoor_channel_id: 'Where the front-door message is posted',
   frontdoor_message_id: 'The posted front-door message, written by the bot',
+  frontdoor_shadow_message_id: 'The front door’s rehearsal copy, written by the bot',
+  frontdoor_shadow_hash: 'What the rehearsal copy is showing, written by the bot',
   frontdoor_title: 'The heading on the front door',
   frontdoor_text: 'What the front door says under its heading',
   frontdoor_ticket_label: 'What the Ask staff privately button is called',
