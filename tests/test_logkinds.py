@@ -68,6 +68,18 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/community/frontdoor.py::TICKET_BUTTON_HIDDEN": (
         "frontdoor.ticket_button_hidden",
     ),
+    # Every hand-off writes one row naming both ends; `handoff.py` builds the kind from
+    # the two words so the five moves have one home rather than five literals.
+    # The question and the member's no are constants so the cog and the tests name them once.
+    "black_bloc/handoff.py::ASKED_KIND": ("handoff.asked",),
+    "black_bloc/handoff.py::REFUSED_KIND": ("handoff.refused",),
+    "black_bloc/handoff.py::handoff_kind(source, target)": (
+        "handoff.event_to_request",
+        "handoff.request_to_event",
+        "handoff.request_to_ticket",
+        "handoff.ticket_to_event",
+        "handoff.ticket_to_request",
+    ),
     "black_bloc/api/writes.py::kind": (
         "web.birthday.clear",
         "web.birthday.import",

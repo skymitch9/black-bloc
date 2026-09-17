@@ -1086,6 +1086,7 @@ function mineCard(row, say) {
       el('div', { class: 'req-marks' }, [statusPill(row), heldChip(row), dueChip(row)]),
     ]),
     whyBlock(row.why),
+    movedBlock(row),
     row.decline_reason
       ? el('p', {
         class: 'req-reason',
@@ -1095,6 +1096,20 @@ function mineCard(row, say) {
     ...writtenBlock(row),
     withdraw ? bar([withdraw]) : null,
   ]));
+}
+
+// Send to... — a request staff turned into an event says so, and links where it went.
+const MOVED_PAGE = { event: 'events.html', request: 'requests.html' };
+
+function movedBlock(row) {
+  if (!row.moved_word) return null;
+  const [what] = row.moved_word.split(' ');
+  const where = MOVED_PAGE[what];
+  const line = el('p', { class: 'req-reason', text: `Moved \u2192 ${row.moved_word}` });
+  if (where) {
+    line.append(' ', el('a', { href: `/${where}`, text: 'open it' }));
+  }
+  return line;
 }
 
 function mineSection(payload, rows, say) {

@@ -758,6 +758,7 @@ async def test_the_website_makes_the_request_forum_and_leaves_one_web_row(
         "on hold",
         "done",
         "declined",
+        "moved",
     ]
     assert web.store.get(wf.GUILD_ID, "request_forum_channel_id") == forum.id
     found = await kinds(web, wf)

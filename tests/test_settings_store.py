@@ -1165,6 +1165,41 @@ async def test_adopting_a_hand_made_forum_post_is_a_key_both_doors_reach(store):
     assert store.get(7, "request_forum_adopts_posts") is False
 
 
+async def test_the_two_send_to_decisions_are_keys_both_doors_reach(store):
+    """Checklist 33 — send-to-design §A: the move itself and the member's answer window.
+
+    Both are filed under `request` through NAMESPACE_OVERRIDE, because `/settings` groups
+    select is at Discord's cap of 25 and a 26th namespace would drop one off it silently."""
+    from black_bloc.settings_panel import namespace_of, reachable_on_the_panel
+    from black_bloc.settings_store import (
+        HANDOFF_CONFIRM_HOURS,
+        HANDOFF_CONFIRM_HOURS_MAX,
+        HANDOFF_CONFIRM_HOURS_MIN,
+        HANDOFF_MODE,
+        HANDOFF_MODES,
+    )
+
+    assert (HANDOFF_MODE, HANDOFF_CONFIRM_HOURS) == ("handoff_mode", "handoff_confirm_hours")
+    assert KEY_TYPES[HANDOFF_MODE] == "enum" and KEY_CHOICES[HANDOFF_MODE] == HANDOFF_MODES
+    assert KEY_TYPES[HANDOFF_CONFIRM_HOURS] == "int"
+    assert store.get(7, HANDOFF_MODE) == "on"
+    assert store.get(7, HANDOFF_CONFIRM_HOURS) == 24
+    for key in (HANDOFF_MODE, HANDOFF_CONFIRM_HOURS):
+        assert reachable_on_the_panel(key)
+        assert namespace_of(key) == "request"
+        assert KEY_HELP.get(key)
+    with pytest.raises(SettingError):
+        coerce_value(HANDOFF_MODE, "sometimes")
+    with pytest.raises(SettingError):
+        coerce_value(HANDOFF_CONFIRM_HOURS, HANDOFF_CONFIRM_HOURS_MAX + 1)
+    with pytest.raises(SettingError):
+        coerce_value(HANDOFF_CONFIRM_HOURS, HANDOFF_CONFIRM_HOURS_MIN - 1)
+    await store.set(7, HANDOFF_MODE, "off")
+    await store.set(7, HANDOFF_CONFIRM_HOURS, 48)
+    assert store.get(7, HANDOFF_MODE) == "off"
+    assert store.get(7, HANDOFF_CONFIRM_HOURS) == 48
+
+
 def test_the_card_moves_key_takes_any_of_the_eight_and_nothing_else():
     assert coerce_value("request_channel_moves", []) == []
     assert coerce_value("request_channel_moves", ["done"]) == ["done"]

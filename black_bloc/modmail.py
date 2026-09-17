@@ -9,6 +9,7 @@ import discord
 
 from .events import clamp, slugify
 from .golive import parse_ts
+from .handoff import MAKE_A_REQUEST, MAKE_AN_EVENT, moved_words
 from .panels import KEEP_IT
 from .settings_store import (
     CHANNEL_MODE,
@@ -806,6 +807,8 @@ CARD_NOTE = "card_note"
 CARD_CLOSE = "card_close"
 CARD_SPEAK = "card_speak"
 CARD_END = "card_end"
+CARD_TO_REQUEST = "card_to_request"
+CARD_TO_EVENT = "card_to_event"
 
 CARD_TITLE = "Ticket #{ticket_id}"
 CARD_PRACTICE_TITLE = "Practice ticket #{ticket_id}"
@@ -816,6 +819,7 @@ CARD_PRACTICE_LINE = (
 )
 CARD_COUNTS = "**messages** — {inbound} from them · {outbound} sent · {notes} note(s)"
 CARD_OPENED_BY_STAFF = "**opened by staff** — <@{who}>"
+CARD_MOVED_LINE = "**filed as** — {what}"
 CARD_NOT_REACHED = (
     "⚠️ **The last reply did not reach them** — their DMs are shut or Black Bloc is blocked. "
     "The ticket has it either way."
@@ -837,16 +841,31 @@ CARD_NOTE_MOVE = CardMove(CARD_NOTE, "Private note", "secondary", 0)
 CARD_CLOSE_MOVE = CardMove(CARD_CLOSE, "Close…", "danger", 0)
 SPEAK_MOVE = CardMove(CARD_SPEAK, "Speak as the member", "secondary", 1)
 END_MOVE = CardMove(CARD_END, "End the practice", "danger", 1)
+TO_REQUEST_MOVE = CardMove(CARD_TO_REQUEST, MAKE_A_REQUEST, "secondary", 1)
+TO_EVENT_MOVE = CardMove(CARD_TO_EVENT, MAKE_AN_EVENT, "secondary", 1)
+HANDOFF_MOVES = (TO_REQUEST_MOVE, TO_EVENT_MOVE)
+HANDOFF_ACTIONS = tuple(one.action for one in HANDOFF_MOVES)
 
-CARD_MOVES = (REPLY_MOVE, ANON_MOVE, CARD_NOTE_MOVE, CARD_CLOSE_MOVE, SPEAK_MOVE, END_MOVE)
+CARD_MOVES = (
+    REPLY_MOVE,
+    ANON_MOVE,
+    CARD_NOTE_MOVE,
+    CARD_CLOSE_MOVE,
+    SPEAK_MOVE,
+    END_MOVE,
+    TO_REQUEST_MOVE,
+    TO_EVENT_MOVE,
+)
 CARD_ROW_LIMIT = 5
 
 
-def card_buttons(*, practice: bool) -> tuple[CardMove, ...]:
-    """The four moves every open ticket has, plus the two only a practice ticket can offer."""
+def card_buttons(*, practice: bool, handoff: bool = False) -> tuple[CardMove, ...]:
+    """The four moves every open ticket has; practice adds two, Send to… adds two."""
     found = [REPLY_MOVE, ANON_MOVE, CARD_NOTE_MOVE, CARD_CLOSE_MOVE]
     if practice:
-        found += [SPEAK_MOVE, END_MOVE]
+        return tuple(found + [SPEAK_MOVE, END_MOVE])
+    if handoff:
+        found += list(HANDOFF_MOVES)
     return tuple(found)
 
 
@@ -856,13 +875,19 @@ CARD_CLOSED_FOOTER = "This ticket is closed — Back goes to the inbox."
 CARD_ROW = 1
 
 
-def panel_card_buttons(*, open_ticket: bool) -> tuple[ModmailMove, ...]:
+def panel_card_buttons(
+    *, open_ticket: bool, handoff: bool = False
+) -> tuple[ModmailMove, ...]:
     """The panel redraws the card's own moves, so there is one label table and never two."""
+    moves = card_buttons(practice=False, handoff=handoff) if open_ticket else ()
     found = [
-        ModmailMove(move.action, move.label, move.style, CARD_ROW, modal=True)
-        for move in (card_buttons(practice=False) if open_ticket else ())
+        ModmailMove(move.action, move.label, move.style, CARD_ROW + move.row, modal=True)
+        for move in moves
     ]
-    found.append(TICKET_BACK_MOVE)
+    last = max((one.row for one in found), default=CARD_ROW)
+    found.append(
+        ModmailMove(BACK, TICKET_BACK_MOVE.label, TICKET_BACK_MOVE.style, last + 1)
+    )
     return tuple(found)
 
 
@@ -937,6 +962,9 @@ def ticket_card_lines(
         lines.append(CARD_BLOCKED_LINE)
     if is_practice(ticket):
         lines.append(CARD_PRACTICE_LINE)
+    gone = moved_words(field_of(ticket, "moved_to"))
+    if gone:
+        lines.append(CARD_MOVED_LINE.format(what=gone))
     return lines
 
 

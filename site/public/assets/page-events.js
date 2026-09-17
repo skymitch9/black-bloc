@@ -64,6 +64,7 @@ function detailCard(row) {
     line('Decided by', nameNode(row.decided_by_id, row.decided_by_name)),
     line('Decided', when(row.decided_at)),
     line('Why not', row.deny_reason),
+    line('Now', row.moved_word),
     line('Review channel', nameNode(row.review_channel_id)),
     line('Announced', row.announced ? 'yes' : 'no'),
     line('Scheduled event', row.scheduled ? 'yes' : 'no'),

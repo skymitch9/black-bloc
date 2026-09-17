@@ -1,9 +1,12 @@
 import asyncio
+import re
 from datetime import UTC, datetime, timedelta
 
 import discord
 import pytest
 
+from black_bloc import handoff as pure_handoff
+from black_bloc import modmail as pure_modmail
 from black_bloc.cogs.moderation import modmail as modmail_cog
 from black_bloc.cogs.moderation.modmail import (
     Modmail,
@@ -382,7 +385,9 @@ class FakeResponse:
 
     async def defer(self, ephemeral=False, **kwargs):
         self.done = True
-        self.messages.append({"content": None, "deferred": True})
+        self.messages.append(
+            {"content": None, "deferred": True, "ephemeral": ephemeral, **kwargs}
+        )
 
 
 class FakeFollowup:
@@ -394,11 +399,12 @@ class FakeFollowup:
 
 
 class FakeInteraction:
-    def __init__(self, bot, user, channel=None):
+    def __init__(self, bot, user, channel=None, message=None, guild=True):
         self.client = bot
         self.user = user
-        self.guild = bot.guild
-        self.guild_id = bot.guild.id
+        self.guild = bot.guild if guild else None
+        self.guild_id = bot.guild.id if guild else None
+        self.message = message
         self.channel = channel
         self.channel_id = channel.id if channel is not None else TEST_CHANNEL
         self.response = FakeResponse()
@@ -1788,6 +1794,9 @@ async def test_a_message_that_starts_by_mentioning_the_bot_is_not_a_reply(
 
 
 CARD_LABELS = ["Reply", "Reply as Staff", "Private note", "Close…"]
+# `handoff_mode` ships on, so an open ticket also carries the two Send to... moves.
+HANDOFF_LABELS = [pure_handoff.MAKE_A_REQUEST, pure_handoff.MAKE_AN_EVENT]
+CARD_LABELS_WITH_HANDOFF = [*CARD_LABELS, *HANDOFF_LABELS]
 
 
 def cards_in(channel):
@@ -1830,7 +1839,7 @@ async def close_from_card(cog, bot, lead, ticket, reason=None, silent=False, car
 async def press_card(bot, who, message, label, channel=None):
     view = message.kwargs["view"]
     item = next(one for one in view.children if one.item.label == label)
-    interaction = FakeInteraction(bot, who, channel=channel)
+    interaction = FakeInteraction(bot, who, channel=channel, message=message)
     await item.callback(interaction)
     return interaction
 
@@ -1842,7 +1851,7 @@ async def test_the_card_carries_the_four_moves_and_lands_last(cog, bot, member, 
 
     assert message is bot.guild.channels[TEST_CHANNEL].messages[-1]
     labels_on = [one.item.label for one in message.kwargs["view"].children]
-    assert labels_on == CARD_LABELS
+    assert labels_on == CARD_LABELS_WITH_HANDOFF
     assert message.kwargs["embed"].title == "Ticket #1"
     assert (await get_ticket(db, ticket["id"]))["card_message_id"] == message.id
 
@@ -2169,7 +2178,7 @@ async def test_a_card_whose_ticket_has_closed_says_so_rather_than_dying(cog, bot
 # --- the ticket card ON the panel ----------------------------------------------------------------
 
 
-PANEL_CARD_LABELS = [*CARD_LABELS, "Back"]
+PANEL_CARD_LABELS = [*CARD_LABELS_WITH_HANDOFF, "Back"]
 
 
 async def ticket_card_panel(cog, bot, lead, ticket):
@@ -3444,3 +3453,360 @@ async def test_the_button_is_still_put_back_when_somebody_deletes_it(cog, bot, l
     assert button_message_id(bot) != was
     kinds = await action_kinds(db)
     assert "modmail.panel_gone" in kinds and "modmail.panel_below_post" not in kinds
+
+
+# --- Send to… — a ticket becomes a request or an event, with the member's say-so (§A) ----------
+
+
+def ticket_channel(bot, ticket):
+    """Where the ticket actually speaks: its own channel, or the test one while guarded."""
+    for channel_id in (ticket["channel_id"], TEST_CHANNEL):
+        found = bot.guild.get_channel(channel_id)
+        if found is not None and found.messages:
+            return found
+    return bot.guild.get_channel(TEST_CHANNEL)
+
+
+def said_in(bot, ticket):
+    channels = {ticket["channel_id"], TEST_CHANNEL}
+    said = []
+    for channel_id in channels:
+        found = bot.guild.get_channel(channel_id)
+        if found is not None:
+            said += [one.content for one in found.messages if one.content]
+    return said
+
+
+async def ask_them(
+    cog, bot, lead, ticket, kind="request", what="a games night", body="on Tuesdays"
+):
+    """Staff press Make this a request…/an event…, fill the modal, and the member is DMed."""
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
+    label = pure_handoff.MAKE_A_REQUEST if kind == "request" else pure_handoff.MAKE_AN_EVENT
+    opened = await press_card(bot, lead, card, label)
+    modal = opened.response.modals[-1]
+    modal.what._value = what
+    modal.body._value = body
+    submitted = FakeInteraction(bot, lead)
+    await modal.on_submit(submitted)
+    return submitted
+
+
+def confirm_dm(member):
+    return member.dms[-1]
+
+
+async def answer_the_dm(bot, member, ticket, kind, label):
+    """The member presses Yes or No on the DM card, which is where the wording lives."""
+    dm = confirm_dm(member)
+    card = FakeMessage(4242, "", None, embed=dm["embed"])
+    card.edits = []
+
+    async def edit(**kwargs):
+        card.edits.append(kwargs)
+
+    card.edit = edit
+    item = next(one for one in dm["view"].children if one.item.label == label)
+    interaction = FakeInteraction(bot, member, message=card, guild=False)
+    await item.callback(interaction)
+    interaction.card = card
+    return interaction
+
+
+async def test_an_open_ticket_carries_both_send_to_moves_only_while_the_key_is_on(
+    cog, bot, member, db
+):
+    ticket = await open_one(cog, bot, member)
+
+    with_it = await card_for(cog, bot, ticket)
+    await bot.store.set(GUILD, "handoff_mode", "off")
+    without = await card_for(cog, bot, ticket)
+
+    labels_on = [one.item.label for one in with_it.kwargs["view"].children]
+    assert labels_on == CARD_LABELS_WITH_HANDOFF
+    assert [one.item.label for one in without.kwargs["view"].children] == CARD_LABELS
+
+
+def test_a_practice_ticket_offers_no_hand_off_at_all():
+    """Nothing in a practice ticket reaches a member, so there is nobody to ask."""
+    labels_on = [one.label for one in pure_modmail.card_buttons(practice=True, handoff=True)]
+
+    assert pure_handoff.MAKE_A_REQUEST not in labels_on
+    assert "Speak as the member" in labels_on
+
+
+async def test_the_staff_modal_starts_filled_in_from_the_tickets_own_words(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
+
+    opened = await press_card(bot, lead, card, pure_handoff.MAKE_A_REQUEST)
+
+    modal = opened.response.modals[-1]
+    assert modal.kind == "request"
+    assert modal.title == pure_handoff.ASK_MODAL_TITLE["request"]
+    assert modal.body.default == "my ban was unfair"
+
+
+async def test_asking_dms_the_member_a_card_with_both_answers_and_nothing_is_filed_yet(
+    cog, bot, member, lead, db
+):
+    from black_bloc import requests as requests_pure
+
+    ticket = await open_one(cog, bot, member)
+
+    said = await ask_them(cog, bot, lead, ticket)
+
+    dm = confirm_dm(member)
+    assert dm["embed"].title == pure_handoff.CONFIRM_TITLE
+    assert [one.item.label for one in dm["view"].children] == [
+        pure_handoff.CONFIRM_YES,
+        pure_handoff.CONFIRM_NO,
+    ]
+    assert pure_handoff.read_ask(dm["embed"]) == ("a games night", "on Tuesdays")
+    assert await requests_pure.list_requests(db, GUILD) == []
+    assert "asked by DM" in said.sent
+    assert (await get_ticket(db, ticket["id"]))["moved_to"].startswith("asked:request:")
+    assert "handoff.asked" in await action_kinds(db)
+
+
+async def test_the_ticket_says_who_was_asked_and_when_the_question_runs_out(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+
+    await ask_them(cog, bot, lead, ticket)
+
+    line = next(one for one in said_in(bot, ticket) if "asked by DM" in one)
+    assert f"<@{member.id}>" in line and "counts as no" in line
+
+
+async def test_yes_files_the_request_in_the_members_name_and_links_it_in_the_ticket(
+    cog, bot, member, lead, db
+):
+    from black_bloc import requests as requests_pure
+
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket)
+
+    said = await answer_the_dm(bot, member, ticket, "request", pure_handoff.CONFIRM_YES)
+
+    filed = await requests_pure.list_requests(db, GUILD)
+    assert len(filed) == 1
+    assert filed[0]["user_id"] == member.id
+    assert (filed[0]["what"], filed[0]["why"]) == ("a games night", "on Tuesdays")
+    assert filed[0]["source"] == requests_pure.SOURCE_TICKET
+    request_id = filed[0]["id"]
+    assert (await get_ticket(db, ticket["id"]))["moved_to"] == f"request:{request_id}"
+    assert any(f"request **#{request_id}**" in one for one in said_in(bot, ticket))
+    assert "filed" in said.sent
+    assert said.card.edits == [{"view": None}]
+
+
+async def test_yes_leaves_one_row_naming_both_ends_and_the_ticket_stays_open(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket)
+
+    await answer_the_dm(bot, member, ticket, "request", pure_handoff.CONFIRM_YES)
+
+    kinds = await action_kinds(db)
+    assert kinds.count("handoff.ticket_to_request") == 1
+    assert (await get_ticket(db, ticket["id"]))["status"] == "open"
+
+
+async def test_no_files_nothing_says_so_in_the_ticket_and_lets_staff_ask_again(
+    cog, bot, member, lead, db
+):
+    from black_bloc import requests as requests_pure
+
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket)
+
+    said = await answer_the_dm(bot, member, ticket, "request", pure_handoff.CONFIRM_NO)
+
+    assert await requests_pure.list_requests(db, GUILD) == []
+    assert (await get_ticket(db, ticket["id"]))["moved_to"] is None
+    assert any("said no" in one for one in said_in(bot, ticket))
+    assert "stays private" in said.sent
+    assert "handoff.refused" in await action_kinds(db)
+
+    again = await ask_them(cog, bot, lead, ticket)
+    assert "asked by DM" in again.sent
+
+
+async def test_no_answer_inside_the_window_counts_as_no_and_the_late_press_says_so(
+    cog, bot, member, lead, db
+):
+    """The design's timeout, proved by the clock rather than by waiting a day."""
+    from black_bloc import requests as requests_pure
+
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket)
+    stale = pure_handoff.asked_trail("request", datetime(2020, 1, 1, tzinfo=UTC))
+    await pure_handoff.set_moved_to(db, "ticket", ticket["id"], stale)
+
+    said = await answer_the_dm(bot, member, ticket, "request", pure_handoff.CONFIRM_YES)
+
+    assert pure_handoff.CONFIRM_GONE in said.sent
+    assert await requests_pure.list_requests(db, GUILD) == []
+    assert "handoff.ticket_to_request" not in await action_kinds(db)
+
+
+async def test_a_question_that_has_run_out_lets_staff_ask_again_rather_than_blocking_them(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket)
+    stale = pure_handoff.asked_trail("request", datetime(2020, 1, 1, tzinfo=UTC))
+    await pure_handoff.set_moved_to(db, "ticket", ticket["id"], stale)
+
+    again = await ask_them(cog, bot, lead, ticket)
+
+    assert "asked by DM" in again.sent
+
+
+async def test_a_second_ask_while_one_is_waiting_is_refused_by_name(cog, bot, member, lead, db):
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
+
+    again = await press_card(bot, lead, card, pure_handoff.MAKE_AN_EVENT)
+
+    assert "already asked" in again.sent and "waiting" in again.sent
+    assert again.response.modals == []
+
+
+async def test_a_ticket_already_filed_refuses_a_second_hand_off(cog, bot, member, lead, db):
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket)
+    await answer_the_dm(bot, member, ticket, "request", pure_handoff.CONFIRM_YES)
+    lead.roles = [FakeRole(STAFF_ROLE)]
+    card = await card_for(cog, bot, ticket)
+
+    again = await press_card(bot, lead, card, pure_handoff.MAKE_AN_EVENT)
+
+    assert "already been filed as request" in again.sent
+
+
+async def test_a_member_whose_dms_are_shut_is_never_asked_and_nothing_is_stored(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    member.dm_raises = refused()
+
+    said = await ask_them(cog, bot, lead, ticket)
+
+    assert "could not DM" in said.sent
+    assert (await get_ticket(db, ticket["id"]))["moved_to"] is None
+    assert "handoff.asked" not in await action_kinds(db)
+
+
+async def test_yes_to_an_event_hands_staff_the_draft_rather_than_filing_a_dateless_one(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket, kind="event", what="Block party")
+
+    said = await answer_the_dm(bot, member, ticket, "event", pure_handoff.CONFIRM_YES)
+
+    assert (await get_ticket(db, ticket["id"]))["moved_to"] == "yes:event"
+    posted = [one for one in ticket_channel(bot, ticket).messages if one.kwargs.get("view")]
+    handed = posted[-1]
+    labels_on = [one.item.label for one in handed.kwargs["view"].children]
+    assert pure_handoff.MAKE_THE_EVENT in labels_on
+    assert pure_handoff.read_ask(handed.kwargs["embed"]) == ("Block party", "on Tuesdays")
+    assert "filed" in said.sent
+
+
+async def test_a_press_on_make_the_event_answers_in_a_new_ephemeral_with_the_draft(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket, kind="event", what="Block party")
+    await answer_the_dm(bot, member, ticket, "event", pure_handoff.CONFIRM_YES)
+    handed = [one for one in ticket_channel(bot, ticket).messages if one.kwargs.get("view")][-1]
+    lead.roles = [FakeRole(STAFF_ROLE)]
+
+    pressed = await press_card(bot, lead, handed, pure_handoff.MAKE_THE_EVENT)
+
+    deferred = pressed.response.messages[0]
+    assert deferred["deferred"] is True and deferred["ephemeral"] is True
+    assert deferred["thinking"] is True
+    assert pressed.edits, pressed.response.messages
+    drawn = pressed.edits[-1]
+    assert drawn["view"].fields.from_ticket == ticket["id"]
+    assert drawn["view"].fields.title == "Block party"
+    assert drawn["view"].fields.requester_id == member.id
+
+
+async def test_a_member_pressing_make_the_event_is_told_which_role_it_needs(
+    cog, bot, member, lead, db
+):
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket, kind="event")
+    await answer_the_dm(bot, member, ticket, "event", pure_handoff.CONFIRM_YES)
+    handed = [one for one in ticket_channel(bot, ticket).messages if one.kwargs.get("view")][-1]
+
+    pressed = await press_card(bot, member, handed, pure_handoff.MAKE_THE_EVENT)
+
+    assert "staff" in pressed.sent.lower()
+    assert pressed.edits == []
+
+
+async def test_somebody_elses_yes_on_a_confirm_card_answers_nothing(cog, bot, member, lead, db):
+    from black_bloc import requests as requests_pure
+
+    ticket = await open_one(cog, bot, member)
+    await ask_them(cog, bot, lead, ticket)
+    dm = confirm_dm(member)
+    card = FakeMessage(4242, "", None, embed=dm["embed"])
+
+    async def edit(**kwargs):
+        return None
+
+    card.edit = edit
+    item = next(one for one in dm["view"].children if one.item.label == pure_handoff.CONFIRM_YES)
+
+    said = FakeInteraction(bot, lead, message=card, guild=False)
+    await item.callback(said)
+
+    assert pure_handoff.CONFIRM_GONE in said.sent
+    assert await requests_pure.list_requests(db, GUILD) == []
+
+
+async def test_both_confirm_buttons_rebuild_themselves_after_a_restart():
+    pairs = (("yes", pure_handoff.CONFIRM_YES), ("no", pure_handoff.CONFIRM_NO))
+    for answer_word, label in pairs:
+        custom_id = modmail_cog.confirm_custom_id(7, "event", answer_word)
+        match = re.fullmatch(modmail_cog.CONFIRM_TEMPLATE, custom_id)
+        assert match is not None, custom_id
+        fresh = await modmail_cog.ConfirmDoor.from_custom_id(None, None, match)
+        assert (fresh.ticket_id, fresh.kind, fresh.answer_word) == (7, "event", answer_word)
+        assert fresh.item.label == label
+
+
+async def test_the_make_the_event_button_rebuilds_itself_after_a_restart():
+    custom_id = modmail_cog.make_event_custom_id(9)
+    match = re.fullmatch(modmail_cog.MAKE_EVENT_TEMPLATE, custom_id)
+
+    fresh = await modmail_cog.MakeTheEventButton.from_custom_id(None, None, match)
+
+    assert fresh.ticket_id == 9 and fresh.item.label == pure_handoff.MAKE_THE_EVENT
+    assert fresh.custom_id == custom_id
+
+
+async def test_the_cog_registers_every_door_a_restart_has_to_dispatch(cog, bot):
+    await cog.cog_load()
+
+    assert bot.dynamic == [
+        modmail_cog.TicketButton,
+        modmail_cog.TicketCardButton,
+        modmail_cog.ConfirmDoor,
+        modmail_cog.MakeTheEventButton,
+    ]

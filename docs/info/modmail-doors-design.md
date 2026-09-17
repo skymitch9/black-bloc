@@ -15,7 +15,7 @@
 | Fact | Where |
 |---|---|
 | The only member door is a DM: `Modmail.on_message` → `_inbound` finds or opens the member's ticket (`_open_or_find`, one open ticket per member by a partial unique index), relays the text, DMs refusals with a cooldown (`DISABLED_DM`, `BLOCKED_DM`, `CANNOT_OPEN_DM`) | `cogs/moderation/modmail.py:1518–1600`, `storage/db.py` |
-| `/modmail` is staff-only: root (Setup…, Blocked…, Snippets…, Forget…, A ticket…, Try a fake ticket, Logs, Open on the site) and the ticket card (Reply · Reply as Staff · Private note · Close…) | [`modmail-panel-design.md`](modmail-panel-design.md) §B–§C |
+| `/modmail` is staff-only: root (Setup…, Blocked…, Snippets…, Forget…, A ticket…, Try a fake ticket, Logs, Open on the site) and the ticket card (Reply · Reply as Staff · Private note · Close…) ⚠️ **SINCE v127 the ticket card also carries `Make this a request…` and `Make this an event…` on a second row** (`send-to-design.md` §A, `handoff_mode` default **on**); a practice ticket carries neither, and nothing is filed until the member answers a DM'd confirm card | [`modmail-panel-design.md`](modmail-panel-design.md) §B–§C |
 | Tickets carry a `source` (`dm`, `practice`); replies carry `source` too, and the card and the Modmail page show it | `black_bloc/modmail.py` `SOURCES`, `modmail-panel-design.md` §F |
 | A persistent button that survives restarts is a `DynamicItem` (`RequestButton`, `BanNowButton`, the sticky card) | `panels-program.md` P14 |
 | A posted-and-movable panel message with Post it / Move it… / Take it down is the role-menu shape | `rolemenu_panels.py` |
@@ -263,8 +263,8 @@ count is one higher again). What it changes, and the three things it does not:
    modmail) — never a bare refusal, and never a button that would refuse (P3): with the key off
    the staff root simply does not draw it.
 4. **Nothing was deleted and no web route moved.** `OPEN_WITH_MOVE`, `MemberPick`, `TicketModal`
-   and the `staff` ticket source are all untouched; `open_a_ticket(source=SOURCE_STAFF)` has no
-   caller outside this cog, so there is no website door to gate. The mock gained the settings row
+   and the `staff` ticket source are all untouched; ~~`open_a_ticket(source=SOURCE_STAFF)` has no
+   caller outside this cog, so there is no website door to gate.~~ ⚠️ **SINCE v127 it has a second caller** (`send-to-design.md` §A): the request's **Open a ticket with them…** move calls it with `check_toggle=False`, so this toggle does NOT gate it — a hand-off is a staff decision about a request rather than a general door. The toggle still hides the `/modmail` root's own button, which is what it was asked for. The mock gained the settings row
    and `labels.js` the label, which is the dashboard half of checklist 33; the Discord half is
    the generated key card, proved by
    `tests/test_settings_panel.py::test_every_registry_key_resolves_to_exactly_one_control[modmail_open_with_button]`.

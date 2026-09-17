@@ -1307,6 +1307,43 @@ KEY_HELP.update(
     }
 )
 
+
+# Send to... (v127) -- the staff hand-offs between requests, events and modmail tickets. Its own
+# block so the parallel branches merge textually; both keys are filed under the `request`
+# namespace through NAMESPACE_OVERRIDE, because `/settings` group select is at its cap of 25.
+# Design: info/send-to-design.md.
+HANDOFF_MODE = "handoff_mode"
+HANDOFF_CONFIRM_HOURS = "handoff_confirm_hours"
+HANDOFF_MODES = ("off", "on")
+HANDOFF_CONFIRM_HOURS_DEFAULT = 24
+HANDOFF_CONFIRM_HOURS_MIN = 1
+HANDOFF_CONFIRM_HOURS_MAX = 168
+KEY_TYPES.update({HANDOFF_MODE: "enum", HANDOFF_CONFIRM_HOURS: "int"})
+KEY_CHOICES[HANDOFF_MODE] = HANDOFF_MODES
+KEY_MIN[HANDOFF_CONFIRM_HOURS] = HANDOFF_CONFIRM_HOURS_MIN
+KEY_MAX[HANDOFF_CONFIRM_HOURS] = HANDOFF_CONFIRM_HOURS_MAX
+KEY_MIN_REASON[HANDOFF_CONFIRM_HOURS] = (
+    "Less than {limit} hour is not long enough for somebody to read a DM and answer it, so the "
+    "question would count as no before they ever saw it."
+)
+KEY_MAX_REASON[HANDOFF_CONFIRM_HOURS] = (
+    "More than {limit} hours is a week, and a ticket nobody can file anything else from for a "
+    "week is a ticket staff have lost the use of."
+)
+KEY_HELP.update(
+    {
+        HANDOFF_MODE: (
+            "on draws the Send to... moves for staff -- a request becomes an event, an event "
+            "becomes a request, a ticket becomes either with the member's say-so; off hides "
+            "them and refuses a stale press in words"
+        ),
+        HANDOFF_CONFIRM_HOURS: (
+            "how long a member has to answer a make-this-a-request/event DM before it counts "
+            "as no; the ticket stays open either way"
+        ),
+    }
+)
+
 # Birthdays, the panel pass (wave 1). Appended as its own block so the parallel branches
 # merge cleanly.
 KEY_TYPES.update(
@@ -2152,6 +2189,8 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_FOLLOWS_POST: "modmail",
     FRONTDOOR_REPLACES_TICKET_BUTTON: "modmail",
     FRONTDOOR_PANEL_MINUTES: "modmail",
+    HANDOFF_MODE: "request",
+    HANDOFF_CONFIRM_HOURS: "request",
 }
 
 
@@ -2760,6 +2799,10 @@ class SettingsStore:
             return False
         if key == "request_post_buttons":
             return True
+        if key == HANDOFF_MODE:
+            return "on"
+        if key == HANDOFF_CONFIRM_HOURS:
+            return HANDOFF_CONFIRM_HOURS_DEFAULT
         if key == "request_forum_adopts_posts":
             return True
         if key == "chat_mode":

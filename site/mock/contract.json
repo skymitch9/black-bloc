@@ -25,6 +25,7 @@
       "events_default_minutes": 5,
       "events_test_retention_minutes": 1,
       "events_where_link_check_seconds": 1,
+      "handoff_confirm_hours": 1,
       "logs_count": 1,
       "pings_empty_role_days": 1,
       "pings_onboarding_option_cap": 1,
@@ -54,6 +55,7 @@
       "chat_person_hourly_turns": 10000,
       "cost_hosting_usd": 10000,
       "events_channel_retention_days": 365,
+      "handoff_confirm_hours": 168,
       "events_default_minutes": 10080,
       "events_max_late_minutes": 1440,
       "events_test_retention_minutes": 1440,
@@ -1193,7 +1195,9 @@
         "created_at",
         "where_kind",
         "where_channel_id",
-        "where_label"
+        "where_label",
+        "moved_to",
+        "moved_word"
       ]
     },
     {
@@ -1219,7 +1223,9 @@
           "scheduled",
           "where_kind",
           "where_channel_id",
-          "where_label"
+          "where_label",
+          "moved_to",
+          "moved_word"
         ]
       }
     },
@@ -1255,7 +1261,9 @@
           "duration",
           "where_kind",
           "where_channel_id",
-          "where_label"
+          "where_label",
+          "moved_to",
+          "moved_word"
         ]
       }
     },
@@ -2983,6 +2991,8 @@
           "due_on",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "requester",
           "comment_count",
           "created_at"
@@ -3008,6 +3018,8 @@
           "due_on",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "priority",
           "notes",
           "requester",
@@ -3062,6 +3074,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "decline_reason",
           "held_from",
           "held_word",
@@ -3088,6 +3102,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "held_from",
           "moves",
           "decided_by",
@@ -3115,6 +3131,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "decline_reason",
           "decided_by",
           "decided_at"
@@ -3142,6 +3160,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "built",
           "how_to_test",
           "ready_by",
@@ -3170,6 +3190,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "built",
           "how_to_test",
           "ready_by",
@@ -3200,6 +3222,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "sent_back_reason",
           "ready_by",
           "moves",
@@ -3225,6 +3249,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "built",
           "how_to_test",
           "moves",
@@ -3254,6 +3280,8 @@
           "id",
           "status",
           "status_word",
+          "moved_to",
+          "moved_word",
           "priority",
           "notes",
           "assignee"

@@ -8,6 +8,24 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-17 (Send to… — staff hand-offs between requests, events and modmail tickets, branch
+> `send-to` off `8a27840`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord):**
+> schema **42 → 43** (measured: `SCHEMA_VERSION`) — `requests.moved_to`, `events.moved_to` and
+> `modmail_tickets.moved_to`, all `TEXT` and all NULL, through the additive `ADDED_COLUMNS` /
+> PRAGMA pattern, no backfill. ⚠️ **Migrate before deploy.** Registry keys **254 → 256**
+> (`handoff_mode` enum off/on **on**, `handoff_confirm_hours` int 1–168 **24** — both filed under
+> the `request` namespace through `NAMESPACE_OVERRIDE`, because `settings_panel.groups()` is at
+> Discord's cap of 25 and a 26th would be silently dropped off `/settings`); mock **19 pages, 180
+> routes**, 15 core settings (no new route — `moved_to` / `moved_word` join the existing request
+> and event rows). ⚠️ **One new module, `black_bloc/handoff.py`** — the trail vocabulary, the
+> wording, the refusals and the five moves, with every cog import function-local so the requests
+> cog can import it back. `requests.STATUSES` gains a final **`moved`** (no transition reaches it,
+> so only a hand-off writes it) with a seventh forum tag; `events.CANCEL_WHY` gains `handed_off`;
+> `modmail.card_buttons` gains two moves behind a member's DM'd confirmation whose wording lives
+> in the confirm embed itself. Log kinds: five `handoff.<from>_to_<to>` (IMPORTANT) plus
+> `handoff.asked` / `handoff.refused` (ROUTINE), all under `HEADS["handoff"] = "request"`; tests
+> **6304 → 6404**. Before that:
+>
 > **2026-09-17 (Blackmail — modmail and requests as FORUM channels, and the ticket button under the rules, branch `blackmail-threads` off `905982b`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord):**
 > schema **40 → 41** (measured: `SCHEMA_VERSION`) — `requests` gains `thread_id INTEGER` through the
 > additive `ADDED_COLUMNS` / PRAGMA pattern, no backfill. ⚠️ **The number is written as though the

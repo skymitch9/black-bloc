@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 42
+        assert SCHEMA_VERSION == 43
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -1753,6 +1753,55 @@ async def test_a_schema_41_file_gains_requests_source_and_reads_old_rows_as_pane
         )
         cur = await again.conn.execute("SELECT source FROM requests WHERE id = 2")
         assert (await cur.fetchone())["source"] == "forum"
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_42_file_gains_the_three_moved_to_columns_all_empty(tmp_path):
+    """42 → 43: the hand-off trail is three additive columns, NULL on every row that predates it.
+
+    `info/send-to-design.md` §A — one cell each on requests, events and modmail_tickets, so a
+    thing that has been sent somewhere says where, both ways, without a table of its own."""
+    path = tmp_path / "old43.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute(
+        "INSERT INTO requests(id, guild_id, user_id, what, why, status, created_at) "
+        "VALUES (1, 7, 9, 'a games night', 'nothing to do', 'open', "
+        "'2026-09-17T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT INTO events(id, guild_id, requester_id, title, starts_at, status, created_at) "
+        "VALUES (1, 7, 9, 'Block Party', '2026-09-18T00:00:00+00:00', 'pending', "
+        "'2026-09-17T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT INTO modmail_tickets(id, guild_id, user_id, mode, channel_id, status, opened_at) "
+        "VALUES (1, 7, 9, 'channel', 10, 'open', '2026-09-17T00:00:00+00:00')"
+    )
+    for table in ("requests", "events", "modmail_tickets"):
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN moved_to")
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '42')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        for table in ("requests", "events", "modmail_tickets"):
+            cur = await again.conn.execute(f"PRAGMA table_info({table})")
+            assert "moved_to" in {row["name"] for row in await cur.fetchall()}, table
+            cur = await again.conn.execute(f"SELECT moved_to FROM {table} WHERE id = 1")
+            assert (await cur.fetchone())["moved_to"] is None, table
+        await again.conn.execute("UPDATE requests SET moved_to = 'event:2' WHERE id = 1")
+        cur = await again.conn.execute("SELECT moved_to FROM requests WHERE id = 1")
+        assert (await cur.fetchone())["moved_to"] == "event:2"
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )

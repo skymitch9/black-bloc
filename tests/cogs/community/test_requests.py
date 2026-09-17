@@ -4,6 +4,7 @@ import re
 import discord
 import pytest
 
+from black_bloc import handoff as pure_handoff
 from black_bloc import requests as pure
 from black_bloc.cogs.community import requests as requests_cog
 from black_bloc.cogs.community.requests import (
@@ -260,7 +261,9 @@ class FakeResponse:
 
     async def defer(self, ephemeral=False, **kwargs):
         self.done = True
-        self.messages.append({"content": None, "deferred": True, "ephemeral": ephemeral})
+        self.messages.append(
+            {"content": None, "deferred": True, "ephemeral": ephemeral, **kwargs}
+        )
 
 
 class FakeFollowup:
@@ -416,6 +419,8 @@ async def request_at(bot, member, lead, status):
         await requests_cog.apply_decision(
             bot, bot.guild, request_id, pure.HOLD, lead, reason="waiting"
         )
+    if status == pure.MOVED:
+        await pure.set_status(bot.db, request_id, pure.MOVED)
     if status == pure.DECLINED:
         await requests_cog.apply_decision(
             bot, bot.guild, request_id, pure.DECLINED, lead, reason="no"
@@ -710,6 +715,17 @@ EXPECTED_BUTTONS = {
     pure.DONE: [],
     pure.DECLINED: [],
     pure.WITHDRAWN: [],
+    pure.MOVED: [],
+}
+# `handoff_mode` ships on, so every state a request can still move from also carries the
+# Send to... row; a final one carries none, which is what refuses a stale press.
+HANDOFF_BUTTONS = {
+    status: (
+        []
+        if status in pure.FINAL_STATUSES
+        else [pure_handoff.SEND_TO_EVENTS, pure_handoff.OPEN_A_TICKET]
+    )
+    for status in pure.STATUSES
 }
 
 
@@ -720,7 +736,11 @@ async def test_the_card_renders_exactly_the_buttons_the_table_says(cog, bot, mem
 
     embed, view = requests_cog.build_card(bot, bot.guild, row, lead)
 
-    assert [item.label for item in view.children] == [*EXPECTED_BUTTONS[status], "Back"]
+    assert [item.label for item in view.children] == [
+        *EXPECTED_BUTTONS[status],
+        *HANDOFF_BUTTONS[status],
+        "Back",
+    ]
     if not EXPECTED_BUTTONS[status]:
         assert "finishes" in embed.footer.text
     # Discord takes five items an action row; review's fifth move filled the first one, so
@@ -754,6 +774,7 @@ async def test_picking_a_request_opens_its_card(cog, bot, member, lead):
     assert card_embed(interaction).title == f"New request #{request_id}"
     assert [item.label for item in card_view(interaction).children] == [
         *EXPECTED_BUTTONS[pure.OPEN],
+        *HANDOFF_BUTTONS[pure.OPEN],
         "Back",
     ]
 
@@ -1474,7 +1495,7 @@ def log_titles(bot):
 async def test_the_done_card_is_the_discord_record_not_the_raw_log_line(
     cog, bot, member, lead, db
 ):
-    await bot.store.set(GUILD, "request_channel_moves", list(pure.LOOKS))
+    await bot.store.set(GUILD, "request_channel_moves", list(pure.CHANNEL_LOOKS))
     request_id = await request_at(bot, member, lead, pure.REVIEW)
     channel = bot.guild.get_channel(TEST_CHANNEL)
     channel.messages.clear()
@@ -1804,6 +1825,7 @@ async def test_staff_make_the_request_forum_under_blackmail_with_every_tag(
         "on hold",
         "done",
         "declined",
+        "moved",
     ]
     assert [getattr(who, "id", who) for who in forum.given_overwrites] == [
         STAFF_ROLE,
@@ -1890,7 +1912,14 @@ async def test_the_posts_first_message_carries_the_moves_for_where_the_request_i
 
     post = await posted(cog, bot, member)
 
-    assert post_labels(post.messages[0]) == ["Pick up", "Hold", "Decline", pure.SITE_BUTTON]
+    assert post_labels(post.messages[0]) == [
+        "Pick up",
+        "Hold",
+        "Decline",
+        pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
+        pure.SITE_BUTTON,
+    ]
     assert site_link_of(post.messages[0]) is not None
 
 
@@ -1904,7 +1933,7 @@ async def test_the_posts_buttons_are_the_same_table_the_panel_card_draws(cog, bo
     _, card = requests_cog.build_card(bot, bot.guild, row, lead)
 
     on_the_card = [one.label for one in card.children if hasattr(one, "spec")]
-    assert post_labels(post.messages[0])[:-1] == on_the_card
+    assert post_labels(post.messages[0])[:-3] == on_the_card
 
 
 async def test_a_staff_press_on_the_post_moves_the_request_and_answers_only_them(
@@ -1933,6 +1962,8 @@ async def test_a_staff_press_re_draws_the_first_messages_buttons_for_the_new_sta
         "Ready to check",
         "Hold",
         "Decline",
+        pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
         pure.SITE_BUTTON,
     ]
 
@@ -1988,7 +2019,13 @@ async def test_a_move_that_needs_a_note_opens_the_modal_and_finishes_on_the_post
     said = await submit_modal(bot, lead, modal)
 
     assert (await pure.get_request(db, 1))["status"] == pure.HOLD
-    assert post_labels(post.messages[0]) == ["Resume", "Decline", pure.SITE_BUTTON]
+    assert post_labels(post.messages[0]) == [
+        "Resume",
+        "Decline",
+        pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
+        pure.SITE_BUTTON,
+    ]
     assert said.response.messages[-1]["ephemeral"] is True
 
 
@@ -2040,7 +2077,10 @@ async def test_every_move_in_the_table_has_a_custom_id_the_template_reads_back()
 async def test_the_cog_registers_the_post_button_so_a_restart_can_dispatch_it(cog, bot):
     await cog.cog_load()
 
-    assert bot.dynamic_items == [requests_cog.PostMoveButton]
+    assert bot.dynamic_items == [
+        requests_cog.PostMoveButton,
+        requests_cog.PostHandoffButton,
+    ]
 
 
 async def test_the_review_row_puts_the_site_link_on_a_second_row(cog, bot, member, lead):
@@ -2050,7 +2090,7 @@ async def test_the_review_row_puts_the_site_link_on_a_second_row(cog, bot, membe
     await requests_cog.mark_ready(bot, bot.guild, 1, lead, "a board", "press it")
 
     view = view_of(post.messages[0])
-    assert len(post_labels(post.messages[0])) == 6
+    assert len(post_labels(post.messages[0])) == 8
     assert [one.row for one in view.children][-1] == 1
 
 
@@ -2141,7 +2181,14 @@ async def test_the_bot_replies_in_the_post_with_the_filed_card_and_the_staff_mov
     reply = post.messages[-1]
     assert reply is not post.messages[0]
     assert card_of(reply)["title"] == "New request #1"
-    assert post_labels(reply) == ["Pick up", "Hold", "Decline", pure.SITE_BUTTON]
+    assert post_labels(reply) == [
+        "Pick up",
+        "Hold",
+        "Decline",
+        pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
+        pure.SITE_BUTTON,
+    ]
     assert (await pure.get_request(db, 1))["message_id"] == reply.id
 
 
@@ -2314,6 +2361,8 @@ async def test_an_adopted_request_moves_exactly_like_any_other_one(cog, bot, mem
         "Ready to check",
         "Hold",
         "Decline",
+        pure_handoff.SEND_TO_EVENTS,
+        pure_handoff.OPEN_A_TICKET,
         pure.SITE_BUTTON,
     ]
     assert tags_on(post) == ["picked up"]
@@ -2361,3 +2410,275 @@ async def test_the_listener_does_nothing_at_all_with_no_database(cog, bot, membe
     await cog.on_thread_create(post)
 
     assert len(post.messages) == 1
+
+
+# --- Send to events… — the press half of a request → event hand-off (send-to-design §A) --------
+
+
+def handoff_button(view, label=None):
+    wanted = label or pure_handoff.SEND_TO_EVENTS
+    return next(
+        one
+        for one in view.children
+        if getattr(inner(one), "label", None) == wanted
+    )
+
+
+async def test_the_panel_card_carries_send_to_events_on_its_second_row(cog, bot, member, lead):
+    request_id = await request_at(bot, member, lead, pure.OPEN)
+    row = await pure.get_request(bot.db, request_id)
+
+    _embed, view = requests_cog.build_card(bot, bot.guild, row, lead)
+
+    button = handoff_button(view)
+    assert button.row == 1 and button.action == pure_handoff.EVENT
+    assert handoff_button(view, pure_handoff.OPEN_A_TICKET).row == 1
+    assert [one.row for one in view.children if one.row == 0] == [0, 0, 0]
+
+
+async def test_a_final_request_carries_no_send_to_move_at_all(cog, bot, member, lead):
+    request_id = await request_at(bot, member, lead, pure.DECLINED)
+    row = await pure.get_request(bot.db, request_id)
+
+    _embed, view = requests_cog.build_card(bot, bot.guild, row, lead)
+
+    assert [one.label for one in view.children] == ["Back"]
+
+
+async def test_the_move_is_not_drawn_at_all_when_the_key_is_off(cog, bot, member, lead):
+    await bot.store.set(GUILD, "handoff_mode", "off")
+    request_id = await request_at(bot, member, lead, pure.OPEN)
+    row = await pure.get_request(bot.db, request_id)
+
+    _embed, view = requests_cog.build_card(bot, bot.guild, row, lead)
+
+    assert pure_handoff.SEND_TO_EVENTS not in [one.label for one in view.children]
+    assert post_labels_of(requests_cog.post_view(bot, bot.guild, row)) == [
+        "Pick up",
+        "Hold",
+        "Decline",
+        pure.SITE_BUTTON,
+    ]
+
+
+def post_labels_of(view):
+    return [] if view is None else [getattr(inner(one), "label", None) for one in view.children]
+
+
+async def test_a_press_on_the_panel_card_draws_the_event_draft_over_the_panel(
+    cog, bot, member, lead
+):
+    request_id = await request_at(bot, member, lead, pure.OPEN)
+    panel = await open_panel(cog, bot, lead)
+    select = next(item for item in panel_view(panel).children if isinstance(item, RequestPick))
+    select._values = [str(request_id)]
+    opened = await click(bot, lead, select)
+
+    pressed = await click(bot, lead, handoff_button(card_view(opened)))
+
+    assert card_embed(pressed).title == "Propose an event — draft"
+    assert card_view(pressed).fields.from_request == request_id
+    assert card_view(pressed).fields.requester_id == member.id
+    assert pressed.response.messages[0]["deferred"] is True
+    assert pressed.response.messages[0].get("thinking") is None
+
+
+async def test_a_press_on_the_public_post_answers_in_a_new_ephemeral_and_never_edits_the_post(
+    cog, bot, member, lead
+):
+    """The §F / front-door lesson: a component defer on a public message would edit the post."""
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+    before = len(post.messages)
+
+    pressed = await click(bot, lead, post_button(post.messages[0], pure_handoff.SEND_TO_EVENTS))
+
+    deferred = pressed.response.messages[0]
+    assert deferred["deferred"] is True
+    assert deferred["ephemeral"] is True and deferred["thinking"] is True
+    assert card_embed(pressed).title == "Propose an event — draft"
+    assert len(post.messages) == before
+
+
+async def test_a_member_pressing_send_to_events_is_told_which_role_it_needs(
+    cog, bot, member, lead
+):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    pressed = await click(bot, member, post_button(post.messages[0], pure_handoff.SEND_TO_EVENTS))
+
+    assert "staff" in pressed.sent.lower()
+    assert pressed.response.messages[-1]["ephemeral"] is True
+
+
+async def test_a_stale_press_after_the_key_went_off_refuses_in_words(cog, bot, member, lead):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+    button = post_button(post.messages[0], pure_handoff.SEND_TO_EVENTS)
+    await bot.store.set(GUILD, "handoff_mode", "off")
+
+    pressed = await click(bot, lead, button)
+
+    assert "handoff_mode" in pressed.sent
+    assert "A setting group" in pressed.sent
+
+
+async def test_a_stale_press_on_a_request_that_has_been_decided_refuses_in_words(
+    cog, bot, member, lead, db
+):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+    button = post_button(post.messages[0], pure_handoff.SEND_TO_EVENTS)
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.DECLINED, lead, reason="no")
+
+    pressed = await click(bot, lead, button)
+
+    assert "already **declined**" in pressed.sent
+    assert (await pure.get_request(db, 1))["moved_to"] is None
+
+
+async def test_a_press_on_a_request_that_is_gone_says_so_rather_than_raising(cog, bot, lead):
+    interaction = FakeInteraction(bot, lead)
+
+    await requests_cog.send_to_events(interaction, 999, on_post=True)
+
+    assert "no request **#999**" in interaction.sent
+
+
+async def test_the_send_to_button_rebuilds_itself_from_its_custom_id_after_a_restart(
+    cog, bot, member, lead
+):
+    bot.guard = FakeGuard()
+    await posted(cog, bot, member)
+    custom_id = requests_cog.handoff_custom_id(1, pure_handoff.EVENT)
+    match = re.fullmatch(requests_cog.HANDOFF_TEMPLATE, custom_id)
+    assert match is not None
+
+    fresh = await requests_cog.PostHandoffButton.from_custom_id(None, None, match)
+    pressed = await click(bot, lead, fresh)
+
+    assert fresh.request_id == 1 and fresh.action == pure_handoff.EVENT
+    assert fresh.custom_id == custom_id
+    assert card_embed(pressed).title == "Propose an event — draft"
+
+
+async def test_the_move_template_never_answers_for_a_status_move_and_the_other_way_round():
+    """Two dynamic templates share the `request:` idea; neither may swallow the other's press."""
+    handoff_id = requests_cog.handoff_custom_id(12, pure_handoff.EVENT)
+    move_id = pure.post_move_custom_id(12, "pickup")
+
+    assert re.fullmatch(requests_cog.MOVE_TEMPLATE, handoff_id) is None
+    assert re.fullmatch(requests_cog.HANDOFF_TEMPLATE, move_id) is None
+
+
+# --- Open a ticket with them… — a conversation beside a request, never a move (§A) -------------
+
+
+def fake_door(calls, *, ok=True, said="Opened."):
+    async def open_a_ticket(bot, guild, user, **kwargs):
+        from black_bloc.panels import Outcome, refusal
+
+        calls.append({"user": user, **kwargs})
+        return Outcome(True, said, value=77) if ok else refusal(said, "blocked", 409)
+
+    return open_a_ticket
+
+
+async def test_the_card_and_the_post_both_carry_open_a_ticket_with_them(cog, bot, member, lead):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+    row = await pure.get_request(bot.db, 1)
+
+    _embed, card = requests_cog.build_card(bot, bot.guild, row, lead)
+
+    assert pure_handoff.OPEN_A_TICKET in [one.label for one in card.children]
+    assert pure_handoff.OPEN_A_TICKET in post_labels(post.messages[0])
+
+
+async def test_the_door_quotes_the_request_and_ignores_the_hide_toggle(
+    cog, bot, member, lead, db, monkeypatch
+):
+    """A hand-off is a staff decision, so `modmail_open_with_button` does not gate it (§A)."""
+    calls = []
+    monkeypatch.setattr(
+        "black_bloc.cogs.moderation.modmail.open_a_ticket", fake_door(calls)
+    )
+    await bot.store.set(GUILD, "modmail_open_with_button", False)
+    request_id = await request_at(bot, member, lead, pure.OPEN)
+    panel = await open_panel(cog, bot, lead)
+    select = next(item for item in panel_view(panel).children if isinstance(item, RequestPick))
+    select._values = [str(request_id)]
+    opened = await click(bot, lead, select)
+
+    pressed = await click(bot, lead, handoff_button(card_view(opened), pure_handoff.OPEN_A_TICKET))
+
+    assert len(calls) == 1
+    asked = calls[0]
+    assert asked["user"].id == member.id
+    assert asked["source"] == "staff" and asked["check_toggle"] is False
+    assert asked["subject"] == f"Request #{request_id}"
+    assert "a request board" in asked["text"] and "because" in asked["text"]
+    assert "Opened." in pressed.sent
+
+
+async def test_the_door_leaves_the_request_exactly_where_it_was(
+    cog, bot, member, lead, db, monkeypatch
+):
+    monkeypatch.setattr("black_bloc.cogs.moderation.modmail.open_a_ticket", fake_door([]))
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    await click(bot, lead, post_button(post.messages[0], pure_handoff.OPEN_A_TICKET))
+
+    row = await pure.get_request(db, 1)
+    assert row["status"] == pure.OPEN and row["moved_to"] is None
+
+
+async def test_the_door_leaves_one_row_naming_the_request_and_the_ticket(
+    cog, bot, member, lead, db, monkeypatch
+):
+    monkeypatch.setattr("black_bloc.cogs.moderation.modmail.open_a_ticket", fake_door([]))
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    await click(bot, lead, post_button(post.messages[0], pure_handoff.OPEN_A_TICKET))
+
+    kinds = await action_kinds(db)
+    assert kinds.count("handoff.request_to_ticket") == 1
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ?", ("handoff.request_to_ticket",)
+    )
+    details = json.loads((await cur.fetchone())["details"])
+    assert (details["request_id"], details["ticket_id"]) == (1, 77)
+
+
+async def test_a_door_that_refuses_says_so_and_leaves_no_hand_off_row(
+    cog, bot, member, lead, db, monkeypatch
+):
+    monkeypatch.setattr(
+        "black_bloc.cogs.moderation.modmail.open_a_ticket",
+        fake_door([], ok=False, said="They are blocked."),
+    )
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    pressed = await click(bot, lead, post_button(post.messages[0], pure_handoff.OPEN_A_TICKET))
+
+    assert "They are blocked." in pressed.sent
+    assert "handoff.request_to_ticket" not in await action_kinds(db)
+
+
+async def test_a_requester_who_has_left_is_named_rather_than_crashed_into(
+    cog, bot, lead, db, monkeypatch
+):
+    monkeypatch.setattr("black_bloc.cogs.moderation.modmail.open_a_ticket", fake_door([]))
+    request_id = await pure.create_request(
+        bot.db, GUILD, 4040, what="a board", why="because", due_on=None
+    )
+    interaction = FakeInteraction(bot, lead)
+
+    await requests_cog.open_a_ticket_with_them(interaction, request_id, on_post=True)
+
+    assert "not somebody Black Bloc can see" in interaction.sent
+    assert "handoff.request_to_ticket" not in await action_kinds(db)

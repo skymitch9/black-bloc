@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 42
+SCHEMA_VERSION = 43
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -260,7 +260,8 @@ CREATE TABLE IF NOT EXISTS events (
     decided_by         INTEGER,
     decided_at         TEXT,
     deny_reason        TEXT,
-    created_at         TEXT    NOT NULL
+    created_at         TEXT    NOT NULL,
+    moved_to           TEXT
 );
 
 CREATE INDEX IF NOT EXISTS events_by_status ON events(guild_id, status, starts_at);
@@ -294,7 +295,8 @@ CREATE TABLE IF NOT EXISTS modmail_tickets (
     card_message_id INTEGER,
     practice       INTEGER NOT NULL DEFAULT 0,
     source         TEXT    NOT NULL DEFAULT 'dm',
-    opened_by      INTEGER
+    opened_by      INTEGER,
+    moved_to       TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS modmail_open_ticket
@@ -568,7 +570,8 @@ CREATE TABLE IF NOT EXISTS requests (
     done_at        TEXT,
     message_id     INTEGER,
     thread_id      INTEGER,
-    source         TEXT    NOT NULL DEFAULT 'panel'
+    source         TEXT    NOT NULL DEFAULT 'panel',
+    moved_to       TEXT
 );
 
 CREATE INDEX IF NOT EXISTS requests_by_status ON requests(guild_id, status, id);
@@ -856,6 +859,9 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("requests", "source", "TEXT NOT NULL DEFAULT 'panel'"),
     ("posts", "shadow_message_id", "INTEGER"),
     ("golive_fan_roles", "unworn_since", "TEXT"),
+    ("requests", "moved_to", "TEXT"),
+    ("events", "moved_to", "TEXT"),
+    ("modmail_tickets", "moved_to", "TEXT"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")

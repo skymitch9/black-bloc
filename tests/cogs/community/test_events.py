@@ -822,7 +822,12 @@ async def test_the_review_card_carries_approve_and_deny_buttons_keyed_by_the_eve
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     posted = bot.guild.created[0].messages[0]
     ids = [item.custom_id for item in posted.kwargs["view"].children]
-    assert ids == [decision_id(row["id"], "approve"), decision_id(row["id"], "deny")]
+    # `handoff_mode` ships on, so the room also carries Not an event — make it a request.
+    assert ids == [
+        decision_id(row["id"], "approve"),
+        decision_id(row["id"], "deny"),
+        decision_id(row["id"], events_cog.MAKE_REQUEST),
+    ]
     assert posted.kwargs["view"].timeout is None
     assert posted.kwargs["allowed_mentions"].everyone is False
 
@@ -3936,3 +3941,354 @@ async def test_the_delete_button_is_the_same_registration_the_card_buttons_use(c
     assert match["event_id"] == "12" and match["action"] == "delete_room"
     assert rebuilt.event_id == 12 and rebuilt.item.label == "Delete this room"
     assert re.fullmatch(events_cog.DECISION_TEMPLATE, decision_id(12, "deny"))["action"] == "deny"
+
+
+# --- Send to events… — the second half of a request → event hand-off (send-to-design §A) -------
+
+
+async def a_request(bot, member, **fields):
+    from black_bloc import requests as requests_pure
+
+    return await requests_pure.create_request(
+        bot.db,
+        GUILD,
+        member.id,
+        what=fields.get("what", "a games night"),
+        why=fields.get("why", "there is nothing to do on Tuesdays"),
+        due_on=None,
+    )
+
+
+async def handed_over_draft(bot, lead, request_id):
+    """What staff see after Send to events…: the `/event` draft, already filled in."""
+    from black_bloc import requests as requests_pure
+
+    row = await requests_pure.get_request(bot.db, request_id)
+    opening = FakeInteraction(bot, lead)
+    await events_cog.open_request_draft(opening, row)
+    return opening, card_view(opening)
+
+
+def pick_a_time(view, start=None):
+    when = draft_fields(start=start or future_start()).when
+    view.fields.when = when
+    return view
+
+
+async def submit_the_draft(bot, lead, view):
+    interaction = FakeInteraction(bot, lead)
+    await submit_draft(interaction, view)
+    return interaction
+
+
+async def test_send_to_events_opens_the_draft_filled_in_from_the_request(bot, lead, member, db):
+    request_id = await a_request(bot, member)
+
+    opening, view = await handed_over_draft(bot, lead, request_id)
+
+    assert card_embed(opening).title == DRAFT_TITLE
+    assert view.fields.title == "a games night"
+    assert f"Filed as request #{request_id} by <@{member.id}>" in view.fields.description
+    assert "there is nothing to do on Tuesdays" in view.fields.description
+    assert view.fields.requester_id == member.id and view.fields.from_request == request_id
+    assert view.fields.when.day is None
+    assert not has_item(view, "Submit")
+
+
+async def test_the_event_a_hand_off_makes_is_filed_in_the_members_name_not_the_staffers(
+    cog, bot, lead, member, db
+):
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    rows = await events_by_status(db, GUILD, (PENDING,))
+    assert len(rows) == 1
+    assert rows[0]["requester_id"] == member.id
+    assert rows[0]["title"] == "a games night"
+
+
+async def test_submitting_a_handed_over_draft_closes_the_request_as_moved_with_the_trail(
+    cog, bot, lead, member, db
+):
+    from black_bloc import requests as requests_pure
+
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    said = await submit_the_draft(bot, lead, pick_a_time(view))
+
+    event = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    row = await requests_pure.get_request(db, request_id)
+    assert row["status"] == requests_pure.MOVED
+    assert row["moved_to"] == f"event:{event['id']}"
+    assert f"event **#{event['id']}**" in said.response.messages[-1]["content"]
+
+
+async def test_a_hand_off_leaves_exactly_one_row_naming_both_ends(cog, bot, lead, member, db):
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    event = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    kinds = await action_kinds(db)
+    assert kinds.count("handoff.request_to_event") == 1
+    cur = await db.conn.execute(
+        "SELECT actor_id, target_id, details FROM action_log WHERE kind = ?",
+        ("handoff.request_to_event",),
+    )
+    logged = await cur.fetchone()
+    details = json.loads(logged["details"])
+    assert (logged["actor_id"], logged["target_id"]) == (lead.id, member.id)
+    assert details["request_id"] == request_id and details["event_id"] == event["id"]
+
+
+async def test_the_member_is_told_by_dm_that_their_request_is_now_an_event(
+    cog, bot, lead, member, db
+):
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    event = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    said = member.dms[-1]["content"]
+    assert f"#{request_id}" in said and f"#{event['id']}" in said
+    assert "staff will review it there" in said
+
+
+async def test_a_member_whose_dms_are_shut_leaves_a_row_rather_than_silence(
+    cog, bot, lead, member, db
+):
+    request_id = await a_request(bot, member)
+    member.dm_raises = refused()
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    assert "request.dm_failed" in await action_kinds(db)
+
+
+async def test_the_staffer_who_handed_it_over_is_not_dmed_as_though_they_proposed_it(
+    cog, bot, lead, member, db
+):
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await submit_the_draft(bot, lead, pick_a_time(view))
+
+    assert lead.dms == []
+    assert member.dms
+
+
+async def test_leaving_the_draft_alone_leaves_the_request_exactly_where_it_was(
+    cog, bot, lead, member, db
+):
+    """Cancel on the draft is Back: nothing is created and nothing is closed (§A)."""
+    from black_bloc import requests as requests_pure
+
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    await click(bot, lead, find_item(view, "Back"))
+
+    row = await requests_pure.get_request(db, request_id)
+    assert row["status"] == requests_pure.OPEN and row["moved_to"] is None
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+
+
+async def test_a_draft_that_cannot_be_submitted_yet_changes_nothing_either(
+    cog, bot, lead, member, db
+):
+    from black_bloc import requests as requests_pure
+
+    request_id = await a_request(bot, member)
+    _opening, view = await handed_over_draft(bot, lead, request_id)
+
+    said = await submit_the_draft(bot, lead, view)
+
+    assert "Pick a day" in card_embed(said).description
+    row = await requests_pure.get_request(db, request_id)
+    assert row["status"] == requests_pure.OPEN and row["moved_to"] is None
+
+
+async def test_an_ordinary_proposal_is_untouched_by_the_hand_off_path(cog, bot, member, db):
+    """No `from_request` means no trail, no second DM and the proposer is whoever pressed."""
+    said = await submit(cog, bot, member)
+
+    rows = await events_by_status(db, GUILD, (PENDING,))
+    assert rows[0]["requester_id"] == member.id
+    assert "handoff.request_to_event" not in await action_kinds(db)
+    assert member.dms and "Submitted on" in member.dms[-1]["content"]
+    assert "review it" in said.response.messages[-1]["content"]
+    assert "event **#" not in said.response.messages[-1]["content"]
+
+
+# --- Not an event — make it a request (send-to-design §A) --------------------------------------
+
+
+async def hand_it_back(bot, lead, event_id, message=None):
+    interaction = FakeInteraction(bot, lead, message=message)
+    await DecisionButton(event_id, events_cog.MAKE_REQUEST).callback(interaction)
+    return interaction
+
+
+async def a_pending_event(cog, bot, member, **fields):
+    await submit(cog, bot, member, **fields)
+    return (await events_by_status(bot.db, GUILD, (PENDING,)))[0]
+
+
+async def test_the_review_room_offers_the_move_only_while_the_key_is_on(cog, bot, member, db):
+    await bot.store.set(GUILD, "handoff_mode", "off")
+
+    await submit(cog, bot, member)
+
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    ids = [item.custom_id for item in bot.guild.created[0].messages[0].kwargs["view"].children]
+    assert ids == [decision_id(row["id"], "approve"), decision_id(row["id"], "deny")]
+
+
+async def test_making_it_a_request_files_one_in_the_requesters_name_from_the_events_words(
+    cog, bot, member, lead, db
+):
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member, title="Games night", description="on Tuesdays")
+
+    await hand_it_back(bot, lead, row["id"])
+
+    filed = await requests_pure.list_requests(db, GUILD)
+    assert len(filed) == 1
+    assert filed[0]["user_id"] == member.id
+    assert (filed[0]["what"], filed[0]["why"]) == ("Games night", "on Tuesdays")
+    assert filed[0]["source"] == requests_pure.SOURCE_EVENT
+    assert filed[0]["status"] == requests_pure.OPEN
+
+
+async def test_an_event_with_no_description_still_files_a_request_with_a_why(
+    cog, bot, member, lead, db
+):
+    """`why` is NOT NULL and the modal makes it required, so the hand-off owes one."""
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member, description="")
+
+    await hand_it_back(bot, lead, row["id"])
+
+    filed = (await requests_pure.list_requests(db, GUILD))[0]
+    assert filed["why"] == f"(filed from event #{row['id']})"
+
+
+async def test_the_event_is_cancelled_with_the_trail_pointing_at_the_request(
+    cog, bot, member, lead, db
+):
+    row = await a_pending_event(cog, bot, member)
+
+    said = await hand_it_back(bot, lead, row["id"])
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["status"] == CANCELLED
+    assert fresh["moved_to"] == "request:1"
+    assert "request **#1**" in said.response.messages[-1]["content"]
+
+
+async def test_the_cancel_dm_names_the_request_it_became(cog, bot, member, lead, db):
+    row = await a_pending_event(cog, bot, member)
+
+    await hand_it_back(bot, lead, row["id"])
+
+    said = member.dms[-1]["content"]
+    assert "filed it as a request instead" in said
+    assert "The reason given was: filed as request #1 instead" in said
+
+
+async def test_the_hand_off_leaves_exactly_one_row_naming_both_ends(cog, bot, member, lead, db):
+    row = await a_pending_event(cog, bot, member)
+
+    await hand_it_back(bot, lead, row["id"])
+
+    kinds = await action_kinds(db)
+    assert kinds.count("handoff.event_to_request") == 1
+    cur = await db.conn.execute(
+        "SELECT actor_id, target_id, details FROM action_log WHERE kind = ?",
+        ("handoff.event_to_request",),
+    )
+    logged = await cur.fetchone()
+    details = json.loads(logged["details"])
+    assert (logged["actor_id"], logged["target_id"]) == (lead.id, member.id)
+    assert (details["event_id"], details["request_id"]) == (row["id"], 1)
+    # Nothing else the cancel does changes: its own row is still written beside ours.
+    assert "event.cancelled" in kinds
+
+
+async def test_the_rooms_card_closes_and_the_room_keeps_the_link(cog, bot, member, lead, db):
+    row = await a_pending_event(cog, bot, member)
+    room = bot.guild.created[0]
+    card = room.messages[0]
+
+    await hand_it_back(bot, lead, row["id"], message=card)
+
+    assert card.kwargs["view"] is None
+    fields = card.kwargs["embed"].to_dict()["fields"]
+    assert {"name": "Now", "value": "request **#1**", "inline": False} in fields
+    assert "→ request **#1**" in [one.content for one in room.messages]
+
+
+async def test_a_second_press_on_a_card_nobody_refreshed_refuses_rather_than_filing_twice(
+    cog, bot, member, lead, db
+):
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member)
+    await hand_it_back(bot, lead, row["id"])
+
+    again = await hand_it_back(bot, lead, row["id"])
+
+    assert "already" in again.response.messages[-1]["content"]
+    assert len(await requests_pure.list_requests(db, GUILD)) == 1
+
+
+async def test_a_press_after_the_key_went_off_refuses_in_words_and_files_nothing(
+    cog, bot, member, lead, db
+):
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member)
+    await bot.store.set(GUILD, "handoff_mode", "off")
+
+    said = await hand_it_back(bot, lead, row["id"])
+
+    assert "handoff_mode" in said.response.messages[-1]["content"]
+    assert await requests_pure.list_requests(db, GUILD) == []
+    assert (await get_event(db, row["id"]))["status"] == PENDING
+
+
+async def test_a_member_pressing_make_it_a_request_is_told_which_role_it_needs(
+    cog, bot, member, db
+):
+    from black_bloc import requests as requests_pure
+
+    row = await a_pending_event(cog, bot, member)
+
+    said = await hand_it_back(bot, member, row["id"])
+
+    assert "staff" in said.response.messages[-1]["content"].lower()
+    assert await requests_pure.list_requests(db, GUILD) == []
+
+
+async def test_the_filed_request_reaches_the_request_channel_like_any_other(
+    cog, bot, member, lead, db
+):
+    await bot.store.set(GUILD, "request_notify_channel_id", TEST_CHANNEL)
+    row = await a_pending_event(cog, bot, member)
+
+    await hand_it_back(bot, lead, row["id"])
+
+    posted = bot.guild.channels[TEST_CHANNEL].messages
+    assert any(
+        one.kwargs.get("embed") is not None
+        and one.kwargs["embed"].to_dict()["title"] == "New request #1"
+        for one in posted
+    )

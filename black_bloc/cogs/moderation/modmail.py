@@ -20,6 +20,30 @@ from ...command_visibility import STAFF_ONLY
 from ...events import clamp
 from ...frontdoor import door_takes_over
 from ...golive import now_iso, parse_ts
+from ...handoff import (
+    ASK_BODY_LABEL,
+    ASK_MODAL_TITLE,
+    ASK_TITLE_LABEL,
+    BODY_LIMIT,
+    CONFIRM_GONE,
+    CONFIRM_NO,
+    CONFIRM_YES,
+    MAKE_THE_EVENT,
+    ask_the_member,
+    asked_kind,
+    handoff_on,
+    member_said_no,
+    member_said_yes,
+    read_ask,
+    refusal_for_ticket,
+    waiting_on,
+)
+from ...handoff import EVENT as HANDOFF_EVENT
+from ...handoff import NO_SUCH_TICKET as HANDOFF_NO_TICKET
+from ...handoff import REQUEST as HANDOFF_REQUEST
+from ...handoff import (
+    TITLE_LIMIT as ASK_TITLE_LIMIT,
+)
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
 from ...modmail import (
@@ -38,6 +62,8 @@ from ...modmail import (
     CARD_NOTE,
     CARD_REPLY,
     CARD_SPEAK,
+    CARD_TO_EVENT,
+    CARD_TO_REQUEST,
     CATEGORY,
     CLOSED,
     CONTENT_LIMIT,
@@ -206,6 +232,22 @@ log = logging.getLogger(__name__)
 LOCKS_ATTR = "_modmail_locks"
 CARDS_ATTR = "_modmail_cards"
 CARD_ACTIONS = "|".join(re.escape(move.action) for move in CARD_MOVES)
+CONFIRM_ANSWER_YES = "yes"
+CONFIRM_ANSWER_NO = "no"
+CONFIRM_TEMPLATE = (
+    r"handoff:ticket:(?P<ticket_id>[0-9]+):(?P<kind>request|event):(?P<answer>yes|no)"
+)
+MAKE_EVENT_TEMPLATE = r"handoff:make:(?P<ticket_id>[0-9]+)"
+
+
+def confirm_custom_id(ticket_id: Any, kind: str, answer_word: str) -> str:
+    return f"handoff:ticket:{int(ticket_id)}:{kind}:{answer_word}"
+
+
+def make_event_custom_id(ticket_id: Any) -> str:
+    return f"handoff:make:{int(ticket_id)}"
+
+
 CARD_TEMPLATE = rf"modmail:card:(?P<action>{CARD_ACTIONS}):(?P<ticket_id>[0-9]+)"
 TICKET_PANEL_TEMPLATE = r"modmail:ticket:(?P<guild_id>[0-9]+)"
 CARD_DEBOUNCE_SECONDS = 2.0
@@ -904,21 +946,27 @@ async def speak(
 
 
 async def deliver_dm(
-    user: Any, content: Any = None, embed: discord.Embed | None = None
+    user: Any, content: Any = None, embed: discord.Embed | None = None, view: Any = None
 ) -> str | None:
     """The reason the DM did not arrive, or None when it did."""
     send = getattr(user, "send", None)
     if send is None:
         return "no_user"
+    extra = {} if view is None else {"view": view}
     try:
-        await send(content, embed=embed, allowed_mentions=mentions())
+        await send(content, embed=embed, allowed_mentions=mentions(), **extra)
     except Exception as exc:
         return f"{type(exc).__name__}: {exc}"
     return None
 
 
 async def ticket_dm(
-    bot: Any, guild: Any, ticket: Any, content: Any = None, embed: discord.Embed | None = None
+    bot: Any,
+    guild: Any,
+    ticket: Any,
+    content: Any = None,
+    embed: discord.Embed | None = None,
+    view: Any = None,
 ) -> str | None:
     """A practice ticket DMs nobody, and a DM that was never sent is not one that failed."""
     if is_practice(ticket):
@@ -926,7 +974,7 @@ async def ticket_dm(
     user = bot.get_user(ticket["user_id"]) or guild.get_member(ticket["user_id"])
     if user is None:
         return "member_not_visible"
-    return await deliver_dm(user, content, embed=embed)
+    return await deliver_dm(user, content, embed=embed, view=view)
 
 
 async def react(bot: Any, message: Any, emoji: str) -> None:
@@ -1062,7 +1110,13 @@ async def post_card(bot: Any, guild: Any, ticket_id: int) -> Any:
         return None
     old_id = field_of(fresh, "card_message_id")
     embed = await card_embed(bot, guild, fresh)
-    message, why_not = await speak(bot, guild, fresh, embed=embed, view=card_view(fresh))
+    message, why_not = await speak(
+        bot,
+        guild,
+        fresh,
+        embed=embed,
+        view=card_view(fresh, handoff=handoff_on(bot.store, guild.id)),
+    )
     if message is None:
         await log_action(
             bot,
@@ -2102,11 +2156,12 @@ async def open_a_ticket(
     subject: Any = None,
     text: Any = None,
     actor: Any = None,
+    check_toggle: bool = True,
     via: str = VIA_DISCORD,
 ) -> Outcome:
     """The command, the posted button and the staff door, all on the DM path's own rails."""
     staff_door = source == SOURCE_STAFF
-    if staff_door and not open_with_on(bot.store, guild.id):
+    if staff_door and check_toggle and not open_with_on(bot.store, guild.id):
         return await refuse_open(
             bot, guild, user, "open_with_off", OPEN_WITH_OFF, actor=actor, via=via
         )
@@ -2548,7 +2603,9 @@ class Modmail(commands.Cog):
         )
 
     async def cog_load(self) -> None:
-        self.bot.add_dynamic_items(TicketCardButton, TicketButton)
+        self.bot.add_dynamic_items(
+            TicketButton, TicketCardButton, ConfirmDoor, MakeTheEventButton
+        )
         if not self.bot.db.is_connected:
             return
         await self.reconcile_tickets()
@@ -3085,7 +3142,9 @@ async def build_ticket(
     view = new_panel(bot, guild, cog)
     view.surface = TICKET_SURFACE
     view.picked_ticket = int(row["id"])
-    for move in panel_card_buttons(open_ticket=still_open):
+    for move in panel_card_buttons(
+        open_ticket=still_open, handoff=handoff_on(bot.store, guild.id)
+    ):
         view.add_item(MoveButton(move))
     return (embed, view)
 
@@ -3589,7 +3648,10 @@ class MoveButton(discord.ui.Button):
     async def open_card_modal(self, interaction: discord.Interaction, view: Any) -> None:
         """The panel's copy of a card move opens the SAME modal the card in the channel does."""
         ticket_id = int(getattr(view, "picked_ticket", None) or 0)
-        if await card_ticket(interaction, ticket_id) is None:
+        ticket = await card_ticket(interaction, ticket_id)
+        if ticket is None:
+            return
+        if await handoff_refused(interaction, self.move.action, ticket):
             return
         await interaction.response.send_modal(
             await card_modal(interaction, self.move.action, ticket_id, previous=view)
@@ -3927,7 +3989,18 @@ CLOSE_SILENT_OPTION = "Close without telling them"
 SPEAK_TITLE = "Say it as the member"
 SPEAK_LABEL = "What the pretend member says — nobody is DMed"
 CARD_MOVE_BY_ACTION = {move.action: move for move in CARD_MOVES}
-CARD_ACTIONS_ON_THE_PANEL = (CARD_REPLY, CARD_ANON, CARD_NOTE, CARD_CLOSE)
+CARD_ACTIONS_ON_THE_PANEL = (
+    CARD_REPLY,
+    CARD_ANON,
+    CARD_NOTE,
+    CARD_CLOSE,
+    CARD_TO_REQUEST,
+    CARD_TO_EVENT,
+)
+HANDOFF_KIND_OF: dict[str, str] = {
+    CARD_TO_REQUEST: HANDOFF_REQUEST,
+    CARD_TO_EVENT: HANDOFF_EVENT,
+}
 REPLY_ACTIONS = (CARD_REPLY, CARD_ANON)
 
 
@@ -3935,10 +4008,10 @@ def card_custom_id(action: str, ticket_id: Any) -> str:
     return f"modmail:card:{action}:{int(ticket_id)}"
 
 
-def card_view(ticket: Any) -> discord.ui.View:
+def card_view(ticket: Any, *, handoff: bool = False) -> discord.ui.View:
     """The card belongs to the room, so its buttons outlive the process that posted them."""
     view = discord.ui.View(timeout=None)
-    for move in card_buttons(practice=is_practice(ticket)):
+    for move in card_buttons(practice=is_practice(ticket), handoff=handoff):
         view.add_item(TicketCardButton(move, ticket["id"]))
     return view
 
@@ -4208,10 +4281,254 @@ class CloseModal(AnswersErrors, discord.ui.Modal):
         )
 
 
+async def handoff_refused(interaction: discord.Interaction, action: str, ticket: Any) -> bool:
+    """A Send to… press on a ticket already asked, answered or filed says so, in words."""
+    if action not in HANDOFF_KIND_OF:
+        return False
+    said = refusal_for_ticket(interaction.client.store, interaction.guild.id, ticket)
+    if not said:
+        return False
+    await answer(interaction, said)
+    return True
+
+
+async def first_words(bot: Any, ticket: Any) -> tuple[str, str]:
+    """What the modal starts filled in with: the ticket's subject and its first message."""
+    rows = await ticket_messages(bot.db, ticket["id"])
+    said = next((str(row["content"]) for row in rows if str(row["direction"]) == IN), "")
+    head, _, rest = said.partition("\n")
+    subject = head.strip().strip("*")
+    if head.startswith("**") and head.rstrip().endswith("**"):
+        return (subject[:ASK_TITLE_LIMIT], rest.strip()[:BODY_LIMIT])
+    return (said.strip()[:ASK_TITLE_LIMIT], said.strip()[:BODY_LIMIT])
+
+
+async def handoff_modal(
+    interaction: discord.Interaction, action: str, ticket_id: int, previous: Any
+) -> Any:
+    ticket = await get_ticket(interaction.client.db, ticket_id)
+    title, body = await first_words(interaction.client, ticket)
+    return HandoffModal(ticket_id, HANDOFF_KIND_OF[action], title, body, previous)
+
+
+class HandoffModal(AnswersErrors, discord.ui.Modal):
+    """What staff would file, in the member's name — they see it before they answer."""
+
+    def __init__(
+        self, ticket_id: int, kind: str, title: str, body: str, previous: Any = None
+    ) -> None:
+        super().__init__(title=ASK_MODAL_TITLE[kind])
+        self.ticket_id = int(ticket_id)
+        self.kind = kind
+        self.previous = previous
+        self.what = discord.ui.TextInput(max_length=ASK_TITLE_LIMIT, default=title or None)
+        self.body = discord.ui.TextInput(
+            style=discord.TextStyle.paragraph, max_length=BODY_LIMIT, default=body or None
+        )
+        self.add_item(discord.ui.Label(text=ASK_TITLE_LABEL, component=self.what))
+        self.add_item(discord.ui.Label(text=ASK_BODY_LABEL, component=self.body))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_ask(
+            interaction,
+            self.ticket_id,
+            self.kind,
+            str(self.what),
+            str(self.body),
+            self.previous,
+        )
+
+
+async def run_ask(
+    interaction: discord.Interaction,
+    ticket_id: int,
+    kind: str,
+    title: str,
+    body: str,
+    previous: Any = None,
+) -> None:
+    """One implementation, both doors: the card in the room and the panel's copy of it."""
+    ticket = await opened_card(interaction, ticket_id, previous)
+    if ticket is None:
+        return
+    if await handoff_refused(interaction, f"card_to_{kind}", ticket):
+        return
+    outcome = await ask_the_member(
+        interaction.client,
+        interaction.guild,
+        ticket,
+        kind,
+        title,
+        body,
+        interaction.user,
+        view=confirm_view(ticket_id, kind),
+    )
+    await card_moved(interaction, ticket_id, previous, outcome.message)
+    if outcome.ok:
+        await bump_card(interaction.client, interaction.guild, ticket)
+
+
+def confirm_view(ticket_id: Any, kind: str) -> discord.ui.View:
+    """The two buttons the member's DM carries; they outlive the process that sent them."""
+    view = discord.ui.View(timeout=None)
+    view.add_item(ConfirmDoor(ticket_id, kind, CONFIRM_ANSWER_YES))
+    view.add_item(ConfirmDoor(ticket_id, kind, CONFIRM_ANSWER_NO))
+    return view
+
+
+def make_event_view(ticket_id: Any) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    view.add_item(MakeTheEventButton(ticket_id))
+    return view
+
+
+def still_the_question(ticket: Any, kind: str, who: Any) -> bool:
+    """Theirs, still waiting, and still the same question — anything else is a stale press."""
+    cell = field_of(ticket, "moved_to")
+    return (
+        int(ticket["user_id"]) == int(getattr(who, "id", who))
+        and waiting_on(cell, datetime.now(UTC)) is not None
+        and asked_kind(cell) == kind
+    )
+
+
+async def run_answer(
+    interaction: discord.Interaction, ticket_id: int, kind: str, yes: bool
+) -> None:
+    """Yes / No on the confirm DM — the wording is read back off the card that carries it.
+
+    The press arrives in a DM, so the guild comes off the ticket row, never off the click."""
+    bot = interaction.client
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    if not await db_ready(interaction):
+        return
+    ticket = await get_ticket(bot.db, ticket_id)
+    guild = bot.get_guild(int(ticket["guild_id"])) if ticket is not None else None
+    if ticket is None or guild is None:
+        await answer(interaction, HANDOFF_NO_TICKET)
+        return
+    if not still_the_question(ticket, kind, interaction.user):
+        await answer(interaction, CONFIRM_GONE)
+        return
+    card = asked_card(interaction)
+    if yes and card is None:
+        await answer(interaction, CONFIRM_GONE)
+        return
+    if not yes:
+        said = await member_said_no(bot, guild, ticket, kind)
+    else:
+        title, body = read_ask(card)
+        said = await member_said_yes(
+            bot,
+            guild,
+            ticket,
+            kind,
+            title,
+            body,
+            make_event_view=make_event_view(ticket_id),
+        )
+    await close_the_dm(interaction)
+    await answer(interaction, said)
+
+
+def asked_card(interaction: discord.Interaction) -> Any:
+    """The embed the press is sitting on — the only place the asked wording is kept."""
+    message = getattr(interaction, "message", None)
+    return next(iter(getattr(message, "embeds", None) or []), None)
+
+
+async def close_the_dm(interaction: discord.Interaction) -> None:
+    """The question is answered, so its buttons go — a second press would be a second answer."""
+    message = getattr(interaction, "message", None)
+    if message is None:
+        return
+    try:
+        await message.edit(view=None)
+    except Exception as exc:
+        log.info("modmail: could not take the confirm buttons down: %s", exc)
+
+
+class ConfirmDoor(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=CONFIRM_TEMPLATE
+):
+    """A ticket is private: this is the member's own say-so, and it survives a restart."""
+
+    def __init__(self, ticket_id: Any, kind: str, answer_word: str) -> None:
+        self.ticket_id = int(ticket_id)
+        self.kind = kind
+        self.answer_word = answer_word
+        yes = answer_word == CONFIRM_ANSWER_YES
+        super().__init__(
+            discord.ui.Button(
+                label=CONFIRM_YES if yes else CONFIRM_NO,
+                style=discord.ButtonStyle.success if yes else discord.ButtonStyle.secondary,
+                custom_id=confirm_custom_id(ticket_id, kind, answer_word),
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: Any):
+        return cls(int(match["ticket_id"]), str(match["kind"]), str(match["answer"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        await run_answer(
+            interaction,
+            self.ticket_id,
+            self.kind,
+            self.answer_word == CONFIRM_ANSWER_YES,
+        )
+
+
+class MakeTheEventButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=MAKE_EVENT_TEMPLATE
+):
+    """The member said yes; an event still owes a date, so staff pick one from the draft."""
+
+    def __init__(self, ticket_id: Any) -> None:
+        self.ticket_id = int(ticket_id)
+        super().__init__(
+            discord.ui.Button(
+                label=MAKE_THE_EVENT,
+                style=discord.ButtonStyle.primary,
+                custom_id=make_event_custom_id(ticket_id),
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: Any):
+        return cls(int(match["ticket_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        await open_the_event_draft(interaction, self.ticket_id)
+
+
+async def open_the_event_draft(interaction: discord.Interaction, ticket_id: int) -> None:
+    """A press on a message the whole room can see answers in a NEW ephemeral, never in place."""
+    from ..community.events import open_ticket_draft
+
+    if not await still_staff(interaction):
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    if not await db_ready(interaction):
+        return
+    ticket = await get_ticket(interaction.client.db, ticket_id)
+    if ticket is None:
+        await answer(interaction, HANDOFF_NO_TICKET)
+        return
+    card = asked_card(interaction)
+    if card is None:
+        await answer(interaction, CONFIRM_GONE)
+        return
+    title, body = read_ask(card)
+    await open_ticket_draft(interaction, ticket, title, body)
+
+
 async def card_modal(
     interaction: discord.Interaction, action: str, ticket_id: int, *, previous: Any = None
 ) -> Any:
     """One table of which move opens which modal, whichever door the move was pressed on."""
+    if action in HANDOFF_KIND_OF:
+        return await handoff_modal(interaction, action, ticket_id, previous)
     if action == CARD_NOTE:
         return CardNoteModal(ticket_id, previous)
     if action == CARD_CLOSE:
@@ -4228,7 +4545,10 @@ async def card_pressed(interaction: discord.Interaction, move: Any, ticket_id: i
         return
     if not await db_up(interaction):
         return
-    if await card_ticket(interaction, ticket_id) is None:
+    ticket = await card_ticket(interaction, ticket_id)
+    if ticket is None:
+        return
+    if await handoff_refused(interaction, move.action, ticket):
         return
     if move.action == CARD_END:
         await run_card_end(interaction, ticket_id)

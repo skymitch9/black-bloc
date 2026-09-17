@@ -432,6 +432,7 @@ def build_card(
     description: str | None = None,
     status: str = PENDING,
     deny_reason: str | None = None,
+    moved_to: str | None = None,
 ) -> discord.Embed:
     """The one card every surface shows: review channel, DM, announcement."""
     embed = discord.Embed(
@@ -448,8 +449,19 @@ def build_card(
         embed.add_field(name="Where", value=said, inline=False)
     if deny_reason:
         embed.add_field(name="Why not", value=clamp(deny_reason, 1024), inline=False)
+    gone = moved_words(moved_to)
+    if gone:
+        embed.add_field(name="Now", value=gone, inline=False)
     embed.set_footer(text=f"Event #{event_id}")
     return embed
+
+
+def moved_words(moved_to: Any) -> str:
+    """Where a handed-off event went, bolded for a card; `handoff` owns the words."""
+    from .handoff import moved_words as said
+
+    found = said(moved_to)
+    return found.replace("#", "**#") + "**" if found else ""
 
 
 def mentions(ping_role_id: Any = None) -> discord.AllowedMentions:
@@ -643,7 +655,12 @@ CANCEL_WHY: dict[str, str] = {
         "and write the time as `YYYY-MM-DD HH:MM`."
     ),
     "room_deleted": "staff removed its room.",
+    "handed_off": (
+        "staff have filed it as a request instead, so it is not on the calendar any more. They "
+        "will take it from there, and `/request` shows where it has got to."
+    ),
 }
+HANDED_OFF = "handed_off"
 CANCEL_WHY_DEFAULT = (
     "either you or a member of staff called it off. Ask a Lead there if that is a surprise."
 )
@@ -815,6 +832,9 @@ class EventDraft:
     where: Where = WHERE_UNSET
     duration: str = ""
     where_note: str = ""
+    requester_id: int | None = None
+    from_request: int | None = None
+    from_ticket: int | None = None
 
 
 def draft_check(draft: EventDraft, now: datetime) -> tuple[EventFields | None, str]:
@@ -1055,6 +1075,7 @@ def card_for(row: Any) -> discord.Embed:
         description=row["description"],
         status=row["status"],
         deny_reason=row["deny_reason"],
+        moved_to=cell(row, "moved_to"),
     )
 
 
@@ -1830,16 +1851,18 @@ async def submit_event(
     *,
     review_view: Any = None,
     room_view: Any = None,
+    requester: Any = None,
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """One proposal, whichever door it came through: a row, a room, a card and the sentence."""
     category, where = events_category(bot, guild)
     if where in CATEGORY_TROUBLE:
         return (CATEGORY_TROUBLE[where], None)
+    whose = actor if requester is None else requester
     event_id = await create_event(
         bot.db,
         guild.id,
-        getattr(actor, "id", actor),
+        getattr(whose, "id", whose),
         title=fields.title,
         description=fields.description,
         where=fields.where,
@@ -1847,7 +1870,7 @@ async def submit_event(
         finishes_at=ends_at(fields.starts, fields.minutes),
     )
     row = await get_event(bot.db, event_id)
-    channel = await make_review_channel(bot, guild, row, actor, category)
+    channel = await make_review_channel(bot, guild, row, whose, category)
     if channel is None:
         return (CANNOT_CREATE, None)
     await set_review(bot.db, event_id, channel.id, None)
@@ -1856,7 +1879,7 @@ async def submit_event(
         guild,
         kind_via("event.created", via),
         actor=actor,
-        target=actor,
+        target=whose,
         details={
             "event_id": event_id,
             "title": fields.title,

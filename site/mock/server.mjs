@@ -519,6 +519,8 @@ const SETTING_SPECS = [
   ["poll_panel_minutes", "int", 10, 10, "minutes the /poll panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ["request_panel_minutes", "int", 10, 10, "minutes the /request panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ["request_panel_own_list", "bool", false, false, "true to show members their own requests on the /request panel; staff always see them, and members can still file and take one back"],
+  ["handoff_mode", "enum", "on", "on", "on draws the Send to... moves for staff -- a request becomes an event, an event becomes a request, a ticket becomes either with the member's say-so; off hides them and refuses a stale press in words", ["off", "on"]],
+  ["handoff_confirm_hours", "int", 24, 24, "how long a member has to answer a make-this-a-request/event DM before it counts as no; the ticket stays open either way", null, 168, 1],
   ["status_prefix", "text", "Cookout attendees", "Cookout attendees", "what goes in front of the member count in Black Bloc's status"],
   // The "When?" picker's five keys — black_bloc/settings_store.py owns them; these are the mock's copy.
   ["events_default_minutes", "int", 120, 120, "how long a proposed event runs when nobody changes How long, 5 to 10080 minutes; whoever proposes one picks their own length from the dropdown", null, 10080, 5],
@@ -1312,6 +1314,8 @@ const NAMESPACE_OVERRIDE = {
   frontdoor_follows_post: 'modmail',
   frontdoor_replaces_ticket_button: 'modmail',
   frontdoor_panel_minutes: 'modmail',
+  handoff_mode: 'request',
+  handoff_confirm_hours: 'request',
 };
 
 function namespaceOf(key) {
@@ -4131,6 +4135,14 @@ function checkedWhere(body) {
   return { kind: channel.type, channel_id: given, text: '' };
 }
 
+// Send to... — `moved_to` is `kind:id`; `handoff.moved_words` is the wording it reads as.
+function movedWord(movedTo) {
+  const [kind, ident] = String(movedTo || '').split(':');
+  return (kind === 'event' || kind === 'request') && /^\d+$/.test(ident || '')
+    ? `${kind} #${ident}`
+    : '';
+}
+
 function eventRow(row) {
   const minutes = eventMinutes(row);
   const where = eventWhere(row);
@@ -4156,6 +4168,8 @@ function eventRow(row) {
     decided_by_name: memberName(row.decided_by),
     decided_at: row.decided_at,
     deny_reason: row.deny_reason,
+    moved_to: row.moved_to === undefined ? null : row.moved_to,
+    moved_word: movedWord(row.moved_to),
     review_channel_id: row.review_channel_id === undefined ? null : row.review_channel_id,
     created_at: row.created_at,
   };
@@ -6124,6 +6138,8 @@ function askRow(row) {
     due_on: row.due_on,
     status: row.status,
     status_word: REQUEST_STATUS_WORDS[row.status] || row.status,
+    moved_to: row.moved_to === undefined ? null : row.moved_to,
+    moved_word: movedWord(row.moved_to),
     priority: row.priority,
     notes: row.notes,
     requester: askPerson(row.user_id),
