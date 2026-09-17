@@ -1,7 +1,6 @@
 # Posts — the welcome and rules message, written on the website, posted and kept current by the bot
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN → dispatched to an Opus
-> build 2026-09-16 15:4x** (owner, 2026-09-16 13:5x, verbatim: *"in the welcome channel there is a post
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v113** — merges `440c0c6` (base) + `34b86a5` (shadow), release `4d60f68`, deployed **2026-09-16 17:36** Phoenix (`../deploys.log`); landing entry in [`../DONE.md`](../DONE.md) (*"2026-09-16 — POSTS"*); the two `## … deviations` feet are the truth where they depart from the body; sweeps **390–418** are the owner's. Was: 📐 DESIGN → dispatched to an Opus build 2026-09-16 15:4x (owner, 2026-09-16 13:5x, verbatim: *"in the welcome channel there is a post
 > there by Carl-bot that xontain the rules and the welcome message, We will be taking over that task. on
 > the site we need a text box and preview window so the staff can update the rules on the website and
 > have the bot post them"*). **Last verified: 2026-09-16 15:40 Phoenix** — §A read off `main` at

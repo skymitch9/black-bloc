@@ -55,18 +55,18 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
-> | What | v108 (`main`, 2026-09-11 08:30) | Where it is measured |
+> | What | v113 (`main`, 2026-09-16) | Where it is measured |
 > |---|---|---|
-> | Cogs | **19** | `bot.py:COGS` |
-> | Top-level slash commands | **29** — 15 staff-locked, 14 member-visible | `tree.get_commands()` |
+> | Cogs | **20** (v113: `cogs/community/posts.py`) | `bot.py:COGS` |
+> | Top-level slash commands | **30** — 16 staff-locked (`/posts` joined at v113), 14 member-visible | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **35** (v111, guides) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **212** (was 202 at v108) | `settings_store.KEY_TYPES` |
-> | Setting groups | **23** | `settings_store.namespace_of` over `KEY_TYPES` |
-> | Features (log-level keys) | **18** | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **17 pages / 150 routes / 14 core settings** (was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **5546** | the v108 deploy gate |
-> | Deploys | **108**, last `67aee7e` (v111) at 2026-09-16 09:07 | `../deploys.log` |
+> | Schema version | **37** (v113, posts + shadow) | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **215** (was 212 at v111) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
+> | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
+> | Mock contract | **19 pages / 168 routes / 14 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
+> | Tests | **5833** | the v113 deploy gate |
+> | Deploys | **110**, last `4d60f68` (v113) at 2026-09-16 17:36 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -86,6 +86,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v113 `4d60f68`, 2026-09-16** | **20** | **30** | **37** | **168** | **5833** |
 > | **v111 `67aee7e`, 2026-09-16** | **19** | **29** | **35** | **160** | **5703** |
 > | **v108 `73e2e44`, 2026-09-11** | **19** | **29** | **34** | **150** | **5546** |
 >
