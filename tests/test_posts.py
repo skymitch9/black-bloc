@@ -910,6 +910,17 @@ async def test_the_shadow_line_names_the_shadow_channel_and_the_posts_own(bot, g
     )
 
 
+async def test_a_post_already_aimed_at_the_shadow_channel_is_not_told_not_to_go_there(bot, guild):
+    """§C9's OLD workaround was to point a post at #blackbloc-logs to see it, so this is a
+    row staff really have; `not #blackbloc-logs` about #blackbloc-logs is nonsense."""
+    bot.guard = FakeGuard()
+    row = await a_post(bot, guild, channel_id=TEST_CHANNEL)
+
+    assert posts.shadow_words(bot, guild, row) == (
+        "shadow — this goes to #blackbloc-logs, which is where it was going anyway."
+    )
+
+
 async def test_the_sweep_forgets_a_shadow_copy_somebody_deleted_by_hand(bot, guild):
     row = await shadow_post(bot, guild, pin=False)
     await posts.publish_post(bot, guild, row, STAFF)

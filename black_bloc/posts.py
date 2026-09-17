@@ -142,6 +142,7 @@ SHADOW_LINE_NOWHERE = (
     "shadow — this goes to {shadow}. It has no channel of its own yet, and nothing reaches one "
     "until posts are on."
 )
+SHADOW_LINE_SAME = "shadow — this goes to {shadow}, which is where it was going anyway."
 
 SAVED_SAID = "**{title}** is saved."
 CREATED_SAID = "**{title}** is made. Nothing is in Discord until you press Post it."
@@ -760,9 +761,12 @@ def shadow_channel_ids(bot: Any, guild: Any) -> list[int]:
 def shadow_words(bot: Any, guild: Any, row: Any) -> str:
     """One spelling of what shadow does to this post, for the card, the page and the panel."""
     channel_id = row_value(row, "channel_id")
-    shadow = where_words(guild, shadow_channel_id(bot, guild))
+    where = shadow_channel_id(bot, guild)
+    shadow = where_words(guild, where)
     if not channel_id:
         return SHADOW_LINE_NOWHERE.format(shadow=shadow)
+    if as_channel_id(channel_id) == where:
+        return SHADOW_LINE_SAME.format(shadow=shadow)
     return SHADOW_LINE.format(shadow=shadow, where=where_words(guild, channel_id))
 
 
@@ -1163,6 +1167,7 @@ __all__ = [
     "SHADOW",
     "SHADOW_LINE",
     "SHADOW_LINE_NOWHERE",
+    "SHADOW_LINE_SAME",
     "SHADOW_MESSAGE_GONE",
     "SHADOW_POSTED",
     "SHADOW_TAKEN_DOWN",

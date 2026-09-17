@@ -51,6 +51,7 @@ const NEEDS_A_CHANNEL = 'Pick a channel before this can be posted anywhere.';
 const WILL_SHADOW = 'shadow — this goes to {shadow}, not {where}, until posts are on.';
 const WILL_SHADOW_NOWHERE = 'shadow — this goes to {shadow}. It has no channel of its own yet, '
   + 'and nothing reaches one until posts are on.';
+const WILL_SHADOW_SAME = 'shadow — this goes to {shadow}, which is where it was going anyway.';
 const NO_SHADOW_CHANNEL = 'no shadow channel yet';
 const SHADOW = 'shadow';
 const PIN_WORDS = { true: 'pins it', false: 'leaves it unpinned' };
@@ -217,6 +218,9 @@ function willPost(draft, post, payload) {
   if (payload.mode === SHADOW) {
     const where = shadowWords(payload.shadow);
     if (!draft.channel_id) return WILL_SHADOW_NOWHERE.replace('{shadow}', where);
+    if (payload.shadow && String(draft.channel_id) === String(payload.shadow.channel_id)) {
+      return WILL_SHADOW_SAME.replace('{shadow}', where);
+    }
     return WILL_SHADOW
       .replace('{shadow}', where)
       .replace('{where}', `#${draft.channel_name || post.channel_name || ''}`);
