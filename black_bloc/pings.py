@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
 from . import rolemenu_panels as panels
@@ -16,7 +17,7 @@ from .cogs.community.role_menus import (
     list_menus,
     remove_option,
 )
-from .golive import now_iso
+from .golive import now_iso, parse_ts
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import KEEP_IT as KEEP_IT
 from .panels import panel_minutes as library_panel_minutes
@@ -27,6 +28,13 @@ log = logging.getLogger(__name__)
 
 MODE_KEY = "pings_mode"
 CREATION_KEY = "pings_fan_role_creation"
+STALE_DAYS_KEY = "pings_streamer_stale_days"
+EMPTY_ROLE_DAYS_KEY = "pings_empty_role_days"
+ONBOARDING_MANAGED_KEY = "pings_onboarding_managed"
+ONBOARDING_TITLE_KEY = "pings_onboarding_prompt_title"
+ONBOARDING_CAP_KEY = "pings_onboarding_option_cap"
+RAIDTRAIN_PING_KEY = "raidtrain_ping_role_id"
+RAIDTRAIN_ROLE_NAME = "Raid trains"
 TEMPLATE_KEY = "pings_fan_role_template"
 UNLINK_KEY = "pings_fan_role_on_unlink"
 DELETE_KEY = "pings_fan_role_delete"
@@ -37,6 +45,7 @@ EVENTS_PING_KEY = "events_ping_role_id"
 SELF = "self"
 STAFF = "staff"
 AUTO = "auto"
+FOLLOW = "follow"
 KEEP = "keep"
 DELETE = "delete"
 
@@ -541,16 +550,23 @@ SITE_FEATURE = "pings"
 GOLIVE_FEED = "golive"
 EVENTS_FEED = "events"
 BOTH_FEEDS = "both"
+RAID_FEED = "raid"
 FEED_WORDS = {
     BOTH_FEEDS: "Go-live and event pings",
     GOLIVE_FEED: "Go-live pings",
     EVENTS_FEED: "Event pings",
+    RAID_FEED: "Raid-train pings",
 }
 FEED_SAID = {
     BOTH_FEEDS: "go-live and event pings",
     GOLIVE_FEED: "go-live pings",
     EVENTS_FEED: "event pings",
+    RAID_FEED: "raid-train pings",
 }
+NO_RAID_ROLE = (
+    "Staff have not set up the raid-train role yet, so there is nothing to opt in to. Ask an "
+    "Auntie/Uncle to press **Set up the raid-train role** on `/pings`."
+)
 
 UNSET = "unset"
 GONE = "gone"
@@ -563,11 +579,20 @@ PANEL_OFF_LINE = (
     "Go-live tab. Anything you already wear can still be taken off."
 )
 NO_STREAMERS = (
-    "Nobody has a ping role yet, so there is nothing to follow. A streamer starts one with "
-    "**Start my own ping role**, and staff can start one for anybody from **Streamers…**."
+    "Nobody has gone live here yet, so there is nobody to follow. Black Bloc puts somebody on "
+    "the streamer list by itself the first time it sees them streaming."
 )
 NO_SUCH_STREAMER = (
     "**{given}** is not somebody with a ping role here any more, so nothing was changed. Press "
+    "**Refresh** and pick again."
+)
+STAFF_ONLY_FOLLOW = (
+    "**{name}** has no ping role yet, and on this server only staff start one, so nothing was "
+    "changed. Ask an Auntie/Uncle to start one from `/pings` ▸ **Streamers…** — or a Lead can "
+    "change who may with **Settings** on this panel."
+)
+NOT_ON_THE_LIST_ANY_MORE = (
+    "**{given}** is not on this server's streamer list any more, so nothing was changed. Press "
     "**Refresh** and pick again."
 )
 ALREADY_FOLLOWING = (
@@ -593,16 +618,32 @@ LIST_EVENTS_GONE = (
 )
 LIST_NONE = "• You follow no streamers. **Follow a streamer…** picks one."
 LIST_ONE = "• **{name}** — <@&{role_id}>"
+LIST_YOURS_ON = (
+    "• You are **on** the streamer list, so people can follow you from here. **Take me off the "
+    "streamer list** takes you off."
+)
+LIST_YOURS_OFF = (
+    "• You are **off** the streamer list, so nobody new can follow you and going live does not "
+    "put you back."
+)
+STREAMERS_CAPPED = "{shown} of {total} — the rest are on the dashboard's Go-live tab"
+STREAMERS_CAPPED_MEMBER = "{shown} of {total} — the rest are on Discord's onboarding screen"
 FANS_OFF_NONE = "You have no ping role, so there was nothing to take away."
 STREAMER_LIST_EMPTY = (
-    "Nobody has a ping role on this server yet. Start one for somebody with **Give somebody a "
-    "ping role…**, or let a streamer start their own from `/pings`."
+    "Black Bloc has not seen anybody streaming here yet, so the streamer list is empty. Nobody "
+    "is added by hand — going live is what puts somebody on it."
 )
-STREAMER_LINE = "• **{name}** — <@&{role_id}> · {count}"
+STREAMER_LINE = "• **{name}** — {listed} · {role} · last live {when}"
+LISTED_WORD = "listed"
+HIDDEN_WORD = "**hidden**"
+NO_ROLE_WORD = "no ping role yet"
 FOLLOWERS_KNOWN = "{count} follower(s)"
 FOLLOWERS_UNKNOWN = "the role is gone from the server"
-COUNTS_LINE = "**{streamers}** streamer(s) · **{with_role}** with a role Discord still has"
-CAPPED_FOLLOW = "{shown} of {total} — the rest are on the *Streamer pings* panels"
+COUNTS_LINE = (
+    "**{streamers}** streamer(s) seen · **{listed}** on the list · **{with_role}** with a role "
+    "Discord still has"
+)
+CAPPED_FOLLOW = "{shown} of {total} — the rest are on Discord's onboarding screen"
 TEMPLATE_OK = "Saved. A streamer's ping role will be called **{example}**."
 TEMPLATE_BROKEN = (
     "Saved, but **{given}** is not something Black Bloc can fill in, so a ping role will be "
@@ -620,21 +661,35 @@ SETTINGS_KEYS = (
     EVENTS_NAME_KEY,
     TEMPLATE_KEY,
     PANEL_MINUTES_KEY,
+    STALE_DAYS_KEY,
+    EMPTY_ROLE_DAYS_KEY,
+    ONBOARDING_MANAGED_KEY,
+    ONBOARDING_TITLE_KEY,
+    ONBOARDING_CAP_KEY,
 )
 
 EVENTS_ADD = "events_add"
 EVENTS_DROP = "events_drop"
 OWN_ADD = "own_add"
 OWN_DROP = "own_drop"
+LIST_OUT = "list_out"
+LIST_IN = "list_in"
 REFRESH = "refresh"
 BACK = "back"
 STREAMERS = "streamers"
 SETUP = "setup"
+RAID_SETUP = "raid_setup"
+ONBOARDING = "onboarding"
+ONBOARDING_SYNC = "onboarding_sync"
+ONBOARDING_STOP = "onboarding_stop"
 SETTINGS = "settings"
 LOGS = "logs"
 CARD_REMOVE = "card_remove"
 CARD_REMAKE = "card_remake"
+CARD_HIDE = "card_hide"
+CARD_RESTORE = "card_restore"
 NAMES = "names"
+NUMBERS = "numbers"
 DELETE_TOGGLE = "delete_toggle"
 
 OWN_DROP_QUESTION = (
@@ -662,6 +717,11 @@ class PanelMove(NamedTuple):
     feed: str = ""
 
 
+LISTED_NEVER = ""
+LISTED_ON = "on"
+LISTED_OFF = "off"
+
+
 class PanelState(NamedTuple):
     mode_on: bool
     events: tuple[tuple[str, str], ...]
@@ -670,7 +730,18 @@ class PanelState(NamedTuple):
     streams: bool
     followed: int
     unfollowed: int
+    listed: str = LISTED_NEVER
 
+
+MEMBER_ROW = 2
+LAST_ROW = 4
+PER_ROW = 5
+
+LIST_OUT_QUESTION = (
+    "Take yourself off the streamer list? Nobody new can follow you, going live does not put "
+    "you back, and your ping role goes too if nobody is wearing it."
+)
+LIST_OUT_YES = "Yes, take me off"
 
 OWN_ADD_MOVE = PanelMove(OWN_ADD, "Start my own ping role", "primary")
 OWN_DROP_MOVE = PanelMove(
@@ -680,27 +751,57 @@ OWN_DROP_MOVE = PanelMove(
     question=OWN_DROP_QUESTION,
     yes=OWN_DROP_YES,
 )
+LIST_OUT_MOVE = PanelMove(
+    LIST_OUT,
+    "Take me off the streamer list",
+    "danger",
+    question=LIST_OUT_QUESTION,
+    yes=LIST_OUT_YES,
+)
+LIST_IN_MOVE = PanelMove(LIST_IN, "Put me back on the list", "success")
 REFRESH_MOVE = PanelMove(REFRESH, "Refresh")
 BACK_MOVE = PanelMove(BACK, "Back")
 STREAMERS_MOVE = PanelMove(STREAMERS, "Streamers…", row=3)
 SETUP_MOVE = PanelMove(SETUP, "Set up the Events role", row=3)
+RAID_SETUP_MOVE = PanelMove(RAID_SETUP, "Set up the raid-train role", row=3)
+ONBOARDING_MOVE = PanelMove(ONBOARDING, "Onboarding…", row=3)
 SETTINGS_MOVE = PanelMove(SETTINGS, "Settings", row=3)
 LOGS_MOVE = PanelMove(LOGS, "Logs", row=3)
-STAFF_MOVES = (STREAMERS_MOVE, SETUP_MOVE, SETTINGS_MOVE, LOGS_MOVE)
+STAFF_MOVES = (
+    STREAMERS_MOVE,
+    SETUP_MOVE,
+    RAID_SETUP_MOVE,
+    ONBOARDING_MOVE,
+    SETTINGS_MOVE,
+    LOGS_MOVE,
+)
 CARD_REMOVE_MOVE = PanelMove(
     CARD_REMOVE, "Remove their ping role", "danger", row=0, yes=CARD_REMOVE_YES
 )
 CARD_REMAKE_MOVE = PanelMove(CARD_REMAKE, "Make the role again", "primary", row=0)
-CARD_BACK_MOVE = PanelMove(BACK, "Back", row=0)
+CARD_HIDE_MOVE = PanelMove(CARD_HIDE, "Hide them from the list", "danger", row=1)
+CARD_RESTORE_MOVE = PanelMove(CARD_RESTORE, "Put them back on the list", "success", row=1)
+CARD_BACK_MOVE = PanelMove(BACK, "Back", row=1)
+ONBOARDING_SYNC_MOVE = PanelMove(ONBOARDING_SYNC, "Sync now", "primary", row=0)
+ONBOARDING_STOP_MOVE = PanelMove(ONBOARDING_STOP, "Stop managing onboarding", "danger", row=0)
+ONBOARDING_START_MOVE = PanelMove(ONBOARDING_STOP, "Manage onboarding again", "success", row=0)
+ONBOARDING_BACK_MOVE = PanelMove(BACK, "Back", row=0)
 
 PANEL_MOVES = (
     OWN_ADD_MOVE,
     OWN_DROP_MOVE,
+    LIST_OUT_MOVE,
+    LIST_IN_MOVE,
     REFRESH_MOVE,
     BACK_MOVE,
     *STAFF_MOVES,
     CARD_REMOVE_MOVE,
     CARD_REMAKE_MOVE,
+    CARD_HIDE_MOVE,
+    CARD_RESTORE_MOVE,
+    ONBOARDING_SYNC_MOVE,
+    ONBOARDING_STOP_MOVE,
+    ONBOARDING_START_MOVE,
 )
 
 
@@ -723,11 +824,45 @@ def row_for(rows: Any, user_id: Any) -> Any:
     return next((row for row in rows or () if int(row["user_id"]) == int(user_id)), None)
 
 
+def streamer_name(guild: Any, row: Any) -> str:
+    member = guild.get_member(int(row["user_id"]))
+    if member is not None:
+        return display_name(member)
+    login = row_value(row, "login")
+    return str(login) if login else str(row["user_id"])
+
+
+def followable(guild: Any, member: Any, streamers: Any, roles: Any) -> list[Any]:
+    """C4: the select is over the LIST — a streamer with no role yet is offered all the same."""
+    mine = int(getattr(member, "id", 0) or 0)
+    found = []
+    for row in streamers or ():
+        user_id = int(row["user_id"])
+        if user_id == mine or not row["listed"]:
+            continue
+        held = row_for(roles, user_id)
+        if held is not None and wears(member, held["role_id"]):
+            continue
+        found.append(row)
+    return found
+
+
+def following(guild: Any, member: Any, roles: Any) -> list[Any]:
+    """Stop following… is over the ROLES worn, so it works whatever the list says."""
+    return [
+        row
+        for row in roles or ()
+        if role_of(guild, row["role_id"]) is not None and wears(member, row["role_id"])
+    ]
+
+
 def feed_role_id(bot: Any, guild_id: int, feed: str = BOTH_FEEDS) -> int | None:
     if feed == GOLIVE_FEED:
         return bot.store.get(guild_id, GOLIVE_PING_KEY) or None
     if feed == EVENTS_FEED:
         return bot.store.get(guild_id, EVENTS_PING_KEY) or None
+    if feed == RAID_FEED:
+        return bot.store.get(guild_id, RAIDTRAIN_PING_KEY) or None
     return events_role_id(bot, guild_id)
 
 
@@ -740,6 +875,11 @@ def events_feeds(bot: Any, guild_id: int) -> tuple[tuple[str, int | None], ...]:
     return ((GOLIVE_FEED, golive), (EVENTS_FEED, events))
 
 
+def all_feeds(bot: Any, guild_id: int) -> tuple[tuple[str, int | None], ...]:
+    """C4's three toggles: the events half (one button or two) and raid trains beside it."""
+    return (*events_feeds(bot, guild_id), (RAID_FEED, feed_role_id(bot, guild_id, RAID_FEED)))
+
+
 def wear_state(guild: Any, member: Any, role_id: Any) -> str:
     if not role_id:
         return UNSET
@@ -748,21 +888,39 @@ def wear_state(guild: Any, member: Any, role_id: Any) -> str:
     return WORN if wears(member, role_id) else NOT_WORN
 
 
-def panel_state(bot: Any, guild: Any, member: Any, rows: Any, *, streams: bool) -> PanelState:
+def listed_state(row: Any) -> str:
+    """Never seen streaming is a different thing from seen and taken off, and reads differently."""
+    if row is None:
+        return LISTED_NEVER
+    return LISTED_ON if row["listed"] else LISTED_OFF
+
+
+def panel_state(
+    bot: Any,
+    guild: Any,
+    member: Any,
+    rows: Any,
+    *,
+    streams: bool,
+    streamers: Any = None,
+    mine: Any = None,
+) -> PanelState:
     found = list(rows or ())
     resolved = [row for row in found if role_of(guild, row["role_id"]) is not None]
     worn = [row for row in resolved if wears(member, row["role_id"])]
+    offered = followable(guild, member, streamers, found) if streamers is not None else []
     return PanelState(
         mode_on=is_on(bot, guild.id),
         events=tuple(
             (feed, wear_state(guild, member, role_id))
-            for feed, role_id in events_feeds(bot, guild.id)
+            for feed, role_id in all_feeds(bot, guild.id)
         ),
         own_role=row_for(found, getattr(member, "id", 0)) is not None,
         creation=bot.store.get(guild.id, CREATION_KEY),
         streams=bool(streams),
         followed=len(worn),
-        unfollowed=len(resolved) - len(worn),
+        unfollowed=len(offered) if streamers is not None else len(resolved) - len(worn),
+        listed=listed_state(mine),
     )
 
 
@@ -780,31 +938,80 @@ def events_move(feed: str, worn: bool) -> PanelMove:
     )
 
 
-def panel_buttons(state: PanelState, *, staff: bool = False) -> tuple[PanelMove, ...]:
-    """The §C table as data — the state is a tuple of booleans, never a status word."""
+def free_slot(moves: Any) -> tuple[int, int]:
+    """Where the next button goes: its row, and how many are already on that row."""
+    found = list(moves)
+    if not found:
+        return (MEMBER_ROW, 0)
+    last = max(move.row for move in found)
+    used = sum(1 for move in found if move.row == last)
+    if used < PER_ROW:
+        return (last, used)
+    return (min(last + 1, LAST_ROW), 0)
+
+
+def packed(moves: Any, start: int, used: int = 0) -> list[PanelMove]:
+    """Discord holds five buttons a row and five rows; the table says the ORDER, not the row."""
     found: list[PanelMove] = []
-    if state.mode_on:
-        found += [
-            events_move(feed, wear == WORN)
-            for feed, wear in state.events
-            if wear in (WORN, NOT_WORN)
-        ]
-        if not state.own_role and state.creation != STAFF and state.streams:
-            found.append(OWN_ADD_MOVE)
+    row, filled = start, used
+    for move in moves:
+        if filled >= PER_ROW:
+            row, filled = min(row + 1, LAST_ROW), 0
+        found.append(move._replace(row=row))
+        filled += 1
+    return found
+
+
+def panel_buttons(state: PanelState, *, staff: bool = False) -> tuple[PanelMove, ...]:
+    """The §C4 table as data — the state is a tuple of booleans, never a status word.
+
+    Every 'stop' half works whatever the mode: an access-REDUCING move never needs a switch.
+    """
+    mine: list[PanelMove] = []
+    for feed, wear in state.events:
+        if wear == WORN:
+            mine.append(events_move(feed, True))
+        elif wear == NOT_WORN and state.mode_on:
+            mine.append(events_move(feed, False))
+    if state.mode_on and not state.own_role and state.creation in (SELF, AUTO) and state.streams:
+        mine.append(OWN_ADD_MOVE)
     if state.own_role:
-        found.append(OWN_DROP_MOVE)
-    found.append(REFRESH_MOVE)
+        mine.append(OWN_DROP_MOVE)
+    if state.listed == LISTED_ON:
+        mine.append(LIST_OUT_MOVE)
+    elif state.listed == LISTED_OFF and state.mode_on:
+        mine.append(LIST_IN_MOVE)
+    mine.append(REFRESH_MOVE)
+    found = packed(mine, MEMBER_ROW)
     if staff:
-        found += list(STAFF_MOVES)
+        found += packed(STAFF_MOVES, *free_slot(found))
     return tuple(found)
 
 
-def card_buttons(*, role_gone: bool) -> tuple[PanelMove, ...]:
-    """Staff always get the final say: a role somebody tidied away is repairable, not stuck."""
+def site_row(moves: Any) -> int:
+    return free_slot(moves)[0]
+
+
+def card_buttons(*, role_gone: bool, listed: str = LISTED_NEVER) -> tuple[PanelMove, ...]:
+    """Staff always get the final say: every stored decision here has a move that reverses it."""
     found = [CARD_REMOVE_MOVE]
     if role_gone:
         found.append(CARD_REMAKE_MOVE)
+    if listed == LISTED_ON:
+        found.append(CARD_HIDE_MOVE)
+    elif listed == LISTED_OFF:
+        found.append(CARD_RESTORE_MOVE)
     found.append(CARD_BACK_MOVE)
+    return tuple(found)
+
+
+def onboarding_buttons(*, managed: bool, community: bool) -> tuple[PanelMove, ...]:
+    """P3: **Sync now** is absent where the write would refuse, and the embed says why."""
+    found: list[PanelMove] = []
+    if managed and community:
+        found.append(ONBOARDING_SYNC_MOVE)
+    found.append(ONBOARDING_STOP_MOVE if managed else ONBOARDING_START_MOVE)
+    found.append(ONBOARDING_BACK_MOVE)
     return tuple(found)
 
 
@@ -823,7 +1030,7 @@ def notification_lines(
             lines.append(LIST_EVENTS_ON.format(what=what, role_id=role_id))
         else:
             lines.append(LIST_EVENTS_OFF.format(what=what))
-    mine = [row for row in rows or () if wears(member, row["role_id"])]
+    mine = following(guild, member, rows)
     if not mine:
         lines.append(LIST_NONE)
     lines += [
@@ -832,30 +1039,47 @@ def notification_lines(
     return lines
 
 
-def streamer_lines(guild: Any, rows: Any) -> list[str]:
-    found = list(rows or ())
+def listed_line(state: str) -> str | None:
+    if state == LISTED_ON:
+        return LIST_YOURS_ON
+    return LIST_YOURS_OFF if state == LISTED_OFF else None
+
+
+def streamer_lines(guild: Any, streamers: Any, roles: Any = None) -> list[str]:
+    """The staff list is the STREAMER list now; the role is a column on it, not the list."""
+    found = list(streamers or ())
     if not found:
         return [STREAMER_LIST_EMPTY]
-    return [
-        STREAMER_LINE.format(
-            name=option_label(guild, row),
-            role_id=row["role_id"],
-            count=followers_word(guild, row["role_id"]),
+    lines = []
+    for row in found:
+        held = row_for(roles, row["user_id"])
+        lines.append(
+            STREAMER_LINE.format(
+                name=streamer_name(guild, row),
+                listed=LISTED_WORD if row["listed"] else HIDDEN_WORD,
+                role=(
+                    f"<@&{held['role_id']}> · {followers_word(guild, held['role_id'])}"
+                    if held is not None
+                    else NO_ROLE_WORD
+                ),
+                when=row["last_live_at"],
+            )
         )
-        for row in found
-    ]
+    return lines
 
 
-def counts_of(rows: Any, guild: Any) -> dict[str, int]:
-    found = list(rows or ())
+def counts_of(streamers: Any, roles: Any, guild: Any) -> dict[str, int]:
+    found = list(streamers or ())
+    held = list(roles or ())
     return {
         "streamers": len(found),
-        "with_role": sum(1 for row in found if role_of(guild, row["role_id"]) is not None),
+        "listed": sum(1 for row in found if row["listed"]),
+        "with_role": sum(1 for row in held if role_of(guild, row["role_id"]) is not None),
     }
 
 
-def counts_line(rows: Any, guild: Any) -> str:
-    return COUNTS_LINE.format(**counts_of(rows, guild))
+def counts_line(streamers: Any, roles: Any, guild: Any) -> str:
+    return COUNTS_LINE.format(**counts_of(streamers, roles, guild))
 
 
 def template_preview(template: Any, name: str) -> tuple[str, bool]:
@@ -902,6 +1126,33 @@ async def follow_streamer(
     return UNFOLLOWED.format(name=name)
 
 
+async def follow_from_list(
+    bot: Any, guild: Any, member: Any, streamer_id: int, *, via: str = VIA_DISCORD
+) -> str:
+    """C2: the first follow of a listed streamer is what MAKES their role, and the second does
+    not. Everything else about following is `follow_streamer`, unchanged."""
+    if not is_on(bot, guild.id):
+        return OFF
+    listing = await get_streamer(bot.db, guild.id, streamer_id)
+    if listing is None or not listing["listed"]:
+        return NOT_ON_THE_LIST_ANY_MORE.format(given=str(streamer_id))
+    name = streamer_name(guild, listing)
+    row = await get_fan_role(bot.db, guild.id, streamer_id)
+    if row is None or role_of(guild, row["role_id"]) is None:
+        streamer = guild.get_member(int(streamer_id))
+        if streamer is None:
+            return NO_SUCH_STREAMER.format(given=name[:60])
+        if bot.store.get(guild.id, CREATION_KEY) == STAFF:
+            return STAFF_ONLY_FOLLOW.format(name=name)
+        made = await ensure_fan_role(bot, guild, streamer, by=getattr(member, "id", None), via=via)
+        if not made.ok:
+            return made.message
+        row = await get_fan_role(bot.db, guild.id, streamer_id)
+        if row is None:
+            return NO_SUCH_STREAMER.format(given=name[:60])
+    return await follow_streamer(bot, guild, member, row, add=True, via=via)
+
+
 async def set_event_pings(
     bot: Any,
     guild: Any,
@@ -913,7 +1164,7 @@ async def set_event_pings(
 ) -> str:
     role_id = feed_role_id(bot, guild.id, feed)
     if not role_id:
-        return NO_EVENTS_ROLE
+        return NO_RAID_ROLE if feed == RAID_FEED else NO_EVENTS_ROLE
     role = role_of(guild, role_id)
     if role is None:
         return EVENTS_ROLE_GONE.format(role_id=role_id)
@@ -984,3 +1235,366 @@ def settings_saved(changed: dict[str, Any]) -> str:
     return SETTINGS_SAVED + ", ".join(
         SETTINGS_ONE.format(key=key, value=value) for key, value in changed.items()
     )
+
+
+# --- the streamer list (C1) ---------------------------------------------------------------------
+
+STREAMER_SEEN = "pings.streamer_seen"
+STREAMER_HIDDEN = "pings.streamer_hidden"
+STREAMER_RESTORED = "pings.streamer_restored"
+STREAMER_PRUNED = "pings.streamer_pruned"
+ROLE_PRUNED = "pings.role_pruned"
+
+NOT_ON_THE_LIST = (
+    "Black Bloc has never seen you streaming, so you are not on the streamer list and there is "
+    "nothing to take you off. You land on it by yourself the first time you go live."
+)
+ALREADY_HIDDEN = (
+    "**{name}** is already off the streamer list, so nothing was changed. **Put me back on the "
+    "list** puts them back."
+)
+ALREADY_LISTED = "**{name}** is already on the streamer list, so nothing was changed."
+HIDDEN_SELF = (
+    "Done — you are off the streamer list, so nobody new can follow you and going live does not "
+    "put you back. **Put me back on the list** is how you come back."
+)
+HIDDEN_SELF_ROLE_GONE = " Nobody was following you, so your ping role **{role}** is gone too."
+HIDDEN_STAFF = (
+    "Done — **{name}** is off the streamer list, so nobody new can follow them and going live "
+    "does not put them back. **Restore** on this panel puts them back."
+)
+RESTORED_SELF = (
+    "Done — you are back on the streamer list, so people can follow you from `/pings` again."
+)
+RESTORED_STAFF = "Done — **{name}** is back on the streamer list."
+NO_SUCH_LISTING = (
+    "**{given}** is not somebody on this server's streamer list, so nothing was changed. Press "
+    "**Refresh** and pick again."
+)
+
+
+async def get_streamer(db: Any, guild_id: int, user_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM streamers WHERE guild_id = ? AND user_id = ?",
+        (int(guild_id), int(user_id)),
+    )
+    return await cur.fetchone()
+
+
+async def all_streamers(db: Any, guild_id: int) -> list[Any]:
+    """Everybody Black Bloc has ever seen streaming here, freshest first — hidden ones too."""
+    cur = await db.conn.execute(
+        "SELECT * FROM streamers WHERE guild_id = ? ORDER BY last_live_at DESC, user_id",
+        (int(guild_id),),
+    )
+    return list(await cur.fetchall())
+
+
+async def listed_streamers(db: Any, guild_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM streamers WHERE guild_id = ? AND listed = 1 "
+        "ORDER BY last_live_at DESC, user_id",
+        (int(guild_id),),
+    )
+    return list(await cur.fetchall())
+
+
+def row_value(row: Any, name: str, fallback: Any = None) -> Any:
+    try:
+        found = row[name]
+    except (KeyError, IndexError, TypeError):
+        return fallback
+    return fallback if found is None else found
+
+
+def hidden_by_hand(row: Any) -> bool:
+    """A person took them off; a staleness prune leaves `hidden_by` empty and can be undone."""
+    return not row["listed"] and row_value(row, "hidden_by") is not None
+
+
+async def saw_streaming(
+    bot: Any, guild: Any, member: Any, platform: Any = None, login: Any = None
+) -> bool:
+    """One upsert per go-live. True only the first time somebody lands on the list."""
+    if member is None or getattr(member, "bot", False):
+        return False
+    if not getattr(bot.db, "is_connected", False):
+        return False
+    when = now_iso()
+    row = await get_streamer(bot.db, guild.id, member.id)
+    if row is None:
+        await bot.db.conn.execute(
+            "INSERT INTO streamers(guild_id, user_id, first_live_at, last_live_at, live_count, "
+            "platform, login, listed) VALUES (?, ?, ?, ?, 1, ?, ?, 1)",
+            (int(guild.id), int(member.id), when, when, platform or None, login or None),
+        )
+        await bot.db.conn.commit()
+        await log_action(
+            bot,
+            guild,
+            STREAMER_SEEN,
+            target=member,
+            details={"platform": platform, "login": login, "user_id": int(member.id)},
+        )
+        return True
+    relist = 1 if row["listed"] or not hidden_by_hand(row) else 0
+    await bot.db.conn.execute(
+        "UPDATE streamers SET last_live_at = ?, live_count = live_count + 1, "
+        "platform = COALESCE(?, platform), login = COALESCE(?, login), listed = ? "
+        "WHERE guild_id = ? AND user_id = ?",
+        (when, platform or None, login or None, relist, int(guild.id), int(member.id)),
+    )
+    await bot.db.conn.commit()
+    return False
+
+
+async def set_listed(
+    db: Any, guild_id: int, user_id: int, *, listed: bool, by: int | None
+) -> None:
+    await db.conn.execute(
+        "UPDATE streamers SET listed = ?, hidden_by = ?, hidden_at = ? "
+        "WHERE guild_id = ? AND user_id = ?",
+        (
+            1 if listed else 0,
+            None if listed else (int(by) if by is not None else None),
+            None if listed else now_iso(),
+            int(guild_id),
+            int(user_id),
+        ),
+    )
+    await db.conn.commit()
+
+
+def role_is_worn(guild: Any, role_id: Any) -> bool:
+    role = role_of(guild, role_id)
+    return role is not None and bool(getattr(role, "members", ()) or ())
+
+
+async def drop_unworn_fan_role(bot: Any, guild: Any, user_id: int) -> str | None:
+    """Delete a streamer's role only while nobody wears it; the role's name, or None."""
+    row = await get_fan_role(bot.db, guild.id, user_id)
+    if row is None:
+        return None
+    role = role_of(guild, row["role_id"])
+    if role is not None and getattr(role, "members", ()):
+        return None
+    name = getattr(role, "name", None)
+    if role is not None:
+        try:
+            await role.delete(reason=ROLE_REASON)
+        except Exception as exc:
+            log.warning(
+                "pings: could not delete the unworn role %s — %s: %s",
+                row["role_id"],
+                type(exc).__name__,
+                exc,
+            )
+            return None
+    await forget_fan_role(bot.db, guild.id, user_id)
+    await sync_streamer_menus(bot, guild)
+    return name
+
+
+async def hide_streamer(
+    bot: Any, guild: Any, user_id: int, *, by: int | None, via: str = VIA_DISCORD
+) -> Outcome:
+    """The member's own opt-out and staff's hide are one path; staff always get the final say."""
+    row = await get_streamer(bot.db, guild.id, user_id)
+    member = guild.get_member(int(user_id))
+    name = display_name(member) if member is not None else str(user_id)
+    mine = by is not None and int(by) == int(user_id)
+    if row is None:
+        return Outcome(False, NOT_ON_THE_LIST if mine else NO_SUCH_LISTING.format(given=name[:60]))
+    if not row["listed"]:
+        return Outcome(False, ALREADY_HIDDEN.format(name=name))
+    await set_listed(bot.db, guild.id, user_id, listed=False, by=by)
+    dropped = await drop_unworn_fan_role(bot, guild, user_id)
+    await log_action(
+        bot,
+        guild,
+        kind_via(STREAMER_HIDDEN, via),
+        actor=by,
+        target=member if member is not None else int(user_id),
+        details={"user_id": int(user_id), "role_deleted": dropped, "self": mine, "via": via},
+    )
+    if not mine:
+        return Outcome(True, HIDDEN_STAFF.format(name=name))
+    said = HIDDEN_SELF
+    if dropped:
+        said += HIDDEN_SELF_ROLE_GONE.format(role=dropped)
+    return Outcome(True, said)
+
+
+async def restore_streamer(
+    bot: Any, guild: Any, user_id: int, *, by: int | None, via: str = VIA_DISCORD
+) -> Outcome:
+    row = await get_streamer(bot.db, guild.id, user_id)
+    member = guild.get_member(int(user_id))
+    name = display_name(member) if member is not None else str(user_id)
+    mine = by is not None and int(by) == int(user_id)
+    if row is None:
+        return Outcome(False, NOT_ON_THE_LIST if mine else NO_SUCH_LISTING.format(given=name[:60]))
+    if row["listed"]:
+        return Outcome(False, ALREADY_LISTED.format(name=name))
+    await set_listed(bot.db, guild.id, user_id, listed=True, by=by)
+    await log_action(
+        bot,
+        guild,
+        kind_via(STREAMER_RESTORED, via),
+        actor=by,
+        target=member if member is not None else int(user_id),
+        details={"user_id": int(user_id), "self": mine, "via": via},
+    )
+    return Outcome(True, RESTORED_SELF if mine else RESTORED_STAFF.format(name=name))
+
+
+def days_old(when: Any, now: Any, days: Any) -> bool:
+    """True once `when` is at least `days` old; an unreadable timestamp is never old enough."""
+    stamped = parse_ts(when)
+    if stamped is None:
+        return False
+    return (now - stamped) >= timedelta(days=max(int(days or 0), 0))
+
+
+async def prune_stale_streamers(bot: Any, guild: Any, *, now: Any = None) -> list[int]:
+    """A streamer nobody has seen live for `pings_streamer_stale_days` leaves the list."""
+    days = bot.store.get(guild.id, STALE_DAYS_KEY)
+    when = now or datetime.now(UTC)
+    pruned: list[int] = []
+    for row in await listed_streamers(bot.db, guild.id):
+        if not days_old(row["last_live_at"], when, days):
+            continue
+        user_id = int(row["user_id"])
+        await set_listed(bot.db, guild.id, user_id, listed=False, by=None)
+        dropped = await drop_unworn_fan_role(bot, guild, user_id)
+        await log_action(
+            bot,
+            guild,
+            STREAMER_PRUNED,
+            target=guild.get_member(user_id) or user_id,
+            details={
+                "user_id": user_id,
+                "days": int(days or 0),
+                "last_live_at": row["last_live_at"],
+                "role_deleted": dropped,
+            },
+        )
+        pruned.append(user_id)
+    return pruned
+
+
+async def mark_unworn(db: Any, guild_id: int, user_id: int, when: Any) -> None:
+    await db.conn.execute(
+        "UPDATE golive_fan_roles SET unworn_since = ? WHERE guild_id = ? AND user_id = ?",
+        (when, int(guild_id), int(user_id)),
+    )
+    await db.conn.commit()
+
+
+async def prune_empty_roles(bot: Any, guild: Any, *, now: Any = None) -> list[int]:
+    """A fan role NOBODY wears for `pings_empty_role_days` is deleted; a worn one never is."""
+    days = bot.store.get(guild.id, EMPTY_ROLE_DAYS_KEY)
+    when = now or datetime.now(UTC)
+    stamp = when.isoformat()
+    deleted: list[int] = []
+    touched = False
+    for row in await all_fan_roles(bot.db, guild.id):
+        user_id = int(row["user_id"])
+        role = role_of(guild, row["role_id"])
+        if role is None:
+            continue
+        if getattr(role, "members", ()):
+            if row_value(row, "unworn_since") is not None:
+                await mark_unworn(bot.db, guild.id, user_id, None)
+            continue
+        since = row_value(row, "unworn_since")
+        if since is None:
+            await mark_unworn(bot.db, guild.id, user_id, stamp)
+            continue
+        if not days_old(since, when, days):
+            continue
+        try:
+            await role.delete(reason=ROLE_REASON)
+        except Exception as exc:
+            log.warning(
+                "pings: could not prune the role %s — %s: %s",
+                row["role_id"],
+                type(exc).__name__,
+                exc,
+            )
+            continue
+        await forget_fan_role(bot.db, guild.id, user_id)
+        touched = True
+        await log_action(
+            bot,
+            guild,
+            ROLE_PRUNED,
+            target=guild.get_member(user_id) or user_id,
+            details={
+                "user_id": user_id,
+                "role_id": int(row["role_id"]),
+                "role": role.name,
+                "days": int(days or 0),
+                "unworn_since": since,
+            },
+        )
+        deleted.append(user_id)
+    if touched:
+        await sync_streamer_menus(bot, guild)
+    return deleted
+
+
+async def follower_counts(bot: Any, guild: Any) -> dict[int, int]:
+    """How many people wear each streamer's role — what orders the onboarding prompt."""
+    found: dict[int, int] = {}
+    for row in await all_fan_roles(bot.db, guild.id):
+        role = role_of(guild, row["role_id"])
+        if role is not None:
+            found[int(row["user_id"])] = len(getattr(role, "members", ()) or ())
+    return found
+
+
+async def setup_raidtrain_role(
+    bot: Any, guild: Any, *, by: int | None, role: Any = None, via: str = VIA_DISCORD
+) -> Outcome:
+    """The Events role's sibling: make or reuse one role and point `raidtrain_ping_role_id`."""
+    made = False
+    if role is None:
+        role = named_role(guild, RAIDTRAIN_ROLE_NAME)
+    if role is None:
+        role, refusal = await make_role(guild, RAIDTRAIN_ROLE_NAME)
+        if role is None:
+            return Outcome(False, refusal or CANNOT_MAKE_ROLE.format(name=RAIDTRAIN_ROLE_NAME))
+        made = True
+    if not assignable(role):
+        return Outcome(False, ROLE_UNASSIGNABLE.format(name=role.name))
+    before = bot.store.get(guild.id, RAIDTRAIN_PING_KEY)
+    if before != role.id:
+        await bot.store.set(guild.id, RAIDTRAIN_PING_KEY, int(role.id), by=by)
+    await log_action(
+        bot,
+        guild,
+        kind_via("pings.raidtrain_setup", via),
+        actor=by,
+        details={"role_id": role.id, "role": role.name, "created": made, "via": via},
+    )
+    if made:
+        said = RAIDTRAIN_CREATED.format(role=role.name)
+    elif before == role.id:
+        said = RAIDTRAIN_UNCHANGED.format(role=role.name)
+    else:
+        said = RAIDTRAIN_REUSED.format(role=role.name)
+    if not is_on(bot, guild.id):
+        said += SETUP_STILL_OFF
+    return Outcome(True, said, role_id=int(role.id), created=made)
+
+
+RAIDTRAIN_CREATED = (
+    "Made the role **{role}** and pointed raid-train pings at it. Members opt in with **Ping me "
+    "for raid trains** on `/pings`."
+)
+RAIDTRAIN_REUSED = (
+    "Used the role **{role}** that was already here and pointed raid-train pings at it. Members "
+    "opt in with **Ping me for raid trains** on `/pings`."
+)
+RAIDTRAIN_UNCHANGED = "Raid-train pings already pointed at **{role}**, so nothing was changed."

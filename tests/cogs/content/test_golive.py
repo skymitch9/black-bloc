@@ -454,12 +454,15 @@ async def test_off_mode_does_nothing_at_all(cog, bot, member, db):
 
 
 async def test_an_opted_out_member_is_never_announced(cog, bot, member, db):
+    """Pings remake C1: the ANNOUNCEMENT opt-out and the streamer list are different things,
+    so somebody who has stopped announcements still lands on the list and can still be
+    followed. `/pings` ▸ **Take me off the streamer list** is the other opt-out."""
     await set_optout(db, member.id)
 
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
 
     assert await open_session_for(db, GUILD, USER) is None
-    assert await action_kinds(db) == []
+    assert await action_kinds(db) == ["pings.streamer_seen"]
 
 
 async def test_the_ignore_role_filter_applies(cog, bot, db):

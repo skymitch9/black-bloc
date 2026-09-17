@@ -658,11 +658,28 @@ class GoLive(commands.Cog):
         async with self._lock(member.id):
             await self._go_live_once(member, info, source)
 
+    async def _note_streaming(self, member: Any, info: StreamInfo) -> None:
+        """The streamer list, fed by BOTH doors: one upsert per go-live, never a second row."""
+        login = _row_value(await get_link(self.bot.db, member.id), "twitch_login")
+        login = login or twitch_login_from_url(getattr(info, "url", None))
+        try:
+            await pings.saw_streaming(
+                self.bot, member.guild, member, getattr(info, "platform", None), login
+            )
+        except Exception as exc:
+            log.warning(
+                "go-live: could not put %s on the streamer list — %s: %s",
+                member.id,
+                type(exc).__name__,
+                exc,
+            )
+
     async def _go_live_once(self, member: Any, info: StreamInfo, source: str) -> None:
         guild = member.guild
         mode = self._mode(guild.id)
         if mode == "off" or member.bot or not self.bot.db.is_connected:
             return
+        await self._note_streaming(member, info)
         if await is_opted_out(self.bot.db, member.id):
             return
         store = self.bot.store

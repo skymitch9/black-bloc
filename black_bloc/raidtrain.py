@@ -440,18 +440,39 @@ def due_checkins(
     return sorted(found, key=lambda one: int(_value(one, "position") or 0))
 
 
-def live_post_text(train: Any, slot: Any, upcoming: Any) -> str:
-    """The `the train moves` line: who is on air, and who is up next."""
+def moved_mentions(fan_role_id: Any = None, raid_role_id: Any = None) -> list[int]:
+    """C3: the on-air streamer's fan role and the raid-train opt-in role, each ONCE."""
+    found: list[int] = []
+    for role_id in (fan_role_id, raid_role_id):
+        if role_id and int(role_id) not in found:
+            found.append(int(role_id))
+    return found
+
+
+def live_post_text(
+    train: Any,
+    slot: Any,
+    upcoming: Any,
+    *,
+    fan_role_id: Any = None,
+    raid_role_id: Any = None,
+) -> str:
+    """The `the train moves` line: who is on air, who is up next, and who that pings."""
     login = str(_value(slot, "twitch_login") or "").strip()
     who = f"**{login}**" if login else f"<@{int(_value(slot, 'user_id') or 0)}>"
     where = f" — {twitch_url(login)}" if login else ""
     if upcoming is None or _value(upcoming, "user_id") is None:
-        return f"{who} is live{where}. That is the last booked slot on this train."
-    start = parse_ts(_value(upcoming, "starts_at"))
-    when = f" at <t:{unix(start)}:t>" if start is not None else ""
-    next_login = str(_value(upcoming, "twitch_login") or "").strip()
-    next_who = f"**{next_login}**" if next_login else f"<@{int(_value(upcoming, 'user_id'))}>"
-    return f"{who} is live{where}. Next up {next_who}{when}."
+        said = f"{who} is live{where}. That is the last booked slot on this train."
+    else:
+        start = parse_ts(_value(upcoming, "starts_at"))
+        when = f" at <t:{unix(start)}:t>" if start is not None else ""
+        next_login = str(_value(upcoming, "twitch_login") or "").strip()
+        next_who = f"**{next_login}**" if next_login else f"<@{int(_value(upcoming, 'user_id'))}>"
+        said = f"{who} is live{where}. Next up {next_who}{when}."
+    pinged = moved_mentions(fan_role_id, raid_role_id)
+    if pinged:
+        said += " " + " ".join(f"<@&{one}>" for one in pinged)
+    return said
 
 
 def positions_word(slots: Any) -> str:
