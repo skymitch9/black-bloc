@@ -195,3 +195,15 @@ rows `BT-a…`; `architecture.md` schema line; this doc's `## Deviations`. NOT `
     keys are still blank and `modmail_panel_channel_id` was not moved — the conductor sets those
     after the deploy, so every path here is dead code until he does. `docs/TODO.md`, `docs/DONE.md`
     and `docs/deploys.log` were not edited. Nothing was merged, deployed or pushed to `main`.
+
+### Found at the landing (conductor, 2026-09-17 11:0x, v120)
+
+The first real test request (**#6**, filed from the website at 10:58 with `request_forum_channel_id` set) made
+NO forum post: `open_forum_post` asks `guard_allows(forum)` and the requests cog never claimed its forum — only
+its posts (`thread_of`) — so under `TEST_MODE` every request was `request.notify_skipped_test_mode`. Deviation 2's
+claim rule was written for modmail (`claim_forum`, gated on `modmail_mode = forum`) and had no twin here. Fixed in
+`forum_of`: a keyed forum is claimed each time it is read — the key is the deliberate act, as the mode is for
+modmail. The test that pinned the refusal (`test_a_forum_the_guard_refuses_is_skipped_in_the_log_not_posted`)
+now asserts the opposite (`test_a_keyed_forum_is_claimed_for_the_guard_so_test_mode_still_posts`). Request #6
+keeps no post; a second test request is filed after the deploy.
+

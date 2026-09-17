@@ -1703,7 +1703,7 @@ async def test_a_blank_forum_key_keeps_todays_notify_channel(cog, bot, member, l
     assert (await pure.get_request(db, 1))["thread_id"] is None
 
 
-async def test_a_forum_the_guard_refuses_is_skipped_in_the_log_not_posted(
+async def test_a_keyed_forum_is_claimed_for_the_guard_so_test_mode_still_posts(
     cog, bot, member, db
 ):
     bot.guard = FakeGuard()
@@ -1712,9 +1712,10 @@ async def test_a_forum_the_guard_refuses_is_skipped_in_the_log_not_posted(
 
     await file_one(cog, bot, member)
 
-    assert bot.guild.get_channel(FORUM).posts == []
-    assert (await pure.get_request(db, 1))["thread_id"] is None
-    assert "request.notify_skipped_test_mode" in await action_kinds(db)
+    assert bot.guard.owns_channel(FORUM)
+    assert len(bot.guild.get_channel(FORUM).posts) == 1
+    assert (await pure.get_request(db, 1))["thread_id"] is not None
+    assert "request.notify_skipped_test_mode" not in await action_kinds(db)
 
 
 async def test_a_forum_discord_refuses_leaves_the_request_filed_and_says_so_in_the_log(

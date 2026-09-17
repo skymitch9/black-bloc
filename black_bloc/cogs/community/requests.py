@@ -313,11 +313,15 @@ async def post_line(
 
 
 def forum_of(bot: Any, guild: Any) -> Any:
-    """The forum every request gets a post in, or None while the key is blank."""
+    """The forum every request gets a post in, claimed for the guard each time it is read."""
     channel_id = forum_channel_id(bot.store, guild.id)
     if not channel_id:
         return None
-    return bot.get_channel(channel_id) or guild.get_channel(channel_id)
+    forum = bot.get_channel(channel_id) or guild.get_channel(channel_id)
+    guard = getattr(bot, "guard", None)
+    if forum is not None and guard is not None:
+        guard.own_channel(forum)
+    return forum
 
 
 def thread_of(bot: Any, guild: Any, row: Any) -> Any:
