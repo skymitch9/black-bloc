@@ -1527,6 +1527,7 @@ MODMAIL_PANEL_CHANNEL = "modmail_panel_channel_id"
 MODMAIL_PANEL_MESSAGE = "modmail_panel_message_id"
 MODMAIL_PANEL_TITLE = "modmail_panel_title"
 MODMAIL_PANEL_TEXT = "modmail_panel_text"
+MODMAIL_OPEN_WITH_BUTTON = "modmail_open_with_button"
 MODMAIL_PANEL_TITLE_DEFAULT = "Need a moderator?"
 MODMAIL_PANEL_TEXT_DEFAULT = (
     "Press the button and tell us what is happening. Only staff see it."
@@ -1539,6 +1540,7 @@ KEY_TYPES.update(
         MODMAIL_PANEL_MESSAGE: "text",
         MODMAIL_PANEL_TITLE: "text",
         MODMAIL_PANEL_TEXT: "text",
+        MODMAIL_OPEN_WITH_BUTTON: "bool",
     }
 )
 KEY_HELP.update(
@@ -1559,6 +1561,13 @@ KEY_HELP.update(
         ),
         MODMAIL_PANEL_TITLE: "the heading on the posted Open a ticket message",
         MODMAIL_PANEL_TEXT: "what the posted Open a ticket message says under its heading",
+        MODMAIL_OPEN_WITH_BUTTON: (
+            "true draws Open a ticket with… on the staff row of /modmail, so staff can start a "
+            "ticket for somebody else; false hides that door and leaves every other way in "
+            "untouched. The door is only hidden, never removed — turning this back on brings it "
+            "straight back, and a press on a panel that was open when it went off is refused in "
+            "words"
+        ),
     }
 )
 
@@ -2569,6 +2578,8 @@ class SettingsStore:
             return MODMAIL_PANEL_TITLE_DEFAULT
         if key == MODMAIL_PANEL_TEXT:
             return MODMAIL_PANEL_TEXT_DEFAULT
+        if key == MODMAIL_OPEN_WITH_BUTTON:
+            return False
         if key == "mod_panel_minutes":
             return 10
         if key == SETTINGS_PANEL_MINUTES:

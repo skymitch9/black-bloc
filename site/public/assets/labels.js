@@ -151,6 +151,7 @@ export const LABELS = {
   modmail_panel_message_id: 'The posted Open a ticket message, written by the bot',
   modmail_panel_title: 'The heading on the Open a ticket message',
   modmail_panel_text: 'What the Open a ticket message says',
+  modmail_open_with_button: 'Whether staff see Open a ticket with… on /modmail',
 
   automod_mode: 'Whether automod is watching',
   automod_rules: 'The rule book automod reads',

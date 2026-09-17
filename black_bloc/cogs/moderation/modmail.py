@@ -173,6 +173,7 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
     MODMAIL_MODES,
+    MODMAIL_OPEN_WITH_BUTTON,
     MODMAIL_REPLY_STYLES,
     THREAD_MODE,
     require_staff,
@@ -371,6 +372,12 @@ STAFF_BLOCKED_SAID = (
     "and then this works."
 )
 STAFF_ALREADY_OPEN = "**{who}** already has an open ticket: <#{where}>. Reply there instead."
+OPEN_WITH_OFF = (
+    "**Open a ticket with…** is switched off on this server, so no ticket was opened. It needs "
+    "**modmail_open_with_button** on — a Lead turns it back on from the dashboard's Settings "
+    "page under **modmail**, or with `/settings` ▸ **A setting group…** ▸ modmail — and the "
+    "door comes straight back."
+)
 STAFF_OPENED = (
     "Ticket **#{ticket_id}** with **{who}** is open in <#{where}>, and what you wrote has gone "
     "to them as your first reply."
@@ -1789,6 +1796,11 @@ def ticket_place_id(ticket: Any) -> int:
     return int(ticket["thread_id"] or ticket["channel_id"] or 0)
 
 
+def open_with_on(store: Any, guild_id: int) -> bool:
+    """The one reader of the hide toggle, so the button, the picker and the modal agree."""
+    return bool(store.get(guild_id, MODMAIL_OPEN_WITH_BUTTON))
+
+
 async def refuse_open(
     bot: Any,
     guild: Any,
@@ -1825,6 +1837,10 @@ async def open_a_ticket(
 ) -> Outcome:
     """The command, the posted button and the staff door, all on the DM path's own rails."""
     staff_door = source == SOURCE_STAFF
+    if staff_door and not open_with_on(bot.store, guild.id):
+        return await refuse_open(
+            bot, guild, user, "open_with_off", OPEN_WITH_OFF, actor=actor, via=via
+        )
     if getattr(user, "bot", False):
         return await refuse_open(
             bot, guild, user, "a_bot", A_BOT_SAID, status=400, actor=actor, via=via
@@ -2620,6 +2636,7 @@ async def build_root(
             staff=True,
             picking=picking,
             blocked_pick=blocked_pick is not None,
+            open_with=open_with_on(bot.store, guild.id),
         ):
             view.add_item(MoveButton(move))
     if picking:
@@ -2822,6 +2839,17 @@ async def open_root(
     await render_root(interaction, previous, confirming=confirming, picking=picking)
 
 
+async def run_open_with(interaction: discord.Interaction, previous: Any) -> None:
+    """A panel opened while the door was on still draws the button after it is switched off."""
+    if not await opened(interaction):
+        return
+    if not open_with_on(interaction.client.store, interaction.guild.id):
+        await render_root(interaction, previous)
+        await answer(interaction, OPEN_WITH_OFF)
+        return
+    await render_root(interaction, previous, picking=True)
+
+
 async def open_ticket_button(
     interaction: discord.Interaction, previous: Any = None, *, picking: bool = False
 ) -> None:
@@ -2884,6 +2912,8 @@ async def open_with_member(interaction: discord.Interaction, user: Any, previous
 async def open_with_refusal(bot: Any, guild: Any, user: Any) -> tuple[str, bool] | None:
     """The three answers `open_a_ticket` would give, asked before the modal rather than after."""
     who = who_said(user, user.id)
+    if not open_with_on(bot.store, guild.id):
+        return OPEN_WITH_OFF, False
     if getattr(user, "bot", False):
         return A_BOT_SAID.format(who=who), False
     if not bot.store.get(guild.id, "modmail_enabled"):
@@ -3151,7 +3181,7 @@ class MoveButton(discord.ui.Button):
             await send_logs(interaction, "modmail")
             return
         if action == OPEN_WITH:
-            await open_root(interaction, view, picking=True)
+            await run_open_with(interaction, view)
             return
         if action == TICKET_BUTTON:
             await open_ticket_button(interaction, view)

@@ -1163,8 +1163,8 @@ async def test_the_panel_lists_the_open_tickets_and_the_resolved_staff(cog, bot,
     assert said["embed"].title == modmail_cog.PANEL_TITLE
     assert f"**#{ticket['id']}**" in said["embed"].description
     assert "Lead" in said["embed"].description
-    assert labels(said["view"])[:2] == ["Open a ticket", "Open a ticket with…"]
-    assert labels(said["view"])[2:5] == ["Setup…", "Blocked…", "Snippets…"]
+    assert labels(said["view"])[:1] == ["Open a ticket"]
+    assert labels(said["view"])[1:4] == ["Setup…", "Blocked…", "Snippets…"]
     assert {"Logs", "Refresh"} <= set(labels(said["view"]))
     assert "/modmail status" not in said["embed"].description
 
@@ -2644,7 +2644,12 @@ async def test_pressing_the_posted_button_opens_a_ticket_and_answers_only_the_pr
     assert said.edits == []
 
 
+async def show_the_open_with_door(bot):
+    await bot.store.set(GUILD, "modmail_open_with_button", True)
+
+
 async def open_with(cog, bot, lead, who):
+    await show_the_open_with_door(bot)
     root = await open_panel(cog, bot, lead)
     picking = await press(root.view, "Open a ticket with…", bot, lead)
     return await choose(picking.view, modmail_cog.PICK_A_MEMBER, [who], bot, lead)
@@ -2730,6 +2735,65 @@ async def test_a_member_with_dms_shut_still_gets_a_ticket_and_the_card_says_so(
     assert "modmail.dm_failed" in await action_kinds(db)
     card = await card_for(cog, bot, ticket)
     assert "did not reach them" in card.kwargs["embed"].description
+
+
+async def test_the_staff_root_hides_the_open_with_door_until_the_key_turns_it_on(cog, bot, lead):
+    """The owner's ask: keep the door, hide it. Off is the default, and nothing else moves."""
+    hidden = await open_panel(cog, bot, lead)
+
+    assert not has(hidden.view, "Open a ticket with…")
+    assert has(hidden.view, "Open a ticket") and has(hidden.view, "Setup…")
+
+    await show_the_open_with_door(bot)
+    shown = await open_panel(cog, bot, lead)
+
+    assert has(shown.view, "Open a ticket with…")
+
+
+async def test_a_press_on_a_panel_opened_before_the_door_was_hidden_is_refused_in_words(
+    cog, bot, lead
+):
+    await show_the_open_with_door(bot)
+    root = await open_panel(cog, bot, lead)
+    await bot.store.set(GUILD, "modmail_open_with_button", False)
+
+    pressed = await press(root.view, "Open a ticket with…", bot, lead)
+
+    assert "modmail_open_with_button" in pressed.sent
+    assert "Settings page" in pressed.sent
+    assert modmail_cog.PICK_A_MEMBER not in placeholders(pressed.view)
+    assert not has(pressed.view, "Open a ticket with…")
+
+
+async def test_a_member_picked_after_the_door_is_hidden_gets_no_modal_and_no_ticket(
+    cog, bot, lead, member, db
+):
+    await show_the_open_with_door(bot)
+    root = await open_panel(cog, bot, lead)
+    picking = await press(root.view, "Open a ticket with…", bot, lead)
+    await bot.store.set(GUILD, "modmail_open_with_button", False)
+
+    picked = await choose(picking.view, modmail_cog.PICK_A_MEMBER, [member], bot, lead)
+
+    assert picked.response.modals == []
+    assert "modmail_open_with_button" in picked.sent
+    assert await open_ticket_for(db, GUILD, member.id) is None
+
+
+async def test_a_modal_submitted_after_the_door_is_hidden_opens_nothing_and_says_why(
+    cog, bot, lead, member, db
+):
+    """The last stale window: the form was already on screen when the key went off."""
+    bot.guard = FakeGuard()
+    picked = await open_with(cog, bot, lead, member)
+    await bot.store.set(GUILD, "modmail_open_with_button", False)
+
+    said = await fill_ticket_modal(picked.response.modals[-1], bot, lead, body="we need a word")
+
+    assert await open_ticket_for(db, GUILD, member.id) is None
+    assert "modmail_open_with_button" in said.sent
+    kinds = await action_kinds(db)
+    assert "modmail.open_refused" in kinds and "modmail.opened_by_staff" not in kinds
 
 
 async def test_a_member_door_that_cannot_reach_a_dm_still_opens_the_ticket(
