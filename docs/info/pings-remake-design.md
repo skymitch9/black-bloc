@@ -1,7 +1,6 @@
 # Pings, remade — one "what pings me" panel, a streamer list fed by going live, raid trains wired in, and Discord's Community onboarding as the front door
 
-> **Audience:** the owner (to settle the forks) and the build agent. **Status:** TRACKED · 🔨
-> **BUILT 2026-09-17** on branch `pings-remake` off `main` `337d22a` — schema **39**, registry
+> **Audience:** the owner (to settle the forks) and the build agent. **Status:** TRACKED · ✅ **LIVE as v116** — merge `f420d3a`, release `29c77b6`, deployed **2026-09-17 00:28** Phoenix; landing entry in [`../DONE.md`](../DONE.md) (*"2026-09-17 — PINGS, REMADE"*); the `## Deviations` foot is the truth where it departs from the body; sweeps **435–448** are the owner's (442–445 need a Community server); `pings_mode` is still OFF. Was: 🔨 BUILT 2026-09-17 on branch `pings-remake` off `main` `337d22a` — schema **39**, registry
 > **225**, **5986** tests pass in both orders (5889 before), ruff clean, `check.mjs` ok.
 > ⚠️ **NOT merged, NOT deployed, and nothing below has met Discord**; §C5's onboarding half is
 > proved with fakes only, because this is not a Community server yet. **Read `## Deviations` at
