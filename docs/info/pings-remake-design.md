@@ -1,7 +1,7 @@
 # Pings, remade — one "what pings me" panel, a streamer list fed by going live, raid trains wired in, and Discord's Community onboarding as the front door
 
 > **Audience:** the owner (to settle the forks) and the build agent. **Status:** TRACKED · 📐 **DESIGN —
-> all three forks DECIDED (a) by the owner 2026-09-16 22:5x; dispatch waits on his word.** Owner, 2026-09-16 22:2x–22:4x, verbatim: *"A wire in pings / Also
+> all three forks DECIDED (a) by the owner 2026-09-16 22:5x; owner "A" to build now → dispatched to an Opus build 22:56 (worktree `C:/lcw/bb-pings-remake`).** Owner, 2026-09-16 22:2x–22:4x, verbatim: *"A wire in pings / Also
 > for roles can we start a listener, each time someone goes live their added to a streamer list / Then a
 > user can opt into a streamer role? / To give some caveats to this whole system. / We're moving to a
 > discord community server so that will handle some role stuff. / We need this system to work with"* →
