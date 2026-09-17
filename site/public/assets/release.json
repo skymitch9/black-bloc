@@ -1,8 +1,7 @@
 {
-  "release": "v114",
-  "commit": "04de842",
+  "release": "v115",
+  "commit": "79fd644",
   "changed_features": [
-    "modmail",
-    "selftest"
+    "guides"
   ]
 }
