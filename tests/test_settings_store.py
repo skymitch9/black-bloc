@@ -925,11 +925,12 @@ def test_an_archive_that_fires_the_same_day_is_refused_with_the_reason():
 
 def test_the_poll_switches_only_take_the_words_they_document():
     assert coerce_value("poll_mode", "on") == "on"
+    assert coerce_value("poll_mode", "shadow") == "shadow"
     assert coerce_value("poll_review_mode", "on") == "on"
     assert coerce_value("poll_who_can_create", "everyone") == "everyone"
     for key, bad in (
-        ("poll_mode", "shadow"),
-        ("poll_review_mode", "maybe"),
+        ("poll_mode", "rehearsal"),
+        ("poll_review_mode", "shadow"),
         ("poll_who_can_create", "role"),
     ):
         with pytest.raises(SettingError):

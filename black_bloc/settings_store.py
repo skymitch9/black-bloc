@@ -43,6 +43,8 @@ from .personas import COOKOUT, PERSONALITY_CHOICES
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
+from .polls import MODES as POLL_MODES
+from .polls import SHADOW_NOTE as POLL_SHADOW_NOTE
 from .storage.db import Database
 from .timezones import DEFAULT_TZ, is_known, suggest
 
@@ -179,7 +181,6 @@ TIMEZONE_CHOICES = (
     "Pacific/Auckland",
 )
 
-POLL_MODES = ("off", "on")
 POLL_REVIEW_MODES = ("off", "on")
 POLL_CREATORS = ("staff", "everyone")
 POLL_DEFAULT_HOURS = 24
@@ -314,6 +315,8 @@ KEY_TYPES: dict[str, str] = {
     "poll_review_mode": "enum",
     "poll_default_hours": "int",
     "poll_channel_id": "channel",
+    "poll_pin": "bool",
+    "poll_shadow_note": "text",
     "poll_ping_role_id": "role",
     "poll_reminder_minutes": "int",
     "poll_auto_thread": "bool",
@@ -835,7 +838,10 @@ KEY_HELP: dict[str, str] = {
         f"panels, {TIME_STEP_MIN_MINUTES} to {TIME_STEP_MAX_MINUTES} minutes; 15 gives :00, "
         ":15, :30 and :45"
     ),
-    "poll_mode": "off, or on (members and staff can start polls from the /poll panel)",
+    "poll_mode": (
+        "off, shadow (every poll is posted for real, but into the log channel with a line "
+        "saying why, so staff can rehearse), or on (polls go where they are pointed)"
+    ),
     "poll_who_can_create": "who may start a poll from the /poll panel: staff, or everyone",
     "poll_review_mode": (
         "off posts a poll straight away; on holds it for a staff Approve or Deny first"
@@ -854,6 +860,12 @@ KEY_HELP: dict[str, str] = {
         f"to {POLL_REMINDER_MAX_MINUTES}"
     ),
     "poll_auto_thread": "true to open a discussion thread under every poll",
+    "poll_pin": (
+        "true pins a poll's message while it is open and unpins it when it closes"
+    ),
+    "poll_shadow_note": (
+        "the line above a poll posted in shadow; {channel} is where it would have gone"
+    ),
     "poll_archive_days": (
         f"days a closed poll stays on the list before it moves to the archive, "
         f"{POLL_ARCHIVE_MIN_DAYS} to {POLL_ARCHIVE_MAX_DAYS}"
@@ -2389,6 +2401,10 @@ class SettingsStore:
             return POLL_REMINDER_MINUTES
         if key == "poll_auto_thread":
             return False
+        if key == "poll_pin":
+            return True
+        if key == "poll_shadow_note":
+            return POLL_SHADOW_NOTE
         if key == "poll_archive_days":
             return POLL_ARCHIVE_DAYS
         if key == "poll_archive_drop_votes":
