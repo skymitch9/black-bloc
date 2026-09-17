@@ -199,6 +199,11 @@ async function seed() {
   // rolemenu_mode ships off, and a panel is not posted while it is off — so the post route's
   // shape, and the guard's own 409 on it, are only reachable with it turned on.
   await send('PUT', '/api/settings/rolemenu_mode', { value: 'on' });
+  // posts_mode ships in SHADOW, where Post it goes to #blackbloc-logs and the guard allows it.
+  // Every posts route and kind below is the `on` behaviour — including the GUARDED entry, which
+  // only means anything when the post's own channel is the target — so the mode is turned on
+  // here. The three modes are walked on their own in checkPostsModes().
+  await send('PUT', '/api/settings/posts_mode', { value: 'on' });
   await post('/api/rolemenus', { name: 'contract', title: 'Contract', mode: 'multiple' });
   await fetch(`${BASE}/api/rolemenus/contract`, {
     method: 'PUT',
@@ -391,10 +396,16 @@ async function checkActionKinds() {
   await post(`/api/applications/${IDS.application_id}/decide`, { status: 'denied', reason: 'contract check' });
   await post('/api/applications/4/decide', { status: 'approved' });
   await post(`/api/applications/${IDS.listed_application_id}/remove`, { reason: 'contract check' });
-  // The nine web.post.* kinds. Publishing twice off one row is the whole point of the
-  // feature — the second press is an edit, not a second copy — so both spellings are left.
+  // The twelve web.post.* kinds. Publishing twice off one row is the whole point of the
+  // feature — the second press is an edit, not a second copy — so both spellings are left, and
+  // the same again in shadow. The third shadow kind needs the mode moved: the first press back
+  // on `on` posts for real and takes the rehearsal down.
   await post('/api/posts', { title: 'Contract post' });
   await send('PUT', `/api/posts/${IDS.post_slug}`, { title: 'Welcome and rules', body: 'A contract line.', channel_id: IDS.test_channel_id });
+  await send('PUT', '/api/settings/posts_mode', { value: 'shadow' });
+  await post(`/api/posts/${IDS.post_slug}/publish`, {});
+  await post(`/api/posts/${IDS.post_slug}/publish`, {});
+  await send('PUT', '/api/settings/posts_mode', { value: 'on' });
   await post(`/api/posts/${IDS.post_slug}/publish`, {});
   await post(`/api/posts/${IDS.post_slug}/publish`, {});
   await post(`/api/posts/${IDS.post_slug}/takedown`, {});
@@ -478,9 +489,68 @@ async function checkRoster() {
   }
 }
 
+// §C9 shadow: the mode decides WHERE Post it goes, and the page has to be able to say so.
+// The seed's `welcome` post already names #welcome, which is NOT the channel the guard allows —
+// that is the whole point: in shadow it reaches #blackbloc-logs anyway, and on `on` it is
+// refused until the cutover.
+async function checkPostsModes() {
+  await setGuard(true);
+  await seed();
+  const where = `/api/posts/${IDS.post_slug}/publish`;
+  const mode = (value) => send('PUT', '/api/settings/posts_mode', { value });
+  const read = async () => (await (await send('GET', `/api/posts/${IDS.post_slug}`, undefined)).json());
+
+  await mode('off');
+  const off = await post(where, {});
+  if (off.status !== 409) fail('POST publish [off]', `answered ${off.status}, not 409`);
+  else if ((await off.json()).error !== 'posts_off') fail('POST publish [off]', 'did not name posts_off');
+
+  await mode('shadow');
+  const first = await post(where, {});
+  let rehearsal = null;
+  if (first.status !== 200) {
+    fail('POST publish [shadow]', `answered ${first.status}, not 200 — the shadow channel is one the guard allows`);
+  } else {
+    const found = (await first.json()).post;
+    rehearsal = found.shadow_message_id;
+    if (found.message_id !== null) fail('POST publish [shadow]', 'put a message in the post\u2019s own channel');
+    if (!rehearsal) fail('POST publish [shadow]', 'left no shadow_message_id');
+    if (found.posted_where !== 'shadow') fail('POST publish [shadow]', `posted_where is ${found.posted_where}`);
+    if (!found.status.includes('posted (shadow)')) fail('POST publish [shadow]', `pills read ${found.status.join(', ')}`);
+  }
+  const again = await post(where, {});
+  if (again.status !== 200) fail('POST publish [shadow twice]', `answered ${again.status}, not 200`);
+  else if ((await again.json()).post.shadow_message_id !== rehearsal) {
+    fail('POST publish [shadow twice]', 'the second press left a second copy instead of editing the first');
+  }
+
+  // `on` with the guard up and #welcome as the target is the refusal the GUARDED pass asserts.
+  // The rehearsal has to survive it: nothing replaced it.
+  await mode('on');
+  const refused = await post(where, {});
+  if (refused.status !== 409) fail('POST publish [on, guarded]', `answered ${refused.status}, not 409`);
+  if ((await read()).post.shadow_message_id !== rehearsal) {
+    fail('POST publish [on, guarded]', 'a refused real post dropped the shadow copy');
+  }
+
+  // Aim it at the one channel the guard allows and the go-live works: a real message, and the
+  // rehearsal taken down with it.
+  await send('PUT', `/api/posts/${IDS.post_slug}`, { channel_id: IDS.test_channel_id });
+  const live = await post(where, {});
+  if (live.status !== 200) fail('POST publish [on]', `answered ${live.status}, not 200`);
+  else {
+    const found = (await live.json()).post;
+    if (!found.message_id) fail('POST publish [on]', 'left no message_id');
+    if (found.shadow_message_id !== null) fail('POST publish [on]', 'kept the shadow copy after the first real post');
+    if (found.posted_where !== 'channel') fail('POST publish [on]', `posted_where is ${found.posted_where}`);
+    if (!found.status.includes('posted')) fail('POST publish [on]', `pills read ${found.status.join(', ')}`);
+  }
+}
+
 process.stdout.write(`check: ${BASE} against ${HERE}contract.json\n`);
 await checkPages();
 await checkGuard();
+await checkPostsModes();
 await checkRoutes();
 await checkSettings();
 await checkRoster();

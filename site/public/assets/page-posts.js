@@ -39,12 +39,20 @@ const AMBER_AT = 0.9;
 const PREVIEW_EVERY_MS = 60;
 const NEED_A_TITLE = 'A post needs a title. Type one and press Make it again.';
 const POSTED_HERE = 'Posted in {where}.';
+const POSTED_IN_SHADOW = 'The shadow copy is in {where}.';
 const NOT_POSTED_ANYWHERE = 'Not posted anywhere yet.';
 const PINNED_TOO = ' It is pinned.';
 const NOT_PINNED = ' It is not pinned.';
 const WILL_POST = 'Post it sends this to {where} as {style} and {pin}.';
 const WILL_UPDATE = 'Update the post edits the message already in {where}, as {style} and {pin}.';
 const NEEDS_A_CHANNEL = 'Pick a channel before this can be posted anywhere.';
+// The twins of posts.SHADOW_LINE / posts.SHADOW_LINE_NOWHERE: Discord's card is written in
+// Python, this line is written live from the draft, so the words are kept the same by test.
+const WILL_SHADOW = 'shadow — this goes to {shadow}, not {where}, until posts are on.';
+const WILL_SHADOW_NOWHERE = 'shadow — this goes to {shadow}. It has no channel of its own yet, '
+  + 'and nothing reaches one until posts are on.';
+const NO_SHADOW_CHANNEL = 'no shadow channel yet';
+const SHADOW = 'shadow';
 const PIN_WORDS = { true: 'pins it', false: 'leaves it unpinned' };
 const STYLE_WORDS = { plain: 'a plain message', embed: 'an embed' };
 const DELETE_QUESTION = 'Every word goes with it. Nothing puts it back.';
@@ -92,12 +100,19 @@ function whereWords(row) {
   return row.channel_name ? `#${row.channel_name}` : NO_CHANNEL;
 }
 
-function postedLine(row) {
-  if (!row.posted) return NOT_POSTED_ANYWHERE;
-  return POSTED_HERE.replace('{where}', whereWords(row)) + (row.pin ? PINNED_TOO : NOT_PINNED);
+function shadowWords(shadow) {
+  return shadow && shadow.channel_name ? `#${shadow.channel_name}` : NO_SHADOW_CHANNEL;
 }
 
-function listCard(row) {
+function postedLine(row, shadow) {
+  if (!row.posted) return NOT_POSTED_ANYWHERE;
+  const rehearsal = row.posted_where === SHADOW;
+  const line = rehearsal ? POSTED_IN_SHADOW : POSTED_HERE;
+  const where = rehearsal ? shadowWords(shadow) : whereWords(row);
+  return line.replace('{where}', where) + (row.pin ? PINNED_TOO : NOT_PINNED);
+}
+
+function listCard(row, shadow) {
   return el('div', { class: 'row', 'data-tone': row.changes_pending ? 'warn' : undefined }, [
     el('span', { class: 'dot' }),
     el('div', { class: 'row-body' }, [
@@ -111,7 +126,7 @@ function listCard(row) {
         ...statusPills(row),
         row.seeded ? badge('ships with the bot', 'quiet') : null,
       ]),
-      el('p', { class: 'row-detail', text: postedLine(row) }),
+      el('p', { class: 'row-detail', text: postedLine(row, shadow) }),
       el('p', {
         class: 'row-note',
         text: `${row.body ? `${row.body.slice(0, 160)}${row.body.length > 160 ? '…' : ''}` : NO_BODY}`,
@@ -169,7 +184,7 @@ async function loadList(payload) {
   const list = section('The posts', LIST_NOTE, { count: payload.posts.length, open: true });
   list.body.append(
     ...(payload.posts.length
-      ? payload.posts.map(listCard)
+      ? payload.posts.map((row) => listCard(row, payload.shadow))
       : [sayNothing(NOTHING_YET)]),
   );
 
@@ -198,7 +213,14 @@ function counterNode() {
   return node;
 }
 
-function willPost(draft, post) {
+function willPost(draft, post, payload) {
+  if (payload.mode === SHADOW) {
+    const where = shadowWords(payload.shadow);
+    if (!draft.channel_id) return WILL_SHADOW_NOWHERE.replace('{shadow}', where);
+    return WILL_SHADOW
+      .replace('{shadow}', where)
+      .replace('{where}', `#${draft.channel_name || post.channel_name || ''}`);
+  }
   if (!draft.channel_id) return NEEDS_A_CHANNEL;
   const template = post.posted ? WILL_UPDATE : WILL_POST;
   return template
@@ -262,7 +284,7 @@ async function editor(payload, known) {
       members: known.members,
     });
     counter.paint(draft.body.length, capOf());
-    howLine.textContent = willPost(draft, post);
+    howLine.textContent = willPost(draft, post, payload);
   };
   const schedule = () => {
     if (timer) clearTimeout(timer);

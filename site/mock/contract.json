@@ -4144,13 +4144,18 @@
         "styles",
         "guard",
         "notes",
-        "checked_at"
+        "checked_at",
+        "shadow"
       ],
       "nested": {
         "guard": [
           "test_mode",
           "test_channel",
           "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
         ]
       },
       "rows": {
@@ -4177,7 +4182,9 @@
           "seeded",
           "updated_at",
           "updated_by",
-          "updated_by_name"
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id"
         ],
         "styles": [
           "style",
@@ -4198,7 +4205,9 @@
         "styles",
         "guard",
         "notes",
-        "read_at"
+        "read_at",
+        "mode",
+        "shadow"
       ],
       "nested": {
         "post": [
@@ -4224,12 +4233,18 @@
           "seeded",
           "updated_at",
           "updated_by",
-          "updated_by_name"
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id"
         ],
         "guard": [
           "test_mode",
           "test_channel",
           "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
         ]
       },
       "rows": {
@@ -4256,7 +4271,9 @@
         "guard",
         "notes",
         "read_at",
-        "message"
+        "message",
+        "mode",
+        "shadow"
       ],
       "nested": {
         "post": [
@@ -4282,12 +4299,18 @@
           "seeded",
           "updated_at",
           "updated_by",
-          "updated_by_name"
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id"
         ],
         "guard": [
           "test_mode",
           "test_channel",
           "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
         ]
       },
       "rows": {
@@ -4318,7 +4341,9 @@
         "guard",
         "notes",
         "read_at",
-        "message"
+        "message",
+        "mode",
+        "shadow"
       ],
       "nested": {
         "post": [
@@ -4344,12 +4369,18 @@
           "seeded",
           "updated_at",
           "updated_by",
-          "updated_by_name"
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id"
         ],
         "guard": [
           "test_mode",
           "test_channel",
           "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
         ]
       },
       "rows": {
@@ -4374,7 +4405,9 @@
         "guard",
         "notes",
         "read_at",
-        "message"
+        "message",
+        "mode",
+        "shadow"
       ],
       "nested": {
         "post": [
@@ -4400,12 +4433,18 @@
           "seeded",
           "updated_at",
           "updated_by",
-          "updated_by_name"
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id"
         ],
         "guard": [
           "test_mode",
           "test_channel",
           "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
         ]
       },
       "rows": {
@@ -4430,7 +4469,9 @@
         "guard",
         "notes",
         "read_at",
-        "message"
+        "message",
+        "mode",
+        "shadow"
       ],
       "nested": {
         "post": [
@@ -4456,12 +4497,18 @@
           "seeded",
           "updated_at",
           "updated_by",
-          "updated_by_name"
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id"
         ],
         "guard": [
           "test_mode",
           "test_channel",
           "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
         ]
       },
       "rows": {
@@ -4486,7 +4533,9 @@
         "guard",
         "notes",
         "read_at",
-        "message"
+        "message",
+        "mode",
+        "shadow"
       ],
       "nested": {
         "post": [
@@ -4512,12 +4561,18 @@
           "seeded",
           "updated_at",
           "updated_by",
-          "updated_by_name"
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id"
         ],
         "guard": [
           "test_mode",
           "test_channel",
           "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
         ]
       },
       "rows": {
@@ -4694,6 +4749,10 @@
     "web.post.pinned",
     "web.post.post_failed",
     "web.post.posted",
+    "web.post.shadow_message_gone",
+    "web.post.shadow_taken_down",
+    "web.post.shadow_updated",
+    "web.post.shadow_posted",
     "web.post.reset",
     "web.post.saved",
     "web.post.taken_down",
