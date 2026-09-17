@@ -342,6 +342,8 @@ ROUTINE: frozenset[str] = frozenset(
         "request.check_asked",
         "request.comment",
         "request.filed",
+        "request.forum_forgotten",
+        "request.forum_made",
         "request.in_progress",
         "request.notify_skipped_test_mode",
         "request.resumed",

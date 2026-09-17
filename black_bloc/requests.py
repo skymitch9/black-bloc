@@ -73,6 +73,7 @@ API_PAGE = 20
 SEARCH_LIMIT = 80
 FIELD_LIMIT = 1024
 TITLE_LIMIT = 256
+NAME_LIMIT = 100
 
 STATUS_WORDS: dict[str, str] = {
     OPEN: "open",
@@ -225,6 +226,43 @@ NOTIFY_SKIPPED_KIND = "request.notify_skipped_test_mode"
 NOTIFY_FAILED_KIND = "request.notify_failed"
 STATUS_CHANNEL_KEY = "request_status_channel_id"
 NOTIFY_CHANNEL_KEY = "request_notify_channel_id"
+FORUM_CHANNEL_KEY = "request_forum_channel_id"
+FORUM_CHANNEL_NAME = "requests"
+FORUM_TOPIC = (
+    "Black Bloc requests — one post per request. The card in each post is where staff move it."
+)
+FORUM_OPEN_TAG = "open"
+FORUM_PICKED_UP_TAG = "picked up"
+FORUM_READY_TAG = "ready to check"
+FORUM_HOLD_TAG = "on hold"
+FORUM_DONE_TAG = "done"
+FORUM_DECLINED_TAG = "declined"
+FORUM_TAG_NAMES = (
+    FORUM_OPEN_TAG,
+    FORUM_PICKED_UP_TAG,
+    FORUM_READY_TAG,
+    FORUM_HOLD_TAG,
+    FORUM_DONE_TAG,
+    FORUM_DECLINED_TAG,
+)
+FORUM_TAG_EMOJI: dict[str, str] = {
+    FORUM_OPEN_TAG: "\N{LARGE GREEN CIRCLE}",
+    FORUM_PICKED_UP_TAG: "\N{LARGE YELLOW CIRCLE}",
+    FORUM_READY_TAG: "\N{LEFT-POINTING MAGNIFYING GLASS}",
+    FORUM_HOLD_TAG: "\N{DOUBLE VERTICAL BAR}",
+    FORUM_DONE_TAG: "\N{WHITE HEAVY CHECK MARK}",
+    FORUM_DECLINED_TAG: "\N{CROSS MARK}",
+}
+FORUM_TAG_FOR: dict[str, str] = {
+    OPEN: FORUM_OPEN_TAG,
+    IN_PROGRESS: FORUM_PICKED_UP_TAG,
+    REVIEW: FORUM_READY_TAG,
+    HOLD: FORUM_HOLD_TAG,
+    DONE: FORUM_DONE_TAG,
+    DECLINED: FORUM_DECLINED_TAG,
+}
+FORUM_ARCHIVE_STATUSES = (DONE, DECLINED)
+FORUM_AUTO_ARCHIVE_MINUTES = 1440
 
 EMBED_COLOURS: dict[str, int] = {
     FILED_LOOK: 0x5865F2,
@@ -548,6 +586,42 @@ def dms_on_decision(store: Any, guild_id: int) -> bool:
 def status_channel_id(store: Any, guild_id: int) -> Any:
     """Its own channel if the server set one, otherwise the one filings already go to."""
     return store.get(guild_id, STATUS_CHANNEL_KEY) or store.get(guild_id, NOTIFY_CHANNEL_KEY)
+
+
+def forum_channel_id(store: Any, guild_id: int) -> Any:
+    """Blank keeps today's behaviour: one line in the notify channel, no post of its own."""
+    return store.get(guild_id, FORUM_CHANNEL_KEY)
+
+
+def forum_tags(names: Any = FORUM_TAG_NAMES) -> list[discord.ForumTag]:
+    """The tags a request forum is made with; their ids live in the forum, never in a key."""
+    return [
+        discord.ForumTag(name=name, emoji=discord.PartialEmoji(name=FORUM_TAG_EMOJI[name]))
+        for name in names
+    ]
+
+
+def tag_named(forum: Any, name: Any) -> Any:
+    for tag in getattr(forum, "available_tags", None) or ():
+        if str(getattr(tag, "name", "")).lower() == str(name or "").lower():
+            return tag
+    return None
+
+
+def tags_for_status(forum: Any, status: Any) -> list[Any]:
+    """The one tag a request post wears; a status with no tag, or a forum without it, wears none."""
+    found = tag_named(forum, FORUM_TAG_FOR.get(str(status or "")))
+    return [found] if found is not None else []
+
+
+def archives_at(status: Any) -> bool:
+    return str(status or "") in FORUM_ARCHIVE_STATUSES
+
+
+def post_title(row: Any) -> str:
+    """The post's own name: the request's number and its one-line summary, nothing else."""
+    said = clamp(row_value(row, "what"), TITLE_LIMIT)
+    return f"#{row_value(row, 'id', '?')} {said}"[:NAME_LIMIT]
 
 
 def channel_moves(store: Any, guild_id: int) -> tuple[str, ...]:
@@ -930,6 +1004,13 @@ async def set_message(db: Any, request_id: int, message_id: int | None) -> None:
     await db.conn.commit()
 
 
+async def set_thread(db: Any, request_id: int, thread_id: int | None) -> None:
+    await db.conn.execute(
+        "UPDATE requests SET thread_id = ? WHERE id = ?", (thread_id, request_id)
+    )
+    await db.conn.commit()
+
+
 async def add_comment(db: Any, request_id: int, author_id: int, text: str) -> int | None:
     cur = await db.conn.execute(
         "INSERT INTO request_comments(request_id, author_id, text, at) VALUES (?, ?, ?, ?)",
@@ -1045,6 +1126,7 @@ __all__ = [
     "WITHDRAWN",
     "RequestError",
     "add_comment",
+    "archives_at",
     "asked_stamp",
     "can_move",
     "card_buttons",
@@ -1062,6 +1144,8 @@ __all__ = [
     "create_request",
     "due_stamp",
     "field_value",
+    "forum_channel_id",
+    "forum_tags",
     "get_comment",
     "get_request",
     "held_words",
@@ -1082,6 +1166,7 @@ __all__ = [
     "parse_due",
     "pick_placeholder",
     "card_will_post",
+    "post_title",
     "posts_a_card",
     "request_embed",
     "request_url",
@@ -1092,9 +1177,12 @@ __all__ = [
     "set_fields",
     "set_message",
     "set_status",
+    "set_thread",
     "site_page_url",
     "site_view",
     "status_channel_id",
+    "tag_named",
+    "tags_for_status",
     "wanted_priority",
     "wanted_status",
     "wanted_statuses",

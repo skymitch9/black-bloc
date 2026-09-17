@@ -1592,6 +1592,7 @@ KEY_HELP.update(
 
 # Blackmail forums — modmail's third mode and the post the ticket button sits under, in their
 # own block so the sibling branches merge textually.
+MODMAIL_CATEGORY_KEY = "modmail_category_id"
 MODMAIL_FORUM_CHANNEL = "modmail_forum_channel_id"
 MODMAIL_FORUM_TAGS = "modmail_forum_tags"
 MODMAIL_PANEL_FOLLOWS_POST = "modmail_panel_follows_post"
