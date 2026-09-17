@@ -122,7 +122,7 @@ leaves only the link; the dynamic item resolves after a fresh view registry (res
 channel card carries no moves, checklist 35), the requests guide in `guides_seed.json` (a staff step: *press a move on
 the post*), sweeps rows `RP-a…`.
 
-## G. A post somebody starts by hand in the requests forum becomes a request (owner, 2026-09-17 12:4x)
+## G. A post somebody starts by hand in the requests forum becomes a request (owner, 2026-09-17 12:4x) — ✅ LIVE as v123 (release `2f1c609`, 2026-09-17 13:15; schema 42; the `### §G` deviations at the foot are the truth; sweeps 507–515)
 
 > ✅ **BUILT** 2026-09-17 on branch `request-forum-adopt` off `main` `5e92e41`;
 > **not merged, not deployed, and no post has ever been started by hand in Discord.** Read the
