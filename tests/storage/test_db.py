@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 36
+        assert SCHEMA_VERSION == 37
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -1542,6 +1542,7 @@ async def test_a_schema_35_file_gains_the_posts_table_and_keeps_its_rows(tmp_pat
             "style",
             "pin",
             "message_id",
+            "shadow_message_id",
             "posted_hash",
             "posted_at",
             "posted_by",
@@ -1551,6 +1552,47 @@ async def test_a_schema_35_file_gains_the_posts_table_and_keeps_its_rows(tmp_pat
         }
     finally:
         await again.close()
+
+
+async def a_schema_36_file(path):
+    """What the code at `main` leaves behind: posts, with no shadow copy to track."""
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE posts DROP COLUMN shadow_message_id")
+    await db.conn.execute(
+        "INSERT INTO posts(guild_id, slug, title, channel_id, body, style, pin, message_id, "
+        "posted_hash, updated_at) VALUES (1, 'welcome', 'Welcome and rules', 5, 'Hello.', "
+        "'plain', 1, 99, 'a-hash', '2026-09-16T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '36')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+
+async def test_a_schema_36_file_gains_shadow_message_id_and_keeps_every_post(tmp_path):
+    """Schema 37 is one nullable column: the posts already written keep every word, every id
+    and their posted hash, and the new column arrives empty."""
+    path = tmp_path / "old36.sqlite3"
+    await a_schema_36_file(path)
+
+    db = Database(path)
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(posts)")
+        assert "shadow_message_id" in {row["name"] for row in await cur.fetchall()}
+        cur = await db.conn.execute("SELECT * FROM posts WHERE guild_id = 1")
+        row = await cur.fetchone()
+        assert row["slug"] == "welcome" and row["body"] == "Hello."
+        assert row["message_id"] == 99 and row["posted_hash"] == "a-hash"
+        assert row["shadow_message_id"] is None
+        cur = await db.conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await db.close()
 
 
 async def test_two_posts_cannot_share_a_slug_and_only_the_two_styles_are_storable(tmp_path):

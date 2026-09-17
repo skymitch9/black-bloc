@@ -543,6 +543,9 @@ async def seed_world(client, web, guild, wf) -> dict:
     # Posts (§C4): the one Black Bloc ships with, pointed at a channel this guild HAS so the
     # publish entry reaches it; one already posted so the takedown entry has something to
     # remove; and one staff wrote here, which is the only kind DELETE takes.
+    # posts_mode ships in SHADOW, where Post it goes to the shadow channel; every posts route
+    # in the contract is the `on` shape, and shadow has its own tests in tests/api/tools.
+    await web.store.set(guild_id, "posts_mode", "on", by=7)
     await posts.seed_posts(web, guild)
     welcome = await posts.get_post(db, guild_id, "welcome")
     await posts.set_post_fields(db, int(welcome["id"]), channel_id=wf.TEST_CHANNEL_ID)

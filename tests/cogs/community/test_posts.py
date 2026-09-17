@@ -206,6 +206,12 @@ def placeholders(view):
     return [one.placeholder for one in view.children if getattr(one, "placeholder", None)]
 
 
+def picked(view):
+    """Which value the mode select shows as chosen — the panel's own reading of the key."""
+    mode = next(one for one in view.children if getattr(one, "placeholder", None) == cog.MODE_PICK)
+    return next((one.value for one in mode.options if one.default), None)
+
+
 # --- the panel --------------------------------------------------------------------------------
 
 
@@ -218,15 +224,15 @@ async def test_the_panel_writes_a_line_per_post_and_offers_the_way_in(bot, staff
     said = embed.description
     assert "**A notice** · #blackbloc-logs · not posted" in said
     assert "no channel yet" in said
-    assert labels(view) == ["New post…", "Turn posts off", "Logs", "Open on the site"]
-    assert placeholders(view) == ["A post…"]
+    assert labels(view) == ["New post…", "Logs", "Open on the site"]
+    assert placeholders(view) == ["Posts are: off / shadow / on", "A post…"]
 
 
 async def test_an_empty_panel_says_so_rather_than_showing_nothing(bot, staff):
     embed, view = await cog.build_panel(bot, bot.guild, staff)
 
     assert posts.PANEL_EMPTY in embed.description
-    assert placeholders(view) == []
+    assert placeholders(view) == ["Posts are: off / shadow / on"]
 
 
 async def test_the_panel_says_in_words_when_posts_are_off(bot, staff):
@@ -235,7 +241,40 @@ async def test_the_panel_says_in_words_when_posts_are_off(bot, staff):
     embed, view = await cog.build_panel(bot, bot.guild, staff)
 
     assert posts.POSTS_OFF in embed.description
-    assert "Turn posts on" in labels(view)
+    assert picked(view) == "off"
+
+
+async def test_the_panel_says_where_shadow_puts_it_and_the_select_shows_the_third_value(
+    bot, staff
+):
+    await a_post(bot)
+    await bot.store.set(GUILD, posts.MODE_KEY, "shadow")
+
+    embed, view = await cog.build_panel(bot, bot.guild, staff)
+
+    assert "Posts are in shadow" in embed.description
+    assert "#blackbloc-logs" in embed.description
+    assert posts.POSTS_OFF not in embed.description
+    mode = next(one for one in view.children if getattr(one, "placeholder", None) == cog.MODE_PICK)
+    assert [one.value for one in mode.options] == ["off", "shadow", "on"]
+    assert [one.label for one in mode.options] == [
+        "Posts are: off",
+        "Posts are: shadow",
+        "Posts are: on",
+    ]
+    assert picked(view) == "shadow"
+
+
+async def test_the_card_says_where_a_shadow_press_would_actually_go(bot, staff):
+    row = await a_post(bot, slug="welcome-here", channel_id=WELCOME_CHANNEL)
+    await bot.store.set(GUILD, posts.MODE_KEY, "shadow")
+
+    embed, _ = cog.build_card(bot, bot.guild, row)
+
+    assert (
+        "shadow — this goes to #blackbloc-logs, not #welcome, until posts are on."
+        in embed.description
+    )
 
 
 # --- the card ---------------------------------------------------------------------------------
@@ -337,18 +376,18 @@ async def test_the_pin_button_saves_through_the_one_shared_path(bot, staff):
     assert await kinds(bot.db) == ["post.saved"]
 
 
-async def test_the_mode_button_flips_it_and_writes_one_row(bot, staff):
-    interaction = FakeInteraction(bot, staff)
-    button = cog.ModeButton(True)
-    button._view = None
+async def test_the_mode_select_reaches_all_three_and_writes_one_row_each(bot, staff):
+    said = await posts.set_mode(bot, bot.guild, staff, "shadow")
 
-    said = await posts.set_mode(bot, bot.guild, staff, button.wanted)
-
-    assert button.label == "Turn posts off" and button.wanted == "off"
-    assert bot.store.get(GUILD, posts.MODE_KEY) == "off"
+    assert bot.store.get(GUILD, posts.MODE_KEY) == "shadow"
+    assert "#blackbloc-logs" in said
     assert await kinds(bot.db) == ["post.mode"]
-    assert "`/posts` disappears" in said
-    assert interaction.said is None
+
+    off = await posts.set_mode(bot, bot.guild, staff, "off")
+
+    assert bot.store.get(GUILD, posts.MODE_KEY) == "off"
+    assert "`/posts` disappears" in off
+    assert await kinds(bot.db) == ["post.mode", "post.mode"]
 
 
 async def test_the_edit_modal_arrives_prefilled_and_names_the_cap(bot, staff):
