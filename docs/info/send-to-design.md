@@ -1,7 +1,6 @@
 # Send to… — a staff move that turns a request into an event, an event into a request, and a ticket into either with the member's say-so
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-17 on branch `send-to`
-> off `main` `8a27840` (v127) — NOT merged, NOT deployed, and nothing in it has met Discord.** Read the
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v128** — merge `5a17466`, release `a0fa7f3`, deployed **2026-09-17 16:09** Phoenix; schema 43; `handoff_mode` on; the `## Deviations` foot is the truth where it departs from the body; sweeps **543–553** are the owner's. Was: ✅ BUILT on branch `send-to` off `main` `8a27840`. Read the
 > `## Deviations` foot BEFORE the sections above: eighteen things differ from what is written here, and
 > deviations **1–4** are the ones that matter (a public press opens the draft with no intermediate card; `moved_to`
 > carries three shapes; nothing sweeps the 24 hours, the read decides; the asked wording lives in the confirm
@@ -221,3 +220,5 @@ rows `ST-a…`; `architecture.md` schema line (43). NOT `TODO.md` / `DONE.md` / 
   Discord does to a view on a DM whose bot has been restarted, are both untested here.
 - **`handoff_mode` ships ON**, so every surface changes the moment this merges. That is what the
   design asked for; it is named here because it is the one thing that is not behind a flip.
+
+19. **Found after the fourth piece (`4af32c4`):** the `/modmail` panel's copy of the ticket card (`panel_card_buttons`) never knew about practice tickets, and `ticket_dm` returns `None` for a practice ticket — the same value a delivered DM returns — so a hand-off pressed there would have said *"@them has been asked by DM"* with nobody asked and written the `asked:` cell. `refusal_for_ticket` now answers in words on the MOVE, whichever button table drew it; a test pins it. Found by reading, not by a test.
