@@ -128,6 +128,10 @@ CONFIRM_GONE = (
     "have taken it back. Nothing was filed."
 )
 NO_SUCH_TICKET = "That ticket is no longer there, so nothing was filed."
+PRACTICE_TICKET = (
+    "This is a **practice** ticket, so there is no member to ask and nothing was filed. "
+    "Open a real one with **Open a ticket with…** if you want to file something from it."
+)
 
 
 class Trail(NamedTuple):
@@ -285,10 +289,12 @@ def refusal_for_request(store: Any, guild_id: int, row: Any) -> str:
 
 def refusal_for_ticket(store: Any, guild_id: int, ticket: Any, now: Any = None) -> str:
     """Why nothing more can be filed from this ticket right now — empty when it can."""
-    from .modmail import field_of
+    from .modmail import field_of, is_practice
 
     if not handoff_on(store, guild_id):
         return HANDOFF_OFF
+    if is_practice(ticket):
+        return PRACTICE_TICKET
     cell = field_of(ticket, "moved_to")
     at = now or datetime.now(UTC)
     found = read_trail(cell)
@@ -713,6 +719,7 @@ __all__ = [
     "NOT_AN_EVENT",
     "NO_SUCH_TICKET",
     "OPEN_A_TICKET",
+    "PRACTICE_TICKET",
     "REQUEST",
     "REQUEST_MOVED_LINE",
     "REQUEST_TO_EVENT_DM",

@@ -222,6 +222,14 @@ def test_the_move_being_off_refuses_a_ticket_by_name_too():
     assert "handoff_mode" in said and "A setting group" in said
 
 
+def test_a_practice_ticket_has_nobody_to_ask_and_says_so():
+    """The panel draws the card moves without knowing a ticket is practice, so the MOVE knows."""
+    said = pure.refusal_for_ticket(ON, GUILD, a_ticket(practice=1))
+
+    assert "practice" in said and "nothing was filed" in said
+    assert pure.refusal_for_ticket(ON, GUILD, a_ticket(practice=0)) == ""
+
+
 def test_a_ticket_waiting_on_an_answer_refuses_and_names_who_and_when():
     until = datetime.now(UTC) + timedelta(hours=4)
     ticket = a_ticket(moved_to=pure.asked_trail(pure.REQUEST, until))
