@@ -1,7 +1,12 @@
 {
-  "release": "v115",
-  "commit": "79fd644",
+  "release": "v116",
+  "commit": "f420d3a",
   "changed_features": [
-    "guides"
+    "core",
+    "golive",
+    "guides",
+    "pings",
+    "raidtrain",
+    "rolemenu"
   ]
 }
