@@ -288,6 +288,8 @@ const LOG_LEVEL_FEATURES = [
 
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
+  ['shadow_channel_id', 'channel', null, null, 'where every rehearsal goes while a feature is in shadow — the welcome post, the front door, the ticket button, polls; blank means the bot’s own log channel. Setting it is the deliberate act that lets test mode speak in that one channel as well, so pick a channel only the people reviewing can see'],
+  ['rehearsal_note', 'text', 'Rehearsal — this is where it would go: {channel}', 'Rehearsal — this is where it would go: {channel}', 'the line the front door and the ticket button carry at the top of their rehearsal copy; {channel} is replaced with the channel the real one is aimed at. Blank leaves the copy with no note at all'],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
   ['role_menu_channel_id', 'channel', '800000000000000002', null, 'the channel /rolemenu offers first when a menu is posted'],
   ['golive_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post go-live announcements)', ['off', 'shadow', 'on']],
@@ -1293,7 +1295,7 @@ function seedActions() {
 
 let state = seedState();
 
-const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url'];
+const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url'];
 const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',

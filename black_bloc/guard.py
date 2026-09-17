@@ -21,6 +21,7 @@ class TestModeGuard:
         self.bot = bot
         self.test_channel_id = test_channel_id
         self.owned_channel_ids: set[int] = set()
+        self.rehearsal_channel_ids: dict[int, int] = {}
         self._original_send: Any = None
         self._original_edit: Any = None
         self._original_delete: Any = None
@@ -57,11 +58,38 @@ class TestModeGuard:
         channel_id = self._id_of(channel)
         return channel_id is not None and channel_id in self.owned_channel_ids
 
+    def rehearse_in(self, guild_id: Any, channel: Any) -> None:
+        """The rehearsal home `shadow_channel_id` names: speaking only, one channel per guild."""
+        here = int(guild_id)
+        channel_id = self._id_of(channel)
+        if channel_id is None:
+            gone = self.rehearsal_channel_ids.pop(here, None)
+            if gone is not None:
+                log.warning("TEST MODE: the rehearsal home %s is no longer allowed", gone)
+            return
+        if self.rehearsal_channel_ids.get(here) == channel_id:
+            return
+        self.rehearsal_channel_ids[here] = channel_id
+        log.warning(
+            "TEST MODE: channel %s is allowed as well — it is the rehearsal home "
+            "shadow_channel_id names for guild %s; deletion is NOT widened",
+            channel_id,
+            here,
+        )
+
+    def rehearses_in(self, channel: Any) -> bool:
+        channel_id = self._id_of(channel)
+        return channel_id is not None and channel_id in self.rehearsal_channel_ids.values()
+
     def allows_channel(self, channel: Any) -> bool:
         channel_id = self._id_of(channel)
         if channel_id is None:
             return False
-        return self._is_test_home(channel_id) or channel_id in self.owned_channel_ids
+        return (
+            self._is_test_home(channel_id)
+            or channel_id in self.owned_channel_ids
+            or self.rehearses_in(channel_id)
+        )
 
     def test_category_id(self) -> int | None:
         test_channel = self.bot.get_channel(self.test_channel_id) if self.test_channel_id else None
@@ -162,8 +190,11 @@ class TestModeGuard:
             tree.interaction_check = interaction_check  # type: ignore[method-assign]
 
         log.warning(
-            "TEST MODE ON: messages and commands restricted to channel %s, DMs and the temporary "
-            "voice channels Black Bloc makes itself; channel deletion restricted to that "
-            "channel's own category and to the channels Black Bloc made itself",
+            "TEST MODE ON: messages and commands restricted to channel %s, DMs, the temporary "
+            "voice channels Black Bloc makes itself and the one rehearsal home "
+            "shadow_channel_id names (blank today: %s); channel deletion restricted to that "
+            "channel's own category and to the channels Black Bloc made itself, and the "
+            "rehearsal home never widens it",
             self.test_channel_id,
+            sorted(self.rehearsal_channel_ids.values()) or "none",
         )

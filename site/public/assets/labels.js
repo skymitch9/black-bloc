@@ -6,6 +6,8 @@
 
 export const LABELS = {
   log_channel_id: 'Where the bot writes its log',
+  shadow_channel_id: 'Where rehearsals go while a feature is in shadow',
+  rehearsal_note: 'The line a rehearsal copy carries at the top',
   staff_channel_id: 'Which channel decides who counts as staff',
   role_menu_channel_id: 'Where role menus are posted',
   core_log_level: 'How much of the dashboard’s own work is repeated into Discord',

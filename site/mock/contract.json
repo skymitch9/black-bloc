@@ -8,6 +8,7 @@
       "operator_read_log",
       "personality_pool_peer_url",
       "personality_pool_sync",
+      "rehearsal_note",
       "role_menu_channel_id",
       "selftest_channel_id",
       "selftest_log_level",
@@ -15,6 +16,7 @@
       "selftest_purge_minutes",
       "settings_core_keys_admin_only",
       "settings_panel_minutes",
+      "shadow_channel_id",
       "spawned_channels_staff_reach",
       "staff_channel_id",
       "status_prefix"

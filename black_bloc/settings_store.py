@@ -45,6 +45,9 @@ from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
 from .polls import MODES as POLL_MODES
 from .polls import SHADOW_NOTE as POLL_SHADOW_NOTE
+from .shadow import NOTE_DEFAULT as REHEARSAL_NOTE_DEFAULT
+from .shadow import NOTE_KEY as REHEARSAL_NOTE
+from .shadow import REHEARSAL_KEY as SHADOW_CHANNEL
 from .storage.db import Database
 from .timezones import DEFAULT_TZ, is_known, suggest
 
@@ -2152,9 +2155,31 @@ KEY_HELP.update(
     }
 )
 
+# The rehearsal home — one channel every shadow copy lands in, so staff review before the
+# cutover. Core, beside `log_channel_id`: the `/settings` group select is at its cap of 25.
+KEY_TYPES.update({SHADOW_CHANNEL: "channel", REHEARSAL_NOTE: "text"})
+KEY_HELP.update(
+    {
+        SHADOW_CHANNEL: (
+            "where every rehearsal goes while a feature is in shadow — the welcome post, the "
+            "front door, the ticket button, polls; blank means the bot's own log channel. "
+            "Setting it is the deliberate act that lets test mode speak in that one channel "
+            "as well, so pick a channel only the people reviewing can see"
+        ),
+        REHEARSAL_NOTE: (
+            "the line the front door and the ticket button carry at the top of their rehearsal "
+            "copy; {channel} is replaced with the channel the real one is aimed at. Blank "
+            "leaves the copy with no note at all"
+        ),
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
+    SHADOW_CHANNEL,
+    REHEARSAL_NOTE,
     "staff_channel_id",
     "role_menu_channel_id",
     "bot_bio",
@@ -2576,7 +2601,17 @@ class SettingsStore:
                     "settings hook for %s failed — %s: %s", key, type(exc).__name__, exc
                 )
 
+    def stored_values(self, key: str) -> dict[int, Any]:
+        """Every guild that has this key stored, for a sweep that runs before any guild is up."""
+        if key not in KEY_TYPES:
+            raise SettingError(f"{key!r} is not a Black Bloc setting.")
+        return {
+            guild_id: value for (guild_id, name), value in self._cache.items() if name == key
+        }
+
     def default(self, key: str) -> Any:
+        if key == REHEARSAL_NOTE:
+            return REHEARSAL_NOTE_DEFAULT
         if key == "staff_channel_id":
             return self.settings.test_channel_id
         if key == "log_channel_id":

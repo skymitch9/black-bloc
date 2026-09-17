@@ -796,18 +796,9 @@ async def _existing_message(
 
 
 async def _shadow_message(bot: Any, guild: Any, message_id: Any) -> Any:
-    """The rehearsal, hunted through every channel it could be sitting in."""
-    for channel_id in shadow_channel_ids(bot, guild):
-        channel = channel_of(bot, guild, channel_id)
-        if channel is None:
-            continue
-        try:
-            return await channel.fetch_message(int(message_id))
-        except discord.NotFound:
-            continue
-        except discord.HTTPException as exc:
-            log.warning("posts: a shadow copy could not be re-read — %s", exc)
-    return None
+    """The rehearsal, hunted through every channel it could be sitting in — one home."""
+    _, message = await shadow_home.find_copy(bot, guild, message_id, log_key=LOG_CHANNEL_KEY)
+    return message
 
 
 async def _drop_shadow(bot: Any, guild: Any, row: Any, actor: Any, via: str) -> None:

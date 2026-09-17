@@ -18,6 +18,7 @@ from .rolemenu_panels import install as install_panels
 from .rolemenu_panels import panels_on_boot
 from .selftest import on_boot as selftest_on_boot
 from .settings_store import SettingsStore
+from .shadow import install as install_rehearsal_home
 from .storage.db import Database
 
 log = logging.getLogger(__name__)
@@ -68,6 +69,7 @@ class BlackBlocBot(commands.Bot):
         install_error_handler(self)
         await self.db.connect()
         await self.store.load()
+        install_rehearsal_home(self)
         log.info("database ready at %s", self.settings.database_path)
         log.info("invite URL: %s", invite_url(self))
         await self._load_cogs()
