@@ -152,6 +152,9 @@ black_bloc/
 ├── actionlog.py      ← log_action(): one DB row always, one embed to the log channel when it can
 ├── twitch.py         ← Helix client: app token, get_streams, get_users. HTTP is injectable, so tests are offline
 ├── golive.py         ← pure go-live logic: extract_stream, render, should_announce, role filters
+├── youtube_live.py   ← pure live-detection logic: the /live page parser ("isLive" + the canonical
+│                      watch id), the videos.list confirm parser, the miss counter, the StreamInfo
+│                      the go-live path is handed (v126, `info/youtube-live-design.md`)
 ├── timezones.py      ← per-member zone store, the autocomplete filter, HammerTime stamps
 ├── events.py         ← pure event logic: slugs, durations, the status machine, the one card
 ├── birthdays.py      ← pure birthday logic: local midnight, ages, the colour, the import matcher
@@ -240,7 +243,10 @@ black_bloc/
 │       │                  slots, claims, the lineup post, the 30-minute reminder DM
 │       └── youtube.py ← F3: the uploads sweep and /youtube, ONE command that opens a panel for
 │                        members and staff alike (2026-09-03; /uploads is retired). Reads the
-│                        public Atom feed; YOUTUBE_API_KEY is optional (see KI-11)
+│                        public Atom feed; YOUTUBE_API_KEY is optional (see KI-11). ALSO the
+│                        LIVE probe (v126): a second loop reads each linked channel's /live
+│                        page and calls the go-live cog's go_live/end_live with
+│                        source=youtube, so the announcement is go-live's, not its own
 ├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 34, measured 2026-09-11)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
