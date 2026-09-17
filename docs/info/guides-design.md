@@ -501,3 +501,39 @@ guides for the website's own pages (the site is the guide for itself — the Set
     opened Discord for it, nothing was cropped, nothing was uploaded to a live guide.
 13. **Nothing in G1's list was reversed.** Deviations 1–14 there all still hold; 14's list
     of what it left to G2 is now built, except the drill in 12 above.
+
+### Mark-all-stale
+
+Branch `guides-stale`, off `main` at `c6a341a`. The follow-up §C4.3 does not describe: a
+staff move that marks EVERY picture, for what a release never can reach (owner, 2026-09-16
+15:5x, "we need to update all screen shots once shadow mode is off to not have that message
+and to not have the old channel"). ⚠️ **Nothing below has met the live app** — the whole
+verification is `pytest`, `ruff`, `check.mjs` and one browser pass over the MOCK.
+
+1. ⚠️ **`guides.mark_all_stale(db, guild_id)` takes NO `reason`, and leaves NO log row.**
+   The brief gave it `*, reason`. `reason` has no column on `guide_media` and the row is the
+   ROUTE's — checklist 34 says the route is the sole logger here, and `tests/test_logkinds.py
+   ::test_a_route_never_notes_an_event_its_shared_path_already_logged` fails the `note()` the
+   moment the shared path logs the same kind. So the module stays the sibling of `mark_stale`:
+   it marks and counts, and its caller writes the row. The reason reaches the log as the
+   route's `note(reason=…)` and as `details["reason"]`.
+2. **The route's kind is `web.guide.shots_stale` — the existing kind with the website head**,
+   not a new one. §C10 lists `guide.shots_stale` as the bot's; the same event with a person
+   behind it takes the `web.` head, which is what `via_of` reads and what the Logs page's Via
+   column says. `logkinds.py` needed no change; the note table in `tests/test_logkinds.py` and
+   `contract.json`'s `action_kinds` did.
+3. **The row is written even when it marked nothing.** A press that found every picture
+   already marked is a result, not a non-event, and `count: 0` in the log is how a later
+   session tells "nobody pressed it" from "it was already done".
+4. ⚠️ **The hub's Screenshots-to-re-shoot block is now drawn for staff whatever the count.**
+   It used to render only when `payload.stale` was non-zero — and none-stale is EXACTLY the
+   state the cutover presses the button in, so the button would not have existed when it was
+   needed. The table's own `Nothing needs re-shooting.` empty line carries the zero case.
+5. **The button is a card under the table, not a control beside the count.** §C4.5's "staff
+   line with the count" is the section's own count pill; hanging a destructive-ish move off a
+   count would put it where a member's eye goes first on a page they share with staff.
+6. **The confirm's reason box is optional and capped at 200** (`guides.REASON_MAX`), the way
+   a caption is. A forced reason is a box people type `.` into.
+7. **The mock seed gains a SECOND picture, on `house-rules`, NOT stale.** The one seeded
+   picture was already stale, so the mock could only ever answer *"Every screenshot was
+   already marked."* and no browser pass could see the sentence that matters.

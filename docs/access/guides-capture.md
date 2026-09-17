@@ -74,6 +74,14 @@ Each row in `shots` carries `slug`, `title`, `feature`, `caption`, `source`
 `stale_since`. **That list is the whole job.** An empty `shots` list means there is
 nothing to **RE-SHOOT**; say so and stop — do not go hunting.
 
+⚠️ **After a cutover the list is empty for the wrong reason, and one button fixes that.** A
+deploy marks the shots of the features it changed; a mode flip, a channel rename or a
+reworded message is not a deploy, so every picture still reads as current while showing
+something that is gone. The owner — or a session at his word — opens the hub as staff
+([`guides.html`](https://blackbloc.heygabi.ai/guides.html)), presses **Mark every screenshot
+stale…** under **Screenshots to re-shoot**, confirms and writes one line of why; every
+picture in the app is then on this list and the runbook runs from §1 exactly as written.
+
 ⚠️ **`count: 0` has TWO meanings, and this file only ever described one.** Staleness is a
 fact about pictures that EXIST. Until a guide has a picture there is nothing to mark, so a
 brand-new guide reads exactly like a freshly re-shot one. Measured 2026-09-16 09:18 on the

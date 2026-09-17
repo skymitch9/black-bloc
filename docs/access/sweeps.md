@@ -1436,6 +1436,18 @@ it**, so row `MD-a` is the one to try from a second, non-staff account.
 | **432** (was `MD-n`) | On the Modmail page on the site: read the **Came in by** column, then the **Ticket button** card | Every ticket says which door it came in by. The card names the channel the button is in and offers **Move the ticket button** / **Take it down**; with nothing up it says so and offers **Post the ticket button**. Both write `web.modmail.panel_*` lines and ⚠️ **one line each, never two** |
 | **433** (was `MD-o`) | `/settings set-value modmail_member_command false`, then run `/modmail` from the non-staff account | The old refusal sentence and no panel at all — the member half is one key, off and on, both ways |
 
+### Mark every screenshot stale — row `GS-a` (branch `guides-stale`, off `main` `c6a341a`)
+
+⚠️ **Nothing below has met the live app.** The build's whole verification is `pytest`, `ruff`,
+`check.mjs` and one browser pass over the Guides hub on the MOCK. No migration. 🔴 **Row `GS-a`
+is the cutover trigger for `../info/cutover-plan.md` row P7** — press it only when the modes
+have flipped and the rename has happened, because a card re-shot while its feature is still
+`shadow` still says so.
+
+| # | Do this | Expect |
+|---|---|---|
+| `GS-a` | On the Guides page at `https://blackbloc.heygabi.ai/guides.html`, signed in as staff, open **Screenshots to re-shoot** and press **Mark every screenshot stale…**; write *shadow mode is off, channel renamed* in the box and confirm | The dialog says no picture is deleted. On **Mark them all** the page says *"N screenshots are marked for re-shooting. The capture runbook's stale list is the whole job."*, the section's count pill and every card's *stale pictures* pill come back with the new numbers, and the table lists all of them. Press it a second time: *"Every screenshot was already marked."* and nothing moves. The Logs page carries **one** `web.guide.shots_stale` line carrying the release, `features: ["all"]`, the count and your reason. `.\scripts\read.ps1 -Path /api/guides/stale` then answers the same count |
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is
