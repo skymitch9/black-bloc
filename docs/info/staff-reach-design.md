@@ -1,6 +1,6 @@
 # Staff reach — every channel the bot makes is the staff's to see and delete, and the BlackMail log
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatching to Opus 2026-09-17 10:5x as branch `staff-reach`** (v120; §C added 10:5x — three site items the owner asked for the same morning). **Last verified: 2026-09-17
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v121** — merge `129bf70`, release `9f003d5`, deployed **2026-09-17 11:41** Phoenix; the `## Deviations` foot is the truth where it departs from the body (deviation 1 corrects §A's measurement); sweeps **487–498** are the owner's; KI-28 closed by §C. Was: 📐 DESIGN, dispatched 10:5x (planned as v120 — v120 became the requests-forum hotfix). **Last verified: 2026-09-17
 > 08:3x** against `main` `91bee8a`: the three overwrite builders named in §A were read in full
 > (`cogs/community/tempvoice.py:382–420`, `events.py:1060–1076`, `cogs/moderation/modmail.py:691–701`), the
 > role list and the two categories were read off the live guild by the bot token. ⚠️ Secret NAMES only.
