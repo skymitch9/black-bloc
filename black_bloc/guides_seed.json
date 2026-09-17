@@ -219,7 +219,8 @@
         {"symptom": "No DM arrived", "answer": "Your DMs are closed to server members. The bot pings you in the requests channel instead."},
         {"symptom": "A button on the post says it is for staff only", "answer": "A forum post is one message for everybody, so the moves are drawn for everybody and refused on the press. Pressing one needs Manage Server or a role that can see the staff channel — ask a Lead."},
         {"symptom": "You cannot find the card again", "answer": "With a requests forum, your request is a post called #<number> and what you asked for, tagged for wherever it has got to. Without one, every card is in the requests channel."},
-        {"symptom": "You started a post in the requests forum yourself", "answer": "It becomes a request filed by you: the title is what you asked for, your first message is the why, and the bot replies in the post with the card, the moves and the open tag. You are DMed the number. Nothing you wrote is deleted."}
+        {"symptom": "You started a post in the requests forum yourself", "answer": "It becomes a request filed by you: the title is what you asked for, your first message is the why, and the bot replies in the post with the card, the moves and the open tag. You are DMed the number. Nothing you wrote is deleted."},
+        {"symptom": "Somebody filed the wrong thing — this is really an event", "answer": "Staff press **Send to events…** on the request's post, or on its card on the /request panel. The event draft opens already filled in from the request, with the day and time left for staff to pick; submitting it files the event in the REQUESTER's name, closes the request as moved with a link both ways, and DMs them. Nothing is copied twice and nothing is deleted."}
       ],
       "facts": [
         {"kind": "setting", "ref": "request_mode"},
@@ -318,7 +319,8 @@
       "faults": [
         {"symptom": "You denied and changed your mind", "answer": "Open the card again and press **Approve after all** while the room exists."},
         {"symptom": "The announcement landed in the spam channel", "answer": "Test mode is on. Every post goes to the test channel until it is lifted."},
-        {"symptom": "No scheduled event was made", "answer": "Test mode makes none. Or events_create_scheduled is off."}
+        {"symptom": "No scheduled event was made", "answer": "Test mode makes none. Or events_create_scheduled is off."},
+        {"symptom": "Somebody filed the wrong thing — this is not really an event", "answer": "Press **Not an event — make it a request** on the review card. A request is filed in the proposer's name from the event's own title and details, the event is cancelled with a link to it both ways, and their DM says staff filed it as a request instead."}
       ],
       "facts": [
         {"kind": "setting", "ref": "events_mode"},
@@ -345,7 +347,8 @@
         {"symptom": "The card is in the spam channel, not the ticket", "answer": "Test mode redirects real tickets' cards there. The practice thread shows it in place."},
         {"symptom": "A typed message did not reach the member", "answer": "modmail_reply_style is buttons. Set it to typing or both under **Setup…** ▸ **Reply style…**."},
         {"symptom": "You want to block somebody", "answer": "**Blocked…** ▸ **Block someone…** ▸ pick them ▸ a reason. **Unblock them** reverses it."},
-        {"symptom": "The ticket list scrolls for ever", "answer": "Press **Setup…** ▸ **Make the forum**, then **Setup…** ▸ **Mode…** ▸ forum. Every ticket is then a post of its own, tagged open while it runs and closed when it ends."}
+        {"symptom": "The ticket list scrolls for ever", "answer": "Press **Setup…** ▸ **Make the forum**, then **Setup…** ▸ **Mode…** ▸ forum. Every ticket is then a post of its own, tagged open while it runs and closed when it ends."},
+        {"symptom": "Somebody filed the wrong thing — this ticket should be a request or an event", "answer": "**Make this a request…** / **Make this an event…** on the ticket card. A ticket is private, so nothing is filed until the member says yes to a DM showing exactly what would be filed — no answer in 24 hours counts as no, and No lets you ask again. The ticket stays open either way; closing it is your own move."}
       ],
       "facts": [
         {"kind": "setting", "ref": "modmail_enabled"},

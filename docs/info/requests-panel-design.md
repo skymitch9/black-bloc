@@ -138,7 +138,9 @@ The panel re-renders in place (`interaction.response.edit_message`) as:
   | `review` | `Accept` (→ done; NOT rendered when `may_accept` says this staffer may not, the embed footer says who may) · `Send back` (modal, note required) · `Hold` · `Decline` — ⚠️ **plus `Ask them to check` between Accept and Send back since v61** |
   | `hold` | `Resume` (→ `resume_target(row)`) · `Decline` |
   | `done` / `declined` / `withdrawn` | no move buttons; the card says it is final (`NO_MOVES_LEFT`) |
+  | `moved` | ⚠️ **SINCE v127** (`send-to-design.md` ▸ §A): a NEW final status, written only by a hand-off. No move buttons and no Send to… either; the card's **Now** field says which event it became |
 
+  ⚠️ **SINCE v127 every non-final card also carries a second row: `Send to events…` and `Open a ticket with them…`** (`send-to-design.md` §A, key `handoff_mode`, default **on**) — the first opens the `/event` draft pre-filled and proposed in the REQUESTER's name, the second opens a modmail ticket with them and leaves the request where it is. A final request draws neither, which is what refuses a stale press.
   Plus `Back` (to the staff panel) on every card. Button styles: the forward move is
   `primary`, `Accept` is `success`, `Decline` is `danger`, the rest `secondary`.
 - **Every move calls the shared function that exists today, `via` left at its Discord

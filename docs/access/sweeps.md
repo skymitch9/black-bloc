@@ -1,6 +1,13 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-17** — rows **`ST-a` … `ST-k`** added at the foot for the SEND TO… build (branch
+> `send-to`, off `main` `8a27840`; design `info/send-to-design.md`; ⚠️ **not merged, not
+> deployed, and nothing in it has met Discord — no draft has been opened from a request and no
+> confirm DM has been sent**): staff can send a request to events, an event back to requests,
+> and a ticket to either with the member's say-so (`handoff_mode`, default **on**).
+> ⚠️ **`ST-b` is the row that matters** — a press on a PUBLIC forum post must answer
+> privately and leave the post alone. Before that,
 > **2026-09-17** — rows **`TS-a` … `TS-h`** added at the foot for the TEMP VOICE SHADOW build
 > (branch `tempvoice-shadow`, off `main` `c56962f`; design `info/tempvoice-shadow-design.md`;
 > ⚠️ **not merged, not deployed, and nothing in it has met Discord — no lobby has been hidden and
@@ -1779,6 +1786,29 @@ https://blackbloc.heygabi.ai/settings.html.
 | **540** (was `YL-g`) | On the **Go-live** page, find the **How live streams are spotted** card | Live streams = the mode you set, Probe = running, **Last probe** a minute or two old, Last probe error = none, **Channels probed** = how many are linked, **Quota used today** = 0 with no key set (1 unit per stream detected with one). ⚠️ A **Last probe** that never moves means the loop stopped — the Health tab's `live_poller` row is the other place that shows it |
 | **541** (was `YL-h`) | Restart the bot (`flyctl apps restart black-bloc`) WHILE the streamer is live, then look at the post and the Recent streams table | Still one session, still open, and the post is NOT re-announced. The reconcile asks YouTube whether they are still live before closing anything. ⚠️ If the post gets rewritten as ended and then a second post appears, the reconcile answered *offline* for somebody who was live |
 | **542** (was `YL-i`) | ⚠️ Set `youtube_live_poll_minutes` to **1** on the Settings page | It is refused **in words**, naming 2 as the floor and why. Same for `youtube_live_end_misses` at 0 or 6. Nothing is saved |
+
+## Send to… — staff hand-offs between requests, events and tickets (`ST-a` … `ST-k`)
+
+⚠️ **Not merged, not deployed, and nothing in it has met Discord** — no draft has been opened from a
+request, no confirm DM has been sent, and no member has pressed Yes. `handoff_mode` ships **on**, so
+the moves are drawn the moment this lands; `handoff_confirm_hours` ships **24**.
+Design: [`../info/send-to-design.md`](../info/send-to-design.md).
+Review links: https://blackbloc.heygabi.ai/requests.html · https://blackbloc.heygabi.ai/events.html ·
+https://blackbloc.heygabi.ai/modmail.html · https://blackbloc.heygabi.ai/settings.html (under **request**).
+
+| # | Do this | Expect |
+|---|---|---|
+| `ST-a` | File a request (`/request` ▸ **File a request**), open its post in the requests forum, and read the buttons under the card | The status moves as before, then **Send to events…** and **Open a ticket with them…**, then **Open on the site**. A finished request (done / declined) carries neither |
+| `ST-b` | ⚠️ **The row that matters.** Press **Send to events…** on that PUBLIC post | The post does not change at all — the answer is a private message only you can see, carrying the event draft with the title and details already filled in from the request and a first line *Filed as request #N by @them*. The When dropdowns are blank: you pick the day and time |
+| `ST-c` | Pick a day, an hour and a minute, then press **Submit** | The event is created in **their** name, not yours — the review channel is named for them and they can see it. The request closes as **moved**, its post is tagged `moved` and archived with the line `→ event #N`, and they get a DM saying *your request #N is now event #M*. ⚠️ You should NOT get a *Submitted on…* DM: you did not propose it |
+| `ST-d` | Press **Send to events…** again on the same (now archived) post | Refused in words: *#N is already moved, so there is nothing left to send anywhere.* Nothing is created |
+| `ST-e` | On the request's page row on the site, find the moved request | It reads **Moved → event #M** with an **open it** link to the events page. ⚠️ The link goes to the PAGE, not to the row — events have no per-event anchor yet |
+| `ST-f` | Propose an event with `/event`, then open its review channel and press **Not an event — make it a request** | A request is filed in the proposer's name from the event's own title and details, the event is cancelled, the card in the room closes and gains a **Now: request #N** line, and the room keeps the line `→ request #N`. Their DM says *staff have filed it as a request instead* |
+| `ST-g` | Open a modmail ticket (DM the bot), then press **Make this a request…** on the ticket card | A form opens already filled in with the ticket's subject and first message — change either. On submit, the ticket says *@them has been asked by DM… No answer by <time> counts as no*, and **nothing is filed yet** |
+| `ST-h` | As the member, read the DM and press **Yes, file it** | The request is filed in your name, the buttons on the DM disappear, and the ticket gains `→ request #N`. The ticket stays OPEN — closing it is staff's own move |
+| `ST-i` | Repeat `ST-g` with **Make this an event…** and press **Yes, file it** | Nothing is filed yet, because an event needs a date: the ticket gains a card with **Make the event…** on it. Press it (as staff) and the event draft opens privately, pre-filled. Submit it and the ticket gains `→ event #N` |
+| `ST-j` | Repeat `ST-g` and press **No, keep it private** as the member | Nothing is filed, the ticket says *@them said no*, and staff can ask again — the two moves are drawn on the card as before |
+| `ST-k` | Press **Open a ticket with them…** on a request's post | A ticket opens with the requester, quoting the request as the first staff message. The request is left exactly where it was — this one is a conversation, not a move. ⚠️ It works even with `modmail_open_with_button` off, which is deliberate |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

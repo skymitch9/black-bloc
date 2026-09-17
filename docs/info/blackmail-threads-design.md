@@ -97,6 +97,8 @@ Owner, verbatim: *"On the request thread there aren't buttons to edit it or anyt
 homes (the `/request` panel's staff card and the website) → *"Yes I want staff, mainly me to be able to interact
 with request in discord too"*.
 
+⚠️ **SINCE v127** the post's row is followed by a SECOND row: `Send to events…` and `Open a ticket with them…` (`send-to-design.md` §A). They are a second `DynamicItem` class with their own template (`handoff:request:<id>:<action>`, so neither regex can swallow the other's press), and a press on the public post defers `ephemeral, thinking=True` and draws the draft over the NEW ephemeral — the post itself is never edited. There are six tags in the requests forum plus a seventh, `moved`, and a moved post is archived like a finished one.
+
 **Rule.** The forum post's FIRST message (the one `open_forum_post` makes) carries, under the filed card, the same
 staff move buttons the `/request` panel's card draws for that status — `requests.card_buttons(status, ...)` rendered
 by the SAME `CardMoveButton` class, one row, staff-gated on press (a member's press answers in words naming the role

@@ -178,6 +178,24 @@ def test_every_key_lands_in_exactly_one_of_the_twenty_four_groups():
     assert set(counted.values()) == {1}
 
 
+def test_the_settings_groups_fit_the_select():
+    """The cap that nearly cost `youtube` its whole Discord door (front-door deviation 3).
+
+    `cogs/core.py:GroupPick` builds its select from `groups()[:SELECT_LIMIT]`, which is
+    Discord's own hard limit — so group 26 is not refused, it is silently dropped, and every
+    key in it becomes unreachable from Discord with nothing anywhere saying so. The front
+    door was filed under `modmail` through NAMESPACE_OVERRIDE for exactly this reason, and
+    so were the two Send to... keys. This is the guard the next namespace fails instead."""
+    found = groups()
+
+    assert len(found) <= SELECT_LIMIT, (
+        f"{len(found)} settings groups and the select holds {SELECT_LIMIT}: "
+        f"{sorted(found[SELECT_LIMIT:])} would be dropped off /settings > A setting group... "
+        "with no refusal anywhere. File the new keys under an existing namespace with "
+        "settings_store.NAMESPACE_OVERRIDE, as frontdoor_* and handoff_* are."
+    )
+
+
 def test_chat_is_the_only_group_over_the_cap_and_find_is_what_reaches_the_rest():
     over = [group for group in groups() if needs_find(group)]
     assert over == ["chat", "modmail"]
