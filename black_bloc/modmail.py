@@ -14,6 +14,8 @@ from .settings_store import (
     CHANNEL_MODE,
     MODMAIL_BOTH,
     MODMAIL_BUTTONS,
+    MODMAIL_PANEL_TEXT_DEFAULT,
+    MODMAIL_PANEL_TITLE_DEFAULT,
     MODMAIL_TYPING,
     THREAD_MODE,
 )
@@ -727,8 +729,8 @@ CARD_NOT_REACHED = (
     "⚠️ **The last reply did not reach them** — their DMs are shut or Black Bloc is blocked. "
     "The ticket has it either way."
 )
-PANEL_HEADING_DEFAULT = "Need a moderator?"
-PANEL_TEXT_DEFAULT = "Press the button and tell us what is happening. Only staff see it."
+PANEL_HEADING_DEFAULT = MODMAIL_PANEL_TITLE_DEFAULT
+PANEL_TEXT_DEFAULT = MODMAIL_PANEL_TEXT_DEFAULT
 
 
 class CardMove(NamedTuple):
