@@ -1,4 +1,5 @@
 import json
+import re
 
 import discord
 import pytest
@@ -61,7 +62,7 @@ class FakeMessage:
         self.view = kwargs.get("view")
 
     async def edit(self, **kwargs):
-        self.kwargs = kwargs
+        self.kwargs = {**self.kwargs, **kwargs}
         if "embeds" in kwargs:
             self.embeds = list(kwargs["embeds"])
         elif kwargs.get("embed") is not None:
@@ -103,6 +104,9 @@ class FakeForumPost(FakeText):
         if "applied_tags" in kwargs:
             self.applied_tags = list(kwargs["applied_tags"] or ())
         self.archived = kwargs.get("archived", self.archived)
+
+    def get_partial_message(self, message_id):
+        return next((one for one in self.messages if one.id == message_id), None)
 
 
 class FakeForum:
@@ -218,6 +222,10 @@ class FakeBot:
         self.guilds = [guild]
         self.guard = None
         self._cog = None
+        self.dynamic_items = []
+
+    def add_dynamic_items(self, *items):
+        self.dynamic_items.extend(items)
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
@@ -315,6 +323,34 @@ def words_in(card):
 def link_of(sent):
     view = (sent.kwargs if hasattr(sent, "kwargs") else sent)["view"]
     return view.children[0].url if view is not None else None
+
+
+def view_of(sent):
+    return (sent.kwargs if hasattr(sent, "kwargs") else sent).get("view")
+
+
+def inner(item):
+    """A `DynamicItem` wraps its button rather than being one; the label lives inside."""
+    return getattr(item, "item", item)
+
+
+def post_labels(sent):
+    view = view_of(sent)
+    return [] if view is None else [getattr(inner(one), "label", None) for one in view.children]
+
+
+def post_button(sent, label):
+    return next(
+        one for one in view_of(sent).children if getattr(inner(one), "label", None) == label
+    )
+
+
+def site_link_of(sent):
+    view = view_of(sent)
+    if view is None:
+        return None
+    urls = [getattr(inner(one), "url", None) for one in view.children]
+    return next((one for one in urls if one), None)
 
 
 @pytest.fixture
@@ -1603,12 +1639,13 @@ async def test_a_filed_request_opens_its_own_post_tagged_open(cog, bot, member, 
 
 
 async def test_a_forum_post_carries_the_cards_link_button(cog, bot, member):
+    """SINCE v122 the link shares the row with the moves — §F; it is no longer child zero."""
     bot.guard = FakeGuard()
     forum = await point_at_a_forum(bot)
 
     await file_one(cog, bot, member)
 
-    assert link_of(forum.posts[0].messages[0]) is not None
+    assert site_link_of(forum.posts[0].messages[0]) is not None
 
 
 async def test_every_move_lands_in_the_requests_own_post_not_the_status_channel(
@@ -1827,3 +1864,216 @@ async def test_a_deleted_request_forum_is_forgotten_rather_than_kept_as_a_dead_i
 
     assert bot.store.get(GUILD, "request_forum_channel_id") is None
     assert "request.forum_forgotten" in await action_kinds(db)
+
+
+# --- the staff moves on the post itself (blackmail-threads §F) --------------------------------
+
+
+async def posted(cog, bot, member, **fields):
+    """One filed request, its forum, and the first message of its own post."""
+    forum = await point_at_a_forum(bot)
+    await file_one(cog, bot, member, **fields)
+    return forum.posts[0]
+
+
+async def submit_modal(bot, who, modal):
+    interaction = FakeInteraction(bot, who)
+    await modal.on_submit(interaction)
+    return interaction
+
+
+async def test_the_posts_first_message_carries_the_moves_for_where_the_request_is(
+    cog, bot, member
+):
+    bot.guard = FakeGuard()
+
+    post = await posted(cog, bot, member)
+
+    assert post_labels(post.messages[0]) == ["Pick up", "Hold", "Decline", pure.SITE_BUTTON]
+    assert site_link_of(post.messages[0]) is not None
+
+
+async def test_the_posts_buttons_are_the_same_table_the_panel_card_draws(cog, bot, member, lead):
+    """One table, two surfaces: §F asks for `card_buttons`, not a second list."""
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.IN_PROGRESS, lead)
+    row = await pure.get_request(bot.db, 1)
+
+    _, card = requests_cog.build_card(bot, bot.guild, row, lead)
+
+    on_the_card = [one.label for one in card.children if hasattr(one, "spec")]
+    assert post_labels(post.messages[0])[:-1] == on_the_card
+
+
+async def test_a_staff_press_on_the_post_moves_the_request_and_answers_only_them(
+    cog, bot, member, lead, db
+):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    said = await click(bot, lead, post_button(post.messages[0], "Pick up"))
+
+    assert (await pure.get_request(db, 1))["status"] == pure.IN_PROGRESS
+    assert "is now **being worked on**" in said.sent
+    assert said.response.messages[-1]["ephemeral"] is True
+    assert "request.in_progress" in await action_kinds(db)
+
+
+async def test_a_staff_press_re_draws_the_first_messages_buttons_for_the_new_status(
+    cog, bot, member, lead
+):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    await click(bot, lead, post_button(post.messages[0], "Pick up"))
+
+    assert post_labels(post.messages[0]) == [
+        "Ready to check",
+        "Hold",
+        "Decline",
+        pure.SITE_BUTTON,
+    ]
+
+
+async def test_a_staff_press_still_posts_the_move_line_into_the_post(cog, bot, member, lead):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    await click(bot, lead, post_button(post.messages[0], "Pick up"))
+
+    assert [card_of(one)["title"] for one in post.messages] == [
+        "New request #1",
+        "Request #1 is being worked on",
+    ]
+    assert tags_on(post) == ["picked up"]
+
+
+async def test_a_members_press_on_the_post_is_refused_in_words_naming_what_it_needs(
+    cog, bot, member, db
+):
+    """Nothing is hidden by rendering — a forum post is one message for everybody."""
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    said = await click(bot, member, post_button(post.messages[0], "Pick up"))
+
+    assert "for staff only" in said.sent
+    assert "Manage Server" in said.sent and "Ask a server admin" in said.sent
+    assert said.response.messages[-1]["ephemeral"] is True
+    assert (await pure.get_request(db, 1))["status"] == pure.OPEN
+
+
+async def test_a_decided_request_keeps_the_link_and_loses_every_move(cog, bot, member, lead):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.DECLINED, lead, reason="no")
+
+    assert post_labels(post.messages[0]) == [pure.SITE_BUTTON]
+    assert post.archived is True
+
+
+async def test_a_move_that_needs_a_note_opens_the_modal_and_finishes_on_the_post(
+    cog, bot, member, lead, db
+):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+
+    opening = await click(bot, lead, post_button(post.messages[0], "Hold"))
+    modal = opening.response.modals[0]
+    assert modal.on_post is True
+    modal.note._value = "waiting on art"
+    said = await submit_modal(bot, lead, modal)
+
+    assert (await pure.get_request(db, 1))["status"] == pure.HOLD
+    assert post_labels(post.messages[0]) == ["Resume", "Decline", pure.SITE_BUTTON]
+    assert said.response.messages[-1]["ephemeral"] is True
+
+
+async def test_the_ready_modal_from_a_post_answers_the_presser_not_the_post(
+    cog, bot, member, lead, db
+):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+    await click(bot, lead, post_button(post.messages[0], "Pick up"))
+
+    opening = await click(bot, lead, post_button(post.messages[0], "Ready to check"))
+    modal = opening.response.modals[0]
+    modal.built._value = "a request board"
+    modal.how_to_test._value = "press it"
+    said = await submit_modal(bot, lead, modal)
+
+    assert (await pure.get_request(db, 1))["status"] == pure.REVIEW
+    assert said.message is None
+    assert "ready to check" in said.sent
+
+
+async def test_a_post_button_rebuilds_itself_from_its_custom_id_after_a_restart(
+    cog, bot, member, lead, db
+):
+    """The proof §F asks for: nothing but the id survives a deploy, and the press still works."""
+    bot.guard = FakeGuard()
+    await posted(cog, bot, member)
+    custom_id = pure.post_move_custom_id(1, "pickup")
+    match = re.fullmatch(requests_cog.MOVE_TEMPLATE, custom_id)
+    assert match is not None
+
+    fresh = await requests_cog.PostMoveButton.from_custom_id(None, None, match)
+    said = await click(bot, lead, fresh)
+
+    assert fresh.request_id == 1 and fresh.spec.action == "pickup"
+    assert fresh.custom_id == custom_id
+    assert (await pure.get_request(db, 1))["status"] == pure.IN_PROGRESS
+    assert "is now **being worked on**" in said.sent
+
+
+async def test_every_move_in_the_table_has_a_custom_id_the_template_reads_back():
+    for action, spec in pure.MOVE_BY_ACTION.items():
+        match = re.fullmatch(requests_cog.MOVE_TEMPLATE, pure.post_move_custom_id(12, action))
+        assert match is not None, action
+        assert match["action"] == action and match["request_id"] == "12"
+        assert pure.MOVE_BY_ACTION[match["action"]] is spec
+
+
+async def test_the_cog_registers_the_post_button_so_a_restart_can_dispatch_it(cog, bot):
+    await cog.cog_load()
+
+    assert bot.dynamic_items == [requests_cog.PostMoveButton]
+
+
+async def test_the_review_row_puts_the_site_link_on_a_second_row(cog, bot, member, lead):
+    bot.guard = FakeGuard()
+    post = await posted(cog, bot, member)
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.IN_PROGRESS, lead)
+    await requests_cog.mark_ready(bot, bot.guild, 1, lead, "a board", "press it")
+
+    view = view_of(post.messages[0])
+    assert len(post_labels(post.messages[0])) == 6
+    assert [one.row for one in view.children][-1] == 1
+
+
+async def test_the_key_off_leaves_the_post_exactly_what_it_was_before(cog, bot, member, lead):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "request_post_buttons", False)
+
+    post = await posted(cog, bot, member)
+    await requests_cog.apply_decision(bot, bot.guild, 1, pure.IN_PROGRESS, lead)
+
+    assert post_labels(post.messages[0]) == [pure.SITE_BUTTON]
+    assert [card_of(one)["title"] for one in post.messages] == [
+        "New request #1",
+        "Request #1 is being worked on",
+    ]
+
+
+async def test_the_panel_card_is_untouched_by_the_post_buttons(cog, bot, member, lead):
+    """§F leaves the panel a panel: its moves stay ordinary items with no custom id of ours."""
+    request_id = await request_at(bot, member, lead, pure.OPEN)
+    row = await pure.get_request(bot.db, request_id)
+
+    _, view = requests_cog.build_card(bot, bot.guild, row, lead)
+
+    moves = [one for one in view.children if isinstance(one, requests_cog.CardMoveButton)]
+    assert [one.label for one in moves] == ["Pick up", "Hold", "Decline"]
+    assert not any(isinstance(one, requests_cog.PostMoveButton) for one in view.children)

@@ -437,6 +437,7 @@ const SETTING_SPECS = [
   ['request_review_by_other', 'bool', false, false, 'true to make somebody other than the staffer who marked a request ready to check be the one who accepts it'],
   ['request_check_fallback_channel', 'bool', true, true, 'true to ping the person who asked in the request channel when Ask-them-to-check cannot DM them (closed DMs); false to tell staff nobody was reached and leave it there'],
   ['request_check_on_ready', 'bool', false, false, 'true to ask the person who asked to try the work the moment a request is marked ready to check, without a staffer pressing Ask them to check'],
+  ['request_post_buttons', 'bool', true, true, "true draws the staff move buttons on each request's forum post (and edits them as the request moves); false leaves the post a notice with the site link"],
   ['cost_hosting_usd', 'int', 0, 0, 'what the always-on container costs a month in whole dollars — read it off your Fly invoice; 0 = not filled in yet, and the Costs card on the Health page says so rather than claiming hosting is free', null, 10000],
   ['raidtrain_mode', 'enum', 'off', 'off', 'off, shadow (log what would be sent and send nothing) or on (post the lineup and DM slot holders before their hour)', ['off', 'shadow', 'on']],
   ['raidtrain_organizer_role_id', 'role', null, null, 'role that may build and change a raid train’s lineup as well as staff; blank leaves it to staff alone'],

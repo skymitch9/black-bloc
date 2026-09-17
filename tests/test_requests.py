@@ -684,6 +684,36 @@ def test_the_two_check_settings_read_off_the_registry_and_never_out_of_the_cog()
     assert pure.checks_on_ready(Store(), GUILD) is False
 
 
+def test_the_post_buttons_setting_reads_off_the_registry_and_defaults_to_drawing_them():
+    assert pure.POST_BUTTONS_KEY == "request_post_buttons"
+    assert pure.post_buttons_on(Store(request_post_buttons=True), GUILD) is True
+    assert pure.post_buttons_on(Store(request_post_buttons=False), GUILD) is False
+
+
+def test_a_post_moves_custom_id_names_the_request_and_the_move_and_nothing_else():
+    assert pure.post_move_custom_id(12, "hold") == "request:12:hold"
+    assert pure.post_move_custom_id("12", "pickup") == "request:12:pickup"
+
+
+def test_every_move_in_the_card_table_has_exactly_one_spec_to_rebuild_it_from():
+    """`from_custom_id` gets an action and nothing else, so an action may mean only one move."""
+    every = [one for moves in pure.CARD_BUTTONS.values() for one in moves]
+    for one in every:
+        assert pure.MOVE_BY_ACTION[one.action] == one
+    assert set(pure.MOVE_ACTIONS) == {one.action for one in every}
+    assert pure.ROW_CAP == 5
+
+
+def test_the_site_link_is_one_button_the_card_and_the_post_both_draw():
+    button = pure.site_button("https://example.test", 4, row=1)
+
+    assert button is not None and button.label == pure.SITE_BUTTON and button.row == 1
+    assert button.url == pure.request_url("https://example.test", 4)
+    assert pure.site_button("", 4) is None
+    assert pure.site_view("", 4) is None
+    assert pure.site_view("https://example.test", 4).children[0].url == button.url
+
+
 async def test_asking_again_overwrites_who_asked_and_when_rather_than_stacking_rows(db):
     request_id = await file_one(db)
 

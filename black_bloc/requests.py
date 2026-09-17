@@ -54,6 +54,7 @@ PANEL_MINUTES_KEY = "request_panel_minutes"
 PANEL_OWN_LIST_KEY = "request_panel_own_list"
 CHECK_FALLBACK_KEY = "request_check_fallback_channel"
 CHECK_ON_READY_KEY = "request_check_on_ready"
+POST_BUTTONS_KEY = "request_post_buttons"
 
 SELECT_CAP = 25
 SELECT_OPTION_LIMIT = 100
@@ -497,6 +498,22 @@ def card_buttons(status: Any, *, may_accept_here: bool = True) -> tuple[MoveButt
     return tuple(one for one in found if one.action != "accept")
 
 
+MOVE_BY_ACTION: dict[str, MoveButton] = {
+    one.action: one for moves in CARD_BUTTONS.values() for one in moves
+}
+MOVE_ACTIONS = tuple(MOVE_BY_ACTION)
+ROW_CAP = 5
+
+
+def post_move_custom_id(request_id: Any, action: Any) -> str:
+    """What a move button on a forum post is called, so a restart can rebuild it from the id."""
+    return f"request:{int(request_id)}:{action}"
+
+
+def post_buttons_on(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, POST_BUTTONS_KEY))
+
+
 def card_footer_override(status: Any, ready_by: Any, may_accept_here: bool) -> str | None:
     """When the default `EMBED_FOOTER` is not the whole story: why Accept is missing, or why
     nothing moves any more."""
@@ -763,18 +780,24 @@ def request_embed(row: Any, *, move: str, origin: Any = "", guild: Any = None) -
     return embed
 
 
-def site_view(origin: Any, request_id: Any) -> discord.ui.View | None:
-    """One link button to the request's own anchor; no origin means no button, never a bad link."""
+def site_button(origin: Any, request_id: Any, row: int = 0) -> discord.ui.Button | None:
+    """The link to a request's own anchor; no origin means no button, never a bad link."""
     if not str(origin or "").strip():
         return None
-    view = discord.ui.View(timeout=None)
-    view.add_item(
-        discord.ui.Button(
-            style=discord.ButtonStyle.link,
-            label=SITE_BUTTON,
-            url=request_url(origin, request_id),
-        )
+    return discord.ui.Button(
+        style=discord.ButtonStyle.link,
+        label=SITE_BUTTON,
+        url=request_url(origin, request_id),
+        row=row,
     )
+
+
+def site_view(origin: Any, request_id: Any) -> discord.ui.View | None:
+    button = site_button(origin, request_id)
+    if button is None:
+        return None
+    view = discord.ui.View(timeout=None)
+    view.add_item(button)
     return view
 
 
@@ -1100,6 +1123,8 @@ __all__ = [
     "HOLD",
     "IN_PROGRESS",
     "LOOKS",
+    "MOVE_ACTIONS",
+    "MOVE_BY_ACTION",
     "MOVE_LINE",
     "MoveButton",
     "NEEDS_A_REASON",
@@ -1111,6 +1136,7 @@ __all__ = [
     "PANEL_EMPTY",
     "PANEL_INTRO",
     "PANEL_MINUTES_KEY",
+    "POST_BUTTONS_KEY",
     "PANEL_OWN_LIST_KEY",
     "PANEL_TIMEOUT_FOOTER",
     "PANEL_TITLE",
@@ -1167,6 +1193,8 @@ __all__ = [
     "pick_placeholder",
     "card_will_post",
     "post_title",
+    "post_buttons_on",
+    "post_move_custom_id",
     "posts_a_card",
     "request_embed",
     "request_url",
@@ -1178,6 +1206,7 @@ __all__ = [
     "set_message",
     "set_status",
     "set_thread",
+    "site_button",
     "site_page_url",
     "site_view",
     "status_channel_id",
