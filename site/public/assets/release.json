@@ -1,9 +1,5 @@
 {
-  "release": "v126",
-  "commit": "427ee2c",
-  "changed_features": [
-    "golive",
-    "guides",
-    "youtube"
-  ]
+  "release": "v127",
+  "commit": "6c3f8de",
+  "changed_features": []
 }
