@@ -108,13 +108,20 @@ async def test_black_bloc_may_speak_in_a_channel_it_made_itself(guarded_bot, mon
     await guarded_bot.close()
 
 
-async def test_owning_a_channel_does_not_widen_where_channels_may_be_deleted(guarded_bot):
+async def test_owning_a_channel_lets_black_bloc_delete_what_it_made(guarded_bot, monkeypatch):
+    seen = []
     _cache(guarded_bot, _Channel(TEST_CH, category_id=CATEGORY), _Channel(OWN_CH, category_id=99))
     g = guarded_bot.guard
+    monkeypatch.setattr(g, "_original_delete", lambda cid, *a, **k: seen.append(cid))
     g.own_channel(OWN_CH)
 
     assert g.allows_channel(OWN_CH) is True
-    assert g.allows_place(_Channel(OWN_CH, category_id=99)) is False
+    assert g.allows_place(_Channel(OWN_CH, category_id=99)) is True
+    assert g.allows_place(_Channel(OTHER_CH, category_id=99)) is False
+    guarded_bot.http.delete_channel(OWN_CH)
+    assert seen == [OWN_CH]
+
+    g.disown_channel(OWN_CH)
     with pytest.raises(TestModeViolation):
         guarded_bot.http.delete_channel(OWN_CH)
     await guarded_bot.close()

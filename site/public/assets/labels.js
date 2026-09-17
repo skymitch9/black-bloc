@@ -79,6 +79,7 @@ export const LABELS = {
   tempvoice_name_template: 'What a new room is called',
   tempvoice_creator_name: 'What the join-to-create channel is called',
   tempvoice_allowed_role_id: 'Who is allowed a room of their own',
+  tempvoice_room_overwrites: 'What a new room’s permissions are copied from',
   tempvoice_log_level: 'How much of temp voice is repeated into Discord',
 
   honeypot_mode: 'Whether the trap is armed',

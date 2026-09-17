@@ -324,6 +324,7 @@ const SETTING_SPECS = [
   ['tempvoice_name_template', 'text', "{user}'s room", "{user}'s room", 'what a spawned channel is called; {user} is the member'],
   ['tempvoice_creator_name', 'text', 'join to create a channel', 'join to create a channel', 'what the join-to-create channel is called'],
   ['tempvoice_allowed_role_id', 'role', null, null, 'only members with this role get a temporary channel'],
+  ['tempvoice_room_overwrites', 'enum', 'lobby', 'lobby', "what a new room's permissions start from: lobby (the join-to-create channel's own — a staff-only lobby makes staff-only rooms) or category (the category's, as before)", ['lobby', 'category']],
   ['honeypot_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (ban whoever posts in the trap)', ['off', 'shadow', 'on']],
   ['honeypot_channel_ids', 'channels', ['800000000000000007'], [], 'the trap channels; Setup… on /honeypot fills this in'],
   ['honeypot_purge_days', 'int', 1, 1, 'days of the banned account’s messages to delete with it, 0 to 7', null, 7],

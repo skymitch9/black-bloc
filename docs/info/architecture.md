@@ -118,6 +118,7 @@ black_bloc/
 ├── command_sync.py   ← sync_dev_guild(): dev-guild slash-command sync, 403 handling
 ├── command_errors.py ← the tree error handler: any unhandled slash-command failure answers with a sentence
 ├── guard.py          ← TestModeGuard: the TEST_MODE gate (send + edit HTTP layer, interaction_check)
+│                     └ `allows_place` also allows a channel Black Bloc MADE (v117, 2026-09-17)
 ├── config.py         ← Settings (pydantic-settings). THE ONLY reader of the environment / .env
 ├── settings_store.py ← per-guild settings on SQLite + the staff check. The ONLY way features read config
 ├── actionlog.py      ← log_action(): one DB row always, one embed to the log channel when it can

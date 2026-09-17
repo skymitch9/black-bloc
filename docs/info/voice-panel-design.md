@@ -541,3 +541,62 @@ delta and re-measure. The delta is one, as predicted.
     reported it as done — `do_bitrate`'s "as high as your boost level allows" line only fires
     when the GUILD capped it, not when the clamp did. Checklist 22 in its literal sense: the
     bound that vanished with the parameter had to be rebuilt where the value now enters.
+
+### Lobby in the main voice area (v117, 2026-09-17)
+
+Built on `tempvoice-lobby`, off `91bee8a`. The owner's two asks, verbatim: *"Let's move it up to
+the main voice channel area but keep its visibility staff only, when we swap off shadow mode it
+should become visible to whatever permissions inherit from the voice group"* and, told the
+test-mode guard would strand the rooms, *"Do a, would the spawned channels be visible to
+everyone?"* — (a) being *let the bot delete what it made itself*. Neither is a change to
+`/voice`'s panel; both are the two things that had to move before the lobby could leave the test
+channel's category.
+
+1. **`guard.allows_place` gained one clause: a channel Black Bloc owns is an allowed place.**
+   `tests/test_guard.py::test_owning_a_channel_does_not_widen_where_channels_may_be_deleted` pinned
+   the opposite decision on purpose and is now
+   `::test_owning_a_channel_lets_black_bloc_delete_what_it_made` — owned means `allows_place`
+   True and `delete_channel` passes through, an unowned channel outside the test category is still
+   refused, and `disown_channel` takes it back. Nothing else in `guard.py` moved; the refusal
+   sentence, the delete log line and the boot `WARNING` were reworded to name both reasons, because
+   *"sits outside the test channel's category"* on its own is no longer why. Checklist 35: the
+   reversal is written into the `guard.py:70` rows of `code-notes.md`, which is where that contract
+   was actually recorded — no design doc carried a DECIDED bullet for it.
+
+2. **New key `tempvoice_room_overwrites`, enum `lobby` | `category`, default `lobby`.** A spawned
+   room's overwrites used to start from `category_overwrites(creator.category)`, so a staff-only
+   lobby sitting in a public category would have spawned rooms everyone could see — the
+   question the owner asked. With `lobby` the room starts from the **lobby channel's own**
+   overwrites instead; with `category`, today's behaviour. The room is still *created* in the
+   lobby's category — only the permission source moves — and everything layered on top
+   (owner, locked/hidden, allowed roles, permitted/banned, the bot itself) is untouched.
+   `owner_overwrites`' keyword `category=` is now `source=`, since it takes either.
+
+**Three departures from the brief, all reported:**
+
+- **`may_act_in` — the cog's own place gate — had to move too, and the brief did not name
+  it.** It is a second, independent gate that `allows_place` knows nothing about: it compares
+  `channel.category_id` to the test channel's and is what the website's room edits
+  (`api/tools/tempvoice.py:95`, the `OUTSIDE_TEST_ROOM` sentence) and `repair_creator_channel` ask.
+  It gained the same owned-channel clause, so a room in the main voice area is still editable from
+  the dashboard.
+- **`may_spawn_from` is new, and it is the one thing without which the feature would have been
+  inert.** The `TODO.md` finding said a moved lobby *"would spawn rooms the bot can never clean
+  up"*; measured, it would have spawned **nothing at all** — `_maybe_create` asks
+  `may_act_in(lobby)` before it creates anything, and the lobby is neither owned nor in the test
+  category. Widening `allows_place` alone would therefore have shipped a lobby that quietly did
+  nothing until `TEST_MODE` lifted, which is option (b) the owner turned down. `may_spawn_from`
+  allows a lobby the guild has **written down** (`tempvoice_creator_ids`) and nothing else; the
+  room is owned the instant it exists, which is the protection the category check used to buy.
+- **`repair_creator_channel` was deliberately left refusing.** It rewrites the lobby's overwrites
+  from its **category**, so letting it run on a moved, staff-only lobby would undo the very thing
+  the move is for. Pressing **Setup** on `/voice` against a lobby outside the test category still
+  answers `OUTSIDE_TEST_CATEGORY` while test mode is on. That sentence was left as it is, because
+  for the lobby it is still both true and the reason.
+
+**Not done, and why:** nothing on Discord. The lobby's `parent_id` move and its overwrites are the
+owner's/conductor's step after v117 boots, and no room was ever spawned, deleted or looked at in a
+client — every claim here is from the test suite. `TEST_MODE=true` was never touched.
+
+Tests **5986 → 5991**, forward and under `BB_REVERSE=1`; `ruff check .` clean; `node
+site/mock/check.mjs` **19 pages / 175 routes / 14 core settings, all keys present**.

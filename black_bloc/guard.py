@@ -68,9 +68,11 @@ class TestModeGuard:
         return getattr(getattr(test_channel, "category", None), "id", None)
 
     def allows_place(self, channel: Any) -> bool:
-        """Where a channel may be made, renamed or deleted: the test channel's own category."""
+        """Where a channel may be made, renamed or deleted: the test category, or one it made."""
         here = self._id_of(channel)
         if here is not None and self._is_test_home(here):
+            return True
+        if self.owns_channel(channel):
             return True
         if not hasattr(channel, "id"):
             channel_id = self._id_of(channel)
@@ -128,12 +130,14 @@ class TestModeGuard:
         def gated_delete_channel(channel_id: int, *args: Any, **kwargs: Any):
             if not guard.allows_place(int(channel_id)):
                 log.error(
-                    "TEST MODE: refused to delete channel %s (allowed: the category of %s)",
+                    "TEST MODE: refused to delete channel %s (allowed: the category of %s, or a "
+                    "channel Black Bloc made itself)",
                     channel_id,
                     guard.test_channel_id,
                 )
                 raise TestModeViolation(
-                    f"test mode: channel {channel_id} is outside the test channel's category"
+                    f"test mode: channel {channel_id} is outside the test channel's category "
+                    "and Black Bloc did not make it"
                 )
             return guard._original_delete(channel_id, *args, **kwargs)
 
@@ -160,6 +164,6 @@ class TestModeGuard:
         log.warning(
             "TEST MODE ON: messages and commands restricted to channel %s, DMs and the temporary "
             "voice channels Black Bloc makes itself; channel deletion restricted to that "
-            "channel's own category",
+            "channel's own category and to the channels Black Bloc made itself",
             self.test_channel_id,
         )
