@@ -1,4 +1,6 @@
+import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import discord
 import pytest
@@ -135,11 +137,37 @@ class FakeMessage:
         self.end_raises = None
         self.thread_raises = None
         self.threads = []
+        self.pinned = False
+        self.pin_reasons = []
+        self.unpin_reasons = []
+        self.pin_raises = None
+        self.unpin_raises = None
+        self.deleted = False
+        self.type = discord.MessageType.default
+        self.reference = None
         if self.poll is not None:
             self.poll.expires_at = datetime.now(UTC) + self.poll.duration
 
     async def edit(self, **kwargs):
         self.edits.append(kwargs)
+
+    async def pin(self, *, reason=None):
+        if self.pin_raises is not None:
+            raise self.pin_raises
+        self.pinned = True
+        self.pin_reasons.append(reason)
+        self.channel.note_a_pin(self)
+
+    async def unpin(self, *, reason=None):
+        if self.unpin_raises is not None:
+            raise self.unpin_raises
+        self.pinned = False
+        self.unpin_reasons.append(reason)
+
+    async def delete(self):
+        self.deleted = True
+        if self in self.channel.messages:
+            self.channel.messages.remove(self)
 
     async def end_poll(self):
         if self.end_raises is not None:
@@ -187,6 +215,21 @@ class FakeText:
         if found is None:
             raise LookupError(message_id)
         return found
+
+    def note_a_pin(self, message):
+        """Discord's own "somebody pinned a message" line, which the bot deletes when it can."""
+        notice = FakeMessage(self.id * 100 + len(self.messages) + 1, self, "")
+        notice.type = discord.MessageType.pins_add
+        notice.reference = SimpleNamespace(message_id=message.id)
+        self.messages.append(notice)
+        return notice
+
+    def history(self, *, limit=50):
+        return self._history(limit)
+
+    async def _history(self, limit):
+        for message in list(reversed(self.messages))[:limit]:
+            yield message
 
     @property
     def polls(self):
@@ -2228,7 +2271,7 @@ async def test_post_it_writes_exactly_one_row_and_one_log_line(cog, bot, lead, d
 
     assert (await get_poll(db, 1))["status"] == pure.OPEN
     assert await get_poll(db, 2) is None
-    assert await action_kinds(db) == ["poll.created", "poll.opened"]
+    assert await action_kinds(db) == ["poll.created", "poll.opened", "poll.pinned"]
     assert "up" in interaction.sent
 
 
@@ -2500,7 +2543,12 @@ async def test_post_it_from_a_resumed_draft_leaves_no_draft_and_one_log_row(cog,
 
     assert await draft_rows(db) == []
     assert (await get_poll(db, 1))["status"] == pure.OPEN
-    assert await action_kinds(db) == ["poll.draft_saved", "poll.created", "poll.opened"]
+    assert await action_kinds(db) == [
+        "poll.draft_saved",
+        "poll.created",
+        "poll.opened",
+        "poll.pinned",
+    ]
     cur = await db.conn.execute("SELECT details FROM action_log WHERE kind = 'poll.created'")
     assert '"from_draft": true' in (await cur.fetchone())["details"]
 
@@ -2754,3 +2802,264 @@ async def test_the_settings_embed_says_where_drafts_stand(cog, bot, lead):
     lines = " ".join(cog.settings_lines(bot.guild))
 
     assert "saved drafts" in lines and "kept 14 day(s)" in lines
+
+
+# --- Shadow, a channel per poll, pinned while open -----------------------------------------
+
+
+async def rehearse(bot):
+    await bot.store.set(GUILD, "poll_mode", pure.SHADOW)
+
+
+async def shadow_poll(cog, bot, who, **kwargs):
+    """A poll aimed at a REAL channel while polls are rehearsing."""
+    await rehearse(bot)
+    elsewhere = bot.guild.get_channel(OTHER_CHANNEL)
+    return await make(cog, bot, who, channel=elsewhere, **kwargs)
+
+
+async def test_in_shadow_the_real_poll_goes_to_the_shadow_channel_with_a_line_saying_why(
+    cog, bot, lead, db
+):
+    interaction = await shadow_poll(cog, bot, lead)
+
+    rehearsal = bot.guild.get_channel(TEST_CHANNEL)
+    assert bot.guild.get_channel(OTHER_CHANNEL).polls == []
+    assert len(rehearsal.polls) == 1
+    said = rehearsal.polls[0].content
+    assert said.startswith("Posted here because polls are in **shadow**")
+    assert "#general" in said.splitlines()[0]
+    assert said.splitlines()[1] == f"<@{lead.id}> started a poll."
+    assert "is up" in interaction.sent
+
+
+async def test_a_rehearsed_row_keeps_the_channel_it_was_aimed_at_and_remembers_the_copy(
+    cog, bot, lead, db
+):
+    """The card, the site's Where column and the results all read `channel_id`, so the
+    rehearsal must not overwrite it — the copy's id goes in `shadow_message_id`."""
+    await shadow_poll(cog, bot, lead)
+
+    row = await get_poll(db, 1)
+    copy = bot.guild.get_channel(TEST_CHANNEL).polls[0]
+    assert row["channel_id"] == OTHER_CHANNEL
+    assert row["message_id"] == copy.id
+    assert row["shadow_message_id"] == copy.id
+
+
+async def test_a_rehearsal_is_logged_as_opened_shadow_with_both_channel_ids(cog, bot, lead, db):
+    await shadow_poll(cog, bot, lead)
+
+    assert await action_kinds(db) == ["poll.created", "poll.opened_shadow", "poll.pinned"]
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'poll.opened_shadow'"
+    )
+    details = json.loads((await cur.fetchone())["details"])
+    assert details["channel_id"] == OTHER_CHANNEL
+    assert details["shadow_channel_id"] == TEST_CHANNEL
+
+
+async def test_would_open_is_never_written_in_shadow_because_the_poll_really_opened(
+    cog, bot, lead, db
+):
+    await shadow_poll(cog, bot, lead)
+
+    assert "poll.would_open" not in await action_kinds(db)
+    assert (await get_poll(db, 1))["status"] == pure.OPEN
+
+
+async def test_with_the_mode_on_a_real_channel_is_still_refused_under_test_mode(
+    cog, bot, lead, db
+):
+    """Today's refusal stays: shadow is the way to rehearse, not a general escape hatch."""
+    interaction = await make(cog, bot, lead, channel=bot.guild.get_channel(OTHER_CHANNEL))
+
+    assert "test mode" in interaction.sent
+    assert await get_poll(db, 1) is None
+
+
+async def test_a_rehearsal_with_nowhere_to_rehearse_says_so_and_writes_no_message(
+    cog, bot, lead, db
+):
+    bot.guard = None
+    await bot.store.set(GUILD, "log_channel_id", 99999)
+    await rehearse(bot)
+
+    await make(cog, bot, lead, channel=bot.guild.get_channel(OTHER_CHANNEL))
+
+    cur = await db.conn.execute("SELECT details FROM action_log WHERE kind = 'poll.open_failed'")
+    assert json.loads((await cur.fetchone())["details"])["reason"] == "no_shadow_channel"
+    assert bot.guild.get_channel(TEST_CHANNEL).polls == []
+    assert bot.guild.get_channel(OTHER_CHANNEL).polls == []
+
+
+async def test_a_vote_on_a_rehearsed_poll_counts_exactly_as_one_on_a_real_poll(
+    cog, bot, lead, db
+):
+    await shadow_poll(cog, bot, lead)
+    row = await get_poll(db, 1)
+    payload = discord.RawPollVoteActionEvent(
+        {
+            "user_id": "10",
+            "channel_id": str(TEST_CHANNEL),
+            "message_id": str(row["message_id"]),
+            "guild_id": str(GUILD),
+            "answer_id": 1,
+        }
+    )
+
+    await cog.on_raw_poll_vote_add(payload)
+
+    assert [(v["user_id"], v["label"]) for v in await votes_of(db, 1)] == [(10, "Pizza")]
+
+
+async def test_ending_a_rehearsed_poll_publishes_the_result_beside_the_rehearsal(
+    cog, bot, lead, db
+):
+    await shadow_poll(cog, bot, lead)
+    rehearsal = bot.guild.get_channel(TEST_CHANNEL)
+    await vote(rehearsal, 0, FakeMember(bot.guild, 10, "Ann"))
+
+    interaction = await end_poll(cog, bot, lead)
+
+    assert (await get_poll(db, 1))["status"] == pure.CLOSED
+    assert "result is posted" in interaction.sent
+    assert rehearsal.messages[-1].kwargs["embed"].title == "Pizza or tacos?"
+    assert bot.guild.get_channel(OTHER_CHANNEL).messages == []
+
+
+async def test_a_poll_is_pinned_when_it_opens_and_unpinned_when_it_closes(cog, bot, lead, db):
+    await make(cog, bot, lead)
+    posted = bot.guild.get_channel(TEST_CHANNEL).polls[0]
+
+    assert posted.pinned is True
+    assert posted.pin_reasons == [pure.PIN_REASON]
+
+    await end_poll(cog, bot, lead)
+
+    assert posted.pinned is False
+    assert posted.unpin_reasons == [pure.UNPIN_REASON]
+    assert await action_kinds(db) == [
+        "poll.created",
+        "poll.opened",
+        "poll.pinned",
+        "poll.closed",
+        "poll.unpinned",
+    ]
+
+
+async def test_a_cancelled_poll_does_not_stay_pinned_for_ever(cog, bot, lead, db):
+    await make(cog, bot, lead)
+    posted = bot.guild.get_channel(TEST_CHANNEL).polls[0]
+
+    await cancel_it(cog, bot, lead)
+
+    assert posted.pinned is False
+    assert "poll.unpinned" in await action_kinds(db)
+
+
+async def test_a_rehearsal_is_pinned_in_the_shadow_channel_so_staff_see_the_real_thing(
+    cog, bot, lead, db
+):
+    await shadow_poll(cog, bot, lead)
+
+    assert bot.guild.get_channel(TEST_CHANNEL).polls[0].pinned is True
+
+
+async def test_the_pin_notice_discord_adds_is_taken_away_again(cog, bot, lead, db):
+    await make(cog, bot, lead)
+
+    channel = bot.guild.get_channel(TEST_CHANNEL)
+    assert [m.type for m in channel.messages] == [discord.MessageType.default]
+
+
+async def test_a_pin_discord_refuses_is_a_log_row_and_the_poll_still_opens(
+    cog, bot, lead, db, monkeypatch
+):
+    """Checklist 12: no Manage Messages must never cost the room its poll."""
+
+    async def refuse(self, *, reason=None):
+        raise discord.Forbidden(
+            SimpleNamespace(status=403, reason="Forbidden"), "Missing Permissions"
+        )
+
+    monkeypatch.setattr(FakeMessage, "pin", refuse)
+
+    await make(cog, bot, lead)
+
+    assert (await get_poll(db, 1))["status"] == pure.OPEN
+    assert bot.guild.get_channel(TEST_CHANNEL).polls[0].pinned is False
+    assert await action_kinds(db) == ["poll.created", "poll.opened", "poll.pin_failed"]
+
+
+async def test_nothing_is_pinned_when_the_setting_says_not_to(cog, bot, lead, db):
+    await bot.store.set(GUILD, "poll_pin", False)
+
+    await make(cog, bot, lead)
+
+    assert bot.guild.get_channel(TEST_CHANNEL).polls[0].pinned is False
+    assert await action_kinds(db) == ["poll.created", "poll.opened"]
+
+
+async def test_the_draft_opens_on_the_servers_poll_channel_not_wherever_it_was_run(
+    cog, bot, lead
+):
+    await bot.store.set(GUILD, "poll_channel_id", OTHER_CHANNEL)
+    panel = await open_panel(cog, bot, lead)
+
+    pressed = await click(bot, lead, find_item(panel_view(panel), "Create"))
+
+    assert pressed.response.modals[0].draft.channel_id == OTHER_CHANNEL
+
+
+async def test_with_no_poll_channel_the_draft_still_opens_where_it_was_run(cog, bot, lead):
+    panel = await open_panel(cog, bot, lead)
+
+    pressed = await click(bot, lead, find_item(panel_view(panel), "Create"))
+
+    assert pressed.response.modals[0].draft.channel_id == TEST_CHANNEL
+
+
+async def test_the_where_select_shows_what_the_draft_is_aimed_at(cog, bot, lead):
+    opened, draft = await fresh_draft(cog, bot, lead)
+
+    select = next(
+        item for item in card_view(opened).children if isinstance(item, discord.ui.ChannelSelect)
+    )
+    assert [one.id for one in select.default_values] == [draft.channel_id]
+
+
+async def test_somebody_who_may_not_create_a_poll_gets_no_where_select(cog, bot, member):
+    """Checklist 33 read the other way: a control nobody may use is not rendered at all."""
+    opened, _ = await fresh_draft(cog, bot, member)
+
+    assert not [
+        item for item in card_view(opened).children if isinstance(item, discord.ui.ChannelSelect)
+    ]
+
+    await bot.store.set(GUILD, "poll_who_can_create", "everyone")
+    again, _ = await fresh_draft(cog, bot, member)
+
+    assert [
+        item for item in card_view(again).children if isinstance(item, discord.ui.ChannelSelect)
+    ]
+
+
+async def test_flipping_shadow_to_on_leaves_an_open_rehearsal_where_it_is(cog, bot, lead, db):
+    await shadow_poll(cog, bot, lead)
+    copy = bot.guild.get_channel(TEST_CHANNEL).polls[0]
+
+    await bot.store.set(GUILD, "poll_mode", pure.ON)
+
+    row = await get_poll(db, 1)
+    assert row["status"] == pure.OPEN
+    assert row["message_id"] == copy.id and row["shadow_message_id"] == copy.id
+    assert bot.guild.get_channel(OTHER_CHANNEL).polls == []
+
+
+async def test_the_staff_block_counts_the_open_polls_that_are_rehearsals(cog, bot, lead, db):
+    await shadow_poll(cog, bot, lead)
+
+    panel = await open_panel(cog, bot, lead)
+
+    assert "**1** posted in shadow" in panel_embed(panel).description
