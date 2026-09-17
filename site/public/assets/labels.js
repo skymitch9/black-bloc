@@ -217,6 +217,7 @@ export const LABELS = {
   request_review_by_other: 'Whether somebody else has to check a request before it is done',
   request_check_fallback_channel: 'Ping in the channel when a check-DM is refused',
   request_check_on_ready: 'Ask the requester to check automatically at ready',
+  request_post_buttons: 'Whether a request’s forum post carries the staff move buttons',
   request_panel_minutes: 'How long the /request panel stays live',
   request_panel_own_list: 'Whether a member sees their own requests on /request',
   request_log_level: 'How much of requests is repeated into Discord',

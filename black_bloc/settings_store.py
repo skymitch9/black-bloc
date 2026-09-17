@@ -1257,6 +1257,7 @@ KEY_TYPES.update(
         "request_panel_own_list": "bool",
         "request_check_fallback_channel": "bool",
         "request_check_on_ready": "bool",
+        "request_post_buttons": "bool",
     }
 )
 KEY_CHOICES["request_channel_moves"] = REQUEST_CARD_MOVES
@@ -1290,6 +1291,10 @@ KEY_HELP.update(
         "request_check_on_ready": (
             "true to ask the person who asked to try the work the moment a request is marked "
             "ready to check, without a staffer pressing Ask them to check"
+        ),
+        "request_post_buttons": (
+            "true draws the staff move buttons on each request's forum post (and edits them as "
+            "the request moves); false leaves the post a notice with the site link"
         ),
     }
 )
@@ -2590,6 +2595,8 @@ class SettingsStore:
             return True
         if key == "request_check_on_ready":
             return False
+        if key == "request_post_buttons":
+            return True
         if key == "chat_mode":
             return "on"
         if key == "chat_cooldown_seconds":

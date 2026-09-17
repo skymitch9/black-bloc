@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from ...actionlog import log_action, send_logs
-from ...command_errors import NETWORK_ERRORS, AnswersErrors
+from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import (
     KEEP_IT,
@@ -17,6 +17,7 @@ from ...panels import (
     answer,
     confirm,
     confirm_items,
+    db_ready,
     opened,
     refusal,
     retire,
@@ -45,6 +46,8 @@ from ...requests import (
     IN_PROGRESS,
     LIST_PAGE,
     LOOKS,
+    MOVE_ACTIONS,
+    MOVE_BY_ACTION,
     NO_SUCH_REQUEST,
     NOT_ON_HOLD,
     NOT_READY_TO_CHECK,
@@ -62,6 +65,7 @@ from ...requests import (
     REQUESTS_OFF,
     REVIEW,
     REVIEW_BY_SOMEBODY_ELSE,
+    ROW_CAP,
     SELECT_CAP,
     SENT_BACK,
     SENT_BACK_LIMIT,
@@ -102,6 +106,8 @@ from ...requests import (
     panel_minutes,
     panel_shows_own_list,
     pick_placeholder,
+    post_buttons_on,
+    post_move_custom_id,
     post_title,
     posts_a_card,
     request_embed,
@@ -113,6 +119,7 @@ from ...requests import (
     set_message,
     set_status,
     set_thread,
+    site_button,
     site_page_url,
     site_view,
     status_channel_id,
@@ -166,6 +173,7 @@ BUTTON_STYLES: dict[str, discord.ButtonStyle] = {
     "danger": discord.ButtonStyle.danger,
 }
 COG_NAME = "Requests"
+MOVE_TEMPLATE = rf"request:(?P<request_id>[0-9]+):(?P<action>{'|'.join(MOVE_ACTIONS)})"
 MAKE_THE_FORUM = "Make the forum"
 FORUM_EXISTS = (
     "<#{where}> is already the request forum, so nothing was made. Clear "
@@ -406,6 +414,44 @@ async def open_forum_post(bot: Any, guild: Any, row: Any, embed: Any, view: Any)
     return post
 
 
+def post_view(bot: Any, guild: Any, row: Any) -> Any:
+    """The post's own buttons: the moves legal from where the request is, then the site link."""
+    origin = str(getattr(getattr(bot, "settings", None), "origin", "") or "")
+    request_id = row_value(row, "id", "")
+    if not post_buttons_on(bot.store, guild.id):
+        return site_view(origin, request_id)
+    moves = card_buttons(row_value(row, "status"))
+    view = discord.ui.View(timeout=None)
+    for spec in moves:
+        view.add_item(PostMoveButton(request_id, spec))
+    link = site_button(origin, request_id, row=1 if len(moves) >= ROW_CAP else 0)
+    if link is not None:
+        view.add_item(link)
+    return view if view.children else None
+
+
+async def restyle_post(bot: Any, guild: Any, row: Any, thread: Any) -> None:
+    """The post's first message keeps the moves legal now, and loses them all at a decision."""
+    message_id = row_value(row, "message_id")
+    finder = getattr(thread, "get_partial_message", None)
+    if not post_buttons_on(bot.store, guild.id) or not message_id or finder is None:
+        return
+    try:
+        await finder(int(message_id)).edit(view=post_view(bot, guild, row))
+    except NETWORK_ERRORS as exc:
+        log.warning("requests: could not re-draw the post buttons for %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            NOTIFY_FAILED_KIND,
+            details={
+                "request_id": row["id"],
+                "move": str(row_value(row, "status")),
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+
+
 async def retag_post(bot: Any, guild: Any, row: Any, thread: Any) -> None:
     """The post's own state: one tag for the status, and an archive once it is finished."""
     forum = getattr(thread, "parent", None) or forum_of(bot, guild)
@@ -438,7 +484,7 @@ async def notify(bot: Any, guild: Any, row: Any, who: Any) -> None:
         return
     embed, view = card(bot, guild, row, FILED_LOOK)
     if forum_of(bot, guild) is not None:
-        await open_forum_post(bot, guild, row, embed, view)
+        await open_forum_post(bot, guild, row, embed, post_view(bot, guild, row))
         return
     message = await post_line(
         bot,
@@ -472,6 +518,7 @@ async def notify_move(bot: Any, guild: Any, row: Any, look: str) -> None:
             view=view,
         )
     if thread is not None:
+        await restyle_post(bot, guild, row, thread)
         await retag_post(bot, guild, row, thread)
 
 
@@ -974,14 +1021,69 @@ async def confirm_withdraw(
     )
 
 
-async def run_move(
-    interaction: discord.Interaction, request_id: int, action: str, previous: Any = None
+async def opened_here(interaction: discord.Interaction, on_post: bool) -> bool:
+    """A panel press edits the panel it sits on; a post press must not touch the post."""
+    if not on_post:
+        return await opened(interaction, staff=False)
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    return await db_ready(interaction)
+
+
+async def finished(
+    interaction: discord.Interaction,
+    request_id: int,
+    said: str,
+    fresh: Any,
+    previous: Any,
+    on_post: bool,
 ) -> None:
-    if not await opened(interaction, staff=False):
+    if not on_post:
+        await finish_card(interaction, request_id, said, fresh, previous)
+        return
+    await interaction.followup.send(
+        said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def run_move(
+    interaction: discord.Interaction,
+    request_id: int,
+    action: str,
+    previous: Any = None,
+    *,
+    on_post: bool = False,
+) -> None:
+    if not await opened_here(interaction, on_post):
         return
     bot = interaction.client
     said, fresh = await MOVE_FUNCS[action](bot, interaction.guild, request_id, interaction.user)
-    await finish_card(interaction, request_id, said, fresh, previous)
+    await finished(interaction, request_id, said, fresh, previous, on_post)
+
+
+async def move_pressed(
+    interaction: discord.Interaction,
+    request_id: int,
+    spec: Any,
+    previous: Any = None,
+    *,
+    on_post: bool = False,
+) -> None:
+    """The one thing a move button does, on the panel's card or on the request's own post."""
+    if not await still_staff(interaction):
+        return
+    cog = interaction.client.get_cog(COG_NAME)
+    if spec.action == "ready":
+        row = await get_request(interaction.client.db, request_id)
+        await interaction.response.send_modal(
+            ReadyModal(cog, request_id, row, previous, on_post)
+        )
+        return
+    if spec.needs_modal:
+        await interaction.response.send_modal(
+            NoteModal(cog, request_id, spec.action, previous, on_post)
+        )
+        return
+    await run_move(interaction, request_id, spec.action, previous, on_post=on_post)
 
 
 class RequestView(Panel):
@@ -1091,21 +1193,32 @@ class CardMoveButton(discord.ui.Button):
         self.spec = spec
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        if not await still_staff(interaction):
-            return
-        cog = interaction.client.get_cog(COG_NAME)
-        if self.spec.action == "ready":
-            row = await get_request(interaction.client.db, self.request_id)
-            await interaction.response.send_modal(
-                ReadyModal(cog, self.request_id, row, self.view)
-            )
-            return
-        if self.spec.needs_modal:
-            await interaction.response.send_modal(
-                NoteModal(cog, self.request_id, self.spec.action, self.view)
-            )
-            return
-        await run_move(interaction, self.request_id, self.spec.action, self.view)
+        await move_pressed(interaction, self.request_id, self.spec, self.view)
+
+
+class PostMoveButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=MOVE_TEMPLATE
+):
+    """The same press as `CardMoveButton`, on a post that outlives the process that drew it."""
+
+    def __init__(self, request_id: Any, spec: Any) -> None:
+        self.request_id = int(request_id)
+        self.spec = spec
+        super().__init__(
+            discord.ui.Button(
+                label=spec.label,
+                style=BUTTON_STYLES[spec.style],
+                custom_id=post_move_custom_id(request_id, spec.action),
+            ),
+            row=0,
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: Any):
+        return cls(int(match["request_id"]), MOVE_BY_ACTION[match["action"]])
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        await move_pressed(interaction, self.request_id, self.spec, on_post=True)
 
 
 class RequestModal(AnswersErrors, discord.ui.Modal, title="Ask for something"):
@@ -1153,12 +1266,18 @@ class ReadyModal(AnswersErrors, discord.ui.Modal, title=READY_MODAL_TITLE):
     )
 
     def __init__(
-        self, cog: Requests, request_id: int, row: Any = None, previous: Any = None
+        self,
+        cog: Requests,
+        request_id: int,
+        row: Any = None,
+        previous: Any = None,
+        on_post: bool = False,
     ) -> None:
         super().__init__()
         self.cog = cog
         self.request_id = request_id
         self.previous = previous
+        self.on_post = on_post
         self.built.default = clamp(row_value(row, "built"), BUILT_LIMIT) or None
         self.how_to_test.default = clamp(row_value(row, "how_to_test"), HOW_TO_TEST_LIMIT) or None
 
@@ -1169,17 +1288,24 @@ class ReadyModal(AnswersErrors, discord.ui.Modal, title=READY_MODAL_TITLE):
             built=str(self.built),
             how_to_test=str(self.how_to_test),
             previous=self.previous,
+            on_post=self.on_post,
         )
 
 
 class NoteModal(PanelNoteModal):
     def __init__(
-        self, cog: Requests, request_id: int, kind: str, previous: Any = None
+        self,
+        cog: Requests,
+        request_id: int,
+        kind: str,
+        previous: Any = None,
+        on_post: bool = False,
     ) -> None:
         self.cog = cog
         self.request_id = request_id
         self.kind = kind
         self.previous = previous
+        self.on_post = on_post
         super().__init__(
             title=NOTE_TITLES[kind],
             label=NOTE_LABELS[kind],
@@ -1188,12 +1314,17 @@ class NoteModal(PanelNoteModal):
         )
 
     async def note_submit(self, interaction: discord.Interaction, text: str) -> None:
-        await self.cog.note_submit(interaction, self.request_id, self.kind, text, self.previous)
+        await self.cog.note_submit(
+            interaction, self.request_id, self.kind, text, self.previous, on_post=self.on_post
+        )
 
 
 class Requests(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+
+    async def cog_load(self) -> None:
+        self.bot.add_dynamic_items(PostMoveButton)
 
     async def _database_ready(self, interaction: discord.Interaction) -> bool:
         if self.bot.db.is_connected:
@@ -1288,11 +1419,12 @@ class Requests(commands.Cog):
         built: str,
         how_to_test: str,
         previous: Any = None,
+        on_post: bool = False,
     ) -> None:
         """What the ready modal does once it is filled in — the one shared path, nothing else."""
         if not await still_staff(interaction):
             return
-        if not await opened(interaction, staff=False):
+        if not await opened_here(interaction, on_post):
             return
         said, fresh = await mark_ready(
             self.bot,
@@ -1302,7 +1434,7 @@ class Requests(commands.Cog):
             built,
             how_to_test,
         )
-        await finish_card(interaction, request_id, said, fresh, previous)
+        await finished(interaction, request_id, said, fresh, previous, on_post)
 
     async def note_submit(
         self,
@@ -1311,11 +1443,13 @@ class Requests(commands.Cog):
         kind: str,
         text: str,
         previous: Any = None,
+        *,
+        on_post: bool = False,
     ) -> None:
         """What hold, decline and send-back all do once their one-line note is submitted."""
         if not await still_staff(interaction):
             return
-        if not await opened(interaction, staff=False):
+        if not await opened_here(interaction, on_post):
             return
         if kind == "sendback":
             said, fresh = await send_back(
@@ -1330,7 +1464,7 @@ class Requests(commands.Cog):
                 interaction.user,
                 reason=text,
             )
-        await finish_card(interaction, request_id, said, fresh, previous)
+        await finished(interaction, request_id, said, fresh, previous, on_post)
 
 
 async def setup(bot: commands.Bot) -> None:
@@ -1344,6 +1478,7 @@ __all__ = [
     "LogsButton",
     "MakeForumButton",
     "NoteModal",
+    "PostMoveButton",
     "ReadyModal",
     "RefreshButton",
     "RequestModal",
@@ -1364,11 +1499,15 @@ __all__ = [
     "guard_allows",
     "make_forum",
     "mark_ready",
+    "move_pressed",
     "moves_land_in",
     "notify",
     "notify_move",
     "open_card",
     "open_forum_post",
+    "opened_here",
+    "post_view",
+    "restyle_post",
     "retag_post",
     "thread_of",
     "open_withdraw_confirm",

@@ -87,6 +87,12 @@ rows `BT-a…`; `architecture.md` schema line; this doc's `## Deviations`. NOT `
 
 ## F. The request post carries the staff moves (owner, 2026-09-17 12:1x)
 
+> ✅ **BUILT** 2026-09-17 on branch `request-post-buttons` off `main` `f7cd19d`;
+> **not merged, not deployed, never pressed in Discord.** Read the `### §F` block in this doc's
+> `## Deviations` foot first — ⚠️ **deviation 1 is the one that matters: there are TWO move-button
+> classes, because a `DynamicItem` on a timeout-bearing panel view de-registers its own template
+> for every post in the guild.** `request_post_buttons` defaults to **true**.
+
 Owner, verbatim: *"On the request thread there aren't buttons to edit it or anything / Why is that"* → shown the two
 homes (the `/request` panel's staff card and the website) → *"Yes I want staff, mainly me to be able to interact
 with request in discord too"*.
@@ -238,3 +244,86 @@ modmail. The test that pinned the refusal (`test_a_forum_the_guard_refuses_is_sk
 now asserts the opposite (`test_a_keyed_forum_is_claimed_for_the_guard_so_test_mode_still_posts`). Request #6
 keeps no post; a second test request is filed after the deploy.
 
+### §F — the request post's staff moves (build, 2026-09-17, branch `request-post-buttons` off `main` `f7cd19d`)
+
+> Everything below is a place the build did NOT do what §F says, and why. ⚠️ **Nothing here has
+> met Discord.** The whole verification is `pytest -n auto` (**6175 → 6196**, and 6196 again
+> under `BB_REVERSE=1`), `ruff check .` (clean), the ES-module parse of every
+> `site/public/assets/*.js`, `node site/mock/check.mjs` (*19 pages, 178 routes, 15 core
+> settings, all keys present*), `node site/mock/discordmd.test.mjs` and
+> `node site/mock/labels.test.mjs`. No forum post was pressed, no browser rendered the
+> requests page, and `python -m black_bloc` was never booted.
+
+1. ⚠️ **There are TWO move-button classes, which §F forbade — and the reason is a measured
+   defect in `discord.py`, not convenience.** §F: *"one class, two registrations is fine, two
+   classes is not."* Measured against the installed **2.7.1**: `ViewStore.remove_view`
+   (`ui/view.py:970`) pops every dynamic TEMPLATE a view carried out of the process-wide
+   `_dynamic_items` registry, and `View.stop()` (`:650`) reaches `remove_view` through
+   `__cancel_callback`. The panel's card view is stopped on **every** re-render (`panels.retire`)
+   and again on every timeout (`_dispatch_timeout`). So a `DynamicItem` used on the `/request`
+   panel would have **de-registered the template for every forum post in the guild**, silently,
+   the first time a staffer pressed Back — and the tests would never have seen it, because the
+   fakes call `item.callback` directly and never go through the view store at all. A
+   timeout-bearing panel view structurally cannot host a dynamic item. So `CardMoveButton` stays
+   the panel's plain item exactly as it was (§F's own escape clause: *"the panel's own
+   `CardMoveButton` may stay a panel item"*), `PostMoveButton` is the dynamic one, and the thing
+   §F was actually protecting — one implementation — is kept by `move_pressed`, which both
+   classes call and which holds all of the behaviour. Each class is ten lines with no logic in
+   it. This is the modmail precedent (`TicketCardButton` on the card, the panel's own button,
+   one `card_pressed`), arrived at for the same reason.
+
+2. ⚠️ **A press on the post answers the presser with a NEW ephemeral message; it does not
+   re-render anything.** §F says the post's first message is edited to the new status's set, and
+   it is — but by `notify_move`, on the way through the shared move function, not by the press.
+   Measured: a component press defers with `deferred_message_update`, so `finish_card`'s
+   `edit_original_response` — the panel's path — would have replaced the request card on the
+   post with a panel view, Back button and all. `opened_here(on_post=True)` defers
+   `thinking=True` instead (a `deferred_channel_message`), which makes the interaction token
+   point at a new ephemeral message the post can never be reached from. That is the whole of the
+   divergence between the two surfaces: `opened_here` and `finished`, three lines each.
+
+3. ⚠️ **Every move is drawn for everybody, `may_accept` included, and refused on the press.**
+   §F's own reasoning ("nothing is hidden by rendering because a forum post is one message for
+   everybody") is followed to its end: `post_view` calls `card_buttons(status)` with
+   `may_accept_here` left at its default, where the panel passes the viewer's own answer. The
+   staffer who marked a request ready and presses **Accept** on the post gets
+   `REVIEW_BY_SOMEBODY_ELSE`, which names who may. Hiding the button on a shared message would
+   have hidden it from the person who is allowed to press it.
+
+4. **The `review` row puts the link on row 1; every other status keeps it beside the moves.**
+   §F allows either ("the last item of the row or a second row"). `review` draws five moves,
+   which is Discord's whole row, so the link has nowhere else to go; two or three moves and a
+   link on its own second row reads as a stray. One conditional, `ROW_CAP`.
+
+5. **`notify_move` re-draws the buttons BEFORE it re-tags.** `retag_post` archives the post at a
+   decision, and a message inside an archived thread cannot be edited without un-archiving it
+   first. Re-drawing while the post is still open costs nothing and leaves the archive the last
+   thing that happens.
+
+6. **The key reached a FOURTH door as well as the three §F named.** §F asked for registry + mock
+   row + label; `request_post_buttons` also went into `page-requests.js`'s `SETTING_KEYS`, so it
+   is editable on the requests page beside the forum key it depends on rather than only on the
+   Settings page. ⚠️ **Neither page was opened in a browser** — the proof is
+   `node site/mock/check.mjs` and `tests/test_settings_store.py`.
+
+7. ⚠️ **What a WITHDRAWN request's post does is still KI-29, and this build did not change it.**
+   `withdraw_request` reaches no Discord surface, so it re-draws no buttons either: a withdrawn
+   request's post keeps the moves for the status it was in. That is the same known gap, one
+   surface wider. The fix is the one KI-29 already names — route `withdraw_request` through
+   `notify_move` — and doing it here would have been the second post-editor this build spent its
+   care avoiding.
+
+8. ⚠️ **The panel was left alone on purpose, and one existing test changed meaning.**
+   `test_a_forum_post_carries_the_cards_link_button` asserted the link was the post view's FIRST
+   child; it is now the last, so the test reads the link by URL instead. Nothing else about the
+   panel, the channel/DM card or the DM moved.
+   `test_the_panel_card_is_untouched_by_the_post_buttons` is what keeps it that way.
+
+9. **What this build deliberately did NOT touch.** `docs/TODO.md`, `docs/DONE.md` and
+   `docs/deploys.log`. No setting was flipped — `request_post_buttons` defaults to true but
+   `request_forum_channel_id` is the owner's to set, so on a guild with no request forum every
+   path here is unreachable. Nothing was merged, deployed or pushed to `main`.
+
+10. ⚠️ **`pytest -n auto` did not stall once** (KI-26). Four full `-n auto` runs in this
+    worktree — the baseline, two after the code, and the `BB_REVERSE=1` one — all finished in
+    30–40 s. The count stands at seven.

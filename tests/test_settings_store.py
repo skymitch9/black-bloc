@@ -1086,6 +1086,7 @@ async def test_requests_ship_on_and_open_to_everyone_with_nothing_auto_approved(
         "request_panel_own_list",
         "request_check_fallback_channel",
         "request_check_on_ready",
+        "request_post_buttons",
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
 
@@ -1124,6 +1125,20 @@ async def test_the_two_ask_them_to_check_decisions_are_keys_both_ways(store):
     assert "ready to check" in KEY_HELP["request_check_on_ready"]
     await store.set(7, "request_check_on_ready", True)
     assert store.get(7, "request_check_on_ready") is True
+
+
+async def test_the_post_move_buttons_are_a_key_both_doors_reach(store):
+    """Checklist 33 — blackmail-threads §F: drawing the moves on a post is a decision."""
+    from black_bloc.settings_panel import reachable_on_the_panel
+
+    assert KEY_TYPES["request_post_buttons"] == "bool"
+    assert store.get(7, "request_post_buttons") is True
+    assert reachable_on_the_panel("request_post_buttons")
+    assert "forum post" in KEY_HELP["request_post_buttons"]
+    with pytest.raises(SettingError):
+        coerce_value("request_post_buttons", "true")
+    await store.set(7, "request_post_buttons", False)
+    assert store.get(7, "request_post_buttons") is False
 
 
 def test_the_card_moves_key_takes_any_of_the_eight_and_nothing_else():
