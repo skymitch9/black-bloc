@@ -78,6 +78,7 @@ from black_bloc.settings_store import (
     WHERE_CHECK_SECONDS_KEY,
     SettingsStore,
 )
+from black_bloc.spawned import STAFF_REACH_KEY
 from black_bloc.timezones import (
     DEFAULT_TZ,
     get_timezone,
@@ -782,6 +783,24 @@ async def test_the_review_channel_is_staff_only_plus_the_person_who_proposed_it(
     mine = overwrites[member]
     assert mine.view_channel is True and mine.send_messages is True
     assert mine.read_message_history is True
+
+
+async def test_the_review_channel_is_the_staff_s_to_delete_by_hand(cog, bot, member):
+    await submit(cog, bot, member)
+
+    staff = bot.guild.created[0].given_overwrites[bot.guild.roles[0]]
+    assert staff.view_channel is True and staff.send_messages is True
+    assert staff.manage_channels is True
+
+
+async def test_with_the_reach_key_off_the_review_channel_is_as_it_was(cog, bot, member):
+    await bot.store.set(GUILD, STAFF_REACH_KEY, False)
+
+    await submit(cog, bot, member)
+
+    staff = bot.guild.created[0].given_overwrites[bot.guild.roles[0]]
+    assert staff.view_channel is True and staff.send_messages is True
+    assert staff.manage_channels is None
 
 
 async def test_a_rename_leaves_the_requesters_overwrite_alone(cog, bot, member, db):

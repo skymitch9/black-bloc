@@ -44,6 +44,7 @@ from black_bloc.modmail import (
     count_directions,
     door_buttons,
     dump_attachments,
+    first_line,
     first_message,
     forget_buttons,
     header_embed,
@@ -54,6 +55,7 @@ from black_bloc.modmail import (
     mentions,
     modes_sentence,
     note_body,
+    open_embed,
     panel_card_buttons,
     panel_minutes,
     parse_topic,
@@ -280,6 +282,49 @@ def test_an_unreadable_timestamp_is_printed_rather_than_dropped():
     )
 
     assert "[not a date]" in text
+
+
+def test_the_new_ticket_card_names_the_door_and_wears_the_incumbents_footer():
+    embed = open_embed(
+        ticket_id=TICKET,
+        user_id=USER,
+        user_label="Alice",
+        source="dm",
+        opened_at="2026-09-17T10:00:00+00:00",
+    )
+    values = {field.name: field.value for field in embed.fields}
+
+    assert embed.title == f"New ticket #{TICKET}"
+    assert embed.description == f"<@{USER}> — Alice"
+    assert values["Came in by"] == "a DM to Black Bloc"
+    assert "Opened by" not in values and "About" not in values
+    assert embed.footer.text == f"Alice | {USER}"
+
+
+def test_a_staff_opened_card_names_the_staffer_and_the_first_line_of_the_subject():
+    embed = open_embed(
+        ticket_id=TICKET,
+        user_id=USER,
+        user_label="Alice",
+        source="staff",
+        opened_by=STAFF,
+        subject="  your appeal  \nand more  ",
+    )
+    values = {field.name: field.value for field in embed.fields}
+
+    assert values["Opened by"] == f"<@{STAFF}>"
+    assert values["About"] == "your appeal"
+    assert values["Came in by"] == "staff"
+
+
+def test_a_card_with_nothing_typed_and_no_name_still_renders():
+    embed = open_embed(ticket_id=TICKET, user_id=USER)
+    values = {field.name: field.value for field in embed.fields}
+
+    assert "About" not in values
+    assert values["Opened"] == "just now"
+    assert embed.footer.text == f"{USER} | {USER}"
+    assert first_line(None) == "" and first_line("   \n  ") == ""
 
 
 def test_the_summary_embed_counts_every_direction():

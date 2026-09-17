@@ -1,6 +1,14 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-17** — rows **`SR-a` … `SR-i`** added at the foot for the STAFF REACH build (branch
+> `staff-reach`, off `main` `4da192c`; ⚠️ **not merged, not deployed, nothing in it has met
+> Discord or a browser**): the staff roles get view + manage (+ connect for voice) on every channel
+> Black Bloc makes (`spawned_channels_staff_reach`, default **true**), a **New ticket** card lands
+> in the transcripts channel the moment a ticket opens (`modmail_log_on_open`, default **true**),
+> every channel dropdown on the site reads `#name · Category`, the Go-live page gains an editor for
+> the ENDED wording, and a text key that may be blank can be emptied from Discord (KI-28 closed).
+> Before that,
 > **2026-09-17** — rows **`BT-a` … `BT-p`** added at the foot for the BLACKMAIL THREADS build (branch
 > `blackmail-threads`, off `main` `905982b`; ⚠️ **not merged, not deployed, nothing in it has met
 > Discord**). What changes underneath them, and only once the conductor sets the keys: `modmail_mode`
@@ -1589,6 +1597,51 @@ guard can see. Delete the forum by hand afterwards if you were only trying it.
 | **484** (was `BT-n`) | On the dashboard: **Modmail** page ▸ **Ticket forum** card, and **Requests** page ▸ **Request forum** card | Each names the forum it already has and says which key to clear; neither draws **Make the forum** any more. Press one anyway through a second browser tab opened before `BT-a`: refused in words, *"already the ticket forum"*, and NO second forum |
 | **485** (was `BT-o`) | Point `modmail_panel_channel_id` at `#blackbloc-logs`, `/modmail` ▸ **Setup…** ▸ **Ticket button…** ▸ **Post it…** ▸ that channel. Then `/posts` ▸ **welcome** ▸ **Post it** | The rules message lands, and ⚠️ **within five minutes the ticket button is posted AGAIN underneath it and the old one is deleted.** The Logs page carries `modmail.panel_below_post` naming the slug — NOT `modmail.panel_gone`, which is the other reason and a different event |
 | **486** (was `BT-p`) | Set `modmail_panel_follows_post` to `none`, press **Post it** on the welcome post again | The button stays exactly where it is and no `modmail.panel_below_post` line is written. Set it back to `welcome` |
+
+## STAFF REACH — every room is the staff's to open and delete (`SR-a` … `SR-e`)
+
+Added 2026-09-17 by the STAFF REACH build (branch `staff-reach`, off `main` `4da192c`; ⚠️ **not
+merged, not deployed, and nothing in it has met Discord**). No migration. The key is
+`spawned_channels_staff_reach`, **true** out of the box, in **Settings ▸ core** and on `/settings`
+▸ **A setting group…** ▸ **core**.
+
+⚠️ **The reach is written when a channel is MADE.** Rooms that already exist keep the permissions
+they were made with — press **Setup** on `/voice` to rewrite the lobby's, and spawn a new room for
+the rest.
+
+| # | Do this | Expect |
+|---|---|---|
+| `SR-a` | `/voice` ▸ **Setup**, then open the lobby's **Edit Channel ▸ Permissions** in Discord | **Aunties / Uncles** is listed with ✅ View Channel, ✅ Connect and ✅ **Manage Channel** |
+| `SR-b` | Join the lobby to spawn a room, then **Hide it** and **Lock it** from the panel | The room vanishes for everyone else and ⚠️ **is still visible to you as an Auntie/Uncle**, with a right-click **Delete Channel** that works |
+| `SR-c` | As a member with no staff role, look for that hidden room | It is not there — the allow is for the staff roles only, not for everybody |
+| `SR-d` | Propose an event (`/event` ▸ **Propose an event**) and open the review room's permissions | The staff role has View + Send + **Manage Channel**; `@everyone` is still denied |
+| `SR-e` | Set **spawned_channels_staff_reach** to false on the Settings page, spawn one more room, then set it back to true | The new room has NO staff overwrite beyond what it always had (view + connect from the allowed-role list); nothing else changes |
+
+## BLACKMAIL — a New-ticket card the moment a ticket opens (`SR-f` … `SR-h`)
+
+Added 2026-09-17 by the same build. The key is `modmail_log_on_open`, **true** out of the box, in
+**Settings ▸ modmail**. The card goes to `modmail_log_channel_id` — ⚠️ **still `#blackbloc-logs`
+until the owner points it at BlackMail's `#modmail-log`** (Settings ▸ modmail ▸ *The transcripts
+channel*), which is why `SR-g` is worth doing before `SR-f`.
+
+| # | Do this | Expect |
+|---|---|---|
+| `SR-f` | DM Black Bloc from a second account | One embed **New ticket #N** in the transcripts channel: the member mentioned and named, *Came in by* **a DM to Black Bloc**, and the footer `<name> \| <user id>` — the same footer the old ModMail bot's log used, so an old search still finds it |
+| `SR-g` | Open one through each other door — `/modmail` ▸ **Open a ticket**, the posted **Open a ticket** button, and (with `modmail_open_with_button` on) staff ▸ **Open a ticket with…** | **One** card each, never two, with *Came in by* reading `/modmail` / *the Open a ticket button* / *staff*. The staff one also carries **Opened by**, and both modal doors carry **About** — the first line of what was typed in the subject box |
+| `SR-h` | Set **modmail_log_on_open** to false, open one more ticket, set it back | No card at all, and the ticket opens exactly as it did. `modmail.opened` is still on the Logs page either way |
+
+## THE SITE — categories on every picker, the ending's own editor, a key that may be blank (`SR-i` … `SR-l`)
+
+Added 2026-09-17 by the same build (§C). No key, no migration — these are three fixes the owner
+asked for by name. Review links: https://blackbloc.heygabi.ai/golive.html and
+https://blackbloc.heygabi.ai/settings.html.
+
+| # | Do this | Expect |
+|---|---|---|
+| `SR-i` | Open **Settings** ▸ modmail ▸ *The transcripts channel*, and any other channel dropdown on the site (Polls ▸ Where, Posts ▸ the target, Role menus ▸ where a menu goes) | Every channel reads `# name · Category`, so the two `modmail-log`s are told apart at last. A channel at the top level reads the name alone, a category row is unchanged, and a stored id the server no longer has still reads `a channel the server no longer has · <id>` |
+| `SR-j` | **Go-live** page ▸ **Announcement wording**. Under the live editor: **What the announcement says once the stream is over** and, under it, **What the card's top line says once the stream is over** | Both are editable here, with the same docked save bar (it says *Once the stream is over*) and a **What the ending looks like** card that fills in as you type, with a two-hour `{duration}`. Empty either box and its preview says what blank means rather than showing nothing |
+| `SR-k` | Change one of them and press **Save Changes**, then watch the **Wording** card below | It repaints itself — no Refresh press. Refresh is still there for a change made from the Settings page or from Discord. ⚠️ The two settings rows on the right still write the same keys; they are the same fact, not a second one |
+| `SR-l` | In Discord: `/settings` ▸ **A setting group…** ▸ **golive** ▸ *golive_end_template* ▸ **The words…**, clear the box and submit | ⚠️ **This is the row that proves KI-28 closed.** Discord accepts the empty submit, the card comes back reading *not set*, and the Wording card on the site shows the live sentence with ` — stream ended` on the end. Try the same on *golive_template*: Discord itself refuses to submit it empty, which is right |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

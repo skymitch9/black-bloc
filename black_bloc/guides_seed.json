@@ -17,7 +17,7 @@
         {"do": "Press **Stop announcing my streams** to pause.", "expect": "The button becomes **Announce my streams again**. Your link is kept."}
       ],
       "faults": [
-        {"symptom": "The post still reads as if you are live", "answer": "A Lead turns golive_end_mode to edit on the Go-live page. The Wording card there shows both messages before anybody streams."},
+        {"symptom": "The post still reads as if you are live", "answer": "A Lead turns golive_end_mode to edit on the Go-live page. Once the stream is over, right under the live wording, is where the ending is written, and the Wording card below both shows what the bot has stored before anybody streams."},
         {"symptom": "Nothing posted", "answer": "Announcements are in shadow. The panel's Announcements line says so; a Lead flips it."},
         {"symptom": "Discord does not show you streaming", "answer": "Reconnect Twitch under Discord's Connections and turn Display on profile on. The bot reads Discord, not Twitch."},
         {"symptom": "You went live twice in a short time", "answer": "The second one waits for the cooldown shown above."},

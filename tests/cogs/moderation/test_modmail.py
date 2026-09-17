@@ -19,7 +19,13 @@ from black_bloc.cogs.moderation.modmail import (
 )
 from black_bloc.config import load_settings
 from black_bloc.modmail import COLOURS, IN, NOTE, OUT, UNDELIVERED_MARK, parse_topic
-from black_bloc.settings_store import CHANNEL_MODE, THREAD_MODE, SettingsStore
+from black_bloc.settings_store import (
+    CHANNEL_MODE,
+    MODMAIL_LOG_ON_OPEN,
+    THREAD_MODE,
+    SettingsStore,
+)
+from black_bloc.spawned import STAFF_REACH_KEY
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -562,7 +568,7 @@ async def test_the_relay_lands_in_the_test_channel_while_the_guard_is_on(cog, bo
     made = bot.guild.created[0]
     assert made.messages == []
     embeds = [m.kwargs.get("embed") for m in bot.guild.channels[TEST_CHANNEL].messages]
-    assert [e.title for e in embeds if e] == ["Ticket #1", "From the member"]
+    assert [e.title for e in embeds if e] == ["Ticket #1", "New ticket #1", "From the member"]
 
 
 async def test_two_dms_in_a_burst_make_exactly_one_ticket(cog, bot, member, db):
@@ -776,7 +782,8 @@ async def test_with_the_guard_lifted_a_ticket_talks_in_its_own_channel(cog, bot,
     assert titles == ["Ticket #1", "From the member", "Sent to the member"]
     assert reply.reactions == ["\N{WHITE HEAVY CHECK MARK}"]
     assert noted.reactions == ["\N{MEMO}"]
-    assert bot.guild.channels[TEST_CHANNEL].messages == []
+    logged = [m.kwargs["embed"].title for m in bot.guild.channels[TEST_CHANNEL].messages]
+    assert logged == ["New ticket #1"]
 
 
 async def test_the_ticket_channel_is_hidden_from_everyone_and_shown_to_staff(cog, bot, member):
@@ -788,6 +795,154 @@ async def test_the_ticket_channel_is_hidden_from_everyone_and_shown_to_staff(cog
     overwrites = bot.guild.created[0].given_overwrites
     assert overwrites[bot.guild.default_role].view_channel is False
     assert any(getattr(key, "id", None) == STAFF_ROLE for key in overwrites)
+
+
+def new_ticket_cards(bot, channel_id=TEST_CHANNEL):
+    """The New-ticket cards that actually landed in the transcripts channel."""
+    return [
+        one.kwargs["embed"]
+        for one in bot.guild.channels[channel_id].messages
+        if str(getattr(one.kwargs.get("embed"), "title", "")).startswith("New ticket")
+    ]
+
+
+async def test_a_dm_ticket_is_announced_once_in_the_transcripts_channel(cog, bot, member, db):
+    bot.guard = FakeGuard()
+
+    await cog.on_message(dm_from(member))
+
+    cards = new_ticket_cards(bot)
+    assert len(cards) == 1
+    assert cards[0].title == "New ticket #1"
+    assert cards[0].footer.text == f"{member.display_name} | {member.id}"
+    assert f"<@{member.id}>" in cards[0].description
+    assert [field.value for field in cards[0].fields if field.name == "Came in by"] == [
+        "a DM to Black Bloc"
+    ]
+
+
+async def test_the_member_command_door_announces_the_open_once_with_the_subject(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+
+    await open_through_the_panel(cog, bot, member, subject="my role")
+
+    cards = new_ticket_cards(bot)
+    assert len(cards) == 1
+    assert [field.value for field in cards[0].fields if field.name == "Came in by"] == [
+        "/modmail"
+    ]
+    assert [field.value for field in cards[0].fields if field.name == "About"] == ["my role"]
+
+
+async def test_the_posted_button_announces_the_open_once(cog, bot, lead, member, db):
+    bot.guard = FakeGuard()
+    await post_the_button(cog, bot, lead)
+    channel = bot.guild.channels[TEST_CHANNEL]
+    button = channel.messages[-1].kwargs["view"].children[0]
+    pressed = FakeInteraction(bot, member, channel=channel)
+    await button.callback(pressed)
+
+    await fill_ticket_modal(pressed.response.modals[-1], bot, member)
+
+    cards = new_ticket_cards(bot)
+    assert len(cards) == 1
+    assert [field.value for field in cards[0].fields if field.name == "Came in by"] == [
+        "the Open a ticket button"
+    ]
+
+
+async def test_a_staff_opened_ticket_says_who_opened_it(cog, bot, lead, member, db):
+    bot.guard = FakeGuard()
+
+    picked = await open_with(cog, bot, lead, member)
+    await fill_ticket_modal(
+        picked.response.modals[-1], bot, lead, subject="your appeal", body="we need a word"
+    )
+
+    cards = new_ticket_cards(bot)
+    assert len(cards) == 1
+    named = {field.name: field.value for field in cards[0].fields}
+    assert named["Came in by"] == "staff" and named["Opened by"] == f"<@{lead.id}>"
+    assert named["About"] == "your appeal"
+
+
+async def test_with_the_key_off_nothing_is_posted_and_the_ticket_still_opens(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, MODMAIL_LOG_ON_OPEN, False)
+
+    await cog.on_message(dm_from(member))
+
+    assert new_ticket_cards(bot) == []
+    assert await open_ticket_for(db, GUILD, member.id) is not None
+    kinds = await action_kinds(db)
+    assert "modmail.opened" in kinds and "modmail.would_log_open" not in kinds
+
+
+async def test_a_transcripts_channel_the_guard_refuses_gets_a_would_row_and_no_card(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_log_channel_id", LOG_CHANNEL)
+
+    await cog.on_message(dm_from(member))
+
+    assert bot.guild.channels[LOG_CHANNEL].messages == []
+    assert new_ticket_cards(bot) == []
+    assert "modmail.would_log_open" in await action_kinds(db)
+
+
+async def test_a_refused_send_is_a_log_row_and_the_ticket_opens_anyway(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    bot.guild.channels[TEST_CHANNEL].send_raises = discord.HTTPException(
+        _Response(403), "no"
+    )
+
+    await cog.on_message(dm_from(member))
+
+    assert await open_ticket_for(db, GUILD, member.id) is not None
+    assert "modmail.log_open_failed" in await action_kinds(db)
+
+
+async def test_no_transcripts_channel_is_a_log_row_not_a_raise(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_log_channel_id", 4242)
+
+    await cog.on_message(dm_from(member))
+
+    assert await open_ticket_for(db, GUILD, member.id) is not None
+    assert "modmail.log_open_failed" in await action_kinds(db)
+
+
+def staff_overwrite(channel):
+    given = channel.given_overwrites
+    return next(value for key, value in given.items() if getattr(key, "id", None) == STAFF_ROLE)
+
+
+async def test_the_ticket_channel_is_the_staff_s_to_delete_by_hand(cog, bot, member):
+    await live(bot)
+    bot.guild.channels[TEST_CHANNEL].visible_to = {STAFF_ROLE}
+
+    await cog.on_message(dm_from(member))
+
+    staff = staff_overwrite(bot.guild.created[0])
+    assert staff.view_channel is True and staff.send_messages is True
+    assert staff.manage_channels is True
+
+
+async def test_with_the_reach_key_off_the_ticket_channel_is_as_it_was(cog, bot, member):
+    await live(bot)
+    bot.guild.channels[TEST_CHANNEL].visible_to = {STAFF_ROLE}
+    await bot.store.set(GUILD, STAFF_REACH_KEY, False)
+
+    await cog.on_message(dm_from(member))
+
+    staff = staff_overwrite(bot.guild.created[0])
+    assert staff.view_channel is True and staff.send_messages is True
+    assert staff.manage_channels is None
 
 
 async def test_reply_from_the_test_channel_finds_the_only_open_ticket(cog, bot, member, lead, db):

@@ -13,6 +13,7 @@ export const LABELS = {
   status_prefix: 'What the bot’s status says',
   operator_read_log: 'Whether an operator-token read leaves a log line',
   hide_commands_when_off: 'Whether a turned-off feature’s slash command disappears',
+  spawned_channels_staff_reach: 'Whether staff can see and delete every channel the bot makes',
   emoji_skin_tone: 'Which skin tone the bot’s emoji wear',
 
   logs_count: 'How many lines a Logs button shows to begin with',
@@ -160,6 +161,7 @@ export const LABELS = {
   modmail_open_with_button: 'Whether staff see Open a ticket with… on /modmail',
   modmail_forum_channel_id: 'Where ticket posts are made, in forum mode',
   modmail_forum_tags: 'Whether a ticket post wears an open or a closed tag',
+  modmail_log_on_open: 'Whether a new ticket is announced in the transcripts channel',
   modmail_panel_follows_post: 'Which post the Open a ticket button sits under',
 
   automod_mode: 'Whether automod is watching',
@@ -283,4 +285,20 @@ function derived(key) {
 /** The human name a key wears; the raw key survives as the mono sub-line. */
 export function humanLabel(key) {
   return LABELS[String(key || '')] || derived(key);
+}
+
+const CHANNEL_KIND = { text: '#', voice: '🔊', forum: '#', category: '▸' };
+
+/** The category a channel sits in, by name, or nothing when it sits at the top level. */
+function categoryName(channel, channels) {
+  if (!channel || channel.type === 'category' || !channel.category_id) return '';
+  const found = (channels || []).find((one) => String(one.id) === String(channel.category_id));
+  return found ? String(found.name || '') : '';
+}
+
+/** `# modmail-log · BlackMail` — two channels of the same name are told apart by where they live. */
+export function channelLabel(channel, channels = []) {
+  const mark = CHANNEL_KIND[channel.type] || '#';
+  const where = categoryName(channel, channels);
+  return where ? `${mark} ${channel.name} · ${where}` : `${mark} ${channel.name}`;
 }

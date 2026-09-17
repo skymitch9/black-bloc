@@ -36,6 +36,7 @@ from ...settings_store import (
     TEMPVOICE_MODES,
     TEMPVOICE_NAME_TEMPLATE,
 )
+from ...spawned import reach_roles, staff_reach
 
 log = logging.getLogger(__name__)
 
@@ -379,11 +380,13 @@ def allow_join(overwrites: dict[Any, Any], targets: Any, **extra: Any) -> dict[A
     return overwrites
 
 
-def creator_overwrites(category: Any, allow: Any = (), me: Any = None) -> dict[Any, Any]:
+def creator_overwrites(
+    category: Any, allow: Any = (), me: Any = None, *, staff: Any = ()
+) -> dict[Any, Any]:
     found = allow_join(category_overwrites(category), allow)
     if me is not None:
         allow_join(found, [me], manage_channels=True, move_members=True)
-    return found
+    return staff_reach(found, staff, voice=True)
 
 
 def owner_overwrites(
@@ -395,6 +398,7 @@ def owner_overwrites(
     source: Any = None,
     allow: Any = (),
     me: Any = None,
+    staff: Any = (),
 ) -> Any:
     found = category_overwrites(source)
     everyone = found.get(guild.default_role) or discord.PermissionOverwrite()
@@ -414,7 +418,7 @@ def owner_overwrites(
         mute_members=True,
         deafen_members=True,
     )
-    return found
+    return staff_reach(found, staff, voice=True)
 
 
 def roles_sentence(roles: Any) -> str:
@@ -748,7 +752,12 @@ async def repair_creator_channel(
     try:
         await channel.edit(
             name=wanted,
-            overwrites=creator_overwrites(channel.category, allow, getattr(guild, "me", None)),
+            overwrites=creator_overwrites(
+                channel.category,
+                allow,
+                getattr(guild, "me", None),
+                staff=reach_roles(bot, guild),
+            ),
             reason="Black Bloc temp voice: repairing the join-to-create channel",
         )
     except discord.HTTPException as exc:
@@ -823,7 +832,9 @@ async def make_creator_channel(
             wanted,
             category=category,
             position=position,
-            overwrites=creator_overwrites(category, allow, getattr(guild, "me", None)),
+            overwrites=creator_overwrites(
+                category, allow, getattr(guild, "me", None), staff=reach_roles(bot, guild)
+            ),
             reason="Black Bloc temp voice: join-to-create",
         )
     except discord.HTTPException as exc:
@@ -2494,6 +2505,7 @@ class TempVoice(commands.Cog):
                 source=room_source(store, guild.id, creator),
                 allow=self._join_roles(guild),
                 me=getattr(guild, "me", None),
+                staff=reach_roles(self.bot, guild),
             ),
             guild,
             id_list(pref(prefs, "permitted_ids")),

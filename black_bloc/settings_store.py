@@ -1629,11 +1629,13 @@ MODMAIL_PANEL_FOLLOWS_POST = "modmail_panel_follows_post"
 MODMAIL_PANEL_FOLLOWS_POST_DEFAULT = "welcome"
 MODMAIL_PANEL_FOLLOWS_NOTHING = "none"
 REQUEST_FORUM_CHANNEL = "request_forum_channel_id"
+MODMAIL_LOG_ON_OPEN = "modmail_log_on_open"
 
 KEY_TYPES.update(
     {
         MODMAIL_FORUM_CHANNEL: "channel",
         MODMAIL_FORUM_TAGS: "bool",
+        MODMAIL_LOG_ON_OPEN: "bool",
         MODMAIL_PANEL_FOLLOWS_POST: "text",
     }
 )
@@ -1646,6 +1648,10 @@ KEY_HELP.update(
         MODMAIL_FORUM_TAGS: (
             "true keeps the open / closed tags on each ticket post in forum mode; false leaves "
             "every post untagged and the forum's own tag list alone"
+        ),
+        MODMAIL_LOG_ON_OPEN: (
+            "true posts a New-ticket card to the transcripts channel the moment a ticket opens "
+            "(what the old ModMail bot's log did); false logs opens only in the action log"
         ),
         MODMAIL_PANEL_FOLLOWS_POST: (
             "the slug of the post the Open a ticket button sits under — welcome by default, so "
@@ -1705,6 +1711,21 @@ KEY_HELP.update(
             "true to write one Core log line for every read a Claude session makes with the "
             "operator token, saying which path it read; false reads the same data and leaves no "
             "row. The token itself is the on/off switch — unset it and there are no reads at all"
+        )
+    }
+)
+
+
+# The staff allow on every channel Black Bloc makes — one decision, one key.
+SPAWNED_STAFF_REACH = "spawned_channels_staff_reach"
+SPAWNED_STAFF_REACH_DEFAULT = True
+KEY_TYPES.update({SPAWNED_STAFF_REACH: "bool"})
+KEY_HELP.update(
+    {
+        SPAWNED_STAFF_REACH: (
+            "true gives the staff roles view + manage on every channel Black Bloc makes (temp "
+            "voice rooms and the lobby, event rooms, ticket channels), so a hidden room is still "
+            "theirs to open or delete by hand; false leaves each builder's own permissions"
         )
     }
 )
@@ -1945,6 +1966,7 @@ CORE_KEYS = (
     "bot_bio",
     "status_prefix",
     "operator_read_log",
+    SPAWNED_STAFF_REACH,
     SETTINGS_PANEL_MINUTES,
     SETTINGS_CORE_KEYS_ADMIN_ONLY,
     SELFTEST_ON_BOOT,
@@ -2544,6 +2566,8 @@ class SettingsStore:
             return STATUS_PREFIX
         if key == "operator_read_log":
             return True
+        if key == SPAWNED_STAFF_REACH:
+            return SPAWNED_STAFF_REACH_DEFAULT
         if key == "rolemenu_mode":
             return "off"
         if key == "request_mode":
@@ -2681,6 +2705,8 @@ class SettingsStore:
         if key == MODMAIL_OPEN_WITH_BUTTON:
             return False
         if key == MODMAIL_FORUM_TAGS:
+            return True
+        if key == MODMAIL_LOG_ON_OPEN:
             return True
         if key == MODMAIL_PANEL_FOLLOWS_POST:
             return MODMAIL_PANEL_FOLLOWS_POST_DEFAULT

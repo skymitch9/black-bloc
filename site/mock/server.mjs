@@ -100,6 +100,7 @@ const CHANNELS = [
   { id: '800000000000000009', name: 'Join to create', type: 'voice', category_id: null, position: 8 },
   { id: '800000000000000010', name: "casey's room", type: 'voice', category_id: null, position: 9 },
   { id: '800000000000000011', name: 'modmail', type: 'category', category_id: null, position: 10 },
+  { id: '800000000000000012', name: 'modmail-log', type: 'text', category_id: '800000000000000011', position: 11 },
 ];
 
 const MEMBERS = [
@@ -380,6 +381,7 @@ const SETTING_SPECS = [
   ['modmail_open_with_button', 'bool', false, false, 'true draws Open a ticket with… on the staff row of /modmail, so staff can start a ticket for somebody else; false hides that door and leaves every other way in untouched. The door is only hidden, never removed — turning this back on brings it straight back, and a press on a panel that was open when it went off is refused in words'],
   ['modmail_forum_channel_id', 'channel', null, null, 'the forum channel tickets are posted in, in forum mode; Setup on /modmail makes one under the ticket category'],
   ['modmail_forum_tags', 'bool', true, true, 'true keeps the open / closed tags on each ticket post in forum mode; false leaves every post untagged and the forum’s own tag list alone'],
+  ['modmail_log_on_open', 'bool', true, true, "true posts a New-ticket card to the transcripts channel the moment a ticket opens (what the old ModMail bot's log did); false logs opens only in the action log"],
   ['modmail_panel_follows_post', 'text', 'welcome', 'welcome', 'the slug of the post the Open a ticket button sits under — welcome by default, so the button lands right after the rules and is put back there whenever that post is posted again. none never moves the button for that reason'],
   ['automod_mode', 'enum', 'shadow', 'off', 'off, shadow (log what it would do) or on (delete, warn and time out)', ['off', 'shadow', 'on']],
   ['automod_rules', 'json', null, null, 'the automod rule book; the Automod tab is what changes it'],
@@ -494,6 +496,7 @@ const SETTING_SPECS = [
   ["logs_count", "int", 10, 10, "how many lines a Logs button shows to begin with, from 1 to 50; 10 by default. Show more adds the same number again, and stops being offered once the log has run out or 50 lines are shown", null, 50, 1],
   ["logs_important_only", "bool", false, false, "true to open every Logs button already filtered to the lines that matter — refusals, errors and staff moves — with Show everything beside the list to see the rest; false opens on everything, which is what it did before"],
   ["operator_read_log", "bool", true, true, "true to write one Core log line for every read a Claude session makes with the operator token, saying which path it read; false reads the same data and leaves no row. The token itself is the on/off switch \u2014 unset it and there are no reads at all"],
+  ["spawned_channels_staff_reach", "bool", true, true, "true gives the staff roles view + manage on every channel Black Bloc makes (temp voice rooms and the lobby, event rooms, ticket channels), so a hidden room is still theirs to open or delete by hand; false leaves each builder's own permissions"],
   ["poll_creator_may_end", "bool", true, true, "true to let whoever started a poll close it early from the /poll panel; staff can always close one either way"],
   ["poll_draft_days", "int", 14, 14, "days a saved poll draft is kept before Black Bloc drops it, up to 365; 0 keeps it for ever", null, 365],
   ["poll_drafts", "bool", true, true, "true to let somebody save a half-written poll from the /poll panel and come back to it; false hides Save for later and Resume draft, and the drafts already saved are kept, not deleted"],
@@ -1272,7 +1275,7 @@ function seedActions() {
 
 let state = seedState();
 
-const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url'];
+const CORE_KEYS = ['log_channel_id', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url'];
 const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',

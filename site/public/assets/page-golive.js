@@ -46,8 +46,8 @@ const WORDING_NOTE = 'Both messages as the bot itself renders them — the same 
   + 'gets, not a copy living on this page. The sample is a two-hour stream of Celeste.';
 const WORDING_LEFT = 'golive_end_mode is off, so an announcement is left exactly as posted. This '
   + 'is what edit would write instead.';
-const WORDING_STALE = 'Saved the wording above with its own Save bar? Press Refresh — this card '
-  + 'reads what the bot has stored.';
+const WORDING_STALE = 'This card repaints itself whenever either wording above is saved. Refresh '
+  + 'is for a change somebody else made, on the Settings page or from Discord.';
 const WHILE_LIVE = 'while live';
 const AFTER_THE_STREAM = 'after the stream';
 
@@ -59,8 +59,8 @@ const SUFFIX_ASK_BODY = 'The announcement keeps its present-tense sentence and g
   + 'is added to the end of it, the way it worked before. The wording you have written is '
   + 'forgotten, so write it again to go back.';
 const REWRITE_ASK_TITLE = 'Rewrite the whole announcement once the stream ends?';
-const REWRITE_ASK_BODY = 'The past-tense wording Black Bloc ships with comes back, and you can '
-  + 'edit it in golive_end_template below.';
+const REWRITE_ASK_BODY = 'The past-tense wording Black Bloc ships with comes back, and you edit '
+  + 'it in the Once the stream is over box above.';
 
 const SAMPLE = {
   name: 'Casey',
@@ -69,6 +69,18 @@ const SAMPLE = {
   url: 'https://twitch.tv/caseyfast',
   platform: 'Twitch',
 };
+
+const END_AUTHOR_KEY = 'golive_end_author';
+const END_WORDING_WHERE = 'Once the stream is over';
+const END_WORDING_TITLE = 'What the ending looks like';
+const END_WORDING_NOTE = 'As you type, filled in with the same sample and a two-hour '
+  + '{duration}. The Wording card below is what the bot has actually stored.';
+const END_BLANK_TEMPLATE = 'Empty — the live sentence is kept and golive_end_suffix is added to '
+  + 'the end of it instead.';
+const END_BLANK_AUTHOR = 'Empty — the card’s top line keeps saying “was live on”.';
+const END_NO_KEYS = 'The bot did not report a golive_end_template key, so the ending is edited '
+  + 'from the Settings group on the right rather than guessed at here.';
+const ENDED_SAMPLE = { ...SAMPLE, duration: '2 h 10 min' };
 
 async function pingPrefix(specs) {
   const spec = specs.find((one) => one.key === PING_KEY);
@@ -128,12 +140,13 @@ function optoutCard(say) {
   return card('Opt somebody out', [picker.node, bar([go])]);
 }
 
-async function wordingCard(spec, prefix, endSpec, onEndMode) {
+async function wordingCard(spec, prefix, endSpec, onEndMode, onSaved) {
   const shown = el('p', { class: 'preview' });
   const playing = el('input', { class: 'input switch', type: 'checkbox', checked: true });
 
   const made = await templateEditor(spec, {
     controls: [playing],
+    onSaved,
     sample: () => ({ ...SAMPLE, game: playing.checked ? SAMPLE.game : GAME_FALLBACK }),
     paint: (filled) => {
       shown.textContent = filled === null
@@ -158,6 +171,38 @@ async function wordingCard(spec, prefix, endSpec, onEndMode) {
     made.say,
   ].filter(Boolean));
   return [made.row.node, preview];
+}
+
+/** C.2: the ended wording gets the editor the live one has — both keys, one save bar. */
+async function endWordingCard(endTemplate, endAuthor, onSaved) {
+  const drawn = {
+    [END_TEMPLATE_KEY]: el('p', { class: 'preview' }),
+    [END_AUTHOR_KEY]: el('p', { class: 'preview' }),
+  };
+  const blank = { [END_TEMPLATE_KEY]: END_BLANK_TEMPLATE, [END_AUTHOR_KEY]: END_BLANK_AUTHOR };
+  const specs = [{ ...endTemplate, editorType: 'longtext' }];
+  if (endAuthor) specs.push({ ...endAuthor, editorType: 'text' });
+
+  const made = await templateEditor(specs, {
+    where: END_WORDING_WHERE,
+    sample: () => ENDED_SAMPLE,
+    onSaved,
+    paint: (filled, key) => {
+      const node = drawn[key];
+      if (!node) return;
+      const empty = filled !== null && String(filled).trim() === '';
+      node.textContent = empty ? blank[key] : (filled === null ? '' : filled);
+      node.classList.toggle('field-help', empty);
+    },
+  });
+
+  const preview = card(END_WORDING_TITLE, [
+    el('p', { class: 'field-help', text: END_WORDING_NOTE }),
+    drawn[END_AUTHOR_KEY],
+    drawn[END_TEMPLATE_KEY],
+    made.say,
+  ]);
+  return [...made.rows.map((row) => row.node), preview];
 }
 
 /** One rendered message, in the shape the modmail tab already draws a bot line in. */
@@ -271,8 +316,16 @@ async function wordingSection(specs) {
     preview.showEnd(mode);
     preview.paint();
   };
+  const ended = endTemplate
+    ? await endWordingCard(
+      endTemplate,
+      specs.find((one) => one.key === END_AUTHOR_KEY) || null,
+      () => preview.paint(),
+    )
+    : [el('p', { class: 'say-nothing', text: END_NO_KEYS })];
   wording.body.append(
-    ...await wordingCard(spec, prefix, endSpec, onEndMode),
+    ...await wordingCard(spec, prefix, endSpec, onEndMode, () => preview.paint()),
+    ...ended,
     preview.node,
   );
   return wording.node;

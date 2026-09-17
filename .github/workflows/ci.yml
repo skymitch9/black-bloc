@@ -38,3 +38,6 @@ jobs:
 
       - name: Preview renderer
         run: node site/mock/discordmd.test.mjs
+
+      - name: Labels
+        run: node site/mock/labels.test.mjs

@@ -15,6 +15,7 @@
       "selftest_purge_minutes",
       "settings_core_keys_admin_only",
       "settings_panel_minutes",
+      "spawned_channels_staff_reach",
       "staff_channel_id",
       "status_prefix"
     ],
