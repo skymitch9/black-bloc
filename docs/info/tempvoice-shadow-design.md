@@ -171,3 +171,13 @@ ES-module `--check` clean across `site/**`; `node site/mock/check.mjs` **19 page
 at spawn (no output at all after 14 minutes) and once at **77 %** (log untouched for 7 minutes).
 Each was killed by **process tree** (`taskkill /F /T /PID <the pytest root>`, never by image name)
 and the retry passed. That takes the count to **nine**.
+
+### Found at the landing (conductor, 2026-09-17 14:2x, v125)
+
+Owner: *"can members still see the rooms staff spawn from it"* — measured **yes**: a room starts from the hidden
+lobby's overwrites (`room_source` = lobby) but `owner_overwrites` then runs `allow_join(found, allow)` with the
+allowed role in `allow`, which set Member view + connect back to True on every spawned room. §B's *"rooms follow the
+lobby"* was therefore false for the one role that matters. Fixed in the cog's create path: while the mode is shadow,
+`hide_from_members(overwrites, shadow_targets)` is applied AFTER the allows (the owner, permitted members, staff and
+the bot keep theirs); one test. Rooms spawned before v125 are not touched.
+

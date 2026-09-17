@@ -1571,6 +1571,34 @@ async def test_a_room_starts_from_the_lobby_s_own_permissions_not_the_category_s
     assert given[bot.guild.default_role].view_channel is False
 
 
+async def test_in_shadow_a_room_is_hidden_from_members_even_though_the_allowed_role_may_join(
+    cog, bot, member
+):
+    category = FakeCategory(
+        50, overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=True)}
+    )
+    staffed(bot, category)
+    creator = bot.guild.add(
+        FakeVoice(
+            CREATOR,
+            bot.guild,
+            category=category,
+            position=4,
+            overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=False)},
+        )
+    )
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+
+    await cog._maybe_create(member, creator)
+
+    given = bot.guild.created[0].given_overwrites
+    assert given[bot.guild.default_role].view_channel is False
+    allowed = bot.guild.get_role(bot.store.get(GUILD, "tempvoice_allowed_role_id"))
+    if allowed is not None:
+        assert given[allowed].view_channel is False
+    assert given[member].view_channel is True
+
+
 async def test_the_category_setting_puts_a_room_back_on_the_category_s_permissions(
     cog, bot, member
 ):

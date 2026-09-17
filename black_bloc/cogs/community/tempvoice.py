@@ -2703,6 +2703,8 @@ class TempVoice(commands.Cog):
             id_list(pref(prefs, "banned_ids")),
             member.id,
         )
+        if mode_of(self.bot, guild) == helpers.SHADOW_MODE:
+            hide_from_members(overwrites, shadow_targets(self.bot, guild))
         try:
             channel = await guild.create_voice_channel(
                 name,
