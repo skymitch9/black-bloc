@@ -158,6 +158,8 @@ Everything a member can run. Half a line each; `/help` prints the whole thing in
 look it over first. **My time zone** is on the same panel.
 `/request` — ask the server for something. It opens a panel; **File a request** files one for
 staff to decide on.
+`/modmail` — reach the moderators privately. It opens a panel; **Open a ticket** asks what is
+happening and opens one, and staff answer by DM. DMing Black Bloc does the same thing.
 `/golive` — your Twitch channel, and whether your streams get announced. It opens a panel:
 **Link my Twitch channel** connects one so going live gets announced, and **Stop announcing my
 streams** turns it off again.

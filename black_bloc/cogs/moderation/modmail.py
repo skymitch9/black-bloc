@@ -46,15 +46,31 @@ from ...modmail import (
     FORGET_TITLE,
     IN,
     LOGS,
+    MEMBER_COMMAND_KEY,
+    MEMBER_INTRO,
+    MEMBER_TICKET_OPEN,
+    MEMBER_TICKET_SEEN,
+    MEMBER_TITLE,
+    MESSAGE_LIMIT,
     MODE,
+    NAME_LIMIT,
     NOTE,
     OPEN,
+    OPEN_WITH,
     OUT,
+    PANEL_CHANNEL_KEY,
+    PANEL_DOWN,
+    PANEL_HEADING_KEY,
+    PANEL_MESSAGE_KEY,
+    PANEL_MOVE_TO,
+    PANEL_POST,
+    PANEL_TEXT_KEY,
     PANEL_TIMEOUT_FOOTER,
     PANEL_TITLE,
     PICK_A_BLOCK,
     PICK_A_CATEGORY,
     PICK_A_CHANNEL,
+    PICK_A_MEMBER,
     PICK_A_MODE,
     PICK_A_PLACE,
     PICK_A_REPLY_STYLE,
@@ -68,6 +84,7 @@ from ...modmail import (
     REPLY_STYLE,
     REPLY_STYLE_KEY,
     REPLY_STYLE_OPTIONS,
+    ROOT_ROW_SELECT,
     SETUP,
     SETUP_TITLE,
     SITE,
@@ -80,8 +97,16 @@ from ...modmail import (
     SNIPPETS_TITLE,
     SOURCE_CARD,
     SOURCE_COMMAND,
+    SOURCE_DM,
+    SOURCE_PANEL,
+    SOURCE_PRACTICE,
+    SOURCE_STAFF,
     SOURCE_TYPED,
     STAFF_CHANNEL,
+    TICKET_BUTTON,
+    TICKET_BUTTON_TITLE,
+    TICKET_MOVE,
+    TICKET_OPEN,
     TICKET_SURFACE,
     TRANSCRIPTS,
     UNBLOCK,
@@ -91,12 +116,15 @@ from ...modmail import (
     card_buttons,
     closing_dm,
     count_directions,
+    door_buttons,
     dump_attachments,
     field_of,
+    first_message,
     forget_buttons,
     header_embed,
     is_note,
     is_practice,
+    last_reply_missed,
     mentions,
     modes_sentence,
     note_body,
@@ -112,6 +140,8 @@ from ...modmail import (
     snippet_lines,
     thread_invite,
     thread_name,
+    ticket_button_buttons,
+    ticket_button_embed,
     ticket_card_embed,
     ticket_channel_name,
     ticket_label,
@@ -155,6 +185,7 @@ LOCKS_ATTR = "_modmail_locks"
 CARDS_ATTR = "_modmail_cards"
 CARD_ACTIONS = "|".join(re.escape(move.action) for move in CARD_MOVES)
 CARD_TEMPLATE = rf"modmail:card:(?P<action>{CARD_ACTIONS}):(?P<ticket_id>[0-9]+)"
+TICKET_PANEL_TEMPLATE = r"modmail:ticket:(?P<guild_id>[0-9]+)"
 CARD_DEBOUNCE_SECONDS = 2.0
 CARD_MIN_GAP_SECONDS = 8.0
 CARD_REASON_LIMIT = 200
@@ -309,12 +340,96 @@ NO_STAFF_WARNING = (
     "staff can see with `/settings` ▸ **Roles & channels…**, then run this again."
 )
 
+TICKET_MODAL_TITLE = "Open a ticket"
+TICKET_SUBJECT_LABEL = "What is this about — a few words, if you like"
+TICKET_BODY_LABEL = "Tell us what is happening"
+STAFF_MODAL_TITLE = "Open a ticket with somebody"
+STAFF_BODY_LABEL = "What they are sent — it opens the ticket as your first reply"
+TICKET_OPENED_SAID = (
+    "Your ticket is open — ticket **#{ticket_id}**. Staff can see it now, and their replies "
+    "come back here as a DM from Black Bloc."
+)
+DMS_ARE_SHUT = (
+    " ⚠️ Black Bloc could not DM you, so open DMs from this server or staff's replies will not "
+    "reach you."
+)
+ALREADY_OPEN_SAID = (
+    "You already have an open ticket, so nothing new was made. Anything you DM Black Bloc is "
+    "added to it, and staff answer there."
+)
+CANNOT_OPEN_SAID = (
+    "Black Bloc could not open a ticket just now, so staff have not seen this. Try again in a "
+    "minute, and tell a moderator directly if it keeps failing."
+)
+A_BOT_SAID = "**{who}** is a bot, and a bot has no DMs to answer, so no ticket was opened."
+STAFF_DISABLED_SAID = (
+    "Black Bloc is not answering modmail here, so no ticket was opened. **Setup…** → **Answer "
+    "DMs on** hands the inbox over first."
+)
+STAFF_BLOCKED_SAID = (
+    "**{who}** is blocked from modmail, so no ticket was opened. **Unblock them** undoes that, "
+    "and then this works."
+)
+STAFF_ALREADY_OPEN = "**{who}** already has an open ticket: <#{where}>. Reply there instead."
+STAFF_OPENED = (
+    "Ticket **#{ticket_id}** with **{who}** is open in <#{where}>, and what you wrote has gone "
+    "to them as your first reply."
+)
+STAFF_NOT_REACHED = (
+    " ⚠️ The DM did not reach them — their DMs are shut or Black Bloc is blocked. The ticket "
+    "holds what you wrote, and the card says so."
+)
+MEMBER_DOOR_OFF = (
+    "Black Bloc is not answering modmail on **{guild}** yet, so there is no ticket to open. A "
+    "moderator can still be reached the way you always have."
+)
+MEMBER_BLOCKED = (
+    "Staff here have stopped Black Bloc from opening modmail tickets for you, so there is no "
+    "button. Speak to a moderator directly if you think that is a mistake."
+)
+PANEL_NOWHERE = (
+    "No **Open a ticket** button is up. **Post it…** puts one in a channel of your choosing."
+)
+PANEL_IS_AT = "The **Open a ticket** button is in <#{where}> — message `{message_id}`."
+PANEL_POSTED_SAID = "The **Open a ticket** button is up in <#{where}>."
+PANEL_MOVED_SAID = "The **Open a ticket** button is in <#{where}> now; the old message is gone."
+PANEL_DOWN_SAID = "The **Open a ticket** button is down. Nothing else changed."
+PANEL_NOT_UP = "There is no **Open a ticket** button up, so nothing was taken down."
+PANEL_STUCK = (
+    "Black Bloc could not post the **Open a ticket** button there — the log says why. Check it "
+    "can write in that channel and try again."
+)
+PANEL_GUARDED = (
+    "Black Bloc is in **test mode**, so the only channel it may post the **Open a ticket** "
+    "button in is the test channel. Nothing was posted; the log says `modmail.would_post_panel`."
+)
+PANEL_LINES = (
+    "**heading** — {title}\n**says** — {text}\nStaff change both on the Settings page, or with "
+    "`/settings set-value modmail_panel_title`."
+)
 
-async def create_ticket(db: Any, guild_id: int, user_id: int, mode: str) -> int | None:
+
+async def create_ticket(
+    db: Any,
+    guild_id: int,
+    user_id: int,
+    mode: str,
+    *,
+    source: str = SOURCE_DM,
+    opened_by: Any = None,
+) -> int | None:
     cur = await db.conn.execute(
-        "INSERT INTO modmail_tickets(guild_id, user_id, mode, channel_id, status, opened_at) "
-        "VALUES (?, ?, ?, 0, ?, ?)",
-        (guild_id, user_id, mode, OPEN, now_iso()),
+        "INSERT INTO modmail_tickets(guild_id, user_id, mode, channel_id, status, opened_at, "
+        "source, opened_by) VALUES (?, ?, ?, 0, ?, ?, ?, ?)",
+        (
+            guild_id,
+            user_id,
+            mode,
+            OPEN,
+            now_iso(),
+            source,
+            int(opened_by) if opened_by else None,
+        ),
     )
     await db.conn.commit()
     return cur.lastrowid
@@ -815,6 +930,7 @@ async def card_embed(bot: Any, guild: Any, ticket: Any) -> discord.Embed:
         count_directions(rows),
         label=getattr(ticket_member(bot, guild, ticket), "display_name", None),
         blocked=blocked,
+        not_reached=last_reply_missed(rows),
     )
 
 
@@ -1224,8 +1340,8 @@ def practice_parent(bot: Any, guild: Any) -> tuple[Any, str]:
 async def create_practice_ticket(db: Any, guild_id: int, user_id: int) -> int | None:
     cur = await db.conn.execute(
         "INSERT INTO modmail_tickets(guild_id, user_id, mode, channel_id, status, opened_at, "
-        "practice) VALUES (?, ?, ?, 0, ?, ?, 1)",
-        (guild_id, user_id, THREAD_MODE, OPEN, now_iso()),
+        "practice, source, opened_by) VALUES (?, ?, ?, 0, ?, ?, 1, ?, ?)",
+        (guild_id, user_id, THREAD_MODE, OPEN, now_iso(), SOURCE_PRACTICE, user_id),
     )
     await db.conn.commit()
     return cur.lastrowid
@@ -1501,11 +1617,424 @@ async def set_reply_style(
     return Outcome(True, reply_style_sentence(style), value=style)
 
 
+async def make_place(
+    bot: Any, guild: Any, user: Any, ticket_id: int, mode: str, *, subject: Any = None
+) -> tuple[Any, str | None]:
+    """Where a new ticket lives: a channel in the category, or a private thread."""
+    if not bot.store.staff_roles(guild):
+        return None, "no_staff_roles"
+    if mode == THREAD_MODE:
+        parent, where = thread_parent(bot, guild)
+        if parent is None:
+            return None, where
+        try:
+            return (
+                await parent.create_thread(
+                    name=thread_name(getattr(user, "display_name", user.name), ticket_id),
+                    type=discord.ChannelType.private_thread,
+                    invitable=False,
+                    auto_archive_duration=AUTO_ARCHIVE_MINUTES,
+                    reason=f"Black Bloc modmail ticket {ticket_id}",
+                ),
+                None,
+            )
+        except discord.HTTPException as exc:
+            return None, f"{type(exc).__name__}: {exc}"
+    category, where = ticket_category(bot, guild)
+    if category is None:
+        return None, where
+    staff = bot.store.staff_roles(guild)
+    try:
+        return (
+            await guild.create_text_channel(
+                ticket_channel_name(getattr(user, "name", user), ticket_id),
+                category=category,
+                topic=ticket_topic(user.id, ticket_id, subject),
+                overwrites=ticket_overwrites(guild, staff, getattr(guild, "me", None)),
+                reason=f"Black Bloc modmail ticket {ticket_id}",
+            ),
+            None,
+        )
+    except discord.HTTPException as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+async def abandon_ticket(bot: Any, guild: Any, user: Any, ticket_id: int, why_not: Any) -> None:
+    await bot.db.conn.execute(
+        "UPDATE modmail_tickets SET status = 'closed', closed_at = ?, close_reason = ? "
+        "WHERE id = ?",
+        (now_iso(), f"never_got_a_place: {why_not}", ticket_id),
+    )
+    await bot.db.conn.commit()
+    log.warning("modmail: ticket %s got no channel — %s", ticket_id, why_not)
+    await log_action(
+        bot,
+        guild,
+        "modmail.open_failed",
+        target=user,
+        details={"ticket_id": ticket_id, "reason": str(why_not)},
+    )
+
+
+async def post_header(bot: Any, guild: Any, ticket: Any, user: Any, mode: str) -> None:
+    member = guild.get_member(user.id)
+    prior = max(await count_tickets(bot.db, guild.id, user.id) - 1, 0)
+    embed = header_embed(
+        ticket_id=ticket["id"],
+        user_id=user.id,
+        user_label=getattr(user, "display_name", str(user)),
+        mode=mode,
+        created_at=getattr(user, "created_at", None),
+        joined_at=getattr(member, "joined_at", None),
+        roles=[r for r in getattr(member, "roles", ()) if getattr(r, "id", 0) != guild.id],
+        prior_tickets=prior,
+    )
+    role_ids = [role.id for role in bot.store.staff_roles(guild)]
+    if mode == THREAD_MODE:
+        await speak(
+            bot,
+            guild,
+            ticket,
+            content=thread_invite(
+                role_ids, ticket["id"], getattr(user, "display_name", str(user))
+            ),
+            embed=embed,
+            allowed=mentions(role_ids),
+        )
+        return
+    await speak(bot, guild, ticket, embed=embed)
+
+
+async def open_or_find(
+    bot: Any,
+    guild: Any,
+    user: Any,
+    *,
+    source: str = SOURCE_DM,
+    opened_by: Any = None,
+    subject: Any = None,
+    via: str = VIA_DISCORD,
+) -> tuple[Any, bool]:
+    """One open ticket per member, made the same way whichever door asked for it."""
+    existing = await open_ticket_for(bot.db, guild.id, user.id)
+    if existing is not None:
+        return existing, False
+    mode = bot.store.get(guild.id, "modmail_mode")
+    try:
+        ticket_id = await create_ticket(
+            bot.db, guild.id, user.id, mode, source=source, opened_by=opened_by
+        )
+    except sqlite3.IntegrityError:
+        return await open_ticket_for(bot.db, guild.id, user.id), False
+    place, why_not = await make_place(bot, guild, user, ticket_id, mode, subject=subject)
+    if place is None:
+        await abandon_ticket(bot, guild, user, ticket_id, why_not)
+        return None, False
+    await set_ticket_place(
+        bot.db,
+        ticket_id,
+        place.id if mode == CHANNEL_MODE else getattr(place, "parent_id", place.id),
+        place.id if mode == THREAD_MODE else None,
+    )
+    ticket = await get_ticket(bot.db, ticket_id)
+    await log_action(
+        bot,
+        guild,
+        kind_via(
+            "modmail.opened_by_staff" if source == SOURCE_STAFF else "modmail.opened", via
+        ),
+        actor=opened_by,
+        target=user,
+        details={
+            "ticket_id": ticket_id,
+            "mode": mode,
+            "channel_id": place.id,
+            "source": source,
+            "via": via,
+        },
+    )
+    await post_header(bot, guild, ticket, user, mode)
+    return ticket, True
+
+
+async def record_inbound(
+    bot: Any, guild: Any, ticket: Any, author: Any, content: Any, attachments: Any = ()
+) -> str | None:
+    """The member's words into the ticket: one row, one embed, one card move."""
+    await add_message(
+        bot.db, ticket["id"], author.id, IN, content=content, attachments=attachments
+    )
+    embed = relay_embed(
+        IN,
+        author_name=getattr(author, "display_name", str(author)),
+        author_id=author.id,
+        content=content,
+        attachments=attachments,
+        icon_url=getattr(getattr(author, "display_avatar", None), "url", None),
+    )
+    _, why_not = await speak(bot, guild, ticket, embed=embed)
+    if why_not is not None:
+        await log_action(
+            bot,
+            guild,
+            "modmail.relay_failed",
+            target=author,
+            details={"ticket_id": ticket["id"], "reason": why_not},
+        )
+    await bump_card(bot, guild, ticket)
+    return why_not
+
+
+def ticket_place_id(ticket: Any) -> int:
+    return int(ticket["thread_id"] or ticket["channel_id"] or 0)
+
+
+async def refuse_open(
+    bot: Any,
+    guild: Any,
+    user: Any,
+    reason: str,
+    said: str,
+    *,
+    status: int = 409,
+    actor: Any = None,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """A door that will not open says why, in words, and leaves one quiet row saying so."""
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.open_refused", via),
+        actor=actor,
+        target=user,
+        details={"reason": reason, "user_id": getattr(user, "id", user), "via": via},
+    )
+    return refusal(said, reason, status)
+
+
+async def open_a_ticket(
+    bot: Any,
+    guild: Any,
+    user: Any,
+    *,
+    source: str,
+    subject: Any = None,
+    text: Any = None,
+    actor: Any = None,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """The command, the posted button and the staff door, all on the DM path's own rails."""
+    staff_door = source == SOURCE_STAFF
+    if getattr(user, "bot", False):
+        return await refuse_open(
+            bot, guild, user, "a_bot", A_BOT_SAID, status=400, actor=actor, via=via
+        )
+    if not bot.store.get(guild.id, "modmail_enabled"):
+        said = STAFF_DISABLED_SAID if staff_door else DISABLED_DM.format(guild=guild.name)
+        return await refuse_open(bot, guild, user, "disabled", said, actor=actor, via=via)
+    blocked = await blocked_row(bot.db, user.id)
+    if blocked is not None:
+        said = (
+            STAFF_BLOCKED_SAID.format(who=who_said(user, user.id))
+            if staff_door
+            else BLOCKED_DM.format(guild=guild.name)
+        )
+        return await refuse_open(bot, guild, user, "blocked", said, actor=actor, via=via)
+    async with user_lock(bot, user.id):
+        existing = await open_ticket_for(bot.db, guild.id, user.id)
+        if existing is not None:
+            said = (
+                STAFF_ALREADY_OPEN.format(
+                    who=who_said(user, user.id), where=ticket_place_id(existing)
+                )
+                if staff_door
+                else ALREADY_OPEN_SAID
+            )
+            return await refuse_open(
+                bot, guild, user, "already_open", said, actor=actor, via=via
+            )
+        ticket, _ = await open_or_find(
+            bot,
+            guild,
+            user,
+            source=source,
+            opened_by=getattr(actor, "id", actor),
+            subject=subject,
+            via=via,
+        )
+        if ticket is None:
+            return await refuse_open(
+                bot, guild, user, "cannot_open", CANNOT_OPEN_SAID, status=500, actor=actor,
+                via=via,
+            )
+        body = first_message(subject, text)
+        if staff_door:
+            why_not = await send_reply(
+                bot, guild, ticket, actor, body, via=via, source=SOURCE_COMMAND
+            )
+            said = STAFF_OPENED.format(
+                who=who_said(user, user.id),
+                ticket_id=ticket["id"],
+                where=ticket_place_id(ticket),
+            )
+            return Outcome(
+                True,
+                said if why_not is None else said + STAFF_NOT_REACHED,
+                value=ticket["id"],
+            )
+        await record_inbound(bot, guild, ticket, user, body)
+        why_not = await deliver_dm(user, opening_dm(guild.name))
+        said = TICKET_OPENED_SAID.format(ticket_id=ticket["id"])
+        return Outcome(
+            True, said if why_not is None else said + DMS_ARE_SHUT, value=ticket["id"]
+        )
+
+
+def ticket_panel_custom_id(guild_id: Any) -> str:
+    return f"modmail:ticket:{int(guild_id)}"
+
+
+def ticket_panel_view(guild_id: Any) -> discord.ui.View:
+    """The posted button belongs to the room, so it outlives the process that posted it."""
+    view = discord.ui.View(timeout=None)
+    view.add_item(TicketButton(guild_id))
+    return view
+
+
+def panel_where(bot: Any, guild: Any) -> tuple[Any, int | None]:
+    channel_id = bot.store.get(guild.id, PANEL_CHANNEL_KEY)
+    message_id = bot.store.get(guild.id, PANEL_MESSAGE_KEY)
+    channel = (
+        (guild.get_channel(channel_id) or bot.get_channel(channel_id)) if channel_id else None
+    )
+    return channel, (int(message_id) if message_id else None)
+
+
+async def panel_is_there(channel: Any, message_id: int) -> bool:
+    """A button somebody deleted by hand reads as gone; anything else leaves it alone."""
+    try:
+        await channel.fetch_message(message_id)
+    except discord.NotFound:
+        return False
+    except Exception as exc:
+        log.info("modmail: could not look up the ticket button %s: %s", message_id, exc)
+        return True
+    return True
+
+
+async def drop_panel_message(bot: Any, guild: Any, channel: Any, message_id: int) -> None:
+    """Deleting a MESSAGE is a side effect `guard.py` never sees, so this one asks by hand."""
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(channel.id):
+        await log_action(
+            bot,
+            guild,
+            "modmail.would_take_down_panel",
+            details={"channel_id": channel.id, "message_id": message_id},
+        )
+        return
+    partial = getattr(channel, "get_partial_message", None)
+    try:
+        if partial is None:
+            await (await channel.fetch_message(message_id)).delete()
+        else:
+            await partial(message_id).delete()
+    except discord.NotFound:
+        return
+    except Exception as exc:
+        log.info("modmail: the old ticket button %s stayed where it was: %s", message_id, exc)
+
+
+async def post_ticket_panel(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    channel: Any,
+    *,
+    moving: bool | None = None,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """One Open-a-ticket message per guild, posted from Discord or from the website."""
+    if channel is None:
+        return refusal(PANEL_STUCK, "no_such_channel", 400)
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(channel.id):
+        await log_action(
+            bot,
+            guild,
+            kind_via("modmail.would_post_panel", via),
+            actor=actor,
+            details={"channel_id": channel.id, "via": via},
+        )
+        return refusal(PANEL_GUARDED, "test_mode", 409)
+    old_channel, old_id = panel_where(bot, guild)
+    store = bot.store
+    try:
+        message = await channel.send(
+            embed=ticket_button_embed(
+                store.get(guild.id, PANEL_HEADING_KEY), store.get(guild.id, PANEL_TEXT_KEY)
+            ),
+            view=ticket_panel_view(guild.id),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except Exception as exc:
+        log.warning("modmail: could not post the ticket button: %s", exc)
+        await log_action(
+            bot,
+            guild,
+            "modmail.panel_failed",
+            actor=actor,
+            details={"channel_id": channel.id, "reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return refusal(PANEL_STUCK, "panel_stuck", 500)
+    by = getattr(actor, "id", actor)
+    await store.set(guild.id, PANEL_CHANNEL_KEY, channel.id, by=by)
+    await store.set(guild.id, PANEL_MESSAGE_KEY, str(message.id), by=by)
+    moved = (old_id is not None) if moving is None else moving
+    if moved and old_channel is not None and old_id:
+        await drop_panel_message(bot, guild, old_channel, old_id)
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.panel_moved" if moved else "modmail.panel_posted", via),
+        actor=actor,
+        details={"channel_id": channel.id, "message_id": message.id, "via": via},
+    )
+    said = (PANEL_MOVED_SAID if moved else PANEL_POSTED_SAID).format(where=channel.id)
+    return Outcome(True, said, value=message.id)
+
+
+async def take_panel_down(
+    bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Down means down: the message goes and both keys are cleared, so nothing puts it back."""
+    channel, message_id = panel_where(bot, guild)
+    if not bot.store.get(guild.id, PANEL_CHANNEL_KEY):
+        return refusal(PANEL_NOT_UP, "no_panel", 404)
+    if channel is not None and message_id:
+        await drop_panel_message(bot, guild, channel, message_id)
+    await bot.store.clear(guild.id, PANEL_MESSAGE_KEY)
+    await bot.store.clear(guild.id, PANEL_CHANNEL_KEY)
+    await log_action(
+        bot,
+        guild,
+        kind_via("modmail.panel_taken_down", via),
+        actor=actor,
+        details={
+            "channel_id": getattr(channel, "id", None),
+            "message_id": message_id,
+            "via": via,
+        },
+    )
+    return Outcome(True, PANEL_DOWN_SAID, value=message_id)
+
+
 class Modmail(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._refused: dict[int, datetime] = {}
         self._gone: dict[int, int] = {}
+        self._panel_shadowed: set[int] = set()
         self.last_ok_at: str | None = None
         self.last_error: str | None = None
 
@@ -1589,150 +2118,19 @@ class Modmail(commands.Cog):
         await deliver_dm(user, text)
 
     async def _open_or_find(self, guild: Any, user: Any) -> tuple[Any, bool]:
-        existing = await open_ticket_for(self.bot.db, guild.id, user.id)
-        if existing is not None:
-            return existing, False
-        mode = self.bot.store.get(guild.id, "modmail_mode")
-        try:
-            ticket_id = await create_ticket(self.bot.db, guild.id, user.id, mode)
-        except sqlite3.IntegrityError:
-            return await open_ticket_for(self.bot.db, guild.id, user.id), False
-        place, why_not = await self._make_place(guild, user, ticket_id, mode)
-        if place is None:
-            await self._abandon(guild, user, ticket_id, why_not)
-            return None, False
-        await set_ticket_place(
-            self.bot.db,
-            ticket_id,
-            place.id if mode == CHANNEL_MODE else getattr(place, "parent_id", place.id),
-            place.id if mode == THREAD_MODE else None,
-        )
-        ticket = await get_ticket(self.bot.db, ticket_id)
-        await log_action(
-            self.bot,
-            guild,
-            "modmail.opened",
-            target=user,
-            details={"ticket_id": ticket_id, "mode": mode, "channel_id": place.id},
-        )
-        await self._post_header(guild, ticket, user, mode)
-        return ticket, True
-
-    async def _make_place(
-        self, guild: Any, user: Any, ticket_id: int, mode: str
-    ) -> tuple[Any, str | None]:
-        if not self.bot.store.staff_roles(guild):
-            return None, "no_staff_roles"
-        if mode == THREAD_MODE:
-            parent, where = thread_parent(self.bot, guild)
-            if parent is None:
-                return None, where
-            try:
-                return (
-                    await parent.create_thread(
-                        name=thread_name(getattr(user, "display_name", user.name), ticket_id),
-                        type=discord.ChannelType.private_thread,
-                        invitable=False,
-                        auto_archive_duration=AUTO_ARCHIVE_MINUTES,
-                        reason=f"Black Bloc modmail ticket {ticket_id}",
-                    ),
-                    None,
-                )
-            except discord.HTTPException as exc:
-                return None, f"{type(exc).__name__}: {exc}"
-        category, where = ticket_category(self.bot, guild)
-        if category is None:
-            return None, where
-        staff = self.bot.store.staff_roles(guild)
-        try:
-            return (
-                await guild.create_text_channel(
-                    ticket_channel_name(getattr(user, "name", user), ticket_id),
-                    category=category,
-                    topic=ticket_topic(user.id, ticket_id),
-                    overwrites=ticket_overwrites(guild, staff, getattr(guild, "me", None)),
-                    reason=f"Black Bloc modmail ticket {ticket_id}",
-                ),
-                None,
-            )
-        except discord.HTTPException as exc:
-            return None, f"{type(exc).__name__}: {exc}"
-
-    async def _abandon(self, guild: Any, user: Any, ticket_id: int, why_not: Any) -> None:
-        await self.bot.db.conn.execute(
-            "UPDATE modmail_tickets SET status = 'closed', closed_at = ?, close_reason = ? "
-            "WHERE id = ?",
-            (now_iso(), f"never_got_a_place: {why_not}", ticket_id),
-        )
-        await self.bot.db.conn.commit()
-        log.warning("modmail: ticket %s got no channel — %s", ticket_id, why_not)
-        await log_action(
-            self.bot,
-            guild,
-            "modmail.open_failed",
-            target=user,
-            details={"ticket_id": ticket_id, "reason": str(why_not)},
-        )
-
-    async def _post_header(self, guild: Any, ticket: Any, user: Any, mode: str) -> None:
-        member = guild.get_member(user.id)
-        prior = max(await count_tickets(self.bot.db, guild.id, user.id) - 1, 0)
-        embed = header_embed(
-            ticket_id=ticket["id"],
-            user_id=user.id,
-            user_label=getattr(user, "display_name", str(user)),
-            mode=mode,
-            created_at=getattr(user, "created_at", None),
-            joined_at=getattr(member, "joined_at", None),
-            roles=[r for r in getattr(member, "roles", ()) if getattr(r, "id", 0) != guild.id],
-            prior_tickets=prior,
-        )
-        role_ids = [role.id for role in self.bot.store.staff_roles(guild)]
-        if mode == THREAD_MODE:
-            await speak(
-                self.bot,
-                guild,
-                ticket,
-                content=thread_invite(
-                    role_ids, ticket["id"], getattr(user, "display_name", str(user))
-                ),
-                embed=embed,
-                allowed=mentions(role_ids),
-            )
-            return
-        await speak(self.bot, guild, ticket, embed=embed)
+        return await open_or_find(self.bot, guild, user, source=SOURCE_DM)
 
     async def _relay_inbound(
         self, guild: Any, ticket: Any, message: discord.Message
     ) -> str | None:
-        urls = attachment_urls(message.attachments)
-        await add_message(
-            self.bot.db,
-            ticket["id"],
-            message.author.id,
-            IN,
-            content=message.content,
-            attachments=urls,
+        return await record_inbound(
+            self.bot,
+            guild,
+            ticket,
+            message.author,
+            message.content,
+            attachment_urls(message.attachments),
         )
-        embed = relay_embed(
-            IN,
-            author_name=getattr(message.author, "display_name", str(message.author)),
-            author_id=message.author.id,
-            content=message.content,
-            attachments=urls,
-            icon_url=getattr(getattr(message.author, "display_avatar", None), "url", None),
-        )
-        _, why_not = await speak(self.bot, guild, ticket, embed=embed)
-        if why_not is not None:
-            await log_action(
-                self.bot,
-                guild,
-                "modmail.relay_failed",
-                target=message.author,
-                details={"ticket_id": ticket["id"], "reason": why_not},
-            )
-        await bump_card(self.bot, guild, ticket)
-        return why_not
 
     async def _staff_message(self, message: discord.Message) -> None:
         """A plain message in a ticket is a reply; one starting with `=` is a private note."""
@@ -1874,7 +2272,7 @@ class Modmail(commands.Cog):
         )
 
     async def cog_load(self) -> None:
-        self.bot.add_dynamic_items(TicketCardButton)
+        self.bot.add_dynamic_items(TicketCardButton, TicketButton)
         if not self.bot.db.is_connected:
             return
         await self.reconcile_tickets()
@@ -1915,7 +2313,39 @@ class Modmail(commands.Cog):
                 continue
             for row in await open_tickets(self.bot.db, guild.id):
                 await self._recheck(guild, row, now)
+            await self._repanel(guild)
         self.last_ok_at = now_iso()
+
+    async def _repanel(self, guild: Any) -> None:
+        """The posted button belongs to the room, so one deleted by hand is put back."""
+        bot = self.bot
+        channel, message_id = panel_where(bot, guild)
+        if not bot.store.get(guild.id, PANEL_CHANNEL_KEY) or channel is None:
+            return
+        if message_id and await panel_is_there(channel, message_id):
+            self._panel_shadowed.discard(guild.id)
+            return
+        guard = getattr(bot, "guard", None)
+        if guard is not None and not guard.allows_channel(channel.id):
+            if guild.id not in self._panel_shadowed:
+                self._panel_shadowed.add(guild.id)
+                await log_action(
+                    bot,
+                    guild,
+                    "modmail.would_post_panel",
+                    details={"channel_id": channel.id, "reason": "reconcile"},
+                )
+            return
+        if message_id:
+            await log_action(
+                bot,
+                guild,
+                "modmail.panel_gone",
+                details={"channel_id": channel.id, "message_id": message_id},
+            )
+        outcome = await post_ticket_panel(bot, guild, None, channel, moving=False)
+        if outcome.ok:
+            self._panel_shadowed.discard(guild.id)
 
     async def _recheck(self, guild: Any, row: Any, now: datetime) -> None:
         if not row["channel_id"]:
@@ -1958,6 +2388,12 @@ class Modmail(commands.Cog):
             if channel.id == self.bot.store.get(guild.id, key):
                 await self.bot.store.clear(guild.id, key)
                 await log_action(self.bot, guild, kind, details={"channel_id": channel.id})
+        if channel.id == self.bot.store.get(guild.id, PANEL_CHANNEL_KEY):
+            await self.bot.store.clear(guild.id, PANEL_CHANNEL_KEY)
+            await self.bot.store.clear(guild.id, PANEL_MESSAGE_KEY)
+            await log_action(
+                self.bot, guild, "modmail.panel_gone", details={"channel_id": channel.id}
+            )
         for row in await tickets_in_channel(self.bot.db, channel.id):
             await self._close(guild, row, reason="ticket_channel_deleted")
 
@@ -1993,17 +2429,24 @@ class Modmail(commands.Cog):
         for row in await tickets_in_channel(self.bot.db, thread.id):
             await self._close(thread.guild, row, reason="ticket_thread_deleted", silent=True)
 
-    @app_commands.command(name="modmail", description="Run the modmail inbox")
-    @app_commands.default_permissions(STAFF_ONLY)
+    @app_commands.command(
+        name="modmail",
+        description="Open a ticket with the moderators, or run the inbox",
+        extras={"staff_only": False},
+    )
     async def modmail(self, interaction: discord.Interaction) -> None:
         if interaction.guild is None:
             await answer(interaction, GUILD_ONLY)
             return
-        if not await require_staff(interaction):
+        staff = self.bot.store.is_staff(interaction.user)
+        if not staff and not self.bot.store.get(interaction.guild.id, MEMBER_COMMAND_KEY):
+            await require_staff(interaction)
             return
         if not await db_up(interaction):
             return
-        embed, view = await build_root(self.bot, interaction.guild, self)
+        embed, view = await build_root(
+            self.bot, interaction.guild, self, actor=interaction.user, staff=staff
+        )
         await interaction.response.send_message(
             embed=embed,
             view=view,
@@ -2091,6 +2534,7 @@ class ModmailPanel(Panel):
         self.picked_snippet: str | None = None
         self.picked_ticket: int | None = None
         self.confirming = False
+        self.staff = True
 
 
 def minutes_for(bot: Any, guild_id: int) -> int:
@@ -2122,20 +2566,68 @@ def setup_lines(bot: Any, guild: Any) -> list[str]:
     ]
 
 
+async def door_lines(bot: Any, guild: Any, actor: Any, *, staff: bool) -> tuple[list[str], bool]:
+    """The first row of the panel, which is the same question for a member and for a Lead."""
+    mine = await open_ticket_for(bot.db, guild.id, actor.id)
+    if mine is not None:
+        said = (
+            MEMBER_TICKET_SEEN.format(where=ticket_place_id(mine))
+            if staff
+            else MEMBER_TICKET_OPEN
+        )
+        return [said], False
+    if not bot.store.get(guild.id, "modmail_enabled"):
+        return ([] if staff else [MEMBER_DOOR_OFF.format(guild=guild.name)]), False
+    if await blocked_row(bot.db, actor.id) is not None:
+        return [MEMBER_BLOCKED], False
+    return [], True
+
+
 async def build_root(
-    bot: Any, guild: Any, cog: Any, *, confirming: bool = False
+    bot: Any,
+    guild: Any,
+    cog: Any,
+    *,
+    actor: Any,
+    staff: bool,
+    confirming: bool = False,
+    picking: bool = False,
+    blocked_pick: int | None = None,
+    note: str | None = None,
 ) -> tuple[discord.Embed, ModmailPanel]:
-    lines = await cog._status_lines(guild)
+    mine, may_open = await door_lines(bot, guild, actor, staff=staff)
+    if not staff:
+        embed = discord.Embed(title=MEMBER_TITLE, description=clamped([MEMBER_INTRO, *mine]))
+        view = new_panel(bot, guild, cog)
+        view.staff = False
+        for move in door_buttons(may_open=may_open, staff=False):
+            view.add_item(MoveButton(move))
+        return (embed, view)
+    lines = [*mine, *await cog._status_lines(guild)]
     if not bot.store.get(guild.id, "modmail_enabled"):
         lines.append(INCUMBENT_LINE)
     if confirming:
         lines.append(REALLY_PRACTISE)
+    if note:
+        lines.append(note)
     embed = discord.Embed(title=PANEL_TITLE, description=clamped(lines))
     view = new_panel(bot, guild, cog)
     view.confirming = confirming
-    tickets = [] if confirming else await open_tickets(bot.db, guild.id)
-    if tickets:
-        view.add_item(TicketPick(bot, guild, tickets))
+    view.picked_block = blocked_pick
+    if not confirming:
+        for move in door_buttons(
+            may_open=may_open,
+            staff=True,
+            picking=picking,
+            blocked_pick=blocked_pick is not None,
+        ):
+            view.add_item(MoveButton(move))
+    if picking:
+        view.add_item(MemberPick())
+    else:
+        tickets = [] if confirming else await open_tickets(bot.db, guild.id)
+        if tickets:
+            view.add_item(TicketPick(bot, guild, tickets))
     url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), "modmail")
     for move in root_buttons(
         has_forget=bool(pointed_keys(bot.store, guild)),
@@ -2144,6 +2636,39 @@ async def build_root(
         confirming=confirming,
     ):
         view.add_item(SiteButton(move, url) if move.action == SITE else MoveButton(move))
+    return (embed, view)
+
+
+def panel_lines(bot: Any, guild: Any) -> list[str]:
+    store = bot.store
+    channel_id = store.get(guild.id, PANEL_CHANNEL_KEY)
+    message_id = store.get(guild.id, PANEL_MESSAGE_KEY)
+    where = (
+        PANEL_IS_AT.format(where=channel_id, message_id=message_id)
+        if channel_id and message_id
+        else PANEL_NOWHERE
+    )
+    return [
+        where,
+        PANEL_LINES.format(
+            title=store.get(guild.id, PANEL_HEADING_KEY),
+            text=store.get(guild.id, PANEL_TEXT_KEY),
+        ),
+    ]
+
+
+def build_ticket_button(
+    bot: Any, guild: Any, cog: Any, *, picking: bool = False
+) -> tuple[discord.Embed, ModmailPanel]:
+    embed = discord.Embed(title=TICKET_BUTTON_TITLE, description=clamped(panel_lines(bot, guild)))
+    view = new_panel(bot, guild, cog)
+    view.surface = TICKET_BUTTON
+    if picking:
+        view.add_item(PanelPlacePick())
+    for move in ticket_button_buttons(
+        posted=bool(bot.store.get(guild.id, PANEL_MESSAGE_KEY)), picking=picking
+    ):
+        view.add_item(MoveButton(move))
     return (embed, view)
 
 
@@ -2261,20 +2786,146 @@ def cog_of(view: Any) -> Any:
 
 
 async def render_root(
-    interaction: discord.Interaction, previous: Any = None, *, confirming: bool = False
+    interaction: discord.Interaction,
+    previous: Any = None,
+    *,
+    confirming: bool = False,
+    picking: bool = False,
+    blocked_pick: int | None = None,
+    note: str | None = None,
 ) -> None:
+    bot = interaction.client
     built = await build_root(
-        interaction.client, interaction.guild, cog_of(previous), confirming=confirming
+        bot,
+        interaction.guild,
+        cog_of(previous),
+        actor=interaction.user,
+        staff=bot.store.is_staff(interaction.user),
+        confirming=confirming,
+        picking=picking,
+        blocked_pick=blocked_pick,
+        note=note,
     )
     await show(interaction, built, previous)
 
 
 async def open_root(
-    interaction: discord.Interaction, previous: Any = None, *, confirming: bool = False
+    interaction: discord.Interaction,
+    previous: Any = None,
+    *,
+    confirming: bool = False,
+    picking: bool = False,
+    staff: bool = True,
+) -> None:
+    if not await opened(interaction, staff=staff):
+        return
+    await render_root(interaction, previous, confirming=confirming, picking=picking)
+
+
+async def open_ticket_button(
+    interaction: discord.Interaction, previous: Any = None, *, picking: bool = False
 ) -> None:
     if not await opened(interaction):
         return
-    await render_root(interaction, previous, confirming=confirming)
+    built = build_ticket_button(
+        interaction.client, interaction.guild, cog_of(previous), picking=picking
+    )
+    await show(interaction, built, previous)
+
+
+async def run_post_panel(
+    interaction: discord.Interaction, channel: Any, previous: Any
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await post_ticket_panel(
+        interaction.client, interaction.guild, interaction.user, channel
+    )
+    built = build_ticket_button(interaction.client, interaction.guild, cog_of(previous))
+    await show(interaction, built, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_take_panel_down(interaction: discord.Interaction, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await take_panel_down(
+        interaction.client, interaction.guild, interaction.user
+    )
+    built = build_ticket_button(interaction.client, interaction.guild, cog_of(previous))
+    await show(interaction, built, previous)
+    await answer(interaction, outcome.message)
+
+
+async def open_with_member(interaction: discord.Interaction, user: Any, previous: Any) -> None:
+    """A door that will refuse says so BEFORE it asks staff to type a paragraph."""
+    bot = interaction.client
+    guild = interaction.guild
+    if not await still_staff(interaction):
+        return
+    if not await db_up(interaction):
+        return
+    why_not = await open_with_refusal(bot, guild, user)
+    if why_not is None:
+        await interaction.response.send_modal(
+            TicketModal(source=SOURCE_STAFF, member=user, previous=previous)
+        )
+        return
+    said, blocked = why_not
+    await interaction.response.defer()
+    if not await db_ready(interaction):
+        return
+    await render_root(
+        interaction, previous, blocked_pick=user.id if blocked else None, note=said
+    )
+    await answer(interaction, said)
+
+
+async def open_with_refusal(bot: Any, guild: Any, user: Any) -> tuple[str, bool] | None:
+    """The three answers `open_a_ticket` would give, asked before the modal rather than after."""
+    who = who_said(user, user.id)
+    if getattr(user, "bot", False):
+        return A_BOT_SAID.format(who=who), False
+    if not bot.store.get(guild.id, "modmail_enabled"):
+        return STAFF_DISABLED_SAID, False
+    if await blocked_row(bot.db, user.id) is not None:
+        return STAFF_BLOCKED_SAID.format(who=who), True
+    existing = await open_ticket_for(bot.db, guild.id, user.id)
+    if existing is not None:
+        return STAFF_ALREADY_OPEN.format(who=who, where=ticket_place_id(existing)), False
+    return None
+
+
+async def run_open_ticket(
+    interaction: discord.Interaction,
+    *,
+    source: str,
+    subject: Any,
+    text: Any,
+    member: Any = None,
+    previous: Any = None,
+) -> None:
+    """Every door's modal lands here: defer, open, re-render what raised it, answer once."""
+    bot = interaction.client
+    staff_door = source == SOURCE_STAFF
+    if previous is None:
+        await interaction.response.defer(ephemeral=True)
+        if not await db_ready(interaction):
+            return
+    elif not await opened(interaction, staff=staff_door):
+        return
+    outcome = await open_a_ticket(
+        bot,
+        interaction.guild,
+        member if member is not None else interaction.user,
+        source=source,
+        subject=subject,
+        text=text,
+        actor=interaction.user if staff_door else None,
+    )
+    if previous is not None:
+        await render_root(interaction, previous)
+    await answer(interaction, outcome.message)
 
 
 async def run_practice(interaction: discord.Interaction, previous: Any) -> None:
@@ -2493,8 +3144,23 @@ class MoveButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
         action = self.move.action
+        if action == TICKET_OPEN:
+            await open_ticket_modal(interaction, view)
+            return
         if action == LOGS:
             await send_logs(interaction, "modmail")
+            return
+        if action == OPEN_WITH:
+            await open_root(interaction, view, picking=True)
+            return
+        if action == TICKET_BUTTON:
+            await open_ticket_button(interaction, view)
+            return
+        if action in (PANEL_POST, PANEL_MOVE_TO):
+            await open_ticket_button(interaction, view, picking=True)
+            return
+        if action == PANEL_DOWN:
+            await run_take_panel_down(interaction, view)
             return
         if action == SETUP:
             await open_setup(interaction, view)
@@ -2556,8 +3222,10 @@ class MoveButton(discord.ui.Button):
             await open_snippets(interaction, view, picked=view.picked_snippet)
         elif surface == FORGET:
             await open_forget(interaction, view)
+        elif surface == TICKET_BUTTON:
+            await open_ticket_button(interaction, view)
         else:
-            await open_root(interaction, view)
+            await open_root(interaction, view, staff=getattr(view, "staff", True))
 
     async def open_modal(self, interaction: discord.Interaction, view: Any) -> None:
         if not await still_staff(interaction):
@@ -2733,11 +3401,42 @@ class TicketPick(discord.ui.Select):
             ],
             min_values=1,
             max_values=1,
-            row=0,
+            row=ROOT_ROW_SELECT,
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_ticket_card(interaction, self.view, int(self.values[0]))
+
+
+class MemberPick(discord.ui.UserSelect):
+    """Staff open a ticket WITH somebody, and anybody in the server can be that somebody."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder=PICK_A_MEMBER, min_values=1, max_values=1, row=ROOT_ROW_SELECT
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_with_member(interaction, self.values[0], self.view)
+
+
+class PanelPlacePick(discord.ui.ChannelSelect):
+    def __init__(self) -> None:
+        super().__init__(
+            placeholder=PICK_A_CHANNEL,
+            channel_types=[discord.ChannelType.text],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        bot = interaction.client
+        picked = self.values[0]
+        channel = (
+            interaction.guild.get_channel(picked.id) or bot.get_channel(picked.id) or picked
+        )
+        await run_post_panel(interaction, channel, self.view)
 
 
 class ForgetPick(discord.ui.Select):
@@ -2801,6 +3500,71 @@ class SnippetModal(AnswersErrors, discord.ui.Modal):
             self.previous,
             overwrite=self.overwrite,
         )
+
+
+class TicketModal(AnswersErrors, discord.ui.Modal):
+    """One form behind every door: a few words about it, then what is happening."""
+
+    def __init__(self, *, source: str, member: Any = None, previous: Any = None) -> None:
+        staff_door = source == SOURCE_STAFF
+        super().__init__(title=STAFF_MODAL_TITLE if staff_door else TICKET_MODAL_TITLE)
+        self.source = source
+        self.member = member
+        self.previous = previous
+        self.subject = discord.ui.TextInput(max_length=NAME_LIMIT, required=False)
+        self.body = discord.ui.TextInput(
+            style=discord.TextStyle.paragraph, max_length=MESSAGE_LIMIT
+        )
+        self.add_item(discord.ui.Label(text=TICKET_SUBJECT_LABEL, component=self.subject))
+        self.add_item(
+            discord.ui.Label(
+                text=STAFF_BODY_LABEL if staff_door else TICKET_BODY_LABEL, component=self.body
+            )
+        )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_open_ticket(
+            interaction,
+            source=self.source,
+            subject=clamp(str(self.subject), NAME_LIMIT).strip() or None,
+            text=clamp(str(self.body), MESSAGE_LIMIT),
+            member=self.member,
+            previous=self.previous,
+        )
+
+
+async def open_ticket_modal(interaction: discord.Interaction, previous: Any = None) -> None:
+    """The one place a member's form is raised, from the panel or from the posted button."""
+    if not await db_up(interaction):
+        return
+    source = SOURCE_COMMAND if previous is not None else SOURCE_PANEL
+    await interaction.response.send_modal(TicketModal(source=source, previous=previous))
+
+
+class TicketButton(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=TICKET_PANEL_TEMPLATE
+):
+    """The posted Open a ticket button: persistent, and its whole answer is ephemeral."""
+
+    def __init__(self, guild_id: Any) -> None:
+        self.guild_id = int(guild_id)
+        super().__init__(
+            discord.ui.Button(
+                label=TICKET_MOVE.label,
+                style=discord.ButtonStyle.primary,
+                custom_id=ticket_panel_custom_id(guild_id),
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: Any):
+        return cls(int(match["guild_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
+            return
+        await open_ticket_modal(interaction)
 
 
 # --- the sticky ticket card ----------------------------------------------------------------------

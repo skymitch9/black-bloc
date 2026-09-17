@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 37
+        assert SCHEMA_VERSION == 38
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -425,11 +425,13 @@ async def test_the_sticky_card_and_practice_columns_arrive_on_a_schema_29_databa
     try:
         cur = await db.conn.execute("PRAGMA table_info(modmail_tickets)")
         columns = {row["name"] for row in await cur.fetchall()}
-        assert {"card_message_id", "practice"} <= columns
+        assert {"card_message_id", "practice", "source", "opened_by"} <= columns
         cur = await db.conn.execute("SELECT * FROM modmail_tickets WHERE id = 1")
         row = await cur.fetchone()
         assert row["card_message_id"] is None
         assert row["practice"] == 0
+        # 37 -> 38: a ticket older than the doors came in the only way there was.
+        assert row["source"] == "dm" and row["opened_by"] is None
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:

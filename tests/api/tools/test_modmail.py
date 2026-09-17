@@ -24,6 +24,8 @@ ROUTES = [
     ("GET", "/api/modmail/blocks", None),
     ("POST", "/api/modmail/blocks", {"user_id": "21"}),
     ("DELETE", "/api/modmail/blocks/21", None),
+    ("POST", "/api/modmail/panel", {"channel_id": "1"}),
+    ("DELETE", "/api/modmail/panel", None),
 ]
 
 
@@ -229,3 +231,86 @@ def test_a_block_needs_a_real_id(client, sign_in):
     sign_in(client)
     assert client.post("/api/modmail/blocks", json={"user_id": "nobody"}).status_code == 400
     assert client.delete("/api/modmail/blocks/nobody").status_code == 400
+
+
+async def test_the_ticket_button_is_posted_and_taken_down_from_the_website(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client, uid=7)
+
+    posted = client.post("/api/modmail/panel", json={"channel_id": str(wf.TEST_CHANNEL_ID)})
+
+    assert posted.status_code == 200 and posted.json()["posted"] is True
+    assert posted.json()["channel_id"] == str(wf.TEST_CHANNEL_ID)
+    assert web.store.get(wf.GUILD_ID, "modmail_panel_channel_id") == wf.TEST_CHANNEL_ID
+    channel = guild.get_channel(wf.TEST_CHANNEL_ID)
+    assert channel.messages[-1].kwargs["embed"].title == "Need a moderator?"
+
+    down = client.delete("/api/modmail/panel")
+
+    assert down.status_code == 200 and down.json()["taken_down"] is True
+    assert web.store.get(wf.GUILD_ID, "modmail_panel_channel_id") is None
+    assert web.store.get(wf.GUILD_ID, "modmail_panel_message_id") is None
+    kinds = await wf.kinds_in(web.db)
+    assert "web.modmail.panel_posted" in kinds
+    assert "web.modmail.panel_taken_down" in kinds
+    assert "modmail.panel_posted" not in kinds
+
+
+async def test_posting_the_ticket_button_twice_moves_it_and_leaves_one_row_each_time(
+    client, sign_in, web, guild, wf
+):
+    sign_in(client, uid=7)
+
+    client.post("/api/modmail/panel", json={"channel_id": str(wf.TEST_CHANNEL_ID)})
+    again = client.post("/api/modmail/panel", json={"channel_id": str(wf.TEST_CHANNEL_ID)})
+
+    assert again.status_code == 200
+    kinds = await wf.kinds_in(web.db)
+    assert "web.modmail.panel_moved" in kinds
+
+
+def test_a_ticket_button_needs_a_channel_the_bot_can_see(client, sign_in):
+    sign_in(client)
+
+    assert client.post("/api/modmail/panel", json={}).status_code == 400
+    assert (
+        client.post("/api/modmail/panel", json={"channel_id": "404"}).json()["error"]
+        == "no_such_channel"
+    )
+
+
+async def test_the_ticket_button_is_refused_outside_the_test_channel_in_test_mode(
+    client, sign_in, web, guild, wf
+):
+    web.guard = wf.Guard()
+    sign_in(client)
+
+    refused = client.post("/api/modmail/panel", json={"channel_id": str(wf.OTHER_CHANNEL_ID)})
+
+    assert refused.status_code == 409 and refused.json()["error"] == "test_mode"
+    assert "test mode" in refused.json()["message"]
+    assert web.store.get(wf.GUILD_ID, "modmail_panel_channel_id") is None
+    assert guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
+
+
+def test_taking_down_a_button_that_is_not_up_says_so_rather_than_pretending(
+    client, sign_in
+):
+    sign_in(client)
+
+    said = client.delete("/api/modmail/panel")
+
+    assert said.status_code == 200
+    assert said.json()["taken_down"] is False
+    assert "no **Open a ticket** button" in said.json()["message"]
+
+
+async def test_a_ticket_says_which_door_it_came_in_by(client, sign_in, web, guild, wf):
+    wf.member(guild, 21, name="ada")
+    ticket_id = await a_ticket(web, wf)
+    sign_in(client)
+
+    row = client.get(f"/api/modmail/tickets/{ticket_id}").json()
+
+    assert row["source"] == "dm" and row["opened_by_id"] is None

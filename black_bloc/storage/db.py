@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 37
+SCHEMA_VERSION = 38
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -274,7 +274,9 @@ CREATE TABLE IF NOT EXISTS modmail_tickets (
     close_reason   TEXT,
     log_message_id INTEGER,
     card_message_id INTEGER,
-    practice       INTEGER NOT NULL DEFAULT 0
+    practice       INTEGER NOT NULL DEFAULT 0,
+    source         TEXT    NOT NULL DEFAULT 'dm',
+    opened_by      INTEGER
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS modmail_open_ticket
@@ -802,6 +804,8 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("modmail_messages", "delivered", "INTEGER NOT NULL DEFAULT 1"),
     ("modmail_tickets", "card_message_id", "INTEGER"),
     ("modmail_tickets", "practice", "INTEGER NOT NULL DEFAULT 0"),
+    ("modmail_tickets", "source", "TEXT NOT NULL DEFAULT 'dm'"),
+    ("modmail_tickets", "opened_by", "INTEGER"),
     ("mod_cases", "actions", "TEXT"),
     ("mod_cases", "done", "TEXT"),
     ("mod_cases", "failed", "TEXT"),

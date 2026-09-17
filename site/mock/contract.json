@@ -2051,7 +2051,8 @@
         "closed_by_id",
         "closed_by_name",
         "close_reason",
-        "practice"
+        "practice",
+        "source"
       ]
     },
     {
@@ -2205,6 +2206,37 @@
       "keys": [
         "unblocked",
         "user_id"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/modmail/panel",
+      "body": {
+        "channel_id": "{test_channel_id}"
+      },
+      "read_by": [
+        "page-modmail.js ticketButtonCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "posted",
+        "channel_id",
+        "message_id",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/modmail/panel",
+      "read_by": [
+        "page-modmail.js ticketButtonCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "taken_down",
+        "channel_id",
+        "message_id",
+        "message"
       ]
     },
     {
@@ -4680,6 +4712,9 @@
     "web.modmail.snippet_removed",
     "web.modmail.blocked",
     "web.modmail.unblocked",
+    "web.modmail.panel_posted",
+    "web.modmail.panel_moved",
+    "web.modmail.panel_taken_down",
     "web.role.approved",
     "web.role.denied",
     "web.role.granted",

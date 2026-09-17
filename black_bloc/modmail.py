@@ -14,6 +14,8 @@ from .settings_store import (
     CHANNEL_MODE,
     MODMAIL_BOTH,
     MODMAIL_BUTTONS,
+    MODMAIL_PANEL_TEXT_DEFAULT,
+    MODMAIL_PANEL_TITLE_DEFAULT,
     MODMAIL_TYPING,
     THREAD_MODE,
 )
@@ -101,8 +103,11 @@ def ticket_channel_name(user_name: Any, ticket_id: Any) -> str:
     return slug or f"ticket-{ticket_id}"
 
 
-def ticket_topic(user_id: Any, ticket_id: Any) -> str:
-    return TOPIC_TEMPLATE.format(user_id=int(user_id), ticket_id=int(ticket_id))
+def ticket_topic(user_id: Any, ticket_id: Any, subject: Any = None) -> str:
+    """What the member called it goes first; `parse_topic` still finds the ids behind it."""
+    line = TOPIC_TEMPLATE.format(user_id=int(user_id), ticket_id=int(ticket_id))
+    said = clamp(str(subject or "").strip(), NAME_LIMIT)
+    return f"{said} — {line}" if said else line
 
 
 def parse_topic(topic: Any) -> tuple[int, int] | None:
@@ -404,6 +409,25 @@ SOURCE_COMMAND = "command"
 SOURCE_WEB = "web"
 SOURCES = (SOURCE_CARD, SOURCE_TYPED, SOURCE_COMMAND, SOURCE_WEB)
 
+SOURCE_DM = "dm"
+SOURCE_PANEL = "panel"
+SOURCE_STAFF = "staff"
+SOURCE_PRACTICE = "practice"
+TICKET_SOURCES = (SOURCE_DM, SOURCE_COMMAND, SOURCE_PANEL, SOURCE_STAFF, SOURCE_PRACTICE)
+SOURCE_WORDS: dict[str, str] = {
+    SOURCE_DM: "a DM to Black Bloc",
+    SOURCE_COMMAND: "/modmail",
+    SOURCE_PANEL: "the Open a ticket button",
+    SOURCE_STAFF: "staff",
+    SOURCE_PRACTICE: "practice",
+}
+
+
+def ticket_source(ticket: Any) -> str:
+    """A ticket that predates the column came in by DM, because that was the only door."""
+    found = str(field_of(ticket, "source", SOURCE_DM) or SOURCE_DM)
+    return found if found in TICKET_SOURCES else SOURCE_DM
+
 SETUP = "setup"
 BLOCKED_MOVE = "blocked"
 SNIPPETS = "snippets"
@@ -430,6 +454,29 @@ SNIPPET_CHANGE = "snippet_change"
 SNIPPET_REMOVE = "snippet_remove"
 SNIPPET_REMOVE_YES = "snippet_remove_yes"
 SNIPPET_REMOVE_NO = "snippet_remove_no"
+
+TICKET_OPEN = "ticket_open"
+OPEN_WITH = "open_with"
+TICKET_BUTTON = "ticket_button"
+PANEL_POST = "panel_post"
+PANEL_MOVE_TO = "panel_move"
+PANEL_DOWN = "panel_down"
+
+MEMBER_COMMAND_KEY = "modmail_member_command"
+PANEL_CHANNEL_KEY = "modmail_panel_channel_id"
+PANEL_MESSAGE_KEY = "modmail_panel_message_id"
+PANEL_HEADING_KEY = "modmail_panel_title"
+PANEL_TEXT_KEY = "modmail_panel_text"
+
+MEMBER_TITLE = "Modmail"
+MEMBER_INTRO = "Modmail is how you reach staff privately. Nobody else sees what you write."
+MEMBER_TICKET_OPEN = (
+    "**Your ticket is open.** Staff can see it, and their replies come back as a DM from Black "
+    "Bloc. Anything you DM Black Bloc is added to the same ticket."
+)
+MEMBER_TICKET_SEEN = "**Your ticket is open:** <#{where}>. Staff answer there, and by DM."
+TICKET_BUTTON_TITLE = "The Open a ticket button"
+PICK_A_MEMBER = "Who to open a ticket with…"
 
 
 class ModmailMove(NamedTuple):
@@ -478,7 +525,31 @@ SNIPPETS_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 3)
 FORGET_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 1)
 FORGET_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 1)
 
+ROOT_ROW_DOORS = 0
+ROOT_ROW_SELECT = 1
+ROOT_ROW_MOVES = 2
+ROOT_ROW_TAIL = 3
+
+TICKET_MOVE = ModmailMove(TICKET_OPEN, "Open a ticket", "primary", ROOT_ROW_DOORS, modal=True)
+OPEN_WITH_MOVE = ModmailMove(OPEN_WITH, "Open a ticket with…", "secondary", ROOT_ROW_DOORS)
+ROOT_UNBLOCK_MOVE = ModmailMove(UNBLOCK, "Unblock them", "danger", ROOT_ROW_DOORS)
+
+TICKET_BUTTON_MOVE = ModmailMove(TICKET_BUTTON, "Ticket button…", "secondary", 2)
+PANEL_POST_MOVE = ModmailMove(PANEL_POST, "Post it…", "primary", 1)
+PANEL_MOVE_MOVE = ModmailMove(PANEL_MOVE_TO, "Move it…", "secondary", 1)
+PANEL_DOWN_MOVE = ModmailMove(PANEL_DOWN, "Take it down", "danger", 1)
+PANEL_BACK_MOVE = ModmailMove(BACK, "Back", "secondary", 2)
+PANEL_REFRESH_MOVE = ModmailMove(REFRESH, "Refresh", "secondary", 2)
+
 PANEL_MOVES = (
+    TICKET_MOVE,
+    OPEN_WITH_MOVE,
+    TICKET_BUTTON_MOVE,
+    PANEL_POST_MOVE,
+    PANEL_MOVE_MOVE,
+    PANEL_DOWN_MOVE,
+    PANEL_BACK_MOVE,
+    PANEL_REFRESH_MOVE,
     SETUP_MOVE,
     BLOCKED_MOVE_BUTTON,
     SNIPPETS_MOVE,
@@ -515,6 +586,20 @@ PANEL_MOVES = (
 )
 
 
+def door_buttons(
+    *, may_open: bool, staff: bool, picking: bool = False, blocked_pick: bool = False
+) -> tuple[ModmailMove, ...]:
+    """The first row everybody sees: one Open a ticket, and for staff the one they open FOR."""
+    found: list[ModmailMove] = []
+    if may_open:
+        found.append(TICKET_MOVE)
+    if staff and not picking:
+        found.append(OPEN_WITH_MOVE)
+    if staff and blocked_pick:
+        found.append(ROOT_UNBLOCK_MOVE)
+    return tuple(found)
+
+
 def root_buttons(
     *,
     has_forget: bool,
@@ -524,16 +609,22 @@ def root_buttons(
 ) -> tuple[ModmailMove, ...]:
     """Forget… is drawn only where something is pointed, so it can never answer 'nothing to do'."""
     if confirming:
-        return (PRACTICE_YES_MOVE, PRACTICE_NO_MOVE)
+        return (
+            PRACTICE_YES_MOVE._replace(row=ROOT_ROW_MOVES),
+            PRACTICE_NO_MOVE._replace(row=ROOT_ROW_MOVES),
+        )
     found = [SETUP_MOVE, BLOCKED_MOVE_BUTTON, SNIPPETS_MOVE]
     if has_forget:
         found.append(FORGET_MOVE)
     if has_practice:
         found.append(PRACTICE_MOVE)
-    found += [LOGS_MOVE, REFRESH_MOVE]
+    tail = [LOGS_MOVE, REFRESH_MOVE]
     if has_site:
-        found.append(SITE_MOVE)
-    return tuple(found)
+        tail.append(SITE_MOVE)
+    return tuple(
+        [move._replace(row=ROOT_ROW_MOVES) for move in found]
+        + [move._replace(row=ROOT_ROW_TAIL) for move in tail]
+    )
 
 
 def setup_buttons(*, enabled: bool) -> tuple[ModmailMove, ...]:
@@ -545,9 +636,21 @@ def setup_buttons(*, enabled: bool) -> tuple[ModmailMove, ...]:
         MODE_MOVE,
         ANSWER_OFF_MOVE if enabled else ANSWER_ON_MOVE,
         REPLY_STYLE_MOVE,
+        TICKET_BUTTON_MOVE,
         SETUP_BACK_MOVE,
         SETUP_REFRESH_MOVE,
     )
+
+
+def ticket_button_buttons(*, posted: bool, picking: bool) -> tuple[ModmailMove, ...]:
+    """Post it while nothing is up, Move it… and Take it down once something is."""
+    found: list[ModmailMove] = []
+    if not picking:
+        found.append(PANEL_MOVE_MOVE if posted else PANEL_POST_MOVE)
+    if posted:
+        found.append(PANEL_DOWN_MOVE)
+    found += [PANEL_BACK_MOVE, PANEL_REFRESH_MOVE]
+    return tuple(found)
 
 
 def blocked_buttons(*, picked: bool, blocking: bool) -> tuple[ModmailMove, ...]:
@@ -621,6 +724,13 @@ CARD_PRACTICE_LINE = (
     "leaves Discord. **End the practice** closes it and files a transcript marked PRACTICE."
 )
 CARD_COUNTS = "**messages** — {inbound} from them · {outbound} sent · {notes} note(s)"
+CARD_OPENED_BY_STAFF = "**opened by staff** — <@{who}>"
+CARD_NOT_REACHED = (
+    "⚠️ **The last reply did not reach them** — their DMs are shut or Black Bloc is blocked. "
+    "The ticket has it either way."
+)
+PANEL_HEADING_DEFAULT = MODMAIL_PANEL_TITLE_DEFAULT
+PANEL_TEXT_DEFAULT = MODMAIL_PANEL_TEXT_DEFAULT
 
 
 class CardMove(NamedTuple):
@@ -708,16 +818,30 @@ def is_practice(ticket: Any) -> bool:
     return bool(field_of(ticket, "practice", 0))
 
 
-def ticket_card_lines(ticket: Any, counts: Any = None, *, label: Any = None, blocked: bool = False):
+def ticket_card_lines(
+    ticket: Any,
+    counts: Any = None,
+    *,
+    label: Any = None,
+    blocked: bool = False,
+    not_reached: bool = False,
+):
     tally = counts or dict.fromkeys(DIRECTIONS, 0)
+    source = ticket_source(ticket)
+    opener = field_of(ticket, "opened_by")
     lines = [
         f"<@{int(ticket['user_id'])}> — {clamp(label or ticket['user_id'], NAME_LIMIT)}",
         f"**opened** — {ticket['opened_at']}",
+        f"**came in by** — {SOURCE_WORDS.get(source, source)}",
         f"**mode** — {ticket['mode']}",
         CARD_COUNTS.format(
             inbound=tally.get(IN, 0), outbound=tally.get(OUT, 0), notes=tally.get(NOTE, 0)
         ),
     ]
+    if source == SOURCE_STAFF and opener:
+        lines.insert(3, CARD_OPENED_BY_STAFF.format(who=int(opener)))
+    if not_reached:
+        lines.append(CARD_NOT_REACHED)
     if blocked:
         lines.append(CARD_BLOCKED_LINE)
     if is_practice(ticket):
@@ -726,13 +850,47 @@ def ticket_card_lines(ticket: Any, counts: Any = None, *, label: Any = None, blo
 
 
 def ticket_card_embed(
-    ticket: Any, counts: Any = None, *, label: Any = None, blocked: bool = False
+    ticket: Any,
+    counts: Any = None,
+    *,
+    label: Any = None,
+    blocked: bool = False,
+    not_reached: bool = False,
 ) -> discord.Embed:
     """The controls' own embed — the header card upstairs is the dossier, this is the state."""
     practice = is_practice(ticket)
     title = (CARD_PRACTICE_TITLE if practice else CARD_TITLE).format(ticket_id=ticket["id"])
     return discord.Embed(
         title=title,
-        description="\n".join(ticket_card_lines(ticket, counts, label=label, blocked=blocked)),
+        description="\n".join(
+            ticket_card_lines(
+                ticket, counts, label=label, blocked=blocked, not_reached=not_reached
+            )
+        ),
         colour=COLOURS[NOTE] if practice else COLOURS[IN],
     )
+
+
+def first_message(subject: Any, text: Any) -> str:
+    """The subject is a heading on the paragraph, so the transcript keeps both."""
+    said = clamp(str(subject or "").strip(), NAME_LIMIT)
+    body = clamp(str(text or "").strip(), MESSAGE_LIMIT)
+    return f"**{said}**\n{body}" if said else body
+
+
+def ticket_button_embed(title: Any, text: Any) -> discord.Embed:
+    """The one message that sits in a channel with the Open a ticket button under it."""
+    return discord.Embed(
+        title=clamp(title, NAME_LIMIT) or PANEL_HEADING_DEFAULT,
+        description=clamp(text, CONTENT_LIMIT) or PANEL_TEXT_DEFAULT,
+        colour=COLOURS[IN],
+    )
+
+
+def last_reply_missed(rows: Any) -> bool:
+    """True when the newest thing sent to the member never arrived — the card says so."""
+    for row in reversed(list(rows or ())):
+        if str(row["direction"]) != OUT:
+            continue
+        return not field_of(row, "delivered", 1)
+    return False

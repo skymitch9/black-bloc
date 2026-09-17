@@ -13,16 +13,26 @@ from ...cogs.moderation.modmail import (
     drop_snippet,
     get_ticket,
     may_remove,
+    panel_where,
+    post_ticket_panel,
     put_snippet,
     resolve_place,
     send_reply,
+    take_panel_down,
     ticket_messages,
     tickets_by_status,
     unblock_member,
 )
 from ...events import clamp
 from ...logkinds import VIA_WEBSITE
-from ...modmail import CLOSED, OPEN, SOURCE_WEB, field_of, load_attachments
+from ...modmail import (
+    CLOSED,
+    OPEN,
+    SOURCE_WEB,
+    field_of,
+    load_attachments,
+    ticket_source,
+)
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
 from ..writes import (
@@ -70,6 +80,14 @@ SNIPPET_NEEDS_BOTH = (
 NO_SUCH_SNIPPET = (
     "Black Bloc has no snippet called **{name}**, so there was nothing to remove."
 )
+NO_SUCH_CHANNEL = (
+    "**{channel_id}** is not a channel Black Bloc can see, so the ticket button was not posted. "
+    "Pick one from the list and try again."
+)
+PANEL_WOULD_POST = (
+    "Black Bloc is in **test mode**, so the only channel it may put the ticket button in is the "
+    "test channel — nothing was posted. Wait until the owner turns test mode off."
+)
 DM_FAILED = (
     "The member could not be sent that reply — their DMs are closed or they have left. It is "
     "saved on the ticket so staff can see it."
@@ -93,6 +111,10 @@ def ticket_row(guild: Any, row: Any) -> dict[str, Any]:
         ),
         "close_reason": row["close_reason"],
         "practice": bool(field_of(row, "practice", 0)),
+        "source": ticket_source(row),
+        "opened_by_id": (
+            str(field_of(row, "opened_by")) if field_of(row, "opened_by") else None
+        ),
     }
 
 
@@ -229,6 +251,48 @@ def build_router(bot: Any) -> APIRouter:
             "closed": True,
             "ticket": ticket_row(guild, fresh),
             "transcript": why_not is None,
+        }
+
+    @router.post("/panel")
+    async def modmail_panel_post(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        channel_id = wanted_id(payload.get("channel_id")) if payload.get("channel_id") else 0
+        target = guild.get_channel(channel_id) if channel_id else None
+        if target is None:
+            raise Refused(
+                400, "no_such_channel", NO_SUCH_CHANNEL.format(channel_id=channel_id)
+            )
+        guard = guard_of(bot)
+        if guard is not None and not guard.allows_channel(target.id):
+            refuse_guarded(PANEL_WOULD_POST)
+        outcome = await post_ticket_panel(
+            bot, guild, actor_for(bot, who, guild), target, via=VIA_WEBSITE
+        )
+        if not outcome.ok:
+            raise Refused(outcome.status or 400, outcome.code, outcome.message)
+        return {
+            "posted": True,
+            "channel_id": str(target.id),
+            "message_id": str(outcome.value),
+            "message": outcome.message,
+        }
+
+    @router.delete("/panel")
+    async def modmail_panel_down(request: Request) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        channel, message_id = panel_where(bot, guild)
+        outcome = await take_panel_down(
+            bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE
+        )
+        return {
+            "taken_down": outcome.ok,
+            "channel_id": str(channel.id) if channel is not None else None,
+            "message_id": str(message_id) if message_id else None,
+            "message": outcome.message,
         }
 
     @router.get("/snippets")

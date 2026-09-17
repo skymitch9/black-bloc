@@ -361,6 +361,11 @@ const SETTING_SPECS = [
   ['modmail_category_id', 'channel', '800000000000000011', null, 'the category ticket channels are made in, in channel mode'],
   ['modmail_staff_channel_id', 'channel', '800000000000000005', null, 'the channel ticket threads are made in, in thread mode'],
   ['modmail_log_channel_id', 'channel', '800000000000000004', null, 'where a closed ticket’s transcript is posted'],
+  ['modmail_member_command', 'bool', true, true, 'true when anybody running /modmail gets the Open a ticket panel; false leaves /modmail to staff, as it was before, and a member’s only door is a DM'],
+  ['modmail_panel_channel_id', 'channel', null, null, 'where the Open a ticket message with its button is posted; blank means no button is up anywhere. Post it from /modmail ▸ Setup… ▸ Ticket button…'],
+  ['modmail_panel_message_id', 'text', null, null, 'the Open a ticket message Black Bloc posted, so it can be moved, taken down and put back after somebody deletes it. Written by the bot as TEXT, because a snowflake does not survive a JavaScript number; there is no reason to set it by hand'],
+  ['modmail_panel_title', 'text', 'Need a moderator?', 'Need a moderator?', 'the heading on the posted Open a ticket message'],
+  ['modmail_panel_text', 'text', 'Press the button and tell us what is happening. Only staff see it.', 'Press the button and tell us what is happening. Only staff see it.', 'what the posted Open a ticket message says under its heading'],
   ['automod_mode', 'enum', 'shadow', 'off', 'off, shadow (log what it would do) or on (delete, warn and time out)', ['off', 'shadow', 'on']],
   ['automod_rules', 'json', null, null, 'the automod rule book; the Automod tab is what changes it'],
   ['automod_exempt_role_ids', 'roles', ['900000000000000001', '900000000000000002'], [], 'roles automod ignores'],
@@ -1024,9 +1029,9 @@ function seedState() {
     { id: 1, user_id: MEMBERS[5].id, kind: 'kick', moderator_id: STAFF.id, reason: 'first-day nitro scam', duration_s: null, at: minutesAgo(14000), mode: 'on', applied: true, actions: ['kick'], done: [], failed: ['kick'] },
   ],
   tickets: [
-    { id: 5, user_id: MEMBERS[3].id, mode: 'thread', channel_id: '800000000000000005', thread_id: '830000000000000001', status: 'open', opened_at: minutesAgo(90), closed_at: null, closed_by: null, close_reason: null },
-    { id: 4, user_id: MEMBERS[6].id, mode: 'thread', channel_id: '800000000000000005', thread_id: '830000000000000002', status: 'open', opened_at: minutesAgo(600), closed_at: null, closed_by: null, close_reason: null },
-    { id: 3, user_id: MEMBERS[4].id, mode: 'channel', channel_id: '800000000000000011', thread_id: null, status: 'closed', opened_at: minutesAgo(4000), closed_at: minutesAgo(3800), closed_by: STAFF.id, close_reason: 'spam' },
+    { id: 5, user_id: MEMBERS[3].id, mode: 'thread', channel_id: '800000000000000005', thread_id: '830000000000000001', status: 'open', opened_at: minutesAgo(90), closed_at: null, closed_by: null, close_reason: null, source: 'dm', opened_by: null },
+    { id: 4, user_id: MEMBERS[6].id, mode: 'thread', channel_id: '800000000000000005', thread_id: '830000000000000002', status: 'open', opened_at: minutesAgo(600), closed_at: null, closed_by: null, close_reason: null, source: 'panel', opened_by: null },
+    { id: 3, user_id: MEMBERS[4].id, mode: 'channel', channel_id: '800000000000000011', thread_id: null, status: 'closed', opened_at: minutesAgo(4000), closed_at: minutesAgo(3800), closed_by: STAFF.id, close_reason: 'spam', source: 'staff', opened_by: STAFF.id },
   ],
   messages: {
     5: [
@@ -4881,6 +4886,8 @@ function ticketRow(ticket) {
     closed_by_name: memberName(ticket.closed_by),
     close_reason: ticket.close_reason,
     practice: Boolean(ticket.practice),
+    source: ticket.source || 'dm',
+    opened_by_id: ticket.opened_by === null || ticket.opened_by === undefined ? null : String(ticket.opened_by),
   };
 }
 
@@ -4950,6 +4957,35 @@ route('POST', '/api/modmail/tickets/:id/close', async (context) => {
   ticket.close_reason = body.reason || null;
   logAction('web.modmail.closed', { target_id: ticket.user_id, reason: ticket.close_reason, details: { ticket_id: ticket.id, silent: Boolean(body.silent) } });
   return { closed: true, ticket: ticketRow(ticket), transcript: true };
+});
+
+route('POST', '/api/modmail/panel', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const channelId = body.channel_id ? String(body.channel_id) : state.settings.get('modmail_panel_channel_id');
+  if (!channelId || !CHANNELS.some((one) => one.id === channelId)) {
+    throw new Refused(400, 'no_such_channel', `**${channelId}** is not a channel Black Bloc can see, so the ticket button was not posted. Pick one from the list and try again.`);
+  }
+  guard('putting an Open a ticket button up');
+  const moving = Boolean(state.settings.get('modmail_panel_message_id'));
+  const messageId = String(Date.now());
+  state.settings.set('modmail_panel_channel_id', channelId);
+  state.settings.set('modmail_panel_message_id', messageId);
+  logAction(moving ? 'web.modmail.panel_moved' : 'web.modmail.panel_posted', { target_id: channelId, details: { channel_id: channelId, message_id: messageId } });
+  return { posted: true, channel_id: channelId, message_id: messageId, message: `The **Open a ticket** button is up in <#${channelId}>.` };
+});
+
+route('DELETE', '/api/modmail/panel', (context) => {
+  requireStaff(context.session);
+  const channelId = state.settings.get('modmail_panel_channel_id');
+  const messageId = state.settings.get('modmail_panel_message_id');
+  if (!channelId) {
+    return { taken_down: false, channel_id: null, message_id: null, message: 'There is no **Open a ticket** button up, so nothing was taken down.' };
+  }
+  state.settings.set('modmail_panel_channel_id', null);
+  state.settings.set('modmail_panel_message_id', null);
+  logAction('web.modmail.panel_taken_down', { target_id: channelId, details: { channel_id: channelId, message_id: messageId } });
+  return { taken_down: true, channel_id: String(channelId), message_id: messageId === null || messageId === undefined ? null : String(messageId), message: 'The **Open a ticket** button is down. Nothing else changed.' };
 });
 
 route('GET', '/api/modmail/snippets', (context) => {
