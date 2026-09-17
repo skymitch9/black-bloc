@@ -1597,6 +1597,7 @@ MODMAIL_FORUM_CHANNEL = "modmail_forum_channel_id"
 MODMAIL_FORUM_TAGS = "modmail_forum_tags"
 MODMAIL_PANEL_FOLLOWS_POST = "modmail_panel_follows_post"
 MODMAIL_PANEL_FOLLOWS_POST_DEFAULT = "welcome"
+MODMAIL_PANEL_FOLLOWS_NOTHING = "none"
 REQUEST_FORUM_CHANNEL = "request_forum_channel_id"
 
 KEY_TYPES.update(
@@ -1619,7 +1620,7 @@ KEY_HELP.update(
         MODMAIL_PANEL_FOLLOWS_POST: (
             "the slug of the post the Open a ticket button sits under — welcome by default, so "
             "the button lands right after the rules and is put back there whenever that post is "
-            "posted again. Blank never moves the button for that reason"
+            "posted again. none never moves the button for that reason"
         ),
     }
 )

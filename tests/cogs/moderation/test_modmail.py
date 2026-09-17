@@ -3137,3 +3137,155 @@ async def test_the_ticket_button_card_names_the_settings_doors_that_still_exist(
     said = where.embed.description
     assert "set-value" not in said
     assert "Settings" in said and "A setting group…" in said
+
+
+# --- the ticket button sits under the rules (blackmail-threads §C) ----------------------------
+
+
+async def a_welcome_post(bot, channel_id, *, slug="welcome", shadow=False):
+    """One `posts` row that has been posted, so the button has something to sit under."""
+    await bot.db.conn.execute(
+        "INSERT INTO posts(guild_id, slug, title, channel_id, body, style, updated_at) "
+        "VALUES (?, ?, 'The rules', ?, 'be kind', 'plain', '2026-09-17T00:00:00+00:00')",
+        (GUILD, slug, channel_id),
+    )
+    await bot.db.conn.commit()
+    return slug
+
+
+async def post_the_rules(bot, channel, *, slug="welcome", shadow=False):
+    """The rules message itself — always NEWER than whatever is already in the channel."""
+    message = await channel.send("**The rules**")
+    column = "shadow_message_id" if shadow else "message_id"
+    await bot.db.conn.execute(
+        f"UPDATE posts SET {column} = ? WHERE guild_id = ? AND slug = ?",
+        (message.id, GUILD, slug),
+    )
+    await bot.db.conn.commit()
+    return message
+
+
+def button_message_id(bot):
+    return int(bot.store.get(GUILD, modmail_cog.PANEL_MESSAGE_KEY))
+
+
+async def test_the_button_is_posted_again_once_the_rules_land_under_it(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    first = button_message_id(bot)
+    await a_welcome_post(bot, TEST_CHANNEL)
+    await post_the_rules(bot, channel)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) > first
+    assert first in channel.deleted_messages
+    assert channel.messages[-1].id == button_message_id(bot)
+    kinds = await action_kinds(db)
+    assert "modmail.panel_below_post" in kinds and "modmail.panel_gone" not in kinds
+
+
+async def test_a_button_already_under_the_rules_is_left_exactly_where_it_is(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await a_welcome_post(bot, TEST_CHANNEL)
+    await post_the_rules(bot, channel)
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) == was
+    assert "modmail.panel_below_post" not in await action_kinds(db)
+
+
+async def test_pressing_post_it_on_the_rules_moves_the_button_straight_away(cog, bot, lead, db):
+    """The posts feature dispatches; the modmail cog answers without waiting for the sweep."""
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    first = button_message_id(bot)
+    await a_welcome_post(bot, TEST_CHANNEL)
+    await post_the_rules(bot, channel)
+    row = await (await db.conn.execute("SELECT * FROM posts WHERE slug = 'welcome'")).fetchone()
+
+    await cog.on_post_published(bot.guild, row)
+
+    assert button_message_id(bot) > first
+    assert channel.messages[-1].id == button_message_id(bot)
+
+
+async def test_another_posts_slug_never_moves_the_ticket_button(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+    await a_welcome_post(bot, TEST_CHANNEL, slug="hello")
+    await post_the_rules(bot, channel, slug="hello")
+    row = await (await db.conn.execute("SELECT * FROM posts WHERE slug = 'hello'")).fetchone()
+
+    await cog.on_post_published(bot.guild, row)
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) == was
+
+
+async def test_a_follows_key_of_none_leaves_the_button_where_the_rules_overtook_it(
+    cog, bot, lead, db
+):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+    await bot.store.set(GUILD, "modmail_panel_follows_post", "none")
+    await a_welcome_post(bot, TEST_CHANNEL)
+    await post_the_rules(bot, channel)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) == was
+    assert "modmail.panel_below_post" not in await action_kinds(db)
+
+
+async def test_rules_posted_in_another_channel_never_move_the_button(cog, bot, lead):
+    bot.guard = FakeGuard()
+    elsewhere = bot.guild.add(FakeText(7788, name="rules"))
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+    await a_welcome_post(bot, elsewhere.id)
+    await post_the_rules(bot, elsewhere)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) == was
+
+
+async def test_a_shadow_rehearsal_of_the_rules_moves_the_button_too(cog, bot, lead):
+    """`posts_mode = shadow` puts both messages in the guard's channel, in that order."""
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    first = button_message_id(bot)
+    await a_welcome_post(bot, LOG_CHANNEL)
+    await post_the_rules(bot, channel, shadow=True)
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) > first
+    assert channel.messages[-1].id == button_message_id(bot)
+
+
+async def test_the_button_is_still_put_back_when_somebody_deletes_it(cog, bot, lead, db):
+    """The older promise, unchanged: gone is gone, and that is a different log line."""
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await post_the_button(cog, bot, lead)
+    was = button_message_id(bot)
+    channel.messages = [one for one in channel.messages if one.id != was]
+
+    await cog.reconcile_tickets()
+
+    assert button_message_id(bot) != was
+    kinds = await action_kinds(db)
+    assert "modmail.panel_gone" in kinds and "modmail.panel_below_post" not in kinds

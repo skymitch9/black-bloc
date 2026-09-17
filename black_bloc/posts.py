@@ -926,6 +926,9 @@ async def publish_post(
         await _drop_shadow(bot, guild, row, actor, via)
     await _pin(bot, guild, row, message, actor, via)
     fresh = await get_post_by_id(bot.db, int(row["id"]))
+    dispatch = getattr(bot, "dispatch", None)
+    if dispatch is not None:
+        dispatch("post_published", guild, fresh)
     return Outcome(
         True, said.format(title=title, where=where_words(guild, target)), value=fresh
     )

@@ -178,6 +178,8 @@ from ...panels import (
     site_page_url,
     still_staff,
 )
+from ...posts import get_post as get_the_post
+from ...posts import shadow_channel_id, shadow_id
 from ...settings_store import (
     CHANNEL_MODE,
     DB_UNAVAILABLE,
@@ -187,6 +189,8 @@ from ...settings_store import (
     MODMAIL_FORUM_TAGS,
     MODMAIL_MODES,
     MODMAIL_OPEN_WITH_BUTTON,
+    MODMAIL_PANEL_FOLLOWS_NOTHING,
+    MODMAIL_PANEL_FOLLOWS_POST,
     MODMAIL_REPLY_STYLES,
     THREAD_MODE,
     require_staff,
@@ -2169,6 +2173,37 @@ async def drop_panel_message(bot: Any, guild: Any, channel: Any, message_id: int
         log.info("modmail: the old ticket button %s stayed where it was: %s", message_id, exc)
 
 
+def followed_slug(store: Any, guild_id: int) -> str:
+    """The post the ticket button sits under; `none` never moves the button for that reason."""
+    found = str(store.get(guild_id, MODMAIL_PANEL_FOLLOWS_POST) or "").strip()
+    return "" if found.casefold() == MODMAIL_PANEL_FOLLOWS_NOTHING else found
+
+
+async def post_below_button(bot: Any, guild: Any, channel: Any, message_id: Any) -> int | None:
+    """The followed post's message when it has landed UNDER the ticket button.
+
+    A snowflake counts up with the clock, so the newer id is the message further down. In
+    `posts_mode = shadow` the rehearsal is the copy that counts, because that is the one in
+    the guard's channel beside the button."""
+    slug = followed_slug(bot.store, guild.id)
+    if not slug or channel is None or not message_id:
+        return None
+    if not getattr(bot.db, "is_connected", False):
+        return None
+    row = await get_the_post(bot.db, guild.id, slug)
+    if row is None:
+        return None
+    for where, found in (
+        (field_of(row, "channel_id"), field_of(row, "message_id")),
+        (shadow_channel_id(bot, guild), shadow_id(row)),
+    ):
+        if not where or not found:
+            continue
+        if int(where) == int(channel.id) and int(found) > int(message_id):
+            return int(found)
+    return None
+
+
 async def post_ticket_panel(
     bot: Any,
     guild: Any,
@@ -2542,12 +2577,14 @@ class Modmail(commands.Cog):
         self.last_ok_at = now_iso()
 
     async def _repanel(self, guild: Any) -> None:
-        """The posted button belongs to the room, so one deleted by hand is put back."""
+        """The posted button belongs to the room: one deleted by hand is put back, and one the
+        rules message has overtaken is posted again so it stays directly under the rules."""
         bot = self.bot
         channel, message_id = panel_where(bot, guild)
         if not bot.store.get(guild.id, PANEL_CHANNEL_KEY) or channel is None:
             return
-        if message_id and await panel_is_there(channel, message_id):
+        overtaken = await post_below_button(bot, guild, channel, message_id)
+        if overtaken is None and message_id and await panel_is_there(channel, message_id):
             self._panel_shadowed.discard(guild.id)
             return
         guard = getattr(bot, "guard", None)
@@ -2561,16 +2598,39 @@ class Modmail(commands.Cog):
                     details={"channel_id": channel.id, "reason": "reconcile"},
                 )
             return
-        if message_id:
+        if overtaken is not None:
+            await log_action(
+                bot,
+                guild,
+                "modmail.panel_below_post",
+                details={
+                    "channel_id": channel.id,
+                    "message_id": message_id,
+                    "post_message_id": overtaken,
+                    "slug": followed_slug(bot.store, guild.id),
+                },
+            )
+        elif message_id:
             await log_action(
                 bot,
                 guild,
                 "modmail.panel_gone",
                 details={"channel_id": channel.id, "message_id": message_id},
             )
-        outcome = await post_ticket_panel(bot, guild, None, channel, moving=False)
+        outcome = await post_ticket_panel(
+            bot, guild, None, channel, moving=overtaken is not None
+        )
         if outcome.ok:
             self._panel_shadowed.discard(guild.id)
+
+    @commands.Cog.listener()
+    async def on_post_published(self, guild: Any, row: Any) -> None:
+        """A re-posted rules message moves what follows it, at once and on the next sweep."""
+        if not self.bot.db.is_connected:
+            return
+        if str(field_of(row, "slug", "")) != followed_slug(self.bot.store, guild.id):
+            return
+        await self._repanel(guild)
 
     async def _recheck(self, guild: Any, row: Any, now: datetime) -> None:
         if not row["channel_id"]:

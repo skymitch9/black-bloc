@@ -284,6 +284,7 @@ ROUTINE: frozenset[str] = frozenset(
         "modmail.note",
         "modmail.open_refused",
         "modmail.opened",
+        "modmail.panel_below_post",
         "modmail.panel_gone",
         "modmail.panel_moved",
         "modmail.panel_posted",
