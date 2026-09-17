@@ -277,6 +277,8 @@ ROUTINE: frozenset[str] = frozenset(
         "modmail.blocked_dm",
         "modmail.category_forgotten",
         "modmail.forgotten",
+        "modmail.forum_forgotten",
+        "modmail.forum_made",
         "modmail.log_channel_forgotten",
         "modmail.member_left",
         "modmail.note",

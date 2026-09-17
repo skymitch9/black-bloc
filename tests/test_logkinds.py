@@ -272,6 +272,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/moderation/modmail.py::kind": (
         "modmail.category_forgotten",
         "modmail.staff_channel_forgotten",
+        "modmail.forum_forgotten",
         "modmail.log_channel_forgotten",
     ),
     "black_bloc/command_visibility.py::LOG_KIND": ("commands.visibility",),

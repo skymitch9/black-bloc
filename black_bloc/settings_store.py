@@ -198,7 +198,8 @@ HEX_COLOR = re.compile(r"^#?([0-9a-fA-F]{6})$")
 
 CHANNEL_MODE = "channel"
 THREAD_MODE = "thread"
-MODMAIL_MODES = (CHANNEL_MODE, THREAD_MODE)
+FORUM_MODE = "forum"
+MODMAIL_MODES = (CHANNEL_MODE, THREAD_MODE, FORUM_MODE)
 MODMAIL_CATEGORY_ID = 1442613057628012594
 MODMAIL_LOG_CHANNEL_ID = 1442613059704066108
 
@@ -345,6 +346,7 @@ KEY_TYPES: dict[str, str] = {
     "request_who_can_file": "enum",
     "request_notify_channel_id": "channel",
     "request_status_channel_id": "channel",
+    "request_forum_channel_id": "channel",
     "request_dm_on_decision": "bool",
     "chat_mode": "enum",
     "chat_cooldown_seconds": "int",
@@ -872,7 +874,11 @@ KEY_HELP: dict[str, str] = {
     "birthday_role_id": "role given for the day and taken back the next; none by default",
     "birthday_show_age": "true to put {age} in reach for people who stored a birth year",
     "modmail_enabled": "true when Black Bloc answers DMs; false leaves them to the old ModMail bot",
-    "modmail_mode": "channel (one channel per ticket) or thread (private threads in one channel)",
+    "modmail_mode": (
+        "channel (one channel per ticket), thread (private threads in the staff channel) or "
+        "forum (one post per ticket in the forum channel — the list never grows past the "
+        "forum's own archive)"
+    ),
     "modmail_category_id": "the category ticket channels are made in, in channel mode",
     "modmail_staff_channel_id": "the channel ticket threads are made in, in thread mode",
     "modmail_log_channel_id": "where a closed ticket's transcript is posted",
@@ -900,6 +906,11 @@ KEY_HELP: dict[str, str] = {
     "request_notify_channel_id": (
         "where one line goes when a request is filed; blank tells nobody and the site is the only "
         "place they show up"
+    ),
+    "request_forum_channel_id": (
+        "a forum channel where every request is its own post; blank posts the card into "
+        "request_notify_channel_id as before. /request ▸ Make the forum… makes one under the "
+        "ticket category"
     ),
     "request_dm_on_decision": (
         "true to DM the person who asked every time staff move their request — picked up, on "
@@ -1574,6 +1585,40 @@ KEY_HELP.update(
             "untouched. The door is only hidden, never removed — turning this back on brings it "
             "straight back, and a press on a panel that was open when it went off is refused in "
             "words"
+        ),
+    }
+)
+
+
+# Blackmail forums — modmail's third mode and the post the ticket button sits under, in their
+# own block so the sibling branches merge textually.
+MODMAIL_FORUM_CHANNEL = "modmail_forum_channel_id"
+MODMAIL_FORUM_TAGS = "modmail_forum_tags"
+MODMAIL_PANEL_FOLLOWS_POST = "modmail_panel_follows_post"
+MODMAIL_PANEL_FOLLOWS_POST_DEFAULT = "welcome"
+REQUEST_FORUM_CHANNEL = "request_forum_channel_id"
+
+KEY_TYPES.update(
+    {
+        MODMAIL_FORUM_CHANNEL: "channel",
+        MODMAIL_FORUM_TAGS: "bool",
+        MODMAIL_PANEL_FOLLOWS_POST: "text",
+    }
+)
+KEY_HELP.update(
+    {
+        MODMAIL_FORUM_CHANNEL: (
+            "the forum channel tickets are posted in, in forum mode; Setup on /modmail makes one "
+            "under the ticket category"
+        ),
+        MODMAIL_FORUM_TAGS: (
+            "true keeps the open / closed tags on each ticket post in forum mode; false leaves "
+            "every post untagged and the forum's own tag list alone"
+        ),
+        MODMAIL_PANEL_FOLLOWS_POST: (
+            "the slug of the post the Open a ticket button sits under — welcome by default, so "
+            "the button lands right after the rules and is put back there whenever that post is "
+            "posted again. Blank never moves the button for that reason"
         ),
     }
 )
@@ -2589,6 +2634,10 @@ class SettingsStore:
             return MODMAIL_PANEL_TEXT_DEFAULT
         if key == MODMAIL_OPEN_WITH_BUTTON:
             return False
+        if key == MODMAIL_FORUM_TAGS:
+            return True
+        if key == MODMAIL_PANEL_FOLLOWS_POST:
+            return MODMAIL_PANEL_FOLLOWS_POST_DEFAULT
         if key == "mod_panel_minutes":
             return 10
         if key == SETTINGS_PANEL_MINUTES:
