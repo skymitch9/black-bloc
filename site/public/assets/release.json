@@ -1,10 +1,8 @@
 {
-  "release": "v128",
-  "commit": "5a17466",
+  "release": "v129",
+  "commit": "7badc43",
   "changed_features": [
-    "events",
-    "guides",
     "modmail",
-    "request"
+    "posts"
   ]
 }
