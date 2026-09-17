@@ -55,7 +55,7 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
-> | What | v114 (`main`, 2026-09-16) | Where it is measured |
+> | What | v115 (`main`, 2026-09-16) | Where it is measured |
 > |---|---|---|
 > | Cogs | **20** (v113: `cogs/community/posts.py`) | `bot.py:COGS` |
 > | Top-level slash commands | **30** — 15 staff-locked, 15 member-visible (`/modmail` became member-visible at v114) | `tree.get_commands()` |
@@ -64,9 +64,9 @@
 > | Registry keys | **220** (was 215 at v113) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **19 pages / 170 routes / 14 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **5880** | the v114 deploy gate |
-> | Deploys | **111**, last `c279676` (v114) at 2026-09-16 18:38 | `../deploys.log` |
+> | Mock contract | **19 pages / 171 routes / 14 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
+> | Tests | **5889** | the v115 deploy gate |
+> | Deploys | **112**, last `64b69ce` (v115) at 2026-09-16 19:15 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -86,6 +86,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v115 `64b69ce`, 2026-09-16** | **20** | **30** | **38** | **171** | **5889** |
 > | **v114 `c279676`, 2026-09-16** | **20** | **30** | **38** | **170** | **5880** |
 > | **v113 `4d60f68`, 2026-09-16** | **20** | **30** | **37** | **168** | **5833** |
 > | **v111 `67aee7e`, 2026-09-16** | **19** | **29** | **35** | **160** | **5703** |

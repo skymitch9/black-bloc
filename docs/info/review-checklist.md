@@ -139,7 +139,7 @@
     and after landing. ⚠️ **Measured in THIS repo, not estimated:** a
     one-subsystem build 279k; the panel builds 370k (`automod`), 441k
     (`chat`), 473k (`raidtrain`), 529k (`role-menus`) — several of them
-    **over their own 300–500k estimates**. A multi-layer build is the
+    **over their own 300–500k estimates**. **2026-09-16, six builds in one day, every one over its band:** guides G1 core 478k (est. 200–280k), G2 pages 469k (220–320k), posts base 569k (300–420k), posts shadow 367k (100–160k), modmail doors 508k (180–260k), guides mark-all-stale 223k (80–140k) — **1.7–2.8× the estimate, every time**; a web research agent was 141k. Estimate by the measured shape, then double it. A multi-layer build is the
     expensive shape; a research or lookup agent is not.
 
 33. **Is every decision this change introduces configurable from BOTH the dashboard and the bot?** (owner rule 2026-08-27: "all decisions we make here can be configured in dashboard and with bot"). A decided default is a registry key (`KEY_TYPES`/`KEY_HELP`/`KEY_CHOICES`), which gives the dashboard's Settings page + the `/settings` panel's own key card for free (⚠️ `/settings set-value` was retired at the v84 landing — do not tell anyone to run it); a per-item choice (menu approval, poll anonymity, request status) needs a slash subcommand AND a dashboard control. Traced to: Phase 12 log levels, Phase 9 approval fields, Phase 10 per-poll flags — all built that way; the rule stops the next one from being a constant.
