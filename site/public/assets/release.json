@@ -1,12 +1,10 @@
 {
-  "release": "v116",
-  "commit": "f420d3a",
+  "release": "v117",
+  "commit": "65f0931",
   "changed_features": [
-    "core",
     "golive",
     "guides",
-    "pings",
-    "raidtrain",
-    "rolemenu"
+    "modmail",
+    "tempvoice"
   ]
 }
