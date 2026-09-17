@@ -1,7 +1,6 @@
 # Polls — a shadow mode, a channel per poll, pinned while open, #announcements by default
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `polls-shadow` (2026-09-17) — NOT merged, NOT
-> deployed, nothing has met Discord. The `## Deviations` foot is the truth where it departs from the body.** **Last verified: 2026-09-17 09:2x** against `main` `e6bd6ac`: `black_bloc/cogs/community/polls.py`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v118** — merge `9c51541`, release `3fe05ef`, deployed **2026-09-17 10:11** Phoenix; schema 40; `poll_mode` = shadow and `poll_channel_id` = #announcements since then; the `## Deviations` foot is the truth where it departs from the body; sweeps **458–470** are the owner's. Was: 🔨 BUILT, not merged. **Last verified: 2026-09-17 09:2x** against `main` `e6bd6ac`: `black_bloc/cogs/community/polls.py`
 > (`post_poll` ~1421, `_post_results` ~1334, the `poll_channel_id` select ~3293), `black_bloc/api/tools/polls.py`
 > (`_refuse_outside_the_test_channel_id`, `POST /api/polls`), `site/public/assets/page-polls.js` (`channelSelect`,
 > the **Where** column), the `poll_*` registry keys, the live values read off the dashboard. ⚠️ Secret NAMES only.
