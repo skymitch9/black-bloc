@@ -1192,6 +1192,21 @@ async def test_a_failed_end_edit_does_not_abort_the_role_or_the_log(cog, bot, me
     assert member.removed == [LIVE_ROLE]
     assert "golive.end" in await action_kinds(db)
     assert await open_session_for(db, GUILD, member.id) is None
+
+
+async def test_a_message_that_cannot_be_fetched_leaves_a_log_line_and_nothing_else(
+    cog, bot, member, db, caplog
+):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_end_mode", "edit")
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+    bot.guild.channel.messages.clear()
+
+    with caplog.at_level("INFO"):
+        await cog._end_live(bot.guild, member, "presence")
+
+    assert "could not mark message" in caplog.text
+    assert bot.guild.channel.messages == []
 async def test_a_run_of_failed_polls_is_logged_once_and_ends_nothing(cog, bot, member, db):
     await set_link(db, member.id, "alice")
     await start_session(db, GUILD, member.id, "twitch", StreamInfo(url="u"), "on")
