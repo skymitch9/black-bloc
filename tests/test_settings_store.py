@@ -43,6 +43,7 @@ from black_bloc.settings_store import (
     MEMBER_ROLE_ID,
     MODMAIL_CATEGORY_ID,
     MODMAIL_LOG_CHANNEL_ID,
+    MODMAIL_OPEN_WITH_BUTTON,
     POLL_ARCHIVE_DAYS,
     POLL_ARCHIVE_MAX_DAYS,
     POLL_DEFAULT_HOURS,
@@ -729,6 +730,21 @@ def test_the_modmail_keys_are_typed_and_the_mode_is_an_enum():
         "modmail_staff_channel_id",
         "modmail_log_channel_id",
     } <= set(KEY_TYPES)
+
+
+async def test_the_open_a_ticket_with_door_ships_hidden_and_is_a_key_both_doors_reach(store):
+    """The owner asked for the door kept but hidden, so the key is a bool defaulting to false
+    and the help says which way round it reads."""
+    assert KEY_TYPES[MODMAIL_OPEN_WITH_BUTTON] == "bool"
+    assert store.get(1, MODMAIL_OPEN_WITH_BUTTON) is False
+    assert settings_store.namespace_of(MODMAIL_OPEN_WITH_BUTTON) == "modmail"
+    assert "Open a ticket with" in KEY_HELP[MODMAIL_OPEN_WITH_BUTTON]
+    with pytest.raises(SettingError, match="true or false"):
+        coerce_value(MODMAIL_OPEN_WITH_BUTTON, "sometimes")
+
+    await store.set(1, MODMAIL_OPEN_WITH_BUTTON, True)
+
+    assert store.get(1, MODMAIL_OPEN_WITH_BUTTON) is True
 
 
 async def test_youtube_uploads_ship_off_with_fan_pings_on_and_shorts_quiet(store):

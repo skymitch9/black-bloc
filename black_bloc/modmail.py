@@ -587,13 +587,18 @@ PANEL_MOVES = (
 
 
 def door_buttons(
-    *, may_open: bool, staff: bool, picking: bool = False, blocked_pick: bool = False
+    *,
+    may_open: bool,
+    staff: bool,
+    picking: bool = False,
+    blocked_pick: bool = False,
+    open_with: bool = False,
 ) -> tuple[ModmailMove, ...]:
     """The first row everybody sees: one Open a ticket, and for staff the one they open FOR."""
     found: list[ModmailMove] = []
     if may_open:
         found.append(TICKET_MOVE)
-    if staff and not picking:
+    if staff and open_with and not picking:
         found.append(OPEN_WITH_MOVE)
     if staff and blocked_pick:
         found.append(ROOT_UNBLOCK_MOVE)

@@ -646,20 +646,34 @@ def test_the_reply_sources_and_the_ticket_sources_are_two_lists_on_purpose():
 
 def test_the_first_row_is_the_same_question_for_a_member_and_for_a_lead():
     member = door_buttons(may_open=True, staff=False)
-    staff = door_buttons(may_open=True, staff=True)
+    staff = door_buttons(may_open=True, staff=True, open_with=True)
 
     assert [move.label for move in member] == ["Open a ticket"]
     assert [move.label for move in staff] == ["Open a ticket", "Open a ticket with…"]
     assert [move.label for move in door_buttons(may_open=False, staff=False)] == []
-    assert [move.label for move in door_buttons(may_open=False, staff=True)] == [
+    assert [move.label for move in door_buttons(may_open=False, staff=True, open_with=True)] == [
         "Open a ticket with…"
     ]
     assert all(move.row == 0 for move in staff)
 
 
+def test_the_staff_door_is_drawn_only_when_the_hide_toggle_says_so():
+    """`modmail_open_with_button` is off by default, and the row is the member's row until it
+    is turned on — nothing else about the first row moves."""
+    hidden = door_buttons(may_open=True, staff=True)
+    shown = door_buttons(may_open=True, staff=True, open_with=True)
+
+    assert [move.label for move in hidden] == ["Open a ticket"]
+    assert [move.label for move in shown] == ["Open a ticket", "Open a ticket with…"]
+    assert door_buttons(may_open=False, staff=True) == ()
+    assert [move.label for move in door_buttons(may_open=True, staff=False, open_with=True)] == [
+        "Open a ticket"
+    ]
+
+
 def test_picking_somebody_hides_the_door_that_raised_the_picker():
-    picking = door_buttons(may_open=True, staff=True, picking=True)
-    refused = door_buttons(may_open=True, staff=True, blocked_pick=True)
+    picking = door_buttons(may_open=True, staff=True, picking=True, open_with=True)
+    refused = door_buttons(may_open=True, staff=True, blocked_pick=True, open_with=True)
 
     assert [move.label for move in picking] == ["Open a ticket"]
     assert "Unblock them" in [move.label for move in refused]
