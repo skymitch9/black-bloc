@@ -30,6 +30,7 @@ from ...cogs.community.polls import (
     set_status,
     store_poll,
     votes_of,
+    where_it_went,
 )
 from ...cogs.community.polls import (
     apply_decision as decide_poll,
@@ -52,6 +53,7 @@ from ...polls import (
     clamp,
     counts_from_options,
     describe_cadence,
+    in_shadow,
     next_occurrence,
     winners,
 )
@@ -309,11 +311,13 @@ async def wanted_poll(bot: Any, guild: Any, poll_id: int) -> Any:
 
 
 def refuse_outside_the_test_channel(bot: Any, row: Any) -> None:
-    """`end_poll` is not behind the HTTP patch, so the route asks the guard itself."""
+    """`end_poll` is not behind the HTTP patch, so the route asks the guard itself — about
+    the channel the poll's message is IN, which for a rehearsal is the shadow home."""
     guard = guard_of(bot)
-    if guard is None or not row["channel_id"]:
+    where = where_it_went(bot, row)
+    if guard is None or not where:
         return
-    if not guard.allows_channel(row["channel_id"]):
+    if not guard.allows_channel(where):
         refuse_guarded(guard.refusal_message())
 
 
@@ -336,8 +340,11 @@ def build_router(bot: Any) -> APIRouter:
             live,
         )
 
-    def _refuse_outside_the_test_channel_id(channel_id: Any) -> None:
+    def _refuse_outside_the_test_channel_id(guild: Any, channel_id: Any) -> None:
+        """In shadow the poll is accepted and rehearsed, so a real channel is not refused."""
         guard = guard_of(bot)
+        if in_shadow(bot.store, guild.id):
+            return
         if guard is not None and channel_id and not guard.allows_channel(int(channel_id)):
             refuse_guarded(guard.refusal_message())
 
@@ -380,7 +387,7 @@ def build_router(bot: Any) -> APIRouter:
         channel_id = payload.get("channel_id") or bot.store.get(guild.id, "poll_channel_id")
         if not channel_id:
             raise Refused(400, "no_channel", NO_CHANNEL_PICKED)
-        _refuse_outside_the_test_channel_id(channel_id)
+        _refuse_outside_the_test_channel_id(guild, channel_id)
         return {
             "plan": plan,
             "channel_id": int(channel_id),

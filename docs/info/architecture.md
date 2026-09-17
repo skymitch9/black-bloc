@@ -62,6 +62,8 @@
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
 > | Schema version | **39** (v116, pings remake: `streamers`, `golive_fan_roles.unworn_since`) | `storage/db.py:SCHEMA_VERSION` |
 > | Registry keys | **230** (was 225 at v116) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Schema version | **39** live (v116, pings remake: `streamers`, `golive_fan_roles.unworn_since`); **40** on branch `polls-shadow` (`polls.shadow_message_id`) — ⚠️ not merged, not deployed, so 39 is still what runs | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **225** (was 220 at v114) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **19 pages / 176 routes / 14 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |

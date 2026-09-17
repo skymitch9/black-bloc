@@ -43,6 +43,7 @@ from ...polls import (
     BUTTONS_UP_TO,
     CADENCES,
     CANCELLED,
+    CHANNEL_KEY,
     CLOSED,
     COLOURS,
     CREATOR_MAY_END_KEY,
@@ -72,13 +73,16 @@ from ...polls import (
     NATIVE,
     NO_MOVES_LEFT,
     NOT_A_RECURRENCE,
+    OFF,
     OPEN,
     OPEN_STATUSES,
+    OPENED_SHADOW,
     PANEL,
     PANEL_CLEAR,
     PANEL_COUNTS,
     PANEL_INTRO,
     PANEL_MINUTES_KEY,
+    PANEL_SHADOW_LINE,
     PANEL_TIMEOUT_FOOTER,
     PANEL_TITLE,
     PANEL_VOTE,
@@ -86,6 +90,10 @@ from ...polls import (
     PICK_A_POLL,
     PICK_A_RECURRENCE,
     PICK_SOMETHING,
+    PIN_FAILED,
+    PIN_NOTICE_LOOKBACK,
+    PIN_REASON,
+    PINNED,
     POLL_SECRET_UNSET,
     QUESTION_LIMIT,
     RECUR_DELETED,
@@ -98,6 +106,9 @@ from ...polls import (
     SITE_BUTTON,
     STEP_DAYS,
     TERMINAL_STATUSES,
+    UNPIN_FAILED,
+    UNPIN_REASON,
+    UNPINNED,
     VOTE_GONE,
     VOTE_HASHED,
     VOTE_KEY_MISSING,
@@ -124,26 +135,35 @@ from ...polls import (
     draft_row,
     drafts,
     drop_draft,
+    in_shadow,
     is_multi,
     load_draft,
     mentions,
+    mode_of,
     next_occurrence,
     open_text,
     options_for,
     panel_embed,
     panel_note,
+    pins_are_on,
     poll_id_from,
     recurrence_card,
     reminder_text,
     results_embed,
     review_card,
     save_draft,
+    shadow_channel_id,
+    shadow_channel_ids,
+    shadow_id,
+    shadow_note,
+    shadow_open_text,
     stale_drafts,
     summary_line,
     surface_for,
     thread_name,
     validate,
     voted_text,
+    where_words,
     winners,
 )
 from ...settings_store import (
@@ -623,11 +643,20 @@ async def set_posted(
     message_id: int,
     finishes_at: datetime,
     thread_id: int | None = None,
+    shadow_message_id: int | None = None,
 ) -> None:
     await db.conn.execute(
-        "UPDATE polls SET channel_id = ?, message_id = ?, closes_at = ?, thread_id = ?, "
-        "opens_at = COALESCE(opens_at, ?) WHERE id = ?",
-        (channel_id, message_id, finishes_at.isoformat(), thread_id, now_iso(), poll_id),
+        "UPDATE polls SET channel_id = ?, message_id = ?, shadow_message_id = ?, closes_at = ?, "
+        "thread_id = ?, opens_at = COALESCE(opens_at, ?) WHERE id = ?",
+        (
+            channel_id,
+            message_id,
+            shadow_message_id,
+            finishes_at.isoformat(),
+            thread_id,
+            now_iso(),
+            poll_id,
+        ),
     )
     await db.conn.commit()
 
@@ -894,6 +923,21 @@ def guard_allows(bot: Any, channel: Any) -> bool:
     return guard is None or guard.allows_channel(channel)
 
 
+def where_it_went(bot: Any, row: Any) -> Any:
+    """The channel this poll's message is in — the shadow home when the copy is a rehearsal."""
+    if not shadow_id(row):
+        return row["channel_id"]
+    return shadow_channel_id(bot, row["guild_id"]) or row["channel_id"]
+
+
+def hunting_grounds(bot: Any, row: Any) -> list[Any]:
+    if not shadow_id(row):
+        return [row["channel_id"]] if row["channel_id"] else []
+    return shadow_channel_ids(bot, row["guild_id"]) or (
+        [row["channel_id"]] if row["channel_id"] else []
+    )
+
+
 def guard_refusal(bot: Any) -> str:
     guard = getattr(bot, "guard", None)
     if guard is None:
@@ -979,7 +1023,7 @@ async def repaint_panel(bot: Any, row: Any, options: Any = None) -> None:
     """The panel message caught up with the votes; a cosmetic failure never fails a vote."""
     if row["surface"] != PANEL or not row["message_id"]:
         return
-    if not guard_allows(bot, row["channel_id"]):
+    if not guard_allows(bot, where_it_went(bot, row)):
         return
     message = await fetch_poll_message(bot, row)
     if message is None:
@@ -1196,25 +1240,29 @@ async def dm(user: Any, text: str, embed: discord.Embed | None = None) -> bool:
 
 async def fetch_poll_message(bot: Any, row: Any) -> Any:
     """The posted message, or None with the reason already logged."""
-    channel_id, message_id = row["channel_id"], row["message_id"]
-    if not channel_id or not message_id:
+    message_id = row["message_id"]
+    wanted = hunting_grounds(bot, row)
+    if not wanted or not message_id:
         return None
-    channel = bot.get_channel(channel_id)
-    if channel is None:
-        log.info("polls: channel %s for poll %s is not visible", channel_id, row["id"])
-        return None
-    try:
-        return await channel.fetch_message(message_id)
-    except Exception as exc:
-        log.info("polls: could not fetch message %s for poll %s: %s", message_id, row["id"], exc)
-        return None
+    for channel_id in wanted:
+        channel = bot.get_channel(channel_id)
+        if channel is None:
+            log.info("polls: channel %s for poll %s is not visible", channel_id, row["id"])
+            continue
+        try:
+            return await channel.fetch_message(message_id)
+        except Exception as exc:
+            log.info(
+                "polls: could not fetch message %s for poll %s: %s", message_id, row["id"], exc
+            )
+    return None
 
 
 async def refresh_voters(bot: Any, row: Any, message: Any, options: Any) -> None:
     """Who voted, read once at close — the gateway events can miss and this cannot."""
     if row["anonymous"]:
         return
-    if not guard_allows(bot, row["channel_id"]):
+    if not guard_allows(bot, where_it_went(bot, row)):
         log.warning("polls: TEST MODE — voters for poll %s were not read", row["id"])
         return
     poll = getattr(message, "poll", None)
@@ -1252,7 +1300,7 @@ async def close_poll(
         fresh = await get_poll(bot.db, row["id"])
         if fresh is None or not can_transition(fresh["status"], CLOSED):
             return (False, False)
-        if not guard_allows(bot, fresh["channel_id"]):
+        if not guard_allows(bot, where_it_went(bot, fresh)):
             await log_action(
                 bot,
                 guild,
@@ -1334,13 +1382,15 @@ async def _shut_panel(bot: Any, row: Any, message: Any, counts: Any, voters: int
 async def _post_results(
     bot: Any, guild: Any, row: Any, message: Any, counts: Any, total: int
 ) -> None:
-    channel = bot.get_channel(row["channel_id"]) if row["channel_id"] else None
+    await _unpin(bot, guild, row, message)
+    where = where_it_went(bot, row)
+    channel = bot.get_channel(where) if where else None
     if channel is None or not guard_allows(bot, channel):
         await log_action(
             bot,
             guild,
             "poll.would_post_results",
-            details={"poll_id": row["id"], "channel_id": row["channel_id"]},
+            details={"poll_id": row["id"], "channel_id": where},
         )
         return
     embed = results_embed(
@@ -1376,7 +1426,7 @@ async def cancel_poll(
         fresh = await get_poll(bot.db, row["id"])
         if fresh is None or not can_transition(fresh["status"], CANCELLED):
             return False
-        if fresh["message_id"] and not guard_allows(bot, fresh["channel_id"]):
+        if fresh["message_id"] and not guard_allows(bot, where_it_went(bot, fresh)):
             await log_action(
                 bot,
                 guild,
@@ -1397,6 +1447,7 @@ async def cancel_poll(
     if not fresh["message_id"]:
         return True
     message = await fetch_poll_message(bot, fresh)
+    await _unpin(bot, guild, fresh, message)
     if fresh["surface"] == PANEL:
         if message is not None:
             counts, voters = await panel_counts(bot.db, fresh["id"])
@@ -1420,12 +1471,15 @@ async def cancel_poll(
 
 async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
     """(the message, the reason there is not one). The one place a poll reaches a channel."""
-    channel = bot.get_channel(row["channel_id"]) if row["channel_id"] else None
+    rehearsing = in_shadow(bot.store, guild.id)
+    where = shadow_channel_id(bot, guild) if rehearsing else row["channel_id"]
+    missing = "no_shadow_channel" if rehearsing else "no_channel"
+    channel = bot.get_channel(where) if where else None
     if channel is None:
         await log_action(
-            bot, guild, "poll.open_failed", details={"poll_id": row["id"], "reason": "no_channel"}
+            bot, guild, "poll.open_failed", details={"poll_id": row["id"], "reason": missing}
         )
-        return (None, "no_channel")
+        return (None, missing)
     if not guard_allows(bot, channel):
         await log_action(
             bot, guild, "poll.would_open", details={"poll_id": row["id"], "reason": "test_mode"}
@@ -1435,18 +1489,25 @@ async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
     labels = [str(item["label"]) for item in options]
     panel = row["surface"] == PANEL
     finishes = closes_at(int(row["hours"]))
+    said = open_text(row["creator_id"], row["ping_role_id"])
+    if rehearsing:
+        said = shadow_open_text(
+            shadow_note(bot.store, guild.id, where_words(guild, row["channel_id"])),
+            row["creator_id"],
+            row["ping_role_id"],
+        )
     try:
         if panel:
             counts, voters = await panel_counts(bot.db, row["id"])
             message = await channel.send(
-                open_text(row["creator_id"], row["ping_role_id"]),
+                said,
                 embed=panel_card(row, counts, voters, finishes),
                 view=panel_view(row, options),
                 allowed_mentions=mentions(row["ping_role_id"]),
             )
         else:
             message = await channel.send(
-                open_text(row["creator_id"], row["ping_role_id"]),
+                said,
                 poll=native_poll(row, labels),
                 allowed_mentions=mentions(row["ping_role_id"]),
             )
@@ -1463,22 +1524,91 @@ async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
     await set_posted(
         bot.db,
         row["id"],
-        channel_id=channel.id,
+        channel_id=row["channel_id"] if rehearsing else channel.id,
         message_id=message.id,
         finishes_at=finishes if panel else _expiry(message, row),
         thread_id=thread_id,
+        shadow_message_id=message.id if rehearsing else None,
     )
     if not panel:
         await set_answer_ids(bot.db, row["id"], _answer_ids(message, len(labels)))
     await set_status(bot.db, row["id"], OPEN)
+    details = {
+        "poll_id": row["id"],
+        "channel_id": row["channel_id"] if rehearsing else channel.id,
+        "message_id": message.id,
+    }
+    if rehearsing:
+        details["shadow_channel_id"] = channel.id
     await log_action(
         bot,
         guild,
-        "poll.opened",
+        OPENED_SHADOW if rehearsing else "poll.opened",
         target=row["creator_id"],
-        details={"poll_id": row["id"], "channel_id": channel.id, "message_id": message.id},
+        details=details,
     )
+    await _pin(bot, guild, row, message)
     return (message, None)
+
+
+async def _pin(bot: Any, guild: Any, row: Any, message: Any) -> None:
+    """Checklist 12: the row is written and the poll is open; a pin that fails changes neither."""
+    if not pins_are_on(bot.store, guild.id) or bool(getattr(message, "pinned", False)):
+        return
+    try:
+        await message.pin(reason=PIN_REASON)
+    except Exception as exc:
+        log.warning("polls: could not pin poll %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            PIN_FAILED,
+            details={"poll_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return
+    await log_action(
+        bot, guild, PINNED, details={"poll_id": row["id"], "message_id": int(message.id)}
+    )
+    await _drop_pin_notice(row, message)
+
+
+async def _drop_pin_notice(row: Any, message: Any) -> None:
+    """Discord's own "pinned a message" line is noise; it goes when the bot may delete it."""
+    history = getattr(getattr(message, "channel", None), "history", None)
+    if history is None:
+        return
+    try:
+        async for found in history(limit=PIN_NOTICE_LOOKBACK):
+            if getattr(found, "type", None) != discord.MessageType.pins_add:
+                continue
+            reference = getattr(found, "reference", None)
+            if getattr(reference, "message_id", None) != int(message.id):
+                continue
+            await found.delete()
+            return
+    except Exception as exc:
+        log.info("polls: the pin notice under poll %s stays: %s", row["id"], exc)
+
+
+async def _unpin(bot: Any, guild: Any, row: Any, message: Any) -> None:
+    """Checklist 3: the pin comes off because the MESSAGE carries one, not because the
+    setting still says pin — a mid-poll flip must not strand it."""
+    if message is None or not bool(getattr(message, "pinned", False)):
+        return
+    try:
+        await message.unpin(reason=UNPIN_REASON)
+    except Exception as exc:
+        log.warning("polls: could not unpin poll %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            UNPIN_FAILED,
+            details={"poll_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return
+    await log_action(
+        bot, guild, UNPINNED, details={"poll_id": row["id"], "message_id": int(message.id)}
+    )
 
 
 def _expiry(message: Any, row: Any) -> datetime:
@@ -1706,7 +1836,7 @@ async def counts_for(bot: Any, row: Any) -> tuple[list[dict[str, Any]], int, boo
     if row["surface"] == PANEL and row["status"] == OPEN:
         return (*await panel_counts(bot.db, row["id"]), False)
     options = await options_of(bot.db, row["id"])
-    if row["status"] == OPEN and guard_allows(bot, row["channel_id"]):
+    if row["status"] == OPEN and guard_allows(bot, where_it_went(bot, row)):
         message = await fetch_poll_message(bot, row)
         if message is not None:
             counts, total = counts_from_message(message, options)
@@ -1913,7 +2043,7 @@ def minutes_for(store: Any, guild_id: int) -> int:
 
 
 def polls_are_on(store: Any, guild_id: int) -> bool:
-    return store.get(guild_id, "poll_mode") != "off"
+    return mode_of(store, guild_id) != OFF
 
 
 def may_create(store: Any, guild_id: int, actor: Any) -> bool:
@@ -1990,6 +2120,9 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
             waiting=sum(1 for row in rows if row["status"] == PENDING_REVIEW),
             repeating=len(repeats),
         )
+        rehearsed = sum(1 for row in rows if row["status"] == OPEN and shadow_id(row))
+        if rehearsed:
+            counts += PANEL_SHADOW_LINE.format(shadow=rehearsed)
         lines.append(counts + (DRAFT_STAFF_LINE.format(drafts=len(saved)) if saved else ""))
     if shown:
         lines.extend(summary_line(row, parse_ts(row["closes_at"])) for row in shown)
@@ -2150,6 +2283,7 @@ class PreviewView(PollPanel):
         saving: bool = False,
         saved: bool = False,
         resumed: bool = False,
+        picking: bool = True,
     ) -> None:
         super().__init__(minutes)
         self.draft = draft
@@ -2162,7 +2296,8 @@ class PreviewView(PollPanel):
             self.add_item(RepeatButton())
         self.add_item(StartOverButton())
         self.add_item(GiveUpButton())
-        self.add_item(DraftChannelSelect())
+        if picking:
+            self.add_item(DraftChannelSelect(draft.channel_id))
         self.add_item(DraftRoleSelect())
         self.add_item(ThreadToggle(draft.thread))
         if saving and not draft.repeating:
@@ -2203,6 +2338,7 @@ async def render_preview(
         saving=saving,
         saved=saved,
         resumed=from_saved,
+        picking=may_create(bot.store, guild.id, interaction.user),
     )
     retire(previous)
     view.message = await interaction.edit_original_response(
@@ -2315,7 +2451,7 @@ async def run_move(
     row = await wanted_poll(interaction, poll_id)
     if row is None:
         return
-    if row["channel_id"] and not guard_allows(bot, row["channel_id"]):
+    if row["channel_id"] and not guard_allows(bot, where_it_went(bot, row)):
         await finish_card(interaction, poll_id, guard_refusal(bot), row, previous)
         return
     said, fresh = await MOVE_FUNCS[action](bot, interaction.guild, row, interaction.user)
@@ -2383,7 +2519,7 @@ async def write_draft(
         await render_preview(interaction, draft, previous)
         await said_to(interaction, NO_CHANNEL)
         return
-    if not guard_allows(bot, channel):
+    if not guard_allows(bot, channel) and not in_shadow(bot.store, guild.id):
         await render_preview(interaction, draft, previous)
         await said_to(interaction, guard_refusal(bot))
         return
@@ -2602,7 +2738,7 @@ class CreateButton(discord.ui.Button):
             await answer(interaction, NOT_A_CREATOR)
             return
         draft = PollDraft(
-            channel_id=interaction.channel_id,
+            channel_id=bot.store.get(guild.id, CHANNEL_KEY) or interaction.channel_id,
             thread=bool(bot.store.get(guild.id, "poll_auto_thread")),
         )
         await interaction.response.send_modal(NewPollModal(draft, self.view))
@@ -2948,13 +3084,14 @@ class GiveUpButton(discord.ui.Button):
 
 
 class DraftChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self) -> None:
+    def __init__(self, channel_id: Any = None) -> None:
         super().__init__(
             placeholder=DRAFT_CHANNEL_PICK,
             channel_types=[discord.ChannelType.text],
             min_values=1,
             max_values=1,
             row=1,
+            default_values=[discord.Object(id=int(channel_id))] if channel_id else [],
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -3513,13 +3650,14 @@ class Polls(commands.Cog):
             return
         if finishes - now > timedelta(minutes=minutes):
             return
-        channel = self.bot.get_channel(row["channel_id"]) if row["channel_id"] else None
+        where = where_it_went(self.bot, row)
+        channel = self.bot.get_channel(where) if where else None
         if channel is None or not guard_allows(self.bot, channel):
             await log_action(
                 self.bot,
                 guild,
                 "poll.would_remind",
-                details={"poll_id": row["id"], "channel_id": row["channel_id"]},
+                details={"poll_id": row["id"], "channel_id": where},
             )
             return
         if not await claim_reminder(self.bot.db, row["id"]):

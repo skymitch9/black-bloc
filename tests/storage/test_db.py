@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 39
+        assert SCHEMA_VERSION == 40
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -1679,5 +1679,52 @@ async def test_two_posts_cannot_share_a_slug_and_only_the_two_styles_are_storabl
         cur = await db.conn.execute("SELECT pin, message_id FROM posts WHERE guild_id = 1")
         row = await cur.fetchone()
         assert row["pin"] == 1 and row["message_id"] is None
+    finally:
+        await db.close()
+
+
+async def test_an_open_poll_gains_a_shadow_message_id_column_on_an_older_file(tmp_path):
+    """Schema 39 -> 40: a poll written before shadow mode has no rehearsal, and the row that
+    carries a real poll is not touched by the upgrade."""
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE polls DROP COLUMN shadow_message_id")
+    await db.conn.execute(
+        "INSERT INTO polls(id, guild_id, creator_id, question, channel_id, message_id, "
+        "status, created_at) VALUES (1, 7, 9, 'now?', 55, 66, 'open', "
+        "'2026-09-17T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '39')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(polls)")
+        assert "shadow_message_id" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute(
+            "SELECT channel_id, message_id, shadow_message_id FROM polls WHERE id = 1"
+        )
+        row = await cur.fetchone()
+        assert (row["channel_id"], row["message_id"]) == (55, 66)
+        assert row["shadow_message_id"] is None
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == "40"
+    finally:
+        await again.close()
+
+
+async def test_a_fresh_database_carries_the_shadow_message_id_column(tmp_path):
+    db = Database(tmp_path / "new.sqlite3")
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(polls)")
+        assert "shadow_message_id" in {row["name"] for row in await cur.fetchall()}
     finally:
         await db.close()

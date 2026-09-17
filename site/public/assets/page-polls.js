@@ -65,8 +65,9 @@ const WEEKDAYS = [
   ['sun', 'Sunday'],
 ];
 
-const SWITCH_HELP = 'Off hides Create on the /poll panel and refuses new polls. Nothing already ' +
-  'running is closed, and every result Black Bloc has kept stays on this page.';
+const SWITCH_HELP = 'Off hides Create on the /poll panel and refuses new polls. Shadow posts every ' +
+  'poll for real, into the log channel, with a line saying it would have gone elsewhere. Nothing ' +
+  'already running is closed or moved, and every result Black Bloc has kept stays on this page.';
 const NO_MODE_KEY = 'The bot did not report a poll_mode key, so this switch is not shown ' +
   'rather than guessed at.';
 

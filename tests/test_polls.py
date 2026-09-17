@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -719,3 +720,98 @@ def test_the_staff_draft_card_carries_who_what_and_when():
     assert "<@900>" in said and "checkbox" in said and "2d" in said
     assert "<#555>" in said and f"<t:{int(when.timestamp())}:R>" in said
     assert "1. Pizza" in said and "2. Tacos" in said
+
+
+class ShadowStore:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+
+class ShadowGuild:
+    def __init__(self, channels):
+        self.channels = channels
+
+    def get_channel(self, channel_id):
+        return self.channels.get(channel_id)
+
+
+def test_the_three_poll_modes_are_off_shadow_and_on():
+    assert polls.MODES == ("off", "shadow", "on")
+    assert polls.mode_of(ShadowStore(poll_mode="shadow"), 7) == polls.SHADOW
+    assert polls.in_shadow(ShadowStore(poll_mode="shadow"), 7)
+    assert polls.polls_are_off(ShadowStore(poll_mode="off"), 7)
+
+
+def test_a_mode_nobody_wrote_reads_as_on_rather_than_silently_off():
+    """A row missing or spelled wrong must not turn polls off behind somebody's back."""
+    assert polls.mode_of(ShadowStore(), 7) == polls.ON
+    assert polls.mode_of(ShadowStore(poll_mode="rehearsal"), 7) == polls.ON
+    assert polls.mode_of(ShadowStore(poll_mode=" SHADOW "), 7) == polls.SHADOW
+
+
+def test_a_rehearsal_goes_where_the_shared_resolution_says():
+    bot = SimpleNamespace(
+        guard=SimpleNamespace(test_channel_id=111),
+        settings=SimpleNamespace(test_channel_id=None),
+        store=ShadowStore(log_channel_id=222),
+    )
+
+    assert polls.shadow_channel_id(bot, SimpleNamespace(id=7)) == 111
+    assert polls.shadow_channel_ids(bot, SimpleNamespace(id=7)) == [111, 222]
+
+
+def test_the_shadow_note_names_the_channel_the_poll_would_have_gone_to():
+    guild = ShadowGuild({555: SimpleNamespace(name="announcements")})
+    where = polls.where_words(guild, 555)
+
+    assert polls.shadow_note(ShadowStore(), 7, where) == (
+        "Posted here because polls are in **shadow** — it would have gone to #announcements."
+    )
+
+
+def test_staff_may_write_their_own_shadow_note_and_it_still_takes_the_channel():
+    store = ShadowStore(poll_shadow_note="Rehearsing. It was bound for {channel}.")
+
+    assert polls.shadow_note(store, 7, "#announcements") == (
+        "Rehearsing. It was bound for #announcements."
+    )
+
+
+def test_a_shadow_note_that_names_something_else_falls_back_to_the_default():
+    """Checklist 17: staff-editable text never takes a poll down with it."""
+    store = ShadowStore(poll_shadow_note="It was bound for {nonsense}.")
+
+    assert polls.shadow_note(store, 7, "#announcements") == polls.SHADOW_NOTE.format(
+        channel="#announcements"
+    )
+
+
+def test_a_blank_shadow_note_is_the_default_rather_than_an_empty_line():
+    assert polls.shadow_note(ShadowStore(poll_shadow_note="   "), 7, "#here") == (
+        polls.SHADOW_NOTE.format(channel="#here")
+    )
+
+
+def test_the_shadow_line_sits_above_the_usual_open_line_and_never_replaces_it():
+    said = polls.shadow_open_text("Rehearsing.", 900, 5)
+
+    assert said.splitlines() == ["Rehearsing.", "<@&5> <@900> started a poll."]
+
+
+def test_a_channel_black_bloc_cannot_see_is_said_so_and_never_guessed_at():
+    assert polls.where_words(ShadowGuild({}), 555) == polls.CHANNEL_UNSEEN
+    assert polls.where_words(ShadowGuild({}), None) == polls.NO_CHANNEL_WORD
+
+
+def test_a_poll_written_before_schema_40_has_no_shadow_copy_rather_than_an_error():
+    assert polls.shadow_id({"message_id": 5}) is None
+    assert polls.shadow_id({"shadow_message_id": 9}) == 9
+    assert polls.shadow_id(None) is None
+
+
+def test_pinning_is_a_setting_and_nothing_is_pinned_when_it_is_off():
+    assert polls.pins_are_on(ShadowStore(poll_pin=True), 7)
+    assert not polls.pins_are_on(ShadowStore(poll_pin=False), 7)

@@ -114,6 +114,16 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "pings.onboarding_took_over",
         "web.pings.onboarding_took_over",
     ),
+    # Polls in shadow: ONE call writes either the rehearsal's kind or the real one, and the
+    # pin's four kinds are module constants with no website door.
+    "black_bloc/cogs/community/polls.py::OPENED_SHADOW": (
+        "poll.opened_shadow",
+        "poll.opened",
+    ),
+    "black_bloc/cogs/community/polls.py::PINNED": ("poll.pinned",),
+    "black_bloc/cogs/community/polls.py::PIN_FAILED": ("poll.pin_failed",),
+    "black_bloc/cogs/community/polls.py::UNPINNED": ("poll.unpinned",),
+    "black_bloc/cogs/community/polls.py::UNPIN_FAILED": ("poll.unpin_failed",),
     # One `move_train` walks the transition table for both doors, so the kind is the target's.
     "black_bloc/cogs/content/raidtrain.py::MOVE_KINDS[to]": (
         "raidtrain.lock",

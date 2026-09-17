@@ -124,6 +124,8 @@ export const LABELS = {
   poll_ping_role_id: 'Who is pinged about a poll',
   poll_reminder_minutes: 'How long before closing the last call goes out',
   poll_auto_thread: 'Whether a poll opens a thread to argue in',
+  poll_pin: 'Whether a poll stays pinned while it is open',
+  poll_shadow_note: 'The line above a poll posted in shadow',
   poll_archive_days: 'How long a finished poll waits before it is archived',
   poll_archive_drop_votes: 'Whether archiving forgets who voted',
   poll_date_labels: 'How dates are written on a poll',

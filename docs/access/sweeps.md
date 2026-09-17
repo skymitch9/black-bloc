@@ -1504,6 +1504,48 @@ row after it depends on it. The owner numbers these at the landing.
 | **456** (was `GE-h`) | Type a broken wording into `golive_end_template` — *"{name} is {"* — save it, and end a stream | ⚠️ **Nothing is lost.** The announcement is edited to the old suffix shape instead, and the Fly log carries *"go-live: end wording … could not be rendered"*. The message must never show `{name}` or an empty sentence |
 | **457** (was `GE-i`) | Run `/golive` as a Lead and read the **stream end** line | It says which of the three shapes is in force: `off (left as posted)`, `edit (rewritten: "…")` with the first 40 characters of your wording, or `edit (suffix " — stream ended")` when the wording is blank |
 
+## Polls — shadow, a channel per poll, pinned while open (rows `PS2-a` … `PS2-m`)
+
+Added for the POLLS SHADOW build (branch `polls-shadow`, off `main` `905982b`; ⚠️ **not merged,
+not deployed, and nothing in it has met Discord**). What changed underneath every poll row above:
+`poll_mode` is now **off / shadow / on**, a poll is **pinned while it is open**, and the `/poll`
+preview's **Where** dropdown opens on `poll_channel_id` rather than on whatever channel the command
+was run in. Schema **39 → 40** (`polls.shadow_message_id`) — ⚠️ **migrate before deploy**; registry
+**227 → 229** (`poll_pin`, `poll_shadow_note`) measured on the BRANCH; tests **5998 → 6047**;
+mock *19 pages, 175 routes,
+14 core settings, all keys present* (unchanged — the two new keys are unbounded, so `contract.json`
+does not name them).
+
+⚠️ **`main` moved under this branch while it built.** It was cut from `905982b`; `main` is now
+`8b161af` (**v117**, the `golive-end` merge) with **230** keys and schema **39**. The merge will
+therefore land at **232** keys and schema **40** — re-measure at the landing rather than quoting
+the branch figures above.
+
+🔴 **`poll_mode` and `poll_channel_id` are the conductor's to set after the deploy**, not this
+build's: nothing here flipped the mode to `shadow` and nothing pointed `poll_channel_id` at
+`#announcements` (`1285381774876344340`). Rows `PS2-a` and `PS2-b` are those two moves; every row
+after them assumes they were made.
+
+| # | Do this | Expect |
+|---|---|---|
+| `PS2-a` | On the Polls page, the switch now reads **off · shadow · on**. Set it to **shadow** | The switch saves and the help under it names all three. The Logs page carries one `web.settings.set` for `poll_mode` |
+| `PS2-b` | On the Settings page, set **poll_channel_id** to `#announcements` | Saved. ⚠️ Nothing already open moves — this is where the NEXT poll is aimed |
+| `PS2-c` | Run `/poll` in `#blackbloc-logs`, press **Create**, fill the box in, submit | The preview's **Where** dropdown already reads `#announcements` — ⚠️ **not `#blackbloc-logs`, which is where you ran the command.** That is the change |
+| `PS2-d` | Press **Post it** | The poll appears in **`#blackbloc-logs`**, not `#announcements`. Its first line reads *"Posted here because polls are in **shadow** — it would have gone to #announcements."* and the usual *"@you started a poll"* line is underneath it, ping and all |
+| `PS2-e` | Look at the poll message | ⚠️ **It is PINNED**, and there is **no "Black Bloc pinned a message" notice** left in the channel — the bot deletes its own. If the notice IS there, Black Bloc could not delete it, which is allowed |
+| `PS2-f` | Vote on it from a second account | The vote counts exactly as on a real poll. `/poll` ▸ pick it ▸ the card shows the live bars |
+| `PS2-g` | On the dashboard's Polls page, look at the row | The **Where** column says **#announcements** — where it WOULD have gone. ⚠️ That is deliberate: the row keeps the channel it was aimed at so the card, the page and the results all agree |
+| `PS2-h` | `/poll` ▸ pick it ▸ **End** | The result card posts in `#blackbloc-logs`, beside the poll, and ⚠️ **the poll is unpinned.** The Logs page carries `poll.closed` then `poll.unpinned` |
+| `PS2-i` | Open the Logs page and find the rehearsal | `poll.opened_shadow`, not `poll.opened` — and its details carry **both** `channel_id` (`#announcements`) and `shadow_channel_id` (`#blackbloc-logs`). ⚠️ There is **no `poll.would_open`**: nothing was refused, the poll really opened |
+| `PS2-j` | From the dashboard's Polls page, create a poll and point **Where** at `#announcements` | ⚠️ **It is accepted**, not refused in words — while the mode is shadow, a real channel is not a refusal. The copy goes to `#blackbloc-logs` with the same shadow line |
+| `PS2-k` | Start a second poll, leave it open, then set the switch to **on** | ⚠️ **The open poll does NOT move.** It stays in `#blackbloc-logs`, still takes votes, and still ends there. `/poll` ▸ the staff block says *"**1** posted in shadow"* — that count is how you know what is still a rehearsal |
+| `PS2-l` | With the mode **on**, run `/poll` and post one at `#announcements` | Under `TEST_MODE` this is still **refused in words** (*"test mode"*) and nothing is posted. Shadow is the way to rehearse; `on` under test mode behaves exactly as it did before this build |
+| `PS2-m` | On the Settings page, set **poll_pin** to false, then post another poll | The new poll is **not pinned** and there is no `poll.pinned` row. ⚠️ Turn it back on, post one, then turn it off again WHILE that poll is open and end it: the pin still comes off, because the unpin reads the message rather than the setting |
+
+⚠️ **`poll_shadow_note` is editable** (Settings page or `/settings` ▸ a setting group ▸ poll). It takes
+one placeholder, `{channel}`. A note that names anything else falls back to the shipped line rather
+than refusing the poll — worth one row of your own if you change it.
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is

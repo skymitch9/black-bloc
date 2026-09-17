@@ -925,11 +925,12 @@ def test_an_archive_that_fires_the_same_day_is_refused_with_the_reason():
 
 def test_the_poll_switches_only_take_the_words_they_document():
     assert coerce_value("poll_mode", "on") == "on"
+    assert coerce_value("poll_mode", "shadow") == "shadow"
     assert coerce_value("poll_review_mode", "on") == "on"
     assert coerce_value("poll_who_can_create", "everyone") == "everyone"
     for key, bad in (
-        ("poll_mode", "shadow"),
-        ("poll_review_mode", "maybe"),
+        ("poll_mode", "rehearsal"),
+        ("poll_review_mode", "shadow"),
         ("poll_who_can_create", "role"),
     ):
         with pytest.raises(SettingError):
@@ -948,6 +949,8 @@ def test_every_poll_key_is_typed_so_the_dashboard_can_render_it():
         "poll_auto_thread",
         "poll_archive_days",
         "poll_archive_drop_votes",
+        "poll_pin",
+        "poll_shadow_note",
     ):
         assert key in KEY_TYPES
 
@@ -2179,3 +2182,20 @@ async def test_a_lead_can_change_all_five_through_the_store_the_settings_page_wr
     assert store.get(7, TIME_STEP_KEY) == 30
     assert store.get(7, "events_default_minutes") == 90
     assert store.get(7, EVENTS_SCHEDULED_NAME_KEY) == "{title} — Black in a Flash"
+
+
+async def test_the_two_shadow_keys_are_typed_explained_and_defaulted(store):
+    """Checklist 33: both reach the Settings page and the /settings panel from the registry."""
+    for key in ("poll_pin", "poll_shadow_note"):
+        assert key in KEY_TYPES and KEY_HELP.get(key)
+    assert KEY_TYPES["poll_pin"] == "bool" and KEY_TYPES["poll_shadow_note"] == "text"
+    assert store.get(7, "poll_pin") is True
+    assert store.get(7, "poll_shadow_note") == settings_store.POLL_SHADOW_NOTE
+    assert "{channel}" in store.get(7, "poll_shadow_note")
+
+
+def test_the_poll_mode_help_names_all_three_words_it_takes():
+    said = KEY_HELP["poll_mode"]
+
+    assert all(word in said for word in ("off", "shadow", "on"))
+    assert KEY_CHOICES["poll_mode"] == ("off", "shadow", "on")

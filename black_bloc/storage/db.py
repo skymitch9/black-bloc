@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 40
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -364,6 +364,7 @@ CREATE TABLE IF NOT EXISTS polls (
     auto_thread       INTEGER NOT NULL DEFAULT 0,
     channel_id        INTEGER,
     message_id        INTEGER,
+    shadow_message_id INTEGER,
     thread_id         INTEGER,
     ping_role_id      INTEGER,
     status            TEXT    NOT NULL DEFAULT 'draft',
@@ -841,6 +842,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("tempvoice_prefs", "permitted_ids", "TEXT"),
     ("tempvoice_prefs", "banned_ids", "TEXT"),
     ("polls", "vote_scheme", "TEXT"),
+    ("polls", "shadow_message_id", "INTEGER"),
     ("requests", "held_from", "TEXT"),
     ("requests", "built", "TEXT"),
     ("requests", "how_to_test", "TEXT"),
