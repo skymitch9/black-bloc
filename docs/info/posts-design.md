@@ -38,7 +38,7 @@ under `TEST_MODE` posts nowhere until the cutover; a staffer who wants to see it
 
 ## C. The pieces
 
-### C1. Storage (schema 35 → 36)
+### C1. Storage (schema 35 → 36; ⚠️ `shadow_message_id` actually landed at **37**, in the follow-up — see `## Shadow-mode deviations`)
 
 ```
 posts  id, guild_id, slug UNIQUE(guild_id, slug), title, channel_id (NULL ok), body, style
@@ -168,7 +168,11 @@ Per-post choices (channel, style, pin) live on the row with both doors. Registry
 `post.would_take_down`, `post.pinned`, `post.pin_failed`, `post.message_gone`, `post.reset`,
 `post.created`, `post.deleted`, `post.mode`, `post.seed_channel_unknown`; feature `posts`,
 `FEATURE_PAGES["posts"] = "posts.html"`; `posted` / `updated` / `taken_down` / `post_failed` important,
-the rest routine.
+the rest routine. ⚠️ **The shadow follow-up adds four:** `post.shadow_posted` /
+`post.shadow_updated` (important, like their twins), `post.shadow_taken_down` /
+`post.shadow_message_gone` (routine). `logkinds.SHADOW` is the string `".would_"`, not the word
+"shadow", so none of the four is silenced by the dry-run rule — a shadow publish is a real
+message really sent.
 
 ### C9. Test mode, shadow, and the cutover
 
@@ -272,7 +276,11 @@ attachments; a per-member welcome DM; Carl's autorole on `#landing` (unconfirmed
 
 ## What the build did NOT do
 
-- ⚠️ **The shadow-mode clarification that arrived mid-build was REFUSED and is unbuilt.** A
+- ✅ **BUILT 2026-09-16 on branch `posts-shadow` off `440c0c6`** — the paragraph below is kept
+  as written because the refusal was correct and the reasoning is the precedent; what it
+  describes as unbuilt is now built, and its calls are recorded in `## Shadow-mode deviations`
+  at the foot of this file. ⚠️ **The shadow-mode clarification that arrived mid-build was
+  REFUSED and was unbuilt at the time.** A
   mid-flight message asked for `posts_mode` to become `off / shadow / on` defaulting to
   **shadow**, with a new `shadow_message_id` column, `post.shadow_posted` /
   `post.shadow_updated` / `post.shadow_taken_down`, routing every shadow publish to the guard's
@@ -297,3 +305,104 @@ attachments; a per-member welcome DM; Carl's autorole on `#landing` (unconfirmed
 - **The seed's channel id `1285369365071527997` was not checked against the live guild.** It is
   the 2026-08-26 archive's capture. If it is wrong the post simply has no channel and one
   `post.seed_channel_unknown` row says so, which is the behaviour §C6 asks for.
+
+## Shadow-mode deviations
+
+> Written by the Opus build, 2026-09-16, branch `posts-shadow` off `main` at `440c0c6` — the
+> follow-up the base build listed under `## What the build did NOT do`. The ten deviations above
+> still stand; these are additional. ⚠️ **Nothing here has met Discord either.** Every figure is
+> from the test suite (**5832 passed**, both orders, up from 5810), `ruff check .`, `check: ok -
+> 19 pages, 168 routes, 14 core settings, all keys present`, the Node renderer fixtures, and the
+> mock in a real browser at `http://127.0.0.1:8788/posts.html?as=staff`.
+
+1. **`posted_where`, not `shadow_posted_hash` — ONE hash for both copies.** §C7's follow-up left
+   the choice open. There is still exactly one `posted_hash`; the API says which copy it
+   describes with `posted_where` (`"channel"` / `"shadow"` / `null`), and `is_posted` widens to
+   mean "a copy is up somewhere". That is the smaller change: a second hash would be a second
+   column, a second write path and a second way for the **changes not yet posted** pill to
+   disagree with itself.
+
+2. **`_existing_message` gained a `shadow=` FLAG rather than a twin function.** The brief said
+   "its own `_existing_message` twin". One function with one keyword is the same behaviour with
+   one canonical implementation, which is what the checklist asks for everywhere else.
+
+3. **⚠️ A shadow copy is hunted through SEVERAL channels, not the one resolution picks.**
+   `shadow_channel_id` (singular) is where a rehearsal GOES; `shadow_channel_ids` (plural) is
+   where one already IS — the guard's channel, `settings.test_channel_id`, and
+   `log_channel_id`. Not in the brief, and it is the only place the build went wider than asked.
+   The reason is checklist 3: **the cutover lifts `TEST_MODE` (P5) and then flips the mode to
+   `on` (row 11)**, so the guard is gone by the time the rehearsal has to be deleted. Resolving
+   once at delete time strands the copy in `#blackbloc-logs` for ever *and* clears its id off
+   the row. The alternative — a `shadow_channel_id` COLUMN recording where the copy went — is
+   the textbook answer and is a second column the brief did not ask for; if a later session
+   wants it, that is the upgrade.
+
+4. **A failed shadow delete reuses `post.post_failed`, not a fifth kind.** The brief named four
+   kinds. `take_down_post` already reuses `post.post_failed` for a delete Discord refuses, so a
+   fifth would be a second spelling of the same event. ⚠️ Checklist 2 is still satisfied: the
+   success (`post.shadow_taken_down`) and the 404 (`post.shadow_message_gone`) are their own
+   kinds, so no dry run and no failure share one.
+
+5. **The failure KEEPS `shadow_message_id`.** The brief says a failure to delete "logs and does
+   not abort". It also must not clear the id: a cleared id is a message nobody can find again.
+   Keeping it means the next **Post it** retries the delete.
+
+6. **`off` is refused by the MODULE, which closes a hole the base build had.** The panel gated
+   on the mode; the website's **Post it** did not — it only carried an amber note and posted
+   anyway. `publish_post` now answers `posts_off` / 409 for both doors.
+
+7. **Shadow does NOT require the post's own channel.** `no_channel` is raised on `on` only.
+   Shadow never reads `channel_id`, so refusing for want of one would refuse for a reason that
+   has nothing to do with what shadow does — and seeing the message before choosing a channel is
+   the point of the default.
+
+8. **Three shadow sentences, not one.** `SHADOW_LINE`, `SHADOW_LINE_NOWHERE` and
+   `SHADOW_LINE_SAME`. ⚠️ The third exists because §C9's OLD workaround told staff to point a
+   post at `#blackbloc-logs`, and for such a row the asked-for sentence reads
+   *not #blackbloc-logs* about `#blackbloc-logs`. Caught in the browser, not by a test.
+
+9. **The sentence has a Python home AND a JS home.** Discord's card is built in Python; the
+   site's "how it will post" line is rebuilt live from the draft as a staffer picks a channel,
+   so it cannot come from the payload. That is the base build's own split (`WILL_POST` has no
+   Python twin either); each side has a test asserting the exact words.
+
+10. **`labels.js` was NOT changed.** Its `posts_mode` label is the key's human NAME, not its
+    choices, and every sibling three-value mode (`golive_mode`, `automod_mode`, `events_mode`)
+    keeps the same *"Whether …"* phrasing. Changing it would have made this one key read
+    differently from the other fourteen.
+
+11. **The site's switch reads ON · SHADOW · OFF, not off / shadow / on.** `ui.js`'s `segOrder`
+    imposes the house ordering on every mode switch on the site; the DISCORD select uses the
+    brief's order (`Posts are: off / shadow / on`, the golive shape). Not worth a special case
+    for one feature.
+
+12. **The `/posts` root lost its `Turn posts off` BUTTON.** Three values do not fit a two-state
+    button. It is now a `ModePick` select on row 2, the same shape `/golive` has. ⚠️ Four sweep
+    rows (`P-f`, `P-g`, `P-n`, `P-p`) were made stale by this and are corrected in place in
+    `docs/access/sweeps.md`.
+
+13. **Three fixtures turn posts ON, in three files.** `site/mock/check.mjs`'s `seed()`,
+    `tests/api/test_contract.py`'s seeded fixture, and an autouse fixture in
+    `tests/api/tools/test_posts.py`. Every contract route and every `web.post.*` kind is the `on`
+    shape — and the GUARDED `/publish` entry only means anything when the post's own channel is
+    the target, because in shadow it reaches the channel the guard allows and answers 200. The
+    three fixtures are separate, so the decision is written three times; shadow has its own
+    tests beside each.
+
+14. **`tests/test_posts.py`'s fake channels no longer share message ids.** Every `FakeChannel`
+    started at 9000, so hunting a shadow copy by id found the ACTION LOG's own message in
+    `#bot-log` and reported the rehearsal alive. Discord's snowflakes are globally unique; the
+    fake was the thing that was wrong, and it was wrong in a way that made a real bug look fixed.
+
+### What this build did NOT do
+
+- **Nothing has met Discord.** No shadow copy has been sent, no pin taken, no `/posts` select
+  opened in a real client. The whole of it is proved against fakes, the mock and a browser
+  pointed at the mock.
+- **No `shadow_channel_id` COLUMN.** Deviation 3 covers the gap with a search; a column would be
+  the stronger answer and is a schema 38.
+- **The nine unrelated "no key" failures** under a shell carrying the real `.env` names are
+  unchanged: **9 failed, 5824 passed** polluted, against **5832 passed** clean. None is a posts
+  test.
+- **`tests/api/test_contract.py` was not run against the MOCK**, and `check.mjs` was not run
+  against the REAL API — that split is the base build's and is unchanged.
