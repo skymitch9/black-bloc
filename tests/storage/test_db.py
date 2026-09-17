@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 41
+        assert SCHEMA_VERSION == 42
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -23,6 +23,7 @@ async def test_connect_bootstraps_schema(tmp_path):
             "check_asked_by",
             "check_asked_at",
             "thread_id",
+            "source",
         } <= {r["name"] for r in await cur.fetchall()}
         cur = await db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {r["name"] for r in await cur.fetchall()}
@@ -1712,6 +1713,46 @@ async def test_a_schema_40_file_gains_requests_thread_id_and_keeps_its_rows(tmp_
         )
         row = await cur.fetchone()
         assert (row["status"], row["message_id"], row["thread_id"]) == ("open", 4242, None)
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_41_file_gains_requests_source_and_reads_old_rows_as_panel(tmp_path):
+    """Schema 42 is additive: a request filed before the forum could adopt a post reads as
+    `panel`, which is where every one of them actually came from."""
+    path = tmp_path / "old41.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE requests DROP COLUMN source")
+    await db.conn.execute(
+        "INSERT INTO requests(id, guild_id, user_id, what, why, status, created_at) "
+        "VALUES (1, 7, 9, 'a request board', 'the doc is a mess', 'open', "
+        "'2026-09-17T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '41')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(requests)")
+        assert "source" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT status, source FROM requests WHERE id = 1")
+        row = await cur.fetchone()
+        assert (row["status"], row["source"]) == ("open", "panel")
+        await again.conn.execute(
+            "INSERT INTO requests(id, guild_id, user_id, what, why, status, created_at, source) "
+            "VALUES (2, 7, 9, 'a post', 'by hand', 'open', '2026-09-17T00:00:00+00:00', 'forum')"
+        )
+        cur = await again.conn.execute("SELECT source FROM requests WHERE id = 2")
+        assert (await cur.fetchone())["source"] == "forum"
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key='schema_version'"
         )

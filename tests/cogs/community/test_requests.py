@@ -220,6 +220,7 @@ class FakeBot:
         self.settings = settings
         self.guild = guild
         self.guilds = [guild]
+        self.user = guild.me
         self.guard = None
         self._cog = None
         self.dynamic_items = []
@@ -2077,3 +2078,286 @@ async def test_the_panel_card_is_untouched_by_the_post_buttons(cog, bot, member,
     moves = [one for one in view.children if isinstance(one, requests_cog.CardMoveButton)]
     assert [one.label for one in moves] == ["Pick up", "Hold", "Decline"]
     assert not any(isinstance(one, requests_cog.PostMoveButton) for one in view.children)
+
+
+# --- a post somebody starts by hand becomes a request (blackmail-threads §G) ------------------
+
+
+def a_post_by_hand(bot, forum, who, *, name="a request board", said="the doc is a mess"):
+    """What Discord hands `on_thread_create`: somebody else's post, with its opening message."""
+    post = FakeForumPost(7700 + len(forum.posts), forum, name)
+    post.guild = bot.guild
+    post.owner_id = getattr(who, "id", who)
+    starter = FakeMessage(9700 + len(forum.posts), said)
+    starter.author = who
+    post.messages.append(starter)
+    post.starter_message = starter
+    forum.posts.append(post)
+    bot.guild.threads[post.id] = post
+    return post
+
+
+async def answers(value):
+    return value
+
+
+async def raises(exc):
+    raise exc
+
+
+async def via_of_filed(db):
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'request.filed' ORDER BY id"
+    )
+    return [json.loads(row["details"])["via"] for row in await cur.fetchall()]
+
+
+async def test_a_post_started_by_hand_becomes_a_request_filed_by_whoever_started_it(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+
+    await cog.on_thread_create(post)
+
+    row = await pure.get_request(db, 1)
+    assert row["user_id"] == member.id and row["thread_id"] == post.id
+    assert (row["what"], row["why"]) == ("a request board", "the doc is a mess")
+    assert row["status"] == pure.OPEN and row["source"] == pure.SOURCE_FORUM
+    assert tags_on(post) == ["open"] and post.archived is False
+    assert await via_of_filed(db) == ["forum"]
+
+
+async def test_the_bot_replies_in_the_post_with_the_filed_card_and_the_staff_moves(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+
+    await cog.on_thread_create(post)
+
+    reply = post.messages[-1]
+    assert reply is not post.messages[0]
+    assert card_of(reply)["title"] == "New request #1"
+    assert post_labels(reply) == ["Pick up", "Hold", "Decline", pure.SITE_BUTTON]
+    assert (await pure.get_request(db, 1))["message_id"] == reply.id
+
+
+async def test_the_person_who_started_the_post_is_dmed_the_card(cog, bot, member):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+
+    await cog.on_thread_create(post)
+
+    assert len(member.dms) == 1
+    assert card_of(member.dms[0])["title"] == "New request #1"
+
+
+async def test_a_post_with_nothing_written_in_it_still_files_with_a_why(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member, said="")
+
+    await cog.on_thread_create(post)
+
+    assert (await pure.get_request(db, 1))["why"] == pure.ADOPTED_WHY
+
+
+async def test_a_post_that_already_carries_a_row_is_never_filed_twice(cog, bot, member, db):
+    """`notify` made this one seconds ago; the row is what says so."""
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    await file_one(cog, bot, member)
+    post = forum.posts[0]
+
+    await cog.on_thread_create(post)
+
+    assert await pure.count_requests(db, GUILD) == 1
+    assert len(post.messages) == 1
+
+
+async def test_a_bot_post_with_no_row_yet_is_still_left_alone(cog, bot, db):
+    """The gateway can beat `set_thread`; who wrote the post is what makes that harmless."""
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, bot.guild.me)
+
+    await cog.on_thread_create(post)
+
+    assert await pure.get_request(db, 1) is None
+    assert len(post.messages) == 1
+
+
+async def test_the_same_post_firing_twice_files_one_request_and_replies_once(
+    cog, bot, member, db
+):
+    """Idempotence: `on_thread_create` can arrive again after a restart (§G)."""
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+
+    await cog.on_thread_create(post)
+    await cog.on_thread_create(post)
+
+    assert await pure.get_request(db, 2) is None
+    assert len(post.messages) == 2
+    assert await via_of_filed(db) == ["forum"]
+    assert len(member.dms) == 1
+
+
+async def test_a_post_by_somebody_who_may_not_file_is_answered_in_words_and_left_alone(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "request_who_can_file", "staff")
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+
+    await cog.on_thread_create(post)
+
+    assert await pure.get_request(db, 1) is None
+    said = post.messages[-1].content
+    assert "only staff may file" in said and "`/request`" in said and "ask staff" in said
+    assert member.mention in said
+    assert tags_on(post) == [] and post.archived is False
+    assert "request.filed" not in await action_kinds(db)
+
+
+async def test_a_staffers_post_is_adopted_even_when_filing_is_staff_only(cog, bot, lead, db):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "request_who_can_file", "staff")
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, lead)
+
+    await cog.on_thread_create(post)
+
+    assert (await pure.get_request(db, 1))["user_id"] == lead.id
+
+
+async def test_a_post_started_while_requests_are_off_is_answered_rather_than_filed(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "request_mode", "off")
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+
+    await cog.on_thread_create(post)
+
+    assert await pure.get_request(db, 1) is None
+    assert "turned off" in post.messages[-1].content
+
+
+async def test_the_key_off_leaves_a_hand_made_post_completely_alone(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "request_forum_adopts_posts", False)
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+
+    await cog.on_thread_create(post)
+
+    assert await pure.get_request(db, 1) is None
+    assert len(post.messages) == 1 and tags_on(post) == []
+
+
+async def test_a_thread_somewhere_else_is_not_a_request(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    elsewhere = bot.guild.add(FakeForum(FORUM + 1, bot.guild, available_tags=[]))
+    post = a_post_by_hand(bot, elsewhere, member)
+
+    await cog.on_thread_create(post)
+
+    assert await pure.get_request(db, 1) is None
+    assert len(post.messages) == 1 and forum.posts == []
+
+
+async def test_a_hand_made_post_with_no_forum_key_at_all_is_not_a_request(cog, bot, member, db):
+    bot.guard = FakeGuard()
+    forum = bot.guild.add(FakeForum(FORUM, bot.guild, available_tags=pure.forum_tags()))
+    post = a_post_by_hand(bot, forum, member)
+
+    await cog.on_thread_create(post)
+
+    assert await pure.get_request(db, 1) is None
+    assert len(post.messages) == 1
+
+
+async def test_the_adopted_post_is_claimed_so_test_mode_still_lets_the_card_land(
+    cog, bot, member
+):
+    """The guard only ever claimed posts the bot MADE; an adopted one has to be claimed too."""
+    bot.guard = FakeGuard()
+    forum = bot.guild.add(FakeForum(FORUM, bot.guild, available_tags=pure.forum_tags()))
+    await bot.store.set(GUILD, "request_forum_channel_id", FORUM)
+    post = a_post_by_hand(bot, forum, member)
+
+    await cog.on_thread_create(post)
+
+    assert bot.guard.owns_channel(post) and bot.guard.owns_channel(FORUM)
+    assert len(post.messages) == 2
+
+
+async def test_an_adopted_request_moves_exactly_like_any_other_one(cog, bot, member, lead, db):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+    await cog.on_thread_create(post)
+
+    await click(bot, lead, post_button(post.messages[1], "Pick up"))
+
+    assert (await pure.get_request(db, 1))["status"] == pure.IN_PROGRESS
+    assert post_labels(post.messages[1]) == [
+        "Ready to check",
+        "Hold",
+        "Decline",
+        pure.SITE_BUTTON,
+    ]
+    assert tags_on(post) == ["picked up"]
+    assert [card_of(one)["title"] for one in post.messages[1:]] == [
+        "New request #1",
+        "Request #1 is being worked on",
+    ]
+
+
+async def test_a_post_whose_starter_has_to_be_fetched_is_still_adopted(cog, bot, member, db):
+    """discord.py leaves `starter_message` empty unless that message is cached."""
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+    starter = post.starter_message
+    post.starter_message = None
+    post.fetch_message = lambda message_id: answers(starter)
+
+    await cog.on_thread_create(post)
+
+    assert (await pure.get_request(db, 1))["why"] == "the doc is a mess"
+
+
+async def test_a_post_whose_first_message_cannot_be_read_is_filed_from_its_owner(
+    cog, bot, member, db
+):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+    post.starter_message = None
+    post.fetch_message = lambda message_id: raises(refused())
+
+    await cog.on_thread_create(post)
+
+    row = await pure.get_request(db, 1)
+    assert row["user_id"] == member.id and row["why"] == pure.ADOPTED_WHY
+
+
+async def test_the_listener_does_nothing_at_all_with_no_database(cog, bot, member):
+    bot.guard = FakeGuard()
+    forum = await point_at_a_forum(bot)
+    post = a_post_by_hand(bot, forum, member)
+    await bot.db.close()
+
+    await cog.on_thread_create(post)
+
+    assert len(post.messages) == 1
