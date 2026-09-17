@@ -310,10 +310,15 @@ const SETTING_SPECS = [
   ['youtube_poll_minutes', 'int', 10, 10, "minutes between checks of every linked channel's uploads feed", null, null, 5],
   ['pings_mode', 'enum', 'off', 'off', 'off, or on (members can opt in to go-live and event pings, and a streamer can have a role of their own that only their followers wear)', ['off', 'on']],
   ['pings_events_role_name', 'text', 'Events', 'Events', 'what **Set up the Events role** on `/pings` calls the one opt-in role for go-live and event pings when it has to make it; an existing role of that name is reused rather than duplicated'],
-  ['pings_fan_role_creation', 'enum', 'self', 'self', 'who may start a streamer’s own ping role: self (the streamer, with **Start my own ping role** on `/pings`), staff (only an Auntie/Uncle, from `/pings` ▸ **Streamers…**), or auto (one is made the moment a Twitch channel is linked). Staff can always do it for anybody, whichever this says', ['self', 'staff', 'auto']],
+  ['pings_fan_role_creation', 'enum', 'follow', 'follow', 'when a streamer’s ping role is made: follow (the first person to follow them on `/pings` makes it, which is the default so a role exists only where somebody wants it), self (the streamer, with **Start my own ping role** on `/pings`), staff (only an Auntie/Uncle, from `/pings` ▸ **Streamers…**), or auto (one is made the moment a Twitch channel is linked). Staff can always do it for anybody, whichever this says', ['self', 'staff', 'auto', 'follow']],
   ['pings_fan_role_template', 'text', '{name} pings', '{name} pings', 'what a streamer’s own ping role is called; {name} is their display name at the moment the role is made and is the only field there is'],
   ['pings_fan_role_on_unlink', 'enum', 'keep', 'keep', 'what happens to a streamer’s ping role when they unlink Twitch or opt out of announcements: keep leaves it alone (nothing is announced, so nobody is pinged), delete takes the role off the server', ['keep', 'delete']],
   ['pings_fan_role_delete', 'bool', true, true, 'true to delete the Discord role itself when a streamer’s ping role is removed; false forgets the role here and leaves it on the server for somebody to tidy by hand'],
+  ['pings_streamer_stale_days', 'int', 90, 90, 'days without a go-live before somebody leaves the streamer list `/pings` ▸ **Follow a streamer…** offers; their ping role is kept while anybody still wears it, and one more go-live puts them back on', null, 365, 7],
+  ['pings_empty_role_days', 'int', 30, 30, 'days a streamer’s ping role that nobody wears survives before Black Bloc deletes it, so the server’s role count tracks who is actually followed; a role somebody wears is never deleted by this', null, 365, 1],
+  ['pings_onboarding_managed', 'bool', true, true, 'true to let Black Bloc keep its two Discord onboarding prompts in step with the Events, raid-train and streamer roles; false leaves the prompts exactly as they are and Black Bloc never writes to onboarding again. Only does anything on a Community server'],
+  ['pings_onboarding_prompt_title', 'text', 'What should ping you?', 'What should ping you?', 'what Black Bloc’s first onboarding prompt is called; it is also how Black Bloc knows which prompts are its own, so changing it makes a fresh pair and leaves the old ones for somebody to delete by hand'],
+  ['pings_onboarding_option_cap', 'int', 25, 25, 'how many streamers the **Which streamers?** onboarding prompt lists before it says how many more are on `/pings`. Discord publishes no number for this, so 25 is Black Bloc’s own conservative cap — raise it and Discord refuses in words if it is too high', null, 50, 1],
   ['tempvoice_mode', 'enum', 'on', 'off', 'off, or on (join-to-create makes a temporary voice channel)', ['off', 'on']],
   ['tempvoice_creator_ids', 'channels', ['800000000000000009'], [], 'the join-to-create channels; Setup on /voice fills this in'],
   ['tempvoice_name_template', 'text', "{user}'s room", "{user}'s room", 'what a spawned channel is called; {user} is the member'],
@@ -975,6 +980,17 @@ function seedState() {
       { user_id: MEMBERS[1].id, role_id: FAN_ROLE_IDS[0], created_at: minutesAgo(3000), created_by: STAFF.id },
       { user_id: MEMBERS[2].id, role_id: FAN_ROLE_IDS[1], created_at: minutesAgo(2000), created_by: MEMBERS[2].id },
     ],
+    // Mirrors the `streamers` table (schema 39). Nobody is added by hand — a go-live is what
+    // puts somebody here — so the mock seeds three: two with a role, one with none yet, and
+    // MEMBERS[3] hidden by their own press.
+    streamers: [
+      { user_id: MEMBERS[1].id, first_live_at: minutesAgo(9000), last_live_at: minutesAgo(120), live_count: 14, platform: 'Twitch', login: 'caseyfast', listed: true, hidden_by: null, hidden_at: null },
+      { user_id: MEMBERS[2].id, first_live_at: minutesAgo(9500), last_live_at: minutesAgo(1300), live_count: 6, platform: 'Twitch', login: 'rivetplays', listed: true, hidden_by: null, hidden_at: null },
+      { user_id: MEMBERS[4].id, first_live_at: minutesAgo(400), last_live_at: minutesAgo(400), live_count: 1, platform: 'Twitch', login: null, listed: true, hidden_by: null, hidden_at: null },
+      { user_id: MEMBERS[3].id, first_live_at: minutesAgo(8000), last_live_at: minutesAgo(5000), live_count: 3, platform: 'Twitch', login: null, listed: false, hidden_by: MEMBERS[3].id, hidden_at: minutesAgo(4000) },
+    ],
+    onboardingManaged: true,
+    onboardingSyncedAt: null,
     sessions: [
       { id: 12, user_id: MEMBERS[1].id, source: 'twitch', url: 'https://twitch.tv/caseyfast', game: 'Lethal Company', title: 'late night runs', started_at: minutesAgo(120), ended_at: null, mode: 'shadow', announced_message_id: null },
       { id: 11, user_id: MEMBERS[2].id, source: 'presence', url: 'https://twitch.tv/rivetplays', game: 'Balatro', title: 'one more run', started_at: minutesAgo(1500), ended_at: minutesAgo(1300), mode: 'shadow', announced_message_id: null },
@@ -3750,6 +3766,52 @@ function fanRoleRow(row) {
   };
 }
 
+// Mirrors black_bloc/api/tools/pings.py:listing_row — the list is who has STREAMED, and the
+// role is a column on it rather than the thing the list is made of.
+function listingRow(row) {
+  const held = state.golive.fanRoles.find((one) => String(one.user_id) === String(row.user_id));
+  const role = held ? roleOf(held.role_id) : null;
+  const name = held ? (role ? role.name : (held.role_name || null)) : null;
+  return {
+    member_id: String(row.user_id),
+    member: memberName(row.user_id),
+    listed: Boolean(row.listed),
+    hidden_by: row.hidden_by === null ? null : String(row.hidden_by),
+    hidden_by_name: row.hidden_by === null ? null : memberName(row.hidden_by),
+    hidden_at: row.hidden_at,
+    first_live_at: row.first_live_at,
+    last_live_at: row.last_live_at,
+    live_count: row.live_count,
+    platform: row.platform,
+    login: row.login,
+    role_id: held ? String(held.role_id) : null,
+    role: name,
+    followers: name === null ? null : (role ? followersOf(held.role_id) : 0),
+  };
+}
+
+// Mirrors black_bloc/pings_onboarding.py:wanted_prompts. The mock server is never a Community
+// guild, so `community` is false and every write refuses in words — which is the half of C5
+// the browser can actually be shown.
+function onboardingPrompts() {
+  const title = String(state.settings.get('pings_onboarding_prompt_title') ?? 'What should ping you?');
+  const cap = Number(state.settings.get('pings_onboarding_option_cap') ?? 25);
+  const feeds = [];
+  const events = state.settings.get('golive_ping_role_id');
+  const raid = state.settings.get('raidtrain_ping_role_id');
+  if (events && roleOf(events)) feeds.push('Events and go-lives');
+  if (raid && roleOf(raid)) feeds.push('Raid trains');
+  const listed = new Set(state.golive.streamers.filter((row) => row.listed).map((row) => String(row.user_id)));
+  const people = state.golive.fanRoles
+    .filter((row) => listed.has(String(row.user_id)) && roleOf(row.role_id))
+    .map((row) => ({ title: roleOf(row.role_id).name, followers: followersOf(row.role_id) }))
+    .sort((a, b) => b.followers - a.followers);
+  const prompts = [];
+  if (feeds.length) prompts.push({ title, options: feeds });
+  if (people.length) prompts.push({ title: 'Which streamers?', options: people.slice(0, cap).map((one) => one.title) });
+  return { prompts, more: Math.max(people.length - cap, 0) };
+}
+
 route('GET', '/api/pings/streamers', (context) => {
   requireStaff(context.session);
   return state.golive.fanRoles.map(fanRoleRow);
@@ -3837,6 +3899,84 @@ route('POST', '/api/pings/setup', async (context) => {
     message += ' Ping roles are still off, so nobody can opt in yet — turn them on with `/settings` ▸ **Turn a feature back on…** or from the dashboard\u2019s Go-live tab.';
   }
   return { role_id: role.id, created, menu: 'notifications', message };
+});
+
+route('POST', '/api/pings/raidtrain-role', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const given = body && body.role_id ? String(body.role_id) : null;
+  if (given && !roleOf(given)) {
+    throw new Refused(400, 'no_such_role', `**${given}** is not a role in this server any more, so nothing was changed. Reload the page and pick the role again.`);
+  }
+  const found = given ? roleOf(given) : ROLES.find((one) => one.name.toLowerCase() === 'raid trains');
+  const created = !found;
+  const role = found || { id: String(930000000000000000n + BigInt(ROLES.length)), name: 'Raid trains' };
+  const before = state.settings.get('raidtrain_ping_role_id');
+  state.settings.set('raidtrain_ping_role_id', role.id);
+  logAction('web.pings.raidtrain_setup', { details: { role_id: role.id, role: role.name, created } });
+  let message = created
+    ? `Made the role **${role.name}** and pointed raid-train pings at it. Members opt in with **Ping me for raid trains** on \`/pings\`.`
+    : (before === role.id
+      ? `Raid-train pings already pointed at **${role.name}**, so nothing was changed.`
+      : `Used the role **${role.name}** that was already here and pointed raid-train pings at it. Members opt in with **Ping me for raid trains** on \`/pings\`.`);
+  if (state.settings.get('pings_mode') !== 'on') {
+    message += ' Ping roles are still off, so nobody can opt in yet — turn them on with `/settings` ▸ **Turn a feature back on…** or from the dashboard’s Go-live tab.';
+  }
+  return { role_id: role.id, created, message };
+});
+
+route('GET', '/api/pings/list', (context) => {
+  requireStaff(context.session);
+  return [...state.golive.streamers]
+    .sort((a, b) => String(b.last_live_at).localeCompare(String(a.last_live_at)))
+    .map(listingRow);
+});
+
+route('POST', '/api/pings/list/:member_id', async (context) => {
+  requireStaff(context.session);
+  const memberId = String(context.params.member_id);
+  const body = await context.body();
+  const listed = body && body.listed === false ? false : true;
+  const row = state.golive.streamers.find((one) => String(one.user_id) === memberId);
+  if (!row) {
+    throw new Refused(409, 'not_changed', `**${memberName(memberId) || memberId}** is not somebody on this server's streamer list, so nothing was changed. Press **Refresh** and pick again.`);
+  }
+  if (Boolean(row.listed) === listed) {
+    throw new Refused(409, 'not_changed', listed
+      ? `**${memberName(memberId)}** is already on the streamer list, so nothing was changed.`
+      : `**${memberName(memberId)}** is already off the streamer list, so nothing was changed. **Put me back on the list** puts them back.`);
+  }
+  row.listed = listed;
+  row.hidden_by = listed ? null : STAFF.id;
+  row.hidden_at = listed ? null : now();
+  logAction(listed ? 'web.pings.streamer_restored' : 'web.pings.streamer_hidden', { target_id: memberId, details: { user_id: memberId, self: false } });
+  return {
+    ...listingRow(row),
+    message: listed
+      ? `Done — **${memberName(memberId)}** is back on the streamer list.`
+      : `Done — **${memberName(memberId)}** is off the streamer list, so nobody new can follow them and going live does not put them back. **Restore** on this panel puts them back.`,
+  };
+});
+
+route('GET', '/api/pings/onboarding', (context) => {
+  requireStaff(context.session);
+  const { prompts, more } = onboardingPrompts();
+  return {
+    community: false,
+    managed: state.golive.onboardingManaged !== false,
+    last_synced_at: state.golive.onboardingSyncedAt,
+    more_on_pings: more,
+    foreign_prompts: 0,
+    prompts,
+  };
+});
+
+route('POST', '/api/pings/onboarding/sync', (context) => {
+  requireStaff(context.session);
+  if (state.golive.onboardingManaged === false) {
+    throw new Refused(409, 'not_managed', 'Black Bloc is not managing this server’s onboarding, so nothing was changed. **Manage onboarding again** on this panel turns it back on.');
+  }
+  throw new Refused(409, 'no_community', 'This server is not a Community server yet, so Discord has no onboarding screen to put anything on and nothing was changed. Turn Community on in **Server Settings ▸ Enable Community** first; until then the *Notifications* role menu is how members opt in.');
 });
 
 // The two words black_bloc/api/tools/events.py:EDITABLE names; every other state is settled.

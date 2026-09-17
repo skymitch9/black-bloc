@@ -9,6 +9,11 @@ ROUTES = [
     ("POST", "/api/pings/streamers"),
     ("DELETE", "/api/pings/streamers/21"),
     ("POST", "/api/pings/setup"),
+    ("POST", "/api/pings/raidtrain-role"),
+    ("GET", "/api/pings/list"),
+    ("POST", "/api/pings/list/21"),
+    ("GET", "/api/pings/onboarding"),
+    ("POST", "/api/pings/onboarding/sync"),
 ]
 
 
@@ -183,3 +188,141 @@ def test_setup_with_no_body_at_all_still_works(client, sign_in, on):
 def test_setup_says_the_feature_is_still_off_rather_than_pretending(client, sign_in, web):
     sign_in(client)
     assert "still off" in client.post("/api/pings/setup", json={}).json()["message"]
+
+
+# --- the streamer list (C1/C9) -------------------------------------------------------------------
+
+
+async def listed(web, wf, user_id, *, hidden=False):
+    """Nobody is added by hand in the app, so the test writes the row the listener would."""
+    await web.db.conn.execute(
+        "INSERT OR REPLACE INTO streamers(guild_id, user_id, first_live_at, last_live_at, "
+        "live_count, platform, login, listed, hidden_by, hidden_at) "
+        "VALUES (?, ?, '2026-09-01T00:00:00+00:00', '2026-09-10T00:00:00+00:00', 4, 'Twitch', "
+        "'namu', ?, ?, ?)",
+        (
+            wf.GUILD_ID,
+            int(user_id),
+            0 if hidden else 1,
+            7 if hidden else None,
+            "2026-09-11T00:00:00+00:00" if hidden else None,
+        ),
+    )
+    await web.db.conn.commit()
+
+
+async def test_the_list_carries_what_the_streamer_table_draws(client, sign_in, on, guild, wf):
+    member = wf.member(guild, 21, name="namu")
+    await listed(on, wf, 21)
+    sign_in(client)
+
+    rows = client.get("/api/pings/list").json()
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["member_id"] == "21" and row["member"] == member.display_name
+    assert row["listed"] is True and row["hidden_by"] is None and row["hidden_at"] is None
+    assert row["live_count"] == 4 and row["login"] == "namu" and row["platform"] == "Twitch"
+    assert row["role_id"] is None and row["role"] is None and row["followers"] is None
+
+
+async def test_a_listed_streamer_with_a_role_carries_its_follower_count(
+    client, sign_in, on, guild, wf
+):
+    wf.member(guild, 21, name="namu")
+    await listed(on, wf, 21)
+    sign_in(client)
+    client.post("/api/pings/streamers", json={"member_id": "21"})
+    fan = wf.member(guild, 22, name="fan")
+    row = await pings.get_fan_role(on.db, wf.GUILD_ID, 21)
+    await fan.add_roles(guild.get_role(int(row["role_id"])))
+
+    found = client.get("/api/pings/list").json()[0]
+
+    assert found["role"] == "Namu pings" and found["followers"] == 1
+
+
+async def test_hiding_and_restoring_are_one_route_both_ways(client, sign_in, on, guild, wf):
+    wf.member(guild, 21, name="namu")
+    await listed(on, wf, 21)
+    sign_in(client)
+
+    hidden = client.post("/api/pings/list/21", json={"listed": False})
+
+    assert hidden.status_code == 200
+    assert hidden.json()["listed"] is False
+    assert hidden.json()["hidden_by"] == "7"
+    assert "off the streamer list" in hidden.json()["message"]
+    assert "web.pings.streamer_hidden" in await wf.kinds_in(on.db)
+
+    again = client.post("/api/pings/list/21", json={"listed": False})
+    assert again.status_code == 409 and "already off" in again.json()["message"]
+
+    back = client.post("/api/pings/list/21", json={"listed": True})
+    assert back.status_code == 200 and back.json()["listed"] is True
+    assert "web.pings.streamer_restored" in await wf.kinds_in(on.db)
+
+
+async def test_hiding_somebody_who_was_never_seen_streaming_refuses_in_words(
+    client, sign_in, on, guild, wf
+):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+
+    refused = client.post("/api/pings/list/21", json={"listed": False})
+
+    assert refused.status_code == 409
+    assert "streamer list" in refused.json()["message"]
+
+
+# --- the raid-train role (C3/C9) -----------------------------------------------------------------
+
+
+async def test_the_raid_train_role_route_makes_one_and_points_the_key(
+    client, sign_in, on, guild, wf
+):
+    sign_in(client)
+
+    made = client.post("/api/pings/raidtrain-role", json={})
+
+    assert made.status_code == 200 and made.json()["created"] is True
+    assert on.store.get(wf.GUILD_ID, "raidtrain_ping_role_id") == int(made.json()["role_id"])
+    assert "web.pings.raidtrain_setup" in await wf.kinds_in(on.db)
+
+    again = client.post("/api/pings/raidtrain-role", json={})
+    assert again.status_code == 200 and again.json()["created"] is False
+
+
+# --- onboarding (C5/C9) --------------------------------------------------------------------------
+
+
+async def test_the_onboarding_card_reads_without_a_community_server(client, sign_in, on, wf):
+    sign_in(client)
+
+    found = client.get("/api/pings/onboarding").json()
+
+    assert found["community"] is False and found["managed"] is True
+    assert found["prompts"] == [] and found["last_synced_at"] is None
+    assert found["more_on_pings"] == 0 and found["foreign_prompts"] == 0
+
+
+async def test_sync_now_refuses_in_words_off_a_community_server(client, sign_in, on, wf):
+    sign_in(client)
+
+    refused = client.post("/api/pings/onboarding/sync")
+
+    assert refused.status_code == 409
+    assert refused.json()["error"] == "no_community"
+    assert "Community" in refused.json()["message"]
+    assert not [one for one in await wf.kinds_in(on.db) if "onboarding" in one]
+
+
+async def test_sync_now_refuses_once_the_managed_switch_is_off(client, sign_in, on, wf):
+    await on.store.set(wf.GUILD_ID, "pings_onboarding_managed", False)
+    sign_in(client)
+
+    refused = client.post("/api/pings/onboarding/sync")
+
+    assert refused.status_code == 409
+    assert refused.json()["error"] == "not_managed"
+    assert client.get("/api/pings/onboarding").json()["managed"] is False

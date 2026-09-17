@@ -337,10 +337,14 @@ async function checkActionKinds() {
   // POST re-links rather than tripping the 409 a second owner would get.
   await post('/api/youtube/links', { member_id: IDS.member_id, channel: 'UCsXVk37bltHxD1rDPwtNM8Q' });
   await send('DELETE', `/api/youtube/links/${IDS.member_id}`, undefined);
-  // The three web.pings.* kinds, each left by the write that spells it.
+  // The six web.pings.* kinds, each left by the write that spells it. `ping_member_id` is
+  // seeded HIDDEN, so restoring first and hiding after leaves the list as it found it.
   await post('/api/pings/setup', {});
   await post('/api/pings/streamers', { member_id: IDS.ping_member_id });
   await send('DELETE', `/api/pings/streamers/${IDS.ping_member_id}`, undefined);
+  await post('/api/pings/raidtrain-role', {});
+  await post(`/api/pings/list/${IDS.ping_member_id}`, { listed: true });
+  await post(`/api/pings/list/${IDS.ping_member_id}`, { listed: false });
   // The six web.chat.* kinds, each left by the write that spells it rather than merely listed.
   await post('/api/chat/intents', { name: 'contract_check', triggers: ['contract check'], lines: ['Hello {name}.'] });
   await send('PUT', `/api/chat/intents/${IDS.chat_intent_id}`, { enabled: true });

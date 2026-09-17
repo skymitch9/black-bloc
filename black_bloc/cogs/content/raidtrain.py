@@ -9,6 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import pings
 from ... import raidtrain as rt
 from ...actionlog import log_action, send_logs, stamp
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
@@ -2131,9 +2132,23 @@ class RaidTrains(commands.Cog):
         return touched
 
     async def _say_the_train_moved(self, guild: Any, train: Any, slot: Any, slots: Any) -> None:
+        """C3: the one line that pings — the on-air streamer's followers and the raid-train
+        opt-ins, each once, and `allowed_mentions` naming exactly those two roles."""
         _before, after = neighbours(slots, slot["position"])
-        text = live_post_text(train, slot, after)
-        details = {"train_id": train["id"], "position": slot["position"], "text": text}
+        fan_role_id = await pings.announced_fan_role(
+            self.bot, guild, slot["user_id"], notice=False
+        )
+        raid_role_id = self.bot.store.get(guild.id, "raidtrain_ping_role_id") or None
+        pinged = rt.moved_mentions(fan_role_id, raid_role_id)
+        text = live_post_text(
+            train, slot, after, fan_role_id=fan_role_id, raid_role_id=raid_role_id
+        )
+        details = {
+            "train_id": train["id"],
+            "position": slot["position"],
+            "text": text,
+            "role_ids": pinged,
+        }
         mode = self._mode(guild.id)
         if mode != "on":
             await log_action(
@@ -2144,8 +2159,20 @@ class RaidTrains(commands.Cog):
             )
             return
         where = train["thread_id"] or train["channel_id"] or self._channel_id(guild.id)
-        message = await self._post(guild, where, text, details)
+        message = await self._post(guild, where, text, details, mentions=self._only(pinged))
         if message is not None:
+            if pinged:
+                await log_action(
+                    self.bot,
+                    guild,
+                    "raidtrain.moved_pinged",
+                    target=slot["user_id"],
+                    details={
+                        "train_id": train["id"],
+                        "position": slot["position"],
+                        "role_ids": pinged,
+                    },
+                )
             await stamp_slot(self.bot.db, slot["id"], "live_posted_at")
 
     # --- posting ------------------------------------------------------------------------------
@@ -2165,6 +2192,15 @@ class RaidTrains(commands.Cog):
             roles=[discord.Object(role_id)] if role_id else False,
         )
 
+    def _only(self, role_ids: Any) -> discord.AllowedMentions:
+        """Checklist 11: exactly these roles and nothing else, whatever the text happens to say."""
+        found = list(role_ids or ())
+        return discord.AllowedMentions(
+            everyone=False,
+            users=False,
+            roles=[discord.Object(one) for one in found] if found else False,
+        )
+
     def _jump(self, train: Any) -> str | None:
         channel_id = _row(train, "channel_id")
         message_id = _row(train, "lineup_message_id")
@@ -2173,7 +2209,13 @@ class RaidTrains(commands.Cog):
         return f"https://discord.com/channels/{train['guild_id']}/{channel_id}/{message_id}"
 
     async def _post(
-        self, guild: Any, channel_id: Any, text: str, details: dict[str, Any]
+        self,
+        guild: Any,
+        channel_id: Any,
+        text: str,
+        details: dict[str, Any],
+        *,
+        mentions: Any = None,
     ) -> Any:
         """The one guarded path anything of this feature takes to a channel."""
         if not channel_id:
@@ -2204,7 +2246,12 @@ class RaidTrains(commands.Cog):
             )
             return None
         try:
-            message = await channel.send(text, allowed_mentions=self._mentions(guild.id))
+            message = await channel.send(
+                text,
+                allowed_mentions=(
+                    mentions if mentions is not None else self._mentions(guild.id)
+                ),
+            )
         except NETWORK_ERRORS as exc:
             log.warning("raidtrain: not posted — %s: %s", type(exc).__name__, exc)
             await log_action(

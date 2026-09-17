@@ -134,6 +134,13 @@ class FakeGuild:
     def get_member(self, user_id):
         return self.members.get(user_id)
 
+    def get_role(self, role_id):
+        return next((role for role in self.roles if role.id == int(role_id)), None)
+
+    def add_role(self, role):
+        self.roles.append(role)
+        return role
+
 
 class FakeGuard:
     def __init__(self, allowed):
@@ -1401,6 +1408,60 @@ async def test_a_holder_who_is_already_streaming_is_checked_in_and_the_train_mov
     posted = bot.guild.get_channel(TEST_CHANNEL).posts
     assert any("alicestreams" in str(one["content"]) for one in posted)
     assert any("bobstreams" in str(one["content"]) for one in posted)
+
+
+async def test_the_moved_line_pings_the_fan_role_and_the_raid_role_and_nothing_else(
+    bot, cog, organizer, alice, bobby, db
+):
+    """C3: `allowed_mentions` lists exactly those two roles, whatever the lineup text says."""
+    from black_bloc import pings
+
+    await link(db, ALICE, "alicestreams")
+    bot.guard = FakeGuard([TEST_CHANNEL])
+    await bot.store.set(GUILD, "pings_mode", "on")
+    bot.guild.add_role(FakeRole(4141))
+    bot.guild.add_role(FakeRole(4242))
+    await pings.set_fan_role(db, GUILD, ALICE, 4141, None)
+    await bot.store.set(GUILD, "raidtrain_ping_role_id", 4242)
+    train_id = await a_train(db, starts=datetime.now(UTC) - timedelta(minutes=1))
+    await seat(bot, train_id, alice, 1, by=organizer)
+    await open_session(db, ALICE)
+
+    await cog.sweep_once()
+
+    moved = next(
+        one
+        for one in bot.guild.get_channel(TEST_CHANNEL).posts
+        if "<@&4141>" in str(one["content"])
+    )
+    assert "<@&4242>" in moved["content"]
+    assert str(moved["content"]).count("<@&") == 2
+    mentions = moved["allowed_mentions"]
+    assert mentions.everyone is False and mentions.users is False
+    assert [one.id for one in mentions.roles] == [4141, 4242]
+    assert (await kinds_logged(db)).count("raidtrain.moved_pinged") == 1
+
+
+async def test_the_moved_line_pings_only_the_raid_role_when_the_streamer_has_none(
+    bot, cog, organizer, alice, db
+):
+    await link(db, ALICE, "alicestreams")
+    bot.guard = FakeGuard([TEST_CHANNEL])
+    await bot.store.set(GUILD, "pings_mode", "on")
+    bot.guild.add_role(FakeRole(4242))
+    await bot.store.set(GUILD, "raidtrain_ping_role_id", 4242)
+    train_id = await a_train(db, starts=datetime.now(UTC) - timedelta(minutes=1))
+    await seat(bot, train_id, alice, 1, by=organizer)
+    await open_session(db, ALICE)
+
+    await cog.sweep_once()
+
+    moved = next(
+        one
+        for one in bot.guild.get_channel(TEST_CHANNEL).posts
+        if "<@&4242>" in str(one["content"])
+    )
+    assert [one.id for one in moved["allowed_mentions"].roles] == [4242]
 
 
 async def test_the_train_moves_line_can_be_turned_off(bot, cog, organizer, alice, db):

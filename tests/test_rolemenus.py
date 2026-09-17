@@ -100,10 +100,13 @@ def test_take_it_down_needs_a_posted_panel():
     assert rm.TAKE_DOWN in actions(card(posted=True))
 
 
-def test_handing_roles_out_needs_options_and_the_mode_on():
+def test_handing_roles_out_needs_options_and_survives_the_mode_going_off():
+    """§C6 of the pings remake: the mode governs MEMBER picking, so a staff hand-out is not
+    its business. Post it still goes; Hand roles out… stays whatever the mode says."""
     assert rm.HAND_OUT in actions(card(menu_mode="staff"))
     assert rm.HAND_OUT not in actions(card(options=0))
-    assert rm.HAND_OUT not in actions(card(picking_on=False))
+    assert rm.HAND_OUT in actions(card(picking_on=False))
+    assert rm.POST not in actions(card(picking_on=False))
 
 
 def test_the_approval_button_says_what_it_will_do():

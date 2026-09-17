@@ -69,8 +69,19 @@ ROLEMENU_MODES = ("off", "on")
 PINGS_MODES = ("off", "on")
 PINGS_EVENTS_ROLE_NAME = "Events"
 PINGS_FAN_ROLE_TEMPLATE = "{name} pings"
-PINGS_CREATORS = ("self", "staff", "auto")
+PINGS_CREATORS = ("self", "staff", "auto", "follow")
+PINGS_CREATION_DEFAULT = "follow"
 PINGS_ON_UNLINK = ("keep", "delete")
+PINGS_STREAMER_STALE_DAYS = 90
+PINGS_STALE_MIN_DAYS = 7
+PINGS_STALE_MAX_DAYS = 365
+PINGS_EMPTY_ROLE_DAYS = 30
+PINGS_EMPTY_ROLE_MIN_DAYS = 1
+PINGS_EMPTY_ROLE_MAX_DAYS = 365
+PINGS_ONBOARDING_TITLE = "What should ping you?"
+PINGS_ONBOARDING_OPTION_CAP = 25
+PINGS_OPTION_CAP_MIN = 1
+PINGS_OPTION_CAP_MAX = 50
 
 MEMBER_ROLE_ID = 1073741054563602532
 TEMPVOICE_NAME_TEMPLATE = "{user}'s bloc"
@@ -261,6 +272,11 @@ KEY_TYPES: dict[str, str] = {
     "pings_fan_role_template": "text",
     "pings_fan_role_on_unlink": "enum",
     "pings_fan_role_delete": "bool",
+    "pings_streamer_stale_days": "int",
+    "pings_empty_role_days": "int",
+    "pings_onboarding_managed": "bool",
+    "pings_onboarding_prompt_title": "text",
+    "pings_onboarding_option_cap": "int",
     "tempvoice_mode": "enum",
     "tempvoice_creator_ids": "channels",
     "tempvoice_name_template": "text",
@@ -433,9 +449,15 @@ KEY_MAX: dict[str, int] = {
     "raidtrain_reminder_minutes": RAIDTRAIN_REMINDER_MAX_MINUTES,
     "raidtrain_poll_minutes": RAIDTRAIN_POLL_MAX_MINUTES,
     "raidtrain_max_slots_per_member": RAIDTRAIN_SLOTS_PER_MEMBER_MAX,
+    "pings_streamer_stale_days": PINGS_STALE_MAX_DAYS,
+    "pings_empty_role_days": PINGS_EMPTY_ROLE_MAX_DAYS,
+    "pings_onboarding_option_cap": PINGS_OPTION_CAP_MAX,
 }
 
 KEY_MIN: dict[str, int] = {
+    "pings_streamer_stale_days": PINGS_STALE_MIN_DAYS,
+    "pings_empty_role_days": PINGS_EMPTY_ROLE_MIN_DAYS,
+    "pings_onboarding_option_cap": PINGS_OPTION_CAP_MIN,
     "events_channel_retention_days": EVENTS_RETENTION_MIN_DAYS,
     EVENTS_TEST_RETENTION_KEY: EVENTS_TEST_RETENTION_MIN_MINUTES,
     WHERE_CHECK_SECONDS_KEY: WHERE_CHECK_MIN_SECONDS,
@@ -499,6 +521,18 @@ KEY_MIN_REASON: dict[str, str] = {
     "raidtrain_poll_minutes": (
         "The sweep is what sends the reminders and spots who is live, and it cannot run more "
         "often than once every {limit} minute."
+    ),
+    "pings_streamer_stale_days": (
+        "Somebody who streamed inside the last {limit} days is still somebody a member might "
+        "want to follow, so that is the shortest Black Bloc will keep them on the list."
+    ),
+    "pings_empty_role_days": (
+        "A ping role made and dropped inside {limit} day is almost always somebody changing "
+        "their mind mid-press, so that is the shortest grace Black Bloc will give one."
+    ),
+    "pings_onboarding_option_cap": (
+        "A prompt with no options on it is a prompt nobody can answer, so {limit} is the "
+        "smallest cap there is. Turn `pings_onboarding_managed` off to have no prompt at all."
     ),
 }
 
@@ -589,6 +623,18 @@ KEY_MAX_REASON: dict[str, str] = {
         "No raid train Black Bloc will build has more than {limit} slots, so a ceiling above "
         "that is the same as no ceiling — set it to 0 for that."
     ),
+    "pings_streamer_stale_days": (
+        "Somebody who has not streamed in {limit} days is not somebody anybody is waiting on, "
+        "and a list nobody can find a name in is worse than a shorter one."
+    ),
+    "pings_empty_role_days": (
+        "A role nobody has worn for {limit} days is one of the 250 this server is allowed, held "
+        "for nothing. The next follow makes a fresh one in a second."
+    ),
+    "pings_onboarding_option_cap": (
+        "Discord publishes no ceiling for options on an onboarding prompt, so Black Bloc will "
+        "not ask it for more than {limit} and have the whole write refused."
+    ),
 }
 
 KEY_HELP: dict[str, str] = {
@@ -641,10 +687,11 @@ KEY_HELP: dict[str, str] = {
         "duplicated"
     ),
     "pings_fan_role_creation": (
-        "who may start a streamer's own ping role: self (the streamer, with **Start my own ping "
-        "role** on `/pings`), staff (only an Auntie/Uncle, from `/pings` ▸ **Streamers…**), or "
-        "auto (one is made the moment a Twitch channel is linked). Staff can always do it for "
-        "anybody, whichever this says"
+        "when a streamer's ping role is made: follow (the first person to follow them on "
+        "`/pings` makes it, which is the default so a role exists only where somebody wants "
+        "it), self (the streamer, with **Start my own ping role** on `/pings`), staff (only an "
+        "Auntie/Uncle, from `/pings` ▸ **Streamers…**), or auto (one is made the moment a Twitch "
+        "channel is linked). Staff can always do it for anybody, whichever this says"
     ),
     "pings_fan_role_template": (
         "what a streamer's own ping role is called; {name} is their display name at the moment "
@@ -658,6 +705,31 @@ KEY_HELP: dict[str, str] = {
     "pings_fan_role_delete": (
         "true to delete the Discord role itself when a streamer's ping role is removed; false "
         "forgets the role here and leaves it on the server for somebody to tidy by hand"
+    ),
+    "pings_streamer_stale_days": (
+        "days without a go-live before somebody leaves the streamer list `/pings` ▸ **Follow a "
+        "streamer…** offers; their ping role is kept while anybody still wears it, and one more "
+        "go-live puts them back on"
+    ),
+    "pings_empty_role_days": (
+        "days a streamer's ping role that nobody wears survives before Black Bloc deletes it, so "
+        "the server's role count tracks who is actually followed; a role somebody wears is never "
+        "deleted by this"
+    ),
+    "pings_onboarding_managed": (
+        "true to let Black Bloc keep its two Discord onboarding prompts in step with the Events, "
+        "raid-train and streamer roles; false leaves the prompts exactly as they are and Black "
+        "Bloc never writes to onboarding again. Only does anything on a Community server"
+    ),
+    "pings_onboarding_prompt_title": (
+        "what Black Bloc's first onboarding prompt is called; it is also how Black Bloc knows "
+        "which prompts are its own, so changing it makes a fresh pair and leaves the old ones "
+        "for somebody to delete by hand"
+    ),
+    "pings_onboarding_option_cap": (
+        "how many streamers the **Which streamers?** onboarding prompt lists before it says how "
+        "many more are on `/pings`. Discord publishes no number for this, so 25 is Black Bloc's "
+        "own conservative cap — raise it and Discord refuses in words if it is too high"
     ),
     "tempvoice_mode": "off, or on (join-to-create makes a temporary voice channel)",
     "tempvoice_creator_ids": "the join-to-create channels; Setup on /voice fills this in",
@@ -2216,13 +2288,23 @@ class SettingsStore:
         if key == "pings_events_role_name":
             return PINGS_EVENTS_ROLE_NAME
         if key == "pings_fan_role_creation":
-            return PINGS_CREATORS[0]
+            return PINGS_CREATION_DEFAULT
         if key == "pings_fan_role_template":
             return PINGS_FAN_ROLE_TEMPLATE
         if key == "pings_fan_role_on_unlink":
             return PINGS_ON_UNLINK[0]
         if key == "pings_fan_role_delete":
             return True
+        if key == "pings_streamer_stale_days":
+            return PINGS_STREAMER_STALE_DAYS
+        if key == "pings_empty_role_days":
+            return PINGS_EMPTY_ROLE_DAYS
+        if key == "pings_onboarding_managed":
+            return True
+        if key == "pings_onboarding_prompt_title":
+            return PINGS_ONBOARDING_TITLE
+        if key == "pings_onboarding_option_cap":
+            return PINGS_ONBOARDING_OPTION_CAP
         if key == "tempvoice_mode":
             return "on"
         if key == "tempvoice_name_template":

@@ -1,6 +1,15 @@
 # Ping roles — `/pings` is ONE command that opens a panel (wave 2)
 
 > **Audience:** the build agent and the reviewer (Claude sessions), and the owner for §I.
+> 🔴 **SUPERSEDED IN PART, 2026-09-17 — the panel this file specifies was REMADE on branch
+> `pings-remake`.** [`pings-remake-design.md`](pings-remake-design.md) §C4 owns the button table
+> now: three toggles (events / go-lives / raid trains), **Follow a streamer…** over the STREAMER
+> LIST rather than over roles, the streamer-list opt-out, and **Set up the raid-train role** and
+> **Onboarding…** beside the staff moves. What is still true here: the panel's SHAPE (§B's
+> invariants, the sub-panels, the confirms, the refusal sentences) and everything §C says about
+> `/pings` being one command. What is stale: the button table itself, the counts line, and the
+> staff **Streamers…** list (it is now the streamer list, not the fan-role list). Two DECIDED
+> bullets below are struck where the remake reverses them.
 > **Status:** TRACKED · ✅ **LIVE since v72** (`a5ad521`, 2026-09-03 18:30; merged clean after Fable
 > review, one merge-time fix: the Names… echo only follows a successful save; boot measured `commands
 > synced` **39** — **29** today; 4050 tests; nothing run against Discord by eye — sweeps 126–134 and
@@ -259,7 +268,14 @@ Settled first, by the standing rules, so they are NOT put to him:
   that traps a member in a ping is the wrong default.
 - ✅ **The Settings sub-panel is built** despite `golive.html` owning the namespace — the applications
   build's deviation 4 settled it.
-- ✅ **The Streamer pings / Notifications role-menu posts are untouched** — P14 and program §7.
+- ~~✅ **The Streamer pings / Notifications role-menu posts are untouched** — P14 and program §7.~~
+  🔴 **HALF-REVERSED at the pings remake, 2026-09-17** (branch `pings-remake`, §C5): the
+  *Notifications* post is **taken down by the bot** the first time it writes Discord's onboarding
+  prompts, and `pings.onboarding_took_over` records it. The reasoning: onboarding now asks the
+  same question that post asked, and leaving both up gives a member two doors onto one role that
+  can disagree about what they wear. The *Streamer pings* posts ARE still untouched and
+  `sync_streamer_menus` keeps rebuilding them, until the separate call that retires the menus.
+  Nothing happens at all on a guild without the `COMMUNITY` feature.
 
 Genuinely his, two:
 

@@ -275,6 +275,32 @@ def test_the_train_moves_line_names_who_is_on_air_and_who_is_next():
     assert "last booked slot" in last
 
 
+def test_the_moved_line_mentions_the_two_roles_once_each_and_nothing_else():
+    """C3: the on-air streamer's fan role and the raid-train opt-in role, each once."""
+    rows = lineup()
+    said = live_post_text(train(), rows[0], rows[1], fan_role_id=11, raid_role_id=22)
+
+    assert said.count("<@&11>") == 1 and said.count("<@&22>") == 1
+    assert said.count("<@&") == 2
+    assert rt.moved_mentions(11, 22) == [11, 22]
+
+
+def test_one_role_playing_both_parts_is_mentioned_once():
+    rows = lineup()
+    said = live_post_text(train(), rows[0], rows[1], fan_role_id=11, raid_role_id=11)
+
+    assert said.count("<@&11>") == 1
+    assert rt.moved_mentions(11, 11) == [11]
+
+
+def test_the_moved_line_mentions_nobody_when_neither_role_exists():
+    rows = lineup()
+    assert "<@&" not in live_post_text(train(), rows[0], rows[1])
+    assert rt.moved_mentions(None, None) == []
+    assert rt.moved_mentions(None, 22) == [22]
+    assert rt.moved_mentions(11, None) == [11]
+
+
 def test_a_twitch_url_survives_an_at_sign():
     assert twitch_url("@name") == "https://twitch.tv/name"
     assert twitch_url(None) == "https://twitch.tv/"

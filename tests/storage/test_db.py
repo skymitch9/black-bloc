@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 38
+        assert SCHEMA_VERSION == 39
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -32,7 +32,15 @@ async def test_connect_bootstraps_schema(tmp_path):
         assert "golive_fan_roles" in tables
         cur = await db.conn.execute("PRAGMA table_info(golive_fan_roles)")
         columns = {r["name"] for r in await cur.fetchall()}
-        assert {"guild_id", "user_id", "role_id", "created_at", "created_by"} == columns
+        assert {
+            "guild_id",
+            "user_id",
+            "role_id",
+            "created_at",
+            "created_by",
+            "unworn_since",
+        } == columns
+        assert "streamers" in tables
         assert {"youtube_links", "youtube_videos"} <= tables
         cur = await db.conn.execute("PRAGMA table_info(youtube_links)")
         assert {
@@ -432,6 +440,54 @@ async def test_the_sticky_card_and_practice_columns_arrive_on_a_schema_29_databa
         assert row["practice"] == 0
         # 37 -> 38: a ticket older than the doors came in the only way there was.
         assert row["source"] == "dm" and row["opened_by"] is None
+        cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await db.close()
+
+
+async def test_the_streamer_list_arrives_on_a_database_that_never_had_it(tmp_path):
+    """38 → 39: one CREATE-IF-NOT-EXISTS table and its index, so an old database gains the
+    streamer list on connect with nobody on it and nothing else touched."""
+    path = tmp_path / "old39.sqlite3"
+    old = await aiosqlite.connect(path)
+    await old.execute("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    await old.execute("INSERT INTO schema_meta(key, value) VALUES ('schema_version', '38')")
+    await old.execute(
+        "CREATE TABLE golive_fan_roles (guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, "
+        "role_id INTEGER NOT NULL, created_at TEXT NOT NULL, created_by INTEGER, "
+        "PRIMARY KEY (guild_id, user_id))"
+    )
+    await old.execute(
+        "INSERT INTO golive_fan_roles VALUES (1, 2, 3, '2026-09-01T00:00:00+00:00', NULL)"
+    )
+    await old.commit()
+    await old.close()
+
+    db = Database(path)
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(streamers)")
+        assert {row["name"] for row in await cur.fetchall()} == {
+            "guild_id",
+            "user_id",
+            "first_live_at",
+            "last_live_at",
+            "live_count",
+            "platform",
+            "login",
+            "listed",
+            "hidden_by",
+            "hidden_at",
+        }
+        cur = await db.conn.execute("SELECT COUNT(*) AS n FROM streamers")
+        assert (await cur.fetchone())["n"] == 0
+        cur = await db.conn.execute("SELECT COUNT(*) AS n FROM golive_fan_roles")
+        assert (await cur.fetchone())["n"] == 1
+        cur = await db.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='streamers_by_last_live'"
+        )
+        assert await cur.fetchone() is not None
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:

@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -150,13 +150,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS golive_open_session
     ON golive_sessions(guild_id, user_id) WHERE ended_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS golive_fan_roles (
-    guild_id   INTEGER NOT NULL,
-    user_id    INTEGER NOT NULL,
-    role_id    INTEGER NOT NULL,
-    created_at TEXT    NOT NULL,
-    created_by INTEGER,
+    guild_id     INTEGER NOT NULL,
+    user_id      INTEGER NOT NULL,
+    role_id      INTEGER NOT NULL,
+    created_at   TEXT    NOT NULL,
+    created_by   INTEGER,
+    unworn_since TEXT,
     PRIMARY KEY (guild_id, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS streamers (
+    guild_id      INTEGER NOT NULL,
+    user_id       INTEGER NOT NULL,
+    first_live_at TEXT    NOT NULL,
+    last_live_at  TEXT    NOT NULL,
+    live_count    INTEGER NOT NULL DEFAULT 1,
+    platform      TEXT,
+    login         TEXT,
+    listed        INTEGER NOT NULL DEFAULT 1,
+    hidden_by     INTEGER,
+    hidden_at     TEXT,
+    PRIMARY KEY (guild_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS streamers_by_last_live
+    ON streamers(guild_id, listed, last_live_at);
 
 CREATE TABLE IF NOT EXISTS youtube_links (
     user_id     INTEGER PRIMARY KEY,
@@ -831,6 +849,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("requests", "check_asked_by", "INTEGER"),
     ("requests", "check_asked_at", "TEXT"),
     ("posts", "shadow_message_id", "INTEGER"),
+    ("golive_fan_roles", "unworn_since", "TEXT"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")

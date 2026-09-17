@@ -975,14 +975,25 @@ async def test_every_ping_role_decision_is_a_key_the_dashboard_and_the_bot_both_
         "pings_fan_role_on_unlink",
         "pings_fan_role_delete",
         "pings_log_level",
+        "pings_streamer_stale_days",
+        "pings_empty_role_days",
+        "pings_onboarding_managed",
+        "pings_onboarding_prompt_title",
+        "pings_onboarding_option_cap",
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
     assert store.get(7, "pings_mode") == "off"
     assert store.get(7, "pings_events_role_name") == "Events"
-    assert store.get(7, "pings_fan_role_creation") == "self"
+    # The pings remake made `follow` the default: a role exists only where somebody wants it.
+    assert store.get(7, "pings_fan_role_creation") == "follow"
     assert store.get(7, "pings_fan_role_template") == "{name} pings"
     assert store.get(7, "pings_fan_role_on_unlink") == "keep"
     assert store.get(7, "pings_fan_role_delete") is True
+    assert store.get(7, "pings_streamer_stale_days") == 90
+    assert store.get(7, "pings_empty_role_days") == 30
+    assert store.get(7, "pings_onboarding_managed") is True
+    assert store.get(7, "pings_onboarding_prompt_title") == "What should ping you?"
+    assert store.get(7, "pings_onboarding_option_cap") == 25
 
 
 def test_the_ping_role_choices_refuse_anything_else():

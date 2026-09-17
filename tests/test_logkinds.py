@@ -89,6 +89,31 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     # writes them — a website read syncs insert-only and logs nothing.
     "black_bloc/personas.py::CHAT_POOL_SYNCED": ("chat.pool_synced",),
     "black_bloc/personas.py::CHAT_POOL_RETIRED": ("chat.pool_retired",),
+    # The streamer list's kinds are module constants. The two prunes and the first sighting are
+    # the LISTENER's and the SWEEP's alone and have no website door; the rest have both.
+    "black_bloc/pings.py::STREAMER_SEEN": ("pings.streamer_seen",),
+    "black_bloc/pings.py::STREAMER_PRUNED": ("pings.streamer_pruned",),
+    "black_bloc/pings.py::ROLE_PRUNED": ("pings.role_pruned",),
+    "black_bloc/pings.py::STREAMER_HIDDEN": (
+        "pings.streamer_hidden",
+        "web.pings.streamer_hidden",
+    ),
+    "black_bloc/pings.py::STREAMER_RESTORED": (
+        "pings.streamer_restored",
+        "web.pings.streamer_restored",
+    ),
+    "black_bloc/pings_onboarding.py::SYNCED": (
+        "pings.onboarding_synced",
+        "web.pings.onboarding_synced",
+    ),
+    "black_bloc/pings_onboarding.py::FAILED": (
+        "pings.onboarding_failed",
+        "web.pings.onboarding_failed",
+    ),
+    "black_bloc/pings_onboarding.py::TOOK_OVER": (
+        "pings.onboarding_took_over",
+        "web.pings.onboarding_took_over",
+    ),
     # One `move_train` walks the transition table for both doors, so the kind is the target's.
     "black_bloc/cogs/content/raidtrain.py::MOVE_KINDS[to]": (
         "raidtrain.lock",

@@ -30,26 +30,31 @@
     },
     {
       "slug": "pings-follow",
-      "title": "Follow a streamer's pings",
-      "goal": "Wear a streamer's ping role, or start your own so your fans get pinged.",
-      "audience": "member",
+      "title": "Choose what pings you",
+      "goal": "Turn on the pings you want, follow the streamers you care about, and take yourself off the streamer list if you would rather nobody followed you.",
+      "audience": "staff",
       "feature": "pings",
       "command": "/pings",
       "sort": 20,
       "steps": [
-        {"do": "Type **/pings**.", "expect": "A panel titled Your pings, listing the roles you wear."},
-        {"do": "Press **Follow a streamer…** and pick a name.", "expect": "The role goes on and the panel lists it. **Stop following…** takes it off."},
-        {"do": "Press the **Events** toggle to get pinged for events and go-lives.", "expect": "The Events role goes on. Press it again to take it off."},
-        {"do": "If you stream: press **Start my own ping role**.", "expect": "A role named after you appears on the Streamer pings menu. **Take my ping role away** removes it."}
+        {"do": "Type **/pings**.", "expect": "A panel titled Your pings, listing every ping you are on and every streamer you follow."},
+        {"do": "Press **Turn event pings on**.", "expect": "The Events role goes on and the line above says on. The same button now says Turn them off."},
+        {"do": "Press **Turn raid-train pings on**.", "expect": "The Raid trains role goes on, so you are mentioned when a raid train moves to the next streamer."},
+        {"do": "Press **Follow a streamer…** and pick a name.", "expect": "Their ping role goes on — Black Bloc makes it on the spot if you are the first to follow them — and the panel lists them."},
+        {"do": "Press **Stop following…** and pick the same name.", "expect": "The role comes off. This one works even while ping roles are turned off."},
+        {"do": "If you stream and would rather nobody followed you: press **Take me off the streamer list**, then **Yes, take me off**.", "expect": "You leave the list, going live does not put you back, and your ping role goes too if nobody is wearing it. **Put me back on the list** undoes it."}
       ],
       "faults": [
-        {"symptom": "No Events toggle", "answer": "Staff have not set the Events role up yet. The panel says so."},
-        {"symptom": "No Start my own ping role", "answer": "Link your Twitch channel first with /golive, or staff make the role for you."},
-        {"symptom": "Follow a streamer… says 25 of N", "answer": "The rest are on the Streamer pings menus in the roles channel."}
+        {"symptom": "No events or raid-train toggle", "answer": "Staff have not set that role up yet. The panel says so, and **Set up the Events role** or **Set up the raid-train role** on the staff half makes it."},
+        {"symptom": "Nobody to follow", "answer": "Black Bloc has not seen anybody streaming here yet. Nobody is added by hand — going live is what puts somebody on the list."},
+        {"symptom": "Follow a streamer… says 25 of N", "answer": "The rest are on Discord's onboarding screen. Staff see the whole list on the dashboard's Go-live tab."},
+        {"symptom": "No Take me off the streamer list", "answer": "Black Bloc has never seen you streaming, so you are not on the list at all."}
       ],
       "facts": [
         {"kind": "setting", "ref": "pings_mode"},
-        {"kind": "setting", "ref": "pings_fan_role_creation"}
+        {"kind": "setting", "ref": "pings_fan_role_creation"},
+        {"kind": "setting", "ref": "pings_streamer_stale_days"},
+        {"kind": "setting", "ref": "pings_empty_role_days"}
       ]
     },
     {

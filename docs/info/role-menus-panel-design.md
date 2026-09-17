@@ -15,6 +15,17 @@
 > `hide_commands_when_off` (bool, default **true**), so the owner can turn it off and get this
 > design's behaviour back; `NEVER_HIDDEN` is `settings, help, about, ping`, and `/memory` is the one
 > feature deliberately left out of the 15 (fork I-M1). Landing entry in
+> 🔴 **AND REVERSED AGAIN, 2026-09-17** (branch `pings-remake`, §C6, measured before
+> anything else was built): `/rolemenu` is **back out of `HIDDEN_WHEN_OFF` and into
+> `NEVER_HIDDEN`** (now `settings, help, about, ping, rolemenu`), so v78's rule holds for the
+> other fourteen features and not for this one. Why it flipped a second time: the owner turned
+> `rolemenu_mode` **off** on 2026-09-16 while keeping the approval-gated menus, the **timed
+> grants** and the staff-assigned sets, none of which onboarding can do — and hiding the
+> command hid the only door to all three. `settings_panel.EXTRA_MODES` gains a `rolemenu_mode`
+> row so the Settings panel's mode block still carries it (17 rows: 14 hidden + 3 hand-added).
+> ⚠️ **Two more things the mode used to take away now stay**: **Hand roles out…** renders
+> whenever a menu has options, and `run_assign` no longer refuses on the mode. **Post it** is the
+> one thing the mode still removes, and `PICKING_IS_OFF` says exactly that.
 > [`../DONE.md`](../DONE.md). ⚠️ **Deviation 11's other claim — that `request_mode` is the only
 > entry left in `HIDDEN_WHEN_OFF` — is stale for the same reason.**
 >
@@ -195,9 +206,12 @@ refusal and no panel at all (P9 — the sentence, never a dead button).
 | S3 | menus + ≥1 pending request | + **Waiting on staff (N)…** | same — a request can still be decided with picking off |
 
 P3 in one line: **no state renders a control whose shared function would refuse it.** The mode never
-removes a button from the ROOT; it removes **Post it** and **Hand roles out…** from the menu card,
+removes a button from the ROOT; ~~it removes **Post it** and **Hand roles out…** from the menu card,
 because `post` `:1979`, `_staff_pick` `:2069` and the route `:527` all answer `ROLE_MENUS_OFF` while
-it is off — and the card says so in a sentence instead.
+it is off~~ 🔴 **narrowed 2026-09-17 (`pings-remake` §C6): it removes ONLY Post it.**
+`run_assign`'s `ROLE_MENUS_OFF` is gone, because handing a role over by name is a STAFF move with no
+onboarding equivalent and the mode is about members picking for themselves. The card still says so in
+a sentence, and the sentence now names what still works.
 
 ## C. The cards, the sub-panels, the modals
 
@@ -238,7 +252,7 @@ the card and the posted panel can never describe one menu two ways.
 | 0 | `Ask staff first` / `Hand it over straight away` — **one button** | always | `change_menu(approval=…)` |
 | 1 | `Post it` (no `message_id`) / `Move it…` (has one) → `ChannelSelect`, defaulting to `_default_channel` `:2149` | mode `on` **and** `menu["mode"] != STAFF_MODE` **and** ≥1 option | `post_menu` (§F) → `post_panel` `:676` |
 | 1 | `Take it down` | `menu["message_id"]` is set | `rolemenu_panels.unpost` `:69` |
-| 1 | `Hand roles out…` → sub-panel | mode `on` **and** ≥1 option | `staff_assign` `:1312` |
+| 1 | `Hand roles out…` → sub-panel | ~~mode `on` **and**~~ ≥1 option (2026-09-17: the mode gate went) | `staff_assign` `:1312` |
 | 1 | `Delete it` (danger) → `Yes, delete it` / `Keep it` | always | `drop_menu` (§F) → `delete_menu` `:565` |
 | 2 | `Back` · `Refresh` | always | — |
 

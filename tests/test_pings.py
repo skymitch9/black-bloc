@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -556,6 +557,7 @@ def a_state(**changed):
         "streams": False,
         "followed": 0,
         "unfollowed": 0,
+        "listed": pings.LISTED_NEVER,
     }
     return pings.PanelState(**(base | changed))
 
@@ -614,13 +616,68 @@ def test_taking_your_own_role_away_renders_whoever_may_start_one():
 
 
 def test_the_staff_row_is_appended_and_only_for_staff():
-    assert moves(a_state(), staff=True)[-4:] == [
+    assert moves(a_state(), staff=True)[-6:] == [
         "Streamers…",
         "Set up the Events role",
+        "Set up the raid-train role",
+        "Onboarding…",
         "Settings",
         "Logs",
     ]
     assert "Logs" not in moves(a_state(), staff=False)
+
+
+def test_the_raid_train_toggle_stands_beside_the_events_one():
+    """C4: three toggles, and the raid-train one is its own role and its own key."""
+    state = a_state(
+        events=((pings.BOTH_FEEDS, pings.NOT_WORN), (pings.RAID_FEED, pings.NOT_WORN))
+    )
+    assert moves(state) == ["Turn event pings on", "Turn raid-train pings on", "Refresh"]
+
+    worn = a_state(events=((pings.BOTH_FEEDS, pings.WORN), (pings.RAID_FEED, pings.WORN)))
+    assert moves(worn) == ["Turn them off", "Turn raid-train pings off", "Refresh"]
+
+
+def test_a_raid_train_role_nobody_set_up_renders_no_toggle():
+    state = a_state(events=((pings.BOTH_FEEDS, pings.WORN), (pings.RAID_FEED, pings.UNSET)))
+    assert moves(state) == ["Turn them off", "Refresh"]
+
+
+def test_the_streamer_list_switch_says_which_way_it_goes():
+    """C4: only somebody Black Bloc has SEEN streaming gets the switch at all."""
+    assert "Take me off the streamer list" not in moves(a_state())
+    assert "Put me back on the list" not in moves(a_state())
+    assert "Take me off the streamer list" in moves(a_state(listed=pings.LISTED_ON))
+    assert "Put me back on the list" in moves(a_state(listed=pings.LISTED_OFF))
+
+
+def test_taking_yourself_off_the_list_works_with_the_mode_off_and_coming_back_does_not():
+    """The access-REDUCING half never needs the switch; the access-INCREASING half does."""
+    off = a_state(mode_on=False, listed=pings.LISTED_ON)
+    assert moves(off) == ["Take me off the streamer list", "Refresh"]
+    back = a_state(mode_on=False, listed=pings.LISTED_OFF)
+    assert moves(back) == ["Refresh"]
+
+
+def test_no_control_sits_outside_discords_five_rows_in_the_busiest_state():
+    """The worst case is two split feeds, raid trains, an own role, the list switch, Refresh
+    and the six staff moves — twelve buttons plus the site link over three rows."""
+    busiest = a_state(
+        events=(
+            (pings.GOLIVE_FEED, pings.WORN),
+            (pings.EVENTS_FEED, pings.NOT_WORN),
+            (pings.RAID_FEED, pings.NOT_WORN),
+        ),
+        own_role=True,
+        listed=pings.LISTED_ON,
+    )
+    found = pings.panel_buttons(busiest, staff=True)
+    assert len(found) == 12
+    for row in {move.row for move in found}:
+        assert sum(1 for move in found if move.row == row) <= 5
+    assert all(pings.MEMBER_ROW <= move.row <= 4 for move in found)
+    assert pings.site_row(found) <= 4
+    assert sum(1 for move in found if move.row == pings.site_row(found)) < 5
 
 
 def test_the_card_offers_a_repair_only_when_the_discord_role_has_gone():
@@ -635,6 +692,31 @@ def test_the_card_offers_a_repair_only_when_the_discord_role_has_gone():
     ]
 
 
+def test_the_card_offers_staff_the_reverse_of_whatever_the_listing_says():
+    """Staff final say: a member's own hide is one press for staff to undo."""
+    listed = [
+        move.label for move in pings.card_buttons(role_gone=False, listed=pings.LISTED_ON)
+    ]
+    hidden = [
+        move.label for move in pings.card_buttons(role_gone=False, listed=pings.LISTED_OFF)
+    ]
+    assert "Hide them from the list" in listed and "Put them back on the list" not in listed
+    assert "Put them back on the list" in hidden and "Hide them from the list" not in hidden
+
+
+def test_the_onboarding_sub_panel_never_offers_a_sync_that_would_refuse():
+    def labels(**kwargs):
+        return [move.label for move in pings.onboarding_buttons(**kwargs)]
+
+    assert labels(managed=True, community=True) == [
+        "Sync now",
+        "Stop managing onboarding",
+        "Back",
+    ]
+    assert labels(managed=True, community=False) == ["Stop managing onboarding", "Back"]
+    assert labels(managed=False, community=True) == ["Manage onboarding again", "Back"]
+
+
 async def test_the_state_is_read_off_the_rows_and_the_settings(bot, streamer, fan):
     made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
     role = bot.guild.get_role(made.role_id)
@@ -646,7 +728,34 @@ async def test_the_state_is_read_off_the_rows_and_the_settings(bot, streamer, fa
 
     assert mine.own_role is True and mine.followed == 0 and mine.unfollowed == 1
     assert theirs.own_role is False and theirs.followed == 1 and theirs.unfollowed == 0
-    assert mine.mode_on is True and mine.creation == "self"
+    assert mine.mode_on is True and mine.creation == "follow"
+    assert mine.listed == pings.LISTED_NEVER
+
+
+async def test_the_state_counts_who_is_followable_off_the_list_not_off_the_roles(
+    bot, streamer, fan
+):
+    """C4: the select is over the LIST, so somebody with no role yet still counts as offered
+    and the streamer never counts as following themselves."""
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", "supernamu")
+    rows = await pings.all_fan_roles(bot.db, GUILD)
+    streamers = await pings.all_streamers(bot.db, GUILD)
+
+    theirs = pings.panel_state(
+        bot, bot.guild, fan, rows, streams=False, streamers=streamers, mine=None
+    )
+    mine = pings.panel_state(
+        bot,
+        bot.guild,
+        streamer,
+        rows,
+        streams=True,
+        streamers=streamers,
+        mine=pings.row_for(streamers, STREAMER),
+    )
+
+    assert theirs.unfollowed == 1 and theirs.followed == 0
+    assert mine.unfollowed == 0 and mine.listed == pings.LISTED_ON
 
 
 async def test_the_feeds_are_one_while_the_two_keys_agree_and_two_once_they_split(bot):
@@ -805,23 +914,46 @@ async def test_the_streamer_lines_count_followers_and_never_say_zero_for_a_gone_
 ):
     assert pings.streamer_lines(bot.guild, []) == [pings.STREAMER_LIST_EMPTY]
 
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", "supernamu")
+    streamers = await pings.all_streamers(bot.db, GUILD)
+    assert pings.NO_ROLE_WORD in pings.streamer_lines(bot.guild, streamers, [])[0]
+
     made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
     bot.guild.get_role(made.role_id).members.append(fan)
     rows = await pings.all_fan_roles(bot.db, GUILD)
-    assert "1 follower(s)" in pings.streamer_lines(bot.guild, rows)[0]
+    assert "1 follower(s)" in pings.streamer_lines(bot.guild, streamers, rows)[0]
 
     bot.guild.roles = []
-    assert pings.FOLLOWERS_UNKNOWN in pings.streamer_lines(bot.guild, rows)[0]
+    assert pings.FOLLOWERS_UNKNOWN in pings.streamer_lines(bot.guild, streamers, rows)[0]
 
 
-async def test_the_counts_tell_rows_apart_from_roles_discord_still_has(bot, streamer):
+async def test_a_hidden_streamer_is_marked_hidden_on_the_staff_list(bot, streamer):
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", "supernamu")
+    await pings.hide_streamer(bot, bot.guild, STREAMER, by=STAFF)
+
+    said = pings.streamer_lines(bot.guild, await pings.all_streamers(bot.db, GUILD), [])[0]
+
+    assert pings.HIDDEN_WORD in said
+
+
+async def test_the_counts_tell_the_list_apart_from_roles_discord_still_has(bot, streamer):
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", "supernamu")
     made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    streamers = await pings.all_streamers(bot.db, GUILD)
     rows = await pings.all_fan_roles(bot.db, GUILD)
-    assert pings.counts_of(rows, bot.guild) == {"streamers": 1, "with_role": 1}
+    assert pings.counts_of(streamers, rows, bot.guild) == {
+        "streamers": 1,
+        "listed": 1,
+        "with_role": 1,
+    }
 
     bot.guild.roles = [one for one in bot.guild.roles if one.id != made.role_id]
-    assert pings.counts_of(rows, bot.guild) == {"streamers": 1, "with_role": 0}
-    assert "**1** streamer(s)" in pings.counts_line(rows, bot.guild)
+    assert pings.counts_of(streamers, rows, bot.guild) == {
+        "streamers": 1,
+        "listed": 1,
+        "with_role": 0,
+    }
+    assert "**1** streamer(s) seen" in pings.counts_line(streamers, rows, bot.guild)
 
 
 def test_the_template_preview_shows_what_a_broken_one_will_actually_produce():
@@ -885,3 +1017,223 @@ async def test_the_web_head_is_built_for_every_panel_move_too(bot, streamer, fan
     found = await kinds(bot.db)
     assert "web.pings.follow" in found and "web.pings.events_on" in found
     assert (await details(bot.db, "web.pings.follow"))["via"] == "website"
+
+
+# --- the streamer list (C1) ---------------------------------------------------------------------
+
+
+async def test_a_first_go_live_lists_the_streamer_once_and_a_second_adds_no_row(bot, streamer):
+    assert await pings.saw_streaming(bot, bot.guild, streamer, "twitch", "supernamu") is True
+    first = await pings.get_streamer(bot.db, GUILD, STREAMER)
+
+    assert await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None) is False
+
+    rows = await pings.all_streamers(bot.db, GUILD)
+    assert len(rows) == 1 and rows[0]["live_count"] == 2
+    assert rows[0]["first_live_at"] == first["first_live_at"]
+    assert rows[0]["last_live_at"] >= first["last_live_at"]
+    assert rows[0]["login"] == "supernamu" and rows[0]["listed"] == 1
+    assert (await kinds(bot.db)).count("pings.streamer_seen") == 1
+
+
+async def test_a_bot_never_lands_on_the_list(bot, streamer):
+    streamer.bot = True
+    assert await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None) is False
+    assert await pings.all_streamers(bot.db, GUILD) == []
+
+
+async def test_a_streamer_a_person_hid_stays_hidden_across_a_go_live(bot, streamer):
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+    await pings.hide_streamer(bot, bot.guild, STREAMER, by=STREAMER)
+
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+
+    row = await pings.get_streamer(bot.db, GUILD, STREAMER)
+    assert row["listed"] == 0 and row["hidden_by"] == STREAMER
+    assert await pings.listed_streamers(bot.db, GUILD) == []
+
+
+async def test_a_staleness_prune_is_undone_by_going_live_again(bot, streamer):
+    """`hidden_by` empty is the difference: nobody decided, so nothing has to be undone by hand."""
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+    await pings.set_listed(bot.db, GUILD, STREAMER, listed=False, by=None)
+
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+
+    assert (await pings.get_streamer(bot.db, GUILD, STREAMER))["listed"] == 1
+
+
+async def test_hiding_yourself_drops_an_unworn_role_and_keeps_a_worn_one(bot, streamer, fan):
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    role = bot.guild.get_role(made.role_id)
+
+    outcome = await pings.hide_streamer(bot, bot.guild, STREAMER, by=STREAMER)
+
+    assert outcome.ok and role.deleted is True
+    assert await pings.get_fan_role(bot.db, GUILD, STREAMER) is None
+    assert "pings.streamer_hidden" in await kinds(bot.db)
+
+    await pings.restore_streamer(bot, bot.guild, STREAMER, by=STREAMER)
+    again = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    kept = bot.guild.get_role(again.role_id)
+    kept.members.append(fan)
+
+    await pings.hide_streamer(bot, bot.guild, STREAMER, by=STAFF)
+
+    assert kept.deleted is False
+    assert await pings.get_fan_role(bot.db, GUILD, STREAMER) is not None
+
+
+async def test_the_two_listing_moves_refuse_in_words_rather_than_writing_twice(bot, streamer):
+    nothing = await pings.hide_streamer(bot, bot.guild, STREAMER, by=STREAMER)
+    assert not nothing.ok and nothing.message == pings.NOT_ON_THE_LIST
+
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+    assert (await pings.restore_streamer(bot, bot.guild, STREAMER, by=STAFF)).ok is False
+    await pings.hide_streamer(bot, bot.guild, STREAMER, by=STREAMER)
+    again = await pings.hide_streamer(bot, bot.guild, STREAMER, by=STREAMER)
+    assert not again.ok and "already off" in again.message
+
+    back = await pings.restore_streamer(bot, bot.guild, STREAMER, by=STAFF)
+    assert back.ok and "pings.streamer_restored" in await kinds(bot.db)
+
+
+# --- lazy roles and the prunes (C2) --------------------------------------------------------------
+
+
+async def test_the_first_follow_makes_the_role_and_the_second_does_not(bot, streamer, fan):
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+    other = FakeMember(bot.guild, 902, "Bo")
+
+    said = await pings.follow_from_list(bot, bot.guild, fan, STREAMER)
+
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+    assert row is not None and "SuperNamu pings" in said
+    assert [one.id for one in fan.roles] == [int(row["role_id"])]
+    made = (await kinds(bot.db)).count("pings.fan_role_created")
+
+    await pings.follow_from_list(bot, bot.guild, other, STREAMER)
+
+    assert (await kinds(bot.db)).count("pings.fan_role_created") == made
+    assert [one.id for one in other.roles] == [int(row["role_id"])]
+
+
+async def test_following_somebody_off_the_list_refuses_in_words_and_makes_nothing(
+    bot, streamer, fan
+):
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+    await pings.hide_streamer(bot, bot.guild, STREAMER, by=STREAMER)
+
+    said = await pings.follow_from_list(bot, bot.guild, fan, STREAMER)
+
+    assert "streamer list any more" in said
+    assert await pings.get_fan_role(bot.db, GUILD, STREAMER) is None
+
+
+async def test_a_staff_only_server_refuses_the_first_follow_in_words(bot, streamer, fan):
+    await bot.store.set(GUILD, pings.CREATION_KEY, "staff")
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+
+    said = await pings.follow_from_list(bot, bot.guild, fan, STREAMER)
+
+    assert "only staff start one" in said
+    assert await pings.get_fan_role(bot.db, GUILD, STREAMER) is None
+    assert fan.roles == []
+
+
+async def test_following_with_the_mode_off_refuses_and_makes_nothing(bot, streamer, fan):
+    await bot.store.set(GUILD, pings.MODE_KEY, "off")
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+
+    assert await pings.follow_from_list(bot, bot.guild, fan, STREAMER) == pings.OFF
+    assert await pings.get_fan_role(bot.db, GUILD, STREAMER) is None
+
+
+async def test_the_empty_role_prune_deletes_only_a_role_nobody_wears(bot, streamer):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    role = bot.guild.get_role(made.role_id)
+    now = datetime.now(UTC)
+
+    assert await pings.prune_empty_roles(bot, bot.guild, now=now) == []
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+    assert row["unworn_since"] is not None
+
+    assert await pings.prune_empty_roles(bot, bot.guild, now=now) == []
+    later = now + timedelta(days=31)
+    assert await pings.prune_empty_roles(bot, bot.guild, now=later) == [STREAMER]
+    assert role.deleted is True
+    assert await pings.get_fan_role(bot.db, GUILD, STREAMER) is None
+    assert "pings.role_pruned" in await kinds(bot.db)
+
+
+async def test_a_worn_role_survives_the_prune_and_its_clock_is_cleared(bot, streamer, fan):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    role = bot.guild.get_role(made.role_id)
+    now = datetime.now(UTC)
+    await pings.prune_empty_roles(bot, bot.guild, now=now)
+
+    role.members.append(fan)
+    assert await pings.prune_empty_roles(bot, bot.guild, now=now + timedelta(days=99)) == []
+    assert (await pings.get_fan_role(bot.db, GUILD, STREAMER))["unworn_since"] is None
+
+    assert await pings.prune_empty_roles(bot, bot.guild, now=now + timedelta(days=999)) == []
+    assert role.deleted is False
+
+
+async def test_the_stale_prune_takes_a_quiet_streamer_off_the_list(bot, streamer):
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+    now = datetime.now(UTC)
+
+    assert await pings.prune_stale_streamers(bot, bot.guild, now=now) == []
+    assert await pings.prune_stale_streamers(
+        bot, bot.guild, now=now + timedelta(days=91)
+    ) == [STREAMER]
+
+    row = await pings.get_streamer(bot.db, GUILD, STREAMER)
+    assert row["listed"] == 0 and row["hidden_by"] is None
+    assert "pings.streamer_pruned" in await kinds(bot.db)
+
+
+async def test_an_unreadable_timestamp_is_never_old_enough_to_prune(bot, streamer):
+    await pings.saw_streaming(bot, bot.guild, streamer, "twitch", None)
+    await bot.db.conn.execute(
+        "UPDATE streamers SET last_live_at = 'whenever' WHERE guild_id = ?", (GUILD,)
+    )
+    await bot.db.conn.commit()
+
+    assert await pings.prune_stale_streamers(bot, bot.guild, now=datetime.now(UTC)) == []
+
+
+# --- the raid-train role (C3) --------------------------------------------------------------------
+
+
+async def test_the_raid_train_role_is_made_once_and_reused_after_that(bot):
+    made = await pings.setup_raidtrain_role(bot, bot.guild, by=STAFF)
+
+    assert made.ok and made.created is True
+    assert bot.store.get(GUILD, "raidtrain_ping_role_id") == made.role_id
+    assert "pings.raidtrain_setup" in await kinds(bot.db)
+    assert pings.feed_role_id(bot, GUILD, pings.RAID_FEED) == made.role_id
+
+    again = await pings.setup_raidtrain_role(bot, bot.guild, by=STAFF)
+    assert again.ok and again.created is False and "already pointed" in again.message
+
+
+async def test_the_raid_train_role_takes_the_one_staff_picked(bot):
+    picked = bot.guild.add_role(FakeRole(77, "Trains"))
+
+    made = await pings.setup_raidtrain_role(bot, bot.guild, by=STAFF, role=picked)
+
+    assert made.role_id == 77 and made.created is False
+    assert bot.store.get(GUILD, "raidtrain_ping_role_id") == 77
+
+
+async def test_a_raid_train_toggle_with_no_role_says_who_to_ask(bot, fan):
+    said = await pings.set_event_pings(bot, bot.guild, fan, add=True, feed=pings.RAID_FEED)
+    assert said == pings.NO_RAID_ROLE
+
+    await pings.setup_raidtrain_role(bot, bot.guild, by=STAFF)
+    on = await pings.set_event_pings(bot, bot.guild, fan, add=True, feed=pings.RAID_FEED)
+    assert "raid-train pings" in on
+    assert (await details(bot.db, "pings.events_on"))["feed"] == pings.RAID_FEED

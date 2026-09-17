@@ -1,7 +1,14 @@
 # Pings, remade — one "what pings me" panel, a streamer list fed by going live, raid trains wired in, and Discord's Community onboarding as the front door
 
-> **Audience:** the owner (to settle the forks) and the build agent. **Status:** TRACKED · 📐 **DESIGN —
-> all three forks DECIDED (a) by the owner 2026-09-16 22:5x; owner "A" to build now → dispatched to an Opus build 22:56 (worktree `C:/lcw/bb-pings-remake`).** Owner, 2026-09-16 22:2x–22:4x, verbatim: *"A wire in pings / Also
+> **Audience:** the owner (to settle the forks) and the build agent. **Status:** TRACKED · 🔨
+> **BUILT 2026-09-17** on branch `pings-remake` off `main` `337d22a` — schema **39**, registry
+> **225**, **5986** tests pass in both orders (5889 before), ruff clean, `check.mjs` ok.
+> ⚠️ **NOT merged, NOT deployed, and nothing below has met Discord**; §C5's onboarding half is
+> proved with fakes only, because this is not a Community server yet. **Read `## Deviations` at
+> the foot BEFORE reading §C as built** — eighteen entries, starting with the numbers Discord
+> will not publish.
+> Before that: 📐 **DESIGN —
+> all three forks DECIDED (a) by the owner 2026-09-16 22:5x; dispatch waits on his word.** Owner, 2026-09-16 22:2x–22:4x, verbatim: *"A wire in pings / Also
 > for roles can we start a listener, each time someone goes live their added to a streamer list / Then a
 > user can opt into a streamer role? / To give some caveats to this whole system. / We're moving to a
 > discord community server so that will handle some role stuff. / We need this system to work with"* →
@@ -205,4 +212,179 @@ roles. The onboarding limits go into `## Deviations` as measured numbers. Sweep 
 
 ## Deviations
 
-*(empty until the build lands)*
+Written by the build agent, branch `pings-remake`, 2026-09-17. Everything §C asks for that is
+not listed here was built exactly as the design says. ⚠️ **Nothing below has met Discord**: the
+whole verification is `pytest` (5986), `ruff`, `node --check`, `site/mock/check.mjs` and one
+browser pass over the MOCK's Go-live page. The onboarding half in particular was proved only
+with fakes — see deviation 3.
+
+### The numbers Discord will not publish
+
+1. ⚠️ **Discord's onboarding LIMITS could not be measured, and are not documented anywhere the
+   build could reach.** What WAS measured, 2026-09-17:
+   - `discord.py` 2.7.1's `discord/onboarding.py` is 369 lines and carries **no numeric
+     constant at all** — no cap on prompts, options, roles per option, or title length. Neither
+     does `Guild.edit_onboarding` (`discord/guild.py:4912–4966`).
+   - Discord's own docs page for the Guild resource
+     (`docs.discord.com/developers/resources/guild`) documents the onboarding object, the prompt
+     and the prompt option, and **states no limit for any of them** — fetched and read, not
+     assumed. The same for `docs.discord.food/resources/guild` and Discord.Net's
+     `GuildOnboardingPromptProperties` page. A web search turned up a support-forum request to
+     *raise* the prompt limit but no number from Discord.
+   - **From the library's docstring** (`Guild.edit_onboarding`): the endpoint needs
+     **Manage Server** *and* **Manage Roles**, and raises `Forbidden` / `HTTPException`.
+
+   So the design's *"capped at Discord's per-prompt limit (measured at build)"* could not be
+   honoured as written. The build caps the **Which streamers?** prompt at **25** — the same
+   number Discord uses for a select menu and the number `/pings` already caps at — and makes it
+   a **registry key**, `pings_onboarding_option_cap` (int **1–50**, default **25**), so the
+   owner can raise it the day the real number is known without another build. That key is the
+   **fifth** of §C7's five, which is how the registry reaches 225: §C7's own table lists only
+   four genuinely new keys (`raidtrain_ping_role_id` and `pings_fan_role_creation` already
+   existed), so 220 + 4 would have been 224.
+
+   ⚠️ **A cap that is too high is not silent.** Discord refuses the whole write, the reconciler
+   catches it, writes `pings.onboarding_failed` with Discord's own words, and the panel and the
+   site both say so in a sentence. Nothing else about anybody's pings changes.
+
+2. **`edit_onboarding(prompts=…)` alone was verified to leave the default channels and
+   `enabled` untouched — from the library's source, not from Discord.**
+   `discord/http.py:2563–2589` builds the PUT payload key by key and omits anything passed as
+   `None`, so a call that passes only `prompts` sends only `prompts`. ⚠️ **What Discord does
+   with a partial PUT is NOT documented on the page the build could read**, so this is a
+   measured fact about the library and an inference about the API. A fake guild in
+   `tests/test_pings_onboarding.py` asserts the library half.
+
+   ⚠️ Also measured and worth knowing: `edit_onboarding` re-numbers prompts by their position
+   (`p.to_dict(id=i) for i, p in enumerate(prompts)`), so **a foreign prompt round-tripped
+   through a write keeps its title, options and roles but gets a NEW id.** Black Bloc's
+   reconciler passes foreign prompts through as the objects it read, in the order it read them,
+   which is the closest thing to "untouched" the endpoint allows.
+
+3. ⚠️ **NOT VERIFIED: every onboarding path against a real Community guild.** The build has no
+   token and the server is not a Community server yet (§A). `reconcile`, the diff, the foreign
+   -prompt pass-through, the take-over and the two refusals are proved against a fake guild that
+   mimics `Guild.onboarding()` / `Guild.edit_onboarding()`. Sweep rows `PR-h`…`PR-k` are the
+   rows that will actually prove it, and they cannot be pressed until Community is on.
+
+### Where the code went
+
+4. **`pings.reconcile_onboarding` is `pings_onboarding.reconcile`.** §C5 names it as a `pings`
+   function; `pings.py` was already 987 lines and the house rule is one module per behaviour, so
+   onboarding is `black_bloc/pings_onboarding.py` with `tests/test_pings_onboarding.py` beside
+   it. It imports `pings`, never the other way round, so there is no cycle and no re-export —
+   callers say `pings_onboarding.reconcile(...)`.
+
+5. **The two prompts are owned by EXACT TITLE, not by a prefix.** §C5 says *"marked by a title
+   prefix it controls"*. A literal prefix would have put *"What should ping you?"* in front of
+   *"Which streamers?"* on a member-facing screen. What shipped: the bot claims exactly the two
+   titles it builds — `pings_onboarding_prompt_title` (default *What should ping you?*) and the
+   constant *Which streamers?*. ⚠️ **The cost: a foreign prompt titled exactly *Which
+   streamers?* would be adopted and rewritten.** The staff sub-panel lists exactly which prompts
+   the bot claims, and **Stop managing onboarding** is the one-press way out; changing the title
+   key makes a fresh pair and leaves the old ones alone, which the key's help text says.
+
+6. **The take-over takes down the Notifications menu ONLY.** §C5 says *"the menu's own post is
+   taken down"*, singular. The *Streamer pings* menus keep being rebuilt by
+   `sync_streamer_menus` as before — §C2 says they stay "until the menus retire". It is
+   idempotent: the post comes down once, and `pings.onboarding_took_over` is written only when a
+   post was actually there to remove.
+
+### The listener
+
+7. **`saw_streaming` runs BEFORE the announcement opt-out, the role filters and the cooldown,
+   and after the `golive_mode == off` gate.** F-PR2 decided *"anyone Discord shows streaming"*,
+   and §C1 says in terms that the announcement opt-out *"is a different thing"*, so somebody who
+   has pressed **Stop announcing my streams** still lands on the list and can still be followed.
+   The cooldown is skipped for the same reason — it exists to stop a second ANNOUNCEMENT, and
+   letting it stop `last_live_at` moving would make the 90-day prune lie.
+   ⚠️ **The consequence worth the owner's eye: `golive_ignore_role_id` no longer keeps somebody
+   off the streamer list.** That follows from the literal F-PR2 answer rather than from a
+   separate decision; one staff press on **Streamers…** ▸ **Hide them from the list** undoes it,
+   and a hide by a person is never undone by going live again.
+   `tests/cogs/content/test_golive.py::test_an_opted_out_member_is_never_announced` reverses its
+   own earlier assertion and says why.
+
+8. **It is NOT gated on `pings_mode`.** The list is a record of who has streamed; recording it
+   pings nobody and changes nobody's roles. Gating it would mean the day the owner turns pings
+   on, the list starts empty and every streamer has to go live again before anybody can follow
+   them. `golive_mode == off` still stops it, because that is the switch that means "Black Bloc
+   is not doing go-live things here".
+
+9. **`hidden_by` is what tells a person's hide apart from a staleness prune**, using the
+   design's own columns rather than a new one. `listed = 0` with `hidden_by` set is somebody's
+   decision and a later go-live never undoes it; `listed = 0` with `hidden_by` empty is the
+   90-day prune, and one more go-live puts them straight back. The site shows who hid whom.
+
+10. **`golive_fan_roles` gains `unworn_since` (an `ADDED_COLUMNS` migration).** §C2's *"a role
+    nobody wears for `pings_empty_role_days`"* needs a clock, and `created_at` is the wrong one —
+    a role worn for a year and then abandoned would have been deleted on the next sweep. The
+    sweep stamps `unworn_since` the first time it sees a role empty, clears it the moment
+    somebody wears it again, and deletes only once the stamp is old enough. ⚠️ The role's
+    `members` list is re-read immediately before the delete, so a role somebody wears is never
+    deleted even if the stamp is stale.
+
+11. **The stale prune gets to an unworn role before the 30-day clock does.** §C1 says a pruned
+    streamer keeps their role "only if somebody wears it", so `prune_stale_streamers` drops an
+    unworn role in the same move and records it in `pings.streamer_pruned`'s details as
+    `role_deleted`. That means the pair leaves **one** log row, not two, when both would have
+    fired — which the sweep tests assert by name.
+
+### The panel
+
+12. **Button rows are PACKED, not fixed.** The busiest staff state is 12 buttons (two split
+    feeds + raid trains + an own role + the list switch + Refresh + six staff moves) plus the
+    site link, and `PanelMove.row` was a constant. `pings.packed` / `pings.free_slot` lay them
+    out from row 2 within Discord's five-per-row; `tests/test_pings.py` asserts the worst case
+    fits and that no row holds six.
+
+13. **The website's onboarding card does NOT carry the managed switch.** The design's
+    *"**Stop managing onboarding**"* is built, on the Discord sub-panel. On the site the switch
+    is `pings_onboarding_managed` in the settings block below the card — one fact, one control
+    (the surfaces rule) — and the card names where it is. The first attempt put a `modeSwitch`
+    on the card and it rendered as an empty box, because `modeSwitch` reads `spec.choices` and a
+    bool key has none; that is why this is a deviation and not an oversight.
+
+14. **`POST /api/pings/onboarding/sync` is deliberately absent from `contract.json`.** It
+    answers **409 in words** on any guild without the `COMMUNITY` feature — which is every guild
+    the contract runner can build — and the runner asserts 200. Its refusals are covered by
+    `tests/api/tools/test_pings.py` instead, both of them, including that they leave no log line.
+
+15. **`pings.setup_raidtrain_role` names its role from a module constant, not a key.** The
+    Events role has `pings_events_role_name`; §C7 adds no sibling for raid trains, so the role is
+    called **Raid trains** and staff pick an existing role instead when they want another name
+    (the same `RolePick` the Events set-up uses). Say the word and it becomes a sixth key.
+
+### §C6, measured before anything was built
+
+16. ⚠️ **Two of the three things §C6 says "must" work with `rolemenu_mode` off did NOT.**
+    Measured on `main` at `337d22a`, before the fix:
+
+    | Thing | With the mode off | Where |
+    |---|---|---|
+    | `/rolemenu` itself | ⚠️ **HIDDEN from the guild's command tree** — `hide_commands_when_off` defaults **true** and `HIDDEN_WHEN_OFF` carried `"rolemenu_mode": ("rolemenu",)`, so nothing under it was reachable at all | `command_visibility.py:17,30`; `settings_store.py:1550` |
+    | **Grants…** | rendered unconditionally *when the panel could be opened* — `root_buttons` says in its own docstring "the mode never removes a control from the root" | `rolemenus.py:193–202` |
+    | **Hand roles out…** | ⚠️ **absent** — gated on `picking_on` | `rolemenus.py:225` |
+    | the hand-out WRITE | ⚠️ **refused in words** (`ROLE_MENUS_OFF`) | `cogs/community/role_menus.py:2483` |
+    | the timed-grant reconciler | ✅ **ran** — no mode gate in `_expiry_loop`, `run_due_grants`, `_expire` or `reconcile_records` | `role_menus.py:3067–3133` |
+
+    Commit `57ce7cb` is the fix, before any other work: `rolemenu` moves out of
+    `HIDDEN_WHEN_OFF` and into `NEVER_HIDDEN` (and into `settings_panel.EXTRA_MODES`, so the
+    Settings panel's mode block still carries its row — 17 rows, 14 hidden + 3 hand-added);
+    `menu_buttons` draws **Hand roles out…** whenever the menu has options; `run_assign` no
+    longer refuses. `PICKING_IS_OFF` was reworded to match. Three tests that asserted the old
+    behaviour now assert the new one and say so in their docstrings.
+
+### The guide
+
+17. ⚠️ **`guides.refresh_seed_text` updates ONLY `seed_do` / `seed_expect`.** The rewritten
+    `pings-follow` entry changes its title, goal, **audience**, faults and facts as well, and
+    none of those reach a database that already holds the guide. **The guide's *Reset to seed*
+    is what takes them** — and `audience` is set to `staff` in the seed to match what the owner
+    did to the live guide on 2026-09-16, so the conductor flips the seed and the live row back
+    to `member` together with `pings_mode`. Two member-guide counts fell 10 → 9 and say why.
+
+### Not built
+
+18. **Nothing was cut.** §C1–§C9 are all here, including §C5's staff sub-panel and §C9's
+    Onboarding card, which the brief named as the first and last things to drop.

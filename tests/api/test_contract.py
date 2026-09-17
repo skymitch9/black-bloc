@@ -255,6 +255,24 @@ async def seed_world(client, web, guild, wf) -> dict:
     await web.store.set(guild_id, "rolemenu_mode", "on", by=7)
     await web.store.set(guild_id, "pings_mode", "on", by=7)
     await pings.set_fan_role(db, guild_id, MEMBER_ID, wf.PLAIN_ROLE_ID, 7)
+    # The streamer list: one on it, and PING_MEMBER_ID off it so the restore route has
+    # something to restore. Nobody is added by hand in the app — a go-live is what lists them.
+    for user_id, listed in ((MEMBER_ID, 1), (PING_MEMBER_ID, 0)):
+        await db.conn.execute(
+            "INSERT OR REPLACE INTO streamers(guild_id, user_id, first_live_at, last_live_at, "
+            "live_count, platform, login, listed, hidden_by, hidden_at) "
+            "VALUES (?, ?, ?, ?, 3, 'Twitch', NULL, ?, ?, ?)",
+            (
+                guild_id,
+                user_id,
+                "2026-09-01T00:00:00+00:00",
+                "2026-09-10T00:00:00+00:00",
+                listed,
+                None if listed else 7,
+                None if listed else "2026-09-11T00:00:00+00:00",
+            ),
+        )
+    await db.conn.commit()
 
     case_id = await add_case(
         db,

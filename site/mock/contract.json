@@ -25,6 +25,9 @@
       "events_test_retention_minutes": 1,
       "events_where_link_check_seconds": 1,
       "logs_count": 1,
+      "pings_empty_role_days": 1,
+      "pings_onboarding_option_cap": 1,
+      "pings_streamer_stale_days": 7,
       "poll_archive_days": 1,
       "poll_default_hours": 1,
       "posts_panel_minutes": 1,
@@ -54,6 +57,9 @@
       "events_where_link_check_seconds": 3,
       "honeypot_purge_days": 7,
       "logs_count": 50,
+      "pings_empty_role_days": 365,
+      "pings_onboarding_option_cap": 50,
+      "pings_streamer_stale_days": 365,
       "poll_archive_days": 3650,
       "poll_default_hours": 768,
       "poll_draft_days": 365,
@@ -1036,6 +1042,88 @@
         "created",
         "menu",
         "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/pings/list",
+      "read_by": [
+        "page-golive.js streamerList"
+      ],
+      "shape": "list",
+      "keys": [
+        "member_id",
+        "member",
+        "listed",
+        "hidden_by",
+        "hidden_by_name",
+        "hidden_at",
+        "first_live_at",
+        "last_live_at",
+        "live_count",
+        "platform",
+        "login",
+        "role_id",
+        "role",
+        "followers"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/pings/list/{ping_member_id}",
+      "body": {
+        "listed": true
+      },
+      "read_by": [
+        "page-golive.js streamerList"
+      ],
+      "shape": "object",
+      "keys": [
+        "member_id",
+        "member",
+        "listed",
+        "hidden_by",
+        "hidden_by_name",
+        "hidden_at",
+        "first_live_at",
+        "last_live_at",
+        "live_count",
+        "platform",
+        "login",
+        "role_id",
+        "role",
+        "followers",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/pings/raidtrain-role",
+      "body": {},
+      "read_by": [
+        "page-golive.js setupCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "role_id",
+        "created",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/pings/onboarding",
+      "read_by": [
+        "page-golive.js onboardingCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "community",
+        "managed",
+        "last_synced_at",
+        "more_on_pings",
+        "foreign_prompts",
+        "prompts"
       ]
     },
     {
@@ -4686,6 +4774,9 @@
     "web.pings.setup",
     "web.pings.fan_role_created",
     "web.pings.fan_role_removed",
+    "web.pings.raidtrain_setup",
+    "web.pings.streamer_hidden",
+    "web.pings.streamer_restored",
     "web.event.approved",
     "web.event.denied",
     "web.event.cancelled",
