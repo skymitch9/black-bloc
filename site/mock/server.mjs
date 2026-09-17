@@ -294,6 +294,9 @@ const SETTING_SPECS = [
   ['golive_template', 'text', '{name} is live playing {game} — {title} {url}', '{name} is live: {url}', 'the announcement wording; {name} {game} {title} {url} {platform}'],
   ['golive_end_mode', 'enum', 'off', 'off', 'what happens to the announcement when the stream ends: off leaves it as posted, edit appends the ended wording and marks the card', ['off', 'edit']],
   ['golive_end_suffix', 'text', ' — stream ended', ' — stream ended', 'what is added to an announcement once the stream has ended; only used when golive_end_mode is edit'],
+  ['golive_end_template', 'text', '**{name}** was streaming **{game}** — the stream has ended. {url}', '**{name}** was streaming **{game}** — the stream has ended. {url}', 'the whole announcement once the stream is over; {name} {game} {title} {url} {platform} {duration}; blank keeps the live sentence and appends golive_end_suffix as before'],
+  ['golive_end_author', 'text', '{name} was live on {platform}', '{name} was live on {platform}', "the card's top line once the stream is over; {name} {platform} {duration}; blank keeps 'was live on'"],
+  ['golive_end_keep_mention', 'bool', false, false, 'on keeps the role mention at the front of the edited announcement; off drops it — nobody is pinged by an edit either way'],
   ['golive_live_role_id', 'role', '900000000000000003', null, 'role given while someone is streaming'],
   ['golive_require_role_id', 'role', null, null, 'only announce people who have this role'],
   ['golive_ignore_role_id', 'role', null, null, 'never announce people who have this role'],
@@ -3349,6 +3352,54 @@ route('GET', '/api/golive/sessions', (context) => {
     mode: row.mode,
     announced_message_id: row.announced_message_id === null ? null : String(row.announced_message_id),
   }));
+});
+
+// The Wording card. The real route renders through black_bloc/golive.py; this is the mock's own
+// short copy of the same shapes, as every other mock answer is.
+const PREVIEW_SAMPLE = {
+  name: 'Ada',
+  game: 'Celeste',
+  title: 'Any% attempts',
+  url: 'https://www.twitch.tv/blackbloc',
+  platform: 'Twitch',
+  duration: '2 h 10 min',
+};
+
+function fillWording(template, fields) {
+  const filled = String(template || '').replace(/\{(\w+)\}/g, (whole, token) => (
+    token in fields ? fields[token] : whole
+  ));
+  return filled
+    .replace(/\(\s*\)|\[\s*\]/g, '')
+    .replace(/[ \t]+(?:for|on|in|at|—|–|·)(?=[ \t]*(?:[.,;:!?)\]]|$))/gi, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+([.,;:!?])/g, '$1')
+    .trim();
+}
+
+route('GET', '/api/golive/preview', (context) => {
+  requireStaff(context.session);
+  const value = (key) => state.settings.get(key) ?? (specOf(key) || [])[3] ?? null;
+  const fields = { ...PREVIEW_SAMPLE, name: STAFF.display_name || PREVIEW_SAMPLE.name };
+  const pingRole = value('golive_ping_role_id');
+  const prefix = pingRole ? `<@&${pingRole}> ` : '';
+  const suffix = String(value('golive_end_suffix') || '');
+  const live = prefix + fillWording(value('golive_template'), fields);
+  const template = String(value('golive_end_template') || '').trim();
+  const author = String(value('golive_end_author') || '').trim();
+  const keep = Boolean(value('golive_end_keep_mention'));
+  const plain = live.replace(/^(?:<@&\d+>[ \t]*)+/, '');
+  const ended = template
+    ? (keep ? prefix : '') + fillWording(template, fields)
+    : (keep ? prefix : '') + (plain.endsWith(suffix) ? plain : plain + suffix);
+  return {
+    live: { text: live, author: `${fields.name} is now live on ${fields.platform}!` },
+    ended: {
+      text: ended,
+      author: author ? fillWording(author, fields) : `${fields.name} was live on ${fields.platform}`,
+      footer: suffix.trim() ? `Black Bloc · via Twitch · ${suffix.replace(/^[\s—–\-·|,;:]+/, '')}` : 'Black Bloc · via Twitch',
+    },
+  };
 });
 
 // F3. Upload announcements. The mock keeps them beside the go-live state for the same reason

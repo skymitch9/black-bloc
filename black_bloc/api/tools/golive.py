@@ -17,6 +17,17 @@ from ...cogs.content.golive import (
     recent_sessions,
     unlink_channel,
 )
+from ...golive import (
+    TWITCH,
+    StreamInfo,
+    author_line,
+    display_name,
+    embed_footer,
+    ended_author,
+    ended_footer,
+    ended_render,
+    render,
+)
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
@@ -32,6 +43,15 @@ log = logging.getLogger(__name__)
 
 SESSIONS_DEFAULT_LIMIT = 50
 SESSIONS_MAX_LIMIT = 200
+
+PREVIEW_STREAM = StreamInfo(
+    url="https://www.twitch.tv/blackbloc",
+    game="Celeste",
+    title="Any% attempts",
+    platform=TWITCH,
+)
+PREVIEW_DURATION = "2 h 10 min"
+PREVIEW_SOURCE = "twitch"
 
 NOT_LINKED = (
     "**{user_id}** has no Twitch account linked, so there was nothing to unlink. The links table "
@@ -85,11 +105,52 @@ def session_row(guild: Any, row: Any) -> dict[str, Any]:
     }
 
 
+def preview_payload(bot: Any, guild: Any, actor: Any) -> dict[str, Any]:
+    """Both wordings through the bot's own renderers, so the page carries no second copy."""
+    store = bot.store
+    name = display_name(actor)
+    suffix = store.get(guild.id, "golive_end_suffix")
+    live = render(
+        store.get(guild.id, "golive_template"),
+        PREVIEW_STREAM,
+        actor,
+        ping_role_id=store.get(guild.id, "golive_ping_role_id"),
+    )
+    return {
+        "live": {"text": live, "author": author_line(name, PREVIEW_STREAM.platform)},
+        "ended": {
+            "text": ended_render(
+                store.get(guild.id, "golive_end_template"),
+                PREVIEW_STREAM,
+                name,
+                content=live,
+                suffix=suffix,
+                duration=PREVIEW_DURATION,
+                keep_mention=bool(store.get(guild.id, "golive_end_keep_mention")),
+            ),
+            "author": ended_author(
+                store.get(guild.id, "golive_end_author"),
+                name,
+                PREVIEW_STREAM.platform,
+                duration=PREVIEW_DURATION,
+            ),
+            "footer": ended_footer(embed_footer(PREVIEW_SOURCE), suffix),
+        },
+    }
+
+
 def build_router(bot: Any) -> APIRouter:
     writer = writer_dependency(bot)
+    staff = staff_dependency(bot)
     router = APIRouter(
         prefix="/api/golive", tags=["golive"], dependencies=[Depends(staff_dependency(bot))]
     )
+
+    @router.get("/preview")
+    async def golive_preview(request: Request) -> dict[str, Any]:
+        who = await staff(request)
+        guild = require_guild(bot)
+        return preview_payload(bot, guild, actor_for(bot, who, guild))
 
     @router.get("/links")
     async def golive_links() -> list[dict[str, Any]]:

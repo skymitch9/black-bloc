@@ -20,11 +20,14 @@ from black_bloc.golive import (
     embed_summary,
     end_details,
     end_summary,
+    ended_author,
     ended_embed,
+    ended_render,
     ended_text,
     enriched,
     extract_stream,
     from_twitch,
+    humanise_duration,
     is_streaming,
     panel_buttons,
     panel_minutes,
@@ -41,10 +44,12 @@ from black_bloc.golive import (
     with_box_art,
 )
 from black_bloc.settings_store import (
+    GOLIVE_END_AUTHOR,
     GOLIVE_END_EDIT,
     GOLIVE_END_MODES,
     GOLIVE_END_OFF,
     GOLIVE_END_SUFFIX,
+    GOLIVE_END_TEMPLATE,
     GOLIVE_TEMPLATE,
 )
 from black_bloc.twitch import TwitchGame, TwitchStream
@@ -337,8 +342,25 @@ def test_the_edit_mode_name_is_the_registrys_and_not_a_second_copy():
 
 def test_the_end_summary_names_the_mode_and_shows_the_wording_only_when_it_is_used():
     assert end_summary(GOLIVE_END_OFF) == "off (left as posted)"
-    assert end_summary(GOLIVE_END_EDIT) == f'edit ("{GOLIVE_END_SUFFIX}")'
-    assert end_summary(GOLIVE_END_EDIT, " (over)") == 'edit (" (over)")'
+    assert end_summary(GOLIVE_END_EDIT) == f'edit (suffix "{GOLIVE_END_SUFFIX}")'
+    assert end_summary(GOLIVE_END_EDIT, " (over)") == 'edit (suffix " (over)")'
+
+
+def test_the_end_summary_says_which_of_the_three_shapes_is_in_force():
+    assert end_summary(GOLIVE_END_OFF, GOLIVE_END_SUFFIX, "{name} was live") == (
+        "off (left as posted)"
+    )
+    assert end_summary(GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, "{name} was live") == (
+        'edit (rewritten: "{name} was live")'
+    )
+    assert end_summary(GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, "   ") == (
+        f'edit (suffix "{GOLIVE_END_SUFFIX}")'
+    )
+
+
+def test_the_end_summary_clips_a_long_rewrite_rather_than_filling_the_panel():
+    said = end_summary(GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, "x" * 200)
+    assert said == 'edit (rewritten: "' + "x" * 39 + '…")'
 
 
 def test_the_end_summary_never_calls_an_unreadable_mode_off():
@@ -364,6 +386,125 @@ def test_an_empty_ended_wording_adds_nothing():
     assert ended_text("live!", "") == "live!"
     assert ended_text("live!", "   ") == "live!"
     assert ended_text("live!", None) == "live!"
+
+
+ENDED_INFO = StreamInfo(
+    url="https://www.twitch.tv/alice",
+    game="Celeste",
+    title="Any% attempts",
+    platform="Twitch",
+)
+LIVE_CONTENT = "<@&55> **Sky** is currently streaming **Celeste**! Check it out: u"
+
+
+def test_the_shipped_end_wording_reads_in_the_past_tense():
+    assert ended_render(GOLIVE_END_TEMPLATE, ENDED_INFO, "Sky", content=LIVE_CONTENT) == (
+        "**Sky** was streaming **Celeste** — the stream has ended. https://www.twitch.tv/alice"
+    )
+
+
+def test_a_blank_end_wording_keeps_the_live_sentence_and_the_suffix():
+    assert ended_render("", ENDED_INFO, "Sky", content="live!") == "live! — stream ended"
+    assert ended_render(None, ENDED_INFO, "Sky", content="live!", suffix=" (over)") == (
+        "live! (over)"
+    )
+    assert ended_render("   ", ENDED_INFO, "Sky", content="live! — stream ended") == (
+        "live! — stream ended"
+    )
+
+
+def test_the_mention_is_dropped_unless_the_guild_keeps_it():
+    assert ended_render("{name} is done", ENDED_INFO, "Sky", content=LIVE_CONTENT) == (
+        "Sky is done"
+    )
+    assert ended_render(
+        "{name} is done", ENDED_INFO, "Sky", content=LIVE_CONTENT, keep_mention=True
+    ) == "<@&55> Sky is done"
+    assert ended_render("", ENDED_INFO, "Sky", content=LIVE_CONTENT) == (
+        "**Sky** is currently streaming **Celeste**! Check it out: u — stream ended"
+    )
+    assert ended_render("", ENDED_INFO, "Sky", content=LIVE_CONTENT, keep_mention=True) == (
+        LIVE_CONTENT + " — stream ended"
+    )
+
+
+def test_the_length_is_shown_when_there_is_one_and_leaves_no_gap_when_there_is_not():
+    template = "{name} streamed {game} for {duration}. {url}"
+    assert ended_render(template, ENDED_INFO, "Sky", content="x", duration="2 h 10 min") == (
+        "Sky streamed Celeste for 2 h 10 min. https://www.twitch.tv/alice"
+    )
+    assert ended_render(template, ENDED_INFO, "Sky", content="x") == (
+        "Sky streamed Celeste. https://www.twitch.tv/alice"
+    )
+
+
+def test_an_empty_game_and_an_empty_url_never_show_as_a_gap():
+    bare = StreamInfo()
+    assert ended_render("**{name}** was streaming **{game}**. {url}", bare, "Sky", content="x") == (
+        "**Sky** was streaming **something**."
+    )
+    assert ended_render("{name} played ({title})", bare, "Sky", content="x") == "Sky played"
+
+
+def test_an_unreadable_end_wording_falls_back_to_the_suffix_and_never_raises(caplog):
+    said = ended_render("{name} is {not closed", ENDED_INFO, "Sky", content="live!")
+    assert said == "live! — stream ended"
+    assert "could not be rendered" in caplog.text
+
+
+def test_an_unknown_placeholder_is_left_standing_rather_than_losing_the_message():
+    assert ended_render("{name} on {wibble}", ENDED_INFO, "Sky", content="x") == (
+        "Sky on {wibble}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("seconds", "said"),
+    [
+        (0, "under a minute"),
+        (59, "under a minute"),
+        (60, "1 min"),
+        (2880, "48 min"),
+        (3600, "1 h"),
+        (7800, "2 h 10 min"),
+    ],
+)
+def test_a_stream_length_is_read_in_words(seconds, said):
+    over = NOW + timedelta(seconds=seconds)
+    assert humanise_duration(NOW.isoformat(), over.isoformat()) == said
+
+
+def test_a_missing_or_unreadable_stamp_renders_as_nothing():
+    assert humanise_duration(None, NOW.isoformat()) == ""
+    assert humanise_duration(NOW.isoformat(), None) == ""
+    assert humanise_duration(NOW.isoformat(), "") == ""
+    assert humanise_duration("not a date", NOW.isoformat()) == ""
+
+
+def test_the_shipped_end_author_line_is_the_registrys_and_not_a_second_copy():
+    assert ended_author(GOLIVE_END_AUTHOR, "Sky", "Twitch") == "Sky was live on Twitch"
+
+
+def test_a_blank_end_author_keeps_todays_line():
+    assert ended_author("", "Sky", "Twitch") == "Sky was live on Twitch"
+    assert ended_author(None, "Sky", None) == "Sky was live"
+
+
+def test_an_end_author_without_a_platform_loses_the_dangling_on():
+    assert ended_author(GOLIVE_END_AUTHOR, "Sky", None) == "Sky was live"
+    assert ended_author("{name} streamed for {duration}", "Sky", "Twitch") == "Sky streamed"
+    assert ended_author("{name} streamed for {duration}", "Sky", "Twitch", duration="48 min") == (
+        "Sky streamed for 48 min"
+    )
+
+
+def test_an_unreadable_end_author_keeps_todays_line(caplog):
+    assert ended_author("{name} was {live on", "Sky", "Twitch") == "Sky was live on Twitch"
+    assert "could not be rendered" in caplog.text
+
+
+def test_an_end_author_that_renders_to_nothing_keeps_todays_line():
+    assert ended_author("{platform}", "Sky", None) == "Sky was live"
 
 
 def twitch_info(**kwargs):
@@ -466,6 +607,28 @@ def test_an_empty_ended_wording_leaves_the_embed_footer_alone():
 def test_the_ended_embed_survives_an_unknown_platform():
     live = announcement_embed(StreamInfo(game="Celeste"))
     assert ended_embed(live, "Alice", None).author.name == "Alice was live"
+
+
+def test_the_ended_embed_takes_the_author_line_the_guild_wrote():
+    live = announcement_embed(twitch_info(), FakeMember("Alice"), "twitch")
+
+    over = ended_embed(
+        live,
+        "Alice",
+        "Twitch",
+        author="{name} streamed on {platform} for {duration}",
+        duration="2 h 10 min",
+    )
+
+    assert over.author.name == "Alice streamed on Twitch for 2 h 10 min"
+    assert over.image.url == live.image.url and over.url == live.url
+
+
+def test_a_blank_author_line_keeps_todays_ended_card():
+    live = announcement_embed(twitch_info(), FakeMember("Alice"), "twitch")
+    assert ended_embed(live, "Alice", "Twitch", author="").author.name == (
+        "Alice was live on Twitch"
+    )
 
 
 def test_the_embed_summary_is_what_the_shadow_log_shows():

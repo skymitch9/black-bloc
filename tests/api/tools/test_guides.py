@@ -10,6 +10,9 @@ READER = 21
 STRANGER = 22
 ADMIN = 23
 
+GOLIVE_SEED = next(one for one in pure.seed_entries() if one["slug"] == "golive-announce")
+SEED_STEPS = len(GOLIVE_SEED["steps"])
+
 
 def png(width: int = 800, height: int = 600, pad: int = 64) -> bytes:
     return (
@@ -207,7 +210,7 @@ async def test_a_guide_carries_its_steps_faults_and_live_values(as_member):
 
     assert body["guide"]["slug"] == "golive-announce"
     assert body["guide"]["url"].endswith("/guides.html#golive-announce")
-    assert len(body["steps"]) == 4 and body["steps"][0]["position"] == 1
+    assert len(body["steps"]) == SEED_STEPS and body["steps"][0]["position"] == 1
     assert body["faults"] and body["facts"]
     assert {one["kind"] for one in body["facts"]} == {"setting", "probe"}
     assert all(one["read_at"] for one in body["facts"])
@@ -280,7 +283,7 @@ async def test_staff_save_the_whole_guide_and_leave_one_row_with_the_diff(as_sta
     saved = answered.json()
     assert saved["steps"][0]["do_text"] == "Simply press the thing"
     assert saved["steps"][0]["warnings"], "the linter warns and the save still happened"
-    assert len(saved["steps"]) == 5
+    assert len(saved["steps"]) == SEED_STEPS + 1
 
     details = await wf.one_web_row(web.db, "web.guide.edited")
     assert details["slug"] == "golive-announce"
@@ -428,7 +431,7 @@ async def test_reset_puts_every_word_back_and_refuses_a_guide_with_no_original(
 
     assert answered.status_code == 200
     assert "back to the words it shipped with" in answered.json()["message"]
-    assert len(answered.json()["steps"]) == 4
+    assert len(answered.json()["steps"]) == SEED_STEPS
 
     made = as_staff.post("/api/guides", json={"title": "Scratch", "goal": "A goal."})
     slug = made.json()["guide"]["slug"]

@@ -13,9 +13,11 @@
         {"do": "Type **/golive** in any channel.", "expect": "A panel only you can see, with **Link my Twitch channel** on it."},
         {"do": "Press **Link my Twitch channel** and type the part after twitch.tv/.", "expect": "The panel reads twitch.tv/your-name. A name somebody else holds is refused without naming them."},
         {"do": "Start your stream with Discord showing you as **Streaming** (Discord ▸ Settings ▸ Connections ▸ Twitch, Display on profile on).", "expect": "The announcement posts in the go-live channel with your fans pinged. In shadow, nothing posts and the bot logs what it would have said."},
+        {"do": "Stop your stream and wait a minute.", "expect": "The same post is rewritten in the past tense — nothing is posted twice, and nobody is pinged again. What it says is set under Announcement wording on the site."},
         {"do": "Press **Stop announcing my streams** to pause.", "expect": "The button becomes **Announce my streams again**. Your link is kept."}
       ],
       "faults": [
+        {"symptom": "The post still reads as if you are live", "answer": "A Lead turns golive_end_mode to edit on the Go-live page. The Wording card there shows both messages before anybody streams."},
         {"symptom": "Nothing posted", "answer": "Announcements are in shadow. The panel's Announcements line says so; a Lead flips it."},
         {"symptom": "Discord does not show you streaming", "answer": "Reconnect Twitch under Discord's Connections and turn Display on profile on. The bot reads Discord, not Twitch."},
         {"symptom": "You went live twice in a short time", "answer": "The second one waits for the cooldown shown above."},

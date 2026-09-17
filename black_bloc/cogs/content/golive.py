@@ -30,10 +30,11 @@ from ...golive import (
     end_details,
     end_summary,
     ended_embed,
-    ended_text,
+    ended_render,
     enriched,
     extract_stream,
     from_twitch,
+    humanise_duration,
     now_iso,
     panel_buttons,
     panel_minutes,
@@ -507,7 +508,9 @@ async def status_lines(bot: Any, cog: Any, guild: Any) -> list[str]:
     note = test_mode_note(bot, guild)
     where = f"<#{channel_id}>" if channel_id else "not set"
     ending = end_summary(
-        store.get(guild.id, "golive_end_mode"), store.get(guild.id, "golive_end_suffix")
+        store.get(guild.id, "golive_end_mode"),
+        store.get(guild.id, "golive_end_suffix"),
+        store.get(guild.id, "golive_end_template"),
     )
     failures = getattr(cog, "poll_failures", 0)
     lines = [
@@ -621,7 +624,8 @@ class GoLive(commands.Cog):
     async def _close_session(self, guild: Any, row: Any, reason: str) -> None:
         member = guild.get_member(row["user_id"])
         end_mode = self._end_mode(guild.id)
-        await end_session(self.bot.db, row["id"], now_iso())
+        ended_at = now_iso()
+        await end_session(self.bot.db, row["id"], ended_at)
         await self._remove_live_role(guild, member, row)
         await log_action(
             self.bot,
@@ -631,7 +635,7 @@ class GoLive(commands.Cog):
             details={"session_id": row["id"], "source": row["source"], "reason": reason}
             | end_details(end_mode),
         )
-        await self._mark_ended(guild, row, end_mode)
+        await self._mark_ended(guild, row, end_mode, ended_at)
 
     async def cog_unload(self) -> None:
         self.poller.cancel()
@@ -754,7 +758,8 @@ class GoLive(commands.Cog):
         if row is None:
             return
         end_mode = self._end_mode(guild.id)
-        await end_session(self.bot.db, row["id"], now_iso())
+        ended_at = now_iso()
+        await end_session(self.bot.db, row["id"], ended_at)
         await self._remove_live_role(guild, member, row)
         await log_action(
             self.bot,
@@ -763,25 +768,40 @@ class GoLive(commands.Cog):
             target=member,
             details={"session_id": row["id"], "source": row["source"]} | end_details(end_mode),
         )
-        await self._mark_ended(guild, row, end_mode)
+        await self._mark_ended(guild, row, end_mode, ended_at)
 
-    async def _mark_ended(self, guild: Any, row: Any, end_mode: str) -> None:
+    async def _mark_ended(
+        self, guild: Any, row: Any, end_mode: str, ended_at: str | None = None
+    ) -> None:
         message_id = row["announced_message_id"]
         if not edits_on_end(end_mode) or not message_id:
             return
         channel = self._channel(guild)
         if channel is None:
             return
-        suffix = self.bot.store.get(guild.id, "golive_end_suffix")
+        store = self.bot.store
+        suffix = store.get(guild.id, "golive_end_suffix")
+        duration = humanise_duration(
+            _row_value(row, "started_at"), ended_at or _row_value(row, "ended_at")
+        )
+        name = display_name_of(guild, row["user_id"])
         fan_role_id = await pings.announced_fan_role(
             self.bot, guild, row["user_id"], notice=False
         )
         try:
             message = await channel.fetch_message(message_id)
             await message.edit(
-                content=ended_text(message.content, suffix),
+                content=ended_render(
+                    store.get(guild.id, "golive_end_template"),
+                    row,
+                    name,
+                    content=message.content,
+                    suffix=suffix,
+                    duration=duration,
+                    keep_mention=bool(store.get(guild.id, "golive_end_keep_mention")),
+                ),
                 allowed_mentions=self._mentions(guild.id, fan_role_id),
-                **self._ended_embed(guild, row, message, suffix),
+                **self._ended_embed(guild, row, message, suffix, name, duration),
             )
         except Exception as exc:
             log.info(
@@ -797,13 +817,21 @@ class GoLive(commands.Cog):
         return announcement_embed(info, member, source)
 
     def _ended_embed(
-        self, guild: Any, row: Any, message: Any, suffix: str | None
+        self, guild: Any, row: Any, message: Any, suffix: str | None, name: str, duration: str
     ) -> dict[str, Any]:
         existing = list(getattr(message, "embeds", None) or ())
         if not existing:
             return {}
-        name = display_name_of(guild, row["user_id"])
-        return {"embed": ended_embed(existing[0], name, _row_value(row, "platform"), suffix)}
+        return {
+            "embed": ended_embed(
+                existing[0],
+                name,
+                _row_value(row, "platform"),
+                suffix,
+                author=self.bot.store.get(guild.id, "golive_end_author"),
+                duration=duration,
+            )
+        }
 
     async def _box_art(self, guild: Any, info: StreamInfo) -> StreamInfo:
         """Twitch knows the game's art; YouTube and presence-only streams are never asked."""

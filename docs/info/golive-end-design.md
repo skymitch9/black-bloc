@@ -90,3 +90,67 @@ matches; blank template → old behaviour. This doc's `## Deviations` foot. NOT 
 ## Deviations
 
 *(the build agent writes here what it had to do differently, dated)*
+
+*(the build, 2026-09-17, branch `golive-end`, cut off `main` `fb1600b` and rebased onto `main`
+`905982b` once the modmail-hide and tempvoice-lobby merges landed. Everything §A–§E asks for is
+built; these are the places the build had to decide something the design left open, or depart.)*
+
+1. **`keep_mention` governs the BLANK template too.** §A says a blank `golive_end_template`
+   keeps the live sentence "as before" (which kept the mention), §B says the prefix is stripped
+   unless `keep_mention`. Those disagree, so one rule was chosen for both shapes: the key decides,
+   default **off**, which is the owner's "let's not tag a role". `golive_end_keep_mention` true is
+   literally-as-before. The existing cog test that asserted the old prefix-keeping behaviour was
+   updated rather than deleted, and a second test covers the kept case.
+2. **The registry had to be taught that these two keys may be blank.** `coerce_value` refuses
+   blank for every `text` key, so `golive_end_template = ""` — the shape §A promises — could not be
+   stored at all. New `settings_store.TEXT_MAY_BE_BLANK = ("golive_end_template",
+   "golive_end_author")`; nothing else about text validation moved.
+3. ⚠️ **Emptying the settings ROW does not blank it, and that is `ui.js`, not this build.** A
+   settings row that is emptied calls `DELETE`, which clears the override and brings the DEFAULT
+   back — so with a non-blank shipped default the blank shape is unreachable from the Settings
+   page. Rather than change a shared file two other builds are in, the **Wording** card carries one
+   button whose label flips: **Just add the ending instead** (`PUT ""`) / **Rewrite it instead**
+   (`DELETE`, so the shipped wording comes back). ⚠️ **The Discord side has the same gap and it is
+   NOT closed:** `/settings` ▸ the key card's modal is `discord.ui.TextInput` with
+   `required=True` (`cogs/core.py:1284`), so an empty submit is refused by Discord itself, and
+   Clear restores the default. Blanking from Discord would mean changing that shared modal for
+   every key. **Left as a finding for the conductor** — a `KNOWN_ISSUES.md` entry was NOT written,
+   because that file is not one this build was told to touch.
+4. **`ended_render`'s signature carries the live `content` and the `suffix`.** §B's sketch
+   (`template, info_or_row, name, *, duration, mention_prefix, keep_mention`) has nothing for the
+   fallback to append the suffix TO, and the mention prefix is read off the content rather than
+   passed in — one argument fewer and no way for the caller to hand in a prefix the message does
+   not have. Signature as built: `ended_render(template, info_or_row, name, *, content, suffix,
+   duration, keep_mention)`.
+5. **`ended_author` is its own function, not a branch inside `ended_embed`.** The preview route
+   needs the author line without building an embed, and the cog needs it inside one.
+6. **`tidy` is shared by both templates and is a fixed list of four repairs** — empty brackets, a
+   dangling `for on in at — – ·` before punctuation or end of line, a doubled space, a space before
+   a full stop. §A only names `()` and `for `; the other two came out of the author line
+   (`"Sky was live on "` with no platform) and a trailing `{url}`.
+7. **The page's client-side guess at the ended sentence is GONE.** `wordingCard` used to paint
+   `${prefix}${filled}${endSuffix}` as it typed, which is the wrong answer the moment a rewrite
+   exists. The ending now has one home: the **Wording** card, rendered by the bot. The live
+   preview-as-you-type stays, because a server route cannot preview unsaved text.
+8. **The card has its own Refresh, and that is a real gap in the "hook the save event" instruction
+   (§C).** `namespaceSettings` and `modeSwitch` both take `onSaved` and are hooked. The wording
+   editor above it saves through `templateEditor`'s docked bar, and `ui.js` passes no `onSaved`
+   through — reaching into a shared file for that one hook was not worth the collision, so the card
+   says what it reads and offers the press.
+9. **Two files outside the brief's list had to change, both one-liners of registration, not
+   behaviour:** `site/public/assets/labels.js` (three labels — `tests/test_settings_store.py::
+   test_every_registry_key_the_site_shows_has_a_label` fails without them) and
+   `site/mock/contract.json` (the route's row, which §B asks for in the same breath as the mock).
+10. **The preview sample's url is `https://www.twitch.tv/blackbloc`** — §B writes
+    `https://twitch.tv/…`, which is not a url. It matches the `/golive` panel's own test stream.
+11. **`_mark_ended` takes `ended_at` from its caller** rather than re-reading the row, so the
+    stored stamp and the rendered length cannot disagree; both callers (`_end_live`,
+    `_close_session`) compute `now_iso()` once.
+12. **The guide step went in the MEMBER guide as an observation, not a staff "Set …" step.**
+    `golive-announce` is the only `golive-*` guide and its audience is `member`; a settings step
+    would be one the reader cannot press. It gained a fifth step ("Stop your stream and wait a
+    minute") and a fault row that names `golive_end_mode` and where a Lead flips it.
+13. **NOT done, deliberately:** `golive_end_mode` was NOT flipped (§A says the owner does it);
+    `TODO.md`, `DONE.md` and `deploys.log` untouched; nothing deployed or merged; no `/golive`
+    panel control was added for the new keys (§B only asks the panel's **stream end** line to name
+    the shape, which it does).

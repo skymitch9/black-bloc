@@ -58,6 +58,8 @@ GOLIVE_END_OFF = "off"
 GOLIVE_END_EDIT = "edit"
 GOLIVE_END_MODES = (GOLIVE_END_OFF, GOLIVE_END_EDIT)
 GOLIVE_END_SUFFIX = " — stream ended"
+GOLIVE_END_TEMPLATE = "**{name}** was streaming **{game}** — the stream has ended. {url}"
+GOLIVE_END_AUTHOR = "{name} was live on {platform}"
 
 YOUTUBE_MODES = ("off", "shadow", "on")
 YOUTUBE_TEMPLATE = "**{name}** just dropped a new video: **{title}** {url}"
@@ -253,6 +255,9 @@ KEY_TYPES: dict[str, str] = {
     "golive_template": "text",
     "golive_end_mode": "enum",
     "golive_end_suffix": "text",
+    "golive_end_template": "text",
+    "golive_end_author": "text",
+    "golive_end_keep_mention": "bool",
     "golive_live_role_id": "role",
     "golive_require_role_id": "role",
     "golive_ignore_role_id": "role",
@@ -654,6 +659,19 @@ KEY_HELP: dict[str, str] = {
     "golive_end_suffix": (
         "what is added to an announcement once the stream has ended; only used when "
         "golive_end_mode is edit"
+    ),
+    "golive_end_template": (
+        "the whole announcement once the stream is over; {name} {game} {title} {url} "
+        "{platform} {duration}; blank keeps the live sentence and appends golive_end_suffix "
+        "as before"
+    ),
+    "golive_end_author": (
+        "the card's top line once the stream is over; {name} {platform} {duration}; blank "
+        "keeps 'was live on'"
+    ),
+    "golive_end_keep_mention": (
+        "on keeps the role mention at the front of the edited announcement; off drops it — "
+        "nobody is pinged by an edit either way"
     ),
     "golive_live_role_id": "role given while someone is streaming",
     "golive_require_role_id": "only announce people who have this role",
@@ -2021,6 +2039,8 @@ TEXT_CHECKS: dict[str, Any] = {
     RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
 }
 
+TEXT_MAY_BE_BLANK = ("golive_end_template", "golive_end_author")
+
 
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
@@ -2095,6 +2115,8 @@ def coerce_value(key: str, value: Any) -> Any:
             raise SettingError(f"{key!r} takes true or false, not {value!r}.")
         return value
     if kind == "text":
+        if isinstance(value, str) and not value.strip() and key in TEXT_MAY_BE_BLANK:
+            return ""
         if not isinstance(value, str) or not value.strip():
             raise SettingError(f"{key!r} takes some text, not {value!r}.")
         check = TEXT_CHECKS.get(key)
@@ -2283,6 +2305,12 @@ class SettingsStore:
             return GOLIVE_END_OFF
         if key == "golive_end_suffix":
             return GOLIVE_END_SUFFIX
+        if key == "golive_end_template":
+            return GOLIVE_END_TEMPLATE
+        if key == "golive_end_author":
+            return GOLIVE_END_AUTHOR
+        if key == "golive_end_keep_mention":
+            return False
         if key == "golive_cooldown_minutes":
             return 60
         if key == "golive_max_session_hours":
