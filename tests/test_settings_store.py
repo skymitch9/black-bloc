@@ -1087,6 +1087,7 @@ async def test_requests_ship_on_and_open_to_everyone_with_nothing_auto_approved(
         "request_check_fallback_channel",
         "request_check_on_ready",
         "request_post_buttons",
+        "request_forum_adopts_posts",
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
 
@@ -1139,6 +1140,20 @@ async def test_the_post_move_buttons_are_a_key_both_doors_reach(store):
         coerce_value("request_post_buttons", "true")
     await store.set(7, "request_post_buttons", False)
     assert store.get(7, "request_post_buttons") is False
+
+
+async def test_adopting_a_hand_made_forum_post_is_a_key_both_doors_reach(store):
+    """Checklist 33 — blackmail-threads §G: whether a post becomes a request is a decision."""
+    from black_bloc.settings_panel import reachable_on_the_panel
+
+    assert KEY_TYPES["request_forum_adopts_posts"] == "bool"
+    assert store.get(7, "request_forum_adopts_posts") is True
+    assert reachable_on_the_panel("request_forum_adopts_posts")
+    assert "by hand" in KEY_HELP["request_forum_adopts_posts"]
+    with pytest.raises(SettingError):
+        coerce_value("request_forum_adopts_posts", "true")
+    await store.set(7, "request_forum_adopts_posts", False)
+    assert store.get(7, "request_forum_adopts_posts") is False
 
 
 def test_the_card_moves_key_takes_any_of_the_eight_and_nothing_else():

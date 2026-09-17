@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -9,7 +10,7 @@ from discord.ext import commands
 
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
-from ...logkinds import VIA_DISCORD, kind_via
+from ...logkinds import VIA_DISCORD, VIA_FORUM, kind_via
 from ...panels import (
     KEEP_IT,
     Outcome,
@@ -25,6 +26,8 @@ from ...panels import (
 )
 from ...panels import NoteModal as PanelNoteModal
 from ...requests import (
+    ADOPTED_NOT_YOURS_TO_FILE,
+    ADOPTED_REQUESTS_OFF,
     BUILT_LIMIT,
     CHECK_ASKED,
     CHECK_ASKED_CHANNEL,
@@ -70,6 +73,7 @@ from ...requests import (
     SENT_BACK,
     SENT_BACK_LIMIT,
     SITE_BUTTON,
+    SOURCE_FORUM,
     STAFF_ONLY_FILES,
     STATUS_WORDS,
     TAKE_ONE_BACK,
@@ -78,6 +82,7 @@ from ...requests import (
     WHY_LIMIT,
     WITHDRAWABLE,
     RequestError,
+    adopted_fields,
     archives_at,
     card_buttons,
     card_footer_override,
@@ -92,6 +97,7 @@ from ...requests import (
     create_request,
     dms_on_decision,
     everyone_may_file,
+    forum_adopts_posts,
     forum_channel_id,
     forum_tags,
     get_request,
@@ -111,6 +117,7 @@ from ...requests import (
     post_title,
     posts_a_card,
     request_embed,
+    request_for_thread,
     requests_are_on,
     resume_target,
     row_value,
@@ -245,9 +252,9 @@ def card(bot: Any, guild: Any, row: Any, look: str) -> tuple[Any, Any]:
     )
 
 
-async def tell_person(bot: Any, guild: Any, row: Any, look: str) -> None:
+async def tell_person(bot: Any, guild: Any, row: Any, look: str, *, to: Any = None) -> None:
     """The DM somebody is owed on a move; a failure is logged, never silent."""
-    wanted = person_told(bot, guild, row, look)
+    wanted = to if to is not None else person_told(bot, guild, row, look)
     if wanted is None:
         return
     if look in DM_LOOKS and not dms_on_decision(bot.store, guild.id):
@@ -477,6 +484,131 @@ async def retag_post(bot: Any, guild: Any, row: Any, thread: Any) -> None:
     guard = getattr(bot, "guard", None)
     if archives_at(status) and guard is not None:
         guard.disown_channel(thread)
+
+
+async def starter_of(thread: Any) -> Any:
+    """A forum post's opening message — cached where discord.py has it, fetched where not."""
+    found = getattr(thread, "starter_message", None)
+    if found is not None:
+        return found
+    fetch = getattr(thread, "fetch_message", None)
+    if fetch is None:
+        return None
+    try:
+        return await fetch(int(thread.id))
+    except NETWORK_ERRORS as exc:
+        log.info("requests: could not read the first message of %s: %s", thread.id, exc)
+        return None
+
+
+def made_by_the_bot(bot: Any, thread: Any, starter: Any) -> bool:
+    me = getattr(getattr(bot, "user", None), "id", None)
+    author = getattr(getattr(starter, "author", None), "id", None)
+    return me is not None and me in (getattr(thread, "owner_id", None), author)
+
+
+def filer_of(guild: Any, thread: Any, starter: Any) -> Any:
+    found = getattr(starter, "author", None)
+    if found is not None:
+        return found
+    owner_id = getattr(thread, "owner_id", None)
+    return guild.get_member(int(owner_id)) if owner_id else None
+
+
+async def say_in_post(bot: Any, guild: Any, thread: Any, said: str, who: Any) -> None:
+    """The one reply a post gets when it cannot become a request; nothing is deleted."""
+    guard = getattr(bot, "guard", None)
+    if guard is not None:
+        guard.own_channel(thread)
+    if not guard_allows(bot, thread.id):
+        log.warning("requests: test mode, so the post %s never heard the refusal", thread.id)
+        return
+    try:
+        await thread.send(
+            said.format(who=mention(getattr(who, "id", who))),
+            allowed_mentions=discord.AllowedMentions(
+                users=[discord.Object(id=int(getattr(who, "id", who)))]
+            ),
+        )
+    except NETWORK_ERRORS as exc:
+        log.warning("requests: could not answer the post %s: %s", thread.id, exc)
+
+
+async def reply_in_post(bot: Any, guild: Any, row: Any, thread: Any) -> Any:
+    """The filed card and its moves, as a reply — the post's own first message is not the bot's."""
+    guard = getattr(bot, "guard", None)
+    if guard is not None:
+        guard.own_channel(thread)
+    embed, _ = card(bot, guild, row, FILED_LOOK)
+    message = await post_line(
+        bot,
+        guild,
+        thread.id,
+        row,
+        move_line(row, FILED_LOOK),
+        FILED_LOOK,
+        embed=embed,
+        view=post_view(bot, guild, row),
+    )
+    if message is not None:
+        await set_message(bot.db, row["id"], message.id)
+    return message
+
+
+async def adopt_post(bot: Any, guild: Any, thread: Any) -> Any:
+    """A post somebody started by hand in the requests forum becomes their request."""
+    forum = forum_of(bot, guild)
+    parent = getattr(thread, "parent_id", None) or getattr(
+        getattr(thread, "parent", None), "id", None
+    )
+    if forum is None or parent != forum.id:
+        return None
+    if await request_for_thread(bot.db, guild.id, thread.id) is not None:
+        return None
+    starter = await starter_of(thread)
+    if made_by_the_bot(bot, thread, starter):
+        return None
+    who = filer_of(guild, thread, starter)
+    if who is None:
+        log.warning("requests: the post %s names nobody who could have filed it", thread.id)
+        return None
+    store = bot.store
+    if not requests_are_on(store, guild.id):
+        await say_in_post(bot, guild, thread, ADOPTED_REQUESTS_OFF, who)
+        return None
+    if not everyone_may_file(store, guild.id) and not store.is_staff(who):
+        await say_in_post(bot, guild, thread, ADOPTED_NOT_YOURS_TO_FILE, who)
+        return None
+    what, why = adopted_fields(getattr(thread, "name", ""), getattr(starter, "content", ""))
+    request_id = await create_request(
+        bot.db,
+        guild.id,
+        int(who.id),
+        what=what,
+        why=why,
+        due_on=None,
+        status=OPEN,
+        source=SOURCE_FORUM,
+    )
+    await set_thread(bot.db, request_id, thread.id)
+    await log_action(
+        bot,
+        guild,
+        "request.filed",
+        actor=who,
+        target=who,
+        details={
+            "request_id": request_id,
+            "what": clamp(what, 120),
+            "due_on": None,
+            "via": VIA_FORUM,
+        },
+    )
+    row = await get_request(bot.db, request_id)
+    await reply_in_post(bot, guild, row, thread)
+    await retag_post(bot, guild, row, thread)
+    await tell_person(bot, guild, row, FILED_LOOK, to=who.id)
+    return row
 
 
 async def notify(bot: Any, guild: Any, row: Any, who: Any) -> None:
@@ -1322,6 +1454,7 @@ class NoteModal(PanelNoteModal):
 class Requests(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self.adopting = asyncio.Lock()
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(PostMoveButton)
@@ -1351,6 +1484,17 @@ class Requests(commands.Cog):
         await log_action(
             self.bot, guild, "request.forum_forgotten", details={"channel_id": channel.id}
         )
+
+    @commands.Cog.listener()
+    async def on_thread_create(self, thread: discord.Thread) -> None:
+        """A post somebody starts by hand in the requests forum becomes their request (§G)."""
+        if not self.bot.db.is_connected:
+            return
+        guild = getattr(thread, "guild", None)
+        if guild is None or not forum_adopts_posts(self.bot.store, guild.id):
+            return
+        async with self.adopting:
+            await adopt_post(self.bot, guild, thread)
 
     @app_commands.command(
         name="request", description="Ask the server for something, or manage requests"
@@ -1487,6 +1631,7 @@ __all__ = [
     "Requests",
     "WithdrawPick",
     "accept",
+    "adopt_post",
     "apply_decision",
     "ask_check",
     "back_to_panel",
@@ -1494,9 +1639,11 @@ __all__ = [
     "build_panel",
     "card",
     "confirm_withdraw",
+    "filer_of",
     "finish_card",
     "forum_of",
     "guard_allows",
+    "made_by_the_bot",
     "make_forum",
     "mark_ready",
     "move_pressed",
@@ -1515,10 +1662,13 @@ __all__ = [
     "person_told",
     "post_line",
     "render_panel",
+    "reply_in_post",
     "resume_request",
     "retire",
     "run_move",
+    "say_in_post",
     "send_back",
+    "starter_of",
     "still_staff",
     "tell_person",
 ]

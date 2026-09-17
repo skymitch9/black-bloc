@@ -96,6 +96,7 @@ const SETTING_KEYS = [
   'request_check_fallback_channel',
   'request_check_on_ready',
   'request_post_buttons',
+  'request_forum_adopts_posts',
   'request_log_level',
 ];
 

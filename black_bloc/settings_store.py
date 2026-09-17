@@ -1258,6 +1258,7 @@ KEY_TYPES.update(
         "request_check_fallback_channel": "bool",
         "request_check_on_ready": "bool",
         "request_post_buttons": "bool",
+        "request_forum_adopts_posts": "bool",
     }
 )
 KEY_CHOICES["request_channel_moves"] = REQUEST_CARD_MOVES
@@ -1295,6 +1296,10 @@ KEY_HELP.update(
         "request_post_buttons": (
             "true draws the staff move buttons on each request's forum post (and edits them as "
             "the request moves); false leaves the post a notice with the site link"
+        ),
+        "request_forum_adopts_posts": (
+            "true turns a post somebody starts by hand in the requests forum into a request "
+            "filed by them; false leaves such posts alone"
         ),
     }
 )
@@ -2596,6 +2601,8 @@ class SettingsStore:
         if key == "request_check_on_ready":
             return False
         if key == "request_post_buttons":
+            return True
+        if key == "request_forum_adopts_posts":
             return True
         if key == "chat_mode":
             return "on"

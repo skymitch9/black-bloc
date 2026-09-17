@@ -124,6 +124,13 @@ the post*), sweeps rows `RP-a…`.
 
 ## G. A post somebody starts by hand in the requests forum becomes a request (owner, 2026-09-17 12:4x)
 
+> ✅ **BUILT** 2026-09-17 on branch `request-forum-adopt` off `main` `5e92e41`;
+> **not merged, not deployed, and no post has ever been started by hand in Discord.** Read the
+> `### §G` block in this doc's `## Deviations` foot first — ⚠️ **deviations 1 and 2 are the ones
+> that matter: the migration WAS needed (schema 41 → 42, `requests.source`), and `via = forum`
+> needed a new `VIA_FORUM` in `logkinds` or `actionlog.stamped` would have rewritten it to
+> `discord`.** `request_forum_adopts_posts` defaults to **true**.
+
 Owner, verbatim: *"If someone makes a thread in the request area, does that link to a request"* → no → *"Make it so
 we don't create a gap but it'll be hopefully under utilized"*.
 
@@ -354,3 +361,94 @@ keeps no post; a second test request is filed after the deploy.
 10. ⚠️ **`pytest -n auto` did not stall once** (KI-26). Four full `-n auto` runs in this
     worktree — the baseline, two after the code, and the `BB_REVERSE=1` one — all finished in
     30–40 s. The count stands at seven.
+
+### §G — a hand-made post becomes a request (build, 2026-09-17, branch `request-forum-adopt` off `main` `5e92e41`)
+
+> Everything below is a place the build did NOT do what §G says, and why. ⚠️ **Nothing here has
+> met Discord.** The whole verification is `pytest -n auto` (**6196 → 6223**, and 6223 again
+> under `BB_REVERSE=1`), `ruff check .` (clean), the ES-module parse of all **32**
+> `site/public/assets/*.js`, `node site/mock/check.mjs` (*19 pages, 178 routes, 15 core
+> settings, all keys present*), `node site/mock/discordmd.test.mjs` and
+> `node site/mock/labels.test.mjs`. No forum post was started by hand, no browser rendered the
+> Settings or Requests page, and `python -m black_bloc` was never booted.
+
+1. ⚠️ **`requests` had NO source column, so the migration §G allowed for was needed: schema
+   **41 → 42**, `requests.source TEXT NOT NULL DEFAULT 'panel'`.** The two lines that carry the
+   number are `black_bloc/storage/db.py:11` (`SCHEMA_VERSION`) and `tests/storage/test_db.py:16`;
+   the column itself is three edits in `db.py` — the version, the `CREATE TABLE requests` body and
+   one `ADDED_COLUMNS` row — and no migrate function, which is how every additive column in this
+   repo is written. ⚠️ **Only the adopt path ever writes `forum`.** The website's
+   `POST /api/requests` and the `/request` modal both leave the default, so a request filed on the
+   site reads `panel` — §G named two values and inventing a third for a door it did not mention
+   would have been a decision nobody asked for. `source` is NOT added to `request_row`
+   (`api/tools/requests.py:134`), which is an explicit allow-list, so the column reaches no
+   browser.
+
+2. ⚠️ **`via = forum` needed a NEW `VIA_FORUM` in `logkinds`, or the value would have been thrown
+   away before it was written.** Measured: `actionlog.stamped` OVERWRITES `details["via"]` with
+   `via_of(kind, details)`, and `via_of` honours a recorded word only when it is already a key of
+   `VIA_WORDS` — so `{"via": "forum"}` would have been silently rewritten to `discord` and §G's
+   own test would have been unprovable. Adding the word meant its two hand-copied JS twins as well
+   (`site/public/assets/logs.js` `VIA_WORDS`/`VIA_TITLES` and `site/mock/server.mjs` `VIA_WORDS`),
+   or the Logs page's **Via** column would have drawn a dash for every adopted request.
+   ⚠️ **`VIA_BOOT` is STILL missing from both JS tables** — a pre-existing gap found on the way
+   past, deliberately not fixed here, so a `selftest.started` row from a boot still reads as a
+   dash on the Logs page.
+
+3. ⚠️ **The reply is NOT gated on `request_channel_moves`, where `notify` is.** With a forum,
+   `notify` asks `posts_a_card(FILED_LOOK)` before opening a post at all — a server that has taken
+   `filed` out of the list gets no post. An adopted post already EXISTS, so honouring the key there
+   would have left a post that had quietly become a request with no card, no move buttons, and no
+   `message_id` for `restyle_post` to re-draw when it next moved. The key decides whether a MOVE
+   puts a card where staff watch; the adopted reply is the post's first-message equivalent, which
+   §F's buttons live on.
+
+4. **`request_mode` off is answered in words, though §G names only `request_who_can_file`.** Both
+   other filing doors refuse when the feature is off, and a post that silently did nothing is
+   indistinguishable from a broken bot. `ADOPTED_REQUESTS_OFF` names the door that turns it back
+   on (`/settings` ▸ **Turn a feature back on…**), exactly as `REQUESTS_OFF` does on the panel.
+
+5. ⚠️ **Idempotence is a per-cog `asyncio.Lock` plus the row check — NOT a unique index.**
+   Checklist 6 asks for a lock AND a DB uniqueness constraint; `Requests.adopting` is the lock, and
+   the whole read-decide-write (`request_for_thread` → `create_request` → `set_thread`) runs inside
+   it. A partial unique index on `requests(guild_id, thread_id)` was deliberately not added: every
+   index in `SCHEMA` is created on each `connect()`, so one pre-existing duplicate pair would stop
+   the bot BOOTING, and there is only one trigger here (the listener), not the two that item was
+   written for. The author check is the second belt and the one that matters at a restart: a post
+   the bot made is ignored whether or not `set_thread` has landed yet, which is the race
+   `on_thread_create` genuinely has against `open_forum_post`.
+
+6. **`tell_person` gained a `to=` keyword rather than `person_told` gaining a `filed` row.**
+   `person_told` is the table read on a MOVE, and `look_of` returns whatever status the move landed
+   on; teaching it that `filed` DMs the requester would have changed behaviour for every path that
+   reaches it, to buy nothing. One keyword, one implementation, no second DM function — the
+   adopted filing is `tell_person(..., FILED_LOOK, to=who.id)`.
+
+7. **The post is claimed for the guard in TWO places, `reply_in_post` and `say_in_post`.** A
+   refusal is also a message the post has to actually hear, and under `TEST_MODE` an unclaimed
+   thread swallows it. The forum itself is claimed by `forum_of`, as it has been since the v120
+   hotfix.
+
+8. **The adopted post keeps its OWN name; `post_title` is not applied to it.** §G says the
+   post's title becomes the request's `what`, not that the post is renamed. Renaming somebody's
+   post is not something this build had a mandate for, and the card the bot replies with carries
+   the number.
+
+9. **A member's post is answered with a PING, where every other send in this cog is
+   `AllowedMentions.none()`.** `say_in_post` narrows to exactly one user id the way `post_line`'s
+   `ping=` already does (checklist 11), because the person who has to read "this did not become a
+   request" is the one who wrote the post.
+
+10. **The requests guide gained a FAULT line as well as the fact §G asked for** — *"You started a
+    post in the requests forum yourself"* — because the fact ref alone tells a member nothing about
+    what happens to their post.
+
+11. ⚠️ **`pytest -n auto` did not stall once** (KI-26). Four full runs in this worktree — the
+    baseline in a throwaway worktree of `main`, two after the code, and the `BB_REVERSE=1` one —
+    all finished in 29–38 s. The count stands at seven.
+
+12. **What this build deliberately did NOT touch.** `docs/TODO.md`, `docs/DONE.md` and
+    `docs/deploys.log`. No setting was flipped: `request_forum_adopts_posts` defaults to **true**,
+    but `request_forum_channel_id` is the owner's, so on a guild with no request forum every path
+    here is unreachable. KI-29 is unchanged — a withdrawn request's post still keeps its tag, and
+    an adopted one is no different. Nothing was merged, deployed or pushed to `main`.

@@ -89,11 +89,12 @@ function whoCell(id, given) {
   }, [node]);
 }
 
-const VIA_WORDS = { discord: 'Discord', website: 'Website', operator: 'Operator token' };
+const VIA_WORDS = { discord: 'Discord', website: 'Website', operator: 'Operator token', forum: 'A forum post' };
 const VIA_TITLES = {
   discord: 'Done in Discord — a slash command or a button on one of the bot’s own messages',
   website: 'Done on this dashboard',
   operator: 'Read by a Claude session holding the operator token — it can look, never change',
+  forum: 'Started by hand as a post in the requests forum, and taken up from there',
 };
 
 /**

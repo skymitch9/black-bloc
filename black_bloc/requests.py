@@ -264,6 +264,20 @@ FORUM_TAG_FOR: dict[str, str] = {
 }
 FORUM_ARCHIVE_STATUSES = (DONE, DECLINED)
 FORUM_AUTO_ARCHIVE_MINUTES = 1440
+ADOPTS_POSTS_KEY = "request_forum_adopts_posts"
+SOURCE_PANEL = "panel"
+SOURCE_FORUM = "forum"
+ADOPTED_WHY = "(filed from a forum post)"
+ADOPTED_NOT_YOURS_TO_FILE = (
+    "{who} — this post was not turned into a request, because only staff may file one on this "
+    "server at the moment. Nothing here has been deleted. File it with `/request`, or ask staff "
+    "to put it in for you; a Lead can set **request_who_can_file** to everyone instead."
+)
+ADOPTED_REQUESTS_OFF = (
+    "{who} — this post was not turned into a request, because requests are turned off on this "
+    "server. Nothing here has been deleted. A Lead turns them back on with `/settings` ▸ **Turn "
+    "a feature back on…** — ask one, or say what you need in here in the meantime."
+)
 
 EMBED_COLOURS: dict[str, int] = {
     FILED_LOOK: 0x5865F2,
@@ -610,6 +624,15 @@ def forum_channel_id(store: Any, guild_id: int) -> Any:
     return store.get(guild_id, FORUM_CHANNEL_KEY)
 
 
+def forum_adopts_posts(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, ADOPTS_POSTS_KEY))
+
+
+def adopted_fields(title: Any, said: Any) -> tuple[str, str]:
+    """What a hand-made post asks for: its title, and its opening message or a stand-in."""
+    return (clamp(title, WHAT_LIMIT), clamp(said, WHY_LIMIT) or ADOPTED_WHY)
+
+
 def forum_tags(names: Any = FORUM_TAG_NAMES) -> list[discord.ForumTag]:
     """The tags a request forum is made with; their ids live in the forum, never in a key."""
     return [
@@ -833,12 +856,24 @@ async def create_request(
     due_on: str | None,
     status: str = OPEN,
     decided_by: int | None = None,
+    source: str = SOURCE_PANEL,
 ) -> int | None:
     decided_at = now_iso() if decided_by is not None else None
     cur = await db.conn.execute(
         "INSERT INTO requests(guild_id, user_id, what, why, due_on, status, created_at, "
-        "decided_by, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (guild_id, user_id, what, why, due_on, status, now_iso(), decided_by, decided_at),
+        "decided_by, decided_at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            guild_id,
+            user_id,
+            what,
+            why,
+            due_on,
+            status,
+            now_iso(),
+            decided_by,
+            decided_at,
+            source,
+        ),
     )
     await db.conn.commit()
     return cur.lastrowid
@@ -846,6 +881,15 @@ async def create_request(
 
 async def get_request(db: Any, request_id: int) -> Any:
     cur = await db.conn.execute("SELECT * FROM requests WHERE id = ?", (request_id,))
+    return await cur.fetchone()
+
+
+async def request_for_thread(db: Any, guild_id: int, thread_id: int) -> Any:
+    """The row a forum post already belongs to; `None` is what makes adopting it safe."""
+    cur = await db.conn.execute(
+        "SELECT * FROM requests WHERE guild_id = ? AND thread_id = ?",
+        (guild_id, int(thread_id)),
+    )
     return await cur.fetchone()
 
 
@@ -1152,6 +1196,7 @@ __all__ = [
     "WITHDRAWN",
     "RequestError",
     "add_comment",
+    "adopted_fields",
     "archives_at",
     "asked_stamp",
     "can_move",
@@ -1170,6 +1215,7 @@ __all__ = [
     "create_request",
     "due_stamp",
     "field_value",
+    "forum_adopts_posts",
     "forum_channel_id",
     "forum_tags",
     "get_comment",
@@ -1193,6 +1239,7 @@ __all__ = [
     "pick_placeholder",
     "card_will_post",
     "post_title",
+    "request_for_thread",
     "post_buttons_on",
     "post_move_custom_id",
     "posts_a_card",

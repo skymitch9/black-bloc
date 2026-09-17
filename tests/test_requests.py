@@ -929,3 +929,51 @@ async def test_withdraw_request_via_website_writes_the_web_headed_kind(db):
 
     cur = await db.conn.execute("SELECT kind FROM action_log")
     assert [r["kind"] for r in await cur.fetchall()] == ["web.request.withdrawn"]
+
+
+# --- a hand-made forum post becomes a request (blackmail-threads §G) --------------------------
+
+
+def test_the_adopt_setting_reads_off_the_registry_and_defaults_to_taking_posts_up():
+    assert pure.ADOPTS_POSTS_KEY == "request_forum_adopts_posts"
+    assert pure.forum_adopts_posts(Store(request_forum_adopts_posts=True), GUILD) is True
+    assert pure.forum_adopts_posts(Store(request_forum_adopts_posts=False), GUILD) is False
+
+
+def test_an_adopted_posts_fields_are_its_title_and_its_first_message():
+    assert pure.adopted_fields("a request board", "the doc is a mess") == (
+        "a request board",
+        "the doc is a mess",
+    )
+
+
+def test_an_adopted_post_with_nothing_written_in_it_still_has_a_why():
+    for said in ("", "   ", None):
+        assert pure.adopted_fields("a request board", said)[1] == pure.ADOPTED_WHY
+    assert pure.ADOPTED_WHY == "(filed from a forum post)"
+
+
+def test_an_adopted_posts_fields_are_clamped_to_what_a_request_holds():
+    what, why = pure.adopted_fields("w" * 4000, "y" * 4000)
+
+    assert len(what) == pure.WHAT_LIMIT and len(why) == pure.WHY_LIMIT
+
+
+async def test_a_request_records_where_it_came_from_and_a_panel_one_is_the_default(db):
+    panel = await file_one(db)
+    adopted = await file_one(db, source=pure.SOURCE_FORUM)
+
+    assert (await pure.get_request(db, panel))["source"] == pure.SOURCE_PANEL == "panel"
+    assert (await pure.get_request(db, adopted))["source"] == pure.SOURCE_FORUM == "forum"
+
+
+async def test_a_post_is_found_by_its_thread_id_within_its_own_server_only(db):
+    request_id = await file_one(db)
+    await pure.set_thread(db, request_id, 4242)
+    await file_one(db, guild_id=OTHER_GUILD)
+
+    found = await pure.request_for_thread(db, GUILD, 4242)
+
+    assert found is not None and found["id"] == request_id
+    assert await pure.request_for_thread(db, OTHER_GUILD, 4242) is None
+    assert await pure.request_for_thread(db, GUILD, 9999) is None

@@ -1,6 +1,14 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-17** — rows **`RA-a` … `RA-i`** added at the foot for the REQUEST FORUM ADOPT build
+> (branch `request-forum-adopt`, off `main` `5e92e41`; design `info/blackmail-threads-design.md` §G;
+> ⚠️ **not merged, not deployed, no post has ever been started by hand in the live forum**): a post
+> somebody starts by hand in `#requests` becomes a request filed by them — the title is what they
+> asked for, the opening message is why, and the bot replies in the post with the card and the staff
+> moves (`request_forum_adopts_posts`, default **true**). ⚠️ **`RA-c` is the row that matters** —
+> the Logs page's **Via** column must read *A forum post*, which is the only end-to-end proof the
+> new via word survives `stamped`. Before that,
 > **2026-09-17** — rows **`RP-a` … `RP-h`** added at the foot for the REQUEST POSTS build (branch
 > `request-post-buttons`, off `main` `f7cd19d`; design `info/blackmail-threads-design.md` §F;
 > ⚠️ **not merged, not deployed, no button in it has been pressed in Discord**): every request's
@@ -1673,6 +1681,29 @@ https://blackbloc.heygabi.ai/request.html and https://blackbloc.heygabi.ai/setti
 ⚠️ **Known gap, not a bug (KI-29, one surface wider):** a request the member WITHDRAWS keeps the
 moves for whatever status it was in, because `withdraw_request` still reaches no Discord surface at
 all. Sweep row **483** is the one that finds it.
+
+## REQUEST FORUM — a post started by hand becomes a request (`RA-a` … `RA-i`)
+
+Added 2026-09-17 by branch `request-forum-adopt` (design `info/blackmail-threads-design.md` §G,
+owner: *"If someone makes a thread in the request area, does that link to a request"* → *"Make it
+so we don't create a gap"*). The key is `request_forum_adopts_posts`, **true** out of the box, in
+**Settings ▸ request** and on the **Requests** page. ⚠️ **Nothing below has been done in Discord —
+every claim is the test suite's; no post has ever been started by hand in the live forum.** These
+rows need `request_forum_channel_id` set (sweep row **487**); with it blank there is no forum and
+nothing here applies. Review links: https://blackbloc.heygabi.ai/request.html and
+https://blackbloc.heygabi.ai/settings.html.
+
+| # | Do this | Expect |
+|---|---|---|
+| `RA-a` | From a SECOND account, start a post in `#requests` by hand: a title, and a sentence in the body | Within a second the bot replies in your post with the **New request #N** card and the moves **Pick up · Hold · Decline · Open on the site**. The post is tagged **open**, keeps the name YOU gave it, and nothing you wrote is deleted. The request's *what* is your title and its *why* is your sentence |
+| `RA-b` | Check that account's DMs | The same card arrives as a DM with the number, exactly as a `/request` filing does. ⚠️ If DMs are shut the card simply does not arrive — a `request.dm_failed` row on the Logs page is the record |
+| `RA-c` | Open **Logs** ▸ Requests on the dashboard and find the `request.filed` row | ⚠️ **The row this build exists to prove.** Its **Via** column reads **A forum post**, not *Discord* — that is the new `forum` via word travelling from the bot through the API to the page. The actor and target are the person who started the post |
+| `RA-d` | Start a post with a title and NO body at all | It still becomes a request; the *why* reads **(filed from a forum post)** on the card and on the Requests page |
+| `RA-e` | Press **Pick up** on the card the bot replied with | Everything §F's rows describe, on an adopted post: the ephemeral line, a **Request #N is being worked on** card in the post, the tag **picked up**, and the buttons on the bot's reply re-drawn. An adopted request is a normal request from here on |
+| `RA-f` | ⚠️ Set **request_who_can_file** to `staff` (Settings ▸ request), then start a post from the second account. Set it back afterwards | The post is NOT filed. The bot replies once, pinging that person, saying only staff may file at the moment, naming `/request` and "ask staff", and naming `request_who_can_file` as what a Lead changes. No tag, no card, no `request.filed` row — and the post is left exactly where it is, never deleted |
+| `RA-g` | With `request_forum_adopts_posts` set to **false**, start another post by hand. Set it back afterwards | Nothing at all happens: no reply, no tag, no row. The post is an ordinary forum post |
+| `RA-h` | File a request the ordinary way (`/request` ▸ **File a request**) and watch the post the bot makes | Exactly ONE card in it — the bot must not adopt its own post. If a second **New request** card appears under the first, that is the bug this row is for |
+| `RA-i` | After `RA-a`, restart the bot (`flyctl apps restart black-bloc`) and look at the adopted post again | Still one request, still one card. A restart re-delivers no `on_thread_create` for an old post, and the row's `thread_id` is what makes it a no-op if one ever arrives |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

@@ -181,12 +181,14 @@
         {"symptom": "You cannot see your requests on the panel", "answer": "The list is staff-only unless a Lead turns request_panel_own_list on. The website's Requests page shows yours."},
         {"symptom": "No DM arrived", "answer": "Your DMs are closed to server members. The bot pings you in the requests channel instead."},
         {"symptom": "A button on the post says it is for staff only", "answer": "A forum post is one message for everybody, so the moves are drawn for everybody and refused on the press. Pressing one needs Manage Server or a role that can see the staff channel — ask a Lead."},
-        {"symptom": "You cannot find the card again", "answer": "With a requests forum, your request is a post called #<number> and what you asked for, tagged for wherever it has got to. Without one, every card is in the requests channel."}
+        {"symptom": "You cannot find the card again", "answer": "With a requests forum, your request is a post called #<number> and what you asked for, tagged for wherever it has got to. Without one, every card is in the requests channel."},
+        {"symptom": "You started a post in the requests forum yourself", "answer": "It becomes a request filed by you: the title is what you asked for, your first message is the why, and the bot replies in the post with the card, the moves and the open tag. You are DMed the number. Nothing you wrote is deleted."}
       ],
       "facts": [
         {"kind": "setting", "ref": "request_mode"},
         {"kind": "setting", "ref": "request_who_can_file"},
         {"kind": "setting", "ref": "request_post_buttons"},
+        {"kind": "setting", "ref": "request_forum_adopts_posts"},
         {"kind": "probe", "ref": "requests.open_count"}
       ]
     },

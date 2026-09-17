@@ -10,11 +10,13 @@ VIA_DISCORD = "discord"
 VIA_WEBSITE = "website"
 VIA_OPERATOR = "operator"
 VIA_BOOT = "boot"
+VIA_FORUM = "forum"
 VIA_WORDS: dict[str, str] = {
     VIA_DISCORD: "Discord",
     VIA_WEBSITE: "Website",
     VIA_OPERATOR: "Operator token",
     VIA_BOOT: "By the bot at boot",
+    VIA_FORUM: "A forum post",
 }
 
 OFF = "off"
@@ -568,6 +570,7 @@ __all__ = [
     "SELFTEST_STARTED",
     "VIA_BOOT",
     "VIA_DISCORD",
+    "VIA_FORUM",
     "VIA_OPERATOR",
     "VIA_WEBSITE",
     "VIA_WORDS",

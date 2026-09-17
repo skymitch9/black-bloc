@@ -17,6 +17,7 @@ from black_bloc.logkinds import (
     SHADOW,
     VIA_BOOT,
     VIA_DISCORD,
+    VIA_FORUM,
     VIA_OPERATOR,
     VIA_WEBSITE,
     VIA_WORDS,
@@ -849,7 +850,11 @@ def test_via_reads_what_the_writer_recorded_and_falls_back_to_the_web_head():
     # The self-test's boot door records its own word, so a boot run is not read as Discord.
     assert via_of("selftest.started", {"via": "boot"}) == VIA_BOOT
     assert via_word("selftest.started", {"via": "boot"}) == "By the bot at boot"
-    assert set(VIA_WORDS) == {VIA_DISCORD, VIA_WEBSITE, VIA_OPERATOR, VIA_BOOT}
+    # A request adopted from a hand-made forum post records its own word, so the Logs page
+    # does not read it as an ordinary Discord filing (blackmail-threads §G).
+    assert via_of("request.filed", {"via": "forum"}) == VIA_FORUM
+    assert via_word("request.filed", {"via": "forum"}) == "A forum post"
+    assert set(VIA_WORDS) == {VIA_DISCORD, VIA_WEBSITE, VIA_OPERATOR, VIA_BOOT, VIA_FORUM}
 
 
 def test_an_operator_read_says_so_only_because_the_writer_recorded_it():
