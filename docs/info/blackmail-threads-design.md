@@ -85,7 +85,7 @@ order: the button lands after the welcome message and re-posts after a **Post it
 the decided bullets they change); the modmail and requests guides in `guides_seed.json`; `docs/access/sweeps.md`
 rows `BT-a…`; `architecture.md` schema line; this doc's `## Deviations`. NOT `TODO.md` / `DONE.md` / `deploys.log`.
 
-## F. The request post carries the staff moves (owner, 2026-09-17 12:1x)
+## F. The request post carries the staff moves (owner, 2026-09-17 12:1x) — ✅ LIVE as v122 (release `672c608`, 2026-09-17 12:38; the `### §F` deviations at the foot are the truth; sweeps 499–506)
 
 > ✅ **BUILT** 2026-09-17 on branch `request-post-buttons` off `main` `f7cd19d`;
 > **not merged, not deployed, never pressed in Discord.** Read the `### §F` block in this doc's
