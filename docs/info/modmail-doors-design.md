@@ -233,7 +233,9 @@ doors`; the `modmail-panel-design.md` §B row that says "no member half" struck 
 
 Owner, 2026-09-17 08:3x, verbatim: *"Let's keep but hide the open a ticket with option on the
 bot. Toggleable of course."* One key, `modmail_open_with_button` (bool, **default false**,
-namespace `modmail`, registry 225 → **226**). What it changes, and the three things it does not:
+namespace `modmail`, registry 225 → **226** on this branch — ⚠️ measured against `91bee8a`, and
+`main` gained `tempvoice_room_overwrites` at `255974c` while this was building, so the merged
+count is one higher again). What it changes, and the three things it does not:
 
 1. **`door_buttons` gained `open_with: bool = False`** rather than reading the store itself —
    `black_bloc/modmail.py` is the pure half and stays pure, so the flag is tested both ways with
@@ -263,6 +265,13 @@ namespace `modmail`, registry 225 → **226**). What it changes, and the three t
    names **Open a ticket with…** (it is the ticket-card guide: Reply, Reply as Staff, note,
    close), so there was no sentence to qualify. The brief's "(only when `modmail_open_with_button`
    is on)" clause has no home today; if a guide ever names that door, it needs one.
+
+**Measured on the branch:** `pytest -q -n auto` **5986 → 5993** (+6 written here, +1 the
+parametrised `test_every_registry_key_resolves_to_exactly_one_control[modmail_open_with_button]`
+the new key adds for free), green forward (44.1 s) **and** under `BB_REVERSE=1` (39.3 s);
+`ruff check .` clean; `node site/mock/check.mjs` ok. ⚠️ Two reversed runs before that one stalled
+mid-suite with the workers idle — **KI-26's hang, at 98 % under `-n auto` and at 81 % serial**,
+and the serial stall is worth the entry knowing: it is **not** an xdist-only shape.
 
 ⚠️ **NOT verified, this change:** nothing met Discord — no boot, no token, no press, no DM;
 `TEST_MODE` was never flipped and nothing was deployed. No browser saw the Settings page, real or
