@@ -59,6 +59,8 @@ governs it.
 
 ### C3. The posted Open-a-ticket panel
 
+⚠️ **SUPERSEDED IN PLACE by the front door (branch `front-door`, 2026-09-17, design [`front-door-design.md`](front-door-design.md) §B).** The posted Open-a-ticket button is now ONE OF THREE buttons on a message that also files a request and proposes an event, and `frontdoor_replaces_ticket_button` (**true**) takes this message down while the front door is up in the same channel — one door per channel. ~~Nothing below changed:~~ the code, both keys and the reconciler are untouched; `modmail_panel_channel_id` keeps its value, so moving the front door away or taking it down puts this button back on modmail's own next five-minute sweep. Everything below still describes what this button does; it is simply no longer the only thing in that channel.
+
 Staff `/modmail` ▸ **Setup…** gains **Ticket button…** → a `ChannelSelect` → the bot posts one message
 (embed: `modmail_panel_title` / `modmail_panel_text`, two new text keys with sensible defaults) with
 one persistent button **Open a ticket** (`TicketButton(DynamicItem)`, `custom_id` carries the guild
