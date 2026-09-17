@@ -7,6 +7,7 @@ import {
   bar,
   button,
   card,
+  channelLabel,
   el,
   field,
   idsIn,
@@ -83,12 +84,12 @@ function whereControl(row, channels) {
   const select = el('select', { class: 'input' });
   select.append(el('option', { value: '', text: NOWHERE }));
   select.append(el('option', { value: ELSEWHERE, text: SOMEWHERE_ELSE }));
-  for (const [kind, label, mark] of [['voice', 'Voice channels', '🔊 '], ['text', 'Text channels', '#']]) {
+  for (const [kind, label] of [['voice', 'Voice channels'], ['text', 'Text channels']]) {
     const group = el('optgroup', { label });
     for (const channel of channels.filter((one) => one.type === kind)) {
       group.append(el('option', {
         value: String(channel.id),
-        text: `${mark}${channel.name}`,
+        text: channelLabel(channel, channels),
         selected: String(row.where_channel_id || '') === String(channel.id) ? true : undefined,
       }));
     }

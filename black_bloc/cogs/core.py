@@ -33,6 +33,7 @@ from ..settings_store import (
     KEY_HELP,
     KEY_MAX,
     KEY_MIN,
+    TEXT_MAY_BE_BLANK,
     SettingError,
     display_value,
     is_staff_command,
@@ -1293,6 +1294,7 @@ class KeyModal(AnswersErrors, discord.ui.Modal):
             else MODAL_LABELS.get(editor, TEXT_LABEL)
         )
         self.field.label = label[:LABEL_MAX]
+        self.field.required = key not in TEXT_MAY_BE_BLANK
         self.field.max_length = field_max(key, editor)
         self.field.style = (
             discord.TextStyle.paragraph

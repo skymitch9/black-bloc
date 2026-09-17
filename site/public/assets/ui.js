@@ -10,9 +10,9 @@ import {
   settingsNamespace,
 } from './api.js';
 import { ICONS } from './icons.js';
-import { humanLabel } from './labels.js';
+import { channelLabel, humanLabel } from './labels.js';
 
-export { humanLabel };
+export { channelLabel, humanLabel };
 
 const OUTAGE_WRITE = 'Black Bloc did not answer, so nothing was changed. That is an outage, not a ' +
   'permission problem — try again in a minute.';
@@ -738,13 +738,6 @@ function optionNode(value, label, selected) {
   return el('option', { value: String(value), text: label, selected: selected || undefined });
 }
 
-const CHANNEL_KIND = { text: '#', voice: '🔊', forum: '#', category: '▸' };
-
-function channelLabel(channel) {
-  const mark = CHANNEL_KIND[channel.type] || '#';
-  return `${mark} ${channel.name}`;
-}
-
 export async function channelSelect(value, { multiple = false, id = null } = {}) {
   const channels = await refChannels();
   const chosen = new Set((multiple ? value || [] : [value]).filter(Boolean).map(String));
@@ -756,7 +749,9 @@ export async function channelSelect(value, { multiple = false, id = null } = {})
   });
   if (!multiple) select.append(optionNode('', 'not set', chosen.size === 0));
   for (const channel of channels) {
-    select.append(optionNode(channel.id, channelLabel(channel), chosen.has(String(channel.id))));
+    select.append(
+      optionNode(channel.id, channelLabel(channel, channels), chosen.has(String(channel.id))),
+    );
   }
   keepUnlisted(select, chosen, channels, 'a channel the server no longer has');
   return select;
@@ -1321,31 +1316,45 @@ export function fillTemplate(template, values) {
 }
 
 /**
- * A wording key edited with a preview: one settingsEditor row rendered as a
- * textarea, the docked bar the Settings page uses, and `paint` called with the
- * filled-in sample every time the text or one of `controls` changes.
+ * One wording key, or several under one save bar: each row is a textarea (or a
+ * one-line input where the spec says `editorType: 'text'`), the docked bar the
+ * Settings page uses, and `paint(filled, key)` called with the filled-in sample
+ * every time the text or one of `controls` changes. `onSaved` is the Settings
+ * page's own hook, passed through so a card below can refresh itself.
  */
-export async function templateEditor(spec, { sample = () => ({}), paint = null, controls = [], where = null } = {}) {
-  const editor = await settingsEditor([{ ...spec, type: 'longtext' }], {
-    where: where || humanLabel(spec.key),
+export async function templateEditor(spec, {
+  sample = () => ({}),
+  paint = null,
+  controls = [],
+  where = null,
+  onSaved = null,
+} = {}) {
+  const wanted = (Array.isArray(spec) ? spec : [spec]).map(
+    (one) => ({ ...one, type: one.editorType || 'longtext' }),
+  );
+  const editor = await settingsEditor(wanted, {
+    where: where || humanLabel(wanted[0].key),
+    onSaved,
   });
-  const row = editor.rows[0];
   const say = notice();
-  const repaint = () => {
+  const repaintOne = (row) => {
     const found = row.read();
     const filled = found.ok ? fillTemplate(found.value, sample()) : null;
     if (filled === null) say.say(UNREADABLE, 'warn');
     else say.say('');
-    if (paint) paint(filled);
+    if (paint) paint(filled, row.key);
   };
-  const control = row.node.querySelector('.setrow-control');
-  if (control) {
-    control.addEventListener('input', repaint);
-    control.addEventListener('change', repaint);
+  const repaint = () => editor.rows.forEach(repaintOne);
+  for (const row of editor.rows) {
+    const control = row.node.querySelector('.setrow-control');
+    if (control) {
+      control.addEventListener('input', repaint);
+      control.addEventListener('change', repaint);
+    }
   }
   for (const one of controls) one.addEventListener('change', repaint);
   repaint();
-  return { row, editor, say, repaint };
+  return { row: editor.rows[0], rows: editor.rows, editor, say, repaint };
 }
 
 /**

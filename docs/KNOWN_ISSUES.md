@@ -2,7 +2,13 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-11 10:55** — **KI-26 ADDED** (the xdist deploy-gate hang, `WATCHING`, 5 hangs v94–v100, 0 of 8 since v103); 10:50 — **KI-25 ADDED** (Discord-only sign-in, `WAIVED` by the owner: "A discord is fine"); **08:33** — every OPEN entry was re-read against the repo at
+> Last verified: **2026-09-17** — **KI-28 CLOSED** on branch `staff-reach` (§C.3 of
+> [`info/staff-reach-design.md`](info/staff-reach-design.md)): the key modal reads
+> `TEXT_MAY_BE_BLANK`, so the two go-live end keys can be emptied from Discord as well as from the
+> dashboard. ⚠️ **Proved by the suite, not by a Discord modal** — the entry says so, and sweep row
+> `SR-l` is the proof that is missing. ⚠️ **Nothing else in this file was re-checked then**, and
+> **KI-26's count stands at seven** — this build's own `pytest -n auto` runs did not stall. Before
+> that, **2026-09-11 10:55** — **KI-26 ADDED** (the xdist deploy-gate hang, `WATCHING`, 5 hangs v94–v100, 0 of 8 since v103); 10:50 — **KI-25 ADDED** (Discord-only sign-in, `WAIVED` by the owner: "A discord is fine"); **08:33** — every OPEN entry was re-read against the repo at
 > `main` `1d090e5` (**v108 LIVE**). What moved:
 > **KI-24 is now LIVE, not just closed on a branch** — it merged as `689eff5` and shipped
 > **v97** (`aa44e3b`, 2026-09-06 13:52; `deploys.log:96`); `black_bloc/loops.py` exists and
@@ -89,7 +95,25 @@
 **Why tolerated.** The build kept ONE place that edits a post (`notify_move`); giving `withdraw_request` its own tagger would be a second. Withdrawals are rare and the post is visibly stale to staff who open it.
 **What would change it.** Route `withdraw_request` through `notify_move` with a look of its own (`withdrawn`), a seventh tag, and the archive — one small change in the next requests build.
 
-## KI-28 — A blank `golive_end_template` / `golive_end_author` cannot be set from Discord — `ACCEPTED`
+## KI-28 — (RESOLVED 2026-09-17) A blank `golive_end_template` / `golive_end_author` cannot be set from Discord — `CLOSED`
+
+✅ **Closed on branch `staff-reach`** (design [`info/staff-reach-design.md`](info/staff-reach-design.md) §C.3), by the one line
+this entry's own *what would change it* named: `KeyModal.__init__` in `black_bloc/cogs/core.py` now
+sets `self.field.required = key not in TEXT_MAY_BE_BLANK`, so Discord itself accepts an empty submit
+for those two keys and only those two. The empty string then travels the path every other typed
+value takes — `parse_value` → `set_key` → `SettingsStore.set` → `coerce_value`, which has allowed
+`""` for `TEXT_MAY_BE_BLANK` since v117 — so one `settings.set` row is written and the value stored
+is the same one the dashboard's **Just add the ending instead** button stores. **Clear** still
+restores the shipped default, which is the other half of the pair and is right.
+
+⚠️ **Verified in the test suite only** (`tests/cogs/test_core.py`: the modal's field is not required
+for `golive_end_template` and is required for `golive_template`; an empty submit stores `""` and
+leaves one `settings.set` row; an empty submit for any other text key is still refused in words).
+**No Discord modal has been submitted** — sweep row `SR-l` is what proves it against the client.
+
+The original text is kept below rather than deleted, as this file's other closed entries are.
+
+## KI-28 (original text, kept for the record) — A blank `golive_end_template` / `golive_end_author` cannot be set from Discord — `ACCEPTED`
 
 **Symptom.** The go-live end wording has a "blank = keep the live sentence and append the suffix" shape (v117, `info/golive-end-design.md` §A). From the dashboard it is reachable (the **Wording** card's *Just add the ending instead* button sends `PUT ""`). From Discord it is not: `/settings` ▸ the key card's modal is a `discord.ui.TextInput` with `required=True` (`cogs/core.py:1284`), so Discord itself refuses an empty submit, and **Clear** restores the shipped default rather than blanking.
 **Status.** `ACCEPTED` 2026-09-17.

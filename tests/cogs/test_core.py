@@ -559,6 +559,37 @@ async def test_a_number_modal_carries_the_bound_and_refuses_past_it_without_writ
     assert await kinds(db) == []
 
 
+async def test_the_two_keys_that_may_be_blank_can_be_emptied_from_discord(bot, cog, lead, db):
+    """KI-28: Discord itself refuses an empty submit unless the field says it may be blank."""
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="golive_end_template")
+    opened = FakeInteraction(bot, lead)
+    await button(card.view, sp.EDITOR_LABELS[sp.TEXT_MODAL]).callback(opened)
+
+    assert opened.response.modals[0].field.required is False
+
+    emptied = FakeInteraction(bot, lead)
+    await core_cog.run_typed(emptied, card.view, "golive_end_template", "")
+
+    assert bot.store.get(GUILD, "golive_end_template") == ""
+    assert await kinds(db) == ["settings.set"]
+
+
+async def test_every_other_text_key_still_has_to_be_typed_into(bot, cog, lead):
+    card = FakeInteraction(bot, lead)
+    await core_cog.render_key(card, None, key="golive_template")
+    opened = FakeInteraction(bot, lead)
+    await button(card.view, sp.EDITOR_LABELS[sp.TEXT_MODAL]).callback(opened)
+
+    assert opened.response.modals[0].field.required is True
+
+    refused = FakeInteraction(bot, lead)
+    await core_cog.run_typed(refused, card.view, "golive_template", "")
+
+    assert "takes some text" in refused.sent
+    assert not bot.store.is_stored(GUILD, "golive_template")
+
+
 async def test_a_colour_is_refused_in_words_and_saved_when_it_is_one(bot, cog, lead, db):
     refused = FakeInteraction(bot, lead)
     await core_cog.run_typed(refused, None, "birthday_color", "blue")

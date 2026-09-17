@@ -100,6 +100,7 @@ const CHANNELS = [
   { id: '800000000000000009', name: 'Join to create', type: 'voice', category_id: null, position: 8 },
   { id: '800000000000000010', name: "casey's room", type: 'voice', category_id: null, position: 9 },
   { id: '800000000000000011', name: 'modmail', type: 'category', category_id: null, position: 10 },
+  { id: '800000000000000012', name: 'modmail-log', type: 'text', category_id: '800000000000000011', position: 11 },
 ];
 
 const MEMBERS = [

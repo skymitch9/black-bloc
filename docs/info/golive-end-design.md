@@ -109,12 +109,17 @@ built; these are the places the build had to decide something the design left op
    back — so with a non-blank shipped default the blank shape is unreachable from the Settings
    page. Rather than change a shared file two other builds are in, the **Wording** card carries one
    button whose label flips: **Just add the ending instead** (`PUT ""`) / **Rewrite it instead**
-   (`DELETE`, so the shipped wording comes back). ⚠️ **The Discord side has the same gap and it is
+   (`DELETE`, so the shipped wording comes back). ~~⚠️ **The Discord side has the same gap and it is
    NOT closed:** `/settings` ▸ the key card's modal is `discord.ui.TextInput` with
    `required=True` (`cogs/core.py:1284`), so an empty submit is refused by Discord itself, and
    Clear restores the default. Blanking from Discord would mean changing that shared modal for
    every key. **Left as a finding for the conductor** — a `KNOWN_ISSUES.md` entry was NOT written,
-   because that file is not one this build was told to touch.
+   because that file is not one this build was told to touch.~~
+   ✅ **REVERSED 2026-09-17, branch `staff-reach`** (checklist 35). The finding became **KI-28**,
+   and KI-28 is now CLOSED: the shared modal reads `settings_store.TEXT_MAY_BE_BLANK`
+   (`required = key not in TEXT_MAY_BE_BLANK`), so an empty submit is accepted for those two keys
+   and refused for every other text key exactly as before. Discord and the dashboard now reach the
+   same shape, which is what checklist 33 asks for. Clear still restores the shipped default.
 4. **`ended_render`'s signature carries the live `content` and the `suffix`.** §B's sketch
    (`template, info_or_row, name, *, duration, mention_prefix, keep_mention`) has nothing for the
    fallback to append the suffix TO, and the mention prefix is read off the content rather than
@@ -131,11 +136,17 @@ built; these are the places the build had to decide something the design left op
    `${prefix}${filled}${endSuffix}` as it typed, which is the wrong answer the moment a rewrite
    exists. The ending now has one home: the **Wording** card, rendered by the bot. The live
    preview-as-you-type stays, because a server route cannot preview unsaved text.
-8. **The card has its own Refresh, and that is a real gap in the "hook the save event" instruction
-   (§C).** `namespaceSettings` and `modeSwitch` both take `onSaved` and are hooked. The wording
-   editor above it saves through `templateEditor`'s docked bar, and `ui.js` passes no `onSaved`
-   through — reaching into a shared file for that one hook was not worth the collision, so the card
-   says what it reads and offers the press.
+8. ~~**The card has its own Refresh, and that is a real gap in the "hook the save event"
+   instruction (§C).** `namespaceSettings` and `modeSwitch` both take `onSaved` and are hooked. The
+   wording editor above it saves through `templateEditor`'s docked bar, and `ui.js` passes no
+   `onSaved` through — reaching into a shared file for that one hook was not worth the collision,
+   so the card says what it reads and offers the press.~~
+   ✅ **REVERSED 2026-09-17, branch `staff-reach`** (checklist 35, and §C.2 of
+   `staff-reach-design.md` names this deviation as the gap it closes). `templateEditor` now takes
+   `onSaved` and passes it to `settingsEditor`, which already had it; both wording editors on the
+   page hook it, so the **Wording** card repaints itself when either is saved. Refresh stays, for a
+   change somebody else made from the Settings page or from Discord, and its help line was
+   rewritten to say so rather than to tell the reader to press it after every save.
 9. **Two files outside the brief's list had to change, both one-liners of registration, not
    behaviour:** `site/public/assets/labels.js` (three labels — `tests/test_settings_store.py::
    test_every_registry_key_the_site_shows_has_a_label` fails without them) and

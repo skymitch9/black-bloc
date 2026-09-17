@@ -1630,6 +1630,19 @@ channel*), which is why `SR-g` is worth doing before `SR-f`.
 | `SR-g` | Open one through each other door — `/modmail` ▸ **Open a ticket**, the posted **Open a ticket** button, and (with `modmail_open_with_button` on) staff ▸ **Open a ticket with…** | **One** card each, never two, with *Came in by* reading `/modmail` / *the Open a ticket button* / *staff*. The staff one also carries **Opened by**, and both modal doors carry **About** — the first line of what was typed in the subject box |
 | `SR-h` | Set **modmail_log_on_open** to false, open one more ticket, set it back | No card at all, and the ticket opens exactly as it did. `modmail.opened` is still on the Logs page either way |
 
+## THE SITE — categories on every picker, the ending's own editor, a key that may be blank (`SR-i` … `SR-l`)
+
+Added 2026-09-17 by the same build (§C). No key, no migration — these are three fixes the owner
+asked for by name. Review links: https://blackbloc.heygabi.ai/golive.html and
+https://blackbloc.heygabi.ai/settings.html.
+
+| # | Do this | Expect |
+|---|---|---|
+| `SR-i` | Open **Settings** ▸ modmail ▸ *The transcripts channel*, and any other channel dropdown on the site (Polls ▸ Where, Posts ▸ the target, Role menus ▸ where a menu goes) | Every channel reads `# name · Category`, so the two `modmail-log`s are told apart at last. A channel at the top level reads the name alone, a category row is unchanged, and a stored id the server no longer has still reads `a channel the server no longer has · <id>` |
+| `SR-j` | **Go-live** page ▸ **Announcement wording**. Under the live editor: **What the announcement says once the stream is over** and, under it, **What the card's top line says once the stream is over** | Both are editable here, with the same docked save bar (it says *Once the stream is over*) and a **What the ending looks like** card that fills in as you type, with a two-hour `{duration}`. Empty either box and its preview says what blank means rather than showing nothing |
+| `SR-k` | Change one of them and press **Save Changes**, then watch the **Wording** card below | It repaints itself — no Refresh press. Refresh is still there for a change made from the Settings page or from Discord. ⚠️ The two settings rows on the right still write the same keys; they are the same fact, not a second one |
+| `SR-l` | In Discord: `/settings` ▸ **A setting group…** ▸ **golive** ▸ *golive_end_template* ▸ **The words…**, clear the box and submit | ⚠️ **This is the row that proves KI-28 closed.** Discord accepts the empty submit, the card comes back reading *not set*, and the Wording card on the site shows the live sentence with ` — stream ended` on the end. Try the same on *golive_template*: Discord itself refuses to submit it empty, which is right |
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is

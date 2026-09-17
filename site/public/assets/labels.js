@@ -286,3 +286,19 @@ function derived(key) {
 export function humanLabel(key) {
   return LABELS[String(key || '')] || derived(key);
 }
+
+const CHANNEL_KIND = { text: '#', voice: '🔊', forum: '#', category: '▸' };
+
+/** The category a channel sits in, by name, or nothing when it sits at the top level. */
+function categoryName(channel, channels) {
+  if (!channel || channel.type === 'category' || !channel.category_id) return '';
+  const found = (channels || []).find((one) => String(one.id) === String(channel.category_id));
+  return found ? String(found.name || '') : '';
+}
+
+/** `# modmail-log · BlackMail` — two channels of the same name are told apart by where they live. */
+export function channelLabel(channel, channels = []) {
+  const mark = CHANNEL_KIND[channel.type] || '#';
+  const where = categoryName(channel, channels);
+  return where ? `${mark} ${channel.name} · ${where}` : `${mark} ${channel.name}`;
+}
