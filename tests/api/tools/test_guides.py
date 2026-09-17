@@ -1,4 +1,5 @@
 import base64
+import time
 
 import pytest
 
@@ -188,6 +189,7 @@ async def test_the_read_bucket_still_says_slow_down_when_it_is_empty(as_member, 
     bucket = member_read_bucket_for(web)
     for _ in range(bucket.limit + 1):
         bucket.take(str(READER))
+    bucket._seen[str(READER)] = (0.0, time.time() + bucket.window)
 
     answered = as_member.get("/api/guides")
 
