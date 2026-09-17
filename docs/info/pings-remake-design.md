@@ -1,7 +1,7 @@
 # Pings, remade — one "what pings me" panel, a streamer list fed by going live, raid trains wired in, and Discord's Community onboarding as the front door
 
-> **Audience:** the owner (to settle the forks) and the build agent. **Status:** TRACKED · 📐 **DESIGN,
-> forks open, nothing dispatched.** Owner, 2026-09-16 22:2x–22:4x, verbatim: *"A wire in pings / Also
+> **Audience:** the owner (to settle the forks) and the build agent. **Status:** TRACKED · 📐 **DESIGN —
+> all three forks DECIDED (a) by the owner 2026-09-16 22:5x; dispatch waits on his word.** Owner, 2026-09-16 22:2x–22:4x, verbatim: *"A wire in pings / Also
 > for roles can we start a listener, each time someone goes live their added to a streamer list / Then a
 > user can opt into a streamer role? / To give some caveats to this whole system. / We're moving to a
 > discord community server so that will handle some role stuff. / We need this system to work with"* →
@@ -200,7 +200,7 @@ roles. The onboarding limits go into `## Deviations` as measured numbers. Sweep 
   the three shared opt-ins in onboarding; streamers stay on `/pings`.
 - **F-PR2 — who lands on the streamer list. ✅ DECIDED 2026-09-16 22:51, owner verbatim "A".** (a) Anyone Discord shows streaming — recommended
   (that is the listener as asked). (b) Only linked members.
-- **F-PR3 — role lifetime.** (a) Made on first follow, pruned when unworn 30 days — recommended.
+- **F-PR3 — role lifetime. ✅ DECIDED 2026-09-16 22:52, owner verbatim "A".** (a) Made on first follow, pruned when unworn 30 days — recommended.
   (b) Made for every listed streamer, never pruned (simple, but the guild role cap is 250).
 
 ## Deviations
