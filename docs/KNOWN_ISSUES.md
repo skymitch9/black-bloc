@@ -82,6 +82,13 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
+## KI-29 — A WITHDRAWN request's forum post keeps its tag and is never archived — `ACCEPTED`
+
+**Symptom.** With `request_forum_channel_id` set (v119), every request is a forum post tagged by where it is, and a decision tags + archives it. A member who WITHDRAWS a request (`withdraw_request` in `black_bloc/requests.py`) leaves the post open and still tagged as it was — the withdrawal reaches no Discord surface at all, and never did (it predates the forum).
+**Status.** `ACCEPTED` 2026-09-17. Sweep row **483** (was `BT-m`) finds it.
+**Why tolerated.** The build kept ONE place that edits a post (`notify_move`); giving `withdraw_request` its own tagger would be a second. Withdrawals are rare and the post is visibly stale to staff who open it.
+**What would change it.** Route `withdraw_request` through `notify_move` with a look of its own (`withdrawn`), a seventh tag, and the archive — one small change in the next requests build.
+
 ## KI-28 — A blank `golive_end_template` / `golive_end_author` cannot be set from Discord — `ACCEPTED`
 
 **Symptom.** The go-live end wording has a "blank = keep the live sentence and append the suffix" shape (v117, `info/golive-end-design.md` §A). From the dashboard it is reachable (the **Wording** card's *Just add the ending instead* button sends `PUT ""`). From Discord it is not: `/settings` ▸ the key card's modal is a `discord.ui.TextInput` with `required=True` (`cogs/core.py:1284`), so Discord itself refuses an empty submit, and **Clear** restores the shipped default rather than blanking.
@@ -108,6 +115,8 @@ Settings page's). The rule is about DECISIONS; guide copy is CONTENT.
 panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
+
+> **2026-09-17 — seven sightings now.** Three of today's were PLAIN `pytest -n auto` runs inside build worktrees (not `deploy.ps1`), one of them serial (`-p no:cacheprovider`, no xdist) — so the hang is not xdist-only and not deploy-only; and one build's `taskkill /F /IM python.exe` during a stall killed every python on the machine (the run was not hung, three agents were sharing the cores). Kill by process tree, never by image name.
 
 **Symptom:** the deploy gate's `pytest -q -n auto` stops making progress — 33 idle pythons,
 the log untouched for over a minute, CPU flat — at spawn (twice) or at 81–92 % of the run

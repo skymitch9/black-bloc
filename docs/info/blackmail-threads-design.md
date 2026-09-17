@@ -1,8 +1,6 @@
 # BlackMail — requests and modmail as forum channels, one thread each; the ticket button under the rules
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT on branch
-> `blackmail-threads`, off `main` `905982b` — NOT merged, NOT deployed, and nothing in it has met
-> Discord.** Schema **40 → 41** (`requests.thread_id`) — ⚠️ **migrate before deploy**, and the number
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v119** — merge `85d88d3`, release `8040a81`, deployed **2026-09-17 10:51** Phoenix; schema 41; the `## Deviations` foot is the truth where it departs from the body; sweeps **471–486** are the owner's; KI-29 for the withdrawn post. Was: ✅ BUILT, not merged (the paragraph that stood here said nothing in it had met Discord — still true at the deploy; the forums were made by the website's Make the forum right after)** Schema **40 → 41** (`requests.thread_id`) — ⚠️ **migrate before deploy**, and the number
 > is written as though the polls build has already taken 40 (`black_bloc/storage/db.py:11` and
 > `tests/storage/test_db.py:16` are the two lines that carry it). ⚠️ **Read the `## Deviations` foot
 > before the sections above: fourteen things differ from what is written here** — most importantly
