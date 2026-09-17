@@ -1,11 +1,9 @@
 {
-  "release": "v125",
-  "commit": "ae6eecb",
+  "release": "v126",
+  "commit": "427ee2c",
   "changed_features": [
-    "core",
+    "golive",
     "guides",
-    "modmail",
-    "selftest",
-    "tempvoice"
+    "youtube"
   ]
 }
