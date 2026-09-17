@@ -1,5 +1,12 @@
 {
-  "release": "v120",
-  "commit": "4c92a0b",
-  "changed_features": []
+  "release": "v121",
+  "commit": "129bf70",
+  "changed_features": [
+    "core",
+    "events",
+    "golive",
+    "guides",
+    "modmail",
+    "tempvoice"
+  ]
 }
