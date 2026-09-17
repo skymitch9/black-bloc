@@ -161,6 +161,7 @@ export const LABELS = {
   modmail_open_with_button: 'Whether staff see Open a ticket with… on /modmail',
   modmail_forum_channel_id: 'Where ticket posts are made, in forum mode',
   modmail_forum_tags: 'Whether a ticket post wears an open or a closed tag',
+  modmail_log_on_open: 'Whether a new ticket is announced in the transcripts channel',
   modmail_panel_follows_post: 'Which post the Open a ticket button sits under',
 
   automod_mode: 'Whether automod is watching',

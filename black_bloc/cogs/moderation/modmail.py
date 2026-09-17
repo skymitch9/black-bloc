@@ -138,6 +138,7 @@ from ...modmail import (
     mentions,
     modes_sentence,
     note_body,
+    open_embed,
     opening_dm,
     panel_card_buttons,
     panel_minutes,
@@ -155,6 +156,7 @@ from ...modmail import (
     ticket_card_embed,
     ticket_channel_name,
     ticket_label,
+    ticket_source,
     ticket_topic,
     transcript_embed,
     transcript_filename,
@@ -187,6 +189,7 @@ from ...settings_store import (
     GUILD_ONLY,
     MODMAIL_FORUM_CHANNEL,
     MODMAIL_FORUM_TAGS,
+    MODMAIL_LOG_ON_OPEN,
     MODMAIL_MODES,
     MODMAIL_OPEN_WITH_BUTTON,
     MODMAIL_PANEL_FOLLOWS_NOTHING,
@@ -1301,6 +1304,55 @@ async def close_ticket(
         return True, why_not
 
 
+async def log_open(bot: Any, guild: Any, ticket: Any, user: Any, subject: Any = None) -> str | None:
+    """The New-ticket card the transcripts channel gets, posted the way a transcript is."""
+    if not bot.store.get(guild.id, MODMAIL_LOG_ON_OPEN):
+        return "off"
+    details = {"ticket_id": ticket["id"]}
+    channel_id = bot.store.get(guild.id, "modmail_log_channel_id")
+    channel = (
+        (bot.get_channel(channel_id) or guild.get_channel(channel_id)) if channel_id else None
+    )
+    if channel is None:
+        await log_action(
+            bot,
+            guild,
+            "modmail.log_open_failed",
+            details=details | {"reason": "no_log_channel"},
+        )
+        return "no_log_channel"
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(channel.id):
+        await log_action(
+            bot,
+            guild,
+            "modmail.would_log_open",
+            details=details | {"reason": "test_mode", "channel_id": channel.id},
+        )
+        return "test_mode"
+    embed = open_embed(
+        ticket_id=ticket["id"],
+        user_id=ticket["user_id"],
+        user_label=getattr(user, "display_name", None) or getattr(user, "name", None),
+        source=ticket_source(ticket),
+        opened_by=field_of(ticket, "opened_by"),
+        subject=subject,
+        opened_at=ticket["opened_at"],
+    )
+    try:
+        await channel.send(embed=embed, allowed_mentions=mentions())
+    except Exception as exc:
+        log.warning("modmail: could not log the open of %s: %s", ticket["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            "modmail.log_open_failed",
+            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return f"{type(exc).__name__}: {exc}"
+    return None
+
+
 async def post_transcript(
     bot: Any, guild: Any, ticket: Any, rows: Any, *, by: Any, reason: Any, closed_at: str
 ) -> tuple[int | None, str | None]:
@@ -1977,6 +2029,7 @@ async def open_or_find(
         },
     )
     await post_header(bot, guild, ticket, user, mode)
+    await log_open(bot, guild, ticket, user, subject)
     return ticket, True
 
 

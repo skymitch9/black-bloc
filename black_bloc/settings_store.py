@@ -1629,11 +1629,13 @@ MODMAIL_PANEL_FOLLOWS_POST = "modmail_panel_follows_post"
 MODMAIL_PANEL_FOLLOWS_POST_DEFAULT = "welcome"
 MODMAIL_PANEL_FOLLOWS_NOTHING = "none"
 REQUEST_FORUM_CHANNEL = "request_forum_channel_id"
+MODMAIL_LOG_ON_OPEN = "modmail_log_on_open"
 
 KEY_TYPES.update(
     {
         MODMAIL_FORUM_CHANNEL: "channel",
         MODMAIL_FORUM_TAGS: "bool",
+        MODMAIL_LOG_ON_OPEN: "bool",
         MODMAIL_PANEL_FOLLOWS_POST: "text",
     }
 )
@@ -1646,6 +1648,10 @@ KEY_HELP.update(
         MODMAIL_FORUM_TAGS: (
             "true keeps the open / closed tags on each ticket post in forum mode; false leaves "
             "every post untagged and the forum's own tag list alone"
+        ),
+        MODMAIL_LOG_ON_OPEN: (
+            "true posts a New-ticket card to the transcripts channel the moment a ticket opens "
+            "(what the old ModMail bot's log did); false logs opens only in the action log"
         ),
         MODMAIL_PANEL_FOLLOWS_POST: (
             "the slug of the post the Open a ticket button sits under — welcome by default, so "
@@ -2699,6 +2705,8 @@ class SettingsStore:
         if key == MODMAIL_OPEN_WITH_BUTTON:
             return False
         if key == MODMAIL_FORUM_TAGS:
+            return True
+        if key == MODMAIL_LOG_ON_OPEN:
             return True
         if key == MODMAIL_PANEL_FOLLOWS_POST:
             return MODMAIL_PANEL_FOLLOWS_POST_DEFAULT

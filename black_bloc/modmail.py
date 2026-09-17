@@ -471,6 +471,41 @@ def ticket_source(ticket: Any) -> str:
     found = str(field_of(ticket, "source", SOURCE_DM) or SOURCE_DM)
     return found if found in TICKET_SOURCES else SOURCE_DM
 
+
+def first_line(text: Any) -> str:
+    """The first thing somebody typed, or nothing at all."""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    return lines[0] if lines else ""
+
+
+def open_embed(
+    *,
+    ticket_id: Any,
+    user_id: Any,
+    user_label: Any = None,
+    source: str = SOURCE_DM,
+    opened_by: Any = None,
+    subject: Any = None,
+    opened_at: Any = None,
+) -> discord.Embed:
+    """The New-ticket card the transcripts channel gets the moment a ticket opens."""
+    label = clamp(str(user_label or user_id), NAME_LIMIT)
+    embed = discord.Embed(
+        title=f"New ticket #{ticket_id}",
+        description=f"<@{int(user_id)}> — {label}",
+        colour=COLOURS[IN],
+    )
+    embed.add_field(name="Opened", value=str(opened_at or "just now"), inline=True)
+    embed.add_field(name="Came in by", value=SOURCE_WORDS.get(source, source), inline=True)
+    if source == SOURCE_STAFF and opened_by:
+        embed.add_field(name="Opened by", value=f"<@{int(opened_by)}>", inline=True)
+    said = first_line(subject)
+    if said:
+        embed.add_field(name="About", value=clamp(said, FIELD_LIMIT), inline=False)
+    embed.set_footer(text=f"{label} | {int(user_id)}")
+    return embed
+
+
 SETUP = "setup"
 BLOCKED_MOVE = "blocked"
 SNIPPETS = "snippets"

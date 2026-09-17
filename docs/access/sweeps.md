@@ -1617,6 +1617,19 @@ the rest.
 | `SR-d` | Propose an event (`/event` ▸ **Propose an event**) and open the review room's permissions | The staff role has View + Send + **Manage Channel**; `@everyone` is still denied |
 | `SR-e` | Set **spawned_channels_staff_reach** to false on the Settings page, spawn one more room, then set it back to true | The new room has NO staff overwrite beyond what it always had (view + connect from the allowed-role list); nothing else changes |
 
+## BLACKMAIL — a New-ticket card the moment a ticket opens (`SR-f` … `SR-h`)
+
+Added 2026-09-17 by the same build. The key is `modmail_log_on_open`, **true** out of the box, in
+**Settings ▸ modmail**. The card goes to `modmail_log_channel_id` — ⚠️ **still `#blackbloc-logs`
+until the owner points it at BlackMail's `#modmail-log`** (Settings ▸ modmail ▸ *The transcripts
+channel*), which is why `SR-g` is worth doing before `SR-f`.
+
+| # | Do this | Expect |
+|---|---|---|
+| `SR-f` | DM Black Bloc from a second account | One embed **New ticket #N** in the transcripts channel: the member mentioned and named, *Came in by* **a DM to Black Bloc**, and the footer `<name> \| <user id>` — the same footer the old ModMail bot's log used, so an old search still finds it |
+| `SR-g` | Open one through each other door — `/modmail` ▸ **Open a ticket**, the posted **Open a ticket** button, and (with `modmail_open_with_button` on) staff ▸ **Open a ticket with…** | **One** card each, never two, with *Came in by* reading `/modmail` / *the Open a ticket button* / *staff*. The staff one also carries **Opened by**, and both modal doors carry **About** — the first line of what was typed in the subject box |
+| `SR-h` | Set **modmail_log_on_open** to false, open one more ticket, set it back | No card at all, and the ticket opens exactly as it did. `modmail.opened` is still on the Logs page either way |
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is
