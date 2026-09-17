@@ -61,6 +61,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.guide.media_replaced",
         "web.guide.published",
         "web.guide.reset",
+        "web.guide.shots_stale",
         "web.guide.unpublished",
         "web.request.comment",
         "web.request.filed",

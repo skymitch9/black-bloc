@@ -35,6 +35,14 @@ CONFIRMED_SAID = (
 )
 MEDIA_SAID = "The picture on step {position} is replaced."
 MEDIA_GUIDE_SAID = "The picture on **{title}** is replaced."
+ALL_STALE_SAID = (
+    "{count} screenshots are marked for re-shooting. The capture runbook's stale list is the "
+    "whole job."
+)
+ONE_STALE_SAID = (
+    "1 screenshot is marked for re-shooting. The capture runbook's stale list is the whole job."
+)
+ALREADY_ALL_STALE = "Every screenshot was already marked."
 NOT_SEEDED = (
     "**{slug}** was written here rather than shipped with Black Bloc, so there is no original to "
     "put back. Nothing was changed."
@@ -388,6 +396,35 @@ def build_router(bot: Any) -> APIRouter:
             "count": len(rows),
             "checked_at": now(),
         }
+
+    @router.post("/stale/all")
+    async def guides_stale_all(
+        request: Request, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """A settings flip or a channel rename is not a deploy, so nothing else can mark these."""
+        who, guild = await _editor(request)
+        reason = wanted_text(payload or {}, "reason", guides.REASON_MAX) or None
+        marked = await guides.mark_all_stale(bot.db, guild.id)
+        release = guides.read_release(bot) or {}
+        await note(
+            bot,
+            guild,
+            "web.guide.shots_stale",
+            who,
+            reason=reason,
+            details={
+                "release": release.get("release"),
+                "features": ["all"],
+                "count": marked,
+                "reason": reason,
+            },
+        )
+        said = ALREADY_ALL_STALE
+        if marked == 1:
+            said = ONE_STALE_SAID
+        elif marked:
+            said = ALL_STALE_SAID.format(count=marked)
+        return {"marked": marked, "message": said}
 
     @router.get("/media/{media_id}")
     async def guide_picture(request: Request, media_id: int) -> Response:

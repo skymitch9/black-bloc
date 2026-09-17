@@ -3804,6 +3804,22 @@
       }
     },
     {
+      "_": "Guides. The one move that marks EVERY picture stale, for what no deploy can reach — a mode flip, a channel rename. Registered before the /{slug} routes so `stale/all` is never read as a slug. Staff + guides_who_edits, and it answers the count it marked.",
+      "method": "POST",
+      "path": "/api/guides/stale/all",
+      "body": {
+        "reason": "the cutover"
+      },
+      "read_by": [
+        "page-guides.js Mark every screenshot stale…"
+      ],
+      "shape": "object",
+      "keys": [
+        "marked",
+        "message"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/guides/{guide_slug}",
       "read_by": [
@@ -4776,6 +4792,7 @@
     "web.guide.media_replaced",
     "web.guide.published",
     "web.guide.reset",
+    "web.guide.shots_stale",
     "web.guide.unpublished",
     "web.post.created",
     "web.post.deleted",

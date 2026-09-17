@@ -726,7 +726,7 @@ function seedState() {
       updated_at: minutesAgo(60),
       updated_by: STAFF.id,
       steps: [
-        { id: 3, do_text: 'Press **Edit this guide**.', expect_text: 'Every line becomes a box.', media_id: null, seed_do: null, seed_expect: null },
+        { id: 3, do_text: 'Press **Edit this guide**.', expect_text: 'Every line becomes a box.', media_id: 2, seed_do: null, seed_expect: null },
       ],
       faults: [{ id: 3, symptom: 'No Edit this guide', answer: 'guides_who_edits is manage_guild. Ask a Lead.' }],
       facts: [{ kind: 'probe', ref: 'test_mode' }],
@@ -750,6 +750,24 @@ function seedState() {
       caption: 'the /golive panel',
       stale: true,
       stale_since: minutesAgo(120),
+    },
+    {
+      id: 2,
+      guide_id: 2,
+      step_id: 3,
+      file: '2.png',
+      sha256: 'b3c8d3fd5e2d7b4a3f4a5b6c7d8e9f00112233445566778899aabbccddeeff00',
+      width: 1280,
+      height: 720,
+      bytes: 61400,
+      source: 'capture',
+      surface: 'website',
+      shot_release: 'v110',
+      shot_at: minutesAgo(2400),
+      shot_by: STAFF.id,
+      caption: 'the guide editor',
+      stale: false,
+      stale_since: null,
     },
   ],
   posts: [
@@ -811,7 +829,7 @@ function seedState() {
   nextPostMessage: 820000000000000001,
   nextGuide: 3,
   nextGuideStep: 4,
-  nextGuideMedia: 2,
+  nextGuideMedia: 3,
   rules: JSON.parse(JSON.stringify(RULES)),
   menus: [
     {
@@ -2332,6 +2350,9 @@ const GUIDE_BAD_PICTURE = 'That upload did not arrive as a picture Black Bloc co
 const GUIDE_WRONG_TYPE = '**{name}** is not a picture Black Bloc can serve. Nothing was uploaded \u2014 send a PNG, a JPEG or a WebP.';
 const GUIDE_OFF = 'Guides are turned off for this server, so there is nothing to show. A Lead turns them back on from the dashboard\u2019s Settings page under **guides**.';
 const GUIDE_RELEASE = 'v110';
+const GUIDE_ALL_STALE = '{count} screenshots are marked for re-shooting. The capture runbook\'s stale list is the whole job.';
+const GUIDE_ONE_STALE = '1 screenshot is marked for re-shooting. The capture runbook\'s stale list is the whole job.';
+const GUIDE_ALREADY_STALE = 'Every screenshot was already marked.';
 const GUIDES_OFF_FOR_STAFF = 'Guides are off for members right now, so nobody but staff can open this page. A Lead turns them back on from the Settings page under **guides**.';
 
 function guideOrigin() {
@@ -2538,6 +2559,27 @@ route('GET', '/api/guides/stale', (context) => {
       return { ...guideMediaRow(one, ''), slug: guide.slug, title: guide.title, feature: guide.feature };
     });
   return { shots, count: shots.length, checked_at: now() };
+});
+
+// Registered before the /:slug routes so `stale/all` is never read as a slug.
+route('POST', '/api/guides/stale/all', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const reason = String(body.reason || '').trim().slice(0, 200) || null;
+  const rows = state.guideMedia.filter((one) => !one.stale);
+  for (const one of rows) {
+    one.stale = true;
+    one.stale_since = now();
+  }
+  logAction('web.guide.shots_stale', {
+    actor_id: STAFF.id,
+    reason,
+    details: { release: GUIDE_RELEASE, features: ['all'], count: rows.length, reason },
+  });
+  let message = GUIDE_ALREADY_STALE;
+  if (rows.length === 1) message = GUIDE_ONE_STALE;
+  else if (rows.length) message = GUIDE_ALL_STALE.split('{count}').join(String(rows.length));
+  return { marked: rows.length, message };
 });
 
 route('GET', '/api/guides/media/:id', (context) => {

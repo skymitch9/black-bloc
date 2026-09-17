@@ -54,6 +54,12 @@ const NO_GUIDES = 'Nothing is published yet.';
 const NO_MATCH = 'Nothing here matches those filters.';
 const STALE_NOTE = 'A screenshot is marked stale when the feature it shows has changed since the ' +
   'picture was taken. The picture stays up until somebody replaces it.';
+const MARK_ALL_NOTE = 'A deploy marks the shots of the features it changed. Nothing else can — ' +
+  'a mode flip, a renamed channel or a rewritten message leave every picture looking current.';
+const MARK_ALL_ASK = 'Every picture in the app is marked for re-shooting. No picture is deleted: ' +
+  'each one stays up until somebody replaces it.';
+const MARK_ALL_WHY = 'Optional. It goes on the log line, so the capture session knows what changed.';
+const REASON_MAX = 200;
 
 const FAULT_HEAD = 'If it did not work';
 const NO_FAULTS = 'Nothing is written down for this one yet.';
@@ -339,11 +345,9 @@ async function loadHub(payload) {
   blocks.push(full(list.node));
 
   if (payload.may_edit) {
-    if (payload.stale) {
-      const stale = section('Screenshots to re-shoot', STALE_NOTE, { count: payload.stale });
-      stale.body.append(await staleList());
-      blocks.push(stale.node);
-    }
+    const stale = section('Screenshots to re-shoot', STALE_NOTE, { count: payload.stale || null });
+    stale.body.append(await staleList(), markAllCard());
+    blocks.push(stale.node);
     const made = section('New guide', null, { count: null });
     made.body.append(newGuideCard(payload, notice()));
     blocks.push(made.node);
@@ -388,6 +392,35 @@ async function staleList() {
     rows,
     { empty: 'Nothing needs re-shooting.' },
   );
+}
+
+function markAllCard() {
+  const say = notice();
+  const reason = el('input', {
+    class: 'input',
+    type: 'text',
+    maxlength: String(REASON_MAX),
+    placeholder: 'shadow mode is off and the channel was renamed',
+  });
+  const press = button('Mark every screenshot stale…', async () => {
+    const yes = await ask({
+      title: 'Mark every screenshot stale?',
+      body: [MARK_ALL_ASK, field('Why', reason, MARK_ALL_WHY)],
+      confirmLabel: 'Mark them all',
+      tone: 'warn',
+    });
+    if (!yes) return;
+    const done = await run(
+      say,
+      () => send('/api/guides/stale/all', 'POST', { reason: reason.value.trim() }),
+      (found) => found?.message || 'Marked.',
+    );
+    if (!done.ok) return;
+    keepSaying('guide', say);
+    refresh();
+  }, { tone: 'warn', small: false });
+
+  return card(null, [el('p', { class: 'muted', text: MARK_ALL_NOTE }), bar([press]), say]);
 }
 
 /* ---- one guide, read ------------------------------------------------------ */

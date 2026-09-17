@@ -6747,3 +6747,20 @@ Ticket button card reads `modmail_panel_channel_id` out of the settings payload,
 routes write that key server-side without going through `saveSetting`, which is what usually
 clears the cache. `settings(true)` is the one place that matters; without it the card says the
 button is still where it was.
+
+# Guides — mark all stale (branch `guides-stale`, off `main` at `c6a341a`)
+
+> Keyed by **NAME**, not by line. Why each call was made this way is
+> [`guides-design.md`](guides-design.md) and its `### Mark-all-stale` sub-list; it is not
+> repeated here.
+
+| Key | Note |
+|---|---|
+| `black_bloc/guides.py` (`mark_all_stale`) — no `reason`, and no row of its own | Its sibling `mark_stale` does not log either: the boot path's row is written by `cogs/core.py` (`_mark_stale_shots`) and this one's by the route. Checklist 34 is the hard edge — a shared path that logs makes the route's `note()` a double-post, and `tests/test_logkinds.py::test_a_route_never_notes_an_event_its_shared_path_already_logged` walks the AST for exactly that. `reason` has no column on `guide_media`, so it lives only on the row |
+| `black_bloc/guides.py` (`mark_all_stale`) — `WHERE stale = 0`, and the count is what it CHANGED | Not `WHERE 1`. A second press must be able to answer "every screenshot was already marked", and re-stamping `stale_since` on a picture marked a week ago would reorder the capture session's to-do list (`stale_media` sorts by it) for no reason |
+| `black_bloc/api/tools/guides.py` (`guides_stale_all`) — registered above `GET /media/{media_id}`, and so above every `/{slug}` route | FastAPI matches in registration order. Declared after `guide_one`, `POST /api/guides/stale/all` still would not collide (the third segment is a literal `all`, not `media`/`reset`/`confirmed`) — but the ordering is what makes that true by construction rather than by luck, and `test_stale_all_is_never_read_as_a_guide_called_stale` holds it |
+| `black_bloc/api/tools/guides.py` (`guides_stale_all`) — `payload: dict[str, Any] \| None = None` | The sibling writes take a required `payload`. This one's only field is optional, so a press with no body at all is a legitimate press; a required dict would answer 422 with a bare FastAPI validation body, which is the one thing a person must never see |
+| `black_bloc/api/tools/guides.py` (`guides_stale_all`) — three sentences, not one with a count | `1 screenshots` is the kind of thing that makes a person distrust the number beside it. `ALREADY_ALL_STALE` is the zero case; `ONE_STALE_SAID` and `ALL_STALE_SAID` are the same sentence in two numbers |
+| `site/public/assets/page-guides.js` (`loadHub`) — the stale section is drawn for staff whatever `payload.stale` says | It used to be `if (payload.stale)`. None-stale is precisely the state the cutover presses the button in, so the old guard hid the control at the only moment it was wanted. `count: payload.stale \|\| null` keeps the pill off a zero |
+| `site/public/assets/page-guides.js` (`markAllCard`) — `keepSaying('guide', say)` BEFORE `refresh()` | The refresh redraws the whole hub and throws the notice away with it; `loadHub` opens with `sayAgain('guide', notice())`, which is where the sentence lands. Same pattern as **Make it** on the New guide card |
+| `site/mock/server.mjs` (`state.guideMedia`) — a second seed picture, on `house-rules`, `stale: false` | With one already-stale picture the mock could only ever answer the zero sentence, so no browser pass could exercise the move. `nextGuideMedia` moves to 3 with it, and `house-rules` step 3 now points at it |
