@@ -14,6 +14,26 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-17 (Events as a forum under BlackMail, branch `events-forum` off `a7399b0`; design
+> `info/events-forum-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord):**
+> schema **44 → 45** (measured: `SCHEMA_VERSION`) — `events` gains `review_kind TEXT` through
+> `ADDED_COLUMNS`, nullable, and a NULL reads as `room`, so no backfill. Registry keys **+2**
+> (`events_review_mode` enum room/forum default **room**, `events_forum_channel_id` channel blank —
+> both events group by prefix); mock **20 pages / 187 routes** (`POST /api/events/forum`, the twin
+> of `POST /api/requests/forum`); tests **6696 → 6755**. ⚠️ **One new module,
+> `black_bloc/forums.py`** — the forum helpers requests and events now share (`tag_named`,
+> `forum_tags`, `forum_overwrites`, `AUTO_ARCHIVE_MINUTES` 1440); both requests modules import it
+> rather than keeping a second copy. In forum mode `events.open_review_post` replaces
+> `make_review_channel` AND `post_review_card` (a forum post is created WITH its first message), and
+> `events.review_place` is the ONE resolver every `guild.get_channel(row["review_channel_id"])` site
+> now goes through — a post is `guild.get_thread` then `bot.get_channel`, claimed for the guard on
+> every read (the v120 lesson). `events.PLACE_WORDS` is one vocabulary per kind, so `delete_room`
+> and the **Delete this post** button are the same code with different sentences. The forum wears
+> **six** tags — one per `STATUSES` entry, `live` included — looked up BY NAME, never by an id in a
+> key. Seven new log kinds: `event.forum_made`, `event.forum_failed`, `event.forum_forgotten`,
+> `event.post_failed`, `event.post_skipped_test_mode`, `event.post_archived`, `event.retag_failed`.
+> ⚠️ `events_review_mode` ships **room** and the forum key is blank, so every path here is
+> unreachable until the owner makes the forum and flips the mode. Before that:
 > **2026-09-17 (Errors — every failure on the site's Logs page, and a Try again that keeps the
 > member's place, branch `errors` off `e7093d7`; design `info/errors-design.md`; ⚠️ BUILT, NOT
 > MERGED, NOT DEPLOYED, nothing has met Discord):** schema **unchanged** — no migration and no

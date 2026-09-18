@@ -1,7 +1,13 @@
 # Events as a forum under BlackMail — one post per event, like requests and modmail
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatching to Opus 2026-09-17 21:3x
-> as branch `events-forum`**. **Last verified: 2026-09-17 21:2x** against `main` `0707768` (v135): `black_bloc/events.py`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-17 on branch `events-forum`
+> off `main` `a7399b0`; ⚠️ NOT merged, NOT deployed, and nothing here has met Discord.** Read the `## Deviations`
+> foot BEFORE the sections above: **fifteen** things differ from what is written here, and deviations **1, 3, 5 and
+> 6** are the ones that matter (six tags not five; an archived post is NOT a gone post; the retention sweep logs
+> `event.post_archived` rather than claiming a deletion; there is no test-channel fall-back). Schema **44 → 45**
+> (`events.review_kind`) — ⚠️ **migrate before deploy.** Registry **+2**; `pytest -n 8` **6696 → 6755**, green
+> forward and under `BB_REVERSE=1`; mock **20 pages / 187 routes**. `events_review_mode` ships **room**, so nothing
+> changes until the owner flips it. Was: 📐 DESIGN, dispatched to Opus 2026-09-17 21:3x. **Last verified: 2026-09-17 21:2x** against `main` `0707768` (v135): `black_bloc/events.py`
 > `make_review_channel` (~1785, `guild.create_text_channel` under `events_category_id` or the test category, `staff_reach`
 > overwrites, then `guard.own_channel`), `set_review` (~975: `review_channel_id`, `review_message_id`, `card_channel_id`),
 > `card_channel` (~1040), every `guild.get_channel(row["review_channel_id"])` site (~1156, ~1370, cog ~452, ~1708–1711,
@@ -112,4 +118,149 @@ guide gains one fact line. NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_IS
 
 ## Deviations
 
-*(the build agent writes here what it had to do differently, dated)*
+> Written by the build, **2026-09-17**, on branch `events-forum` off `main` `a7399b0` (the design
+> doc's own commit `3861e9c` plus one TODO line). Everything below is a place the build did NOT do
+> what §A–§F says, and why. ⚠️ **Nothing here has met Discord**: no boot, no token, no forum made
+> in a client, no post opened, no button pressed, no DM sent, and `TEST_MODE` was never flipped.
+> The whole verification is `ruff check .` (clean), `pytest -n 8` (**6696 → 6755**, green forward
+> and under `BB_REVERSE=1`), the ES-module parse of all **33** `site/public/assets/*.js`,
+> `node site/mock/check.mjs` (*20 pages, 187 routes, 24 core settings, all keys present*),
+> `node site/mock/discordmd.test.mjs` and `node site/mock/labels.test.mjs`. **No browser rendered
+> the events page**, real or mock.
+
+1. ⚠️ **The forum has SIX tags, where §A named five — and §A's own instruction is what produced
+   the sixth.** §A says *"named exactly after `events.py`'s status constants … `events.py:79–84`
+   is the list; match it one for one and say so"*. That list is `pending, approved, denied, live,
+   done, cancelled` — **`live` is in it**, and the design's own table omitted it. A live event with
+   no tag of its own would have gone on wearing **approved** for its whole duration, which is the
+   one window where staff most want to see at a glance what is happening. `live` is 📣;
+   `test_the_forum_carries_one_tag_for_every_status_an_event_can_hold` asserts the two lists are
+   equal, so a seventh status cannot be added without a tag.
+
+2. ⚠️ **`review_place` is SYNC and never calls `fetch_channel`, where §C names one.** §C asks for
+   *"`guild.get_thread(id)` then `bot.get_channel(id)` then a `fetch_channel`"*. The requests
+   precedent it names in the same breath — `thread_of` (`cogs/community/requests.py:363`) — does
+   the first two and stops, because it is sync. Making this one async would have turned **ten**
+   call sites into awaits for what is a cache read: `build_card`, `event_line`, `rename_channel`,
+   `room_of`'s callers and the two sweeps. What a `fetch` would have bought is an archived post,
+   and deviation 3 is why that case is handled differently anyway.
+
+3. ⚠️ **An unresolvable POST is not counted as a miss and never cancels an event — deletion is
+   `on_thread_delete`'s to report.** §C says *"a deleted post is `review_channel_deleted`, an
+   archived post is NOT gone"*, and the only way to honour that is to stop `_recheck` deciding
+   anything about a post it cannot see. Measured against discord.py 2.7.1: an archived thread
+   leaves `Guild._threads`, so `guild.get_thread` answers `None` for it — and `default_auto_archive_duration`
+   is **1440 minutes**, which means **any event proposed more than a day ahead would have had its
+   post auto-archive and its event cancelled for being early.** So a post row re-owns when it
+   resolves and does nothing when it does not; a new `on_thread_delete` listener carries the
+   cancel, and the two-consecutive-misses rule (checklist 32) is untouched for rooms.
+
+4. **The 1440-minute auto-archive is kept as §B asks ("the requests value"), and it is the reason
+   deviation 3 exists.** Discord's maximum is 10080 (a week), which would have hidden the problem
+   for most events rather than fixed it. Writing a message into an archived thread un-archives it
+   where the bot has Manage Threads, so an approved event's go-live line brings its own post back.
+   ⚠️ **Unmeasured:** that un-archiving has not been exercised against Discord.
+
+5. ⚠️ **The retention sweep logs `event.post_archived`, NOT `event.channel_deleted`.** §C says
+   *"writes the same log kind with `kind: post`"*. `event.channel_deleted` is read by an auditor as
+   *a channel was removed*, and in live mode nothing is removed — the post is tagged and archived
+   and keeps its id. A kind that claims a deletion that did not happen is the same defect
+   checklist 2 exists to stop one class up. Under `TEST_MODE` a post IS deleted, and there the
+   sweep writes `event.channel_deleted` exactly as a room does, with `kind: post` in the details.
+
+6. ⚠️ **A guard-refused forum is refused in WORDS; there is no fall-back to the test channel.**
+   §C's last bullet keeps one fall-back — *"a refused post … the review card falls back to the test
+   channel as today"*. It is unreachable as written, and building it would have been worse than
+   leaving it out. Unreachable: `forum_of` CLAIMS the forum on every read (§B's own rule), and
+   `TestModeGuard.allows_channel` returns True for anything in `owned_channel_ids`
+   (`guard.py:84–92`), so the check immediately after the claim cannot fail. Worse: the room path's
+   fall-back stores the ROOM as `review_channel_id` while the card sits elsewhere — the post
+   equivalent would have stored the FORUM, and **Delete this post** would then have offered staff
+   the whole forum to delete. The path is kept as a refusal (`POST_REFUSED_TEST`, which names
+   `event.post_skipped_test_mode`) so a future guard change is answered in words rather than
+   silently.
+
+7. ⚠️ **`rename_channel` passes its `status` ARGUMENT to `retag_post`, not the row's.** Found by a
+   test, not by reading: `_finish` calls `rename_channel(..., DONE, ...)` with the row it read
+   **before** `set_status`, so tagging from `row["status"]` marked a finished event **live**. Rooms
+   never had this bug because `channel_name(status, …)` already took the argument.
+
+8. **`cancel_event` re-tags the post itself, because it is the one status change that does not
+   rename.** `cancel_for` renames afterwards and `_cancel` (the reconcile path) does not, so a
+   reconcile-driven cancel would have left a cancelled event tagged **pending** for ever. The
+   double call on the `cancel_for` path costs nothing: `post_is_right` compares the tags and the
+   archive flag and skips the edit.
+
+9. ⚠️ **A settled post is NOT disowned at the archive, where `requests.retag_post` disowns.** A
+   test post still has to be DELETABLE by the five-minute sweep, and `allows_place` reaches that
+   through `owns_channel` (`guard.py:103`). The set therefore grows by one entry per settled event
+   until the process restarts; that is the same shape rooms already have (they are disowned only
+   at the delete), and it is bounded by the sweep.
+
+10. ⚠️ **Every word the bot posts is still a CONSTANT in `events.py`, not a settings key.** The
+    standing rule (owner, 2026-09-17) says a heading, a line and a button label are each a settings
+    key. This build introduced the post's opening line, the post notice and six refusals as
+    constants beside the room twins they mirror, because §A names exactly two keys and the events
+    feature has ~50 such constants today — keying only the new ones would have left the feature
+    half-keyed and the two halves of one sentence in two different homes. **This is named as a
+    departure, not as a decision**: the honest fix is one pass that keys the events vocabulary as
+    `frontdoor_*` did, and it is bigger than this build.
+
+11. **`black_bloc/forums.py` is a NEW shared module, which §B allowed for ("share a helper if one
+    falls out cleanly — say so").** Three things fell out cleanly and are now single-homed:
+    `tag_named`, `forum_tags(names, emoji)` and `forum_overwrites(guild, category)`, plus
+    `AUTO_ARCHIVE_MINUTES`. `black_bloc/requests.py` and `cogs/community/requests.py` import them;
+    `requests.forum_tags` keeps its name and its default so nothing reading it changed, and the
+    requests suite is green unchanged. What did NOT fall out cleanly is `make_forum` itself — the
+    refusal sentences, the key, the log kind and the tag set are all feature-specific, so
+    `events.make_forum` is a copy of its shape rather than a call into a shared one.
+
+12. **The two keys reach a FOURTH door as well as the three §A named.** Registry + mock row +
+    label, and also `events.SETTINGS_KEYS`, so `/event` ▸ Settings ▸ Rooms… ▸ **Forum…** writes
+    them through the same `write_settings` path every other events key uses. The events page needed
+    nothing: it already draws the whole `events` namespace through `namespaceSettings`.
+
+13. **`build_forum` is a FIFTH sub-page rather than two more rows on Rooms…** A Discord view takes
+    five rows and a select fills one; Rooms… already spends rows 0–2 on three selects and row 3 on
+    its buttons. The same reasoning that put Rooms… on its own page in `events-rooms-design.md`
+    deviation 3.
+
+14. ⚠️ **`pytest -n 8` did not stall once** (KI-26). Six full runs in this worktree — the baseline,
+    four after code, and the `BB_REVERSE=1` one — all finished in 55–80 s. The count stands at
+    seven, and none of these was a `deploy.ps1` run.
+
+15. **What this build deliberately did NOT touch.** `docs/TODO.md`, `docs/DONE.md`,
+    `docs/deploys.log` and `docs/KNOWN_ISSUES.md`. No setting was flipped: `events_review_mode`
+    ships **room** and `events_forum_channel_id` is blank, so **every forum path here is
+    unreachable until the owner makes the forum and flips the mode.** Hand-made posts in the events
+    forum are NOT adopted — §C says so and the bot ignores a thread no row claims. Nothing was
+    merged, deployed or pushed to `main`.
+
+## What was NOT verified
+
+- **Nothing met Discord.** No boot, no token, no forum created in a guild, no post opened, no tag
+  applied, no button pressed in a client, no DM sent. `TEST_MODE` was never flipped and nothing was
+  deployed. Sweep rows `EF-a`…`EF-g` in [`../access/sweeps.md`](../access/sweeps.md) are all unrun.
+- **The migration was not run against a copy of the live database.**
+  `tests/storage/test_db.py` asserts `SCHEMA_VERSION == 45` and the column is added by the same
+  `ADDED_COLUMNS` pattern every additive column in this repo uses, but the live file was not
+  touched.
+- ⚠️ **"A forum can be made in this guild" is still inference**, exactly as
+  `blackmail-threads-design.md` deviation 12 recorded it: no forum has ever been created in the
+  live guild by Black Bloc. What WAS read off the installed **discord.py 2.7.1**:
+  `Guild.create_forum` takes `available_tags` and `default_auto_archive_duration`;
+  `ForumChannel.create_thread` returns a `ThreadWithMessage` (`thread`, `message`) and takes
+  `applied_tags`; `Thread.edit` takes `applied_tags` and `archived`; `Thread.category_id` is the
+  parent's; and an archived thread leaves `Guild._threads`, which is deviation 3's whole basis.
+- **No `DynamicItem` has survived a real restart.** The **Delete this post** button is the same
+  `DECISION_TEMPLATE` registration the room button already uses, rebuilt from its custom id in a
+  test with fakes. ⚠️ Its LABEL is not in the custom id, so a button rebuilt by `from_custom_id`
+  reads "Delete this room" — that object is only ever used for the CALLBACK, and the label Discord
+  renders is the one stored on the message, but no restart has proved it.
+- **No browser saw the events page**, real or mock; the site half was exercised only by
+  `node site/mock/check.mjs`, `tests/api/tools/test_events.py` and the ES-module parse.
+- **The auto-archive round trip is untested**: that a message into an archived post un-archives it
+  (deviation 4), and that Discord actually drops an archived thread from the cache on a running
+  bot rather than only in the library's source (deviation 3).
+- **`review_place` was not exercised against a restarted process.** The claim-on-every-read rule is
+  proved by a test asserting the guard's owned set, not by a restart.

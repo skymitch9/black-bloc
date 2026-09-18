@@ -312,7 +312,7 @@
       "command": "/event",
       "sort": 200,
       "steps": [
-        {"do": "Open the room named pending-name-title, or type **/event** and use **Pick an event…**.", "expect": "The review card: title, when in every reader's own clock, where, who asked."},
+        {"do": "Open the room named pending-name-title — or, in forum mode, the post in the events forum under BlackMail — or type **/event** and use **Pick an event…**.", "expect": "The review card: title, when in every reader's own clock, where, who asked."},
         {"do": "Press **Approve**, or **Deny** and type a reason.", "expect": "The room renames to approved- or denied-, the requester is DMed, and an approved event lands on the server calendar."},
         {"do": "To change something first, open the event on the website's Events page and press **Change it**.", "expect": "The room and card update. An announcement already posted keeps its text and the reply says so."},
         {"do": "To take the room away, press **Delete this room** and type why.", "expect": "The room goes. An open event is cancelled and the requester is DMed the reason."}
@@ -321,11 +321,14 @@
         {"symptom": "You denied and changed your mind", "answer": "Open the card again and press **Approve after all** while the room exists."},
         {"symptom": "The announcement landed in the spam channel", "answer": "Test mode is on. Every post goes to the test channel until it is lifted."},
         {"symptom": "No scheduled event was made", "answer": "Test mode makes none. Or events_create_scheduled is off."},
-        {"symptom": "Somebody filed the wrong thing — this is not really an event", "answer": "Press **Not an event — make it a request** on the review card. A request is filed in the proposer's name from the event's own title and details, the event is cancelled with a link to it both ways, and their DM says staff filed it as a request instead."}
+        {"symptom": "Somebody filed the wrong thing — this is not really an event", "answer": "Press **Not an event — make it a request** on the review card. A request is filed in the proposer's name from the event's own title and details, the event is cancelled with a link to it both ways, and their DM says staff filed it as a request instead."},
+        {"symptom": "There is no review room — the event is a post in a forum", "answer": "events_review_mode is set to forum, so every new event is one post in the events forum under BlackMail instead of a channel of its own. The card and its buttons are the post's first message, the tag says where it has got to, and the button reads Delete this post. Events already open keep the room they were given."}
       ],
       "facts": [
         {"kind": "setting", "ref": "events_mode"},
         {"kind": "setting", "ref": "events_category_id"},
+        {"kind": "setting", "ref": "events_review_mode"},
+        {"kind": "setting", "ref": "events_forum_channel_id"},
         {"kind": "setting", "ref": "events_posts_where"},
         {"kind": "probe", "ref": "events.open_count"}
       ]
