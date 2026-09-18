@@ -1,9 +1,7 @@
 {
-  "release": "v136",
-  "commit": "434721f",
+  "release": "v137",
+  "commit": "43ec005",
   "changed_features": [
-    "events",
-    "guides",
-    "request"
+    "events"
   ]
 }
