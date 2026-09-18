@@ -116,6 +116,33 @@ with the card and buttons, tagged pending; c: approve → tag + the announcement
 e: Delete this post; f: a mode flip leaves an open room alone; g: the events page's link opens the post); the events
 guide gains one fact line. NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_ISSUES.md`.
 
+## H. Move an open event's room into the forum (owner, 2026-09-17 22:1x) — branch `events-move-to-forum`
+
+*"#pending-ds-poison-meter-pt-what-day-it-was convert this channel into a thread into events"* — event #1 (*What Day It
+Was*, pending, its room made before v136). §C leaves open rooms as rooms on purpose; this adds the staff move for exactly
+that case.
+
+- **`move_room_to_forum(bot, guild, actor, row, *, via)`** in `events.py`: refuses in words when the row is not a room
+  (`review_kind` post), when the event is settled (denied / cancelled / done), when `events_forum_channel_id` is blank or
+  dead (names **Make the forum**), or when the guard refuses the forum. Otherwise: opens the post exactly as Propose does in
+  forum mode (`open_review_post` — the opening line, the review card, the decision buttons, the tag for the row's CURRENT
+  status, the Delete-this-post card), re-points the row (`review_channel_id` = the thread, `review_message_id` = the starter,
+  `review_kind` = post, `card_channel_id` as forum mode sets it), posts ONE line in the old room (a key: `events_moved_line`,
+  default *"This event now lives in its own post: {post}. This room is being removed."*, `{post}` = the thread mention),
+  then deletes the room through the existing `delete_room` path WITHOUT settling the event (a new `settle=False` — or
+  whatever shape keeps one deletion path; say so) and logs `event.room_moved` (event_id, from the room id, to the thread id,
+  `via`). ⚠️ The room's earlier messages are not copied — Discord has no move for messages; the log row and the moved line
+  name the room id so the history is findable in the audit log. The host's DM: none (they were never in a staff-side post).
+- **Doors:** a **Move to the forum** button on the room's Delete card (`room_notice_view`, kind room — a second button,
+  staff-gated by the same `may_delete_room` rule; renders only while `events_review_mode` is forum AND the forum is set),
+  and **Move to the forum** on the site's event detail card (`POST /api/events/{event_id}/forum`, staff, mirroring
+  `/room/delete`); mock, contract, `page-events.js`.
+- **Tests:** the pure move (a room row → a post row, the tag matches status, the moved line, the deletion without settling,
+  every refusal), the button renders only under forum mode, the route, the count guards. Docs: this section's deviations,
+  `code-notes.md`, sweeps `EM-a…` (a: press Move to the forum on event #1's room → the post appears with the card and
+  buttons tagged pending and the room goes; b: Approve inside the post works; c: the site's button on a settled event refuses
+  in words).
+
 ## Deviations
 
 > Written by the build, **2026-09-17**, on branch `events-forum` off `main` `a7399b0` (the design
