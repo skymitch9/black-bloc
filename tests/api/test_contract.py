@@ -10,7 +10,7 @@ import pytest
 import pytest_asyncio
 from discord.ext import tasks
 
-from black_bloc import applications, guides, knowledge, pings, posts
+from black_bloc import applications, guides, knowledge, minutes, pings, posts
 from black_bloc import rolegrants as grants
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.settings_api import grouped
@@ -631,6 +631,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         granted_by=7,
         until=grants.expires_at(7),
     )
+    meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
+    arm_minutes(web)
     return {
         "member_id": str(MEMBER_ID),
         "case_id": str(case_id),
@@ -668,6 +670,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         "post_slug": "welcome",
         "posted_post_slug": "opening-hours",
         "scratch_post_slug": "scratch-post",
+        "meeting_id": str(meeting_id),
+        "recording_meeting_id": str(recording_meeting_id),
     }
 
 
@@ -694,6 +698,7 @@ class Seed:
         self.web.cogs.update(self.cogs)
         await self.wf.put(self.web.db, self.rows)
         await self.web.store.load()
+        arm_minutes(self.web)
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
@@ -772,6 +777,48 @@ async def seed_selftest_run(db, guild_id: int, channel_id: int) -> int:
     )
     await db.conn.commit()
     return run_id
+
+
+class ContractNotes:
+    """The LLM door `/write` goes through, stood in for — no contract entry meets a model."""
+
+    async def reply(self, *, system, messages):
+        from black_bloc.llm import Reply, Usage
+
+        return Reply(text="Summary.\nDecisions: none.", provider="anthropic", model="m",
+                     usage=Usage())
+
+
+def arm_minutes(web) -> None:
+    """`reset_bot` rebuilds settings from scratch, so the two the minutes routes need go back
+    on after every rewind rather than only at seeding."""
+    web.settings = web.store.settings = web.settings.model_copy(
+        update={"anthropic_api_key": "contract-key", "groq_api_key": "contract-key"}
+    )
+    web.minutes_notes_client = ContractNotes()
+
+
+async def seed_meetings(db, guild_id: int, channel_id: int) -> tuple[int, int]:
+    """One finished meeting with notes and a three-line transcript, and one still recording."""
+    done = await minutes.start_row(db, guild_id, channel_id, 7)
+    for at, speaker_id, speaker, text in (
+        (1, 7, "Mod", "We should ship the prototype off by default."),
+        (2, MEMBER_ID, "Casey", "I will write the guide for it."),
+        (3, 7, "Mod", "Agreed. Nobody turns it on until we have tested it."),
+    ):
+        await minutes.add_line(
+            db,
+            int(done["id"]),
+            speaker_id=speaker_id,
+            speaker=speaker,
+            started_at=(datetime.now(UTC) - timedelta(minutes=200 - at)).isoformat(),
+            text=text,
+        )
+    await minutes.end_row(db, int(done["id"]), minutes.BY_HAND)
+    await minutes.save_notes_row(db, int(done["id"]), "Summary.\nDecisions: none.", minutes.DONE)
+    await minutes.save_posted(db, int(done["id"]), channel_id, 830042)
+    recording = await minutes.start_row(db, guild_id, channel_id, 7)
+    return (int(done["id"]), int(recording["id"]))
 
 
 async def uploads_link(db):

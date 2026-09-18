@@ -530,7 +530,7 @@ def notes_client(bot: Any) -> Any:
     return made
 
 
-async def write_notes(bot: Any, guild: Any, row: Any) -> Outcome:
+async def write_notes(bot: Any, guild: Any, row: Any, *, via: str = VIA_DISCORD) -> Outcome:
     """Transcript → the bot's own LLM door → `meetings.notes`. Never raises into a caller."""
     guild_id = guild_id_of(guild)
     meeting_id = int(row["id"])
@@ -541,7 +541,10 @@ async def write_notes(bot: Any, guild: Any, row: Any) -> Outcome:
     if not notes_configured(bot):
         await save_notes_row(bot.db, meeting_id, "", FAILED)
         await log_action(
-            bot, guild, NOTES_FAILED, details={"meeting": meeting_id, "reason": "no_key"}
+            bot,
+            guild,
+            kind_via(NOTES_FAILED, via),
+            details={"meeting": meeting_id, "reason": "no_key", "via": via},
         )
         return refusal(NO_NOTES_WRITER, "no_notes_writer", 503)
     system, messages = prompt_messages(bot.store, guild_id, transcript_text(rows))
@@ -550,22 +553,33 @@ async def write_notes(bot: Any, guild: Any, row: Any) -> Outcome:
     except LLMError as exc:
         await save_notes_row(bot.db, meeting_id, "", FAILED)
         await log_action(
-            bot, guild, NOTES_FAILED, details={"meeting": meeting_id, "reason": exc.reason}
+            bot,
+            guild,
+            kind_via(NOTES_FAILED, via),
+            details={"meeting": meeting_id, "reason": exc.reason, "via": via},
         )
         return refusal(NOTES_BROKE.format(reason=str(exc)), "notes_broke", 502)
     said = str(reply.text or "").strip()[:NOTES_MAX]
     if not said:
         await save_notes_row(bot.db, meeting_id, "", FAILED)
         await log_action(
-            bot, guild, NOTES_FAILED, details={"meeting": meeting_id, "reason": "empty"}
+            bot,
+            guild,
+            kind_via(NOTES_FAILED, via),
+            details={"meeting": meeting_id, "reason": "empty", "via": via},
         )
         return refusal(NOTES_BROKE.format(reason="it answered with no words in it"), "empty", 502)
     await save_notes_row(bot.db, meeting_id, said, DONE)
     await log_action(
         bot,
         guild,
-        NOTES_WRITTEN,
-        details={"meeting": meeting_id, "lines": len(rows), "speakers": len(speakers_of(rows))},
+        kind_via(NOTES_WRITTEN, via),
+        details={
+            "meeting": meeting_id,
+            "lines": len(rows),
+            "speakers": len(speakers_of(rows)),
+            "via": via,
+        },
     )
     return Outcome(True, NOTES_SAID.format(meeting_id=meeting_id), value=said)
 

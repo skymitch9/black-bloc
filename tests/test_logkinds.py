@@ -51,8 +51,14 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/minutes_session.py::mins.ENDED": ("minutes.ended",),
     "black_bloc/minutes_session.py::mins.JOIN_FAILED": ("minutes.join_failed",),
     "black_bloc/minutes_session.py::mins.TRANSCRIBE_FAILED": ("minutes.transcribe_failed",),
-    "black_bloc/minutes.py::NOTES_WRITTEN": ("minutes.notes_written",),
-    "black_bloc/minutes.py::NOTES_FAILED": ("minutes.notes_failed",),
+    "black_bloc/minutes.py::NOTES_WRITTEN": (
+        "minutes.notes_written",
+        "web.minutes.notes_written",
+    ),
+    "black_bloc/minutes.py::NOTES_FAILED": (
+        "minutes.notes_failed",
+        "web.minutes.notes_failed",
+    ),
     "black_bloc/minutes.py::POSTED": ("minutes.posted", "web.minutes.posted"),
     "black_bloc/minutes.py::POST_FAILED": ("minutes.post_failed", "web.minutes.post_failed"),
     "black_bloc/minutes.py::NOTES_EDITED": (

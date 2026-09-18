@@ -80,6 +80,10 @@ const IDS = {
   post_slug: 'welcome',
   posted_post_slug: 'opening-hours',
   scratch_post_slug: 'scratch-post',
+  // Meeting minutes: 1 is finished, written up and posted, with a three-line transcript, so
+  // every notes move reaches it; 2 is still recording, which /write and /post refuse from.
+  meeting_id: '1',
+  recording_meeting_id: '2',
 };
 
 const failures = [];
@@ -415,6 +419,12 @@ async function checkActionKinds() {
   await post(`/api/posts/${IDS.post_slug}/takedown`, {});
   await post(`/api/posts/${IDS.post_slug}/reset`, {});
   await send('DELETE', `/api/posts/${IDS.scratch_post_slug}`, undefined);
+  // The four web.minutes.* kinds a staff move can leave. The meeting is deleted last, so the
+  // other three act on a row that is still there.
+  await post(`/api/minutes/${IDS.meeting_id}/write`, {});
+  await send('PUT', `/api/minutes/${IDS.meeting_id}`, { notes: 'Staff wrote this line.' });
+  await post(`/api/minutes/${IDS.meeting_id}/post`, {});
+  await send('DELETE', `/api/minutes/${IDS.meeting_id}`, undefined);
   const response = await fetch(`${BASE}/api/actions?limit=200`, { headers: { cookie: 'mock_as=staff' } });
   const payload = await response.json();
   const known = new Set(contract.action_kinds);

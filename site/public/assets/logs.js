@@ -32,6 +32,7 @@ export const LOG_FEATURES = [
   { feature: 'poll', label: 'Polls', tab: 'polls' },
   { feature: 'chat', label: 'Chat', tab: 'chat' },
   { feature: 'request', label: 'Requests', tab: 'requests' },
+  { feature: 'minutes', label: 'Meeting minutes', tab: 'minutes' },
   // Left out of the unfiltered view by the API itself, so this chip is the only way to it.
   { feature: 'selftest', label: 'Test', tab: 'health' },
 ];
