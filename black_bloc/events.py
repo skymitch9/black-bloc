@@ -12,30 +12,38 @@ import discord
 
 from .actionlog import log_action
 from .command_errors import NETWORK_ERRORS
+from .forums import AUTO_ARCHIVE_MINUTES, forum_overwrites, parent_id_of, tag_named
+from .forums import forum_tags as library_forum_tags
 from .golive import now_iso, parse_ts
 from .linkcheck import LINK_MISSING, LINK_UNREACHABLE
 from .logkinds import VIA_DISCORD, kind_via
-from .panels import capped_placeholder
+from .panels import Outcome, capped_placeholder, refusal
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
 from .settings_store import (
     DEFAULT_TIMEZONE_KEY,
     EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_FORUM_CHANNEL_KEY,
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_POSTS_WHERE,
     EVENTS_POSTS_WHERE_KEY,
     EVENTS_RETENTION_MAX_DAYS,
     EVENTS_RETENTION_MIN_DAYS,
+    EVENTS_REVIEW_MODE,
+    EVENTS_REVIEW_MODE_KEY,
     EVENTS_ROOM_DELETE_KEY,
     EVENTS_ROOM_DELETE_WHO,
     EVENTS_ROOM_NOTICE_KEY,
     EVENTS_SCHEDULED_NAME_KEY,
     EVENTS_SCHEDULED_NAME_TEMPLATE,
     EVENTS_TEST_RETENTION_KEY,
+    MODMAIL_CATEGORY_KEY,
     NAME_PLACEHOLDER,
     POSTS_ANNOUNCE,
     POSTS_BOTH,
     POSTS_ROOM,
+    REVIEW_FORUM,
+    REVIEW_ROOM,
     ROOM_DELETE_APPROVER,
     TIME_STEP_KEY,
     TIMEZONE_CHOICES_KEY,
@@ -62,6 +70,7 @@ from .timezones import (
     stamp,
     stored_timezone,
     suggest,
+    zone,
 )
 from .when_picker import WhenDraft, resolve, said_when
 
@@ -655,6 +664,7 @@ CANCEL_WHY: dict[str, str] = {
         "and write the time as `YYYY-MM-DD HH:MM`."
     ),
     "room_deleted": "staff removed its room.",
+    "post_deleted": "staff removed its post.",
     "handed_off": (
         "staff have filed it as a request instead, so it is not on the calendar any more. They "
         "will take it from there, and `/request` shows where it has got to."
@@ -685,6 +695,7 @@ ROOM_DENIED = (
 )
 ROOM_QUIET_REASONS = (
     "room_deleted",
+    "post_deleted",
     "review_channel_gone",
     "review_channel_deleted",
     "never_got_a_channel",
@@ -725,6 +736,160 @@ ANNOUNCED_IN_ROOM = (
     "**events_posts_where** changes that."
 )
 
+ROOM = "room"
+POST = "post"
+REVIEW_KINDS = (ROOM, POST)
+
+FORUM_CHANNEL_NAME = "events"
+FORUM_TOPIC = (
+    "One post per proposed event: the review card and its buttons are the first message, the "
+    "tag says where it has got to, and staff talk it over in the post."
+)
+FORUM_TAG_EMOJI: dict[str, str] = {
+    PENDING: "🟡",
+    APPROVED: "🟢",
+    LIVE: "📣",
+    DENIED: "🔴",
+    DONE: "✅",
+    CANCELLED: "⚫",
+}
+FORUM_ARCHIVE_STATUSES = (DENIED, DONE, CANCELLED)
+MAKE_THE_FORUM = "Make the forum"
+FORUM_EXISTS = (
+    "<#{where}> is already the events forum, so nothing was made. Clear "
+    "**events_forum_channel_id** on the events page first if you want a new one."
+)
+FORUM_NO_CATEGORY = (
+    "**modmail_category_id** is not pointed at a category Black Bloc can see, so there is "
+    "nowhere under BlackMail to make the forum. Point it at one with `/modmail` ▸ "
+    "**Setup…** ▸ **Ticket category…** first."
+)
+FORUM_UNSUPPORTED = (
+    "This server cannot be given a forum channel by Black Bloc — the library it runs on "
+    "offers no way to make one here. Make a forum by hand and point **events_forum_channel_id** "
+    "at it on the events page."
+)
+FORUM_FAILED_SAID = (
+    "Black Bloc could not make the forum — {reason}. Check it has **Manage Channels** on "
+    "the BlackMail category and try again; the log says `event.forum_failed`."
+)
+FORUM_MADE = (
+    "<#{where}> is up: a forum under the BlackMail category, with its overwrites, and one tag "
+    "for each place an event can be. Set **events_review_mode** to `forum` and every event "
+    "proposed from then on gets its own post there."
+)
+FORUM_MADE_GUARDED = (
+    " ⚠️ Black Bloc is in **test mode** and this forum is OUTSIDE the test channel "
+    "— making a channel is not something the guard can see, so it was made anyway. Black "
+    "Bloc claims the forum and each post in it every time it reads one, so the cards land there "
+    "and nowhere else."
+)
+FORUM_NOT_SET_STAFF = (
+    "Events are set to be reviewed in a forum, but **events_forum_channel_id** is blank or "
+    "points at a channel Black Bloc cannot see, so nothing was submitted. Press **"
+    + MAKE_THE_FORUM
+    + "** on `/event` ▸ **Settings** ▸ **Rooms…**, or set "
+    "**events_review_mode** back to `room`."
+)
+FORUM_NOT_SET_MEMBER = (
+    "Staff have not set up the events forum yet, so nothing was submitted. Tell a Lead — "
+    "there is nothing you can do about it from here, and your words were not lost if you "
+    "kept them."
+)
+CANNOT_CREATE_POST = (
+    "Discord refused to open the post for it, so nothing was submitted. Black Bloc needs "
+    "**Create Posts** in the events forum. Tell a Lead, then try again."
+)
+POST_NOTICE = (
+    "This post is Black Bloc's — it is tagged as the event moves and archives itself when "
+    "the event is settled. Staff can remove it sooner."
+)
+POST_NOTICE_TEST = (
+    "This post is Black Bloc's — it goes away on its own **{when}**. Staff can remove it "
+    "sooner."
+)
+POST_OPENED = "Event **#{event_id}** — proposed by <@{who}>. Approve or deny it below."
+POST_DELETE_BUTTON = "Delete this post"
+POST_DELETE_TITLE = "Remove this post?"
+POST_DELETE_NOT_STAFF = (
+    "Only staff can remove this post. If you want your event called off, use **Call it off** on "
+    "`/event`."
+)
+POST_NOT_THIS_EVENT = (
+    "That button belongs to event #{event_id}, which is not the event this post is for any "
+    "more, so nothing was removed. `/event` has the one you want."
+)
+POST_ALREADY_GONE = (
+    "Event #{event_id} has no post any more, so there was nothing to remove."
+)
+POST_DELETED_SAID = "The post is gone."
+POST_DELETE_FAILED = (
+    "Discord would not remove this post just now, so it is still here — the log says why."
+)
+POST_DELETE_REFUSED_TEST = (
+    "Black Bloc is in test mode and may only delete a post it made itself, so this one was left "
+    "alone — the log says `event.would_delete_channel`."
+)
+POST_REFUSED_TEST = (
+    "Black Bloc is in **test mode** and the guard refused the events forum, so nothing was "
+    "submitted and nothing was posted. The log says `event.post_skipped_test_mode`."
+)
+POST_DELETED_BY = "Black Bloc event {event_id}: post removed by {who}"
+POST_DELETED_REASON = "post_deleted"
+ANNOUNCED_IN_POST = (
+    "It is announced in the event's own post rather than a public channel — "
+    "**events_posts_where** changes that."
+)
+
+
+class PlaceWords(NamedTuple):
+    """One vocabulary per kind of review place, so one function serves a room and a post."""
+
+    word: str
+    button: str
+    modal_title: str
+    not_staff: str
+    not_this_event: str
+    already_gone: str
+    deleted: str
+    failed: str
+    refused_test: str
+    audit: str
+    cancel_reason: str
+    announced: str
+
+
+PLACE_WORDS: dict[str, PlaceWords] = {
+    ROOM: PlaceWords(
+        word=ROOM,
+        button=ROOM_DELETE_BUTTON,
+        modal_title=ROOM_DELETE_TITLE,
+        not_staff=ROOM_DELETE_NOT_STAFF,
+        not_this_event=ROOM_NOT_THIS_EVENT,
+        already_gone=ROOM_ALREADY_GONE,
+        deleted=ROOM_DELETED_SAID,
+        failed=ROOM_DELETE_FAILED,
+        refused_test=ROOM_DELETE_REFUSED_TEST,
+        audit=ROOM_DELETED_BY,
+        cancel_reason="room_deleted",
+        announced=ANNOUNCED_IN_ROOM,
+    ),
+    POST: PlaceWords(
+        word=POST,
+        button=POST_DELETE_BUTTON,
+        modal_title=POST_DELETE_TITLE,
+        not_staff=POST_DELETE_NOT_STAFF,
+        not_this_event=POST_NOT_THIS_EVENT,
+        already_gone=POST_ALREADY_GONE,
+        deleted=POST_DELETED_SAID,
+        failed=POST_DELETE_FAILED,
+        refused_test=POST_DELETE_REFUSED_TEST,
+        audit=POST_DELETED_BY,
+        cancel_reason=POST_DELETED_REASON,
+        announced=ANNOUNCED_IN_POST,
+    ),
+}
+
 PANEL_TITLE = "Events"
 PANEL_INTRO = "Propose something for the server to do, and see where the open ones have got to."
 PANEL_EMPTY = "You have not proposed an event yet."
@@ -739,6 +904,8 @@ DENIED_ROOM_GONE = (
     "**Propose an event**."
 )
 REVIEW_ROOM_BUTTON = "The review channel"
+REVIEW_POST_BUTTON = "The review post"
+PLACE_LINK_BUTTON: dict[str, str] = {ROOM: REVIEW_ROOM_BUTTON, POST: REVIEW_POST_BUTTON}
 CHANNEL_URL = "https://discord.com/channels/{guild_id}/{channel_id}"
 
 
@@ -979,6 +1146,14 @@ async def set_review(
     await db.conn.commit()
 
 
+async def set_review_kind(db: Any, event_id: int, kind: str) -> None:
+    """Which kind of place holds this event's review, so no reader ever has to guess."""
+    await db.conn.execute(
+        "UPDATE events SET review_kind = ? WHERE id = ?", (kind, event_id)
+    )
+    await db.conn.commit()
+
+
 async def set_where(db: Any, event_id: int, where: Where) -> None:
     """Staff final say, one fact at a time: the three columns `Where` owns and nothing else."""
     await db.conn.execute(
@@ -1153,7 +1328,11 @@ async def tell_or_log(bot: Any, guild: Any, user: Any, row: Any, text: str) -> N
 
 
 async def rename_channel(bot: Any, guild: Any, row: Any, status: str, user_name: str) -> None:
-    channel = guild.get_channel(row["review_channel_id"]) if row["review_channel_id"] else None
+    """A room says its status in its name; a post says it in its tag, and keeps its own name."""
+    if review_kind(row) == POST:
+        await retag_post(bot, guild, row)
+        return
+    channel = room_of(guild, row)
     if channel is None:
         return
     wanted = channel_name(status, user_name, row["title"])
@@ -1371,6 +1550,90 @@ def room_of(guild: Any, row: Any) -> Any:
     return guild.get_channel(int(channel_id)) if channel_id else None
 
 
+def review_kind(row: Any) -> str:
+    """What kind of place this event is reviewed in; a row from before schema 45 is a room."""
+    return POST if str(cell(row, "review_kind") or "") == POST else ROOM
+
+
+def place_words(row: Any) -> PlaceWords:
+    return PLACE_WORDS[review_kind(row)]
+
+
+def review_mode(store: Any, guild_id: int) -> str:
+    return str(store.get(guild_id, EVENTS_REVIEW_MODE_KEY) or EVENTS_REVIEW_MODE).strip().lower()
+
+
+def reviews_in_forum(store: Any, guild_id: int) -> bool:
+    return review_mode(store, guild_id) == REVIEW_FORUM
+
+
+def forum_channel_id(store: Any, guild_id: int) -> int | None:
+    found = store.get(guild_id, EVENTS_FORUM_CHANNEL_KEY)
+    try:
+        return int(found) if found else None
+    except (TypeError, ValueError):
+        return None
+
+
+def forum_of(bot: Any, guild: Any) -> Any:
+    """The events forum, claimed for the guard on every read (the v120 lesson)."""
+    channel_id = forum_channel_id(bot.store, guild.id)
+    if not channel_id:
+        return None
+    forum = bot.get_channel(channel_id) or guild.get_channel(channel_id)
+    own_room(bot, forum)
+    return forum
+
+
+def post_of(bot: Any, guild: Any, row: Any) -> Any:
+    """This event's own post, claimed back each read because a claim dies with the process."""
+    channel_id = cell(row, "review_channel_id")
+    if not channel_id:
+        return None
+    finder = getattr(guild, "get_thread", None)
+    thread = (finder(int(channel_id)) if finder is not None else None) or bot.get_channel(
+        int(channel_id)
+    )
+    forum = forum_of(bot, guild)
+    if thread is None or forum is None:
+        return thread
+    if parent_id_of(thread) == int(forum.id):
+        own_room(bot, thread)
+    return thread
+
+
+def review_place(bot: Any, guild: Any, row: Any) -> Any:
+    """The one resolver: a room is a channel, a post is a thread, and nothing else guesses."""
+    if review_kind(row) == POST:
+        return post_of(bot, guild, row)
+    return room_of(guild, row)
+
+
+def forum_tags(names: Any = STATUSES) -> list[Any]:
+    return library_forum_tags(names, FORUM_TAG_EMOJI)
+
+
+def tags_for_status(forum: Any, status: Any) -> list[Any]:
+    """The one tag a post wears; a forum without that tag wears none rather than refusing."""
+    found = tag_named(forum, str(status or ""))
+    return [found] if found is not None else []
+
+
+def archives_at(status: Any) -> bool:
+    return str(status or "") in FORUM_ARCHIVE_STATUSES
+
+
+def post_title(store: Any, row: Any) -> str:
+    """The post's own name: the event's title and the day it happens, nothing else."""
+    starts = parse_ts(cell(row, "starts_at"))
+    said = clamp(cell(row, "title"), TITLE_LIMIT)
+    if starts is None:
+        return said[:CHANNEL_NAME_LIMIT] or "event"
+    here = zone(guild_zone(store, row["guild_id"]))
+    day = (starts.astimezone(here) if here is not None else starts).strftime("%Y-%m-%d")
+    return f"{said} · {day}"[:CHANNEL_NAME_LIMIT]
+
+
 def posts_where(store: Any, guild_id: int) -> str:
     return str(store.get(guild_id, EVENTS_POSTS_WHERE_KEY) or EVENTS_POSTS_WHERE).strip().lower()
 
@@ -1421,7 +1684,7 @@ async def post_to_room(
     *,
     ping: bool = True,
 ) -> int | None:
-    """The event's own room, which the guard allows only because Black Bloc made it."""
+    """The event's own place, which the guard allows only because Black Bloc made it."""
     details = {"event_id": row["id"]}
     mode = bot.store.get(guild.id, "events_mode")
     if mode != "on":
@@ -1429,7 +1692,7 @@ async def post_to_room(
             bot, guild, f"event.would_{kind}_room", details=details | {"reason": f"mode_{mode}"}
         )
         return None
-    channel = room_of(guild, row)
+    channel = review_place(bot, guild, row)
     if channel is None:
         await log_action(
             bot, guild, f"event.{kind}_room_failed", details=details | {"reason": "no_room"}
@@ -1471,12 +1734,21 @@ async def post_event(
     return message_id
 
 
+def notice_said(store: Any, guild_id: int, row: Any, *, testing: bool) -> str:
+    """What the Delete message says: a room counts down, a live post archives instead."""
+    if review_kind(row) == POST:
+        if not testing:
+            return POST_NOTICE
+        return POST_NOTICE_TEST.format(when=room_keeps(store, guild_id, testing=True))
+    return ROOM_NOTICE.format(when=room_keeps(store, guild_id, testing=testing))
+
+
 async def post_room_notice(bot: Any, guild: Any, row: Any, channel: Any, view: Any) -> int | None:
-    """The staff Delete button's own message, in a room the review card actually reached."""
+    """The staff Delete button's own message, in the place the review card actually reached."""
     if not bot.store.get(guild.id, EVENTS_ROOM_NOTICE_KEY):
         return None
     testing = getattr(bot, "guard", None) is not None
-    said = ROOM_NOTICE.format(when=room_keeps(bot.store, guild.id, testing=testing))
+    said = notice_said(bot.store, guild.id, row, testing=testing)
     try:
         message = await channel.send(
             said, view=view, allowed_mentions=discord.AllowedMentions.none()
@@ -1504,7 +1776,11 @@ async def forget_room(bot: Any, guild: Any, row: Any) -> None:
         bot,
         guild,
         "event.room_forgotten",
-        details={"event_id": row["id"], "channel_id": row["review_channel_id"]},
+        details={
+            "event_id": row["id"],
+            "channel_id": row["review_channel_id"],
+            "kind": review_kind(row),
+        },
     )
 
 
@@ -1517,39 +1793,45 @@ async def delete_room(
     note: Any = None,
     via: str = VIA_DISCORD,
 ) -> tuple[str, bool]:
-    """Staff removing one room: settle the event first, then the channel, then the record."""
+    """Staff removing one place: settle the event first, then the channel, then the record."""
     actor_id = getattr(by, "id", by)
     fresh = await get_event(bot.db, row["id"])
     if fresh is None:
         return (NO_SUCH_EVENT, False)
-    channel = room_of(guild, fresh)
+    words = place_words(fresh)
+    channel = review_place(bot, guild, fresh)
     if channel is None:
-        return (ROOM_ALREADY_GONE.format(event_id=fresh["id"]), False)
+        return (words.already_gone.format(event_id=fresh["id"]), False)
     cancelled = False
     if fresh["status"] in OPEN_STATUSES:
         cancelled = await cancel_event(
-            bot, guild, fresh, "room_deleted", by=actor_id, note=note, via=via
+            bot, guild, fresh, words.cancel_reason, by=actor_id, note=note, via=via
         )
         fresh = await get_event(bot.db, row["id"])
     extra = ROOM_ALSO_CANCELLED.format(event_id=fresh["id"]) if cancelled else ""
-    details = {"event_id": fresh["id"], "channel_id": channel.id, "by": actor_id}
+    details = {
+        "event_id": fresh["id"],
+        "channel_id": channel.id,
+        "by": actor_id,
+        "kind": words.word,
+    }
     guard = getattr(bot, "guard", None)
     if guard is not None and not guard.allows_place(channel):
         await log_action(bot, guild, "event.would_delete_channel", details=details)
-        return (f"{ROOM_DELETE_REFUSED_TEST}{extra}", False)
+        return (f"{words.refused_test}{extra}", False)
     try:
         await channel.delete(
-            reason=ROOM_DELETED_BY.format(event_id=fresh["id"], who=actor_id)
+            reason=words.audit.format(event_id=fresh["id"], who=actor_id)
         )
     except NETWORK_ERRORS as exc:
-        log.warning("events: could not delete the room %s: %s", channel.id, exc)
+        log.warning("events: could not delete the %s %s: %s", words.word, channel.id, exc)
         await log_action(
             bot,
             guild,
             "event.room_delete_failed",
             details=details | {"reason": f"{type(exc).__name__}: {exc}"},
         )
-        return (f"{ROOM_DELETE_FAILED}{extra}", False)
+        return (f"{words.failed}{extra}", False)
     await set_review(
         bot.db, fresh["id"], None, fresh["review_message_id"], fresh["card_channel_id"]
     )
@@ -1561,7 +1843,7 @@ async def delete_room(
         actor=by,
         details=details | {"cancelled": cancelled, "via": via},
     )
-    return (f"{ROOM_DELETED_SAID}{extra}", True)
+    return (f"{words.deleted}{extra}", True)
 
 
 async def edit_announcement(bot: Any, guild: Any, row: Any) -> None:
@@ -1635,6 +1917,8 @@ async def cancel_event(
         await cancel_scheduled_event(bot, guild, fresh)
         fresh = await get_event(bot.db, row["id"])
         await edit_announcement(bot, guild, fresh)
+        if review_kind(fresh) == POST:
+            await retag_post(bot, guild, fresh)
         if reason not in ROOM_QUIET_REASONS and posts_in_room(bot.store, guild.id):
             await post_to_room(
                 bot,
@@ -1733,7 +2017,10 @@ async def apply_decision(
         return (
             APPROVED_SAID.format(
                 extra=approve_extra(
-                    why_not, message_id, where=posts_where(bot.store, guild.id)
+                    why_not,
+                    message_id,
+                    where=posts_where(bot.store, guild.id),
+                    kind=review_kind(fresh),
                 )
             ),
             fresh,
@@ -1763,7 +2050,11 @@ async def tell_requester(
 
 
 def approve_extra(
-    why_not: str | None, message_id: int | None, *, where: str = POSTS_ANNOUNCE
+    why_not: str | None,
+    message_id: int | None,
+    *,
+    where: str = POSTS_ANNOUNCE,
+    kind: str = ROOM,
 ) -> str:
     parts = []
     if why_not == "test_mode":
@@ -1776,7 +2067,7 @@ def approve_extra(
     elif why_not is not None:
         parts.append("Discord refused to make the scheduled event — the log says why.")
     if where == POSTS_ROOM:
-        parts.append(ANNOUNCED_IN_ROOM)
+        parts.append(PLACE_WORDS[kind].announced)
     elif message_id is None:
         parts.append("Nothing was announced publicly; the log says why.")
     return " ".join(parts) or "The event is announced and the requester has been told."
@@ -1813,6 +2104,134 @@ async def make_review_channel(bot: Any, guild: Any, row: Any, actor: Any, catego
         return None
     own_room(bot, room)
     return room
+
+
+async def open_review_post(bot: Any, guild: Any, row: Any, view: Any) -> tuple[Any, str]:
+    """Forum mode's `make_review_channel`: one post, the card and its buttons as message one."""
+    forum = forum_of(bot, guild)
+    if forum is None:
+        return (None, "no_forum")
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(forum.id):
+        await log_action(
+            bot,
+            guild,
+            "event.post_skipped_test_mode",
+            details={"event_id": row["id"], "channel_id": int(forum.id)},
+        )
+        return (None, "test_mode")
+    extra = {} if view is None else {"view": view}
+    try:
+        made = await forum.create_thread(
+            name=post_title(bot.store, row),
+            content=POST_OPENED.format(event_id=row["id"], who=row["requester_id"]),
+            embed=card_for(row),
+            applied_tags=tags_for_status(forum, row["status"]),
+            auto_archive_duration=AUTO_ARCHIVE_MINUTES,
+            allowed_mentions=discord.AllowedMentions.none(),
+            reason=f"Black Bloc event {row['id']}",
+            **extra,
+        )
+    except Exception as exc:
+        log.warning("events: could not open a post for %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            "event.post_failed",
+            details={"event_id": row["id"], "reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return (None, "failed")
+    post = getattr(made, "thread", made)
+    own_room(bot, post)
+    starter = getattr(made, "message", None)
+    await set_review(
+        bot.db, row["id"], post.id, getattr(starter, "id", None), post.id
+    )
+    await set_review_kind(bot.db, row["id"], POST)
+    return (post, "")
+
+
+def post_is_right(place: Any, wanted: list[Any], archived: bool) -> bool:
+    """Whether the post already wears what it should, so a second pass costs no API call."""
+    found = [getattr(tag, "id", tag) for tag in getattr(place, "applied_tags", None) or ()]
+    asked = [getattr(tag, "id", tag) for tag in wanted]
+    return found == asked and bool(getattr(place, "archived", False)) == archived
+
+
+async def retag_post(bot: Any, guild: Any, row: Any) -> None:
+    """The post's own state: one tag for the status, and an archive once it is settled."""
+    place = post_of(bot, guild, row)
+    if place is None:
+        return
+    forum = getattr(place, "parent", None) or forum_of(bot, guild)
+    status = row["status"]
+    wanted = tags_for_status(forum, status)
+    settled = archives_at(status)
+    if post_is_right(place, wanted, settled):
+        return
+    try:
+        await place.edit(applied_tags=wanted, archived=settled)
+    except NETWORK_ERRORS as exc:
+        log.warning("events: could not re-tag the post for %s: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            "event.retag_failed",
+            details={
+                "event_id": row["id"],
+                "channel_id": getattr(place, "id", None),
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+
+
+async def make_forum(bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD) -> Outcome:
+    """**Make the forum**: one forum under BlackMail, with a tag for each place an event can be."""
+    known = forum_channel_id(bot.store, guild.id)
+    if known and (bot.get_channel(known) or guild.get_channel(known)) is not None:
+        return refusal(FORUM_EXISTS.format(where=known), "forum_exists", 409)
+    category_id = bot.store.get(guild.id, MODMAIL_CATEGORY_KEY)
+    category = guild.get_channel(category_id) if category_id else None
+    if category is None:
+        return refusal(FORUM_NO_CATEGORY, "no_category", 409)
+    create = getattr(guild, "create_forum", None)
+    if create is None:
+        return refusal(FORUM_UNSUPPORTED, "no_forum_api", 409)
+    try:
+        forum = await create(
+            FORUM_CHANNEL_NAME,
+            category=category,
+            topic=FORUM_TOPIC,
+            overwrites=forum_overwrites(guild, category),
+            available_tags=forum_tags(),
+            default_auto_archive_duration=AUTO_ARCHIVE_MINUTES,
+            reason="Black Bloc events forum",
+        )
+    except Exception as exc:
+        log.warning("events: could not make the forum: %s", exc)
+        await log_action(
+            bot,
+            guild,
+            "event.forum_failed",
+            actor=actor,
+            details={"category_id": category.id, "reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return refusal(FORUM_FAILED_SAID.format(reason=exc), "forum_failed", 500)
+    said = FORUM_MADE.format(where=forum.id)
+    if getattr(bot, "guard", None) is not None:
+        said += FORUM_MADE_GUARDED
+    own_room(bot, forum)
+    await bot.store.set(
+        guild.id, EVENTS_FORUM_CHANNEL_KEY, forum.id, by=getattr(actor, "id", None)
+    )
+    await log_action(
+        bot,
+        guild,
+        kind_via("event.forum_made", via),
+        actor=actor,
+        details={"channel_id": forum.id, "category_id": category.id, "via": via},
+    )
+    return Outcome(True, said, value=forum.id)
 
 
 async def post_review_card(bot: Any, guild: Any, row: Any, channel: Any, view: Any) -> int | None:
@@ -1854,10 +2273,17 @@ async def submit_event(
     requester: Any = None,
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
-    """One proposal, whichever door it came through: a row, a room, a card and the sentence."""
-    category, where = events_category(bot, guild)
-    if where in CATEGORY_TROUBLE:
-        return (CATEGORY_TROUBLE[where], None)
+    """One proposal, whichever door it came through: a row, a place, a card and the sentence."""
+    in_forum = reviews_in_forum(bot.store, guild.id)
+    category = None
+    if in_forum:
+        if forum_of(bot, guild) is None:
+            staff = bot.store.is_staff(actor)
+            return (FORUM_NOT_SET_STAFF if staff else FORUM_NOT_SET_MEMBER, None)
+    else:
+        category, where = events_category(bot, guild)
+        if where in CATEGORY_TROUBLE:
+            return (CATEGORY_TROUBLE[where], None)
     whose = actor if requester is None else requester
     event_id = await create_event(
         bot.db,
@@ -1870,10 +2296,17 @@ async def submit_event(
         finishes_at=ends_at(fields.starts, fields.minutes),
     )
     row = await get_event(bot.db, event_id)
-    channel = await make_review_channel(bot, guild, row, whose, category)
-    if channel is None:
-        return (CANNOT_CREATE, None)
-    await set_review(bot.db, event_id, channel.id, None)
+    card_view = review_view(event_id) if review_view is not None else None
+    if in_forum:
+        channel, why = await open_review_post(bot, guild, row, card_view)
+        if channel is None:
+            await set_status(bot.db, event_id, CANCELLED)
+            return (POST_REFUSED_TEST if why == "test_mode" else CANNOT_CREATE_POST, None)
+    else:
+        channel = await make_review_channel(bot, guild, row, whose, category)
+        if channel is None:
+            return (CANNOT_CREATE, None)
+        await set_review(bot.db, event_id, channel.id, None)
     await log_action(
         bot,
         guild,
@@ -1884,19 +2317,24 @@ async def submit_event(
             "event_id": event_id,
             "title": fields.title,
             "channel_id": channel.id,
+            "kind": POST if in_forum else ROOM,
             "via": via,
         },
     )
     row = await get_event(bot.db, event_id)
-    posted = await post_review_card(
-        bot, guild, row, channel, review_view(event_id) if review_view is not None else None
+    posted = (
+        channel.id if in_forum else await post_review_card(bot, guild, row, channel, card_view)
     )
     if posted is None:
         said = SUBMITTED_NO_CARD
     elif posted == channel.id:
         said = SUBMITTED_HERE
         await post_room_notice(
-            bot, guild, row, channel, room_view(event_id) if room_view is not None else None
+            bot,
+            guild,
+            row,
+            channel,
+            room_view(event_id, POST if in_forum else ROOM) if room_view is not None else None,
         )
     else:
         said = SUBMITTED_TEST
@@ -2119,6 +2557,8 @@ SETTINGS_KEYS = (
     EVENTS_ROOM_DELETE_KEY,
     EVENTS_APPROVER_ROLE_KEY,
     EVENTS_ROOM_NOTICE_KEY,
+    EVENTS_REVIEW_MODE_KEY,
+    EVENTS_FORUM_CHANNEL_KEY,
 )
 
 ROOMS_TITLE = "Events — rooms"
@@ -2127,6 +2567,14 @@ POSTS_WHERE_PLACEHOLDER = "Where an event's posts go…"
 ROOM_DELETE_PLACEHOLDER = "Who may remove a room…"
 ROOM_APPROVER_PLACEHOLDER = "The role that may remove a room (pick nothing for staff)"
 ROOM_NOTICE_BUTTON = "Delete message: {state}"
+FORUM_TITLE = "Events — the forum"
+FORUM_BUTTON = "Forum…"
+REVIEW_MODE_PLACEHOLDER = "Where a proposal is reviewed…"
+FORUM_CHANNEL_PLACEHOLDER = "The events forum (pick nothing to forget it)"
+REVIEW_MODE_WORDS: dict[str, str] = {
+    REVIEW_ROOM: "a text channel of its own, under events_category_id",
+    REVIEW_FORUM: "one post in the events forum, under BlackMail",
+}
 POSTS_WHERE_WORDS: dict[str, str] = {
     POSTS_ROOM: "the event's own room",
     POSTS_ANNOUNCE: "the announce channel",
@@ -2148,6 +2596,24 @@ def rooms_lines(store: Any, guild: Any) -> list[str]:
         f"**a room is kept** — {room_keeps(store, guild.id, testing=False)}, or "
         f"{room_keeps(store, guild.id, testing=True)} while Black Bloc is in test mode",
     ]
+
+
+def forum_lines(store: Any, guild: Any) -> list[str]:
+    """What the Forum sub-panel says: the mode, the forum, and what is missing to use it."""
+    mode = review_mode(store, guild.id)
+    forum_id = forum_channel_id(store, guild.id)
+    lines = [
+        f"**a proposal is reviewed in** — {REVIEW_MODE_WORDS.get(mode, mode)}",
+        "**the events forum** — " + (f"<#{forum_id}>" if forum_id else "not set"),
+        "**open events already have their room or post** — a change here only reaches the ones "
+        "proposed after it",
+    ]
+    if mode == REVIEW_FORUM and not forum_id:
+        lines.append(
+            f"⚠️ Forum mode with no forum refuses every proposal in words. Press "
+            f"**{MAKE_THE_FORUM}**, or set the mode back to room."
+        )
+    return lines
 
 
 def settings_lines(store: Any, guild: Any, health: Any = ()) -> list[str]:

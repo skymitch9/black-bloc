@@ -122,6 +122,8 @@ export const LABELS = {
   events_room_delete_who: 'Who may remove an event’s room',
   events_approver_role_id: 'The role that may remove an event’s room',
   events_room_notice: 'Whether the Delete this room message is posted',
+  events_review_mode: 'Whether an event gets its own room or a forum post',
+  events_forum_channel_id: 'The forum every event is posted in',
   default_timezone: 'The zone times are read in for anybody who never picked one',
   timezone_choices: 'The zones the Time zone dropdown offers',
   time_step_minutes: 'How far apart the Minute dropdown’s choices are',

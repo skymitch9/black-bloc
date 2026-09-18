@@ -132,6 +132,12 @@ EVENTS_ROOM_DELETE_WHO = ROOM_DELETE_STAFF
 EVENTS_APPROVER_ROLE_KEY = "events_approver_role_id"
 EVENTS_ROOM_NOTICE_KEY = "events_room_notice"
 EVENTS_ROOM_NOTICE = True
+EVENTS_REVIEW_MODE_KEY = "events_review_mode"
+REVIEW_ROOM = "room"
+REVIEW_FORUM = "forum"
+EVENTS_REVIEW_MODES = (REVIEW_ROOM, REVIEW_FORUM)
+EVENTS_REVIEW_MODE = REVIEW_ROOM
+EVENTS_FORUM_CHANNEL_KEY = "events_forum_channel_id"
 
 WHERE_ALIASES_KEY = "events_where_link_aliases"
 WHERE_ALIAS_MAX = 32
@@ -319,6 +325,8 @@ KEY_TYPES: dict[str, str] = {
     EVENTS_ROOM_DELETE_KEY: "enum",
     EVENTS_APPROVER_ROLE_KEY: "role",
     EVENTS_ROOM_NOTICE_KEY: "bool",
+    EVENTS_REVIEW_MODE_KEY: "enum",
+    EVENTS_FORUM_CHANNEL_KEY: "channel",
     DEFAULT_TIMEZONE_KEY: "text",
     TIMEZONE_CHOICES_KEY: "text",
     TIME_STEP_KEY: "int",
@@ -420,6 +428,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "events_mode": EVENTS_MODES,
     EVENTS_POSTS_WHERE_KEY: EVENTS_POSTS_WHERES,
     EVENTS_ROOM_DELETE_KEY: EVENTS_ROOM_DELETE_WHOS,
+    EVENTS_REVIEW_MODE_KEY: EVENTS_REVIEW_MODES,
     WHERE_CHECK_KEY: WHERE_CHECK_MODES,
     "poll_mode": POLL_MODES,
     "poll_review_mode": POLL_REVIEW_MODES,
@@ -836,6 +845,16 @@ KEY_HELP: dict[str, str] = {
     EVENTS_ROOM_NOTICE_KEY: (
         "true to post the message carrying **Delete this room** in every review room Black "
         "Bloc makes; false posts nothing and the sweep still tidies the room away on its own"
+    ),
+    EVENTS_REVIEW_MODE_KEY: (
+        "where a proposed event is reviewed: room makes a text channel per event under "
+        "`events_category_id`; forum makes one post per event in `events_forum_channel_id` "
+        "(**Make the forum** on `/event` first). Changing it only affects events proposed "
+        "afterwards — the ones already open keep the room or post they have"
+    ),
+    EVENTS_FORUM_CHANNEL_KEY: (
+        "the forum channel every event is posted in, in forum mode; **Make the forum** on "
+        "`/event` ▸ **Settings** ▸ **Rooms…** makes one under the BlackMail category"
     ),
     "events_max_late_minutes": (
         "minutes an event may start late and still be announced; later than that it goes live "
@@ -3006,6 +3025,8 @@ class SettingsStore:
             return EVENTS_ROOM_DELETE_WHO
         if key == EVENTS_ROOM_NOTICE_KEY:
             return EVENTS_ROOM_NOTICE
+        if key == EVENTS_REVIEW_MODE_KEY:
+            return EVENTS_REVIEW_MODE
         if key == DEFAULT_TIMEZONE_KEY:
             return DEFAULT_TZ
         if key == TIMEZONE_CHOICES_KEY:

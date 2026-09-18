@@ -283,6 +283,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/community/events.py::kind": (
         "event.category_forgotten",
         "event.announce_channel_forgotten",
+        "event.forum_forgotten",
     ),
     "black_bloc/cogs/community/tempvoice.py::f'tempvoice.{kind}'": (
         "tempvoice.ban",

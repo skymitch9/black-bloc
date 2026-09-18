@@ -10,6 +10,7 @@ from discord.ext import commands
 
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
+from ...forums import forum_overwrites
 from ...handoff import EVENT as HANDOFF_EVENT
 from ...handoff import OPEN_A_TICKET, SEND_TO_EVENTS, request_to_ticket
 from ...handoff import TICKET as HANDOFF_TICKET
@@ -933,22 +934,12 @@ async def make_forum(
     create = getattr(guild, "create_forum", None)
     if create is None:
         return refusal(FORUM_UNSUPPORTED, "no_forum_api", 409)
-    overwrites = dict(getattr(category, "overwrites", None) or {})
-    me = getattr(guild, "me", None)
-    if me is not None:
-        overwrites[me] = discord.PermissionOverwrite(
-            view_channel=True,
-            send_messages=True,
-            manage_channels=True,
-            manage_threads=True,
-            send_messages_in_threads=True,
-        )
     try:
         forum = await create(
             FORUM_CHANNEL_NAME,
             category=category,
             topic=FORUM_TOPIC,
-            overwrites=overwrites,
+            overwrites=forum_overwrites(guild, category),
             available_tags=forum_tags(),
             default_auto_archive_duration=FORUM_AUTO_ARCHIVE_MINUTES,
             reason="Black Bloc request forum",

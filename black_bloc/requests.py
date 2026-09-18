@@ -7,6 +7,8 @@ from typing import Any, NamedTuple
 import discord
 
 from .actionlog import log_action
+from .forums import AUTO_ARCHIVE_MINUTES, tag_named
+from .forums import forum_tags as library_forum_tags
 from .logkinds import FEATURE_PAGES, VIA_DISCORD, kind_via
 from .panels import CAPPED_PLACEHOLDER, capped_placeholder
 from .panels import option_label as library_option_label
@@ -282,7 +284,7 @@ FORUM_TAG_FOR: dict[str, str] = {
     MOVED: FORUM_MOVED_TAG,
 }
 FORUM_ARCHIVE_STATUSES = (DONE, DECLINED, MOVED)
-FORUM_AUTO_ARCHIVE_MINUTES = 1440
+FORUM_AUTO_ARCHIVE_MINUTES = AUTO_ARCHIVE_MINUTES
 ADOPTS_POSTS_KEY = "request_forum_adopts_posts"
 SOURCE_PANEL = "panel"
 SOURCE_FORUM = "forum"
@@ -661,17 +663,7 @@ def adopted_fields(title: Any, said: Any) -> tuple[str, str]:
 
 def forum_tags(names: Any = FORUM_TAG_NAMES) -> list[discord.ForumTag]:
     """The tags a request forum is made with; their ids live in the forum, never in a key."""
-    return [
-        discord.ForumTag(name=name, emoji=discord.PartialEmoji(name=FORUM_TAG_EMOJI[name]))
-        for name in names
-    ]
-
-
-def tag_named(forum: Any, name: Any) -> Any:
-    for tag in getattr(forum, "available_tags", None) or ():
-        if str(getattr(tag, "name", "")).lower() == str(name or "").lower():
-            return tag
-    return None
+    return library_forum_tags(names, FORUM_TAG_EMOJI)
 
 
 def tags_for_status(forum: Any, status: Any) -> list[Any]:
