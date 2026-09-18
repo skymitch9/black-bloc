@@ -145,6 +145,8 @@ not import, at which point the version gets pinned to `==0.5.2a179` in the same 
 
 ## KI-30 — YouTube live detection reads the `/live` PAGE, and from a DATACENTER address that page is a bot check — `WATCHING`
 
+> **2026-09-18 10:07 — the wall is INTERMITTENT, not constant:** the v139 boot probe (17:05:49Z) read Pawpette's page with `botcheck false` from the same Fly address that got the wall on every probe of 2026-09-17 18:1x–19:11. So the id-from-canonical path and the searched-id path will both be exercised over time; `botcheck` on the status line is the tell for which one ran.
+
 **Symptom.** The quota-free half of YouTube live detection (v126, `info/youtube-live-design.md` §A)
 is a scrape: `GET https://www.youtube.com/channel/<id>/live`, parsed for `"isLive":true` and the
 canonical `watch?v=<id>`. YouTube publishes no contract for either. ⚠️ **It has already happened
