@@ -1,7 +1,6 @@
 # Errors — every command error on the site's Logs page, and a Try again that keeps the member's place
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT on branch `errors`
-> (off `main` `e7093d7`), ⚠️ NOT MERGED, NOT DEPLOYED, nothing has met Discord** — §A–§D in `5177040` (code +
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v131** — merge `64684d6`, release `709defe`, deployed **2026-09-17 18:12** Phoenix; the `## Deviations` foot is the truth where it departs from the body; sweeps **565–571** are the owner's. Was: ✅ BUILT on branch `errors` (off `main` `e7093d7`), not merged — §A–§D in `5177040` (code +
 > tests) and the docs commit after it; see `## Deviations`. (v131 or v132, whichever lands first beside `minutes`). **Last verified: 2026-09-17 17:2x** against
 > `main` `479fe29`: `black_bloc/command_errors.py` (`report` → `log.exception` + one sentence `COMMAND_FAILED`;
 > `AnswersErrors.on_error`, `SafeDynamicItem`, `on_tree_error`), `black_bloc/panels.py` (`opened`, `Panel`, `retire`),
