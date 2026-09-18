@@ -53,6 +53,7 @@ from .settings_store import (
     WHERE_CHECK_MODE,
     WHERE_CHECK_SECONDS,
     WHERE_CHECK_SECONDS_KEY,
+    WHERE_HINT_KEY,
     staff_roles_sentence,
     where_alias_table,
 )
@@ -339,6 +340,7 @@ def where_button_label(where: Where, channel: Any = None) -> str:
 
 
 WHERE_NOTE_MARK = " — ⚠️ {note}"
+WHERE_HINT_MARK = " *{hint}*"
 WHERE_NOTE_MISSING = "that page answered 404 — check the name"
 WHERE_NOTE_UNREACHABLE = "{host} did not answer within {seconds} s — the link is kept as typed"
 WHERE_REFUSED_MISSING = (
@@ -591,6 +593,21 @@ WHERE_JOIN_NOTE = (
     "A voice or stage channel gives everybody a **Join** button on the Discord event; anything "
     "else is written on it as words."
 )
+
+
+def where_hint(store: Any, guild_id: int) -> str:
+    """Read at every render, so a word changed on the site shows the next time it opens."""
+    return clamp(store.get(guild_id, WHERE_HINT_KEY), DESCRIPTION_LIMIT)
+
+
+def where_panel_lines(hint: str = "") -> list[str]:
+    """The panel's words, the editable hint last so it sits directly above the picker."""
+    lines = [WHERE_PANEL_INTRO, WHERE_JOIN_NOTE]
+    if hint.strip():
+        lines.append(hint.strip())
+    return lines
+
+
 ZONE_PANEL_TITLE = "Your time zone"
 ZONE_PANEL_INTRO = (
     "Times you pick are read in this zone. Pick one, or **Other — type it…** for anywhere else."
@@ -1036,12 +1053,17 @@ def draft_how_long(draft: EventDraft) -> str:
     return describe_duration(minutes)
 
 
-def draft_lines(draft: EventDraft, now: datetime, *, chosen: bool, why: str = "") -> list[str]:
+def draft_lines(
+    draft: EventDraft, now: datetime, *, chosen: bool, why: str = "", hint: str = ""
+) -> list[str]:
     """The draft card, in the order the design writes it, with one Still-needed line at most."""
     when = draft_when_line(draft, now)
-    said = where_line(draft.where) or DRAFT_NOT_SET
+    shown = where_line(draft.where)
+    said = shown or DRAFT_NOT_SET
     if draft.where_note:
         said = f"{said}{WHERE_NOTE_MARK.format(note=draft.where_note)}"
+    elif not shown and hint.strip():
+        said = f"{said}{WHERE_HINT_MARK.format(hint=hint.strip())}"
     lines = [
         f"**Title** — {clamp(draft.title, TITLE_LIMIT) or DRAFT_NEEDED}",
         f"**When** — {when}",

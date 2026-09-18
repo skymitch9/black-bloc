@@ -354,6 +354,7 @@ const SETTING_SPECS = [
   ['events_where_link_aliases', 'text', 'ttv=https://twitch.tv/{handle}, yt=https://youtube.com/@{handle}', 'ttv=https://twitch.tv/{handle}, yt=https://youtube.com/@{handle}', 'the shorthands the Where box turns into links, alias=https://host/{handle} entries separated by commas, up to 32 of them'],
   ['events_where_link_check', 'enum', 'warn', 'warn', 'whether a link typed into the Where box is opened once before it is kept: off, warn (kept either way, with a note) or refuse (the box says so in words)', ['off', 'warn', 'refuse']],
   ['events_where_link_check_seconds', 'int', 2, 2, 'seconds the link check waits for an answer, 1 to 3', null, 3, 1],
+  ['events_where_hint', 'text', 'If you do not see your channel, start typing the channel name and it should appear.', 'If you do not see your channel, start typing the channel name and it should appear.', 'the sentence directly above the channel picker on the Where panel, and on the draft card while nothing is picked; empty shows no such line'],
   ['events_channel_retention_days', 'int', 7, 7, 'days a finished event’s channel is kept before deletion, 1 to 365', null, 365, 1],
   ['events_test_retention_minutes', 'int', 5, 5, 'minutes a finished or refused event’s review room is kept while Black Bloc is in test mode, 1 to 1440', null, 1440, 1],
   ['events_max_late_minutes', 'int', 30, 30, 'minutes an event may start late and still be announced', null, 1440],

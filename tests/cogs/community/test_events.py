@@ -89,6 +89,8 @@ from black_bloc.settings_store import (
     WHERE_CHECK_OFF,
     WHERE_CHECK_REFUSE,
     WHERE_CHECK_SECONDS_KEY,
+    WHERE_HINT,
+    WHERE_HINT_KEY,
     SettingsStore,
 )
 from black_bloc.spawned import STAFF_REACH_KEY
@@ -2771,6 +2773,50 @@ async def test_the_where_panel_opens_with_the_channel_picker_and_the_two_other_d
     assert isinstance(find_select(panel, events_pure.WHERE_PLACEHOLDER), discord.ui.ChannelSelect)
     assert has_item(panel, events_pure.WHERE_OTHER_BUTTON)
     assert has_item(panel, "Back")
+
+
+async def test_the_where_panel_says_to_start_typing_directly_above_the_picker(cog, bot, member):
+    """136 channels are allowed here and Discord's picker lists its first page until you type."""
+    opened_where, _panel = await open_where(cog, bot, member)
+
+    said = card_embed(opened_where).description
+    assert said.endswith(WHERE_HINT)
+    assert said.splitlines()[-1] == WHERE_HINT
+
+
+async def test_the_words_above_the_picker_are_whatever_the_guild_stored(cog, bot, member):
+    await bot.store.set(GUILD, WHERE_HINT_KEY, "Start typing, it is in there.")
+
+    opened_where, _panel = await open_where(cog, bot, member)
+
+    said = card_embed(opened_where).description
+    assert said.splitlines()[-1] == "Start typing, it is in there."
+    assert WHERE_HINT not in said
+
+
+async def test_an_emptied_hint_leaves_the_where_panel_with_no_such_line(cog, bot, member):
+    await bot.store.set(GUILD, WHERE_HINT_KEY, "")
+
+    opened_where, _panel = await open_where(cog, bot, member)
+
+    said = card_embed(opened_where).description
+    assert said.splitlines()[-1] == events_pure.WHERE_JOIN_NOTE
+    assert "start typing" not in said.lower()
+
+
+async def test_the_draft_card_carries_the_same_sentence_while_nowhere_is_picked(cog, bot, member):
+    opened, _view = await open_draft_panel(cog, bot, member)
+
+    assert f"**Where** — (not set) *{WHERE_HINT}*" in card_embed(opened).description
+
+
+async def test_an_emptied_hint_leaves_the_draft_where_line_alone(cog, bot, member):
+    await bot.store.set(GUILD, WHERE_HINT_KEY, "")
+
+    opened, _view = await open_draft_panel(cog, bot, member)
+
+    assert "**Where** — (not set)" in card_embed(opened).description
+    assert "start typing" not in card_embed(opened).description.lower()
 
 
 async def test_the_channel_picker_offers_voice_stage_and_text_and_nothing_else(cog, bot, member):

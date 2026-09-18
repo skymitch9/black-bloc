@@ -58,6 +58,7 @@ from black_bloc.settings_store import (
     REQUEST_CARD_MOVES,
     TEMPVOICE_MODES,
     TEMPVOICE_NAME_TEMPLATE,
+    TEXT_MAY_BE_BLANK,
     THREAD_MODE,
     TIME_STEP_KEY,
     TIME_STEP_MINUTES,
@@ -74,6 +75,8 @@ from black_bloc.settings_store import (
     WHERE_CHECK_MODES,
     WHERE_CHECK_SECONDS,
     WHERE_CHECK_SECONDS_KEY,
+    WHERE_HINT,
+    WHERE_HINT_KEY,
     YOUTUBE_MODES,
     YOUTUBE_TEMPLATE,
     SettingError,
@@ -622,6 +625,26 @@ def test_how_long_the_link_check_waits_is_bounded_by_what_a_modal_has(store):
     with pytest.raises(SettingError, match="cannot be more than 3") as too_big:
         coerce_value(WHERE_CHECK_SECONDS_KEY, WHERE_CHECK_MAX_SECONDS + 1)
     assert "three seconds" in str(too_big.value)
+
+
+async def test_the_sentence_above_the_channel_picker_is_a_key_both_doors_reach(store):
+    """Follow-up 5: every word the bot posts is editable on the site, this one included."""
+    assert KEY_TYPES[WHERE_HINT_KEY] == "text"
+    assert KEY_HELP[WHERE_HINT_KEY]
+    assert namespace_of(WHERE_HINT_KEY) == "events"
+    assert store.get(1, WHERE_HINT_KEY) == WHERE_HINT
+    assert WHERE_HINT == (
+        "If you do not see your channel, start typing the channel name and it should appear."
+    )
+
+    await store.set(1, WHERE_HINT_KEY, "Start typing, it is in there.")
+    assert store.get(1, WHERE_HINT_KEY) == "Start typing, it is in there."
+
+
+def test_the_sentence_above_the_channel_picker_may_be_emptied_to_hide_it():
+    assert WHERE_HINT_KEY in TEXT_MAY_BE_BLANK
+    assert coerce_value(WHERE_HINT_KEY, "") == ""
+    assert coerce_value(WHERE_HINT_KEY, "   ") == ""
 
 
 def test_how_late_an_announcement_may_be_is_a_capped_whole_number():

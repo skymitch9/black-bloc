@@ -68,7 +68,6 @@ from ...events import (
     TITLE_LIMIT,
     WHERE_CHANNEL_KINDS,
     WHERE_CLEAR_BUTTON,
-    WHERE_JOIN_NOTE,
     WHERE_LINK_BUTTON,
     WHERE_LINK_MODAL_TITLE,
     WHERE_MODAL_LABEL,
@@ -76,7 +75,6 @@ from ...events import (
     WHERE_OPEN_LINK_BUTTON,
     WHERE_OTHER,
     WHERE_OTHER_BUTTON,
-    WHERE_PANEL_INTRO,
     WHERE_PANEL_TITLE,
     WHERE_PLACEHOLDER,
     WHERE_UNSET,
@@ -152,9 +150,11 @@ from ...events import (
     when_line,
     where_aliases,
     where_button_label,
+    where_hint,
     where_link,
     where_note,
     where_of_channel,
+    where_panel_lines,
     where_refused,
     where_typed,
     write_settings,
@@ -858,7 +858,9 @@ async def build_draft(
     checked, why = draft_check(fields, now)
     embed = discord.Embed(
         title=DRAFT_TITLE,
-        description="\n".join(draft_lines(fields, now, chosen=chosen, why=why)),
+        description="\n".join(
+            draft_lines(fields, now, chosen=chosen, why=why, hint=where_hint(store, guild.id))
+        ),
         colour=discord.Colour(COLOURS[PENDING]),
     )
     view = EventDraftPanel(panel_minutes(store, guild.id), fields)
@@ -1021,7 +1023,7 @@ async def open_where_panel(
     store = interaction.client.store
     embed = discord.Embed(
         title=WHERE_PANEL_TITLE,
-        description="\n".join([WHERE_PANEL_INTRO, WHERE_JOIN_NOTE]),
+        description="\n".join(where_panel_lines(where_hint(store, interaction.guild.id))),
         colour=discord.Colour(COLOURS[PENDING]),
     )
     view = WherePanel(

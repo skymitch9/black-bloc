@@ -160,6 +160,10 @@ WHERE_CHECK_SECONDS_KEY = "events_where_link_check_seconds"
 WHERE_CHECK_SECONDS = 2
 WHERE_CHECK_MIN_SECONDS = 1
 WHERE_CHECK_MAX_SECONDS = 3
+WHERE_HINT_KEY = "events_where_hint"
+WHERE_HINT = (
+    "If you do not see your channel, start typing the channel name and it should appear."
+)
 
 DEFAULT_TIMEZONE_KEY = "default_timezone"
 TIMEZONE_CHOICES_KEY = "timezone_choices"
@@ -316,6 +320,7 @@ KEY_TYPES: dict[str, str] = {
     WHERE_ALIASES_KEY: "text",
     WHERE_CHECK_KEY: "enum",
     WHERE_CHECK_SECONDS_KEY: "int",
+    WHERE_HINT_KEY: "text",
     "events_channel_retention_days": "int",
     EVENTS_TEST_RETENTION_KEY: "int",
     "events_max_late_minutes": "int",
@@ -816,6 +821,12 @@ KEY_HELP: dict[str, str] = {
         f"seconds the link check waits for an answer, {WHERE_CHECK_MIN_SECONDS} to "
         f"{WHERE_CHECK_MAX_SECONDS}; Discord closes a box that has not answered within three "
         f"seconds, so the panel has to render in what is left"
+    ),
+    WHERE_HINT_KEY: (
+        "the sentence directly above the channel picker on the Where panel, and on the draft "
+        "card's Where line while "
+        "nothing is picked — Discord's picker only lists the first page of channels until "
+        "somebody types, so this says so. Leave it empty and no such line is shown"
     ),
     "events_channel_retention_days": (
         f"days a finished event's channel is kept before deletion, "
@@ -2657,7 +2668,12 @@ TEXT_CHECKS: dict[str, Any] = {
     RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
 }
 
-TEXT_MAY_BE_BLANK = ("golive_end_template", "golive_end_author", REHEARSAL_NOTE)
+TEXT_MAY_BE_BLANK = (
+    "golive_end_template",
+    "golive_end_author",
+    REHEARSAL_NOTE,
+    WHERE_HINT_KEY,
+)
 
 
 def coerce_value(key: str, value: Any) -> Any:
@@ -3009,6 +3025,8 @@ class SettingsStore:
             return WHERE_CHECK_MODE
         if key == WHERE_CHECK_SECONDS_KEY:
             return WHERE_CHECK_SECONDS
+        if key == WHERE_HINT_KEY:
+            return WHERE_HINT
         if key == "events_channel_retention_days":
             return EVENTS_RETENTION_DAYS
         if key == EVENTS_TEST_RETENTION_KEY:

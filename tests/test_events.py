@@ -73,6 +73,8 @@ from black_bloc.settings_store import (
     REVIEW_FORUM,
     REVIEW_ROOM,
     ROOM_DELETE_APPROVER,
+    WHERE_HINT,
+    WHERE_HINT_KEY,
 )
 from black_bloc.timezones import START_EXAMPLE, local_time, unix
 from black_bloc.when_picker import WhenDraft
@@ -622,6 +624,34 @@ def test_the_draft_card_names_the_empty_boxes_rather_than_leaving_them_blank():
     assert "**How long** — 2h" in said
 
 
+def test_the_draft_where_line_says_how_to_find_a_channel_while_nothing_is_picked():
+    said = "\n".join(events.draft_lines(a_draft(title="C"), NOW, chosen=True, hint=WHERE_HINT))
+
+    assert f"**Where** — (not set) *{WHERE_HINT}*" in said
+
+
+def test_the_draft_where_line_drops_the_hint_the_moment_somewhere_is_picked():
+    picked = a_draft(title="C", where=Where(WHERE_VOICE, 55, ""))
+    typed = a_draft(title="C", where=Where(WHERE_OTHER, None, "the park"))
+
+    assert WHERE_HINT not in "\n".join(
+        events.draft_lines(picked, NOW, chosen=True, hint=WHERE_HINT)
+    )
+    assert WHERE_HINT not in "\n".join(
+        events.draft_lines(typed, NOW, chosen=True, hint=WHERE_HINT)
+    )
+
+
+def test_a_blank_hint_leaves_the_draft_where_line_exactly_as_it_was():
+    def where_line_of(hint):
+        lines = events.draft_lines(a_draft(title="C"), NOW, chosen=True, hint=hint)
+        return next(line for line in lines if line.startswith("**Where**"))
+
+    assert where_line_of("") == "**Where** — (not set)"
+    assert where_line_of("   ") == "**Where** — (not set)"
+    assert where_line_of("Type it.") == "**Where** — (not set) *Type it.*"
+
+
 def test_the_what_line_is_cut_so_a_long_description_cannot_take_the_card_over():
     draft = a_draft(title="Cookout", description="x" * 500)
 
@@ -703,6 +733,40 @@ def test_a_guild_that_has_stored_nothing_lands_on_the_shipped_figures():
     assert events.guild_zone(store, 7) == "America/Phoenix"
     assert events.zone_choices(store, 7) == []
     assert events.minute_step(store, 7) == 15
+
+
+# The hint above the picker (`docs/info/where-picker-design.md`, follow-up 5). Discord's native
+# channel select lists one page until somebody types, and this guild has 136 channels it allows.
+
+
+def test_the_where_panel_ends_on_the_sentence_that_says_to_start_typing():
+    lines = events.where_panel_lines(WHERE_HINT)
+
+    assert lines[-1] == WHERE_HINT
+    assert lines[:-1] == [events.WHERE_PANEL_INTRO, events.WHERE_JOIN_NOTE]
+
+
+def test_a_blank_hint_leaves_the_where_panel_with_the_words_it_always_had():
+    assert events.where_panel_lines("") == [events.WHERE_PANEL_INTRO, events.WHERE_JOIN_NOTE]
+    assert events.where_panel_lines("  ") == events.where_panel_lines()
+
+
+def test_the_hint_is_whatever_the_guild_stored_and_is_read_at_every_render():
+    store = _Store(**{WHERE_HINT_KEY: "Start typing, it is in there."})
+
+    assert events.where_hint(store, 7) == "Start typing, it is in there."
+    assert events.where_panel_lines(events.where_hint(store, 7))[-1] == (
+        "Start typing, it is in there."
+    )
+    store.values[WHERE_HINT_KEY] = ""
+    assert events.where_hint(store, 7) == ""
+    assert events.where_panel_lines(events.where_hint(store, 7))[-1] == events.WHERE_JOIN_NOTE
+
+
+def test_a_hint_long_enough_to_break_an_embed_is_cut_before_it_gets_there():
+    store = _Store(**{WHERE_HINT_KEY: "x" * (DESCRIPTION_LIMIT + 50)})
+
+    assert events.where_hint(store, 7) == "x" * DESCRIPTION_LIMIT
 
 
 # The "Where?" picker (`docs/info/where-picker-design.md`) — one `Where` through the pure half,

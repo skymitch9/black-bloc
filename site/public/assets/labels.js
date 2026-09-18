@@ -113,6 +113,7 @@ export const LABELS = {
   events_where_link_aliases: 'The shorthands the Where box turns into links',
   events_where_link_check: 'Whether a link typed into Where is opened once before it is kept',
   events_where_link_check_seconds: 'How long the link check waits for an answer',
+  events_where_hint: 'The line above the Where picker about typing a channel name',
   events_channel_retention_days: 'How long an event keeps its channel',
   events_test_retention_minutes: 'How long a test event keeps its room',
   events_max_late_minutes: 'How late an event may start before it is dropped',
