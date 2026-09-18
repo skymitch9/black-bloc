@@ -7,7 +7,7 @@
 > `event.post_archived` rather than claiming a deletion; there is no test-channel fall-back). Schema **44 → 45**
 > (`events.review_kind`) — ⚠️ **migrate before deploy.** Registry **280 → 282**; `pytest -n 8` **6696 → 6755**, green
 > forward and under `BB_REVERSE=1`; mock **20 pages / 187 routes**. `events_review_mode` ships **room**, so nothing
-> changes until the owner flips it. Was: 📐 DESIGN, dispatched to Opus 2026-09-17 21:3x. **Last verified: 2026-09-17 21:2x** against `main` `0707768` (v135): `black_bloc/events.py`
+> changes until the owner flips it. Was: 📐 DESIGN, dispatched to Opus 2026-09-17 21:22. **Last verified: 2026-09-17 21:2x** against `main` `0707768` (v135): `black_bloc/events.py`
 > `make_review_channel` (~1785, `guild.create_text_channel` under `events_category_id` or the test category, `staff_reach`
 > overwrites, then `guard.own_channel`), `set_review` (~975: `review_channel_id`, `review_message_id`, `card_channel_id`),
 > `card_channel` (~1040), every `guild.get_channel(row["review_channel_id"])` site (~1156, ~1370, cog ~452, ~1708–1711,
