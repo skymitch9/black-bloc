@@ -116,7 +116,7 @@ with the card and buttons, tagged pending; c: approve → tag + the announcement
 e: Delete this post; f: a mode flip leaves an open room alone; g: the events page's link opens the post); the events
 guide gains one fact line. NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_ISSUES.md`.
 
-## H. Move an open event's room into the forum (owner, 2026-09-17 22:1x) — branch `events-move-to-forum`
+## H. Move an open event's room into the forum (owner, 2026-09-17 22:1x) — ✅ LIVE as v137 (release `a16f5e5`, merge `43ec005`, 2026-09-17 23:00; the `### §H` deviations at the foot are the truth; sweeps 603–607; verified: boot clean (logged in 23:00:11), /health ready; Move to the forum pressed on the events page 23:0x for event #5 (the pending 'What Day It Was') → POST /api/events/5/forum 200; by token the forum holds post 'What Day It Was · 2026-10-03' (1550386189759156336) tagged pending with the opening line + card + Approve / Deny / Not an event — make it a request and the Delete-this-post card, and the old room no longer exists (row 603 done); a member-made 'Bot Stuff · 2026-09-18' post already sat in the forum from the owner's own test (row 597 done by him).)
 
 > **Status: BUILT** on branch `events-move-to-forum` off `main` `90252a6`, **2026-09-17**. ⚠️ Read the
 > `### §H` block under `## Deviations` first — **eleven** things differ from what is written below, and
