@@ -17,11 +17,16 @@ from ...frontdoor import (
     DOOR_GUARDED,
     DOOR_MOVED_SAID,
     DOOR_NO_CHANNEL,
+    DOOR_NO_HOME,
     DOOR_NOT_UP,
     DOOR_OFF,
     DOOR_POSTED_SAID,
     DOOR_REHEARSAL_DOWN_SAID,
     DOOR_REHEARSING_SAID,
+    DOOR_SHADOW_LINE,
+    DOOR_SHADOW_LINE_HOMELESS,
+    DOOR_SHADOW_LINE_NOWHERE,
+    DOOR_SHADOW_SAID,
     DOOR_STUCK,
     EVENT,
     EVENT_HANDOFF_TEXT,
@@ -35,9 +40,11 @@ from ...frontdoor import (
     door_embed,
     door_hash,
     door_is_on,
+    door_rehearses,
     door_takes_over,
     followed_slug,
     label_for,
+    panel_follows_the_door,
     rehearsal_copy,
     rehearsal_stamp,
     rehearsal_takes_over,
@@ -193,13 +200,41 @@ def door_view(bot: Any, guild: Any) -> discord.ui.View:
     return view
 
 
+def shadow_words(bot: Any, guild: Any) -> str:
+    """What shadow is doing to the door, in words, for a staffer — never posted anywhere."""
+    store = bot.store
+    if not door_rehearses(store, guild.id):
+        return ""
+    home = shadow.channel_id(bot, guild)
+    if not home:
+        return DOOR_SHADOW_LINE_HOMELESS
+    wanted = store.get(guild.id, FRONTDOOR_CHANNEL)
+    if not wanted:
+        return DOOR_SHADOW_LINE_NOWHERE.format(home=where_words(guild, home))
+    return DOOR_SHADOW_LINE.format(
+        home=where_words(guild, home), where=where_words(guild, wanted)
+    )
+
+
+def staff_shadow_words(bot: Any, guild: Any, actor: Any) -> str:
+    try:
+        staff = actor is not None and bot.store.is_staff(actor)
+    except Exception:
+        staff = False
+    return shadow_words(bot, guild) if staff else ""
+
+
 def build_panel(bot: Any, guild: Any, actor: Any = None) -> tuple[discord.Embed, DoorPanel]:
     """The one card: the posted message wears it, and so does `/ask`."""
     store = bot.store
     view = DoorPanel(panel_minutes(store, guild.id, FRONTDOOR_PANEL_MINUTES))
     for kind in KINDS:
         view.add_item(DOORS[kind](label_for(store, guild.id, kind)))
-    return door_embed(store, guild.id), view
+    embed = door_embed(store, guild.id)
+    said = staff_shadow_words(bot, guild, actor)
+    if said:
+        embed.set_footer(text=said)
+    return embed, view
 
 
 def event_handoff(bot: Any, guild: Any) -> tuple[discord.Embed, EventHandoff]:
@@ -230,7 +265,9 @@ async def hide_ticket_button(bot: Any, guild: Any) -> int | None:
     channel, message_id = panel_where(bot, guild)
     if channel is None or not message_id:
         return None
-    if door_takes_over(bot.store, guild.id) != int(channel.id):
+    if not panel_follows_the_door(bot.store, guild.id) and door_takes_over(
+        bot.store, guild.id
+    ) != int(channel.id):
         return None
     gone = await drop_message(
         bot, guild, channel, message_id, would_kind=WOULD_HIDE_TICKET_BUTTON
@@ -274,6 +311,39 @@ async def hide_rehearsed_ticket_button(bot: Any, guild: Any) -> int | None:
         },
     )
     return message_id
+
+
+async def lower_the_real_door(
+    bot: Any, guild: Any, actor: Any = None, *, via: str = VIA_DISCORD
+) -> int | None:
+    """Shadow leaves nothing in the real channel; where the door is AIMED is remembered."""
+    channel, message_id = where_the_door_is(bot, guild)
+    if not message_id:
+        return None
+    if channel is not None and not await drop_message(
+        bot, guild, channel, message_id, would_kind=WOULD_TAKE_DOWN
+    ):
+        return None
+    await bot.store.clear(guild.id, FRONTDOOR_MESSAGE)
+    await log_action(
+        bot,
+        guild,
+        kind_via(TAKEN_DOWN, via),
+        actor=actor,
+        details={
+            "channel_id": getattr(channel, "id", None),
+            "message_id": message_id,
+            "rehearsal": True,
+            "via": via,
+        },
+    )
+    return message_id
+
+
+async def start_rehearsing(bot: Any, guild: Any, actor: Any = None, *, via: str = VIA_DISCORD):
+    """Going into shadow takes the real door — and the button it replaces — down first."""
+    await lower_the_real_door(bot, guild, actor, via=via)
+    await hide_ticket_button(bot, guild)
 
 
 def rehearsal_payload(bot: Any, guild: Any, wanted: Any) -> dict[str, Any]:
@@ -328,10 +398,11 @@ async def rehearse_door(
     five-minute sweep says it once."""
     store = bot.store
     guard = getattr(bot, "guard", None)
+    rehearsing = door_rehearses(store, guild.id)
     home_id = shadow.channel_id(bot, guild)
     home = shadow.channel_of(bot, guild, home_id)
     if home is None or (guard is not None and not guard.allows_channel(home_id)):
-        return refusal(DOOR_GUARDED, "test_mode", 409)
+        return refusal(DOOR_NO_HOME if rehearsing else DOOR_GUARDED, "test_mode", 409)
     copy_id = rehearsal_copy(store, guild.id)
     where, message = await shadow.find_copy(bot, guild, copy_id)
     here = message is not None and int(where.id) == int(home.id)
@@ -342,7 +413,9 @@ async def rehearse_door(
     )
     payload = rehearsal_payload(bot, guild, wanted)
     stamp = rehearsal_hash(bot, guild, wanted)
-    said = DOOR_REHEARSING_SAID.format(where=home.id, wanted=getattr(wanted, "id", wanted))
+    said = (DOOR_SHADOW_SAID if rehearsing else DOOR_REHEARSING_SAID).format(
+        where=home.id, wanted=getattr(wanted, "id", wanted)
+    )
     by = getattr(actor, "id", actor)
     if here and overtaken is None:
         if rehearsal_stamp(store, guild.id) == stamp:
@@ -435,7 +508,10 @@ async def post_door(
     if channel is None:
         return refusal(DOOR_NO_CHANNEL, "no_such_channel", 400)
     guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_channel(channel.id):
+    rehearsing = door_rehearses(bot.store, guild.id)
+    if rehearsing or (guard is not None and not guard.allows_channel(channel.id)):
+        if rehearsing:
+            await start_rehearsing(bot, guild, actor, via=via)
         outcome = await rehearse_door(bot, guild, actor, channel, via=via)
         if outcome.ok:
             await bot.store.set(
@@ -590,7 +666,10 @@ class FrontDoor(commands.Cog):
         if not store.get(guild.id, FRONTDOOR_CHANNEL) or channel is None:
             return
         guard = getattr(bot, "guard", None)
-        if guard is not None and not guard.allows_channel(channel.id):
+        rehearsing = door_rehearses(store, guild.id)
+        if rehearsing or (guard is not None and not guard.allows_channel(channel.id)):
+            if rehearsing:
+                await start_rehearsing(bot, guild, None)
             outcome = await rehearse_door(bot, guild, None, channel)
             if outcome.ok:
                 self._shadowed.discard(guild.id)
@@ -688,6 +767,7 @@ __all__ = [
     "event_handoff",
     "hide_rehearsed_ticket_button",
     "hide_ticket_button",
+    "lower_the_real_door",
     "open_the_event",
     "open_the_request",
     "open_the_ticket",
@@ -695,6 +775,9 @@ __all__ = [
     "rehearsal_hash",
     "rehearsal_payload",
     "rehearse_door",
+    "shadow_words",
+    "staff_shadow_words",
+    "start_rehearsing",
     "take_door_down",
     "where_the_door_is",
 ]

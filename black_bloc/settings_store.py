@@ -1811,7 +1811,7 @@ FRONTDOOR_FOLLOWS_POST = "frontdoor_follows_post"
 FRONTDOOR_REPLACES_TICKET_BUTTON = "frontdoor_replaces_ticket_button"
 FRONTDOOR_PANEL_MINUTES = "frontdoor_panel_minutes"
 FRONTDOOR_FOLLOWS_NOTHING = "none"
-FRONTDOOR_MODES = ("off", "on")
+FRONTDOOR_MODES = ("off", "shadow", "on")
 FRONTDOOR_MODE_DEFAULT = "on"
 FRONTDOOR_TITLE_DEFAULT = "Need something?"
 FRONTDOOR_TEXT_DEFAULT = (
@@ -1843,9 +1843,12 @@ KEY_CHOICES.update({FRONTDOOR_MODE: FRONTDOOR_MODES})
 KEY_HELP.update(
     {
         FRONTDOOR_MODE: (
-            "off hides /ask and takes the posted front door down; on posts it where it is "
-            "pointed and shows /ask. The three flows behind it (modmail, requests, events) "
-            "keep their own modes either way"
+            "off hides /ask and takes the door down; shadow posts the rehearsal copy into "
+            "shadow_channel_id with the rehearsal note and nothing into the real channel; on "
+            "posts it where it is pointed. /ask answers in both shadow and on, and the three "
+            "flows behind it (modmail, requests, events) keep their own modes whatever this "
+            "says. In shadow the Open a ticket button follows the door while "
+            "frontdoor_replaces_ticket_button is true"
         ),
         FRONTDOOR_CHANNEL: (
             "where the front-door message is posted; blank posts nothing, and the /ask command "

@@ -43,6 +43,13 @@ const DOOR_HELP = 'One message with three buttons: Ask staff privately opens a t
   + 'something files a request, and Propose an event starts an event proposal. Each press opens '
   + 'the flow that already exists, so each one answers with its own words when it is switched '
   + 'off. Its heading, wording and the three button labels are the frontdoor_ settings below.';
+const DOOR_OFF_LINE = 'frontdoor_mode is off, so /ask is hidden and no front door stays posted.';
+const DOOR_SHADOW_HOMELESS = 'shadow — the door has nowhere to rehearse, so it is posted nowhere '
+  + 'at all. Set shadow_channel_id on the Settings page.';
+const DOOR_SHADOW_NOWHERE_END = '. It has no channel of its own yet, and nothing reaches members '
+  + 'until the door is on.';
+const DOOR_SHADOW_FOLLOWS = 'The Open a ticket button follows the door while it is rehearsing, so '
+  + 'it comes down too — frontdoor_replaces_ticket_button below is what switches that off.';
 const DOOR_ONE_PER_CHANNEL = 'While the front door is up in the ticket button’s channel, that '
   + 'button is taken down — one door per channel. Moving the front door elsewhere, or taking it '
   + 'down, puts the ticket button back within five minutes. frontdoor_replaces_ticket_button '
@@ -268,6 +275,25 @@ function ticketForumCard(forumId) {
   ]);
 }
 
+function doorShadowLine(door) {
+  const home = door.shadow_channel_id;
+  if (!home) return sayNothing(DOOR_SHADOW_HOMELESS);
+  if (!door.channel_id) {
+    return el('p', { class: 'muted' }, ['shadow — the door is rehearsing in ', nameNode(home), DOOR_SHADOW_NOWHERE_END]);
+  }
+  return el('p', { class: 'muted' }, [
+    'shadow — the door is rehearsing in ', nameNode(home), '; nothing is in ', nameNode(door.channel_id), '.',
+  ]);
+}
+
+function doorWhere(door) {
+  if (door.mode === 'off') return sayNothing(DOOR_OFF_LINE);
+  if (door.mode === 'shadow') return doorShadowLine(door);
+  return door.channel_id
+    ? el('p', {}, ['It is in ', nameNode(door.channel_id), '.'])
+    : sayNothing('No front door is posted anywhere. /ask still opens the same three buttons.');
+}
+
 function doorPreview(door) {
   const buttons = [door.ticket_label, door.request_label, door.event_label];
   return el('div', { class: 'door-preview' }, [
@@ -319,26 +345,25 @@ async function frontDoorCard(door) {
   }, { tone: 'danger' });
   return card('Front door', [
     el('p', { text: DOOR_HELP }),
-    door.mode === 'on'
-      ? null
-      : sayNothing('frontdoor_mode is off, so /ask is hidden and no front door stays posted.'),
-    posted
-      ? el('p', {}, ['It is in ', nameNode(posted), '.'])
-      : sayNothing('No front door is posted anywhere. /ask still opens the same three buttons.'),
+    doorWhere(door),
     doorPreview(door),
-    el('p', { class: 'muted', text: DOOR_ONE_PER_CHANNEL }),
+    el('p', { class: 'muted', text: door.mode === 'shadow' ? DOOR_SHADOW_FOLLOWS : DOOR_ONE_PER_CHANNEL }),
     el('div', { class: 'formrow' }, [field('Put it in', where), bar(posted ? [post, down] : [post])]),
     say,
   ].filter(Boolean));
 }
 
 async function panelSettings() {
-  const specs = settingsNamespace(await settings(true), 'modmail');
+  const payload = await settings(true);
+  const specs = settingsNamespace(payload, 'modmail');
+  const core = settingsNamespace(payload, 'core');
   const value = (key) => (specs.find((spec) => spec.key === key) || {}).value ?? null;
+  const coreValue = (key) => (core.find((spec) => spec.key === key) || {}).value ?? null;
   const channelId = value('modmail_panel_channel_id');
   const forumId = value('modmail_forum_channel_id');
   const doorId = value('frontdoor_channel_id');
-  const known = [channelId, forumId, doorId].filter(Boolean).map(String);
+  const shadowId = coreValue('shadow_channel_id') || coreValue('log_channel_id');
+  const known = [channelId, forumId, doorId, shadowId].filter(Boolean).map(String);
   if (known.length) await names(known);
   return {
     channel_id: channelId,
@@ -347,6 +372,7 @@ async function panelSettings() {
     door: {
       mode: value('frontdoor_mode'),
       channel_id: doorId,
+      shadow_channel_id: shadowId,
       message_id: value('frontdoor_message_id'),
       title: value('frontdoor_title'),
       text: value('frontdoor_text'),

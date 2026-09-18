@@ -9,11 +9,14 @@ from black_bloc.frontdoor import (
     LABEL_DEFAULTS,
     LABEL_KEYS,
     LABEL_LIMIT,
+    MODES,
     REQUEST,
     TICKET,
     custom_id,
     door_embed,
     door_is_on,
+    door_mode,
+    door_rehearses,
     door_takes_over,
     door_text,
     door_title,
@@ -21,6 +24,7 @@ from black_bloc.frontdoor import (
     followed_slug,
     label_for,
     labels,
+    panel_follows_the_door,
     replaces_ticket_button,
 )
 from black_bloc.settings_store import (
@@ -142,6 +146,31 @@ def test_the_mode_is_read_as_a_word_never_as_a_truthy_value():
     assert not door_is_on(store(**{FRONTDOOR_MODE: None}), GUILD)
 
 
+def test_shadow_is_a_third_word_and_a_word_nobody_ships_reads_as_off():
+    assert MODES == ("off", "shadow", "on")
+    assert door_mode(store(**{FRONTDOOR_MODE: "SHADOW "}), GUILD) == "shadow"
+    assert door_mode(store(**{FRONTDOOR_MODE: "sideways"}), GUILD) == "off"
+    assert door_mode(store(**{FRONTDOOR_MODE: None}), GUILD) == "off"
+
+
+def test_the_door_is_live_in_shadow_so_ask_keeps_answering():
+    """`door_is_on` is the feature switch, not the where: shadow is on, somewhere else."""
+    assert door_is_on(store(**{FRONTDOOR_MODE: "shadow"}), GUILD)
+    assert door_rehearses(store(**{FRONTDOOR_MODE: "shadow"}), GUILD)
+    assert not door_rehearses(store(**{FRONTDOOR_MODE: "on"}), GUILD)
+    assert not door_rehearses(store(**{FRONTDOOR_MODE: "off"}), GUILD)
+
+
+def test_the_ticket_button_has_no_mode_of_its_own_and_follows_the_doors():
+    rehearsing = {FRONTDOOR_MODE: "shadow"}
+    assert panel_follows_the_door(store(**rehearsing), GUILD)
+    assert not panel_follows_the_door(store(**{FRONTDOOR_MODE: "on"}), GUILD)
+    assert not panel_follows_the_door(store(**{FRONTDOOR_MODE: "off"}), GUILD)
+    assert not panel_follows_the_door(
+        store(**{**rehearsing, FRONTDOOR_REPLACES_TICKET_BUTTON: False}), GUILD
+    )
+
+
 def test_none_is_the_word_that_means_the_door_follows_no_post():
     assert followed_slug(store(**{FRONTDOOR_FOLLOWS_POST: "welcome"}), GUILD) == "welcome"
     assert followed_slug(store(**{FRONTDOOR_FOLLOWS_POST: "none"}), GUILD) == ""
@@ -164,6 +193,18 @@ def test_the_door_only_takes_a_channel_over_when_it_is_actually_up_in_it():
     )
     assert door_takes_over(store(**{FRONTDOOR_CHANNEL: CHANNEL}), GUILD) is None
     assert door_takes_over(store(), GUILD) is None
+
+
+def test_in_shadow_the_door_owns_the_channel_it_is_AIMED_at_with_nothing_up_in_it():
+    """Nothing of Black Bloc's goes in the real channel while the door rehearses."""
+    aimed = {FRONTDOOR_CHANNEL: CHANNEL, FRONTDOOR_MODE: "shadow"}
+    assert door_takes_over(store(**aimed), GUILD) == CHANNEL
+    assert door_takes_over(store(**{**aimed, FRONTDOOR_MESSAGE: str(MESSAGE)}), GUILD) == CHANNEL
+    assert (
+        door_takes_over(store(**{**aimed, FRONTDOOR_REPLACES_TICKET_BUTTON: False}), GUILD)
+        is None
+    )
+    assert door_takes_over(store(**{FRONTDOOR_MODE: "shadow"}), GUILD) is None
 
 
 def test_replacing_the_ticket_button_is_on_by_default_and_is_a_real_bool():

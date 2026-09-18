@@ -175,7 +175,7 @@ export const LABELS = {
   modmail_log_on_open: 'Whether a new ticket is announced in the transcripts channel',
   modmail_panel_follows_post: 'Which post the Open a ticket button sits under',
 
-  frontdoor_mode: 'Whether the front door is up',
+  frontdoor_mode: 'Whether the front door is up, rehearsing or off',
   frontdoor_channel_id: 'Where the front-door message is posted',
   frontdoor_message_id: 'The posted front-door message, written by the bot',
   frontdoor_shadow_message_id: 'The front door’s rehearsal copy, written by the bot',

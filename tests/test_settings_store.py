@@ -2288,6 +2288,26 @@ def test_the_poll_mode_help_names_all_three_words_it_takes():
     assert KEY_CHOICES["poll_mode"] == ("off", "shadow", "on")
 
 
+def test_the_front_door_mode_takes_all_three_words_and_its_help_names_them():
+    said = KEY_HELP[settings_store.FRONTDOOR_MODE]
+
+    assert KEY_CHOICES[settings_store.FRONTDOOR_MODE] == ("off", "shadow", "on")
+    assert settings_store.FRONTDOOR_MODES == ("off", "shadow", "on")
+    assert all(word in said for word in ("off", "shadow", "on"))
+    assert "shadow_channel_id" in said
+
+
+async def test_the_front_door_still_ships_on_and_stays_in_the_modmail_group(store):
+    """A third mode is a wider choice, never a new default and never a 26th group."""
+    assert store.get(7, settings_store.FRONTDOOR_MODE) == "on"
+    assert settings_store.FRONTDOOR_MODE_DEFAULT == "on"
+    assert namespace_of(settings_store.FRONTDOOR_MODE) == "modmail"
+
+    await store.set(7, settings_store.FRONTDOOR_MODE, "shadow")
+
+    assert store.get(7, settings_store.FRONTDOOR_MODE) == "shadow"
+
+
 async def test_the_rehearsal_home_is_a_core_key_reachable_from_both_doors(store):
     """Checklist 33, and the 25-group cap: `shadow_` would have been a group of its own."""
     for key in (settings_store.SHADOW_CHANNEL, settings_store.REHEARSAL_NOTE):

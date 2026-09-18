@@ -19,7 +19,7 @@ from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
 from ...events import clamp
-from ...frontdoor import door_takes_over, rehearsal_takes_over
+from ...frontdoor import door_takes_over, panel_follows_the_door, rehearsal_takes_over
 from ...golive import now_iso, parse_ts
 from ...handoff import (
     ASK_BODY_LABEL,
@@ -2452,7 +2452,9 @@ async def post_ticket_panel(
     if channel is None:
         return refusal(PANEL_STUCK, "no_such_channel", 400)
     guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_channel(channel.id):
+    if panel_follows_the_door(bot.store, guild.id) or (
+        guard is not None and not guard.allows_channel(channel.id)
+    ):
         outcome = await rehearse_panel(bot, guild, actor, channel, via=via)
         if outcome.ok:
             await bot.store.set(
@@ -2834,7 +2836,9 @@ class Modmail(commands.Cog):
         if door_takes_over(bot.store, guild.id) == int(channel.id):
             return
         guard = getattr(bot, "guard", None)
-        if guard is not None and not guard.allows_channel(channel.id):
+        if panel_follows_the_door(bot.store, guild.id) or (
+            guard is not None and not guard.allows_channel(channel.id)
+        ):
             if rehearsal_takes_over(bot.store, guild.id):
                 return
             outcome = await rehearse_panel(bot, guild, None, channel)
