@@ -4,6 +4,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime
 
+import discord
 from discord.ext import commands
 
 from .command_errors import install as install_error_handler
@@ -14,6 +15,7 @@ from .guard import TestModeGuard
 from .intents import build_intents
 from .invite import invite_url
 from .prefix import no_prefix_commands
+from .presence import boot_presence, shutdown_presence
 from .rolemenu_panels import install as install_panels
 from .rolemenu_panels import panels_on_boot
 from .selftest import on_boot as selftest_on_boot
@@ -51,15 +53,18 @@ COGS: tuple[str, ...] = (
 
 class BlackBlocBot(commands.Bot):
     def __init__(self, settings: Settings) -> None:
+        db = Database(settings.database_path)
+        store = SettingsStore(db, settings)
         super().__init__(
             command_prefix=no_prefix_commands,
             intents=build_intents(),
             help_command=None,
+            **boot_presence(store),
         )
         self.settings = settings
         self.started_at = datetime.now(UTC)
-        self.db = Database(settings.database_path)
-        self.store = SettingsStore(self.db, settings)
+        self.db = db
+        self.store = store
         self._background: list[asyncio.Task] = []
         self.guard: TestModeGuard | None = None
         if settings.test_mode:
@@ -71,6 +76,7 @@ class BlackBlocBot(commands.Bot):
         await self.db.connect()
         await self.store.load()
         install_rehearsal_home(self)
+        self._apply_boot_presence()
         log.info("database ready at %s", self.settings.database_path)
         log.info("invite URL: %s", invite_url(self))
         await self._load_cogs()
@@ -78,6 +84,22 @@ class BlackBlocBot(commands.Bot):
         install_visibility(self)
         install_panels(self)
         self._start_api()
+
+    def _apply_boot_presence(self) -> None:
+        """setup_hook runs before IDENTIFY, so the stored sentence is the one Discord is sent."""
+        wanted = boot_presence(self.store, self.settings.dev_guild_id)
+        self.status = wanted.get("status") or discord.Status.online
+        self.activity = wanted.get("activity")
+
+    async def _say_shutting_down(self) -> None:
+        """Red again for the last second of a planned shutdown; never worth delaying close."""
+        wanted = shutdown_presence(self.store, self.settings.dev_guild_id)
+        if not wanted:
+            return
+        try:
+            await self.change_presence(**wanted)
+        except Exception as exc:
+            log.debug("presence: the shutdown status was not set — %s: %s", type(exc).__name__, exc)
 
     async def _load_cogs(self) -> None:
         for name in COGS:
@@ -98,6 +120,7 @@ class BlackBlocBot(commands.Bot):
         await selftest_on_boot(self)
 
     async def close(self) -> None:
+        await self._say_shutting_down()
         visibility = getattr(self, "command_visibility", None)
         if visibility is not None and visibility.task is not None:
             visibility.task.cancel()

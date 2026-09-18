@@ -80,6 +80,7 @@ class FakeBot:
         self.guilds = [guild]
         self.app = app
         self.presences = []
+        self.statuses = []
         self.refuse_presence = None
         self.ready = asyncio.Event()
         self.cog = None
@@ -103,6 +104,7 @@ class FakeBot:
         if self.refuse_presence is not None:
             raise self.refuse_presence
         self.presences.append(activity)
+        self.statuses.append(status)
 
 
 class FakeResponse:
@@ -225,6 +227,23 @@ async def test_starting_up_sets_the_status_and_writes_the_bio_once(bot, cog):
 
     assert len(bot.app.edits) == 1
     assert len(bot.presences) == 2
+
+
+async def test_being_ready_is_what_turns_it_green(bot, cog):
+    """The flip and the count travel in the same call — never green still saying "restarting"."""
+    await cog.on_ready()
+
+    assert bot.statuses == [discord.Status.online]
+    assert bot.presences[-1].name == "Cookout attendees: 10"
+
+
+async def test_a_ready_bot_that_cannot_read_a_head_count_is_not_left_red(bot, cog):
+    bot.guild.member_count = None
+
+    await cog.on_ready()
+
+    assert bot.statuses == [discord.Status.online]
+    assert bot.presences == [None]
 
 
 async def test_someone_joining_or_leaving_refreshes_the_count_once(bot, cog, monkeypatch):

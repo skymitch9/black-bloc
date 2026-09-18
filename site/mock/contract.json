@@ -3,6 +3,8 @@
   "settings": {
     "_": "The registry IS the truth (black_bloc/settings_store.py). This block is the one table both halves read: tests/api/test_contract.py asserts it equals CORE_KEYS / KEY_MIN / KEY_MAX, and site/mock/check.mjs asserts the mock's own /api/settings matches it. A bound invented in the mock, or one added to the registry and not mirrored, fails one half or the other by name.",
     "core_keys": [
+      "boot_status_mode",
+      "boot_status_text",
       "bot_bio",
       "error_retry_expired",
       "error_retry_label",
@@ -21,6 +23,7 @@
       "settings_core_keys_admin_only",
       "settings_panel_minutes",
       "shadow_channel_id",
+      "shutdown_status_text",
       "spawned_channels_staff_reach",
       "staff_channel_id",
       "status_prefix"

@@ -8,13 +8,25 @@ from black_bloc.presence import (
     BIO_LIMIT,
     STATUS_LIMIT,
     bio_text,
+    boot_presence,
     ensure_bio,
+    go_green,
     human_count,
+    shutdown_presence,
     status_guild,
     status_text,
     update_status,
 )
-from black_bloc.settings_store import BOT_BIO_TEMPLATE, STATUS_PREFIX, SettingsStore
+from black_bloc.settings_store import (
+    BOOT_STATUS_MODE,
+    BOOT_STATUS_TEXT,
+    BOOT_STATUS_TEXT_KEY,
+    BOT_BIO_TEMPLATE,
+    SHUTDOWN_STATUS_TEXT,
+    SHUTDOWN_STATUS_TEXT_KEY,
+    STATUS_PREFIX,
+    SettingsStore,
+)
 
 GUILD = 7
 OTHER_GUILD = 8
@@ -65,6 +77,7 @@ class FakeBot:
         self.guilds = [guild] if guild is not None else []
         self.app = app
         self.presences = []
+        self.calls = []
         self.info_calls = 0
 
     def get_guild(self, guild_id):
@@ -81,6 +94,7 @@ class FakeBot:
 
     async def change_presence(self, *, activity=None, status=None):
         self.presences.append(activity)
+        self.calls.append({"status": status, "activity": activity})
 
 
 def refusal(status=403):
@@ -181,6 +195,69 @@ async def test_nothing_is_set_when_there_is_no_server_or_no_count_yet(bot):
     bot.guilds = []
     assert await update_status(bot) is None
     assert bot.presences == []
+
+
+async def test_going_green_and_saying_the_count_are_one_change_not_two(bot):
+    """Two calls would show a green bot still saying it is restarting, for a moment."""
+    await update_status(bot)
+
+    assert bot.calls == [{"status": discord.Status.online, "activity": bot.presences[-1]}]
+    assert bot.calls[-1]["activity"].name == "Cookout attendees: 10"
+
+
+def test_the_boot_status_is_red_and_says_what_the_key_says(store):
+    """The owner's ask, 2026-09-17: red, and the status says it is restarting and booting."""
+    wanted = boot_presence(store)
+
+    assert wanted["status"] is discord.Status.dnd
+    assert wanted["activity"].name == BOOT_STATUS_TEXT
+    assert shutdown_presence(store)["status"] is discord.Status.dnd
+    assert shutdown_presence(store)["activity"].name == SHUTDOWN_STATUS_TEXT
+
+
+async def test_both_sentences_are_words_a_lead_can_change(store):
+    await store.set(GUILD, BOOT_STATUS_TEXT_KEY, "Back in five")
+    await store.set(GUILD, SHUTDOWN_STATUS_TEXT_KEY, "Down for a deploy")
+
+    assert boot_presence(store, GUILD)["activity"].name == "Back in five"
+    assert shutdown_presence(store, GUILD)["activity"].name == "Down for a deploy"
+    assert boot_presence(store)["activity"].name == BOOT_STATUS_TEXT
+
+
+async def test_the_mode_off_leaves_the_presence_alone_entirely(store):
+    await store.set(GUILD, BOOT_STATUS_MODE, "off")
+
+    assert boot_presence(store, GUILD) == {}
+    assert shutdown_presence(store, GUILD) == {}
+
+
+async def test_a_boot_sentence_too_long_for_discord_is_trimmed_rather_than_refused(store):
+    await store.set(GUILD, BOOT_STATUS_TEXT_KEY, "x" * 400)
+
+    assert len(boot_presence(store, GUILD)["activity"].name) == STATUS_LIMIT
+
+
+async def test_a_ready_bot_with_no_head_count_to_show_still_turns_green(bot):
+    """`update_status` sends nothing on that path, so the boot status would stay red forever."""
+    bot.guild.member_count = None
+
+    assert await update_status(bot) is None
+    assert bot.calls == []
+
+    await go_green(bot)
+
+    assert bot.calls == [{"status": discord.Status.online, "activity": None}]
+
+
+async def test_a_green_flip_discord_refuses_is_a_warning_and_never_a_raise(caplog):
+    class Refuses:
+        async def change_presence(self, **kwargs):
+            raise RuntimeError("the gateway went away")
+
+    with caplog.at_level("WARNING"):
+        await go_green(Refuses())
+
+    assert "boot status could not be cleared" in caplog.text
 
 
 async def test_the_bio_is_written_once_and_recorded_in_the_action_log(bot, app):

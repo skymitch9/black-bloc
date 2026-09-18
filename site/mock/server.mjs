@@ -518,6 +518,10 @@ const SETTING_SPECS = [
   ['error_retry_label', 'text', 'Try again', 'Try again', 'what the Try again button on that sentence is called'],
   ['error_retry_minutes', 'int', 10, 10, 'minutes a Try again button keeps working before it says it has run out; 10 by default. Discord closes the interaction it re-renders through after 15 minutes, so anything above that is a button that answers \'run it again\' rather than working', null, 30, 1],
   ['error_retry_expired', 'text', 'That Try again has run out — Black Bloc can only put somebody back where they were for a few minutes. Run {command} again to start it fresh, and tell a Lead if it keeps happening.', 'That Try again has run out — Black Bloc can only put somebody back where they were for a few minutes. Run {command} again to start it fresh, and tell a Lead if it keeps happening.', 'what a Try again pressed too late says. `{command}` is filled in with the command the member was running when it is known, and with \'that command\' when it is not'],
+  // The three boot-status keys (docs/info/boot-status-design.md); they sit under core too.
+  ['boot_status_mode', 'enum', 'on', 'on', 'on makes Black Bloc read Do Not Disturb with the restarting sentence from the moment Discord sees it until every cog is loaded and it is ready, and flip to it again on the way down; off is the older behaviour, where it simply appears', ['off', 'on']],
+  ['boot_status_text', 'text', 'Restarting and booting — back in a moment', 'Restarting and booting — back in a moment', 'the status Black Bloc carries while it is starting up, beside the red Do Not Disturb dot. It is replaced by the member count the moment it is ready'],
+  ['shutdown_status_text', 'text', 'Restarting — back in a moment', 'Restarting — back in a moment', 'the status Black Bloc carries on its way down, beside the red dot. Discord keeps a bot\'s status only while it is connected, so this shows for the last second and then it reads offline'],
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
@@ -1360,7 +1364,7 @@ function seedActions() {
 
 let state = seedState();
 
-const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired'];
+const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text'];
 const NOT_A_FEATURE = ['golive_end_mode'];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
