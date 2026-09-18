@@ -1,6 +1,13 @@
 # The front door — one message and one command that route a member to a ticket, a request or an event
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v125** — merge `ae6eecb`, release `e8042a5`, deployed **2026-09-17 14:38** Phoenix; `frontdoor_channel_id` = #welcome since 14:38; sweeps **524–533** are the owner's. Was: ✅ BUILT on branch `front-door`, off `main` `0cee997` (v122); read the `## Deviations` foot before the sections above, thirteen
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **SHADOW MODE BUILT 2026-09-18** on branch
+> `frontdoor-shadow` off `main` `58fb7d6` (v139 live) — ⚠️ **not merged, not deployed, no key flipped, and nothing in
+> it has met Discord.** Read [`## Shadow mode (2026-09-18)`](#shadow-mode-2026-09-18) and its own Deviations block
+> before the sections above: `frontdoor_mode` now takes **off / shadow / on**. `pytest -n 8` **6720 → 6740 passed**
+> (3 skipped), both orders; registry unchanged at **262** keys — a third enum word, not a twelfth key; no schema
+> change; mock unchanged at **20 pages / 186 routes**. Before that: ✅ **LIVE as v125** — merge `ae6eecb`, release
+> `e8042a5`, deployed **2026-09-17 14:38** Phoenix; `frontdoor_channel_id` = #welcome since 14:38; sweeps
+> **524–533** are the owner's. Was: ✅ BUILT on branch `front-door`, off `main` `0cee997` (v122); read the `## Deviations` foot before the sections above, thirteen
 > things differ from what is written here. No schema change; registry **239 → 250**; mock **178 → 180 routes**;
 > `pytest` **6196 → 6276**, both orders green. **Last verified: 2026-09-17 12:5x** against `main`
 > `5e92e41`: the posted ticket button (`cogs/moderation/modmail.py` `TicketButton`, keys `modmail_panel_*`,
@@ -55,7 +62,7 @@ sees the three buttons whatever the gates say; a press that is refused answers i
 
 | Key | Kind | Default | Help |
 |---|---|---|---|
-| `frontdoor_mode` | enum `off`/`on` | **on** | *"off hides /ask and takes the posted door down; on posts it where it is pointed and shows /ask"* |
+| `frontdoor_mode` | ~~enum `off`/`on`~~ → **enum `off`/`shadow`/`on`** (2026-09-18, [`## Shadow mode`](#shadow-mode-2026-09-18)) | **on** | *"off hides /ask and takes the door down; shadow posts the rehearsal copy into shadow_channel_id with the rehearsal note and nothing into the real channel; on posts it where it is pointed"* |
 | `frontdoor_channel_id` | channel | blank | *"where the front-door message is posted; blank posts nothing (the /ask command still works)"* |
 | `frontdoor_message_id` | text | blank | (the posted message's id, written by the bot — TEXT, a snowflake does not survive a JavaScript number) |
 | `frontdoor_shadow_message_id` | text | blank | **added v129** — the rehearsal copy's id, written by the bot |
@@ -87,6 +94,81 @@ voice, picture slot on step 1 — the capture runbook shoots the posted message 
 must post the door's card too: add it to the self-test's panel list); `/help` line; `docs/access/sweeps.md` rows
 `FD-a…`; `architecture.md`'s cog count (20 → 21) and command count (30 → 31); `docs/info/README.md` row. NOT
 `TODO.md` / `DONE.md` / `deploys.log`.
+
+## Shadow mode (2026-09-18)
+
+> Built on branch `frontdoor-shadow` off `main` `58fb7d6` (**v139 live**), the afternoon
+> `TEST_MODE` was lifted. ⚠️ **Not merged, not deployed, no key flipped, and nothing below has
+> met Discord** — no boot, no token, no message posted or deleted in a real channel, no button
+> pressed in a client. The whole verification is `pytest -n 8` (**6720 → 6740 passed**, 3
+> skipped, forward and under `BB_REVERSE=1`), `ruff check .`, `node --check` over every
+> `site/public/assets/*.js` and `site/mock/*.mjs`, `node site/mock/check.mjs` (*20 pages, 186
+> routes, 24 core settings, all keys present*), `node site/mock/discordmd.test.mjs` and
+> `node site/mock/labels.test.mjs`.
+
+### Owner ask, verbatim (2026-09-18 16:1x)
+
+A minute after the `TEST_MODE` lift (16:08) reconciled the real door into `#welcome`:
+*"okay now that we're in live shadow mode is even more important, i dont want it to post in
+welcome yet"* → *"lets have that in shadow mode"*.
+
+The conductor cleared `frontdoor_channel_id` and `modmail_panel_channel_id` by hand and deleted
+both posted messages; after this ships he sets `frontdoor_mode` = **shadow** and points
+`frontdoor_channel_id` back at `#welcome`.
+
+### S1. What the mode means
+
+`frontdoor_mode` is `enum` **off / shadow / on**, default still **on**. Help text:
+*"off hides /ask and takes the door down; shadow posts the rehearsal copy into
+shadow_channel_id with the rehearsal note and nothing into the real channel; on posts it where
+it is pointed."*
+
+| | the real door (`frontdoor_channel_id`) | the rehearsal copy (`shadow_channel_id`) | `/ask` | the ticket button |
+|---|---|---|---|---|
+| **off** | taken down, both keys cleared | taken down | hidden (`HIDDEN_WHEN_OFF`) | its own rules |
+| **shadow** | taken down if one is up — `frontdoor.taken_down`, only `frontdoor_message_id` cleared | posted and kept current, `rehearsal_note` on top naming the real channel | answers | follows the door while `frontdoor_replaces_ticket_button` |
+| **on** | posted / moved / re-posted as before | taken down — `frontdoor.taken_down_shadow` | answers | its own rules (one door per channel) |
+
+`frontdoor_channel_id` survives shadow on purpose: it is where the door is **AIMED**, it is what
+the rehearsal note names, and it is what the flip to **on** posts into with no second step.
+
+### S2. Where the decision lives
+
+Three predicates in the pure half, one branch each in the two cogs — nothing restructured, so the
+concurrent `boot-reconcile-once` branch (which wraps `reconcile()` in a lock helper) merges
+textually:
+
+| Pure (`black_bloc/frontdoor.py`) | Answers |
+|---|---|
+| `door_mode(store, guild_id)` | `off` / `shadow` / `on`; anything unknown reads as **off** |
+| `door_is_on(...)` | the mode is **not off** — the feature switch, not the where. Shadow is on, somewhere else |
+| `door_rehearses(...)` | the mode is **shadow** |
+| `panel_follows_the_door(...)` | shadow **and** `frontdoor_replaces_ticket_button` — the ticket button's mode, derived, never stored |
+| `door_takes_over(...)` | in shadow it answers the AIMED channel even with no message up: nothing of Black Bloc's goes in the real channel while the door rehearses |
+
+The posting decision itself is one line in each of four places —
+`frontdoor.post_door`, `FrontDoor._redoor`, `modmail.post_ticket_panel` and `Modmail._repanel` —
+reading `door_rehearses(...) or (guard refuses the channel)` where each read the guard alone.
+Everything behind that branch is the **existing** `TEST_MODE` rehearsal path, unchanged:
+`rehearse_door`, `frontdoor_shadow_message_id`, `frontdoor_shadow_hash`, `shadow.channel_id`,
+`shadow.find_copy`, `rehearsal_note`.
+
+`start_rehearsing(bot, guild)` is the only new move: `lower_the_real_door` (drop the message,
+clear `frontdoor_message_id`, log `frontdoor.taken_down` with `rehearsal: true`) followed by
+`hide_ticket_button`. Coming back out of shadow needs nothing new — `_redoor`'s non-guarded
+branch already calls `drop_rehearsal` and posts the real door.
+
+### S3. Saying it in words
+
+- **`/ask`** carries the sentence as an embed **footer**, and only for a staffer
+  (`store.is_staff(actor)`): *"shadow — the door is rehearsing in #welcome-test; nothing is in
+  #welcome."* A member sees the card exactly as before.
+- **The Modmail page's Front door card** says the same thing, from the same three values.
+- ⚠️ **These sentences are NOT settings keys**, and that is the rule rather than an exception to
+  it: *every word the bot POSTS is editable on the site*. This one is never posted — it is a
+  status line on an ephemeral staff panel and on a dashboard card, the same call
+  `rehearsal-home-design.md` deviation 7 made for `posts.shadow_words`. The one line that IS
+  posted, `rehearsal_note`, was already a key and is untouched.
 
 ## Deviations
 
@@ -206,3 +288,69 @@ must post the door's card too: add it to the self-test's panel list); `/help` li
   reads exactly like a freshly re-shot one (`access/guides-capture.md` §1, the `count: 0`
   trap). The capture runbook's first-population pass is what fills it.
 - **No migration was needed and none was run** — eleven registry keys, no schema change.
+
+### Deviations — the shadow-mode build (2026-09-18, branch `frontdoor-shadow`)
+
+> Written by the Opus build off `main` `58fb7d6` (v139 live). Every line is a place the build did
+> NOT do what the brief said, and why. The thirteen numbered deviations above belong to the
+> ORIGINAL v125 build and are unchanged.
+
+S1. ⚠️ **In shadow with `frontdoor_replaces_ticket_button` TRUE, the ticket button's own rehearsal
+    copy is NOT posted — it comes down in the rehearsal home too.** The brief said *"its rehearsal
+    copy (`modmail_panel_shadow_*`) is kept in the shadow home under the door's copy"*. That
+    contradicts what is already shipped and deliberate: `rehearsal-home-design.md` §C says the door
+    takes the button down **in the same channel**, "so in the rehearsal home the mods see exactly
+    what `#welcome` will show: the rules post, then the front door under it". The rehearsal home IS
+    that same channel — both copies land there — so `rehearsal_takes_over` / `hide_rehearsed_ticket_button`
+    already remove the button's copy whenever the door's copy is up. Posting it anyway would have
+    made the rehearsal show something `#welcome` never will, and the door's own **Ask staff
+    privately** button IS the ticket door. With the key **false** nothing follows the door at all
+    and the button keeps its own rules, which is what the brief's own gating says. Net: in shadow
+    the mods review ONE message, the door.
+
+S2. ⚠️ **The ticket button follows the door whatever channel it is in, not only the door's.**
+    `hide_ticket_button` used to return early unless `door_takes_over(...) == the button's channel`
+    (one door per **channel**). Under `panel_follows_the_door` that check is skipped, so a ticket
+    button aimed at `#help` also comes down while the door rehearses. The owner's sentence is
+    *"i dont want it to post in welcome yet"*, and a build that left a live **Open a ticket** button
+    in a second public channel would be reading the letter of "one door per channel" against its
+    point. `modmail_panel_channel_id` keeps its value, so the flip to **on** puts it back within
+    five minutes, exactly as moving the door away does today.
+
+S3. **No new refusal CODE — the homeless refusal is still `code="test_mode"`, with a new message.**
+    `rehearse_door` returns `refusal(DOOR_NO_HOME if rehearsing else DOOR_GUARDED, "test_mode", 409)`.
+    The code is an internal routing token read in two places (`post_door` and `_redoor`, to write
+    `frontdoor.would_post` once per guild); changing it would have touched both plus their tests for
+    no gain a person can see. ⚠️ **The word is wrong now** — in shadow with nowhere to rehearse,
+    nothing is in test mode. The message a person reads is right (`DOOR_NO_HOME` names
+    `shadow_channel_id` and says nothing about test mode); only the token lies. Worth renaming to
+    `no_rehearsal_home` in the next build that touches this file.
+
+S4. **A blank `frontdoor_channel_id` in shadow rehearses NOTHING, as it posts nothing when on.**
+    `_redoor` still returns early with no channel stored. So the conductor's two steps after the
+    deploy are both needed and in either order: set the mode to shadow, point the channel at
+    `#welcome`. The staff sentence covers the in-between state in words (*"It has no channel of its
+    own yet"*) rather than leaving it silent.
+
+S5. **`door_is_on` changed MEANING rather than gaining a sibling.** It now answers "the mode is not
+    off" — so shadow is on, somewhere else. Every one of its four call sites wants exactly that
+    (`/ask` answers, a press on the copy opens the real flow, the sweep does not take the door down,
+    `door_takes_over` still applies). A `door_is_live` beside it would have been two names for one
+    question and a fifth place to forget. Its three existing assertions in `tests/test_frontdoor.py`
+    still pass unchanged.
+
+S6. **The staff line is an embed FOOTER on `/ask`, not a field or a second message.** A field would
+    sit between the heading and the buttons on a card a member also sees, and the panel is already
+    the one card both faces wear (`build_panel`). The footer is drawn only when `store.is_staff`
+    answers true, and `door_hash` does not cover it — the posted copy is built by `door_embed`
+    directly, so no footer can ever reach a real channel or drift the fingerprint.
+
+S7. **The site reads `shadow_channel_id || log_channel_id` for the home it names.** The bot's chain
+    is `shadow_channel_id` → the guard's test channel → `log_channel_id` (`black_bloc/shadow.py`),
+    and with `TEST_MODE` lifted the middle link is gone. The card therefore agrees with the bot in
+    every configuration that exists today. ⚠️ If `TEST_MODE` is ever turned back on, the card could
+    name the log channel while the bot rehearses in the test channel — one line in
+    `page-modmail.js:panelSettings` if that ever matters.
+
+S8. **`docs/TODO.md`, `docs/DONE.md`, `docs/deploys.log` and `docs/KNOWN_ISSUES.md` were not
+    touched**, as the brief said. The landing entry and the triage item are the conductor's.

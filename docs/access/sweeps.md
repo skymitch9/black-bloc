@@ -1,6 +1,14 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-18** — rows **`FS-a` … `FS-c`** added at the foot for the FRONT DOOR'S SHADOW MODE
+> (branch `frontdoor-shadow`, off `main` `58fb7d6`, v139; design
+> [`../info/front-door-design.md`](../info/front-door-design.md) ▸ `## Shadow mode (2026-09-18)`; ⚠️ **not
+> merged, not deployed, no key flipped, and nothing in it has met Discord**). Owner, a minute after the
+> `TEST_MODE` lift put the real door in `#welcome`: *"i dont want it to post in welcome yet"* → *"lets have
+> that in shadow mode"*. ⚠️ **`FS-b` is the CUTOVER itself** — it is the row that puts the door live, so run
+> it when that is meant to happen, not to satisfy the list. Rows are lettered; the conductor numbers them at
+> the merge. ⚠️ **Nothing else in this file was re-checked then.** Before that,
 > **2026-09-18** — rows **`YU-a` … `YU-d`** added at the foot for the YOUTUBE UPLOADS REMOVAL
 > (branch `youtube-uploads-removal`, off `main` `9bc1982`; design
 > [`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md); ⚠️ **not
@@ -2017,3 +2025,21 @@ post reads *Live now* with no thumbnail — that is **KI-30**, not a regression.
 | **610** (was `YU-b`) | Dashboard ▸ **Go-live** ▸ scroll to **YouTube channels** | The section is titled **YouTube channels**, not *YouTube uploads*. It holds the live-mode switch (**Live-stream announcements**), the **How live streams are spotted** card, the links table (**Member · Channel · Id · Linked · Unlink** — ⚠️ **no *Counted* column and no *Last video* column**), and **Link a member**. ⚠️ **There is no *How the sweep is doing* card and no *Recent uploads* table anywhere on the page.** Below it, **YouTube settings** lists only `youtube_log_level`, `youtube_panel_minutes`, `youtube_unlink_dms_them`, `youtube_live_poll_minutes` and `youtube_live_end_misses` — no `youtube_mode`, `youtube_channel_id`, `youtube_ping_role_id`, `youtube_ping_fan_roles`, `youtube_announce_shorts`, `youtube_template` or `youtube_poll_minutes` — and the logs card is titled **YouTube logs**. Link a member and unlink them again: both work, and the Audit tab shows one `web.youtube.link` and one `web.youtube.unlink` |
 | **611** (was `YU-c`) | Open `https://blackbloc.heygabi.ai/api/youtube/status` while signed in as staff (or read the Go-live card, which shows the same numbers) | The body carries `api_key_set`, `links` and every live field (`live_mode`, `live_minutes`, `live_end_misses`, `live_running`, `last_probe_at`, `last_probe_error`, `probed`, `quota_today`, `botcheck`, `live_now`, `reading_live`) — and ⚠️ **none of `running`, `last_ok_at`, `last_error`, `failures`, `fetches`, `unchanged`, `unchanged_ratio`, `videos` or `announced`**, not even as zeroes. `GET /api/youtube/videos` answers **404**. Dashboard ▸ **Settings** ▸ the **youtube** group shows the same five keys `YU-b` listed and nothing else |
 | **612** (was `YU-d`) | ⚠️ **On the LIVE bot only.** With `youtube_live_mode` **on** and `golive_mode` **on**, have a linked YouTube channel go live, then wait up to `youtube_live_poll_minutes` (5) | The go-live channel gets the usual card, **source YouTube** in its footer, exactly as it did before the uploads half was removed. `/youtube` ▸ **Logs** shows one `youtube.live_seen` row for the transition and nothing else per probe; the Go-live page's **Reading live now** reads **1**. Stop the stream: after `youtube_live_end_misses` (2) quiet probes the post is rewritten in the past tense. ⚠️ Behind the bot-check wall the title reads *Live now* with no thumbnail — **KI-30**, not a regression |
+
+## THE FRONT DOOR REHEARSES INSTEAD OF POSTING IN `#welcome` (`FS-a` … `FS-c`, branch `frontdoor-shadow`, design [`../info/front-door-design.md`](../info/front-door-design.md) ▸ `## Shadow mode (2026-09-18)`)
+
+Owner, 2026-09-18 16:1x, a minute after the `TEST_MODE` lift posted the real door in `#welcome`:
+*"okay now that we're in live shadow mode is even more important, i dont want it to post in welcome
+yet"* → *"lets have that in shadow mode"*. ⚠️ **Nothing below has met Discord** — a worktree holds
+no token, no message was posted or deleted in a real channel and no button was pressed in a client.
+These three rows are the proof that is missing.
+
+⚠️ **Do them in order and give the sweep up to five minutes** where a row says so: the door
+reconciles every `RECONCILE_MINUTES` (5), and so does modmail's ticket-button sweep. `FS-b` is the
+cutover itself, so run it when the door really is meant to go live.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`FS-a`** | Dashboard ▸ **Settings** ▸ the **modmail** group: set `frontdoor_mode` to **shadow**. Then Dashboard ▸ **Modmail** ▸ **Doors** ▸ **Front door**: pick `#welcome` and press **Post the front door** | The reply says the door is **rehearsing in `#welcome-test` instead of `#welcome`** — and says **shadow**, never *test mode*. `#welcome` gets **nothing**: no card, no ticket button, nothing appears there over the next five minutes either. `#welcome-test` carries the real card — *Need something?*, the line under it, the three buttons — under one line reading *"Rehearsal — this is where it would go: #welcome"*. The card says **shadow — the door is rehearsing in #welcome-test; nothing is in #welcome.** Press **Ask staff privately** on the copy: it opens the real ticket modal. `/ask` in `#blackbloc-logs` still answers, and as a Lead its card carries the same shadow sentence in the footer (a plain member sees no footer). Reword `frontdoor_title` on the Settings page and within five minutes the copy is EDITED in place — same message, new heading, no second copy |
+| **`FS-b`** | ⚠️ **This is the cutover.** With `FS-a` standing, set `frontdoor_mode` to **on** and wait up to five minutes (or press **Post the front door** again to skip the wait) | The rehearsal copy in `#welcome-test` **disappears**, and the real door appears in `#welcome`, directly under the rules post. `/ask`'s staff footer is gone. Modmail ▸ Logs shows one `frontdoor.taken_down_shadow` and one `frontdoor.posted`. Set it back to **shadow** and wait: the door in `#welcome` comes down again (`frontdoor.taken_down`), the copy reappears in `#welcome-test`, and `frontdoor_channel_id` still reads `#welcome` throughout — it is never cleared by a mode flip |
+| **`FS-c`** | Before `FS-b`, while the mode is **shadow**: put the ticket button up on its own (Dashboard ▸ **Modmail** ▸ **Doors** ▸ **Ticket button** ▸ pick `#welcome`, **Post the ticket button**), then wait five minutes and look at both channels. Then set `frontdoor_replaces_ticket_button` to **false** and wait five minutes more | With the key **true**: the reply rehearses rather than posts, `#welcome` stays empty, and `#welcome-test` holds **one** message — the front door — never a ticket button under it. `modmail_panel_channel_id` still reads `#welcome`. With the key **false**: the ticket button goes back to its own rules and posts for real in `#welcome`, beside nothing (the door is still rehearsing). ⚠️ **Put the key back to true before `FS-b`** |
