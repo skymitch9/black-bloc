@@ -39,6 +39,9 @@ from .logkinds import (
     OFF,
     log_level_key,
 )
+from .minutes_audio import CHUNK_SECONDS_DEFAULT as MINUTES_CHUNK_SECONDS_DEFAULT
+from .minutes_audio import CHUNK_SECONDS_MAX as MINUTES_CHUNK_SECONDS_MAX
+from .minutes_audio import CHUNK_SECONDS_MIN as MINUTES_CHUNK_SECONDS_MIN
 from .personas import COOKOUT, PERSONALITY_CHOICES
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
@@ -1157,6 +1160,7 @@ LOG_LEVEL_COMMANDS: dict[str, str] = {
     "applications": "apply",
     "selftest": "settings",
     "posts": "posts",
+    "minutes": "minutes",
 }
 
 
@@ -2236,6 +2240,150 @@ KEY_HELP.update(
     }
 )
 
+# Meeting minutes (prototype) — filed under `events` in NAMESPACE_OVERRIDE below, because the
+# `/settings` group select is at its cap of 25 and a meeting is an event's cousin.
+MINUTES_MODES = ("off", "on")
+MINUTES_MODE_DEFAULT = "off"
+MINUTES_START_TEXT_DEFAULT = (
+    "\U0001f534 Black Bloc is taking notes in this meeting. Say **stop notes** or press Stop "
+    "on /minutes to end it."
+)
+MINUTES_NOTES_TITLE_DEFAULT = "Meeting notes"
+MINUTES_PROMPT_DEFAULT = (
+    "You are writing the minutes of a voice meeting from an automatic transcript. The "
+    "transcript is speaker-labelled and may contain mishearings — never invent anything it does "
+    "not say, and say so plainly where it is unclear. Write, in plain words and in this order: "
+    "a two-line summary; the decisions that were made; the action items, each with the name of "
+    "the person who took it; the questions that were left open. Use short headings and bullets. "
+    "Leave a section out entirely if the meeting held nothing for it."
+)
+MINUTES_MAX_HOURS_DEFAULT = 3
+MINUTES_MAX_HOURS_MIN = 1
+MINUTES_MAX_HOURS_MAX = 6
+MINUTES_KEEP_DAYS_DEFAULT = 90
+MINUTES_KEEP_DAYS_MIN = 1
+MINUTES_KEEP_DAYS_MAX = 365
+MINUTES_PANEL_MINUTES_DEFAULT = 10
+MINUTES_PANEL_MIN_MINUTES = 1
+MINUTES_PANEL_MAX_MINUTES = 1440
+
+KEY_TYPES.update(
+    {
+        "minutes_mode": "enum",
+        "minutes_channel_id": "channel",
+        "minutes_opt_out_role_id": "role",
+        "minutes_start_text": "text",
+        "minutes_notes_title": "text",
+        "minutes_prompt": "text",
+        "minutes_chunk_seconds": "int",
+        "minutes_max_hours": "int",
+        "minutes_keep_days": "int",
+        "minutes_panel_minutes": "int",
+    }
+)
+KEY_CHOICES["minutes_mode"] = MINUTES_MODES
+KEY_MIN.update(
+    {
+        "minutes_chunk_seconds": MINUTES_CHUNK_SECONDS_MIN,
+        "minutes_max_hours": MINUTES_MAX_HOURS_MIN,
+        "minutes_keep_days": MINUTES_KEEP_DAYS_MIN,
+        "minutes_panel_minutes": MINUTES_PANEL_MIN_MINUTES,
+    }
+)
+KEY_MAX.update(
+    {
+        "minutes_chunk_seconds": MINUTES_CHUNK_SECONDS_MAX,
+        "minutes_max_hours": MINUTES_MAX_HOURS_MAX,
+        "minutes_keep_days": MINUTES_KEEP_DAYS_MAX,
+        "minutes_panel_minutes": MINUTES_PANEL_MAX_MINUTES,
+    }
+)
+KEY_MIN_REASON.update(
+    {
+        "minutes_chunk_seconds": (
+            "Below {limit} seconds the speech-to-text call is made so often that a meeting "
+            "costs more in requests than it does in words, and a sentence cut in half "
+            "transcribes worse than a whole one."
+        ),
+        "minutes_max_hours": "A meeting has to be allowed to run at least {limit} hour.",
+        "minutes_keep_days": "A transcript deleted sooner than {limit} day is gone before "
+        "anybody has read it.",
+        "minutes_panel_minutes": (
+            "A panel that goes quiet in less than {limit} minute is gone before anybody has "
+            "read it."
+        ),
+    }
+)
+KEY_MAX_REASON.update(
+    {
+        "minutes_chunk_seconds": (
+            "Over {limit} seconds a chunk gets big enough to be slow to send, and nothing "
+            "reaches the transcript until the whole chunk is done."
+        ),
+        "minutes_max_hours": (
+            "{limit} hours is longer than any meeting anybody means to hold, and the cut-off is "
+            "what stops a bot left in an empty channel recording all night."
+        ),
+        "minutes_keep_days": "{limit} days is a year of somebody's words; the notes are kept "
+        "either way.",
+        "minutes_panel_minutes": (
+            "{limit} minutes is a day, and a panel nobody has touched since yesterday is not "
+            "one anybody is still looking at."
+        ),
+    }
+)
+KEY_HELP.update(
+    {
+        "minutes_mode": (
+            "off or on. This is a PROTOTYPE and it ships off: while it is off `/minutes` is "
+            "hidden and both doors refuse in words. On lets staff have Black Bloc join the "
+            "voice channel they are in and take notes; it always announces itself first, and "
+            "the audio is never stored"
+        ),
+        "minutes_channel_id": (
+            "where a meeting's announcement and its notes go; blank means the voice channel's "
+            "own text chat. While test mode is on, both land in the test channel or the "
+            "rehearsal home instead, and the panel says where they went"
+        ),
+        "minutes_opt_out_role_id": (
+            "a role that means do not record me: if anybody in the voice channel is wearing it, "
+            "Start refuses and names them. Blank means nobody can opt out that way"
+        ),
+        "minutes_start_text": (
+            "the message Black Bloc posts the moment it joins a meeting, before a word is "
+            "recorded. It cannot be blank — a meeting that is recorded silently is the one "
+            "thing this feature must never do"
+        ),
+        "minutes_notes_title": "the heading on the notes embed when a meeting is written up",
+        "minutes_prompt": (
+            "what Black Bloc asks the model for when it turns a transcript into notes. The "
+            "transcript is sent after it, so write instructions rather than content"
+        ),
+        "minutes_chunk_seconds": (
+            "how much of one person's speech is gathered before it is sent to be transcribed; "
+            f"{MINUTES_CHUNK_SECONDS_DEFAULT} by default, {MINUTES_CHUNK_SECONDS_MIN}–"
+            f"{MINUTES_CHUNK_SECONDS_MAX}. Nothing reaches the transcript until a chunk is "
+            "finished, so this is also how far behind the live meeting the transcript runs"
+        ),
+        "minutes_max_hours": (
+            "the longest a single meeting may be recorded before Black Bloc leaves and writes "
+            f"the notes anyway; {MINUTES_MAX_HOURS_DEFAULT} by default. It is what stops a bot "
+            "left in an empty channel recording all night"
+        ),
+        "minutes_keep_days": (
+            "how long a meeting's TRANSCRIPT is kept before it is deleted; "
+            f"{MINUTES_KEEP_DAYS_DEFAULT} days by default. The notes and the meeting itself are "
+            "kept until somebody deletes them"
+        ),
+        "minutes_panel_minutes": (
+            "minutes the /minutes panel stays live before its buttons disable themselves; 10 by "
+            "default. The 'this panel has gone quiet' footer can only be written while Discord's "
+            "15-minute interaction window is still open, so 15 or more means the buttons simply "
+            "stop working with no footer to explain it"
+        ),
+    }
+)
+
 # The rehearsal home — one channel every shadow copy lands in, so staff review before the
 # cutover. Core, beside `log_channel_id`: the `/settings` group select is at its cap of 25.
 KEY_TYPES.update({SHADOW_CHANNEL: "channel", REHEARSAL_NOTE: "text"})
@@ -2303,6 +2451,17 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_PANEL_MINUTES: "modmail",
     HANDOFF_MODE: "request",
     HANDOFF_CONFIRM_HOURS: "request",
+    "minutes_mode": "events",
+    "minutes_channel_id": "events",
+    "minutes_opt_out_role_id": "events",
+    "minutes_start_text": "events",
+    "minutes_notes_title": "events",
+    "minutes_prompt": "events",
+    "minutes_chunk_seconds": "events",
+    "minutes_max_hours": "events",
+    "minutes_keep_days": "events",
+    "minutes_panel_minutes": "events",
+    log_level_key("minutes"): "events",
 }
 
 
@@ -3113,6 +3272,22 @@ class SettingsStore:
             return GUIDES_WHO_EDITS_DEFAULT
         if key in ("guides_help_links", "guides_show_facts", "guides_fault_files_request"):
             return True
+        if key == "minutes_mode":
+            return MINUTES_MODE_DEFAULT
+        if key == "minutes_start_text":
+            return MINUTES_START_TEXT_DEFAULT
+        if key == "minutes_notes_title":
+            return MINUTES_NOTES_TITLE_DEFAULT
+        if key == "minutes_prompt":
+            return MINUTES_PROMPT_DEFAULT
+        if key == "minutes_chunk_seconds":
+            return MINUTES_CHUNK_SECONDS_DEFAULT
+        if key == "minutes_max_hours":
+            return MINUTES_MAX_HOURS_DEFAULT
+        if key == "minutes_keep_days":
+            return MINUTES_KEEP_DAYS_DEFAULT
+        if key == "minutes_panel_minutes":
+            return MINUTES_PANEL_MINUTES_DEFAULT
         if key.endswith("_log_level"):
             return LEVEL_DEFAULT
         if KEY_TYPES.get(key) in ("channels", "roles"):

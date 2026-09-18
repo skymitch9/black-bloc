@@ -144,7 +144,7 @@ async def test_a_member_sees_the_member_guides_and_no_staff_one(as_member):
 async def test_staff_see_every_guide_including_the_staff_ones(as_staff):
     body = as_staff.get("/api/guides").json()
 
-    assert len(body["guides"]) == 18
+    assert len(body["guides"]) == 19
     assert {one["audience"] for one in body["guides"]} == {"member", "staff"}
     assert body["may_edit"] is True
 

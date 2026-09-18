@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "guides": [
     {
       "slug": "front-door",
@@ -483,6 +483,64 @@
         {"kind": "setting", "ref": "hide_commands_when_off"},
         {"kind": "setting", "ref": "staff_channel_id"},
         {"kind": "probe", "ref": "test_mode"}
+      ]
+    },
+    {
+      "slug": "minutes-take",
+      "title": "Have Black Bloc take the minutes of a meeting",
+      "goal": "Start a recording, stop it, and get the notes \u2014 and what it refuses to do.",
+      "audience": "staff",
+      "feature": "minutes",
+      "command": "/minutes",
+      "sort": 270,
+      "steps": [
+        {
+          "do": "Join the voice channel the meeting is in, then type **/minutes**.",
+          "expect": "A panel listing every meeting already recorded, with **Start taking notes** at the top. It is staff-only and nobody else sees it."
+        },
+        {
+          "do": "Press **Start taking notes**.",
+          "expect": "Black Bloc joins the channel and posts its announcement in the chat before a word is recorded. The panel's top line says who it has heard and how many chunks it has transcribed."
+        },
+        {
+          "do": "Hold the meeting as normal.",
+          "expect": "Nothing else happens in Discord. The audio is thrown away as it is read \u2014 only the words are kept."
+        },
+        {
+          "do": "When it is over press **Stop**, or say **stop notes** in the meeting's own chat.",
+          "expect": "Black Bloc leaves, finishes the chunks it already has, writes the notes and posts them with the whole transcript attached as a .txt."
+        },
+        {
+          "do": "Open the **Minutes** page to read, rewrite, re-post or delete them.",
+          "expect": "The notes are editable in place. **Post again** sends the current wording; **Delete** takes the notes and the transcript with it."
+        }
+      ],
+      "faults": [
+        {
+          "symptom": "Start says meeting minutes are turned off",
+          "answer": "That is deliberate \u2014 this is a prototype and it ships off. A Lead sets minutes_mode to on, under events."
+        },
+        {
+          "symptom": "Start names somebody and refuses",
+          "answer": "They are wearing the do-not-record role. Ask them first; a Lead takes the role off. Never work around it."
+        },
+        {
+          "symptom": "Start says Black Bloc is not allowed to join",
+          "answer": "It needs the Connect permission on that voice channel. It never needs Speak. Ask a server admin."
+        },
+        {
+          "symptom": "The notes never arrived",
+          "answer": "The transcript is still on the Minutes page. Press **Write the notes again**, and tell a Lead if it keeps happening."
+        },
+        {
+          "symptom": "The transcript stops short of the end",
+          "answer": "Nothing reaches it until a chunk is finished, so the last stretch can be missing. minutes_chunk_seconds is how far behind it runs."
+        }
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "minutes_mode"},
+        {"kind": "setting", "ref": "minutes_opt_out_role_id"},
+        {"kind": "setting", "ref": "minutes_keep_days"}
       ]
     }
   ]

@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 43
+SCHEMA_VERSION = 44
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -812,6 +812,37 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 CREATE INDEX IF NOT EXISTS posts_by_guild ON posts(guild_id, id);
+
+CREATE TABLE IF NOT EXISTS meetings (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id         INTEGER NOT NULL,
+    channel_id       INTEGER NOT NULL,
+    started_by       INTEGER NOT NULL,
+    started_at       TEXT    NOT NULL,
+    ended_at         TEXT,
+    ended_reason     TEXT,
+    notes            TEXT,
+    notes_channel_id INTEGER,
+    notes_message_id INTEGER,
+    status           TEXT    NOT NULL DEFAULT 'recording'
+                     CHECK (status IN ('recording', 'writing', 'done', 'failed'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS meetings_one_open
+    ON meetings(guild_id) WHERE ended_at IS NULL;
+CREATE INDEX IF NOT EXISTS meetings_by_guild ON meetings(guild_id, id);
+
+CREATE TABLE IF NOT EXISTS meeting_lines (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    speaker_id INTEGER NOT NULL,
+    speaker    TEXT    NOT NULL,
+    started_at TEXT    NOT NULL,
+    text       TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS meeting_lines_by_meeting
+    ON meeting_lines(meeting_id, started_at, id);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

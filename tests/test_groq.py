@@ -1,6 +1,14 @@
 import pytest
 
-from black_bloc.groq import CHAT_URL, DEFAULT_MODEL, GroqClient, message_text
+from black_bloc.groq import (
+    CHAT_URL,
+    DEFAULT_MODEL,
+    TRANSCRIBE_URL,
+    WHISPER_MODEL,
+    GroqClient,
+    WhisperClient,
+    message_text,
+)
 from black_bloc.llm import (
     BROKEN,
     GROQ,
@@ -115,6 +123,74 @@ async def test_a_transport_error_is_wrapped_at_the_boundary_so_callers_catch_one
 
 async def test_closing_a_client_that_never_opened_a_session_is_quiet():
     client = GroqClient("k", request=answering()[0])
+
+    await client.close()
+
+    assert client._session is None
+
+
+def transcribing(status=200, payload=None, raises=None):
+    seen = {}
+
+    async def request(url, *, headers, audio, name, fields):
+        seen.update(
+            {"url": url, "headers": headers, "audio": audio, "name": name, "fields": fields}
+        )
+        if raises is not None:
+            raise raises
+        return status, payload if payload is not None else {}
+
+    return request, seen
+
+
+async def test_a_wav_chunk_is_sent_to_groqs_transcription_door_with_the_whisper_model():
+    request, seen = transcribing(payload={"text": " We should ship it. "})
+
+    said_back = await WhisperClient("k", request=request).transcribe(b"RIFF...", name="one.wav")
+
+    assert said_back == "We should ship it."
+    assert seen["url"] == TRANSCRIBE_URL
+    assert seen["fields"]["model"] == WHISPER_MODEL
+    assert seen["name"] == "one.wav"
+    assert seen["headers"]["Authorization"] == "Bearer k"
+
+
+async def test_an_empty_chunk_is_never_sent_anywhere():
+    request, seen = transcribing()
+
+    assert await WhisperClient("k", request=request).transcribe(b"") == ""
+    assert seen == {}
+
+
+async def test_an_answer_with_no_words_in_it_is_an_empty_string_not_a_crash():
+    request, _ = transcribing(payload={})
+    assert await WhisperClient("k", request=request).transcribe(b"RIFF") == ""
+
+
+@pytest.mark.parametrize(
+    "status,reason", [(429, RATE_LIMITED), (401, REFUSED), (400, REFUSED), (503, UNREACHABLE)]
+)
+async def test_every_status_groq_can_answer_a_chunk_with_becomes_one_named_reason(status, reason):
+    request, _ = transcribing(status=status)
+    with pytest.raises(LLMError) as caught:
+        await WhisperClient("k", request=request).transcribe(b"RIFF")
+    assert caught.value.reason == reason and caught.value.status == status
+
+
+async def test_a_transport_error_transcribing_is_wrapped_the_same_way_a_chat_one_is():
+    request, _ = transcribing(raises=LLMError(UNREACHABLE, "groq unreachable: OSError"))
+    with pytest.raises(LLMError) as caught:
+        await WhisperClient("k", request=request).transcribe(b"RIFF")
+    assert caught.value.reason == UNREACHABLE
+
+    request, _ = transcribing(raises=ValueError("odd"))
+    with pytest.raises(LLMError) as caught:
+        await WhisperClient("k", request=request).transcribe(b"RIFF")
+    assert caught.value.reason == BROKEN
+
+
+async def test_closing_a_whisper_client_that_never_opened_a_session_is_quiet():
+    client = WhisperClient("k", request=transcribing()[0])
 
     await client.close()
 

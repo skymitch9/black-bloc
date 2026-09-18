@@ -1564,7 +1564,7 @@ async def test_eighteen_guide_links_keep_every_help_page_under_discords_limit(se
         for one in guides.seed_entries()
         if one["command"]
     }
-    assert len(links) == 17
+    assert len(links) == 18
 
     pages = pages_under_limit([core_cog.HELP_HEADER, *help_lines(entries, "", links)])
     longest = max(len(page) for page in pages)

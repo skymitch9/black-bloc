@@ -34,6 +34,10 @@
       "events_where_link_check_seconds": 1,
       "handoff_confirm_hours": 1,
       "logs_count": 1,
+      "minutes_chunk_seconds": 30,
+      "minutes_keep_days": 1,
+      "minutes_max_hours": 1,
+      "minutes_panel_minutes": 1,
       "pings_empty_role_days": 1,
       "pings_onboarding_option_cap": 1,
       "pings_streamer_stale_days": 7,
@@ -70,6 +74,10 @@
       "handoff_confirm_hours": 168,
       "honeypot_purge_days": 7,
       "logs_count": 50,
+      "minutes_chunk_seconds": 120,
+      "minutes_keep_days": 365,
+      "minutes_max_hours": 6,
+      "minutes_panel_minutes": 1440,
       "pings_empty_role_days": 365,
       "pings_onboarding_option_cap": 50,
       "pings_streamer_stale_days": 365,
@@ -4861,6 +4869,257 @@
         "deleted",
         "message"
       ]
+    },
+    {
+      "_": "Meeting minutes (prototype). {meeting_id} is a FINISHED meeting with notes and a short transcript, so every notes move reaches it; {recording_meeting_id} is still being recorded, which is the state /write and /post refuse from in words. Staff only: there is no member view of a meeting.",
+      "method": "GET",
+      "path": "/api/minutes",
+      "read_by": [
+        "page-minutes.js list"
+      ],
+      "shape": "object",
+      "keys": [
+        "meetings",
+        "mode",
+        "may_edit",
+        "guard",
+        "host",
+        "notes",
+        "checked_at"
+      ],
+      "rows": {
+        "meetings": [
+          "id",
+          "channel_id",
+          "channel_name",
+          "started_by",
+          "started_by_name",
+          "started_at",
+          "ended_at",
+          "ended_reason",
+          "status",
+          "status_words",
+          "notes",
+          "notes_cap",
+          "notes_channel_id",
+          "notes_channel_name",
+          "notes_message_id",
+          "posted",
+          "lines"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/minutes/{meeting_id}",
+      "read_by": [
+        "page-minutes.js notes and transcript"
+      ],
+      "shape": "object",
+      "keys": [
+        "meeting",
+        "transcript",
+        "speakers",
+        "mode",
+        "guard",
+        "host",
+        "notes",
+        "read_at"
+      ],
+      "nested": {
+        "meeting": [
+          "id",
+          "channel_id",
+          "channel_name",
+          "started_by",
+          "started_by_name",
+          "started_at",
+          "ended_at",
+          "ended_reason",
+          "status",
+          "status_words",
+          "notes",
+          "notes_cap",
+          "notes_channel_id",
+          "notes_channel_name",
+          "notes_message_id",
+          "posted",
+          "lines"
+        ]
+      },
+      "rows": {
+        "transcript": [
+          "id",
+          "speaker",
+          "speaker_id",
+          "started_at",
+          "text"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/minutes/{meeting_id}",
+      "body": {
+        "notes": "Staff wrote this line from the dashboard."
+      },
+      "read_by": [
+        "page-minutes.js Save the notes"
+      ],
+      "shape": "object",
+      "keys": [
+        "meeting",
+        "transcript",
+        "speakers",
+        "mode",
+        "guard",
+        "host",
+        "notes",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "meeting": [
+          "id",
+          "channel_id",
+          "channel_name",
+          "started_by",
+          "started_by_name",
+          "started_at",
+          "ended_at",
+          "ended_reason",
+          "status",
+          "status_words",
+          "notes",
+          "notes_cap",
+          "notes_channel_id",
+          "notes_channel_name",
+          "notes_message_id",
+          "posted",
+          "lines"
+        ]
+      },
+      "rows": {
+        "transcript": [
+          "id",
+          "speaker",
+          "speaker_id",
+          "started_at",
+          "text"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/minutes/{meeting_id}/write",
+      "body": {},
+      "read_by": [
+        "page-minutes.js Write the notes again"
+      ],
+      "shape": "object",
+      "keys": [
+        "meeting",
+        "transcript",
+        "speakers",
+        "mode",
+        "guard",
+        "host",
+        "notes",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "meeting": [
+          "id",
+          "channel_id",
+          "channel_name",
+          "started_by",
+          "started_by_name",
+          "started_at",
+          "ended_at",
+          "ended_reason",
+          "status",
+          "status_words",
+          "notes",
+          "notes_cap",
+          "notes_channel_id",
+          "notes_channel_name",
+          "notes_message_id",
+          "posted",
+          "lines"
+        ]
+      },
+      "rows": {
+        "transcript": [
+          "id",
+          "speaker",
+          "speaker_id",
+          "started_at",
+          "text"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/minutes/{meeting_id}/post",
+      "body": {},
+      "read_by": [
+        "page-minutes.js Post again"
+      ],
+      "shape": "object",
+      "keys": [
+        "meeting",
+        "transcript",
+        "speakers",
+        "mode",
+        "guard",
+        "host",
+        "notes",
+        "read_at",
+        "message"
+      ],
+      "nested": {
+        "meeting": [
+          "id",
+          "channel_id",
+          "channel_name",
+          "started_by",
+          "started_by_name",
+          "started_at",
+          "ended_at",
+          "ended_reason",
+          "status",
+          "status_words",
+          "notes",
+          "notes_cap",
+          "notes_channel_id",
+          "notes_channel_name",
+          "notes_message_id",
+          "posted",
+          "lines"
+        ]
+      },
+      "rows": {
+        "transcript": [
+          "id",
+          "speaker",
+          "speaker_id",
+          "started_at",
+          "text"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/minutes/{meeting_id}",
+      "read_by": [
+        "page-minutes.js Delete this meeting"
+      ],
+      "shape": "object",
+      "keys": [
+        "deleted",
+        "message"
+      ]
     }
   ],
   "pages": [
@@ -4882,7 +5141,8 @@
     "/chat.html",
     "/requests.html",
     "/guides.html",
-    "/posts.html"
+    "/posts.html",
+    "/minutes.html"
   ],
   "action_kinds": [
     "web.operator.read",
@@ -5036,6 +5296,12 @@
     "web.post.taken_down",
     "web.post.updated",
     "web.post.would_post",
-    "web.post.would_take_down"
+    "web.post.would_take_down",
+    "web.minutes.notes_written",
+    "web.minutes.notes_failed",
+    "web.minutes.notes_edited",
+    "web.minutes.posted",
+    "web.minutes.post_failed",
+    "web.minutes.deleted"
   ]
 }

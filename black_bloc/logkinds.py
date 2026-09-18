@@ -53,6 +53,7 @@ FEATURES = (
     "selftest",
     "guides",
     "posts",
+    "minutes",
 )
 
 HEADS: dict[str, str] = {
@@ -89,6 +90,7 @@ HEADS: dict[str, str] = {
     "guides": "guides",
     "post": "posts",
     "posts": "posts",
+    "minutes": "minutes",
 }
 
 FEATURE_LABELS: dict[str, str] = {
@@ -112,6 +114,7 @@ FEATURE_LABELS: dict[str, str] = {
     "selftest": "Test",
     "guides": "Guides",
     "posts": "Posts",
+    "minutes": "Meeting minutes",
 }
 
 FEATURE_PAGES: dict[str, str] = {
@@ -135,6 +138,7 @@ FEATURE_PAGES: dict[str, str] = {
     "selftest": "health.html",
     "guides": "guides.html",
     "posts": "posts.html",
+    "minutes": "minutes.html",
 }
 
 IMPORTANT_SUFFIXES = (
@@ -474,6 +478,14 @@ ROUTINE: frozenset[str] = frozenset(
         "post.shadow_taken_down",
         "post.seeded",
         "post.seed_channel_unknown",
+        "minutes.started",
+        "minutes.ended",
+        "minutes.notes_written",
+        "minutes.posted",
+        "minutes.notes_edited",
+        "minutes.deleted",
+        "minutes.purged",
+        "minutes.mode",
     }
 )
 

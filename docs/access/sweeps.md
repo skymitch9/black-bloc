@@ -1,7 +1,7 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-17** — rows **`YL-j` … `YL-n`** (numbered **572–576**) added at the foot for the YOUTUBE
+> **2026-09-17** — rows **`YL-j` … `YL-n`** (numbered **586–590** — 572–585 went to the minutes rows the same evening) added at the foot for the YOUTUBE
 > LIVE FIX build (branch `youtube-live-fix`, off `main` `ddd6fdc`; design
 > `info/youtube-live-design.md` ▸ Deviations ▸ *The datacenter page*; ⚠️ **not merged, not deployed,
 > and NOT runnable from a laptop — every row needs the live bot on Fly**, because the defect is the
@@ -1856,13 +1856,36 @@ confirm you're not a bot* wall. Nothing here reproduces on a laptop. `youtube_li
 
 | Row | Do | Expect |
 |---|---|---|
-| **572** (was `YL-j`) | ⚠️ **The row this fix exists for.** With the linked streamer LIVE on YouTube, wait `youtube_live_poll_minutes`, then open the dashboard's **Logs** ▸ YouTube | A `youtube.live_seen` (or `would_live_seen`) row appears. Before this fix there was NOTHING at all — measured 2026-09-17 18:14, the probe read the wall, found no video id and announced nothing |
-| **573** (was `YL-k`) | Open that row's Summary | It carries `botcheck: true`. That is the wall saying so out loud. With `YOUTUBE_API_KEY` set there is also a `youtube.live_id_searched` row a second earlier, reading `units: 100` and the video id it found |
-| **574** (was `YL-l`) | Open the go-live post itself | **With a key:** the ordinary card, the real `watch?v=…` link, the title and the thumbnail — indistinguishable from a stream spotted from a home address. **Without a key:** the link is the channel's own `/live` page, the title reads **Live now** and there is no thumbnail. Both are correct; the key is what buys the id |
-| **575** (was `YL-m`) | Leave the stream running for half an hour and watch the quota line on the **Go-live** page ▸ **How live streams are spotted** | **Quota used today** goes to **101** and STAYS there — 100 for the one search plus 1 for the confirm. ⚠️ A number climbing by 100 every probe is the bug this row exists to catch; 10,000 a day is the whole allowance and 100 per probe would burn it before lunch |
-| **576** (was `YL-n`) | On the same card, read **Bot check** | *yes — that page had no video id* while the wall is being served, *no* once it is not. The same line is on `/youtube`'s staff half. It is the only place that explains why a card ever reads *Live now* with a key set |
+| **586** (was `YL-j`) | ⚠️ **The row this fix exists for.** With the linked streamer LIVE on YouTube, wait `youtube_live_poll_minutes`, then open the dashboard's **Logs** ▸ YouTube | A `youtube.live_seen` (or `would_live_seen`) row appears. Before this fix there was NOTHING at all — measured 2026-09-17 18:14, the probe read the wall, found no video id and announced nothing |
+| **587** (was `YL-k`) | Open that row's Summary | It carries `botcheck: true`. That is the wall saying so out loud. With `YOUTUBE_API_KEY` set there is also a `youtube.live_id_searched` row a second earlier, reading `units: 100` and the video id it found |
+| **588** (was `YL-l`) | Open the go-live post itself | **With a key:** the ordinary card, the real `watch?v=…` link, the title and the thumbnail — indistinguishable from a stream spotted from a home address. **Without a key:** the link is the channel's own `/live` page, the title reads **Live now** and there is no thumbnail. Both are correct; the key is what buys the id |
+| **589** (was `YL-m`) | Leave the stream running for half an hour and watch the quota line on the **Go-live** page ▸ **How live streams are spotted** | **Quota used today** goes to **101** and STAYS there — 100 for the one search plus 1 for the confirm. ⚠️ A number climbing by 100 every probe is the bug this row exists to catch; 10,000 a day is the whole allowance and 100 per probe would burn it before lunch |
+| **590** (was `YL-n`) | On the same card, read **Bot check** | *yes — that page had no video id* while the wall is being served, *no* once it is not. The same line is on `/youtube`'s staff half. It is the only place that explains why a card ever reads *Live now* with a key set |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is
 a `would_*` line in the log where you expected a post (that is test mode doing its job).
+
+## Meeting minutes (branch `minutes`, the PROTOTYPE) — run these with `minutes_mode` **on** and put it back to **off** afterwards
+
+⚠️ **`MM-a` is the one that decides whether any of the rest is worth running.** Nothing below
+this line has ever met Discord: the build proved the extension installs, imports and decodes
+offline, and nothing more.
+
+| Row | Do | Expect |
+|---|---|---|
+| **572** (was `MM-a`) | Join *The Basement* ▸ **Meeting Room**, then run `/minutes` in `#blackbloc-logs` and press **Start taking notes** | Black Bloc joins the voice channel. ⚠️ If it refuses, read the sentence: **Connect** missing on that channel is a server-admin fix, and *the voice-recording extension is not installed* means the deployed image is wrong, not the permissions |
+| **573** (was `MM-b`) | Watch the channel the announcement should land in | `minutes_start_text` is posted BEFORE anything is recorded. Under test mode it lands in `#blackbloc-logs` and the panel says so in words |
+| **574** (was `MM-c`) | Say a few sentences, wait past `minutes_chunk_seconds` (60), then press the panel again | The top line names you under **Heard so far** and **Chunks transcribed** is at least 1. ⚠️ Nothing appears until a chunk is finished — that lag is the design, not a fault |
+| **575** (was `MM-d`) | Have a second person speak | Both names appear. The transcript keeps them apart: one line per speaker per chunk, in the order they spoke |
+| **576** (was `MM-e`) | Say **stop notes** in the meeting's own text chat | Black Bloc leaves, and within a moment posts the notes embed with the whole transcript attached as a `.txt` |
+| **577** (was `MM-f`) | Read the notes | A two-line summary, decisions, action items with names, open questions — in plain words, and nothing invented that was not said |
+| **578** (was `MM-g`) | Open the **Minutes** page on the dashboard | The meeting is listed. Open it: the notes are editable in place and the transcript is under them |
+| **579** (was `MM-h`) | Edit the notes, press **Save the notes**, then **Post again** | The saved wording is what gets posted. Exactly one `web.minutes.notes_edited` and one `web.minutes.posted` row on the Logs page — never a bare `minutes.*` beside them |
+| **580** (was `MM-i`) | Press **Write the notes again** | The model reads the transcript again and replaces the box. Anything typed by hand is lost — the confirm says so first |
+| **581** (was `MM-j`) | Give somebody the role named by `minutes_opt_out_role_id`, put them in the channel, and press **Start taking notes** | Refused in words, naming them, and Black Bloc does NOT join. ⚠️ This is the row that must never fail |
+| **582** (was `MM-k`) | With a meeting running, press **Start taking notes** from a second `/minutes` panel | Refused in words, naming the channel it is already in |
+| **583** (was `MM-l`) | Start a meeting and have everybody leave the voice channel | Black Bloc leaves on its own and writes the notes. The log row's reason reads *everyone left* |
+| **584** (was `MM-m`) | Set `minutes_mode` to **off** on the Settings page ▸ **events**, wait a minute, press Ctrl+R in Discord | `/minutes` is gone from the picker. The Minutes page still lists every meeting and says in words that the prototype is off |
+| **585** (was `MM-n`) | Press **Delete this meeting** on the site | The notes and the transcript go. The message already posted in Discord is left where it is — delete that by hand if you want it gone |

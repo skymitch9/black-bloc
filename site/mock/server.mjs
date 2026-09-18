@@ -75,6 +75,16 @@ const dayAhead = (d) => {
   return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
 };
 
+const MINUTES_NO_SUCH = 'There is no meeting **#{meeting_id}** on this server, so nothing was done. It may have been deleted — open the Minutes page and pick one from the list.';
+const MINUTES_STILL_RECORDING = 'Meeting **#{meeting_id}** is still being recorded, so there are no notes to work with yet. Press **Stop** on `/minutes` first.';
+const MINUTES_ARE_OFF = 'Meeting minutes are off for this server, so `/minutes` is hidden and Start refuses in words. This is a prototype and it ships off on purpose. Every meeting already recorded is kept — a Lead turns it on from the Settings page under **events**.';
+const MINUTES_TEST_MODE = 'Black Bloc is in test mode, so a meeting’s announcement and its notes land in #blackbloc-logs rather than the channel they name. **Post again** obeys the same rule.';
+const MINUTES_BLANK = 'Notes cannot be empty, so nothing was saved. Write something, or press **Delete** if this meeting should not be kept at all.';
+const MINUTES_TOO_LONG = 'Notes hold 4000 characters and those are {count}, so nothing was saved. Take {over} character(s) out.';
+const MINUTES_NOTHING_HEARD = 'Nobody said anything Black Bloc could make out, so there is no transcript and no notes were written. The meeting is still on the Minutes page with nothing in it.';
+const MINUTES_NOTES_MAX = 4000;
+const MINUTES_SEED_NOTES = '**In short**\nThe meeting-minutes prototype ships off and is tested by staff only.\n\n**Decisions**\n- Nobody turns it on until it has been tested.\n\n**Action items**\n- Casey: write the guide.\n\n**Left open**\n- Which channel the notes should land in once it is on.';
+
 const POST_SEED_BODY = "Welcome to** Black in a Flash**, a dedicated space for Black gamers!  While we appreciate and see multiple teams around the content creation space we don't see one that is just for us, and that is what this Discord hopes to alleviate: the creation of a space where we can authentically and openly be ourselves.\n# Familiarize yourselves with the rules before you join the discord.\n**Failure to comply with the rules may lead to moderator action.**\n\n***1. The moderation team reserve the right to remove anyone from the space.***\n> If you cannot abide the rules or plainly speaking are not a good fit for the space, the moderators can remove you at will.\n\n***2. Be respectful of others.***\n> We will not tolerate any forms of harassment or bigotry, such as- but not limited to- harassment about race, gender/identity expression, sexual orientation, religion, disability, physical appearances. There's a line between a friendly roast and being a jerk.\n\n***3. First and foremost, this space is to adapt, learn, and grow.***\n> Let's try to keep that as the primary focus. It's okay to have off topic conversations or to be upset about things, but this is a space to empower ourselves. If you are going to detract from the experience of others, there may be moderator intervention.\n\nYou can head to the landing channel and type a message so you gain access to the rest of the discord. If you are unsure of something, you are welcome to ping the Aunties / Uncles role.";
 
 const ROLES = [
@@ -547,6 +557,18 @@ const SETTING_SPECS = [
   ['guides_help_links', 'bool', true, true, 'true to add a small guide link beside every /help line whose command has a published guide, and an All the guides button on the last page; false leaves /help exactly as it was'],
   ['guides_show_facts', 'bool', true, true, 'true to show the Right now block on a guide \u2014 up to four live values read from the bot as the page opens, such as which mode a feature is in; false shows the steps only'],
   ['guides_fault_files_request', 'bool', true, true, 'true to make Something\u2019s off at the foot of a guide file a request, so staff see it where they see everything else; false makes it a sentence telling the reader to tell a Lead'],
+  // Meeting minutes (prototype) — black_bloc/settings_store.py owns them; these are the mock's
+  // copy. Filed under `events` in NAMESPACE_OVERRIDE, because the group select is at its cap.
+  ['minutes_mode', 'enum', 'off', 'off', 'off or on. This is a PROTOTYPE and it ships off: while it is off `/minutes` is hidden and both doors refuse in words. On lets staff have Black Bloc join the voice channel they are in and take notes; it always announces itself first, and the audio is never stored', ['off', 'on']],
+  ['minutes_channel_id', 'channel', null, null, 'where a meeting\u2019s announcement and its notes go; blank means the voice channel\u2019s own text chat. While test mode is on, both land in the test channel or the rehearsal home instead, and the panel says where they went'],
+  ['minutes_opt_out_role_id', 'role', null, null, 'a role that means do not record me: if anybody in the voice channel is wearing it, Start refuses and names them. Blank means nobody can opt out that way'],
+  ['minutes_start_text', 'text', '\ud83d\udd34 Black Bloc is taking notes in this meeting. Say **stop notes** or press Stop on /minutes to end it.', '\ud83d\udd34 Black Bloc is taking notes in this meeting. Say **stop notes** or press Stop on /minutes to end it.', 'the message Black Bloc posts the moment it joins a meeting, before a word is recorded. It cannot be blank \u2014 a meeting that is recorded silently is the one thing this feature must never do'],
+  ['minutes_notes_title', 'text', 'Meeting notes', 'Meeting notes', 'the heading on the notes embed when a meeting is written up'],
+  ['minutes_prompt', 'text', 'You are writing the minutes of a voice meeting from an automatic transcript.', 'You are writing the minutes of a voice meeting from an automatic transcript.', 'what Black Bloc asks the model for when it turns a transcript into notes. The transcript is sent after it, so write instructions rather than content'],
+  ['minutes_chunk_seconds', 'int', 60, 60, 'how much of one person\u2019s speech is gathered before it is sent to be transcribed; 60 by default, 30\u2013120. Nothing reaches the transcript until a chunk is finished, so this is also how far behind the live meeting the transcript runs', null, 120, 30],
+  ['minutes_max_hours', 'int', 3, 3, 'the longest a single meeting may be recorded before Black Bloc leaves and writes the notes anyway; 3 by default. It is what stops a bot left in an empty channel recording all night', null, 6, 1],
+  ['minutes_keep_days', 'int', 90, 90, 'how long a meeting\u2019s TRANSCRIPT is kept before it is deleted; 90 days by default. The notes and the meeting itself are kept until somebody deletes them', null, 365, 1],
+  ['minutes_panel_minutes', 'int', 10, 10, "minutes the /minutes panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440, 1],
   ["time_step_minutes", "int", 15, 15, "how far apart the Minute dropdown's choices are on the /event and /raidtrain draft panels, 5 to 60 minutes; 15 gives :00, :15, :30 and :45", null, 60, 5],
 ];
 
@@ -875,6 +897,40 @@ function seedState() {
   ],
   nextPost: 4,
   nextPostMessage: 820000000000000001,
+  // Meeting minutes (prototype). Meeting 1 is finished, written up and posted, with a short
+  // transcript; meeting 2 is still recording, which is the state every notes move refuses from.
+  meetings: [
+    {
+      id: 1,
+      channel_id: '800000000000000009',
+      started_by: STAFF.id,
+      started_at: minutesAgo(200),
+      ended_at: minutesAgo(160),
+      ended_reason: 'by hand',
+      notes: MINUTES_SEED_NOTES,
+      notes_channel_id: '800000000000000003',
+      notes_message_id: '830000000000000001',
+      status: 'done',
+    },
+    {
+      id: 2,
+      channel_id: '800000000000000009',
+      started_by: STAFF.id,
+      started_at: minutesAgo(4),
+      ended_at: null,
+      ended_reason: null,
+      notes: '',
+      notes_channel_id: null,
+      notes_message_id: null,
+      status: 'recording',
+    },
+  ],
+  meetingLines: [
+    { id: 1, meeting_id: 1, speaker_id: STAFF.id, speaker: 'Mod', started_at: minutesAgo(199), text: 'We should ship the prototype off by default.' },
+    { id: 2, meeting_id: 1, speaker_id: '700000000000000002', speaker: 'Casey', started_at: minutesAgo(198), text: 'I will write the guide for it.' },
+    { id: 3, meeting_id: 1, speaker_id: STAFF.id, speaker: 'Mod', started_at: minutesAgo(197), text: 'Agreed. Nobody turns it on until we have tested it.' },
+  ],
+  nextMeetingMessage: 830000000000000002,
   nextGuide: 3,
   nextGuideStep: 4,
   nextGuideMedia: 3,
@@ -1329,6 +1385,17 @@ const NAMESPACE_OVERRIDE = {
   frontdoor_panel_minutes: 'modmail',
   handoff_mode: 'request',
   handoff_confirm_hours: 'request',
+  minutes_mode: 'events',
+  minutes_channel_id: 'events',
+  minutes_opt_out_role_id: 'events',
+  minutes_start_text: 'events',
+  minutes_notes_title: 'events',
+  minutes_prompt: 'events',
+  minutes_chunk_seconds: 'events',
+  minutes_max_hours: 'events',
+  minutes_keep_days: 'events',
+  minutes_panel_minutes: 'events',
+  minutes_log_level: 'events',
 };
 
 function namespaceOf(key) {
@@ -2380,6 +2447,173 @@ route('DELETE', '/api/posts/:slug', (context) => {
   state.posts = state.posts.filter((one) => one.id !== row.id);
   logAction('web.post.deleted', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
   return { deleted: row.slug, message: `**${row.title}** is gone.` };
+});
+
+// --- meeting minutes (prototype) ---------------------------------------------------------------
+// The shapes black_bloc/api/tools/minutes.py answers with. The feature ships OFF, so the list
+// carries the "it is off" note, and every staff move still works on a meeting already recorded.
+
+function minutesMode() {
+  return String(state.settings.get('minutes_mode') ?? 'off');
+}
+
+function minutesGuard() {
+  return {
+    test_mode: testMode,
+    test_channel: testMode ? 'blackbloc-logs' : null,
+    said: testMode ? MINUTES_TEST_MODE : null,
+  };
+}
+
+function minutesHost() {
+  return { extension: true, opus: true, transcriber: true, notes_writer: true };
+}
+
+function minutesNotes() {
+  return minutesMode() === 'on' ? [] : [MINUTES_ARE_OFF];
+}
+
+function minutesChannelName(channelId) {
+  if (!channelId) return 'nowhere yet';
+  const found = CHANNELS.find((one) => String(one.id) === String(channelId));
+  return found ? `#${found.name}` : `<#${channelId}>`;
+}
+
+function minutesStatusWords(row) {
+  if (row.status === 'recording') return 'recording';
+  if (row.status === 'writing') return 'writing the notes';
+  if (row.status === 'failed') return 'the notes did not get written';
+  return 'done';
+}
+
+function meetingLinesOf(id) {
+  return state.meetingLines.filter((one) => one.meeting_id === id);
+}
+
+function meetingRow(row) {
+  return {
+    id: String(row.id),
+    channel_id: row.channel_id ? String(row.channel_id) : null,
+    channel_name: minutesChannelName(row.channel_id),
+    started_by: String(row.started_by || ''),
+    started_by_name: String(row.started_by) === String(STAFF.id) ? STAFF.display_name : null,
+    started_at: row.started_at,
+    ended_at: row.ended_at,
+    ended_reason: row.ended_reason,
+    status: row.status,
+    status_words: minutesStatusWords(row),
+    notes: String(row.notes || ''),
+    notes_cap: MINUTES_NOTES_MAX,
+    notes_channel_id: row.notes_channel_id ? String(row.notes_channel_id) : null,
+    notes_channel_name: minutesChannelName(row.notes_channel_id),
+    notes_message_id: row.notes_message_id ? String(row.notes_message_id) : null,
+    posted: Boolean(row.notes_message_id),
+    lines: meetingLinesOf(row.id).length,
+  };
+}
+
+function meetingWhole(row, said) {
+  const rows = meetingLinesOf(row.id);
+  const found = {
+    meeting: meetingRow(row),
+    transcript: rows.map((one) => ({
+      id: String(one.id),
+      speaker: one.speaker,
+      speaker_id: String(one.speaker_id),
+      started_at: one.started_at,
+      text: one.text,
+    })),
+    speakers: [...new Set(rows.map((one) => one.speaker))],
+    mode: minutesMode(),
+    guard: minutesGuard(),
+    host: minutesHost(),
+    notes: minutesNotes(),
+    read_at: now(),
+  };
+  return said === undefined ? found : { ...found, message: said };
+}
+
+function wantedMeeting(id) {
+  const found = state.meetings.find((one) => String(one.id) === String(id));
+  if (!found) {
+    throw new Refused(404, 'no_such_meeting', MINUTES_NO_SUCH.split('{meeting_id}').join(String(id)));
+  }
+  return found;
+}
+
+function meetingIsOver(row) {
+  if (row.status === 'recording') {
+    throw new Refused(409, 'still_recording', MINUTES_STILL_RECORDING.split('{meeting_id}').join(String(row.id)));
+  }
+}
+
+route('GET', '/api/minutes', (context) => {
+  requireStaff(context.session);
+  return {
+    meetings: state.meetings.map(meetingRow),
+    mode: minutesMode(),
+    may_edit: true,
+    guard: minutesGuard(),
+    host: minutesHost(),
+    notes: minutesNotes(),
+    checked_at: now(),
+  };
+});
+
+route('GET', '/api/minutes/:id', (context) => {
+  requireStaff(context.session);
+  return meetingWhole(wantedMeeting(context.params.id));
+});
+
+route('PUT', '/api/minutes/:id', async (context) => {
+  requireStaff(context.session);
+  const row = wantedMeeting(context.params.id);
+  const body = await context.body();
+  const notes = String(body.notes || '').trim();
+  if (!notes) throw new Refused(400, 'notes_blank', MINUTES_BLANK);
+  if (notes.length > MINUTES_NOTES_MAX) {
+    throw new Refused(400, 'notes_too_long', MINUTES_TOO_LONG
+      .split('{count}').join(String(notes.length))
+      .split('{over}').join(String(notes.length - MINUTES_NOTES_MAX)));
+  }
+  row.notes = notes;
+  row.status = 'done';
+  logAction('web.minutes.notes_edited', { details: { meeting: row.id, via: 'website' } });
+  return meetingWhole(row, `Saved the notes for meeting **#${row.id}**.`);
+});
+
+route('POST', '/api/minutes/:id/write', (context) => {
+  requireStaff(context.session);
+  const row = wantedMeeting(context.params.id);
+  meetingIsOver(row);
+  const rows = meetingLinesOf(row.id);
+  if (rows.length === 0) throw new Refused(409, 'nothing_heard', MINUTES_NOTHING_HEARD);
+  row.notes = MINUTES_SEED_NOTES;
+  row.status = 'done';
+  logAction('web.minutes.notes_written', { details: { meeting: row.id, lines: rows.length, via: 'website' } });
+  return meetingWhole(row, `Notes written for meeting **#${row.id}**.`);
+});
+
+route('POST', '/api/minutes/:id/post', (context) => {
+  requireStaff(context.session);
+  const row = wantedMeeting(context.params.id);
+  meetingIsOver(row);
+  row.notes_channel_id = testMode ? '800000000000000003' : (row.notes_channel_id || row.channel_id);
+  row.notes_message_id = String(state.nextMeetingMessage++);
+  logAction('web.minutes.posted', { details: { meeting: row.id, channel: row.notes_channel_id, via: 'website' } });
+  return meetingWhole(row, `Posted the notes for meeting **#${row.id}** in ${minutesChannelName(row.notes_channel_id)}.`);
+});
+
+route('DELETE', '/api/minutes/:id', (context) => {
+  requireStaff(context.session);
+  const row = wantedMeeting(context.params.id);
+  state.meetings = state.meetings.filter((one) => one.id !== row.id);
+  state.meetingLines = state.meetingLines.filter((one) => one.meeting_id !== row.id);
+  logAction('web.minutes.deleted', { details: { meeting: row.id, via: 'website' } });
+  return {
+    deleted: String(row.id),
+    message: `Deleted meeting **#${row.id}** — the notes and the transcript went with it.`,
+  };
 });
 
 // --- guides (G1) ------------------------------------------------------------------------------

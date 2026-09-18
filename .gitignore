@@ -1,5 +1,6 @@
 # Virtualenv + Python noise
 .venv/
+.venv-spike/
 __pycache__/
 *.py[cod]
 *.egg-info/

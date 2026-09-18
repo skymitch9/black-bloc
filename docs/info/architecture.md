@@ -112,18 +112,40 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
-> | What | v131 (`main`, 2026-09-17) | Where it is measured |
+> **2026-09-17 (MEETING MINUTES — the prototype, branch `minutes` off `d739726`; ✅ MERGED `41a9f26`, LIVE as v132 `82c3467` 18:32; nothing has met Discord — `minutes_mode` ships **off**):**
+> cogs **21 → 22** (`cogs/community/minutes.py`), top-level slash commands **31 → 32**
+> (`/minutes`, staff-locked and `HIDDEN_WHEN_OFF`), schema **43 → 44** (measured:
+> `SCHEMA_VERSION`) — `meetings` and `meeting_lines`, new tables through the `SCHEMA`
+> bootstrap, with a PARTIAL UNIQUE INDEX `meetings_one_open ON meetings(guild_id) WHERE
+> ended_at IS NULL` so one guild can only have one meeting open. ⚠️ **Migrate before
+> deploy.** Registry keys **262 → 273** (ten `minutes_*` plus `minutes_log_level`), features
+> **20 → 21**, setting groups **still 25** — every minutes key is `NAMESPACE_OVERRIDE`'d onto
+> **`events`**, because `settings_panel.groups()` is at Discord's cap of 25 and a 26th would be
+> silently dropped off `/settings`; `events` therefore reaches **33** keys and joins `chat` and
+> `modmail` as a group with a **Find…** path. Mock **19 → 20 pages, 180 → 186 routes**, 17
+> core settings. ⚠️ **Four new modules:** `black_bloc/minutes_audio.py` (the pure sink —
+> per-speaker 48 kHz stereo PCM in, one 16 kHz mono WAV per speaker per
+> `minutes_chunk_seconds` out, audio dropped the moment a chunk is handed off),
+> `black_bloc/minutes.py` (the refusals, the transcript, the notes, the staff moves),
+> `black_bloc/minutes_session.py` (one meeting's runtime: the queue, the Whisper worker, how it
+> ends) and `black_bloc/api/tools/minutes.py`; plus `site/public/minutes.html` +
+> `assets/page-minutes.js`. `groq.py` gains `WhisperClient`. **The image gained `libopus0`**
+> (`Dockerfile`) and the package gained `discord.py[voice]` + `discord-ext-voice-recv`; see
+> [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
+> kinds: twelve `minutes.*`, four of them with a `web.` spelling.
+>
+> | What | v132 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
-> | Cogs | **21** (`cogs/community/frontdoor.py` at v125; 20 at v113) | `bot.py:COGS` |
-> | Top-level slash commands | **31** — 15 staff-locked, 16 member-visible (`/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
+> | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
+> | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **43** (v128, `moved_to` on requests / events / modmail_tickets; 42 at v123, 41 at v119) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **266** (was 262 at v129; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Schema version | **44** (v132, `meetings` + `meeting_lines`; 43 at v128, 42 at v123, 41 at v119) | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **277** (was 266 at v131 — the eleven `minutes_*` keys sit under events; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
-> | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **19 pages / 180 routes / 21 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **6479** | the v131 deploy gate |
-> | Deploys | **128**, last `709defe` (v131) at 2026-09-17 18:12 | `../deploys.log` |
+> | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
+> | Mock contract | **20 pages / 186 routes / 21 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
+> | Tests | **6649** (+3 skipped where the receive extension is absent) | the v132 deploy gate |
+> | Deploys | **129**, last `82c3467` (v132) at 2026-09-17 18:32 | `../deploys.log` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 >
@@ -145,6 +167,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v132 `82c3467`, 2026-09-17** | **22** | **32** | **44** | **186** | **6649** |
 > | **v131 `709defe`, 2026-09-17** | **21** | **31** | **43** | **180** | **6479** |
 > | **v130 `d739726`, 2026-09-17** | **21** | **31** | **43** | **180** | **6456** |
 > | **v129 `60958ec`, 2026-09-17** | **21** | **31** | **43** | **180** | **6455** |
@@ -293,7 +316,7 @@ black_bloc/
 │                        LIVE probe (v126): a second loop reads each linked channel's /live
 │                        page and calls the go-live cog's go_live/end_live with
 │                        source=youtube, so the announcement is go-live's, not its own
-├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 34, measured 2026-09-11)
+├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 44 on branch `minutes`, measured 2026-09-17)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
     ├── auth.py      ← Discord OAuth2 + the signed session cookie. The site's ONLY gate.

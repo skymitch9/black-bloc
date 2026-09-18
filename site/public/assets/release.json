@@ -1,10 +1,7 @@
 {
-  "release": "v131",
-  "commit": "1f65834",
+  "release": "v132",
+  "commit": "41a9f26",
   "changed_features": [
-    "core",
-    "guides",
-    "modmail",
-    "request"
+    "guides"
   ]
 }
