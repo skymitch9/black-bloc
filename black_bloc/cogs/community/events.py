@@ -753,12 +753,16 @@ class EventDraftPanel(Panel):
     """The draft the four dropdowns and the text modal write into; nothing here refuses."""
 
     def __init__(self, minutes: int, fields: EventDraft) -> None:
-        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER, again=self.reopen)
         self.fields = fields
 
     @property
     def draft(self) -> WhenDraft:
         return self.fields.when
+
+    async def reopen(self, interaction: discord.Interaction, previous: Any = None) -> None:
+        """Try again lands here: the same `fields`, so the title they typed comes back with it."""
+        await open_draft(interaction, self.fields, previous)
 
     async def rerender(self, interaction: discord.Interaction) -> None:
         await open_draft(interaction, self.fields, self)
@@ -1114,6 +1118,7 @@ async def open_zone_panel(interaction: discord.Interaction, previous: Any, back:
         on_pick=lambda one, name, panel: pick_zone(one, name, panel, back),
         on_other=lambda one, panel: open_zone_modal(one, current, panel, back),
         on_back=back,
+        again=back,
     )
     retire(previous)
     view.message = await interaction.edit_original_response(

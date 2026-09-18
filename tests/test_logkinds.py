@@ -7,6 +7,11 @@ import pytest
 from black_bloc import logkinds
 from black_bloc.logkinds import (
     ALL,
+    ERROR_BUTTON,
+    ERROR_COMMAND,
+    ERROR_KINDS,
+    ERROR_MODAL,
+    ERROR_PANEL,
     FEATURES,
     IMPORTANT,
     IMPORTANT_ONLY,
@@ -43,6 +48,9 @@ ROOT = PACKAGE.parent
 # A call site the table does not cover fails `test_every_dynamic_kind_is_enumerated`
 # by name, which is what stops a new kind going quietly unclassified.
 KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
+    # `record()` writes one row per failure and the surface it failed on names the kind —
+    # four, and only four (`errors-design.md` §A).
+    "black_bloc/command_errors.py::surface": ERROR_KINDS,
     # `posted.py` deletes a message for whoever asked, and the caller names the shadow kind
     # it writes when test mode refuses the channel — two callers, three kinds.
     "black_bloc/posted.py::would_kind": (
@@ -988,6 +996,8 @@ def test_like_patterns_cover_every_head_of_a_feature():
     patterns = like_patterns("rolemenu")
     assert "role.%" in patterns and "web.role.%" in patterns
     assert like_patterns("core") == (
+        "error.%",
+        "web.error.%",
         "settings.%",
         "web.settings.%",
         "commands.%",
@@ -995,3 +1005,31 @@ def test_like_patterns_cover_every_head_of_a_feature():
         "presence.%",
         "web.presence.%",
     )
+
+
+# The `error.*` family (`docs/info/errors-design.md` §A): four kinds, all IMPORTANT, headed
+# core, and offered on the site's Logs page as a filter of their own.
+
+
+def test_every_error_kind_is_important_because_a_failure_is_never_routine():
+    assert ERROR_KINDS == (ERROR_COMMAND, ERROR_PANEL, ERROR_MODAL, ERROR_BUTTON)
+    for kind in ERROR_KINDS:
+        assert is_important(kind), kind
+        assert kind in IMPORTANT and kind not in ROUTINE
+
+
+def test_every_error_kind_is_headed_core_so_it_lands_on_the_dashboard():
+    for kind in ERROR_KINDS:
+        assert feature_of(kind) == "core"
+    assert logkinds.HEADS[logkinds.ERROR_HEAD] == "core"
+
+
+def test_the_logs_page_offers_the_error_family_as_a_filter_of_its_own():
+    """`error.*` is headed core, so without this chip the failures are buried in Core."""
+    assets = ROOT / "site" / "public" / "assets"
+    logs = (assets / "logs.js").read_text(encoding="utf-8")
+    audit = (assets / "page-audit.js").read_text(encoding="utf-8")
+
+    assert f"kind: '{logkinds.ERROR_HEAD}'" in logs
+    assert "label: 'Errors'" in logs
+    assert "entry.kind" in audit
