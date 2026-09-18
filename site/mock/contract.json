@@ -1030,6 +1030,7 @@
         "last_probe_error",
         "probed",
         "quota_today",
+        "botcheck",
         "live_now"
       ]
     },

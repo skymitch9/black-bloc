@@ -294,6 +294,19 @@ async def test_status_says_whether_the_key_is_set_and_how_the_sweep_is_doing(
     assert body["last_probe_at"] == "2026-09-17T13:00:00+00:00"
     assert body["last_probe_error"] is None
     assert body["probed"] == 3 and body["quota_today"] == 0 and body["live_now"] == 0
+    assert body["botcheck"] is False
+
+
+async def test_status_says_when_the_last_probe_was_served_youtubes_bot_check(
+    client, sign_in, web, guild, wf
+):
+    """KI-30: staff can see why a live stream was announced without its video id."""
+    cog = FakeCog(web.db, keyed=True)
+    cog.last_botcheck = True
+    web.cogs["YouTube"] = cog
+    sign_in(client)
+
+    assert client.get("/api/youtube/status").json()["botcheck"] is True
 
 
 async def test_status_says_what_the_live_probe_is_doing_when_the_cog_is_loaded(

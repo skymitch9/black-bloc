@@ -643,6 +643,7 @@ function liveStatus(status) {
     ['Channels probed', `${status.probed || 0}, every ${status.live_minutes} minute(s)`],
     ['Live now', `${status.live_now || 0}, ended after ${status.live_end_misses} quiet probe(s)`],
     ['Quota used today', `${status.quota_today || 0} unit(s)`],
+    ['Bot check', status.botcheck ? badge('yes — that page had no video id', 'warn') : 'no'],
   ];
   return card('How live streams are spotted', [
     el('p', { class: 'field-help', text: LIVE_NOTE }),

@@ -289,6 +289,7 @@ ROUTINE: frozenset[str] = frozenset(
         "golive.unlink",
         "youtube.announce",
         "youtube.link",
+        "youtube.live_id_searched",
         "youtube.live_mode",
         "youtube.live_seen",
         "youtube.mode",

@@ -70,9 +70,13 @@ from ...youtube import (
     where_words,
 )
 from ...youtube_live import (
+    CONFIRM_UNITS,
+    LIVE_ID_UNKNOWN,
     LIVE_URL,
+    SEARCH_UNITS,
     UNREADABLE_EVERY_SECONDS,
     after_probe,
+    channel_info,
     is_over,
     stream_info,
 )
@@ -645,6 +649,7 @@ class YouTube(commands.Cog):
         self.live_misses: dict[str, int] = {}
         self.live_video: dict[str, str] = {}
         self.unreadable_at: dict[str, datetime] = {}
+        self.last_botcheck = False
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name == "live_poller":
@@ -780,6 +785,7 @@ class YouTube(commands.Cog):
                 continue
             worked += 1
             self.probed += 1
+            self.last_botcheck = bool(getattr(probe, "botcheck", False))
             await self._probed(member, channel_id, probe, mode)
         if worked:
             self.last_probe_at = now_iso()
@@ -788,7 +794,7 @@ class YouTube(commands.Cog):
     async def _probed(self, member: Any, channel_id: str, probe: Any, mode: str) -> None:
         if not probe.readable:
             await self._unreadable(member, channel_id)
-        if probe.announceable:
+        if probe.live:
             await self._live_now(member, channel_id, probe, mode)
             return
         await self._not_live(member, channel_id)
@@ -817,20 +823,26 @@ class YouTube(commands.Cog):
 
     async def _live_now(self, member: Any, channel_id: str, probe: Any, mode: str) -> None:
         self.live_misses[channel_id] = 0
-        if self.live_video.get(channel_id) == probe.video_id:
+        known = self.live_video.get(channel_id)
+        if known is not None and (probe.video_id is None or known == probe.video_id):
             return
         guild = member.guild
         if await self._any_open_session(guild, member) is not None:
-            self.live_video[channel_id] = probe.video_id
+            self.live_video[channel_id] = probe.video_id or LIVE_ID_UNKNOWN
             return
-        confirmed = await self._confirm(guild, member, probe.video_id)
-        self.live_video[channel_id] = probe.video_id
+        video_id = probe.video_id or await self._searched(guild, member, channel_id)
+        confirmed = await self._confirm(guild, member, video_id) if video_id else None
+        self.live_video[channel_id] = video_id or LIVE_ID_UNKNOWN
         if confirmed is not None and not confirmed.live:
             return
-        info = stream_info(
-            probe.video_id,
-            getattr(confirmed, "title", ""),
-            getattr(confirmed, "thumbnail", ""),
+        info = (
+            stream_info(
+                video_id,
+                getattr(confirmed, "title", ""),
+                getattr(confirmed, "thumbnail", ""),
+            )
+            if video_id
+            else channel_info(channel_id)
         )
         await log_action(
             self.bot,
@@ -839,14 +851,41 @@ class YouTube(commands.Cog):
             target=member,
             details={
                 "channel_id": channel_id,
-                "video_id": probe.video_id,
+                "video_id": video_id,
                 "url": info.url,
                 "title": info.title,
                 "confirmed": confirmed is not None,
+                "botcheck": bool(getattr(probe, "botcheck", False)),
                 "mode": mode,
             },
         )
         await self._go_live(guild, member, info)
+
+    async def _searched(self, guild: Any, member: Any, channel_id: str) -> str | None:
+        """100 units, on the transition only: the bot-check page carries no canonical link."""
+        if not getattr(self.client, "keyed", False):
+            return None
+        self._spent(SEARCH_UNITS)
+        try:
+            found = await self.client.search_live(channel_id)
+        except YouTubeError as exc:
+            log.warning("youtube: could not search %s for its live video: %s", channel_id, exc)
+            await log_action(
+                self.bot,
+                guild,
+                "youtube.live_search_failed",
+                target=member,
+                details={"channel_id": channel_id, "units": SEARCH_UNITS, "reason": str(exc)},
+            )
+            return None
+        await log_action(
+            self.bot,
+            guild,
+            "youtube.live_id_searched",
+            target=member,
+            details={"channel_id": channel_id, "units": SEARCH_UNITS, "video_id": found},
+        )
+        return found
 
     async def _not_live(self, member: Any, channel_id: str) -> None:
         guild = member.guild
@@ -862,7 +901,7 @@ class YouTube(commands.Cog):
         """One unit, only where a key exists; a refusal is said out loud and announced anyway."""
         if not getattr(self.client, "keyed", False):
             return None
-        self._spent()
+        self._spent(CONFIRM_UNITS)
         try:
             return await self.client.confirm_live(video_id)
         except YouTubeError as exc:
@@ -876,12 +915,12 @@ class YouTube(commands.Cog):
             )
             return None
 
-    def _spent(self) -> None:
+    def _spent(self, units: int = CONFIRM_UNITS) -> None:
         today = datetime.now(UTC).date().isoformat()
         if self.confirms_day != today:
             self.confirms_day = today
             self.confirms = 0
-        self.confirms += 1
+        self.confirms += int(units)
 
     async def _go_live(self, guild: Any, member: Any, info: Any) -> None:
         goer = getattr(self._golive(), "go_live", None)
@@ -930,7 +969,7 @@ class YouTube(commands.Cog):
                 "youtube: could not check whether %s is still live (%s)", channel_id, exc
             )
             return None
-        return probe.announceable if probe.readable else None
+        return probe.live if probe.readable else None
 
     def _live_mode(self, guild_id: int) -> str:
         return self.bot.store.get(guild_id, "youtube_live_mode")
@@ -1320,6 +1359,7 @@ async def live_health(bot: Any, guild: Any) -> dict[str, Any]:
         or (None if cog is not None else FEATURE_MISSING),
         "probed": int(getattr(cog, "probed", 0) or 0),
         "quota": int(getattr(cog, "confirms", 0) or 0),
+        "botcheck": bool(getattr(cog, "last_botcheck", False)),
         "open": open_now,
     }
 

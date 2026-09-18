@@ -1,6 +1,6 @@
 # YouTube live — a poller that catches a linked channel going live, feeding the go-live path
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v126** — merge `99c307c`, release `e537b2c`, deployed **2026-09-17 14:45** Phoenix; `youtube_live_mode` ships OFF (the owner flips it); the `## Deviations` foot is the truth where it departs from the body; sweeps **534–542** are the owner's; KI-30. Was: 📐 DESIGN, dispatching to Opus 13:3x. **Last verified: 2026-09-17 13:29**
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v126, the datacenter fix LIVE as v133** (merge `858feeb`, release `b20e4dc`, 2026-09-17 18:44 — deviations 15–23 are the truth behind the wall; verified live: the bot's own probe_live, run inside the Fly container 18:5x, read Pawpette as live=True / video_id=None / botcheck=True (the wall page: isLive once, canonical href="undefined"); the site's status showed botcheck true, probed 2, quota 0, live_now 0 — nothing announced because her TWITCH go-live session #139 was still open (the one-announcement-per-person rule), and that path writes no row, so the probe's success was invisible — follow-up dispatched.) · v126: — merge `99c307c`, release `e537b2c`, deployed **2026-09-17 14:45** Phoenix; `youtube_live_mode` ships OFF (the owner flips it); the `## Deviations` foot is the truth where it departs from the body; sweeps **534–542** are the owner's; KI-30. ⚠️ **A FIX is in flight on branch `youtube-live-fix` (off `main` `ddd6fdc`, NOT merged, NOT deployed): from Fly's datacenter address YouTube serves a bot-check page with no canonical link, so v126 announced nothing at all — Deviations ▸ *The datacenter page*, sweeps 586–590, KI-30 rewritten.** Was: 📐 DESIGN, dispatching to Opus 13:3x. **Last verified: 2026-09-17 13:29**
 > against `main` `c56962f`: `black_bloc/youtube.py` (`YouTubeClient`, the uploads feed, `youtube_*` keys, the
 > linked-channel rows), `cogs/content/golive.py` (`_go_live`, `_go_live_once(member, info, source)`,
 > `_end_live`, the Helix poller at ~1137, `source` ∈ {`twitch`, `presence`}), `config.youtube_api_key`, KI-11, and
@@ -171,3 +171,64 @@ choice open it is decided here and marked ✅ DECIDED.*
     `PYTHONPATH`s in their parent `env.exe` command lines.** A second run at `-n 8` passed in 52 s
     while the other build's `-n auto` was still going — that is the neighbourly setting when two
     builds share the machine.
+
+### The datacenter page (fix) — 2026-09-17, branch `youtube-live-fix` off `main` `ddd6fdc`
+
+*§A's probe was written against a page a HOME machine gets. Measured by the conductor 2026-09-17
+18:14–18:20, from the Fly machine (a datacenter address), the same URL answers **200** with
+YouTube's **"Sign in to confirm you're not a bot"** page: `ytInitialData` present (so §A item 3's
+readability marker says READABLE and no `probe_unreadable` row is written), `"isLive":true` present
+**once** for a live channel and **absent** for an offline one (so the live signal SURVIVES the
+wall), **no `<link rel="canonical">` at all**, and about **180** `"videoId"` fields belonging to
+unrelated videos — the first of which is NOT the live stream. `quota_today` stayed 0 and both
+`probe_all` runs reported no error: the feature simply went quiet, which is exactly the shape KI-30
+was filed to watch for. The same page from a home machine was 200, ~1.29 MB, `"isLive":true` ×2,
+canonical present.*
+
+15. **The `"videoId"` fallback is GONE; `video_id` comes ONLY from the canonical link.** Deviation
+    9's original page carried both and the fallback looked free. On the bot-check page it is
+    actively wrong — it hands back a stranger's video, which would be announced as the streamer's
+    stream. A reading that can be confidently wrong is worse than one that is absent, so
+    `read_page` now returns `video_id=None` there and the caller deals with it.
+16. **A third probe OUTCOME: *live, id unknown*.** `Probe.announceable` (live AND an id) is
+    unchanged, but the cog no longer routes on it — it routes on `probe.live`, and
+    `live and not video_id` is its own path. `announceable` stays the honest two-part reading §A
+    wanted; the cog is where the two are reconciled.
+17. **With a key, ONE `search.list(part=id, channelId, eventType=live, type=video, maxResults=1)`
+    — 100 units — on the TRANSITION only.** §A ruled the search out as a POLLER (144,000 units a
+    day for ten channels). It is affordable as a one-off: the channel is remembered as live
+    (`live_video[channel_id]`, with `LIVE_ID_UNKNOWN` = `"?"` as the sentinel when even the search
+    could not say), so the next probe searches nothing. ⚠️ **A day with one linked channel that
+    goes live once costs 101 units of 10,000** — 100 for the search, 1 for the existing confirm.
+    Ten channels each going live once is 1,010. The row that catches a regression here is sweep
+    **`YL-m`**: a quota climbing by 100 per probe is the bug.
+18. **Without a key, the announcement is the CHANNEL's own `/live` page.** `channel_info()` builds
+    `StreamInfo(url=https://www.youtube.com/channel/<id>/live, title=None, game=None,
+    thumbnail_url=None)`, so the card reads **Live now** (`EMBED_NO_TITLE`) over a working link to
+    whatever is playing, with no thumbnail — `YOUTUBE_THUMBNAIL` needs a video id and guessing one
+    would be the same lie as item 15. This is the keyless shape of Deviation 1, one step further.
+19. **`Probe.botcheck` exists, and it is a REPORTING field only.** It never changes what is
+    announced. It reaches `live_health()` as `botcheck` (the LAST probe, not a tally), and from
+    there both the `/youtube` panel's staff half and `/api/youtube/status`, plus one row on the
+    Go-live page's **How live streams are spotted** card — the surfaces were already one function,
+    so the field cost one line each. It also travels in the `youtube.live_seen` /
+    `would_live_seen` details, which is where a later session will read why an id was missing.
+20. **Two log kinds, not one.** §3 of the brief asked for `youtube.live_id_searched` (ROUTINE,
+    carrying `channel_id`, `units: 100` and the id). `youtube.live_search_failed` was added beside
+    it — IMPORTANT by the `_failed` suffix, no table edit — because a search that refuses falls
+    back to the keyless announcement, and a fallback nobody can see is the silent-failure the
+    review checklist exists to stop. It mirrors `youtube.live_confirm_failed` exactly.
+21. **`is_live_now()` now answers `probe.live`, not `probe.announceable`.** The reconcile asks *is
+    this member still live*, and behind the wall the honest answer is yes-with-no-id. Left as it
+    was, a restart inside a stream would have read the wall as offline and ended the session —
+    the exact failure Deviation 8 and checklist 4 were about, arriving by a different door.
+22. **`self.confirms` now counts UNITS, not confirms.** It is what `quota_today` reads, and a
+    counter labelled *quota used today* that ignores the 100-unit call would be a measurement
+    wearing another's clothes. `_spent(units)` takes the number; the attribute keeps its name so
+    nothing else moves.
+23. **The two new fixtures are named `youtube_botcheck_live_page.html` and
+    `youtube_botcheck_offline_page.html`**, not the brief's `botcheck_live.html` — the family in
+    `tests/fixtures/` is `youtube_*_page.html` and one odd name out is how a directory stops being
+    scannable. Both are hand-written from the measured markers (1,317 and 1,155 bytes), not
+    captures; ⚠️ **no real bot-check page was ever saved to this repo** and this build could not
+    reach one — every claim above about the wall is the conductor's measurement, not the build's.

@@ -9,14 +9,17 @@ from .golive import YOUTUBE, YOUTUBE_THUMBNAIL, StreamInfo
 LIVE_URL = "https://www.youtube.com/channel/{channel_id}/live"
 WATCH_URL = "https://www.youtube.com/watch?v={video_id}"
 UNREADABLE_EVERY_SECONDS = 3600
+SEARCH_UNITS = 100
+CONFIRM_UNITS = 1
+LIVE_ID_UNKNOWN = "?"
 
 IS_LIVE = re.compile(r'"isLive"\s*:\s*true')
 IS_UPCOMING = re.compile(r'"isUpcoming"\s*:\s*true')
 CANONICAL_WATCH = re.compile(
     r'<link\s+rel="canonical"\s+href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"'
 )
-VIDEO_ID = re.compile(r'"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"')
 READABLE = re.compile(r'ytInitialData|<link\s+rel="canonical"')
+BOT_CHECK = re.compile(r"Sign in to confirm")
 
 THUMBNAIL_ORDER = ("maxres", "standard", "high", "medium", "default")
 
@@ -26,12 +29,13 @@ CONFIRM_REFUSED = "YouTube's API said nothing about {video_id}."
 
 @dataclass(frozen=True)
 class Probe:
-    """The two facts the /live page is read for, and whether it was readable at all."""
+    """The facts the /live page is read for, and whether it was readable at all."""
 
     live: bool = False
     upcoming: bool = False
     video_id: str | None = None
     readable: bool = False
+    botcheck: bool = False
 
     @property
     def announceable(self) -> bool:
@@ -65,12 +69,13 @@ def read_page(html: Any) -> Probe:
         return Probe()
     upcoming = IS_UPCOMING.search(body) is not None
     live = IS_LIVE.search(body) is not None and not upcoming
-    found = CANONICAL_WATCH.search(body) or VIDEO_ID.search(body)
+    found = CANONICAL_WATCH.search(body)
     return Probe(
         live=live,
         upcoming=upcoming,
         video_id=found.group(1) if found else None,
         readable=True,
+        botcheck=BOT_CHECK.search(body) is not None,
     )
 
 
@@ -111,6 +116,18 @@ def read_confirm(payload: Any, video_id: Any = "") -> Confirm | None:
     )
 
 
+def read_search(payload: Any) -> str | None:
+    """One `search.list` answer; anything that is not a video id reads as nothing found."""
+    if not isinstance(payload, dict):
+        return None
+    for row in payload.get("items") or ():
+        found = row.get("id") if isinstance(row, dict) else None
+        video_id = str(found.get("videoId") or "").strip() if isinstance(found, dict) else ""
+        if video_id:
+            return video_id
+    return None
+
+
 def after_probe(misses: Any, live: Any) -> int:
     """A live read clears the count; anything else adds one, so a hiccup never ends a stream."""
     return 0 if live else max(0, int(misses or 0)) + 1
@@ -132,4 +149,15 @@ def stream_info(
         platform=YOUTUBE,
         thumbnail_url=str(thumbnail or "").strip()
         or YOUTUBE_THUMBNAIL.format(video=wanted),
+    )
+
+
+def channel_info(channel_id: Any) -> StreamInfo:
+    """Live, id unknown: the channel's own /live page is a valid link to whatever is playing."""
+    return StreamInfo(
+        url=LIVE_URL.format(channel_id=str(channel_id or "")),
+        game=None,
+        title=None,
+        platform=YOUTUBE,
+        thumbnail_url=None,
     )

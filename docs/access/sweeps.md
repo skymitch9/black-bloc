@@ -10,7 +10,16 @@
 > thing it must never show is a GREEN bot still saying *"restarting"*. Lettered rather than
 > numbered because `main` took **586–590** for the YouTube live fix while this was building;
 > they are renumbered at the merge. Before that,
-> **2026-09-17** — rows **`ST-a` … `ST-k`** added at the foot for the SEND TO… build (branch
+> **2026-09-17** — rows **`YL-j` … `YL-n`** (numbered **586–590** — 572–585 went to the minutes rows the same evening) added at the foot for the YOUTUBE
+> LIVE FIX build (branch `youtube-live-fix`, off `main` `ddd6fdc`; design
+> `info/youtube-live-design.md` ▸ Deviations ▸ *The datacenter page*; ⚠️ **not merged, not deployed,
+> and NOT runnable from a laptop — every row needs the live bot on Fly**, because the defect is the
+> address the request comes from): from a datacenter address YouTube serves the *Sign in to confirm
+> you're not a bot* wall, which still says `"isLive":true` but carries no canonical link, so the id
+> is searched for (100 units, once per broadcast) or the channel's own `/live` page is announced.
+> ⚠️ **`YL-j` is the row that matters** — before this fix a live channel produced NO row at all, and
+> **`YL-m`** is the one that catches the expensive failure (a quota climbing by 100 every probe).
+> Before that, **2026-09-17** — rows **`ST-a` … `ST-k`** added at the foot for the SEND TO… build (branch
 > `send-to`, off `main` `8a27840`; design `info/send-to-design.md`; ⚠️ **not merged, not
 > deployed, and nothing in it has met Discord — no draft has been opened from a request and no
 > confirm DM has been sent**): staff can send a request to events, an event back to requests,
@@ -1846,6 +1855,21 @@ https://blackbloc.heygabi.ai/modmail.html · https://blackbloc.heygabi.ai/settin
 | **569** (was `ER-e`) | When a panel or a modal fails, read the sentence Black Bloc sends | It says it has been logged **for staff** and carries one **Try again** button. Press it: the card you were on comes back with everything you had typed, and the error message disappears |
 | **570** (was `ER-f`) | Leave a **Try again** sentence for more than `error_retry_minutes` (default 10), then press it | It says the button has run out and names the command to run instead. Nothing crashes and nothing is lost that was already stored |
 | **571** (was `ER-g`) | Settings page ▸ **core** ▸ change **What the Try again button is called** and **How long a Try again button keeps working**, save, then cause an error | The button wears the new label and lives for the new number of minutes. `/settings` ▸ **A setting group…** ▸ **core** reaches the same four keys |
+
+## YouTube LIVE from the SERVER's address — the bot-check page (`YL-j` … `YL-n`, branch `youtube-live-fix`, design [`../info/youtube-live-design.md`](../info/youtube-live-design.md) ▸ Deviations ▸ *The datacenter page*)
+
+⚠️ **These rows can only be run against the LIVE bot on Fly**, because the whole defect is the
+address the request comes from: a home machine gets the real page, Fly gets YouTube's *Sign in to
+confirm you're not a bot* wall. Nothing here reproduces on a laptop. `youtube_live_mode` must be
+`shadow` or `on`, and a channel must be linked.
+
+| Row | Do | Expect |
+|---|---|---|
+| **586** (was `YL-j`) | ⚠️ **The row this fix exists for.** With the linked streamer LIVE on YouTube, wait `youtube_live_poll_minutes`, then open the dashboard's **Logs** ▸ YouTube | A `youtube.live_seen` (or `would_live_seen`) row appears. Before this fix there was NOTHING at all — measured 2026-09-17 18:14, the probe read the wall, found no video id and announced nothing |
+| **587** (was `YL-k`) | Open that row's Summary | It carries `botcheck: true`. That is the wall saying so out loud. With `YOUTUBE_API_KEY` set there is also a `youtube.live_id_searched` row a second earlier, reading `units: 100` and the video id it found |
+| **588** (was `YL-l`) | Open the go-live post itself | **With a key:** the ordinary card, the real `watch?v=…` link, the title and the thumbnail — indistinguishable from a stream spotted from a home address. **Without a key:** the link is the channel's own `/live` page, the title reads **Live now** and there is no thumbnail. Both are correct; the key is what buys the id |
+| **589** (was `YL-m`) | Leave the stream running for half an hour and watch the quota line on the **Go-live** page ▸ **How live streams are spotted** | **Quota used today** goes to **101** and STAYS there — 100 for the one search plus 1 for the confirm. ⚠️ A number climbing by 100 every probe is the bug this row exists to catch; 10,000 a day is the whole allowance and 100 per probe would burn it before lunch |
+| **590** (was `YL-n`) | On the same card, read **Bot check** | *yes — that page had no video id* while the wall is being served, *no* once it is not. The same line is on `/youtube`'s staff half. It is the only place that explains why a card ever reads *Live now* with a key set |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
