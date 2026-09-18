@@ -192,7 +192,7 @@
 > [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
 > kinds: twelve `minutes.*`, four of them with a `web.` spelling.
 >
-> | What | v139 (`main`, 2026-09-18) | Where it is measured |
+> | What | v140 (`main`, 2026-09-18) | Where it is measured |
 > |---|---|---|
 > | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
 > | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
@@ -202,8 +202,8 @@
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **20 pages / 186 routes / 24 core settings** on branch `youtube-uploads-removal` (187 on `main` at v138, minus `GET /api/youtube/videos`) (21 core at v133) (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — re-RUN 2026-09-18 against a mock on a spare port |
-> | Tests | **6720** (+3 skipped where the receive extension is absent) | the v139 deploy gate |
-> | Deploys | **136**, last `fad4e50` (v139) at 2026-09-18 10:05 | `../deploys.log` |
+> | Tests | **6720** (+3 skipped where the receive extension is absent) | the v140 deploy gate |
+> | Deploys | **137**, last `413f939` (v140) at 2026-09-18 16:38 | `../deploys.log` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 >
@@ -225,6 +225,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v140 `413f939`, 2026-09-18** | **22** | **32** | **45** | **186** | **6720** |
 > | **v139 `fad4e50`, 2026-09-18** | **22** | **32** | **45** | **186** | **6720** |
 > | **v138 `9e2298c`, 2026-09-17** | **22** | **32** | **45** | **187** | **6808** |
 > | **v137 `a16f5e5`, 2026-09-17** | **22** | **32** | **45** | **187** | **6793** |

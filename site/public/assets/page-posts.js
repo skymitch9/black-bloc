@@ -1,5 +1,6 @@
 import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { htmlToDiscordMarkdown } from './clipmd.js';
 import { renderPreview } from './discordmd.js';
 import { logsSection } from './logs.js';
 import {
@@ -56,6 +57,12 @@ const NO_SHADOW_CHANNEL = 'no shadow channel yet';
 const SHADOW = 'shadow';
 const PIN_WORDS = { true: 'pins it', false: 'leaves it unpinned' };
 const STYLE_WORDS = { plain: 'a plain message', embed: 'an embed' };
+// Site words, not posted words: the "every word the bot posts is editable on the site" rule
+// is about what Discord shows. These three are the dashboard talking to staff.
+const PASTE_HINT = 'Paste keeps formatting';
+const PASTE_KEPT = 'Pasted with formatting kept (headings, bold, bullets, links). '
+  + 'Undo with Ctrl+Z.';
+const PASTE_DISMISS = 'Dismiss';
 const DELETE_QUESTION = 'Every word goes with it. Nothing puts it back.';
 const RESET_QUESTION = 'Every word goes back to the message Black Bloc ships with. Anything '
   + 'written here is lost; the channel, the style and the pin are kept.';
@@ -214,6 +221,58 @@ function counterNode() {
   return node;
 }
 
+function pasteNoteNode() {
+  const node = el('p', { class: 'notice pastenote' }, [
+    el('span', { text: PASTE_KEPT }),
+    ' ',
+    el('button', {
+      class: 'say-nothing-do',
+      type: 'button',
+      text: PASTE_DISMISS,
+      on: { click: () => { node.hidden = true; } },
+    }),
+  ]);
+  node.hidden = true;
+  node.show = () => { node.hidden = false; };
+  return node;
+}
+
+/** `insertText` is what keeps Ctrl+Z working; `setRangeText` is the fallback that may not. */
+function insertAtCaret(node, text) {
+  node.focus();
+  try {
+    if (document.execCommand && document.execCommand('insertText', false, text)) return;
+  } catch (error) {
+    // fall through to the range write
+  }
+  const from = node.selectionStart === null || node.selectionStart === undefined
+    ? node.value.length
+    : node.selectionStart;
+  const to = node.selectionEnd === null || node.selectionEnd === undefined ? from : node.selectionEnd;
+  node.setRangeText(text, from, to, 'end');
+}
+
+/** The markdown a rich paste is worth, or '' when the clipboard has nothing plain text lacks. */
+function markdownFromPaste(event) {
+  const data = event.clipboardData || (typeof window === 'undefined' ? null : window.clipboardData);
+  if (!data) return '';
+  let html = '';
+  try {
+    html = data.getData('text/html') || '';
+  } catch (error) {
+    return '';
+  }
+  if (!html.trim()) return '';
+  let made = '';
+  try {
+    made = htmlToDiscordMarkdown(html);
+  } catch (error) {
+    return '';
+  }
+  const plain = String(data.getData('text/plain') || '').replace(/\r\n/g, '\n').trim();
+  return made && made !== plain ? made : '';
+}
+
 function willPost(draft, post, payload) {
   if (payload.mode === SHADOW) {
     const where = shadowWords(payload.shadow);
@@ -272,6 +331,7 @@ async function editor(payload, known) {
 
   const box = el('textarea', { class: 'input area postbox', id: 'post-body', rows: '18', spellcheck: 'true' });
   box.value = draft.body;
+  const pasteNote = pasteNoteNode();
   const counter = counterNode();
   const preview = el('div', { class: 'preview', id: 'post-preview' });
   const howLine = el('p', { class: 'field-help', id: 'post-how' });
@@ -304,6 +364,16 @@ async function editor(payload, known) {
     draft.body = box.value;
     refreshBar();
     schedule();
+  });
+  box.addEventListener('paste', (event) => {
+    const made = markdownFromPaste(event);
+    if (!made) return;
+    event.preventDefault();
+    insertAtCaret(box, made);
+    draft.body = box.value;
+    refreshBar();
+    paintPreview();
+    pasteNote.show();
   });
   style.addEventListener('change', () => {
     draft.style = style.value;
@@ -442,10 +512,14 @@ async function editor(payload, known) {
       el('div', { class: 'postgrid' }, [
         el('div', { class: 'postcol' }, [
           el('div', { class: 'postboxhead' }, [
-            el('label', { class: 'field-label', for: 'post-body', text: 'The message' }),
+            el('span', { class: 'postboxlabel' }, [
+              el('label', { class: 'field-label', for: 'post-body', text: 'The message' }),
+              el('span', { class: 'field-help pastehint', text: PASTE_HINT }),
+            ]),
             counter,
           ]),
           box,
+          pasteNote,
         ]),
         el('div', { class: 'postcol' }, [
           el('div', { class: 'postboxhead' }, [

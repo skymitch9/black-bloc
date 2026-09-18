@@ -8,6 +8,15 @@
 > live bot restarting on Fly. Rows are lettered; the conductor numbers them at the merge.
 > ⚠️ **Nothing else in this file was re-checked then.** Before that,
 > **2026-09-18** — rows **`YU-a` … `YU-d`** added at the foot for the YOUTUBE UPLOADS REMOVAL
+> **2026-09-18 16:2x** — rows **`PP-a` … `PP-c`** added at the foot for the POST EDITOR'S PASTE
+> CONVERTER (branch `posts-paste`, off `main` `0b4e7c4`; design
+> [`../info/posts-paste-design.md`](../info/posts-paste-design.md); ⚠️ **not merged, not deployed,
+> and NO BROWSER HAS PASTED ANYTHING** — these three rows are the only proof that will ever exist
+> that a real Google Docs clipboard converts). Owner: *"the formatting was lost when copying from
+> google drive"*. They are the WEBSITE only — a Discord modal never sees the clipboard, so pasting
+> into the `/posts` modal still loses formatting and that is not a bug. Rows are lettered; the
+> conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked then.** Before
+> that, **2026-09-18** — rows **`YU-a` … `YU-d`** added at the foot for the YOUTUBE UPLOADS REMOVAL
 > (branch `youtube-uploads-removal`, off `main` `9bc1982`; design
 > [`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md); ⚠️ **not
 > merged, not deployed, and nothing in it has met Discord or a browser**). Owner: *"the youtube
@@ -2036,5 +2045,25 @@ worktree holds no token, no bot was booted, and the fix is proved by the suite a
 
 | Row | Do | Expect |
 |---|---|---|
-| **`RO-a`** | Restart the machine (`flyctl machine restart <id>`, or any deploy) with `frontdoor_mode` **on** and the door posted in `#welcome`. When it is back, look at `#welcome`, then open the Logs page (or `/settings` ▸ Logs) filtered to the boot minute | **Exactly ONE front door** in `#welcome` and **no stray Open-a-ticket message** under it. The log holds **one** `frontdoor.posted`-family row for that boot at most — on a healthy restart, where the door is still up, it holds **none of them at all**, because the sweep found its message and left it alone. ⚠️ **No `frontdoor.duplicate_seen` and no `modmail.panel_duplicate_seen` row.** If one IS there, the guard fired: it names the stored id and every other id it found, nothing was deleted, and the two messages are waiting for you to pick which one stays |
-| **`RO-b`** | On the same boot, open an event that has been denied or cancelled for longer than the retention window and whose review room has already been deleted, then read the Logs page's events rows for the boot minute | **One** `event.room_forgotten` row for that event, never two. The event's card says **The review channel** is gone and the row keeps its status |
+| **616** (was `RO-a`) | Restart the machine (`flyctl machine restart <id>`, or any deploy) with `frontdoor_mode` **on** and the door posted in `#welcome`. When it is back, look at `#welcome`, then open the Logs page (or `/settings` ▸ Logs) filtered to the boot minute | **Exactly ONE front door** in `#welcome` and **no stray Open-a-ticket message** under it. The log holds **one** `frontdoor.posted`-family row for that boot at most — on a healthy restart, where the door is still up, it holds **none of them at all**, because the sweep found its message and left it alone. ⚠️ **No `frontdoor.duplicate_seen` and no `modmail.panel_duplicate_seen` row.** If one IS there, the guard fired: it names the stored id and every other id it found, nothing was deleted, and the two messages are waiting for you to pick which one stays |
+| **617** (was `RO-b`) | On the same boot, open an event that has been denied or cancelled for longer than the retention window and whose review room has already been deleted, then read the Logs page's events rows for the boot minute | **One** `event.room_forgotten` row for that event, never two. The event's card says **The review channel** is gone and the row keeps its status |
+## A GOOGLE DOC PASTED INTO A POST KEEPS ITS FORMATTING (`PP-a` … `PP-c`, branch `posts-paste`, design [`../info/posts-paste-design.md`](../info/posts-paste-design.md))
+
+Owner, 2026-09-18 16:0x: *"the formatting was lost when copying from google drive"*. ⚠️ **Nothing
+below has ever been done in a browser** — no real Google Docs clipboard has been pasted into the
+box even once, and every fixture behind this build is hand-written markup in the shape Docs is
+*known* to emit, not a capture from the owner's own document. `PP-a` is the row that turns that
+from a claim into a fact.
+
+⚠️ **This is the WEBSITE only, and it cannot ever be `/posts`.** A Discord modal never sees the
+clipboard — the client hands the bot the finished string on submit. Pasting into the `/posts` edit
+modal still loses everything, and that is not a bug to file.
+
+These rows need nothing turned on: no key, no mode, no schema. Go to **Runs the server** ▸
+**Posts** ▸ any post (https://blackbloc.heygabi.ai/posts.html).
+
+| Row | Do | Expect |
+|---|---|---|
+| **613** (was `PP-a`) | Open a Google Doc with a **heading**, some **bold**, some *italic*, a bulleted list with one item indented under another, a numbered list and a link whose words are not the address. Select all of it, copy, then click into **The message** box on a post and paste | The box fills with markdown, not flat text: `# ` before the heading, `**` around the bold words, `*` around the italic ones, `- ` on each bullet with **two spaces** of indent on the nested one, `1. ` / `2. ` on the numbered list, and the link as `[words](https://…)`. **What Discord will show** beside it redraws immediately with the heading big, the bold bold and the bullets as bullets. Under the box: *"Pasted with formatting kept (headings, bold, bullets, links). Undo with Ctrl+Z."* with a **Dismiss** that hides it. ⚠️ **The whole document must NOT be bold** — if it is, the `docs-internal-guid` wrapper got through and that is the bug to report. Beside the **The message** label, **Paste keeps formatting** |
+| **614** (was `PP-b`) | In Notepad (or the Discord message box), type a plain line with no formatting, copy it, and paste it into the same box | The words land exactly as they were — **no `**`, no `#`, nothing added** — and ⚠️ **no note appears under the box at all**. Do the same with a line copied from a Google Doc that has no formatting in it: same result, still no note. The counter moves by the number of characters you pasted and nothing else on the page changes |
+| **615** (was `PP-c`) | Straight after the `PP-a` paste, press **Ctrl+Z** once | The pasted markdown comes out again and the box is exactly what it was before the paste — including anything you had selected when you pasted, which comes back selected. The preview follows it back. Press **Ctrl+Y** (or Ctrl+Shift+Z): the markdown returns. Nothing was saved by any of this — the save bar still says the same number of changes it said before you pressed anything, and **Discard** puts the whole box back to the saved post |

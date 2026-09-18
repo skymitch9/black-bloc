@@ -2239,6 +2239,10 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 }
 .postcol { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .postboxhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.postboxlabel { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.pastehint { white-space: nowrap; }
+.pastenote { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.pastenote[hidden] { display: none; }
 .counter { color: var(--et-muted); font-family: var(--et-font-mono); font-size: var(--et-ui-2xs); }
 .counter[data-tone="warn"] { color: var(--et-warn); }
 .counter[data-tone="danger"] { color: var(--et-danger); }

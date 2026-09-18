@@ -17,6 +17,10 @@
 > `check.mjs` → `git push` through `cmd /c` → `flyctl deploy --ha=false --remote-only
 > --yes` → the `deploys.log` skeleton line; escape hatch `BLACKBLOC_SKIP_GATE=1`).
 > The suite it runs is **5,546 tests in 40 s** (measured today, `-n auto`).
+> **2026-09-18, gate step only:** the chain above also runs **three** node fixture files after
+> `check.mjs`, each with its own `REFUSED` line — `discordmd.test.mjs`, `labels.test.mjs` and
+> (new, branch `posts-paste`) **`clipmd.test.mjs`**, the post editor's paste converter. ⚠️ Nothing
+> else on this page was re-checked at that pass and no deploy was run.
 > ⚠️ **NOT re-run today:** every command body below — first launch, rotate, SFTP, scale
 > — and nothing in this pass touched the live Fly app, Discord or a browser. The
 > first-launch sequence was RUN on 2026-08-26, in this order, and the bot logged in from
@@ -95,7 +99,10 @@ never run `fly launch` — it rewrites the file.
 # Dockerfile build ships what is on disk). It runs ruff -> the full test suite (-n auto)
 # -> an ES-module parse of every site/public/assets/*.js (the labels.js incident: plain
 # `node --check` parses a .js file as CommonJS and PASSED the file that blanked every
-# dashboard page) -> node site/mock/check.mjs -> git push origin main -> flyctl deploy, then appends a
+# dashboard page) -> node site/mock/check.mjs -> the three node fixture files, each its own
+# REFUSED line: site/mock/discordmd.test.mjs (the preview renderer), labels.test.mjs (what a
+# key and a channel are CALLED) and clipmd.test.mjs (the post editor's paste converter)
+# -> git push origin main -> flyctl deploy, then appends a
 # SKELETON line to docs/deploys.log that you must EDIT (what shipped; verified: what
 # was checked) and commit. Escape hatch BLACKBLOC_SKIP_GATE=1 - emergencies only.
 .\scripts\deploy.ps1

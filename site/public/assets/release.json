@@ -1,11 +1,7 @@
 {
-  "release": "v139",
-  "commit": "bdc50c4",
+  "release": "v140",
+  "commit": "698f33a",
   "changed_features": [
-    "core",
-    "golive",
-    "guides",
-    "selftest",
-    "youtube"
+    "posts"
   ]
 }

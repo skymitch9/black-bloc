@@ -41,3 +41,6 @@ jobs:
 
       - name: Labels
         run: node site/mock/labels.test.mjs
+
+      - name: Paste converter
+        run: node site/mock/clipmd.test.mjs
