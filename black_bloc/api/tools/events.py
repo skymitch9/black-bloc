@@ -24,9 +24,11 @@ from ...events import (
     ends_at,
     events_by_status,
     get_event,
+    make_forum,
     moved_words,
     read_where,
     rename_channel,
+    review_kind,
     update_event,
     where_said,
 )
@@ -73,6 +75,10 @@ EDITED = "Saved, and the review channel's name follows the title."
 NO_ROOM = (
     "Event **#{event_id}** has no room of its own any more, so there was nothing to remove."
 )
+NO_POST = (
+    "Event **#{event_id}** has no post of its own any more, so there was nothing to remove."
+)
+NO_PLACE: dict[str, str] = {"room": NO_ROOM, "post": NO_POST}
 
 
 def event_row(guild: Any, row: Any) -> dict[str, Any]:
@@ -107,6 +113,7 @@ def event_row(guild: Any, row: Any) -> dict[str, Any]:
         "review_channel_id": (
             str(row["review_channel_id"]) if row["review_channel_id"] else None
         ),
+        "review_kind": review_kind(row),
         "created_at": row["created_at"],
     }
 
@@ -123,6 +130,21 @@ def build_router(bot: Any) -> APIRouter:
     router = APIRouter(
         prefix="/api/events", tags=["events"], dependencies=[Depends(staff_dependency(bot))]
     )
+
+    @router.post("/forum")
+    async def event_forum_make(request: Request) -> dict[str, Any]:
+        """**Make the forum**, from the website — the same one path `/event` presses."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await make_forum(bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE)
+        if not outcome.ok:
+            raise Refused(outcome.status or 400, outcome.code, outcome.message)
+        return {
+            "made": True,
+            "channel_id": str(outcome.value),
+            "message": outcome.message,
+        }
 
     @router.get("")
     async def events_index(status: str = "") -> list[dict[str, Any]]:
@@ -273,7 +295,9 @@ def build_router(bot: Any) -> APIRouter:
         require_db(bot)
         row = await wanted_event(bot, guild, event_id)
         if not row["review_channel_id"]:
-            raise Refused(409, "no_room", NO_ROOM.format(event_id=event_id))
+            raise Refused(
+                409, "no_room", NO_PLACE[review_kind(row)].format(event_id=event_id)
+            )
         said, gone = await delete_room(
             bot,
             guild,

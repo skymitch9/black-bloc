@@ -1,4 +1,4 @@
-import { api, listOf, names, refChannels, send } from './api.js';
+import { api, listOf, names, refChannels, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
 import {
@@ -32,8 +32,21 @@ const TONE = { pending: 'warn', approved: 'ok', denied: null, cancelled: null };
 const HERE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const SETTLED = 'This one is settled, so its details cannot be changed — only an event waiting ' +
   'for a decision or already approved can be edited.';
+const PLACE_WORD = { room: 'Review channel', post: 'Review post' };
+const REMOVE_PLACE = { room: 'Remove its room', post: 'Remove its post' };
+const FORUM_NOTE = 'One forum under BlackMail, one post per event: the review card and its '
+  + 'buttons are the post\u2019s first message, the tag says where it has got to, and the list '
+  + 'never grows past the forum\u2019s own archive. events_review_mode decides which one a new '
+  + 'proposal gets; the events already open keep the room or post they have.';
 const NOT_RESENT = 'Saving does not rewrite an announcement that is already up or a Discord ' +
   'scheduled event that already exists; the answer says when that applies.';
+
+/** What `events_forum_channel_id` holds right now, read from the same place Settings does. */
+async function forumChannelId() {
+  const specs = settingsNamespace(await settings(true), 'events');
+  const spec = specs.find((one) => one.key === 'events_forum_channel_id');
+  return (spec || {}).value ?? null;
+}
 
 /** The `YYYY-MM-DD HH:MM` the API reads, in this browser's own zone. */
 function localStart(iso) {
@@ -65,7 +78,7 @@ function detailCard(row) {
     line('Decided', when(row.decided_at)),
     line('Why not', row.deny_reason),
     line('Now', row.moved_word),
-    line('Review channel', nameNode(row.review_channel_id)),
+    line(PLACE_WORD[row.review_kind] || PLACE_WORD.room, nameNode(row.review_channel_id)),
     line('Announced', row.announced ? 'yes' : 'no'),
     line('Scheduled event', row.scheduled ? 'yes' : 'no'),
     line('Proposed', when(row.created_at)),
@@ -215,12 +228,13 @@ function decide(row, say) {
     }, { tone: 'quiet' }));
   }
   if (row.review_channel_id) {
-    buttons.push(button('Remove its room', async () => {
+    const place = row.review_kind === 'post' ? 'post' : 'room';
+    buttons.push(button(REMOVE_PLACE[place], async () => {
       const note = el('input', { class: 'input', type: 'text', placeholder: 'a line the host is sent — optional' });
       const sure = await ask({
-        title: `Remove the room for “${row.title}”?`,
+        title: `Remove the ${place} for “${row.title}”?`,
         body: [
-          'The channel goes for good. If the event is still open it is called off as well, and the person who asked is told why.',
+          `The ${place} goes for good. If the event is still open it is called off as well, and the person who asked is told why.`,
           field('A line the host is sent', note),
         ],
         confirmLabel: 'Remove it',
@@ -444,6 +458,32 @@ async function raidTrainsSection() {
   return [group.node];
 }
 
+/** The one place the events forum is made from the website; the bot presses the same path. */
+function eventForumCard(forumId) {
+  const say = notice();
+  const make = button('Make the forum', async () => {
+    const done = await run(
+      say,
+      () => send('/api/events/forum', 'POST', {}),
+      (found) => found?.message || 'The events forum is up.',
+    );
+    if (done.ok) {
+      keepSaying('events', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+  return card('Events forum', [
+    el('p', { text: FORUM_NOTE }),
+    forumId
+      ? sayNothing('Set events_review_mode to forum and every event proposed from then on gets its own post there.')
+      : sayNothing('There is no events forum yet, so every proposal gets a review channel of its own.'),
+    forumId
+      ? sayNothing('Clear events_forum_channel_id below to let go of it.')
+      : bar([make]),
+    say,
+  ]);
+}
+
 async function load() {
   const query = state.status ? `?status=${encodeURIComponent(state.status)}` : '';
   const payload = await api(`/api/events${query}`);
@@ -487,8 +527,12 @@ async function load() {
     nodes.push(detail.node);
   }
 
+  const forumBox = section('Events forum', null, { id: 'events-forum', open: true });
+  forumBox.body.append(eventForumCard(await forumChannelId()));
+
   document.getElementById('dash').replaceChildren(
     ...nodes,
+    forumBox.node,
     await namespaceSettings('events'),
     await logsSection('events'),
     ...(await raidTrainsSection()),

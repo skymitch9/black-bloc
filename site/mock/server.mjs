@@ -361,6 +361,8 @@ const SETTING_SPECS = [
   ['events_room_delete_who', 'enum', 'staff', 'staff', 'who may press Delete this room: staff, or approver — the role in events_approver_role_id. Staff can always press it whichever this holds', ['staff', 'approver']],
   ['events_approver_role_id', 'role', null, null, 'the role Delete this room asks for when events_room_delete_who is approver; blank falls back to staff'],
   ['events_room_notice', 'bool', true, true, 'true to post the message carrying Delete this room in every review room Black Bloc makes'],
+  ['events_review_mode', 'enum', 'room', 'room', 'where a proposed event is reviewed: room makes a text channel per event under events_category_id; forum makes one post per event in events_forum_channel_id (Make the forum on /event first)', ['room', 'forum']],
+  ['events_forum_channel_id', 'channel', null, null, 'the forum channel every event is posted in, in forum mode; Make the forum on /event makes one under the BlackMail category'],
   ['poll_mode', 'enum', 'on', 'on', 'off, shadow (every poll is posted for real, but into the log channel with a line saying why, so staff can rehearse), or on (polls go where they are pointed)', ['off', 'shadow', 'on']],
   ['poll_who_can_create', 'enum', 'staff', 'staff', 'who may run /poll create: staff, or everyone', ['staff', 'everyone']],
   ['poll_review_mode', 'enum', 'off', 'off', 'off posts a poll straight away; on holds it for a staff Approve or Deny first', ['off', 'on']],
@@ -4424,6 +4426,7 @@ function eventRow(row) {
     moved_to: row.moved_to === undefined ? null : row.moved_to,
     moved_word: movedWord(row.moved_to),
     review_channel_id: row.review_channel_id === undefined ? null : row.review_channel_id,
+    review_kind: row.review_kind === 'post' ? 'post' : 'room',
     created_at: row.created_at,
   };
 }
@@ -4542,6 +4545,21 @@ route('POST', '/api/events/:id/room/delete', async (context) => {
     ? `The room is gone. Event #${event.id} is cancelled, and the person who proposed it has been told why.`
     : 'The room is gone.';
   return { event: eventRow(event), message: said };
+});
+
+route('POST', '/api/events/forum', (context) => {
+  requireStaff(context.session);
+  const known = state.settings.get('events_forum_channel_id');
+  if (known) {
+    throw new Refused(409, 'forum_exists', `<#${known}> is already the events forum, so nothing was made. Clear **events_forum_channel_id** on the events page first if you want a new one.`);
+  }
+  if (!state.settings.get('modmail_category_id')) {
+    throw new Refused(409, 'no_category', '**modmail_category_id** is not pointed at a category Black Bloc can see, so there is nowhere under BlackMail to make the forum. Point it at one with `/modmail` \u25b8 **Setup\u2026** \u25b8 **Ticket category\u2026** first.');
+  }
+  const channelId = String(Date.now());
+  state.settings.set('events_forum_channel_id', channelId);
+  logAction('web.event.forum_made', { target_id: channelId, details: { channel_id: channelId } });
+  return { made: true, channel_id: channelId, message: `<#${channelId}> is up: a forum under the BlackMail category, with its overwrites, and one tag for each place an event can be.` };
 });
 
 route('POST', '/api/events/:id/cancel', (context) => {

@@ -1213,12 +1213,26 @@
         "decided_at",
         "deny_reason",
         "review_channel_id",
+        "review_kind",
         "created_at",
         "where_kind",
         "where_channel_id",
         "where_label",
         "moved_to",
         "moved_word"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/events/forum",
+      "read_by": [
+        "page-events.js eventForumCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "made",
+        "channel_id",
+        "message"
       ]
     },
     {
