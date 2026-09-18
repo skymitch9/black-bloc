@@ -1826,6 +1826,18 @@ https://blackbloc.heygabi.ai/modmail.html · https://blackbloc.heygabi.ai/settin
 | **563** (was `RH-j`) | Try `/ask` in `#welcome-test` | It is refused in words: the rehearsal home lets Black Bloc SPEAK there, not take commands there. Run it in `#blackbloc-logs` instead |
 | **564** (was `RH-k`) | Clear `shadow_channel_id`, wait five minutes | Everything rehearses in `#blackbloc-logs` again, and Black Bloc is refused in `#welcome-test` from that moment |
 
+## ERRORS — every failure on the Logs page, and a Try again that keeps your place (`ER-a` … `ER-g`, branch `errors`, design `../info/errors-design.md`)
+
+| Row | Do | Expect |
+|---|---|---|
+| **`ER-a`** | With no time zone stored for you yet, run `/event` ▸ **Propose an event**, type a title, then press **Time zone** and pick one | The zone is stored, the sentence names it, and the DRAFT comes back with your title still on it. This is the 17:15 crash; it must simply work now |
+| **`ER-b`** | Dashboard ▸ **Logs** ▸ press the **Errors** chip | The list narrows to `error.*` rows only, and the Kind box fills in with `error` so the two agree. Press it again to clear it |
+| **`ER-c`** | Open any `error.*` row's Summary | It says `where`, `error`, `message`, `step` (a `black_bloc/…py:NN`) and `interaction`. ⚠️ **Read it carefully: nothing a member TYPED may appear** — no modal field values, no message content |
+| **`ER-d`** | Find an `error.*` row on the Logs page with **Important** selected | It is there. A failure is never routine, so it shows without switching to All |
+| **`ER-e`** | When a panel or a modal fails, read the sentence Black Bloc sends | It says it has been logged **for staff** and carries one **Try again** button. Press it: the card you were on comes back with everything you had typed, and the error message disappears |
+| **`ER-f`** | Leave a **Try again** sentence for more than `error_retry_minutes` (default 10), then press it | It says the button has run out and names the command to run instead. Nothing crashes and nothing is lost that was already stored |
+| **`ER-g`** | Settings page ▸ **core** ▸ change **What the Try again button is called** and **How long a Try again button keeps working**, save, then cause an error | The button wears the new label and lives for the new number of minutes. `/settings` ▸ **A setting group…** ▸ **core** reaches the same four keys |
+
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
 minute plus the dashboard Logs page are enough to diagnose. Nothing here is destructive; the worst case is

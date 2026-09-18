@@ -8,6 +8,24 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-17 (Errors — every failure on the site's Logs page, and a Try again that keeps the
+> member's place, branch `errors` off `e7093d7`; design `info/errors-design.md`; ⚠️ BUILT, NOT
+> MERGED, NOT DEPLOYED, nothing has met Discord):** schema **unchanged** — no migration and no
+> backfill. Registry keys **+4**, all under `core` through `CORE_KEYS` (`error_sentence` text,
+> `error_retry_label` text **Try again**, `error_retry_minutes` int 1–30 **10**,
+> `error_retry_expired` text) — `namespace_of` would otherwise have invented an `error` group and
+> `settings_panel.groups()` is at Discord's cap of 25. ⚠️ **No new module** — `command_errors.py`
+> grows `record()`, `offer()` and `RetryView`, and `panels.Panel` grows an `again` move with a
+> `render_again` property. **One new log-kind family: `error.command` / `error.panel` /
+> `error.modal` / `error.button`, all IMPORTANT, under `HEADS["error"] = "core"`** — the first
+> family whose rows are written by the error handler rather than by a feature, so the site's Logs
+> page can show staff a failure nobody reported. Row details are `where` / `error` / `message`
+> (truncated to 200, an `HTTPException` reduced to Discord's own code + text) / `step` (the
+> innermost `black_bloc/**` frame) / `interaction` (a command name or a custom id) and ⚠️ **never
+> a member's words**. The Logs page gains one `LOG_FEATURES` entry that narrows by the `error.`
+> KIND prefix rather than by feature; `site/mock` and `contract.json` mirror the four keys. Tests
+> **6456 → 6479**.
+>
 > **2026-09-17 (Send to… — staff hand-offs between requests, events and modmail tickets, branch
 > `send-to` off `8a27840`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord):**
 > schema **42 → 43** (measured: `SCHEMA_VERSION`) — `requests.moved_to`, `events.moved_to` and
