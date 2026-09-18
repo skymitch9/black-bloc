@@ -47,6 +47,11 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
   say and permission").** Every stored decision has a staff move that reverses or overrides it (with a
   DM'd reason where a person is affected). Never design a terminal state staff cannot leave; never ask
   whether staff may act — gate it on staff/approver role and build it.
+- ⚠️ **Every word the bot posts is editable on the site (owner, 2026-09-17: "lets make sure all the stuff in the
+  need something ticket block is editable on the site, make that a standing black bloc rule").** A heading, a line, a
+  button label, a note, a template — each is a settings key (registry + mock row + label) that the Settings page and
+  the feature's own page can change, never a string only the code knows. The front door (`frontdoor_title`,
+  `frontdoor_text`, the three labels, `rehearsal_note`) is the pattern; a posted copy re-renders when its words change.
 - ⚠️ **Every decision is configurable BOTH ways (owner, 2026-08-27).** A default decided in chat lives in the
   settings registry (`settings_store.py`) so the Settings page and `/settings set-value` both reach it; per-item
   choices have a slash path AND a dashboard editor. Never hard-code a decided default. Checklist item 33.
