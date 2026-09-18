@@ -1,7 +1,7 @@
 # Events as a forum under BlackMail — one post per event, like requests and modmail
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-17 on branch `events-forum`
-> off `main` `a7399b0`; ⚠️ NOT merged, NOT deployed, and nothing here has met Discord.** Read the `## Deviations`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v136** — merge `32f4827`, release `bb94a92`,
+> deployed **2026-09-17 22:07** Phoenix, `events_review_mode` ships **room**; sweeps **596–602** are the owner's; verified: boot log clean (logged in 22:07:41, no traceback — the schema-45 column applied silently as ADDED_COLUMNS does), /health ready; Make the forum pressed on the events page 22:08 → POST /api/events/forum 200 and the guild lists forum #events 1550372982566686802 under BlackMail with the six tags (pending, approved, denied, live, done, cancelled) read by token; the reply names test mode and the claim. NOT yet: a post — that needs a proposed event after the mode flip (rows 597–602). Was: BUILT on branch `events-forum` off `main` `a7399b0`. Read the `## Deviations`
 > foot BEFORE the sections above: **fifteen** things differ from what is written here, and deviations **1, 3, 5 and
 > 6** are the ones that matter (six tags not five; an archived post is NOT a gone post; the retention sweep logs
 > `event.post_archived` rather than claiming a deletion; there is no test-channel fall-back). Schema **44 → 45**
