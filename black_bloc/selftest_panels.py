@@ -133,23 +133,6 @@ async def send_golive(one: Run) -> str:
     return SENT.format(what="the go-live card, with its sentence")
 
 
-async def send_youtube(one: Run) -> str:
-    from . import youtube
-
-    video = youtube.Video(
-        video_id="selftest",
-        title=SELFTEST_MARK,
-        url="https://www.youtube.com/watch?v=selftest",
-        published=datetime.now(UTC).isoformat(),
-        author=SELFTEST_MARK,
-    )
-    text = youtube.render(
-        one.bot.store.get(one.guild.id, "youtube_template"), video, _member(one)
-    )
-    await one.post(content=text)
-    return SENT.format(what="the upload sentence")
-
-
 async def send_birthday(one: Run) -> str:
     from . import birthdays
 
@@ -191,7 +174,6 @@ async def send_pings(one: Run) -> str:
     )
     wanted = [
         store.get(one.guild.id, "golive_ping_role_id"),
-        store.get(one.guild.id, "youtube_ping_role_id"),
         getattr(events_role, "id", None),
     ]
     prefix = ping_prefix(*wanted)
@@ -232,7 +214,6 @@ async def send_raidtrain(one: Run) -> str:
 
 SENDERS: tuple[tuple[str, str, Any], ...] = (
     ("golive", "golive", send_golive),
-    ("youtube", "youtube", send_youtube),
     ("birthday", "birthday", send_birthday),
     ("events", "events", send_events),
     ("pings", "pings", send_pings),

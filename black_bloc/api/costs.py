@@ -29,8 +29,8 @@ SECRET_NOTES: dict[str, str] = {
     "twitch_client_id": "reads Twitch for go-live posts. Free; unset means presence only.",
     "twitch_client_secret": "the other half of the Twitch app.",
     "youtube_api_key": (
-        "sorts a new upload into video, Short or live stream, and turns an @handle into a "
-        "channel id. Free within a daily quota; unset leaves uploads on the public feed alone."
+        "names the video a linked channel is live on, and turns an @handle into a channel id. "
+        "Free within a daily quota; unset leaves a live post reading Live now."
     ),
     "poll_vote_secret": "keys anonymous poll votes. Unset falls back to a plain hash.",
     "anthropic_api_key": "pays for the careful chat tier. Unset means that tier does not exist.",

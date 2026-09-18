@@ -343,11 +343,11 @@ async def test_settings_will_not_open_while_the_database_is_down(bot, cog, lead,
 
 
 async def test_the_root_reads_every_feature_mode_and_never_offers_to_change_one(bot, cog, lead):
-    await bot.store.set(GUILD, "youtube_mode", "shadow")
+    await bot.store.set(GUILD, "youtube_live_mode", "shadow")
 
     interaction = await open_panel(cog, bot, lead)
 
-    assert "**YouTube uploads** — shadow · `/youtube` to change" in interaction.said
+    assert "**YouTube** — shadow · `/youtube` to change" in interaction.said
     assert "**Modmail** — not answering DMs · `/modmail` to change" in interaction.said
     assert not any("mode" in str(one).lower() for one in placeholders(interaction.view))
 
@@ -424,25 +424,29 @@ async def test_turn_a_feature_back_on_is_absent_while_nothing_is_hidden(bot, cog
 
 async def test_turn_a_feature_back_on_lists_what_is_hidden_and_writes_on_once(bot, cog, lead, db):
     await all_features_on(bot.store)
-    await bot.store.set(GUILD, "youtube_mode", "off")
+    await bot.store.set(GUILD, "youtube_live_mode", "off")
 
     root = await open_panel(cog, bot, lead)
     pick = picker(root.view, sp.BACK_ON_PLACEHOLDER)
-    assert [option.value for option in pick.options] == ["youtube_mode"]
-    assert "YouTube uploads — turn it on" in [option.label for option in pick.options]
+    assert [option.value for option in pick.options] == ["youtube_live_mode"]
+    assert "YouTube — turn it on" in [option.label for option in pick.options]
 
     pressed = FakeInteraction(bot, lead)
-    await choose(pick, pressed, ["youtube_mode"])
+    await choose(pick, pressed, ["youtube_live_mode"])
 
-    assert bot.store.get(GUILD, "youtube_mode") == "on"
+    assert bot.store.get(GUILD, "youtube_live_mode") == "on"
     assert await kinds(db) == ["settings.set"]
-    assert (await details(db))[0] == {"key": "youtube_mode", "value": "on", "via": "discord"}
+    assert (await details(db))[0] == {
+        "key": "youtube_live_mode",
+        "value": "on",
+        "via": "discord",
+    }
 
 
 async def test_hiding_switched_off_altogether_is_a_different_sentence_from_nothing_hidden(
     bot, cog, lead
 ):
-    await bot.store.set(GUILD, "youtube_mode", "off")
+    await bot.store.set(GUILD, "youtube_live_mode", "off")
     await bot.store.set(GUILD, sp.HIDE_COMMANDS_WHEN_OFF, False)
 
     interaction = await open_panel(cog, bot, lead)

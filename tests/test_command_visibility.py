@@ -272,7 +272,7 @@ async def test_the_sixteen_features_that_hide_each_map_to_one_command():
         "raidtrain_mode": ("raidtrain",),
         "request_mode": ("request",),
         "tempvoice_mode": ("voice",),
-        "youtube_mode": ("youtube",),
+        "youtube_live_mode": ("youtube",),
     }
     assert "modmail_mode" not in cv.HIDDEN_WHEN_OFF
     assert "rolemenu" in cv.NEVER_HIDDEN
@@ -303,11 +303,11 @@ async def test_modmail_lost_its_lock_because_anybody_may_open_a_ticket(tmp_path,
 
 async def test_shadow_is_not_off_so_a_shadowed_feature_keeps_its_command(bot):
     """The owner shadows youtube today; only the literal word off takes a command away."""
-    await bot.store.set(GUILD, "youtube_mode", "shadow", by=5)
+    await bot.store.set(GUILD, "youtube_live_mode", "shadow", by=5)
 
     assert "youtube" not in cv.hidden_names(bot, GUILD)
 
-    await bot.store.set(GUILD, "youtube_mode", "off", by=5)
+    await bot.store.set(GUILD, "youtube_live_mode", "off", by=5)
 
     assert "youtube" in cv.hidden_names(bot, GUILD)
 

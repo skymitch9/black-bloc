@@ -30,7 +30,7 @@ HIDDEN_WHEN_OFF: dict[str, tuple[str, ...]] = {
     "raidtrain_mode": ("raidtrain",),
     "request_mode": ("request",),
     "tempvoice_mode": ("voice",),
-    "youtube_mode": ("youtube",),
+    "youtube_live_mode": ("youtube",),
 }
 NEVER_HIDDEN: tuple[str, ...] = ("settings", "help", "about", "ping", "rolemenu")
 SWITCH_KEY = HIDE_COMMANDS_WHEN_OFF

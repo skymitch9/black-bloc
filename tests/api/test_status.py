@@ -315,7 +315,7 @@ REAL_COGS = [
     (
         "black_bloc.cogs.content.youtube",
         "YouTube",
-        {"poller": _record("last_poll_ok_at"), "live_poller": _record("last_probe_at")},
+        {"live_poller": _record("last_probe_at")},
     ),
     ("black_bloc.cogs.content.raidtrain", "RaidTrains", {"sweep": _record("last_sweep_ok_at")}),
     (

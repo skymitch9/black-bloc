@@ -111,7 +111,10 @@ EXTRA_MODES: tuple[FeatureMode, ...] = (
 )
 
 
-MODE_LABELS: dict[str, str] = {"frontdoor": "The front door"}
+MODE_LABELS: dict[str, str] = {
+    "frontdoor": "The front door",
+    "youtube_live": FEATURE_LABELS["youtube"],
+}
 
 
 def _hidden_when_off_modes() -> tuple[FeatureMode, ...]:

@@ -23,7 +23,7 @@ export const LOG_FEATURES = [
   { feature: 'honeypot', label: 'Honeypot', tab: 'honeypot' },
   { feature: 'modmail', label: 'Modmail', tab: 'modmail' },
   { feature: 'golive', label: 'Go-live', tab: 'golive' },
-  { feature: 'youtube', label: 'YouTube uploads', tab: 'golive' },
+  { feature: 'youtube', label: 'YouTube', tab: 'golive' },
   { feature: 'pings', label: 'Ping roles', tab: 'golive' },
   { feature: 'events', label: 'Events', tab: 'events' },
   { feature: 'birthday', label: 'Birthdays', tab: 'birthdays' },

@@ -156,14 +156,14 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_three_hand_added_rows():
 
 
 def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
-    store = FakeStore({"modmail_enabled": True, "youtube_mode": "shadow"})
+    store = FakeStore({"modmail_enabled": True, "youtube_live_mode": "shadow"})
     lines = mode_lines(store, GUILD)
     said = "\n".join(lines)
 
     assert len(lines) == 19
     assert any(line.startswith("**The front door** —") and "`/ask`" in line for line in lines)
     assert f"**Modmail** — {MODMAIL_ANSWERING} · `/modmail` to change" in lines
-    assert "**YouTube uploads** — shadow · `/youtube` to change" in lines
+    assert "**YouTube** — shadow · `/youtube` to change" in lines
 
     store.values["modmail_enabled"] = False
     assert MODMAIL_NOT_ANSWERING in "\n".join(mode_lines(store, GUILD))
@@ -253,7 +253,7 @@ async def test_the_root_counts_what_this_server_has_moved_off_the_default(store)
     lines = root_lines(bot, FakeGuild(), set())
     assert f"**0** of {total} settings" in "\n".join(lines)
 
-    await store.set(GUILD, "youtube_mode", "on")
+    await store.set(GUILD, "youtube_live_mode", "on")
     assert stored_count(store, GUILD) == 1
     assert f"**1** of {total} settings" in "\n".join(root_lines(bot, FakeGuild(), set()))
     assert any("A setting group" in line for line in lines)
@@ -347,7 +347,7 @@ async def test_the_key_card_says_the_value_the_default_the_help_and_the_bounds(s
 
 def test_a_key_with_only_one_bound_says_only_that_one_and_an_unbounded_one_says_nothing():
     assert bounds_line("cost_hosting_usd").startswith("It takes a whole number no larger than")
-    assert bounds_line("youtube_poll_minutes").startswith("It takes a whole number of at least")
+    assert bounds_line("youtube_live_end_misses").startswith("It takes a whole number ")
     assert bounds_line("bot_bio") == ""
 
 
@@ -360,10 +360,10 @@ async def test_the_rule_book_card_carries_no_editor_at_all_and_says_where_it_is_
 
 
 async def test_put_the_default_back_is_absent_on_a_key_with_nothing_stored(store):
-    unset = key_card_buttons(store, GUILD, "youtube_mode", stored=False)
+    unset = key_card_buttons(store, GUILD, "youtube_live_mode", stored=False)
     assert RESET not in actions(unset)
 
-    set_here = key_card_buttons(store, GUILD, "youtube_mode", stored=True)
+    set_here = key_card_buttons(store, GUILD, "youtube_live_mode", stored=True)
     assert actions(set_here) == ["edit:one_of", RESET, BACK]
 
 

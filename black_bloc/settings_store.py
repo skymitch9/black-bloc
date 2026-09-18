@@ -69,10 +69,6 @@ GOLIVE_END_SUFFIX = " — stream ended"
 GOLIVE_END_TEMPLATE = "**{name}** was streaming **{game}** — the stream has ended. {url}"
 GOLIVE_END_AUTHOR = "{name} was live on {platform}"
 
-YOUTUBE_MODES = ("off", "shadow", "on")
-YOUTUBE_TEMPLATE = "**{name}** just dropped a new video: **{title}** {url}"
-YOUTUBE_POLL_MINUTES = 10
-YOUTUBE_POLL_MIN_MINUTES = 5
 
 ROLEMENU_MODES = ("off", "on")
 
@@ -288,13 +284,6 @@ KEY_TYPES: dict[str, str] = {
     "golive_ping_role_id": "role",
     "golive_max_session_hours": "int",
     "golive_embed": "bool",
-    "youtube_mode": "enum",
-    "youtube_channel_id": "channel",
-    "youtube_ping_role_id": "role",
-    "youtube_ping_fan_roles": "bool",
-    "youtube_announce_shorts": "bool",
-    "youtube_template": "text",
-    "youtube_poll_minutes": "int",
     "pings_mode": "enum",
     "pings_events_role_name": "text",
     "pings_fan_role_creation": "enum",
@@ -429,7 +418,6 @@ KEY_TYPES: dict[str, str] = {
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
     "golive_end_mode": GOLIVE_END_MODES,
-    "youtube_mode": YOUTUBE_MODES,
     "pings_mode": PINGS_MODES,
     "pings_fan_role_creation": PINGS_CREATORS,
     "pings_fan_role_on_unlink": PINGS_ON_UNLINK,
@@ -505,7 +493,6 @@ KEY_MIN: dict[str, int] = {
     "chat_cooldown_seconds": CHAT_COOLDOWN_MIN_SECONDS,
     "poll_default_hours": POLL_MIN_HOURS,
     "poll_archive_days": POLL_ARCHIVE_MIN_DAYS,
-    "youtube_poll_minutes": YOUTUBE_POLL_MIN_MINUTES,
     "raidtrain_slot_minutes": RAIDTRAIN_SLOT_MIN_MINUTES,
     "raidtrain_reminder_minutes": RAIDTRAIN_REMINDER_MIN_MINUTES,
     "raidtrain_poll_minutes": RAIDTRAIN_POLL_MIN_MINUTES,
@@ -544,10 +531,6 @@ KEY_MIN_REASON: dict[str, str] = {
     "poll_archive_days": (
         "Archiving a poll the day it closes hides the result before anybody has read it, so the "
         "shortest Black Bloc will wait is {limit} day."
-    ),
-    "youtube_poll_minutes": (
-        "YouTube's feed is cached for fifteen minutes at a time, so asking more often than every "
-        "{limit} minutes fetches the same answer again and finds nothing new any sooner."
     ),
     "raidtrain_slot_minutes": (
         "A raid train slot shorter than {limit} minutes is not long enough for anybody to start "
@@ -713,22 +696,6 @@ KEY_HELP: dict[str, str] = {
     "golive_embed": (
         "post the announcement as an embed with the game's art; off = the sentence only"
     ),
-    "youtube_mode": "off, shadow (log only) or on (post an announcement for a new upload)",
-    "youtube_channel_id": (
-        "where a new-upload announcement is posted; leave it unset and the go-live channel is "
-        "used instead"
-    ),
-    "youtube_ping_role_id": "role mentioned in front of every upload announcement",
-    "youtube_ping_fan_roles": (
-        "also mention the uploader's own fan role, the one their followers wear; off pings only "
-        "youtube_ping_role_id"
-    ),
-    "youtube_announce_shorts": (
-        "announce Shorts as well as full videos; off is the default because a channel can post "
-        "several a day"
-    ),
-    "youtube_template": "what an upload announcement says; {name} {title} {url} {channel} {kind}",
-    "youtube_poll_minutes": "minutes between checks of every linked channel's uploads feed",
     "pings_mode": (
         "off, or on (members can opt in to go-live and event pings, and a streamer can have a "
         "role of their own that only their followers wear)"
@@ -2991,16 +2958,6 @@ class SettingsStore:
             return 12
         if key == "golive_embed":
             return True
-        if key == "youtube_mode":
-            return "off"
-        if key == "youtube_template":
-            return YOUTUBE_TEMPLATE
-        if key == "youtube_ping_fan_roles":
-            return True
-        if key == "youtube_announce_shorts":
-            return False
-        if key == "youtube_poll_minutes":
-            return YOUTUBE_POLL_MINUTES
         if key == "pings_mode":
             return "off"
         if key == "pings_events_role_name":

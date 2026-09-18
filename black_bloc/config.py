@@ -61,7 +61,7 @@ class Settings(BaseSettings):
 
     youtube_api_key: str | None = Field(
         default=None,
-        description="YouTube Data API key; unset leaves uploads on the public feed alone",
+        description="YouTube Data API key; unset leaves live detection on the page alone",
     )
 
     test_mode: bool = True

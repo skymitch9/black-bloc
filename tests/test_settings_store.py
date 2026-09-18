@@ -79,8 +79,6 @@ from black_bloc.settings_store import (
     WHERE_CHECK_SECONDS_KEY,
     WHERE_HINT,
     WHERE_HINT_KEY,
-    YOUTUBE_MODES,
-    YOUTUBE_TEMPLATE,
     SettingError,
     SettingsStore,
     coerce_value,
@@ -781,36 +779,9 @@ async def test_the_open_a_ticket_with_door_ships_hidden_and_is_a_key_both_doors_
     assert store.get(1, MODMAIL_OPEN_WITH_BUTTON) is True
 
 
-async def test_youtube_uploads_ship_off_with_fan_pings_on_and_shorts_quiet(store):
-    """D5, D8 and the D4 default, all of them registry keys rather than constants."""
-    assert store.get(1, "youtube_mode") == "off"
-    assert store.get(1, "youtube_announce_shorts") is False
-    assert store.get(1, "youtube_ping_fan_roles") is True
-    assert store.get(1, "youtube_poll_minutes") == 10
-    assert store.get(1, "youtube_template") == YOUTUBE_TEMPLATE
-    assert store.get(1, "youtube_log_level") == "important"
-
-
-async def test_a_blank_youtube_channel_means_the_go_live_one(store):
-    """D3: the key has no default of its own, so the cog falls back to golive_channel_id."""
-    assert store.get(1, "youtube_channel_id") is None
-    assert store.get(1, "youtube_ping_role_id") is None
-
-
-async def test_the_youtube_keys_are_typed_and_the_mode_is_an_enum(store):
-    assert KEY_TYPES["youtube_mode"] == "enum"
-    for name in YOUTUBE_MODES:
-        assert await store.set(1, "youtube_mode", name) == name
-    with pytest.raises(SettingError, match="off, shadow, on"):
-        await store.set(1, "youtube_mode", "sometimes")
-    assert await store.set(1, "youtube_channel_id", _Role(5)) == 5
-    assert await store.set(1, "youtube_ping_role_id", 42) == 42
-    assert await store.set(1, "youtube_announce_shorts", True) is True
-    with pytest.raises(SettingError, match="true or false"):
-        await store.set(1, "youtube_ping_fan_roles", "yes")
-    with pytest.raises(SettingError, match="some text"):
-        await store.set(1, "youtube_template", "  ")
-    assert {
+async def test_the_seven_upload_keys_are_gone_from_the_registry_altogether(store):
+    """The uploads half was removed 2026-09-18; a stored row is harmless, a key is not."""
+    gone = {
         "youtube_mode",
         "youtube_channel_id",
         "youtube_ping_role_id",
@@ -818,18 +789,11 @@ async def test_the_youtube_keys_are_typed_and_the_mode_is_an_enum(store):
         "youtube_announce_shorts",
         "youtube_template",
         "youtube_poll_minutes",
-        "youtube_log_level",
-    } <= set(KEY_TYPES)
+    }
 
-
-async def test_the_poll_gap_has_a_floor_that_says_why_the_feeds_cache_sets_it(store):
-    assert await store.set(1, "youtube_poll_minutes", 5) == 5
-    with pytest.raises(SettingError) as caught:
-        await store.set(1, "youtube_poll_minutes", 4)
-
-    said = str(caught.value)
-    assert "cannot be less than 5" in said
-    assert "fifteen minutes" in said
+    assert gone & set(KEY_TYPES) == set()
+    assert gone & set(KEY_HELP) == set()
+    assert store.get(1, "youtube_log_level") == "important"
 
 
 def test_staff_refusal_names_the_channel(tmp_path, monkeypatch):
@@ -1571,15 +1535,11 @@ async def test_the_live_probe_gap_and_the_quiet_probe_count_are_both_bounded(sto
         coerce_value("youtube_live_mode", "sometimes")
 
 
-async def test_the_seven_youtube_keys_the_panel_only_reads_keep_their_defaults(store):
-    """The panel changed the door, not the room: no `youtube_*` default moved."""
-    assert store.get(7, "youtube_mode") == "off"
-    assert store.get(7, "youtube_poll_minutes") == 10
-    assert store.get(7, "youtube_announce_shorts") is False
-    assert store.get(7, "youtube_ping_fan_roles") is True
-    assert store.get(7, "youtube_ping_role_id") is None
-    assert store.get(7, "youtube_channel_id") is None
-    assert store.get(7, "youtube_template").startswith("**{name}**")
+async def test_the_youtube_keys_the_panel_only_reads_keep_their_defaults(store):
+    """The panel changed the door, not the room: no surviving `youtube_*` default moved."""
+    assert store.get(7, "youtube_panel_minutes") == 10
+    assert store.get(7, "youtube_unlink_dms_them") is True
+    assert store.get(7, "youtube_live_mode") == "off"
 
 
 async def test_the_eight_chat_memory_keys_are_untouched_by_the_panel(store):

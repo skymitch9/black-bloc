@@ -3,13 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass
 from typing import Any, NamedTuple
-from xml.etree import ElementTree
 
 from .panels import KEEP_IT as KEEP_IT
 from .panels import panel_minutes as _panel_minutes
-from .settings_store import YOUTUBE_TEMPLATE
 from .youtube_live import (
     LIVE_URL,
     PROBE_REFUSED,
@@ -22,26 +19,11 @@ from .youtube_live import (
 
 log = logging.getLogger(__name__)
 
-FEED_URL = "https://www.youtube.com/feeds/videos.xml"
 API_URL = "https://www.googleapis.com/youtube/v3"
-CHANNEL_URL = "https://www.youtube.com/channel/{channel_id}"
-WATCH_URL = "https://www.youtube.com/watch?v={video_id}"
 REQUEST_TIMEOUT_SECONDS = 15
-FEED_ATTEMPTS = 4
-CLASSIFY_BATCH = 50
-SHORT_SECONDS = 60
 BROWSER_AGENT = (
     "Mozilla/5.0 (compatible; BlackBloc/1.0; +https://blackbloc.heygabi.ai)"
 )
-
-VIDEO = "video"
-SHORT = "short"
-LIVE = "live"
-UNKNOWN = "unknown"
-
-ATOM = "http://www.w3.org/2005/Atom"
-YT = "http://www.youtube.com/xml/schemas/2015"
-NS = {"a": ATOM, "yt": YT}
 
 CHANNEL_ID = re.compile(r"^UC[A-Za-z0-9_-]{22}$")
 CHANNEL_IN_URL = re.compile(r"youtube\.com/channel/(UC[A-Za-z0-9_-]{22})")
@@ -50,17 +32,11 @@ CANONICAL = re.compile(
 )
 HANDLE = re.compile(r"^@?([A-Za-z0-9._-]{3,30})$")
 HANDLE_IN_URL = re.compile(r"youtube\.com/(?:@|c/|user/)([A-Za-z0-9._-]{1,60})")
-DURATION = re.compile(r"^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$")
 
 CANNOT_RESOLVE = (
     "I could not turn **{given}** into a YouTube channel id, so nothing was linked. Paste the "
     "channel address that starts with youtube.com/channel/UC…, or ask a Lead to set a YouTube "
     "API key so handles like @yourname can be looked up."
-)
-FEED_REFUSED = (
-    "YouTube's feed server would not answer for that channel after {attempts} tries. That is "
-    "usually the feed being flaky rather than the channel being wrong, so nothing was changed — "
-    "try again in a minute."
 )
 
 
@@ -70,103 +46,6 @@ class YouTubeError(RuntimeError):
     def __init__(self, message: str, *, network: bool = False) -> None:
         super().__init__(message)
         self.network = network
-
-
-@dataclass(frozen=True)
-class Video:
-    video_id: str
-    title: str = ""
-    url: str = ""
-    published: str = ""
-    channel_id: str = ""
-    author: str = ""
-    kind: str = VIDEO
-
-    @property
-    def link(self) -> str:
-        return self.url or WATCH_URL.format(video_id=self.video_id)
-
-
-class _Fields(dict):
-    def __missing__(self, key: str) -> str:
-        return "{" + key + "}"
-
-
-def kind_of(url: Any) -> str:
-    return SHORT if "/shorts/" in str(url or "") else VIDEO
-
-
-def _text(node: Any, path: str) -> str:
-    if node is None:
-        return ""
-    found = node.findtext(path, None, NS)
-    return str(found).strip() if found else ""
-
-
-def _entry(node: Any) -> Video | None:
-    video_id = _text(node, "yt:videoId")
-    if not video_id:
-        return None
-    link = node.find("a:link", NS)
-    url = str(link.get("href") or "").strip() if link is not None else ""
-    return Video(
-        video_id=video_id,
-        title=_text(node, "a:title"),
-        url=url or WATCH_URL.format(video_id=video_id),
-        published=_text(node, "a:published"),
-        channel_id=_text(node, "yt:channelId"),
-        author=_text(node, "a:author/a:name"),
-        kind=kind_of(url),
-    )
-
-
-def parse_feed(xml: Any) -> list[Video]:
-    """Every readable entry of a channel Atom feed; an entry with no video id is dropped."""
-    body = xml.decode("utf-8", "replace") if isinstance(xml, bytes) else str(xml or "")
-    if not body.strip():
-        return []
-    try:
-        root = ElementTree.fromstring(body)
-    except ElementTree.ParseError as exc:
-        raise YouTubeError(
-            f"YouTube's feed was not readable XML: {exc}", network=True
-        ) from exc
-    found: list[Video] = []
-    for node in root.findall("a:entry", NS):
-        video = _entry(node)
-        if video is not None:
-            found.append(video)
-    return found
-
-
-def feed_title(xml: Any) -> str:
-    body = xml.decode("utf-8", "replace") if isinstance(xml, bytes) else str(xml or "")
-    try:
-        root = ElementTree.fromstring(body)
-    except ElementTree.ParseError:
-        return ""
-    return _text(root, "a:title")
-
-
-def duration_seconds(text: Any) -> int | None:
-    match = DURATION.match(str(text or "").strip())
-    if match is None:
-        return None
-    days, hours, minutes, seconds = (int(part or 0) for part in match.groups())
-    return days * 86400 + hours * 3600 + minutes * 60 + seconds
-
-
-def classify_row(row: dict[str, Any]) -> str:
-    """One videos.list row to a kind; live beats short, and an unreadable length is unknown."""
-    if row.get("liveStreamingDetails"):
-        return LIVE
-    details = row.get("contentDetails")
-    if not isinstance(details, dict):
-        return UNKNOWN
-    length = duration_seconds(details.get("duration"))
-    if length is None:
-        return UNKNOWN
-    return SHORT if length <= SHORT_SECONDS else VIDEO
 
 
 def channel_id_in(text: Any) -> str | None:
@@ -189,32 +68,16 @@ def handle_in(text: Any) -> str | None:
     return named.group(1) if named else None
 
 
-def render(
-    template: str,
-    video: Video,
-    member: Any = None,
-    *,
-    ping_role_id: int | None = None,
-    fan_role_id: int | None = None,
-) -> str:
-    """The upload sentence; a broken template falls back to the default one with a warning."""
-    from .golive import display_name, ping_prefix
-
-    fields = _Fields(
-        name=display_name(member),
-        title=video.title or "a new video",
-        url=video.link,
-        channel=video.author or "",
-        kind=video.kind,
-    )
-    try:
-        text = template.format_map(fields)
-    except Exception as exc:
-        log.warning(
-            "youtube: template %r could not be rendered (%s); using the default", template, exc
-        )
-        text = YOUTUBE_TEMPLATE.format_map(fields)
-    return ping_prefix(ping_role_id, fan_role_id) + text
+def title_of(payload: Any) -> str:
+    """The channel title out of one `channels.list` answer; anything else is no title at all."""
+    if not isinstance(payload, dict):
+        return ""
+    for row in payload.get("items") or ():
+        snippet = row.get("snippet") if isinstance(row, dict) else None
+        title = str((snippet or {}).get("title") or "").strip()
+        if title:
+            return title
+    return ""
 
 
 class YouTubeClient:
@@ -250,27 +113,6 @@ class YouTubeClient:
         if self._session is not None and not self._session.closed:
             await self._session.close()
         self._session = None
-
-    async def fetch_feed(
-        self, channel_id: str, etag: str | None = None
-    ) -> tuple[int, str | None, list[Video]]:
-        """The channel's entries, retried past the feed's own flakiness; 304 means unchanged."""
-        headers = {"User-Agent": BROWSER_AGENT}
-        if etag:
-            headers["If-None-Match"] = etag
-        status = 0
-        seen: list[int] = []
-        for _ in range(FEED_ATTEMPTS):
-            status, response_headers, body = await self._request(
-                "GET", FEED_URL, headers=headers, params={"channel_id": channel_id}
-            )
-            seen.append(status)
-            if status == 304:
-                return (status, etag, [])
-            if status == 200:
-                return (status, response_headers.get("ETag") or None, parse_feed(body))
-        log.warning("youtube: the feed for %s answered %s", channel_id, seen)
-        raise YouTubeError(FEED_REFUSED.format(attempts=FEED_ATTEMPTS), network=True)
 
     async def _api(self, path: str, params: dict[str, str]) -> dict[str, Any]:
         if not self.keyed:
@@ -329,16 +171,14 @@ class YouTubeClient:
         return (channel_id, await self._title_of(channel_id))
 
     async def _title_of(self, channel_id: str) -> str:
+        """One unit, and only where a key exists; without one a channel goes by its id."""
+        if not self.keyed:
+            return ""
         try:
-            status, _headers, body = await self._request(
-                "GET",
-                FEED_URL,
-                headers={"User-Agent": BROWSER_AGENT},
-                params={"channel_id": channel_id},
-            )
+            payload = await self._api("channels", {"part": "snippet", "id": channel_id})
         except YouTubeError:
             return ""
-        return feed_title(body) if status == 200 else ""
+        return title_of(payload)
 
     async def probe_live(self, channel_id: str) -> Probe:
         """The quota-free `/live` page: two facts, a tolerant parse, no key and no units."""
@@ -380,31 +220,12 @@ class YouTubeClient:
         )
         return read_search(payload)
 
-    async def classify(self, video_ids: Any) -> dict[str, str]:
-        """Kind per video id from the API; without a key nothing is claimed, so it answers empty."""
-        wanted = [str(one) for one in video_ids or () if str(one or "").strip()]
-        if not wanted or not self.keyed:
-            return {}
-        found: dict[str, str] = {}
-        for start in range(0, len(wanted), CLASSIFY_BATCH):
-            chunk = wanted[start : start + CLASSIFY_BATCH]
-            payload = await self._api(
-                "videos",
-                {"part": "contentDetails,liveStreamingDetails,snippet", "id": ",".join(chunk)},
-            )
-            for row in payload.get("items") or ():
-                video_id = str(row.get("id") or "")
-                if video_id:
-                    found[video_id] = classify_row(row)
-        return found
-
 
 PANEL_MINUTES_KEY = "youtube_panel_minutes"
 PANEL_TITLE = "Your YouTube channel"
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /youtube again"
 SELECT_CAP = 25
 
-NOT_SEEDED_YET = "not checked yet"
 NOBODY_LINKED = "Nobody has linked a YouTube channel yet."
 LIVE_NO_KEY = (
     "**quota used today** — none; with no YOUTUBE_API_KEY a live stream is announced from the "
@@ -421,13 +242,12 @@ UNLINK = "unlink"
 RELINK_FOR = "relink_for"
 UNLINK_FOR = "unlink_for"
 LINK_FOR = "link_for"
-SETUP = "setup"
 LOGS = "logs"
 REFRESH = "refresh"
 BACK = "back"
 
 UNLINK_QUESTION = (
-    "Forget your YouTube channel? Black Bloc stops watching it for new uploads. You can link "
+    "Forget your YouTube channel? Black Bloc stops watching it for live streams. You can link "
     "it again whenever you like."
 )
 UNLINK_YES = "Yes, forget it"
@@ -453,7 +273,6 @@ UNLINK_FOR_MOVE = PanelMove(UNLINK_FOR, "Unlink for", "danger", modal=True)
 REFRESH_MOVE = PanelMove(REFRESH, "Refresh", "secondary")
 BACK_MOVE = PanelMove(BACK, "Back", "secondary")
 LINK_FOR_MOVE = PanelMove(LINK_FOR, "Link for somebody…", "secondary", row=3)
-SETUP_MOVE = PanelMove(SETUP, "Setup", "secondary", row=3)
 LOGS_MOVE = PanelMove(LOGS, "Logs", "secondary", row=3)
 
 PANEL_MOVES = (
@@ -465,7 +284,6 @@ PANEL_MOVES = (
     REFRESH_MOVE,
     BACK_MOVE,
     LINK_FOR_MOVE,
-    SETUP_MOVE,
     LOGS_MOVE,
 )
 
@@ -475,7 +293,7 @@ CARD_BUTTONS: dict[tuple[bool, bool], tuple[PanelMove, ...]] = {
     (False, False): (),
     (False, True): (RELINK_FOR_MOVE, UNLINK_FOR_MOVE),
 }
-STAFF_MOVES = (LINK_FOR_MOVE, SETUP_MOVE, LOGS_MOVE)
+STAFF_MOVES = (LINK_FOR_MOVE, LOGS_MOVE)
 
 
 def card_buttons(*, linked: bool, mine: bool, staff: bool) -> tuple[PanelMove, ...]:
@@ -489,48 +307,40 @@ def card_buttons(*, linked: bool, mine: bool, staff: bool) -> tuple[PanelMove, .
     return tuple(found)
 
 
-def where_words(mode: str, channel_id: Any) -> str:
-    """Why an upload would not be posted, in words — never a bare mode name on its own."""
+def where_words(mode: str, golive_mode: str, channel_id: Any) -> str:
+    """Why a live stream would not be announced, in words — never a bare mode name on its own."""
     if mode != "on":
-        return f"no — upload announcements are **{mode}** for this server at the moment"
+        return f"no — live-stream announcements are **{mode}** for this server at the moment"
     if not channel_id:
-        return "no — nowhere is set to post them; a Lead picks one under **Setup** on this panel"
+        return (
+            "no — a live stream is announced through the go-live feature and no go-live channel "
+            "is set; a Lead picks one under **Setup** on `/golive`"
+        )
+    if golive_mode != "on":
+        return (
+            f"no — go-live announcements are **{golive_mode}**, and a live stream is announced "
+            "through them"
+        )
     return f"yes, in <#{channel_id}>"
 
 
-def status_lines(row: Any, latest_title: Any, *, where: str, shorts: Any) -> list[str]:
-    seen = latest_title or ("none yet" if row["seeded"] else NOT_SEEDED_YET)
+def status_lines(row: Any, *, where: str) -> list[str]:
     return [
         f"**channel** — {row['title'] or row['channel_id']}",
         f"**linked** — {row['linked_at']}",
-        f"**last video seen** — {seen}",
         f"**announced here** — {where}",
-        f"**Shorts** — {'announced too' if shorts else 'not announced'}",
     ]
 
 
 def health_lines(
     *,
-    mode: str,
-    channel_id: Any,
-    minutes: Any,
     keyed: bool,
-    last_ok_at: Any,
-    last_error: Any,
-    failures: int,
-    totals: dict[str, int],
+    links: int,
     live: dict[str, Any] | None = None,
 ) -> list[str]:
     lines = [
-        f"**mode** — {mode}",
-        f"**channel** — {f'<#{channel_id}>' if channel_id else 'not set'}",
-        f"**every** — {minutes} minute(s)",
-        f"**api key** — {'set' if keyed else 'not set (feed only)'}",
-        f"**last good sweep** — {last_ok_at or 'never'}",
-        f"**last error** — {last_error or 'none'}"
-        + (f" ({failures} sweep(s) in a row)" if failures else ""),
-        f"**links** — {totals['links']} · **videos seen** — {totals['videos']} · "
-        f"**announced** — {totals['announced']}",
+        f"**api key** — {'set' if keyed else 'not set (the live page alone)'}",
+        f"**links** — {links}",
     ]
     return lines + live_lines(live, keyed=keyed)
 
@@ -564,8 +374,7 @@ def link_lines(rows: Any, names: dict[int, str] | None = None) -> list[str]:
     lines = []
     for row in found:
         named = known.get(int(row["user_id"])) or row["user_id"]
-        seen = "seeded" if row["seeded"] else NOT_SEEDED_YET
-        lines.append(f"• {named} — {row['title'] or row['channel_id']} ({seen})")
+        lines.append(f"• {named} — {row['title'] or row['channel_id']}")
     return lines
 
 

@@ -167,8 +167,8 @@ happening and opens one, and staff answer by DM. DMing Black Bloc does the same 
 `/golive` — your Twitch channel, and whether your streams get announced. It opens a panel:
 **Link my Twitch channel** connects one so going live gets announced, and **Stop announcing my
 streams** turns it off again.
-`/youtube` — your YouTube channel. It opens a panel saying what happens to your uploads, with
-**Link my channel** to connect one and **Unlink** to stop it.
+`/youtube` — your YouTube channel. It opens a panel saying whether your live streams are
+announced, with **Link my channel** to connect one and **Unlink** to stop it.
 `/pings` — which pings you get. It opens a panel saying what you already wear, with **Follow a
 streamer…** and **Stop following…** for one streamer's go-live pings, a toggle for the go-live
 and event pings everybody can have, and **Start my own ping role** if you stream. The *Streamer

@@ -50,7 +50,6 @@ from black_bloc.requests import HOLD, IN_PROGRESS, OPEN, REVIEW, create_request
 from black_bloc.requests import add_comment as add_request_comment
 from black_bloc.requests import set_fields as set_request_fields
 from black_bloc.requests import set_status as set_request_status
-from black_bloc.youtube import Video
 
 CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.json"
 MEMBER_ID = 21
@@ -58,30 +57,16 @@ YT_CHANNEL = "UCsXVk37bltHxD1rDPwtNM8Q"
 PING_MEMBER_ID = 22
 
 
-class FakeFeed:
-    """The uploads client, offline: the contract checks payload shapes, never YouTube."""
+class FakeClient:
+    """The YouTube client, offline: the contract checks payload shapes, never YouTube."""
 
     keyed = False
 
     async def resolve(self, text):
         return (YT_CHANNEL, "Ada Makes")
 
-    async def fetch_feed(self, channel_id, etag=None):
-        return (200, None, [seed_video()])
-
     async def close(self):
         return None
-
-
-def seed_video() -> Video:
-    return Video(
-        video_id="vidcontract",
-        title="How the cookout runs",
-        url="https://www.youtube.com/watch?v=vidcontract",
-        published="2026-09-01T00:00:00+00:00",
-        channel_id=YT_CHANNEL,
-        author="Ada Makes",
-    )
 
 
 class FakeCog:
@@ -315,11 +300,10 @@ async def seed_world(client, web, guild, wf) -> dict:
         db, guild_id, MEMBER_ID, wf.OTHER_CHANNEL_ID, 999, "buy my coins", "shadow", "would_ban"
     )
     await set_link(db, MEMBER_ID, "adastreams", "t-1")
-    uploads = YouTube(web)
-    uploads.client = FakeFeed()
-    web.cogs["YouTube"] = uploads
+    youtube = YouTube(web)
+    youtube.client = FakeClient()
+    web.cogs["YouTube"] = youtube
     await set_youtube_link(db, MEMBER_ID, YT_CHANNEL, "@ada", "Ada Makes")
-    await uploads._seed(MEMBER_ID, await uploads_link(db), [seed_video()], None)
     await set_optout(db, MEMBER_ID)
     await start_session(
         db,
@@ -819,12 +803,6 @@ async def seed_meetings(db, guild_id: int, channel_id: int) -> tuple[int, int]:
     await minutes.save_posted(db, int(done["id"]), channel_id, 830042)
     recording = await minutes.start_row(db, guild_id, channel_id, 7)
     return (int(done["id"]), int(recording["id"]))
-
-
-async def uploads_link(db):
-    from black_bloc.cogs.content.youtube import get_link as get_youtube_link
-
-    return await get_youtube_link(db, MEMBER_ID)
 
 
 def fill(text: str, ids: dict) -> str:
