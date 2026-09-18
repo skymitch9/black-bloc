@@ -62,6 +62,8 @@ from black_bloc.linkcheck import LINK_MISSING, LINK_OK, LINK_UNREACHABLE
 from black_bloc.settings_store import (
     EVENTS_APPROVER_ROLE_KEY,
     EVENTS_FORUM_CHANNEL_KEY,
+    EVENTS_MOVED_LINE,
+    EVENTS_MOVED_LINE_KEY,
     EVENTS_POSTS_WHERE_KEY,
     EVENTS_REVIEW_MODE_KEY,
     EVENTS_ROOM_DELETE_KEY,
@@ -1560,3 +1562,97 @@ def test_the_two_forum_keys_reach_the_write_path_the_panel_uses():
 def test_the_card_link_says_which_kind_of_place_it_opens():
     assert events.PLACE_LINK_BUTTON[events.ROOM] == "The review channel"
     assert events.PLACE_LINK_BUTTON[events.POST] == "The review post"
+
+
+# --- §H: what the doors render on, and the words the move says -------------------------
+
+
+def a_forum_store(**values):
+    return FakeStore(
+        staff_ids=(1,),
+        values={EVENTS_REVIEW_MODE_KEY: "forum", EVENTS_FORUM_CHANNEL_KEY: 555, **values},
+    )
+
+
+def a_room_row(**fields):
+    return a_row(review_channel_id=4242, review_kind=events.ROOM, **fields)
+
+
+def test_only_an_open_room_with_a_forum_to_go_to_offers_the_move():
+    store = a_forum_store()
+
+    assert events.may_move_to_forum(store, 7, a_room_row()) is True
+    assert events.may_move_to_forum(store, 7, a_room_row(status=APPROVED)) is True
+    assert events.may_move_to_forum(store, 7, a_room_row(status=LIVE)) is True
+
+
+@pytest.mark.parametrize("status", (DENIED, DONE, CANCELLED))
+def test_a_settled_event_is_never_offered_the_move(status):
+    assert events.may_move_to_forum(a_forum_store(), 7, a_room_row(status=status)) is False
+
+
+def test_a_post_a_roomless_row_and_a_missing_row_are_never_offered_the_move():
+    store = a_forum_store()
+
+    assert events.may_move_to_forum(store, 7, None) is False
+    assert events.may_move_to_forum(store, 7, a_row(review_kind=events.POST)) is False
+    assert events.may_move_to_forum(store, 7, a_row()) is False
+    assert (
+        events.may_move_to_forum(store, 7, a_row(review_channel_id=4242, review_kind="post"))
+        is False
+    )
+
+
+def test_room_mode_or_a_blank_forum_hides_the_move_even_on_an_open_room():
+    """§H: the doors render only while the mode is forum AND a forum is set."""
+    assert (
+        events.may_move_to_forum(
+            a_forum_store(**{EVENTS_REVIEW_MODE_KEY: "room"}), 7, a_room_row()
+        )
+        is False
+    )
+    assert (
+        events.may_move_to_forum(
+            a_forum_store(**{EVENTS_FORUM_CHANNEL_KEY: None}), 7, a_room_row()
+        )
+        is False
+    )
+
+
+def test_the_moved_line_is_the_default_until_staff_change_it():
+    store = a_forum_store()
+
+    assert events.moved_line(store, 7, 99) == (
+        "This event now lives in its own post: <#99>. This room is being removed."
+    )
+    store.values[EVENTS_MOVED_LINE_KEY] = "We are over in {post} now."
+    assert events.moved_line(store, 7, 99) == "We are over in <#99> now."
+
+
+def test_a_moved_line_whose_braces_went_wrong_falls_back_rather_than_raising():
+    """Checklist 17: staff-editable text never takes the feature down with it."""
+    store = a_forum_store(**{EVENTS_MOVED_LINE_KEY: "Off to {nowhere} we go."})
+
+    assert events.moved_line(store, 7, 99) == EVENTS_MOVED_LINE.format(post="<#99>")
+
+
+def test_every_refusal_the_move_gives_says_what_to_do_about_it():
+    assert "already reviewed in a post" in events.MOVE_ALREADY_A_POST
+    assert "{status}" in events.MOVE_SETTLED
+    assert events.MAKE_THE_FORUM in events.MOVE_NO_FORUM
+    assert "events_forum_channel_id" in events.MOVE_NO_FORUM
+    assert "test mode" in events.MOVE_REFUSED_TEST
+    assert "Create Posts" in events.MOVE_FAILED
+    assert "Call it off" in events.MOVE_NOT_STAFF
+    assert set(events.MOVE_WHY) == {"no_forum", "test_mode", "failed"}
+
+
+def test_the_moved_line_key_reaches_the_write_path_the_panel_uses():
+    assert EVENTS_MOVED_LINE_KEY in events.SETTINGS_KEYS
+
+
+def test_the_forum_page_names_the_move_and_shows_the_line_it_leaves():
+    lines = events.forum_lines(a_forum_store(), SimpleNamespace(id=7))
+
+    assert any(events.MOVE_TO_FORUM_BUTTON in line for line in lines)
+    assert any("{post}" in line for line in lines)

@@ -602,3 +602,135 @@ async def test_a_missing_post_is_refused_in_the_words_a_post_uses(client, sign_i
 
     assert answer.status_code == 409
     assert "no post of its own" in answer.json()["message"]
+
+
+# --- Move to the forum, from the website (events-forum-design.md §H) ---------------------
+
+
+async def an_events_forum(web, wf, guild, client, sign_in) -> object:
+    """The one forum both doors use, made through the route that makes it."""
+    await web.store.set(wf.GUILD_ID, "modmail_category_id", wf.CATEGORY_ID)
+    sign_in(client)
+    client.post("/api/events/forum", json={})
+    return guild.created[-1]
+
+
+async def test_the_website_moves_an_open_rooms_event_into_the_forum(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    event_id = await an_event(web, wf)
+    room = await a_room(web, wf, guild, event_id)
+    forum = await an_events_forum(web, wf, guild, client, sign_in)
+
+    answer = client.post(f"/api/events/{event_id}/forum", json={})
+
+    assert answer.status_code == 200
+    post = forum.threads[0]
+    fresh = await get_event(web.db, event_id)
+    assert fresh["review_kind"] == "post" and fresh["review_channel_id"] == post.id
+    assert fresh["status"] == "pending"
+    assert room.deleted is True
+    assert [tag.name for tag in post.applied_tags] == ["pending"]
+    assert f"<#{post.id}>" in answer.json()["message"]
+    assert answer.json()["event"]["review_kind"] == "post"
+
+
+async def test_the_move_leaves_one_moved_row_and_names_both_ends(
+    client, sign_in, web, guild, wf
+):
+    """Checklist 34: the shared path takes `via`, so the route notes nothing of its own."""
+    wf.member(guild, 21, name="ada")
+    event_id = await an_event(web, wf)
+    room = await a_room(web, wf, guild, event_id)
+    forum = await an_events_forum(web, wf, guild, client, sign_in)
+
+    client.post(f"/api/events/{event_id}/forum", json={})
+
+    found = await wf.kinds_in(web.db)
+    assert found.count("web.event.room_moved") == 1
+    assert "event.room_moved" not in found
+    assert "web.event.cancelled" not in found and "event.cancelled" not in found
+    rows = [details for kind, details in await wf.web_rows_in(web.db) if "moved" in kind]
+    assert rows[0]["from"] == room.id and rows[0]["to"] == forum.threads[0].id
+    assert rows[0]["via"] == wf.VIA_WEBSITE
+
+
+async def test_the_old_room_is_told_where_the_event_went(client, sign_in, web, guild, wf):
+    wf.member(guild, 21, name="ada")
+    event_id = await an_event(web, wf)
+    room = await a_room(web, wf, guild, event_id)
+    forum = await an_events_forum(web, wf, guild, client, sign_in)
+
+    client.post(f"/api/events/{event_id}/forum", json={})
+
+    assert room.messages[-1].content == (
+        f"This event now lives in its own post: <#{forum.threads[0].id}>. "
+        "This room is being removed."
+    )
+
+
+async def test_a_settled_event_is_not_moved_and_is_refused_in_words(
+    client, sign_in, web, guild, wf
+):
+    event_id = await an_event(web, wf, status="denied")
+    room = await a_room(web, wf, guild, event_id)
+    await an_events_forum(web, wf, guild, client, sign_in)
+
+    answer = client.post(f"/api/events/{event_id}/forum", json={})
+
+    assert answer.status_code == 409
+    assert "is **denied**" in answer.json()["message"]
+    assert room.deleted is False
+
+
+async def test_an_event_already_in_a_post_is_refused_in_words(client, sign_in, web, guild, wf):
+    event_id = await an_event(web, wf)
+    await a_room(web, wf, guild, event_id)
+    await web.db.conn.execute(
+        "UPDATE events SET review_kind = 'post' WHERE id = ?", (event_id,)
+    )
+    await web.db.conn.commit()
+    await an_events_forum(web, wf, guild, client, sign_in)
+
+    answer = client.post(f"/api/events/{event_id}/forum", json={})
+
+    assert answer.status_code == 409
+    assert "already reviewed in a post" in answer.json()["message"]
+
+
+async def test_no_forum_names_the_button_that_makes_one(client, sign_in, web, guild, wf):
+    event_id = await an_event(web, wf)
+    room = await a_room(web, wf, guild, event_id)
+    sign_in(client)
+
+    answer = client.post(f"/api/events/{event_id}/forum", json={})
+
+    assert answer.status_code == 409
+    assert "Make the forum" in answer.json()["message"]
+    assert "events_forum_channel_id" in answer.json()["message"]
+    assert room.deleted is False
+
+
+async def test_an_event_with_no_room_of_its_own_has_nothing_to_move(
+    client, sign_in, web, guild, wf
+):
+    event_id = await an_event(web, wf)
+    await an_events_forum(web, wf, guild, client, sign_in)
+
+    answer = client.post(f"/api/events/{event_id}/forum", json={})
+
+    assert answer.status_code == 409
+    assert "no room of its own" in answer.json()["message"]
+
+
+async def test_moving_an_event_black_bloc_never_heard_of_is_a_404(client, sign_in, web, wf):
+    sign_in(client)
+
+    answer = client.post("/api/events/9999/forum", json={})
+
+    assert answer.status_code == 404
+
+
+def test_moving_an_event_into_the_forum_needs_a_session(client):
+    assert client.post("/api/events/1/forum", json={}).status_code == 401

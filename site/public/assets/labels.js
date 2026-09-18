@@ -125,6 +125,7 @@ export const LABELS = {
   events_room_notice: 'Whether the Delete this room message is posted',
   events_review_mode: 'Whether an event gets its own room or a forum post',
   events_forum_channel_id: 'The forum every event is posted in',
+  events_moved_line: 'What the old room is told when an event moves into the forum',
   default_timezone: 'The zone times are read in for anybody who never picked one',
   timezone_choices: 'The zones the Time zone dropdown offers',
   time_step_minutes: 'How far apart the Minute dropdown’s choices are',

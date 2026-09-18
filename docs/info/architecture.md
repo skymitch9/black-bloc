@@ -14,6 +14,28 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-17 (Move an open event's room into the forum, branch `events-move-to-forum` off
+> `90252a6`; design `info/events-forum-design.md` §H; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing
+> has met Discord):** schema **unchanged at 45** (measured: `SCHEMA_VERSION`) — the move re-points
+> the four columns schema 45 already has, so **no migration and no backfill**. Registry keys
+> **282 → 283** (measured: `len(settings_store.KEY_TYPES)`) — `events_moved_line` text, the one
+> line the old room hears, `{post}` its only placeholder, validated by `checked_moved_line` and
+> rendered with a fall-back to the default (checklist 17). Mock **unchanged at 20 pages / 187
+> routes** — ⚠️ the real API serves **188**: `POST /api/events/{event_id}/forum` is deliberately
+> NOT a `contract.json` row because `check.mjs` reseeds before every entry and a fresh seed has no
+> forum (deviation §H-4); it is exercised by a bespoke `checkEventsMove()` pass and by
+> `tests/api/tools/test_events.py`. Tests **6755 → 6793**. ⚠️ **No new module.**
+> `events.remove_place` is the deletion extracted out of `delete_room` — the guard check, the
+> delete, the disown and nothing decided about the row — so `events.move_room_to_forum` can remove
+> a room **without** settling the event and without clearing the `review_channel_id` it has just
+> pointed at the new post. The order is load-bearing: the post is opened and the row re-pointed
+> BEFORE the room goes, so `on_guild_channel_delete` finds no row for the old id and cannot cancel
+> the event behind the move. `events.may_move_to_forum` is what a DOOR renders on (an open room,
+> forum mode, a forum set); the function itself does not read the mode, so staff keep the final
+> say. One new log kind, `event.room_moved` (ROUTINE, `{event_id, from, to, via}`), plus
+> `event.moved_line_failed`. The Discord door is the `/event` panel's own event card — ⚠️ the
+> Delete card §H named cannot carry it (deviation §H-2) — and the website door is the events
+> page's queue row. `DECISION_TEMPLATE` grows a fifth action, `move_forum`. Before that:
 > **2026-09-17 (Events as a forum under BlackMail, branch `events-forum` off `a7399b0`; design
 > `info/events-forum-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord):**
 > schema **44 → 45** (measured: `SCHEMA_VERSION`) — `events` gains `review_kind TEXT` through
@@ -160,7 +182,7 @@
 > [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
 > kinds: twelve `minutes.*`, four of them with a `web.` spelling.
 >
-> | What | v136 (`main`, 2026-09-17) | Where it is measured |
+> | What | v137 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
 > | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
 > | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
@@ -170,8 +192,8 @@
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **20 pages / 186 routes / 24 core settings** (21 at v133) (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **6755** (+3 skipped where the receive extension is absent) | the v136 deploy gate |
-> | Deploys | **133**, last `bb94a92` (v136) at 2026-09-17 22:07 | `../deploys.log` |
+> | Tests | **6793** (+3 skipped where the receive extension is absent) | the v137 deploy gate |
+> | Deploys | **134**, last `a16f5e5` (v137) at 2026-09-17 23:00 | `../deploys.log` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 >
@@ -193,6 +215,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v137 `a16f5e5`, 2026-09-17** | **22** | **32** | **45** | **187** | **6793** |
 > | **v136 `bb94a92`, 2026-09-17** | **22** | **32** | **45** | **187** | **6755** |
 > | **v135 `2dd8fcd`, 2026-09-17** | **22** | **32** | **44** | **186** | **6696** |
 > | **v134 `79fcef8`, 2026-09-17** | **22** | **32** | **44** | **186** | **6689** |

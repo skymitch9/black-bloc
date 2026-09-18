@@ -25,6 +25,7 @@ from ...events import (
     events_by_status,
     get_event,
     make_forum,
+    move_room_to_forum,
     moved_words,
     read_where,
     rename_channel,
@@ -310,5 +311,28 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(409, "room_kept", said)
         fresh = await wanted_event(bot, guild, event_id)
         return {"event": event_row(guild, fresh), "message": said}
+
+    @router.post("/{event_id}/forum")
+    async def event_move_to_forum(request: Request, event_id: int) -> dict[str, Any]:
+        """**Move to the forum**, from the website — the same one path the room's card presses."""
+        from ...cogs.community.events import handoff_review_view, room_notice_view
+
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await wanted_event(bot, guild, event_id)
+        outcome = await move_room_to_forum(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            row,
+            review_view=handoff_review_view(bot, guild),
+            room_view=room_notice_view,
+            via=VIA_WEBSITE,
+        )
+        if not outcome.ok:
+            raise Refused(outcome.status or 400, outcome.code, outcome.message)
+        fresh = await wanted_event(bot, guild, event_id)
+        return {"event": event_row(guild, fresh), "message": outcome.message}
 
     return router

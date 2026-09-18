@@ -270,6 +270,7 @@ ROUTINE: frozenset[str] = frozenset(
         "event.post_archived",
         "event.post_skipped_test_mode",
         "event.room_forgotten",
+        "event.room_moved",
         "event.settings",
         "frontdoor.below_post",
         "frontdoor.gone",

@@ -34,18 +34,24 @@ const SETTLED = 'This one is settled, so its details cannot be changed — only 
   'for a decision or already approved can be edited.';
 const PLACE_WORD = { room: 'Review channel', post: 'Review post' };
 const REMOVE_PLACE = { room: 'Remove its room', post: 'Remove its post' };
+const OPEN_STATUSES = ['pending', 'approved', 'live'];
+const MOVE_BUTTON = 'Move to the forum';
+const MOVE_BODY = 'A post goes up in the events forum carrying the same card and the same buttons, '
+  + 'the room is told where it went, and then the room is removed. The event is NOT called off, '
+  + 'and the messages already in the room are not carried over — Discord cannot move those.';
 const FORUM_NOTE = 'One forum under BlackMail, one post per event: the review card and its '
   + 'buttons are the post\u2019s first message, the tag says where it has got to, and the list '
   + 'never grows past the forum\u2019s own archive. events_review_mode decides which one a new '
-  + 'proposal gets; the events already open keep the room or post they have.';
+  + 'proposal gets; the events already open keep the room or post they have, and Move to the '
+  + 'forum on an open one takes its room into the forum.';
 const NOT_RESENT = 'Saving does not rewrite an announcement that is already up or a Discord ' +
   'scheduled event that already exists; the answer says when that applies.';
 
-/** What `events_forum_channel_id` holds right now, read from the same place Settings does. */
-async function forumChannelId() {
+/** The forum and the mode as they stand, read from the same place Settings does. */
+async function forumState() {
   const specs = settingsNamespace(await settings(true), 'events');
-  const spec = specs.find((one) => one.key === 'events_forum_channel_id');
-  return (spec || {}).value ?? null;
+  const held = (key) => ((specs.find((one) => one.key === key) || {}).value ?? null);
+  return { id: held('events_forum_channel_id'), mode: held('events_review_mode') };
 }
 
 /** The `YYYY-MM-DD HH:MM` the API reads, in this browser's own zone. */
@@ -179,7 +185,7 @@ async function editCard(row, say) {
   ]);
 }
 
-function decide(row, say) {
+function decide(row, say, forum) {
   const buttons = [button(state.open === row.id ? 'Close' : 'Open', () => {
     state.open = state.open === row.id ? null : row.id;
     refresh();
@@ -226,6 +232,25 @@ function decide(row, say) {
       const done = await run(say, () => send(`/api/events/${encodeURIComponent(row.id)}/cancel`, 'POST', {}), `Cancelled “${row.title}”.`);
       if (done.ok) refresh();
     }, { tone: 'quiet' }));
+  }
+  const movable = row.review_channel_id && row.review_kind !== 'post'
+    && OPEN_STATUSES.includes(row.status) && forum && forum.id && forum.mode === 'forum';
+  if (movable) {
+    buttons.push(button(MOVE_BUTTON, async () => {
+      const sure = await ask({
+        title: `Move “${row.title}” into the forum?`,
+        body: [MOVE_BODY],
+        confirmLabel: 'Move it',
+        tone: 'warn',
+      });
+      if (!sure) return;
+      const done = await run(
+        say,
+        () => send(`/api/events/${encodeURIComponent(row.id)}/forum`, 'POST', {}),
+        (found) => found?.message,
+      );
+      if (done.ok) refresh();
+    }, { tone: 'warn' }));
   }
   if (row.review_channel_id) {
     const place = row.review_kind === 'post' ? 'post' : 'room';
@@ -489,6 +514,7 @@ async function load() {
   const payload = await api(`/api/events${query}`);
   const rows = listOf(payload, 'events');
   await names(idsIn(rows, ['requester_id', 'decided_by_id', 'review_channel_id']));
+  const forum = await forumState();
 
   const say = notice();
   const status = el('select', { class: 'input' });
@@ -508,7 +534,7 @@ async function load() {
     { label: 'Status', cell: (row) => badge(row.status, TONE[row.status] || null) },
     { label: 'Decided by', cell: (row) => nameNode(row.decided_by_id, row.decided_by_name) },
     { label: 'Why not', cell: (row) => row.deny_reason, className: 'wrap' },
-    { label: '', cell: (row) => decide(row, say) },
+    { label: '', cell: (row) => decide(row, say, forum) },
   ], rows, { empty: 'Nothing matches that.' });
 
   const one = section(
@@ -528,7 +554,7 @@ async function load() {
   }
 
   const forumBox = section('Events forum', null, { id: 'events-forum', open: true });
-  forumBox.body.append(eventForumCard(await forumChannelId()));
+  forumBox.body.append(eventForumCard(forum.id));
 
   document.getElementById('dash').replaceChildren(
     ...nodes,

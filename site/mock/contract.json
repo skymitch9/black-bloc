@@ -5190,6 +5190,8 @@
     "web.event.denied",
     "web.event.cancelled",
     "web.event.channel_deleted",
+    "web.event.forum_made",
+    "web.event.room_moved",
     "web.event.edited",
     "web.poll.approved",
     "web.poll.denied",

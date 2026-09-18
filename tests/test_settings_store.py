@@ -18,6 +18,8 @@ from black_bloc.settings_store import (
     EVENTS_DEFAULT_MINUTES,
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_MAX_LATE_MINUTES,
+    EVENTS_MOVED_LINE,
+    EVENTS_MOVED_LINE_KEY,
     EVENTS_RETENTION_DAYS,
     EVENTS_RETENTION_MAX_DAYS,
     EVENTS_RETENTION_MIN_DAYS,
@@ -2389,3 +2391,21 @@ async def test_stored_values_finds_every_guild_that_set_a_key(store):
 async def test_stored_values_refuses_a_key_that_is_not_a_setting(store):
     with pytest.raises(settings_store.SettingError):
         store.stored_values("never_heard_of_it")
+
+
+def test_the_moved_line_is_a_text_key_in_the_events_namespace_with_a_default():
+    """§H: the words the old room hears are a setting, not a constant only the code knows."""
+    assert KEY_TYPES[EVENTS_MOVED_LINE_KEY] == "text"
+    assert namespace_of(EVENTS_MOVED_LINE_KEY) == "events"
+    assert "{post}" in EVENTS_MOVED_LINE
+    assert "{post}" in KEY_HELP[EVENTS_MOVED_LINE_KEY]
+
+
+def test_the_moved_line_takes_post_and_refuses_any_other_placeholder():
+    assert coerce_value(EVENTS_MOVED_LINE_KEY, "  Over in {post} now.  ") == "Over in {post} now."
+    assert coerce_value(EVENTS_MOVED_LINE_KEY, "This room is closing.") == "This room is closing."
+
+    with pytest.raises(SettingError) as caught:
+        coerce_value(EVENTS_MOVED_LINE_KEY, "Off to {nowhere} we go.")
+
+    assert "{nowhere}" in str(caught.value) and "{post}" in str(caught.value)
