@@ -34,7 +34,9 @@ from ...events import (
     LIVE,
     LOCATION_LIMIT,
     MAKE_THE_FORUM,
+    MOVE_NOT_STAFF,
     MOVE_TARGETS,
+    MOVE_TO_FORUM_BUTTON,
     NO_SUCH_EVENT,
     NOTHING_OPEN,
     OPEN_STATUSES,
@@ -121,7 +123,9 @@ from ...events import (
     make_forum,
     may_cancel,
     may_delete_room,
+    may_move_to_forum,
     minute_step,
+    move_room_to_forum,
     option_label,
     own_events,
     own_room,
@@ -139,6 +143,7 @@ from ...events import (
     review_kind,
     review_mode,
     review_place,
+    reviews_in_forum,
     rooms_lines,
     set_review,
     set_status,
@@ -226,15 +231,17 @@ from ...when_picker import ZoneModal as WhenZoneModal
 log = logging.getLogger(__name__)
 
 DECISION_TEMPLATE = (
-    r"event:(?P<event_id>[0-9]+):(?P<action>approve|deny|delete_room|make_request)"
+    r"event:(?P<event_id>[0-9]+):(?P<action>approve|deny|delete_room|make_request|move_forum)"
 )
 DELETE_ROOM = "delete_room"
 MAKE_REQUEST = "make_request"
+MOVE_FORUM = "move_forum"
 DECISION_LABELS: dict[str, str] = {
     "approve": "Approve",
     "deny": "Deny",
     DELETE_ROOM: ROOM_DELETE_BUTTON,
     MAKE_REQUEST: NOT_AN_EVENT,
+    MOVE_FORUM: MOVE_TO_FORUM_BUTTON,
 }
 GOLIVE_MINUTES = 1
 RECONCILE_MINUTES = 5
@@ -274,6 +281,7 @@ DECISION_STYLES: dict[str, discord.ButtonStyle] = {
     "deny": discord.ButtonStyle.danger,
     DELETE_ROOM: discord.ButtonStyle.danger,
     MAKE_REQUEST: discord.ButtonStyle.secondary,
+    MOVE_FORUM: discord.ButtonStyle.primary,
 }
 NOTE_TITLES: dict[str, str] = {"deny": "Why not?", "cancel": "Why is it off?"}
 NOTE_LABELS: dict[str, str] = {
@@ -309,11 +317,23 @@ def handoff_review_view(bot: Any, guild: Any) -> Any:
     return lambda event_id: review_view(event_id, handoff=on)
 
 
-def room_notice_view(event_id: int, kind: str = ROOM) -> discord.ui.View:
+def room_notice_view(
+    event_id: int, kind: str = ROOM, *, move: bool = False
+) -> discord.ui.View:
     """The Delete button, labelled for the place it is about to be posted in."""
     view = discord.ui.View(timeout=None)
     view.add_item(DecisionButton(event_id, DELETE_ROOM, label=PLACE_WORDS[kind].button))
+    if move:
+        view.add_item(DecisionButton(event_id, MOVE_FORUM))
     return view
+
+
+def moving_notice_view(bot: Any, guild: Any) -> Any:
+    """`submit_event` takes a two-argument factory; the mode is read here, not inside it."""
+    on = reviews_in_forum(bot.store, guild.id) and forum_of(bot, guild) is not None
+    return lambda event_id, kind: room_notice_view(
+        event_id, kind, move=on and kind == ROOM
+    )
 
 
 async def decide(
@@ -482,6 +502,10 @@ def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embe
         view.add_item(
             CardWhereButton(row["id"], where, guild.get_channel(where.channel_id or 0))
         )
+    if may_move_to_forum(bot.store, guild.id, row) and may_delete_room(
+        bot.store, guild.id, actor
+    ):
+        view.add_item(DecisionButton(row["id"], MOVE_FORUM, row=2))
     view.add_item(BackButton())
     if room is not None:
         view.add_item(
@@ -965,7 +989,7 @@ async def submit_draft(interaction: discord.Interaction, previous: Any) -> None:
         interaction.user,
         checked,
         review_view=handoff_review_view(bot, interaction.guild),
-        room_view=room_notice_view,
+        room_view=moving_notice_view(bot, interaction.guild),
         requester=proposer(interaction.guild, fields),
     )
     if row is None:
@@ -1757,7 +1781,9 @@ class DenyModal(AnswersErrors, discord.ui.Modal, title="Why not?"):
 class DecisionButton(
     SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Button], template=DECISION_TEMPLATE
 ):
-    def __init__(self, event_id: int, action: str, label: str | None = None) -> None:
+    def __init__(
+        self, event_id: int, action: str, label: str | None = None, row: int | None = None
+    ) -> None:
         self.event_id = event_id
         self.action = action
         super().__init__(
@@ -1765,6 +1791,7 @@ class DecisionButton(
                 label=label or DECISION_LABELS[action],
                 style=DECISION_STYLES[action],
                 custom_id=decision_id(event_id, action),
+                row=row,
             )
         )
 
@@ -1778,6 +1805,9 @@ class DecisionButton(
             return
         if self.action == MAKE_REQUEST:
             await make_it_a_request(interaction, self.event_id)
+            return
+        if self.action == MOVE_FORUM:
+            await move_into_the_forum(interaction, self.event_id)
             return
         row = await decision_context(interaction, self.event_id)
         if row is None:
@@ -1812,6 +1842,33 @@ async def ask_to_delete_room(interaction: discord.Interaction, event_id: int) ->
         await interaction.response.send_message(said, ephemeral=True)
         return
     await interaction.response.send_modal(RoomDeleteModal(event_id, words))
+
+
+async def move_into_the_forum(interaction: discord.Interaction, event_id: int) -> None:
+    """Staff final say: an open room becomes a post, and the words say where it went."""
+    row = await decision_context(interaction, event_id, staff=False)
+    if row is None:
+        return
+    bot = interaction.client
+    store = bot.store
+    if not may_delete_room(store, interaction.guild.id, interaction.user):
+        said = (
+            MOVE_NOT_STAFF
+            if interaction.user.id == row["requester_id"]
+            else store.staff_refusal(interaction.guild.id)
+        )
+        await interaction.response.send_message(said, ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    outcome = await move_room_to_forum(
+        bot,
+        interaction.guild,
+        interaction.user,
+        row,
+        review_view=handoff_review_view(bot, interaction.guild),
+        room_view=room_notice_view,
+    )
+    await said_after_the_room(interaction, outcome.message)
 
 
 async def said_after_the_room(interaction: discord.Interaction, said: str) -> None:
@@ -2370,6 +2427,8 @@ __all__ = [
     "decision_context",
     "decision_id",
     "finish_card",
+    "move_into_the_forum",
+    "moving_notice_view",
     "open_cancel_confirm",
     "open_card",
     "open_draft",

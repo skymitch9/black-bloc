@@ -25,6 +25,8 @@ from .settings_store import (
     EVENTS_APPROVER_ROLE_KEY,
     EVENTS_FORUM_CHANNEL_KEY,
     EVENTS_LATE_CEILING_MINUTES,
+    EVENTS_MOVED_LINE,
+    EVENTS_MOVED_LINE_KEY,
     EVENTS_POSTS_WHERE,
     EVENTS_POSTS_WHERE_KEY,
     EVENTS_RETENTION_MAX_DAYS,
@@ -836,6 +838,43 @@ POST_REFUSED_TEST = (
 )
 POST_DELETED_BY = "Black Bloc event {event_id}: post removed by {who}"
 POST_DELETED_REASON = "post_deleted"
+MOVE_TO_FORUM_BUTTON = "Move to the forum"
+MOVED_SAID = "Event #{event_id} now lives in <#{post}>."
+MOVE_ALREADY_A_POST = (
+    "Event #{event_id} is already reviewed in a post, so there is nothing to move. Its own "
+    "post is where the buttons are."
+)
+MOVE_SETTLED = (
+    "Event #{event_id} is **{status}**, so it is not moving anywhere — only an event still "
+    "waiting for a decision, approved or running is worth a post. Its room goes on its own."
+)
+MOVE_NO_ROOM = (
+    "Event #{event_id} has no room of its own any more, so there is nothing to move into the "
+    "forum. Propose it again if it still needs reviewing."
+)
+MOVE_NO_FORUM = (
+    "**events_forum_channel_id** is blank or points at a channel Black Bloc cannot see, so "
+    "there is no forum to move it into and nothing was changed. Press **"
+    + MAKE_THE_FORUM
+    + "** on `/event` ▸ **Settings** ▸ **Rooms…** ▸ **Forum…** first."
+)
+MOVE_REFUSED_TEST = (
+    "Black Bloc is in **test mode** and the guard refused the events forum, so nothing was "
+    "moved and the room is untouched. The log says `event.post_skipped_test_mode`."
+)
+MOVE_FAILED = (
+    "Discord would not open a post for it, so nothing was moved and the room is untouched. "
+    "Black Bloc needs **Create Posts** in the events forum; the log says `event.post_failed`."
+)
+MOVE_NOT_STAFF = (
+    "Only staff can move this event into the forum. If you want your event called off, use "
+    "**Call it off** on `/event`."
+)
+MOVE_WHY: dict[str, str] = {
+    "no_forum": MOVE_NO_FORUM,
+    "test_mode": MOVE_REFUSED_TEST,
+    "failed": MOVE_FAILED,
+}
 ANNOUNCED_IN_POST = (
     "It is announced in the event's own post rather than a public channel — "
     "**events_posts_where** changes that."
@@ -1674,6 +1713,28 @@ def may_delete_room(store: Any, guild_id: int, member: Any) -> bool:
     return bool(store.is_staff(member))
 
 
+def may_move_to_forum(store: Any, guild_id: int, row: Any) -> bool:
+    """What every door renders on: an open room, forum mode, and a forum to move it into."""
+    if row is None or review_kind(row) != ROOM or not cell(row, "review_channel_id"):
+        return False
+    if row["status"] not in OPEN_STATUSES:
+        return False
+    return reviews_in_forum(store, guild_id) and forum_channel_id(store, guild_id) is not None
+
+
+def moved_line(store: Any, guild_id: int, post: Any) -> str:
+    """The staff-editable goodbye; a line whose braces went wrong falls back to the default."""
+    where = f"<#{getattr(post, 'id', post)}>"
+    said = str(store.get(guild_id, EVENTS_MOVED_LINE_KEY) or EVENTS_MOVED_LINE)
+    try:
+        return said.format(post=where)
+    except Exception as exc:
+        log.warning(
+            "events: %s would not render (%s); using the default", EVENTS_MOVED_LINE_KEY, exc
+        )
+        return EVENTS_MOVED_LINE.format(post=where)
+
+
 async def post_to_room(
     bot: Any,
     guild: Any,
@@ -1784,6 +1845,40 @@ async def forget_room(bot: Any, guild: Any, row: Any) -> None:
     )
 
 
+def place_details(row: Any, channel: Any, actor_id: Any, words: Any) -> dict[str, Any]:
+    return {
+        "event_id": row["id"],
+        "channel_id": channel.id,
+        "by": actor_id,
+        "kind": words.word,
+    }
+
+
+async def remove_place(
+    bot: Any, guild: Any, row: Any, channel: Any, *, by: Any, words: Any, extra: str = ""
+) -> tuple[str, bool]:
+    """The one deletion: the guard, the delete, the disown — and nothing decided about the row."""
+    actor_id = getattr(by, "id", by)
+    details = place_details(row, channel, actor_id, words)
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_place(channel):
+        await log_action(bot, guild, "event.would_delete_channel", details=details)
+        return (f"{words.refused_test}{extra}", False)
+    try:
+        await channel.delete(reason=words.audit.format(event_id=row["id"], who=actor_id))
+    except NETWORK_ERRORS as exc:
+        log.warning("events: could not delete the %s %s: %s", words.word, channel.id, exc)
+        await log_action(
+            bot,
+            guild,
+            "event.room_delete_failed",
+            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
+        )
+        return (f"{words.failed}{extra}", False)
+    disown_room(bot, channel)
+    return (f"{words.deleted}{extra}", True)
+
+
 async def delete_room(
     bot: Any,
     guild: Any,
@@ -1809,41 +1904,23 @@ async def delete_room(
         )
         fresh = await get_event(bot.db, row["id"])
     extra = ROOM_ALSO_CANCELLED.format(event_id=fresh["id"]) if cancelled else ""
-    details = {
-        "event_id": fresh["id"],
-        "channel_id": channel.id,
-        "by": actor_id,
-        "kind": words.word,
-    }
-    guard = getattr(bot, "guard", None)
-    if guard is not None and not guard.allows_place(channel):
-        await log_action(bot, guild, "event.would_delete_channel", details=details)
-        return (f"{words.refused_test}{extra}", False)
-    try:
-        await channel.delete(
-            reason=words.audit.format(event_id=fresh["id"], who=actor_id)
-        )
-    except NETWORK_ERRORS as exc:
-        log.warning("events: could not delete the %s %s: %s", words.word, channel.id, exc)
-        await log_action(
-            bot,
-            guild,
-            "event.room_delete_failed",
-            details=details | {"reason": f"{type(exc).__name__}: {exc}"},
-        )
-        return (f"{words.failed}{extra}", False)
+    said, gone = await remove_place(
+        bot, guild, fresh, channel, by=by, words=words, extra=extra
+    )
+    if not gone:
+        return (said, False)
     await set_review(
         bot.db, fresh["id"], None, fresh["review_message_id"], fresh["card_channel_id"]
     )
-    disown_room(bot, channel)
     await log_action(
         bot,
         guild,
         kind_via("event.channel_deleted", via),
         actor=by,
-        details=details | {"cancelled": cancelled, "via": via},
+        details=place_details(fresh, channel, actor_id, words)
+        | {"cancelled": cancelled, "via": via},
     )
-    return (f"{words.deleted}{extra}", True)
+    return (said, True)
 
 
 async def edit_announcement(bot: Any, guild: Any, row: Any) -> None:
@@ -2183,6 +2260,92 @@ async def retag_post(bot: Any, guild: Any, row: Any, status: Any = None) -> None
                 "reason": f"{type(exc).__name__}: {exc}",
             },
         )
+
+
+async def say_moved(bot: Any, guild: Any, row: Any, room: Any, post: Any) -> None:
+    """The last line the old room ever gets, in the words `events_moved_line` holds."""
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(room.id):
+        return
+    try:
+        await room.send(
+            moved_line(bot.store, guild.id, post),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except NETWORK_ERRORS as exc:
+        log.warning("events: could not say where %s went: %s", row["id"], exc)
+        await log_action(
+            bot,
+            guild,
+            "event.moved_line_failed",
+            details={
+                "event_id": row["id"],
+                "channel_id": getattr(room, "id", None),
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+
+
+async def move_room_to_forum(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    row: Any,
+    *,
+    review_view: Any = None,
+    room_view: Any = None,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """An open room becomes a post: the post first, the line next, the room last, no settling."""
+    fresh = await get_event(bot.db, row["id"])
+    if fresh is None:
+        return refusal(NO_SUCH_EVENT, "no_such_event", 404)
+    if review_kind(fresh) == POST:
+        return refusal(
+            MOVE_ALREADY_A_POST.format(event_id=fresh["id"]), "already_a_post", 409
+        )
+    if fresh["status"] not in OPEN_STATUSES:
+        return refusal(
+            MOVE_SETTLED.format(event_id=fresh["id"], status=fresh["status"]), "settled", 409
+        )
+    if not cell(fresh, "review_channel_id"):
+        return refusal(MOVE_NO_ROOM.format(event_id=fresh["id"]), "no_room", 409)
+    if forum_of(bot, guild) is None:
+        return refusal(MOVE_NO_FORUM, "no_forum", 409)
+    was = int(fresh["review_channel_id"])
+    room = room_of(guild, fresh)
+    post, why = await open_review_post(
+        bot, guild, fresh, review_view(fresh["id"]) if review_view is not None else None
+    )
+    if post is None:
+        return refusal(
+            MOVE_WHY.get(why, MOVE_FAILED),
+            f"post_{why or 'failed'}",
+            409 if why in MOVE_WHY else 500,
+        )
+    moved = await get_event(bot.db, fresh["id"])
+    await post_room_notice(
+        bot,
+        guild,
+        moved,
+        post,
+        room_view(fresh["id"], POST) if room_view is not None else None,
+    )
+    await log_action(
+        bot,
+        guild,
+        kind_via("event.room_moved", via),
+        actor=actor,
+        details={"event_id": moved["id"], "from": was, "to": post.id, "via": via},
+    )
+    said = MOVED_SAID.format(event_id=moved["id"], post=post.id)
+    if room is None:
+        return Outcome(True, said, value=post.id)
+    await say_moved(bot, guild, moved, room, post)
+    gone, _ = await remove_place(
+        bot, guild, moved, room, by=actor, words=PLACE_WORDS[ROOM]
+    )
+    return Outcome(True, f"{said} {gone}", value=post.id)
 
 
 async def make_forum(bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD) -> Outcome:
@@ -2559,6 +2722,7 @@ SETTINGS_KEYS = (
     EVENTS_ROOM_NOTICE_KEY,
     EVENTS_REVIEW_MODE_KEY,
     EVENTS_FORUM_CHANNEL_KEY,
+    EVENTS_MOVED_LINE_KEY,
 )
 
 ROOMS_TITLE = "Events — rooms"
@@ -2606,7 +2770,9 @@ def forum_lines(store: Any, guild: Any) -> list[str]:
         f"**a proposal is reviewed in** — {REVIEW_MODE_WORDS.get(mode, mode)}",
         "**the events forum** — " + (f"<#{forum_id}>" if forum_id else "not set"),
         "**open events already have their room or post** — a change here only reaches the ones "
-        "proposed after it",
+        f"proposed after it, and **{MOVE_TO_FORUM_BUTTON}** moves one that is still open",
+        "**the line the old room gets** — "
+        + str(store.get(guild.id, EVENTS_MOVED_LINE_KEY) or EVENTS_MOVED_LINE),
     ]
     if mode == REVIEW_FORUM and not forum_id:
         lines.append(

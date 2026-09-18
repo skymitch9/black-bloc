@@ -337,6 +337,9 @@ async function checkActionKinds() {
   await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id] });
   await post('/api/rolemenus/contract/assign', { user_id: IDS.member_id, role_ids: [IDS.plain_role_id], remove: true });
   await send('PUT', `/api/events/${IDS.event_id}`, { title: 'Contract night', start: '2099-09-14 19:30', duration: '2h' });
+  // §H: the forum has to exist before a room can move into it, so both kinds land here.
+  await post('/api/events/forum', {});
+  await post(`/api/events/${IDS.event_id}/forum`, {});
   // F3's two web.youtube.* kinds. The member already holds that channel in the seed, so the
   // POST re-links rather than tripping the 409 a second owner would get.
   await post('/api/youtube/links', { member_id: IDS.member_id, channel: 'UCsXVk37bltHxD1rDPwtNM8Q' });
@@ -503,6 +506,38 @@ async function checkRoster() {
   }
 }
 
+// §H Move to the forum. NOT a contract row: `checkRoutes` reseeds before every entry, and a
+// fresh seed has no forum — giving one to the seed would make the entry that MAKES the forum
+// refuse as already-there. So the pass makes the forum first and then walks the move and its
+// two refusals.
+async function checkEventsMove() {
+  await setGuard(false);
+  await seed();
+  const where = `/api/events/${IDS.event_id}/forum`;
+  const blank = await post(where, {});
+  if (blank.status !== 409) fail('POST move [no forum]', `answered ${blank.status}, not 409`);
+  await post('/api/events/forum', {});
+  const moved = await post(where, {});
+  if (moved.status !== 200) {
+    fail('POST move', `answered ${moved.status}: ${(await moved.text()).slice(0, 200)}`);
+  } else {
+    const found = (await moved.json()).event;
+    const gone = missing(found, ['id', 'status', 'review_channel_id', 'review_kind']);
+    if (gone.length) fail('POST move', `event is missing ${gone.join(', ')}`);
+    if (found.review_kind !== 'post') fail('POST move', `review_kind is ${found.review_kind}`);
+    if (found.status !== 'pending') fail('POST move', `settled the event to ${found.status}`);
+    if (found.review_channel_id === '800000000000000005') {
+      fail('POST move', 'still points at the old room');
+    }
+  }
+  const again = await post(where, {});
+  if (again.status !== 409) fail('POST move [twice]', `answered ${again.status}, not 409`);
+  const settled = await post('/api/events/1/forum', {});
+  if (settled.status !== 409) {
+    fail('POST move [settled]', `answered ${settled.status}, not 409`);
+  }
+}
+
 // §C9 shadow: the mode decides WHERE Post it goes, and the page has to be able to say so.
 // The seed's `welcome` post already names #welcome, which is NOT the channel the guard allows —
 // that is the whole point: in shadow it reaches #blackbloc-logs anyway, and on `on` it is
@@ -565,6 +600,7 @@ process.stdout.write(`check: ${BASE} against ${HERE}contract.json\n`);
 await checkPages();
 await checkGuard();
 await checkPostsModes();
+await checkEventsMove();
 await checkRoutes();
 await checkSettings();
 await checkRoster();

@@ -35,7 +35,9 @@ from black_bloc.cogs.community.events import (
     build_forum,
     build_rooms,
     decision_id,
+    moving_notice_view,
     review_view,
+    room_notice_view,
     submit_draft,
 )
 from black_bloc.config import load_settings
@@ -46,6 +48,8 @@ from black_bloc.events import (
     DONE,
     DRAFT_TITLE,
     LIVE,
+    MAKE_THE_FORUM,
+    MOVE_TO_FORUM_BUTTON,
     PANEL_TITLE,
     PENDING,
     STATUSES,
@@ -73,6 +77,7 @@ from black_bloc.settings_store import (
     ERROR_SENTENCE,
     EVENTS_APPROVER_ROLE_KEY,
     EVENTS_FORUM_CHANNEL_KEY,
+    EVENTS_MOVED_LINE_KEY,
     EVENTS_POSTS_WHERE_KEY,
     EVENTS_REVIEW_MODE_KEY,
     EVENTS_ROOM_DELETE_KEY,
@@ -4896,3 +4901,226 @@ async def test_the_event_card_links_the_post_by_its_own_name(
 
     assert has_item(view, "The review post")
     assert not has_item(view, "The review channel")
+
+
+# --- §H: moving an open event's room into the forum ------------------------------------
+
+
+@pytest.fixture
+async def a_room_in_forum_mode(cog, bot, member, db, forum):
+    """The owner's case: a room made under room mode, and then the mode flipped to forum."""
+    await submit(cog, bot, member)
+    room = bot.guild.created[0]
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await bot.store.set(GUILD, EVENTS_REVIEW_MODE_KEY, REVIEW_FORUM)
+    await bot.store.set(GUILD, EVENTS_FORUM_CHANNEL_KEY, FORUM)
+    return (row, room)
+
+
+async def press_move(bot, who, event_id, channel=None):
+    interaction = FakeInteraction(bot, who, channel=channel)
+    await DecisionButton(event_id, "move_forum").callback(interaction)
+    return interaction
+
+
+def item_labels(view):
+    return [item.item.label for item in view.children]
+
+
+def offers_the_move(view):
+    """`has_item` reads `.label`, which a `DynamicItem` keeps on the button it wraps."""
+    return any(
+        getattr(getattr(item, "item", item), "label", None) == MOVE_TO_FORUM_BUTTON
+        for item in view.children
+    )
+
+
+async def test_moving_a_room_opens_a_post_with_the_card_and_the_buttons(
+    cog, bot, lead, db, a_room_in_forum_mode, forum
+):
+    row, room = a_room_in_forum_mode
+
+    await press_move(bot, lead, row["id"], channel=room)
+
+    post = forum.threads[0]
+    fresh = await get_event(db, row["id"])
+    assert fresh["review_kind"] == "post"
+    assert fresh["review_channel_id"] == post.id
+    assert fresh["review_message_id"] == post.messages[0].id
+    assert tags_on(post) == [PENDING]
+    assert item_labels(post.messages[0].kwargs["view"])[:2] == ["Approve", "Deny"]
+
+
+async def test_the_move_never_settles_the_event_and_never_dms_the_host(
+    cog, bot, lead, member, db, a_room_in_forum_mode
+):
+    """§H: the room goes without the cancel `delete_room` would have done."""
+    row, room = a_room_in_forum_mode
+    before = list(member.dms)
+
+    interaction = await press_move(bot, lead, row["id"], channel=room)
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["status"] == PENDING
+    assert room.deleted is True
+    assert member.dms == before
+    assert "event.cancelled" not in await action_kinds(db)
+    assert f"<#{fresh['review_channel_id']}>" in interaction.sent
+
+
+async def test_the_old_room_is_told_where_it_went_before_it_goes(
+    cog, bot, lead, db, a_room_in_forum_mode, forum
+):
+    row, room = a_room_in_forum_mode
+
+    await press_move(bot, lead, row["id"], channel=room)
+
+    post = forum.threads[0]
+    assert room.messages[-1].content == (
+        f"This event now lives in its own post: <#{post.id}>. This room is being removed."
+    )
+
+
+async def test_the_moved_line_is_a_settings_key_the_site_can_change(
+    cog, bot, lead, db, a_room_in_forum_mode, forum
+):
+    row, room = a_room_in_forum_mode
+    await bot.store.set(GUILD, EVENTS_MOVED_LINE_KEY, "Carry on in {post}, please.")
+
+    await press_move(bot, lead, row["id"], channel=room)
+
+    assert room.messages[-1].content == f"Carry on in <#{forum.threads[0].id}>, please."
+
+
+async def test_the_post_carries_the_delete_this_post_card(
+    cog, bot, lead, db, a_room_in_forum_mode, forum
+):
+    row, room = a_room_in_forum_mode
+
+    await press_move(bot, lead, row["id"], channel=room)
+
+    assert item_labels(forum.threads[0].messages[-1].kwargs["view"]) == ["Delete this post"]
+
+
+async def test_an_approved_event_keeps_its_status_and_wears_its_own_tag(
+    cog, bot, lead, member, db, forum
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await approve(bot, lead, row["id"])
+    await bot.store.set(GUILD, EVENTS_REVIEW_MODE_KEY, REVIEW_FORUM)
+    await bot.store.set(GUILD, EVENTS_FORUM_CHANNEL_KEY, FORUM)
+
+    await press_move(bot, lead, row["id"], channel=bot.guild.created[0])
+
+    assert tags_on(forum.threads[0]) == [APPROVED]
+    assert (await get_event(db, row["id"]))["status"] == APPROVED
+
+
+async def test_the_move_logs_where_it_came_from_and_where_it_went(
+    cog, bot, lead, db, a_room_in_forum_mode, forum
+):
+    row, room = a_room_in_forum_mode
+
+    await press_move(bot, lead, row["id"], channel=room)
+
+    details = await action_details(db, "event.room_moved")
+    assert details["from"] == room.id
+    assert details["to"] == forum.threads[0].id
+    assert details["event_id"] == row["id"]
+
+
+async def test_the_deleted_room_does_not_cancel_the_event_behind_the_move(
+    cog, bot, lead, db, a_room_in_forum_mode
+):
+    """The row is re-pointed first, so `on_guild_channel_delete` finds nothing to settle."""
+    row, room = a_room_in_forum_mode
+
+    await press_move(bot, lead, row["id"], channel=room)
+    await cog.on_guild_channel_delete(room)
+
+    assert (await get_event(db, row["id"]))["status"] == PENDING
+
+
+async def test_a_post_cannot_be_moved_into_the_forum_it_is_already_in(
+    cog, bot, lead, member, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    interaction = await press_move(bot, lead, row["id"], channel=in_forum_mode.threads[0])
+
+    assert "already reviewed in a post" in interaction.sent
+    assert len(in_forum_mode.threads) == 1
+
+
+async def test_a_settled_event_is_refused_in_words_and_keeps_its_room(
+    cog, bot, lead, member, db, forum
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await deny(bot, lead, row["id"])
+    await bot.store.set(GUILD, EVENTS_REVIEW_MODE_KEY, REVIEW_FORUM)
+    await bot.store.set(GUILD, EVENTS_FORUM_CHANNEL_KEY, FORUM)
+
+    interaction = await press_move(bot, lead, row["id"], channel=bot.guild.created[0])
+
+    assert "is **denied**" in interaction.sent
+    assert forum.threads == []
+
+
+async def test_a_blank_forum_names_the_button_that_makes_one(cog, bot, lead, member, db, forum):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await bot.store.set(GUILD, EVENTS_REVIEW_MODE_KEY, REVIEW_FORUM)
+
+    interaction = await press_move(bot, lead, row["id"], channel=bot.guild.created[0])
+
+    assert MAKE_THE_FORUM in interaction.sent
+    assert bot.guild.created[0].deleted is False
+
+
+async def test_the_host_pressing_move_is_refused_in_words(
+    cog, bot, member, db, a_room_in_forum_mode
+):
+    row, room = a_room_in_forum_mode
+
+    interaction = await press_move(bot, member, row["id"], channel=room)
+
+    said = interaction.response.messages[-1]["content"]
+    assert "Only staff can move this event into the forum" in said
+    assert room.deleted is False
+
+
+async def test_the_card_offers_the_move_only_once_the_forum_is_the_mode(
+    cog, bot, lead, member, db, forum
+):
+    await submit(cog, bot, member)
+    row = await get_event(db, (await events_by_status(db, GUILD, (PENDING,)))[0]["id"])
+
+    _, before = build_card(bot, bot.guild, row, lead)
+    assert not offers_the_move(before)
+
+    await bot.store.set(GUILD, EVENTS_REVIEW_MODE_KEY, REVIEW_FORUM)
+    await bot.store.set(GUILD, EVENTS_FORUM_CHANNEL_KEY, FORUM)
+    _, after = build_card(bot, bot.guild, row, lead)
+    assert offers_the_move(after)
+
+    _, theirs = build_card(bot, bot.guild, row, member)
+    assert not offers_the_move(theirs)
+
+
+async def test_the_notice_card_carries_the_move_only_for_a_room_under_forum_mode(
+    cog, bot, db, in_forum_mode
+):
+    factory = moving_notice_view(bot, bot.guild)
+
+    assert item_labels(room_notice_view(1)) == ["Delete this room"]
+    assert item_labels(factory(1, "room")) == ["Delete this room", MOVE_TO_FORUM_BUTTON]
+    assert item_labels(factory(1, "post")) == ["Delete this post"]
+
+
+async def test_a_room_mode_notice_card_never_offers_the_move(cog, bot, db, forum):
+    factory = moving_notice_view(bot, bot.guild)
+
+    assert item_labels(factory(1, "room")) == ["Delete this room"]

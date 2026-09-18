@@ -194,6 +194,27 @@ class WebChannel:
             raise LookupError(message_id)
         return found
 
+    async def create_thread(self, name: str, **kwargs: Any) -> Any:
+        """A forum post, handed back the way `ForumChannel.create_thread` hands one over."""
+        self.threads = getattr(self, "threads", [])
+        thread = WebChannel(self.id * 100 + len(self.threads) + 1, name, kind="public_thread")
+        thread.guild = self.guild
+        thread.parent = self
+        thread.parent_id = self.id
+        thread.applied_tags = list(kwargs.get("applied_tags") or ())
+        thread.archived = False
+        message = WebMessage(
+            9000,
+            thread,
+            content=kwargs.get("content"),
+            **{k: v for k, v in kwargs.items() if k in ("embed", "view")},
+        )
+        thread.messages.append(message)
+        self.threads.append(thread)
+        if self.guild is not None:
+            self.guild.channels.append(thread)
+        return SimpleNamespace(thread=thread, message=message)
+
 
 class MemberBook(dict):
     """A dict for the shared sign-in fixture, a list of members for the resolver."""
@@ -258,6 +279,10 @@ class WebGuild:
 
     def get_channel(self, channel_id: int):
         return next((c for c in self.channels if c.id == int(channel_id)), None)
+
+    def get_thread(self, thread_id: int):
+        found = self.get_channel(int(thread_id))
+        return found if getattr(found, "parent_id", None) else None
 
     @property
     def text_channels(self):

@@ -363,6 +363,7 @@ const SETTING_SPECS = [
   ['events_room_notice', 'bool', true, true, 'true to post the message carrying Delete this room in every review room Black Bloc makes'],
   ['events_review_mode', 'enum', 'room', 'room', 'where a proposed event is reviewed: room makes a text channel per event under events_category_id; forum makes one post per event in events_forum_channel_id (Make the forum on /event first)', ['room', 'forum']],
   ['events_forum_channel_id', 'channel', null, null, 'the forum channel every event is posted in, in forum mode; Make the forum on /event makes one under the BlackMail category'],
+  ['events_moved_line', 'text', 'This event now lives in its own post: {post}. This room is being removed.', 'This event now lives in its own post: {post}. This room is being removed.', "the one line left in an event's old review room when staff press Move to the forum; {post} stands for the new post"],
   ['poll_mode', 'enum', 'on', 'on', 'off, shadow (every poll is posted for real, but into the log channel with a line saying why, so staff can rehearse), or on (polls go where they are pointed)', ['off', 'shadow', 'on']],
   ['poll_who_can_create', 'enum', 'staff', 'staff', 'who may run /poll create: staff, or everyone', ['staff', 'everyone']],
   ['poll_review_mode', 'enum', 'off', 'off', 'off posts a poll straight away; on holds it for a staff Approve or Deny first', ['off', 'on']],
@@ -4560,6 +4561,35 @@ route('POST', '/api/events/forum', (context) => {
   state.settings.set('events_forum_channel_id', channelId);
   logAction('web.event.forum_made', { target_id: channelId, details: { channel_id: channelId } });
   return { made: true, channel_id: channelId, message: `<#${channelId}> is up: a forum under the BlackMail category, with its overwrites, and one tag for each place an event can be.` };
+});
+
+// §H: an open room becomes a post. The post first, then the room goes — and the event is NOT
+// settled on the way, which is the one thing that separates this from /room/delete.
+route('POST', '/api/events/:id/forum', (context) => {
+  requireStaff(context.session);
+  const event = eventOf(context.params.id);
+  if (event.review_kind === 'post') {
+    throw new Refused(409, 'already_a_post', `Event #${event.id} is already reviewed in a post, so there is nothing to move. Its own post is where the buttons are.`);
+  }
+  if (!['pending', 'approved', 'live'].includes(event.status)) {
+    throw new Refused(409, 'settled', `Event #${event.id} is **${event.status}**, so it is not moving anywhere — only an event still waiting for a decision, approved or running is worth a post. Its room goes on its own.`);
+  }
+  if (!event.review_channel_id) {
+    throw new Refused(409, 'no_room', `Event #${event.id} has no room of its own any more, so there is nothing to move into the forum. Propose it again if it still needs reviewing.`);
+  }
+  const forum = state.settings.get('events_forum_channel_id');
+  if (!forum) {
+    throw new Refused(409, 'no_forum', '**events_forum_channel_id** is blank or points at a channel Black Bloc cannot see, so there is no forum to move it into and nothing was changed. Press **Make the forum** on `/event` ▸ **Settings** ▸ **Rooms…** ▸ **Forum…** first.');
+  }
+  const was = event.review_channel_id;
+  const post = String(Date.now());
+  event.review_channel_id = post;
+  event.review_kind = 'post';
+  logAction('web.event.room_moved', { target_id: event.requester_id, details: { event_id: event.id, from: was, to: post } });
+  return {
+    event: eventRow(event),
+    message: `Event #${event.id} now lives in <#${post}>. The room is gone.`,
+  };
 });
 
 route('POST', '/api/events/:id/cancel', (context) => {

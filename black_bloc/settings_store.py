@@ -138,6 +138,11 @@ REVIEW_FORUM = "forum"
 EVENTS_REVIEW_MODES = (REVIEW_ROOM, REVIEW_FORUM)
 EVENTS_REVIEW_MODE = REVIEW_ROOM
 EVENTS_FORUM_CHANNEL_KEY = "events_forum_channel_id"
+EVENTS_MOVED_LINE_KEY = "events_moved_line"
+EVENTS_MOVED_LINE = (
+    "This event now lives in its own post: {post}. This room is being removed."
+)
+POST_PLACEHOLDER = "{post}"
 
 WHERE_ALIASES_KEY = "events_where_link_aliases"
 WHERE_ALIAS_MAX = 32
@@ -327,6 +332,7 @@ KEY_TYPES: dict[str, str] = {
     EVENTS_ROOM_NOTICE_KEY: "bool",
     EVENTS_REVIEW_MODE_KEY: "enum",
     EVENTS_FORUM_CHANNEL_KEY: "channel",
+    EVENTS_MOVED_LINE_KEY: "text",
     DEFAULT_TIMEZONE_KEY: "text",
     TIMEZONE_CHOICES_KEY: "text",
     TIME_STEP_KEY: "int",
@@ -855,6 +861,11 @@ KEY_HELP: dict[str, str] = {
     EVENTS_FORUM_CHANNEL_KEY: (
         "the forum channel every event is posted in, in forum mode; **Make the forum** on "
         "`/event` ▸ **Settings** ▸ **Rooms…** makes one under the BlackMail category"
+    ),
+    EVENTS_MOVED_LINE_KEY: (
+        f"the one line left in an event's old review room when staff press **Move to the "
+        f"forum**; `{POST_PLACEHOLDER}` stands for the new post and is the only thing that may "
+        "be filled in. The room is removed straight after, so this is the last thing said in it"
     ),
     "events_max_late_minutes": (
         "minutes an event may start late and still be announced; later than that it goes live "
@@ -2574,6 +2585,11 @@ NAME_TEMPLATE_UNKNOWN = (
     "thing a calendar name may stand in for is `{placeholder}`, the event's own title; write "
     "any other braces out as words."
 )
+MOVED_LINE_UNKNOWN = (
+    "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. The only "
+    "thing that line may stand in for is `{placeholder}`, the post the event moved into; write "
+    "any other braces out as words."
+)
 
 PLACEHOLDERS = re.compile(r"\{([^{}]*)\}")
 
@@ -2649,11 +2665,25 @@ def checked_name_template(given: Any) -> str:
     return text
 
 
+def checked_moved_line(given: Any) -> str:
+    """`{post}` and nothing else, and it may be left out — a line with no link still reads."""
+    text = str(given or "").strip()
+    stray = next(
+        (one.strip() for one in PLACEHOLDERS.findall(text) if one.strip() != "post"), None
+    )
+    if stray is not None:
+        raise SettingError(
+            MOVED_LINE_UNKNOWN.format(found=stray[:40], placeholder=POST_PLACEHOLDER)
+        )
+    return text
+
+
 TEXT_CHECKS: dict[str, Any] = {
     DEFAULT_TIMEZONE_KEY: checked_zone,
     TIMEZONE_CHOICES_KEY: checked_zones,
     WHERE_ALIASES_KEY: checked_aliases,
     EVENTS_SCHEDULED_NAME_KEY: checked_name_template,
+    EVENTS_MOVED_LINE_KEY: checked_moved_line,
     RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
 }
 
@@ -3027,6 +3057,8 @@ class SettingsStore:
             return EVENTS_ROOM_NOTICE
         if key == EVENTS_REVIEW_MODE_KEY:
             return EVENTS_REVIEW_MODE
+        if key == EVENTS_MOVED_LINE_KEY:
+            return EVENTS_MOVED_LINE
         if key == DEFAULT_TIMEZONE_KEY:
             return DEFAULT_TZ
         if key == TIMEZONE_CHOICES_KEY:
