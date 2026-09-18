@@ -1518,17 +1518,27 @@ UPCOMING_PAGE = (
 LIVE_VIDEO = "3PFJ9SETS4M"
 LIVE_WATCH = f"https://www.youtube.com/watch?v={LIVE_VIDEO}"
 UNREADABLE_PAGE = "<html><body>maintenance</body></html>"
+BOTCHECK_LIVE_PAGE = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "youtube_botcheck_live_page.html"
+).read_text(encoding="utf-8")
+BOTCHECK_OFFLINE_PAGE = (
+    Path(__file__).resolve().parents[2] / "fixtures" / "youtube_botcheck_offline_page.html"
+).read_text(encoding="utf-8")
+SEARCHED_VIDEO = "ZZZZZZZZZZZ"
+CHANNEL_LIVE_URL = f"https://www.youtube.com/channel/{CHANNEL}/live"
 
 
 class _Live:
     """A stand-in YouTubeClient for the probe: canned pages, canned confirms, nothing fetched."""
 
-    def __init__(self, *pages, keyed=False, confirms=None):
+    def __init__(self, *pages, keyed=False, confirms=None, searches=None):
         self.pages = list(pages)
         self.keyed = keyed
         self.confirms = list(confirms or [])
+        self.searches = list(searches or [])
         self.probed = []
         self.confirmed = []
+        self.searched = []
         self.closed = False
 
     async def probe_live(self, channel_id):
@@ -1541,6 +1551,13 @@ class _Live:
     async def confirm_live(self, video_id):
         self.confirmed.append(video_id)
         reply = self.confirms.pop(0) if self.confirms else None
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    async def search_live(self, channel_id):
+        self.searched.append(channel_id)
+        reply = self.searches.pop(0) if self.searches else None
         if isinstance(reply, Exception):
             raise reply
         return reply
@@ -1567,11 +1584,11 @@ async def live_on(bot, mode="on", golive_mode="on"):
     await bot.store.set(GUILD, "golive_mode", golive_mode)
 
 
-async def live_linked(db, cog, *pages, keyed=False, confirms=None):
+async def live_linked(db, cog, *pages, keyed=False, confirms=None, searches=None):
     await set_link(db, STREAMER, CHANNEL, None, "Kurzgesagt")
     await db.conn.execute("UPDATE youtube_links SET seeded = 1 WHERE user_id = ?", (STREAMER,))
     await db.conn.commit()
-    cog.client = _Live(*pages, keyed=keyed, confirms=confirms)
+    cog.client = _Live(*pages, keyed=keyed, confirms=confirms, searches=searches)
     return cog.client
 
 
@@ -1894,3 +1911,193 @@ async def test_a_member_nobody_can_see_is_not_probed(bot, cog, db):
     await cog.probe_all()
 
     assert client.probed == []
+
+
+# --- the datacenter bot-check page: live, id unknown (KI-30) --------------------------------------
+
+
+async def test_a_live_channel_behind_the_bot_check_wall_is_announced_with_the_searched_id(
+    bot, cog, golive, db, member
+):
+    """The page says live and carries no canonical link, so one 100-unit search finds the id."""
+    await live_on(bot)
+    client = await live_linked(
+        db,
+        cog,
+        BOTCHECK_LIVE_PAGE,
+        keyed=True,
+        searches=[SEARCHED_VIDEO],
+        confirms=[Confirm(started=True, title="the stream")],
+    )
+
+    await cog.probe_all()
+
+    assert client.searched == [CHANNEL] and client.confirmed == [SEARCHED_VIDEO]
+    rows = await sessions(db)
+    assert len(rows) == 1
+    assert rows[0]["url"] == f"https://www.youtube.com/watch?v={SEARCHED_VIDEO}"
+    assert rows[0]["title"] == "the stream"
+    searched = (await details_logged(db, "youtube.live_id_searched"))[0]
+    assert searched["channel_id"] == CHANNEL and searched["units"] == 100
+    assert searched["video_id"] == SEARCHED_VIDEO
+    seen = (await details_logged(db, "youtube.live_seen"))[0]
+    assert seen["video_id"] == SEARCHED_VIDEO and seen["botcheck"] is True
+
+
+async def test_the_search_is_one_per_broadcast_and_not_one_per_probe(bot, cog, golive, db, member):
+    await live_on(bot)
+    client = await live_linked(
+        db,
+        cog,
+        BOTCHECK_LIVE_PAGE,
+        BOTCHECK_LIVE_PAGE,
+        BOTCHECK_LIVE_PAGE,
+        keyed=True,
+        searches=[SEARCHED_VIDEO],
+        confirms=[Confirm(started=True)],
+    )
+
+    await cog.probe_all()
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert client.searched == [CHANNEL]
+    assert len(await sessions(db)) == 1
+    assert len(bot.guild.get_channel(GOLIVE_CHANNEL).posts) == 1
+
+
+async def test_one_stream_spotted_behind_the_wall_costs_a_hundred_and_one_units(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(
+        db,
+        cog,
+        BOTCHECK_LIVE_PAGE,
+        BOTCHECK_LIVE_PAGE,
+        keyed=True,
+        searches=[SEARCHED_VIDEO],
+        confirms=[Confirm(started=True)],
+    )
+
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert cog.confirms == 101
+
+
+async def test_without_a_key_the_wall_is_announced_as_the_channels_own_live_page(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    client = await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=False)
+
+    await cog.probe_all()
+
+    assert client.searched == [] and client.confirmed == []
+    assert cog.confirms == 0
+    rows = await sessions(db)
+    assert len(rows) == 1 and rows[0]["url"] == CHANNEL_LIVE_URL
+    embed = bot.guild.get_channel(GOLIVE_CHANNEL).posts[0]["embed"]
+    assert embed.title == EMBED_NO_TITLE
+    assert embed.url == CHANNEL_LIVE_URL
+    assert embed.image.url is None
+    assert (await details_logged(db, "youtube.live_seen"))[0]["video_id"] is None
+
+
+async def test_a_search_that_refuses_still_announces_the_stream_and_says_so(
+    bot, cog, golive, db, member
+):
+    """Checklist 10: the id could not be read AND could not be searched — never silence."""
+    await live_on(bot)
+    await live_linked(
+        db,
+        cog,
+        BOTCHECK_LIVE_PAGE,
+        keyed=True,
+        searches=[YouTubeError("quota exceeded", network=True)],
+    )
+
+    await cog.probe_all()
+
+    kinds = await kinds_logged(db)
+    assert "youtube.live_search_failed" in kinds and is_important("youtube.live_search_failed")
+    assert (await sessions(db))[0]["url"] == CHANNEL_LIVE_URL
+
+
+async def test_the_same_wall_for_an_offline_channel_is_a_quiet_probe(bot, cog, golive, db, member):
+    await live_on(bot)
+    client = await live_linked(
+        db, cog, BOTCHECK_OFFLINE_PAGE, BOTCHECK_OFFLINE_PAGE, keyed=True
+    )
+
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert await sessions(db) == []
+    assert client.searched == [] and cog.confirms == 0
+    assert "youtube.probe_unreadable" not in await kinds_logged(db)
+
+
+async def test_a_stream_behind_the_wall_ends_on_quiet_probes_exactly_as_any_other(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(
+        db,
+        cog,
+        BOTCHECK_LIVE_PAGE,
+        BOTCHECK_OFFLINE_PAGE,
+        BOTCHECK_OFFLINE_PAGE,
+        keyed=True,
+        searches=[SEARCHED_VIDEO],
+        confirms=[Confirm(started=True)],
+    )
+
+    await cog.probe_all()
+    await cog.probe_all()
+    assert (await sessions(db))[0]["ended_at"] is None
+
+    await cog.probe_all()
+
+    assert (await sessions(db))[0]["ended_at"] is not None
+
+
+async def test_the_reconcile_reads_the_wall_as_live_rather_than_closing_the_session(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE)
+    await cog.probe_all()
+    cog.client = _Live(BOTCHECK_LIVE_PAGE)
+
+    await golive.reconcile_open_sessions()
+
+    assert (await sessions(db))[0]["ended_at"] is None
+
+
+async def test_the_health_reading_says_the_last_probe_met_the_bot_check(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(db, cog, BOTCHECK_OFFLINE_PAGE, OFFLINE_PAGE, keyed=True)
+    assert (await live_health(bot, bot.guild))["botcheck"] is False
+
+    await cog.probe_all()
+    assert (await live_health(bot, bot.guild))["botcheck"] is True
+
+    await cog.probe_all()
+    assert (await live_health(bot, bot.guild))["botcheck"] is False
+
+
+async def test_the_staff_panel_says_when_a_probe_was_served_the_bot_check(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(db, cog, BOTCHECK_OFFLINE_PAGE, keyed=True)
+    await cog.probe_all()
+    _staff(bot)
+
+    embed, _view = await build_panel(bot, bot.guild, member)
+
+    assert "**bot check** — yes" in embed.description

@@ -193,6 +193,7 @@ def build_router(bot: Any) -> APIRouter:
             "last_probe_error": live["last_probe_error"],
             "probed": live["probed"],
             "quota_today": live["quota"],
+            "botcheck": live["botcheck"],
             "live_now": live["open"],
         }
 

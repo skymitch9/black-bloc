@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<!-- Hand-written from what the Fly machine (a datacenter address) was served for a LIVE channel's
+     /channel/<id>/live page on 2026-09-17 18:14-18:20: 200, ~180 KB, YouTube's "Sign in to confirm
+     you're not a bot" page. ytInitialData is present (so the page reads as readable), "isLive":true
+     survives once, there is NO canonical link at all, and ~180 "videoId" fields belong to unrelated
+     videos — the first is NOT the live one, which is why the videoId fallback was dropped. -->
+<html lang="en">
+<head>
+<meta property="og:title" content="Before you continue to YouTube">
+<title>Before you continue to YouTube</title>
+</head>
+<body>
+<h1>Sign in to confirm you&#39;re not a bot</h1>
+<p>This helps protect our community. <a href="https://support.google.com/youtube">Learn more</a></p>
+<script nonce="x">var ytInitialData = {"contents":{"twoColumnBrowseResultsRenderer":{"tabs":[{"tabRenderer":{"content":{"richGridRenderer":{"contents":[{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"aaaaaaaaaaa","title":"some other video"}}}},{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"bbbbbbbbbbb","title":"another one"}}}},{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"ccccccccccc","title":"a third","isLive":true}}}}]}}}}]}}};</script>
+</body>
+</html>

@@ -17,6 +17,7 @@ from .youtube_live import (
     Probe,
     read_confirm,
     read_page,
+    read_search,
 )
 
 log = logging.getLogger(__name__)
@@ -362,6 +363,23 @@ class YouTubeClient:
         )
         return read_confirm(payload, wanted)
 
+    async def search_live(self, channel_id: Any) -> str | None:
+        """100 units, so it is asked only where the page would not say: which video is live."""
+        wanted = str(channel_id or "").strip()
+        if not wanted or not self.keyed:
+            return None
+        payload = await self._api(
+            "search",
+            {
+                "part": "id",
+                "channelId": wanted,
+                "eventType": "live",
+                "type": "video",
+                "maxResults": "1",
+            },
+        )
+        return read_search(payload)
+
     async def classify(self, video_ids: Any) -> dict[str, str]:
         """Kind per video id from the API; without a key nothing is claimed, so it answers empty."""
         wanted = [str(one) for one in video_ids or () if str(one or "").strip()]
@@ -391,6 +409,10 @@ NOBODY_LINKED = "Nobody has linked a YouTube channel yet."
 LIVE_NO_KEY = (
     "**quota used today** — none; with no YOUTUBE_API_KEY a live stream is announced from the "
     "page alone, so its title reads *Live now*"
+)
+BOT_CHECKED = (
+    "yes — YouTube served the last probe its *Sign in to confirm you're not a bot* page, which "
+    "carries no video id; the stream is still spotted, and with a key the id is searched for"
 )
 
 LINK = "link"
@@ -524,6 +546,7 @@ def live_lines(live: dict[str, Any] | None, *, keyed: bool = False) -> list[str]
         f"**last probe error** — {live.get('last_probe_error') or 'none'}",
         f"**channels probed** — {live.get('probed') or 0}",
         f"**live now** — {live.get('open') or 0}",
+        f"**bot check** — {BOT_CHECKED if live.get('botcheck') else 'no'}",
     ]
     if keyed:
         lines.append(f"**quota used today** — {live.get('quota') or 0} unit(s)")

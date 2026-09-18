@@ -10,9 +10,11 @@ from black_bloc.youtube_live import (
     Confirm,
     Probe,
     after_probe,
+    channel_info,
     is_over,
     read_confirm,
     read_page,
+    read_search,
     stream_info,
 )
 
@@ -20,7 +22,12 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 LIVE_PAGE = (FIXTURES / "youtube_live_page.html").read_text(encoding="utf-8")
 OFFLINE_PAGE = (FIXTURES / "youtube_not_live_page.html").read_text(encoding="utf-8")
 UPCOMING_PAGE = (FIXTURES / "youtube_upcoming_page.html").read_text(encoding="utf-8")
+BOTCHECK_LIVE_PAGE = (FIXTURES / "youtube_botcheck_live_page.html").read_text(encoding="utf-8")
+BOTCHECK_OFFLINE_PAGE = (FIXTURES / "youtube_botcheck_offline_page.html").read_text(
+    encoding="utf-8"
+)
 VIDEO = "3PFJ9SETS4M"
+CHANNEL = "UC7ydYSU1nZOHB7nVV-As_XA"
 
 
 # --- the probe parser ---------------------------------------------------------------------------
@@ -183,3 +190,76 @@ def test_a_confirm_reads_live_only_when_it_started_and_has_not_ended():
     assert Confirm(started=True).live
     assert not Confirm(started=True, ended=True).live
     assert not Confirm().live
+
+
+# --- the datacenter page: KI-30's measured shape --------------------------------------------------
+
+
+def test_the_bot_check_page_a_datacenter_gets_still_says_the_channel_is_live():
+    found = read_page(BOTCHECK_LIVE_PAGE)
+
+    assert found.readable and found.botcheck
+    assert found.live and found.video_id is None and not found.announceable
+
+
+def test_the_same_bot_check_page_for_an_offline_channel_is_a_quiet_readable_probe():
+    found = read_page(BOTCHECK_OFFLINE_PAGE)
+
+    assert found.readable and found.botcheck
+    assert not found.live and not found.upcoming and found.video_id is None
+
+
+def test_an_ordinary_live_page_is_not_a_bot_check():
+    assert not read_page(LIVE_PAGE).botcheck
+    assert not read_page(OFFLINE_PAGE).botcheck
+
+
+def test_a_video_id_is_only_ever_taken_from_the_canonical_link():
+    """The bot-check page carries ~180 other channels' ids; the first is not the live one."""
+    body = LIVE_PAGE.replace('<link rel="canonical"', '<link rel="nothing"')
+
+    found = read_page(body)
+
+    assert found.live and found.video_id is None
+    assert read_page(BOTCHECK_LIVE_PAGE).video_id is None
+
+
+# --- the search answer, asked for only when the page would not say --------------------------------
+
+
+def test_the_first_live_video_id_is_read_out_of_a_search_answer():
+    payload = {"items": [{"id": {"kind": "youtube#video", "videoId": VIDEO}}]}
+
+    assert read_search(payload) == VIDEO
+
+
+def test_a_search_answer_with_nothing_usable_claims_nothing():
+    for given in (
+        {},
+        {"items": []},
+        None,
+        "nonsense",
+        {"items": ["not a row"]},
+        {"items": [{"id": "not a dict"}]},
+        {"items": [{"id": {"channelId": "UC123"}}]},
+    ):
+        assert read_search(given) is None
+
+
+def test_a_search_answer_skips_a_row_that_carries_no_video_id():
+    payload = {"items": [{"id": {"channelId": "UC123"}}, {"id": {"videoId": VIDEO}}]}
+
+    assert read_search(payload) == VIDEO
+
+
+# --- live, id unknown: what the go-live path is handed instead ----------------------------------
+
+
+def test_with_no_video_id_the_card_links_the_channels_own_live_page():
+    info = channel_info(CHANNEL)
+
+    assert info.url == LIVE_URL.format(channel_id=CHANNEL)
+    assert info.platform == YOUTUBE
+    assert info.title is None
+    assert info.game is None
+    assert info.thumbnail_url is None

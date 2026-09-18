@@ -3579,6 +3579,7 @@ route('GET', '/api/youtube/status', (context) => {
     last_probe_error: null,
     probed: state.youtube.links.length,
     quota_today: 0,
+    botcheck: false,
     live_now: 0,
   };
 });

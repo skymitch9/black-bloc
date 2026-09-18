@@ -418,6 +418,28 @@ async def test_an_empty_id_list_asks_nothing():
     assert request.calls == []
 
 
+async def test_the_live_search_asks_for_one_live_video_on_that_channel_and_nothing_else():
+    """100 units: the one call that finds the id the bot-check page will not carry."""
+    request = _Request(ok('{"items": [{"id": {"videoId": "ZZZZZZZZZZZ"}}]}'))
+    client = YouTubeClient("k-e-y", request=request)
+
+    assert await client.search_live(CHANNEL) == "ZZZZZZZZZZZ"
+    params = request.calls[0]["params"]
+    assert params["channelId"] == CHANNEL and params["eventType"] == "live"
+    assert params["type"] == "video" and params["part"] == "id" and params["maxResults"] == "1"
+    assert request.calls[0]["url"].endswith("/search")
+
+
+async def test_the_live_search_asks_nothing_without_a_key_or_a_channel():
+    request = _Request()
+    keyless = YouTubeClient(None, request=request)
+    keyed = YouTubeClient("k-e-y", request=request)
+
+    assert await keyless.search_live(CHANNEL) is None
+    assert await keyed.search_live("") is None
+    assert request.calls == []
+
+
 # --- rendering ---------------------------------------------------------------------------------
 
 
