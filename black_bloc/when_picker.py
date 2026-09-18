@@ -418,8 +418,9 @@ class ZonePanel(Panel):
         on_other: Callable[[discord.Interaction, Any], Awaitable[None]],
         on_back: Callable[[discord.Interaction, Any], Awaitable[None]],
         now: datetime | None = None,
+        again: Callable[[discord.Interaction, Any], Awaitable[None]] | None = None,
     ) -> None:
-        super().__init__(minutes, footer=footer)
+        super().__init__(minutes, footer=footer, again=again)
         self.takes_zone = on_pick
         self.takes_other = on_other
         self.goes_back = on_back

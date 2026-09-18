@@ -203,12 +203,24 @@ def site_page_url(origin: Any, feature: str) -> str | None:
 class Panel(AnswersErrors, discord.ui.View):
     """The one ephemeral panel view every feature's panel inherits."""
 
-    def __init__(self, minutes: int, *, footer: str) -> None:
+    def __init__(self, minutes: int, *, footer: str, again: Move | None = None) -> None:
         super().__init__(timeout=max(1, int(minutes or 1)) * 60)
         self.footer = footer
         self.message: Any = None
         self.last_interaction: Any = None
         self.replaced = False
+        self.again = again
+
+    @property
+    def render_again(self) -> Any:
+        """What Try again presses, or nothing when this panel cannot rebuild itself."""
+        if self.again is None:
+            return None
+
+        async def back(interaction: discord.Interaction) -> None:
+            await self.again(interaction, self)
+
+        return back
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         self.last_interaction = interaction

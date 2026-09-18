@@ -1930,6 +1930,57 @@ KEY_HELP.update(
 )
 
 
+# Errors (`docs/info/errors-design.md` §B) — the words a failure says and how long Try again
+# lives, in their own block so the parallel branches merge textually. All four sit under `core`.
+ERROR_SENTENCE_KEY = "error_sentence"
+ERROR_RETRY_LABEL_KEY = "error_retry_label"
+ERROR_RETRY_MINUTES_KEY = "error_retry_minutes"
+ERROR_RETRY_EXPIRED_KEY = "error_retry_expired"
+ERROR_RETRY_MINUTES = 10
+ERROR_RETRY_MIN_MINUTES = 1
+ERROR_RETRY_MAX_MINUTES = 30
+ERROR_SENTENCE = (
+    "Black Bloc hit an error at that step; it has been logged for staff. Press **Try again** to "
+    "pick up where you were — your answers are kept."
+)
+ERROR_RETRY_LABEL = "Try again"
+ERROR_RETRY_EXPIRED = (
+    "That Try again has run out — Black Bloc can only put somebody back where they were for a "
+    "few minutes. Run {command} again to start it fresh, and tell a Lead if it keeps happening."
+)
+
+KEY_TYPES.update(
+    {
+        ERROR_SENTENCE_KEY: "text",
+        ERROR_RETRY_LABEL_KEY: "text",
+        ERROR_RETRY_MINUTES_KEY: "int",
+        ERROR_RETRY_EXPIRED_KEY: "text",
+    }
+)
+KEY_MIN[ERROR_RETRY_MINUTES_KEY] = ERROR_RETRY_MIN_MINUTES
+KEY_MAX[ERROR_RETRY_MINUTES_KEY] = ERROR_RETRY_MAX_MINUTES
+KEY_HELP.update(
+    {
+        ERROR_SENTENCE_KEY: (
+            "what somebody is told when a panel, a modal or a button fails and Black Bloc can "
+            "put them back where they were; it is said beside a Try again button that re-renders "
+            "what they had open, answers kept. A failure with nothing to re-render says the "
+            "plain 'hit an error running that command' sentence instead"
+        ),
+        ERROR_RETRY_LABEL_KEY: "what the Try again button on that sentence is called",
+        ERROR_RETRY_MINUTES_KEY: (
+            "minutes a Try again button keeps working before it says it has run out; 10 by "
+            "default. Discord closes the interaction it re-renders through after 15 minutes, so "
+            "anything above that is a button that answers 'run it again' rather than working"
+        ),
+        ERROR_RETRY_EXPIRED_KEY: (
+            "what a Try again pressed too late says. `{command}` is filled in with the command "
+            "the member was running when it is known, and with 'that command' when it is not"
+        ),
+    }
+)
+
+
 # Operator read token — the token itself is the on/off switch; this is the one decision left.
 KEY_TYPES.update({"operator_read_log": "bool"})
 KEY_HELP.update(
@@ -2224,6 +2275,10 @@ CORE_KEYS = (
     SELFTEST_LOG_LEVEL,
     PERSONALITY_POOL_SYNC,
     PERSONALITY_POOL_PEER_URL,
+    ERROR_SENTENCE_KEY,
+    ERROR_RETRY_LABEL_KEY,
+    ERROR_RETRY_MINUTES_KEY,
+    ERROR_RETRY_EXPIRED_KEY,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -3022,6 +3077,14 @@ class SettingsStore:
             return 10
         if key == SETTINGS_CORE_KEYS_ADMIN_ONLY:
             return SETTINGS_CORE_KEYS_ADMIN_ONLY_DEFAULT
+        if key == ERROR_SENTENCE_KEY:
+            return ERROR_SENTENCE
+        if key == ERROR_RETRY_LABEL_KEY:
+            return ERROR_RETRY_LABEL
+        if key == ERROR_RETRY_MINUTES_KEY:
+            return ERROR_RETRY_MINUTES
+        if key == ERROR_RETRY_EXPIRED_KEY:
+            return ERROR_RETRY_EXPIRED
         if key == HIDE_COMMANDS_WHEN_OFF:
             return HIDE_COMMANDS_WHEN_OFF_DEFAULT
         if key == LOGS_COUNT:
