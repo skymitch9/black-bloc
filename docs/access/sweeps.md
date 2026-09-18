@@ -7,9 +7,7 @@
 > dot, a green dot or either sentence**): Black Bloc reads Do Not Disturb with *"Restarting and
 > booting — back in a moment"* from the first connect and flips to online with the head count at
 > ready. ⚠️ **`BS-a` is the row that decides whether the feature works at all**, and the one
-> thing it must never show is a GREEN bot still saying *"restarting"*. Lettered rather than
-> numbered because `main` took **586–590** for the YouTube live fix while this was building;
-> they are renumbered at the merge. Before that,
+> thing it must never show is a GREEN bot still saying *"restarting"*. Numbered **591–593** at the merge (`main` had taken **586–590** for the YouTube live fix while this was building). Before that,
 > **2026-09-17** — rows **`YL-j` … `YL-n`** (numbered **586–590** — 572–585 went to the minutes rows the same evening) added at the foot for the YOUTUBE
 > LIVE FIX build (branch `youtube-live-fix`, off `main` `ddd6fdc`; design
 > `info/youtube-live-design.md` ▸ Deviations ▸ *The datacenter page*; ⚠️ **not merged, not deployed,
@@ -1907,6 +1905,6 @@ sentence.** `BS-a` is the row that decides whether the feature works at all.
 
 | Row | Do | Expect |
 |---|---|---|
-| **`BS-a`** | Watch Black Bloc in the member list through a whole deploy — start looking before `flyctl deploy` finishes and keep looking for a minute after | ⚫ grey for the seconds between processes (Discord's, not ours), then 🔴 **Do Not Disturb** reading *"Restarting and booting — back in a moment"*, then 🟢 **online** reading *"Cookout attendees: N"*. ⚠️ **It must never read green while still saying "restarting"** — that is the one thing the build is shaped to prevent |
-| **`BS-b`** | Open the dashboard ▸ **Settings** ▸ **core**, change `boot_status_text` to something you will recognise, save, then deploy again | The new words are what the red status says on the next boot. The old words never appear again |
-| **`BS-c`** | Set `boot_status_mode` to **off** on the same page and deploy once more | Black Bloc simply appears 🟢 online with the head count — no red, no sentence, and nothing red on the way down either. Put it back to **on** afterwards |
+| **591** (was `BS-a`) | Watch Black Bloc in the member list through a whole deploy — start looking before `flyctl deploy` finishes and keep looking for a minute after | ⚫ grey for the seconds between processes (Discord's, not ours), then 🔴 **Do Not Disturb** reading *"Restarting and booting — back in a moment"*, then 🟢 **online** reading *"Cookout attendees: N"*. ⚠️ **It must never read green while still saying "restarting"** — that is the one thing the build is shaped to prevent |
+| **592** (was `BS-b`) | Open the dashboard ▸ **Settings** ▸ **core**, change `boot_status_text` to something you will recognise, save, then deploy again | The new words are what the red status says on the next boot. The old words never appear again |
+| **593** (was `BS-c`) | Set `boot_status_mode` to **off** on the same page and deploy once more | Black Bloc simply appears 🟢 online with the head count — no red, no sentence, and nothing red on the way down either. Put it back to **on** afterwards |

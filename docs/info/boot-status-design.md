@@ -1,7 +1,7 @@
 # Boot status — red while it restarts, green when it is ready
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔧 **BUILT, not merged and
-> not deployed** — branch `boot-status`, cut from `main` `5ceea19`. **Last verified: 2026-09-17**
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v134** — merge `6421c0f`, release `79fcef8`,
+> deployed **2026-09-17 19:01** Phoenix; sweeps **591–593** are the owner's; verified: boot log clean (presence cog loaded, logged in 19:01:17, 11 s after the old process's shutdown line) + /health ready; ⚠️ the red → green flip itself was NOT seen from here (no gateway view) — row 591 is the owner's eye on the next deploy. Was: 🔧 BUILT on branch `boot-status`, cut from `main` `5ceea19`. **Last verified: 2026-09-17**
 > — measured on that branch: `pytest -n 8` **6668 passed, 3 skipped** in both orders
 > (`BB_REVERSE=1` for the second), `ruff check .` clean, `node site/mock/check.mjs` *20 pages,
 > 186 routes, **24** core settings, all keys present*, both `.mjs` fixture tests green, every
