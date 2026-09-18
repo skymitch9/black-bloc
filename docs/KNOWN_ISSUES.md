@@ -2,7 +2,16 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-17** — **KI-30 REWRITTEN** on branch `youtube-live-fix` with a MEASURED
+> Last verified: **2026-09-18** — **KI-11, KI-12 and KI-13 CLOSED as moot** on branch
+> `youtube-uploads-removal` (owner: *"the youtube uploader we should just fully trash"*; design
+> [`info/youtube-uploads-removal-design.md`](info/youtube-uploads-removal-design.md)). All three
+> described the UPLOADS half — the feed's flakiness, the ~25-minute lateness, and a live broadcast
+> announced as a video — and that half no longer exists. Each keeps its body and gains a one-line
+> banner; nothing was deleted. ⚠️ **Verified in the suite and by reading the tree, not against live
+> Discord.** ⚠️ **Nothing else in this file was re-checked then** — KI-26's count still stands at
+> eight, and this build's own `pytest -n 8` runs did not stall in either order. **KI-30 is
+> UNAFFECTED and still `WATCHING`:** it is the LIVE half's scrape, which this build did not touch.
+> Before that, **2026-09-17** — **KI-30 REWRITTEN** on branch `youtube-live-fix` with a MEASURED
 > sighting: it is no longer "never triggered". From the Fly machine's datacenter address YouTube
 > serves the *Sign in to confirm you're not a bot* page — `"isLive"` survives, the canonical link
 > does not — so a live channel read as unannounceable and the feature went silently quiet in
@@ -513,7 +522,9 @@ adds a step that can also be forgotten and proves nothing.
 never got an invite. The cheap fix for the second is a per-form reminder on the card after
 N days, not a new integration.
 
-## KI-13 — An upload announcement can be up to ~25 minutes late — `ACCEPTED`
+## KI-13 — (CLOSED 2026-09-18, moot) An upload announcement can be up to ~25 minutes late — `CLOSED`
+
+✅ **CLOSED (moot) 2026-09-18 — the uploads half was removed.** Owner: *"the youtube uploader we should just fully trash"*; branch `youtube-uploads-removal`, design [`info/youtube-uploads-removal-design.md`](info/youtube-uploads-removal-design.md). There is no upload announcement any more, and no sweep to be late: `poller`, `poll_once`, `fetch_feed` and `youtube_poll_minutes` are all gone. The LIVE half has its own clock, `youtube_live_poll_minutes` (2–60, default 5), and its own lateness story — which is not this one, because a probe reads a page rather than a 15-minute-cached feed. The body below is kept for the record, as this file's other closed entries are. ⚠️ **Verified in the suite and by reading the tree, not against live Discord** — a worktree holds no token.
 
 **Symptom.** Two delays add up. The feed is edge-cached: the live response
 carries `Cache-Control: public, max-age=900` and an `Age` header (measured
@@ -536,7 +547,9 @@ re-fetches the same bytes and finds nothing new any sooner.
 uploads becoming time-critical (a premiere people are meant to arrive for). The
 fix then is PubSubHubbub with a public callback, not a shorter poll.
 
-## KI-12 — YouTube's own uploads feed answers only about half the time — `ACCEPTED`
+## KI-12 — (CLOSED 2026-09-18, moot) YouTube's own uploads feed answers only about half the time — `CLOSED`
+
+✅ **CLOSED (moot) 2026-09-18 — the uploads half was removed.** Owner: *"the youtube uploader we should just fully trash"*; branch `youtube-uploads-removal`, design [`info/youtube-uploads-removal-design.md`](info/youtube-uploads-removal-design.md). Nothing fetches that feed any more — `FEED_URL`, `FEED_ATTEMPTS`, `fetch_feed` and the Atom parser are deleted, and `tests/fixtures/youtube_feed.xml` went with them. ⚠️ **The measurement that killed the feature is worth keeping: on 2026-09-17 21:07 the endpoint answered 404 for every channel from every address, 20/20** — the ~50% of 2026-09-02 had become 0%. The one thing the feed still did, handing back a channel TITLE at link time, now costs one `channels.list` unit and only where `YOUTUBE_API_KEY` is set; without a key a channel simply goes by its `UC…` id. The body below is kept for the record, as this file's other closed entries are. ⚠️ **Verified in the suite and by reading the tree, not against live Discord** — a worktree holds no token.
 
 **Symptom.** `https://www.youtube.com/feeds/videos.xml?channel_id=UC…` returns
 HTTP 404 or 500 for a channel that plainly exists, at random. Measured
@@ -563,7 +576,9 @@ tries stops being enough), or **1 upload confirmed missed for a whole day**.
 Either would mean moving to the Data API's `playlistItems.list` on the uploads
 playlist, which needs `YOUTUBE_API_KEY` and spends quota per channel per sweep.
 
-## KI-11 — Without `YOUTUBE_API_KEY` a live broadcast can be announced as an upload — `ACCEPTED`
+## KI-11 — (CLOSED 2026-09-18, moot) Without `YOUTUBE_API_KEY` a live broadcast can be announced as an upload — `CLOSED`
+
+✅ **CLOSED (moot) 2026-09-18 — the uploads half was removed.** Owner: *"the youtube uploader we should just fully trash"*; branch `youtube-uploads-removal`, design [`info/youtube-uploads-removal-design.md`](info/youtube-uploads-removal-design.md). Nothing is announced as an upload any more, so there is no wrong sentence left to write: `render`, `classify`, `classify_row`, `youtube_template` and `youtube_announce_shorts` are gone. A YouTube broadcast is announced by the LIVE half through go-live, which is what this entry's *what would change it* was reaching for. ⚠️ **`youtube_mode` shipped `off` and has been removed; the feature's on/off is `youtube_live_mode` now, which also ships `off`.** The keyless gap the live half still has is a different one and lives in **KI-30**. The body below is kept for the record, as this file's other closed entries are. ⚠️ **Verified in the suite and by reading the tree, not against live Discord** — a worktree holds no token.
 
 **Symptom.** The Atom feed carries no duration and no live-stream marker — it is
 `yt:videoId`, `title`, `published`, `link` and the author, and nothing else

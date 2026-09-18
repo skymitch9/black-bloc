@@ -1,6 +1,17 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-18** — rows **`YU-a` … `YU-d`** added at the foot for the YOUTUBE UPLOADS REMOVAL
+> (branch `youtube-uploads-removal`, off `main` `9bc1982`; design
+> [`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md); ⚠️ **not
+> merged, not deployed, and nothing in it has met Discord or a browser**). Owner: *"the youtube
+> uploader we should just fully trash"*. They prove the uploads half is GONE from the three surfaces
+> a person meets — `/youtube`, the Go-live page and `/api/youtube/status` — and that the LIVE half
+> survived. ⚠️ **`YU-d` needs the live bot on Fly and a linked channel actually going live**, so it
+> is the same shape as `YL-j`…`YL-p` and cannot be run from a laptop. Rows are lettered; the
+> conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked then** — and
+> ⚠️ **rows 43–47 and 118–125 below are now HISTORY**: they walk the uploads half, which no longer
+> exists. They are left rather than deleted, with a banner on each section saying so. Before that,
 > **2026-09-17 23:1x** — row **`WH-a`** added at the foot for the WHERE HINT build (branch
 > `events-where-hint`, off `main` `27f08f2`; design
 > [`../info/where-picker-design.md`](../info/where-picker-design.md) ▸ `## Follow-up 5`; ⚠️ **not
@@ -460,6 +471,10 @@ All of this happens in **`#blackbloc-logs`** (test mode) or on **https://blackbl
 | 40 | Ping roles — the announcement prefix | with `golive_mode` on (or shadow, and read the `would_announce` line) and a fan role on the streamer: go live | the line starts `<@&Events> <@&… pings>` — both roles, never twice, the shared one first; end the stream with `golive_end_mode edit` and the edit adds the suffix without adding a mention |
 | 41 | Ping roles — 26 streamers (paging) | only if you ever have more than 25: `/pings` → **Streamers…** | there are TWO panels, `streamers` and `streamers-2`; post the second one too. The member's **Follow a streamer…** select caps at 25 and says *"25 of N — the rest are on the *Streamer pings* panels"*, NOT "on the site" — a member cannot open the site. ⚠️ Never exercised in the server; the 25-per-select cap is Discord's documented limit, tested with 26 rows in the suite |
 | 42 | Ping roles — the dashboard | Dashboard → Go-live → Pings | the table shows every streamer, their role, a follower count (or a dash when the role was deleted by hand), who started it; Remove asks first; "Create for a streamer" makes one; the Logs section under it is `pings.*` only |
+🔴 **Rows 43–47 are HISTORY as of 2026-09-18** — the uploads half they walk was removed
+([`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md)). Row **4**
+(YouTube go-live) is unaffected and rows **`YU-a` … `YU-d`** replace 43–47.
+
 | 43 | YouTube uploads — link (F3, `youtube_mode` ships **off**) | `/youtube` → **Link my channel**, paste your channel address (the `youtube.com/channel/UC…` one; an `@handle` works too) | the reply names the channel, says how many videos were counted as history, and says out loud that announcements are **off** until a Lead changes **Announcements are…** on the same panel. The panel then shows the five status lines. ⚠️ Nothing already published is ever announced — that is what the count is for |
 | 44 | YouTube uploads — an actual upload | staff: `/youtube` → **Announcements are…** → **shadow**. Publish something on the linked channel, then wait and press **Logs** | within ~25 minutes a `youtube.would_announce` line carrying the rendered text (**KI-13** explains the two delays). Set the same picker to **on** and repeat for a real post in the test channel |
 | 45 | YouTube uploads — Shorts and live streams | publish a Short; separately, start a YouTube live stream | the Short is skipped with `youtube.skipped reason=short` (turn `youtube_announce_shorts` on and the next one posts); a live stream is skipped only while Discord shows you live on YouTube — see **KI-11**, that is the gap `YOUTUBE_API_KEY` would close |
@@ -695,6 +710,14 @@ memory panel took 104–108, so these are **109 onward**; the numbering held at 
 | 117 | The panel goes quiet | leave `/golive` alone for `golive_panel_minutes` (10) minutes | every control greys out and the embed footer reads *This panel has gone quiet — run /golive again*. ⚠️ Setting it to 15 or more loses the footer (KI-20) and the help text on the Settings page says so |
 
 ## The YouTube panel — `/youtube` is one window (wave 2, 2026-09-03)
+
+🔴 **HISTORY as of 2026-09-18 — rows 118, 119, 120, 122, 123 and 124 walk the UPLOADS half, which
+was removed** ([`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md)).
+There is no **Announcements are…**, no **Setup**, no *last video seen* and no *Shorts* line any
+more, and a link no longer counts anything as history. **121** (unlink, and changing your mind) and
+**125** (the quiet footer) still hold word for word. Rows **`YU-a` … `YU-d`** at the foot are what
+replaces the rest. Left here rather than deleted because what they asked for is the record of what
+the panel used to be.
 
 Rows **118–125**. `/youtube` is now ONE command that opens a panel; the `youtube` and
 `uploads` groups and their nine subcommands are gone, so `commands synced` drops by one
@@ -1976,3 +1999,21 @@ was posted with, and event #1's room card was posted before v136, so the Discord
 | **605** (was `EM-c`) | Press **Approve** inside the new post | It works exactly as a post proposed in forum mode does: the tag becomes 🟢 **approved** and the host is DMed |
 | **606** (was `EM-d`) | On the dashboard's **Events** page, press **Move to the forum** on another open event that still has a room | Same result through the website: the post appears, the room says where it went and goes, the status is unchanged, and the Audit tab shows one `web.event.room_moved` row naming the room it came from and the post it went to |
 | **607** (was `EM-e`) | On the same page, find a **denied** or **cancelled** event that still has a room | **Move to the forum** is not offered on it at all. (If you reach the route another way it answers *"Event #N is **denied**, so it is not moving anywhere"* and the room is left alone) |
+
+## THE YOUTUBE UPLOADER IS GONE — the links and the live half are what is left (`YU-a` … `YU-d`, branch `youtube-uploads-removal`, design [`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md))
+
+Owner, 2026-09-18: *"the youtube uploader we should just fully trash"*. ⚠️ **Nothing below has met
+Discord or a browser** — a worktree holds no token and no page was rendered. These four rows are
+the proof that is missing. They supersede rows **43–47** and most of **118–125**.
+
+⚠️ **`YU-d` can only be run against the live bot on Fly**, and it needs a linked YouTube channel to
+actually go live while `youtube_live_mode` is **on** and `golive_mode` is **on**. It is the row that
+says the removal did not quietly take the live half with it. Behind YouTube's bot-check wall the
+post reads *Live now* with no thumbnail — that is **KI-30**, not a regression.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`YU-a`** | `/youtube` in `#blackbloc-logs`, first as a plain member with a channel linked, then as a Lead | The member card is **channel · linked · announced here** and nothing else — **no** *last video seen*, **no** *Shorts*, and the word *upload* appears nowhere on the panel. The buttons are **Relink… · Unlink · Refresh · Open on the site**. As a Lead you also get **Link for somebody… · Logs** — ⚠️ **there is no Setup button at all** — plus **Somebody's channel…** and **Live streams are…**. The staff block reads **api key · links · live streams · probed every · last probe · last probe error · channels probed · live now · reading live now · bot check · quota** and has no *mode*, *channel*, *every N minutes*, *last good sweep* or *videos/announced* line. With `youtube_live_mode` **off** the card says so and names **Live streams are…** as the way to change it |
+| **`YU-b`** | Dashboard ▸ **Go-live** ▸ scroll to **YouTube channels** | The section is titled **YouTube channels**, not *YouTube uploads*. It holds the live-mode switch (**Live-stream announcements**), the **How live streams are spotted** card, the links table (**Member · Channel · Id · Linked · Unlink** — ⚠️ **no *Counted* column and no *Last video* column**), and **Link a member**. ⚠️ **There is no *How the sweep is doing* card and no *Recent uploads* table anywhere on the page.** Below it, **YouTube settings** lists only `youtube_log_level`, `youtube_panel_minutes`, `youtube_unlink_dms_them`, `youtube_live_poll_minutes` and `youtube_live_end_misses` — no `youtube_mode`, `youtube_channel_id`, `youtube_ping_role_id`, `youtube_ping_fan_roles`, `youtube_announce_shorts`, `youtube_template` or `youtube_poll_minutes` — and the logs card is titled **YouTube logs**. Link a member and unlink them again: both work, and the Audit tab shows one `web.youtube.link` and one `web.youtube.unlink` |
+| **`YU-c`** | Open `https://blackbloc.heygabi.ai/api/youtube/status` while signed in as staff (or read the Go-live card, which shows the same numbers) | The body carries `api_key_set`, `links` and every live field (`live_mode`, `live_minutes`, `live_end_misses`, `live_running`, `last_probe_at`, `last_probe_error`, `probed`, `quota_today`, `botcheck`, `live_now`, `reading_live`) — and ⚠️ **none of `running`, `last_ok_at`, `last_error`, `failures`, `fetches`, `unchanged`, `unchanged_ratio`, `videos` or `announced`**, not even as zeroes. `GET /api/youtube/videos` answers **404**. Dashboard ▸ **Settings** ▸ the **youtube** group shows the same five keys `YU-b` listed and nothing else |
+| **`YU-d`** | ⚠️ **On the LIVE bot only.** With `youtube_live_mode` **on** and `golive_mode` **on**, have a linked YouTube channel go live, then wait up to `youtube_live_poll_minutes` (5) | The go-live channel gets the usual card, **source YouTube** in its footer, exactly as it did before the uploads half was removed. `/youtube` ▸ **Logs** shows one `youtube.live_seen` row for the transition and nothing else per probe; the Go-live page's **Reading live now** reads **1**. Stop the stream: after `youtube_live_end_misses` (2) quiet probes the post is rewritten in the past tense. ⚠️ Behind the bot-check wall the title reads *Live now* with no thumbnail — **KI-30**, not a regression |

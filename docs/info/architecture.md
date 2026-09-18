@@ -2,7 +2,17 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — was
 > local-only until then).
-> Last verified: **2026-09-17** — **two fact-table rows only**, on branch `boot-status` (cut from
+> Last verified: **2026-09-18** — **three fact-table rows and two tree annotations**, on branch
+> `youtube-uploads-removal` (cut from `main` `9bc1982`, NOT merged and NOT deployed; design
+> `info/youtube-uploads-removal-design.md`). Re-measured by import and by running the thing in that
+> worktree: registry keys **284 → 277** (`len(settings_store.KEY_TYPES)`, before and after — the seven
+> `youtube_*` upload keys), mock **20 pages / 187 → 186 routes / 24 core settings** (`node
+> site/mock/check.mjs` re-RUN against a mock on a spare port, not quoted), tests **6811 → 6723**
+> collected, **6808 → 6720** passed + 3 skipped (`pytest -n 8`, forward and under `BB_REVERSE=1`).
+> The `cogs/content/youtube.py` and `api/tools/youtube.py` lines in the Shape tree were rewritten:
+> the uploads sweep is gone and the cog is the LIVE probe plus the channel links.
+> ⚠️ **Nothing else on this page was re-checked then**, and ⚠️ the rows describe a BRANCH.
+> Before that, **2026-09-17** — **two fact-table rows only**, on branch `boot-status` (cut from
 > `main` `5ceea19`, NOT merged and NOT deployed): registry keys re-measured by import in that
 > worktree, **280** (277 at v132), and the mock line re-RUN rather than quoted —
 > `node site/mock/check.mjs` answered *20 pages, 186 routes, **24** core settings, all keys
@@ -188,11 +198,11 @@
 > | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
 > | Schema version | **44** (v132, `meetings` + `meeting_lines`; 43 at v128, 42 at v123, 41 at v119) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **280** on branch `boot-status`, 277 at v132 (was 266 at v131 — the three `boot_status_mode` / `boot_status_text` / `shutdown_status_text` keys sit under core; the eleven `minutes_*` keys sit under events; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Registry keys | **277** on branch `youtube-uploads-removal` (284 on `main` at v138, minus the seven `youtube_*` upload keys); 280 on branch `boot-status`, 277 at v132 (was 266 at v131 — the three `boot_status_mode` / `boot_status_text` / `shutdown_status_text` keys sit under core; the eleven `minutes_*` keys sit under events; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **20 pages / 186 routes / 24 core settings** (21 at v133) (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **6808** (+3 skipped where the receive extension is absent) | the v138 deploy gate |
+> | Mock contract | **20 pages / 186 routes / 24 core settings** on branch `youtube-uploads-removal` (187 on `main` at v138, minus `GET /api/youtube/videos`) (21 core at v133) (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — re-RUN 2026-09-18 against a mock on a spare port |
+> | Tests | **6720** on branch `youtube-uploads-removal` (6808 on `main` at v138) (+3 skipped where the receive extension is absent) | `pytest -n 8`, forward and `BB_REVERSE=1` |
 > | Deploys | **135**, last `9e2298c` (v138) at 2026-09-17 23:11 | `../deploys.log` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
@@ -364,12 +374,14 @@ black_bloc/
 │       │                    one member panel. The pure half is `chat_distil.py`
 │       ├── raidtrain.py ← Phase 18: /raidtrain — ONE command, one panel (both slots retired);
 │       │                  slots, claims, the lineup post, the 30-minute reminder DM
-│       └── youtube.py ← F3: the uploads sweep and /youtube, ONE command that opens a panel for
-│                        members and staff alike (2026-09-03; /uploads is retired). Reads the
-│                        public Atom feed; YOUTUBE_API_KEY is optional (see KI-11). ALSO the
-│                        LIVE probe (v126): a second loop reads each linked channel's /live
+│       └── youtube.py ← F3: the channel LINKS and /youtube, ONE command that opens a panel for
+│                        members and staff alike (2026-09-03; /uploads is retired), plus the
+│                        LIVE probe (v126) — its only loop reads each linked channel's /live
 │                        page and calls the go-live cog's go_live/end_live with
-│                        source=youtube, so the announcement is go-live's, not its own
+│                        source=youtube, so the announcement is go-live's, not its own.
+│                        YOUTUBE_API_KEY is optional (it names the live video and resolves
+│                        an @handle). ⚠️ The UPLOADS half was removed 2026-09-18 —
+│                        `info/youtube-uploads-removal-design.md`
 ├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 44 on branch `minutes`, measured 2026-09-17)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
@@ -391,7 +403,8 @@ black_bloc/
         ├── modmail.py    ← tickets, replies, closes, snippets, blocks
         ├── events.py     ← the approval queue: approve / deny / cancel
         ├── golive.py     ← links, opt-outs, recent sessions
-        ├── youtube.py    ← F3: upload links, the videos seen, and the sweep's own status
+        ├── youtube.py    ← F3: the channel links and the live probe's own status (the videos
+        │                    route went with the uploads half, 2026-09-18)
         ├── pings.py      ← F14: the streamer table, staff create/remove, the Events-role set-up
         ├── rolemenus.py  ← menus, options, post
         ├── birthdays.py  ← the list, set / remove, and the Birthday Bot import

@@ -1,5 +1,18 @@
 # Phase 16 — YouTube upload announcements (F3)
 
+> 🔴 **RETIRED 2026-09-18 — the feature this doc designs NO LONGER EXISTS.** Owner: *"the
+> youtube uploader we should just fully trash"*. The uploads half was removed whole on branch
+> `youtube-uploads-removal` — the feed poll loop, the Atom parser, `fetch_feed`, the
+> seed-on-link, the announcement path, the seven `youtube_*` upload keys, the Setup sub-panel,
+> `GET /api/youtube/videos` and six log kinds. What replaced it is nothing: a linked YouTube
+> channel is now watched for LIVE STREAMS only. **Read
+> [`youtube-uploads-removal-design.md`](youtube-uploads-removal-design.md) for what went and what
+> stayed, and [`youtube-live-design.md`](youtube-live-design.md) for the half that runs today.**
+> This doc is NOT moved to `archive/` and NOT rewritten: the live half's history is in it too
+> (the `youtube_links` table, `resolve`, the panel and every decision behind them are still what
+> the bot does), and KI-11 / KI-12 / KI-13 — all three now CLOSED as moot — were measured here.
+> Everything below about an UPLOAD is history.
+
 > ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v70, `0aeed72`) — the slash surface below is gone.** `/golive` and
 > `/twitch` and all eight of their subcommands (`logs`, `optout`, `optin`, `status`, `mode`,
 > `test`, `link`, `unlink`) were replaced by ONE `/golive` command that opens an ephemeral
