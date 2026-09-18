@@ -237,7 +237,8 @@ panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
 
-> **2026-09-17 — seven sightings now.** Three of today's were PLAIN `pytest -n auto` runs inside build worktrees (not `deploy.ps1`), one of them serial (`-p no:cacheprovider`, no xdist) — so the hang is not xdist-only and not deploy-only; and one build's `taskkill /F /IM python.exe` during a stall killed every python on the machine (the run was not hung, three agents were sharing the cores). Kill by process tree, never by image name.
+> **2026-09-17 23:1x — EIGHT sightings.** The eighth: the `events-where-hint` build's `BB_REVERSE=1 pytest -n 8` hung at spawn (8 workers flat at 0.0156 s CPU, 10 min in; the forward run had taken 66 s) — killed by process tree, passed in 53 s on the retry with output redirected to a file. Before that —
+> **2026-09-17 — seven sightings.** Three of today's were PLAIN `pytest -n auto` runs inside build worktrees (not `deploy.ps1`), one of them serial (`-p no:cacheprovider`, no xdist) — so the hang is not xdist-only and not deploy-only; and one build's `taskkill /F /IM python.exe` during a stall killed every python on the machine (the run was not hung, three agents were sharing the cores). Kill by process tree, never by image name.
 
 **Symptom:** the deploy gate's `pytest -q -n auto` stops making progress — 33 idle pythons,
 the log untouched for over a minute, CPU flat — at spawn (twice) or at 81–92 % of the run

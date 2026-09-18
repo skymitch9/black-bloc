@@ -182,7 +182,7 @@
 > [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
 > kinds: twelve `minutes.*`, four of them with a `web.` spelling.
 >
-> | What | v137 (`main`, 2026-09-17) | Where it is measured |
+> | What | v138 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
 > | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
 > | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
@@ -192,8 +192,8 @@
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **20 pages / 186 routes / 24 core settings** (21 at v133) (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **6793** (+3 skipped where the receive extension is absent) | the v137 deploy gate |
-> | Deploys | **134**, last `a16f5e5` (v137) at 2026-09-17 23:00 | `../deploys.log` |
+> | Tests | **6808** (+3 skipped where the receive extension is absent) | the v138 deploy gate |
+> | Deploys | **135**, last `9e2298c` (v138) at 2026-09-17 23:11 | `../deploys.log` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 >
@@ -215,6 +215,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v138 `9e2298c`, 2026-09-17** | **22** | **32** | **45** | **187** | **6808** |
 > | **v137 `a16f5e5`, 2026-09-17** | **22** | **32** | **45** | **187** | **6793** |
 > | **v136 `bb94a92`, 2026-09-17** | **22** | **32** | **45** | **187** | **6755** |
 > | **v135 `2dd8fcd`, 2026-09-17** | **22** | **32** | **44** | **186** | **6696** |
