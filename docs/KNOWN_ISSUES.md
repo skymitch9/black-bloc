@@ -2,7 +2,12 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-17** — **KI-30 ADDED** on branch `youtube-live` (`WATCHING`, the `/live`-page
+> Last verified: **2026-09-17** — **KI-31 ADDED** on branch `minutes` (`ACCEPTED`, the
+> receive extension is a PRE-RELEASE and it pins the image to Python 3.12; filed by the
+> prototype build from its own spike, never from an incident, and ⚠️ **nothing else in this
+> file was re-checked then** — KI-26's count still stands at seven and this build's own
+> `pytest -n 8` runs did not stall). Before that,
+> **2026-09-17** — **KI-30 ADDED** on branch `youtube-live` (`WATCHING`, the `/live`-page
 > scrape behind YouTube live detection; filed by the build because `info/youtube-live-design.md` §A told it to,
 > never triggered, markers verified against ONE real page). Before that,
 > **2026-09-17** — **KI-28 CLOSED** on branch `staff-reach` (§C.3 of
@@ -90,6 +95,37 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-31 — Voice RECEIVE rests on a PRE-RELEASE extension, and it pins the image to Python 3.12 — `ACCEPTED`
+
+**Symptom.** discord.py sends voice and does not receive it, so meeting minutes needs
+**`discord-ext-voice-recv`**. Measured 2026-09-17 in a throwaway venv: the newest thing PyPI
+will install is **`0.5.2a179`** — an ALPHA. There is no stable release. Two consequences the
+prototype lives with:
+
+1. `pyproject.toml` has to name a pre-release (`>=0.5.2a179,<0.6`) for pip to consider it at
+   all, so `pip install` picks up whatever alpha is newest inside that range. An alpha that
+   changes `AudioSink`'s shape breaks `black_bloc/minutes_audio.py:build_sink` at import time
+   on the next image build, not on the next deploy of unchanged code.
+2. ⚠️ **`discord/ext/voice_recv/sinks.py` imports `audioop`, which was REMOVED in Python
+   3.13.** The image is `python:3.12-slim` today, so this is fine — but the base image can no
+   longer be bumped without checking it. `discord.py`'s own `player.py` imports `audioop` too
+   and already warns about it on every test run.
+
+**Status.** `ACCEPTED` 2026-09-17, filed by the `minutes` prototype build from its own spike,
+never from an incident. It installed and imported cleanly on Python 3.12.10 against the pinned
+discord.py 2.7.1, and an Opus frame round-tripped 96 bytes → 3,840 bytes of PCM.
+
+**Why tolerated.** There is no alternative: receiving Discord voice in Python means this
+extension or writing the RTP/Opus layer by hand, and the feature ships **off** behind
+`minutes_mode`, staff-only, on one prototype. The blast radius of a bad alpha is a `/minutes`
+Start that refuses **in words** (`black_bloc/minutes_audio.py:NO_EXTENSION`) — the bot boots
+and every other feature is untouched, because nothing imports the extension at module level.
+
+**What would change it.** A stable `discord-ext-voice-recv` release — pin it exactly and drop
+the pre-release specifier — or **one** image build whose `pip install` picks an alpha that will
+not import, at which point the version gets pinned to `==0.5.2a179` in the same commit. Number:
+**1** failed build, or **1** `Dockerfile` bump past Python 3.12.
 
 ## KI-30 — YouTube live detection reads the `/live` PAGE; a shape change makes every linked channel read as offline — `WATCHING`
 

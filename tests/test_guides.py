@@ -87,16 +87,16 @@ async def rows(db, sql, *args):
 def test_the_shipped_seed_is_eighteen_guides_with_a_slug_each():
     entries = guides.seed_entries()
 
-    assert len(entries) == 18
-    assert len({one["slug"] for one in entries}) == 18
+    assert len(entries) == 19
+    assert len({one["slug"] for one in entries}) == 19
     assert {one["audience"] for one in entries} == {"member", "staff"}
 
 
 async def test_seeding_a_guild_writes_eighteen_guides_and_no_pictures(bot, db):
     made = await guides.seed_guides(db, GUILD)
 
-    assert made == 18
-    assert await guides.count_guides(db, GUILD) == 18
+    assert made == 19
+    assert await guides.count_guides(db, GUILD) == 19
     assert len(await rows(db, "SELECT * FROM guide_media")) == 0
     steps = await rows(db, "SELECT * FROM guide_steps")
     assert steps and all(row["seed_do"] == row["do_text"] for row in steps)
@@ -439,8 +439,8 @@ async def test_two_guilds_keep_their_own_guides(bot, db):
     await guides.seed_guides(db, GUILD)
     await guides.seed_guides(db, OTHER_GUILD)
 
-    assert await guides.count_guides(db, GUILD) == 18
-    assert await guides.count_guides(db, OTHER_GUILD) == 18
+    assert await guides.count_guides(db, GUILD) == 19
+    assert await guides.count_guides(db, OTHER_GUILD) == 19
     assert (await guides.get_guide(db, OTHER_GUILD, "golive-announce"))["published"] == 1
 
 

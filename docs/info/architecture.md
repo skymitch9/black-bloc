@@ -94,6 +94,29 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
+> **2026-09-17 (MEETING MINUTES — the prototype, branch `minutes` off `d739726`; ⚠️ BUILT,
+> NOT MERGED, NOT DEPLOYED, and nothing has met Discord — `minutes_mode` ships **off**):**
+> cogs **21 → 22** (`cogs/community/minutes.py`), top-level slash commands **31 → 32**
+> (`/minutes`, staff-locked and `HIDDEN_WHEN_OFF`), schema **43 → 44** (measured:
+> `SCHEMA_VERSION`) — `meetings` and `meeting_lines`, new tables through the `SCHEMA`
+> bootstrap, with a PARTIAL UNIQUE INDEX `meetings_one_open ON meetings(guild_id) WHERE
+> ended_at IS NULL` so one guild can only have one meeting open. ⚠️ **Migrate before
+> deploy.** Registry keys **262 → 273** (ten `minutes_*` plus `minutes_log_level`), features
+> **20 → 21**, setting groups **still 25** — every minutes key is `NAMESPACE_OVERRIDE`'d onto
+> **`events`**, because `settings_panel.groups()` is at Discord's cap of 25 and a 26th would be
+> silently dropped off `/settings`; `events` therefore reaches **33** keys and joins `chat` and
+> `modmail` as a group with a **Find…** path. Mock **19 → 20 pages, 180 → 186 routes**, 17
+> core settings. ⚠️ **Four new modules:** `black_bloc/minutes_audio.py` (the pure sink —
+> per-speaker 48 kHz stereo PCM in, one 16 kHz mono WAV per speaker per
+> `minutes_chunk_seconds` out, audio dropped the moment a chunk is handed off),
+> `black_bloc/minutes.py` (the refusals, the transcript, the notes, the staff moves),
+> `black_bloc/minutes_session.py` (one meeting's runtime: the queue, the Whisper worker, how it
+> ends) and `black_bloc/api/tools/minutes.py`; plus `site/public/minutes.html` +
+> `assets/page-minutes.js`. `groq.py` gains `WhisperClient`. **The image gained `libopus0`**
+> (`Dockerfile`) and the package gained `discord.py[voice]` + `discord-ext-voice-recv`; see
+> [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
+> kinds: twelve `minutes.*`, four of them with a `web.` spelling.
+>
 > | What | v129 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
 > | Cogs | **21** (`cogs/community/frontdoor.py` at v125; 20 at v113) | `bot.py:COGS` |
@@ -273,7 +296,7 @@ black_bloc/
 │                        LIVE probe (v126): a second loop reads each linked channel's /live
 │                        page and calls the go-live cog's go_live/end_live with
 │                        source=youtube, so the announcement is go-live's, not its own
-├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 34, measured 2026-09-11)
+├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 44 on branch `minutes`, measured 2026-09-17)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
     ├── auth.py      ← Discord OAuth2 + the signed session cookie. The site's ONLY gate.

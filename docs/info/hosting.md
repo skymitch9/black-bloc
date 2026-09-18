@@ -73,7 +73,7 @@ of the FastAPI dashboard — without hosting the bot process.
 
 | File | What it actually says |
 |---|---|
-| `Dockerfile` | `python:3.12-slim`, **no secrets baked in** (`DISCORD_TOKEN` arrives from the host's secret store). Installs the package, copies `site/public` so one hostname serves the dashboard too, `VOLUME ["/data"]`, `CMD python -m black_bloc` |
+| `Dockerfile` | `python:3.12-slim` — ⚠️ **plus one `apt-get` layer since branch `minutes`: `libopus0`**, which is what decodes voice a meeting is recorded from (`docs/info/minutes-design.md`). The base image has no OS packages of its own, so this is the first one, and a rebuild that drops it turns every `/minutes` Start into a refusal rather than a crash. **Python 3.12 is now load-bearing rather than merely current:** `discord-ext-voice-recv` imports `audioop`, which was REMOVED in 3.13 — do not bump the base image without checking that first. **No secrets baked in** (`DISCORD_TOKEN` arrives from the host's secret store). Installs the package, copies `site/public` so one hostname serves the dashboard too, `VOLUME ["/data"]`, `CMD python -m black_bloc` |
 | `fly.toml` | app `black-bloc`, `primary_region = "lax"` (nearest to Phoenix — Fly has no `phx`). `[env]` sets `DATABASE_PATH=/data/black_bloc.sqlite3`, `API_ENABLED=true`, `API_HOST=0.0.0.0`. `[mounts]` `black_bloc_data` → `/data`. `[[vm]]` `shared-cpu-1x` / 256 MB |
 | `scripts/deploy.ps1` | **the one deploy path** (incident 2026-09-01: an ungated chain deployed on a red suite). Refuses a dirty tree; gate = ruff → `pytest -n auto` → every `site/public/assets/*.js` through `node --check` → `node site/mock/check.mjs` against the mock server. Escape hatch `BLACKBLOC_SKIP_GATE=1`, emergency only. Appends the `../deploys.log` line on success |
 
