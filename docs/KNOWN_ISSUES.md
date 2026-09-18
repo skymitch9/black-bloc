@@ -7,8 +7,8 @@
 > serves the *Sign in to confirm you're not a bot* page — `"isLive"` survives, the canonical link
 > does not — so a live channel read as unannounceable and the feature went silently quiet in
 > production (conductor's measurement 18:14–18:20; ⚠️ **this build could not re-measure the network
-> from Fly and did not try**). The fix is on the same branch, unmerged and undeployed; sweeps
-> **586–590** are the only proof that would count and they need the live bot. ⚠️ **Nothing else in
+> from Fly and did not try**). The fix is **LIVE as v133** (2026-09-17 18:44, release `b20e4dc`); verified live: the bot's own probe_live, run inside the Fly container 18:5x, read Pawpette as live=True / video_id=None / botcheck=True (the wall page: isLive once, canonical href="undefined"); the site's status showed botcheck true, probed 2, quota 0, live_now 0 — nothing announced because her TWITCH go-live session #139 was still open (the one-announcement-per-person rule), and that path writes no row, so the probe's success was invisible — follow-up dispatched. Sweeps
+> **586–590** are the owner's, on the live bot. ⚠️ **Nothing else in
 > this file was re-checked then.** Before that, **2026-09-17** — **KI-31 ADDED** on branch `minutes` (`ACCEPTED`, the
 > receive extension is a PRE-RELEASE and it pins the image to Python 3.12; filed by the
 > prototype build from its own spike, never from an incident, and ⚠️ **nothing else in this
