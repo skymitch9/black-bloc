@@ -1936,3 +1936,23 @@ back to **room** is what switches it off again.
 | **600** (was `EF-e`) | On a third post, press **Delete this post** as staff and type a line | A modal titled **Remove this post?**. The post goes for good, the event is cancelled, and the DM reads *"staff removed its post."* plus your line. Pressing it as the host instead answers *"Only staff can remove this post"* and nothing happens |
 | **601** (was `EF-f`) | With an event still open in a room from before the flip, approve it | The ROOM is renamed `approved-…` exactly as it always was, and no post is made for it. A mode flip reaches new events only |
 | **602** (was `EF-g`) | On the dashboard's **Events** page, open the event from row 597 | Its detail card reads **Review post** (not *Review channel*) and its button reads **Remove its post**. The link opens the post |
+
+
+## MOVE AN OPEN ROOM INTO THE FORUM — event #1's room becomes a post (`EM-a` … `EM-e`, branch `events-move-to-forum`, design [`../info/events-forum-design.md`](../info/events-forum-design.md) §H)
+
+⚠️ **Nothing below has ever met Discord.** No room has been moved, no post opened by a move and no
+**Move to the forum** button pressed. These need `events_review_mode` on **forum** and
+`events_forum_channel_id` filled in (row 596 made the forum; row 597's flip is the mode) — the
+button renders nowhere until both hold.
+
+⚠️ **The button is NOT on the old room's card.** A message already in Discord keeps the buttons it
+was posted with, and event #1's room card was posted before v136, so the Discord door is
+`/event` ▸ pick the event → its card. The design's deviation §H-2 says why.
+
+| Row | Do | Expect |
+|---|---|---|
+| `EM-a` | With the mode on **forum**, run `/event`, pick event **#1** (*What Day It Was*, pending, in `#pending-ds-poison-meter-pt-what-day-it-was`) and press **Move to the forum** | A POST appears in `#events` named *What Day It Was · YYYY-MM-DD*, wearing 🟡 **pending**, its first message carrying the review card with **Approve** and **Deny**, and a second message carrying **Delete this post**. The old room says *"This event now lives in its own post: #… . This room is being removed."* and then disappears. The reply names the post. The event is **still pending** and the host is NOT DMed |
+| `EM-b` | Open the event again on `/event` | Its card links **The review post**, not *The review channel*, and it no longer offers **Move to the forum** |
+| `EM-c` | Press **Approve** inside the new post | It works exactly as a post proposed in forum mode does: the tag becomes 🟢 **approved** and the host is DMed |
+| `EM-d` | On the dashboard's **Events** page, press **Move to the forum** on another open event that still has a room | Same result through the website: the post appears, the room says where it went and goes, the status is unchanged, and the Audit tab shows one `web.event.room_moved` row naming the room it came from and the post it went to |
+| `EM-e` | On the same page, find a **denied** or **cancelled** event that still has a room | **Move to the forum** is not offered on it at all. (If you reach the route another way it answers *"Event #N is **denied**, so it is not moving anywhere"* and the room is left alone) |

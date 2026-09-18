@@ -118,6 +118,15 @@ guide gains one fact line. NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_IS
 
 ## H. Move an open event's room into the forum (owner, 2026-09-17 22:1x) — branch `events-move-to-forum`
 
+> **Status: BUILT** on branch `events-move-to-forum` off `main` `90252a6`, **2026-09-17**. ⚠️ Read the
+> `### §H` block under `## Deviations` first — **eleven** things differ from what is written below, and
+> deviations **§H-2** (the Delete-card button §H names is unreachable, so the reachable Discord door is
+> the `/event` card), **§H-1** (`settle=False` became a shared `remove_place`) and **§H-4** (the route is
+> not a `contract.json` row) are the ones that matter. **No schema change** — the move re-points the
+> columns schema 45 already has, so `SCHEMA_VERSION` stays **45**. Registry **282 → 283**
+> (`events_moved_line`); `pytest -n 8` **6755 → 6793**, green forward and under `BB_REVERSE=1`; mock
+> unchanged at **20 pages / 187 routes**; `ruff check .` clean. Nothing has met Discord.
+
 *"#pending-ds-poison-meter-pt-what-day-it-was convert this channel into a thread into events"* — event #1 (*What Day It
 Was*, pending, its room made before v136). §C leaves open rooms as rooms on purpose; this adds the staff move for exactly
 that case.
@@ -263,6 +272,101 @@ that case.
     forum are NOT adopted — §C says so and the bot ignores a thread no row claims. Nothing was
     merged, deployed or pushed to `main`.
 
+### §H — moving an open room into the forum
+
+> Written by the build, **2026-09-17**, on branch `events-move-to-forum` off `main` `90252a6`.
+> Everything below is a place the build did NOT do what §H says, and why. ⚠️ **Nothing here has
+> met Discord**: no boot, no token, no button pressed, no post opened in a client, no room
+> deleted, and `TEST_MODE` was never flipped. The whole verification is `ruff check .` (clean),
+> `pytest -n 8` (**6755 → 6793**, green forward and under `BB_REVERSE=1`), the ES-module parse of
+> all **33** `site/public/assets/*.js`, `node site/mock/check.mjs` (*20 pages, 187 routes, 24 core
+> settings, all keys present*), `node site/mock/discordmd.test.mjs` and
+> `node site/mock/labels.test.mjs`. **No browser rendered the events page**, real or mock.
+
+**§H-1.** ⚠️ **`settle=False` on `delete_room` became a shared `remove_place` helper** — §H allowed
+this ("*or whatever shape keeps one deletion path; say so*"). A flag would have had to turn off
+**two** things, not one: the cancel *and* the `set_review(bot.db, id, None, …)` that clears
+`review_channel_id` — which the move has just pointed at the new post, so clearing it would have
+thrown the post away. `remove_place` is the guard check, the delete, the disown and nothing decided
+about the row; `delete_room` keeps its own cancel, its own `set_review` and its own
+`event.channel_deleted` row, so its log rows, its details and its sentences are unchanged.
+
+**§H-2.** 🔴 **The button §H puts on the room's Delete card is UNREACHABLE, so the reachable Discord
+door is the `/event` panel's event card instead.** §H says *"a **Move to the forum** button on the
+room's Delete card (`room_notice_view`, kind room … renders only while `events_review_mode` is forum
+AND the forum is set)"*. That card is posted **once, at propose time** (`submit_event` →
+`post_room_notice`), and at propose time the two conditions cannot both hold: in `room` mode the
+gate is False, and in `forum` mode the proposal gets a POST, so the card is a post's card and its
+kind is not `room`. Worse for the owner's actual case — event #1's room was made **before** v136 —
+a message already in Discord keeps the components stored on it; nothing re-renders an old notice, so
+no edit to `room_notice_view` could ever reach it. The button is built exactly as §H describes
+(`moving_notice_view` asks the mode and the forum) **and** added to `build_card`, the `/event`
+panel's own event card, which is the only Discord surface that is drawn fresh every time. That is
+where the owner presses it for event #1, gated on `may_move_to_forum` AND `may_delete_room`. This is
+the same defect class as deviation 6 of the parent build, caught before it shipped rather than after.
+
+**§H-3.** **The move logs ONE row, `event.room_moved`, and no `event.channel_deleted`.** §H names
+only `event.room_moved`, and the room's removal is what its `from` field is for. A second headed row
+for one web write is what checklist 34 exists to stop; the `would_delete_channel` and
+`room_delete_failed` rows `remove_place` writes when it cannot delete are unchanged, because those
+are failures and a failure must never be silent.
+
+**§H-4.** ⚠️ **`POST /api/events/{event_id}/forum` is NOT a `contract.json` row, so the table stays at
+187 routes while the real API serves 188.** `site/mock/check.mjs`'s `checkRoutes` calls `seed()`
+before **every** entry, and a fresh seed has no forum — the move would answer its own 409. Seeding a
+forum instead would make the entry that *makes* the forum refuse as already-there, so one row cannot
+be bought without losing another. Instead: a bespoke `checkEventsMove()` pass (the `checkPostsModes`
+precedent) walks *no forum → 409*, the move → 200 with the keys and `review_kind: post` and the
+status still `pending`, a second press → 409, and a settled event → 409; `checkActionKinds` presses
+the route so `web.event.room_moved` is proved listed; and `tests/api/tools/test_events.py` covers the
+real router with **10** tests. That is more than a contract row would have asserted, and it is named
+here because the route count in `architecture.md` no longer equals the router count.
+
+**§H-5.** **`move_room_to_forum` does NOT check `events_review_mode`; only the doors do.** §H lists
+four refusals and the mode is not among them, so staff who reach the route while the mode is still
+`room` may move an event into a forum that exists (staff final say, owner 2026-09-03). The rendering
+gate, `may_move_to_forum`, DOES include the mode exactly as §H says, so no button offers the move
+outside forum mode. Two different questions, kept apart on purpose.
+
+**§H-6.** **A room whose id no longer resolves is still moved, not refused.** `room_of` can answer
+`None` on a stale id. The post is opened and the row re-pointed; the moved line and the deletion are
+skipped and the sentence says only where the event went. Refusing would have stranded the event in a
+room that is not there. A row with **no** `review_channel_id` at all is refused in words
+(`MOVE_NO_ROOM`) — there is nothing to move.
+
+**§H-7.** **The signature gained two view factories: `move_room_to_forum(bot, guild, actor, row, *,
+review_view=None, room_view=None, via=VIA_DISCORD)`.** §H names only `via`, but a post has to be
+opened with its Approve/Deny buttons and its Delete-this-post card, and those live in the cog —
+`submit_event` already takes the same two. The website route imports them inside the function body,
+the way `handoff.py` imports the requests cog, because a post with no view is a post staff cannot
+decide from.
+
+**§H-8.** **It returns a `panels.Outcome`, not a `(said, ok)` pair.** §H does not say. `Outcome`
+carries the code and the HTTP status the route needs, and `make_forum` beside it already returns one;
+the `(said, bool)` shape belongs to `delete_room`, which the site translates into a 409 by hand.
+
+**§H-9.** **`events_moved_line` got a validator §H did not ask for.** `settings_store.checked_moved_line`
+refuses any placeholder but `{post}` in words, and `moved_line` ALSO catches `Exception` around
+`.format` and falls back to the default with a log line (checklist 17). Two halves of one rule: the
+door refuses the typo, the renderer survives one that got in before the door existed. The line may be
+written with no `{post}` at all — a room being closed is allowed to say so without a link.
+
+**§H-10.** ⚠️ **Only the moved line is a settings key; the six refusals, the button label and the
+success sentence are still CONSTANTS.** The standing rule (owner, 2026-09-17) says every word the bot
+posts is a key, and §H names exactly one. Deviation **10** of the parent build stands unchanged and
+this build did not widen it: keying eight more sentences would have left the events vocabulary
+three-quarters unkeyed with the halves of one paragraph in two different homes. Named as a departure,
+not a decision — the honest fix is still one pass over the whole events vocabulary.
+
+**§H-11.** **What this build deliberately did NOT touch.** `docs/TODO.md`, `docs/DONE.md`,
+`docs/deploys.log` and `docs/KNOWN_ISSUES.md`. **No setting was flipped and no schema change was
+needed** — the move writes the columns schema 45 already has (`review_channel_id`,
+`review_message_id`, `card_channel_id`, `review_kind`), so `SCHEMA_VERSION` stays **45** and there is
+no migration to run before the deploy. Nothing was merged, deployed or pushed to `main`. ⚠️ **`pytest
+-n 8` did not stall once** (KI-26): four full runs in this worktree — the baseline, two after code
+and the `BB_REVERSE=1` one — all finished in 53–82 s, none of them a `deploy.ps1` run.
+
+
 ## What was NOT verified
 
 - **Nothing met Discord.** No boot, no token, no forum created in a guild, no post opened, no tag
@@ -291,3 +395,29 @@ that case.
   bot rather than only in the library's source (deviation 3).
 - **`review_place` was not exercised against a restarted process.** The claim-on-every-read rule is
   proved by a test asserting the guard's owned set, not by a restart.
+
+### §H — moving an open room into the forum
+
+- **Nothing met Discord.** No boot, no token, **Move to the forum** was never pressed in a client,
+  no post was opened by a move, no room was deleted, no `events_moved_line` was ever read in a
+  channel. `TEST_MODE` was never flipped and nothing was deployed. Sweep rows `EM-a`…`EM-e` in
+  [`../access/sweeps.md`](../access/sweeps.md) are all unrun.
+- ⚠️ **The owner's own case — event #1's room, made before v136 — was not exercised against the
+  live database.** The move was proved against fakes and against the mock; the live row's
+  `review_kind` is NULL (schema 45 default) and reads as a room, which is what the move needs, but
+  nobody has read that row.
+- ⚠️ **Deviation §H-2's claim that an old notice card cannot gain a button is LIBRARY REASONING,
+  not a measurement.** It follows from Discord storing components on the message and from nothing
+  in this repo re-rendering `post_room_notice`'s message (`post_room_notice`'s id is not stored) —
+  but no client was opened to look at event #1's card.
+- **No browser saw the events page**, real or mock. The site half was exercised only by
+  `node site/mock/check.mjs` (including the new `checkEventsMove` pass),
+  `tests/api/tools/test_events.py` and the ES-module parse — so the **Move to the forum** button on
+  the queue row has never been drawn.
+- **The `/event` panel card's row 2 was not seen in Discord.** The button is added at `row=2` on the
+  reasoning that rows 0 and 1 are already spoken for; a view that exceeds five rows raises at send
+  time, and only a real panel would prove it does not.
+- **The API route's lazy cog import was not exercised in the running process** — only under pytest,
+  where the cog module is importable. A deployment where `black_bloc.cogs.community.events` failed
+  to import would fail the route rather than the boot.
+
