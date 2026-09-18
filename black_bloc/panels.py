@@ -93,7 +93,8 @@ async def opened(interaction: discord.Interaction, *, staff: bool = True) -> boo
     """Staff are re-asked before every move, the reads included, and then the database is."""
     if staff and not await still_staff(interaction):
         return False
-    await interaction.response.defer()
+    if not interaction.response.is_done():
+        await interaction.response.defer()
     return await db_ready(interaction)
 
 

@@ -544,6 +544,17 @@ async def test_opened_without_the_staff_gate_defers_for_a_member_panel():
     assert interaction.response.sent == []
 
 
+async def test_opened_twice_on_one_interaction_defers_once_and_never_raises():
+    """The zone picker hands the same interaction on to open_draft, which opens it again (v130)."""
+    interaction = FakeInteraction(FakeBot(staff=False))
+
+    assert await panels.opened(interaction, staff=False) is True
+    interaction.response.deferred = False
+    assert await panels.opened(interaction, staff=False) is True
+    assert interaction.response.deferred is False
+    assert interaction.response.sent == []
+
+
 # --- confirm --------------------------------------------------------------------------------
 
 
