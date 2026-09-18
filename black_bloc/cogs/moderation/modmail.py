@@ -46,7 +46,7 @@ from ...handoff import (
     TITLE_LIMIT as ASK_TITLE_LIMIT,
 )
 from ...logkinds import VIA_DISCORD, kind_via
-from ...loops import wait_ready
+from ...loops import Reconciler, wait_ready
 from ...modmail import (
     ANONYMOUS_NAME,
     AUTO_ARCHIVE_MINUTES,
@@ -212,7 +212,7 @@ from ...panels import (
     site_page_url,
     still_staff,
 )
-from ...posted import drop_message, message_is_there, overtaken_by
+from ...posted import drop_message, duplicates_near, message_is_there, overtaken_by
 from ...posts import where_words
 from ...settings_store import (
     CHANNEL_MODE,
@@ -2542,6 +2542,7 @@ class Modmail(commands.Cog):
         self._refused: dict[int, datetime] = {}
         self._gone: dict[int, int] = {}
         self._panel_shadowed: set[int] = set()
+        self._reconciles = Reconciler()
         self.last_ok_at: str | None = None
         self.last_error: str | None = None
 
@@ -2810,11 +2811,14 @@ class Modmail(commands.Cog):
     async def on_ready(self) -> None:
         if not self.bot.db.is_connected:
             return
-        await self.reconcile_tickets()
+        await self.reconcile_tickets(skip_if_recent=True)
         if not self._reconcile_loop.is_running():
             self._reconcile_loop.start()
 
-    async def reconcile_tickets(self) -> None:
+    async def reconcile_tickets(self, *, skip_if_recent: bool = False) -> bool:
+        return await self._reconciles.run(self._sweep, skip_if_recent=skip_if_recent)
+
+    async def _sweep(self) -> None:
         """An open ticket whose channel or thread has gone is closed, with the reason recorded."""
         now = datetime.now(UTC)
         for guild in list(getattr(self.bot, "guilds", ())):
@@ -2877,6 +2881,15 @@ class Modmail(commands.Cog):
                 "modmail.panel_gone",
                 details={"channel_id": channel.id, "message_id": message_id},
             )
+        also = await duplicates_near(channel, message_id, ticket_panel_custom_id(guild.id))
+        if also:
+            await log_action(
+                bot,
+                guild,
+                "modmail.panel_duplicate_seen",
+                details={"channel_id": channel.id, "message_id": message_id, "also": also},
+            )
+            return
         outcome = await post_ticket_panel(
             bot, guild, None, channel, moving=overtaken is not None
         )
@@ -2890,7 +2903,7 @@ class Modmail(commands.Cog):
             return
         if str(field_of(row, "slug", "")) != followed_slug(self.bot.store, guild.id):
             return
-        await self._repanel(guild)
+        await self._reconciles.run(lambda: self._repanel(guild), stamp=False)
 
     async def _recheck(self, guild: Any, row: Any, now: datetime) -> None:
         if not row["channel_id"]:

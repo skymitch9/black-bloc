@@ -5170,3 +5170,43 @@ async def test_a_room_mode_notice_card_never_offers_the_move(cog, bot, db, forum
     factory = moving_notice_view(bot, bot.guild)
 
     assert item_labels(factory(1, "room")) == ["Delete this room"]
+
+
+# --- the boot double-reconcile, 2026-09-18 16:08 ----------------------------------------------
+
+
+async def test_two_reconciles_at_boot_forget_a_gone_room_once(cog, bot, db):
+    """The same race as the front door's, one row instead of one message."""
+    event_id = await store_event(
+        db, status=DENIED, starts_in=-timedelta(days=30), minutes=60, channel_id=4242
+    )
+
+    await asyncio.gather(cog.reconcile_events(), cog.reconcile_events())
+
+    assert (await get_event(db, event_id))["review_channel_id"] is None
+    assert (await action_kinds(db)).count("event.room_forgotten") == 1
+
+
+async def test_every_gone_room_at_boot_leaves_exactly_one_row_of_its_own(cog, bot, db):
+    ids = [
+        await store_event(
+            db,
+            status=DENIED,
+            starts_in=-timedelta(days=30),
+            minutes=60,
+            channel_id=4242 + one,
+        )
+        for one in range(3)
+    ]
+
+    await asyncio.gather(cog.reconcile_events(), cog.reconcile_events())
+
+    assert (await action_kinds(db)).count("event.room_forgotten") == len(ids)
+
+
+async def test_on_ready_does_not_reconcile_again_right_after_cog_load_did(cog, bot, db):
+    await cog.cog_load()
+    try:
+        assert await cog.reconcile_events(skip_if_recent=True) is False
+    finally:
+        await cog.cog_unload()

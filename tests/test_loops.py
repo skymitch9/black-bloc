@@ -7,7 +7,7 @@ import pathlib
 import pytest
 from discord.ext import tasks
 
-from black_bloc.loops import wait_ready
+from black_bloc.loops import Reconciler, wait_ready
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "black_bloc"
@@ -111,6 +111,104 @@ async def test_a_cancelled_wait_is_re_raised_untouched_and_never_reaches_the_han
     with pytest.raises(asyncio.CancelledError):
         await wait_ready(Cancelling(), failed)
     assert seen == []
+
+
+# --- Reconciler: the 2026-09-18 boot double-post ---------------------------------------------
+
+
+async def test_two_reconciles_at_once_run_one_at_a_time():
+    """The whole of the incident: `on_ready` and the loop's first tick overlapped."""
+    reconciler = Reconciler()
+    inside = 0
+    most = 0
+
+    async def work():
+        nonlocal inside, most
+        inside += 1
+        most = max(most, inside)
+        await asyncio.sleep(0)
+        inside -= 1
+
+    await asyncio.gather(reconciler.run(work), reconciler.run(work))
+
+    assert most == 1
+
+
+async def test_the_second_reconcile_reads_the_state_the_first_wrote_and_posts_nothing():
+    reconciler = Reconciler()
+    stored: dict[str, int | None] = {"message_id": None}
+    posted: list[int] = []
+
+    async def work():
+        await asyncio.sleep(0)
+        if stored["message_id"] is not None:
+            return
+        await asyncio.sleep(0)
+        posted.append(len(posted) + 1)
+        stored["message_id"] = posted[-1]
+
+    await asyncio.gather(reconciler.run(work), reconciler.run(work))
+
+    assert posted == [1]
+    assert stored["message_id"] == 1
+
+
+async def test_on_ready_skips_a_reconcile_that_has_just_run_and_the_loop_tick_does_not():
+    reconciler = Reconciler()
+    ran = 0
+
+    async def work():
+        nonlocal ran
+        ran += 1
+
+    assert await reconciler.run(work) is True
+    assert reconciler.ran_recently() is True
+    assert await reconciler.run(work, skip_if_recent=True) is False
+    assert await reconciler.run(work) is True
+    assert ran == 2
+
+
+async def test_the_skip_window_is_a_window_and_not_a_latch():
+    reconciler = Reconciler(recent_seconds=0)
+    ran = 0
+
+    async def work():
+        nonlocal ran
+        ran += 1
+
+    await reconciler.run(work)
+
+    assert reconciler.ran_recently() is False
+    assert await reconciler.run(work, skip_if_recent=True) is True
+    assert ran == 2
+
+
+async def test_a_one_guild_run_serialises_without_holding_the_skip_window_open():
+    """`on_post_published` re-posts one guild's door; it is not the whole sweep."""
+    reconciler = Reconciler()
+
+    async def work():
+        return None
+
+    await reconciler.run(work, stamp=False)
+
+    assert reconciler.ran_recently() is False
+
+
+async def test_a_reconcile_that_raises_releases_the_lock_and_leaves_the_window_shut():
+    reconciler = Reconciler()
+
+    async def broken():
+        raise RuntimeError("the channel went")
+
+    with pytest.raises(RuntimeError):
+        await reconciler.run(broken)
+
+    async def fine():
+        return None
+
+    assert reconciler.ran_recently() is False
+    assert await reconciler.run(fine) is True
 
 
 def _before_loop_methods() -> list[tuple[str, ast.AsyncFunctionDef]]:

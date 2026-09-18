@@ -3938,3 +3938,91 @@ async def test_the_cog_registers_every_door_a_restart_has_to_dispatch(cog, bot):
         modmail_cog.ConfirmDoor,
         modmail_cog.MakeTheEventButton,
     ]
+
+
+# --- the boot double-post, 2026-09-18 16:08 ---------------------------------------------------
+
+
+def yields_before_it_sends(channel, turns=4):
+    """Two reconciles only race if the send gives the other one a turn; a real one always does."""
+    real = channel.send
+
+    async def slow(*args, **kwargs):
+        for _ in range(turns):
+            await asyncio.sleep(0)
+        return await real(*args, **kwargs)
+
+    channel.send = slow
+
+
+def can_say_what_else_is_in_it(channel):
+    """`FakeText` cannot list its own messages, so the duplicate guard is dark on it."""
+
+    async def history(limit=None, after=None):
+        for message in reversed(channel.messages):
+            yield message
+
+    channel.history = history
+
+
+class _Item:
+    def __init__(self, custom_id):
+        self.custom_id = custom_id
+
+
+class _Row:
+    def __init__(self, ids):
+        self.children = [_Item(one) for one in ids]
+
+
+def a_stray_button(channel, message_id=4242):
+    message = FakeMessage(message_id, "", channel)
+    message.components = [_Row([modmail_cog.ticket_panel_custom_id(GUILD)])]
+    channel.messages.append(message)
+    return message
+
+
+async def test_two_reconciles_at_boot_post_exactly_one_ticket_button(cog, bot, db):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await bot.store.set(GUILD, "modmail_panel_channel_id", TEST_CHANNEL)
+    yields_before_it_sends(channel)
+
+    await asyncio.gather(cog.reconcile_tickets(), cog.reconcile_tickets())
+
+    assert len(channel.messages) == 1
+    assert (await action_kinds(db)).count("modmail.panel_posted") == 1
+    assert bot.store.get(GUILD, "modmail_panel_message_id") == str(channel.messages[0].id)
+
+
+async def test_on_ready_does_not_reconcile_again_right_after_cog_load_did(cog, bot):
+    bot.guard = FakeGuard()
+    channel = bot.guild.channels[TEST_CHANNEL]
+    await bot.store.set(GUILD, "modmail_panel_channel_id", TEST_CHANNEL)
+    await cog.cog_load()
+    try:
+        before = list(channel.messages)
+
+        assert await cog.reconcile_tickets(skip_if_recent=True) is False
+        assert channel.messages == before
+    finally:
+        await cog.cog_unload()
+
+
+async def test_a_ticket_button_already_up_twice_is_left_for_staff_and_no_third_is_posted(
+    cog, bot, lead, db
+):
+    bot.guard = FakeGuard()
+    await post_the_button(cog, bot, lead)
+    channel = bot.guild.channels[TEST_CHANNEL]
+    can_say_what_else_is_in_it(channel)
+    first = int(bot.store.get(GUILD, "modmail_panel_message_id"))
+    channel.messages = [one for one in channel.messages if one.id != first]
+    stray = a_stray_button(channel)
+
+    await cog.reconcile_tickets()
+
+    kinds = await action_kinds(db)
+    assert kinds.count("modmail.panel_duplicate_seen") == 1
+    assert kinds.count("modmail.panel_posted") == 1
+    assert [one.id for one in channel.messages] == [stray.id]

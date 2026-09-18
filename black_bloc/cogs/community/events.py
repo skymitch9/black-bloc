@@ -187,7 +187,7 @@ from ...handoff import (
 from ...handoff import REQUEST as HANDOFF_REQUEST
 from ...handoff import TICKET as HANDOFF_TICKET
 from ...linkcheck import LINK_OK, link_answers
-from ...loops import wait_ready
+from ...loops import Reconciler, wait_ready
 from ...panels import (
     KEEP_IT,
     Panel,
@@ -1950,6 +1950,7 @@ class Events(commands.Cog):
         self.last_ok_at: dict[str, str | None] = {name: None for name in LOOP_NAMES}
         self.last_error: dict[str, str | None] = {name: None for name in LOOP_NAMES}
         self._missing_since: dict[int, str] = {}
+        self._reconciles = Reconciler()
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(DecisionButton)
@@ -2006,7 +2007,7 @@ class Events(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self) -> None:
         if self.bot.db.is_connected:
-            await self.reconcile_events()
+            await self.reconcile_events(skip_if_recent=True)
 
     async def run_due_events(self) -> None:
         """Approved events that have started go live; live ones that have finished are done."""
@@ -2121,7 +2122,10 @@ class Events(commands.Cog):
                     ping=False,
                 )
 
-    async def reconcile_events(self) -> None:
+    async def reconcile_events(self, *, skip_if_recent: bool = False) -> bool:
+        return await self._reconciles.run(self._sweep, skip_if_recent=skip_if_recent)
+
+    async def _sweep(self) -> None:
         """Events whose review channel has gone are cancelled; finished ones are tidied away."""
         now = datetime.now(UTC)
         for guild in list(getattr(self.bot, "guilds", ())):

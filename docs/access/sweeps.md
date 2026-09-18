@@ -9,7 +9,22 @@
 > that in shadow mode"*. ⚠️ **`FS-b` is the CUTOVER itself** — it is the row that puts the door live, so run
 > it when that is meant to happen, not to satisfy the list. Rows are lettered; the conductor numbers them at
 > the merge. ⚠️ **Nothing else in this file was re-checked then.** Before that,
+> **2026-09-18** — rows **`RO-a`** and **`RO-b`** added at the foot for the BOOT RECONCILE FIX
+> (branch `boot-reconcile-once`, off `main` `1177bce`; design
+> [`../info/front-door-design.md`](../info/front-door-design.md) ▸ Deviations ▸ **14**). They are the
+> only proof of the 16:08 incident's fix and ⚠️ **neither can be run from a laptop** — both need the
+> live bot restarting on Fly. Rows are lettered; the conductor numbers them at the merge.
+> ⚠️ **Nothing else in this file was re-checked then.** Before that,
 > **2026-09-18** — rows **`YU-a` … `YU-d`** added at the foot for the YOUTUBE UPLOADS REMOVAL
+> **2026-09-18 16:2x** — rows **`PP-a` … `PP-c`** added at the foot for the POST EDITOR'S PASTE
+> CONVERTER (branch `posts-paste`, off `main` `0b4e7c4`; design
+> [`../info/posts-paste-design.md`](../info/posts-paste-design.md); ⚠️ **not merged, not deployed,
+> and NO BROWSER HAS PASTED ANYTHING** — these three rows are the only proof that will ever exist
+> that a real Google Docs clipboard converts). Owner: *"the formatting was lost when copying from
+> google drive"*. They are the WEBSITE only — a Discord modal never sees the clipboard, so pasting
+> into the `/posts` modal still loses formatting and that is not a bug. Rows are lettered; the
+> conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked then.** Before
+> that, **2026-09-18** — rows **`YU-a` … `YU-d`** added at the foot for the YOUTUBE UPLOADS REMOVAL
 > (branch `youtube-uploads-removal`, off `main` `9bc1982`; design
 > [`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md); ⚠️ **not
 > merged, not deployed, and nothing in it has met Discord or a browser**). Owner: *"the youtube
@@ -2040,6 +2055,40 @@ cutover itself, so run it when the door really is meant to go live.
 
 | Row | Do | Expect |
 |---|---|---|
-| **`FS-a`** | Dashboard ▸ **Settings** ▸ the **modmail** group: set `frontdoor_mode` to **shadow**. Then Dashboard ▸ **Modmail** ▸ **Doors** ▸ **Front door**: pick `#welcome` and press **Post the front door** | The reply says the door is **rehearsing in `#welcome-test` instead of `#welcome`** — and says **shadow**, never *test mode*. `#welcome` gets **nothing**: no card, no ticket button, nothing appears there over the next five minutes either. `#welcome-test` carries the real card — *Need something?*, the line under it, the three buttons — under one line reading *"Rehearsal — this is where it would go: #welcome"*. The card says **shadow — the door is rehearsing in #welcome-test; nothing is in #welcome.** Press **Ask staff privately** on the copy: it opens the real ticket modal. `/ask` in `#blackbloc-logs` still answers, and as a Lead its card carries the same shadow sentence in the footer (a plain member sees no footer). Reword `frontdoor_title` on the Settings page and within five minutes the copy is EDITED in place — same message, new heading, no second copy |
-| **`FS-b`** | ⚠️ **This is the cutover.** With `FS-a` standing, set `frontdoor_mode` to **on** and wait up to five minutes (or press **Post the front door** again to skip the wait) | The rehearsal copy in `#welcome-test` **disappears**, and the real door appears in `#welcome`, directly under the rules post. `/ask`'s staff footer is gone. Modmail ▸ Logs shows one `frontdoor.taken_down_shadow` and one `frontdoor.posted`. Set it back to **shadow** and wait: the door in `#welcome` comes down again (`frontdoor.taken_down`), the copy reappears in `#welcome-test`, and `frontdoor_channel_id` still reads `#welcome` throughout — it is never cleared by a mode flip |
-| **`FS-c`** | Before `FS-b`, while the mode is **shadow**: put the ticket button up on its own (Dashboard ▸ **Modmail** ▸ **Doors** ▸ **Ticket button** ▸ pick `#welcome`, **Post the ticket button**), then wait five minutes and look at both channels. Then set `frontdoor_replaces_ticket_button` to **false** and wait five minutes more | With the key **true**: the reply rehearses rather than posts, `#welcome` stays empty, and `#welcome-test` holds **one** message — the front door — never a ticket button under it. `modmail_panel_channel_id` still reads `#welcome`. With the key **false**: the ticket button goes back to its own rules and posts for real in `#welcome`, beside nothing (the door is still rehearsing). ⚠️ **Put the key back to true before `FS-b`** |
+| **618** (was `FS-a`) | Dashboard ▸ **Settings** ▸ the **modmail** group: set `frontdoor_mode` to **shadow**. Then Dashboard ▸ **Modmail** ▸ **Doors** ▸ **Front door**: pick `#welcome` and press **Post the front door** | The reply says the door is **rehearsing in `#welcome-test` instead of `#welcome`** — and says **shadow**, never *test mode*. `#welcome` gets **nothing**: no card, no ticket button, nothing appears there over the next five minutes either. `#welcome-test` carries the real card — *Need something?*, the line under it, the three buttons — under one line reading *"Rehearsal — this is where it would go: #welcome"*. The card says **shadow — the door is rehearsing in #welcome-test; nothing is in #welcome.** Press **Ask staff privately** on the copy: it opens the real ticket modal. `/ask` in `#blackbloc-logs` still answers, and as a Lead its card carries the same shadow sentence in the footer (a plain member sees no footer). Reword `frontdoor_title` on the Settings page and within five minutes the copy is EDITED in place — same message, new heading, no second copy |
+| **619** (was `FS-b`) | ⚠️ **This is the cutover.** With `FS-a` standing, set `frontdoor_mode` to **on** and wait up to five minutes (or press **Post the front door** again to skip the wait) | The rehearsal copy in `#welcome-test` **disappears**, and the real door appears in `#welcome`, directly under the rules post. `/ask`'s staff footer is gone. Modmail ▸ Logs shows one `frontdoor.taken_down_shadow` and one `frontdoor.posted`. Set it back to **shadow** and wait: the door in `#welcome` comes down again (`frontdoor.taken_down`), the copy reappears in `#welcome-test`, and `frontdoor_channel_id` still reads `#welcome` throughout — it is never cleared by a mode flip |
+| **620** (was `FS-c`) | Before `FS-b`, while the mode is **shadow**: put the ticket button up on its own (Dashboard ▸ **Modmail** ▸ **Doors** ▸ **Ticket button** ▸ pick `#welcome`, **Post the ticket button**), then wait five minutes and look at both channels. Then set `frontdoor_replaces_ticket_button` to **false** and wait five minutes more | With the key **true**: the reply rehearses rather than posts, `#welcome` stays empty, and `#welcome-test` holds **one** message — the front door — never a ticket button under it. `modmail_panel_channel_id` still reads `#welcome`. With the key **false**: the ticket button goes back to its own rules and posts for real in `#welcome`, beside nothing (the door is still rehearsing). ⚠️ **Put the key back to true before `FS-b`** |
+## ONE DOOR PER BOOT — the reconciles no longer race (`RO-a` … `RO-b`, branch `boot-reconcile-once`, design [`../info/front-door-design.md`](../info/front-door-design.md) ▸ Deviations ▸ **14**)
+
+These two rows are the only proof that matters, and ⚠️ **neither can be run from a laptop** — they
+need the live bot restarting on Fly. The incident they answer is measured, not inferred: at
+**2026-09-18 16:08 Phoenix**, the boot that followed the TEST_MODE lift posted the front door twice
+(`frontdoor.posted` 23:08:28.529Z and 23:08:29.352Z) and the ticket button twice
+(`modmail.panel_posted` 23:08:28.110Z and 23:08:28.589Z), and hid only the FIRST ticket button —
+leaving two doors and one orphan in `#welcome`. ⚠️ **Nothing in this build has met Discord**: a
+worktree holds no token, no bot was booted, and the fix is proved by the suite alone.
+
+| Row | Do | Expect |
+|---|---|---|
+| **616** (was `RO-a`) | Restart the machine (`flyctl machine restart <id>`, or any deploy) with `frontdoor_mode` **on** and the door posted in `#welcome`. When it is back, look at `#welcome`, then open the Logs page (or `/settings` ▸ Logs) filtered to the boot minute | **Exactly ONE front door** in `#welcome` and **no stray Open-a-ticket message** under it. The log holds **one** `frontdoor.posted`-family row for that boot at most — on a healthy restart, where the door is still up, it holds **none of them at all**, because the sweep found its message and left it alone. ⚠️ **No `frontdoor.duplicate_seen` and no `modmail.panel_duplicate_seen` row.** If one IS there, the guard fired: it names the stored id and every other id it found, nothing was deleted, and the two messages are waiting for you to pick which one stays |
+| **617** (was `RO-b`) | On the same boot, open an event that has been denied or cancelled for longer than the retention window and whose review room has already been deleted, then read the Logs page's events rows for the boot minute | **One** `event.room_forgotten` row for that event, never two. The event's card says **The review channel** is gone and the row keeps its status |
+## A GOOGLE DOC PASTED INTO A POST KEEPS ITS FORMATTING (`PP-a` … `PP-c`, branch `posts-paste`, design [`../info/posts-paste-design.md`](../info/posts-paste-design.md))
+
+Owner, 2026-09-18 16:0x: *"the formatting was lost when copying from google drive"*. ⚠️ **Nothing
+below has ever been done in a browser** — no real Google Docs clipboard has been pasted into the
+box even once, and every fixture behind this build is hand-written markup in the shape Docs is
+*known* to emit, not a capture from the owner's own document. `PP-a` is the row that turns that
+from a claim into a fact.
+
+⚠️ **This is the WEBSITE only, and it cannot ever be `/posts`.** A Discord modal never sees the
+clipboard — the client hands the bot the finished string on submit. Pasting into the `/posts` edit
+modal still loses everything, and that is not a bug to file.
+
+These rows need nothing turned on: no key, no mode, no schema. Go to **Runs the server** ▸
+**Posts** ▸ any post (https://blackbloc.heygabi.ai/posts.html).
+
+| Row | Do | Expect |
+|---|---|---|
+| **613** (was `PP-a`) | Open a Google Doc with a **heading**, some **bold**, some *italic*, a bulleted list with one item indented under another, a numbered list and a link whose words are not the address. Select all of it, copy, then click into **The message** box on a post and paste | The box fills with markdown, not flat text: `# ` before the heading, `**` around the bold words, `*` around the italic ones, `- ` on each bullet with **two spaces** of indent on the nested one, `1. ` / `2. ` on the numbered list, and the link as `[words](https://…)`. **What Discord will show** beside it redraws immediately with the heading big, the bold bold and the bullets as bullets. Under the box: *"Pasted with formatting kept (headings, bold, bullets, links). Undo with Ctrl+Z."* with a **Dismiss** that hides it. ⚠️ **The whole document must NOT be bold** — if it is, the `docs-internal-guid` wrapper got through and that is the bug to report. Beside the **The message** label, **Paste keeps formatting** |
+| **614** (was `PP-b`) | In Notepad (or the Discord message box), type a plain line with no formatting, copy it, and paste it into the same box | The words land exactly as they were — **no `**`, no `#`, nothing added** — and ⚠️ **no note appears under the box at all**. Do the same with a line copied from a Google Doc that has no formatting in it: same result, still no note. The counter moves by the number of characters you pasted and nothing else on the page changes |
+| **615** (was `PP-c`) | Straight after the `PP-a` paste, press **Ctrl+Z** once | The pasted markdown comes out again and the box is exactly what it was before the paste — including anything you had selected when you pasted, which comes back selected. The preview follows it back. Press **Ctrl+Y** (or Ctrl+Shift+Z): the markdown returns. Nothing was saved by any of this — the save bar still says the same number of changes it said before you pressed anything, and **Discard** puts the whole box back to the saved post |

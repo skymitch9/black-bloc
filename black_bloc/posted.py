@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 
 import discord
@@ -9,6 +10,30 @@ from .actionlog import log_action
 from .posts import get_post, row_value, shadow_channel_id, shadow_id
 
 log = logging.getLogger(__name__)
+
+DUPLICATE_MINUTES = 5
+DUPLICATE_LIMIT = 50
+
+
+async def duplicates_near(
+    channel: Any, message_id: Any, head: str, *, minutes: int = DUPLICATE_MINUTES
+) -> list[int]:
+    """Other recent messages in the room wearing the same buttons — a post that went twice."""
+    try:
+        after = discord.utils.utcnow() - timedelta(minutes=minutes)
+        found: list[int] = []
+        async for message in channel.history(limit=DUPLICATE_LIMIT, after=after):
+            if message_id and int(message.id) == int(message_id):
+                continue
+            for row in getattr(message, "components", None) or ():
+                ids = [getattr(one, "custom_id", "") or "" for one in row.children]
+                if any(one.startswith(head) for one in ids):
+                    found.append(int(message.id))
+                    break
+        return found
+    except Exception as exc:
+        log.info("posted: could not read what else is in %s: %s", getattr(channel, "id", None), exc)
+        return []
 
 
 async def message_is_there(channel: Any, message_id: int) -> bool:
@@ -76,4 +101,10 @@ async def overtaken_by(
     return None
 
 
-__all__ = ["drop_message", "message_is_there", "overtaken_by"]
+__all__ = [
+    "DUPLICATE_MINUTES",
+    "drop_message",
+    "duplicates_near",
+    "message_is_there",
+    "overtaken_by",
+]
