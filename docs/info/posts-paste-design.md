@@ -4,11 +4,16 @@
 > `posts-paste`** — off `main` at `0b4e7c4`, **not merged, not deployed, and NOBODY HAS PASTED
 > ANYTHING**. A companion to [`posts-design.md`](posts-design.md) (the Posts feature, ✅ LIVE
 > v113); it changes no row, no key, no route and no Python.
-> **Last verified: 2026-09-18** — the node fixtures in `../../site/mock/clipmd.test.mjs` pass
-> (`node site/mock/clipmd.test.mjs`), the full gate is green in the worktree (`ruff check .`;
-> `pytest -n 8` forward **6720 passed / 3 skipped** and again under `BB_REVERSE=1`; the
-> ES-module parse of all **34** `site/public/assets/*.js`; `node site/mock/check.mjs` → *20
-> pages, 186 routes, 24 core settings*).
+> **Last verified: 2026-09-18** — the full gate is green in the worktree, on the committed tree:
+> `ruff check .` clean; `pytest -q -n 8` **6720 passed / 3 skipped** forward (57 s) and again
+> under `BB_REVERSE=1` (61 s); the ES-module parse of all **34** `site/public/assets/*.js`;
+> `node site/mock/check.mjs` on `MOCK_PORT=8791` → *20 pages, 186 routes, 24 core settings*
+> (the server was stopped and the port confirmed free); `discordmd.test.mjs`, `labels.test.mjs`
+> and the new `clipmd.test.mjs` all exit 0.
+> ⚠️ **The `BB_REVERSE=1` run hit [`gotchas.md`](gotchas.md)'s xdist hang once** (KI-26, shape 1:
+> silent at spawn, no output at all in 10 minutes). Killed by process tree and re-run with
+> output to a file, per that entry; **the retry was green in 61 s**, and the same commit is green
+> forward. That is the known hang, not a red suite.
 > ⚠️ **NOT checked:** no browser has run this code and **no real Google Docs clipboard has ever
 > been pasted into the box** — every fixture is a hand-written fragment in the shape Docs is
 > documented and observed to emit, not a capture taken from the owner's own document. See
@@ -193,9 +198,11 @@ preview draws it.
 - **The heading thresholds (20pt / 16pt / 13.5pt) are library knowledge, not measurement.** They
   are keyed to Docs' 11pt body default; a document written at a different base size may promote
   or fail to promote a heading.
-- **`site/mock/check.mjs` was run against the mock on the default port 8788**, which the gate
-  also uses; it reported *20 pages, 186 routes, 24 core settings* and the process was stopped
-  after. The port was confirmed free afterwards.
+- **`site/mock/check.mjs` was run on a spare port (`MOCK_PORT=8791`)**, not the gate's 8788,
+  because another session was holding a mock on the default. It reported *20 pages, 186 routes,
+  24 core settings*; the server was stopped and the port confirmed free. ⚠️ **Nothing in this
+  branch touches the contract** — no route, no page, no key — so a green `check.mjs` says only
+  that nothing was broken, not that anything new was proved.
 - The **CI job** was edited but not run — GitHub has not executed the new `Paste converter` step.
 
 ## Sweeps
