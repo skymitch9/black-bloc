@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import discord
@@ -6,6 +7,7 @@ import pytest
 from black_bloc.cogs.community.events import EVENTS_OFF, ProposeButton
 from black_bloc.cogs.community.frontdoor import (
     BELOW_POST,
+    DUPLICATE_SEEN,
     GONE,
     MOVED,
     POSTED,
@@ -922,3 +924,118 @@ async def test_the_cog_registers_the_one_dynamic_item_on_load(guarded, cog):
     await cog.cog_load()
 
     assert DoorButton in guarded.dynamic_items
+
+
+# --- the boot double-post, 2026-09-18 16:08 ---------------------------------------------------
+
+
+def yields_before_it_sends(channel, turns=4):
+    """Two reconciles only race if the send gives the other one a turn; a real one always does."""
+    real = channel.send
+
+    async def slow(*args, **kwargs):
+        for _ in range(turns):
+            await asyncio.sleep(0)
+        return await real(*args, **kwargs)
+
+    channel.send = slow
+
+
+def can_say_what_else_is_in_it(channel):
+    """`FakeText` cannot list its own messages, so the duplicate guard is dark on it."""
+
+    async def history(limit=None, after=None):
+        for message in reversed(channel.messages):
+            yield message
+
+    channel.history = history
+
+
+class _Item:
+    def __init__(self, custom_id):
+        self.custom_id = custom_id
+
+
+class _Row:
+    def __init__(self, ids):
+        self.children = [_Item(one) for one in ids]
+
+
+def a_stray_door(channel, message_id=4242):
+    message = FakeMessage(message_id)
+    message.components = [_Row([custom_id(TICKET, GUILD)])]
+    channel.messages.append(message)
+    return message
+
+
+async def test_two_reconciles_at_boot_post_exactly_one_door(guarded, cog):
+    channel = guarded.guild.get_channel(TEST_CHANNEL)
+    await guarded.store.set(GUILD, FRONTDOOR_CHANNEL, TEST_CHANNEL)
+    yields_before_it_sends(channel)
+
+    await asyncio.gather(cog.reconcile(), cog.reconcile())
+
+    assert len(channel.messages) == 1
+    assert (await kinds_in(guarded.db)).count(POSTED) == 1
+    assert guarded.store.get(GUILD, FRONTDOOR_MESSAGE) == str(channel.messages[0].id)
+
+
+async def test_the_second_reconcile_at_boot_hides_the_ticket_button_only_once(guarded, cog):
+    channel = guarded.guild.get_channel(TEST_CHANNEL)
+    await put_the_ticket_button_up(guarded, channel)
+    await guarded.store.set(GUILD, FRONTDOOR_CHANNEL, TEST_CHANNEL)
+    yields_before_it_sends(channel)
+
+    await asyncio.gather(cog.reconcile(), cog.reconcile())
+
+    assert (await kinds_in(guarded.db)).count(TICKET_BUTTON_HIDDEN) == 1
+
+
+async def test_on_ready_does_not_reconcile_again_right_after_cog_load_did(guarded, cog):
+    channel = guarded.guild.get_channel(TEST_CHANNEL)
+    await guarded.store.set(GUILD, FRONTDOOR_CHANNEL, TEST_CHANNEL)
+    await cog.cog_load()
+    try:
+        before = list(channel.messages)
+
+        assert await cog.reconcile(skip_if_recent=True) is False
+        assert channel.messages == before
+    finally:
+        await cog.cog_unload()
+
+
+async def test_a_door_already_up_twice_is_left_for_staff_and_no_third_is_posted(
+    guarded, cog, member, db
+):
+    channel = guarded.guild.get_channel(TEST_CHANNEL)
+    can_say_what_else_is_in_it(channel)
+    await post_door(guarded, guarded.guild, member, channel)
+    stored = int(guarded.store.get(GUILD, FRONTDOOR_MESSAGE))
+    channel.messages = [one for one in channel.messages if one.id != stored]
+    stray = a_stray_door(channel)
+
+    await cog.reconcile()
+
+    said = await kinds_in(guarded.db)
+    assert said.count(DUPLICATE_SEEN) == 1
+    assert said.count(POSTED) == 1
+    assert [one.id for one in channel.messages] == [stray.id]
+
+
+async def test_the_duplicate_row_names_both_ids_so_staff_can_find_them(
+    guarded, cog, member, db
+):
+    channel = guarded.guild.get_channel(TEST_CHANNEL)
+    can_say_what_else_is_in_it(channel)
+    await post_door(guarded, guarded.guild, member, channel)
+    stored = int(guarded.store.get(GUILD, FRONTDOOR_MESSAGE))
+    channel.messages = [one for one in channel.messages if one.id != stored]
+    stray = a_stray_door(channel)
+
+    await cog.reconcile()
+
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id", (DUPLICATE_SEEN,)
+    )
+    details = json.loads((await cur.fetchall())[-1]["details"])
+    assert details["message_id"] == stored and details["also"] == [stray.id]

@@ -118,6 +118,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/community/frontdoor.py::TICKET_BUTTON_HIDDEN": (
         "frontdoor.ticket_button_hidden",
     ),
+    "black_bloc/cogs/community/frontdoor.py::DUPLICATE_SEEN": ("frontdoor.duplicate_seen",),
     # The ticket button's rehearsal copy: three constants, each written from the sweep and
     # from either door, so the website spelling is listed beside the bare one.
     "black_bloc/cogs/moderation/modmail.py::PANEL_POSTED_SHADOW": (

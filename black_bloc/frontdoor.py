@@ -194,6 +194,7 @@ def door_hash(store: Any, guild_id: int, note: str = "") -> str:
 
 
 __all__ = [
+    "CUSTOM_ID_HEAD",
     "CUSTOM_ID_TEMPLATE",
     "DOOR_COLOUR",
     "DOOR_DOWN_SAID",

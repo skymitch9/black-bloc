@@ -11,6 +11,7 @@ from ... import shadow
 from ...actionlog import log_action
 from ...command_errors import SafeDynamicItem
 from ...frontdoor import (
+    CUSTOM_ID_HEAD,
     CUSTOM_ID_TEMPLATE,
     DOOR_COLOUR,
     DOOR_DOWN_SAID,
@@ -44,10 +45,10 @@ from ...frontdoor import (
 )
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, kind_via
-from ...loops import wait_ready
+from ...loops import Reconciler, wait_ready
 from ...modmail import panel_rehearsal_copy
 from ...panels import Outcome, Panel, answer, panel_minutes, refusal
-from ...posted import drop_message, message_is_there, overtaken_by
+from ...posted import drop_message, duplicates_near, message_is_there, overtaken_by
 from ...posts import row_value, where_words
 from ...settings_store import (
     FRONTDOOR_CHANNEL,
@@ -79,6 +80,7 @@ WOULD_POST = "frontdoor.would_post"
 WOULD_TAKE_DOWN = "frontdoor.would_take_down"
 WOULD_HIDE_TICKET_BUTTON = "frontdoor.would_hide_ticket_button"
 TICKET_BUTTON_HIDDEN = "frontdoor.ticket_button_hidden"
+DUPLICATE_SEEN = "frontdoor.duplicate_seen"
 POSTED_SHADOW = "frontdoor.posted_shadow"
 UPDATED_SHADOW = "frontdoor.updated_shadow"
 TAKEN_DOWN_SHADOW = "frontdoor.taken_down_shadow"
@@ -520,6 +522,7 @@ class FrontDoor(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._shadowed: set[int] = set()
+        self._reconciles = Reconciler()
         self.last_ok_at: str | None = None
         self.last_error: str | None = None
 
@@ -557,7 +560,7 @@ class FrontDoor(commands.Cog):
     async def on_ready(self) -> None:
         if not self.bot.db.is_connected:
             return
-        await self.reconcile()
+        await self.reconcile(skip_if_recent=True)
         if not self._reconcile_loop.is_running():
             self._reconcile_loop.start()
 
@@ -568,9 +571,12 @@ class FrontDoor(commands.Cog):
             return
         if str(row_value(row, "slug", "")) != followed_slug(self.bot.store, guild.id):
             return
-        await self._redoor(guild)
+        await self._reconciles.run(lambda: self._redoor(guild), stamp=False)
 
-    async def reconcile(self) -> None:
+    async def reconcile(self, *, skip_if_recent: bool = False) -> bool:
+        return await self._reconciles.run(self._sweep, skip_if_recent=skip_if_recent)
+
+    async def _sweep(self) -> None:
         for guild in list(getattr(self.bot, "guilds", ())):
             if getattr(guild, "unavailable", False):
                 continue
@@ -630,6 +636,15 @@ class FrontDoor(commands.Cog):
                 GONE,
                 details={"channel_id": channel.id, "message_id": message_id},
             )
+        also = await duplicates_near(channel, message_id, f"{CUSTOM_ID_HEAD}:")
+        if also:
+            await log_action(
+                bot,
+                guild,
+                DUPLICATE_SEEN,
+                details={"channel_id": channel.id, "message_id": message_id, "also": also},
+            )
+            return
         outcome = await post_door(bot, guild, None, channel, moving=overtaken is not None)
         if outcome.ok:
             self._shadowed.discard(guild.id)
@@ -662,6 +677,7 @@ __all__ = [
     "BELOW_POST",
     "COG_NAME",
     "DOORS",
+    "DUPLICATE_SEEN",
     "GONE",
     "MOVED",
     "OPENERS",
