@@ -1,7 +1,6 @@
 # Posted strings — EVENTS: every word the bot posts becomes a key (pass 1 of the standing rule)
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatched to Opus 2026-09-18 09:2x as
-> branch `events-strings`**. **Last verified: 2026-09-18 09:2x** against `main` `7e6c493` (v138): `black_bloc/events.py`
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ⏸️ **DESIGN, HELD (owner, 2026-09-18 09:2x: "for the audit make a list but don't execute fixes yet")** — the build dispatched 09:22 as `events-strings` was stopped at 09:30 with nothing committed and its worktree discarded; the LIST comes first: [`posted-strings-audit.md`](posted-strings-audit.md), every posted string across every feature, for the owner to read before any key is added. This design is what pass 1 becomes when he says go. **Last verified: 2026-09-18 09:2x** against `main` `7e6c493` (v138): `black_bloc/events.py`
 > carries **108** string constants and **86** tuple constants at module level; the pattern to copy is the front door
 > (`frontdoor_title` / `frontdoor_text` / the three labels / `rehearsal_note` — registry `KEY_TYPES` / `KEY_HELP` /
 > defaults + `TEXT_MAY_BE_BLANK` where a blank is allowed, a `site/mock/server.mjs` row, a `labels.js` label, read from
