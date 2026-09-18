@@ -2,7 +2,14 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-17** — **KI-30 ADDED** on branch `youtube-live` (`WATCHING`, the `/live`-page
+> Last verified: **2026-09-17** — **KI-30 REWRITTEN** on branch `youtube-live-fix` with a MEASURED
+> sighting: it is no longer "never triggered". From the Fly machine's datacenter address YouTube
+> serves the *Sign in to confirm you're not a bot* page — `"isLive"` survives, the canonical link
+> does not — so a live channel read as unannounceable and the feature went silently quiet in
+> production (conductor's measurement 18:14–18:20; ⚠️ **this build could not re-measure the network
+> from Fly and did not try**). The fix is on the same branch, unmerged and undeployed; sweeps
+> **572–576** are the only proof that would count and they need the live bot. ⚠️ **Nothing else in
+> this file was re-checked then.** Before that, **2026-09-17** — **KI-30 ADDED** on branch `youtube-live` (`WATCHING`, the `/live`-page
 > scrape behind YouTube live detection; filed by the build because `info/youtube-live-design.md` §A told it to,
 > never triggered, markers verified against ONE real page). Before that,
 > **2026-09-17** — **KI-28 CLOSED** on branch `staff-reach` (§C.3 of
@@ -91,38 +98,56 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
-## KI-30 — YouTube live detection reads the `/live` PAGE; a shape change makes every linked channel read as offline — `WATCHING`
+## KI-30 — YouTube live detection reads the `/live` PAGE, and from a DATACENTER address that page is a bot check — `WATCHING`
 
 **Symptom.** The quota-free half of YouTube live detection (v126, `info/youtube-live-design.md` §A)
 is a scrape: `GET https://www.youtube.com/channel/<id>/live`, parsed for `"isLive":true` and the
-canonical `watch?v=<id>`. YouTube publishes no contract for either. If the page stops carrying
-them — a rename, a client-side render, a consent wall, a region block — every linked channel reads
-as **offline**: no stream is announced, and any open session ends after `youtube_live_end_misses`
-probes. Nothing raises and nothing is obviously broken; the feature just goes quiet.
-⚠️ The build's own guard is the only thing that distinguishes "not live" from "not readable":
-`youtube_live.read_page` looks for `ytInitialData` or a `<link rel="canonical">` first, and a page
-with neither writes one **`youtube.probe_unreadable`** row per channel per hour (`IMPORTANT`, so it
-reaches the log channel at the default level). **That row is the alarm.** A shape change that KEEPS
-those two markers but drops `"isLive"` reads as a plain offline channel and rings no bell at all.
+canonical `watch?v=<id>`. YouTube publishes no contract for either. ⚠️ **It has already happened
+once, and not as a rename:** measured 2026-09-17 18:14–18:20 against a channel that WAS live
+(`UC7ydYSU1nZOHB7nVV-As_XA`), the page differs by *where the request comes from* —
 
-**Status.** `WATCHING` — filed 2026-09-17 by the `youtube-live` build, which the design told to file
-it. ⚠️ **Never triggered:** the markers were verified against **one** real page (Lofi Girl,
-`UCSJ4gkVC6NrvII8umztf0Ow`, 2026-09-17, 200, 1,257,542 bytes — `"isLive":true`, no `isUpcoming`,
-canonical `watch?v=3PFJ9SETS4M`, `ytInitialData` present) and every test runs on hand-written
-fixtures. No YouTube page change has ever been observed by this bot.
+| | home machine | the Fly machine (datacenter) |
+|---|---|---|
+| status / size | 200, ~1.29 MB | 200, ~180 KB — *"Sign in to confirm you're not a bot"* |
+| `"isLive":true` | ×2 (live) | ×1 live, ×0 offline — **the live signal survives** |
+| `<link rel="canonical">` | the watch page | **absent** |
+| `ytInitialData` | present | present — so the page reads as READABLE |
+| `"videoId":"…"` | the live video | ~180 **unrelated** videos; the first is NOT the stream |
 
-**Why tolerated.** The documented alternative is `search.list(eventType=live)` at **100 units** a
-call against a **10,000/day** quota — ten channels every ten minutes is 144,000 units a day, which
-is fourteen times the whole allowance. The scrape costs nothing and no key. The paid `videos.list`
-confirm (1 unit) only runs once a stream has already been spotted, so it cannot replace the probe.
-The blast radius is also bounded: `on_presence_update` still catches a YouTube stream whenever the
-streamer's Discord status is Streaming with a youtube.com link — which is exactly how Pawpette's
-stream was caught on 2026-09-17, before any of this existed.
+So v126 read live-without-an-id, `announceable` was false, and **nothing was logged, announced or
+counted** — `quota_today` stayed 0 and both `probe_all` runs reported no error. The feature went
+quiet in production while every test and every home-machine check stayed green.
 
-**What would change it.** YouTube publishing a cheap live endpoint, or **one** `youtube.probe_unreadable`
-row the owner notices — at which point the regexes in `black_bloc/youtube_live.py` are the whole
-fix, and the three fixtures under `tests/fixtures/youtube_*_page.html` are where a new shape is
-pinned. Until then `youtube_live_mode` ships `off`.
+**Status.** `WATCHING` — filed 2026-09-17 by the `youtube-live` build; **rewritten 2026-09-17 with
+the measured shape, and the fix is on branch `youtube-live-fix`** (design ▸ Deviations ▸ *The
+datacenter page*; sweeps **572–576**, which ⚠️ **can only be run against the live bot on Fly**).
+What the fix does: `video_id` comes ONLY from the canonical link (the `"videoId"` fallback is gone —
+it returned a stranger's video); `live` is the routing fact, so *live, id unknown* is its own
+outcome; with `YOUTUBE_API_KEY` **one** `search.list(eventType=live)` — **100 units, once per
+broadcast, never per probe** — finds the id, and without a key the announcement links the channel's
+own `/live` page with the title *Live now*; `Probe.botcheck` reaches the `/youtube` staff half,
+`/api/youtube/status` and the Go-live page so staff can see why an id was missing.
+
+**Why still tolerated / what is still open.** The probe is still a scrape of a page nobody
+contracts. Three things would still break it and none of them rings a bell:
+**(a)** the wall dropping `"isLive"` too — the channel then reads as a plain, quiet, *readable*
+offline channel and writes **no** `youtube.probe_unreadable` row, because `ytInitialData` is still
+there; **(b)** a keyless install behind the wall announcing a stream it cannot name (title *Live
+now*, no thumbnail) — correct, but it looks like a bug to anyone who has not read this;
+**(c)** the 100-unit search: one linked channel going live once a day is **101 of 10,000 units**,
+ten channels is 1,010, but a regression that searched per probe instead of per broadcast would burn
+the allowance before lunch (sweep `YL-m` is the human check, and the cog remembers the channel as
+live in `live_video` so it cannot ask twice).
+The blast radius is still bounded: `on_presence_update` catches a YouTube stream whenever the
+streamer's Discord status is Streaming with a youtube.com link, which is how Pawpette's stream was
+caught on 2026-09-17 before any of this existed.
+
+**What would change it.** YouTube publishing a cheap live endpoint. ⚠️ **Two routes were measured
+and are NOT one:** oEmbed on the `/live` URL is **404 everywhere**, and
+`https://www.youtube.com/embed/live_stream?channel=<id>` carries **no `videoId` anywhere**. Until
+then the regexes in `black_bloc/youtube_live.py` are the whole fix and the five fixtures under
+`tests/fixtures/youtube_*_page.html` — including the two hand-written bot-check pages — are where a
+new shape is pinned. `youtube_live_mode` still ships `off`.
 
 ## KI-29 — A WITHDRAWN request's forum post keeps its tag and is never archived — `ACCEPTED`
 
