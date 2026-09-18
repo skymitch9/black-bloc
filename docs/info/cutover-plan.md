@@ -3,7 +3,7 @@
 > **Audience:** the owner (who flips the switches) + Claude sessions (who watch and
 > verify). **Status:** TRACKED · ⏸️ **NOT STARTED — PAUSED ON THE OWNER.**
 > **Last verified: 2026-09-11 09:10** — docs-wide staleness pass against **v108** `73e2e44`.
-> ⚠️ **Six days and sixteen releases on, step P5 has still not been taken: `TEST_MODE` is ON
+> ✅ **P5 TAKEN by the owner 2026-09-18 16:08** (`flyctl secrets set TEST_MODE=false --app black-bloc`, from his own terminal; the bot restarted 16:08:27 without the guard, the front door's rehearsal ids were cleared at boot, the self-test passed 116/116). What follows is the per-feature ladder at his pace. Was: ⚠️ **Six days and sixteen releases on, step P5 has still not been taken: `TEST_MODE` is ON
 > and the bot still speaks only in `#blackbloc-logs` and DMs.** Not one row of §2 has
 > been executed. That is not drift — the owner paces this and nothing here is a promise about
 > dates — but a reader must not mistake this file for a record of what happened. **Re-measured
