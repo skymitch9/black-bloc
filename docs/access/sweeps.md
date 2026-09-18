@@ -1,7 +1,15 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-18** — rows **`YU-a` … `YU-d`** added at the foot for the YOUTUBE UPLOADS REMOVAL
+> **2026-09-18 16:2x** — rows **`PP-a` … `PP-c`** added at the foot for the POST EDITOR'S PASTE
+> CONVERTER (branch `posts-paste`, off `main` `0b4e7c4`; design
+> [`../info/posts-paste-design.md`](../info/posts-paste-design.md); ⚠️ **not merged, not deployed,
+> and NO BROWSER HAS PASTED ANYTHING** — these three rows are the only proof that will ever exist
+> that a real Google Docs clipboard converts). Owner: *"the formatting was lost when copying from
+> google drive"*. They are the WEBSITE only — a Discord modal never sees the clipboard, so pasting
+> into the `/posts` modal still loses formatting and that is not a bug. Rows are lettered; the
+> conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked then.** Before
+> that, **2026-09-18** — rows **`YU-a` … `YU-d`** added at the foot for the YOUTUBE UPLOADS REMOVAL
 > (branch `youtube-uploads-removal`, off `main` `9bc1982`; design
 > [`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md); ⚠️ **not
 > merged, not deployed, and nothing in it has met Discord or a browser**). Owner: *"the youtube
@@ -2017,3 +2025,24 @@ post reads *Live now* with no thumbnail — that is **KI-30**, not a regression.
 | **610** (was `YU-b`) | Dashboard ▸ **Go-live** ▸ scroll to **YouTube channels** | The section is titled **YouTube channels**, not *YouTube uploads*. It holds the live-mode switch (**Live-stream announcements**), the **How live streams are spotted** card, the links table (**Member · Channel · Id · Linked · Unlink** — ⚠️ **no *Counted* column and no *Last video* column**), and **Link a member**. ⚠️ **There is no *How the sweep is doing* card and no *Recent uploads* table anywhere on the page.** Below it, **YouTube settings** lists only `youtube_log_level`, `youtube_panel_minutes`, `youtube_unlink_dms_them`, `youtube_live_poll_minutes` and `youtube_live_end_misses` — no `youtube_mode`, `youtube_channel_id`, `youtube_ping_role_id`, `youtube_ping_fan_roles`, `youtube_announce_shorts`, `youtube_template` or `youtube_poll_minutes` — and the logs card is titled **YouTube logs**. Link a member and unlink them again: both work, and the Audit tab shows one `web.youtube.link` and one `web.youtube.unlink` |
 | **611** (was `YU-c`) | Open `https://blackbloc.heygabi.ai/api/youtube/status` while signed in as staff (or read the Go-live card, which shows the same numbers) | The body carries `api_key_set`, `links` and every live field (`live_mode`, `live_minutes`, `live_end_misses`, `live_running`, `last_probe_at`, `last_probe_error`, `probed`, `quota_today`, `botcheck`, `live_now`, `reading_live`) — and ⚠️ **none of `running`, `last_ok_at`, `last_error`, `failures`, `fetches`, `unchanged`, `unchanged_ratio`, `videos` or `announced`**, not even as zeroes. `GET /api/youtube/videos` answers **404**. Dashboard ▸ **Settings** ▸ the **youtube** group shows the same five keys `YU-b` listed and nothing else |
 | **612** (was `YU-d`) | ⚠️ **On the LIVE bot only.** With `youtube_live_mode` **on** and `golive_mode` **on**, have a linked YouTube channel go live, then wait up to `youtube_live_poll_minutes` (5) | The go-live channel gets the usual card, **source YouTube** in its footer, exactly as it did before the uploads half was removed. `/youtube` ▸ **Logs** shows one `youtube.live_seen` row for the transition and nothing else per probe; the Go-live page's **Reading live now** reads **1**. Stop the stream: after `youtube_live_end_misses` (2) quiet probes the post is rewritten in the past tense. ⚠️ Behind the bot-check wall the title reads *Live now* with no thumbnail — **KI-30**, not a regression |
+
+## A GOOGLE DOC PASTED INTO A POST KEEPS ITS FORMATTING (`PP-a` … `PP-c`, branch `posts-paste`, design [`../info/posts-paste-design.md`](../info/posts-paste-design.md))
+
+Owner, 2026-09-18 16:0x: *"the formatting was lost when copying from google drive"*. ⚠️ **Nothing
+below has ever been done in a browser** — no real Google Docs clipboard has been pasted into the
+box even once, and every fixture behind this build is hand-written markup in the shape Docs is
+*known* to emit, not a capture from the owner's own document. `PP-a` is the row that turns that
+from a claim into a fact.
+
+⚠️ **This is the WEBSITE only, and it cannot ever be `/posts`.** A Discord modal never sees the
+clipboard — the client hands the bot the finished string on submit. Pasting into the `/posts` edit
+modal still loses everything, and that is not a bug to file.
+
+These rows need nothing turned on: no key, no mode, no schema. Go to **Runs the server** ▸
+**Posts** ▸ any post (https://blackbloc.heygabi.ai/posts.html).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PP-a`** | Open a Google Doc with a **heading**, some **bold**, some *italic*, a bulleted list with one item indented under another, a numbered list and a link whose words are not the address. Select all of it, copy, then click into **The message** box on a post and paste | The box fills with markdown, not flat text: `# ` before the heading, `**` around the bold words, `*` around the italic ones, `- ` on each bullet with **two spaces** of indent on the nested one, `1. ` / `2. ` on the numbered list, and the link as `[words](https://…)`. **What Discord will show** beside it redraws immediately with the heading big, the bold bold and the bullets as bullets. Under the box: *"Pasted with formatting kept (headings, bold, bullets, links). Undo with Ctrl+Z."* with a **Dismiss** that hides it. ⚠️ **The whole document must NOT be bold** — if it is, the `docs-internal-guid` wrapper got through and that is the bug to report. Beside the **The message** label, **Paste keeps formatting** |
+| **`PP-b`** | In Notepad (or the Discord message box), type a plain line with no formatting, copy it, and paste it into the same box | The words land exactly as they were — **no `**`, no `#`, nothing added** — and ⚠️ **no note appears under the box at all**. Do the same with a line copied from a Google Doc that has no formatting in it: same result, still no note. The counter moves by the number of characters you pasted and nothing else on the page changes |
+| **`PP-c`** | Straight after the `PP-a` paste, press **Ctrl+Z** once | The pasted markdown comes out again and the box is exactly what it was before the paste — including anything you had selected when you pasted, which comes back selected. The preview follows it back. Press **Ctrl+Y** (or Ctrl+Shift+Z): the markdown returns. Nothing was saved by any of this — the save bar still says the same number of changes it said before you pressed anything, and **Discard** puts the whole box back to the saved post |
