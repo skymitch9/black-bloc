@@ -8,7 +8,7 @@ from black_bloc.logkinds import FEATURES
 
 TOP_LEVEL_MAX = 100
 CHILDREN_MAX = 25
-TOP_LEVEL_NOW = 31
+TOP_LEVEL_NOW = 32
 RETIRED_GROUPS = (
     "chat",
     "mod",
@@ -27,6 +27,7 @@ STAFF_COMMANDS = {
     "chat",
     "honeypot",
     "kick",
+    "minutes",
     "mod",
     "posts",
     "purge",

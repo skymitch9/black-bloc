@@ -421,7 +421,7 @@ def test_every_send_logs_call_site_passes_only_the_feature_name():
             if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "send_logs":
                 found.append((path.name, len(node.args), tuple(one.arg for one in node.keywords)))
 
-    assert len(found) == 19
+    assert len(found) == 20
     assert {(args, words) for _, args, words in found} == {(2, ())}
 
 

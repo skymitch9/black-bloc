@@ -43,6 +43,24 @@ ROOT = PACKAGE.parent
 # A call site the table does not cover fails `test_every_dynamic_kind_is_enumerated`
 # by name, which is what stops a new kind going quietly unclassified.
 KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
+    # Meeting minutes keeps its kinds as module constants in `minutes.py` so the module, the
+    # session, the cog and the routes name each one once. The four a website door can also
+    # write are listed in both spellings.
+    "black_bloc/cogs/community/minutes.py::mins.STARTED": ("minutes.started",),
+    "black_bloc/cogs/community/minutes.py::mins.PURGED": ("minutes.purged",),
+    "black_bloc/minutes_session.py::mins.ENDED": ("minutes.ended",),
+    "black_bloc/minutes_session.py::mins.JOIN_FAILED": ("minutes.join_failed",),
+    "black_bloc/minutes_session.py::mins.TRANSCRIBE_FAILED": ("minutes.transcribe_failed",),
+    "black_bloc/minutes.py::NOTES_WRITTEN": ("minutes.notes_written",),
+    "black_bloc/minutes.py::NOTES_FAILED": ("minutes.notes_failed",),
+    "black_bloc/minutes.py::POSTED": ("minutes.posted", "web.minutes.posted"),
+    "black_bloc/minutes.py::POST_FAILED": ("minutes.post_failed", "web.minutes.post_failed"),
+    "black_bloc/minutes.py::NOTES_EDITED": (
+        "minutes.notes_edited",
+        "web.minutes.notes_edited",
+    ),
+    "black_bloc/minutes.py::DELETED": ("minutes.deleted", "web.minutes.deleted"),
+    "black_bloc/minutes.py::MODE_SET": ("minutes.mode", "web.minutes.mode"),
     # `posted.py` deletes a message for whoever asked, and the caller names the shadow kind
     # it writes when test mode refuses the channel — two callers, three kinds.
     "black_bloc/posted.py::would_kind": (
@@ -962,8 +980,8 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 20
-    assert len(set(FEATURES)) == 20
+    assert len(FEATURES) == 21
+    assert len(set(FEATURES)) == 21
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 

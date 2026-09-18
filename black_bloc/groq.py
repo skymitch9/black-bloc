@@ -18,8 +18,11 @@ from .llm import (
 log = logging.getLogger(__name__)
 
 CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
+TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 DEFAULT_MODEL = "openai/gpt-oss-120b"
+WHISPER_MODEL = "whisper-large-v3-turbo"
 REQUEST_TIMEOUT_SECONDS = 15
+TRANSCRIBE_TIMEOUT_SECONDS = 60
 TOO_MANY = 429
 SERVER_TROUBLE = 500
 JSON_OBJECT = {"type": "json_object"}
@@ -108,3 +111,69 @@ class GroqClient:
             model=str(payload.get("model") or self.model),
             usage=usage_from(payload.get("usage")),
         )
+
+
+class WhisperClient:
+    """Groq's speech-to-text door: one WAV chunk in, the words in it out."""
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        model: str = WHISPER_MODEL,
+        request: Any = None,
+    ) -> None:
+        self.model = str(model or WHISPER_MODEL)
+        self._key = str(api_key)
+        self._request = request or self._aiohttp_request
+        self._session: Any = None
+
+    async def _aiohttp_request(
+        self, url: str, *, headers: Any, audio: bytes, name: str, fields: Any
+    ) -> tuple[int, Any]:
+        import aiohttp
+
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=TRANSCRIBE_TIMEOUT_SECONDS)
+            )
+        form = aiohttp.FormData()
+        form.add_field("file", audio, filename=name, content_type="audio/wav")
+        for key, value in dict(fields).items():
+            form.add_field(key, str(value))
+        try:
+            async with self._session.post(url, headers=headers, data=form) as response:
+                try:
+                    payload = await response.json(content_type=None)
+                except Exception:
+                    payload = {}
+                return response.status, payload if isinstance(payload, dict) else {}
+        except (TimeoutError, aiohttp.ClientError, OSError) as exc:
+            raise LLMError(UNREACHABLE, f"groq unreachable: {type(exc).__name__}") from exc
+
+    async def close(self) -> None:
+        if self._session is not None and not self._session.closed:
+            await self._session.close()
+        self._session = None
+
+    async def transcribe(self, audio: bytes, *, name: str = "chunk.wav") -> str:
+        if not audio:
+            return ""
+        try:
+            status, payload = await self._request(
+                TRANSCRIBE_URL,
+                headers={"Authorization": f"Bearer {self._key}"},
+                audio=audio,
+                name=name,
+                fields={"model": self.model, "response_format": "json"},
+            )
+        except LLMError:
+            raise
+        except Exception as exc:
+            raise LLMError(BROKEN, f"groq call failed: {type(exc).__name__}") from exc
+        if status == TOO_MANY:
+            raise LLMError(RATE_LIMITED, "groq is rate limiting", status=status)
+        if status != 200:
+            reason = UNREACHABLE if status >= SERVER_TROUBLE else REFUSED
+            raise LLMError(reason, f"groq answered {status}", status=status)
+        return str(payload.get("text") or "").strip()

@@ -1324,6 +1324,17 @@ const NAMESPACE_OVERRIDE = {
   frontdoor_panel_minutes: 'modmail',
   handoff_mode: 'request',
   handoff_confirm_hours: 'request',
+  minutes_mode: 'events',
+  minutes_channel_id: 'events',
+  minutes_opt_out_role_id: 'events',
+  minutes_start_text: 'events',
+  minutes_notes_title: 'events',
+  minutes_prompt: 'events',
+  minutes_chunk_seconds: 'events',
+  minutes_max_hours: 'events',
+  minutes_keep_days: 'events',
+  minutes_panel_minutes: 'events',
+  minutes_log_level: 'events',
 };
 
 function namespaceOf(key) {

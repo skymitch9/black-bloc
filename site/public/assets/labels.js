@@ -289,6 +289,18 @@ export const LABELS = {
   guides_show_facts: 'Whether a guide shows live values read from the bot',
   guides_fault_files_request: 'What Something’s off on a guide does',
   guides_log_level: 'How much of the guides is repeated into Discord',
+
+  minutes_mode: 'Whether Black Bloc may take notes in a voice meeting',
+  minutes_channel_id: 'Where a meeting’s announcement and its notes go',
+  minutes_opt_out_role_id: 'The role that means do not record me',
+  minutes_start_text: 'What Black Bloc says when it joins a meeting',
+  minutes_notes_title: 'The heading on a meeting’s notes',
+  minutes_prompt: 'What Black Bloc asks for when it writes a meeting up',
+  minutes_chunk_seconds: 'How much speech is gathered before it is transcribed',
+  minutes_max_hours: 'The longest a single meeting may be recorded',
+  minutes_keep_days: 'How long a meeting’s transcript is kept',
+  minutes_panel_minutes: 'How long the /minutes panel stays live',
+  minutes_log_level: 'How much of meeting minutes is repeated into Discord',
 };
 
 const NAMESPACES = ['golive', 'youtube', 'pings', 'tempvoice', 'honeypot', 'events', 'birthday', 'modmail', 'automod', 'rolemenu', 'raidtrain', 'applications'];
