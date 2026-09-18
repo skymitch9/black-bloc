@@ -1,8 +1,8 @@
 # The front door — one message and one command that route a member to a ticket, a request or an event
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **SHADOW MODE BUILT 2026-09-18** on branch
-> `frontdoor-shadow` off `main` `58fb7d6` (v139 live) — ⚠️ **not merged, not deployed, no key flipped, and nothing in
-> it has met Discord.** Read [`## Shadow mode (2026-09-18)`](#shadow-mode-2026-09-18) and its own Deviations block
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **SHADOW MODE + THE RECONCILE LOCK LIVE as v141** — merge `d6c271d`,
+> release `2e48d7c`, deployed **2026-09-18 16:55** Phoenix; sweeps **616–620** are the owner's (619 = the cutover); verified: boot clean at 16:55:30 (no reconcile posted anything — the door's channel was still blank), /health ready; the shadow flip itself (frontdoor_mode → shadow, frontdoor_channel_id → #welcome) was set on the settings API right after and checked by token — see the TODO's next line. Was: 🔨 built on
+> branch `frontdoor-shadow` off `main` `58fb7d6`. Read [`## Shadow mode (2026-09-18)`](#shadow-mode-2026-09-18) and its own Deviations block
 > before the sections above: `frontdoor_mode` now takes **off / shadow / on**. Deviation **14** (the boot double-post of 2026-09-18 16:08, fixed on `boot-reconcile-once`) is merged beside it. `pytest -n 8` **6720 → 6740 passed**
 > (3 skipped), both orders; registry unchanged at **262** keys — a third enum word, not a twelfth key; no schema
 > change; mock unchanged at **20 pages / 186 routes**. Before that: ✅ **LIVE as v125** — merge `ae6eecb`, release
