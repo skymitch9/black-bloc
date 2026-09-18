@@ -1,6 +1,15 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-17** — rows **`YL-o`** and **`YL-p`** added to the same section for the YOUTUBE LIVE
+> follow-up (branch `youtube-live-seen`, off `main` `568c177`; design
+> `info/youtube-live-design.md` ▸ Deviations ▸ *The silent open-session path*; ⚠️ **not merged,
+> not deployed, and NOT runnable from a laptop** either — they need the live bot and a streamer who
+> is live on Twitch and YouTube at once). They are UNNUMBERED: the conductor numbers them from 591
+> at the merge. What they prove: a probe that reads a channel live while another source already
+> holds the go-live session now leaves one `youtube.live_seen` row saying `announced: false` and
+> `because: open_session:twitch`, and the Go-live card's new **Reading live now** says how many
+> channels the probe reads as live while **Live now** stays 0. Before that,
 > **2026-09-17** — rows **`YL-j` … `YL-n`** (numbered **586–590** — 572–585 went to the minutes rows the same evening) added at the foot for the YOUTUBE
 > LIVE FIX build (branch `youtube-live-fix`, off `main` `ddd6fdc`; design
 > `info/youtube-live-design.md` ▸ Deviations ▸ *The datacenter page*; ⚠️ **not merged, not deployed,
@@ -1861,6 +1870,8 @@ confirm you're not a bot* wall. Nothing here reproduces on a laptop. `youtube_li
 | **588** (was `YL-l`) | Open the go-live post itself | **With a key:** the ordinary card, the real `watch?v=…` link, the title and the thumbnail — indistinguishable from a stream spotted from a home address. **Without a key:** the link is the channel's own `/live` page, the title reads **Live now** and there is no thumbnail. Both are correct; the key is what buys the id |
 | **589** (was `YL-m`) | Leave the stream running for half an hour and watch the quota line on the **Go-live** page ▸ **How live streams are spotted** | **Quota used today** goes to **101** and STAYS there — 100 for the one search plus 1 for the confirm. ⚠️ A number climbing by 100 every probe is the bug this row exists to catch; 10,000 a day is the whole allowance and 100 per probe would burn it before lunch |
 | **590** (was `YL-n`) | On the same card, read **Bot check** | *yes — that page had no video id* while the wall is being served, *no* once it is not. The same line is on `/youtube`'s staff half. It is the only place that explains why a card ever reads *Live now* with a key set |
+| **`YL-o`** | ⚠️ **The row this follow-up exists for.** With the linked streamer live on YouTube AND already live on Twitch (so their go-live session is open from the Twitch side), wait `youtube_live_poll_minutes`, then open the dashboard's **Logs** ▸ YouTube | A `youtube.live_seen` (or `would_live_seen`) row is there. Open its Summary: it reads `announced: false` and `because: open_session:twitch`, with `botcheck: true` behind the wall. There is NO second go-live post and NO second session — one announcement per person still holds. ⚠️ Before this fix that probe left nothing at all, measured on the live bot 2026-09-17 18:5x. Leave the stream running and check again after another poll: still exactly ONE row |
+| **`YL-p`** | On the **Go-live** page ▸ **How live streams are spotted**, read **Reading live now** | It counts the channels the probe currently reads as live — **1** in the row above, while **Live now** stays **0** because that counts open go-live sessions whose source is YouTube. The two disagreeing is the point: the probe is working and the announcement was skipped on purpose. The same line is on `/youtube`'s staff half as **reading live now**. ⚠️ Once the stream ends it must fall back to 0 after `youtube_live_end_misses` quiet probes — a number that never comes down means the poller stopped or the miss counter is not running |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that

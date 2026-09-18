@@ -1,6 +1,6 @@
 # YouTube live — a poller that catches a linked channel going live, feeding the go-live path
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v126, the datacenter fix LIVE as v133** (merge `858feeb`, release `b20e4dc`, 2026-09-17 18:44 — deviations 15–23 are the truth behind the wall; verified live: the bot's own probe_live, run inside the Fly container 18:5x, read Pawpette as live=True / video_id=None / botcheck=True (the wall page: isLive once, canonical href="undefined"); the site's status showed botcheck true, probed 2, quota 0, live_now 0 — nothing announced because her TWITCH go-live session #139 was still open (the one-announcement-per-person rule), and that path writes no row, so the probe's success was invisible — follow-up dispatched.) · v126: — merge `99c307c`, release `e537b2c`, deployed **2026-09-17 14:45** Phoenix; `youtube_live_mode` ships OFF (the owner flips it); the `## Deviations` foot is the truth where it departs from the body; sweeps **534–542** are the owner's; KI-30. ⚠️ **A FIX is in flight on branch `youtube-live-fix` (off `main` `ddd6fdc`, NOT merged, NOT deployed): from Fly's datacenter address YouTube serves a bot-check page with no canonical link, so v126 announced nothing at all — Deviations ▸ *The datacenter page*, sweeps 586–590, KI-30 rewritten.** Was: 📐 DESIGN, dispatching to Opus 13:3x. **Last verified: 2026-09-17 13:29**
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v126, the datacenter fix LIVE as v133** (merge `858feeb`, release `b20e4dc`, 2026-09-17 18:44 — deviations 15–23 are the truth behind the wall; verified live: the bot's own probe_live, run inside the Fly container 18:5x, read Pawpette as live=True / video_id=None / botcheck=True (the wall page: isLive once, canonical href="undefined"); the site's status showed botcheck true, probed 2, quota 0, live_now 0 — nothing announced because her TWITCH go-live session #139 was still open (the one-announcement-per-person rule), and that path writes no row, so the probe's success was invisible — follow-up dispatched.) · ⚠️ **A FOLLOW-UP is in flight on branch `youtube-live-seen` (off `main` `568c177`, NOT merged, NOT deployed): the open-session path now leaves one `youtube.live_seen` row reading `announced: false` / `because: open_session:<source>`, and `live_health` gained `reading_live` — Deviations ▸ *The silent open-session path*, sweeps `YL-o`/`YL-p`.** · v126: — merge `99c307c`, release `e537b2c`, deployed **2026-09-17 14:45** Phoenix; `youtube_live_mode` ships OFF (the owner flips it); the `## Deviations` foot is the truth where it departs from the body; sweeps **534–542** are the owner's; KI-30. ⚠️ **A FIX is in flight on branch `youtube-live-fix` (off `main` `ddd6fdc`, NOT merged, NOT deployed): from Fly's datacenter address YouTube serves a bot-check page with no canonical link, so v126 announced nothing at all — Deviations ▸ *The datacenter page*, sweeps 586–590, KI-30 rewritten.** Was: 📐 DESIGN, dispatching to Opus 13:3x. **Last verified: 2026-09-17 13:29**
 > against `main` `c56962f`: `black_bloc/youtube.py` (`YouTubeClient`, the uploads feed, `youtube_*` keys, the
 > linked-channel rows), `cogs/content/golive.py` (`_go_live`, `_go_live_once(member, info, source)`,
 > `_end_live`, the Helix poller at ~1137, `source` ∈ {`twitch`, `presence`}), `config.youtube_api_key`, KI-11, and
@@ -232,3 +232,50 @@ canonical present.*
     scannable. Both are hand-written from the measured markers (1,317 and 1,155 bytes), not
     captures; ⚠️ **no real bot-check page was ever saved to this repo** and this build could not
     reach one — every claim above about the wall is the conductor's measurement, not the build's.
+
+### The silent open-session path (follow-up) — 2026-09-17, branch `youtube-live-seen` off `main` `568c177`
+
+*Measured by the conductor on the LIVE bot at v133, 2026-09-17 18:5x: the bot's own `probe_live`,
+run inside the Fly container, read Pawpette's channel as `Probe(live=True, video_id=None,
+botcheck=True)` — v133 working exactly as Deviations 15-23 intend. Nothing was announced, correctly,
+because her TWITCH go-live session (#139, source `twitch`, `ended_at` null) was still open and the
+one-announcement-per-person rule holds. But that branch of `_live_now` stored `live_video[channel_id]`
+and RETURNED with no action-log row at all, and `live_health`'s `live_now` counts open go-live
+sessions whose source is YouTube only - so `/api/youtube/status` read `live_now 0`, `quota_today 0`
+and no `youtube.*` row existed. A probe that worked was indistinguishable from a probe that never
+ran.*
+
+24. **The open-session branch writes ONE routine `youtube.live_seen` row, `announced: false`,
+    `because: "open_session:<source>"`.** Same kind as the announcing path - and the same ternary,
+    so a shadow live half writes `youtube.would_live_seen` (both kinds already exist; nothing was
+    added to `logkinds.py`, and its guard wants a STRING LITERAL at the `log_action` call, so the
+    two names could not be lifted into module constants). It is written on the TRANSITION only -
+    when `live_video` had no entry for the channel - so a five-minute poll through a three-hour
+    stream still leaves one row, the same rule Deviation 5 set for the announcing row. Three
+    consequences worth naming:
+    - **Both rows are now built by one helper, `live_seen_details()`**, so `channel_id`,
+      `video_id` (None -> `null`), `botcheck` and `mode` cannot drift apart between the two
+      writers. Each caller adds its own tail.
+    - **The announcing row gained `announced: true`.** An `announced` key present on one kind of
+      row and absent on the other is a field a reader has to guess at; checklist 2 wants a dry run
+      and a real one distinguishable at a glance, and this is that argument one level down.
+    - ⚠️ **a stream that changes video id WITHOUT going offline writes no second row.** The
+      condition is literally "`live_video` had no entry", per the brief; the id-changed case falls
+      through to the announcing branch, where the open-session check then returns as before. It is
+      the rarest case and it is named here rather than guessed at.
+25. **`live_health` gained `reading_live` AND `reading_live_channels`; only the first is
+    surfaced.** `reading_live` is `len(cog.live_video)` - how many channels the probe currently
+    reads as live, whatever the sessions table says - and it reaches the `/youtube` staff half
+    (`**reading live now** - N`, beside `**live now**`), `/api/youtube/status` (`reading_live`) and
+    the Go-live page's *How live streams are spotted* card (*Reading live now*), exactly the three
+    surfaces Deviation 19 gave `botcheck`. `reading_live_channels` (the sorted ids) stays in the
+    health dict for the tests and for a later session; a list of channel ids nobody can click is
+    noise on a status card. ⚠️ **`live_now` was NOT changed** - it still counts
+    YouTube-source sessions, which is the honest answer to *what did go-live announce*; the new
+    number is the honest answer to *what does the probe see*, and the two disagreeing is now
+    information rather than a silence.
+26. ⚠️ **none of this was verified against the live bot.** The suite proves the row, the
+    once-per-stream rule and both health numbers against fixtures and a fake client; the wall
+    itself is still unreachable from here (Deviation 23), and no browser rendered the Go-live card.
+    Sweeps **`YL-o`** and **`YL-p`** are the proof that is missing, and like 586-590 they can only
+    be run on Fly.
