@@ -1,7 +1,6 @@
 # The rehearsal home — one channel where every shadow copy lands, so staff can review before the cutover
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT 2026-09-17 on branch `rehearsal-home`,
-> off `main` `9c8c179`; planned as v129, NOT merged and NOT deployed.** Read the `## Deviations` foot before
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v129** — merge `7badc43`, release `60958ec`, deployed **2026-09-17 17:00** Phoenix; `shadow_channel_id` = `#welcome-test` since 17:01; the `## Deviations` foot is the truth where it departs from §A–§F; sweeps **554–564** are the owner's. Was: 🔨 BUILT, planned as v129. Read the `## Deviations` foot before
 > §A–§F — nine things differ. `pytest -n auto` **6406 → 6455**, forward and under `BB_REVERSE=1`; registry
 > **256 → 262** keys; no schema change. Was: 📐 DESIGN, dispatched to Opus 2026-09-17 16:2x (v129). **Last verified: 2026-09-17 16:16** against `main` `fbc4a48`: `black_bloc/shadow.py`
 > (`channel_id` = the guard's channel else `log_channel_id`; `channel_ids` = every place a copy could be),

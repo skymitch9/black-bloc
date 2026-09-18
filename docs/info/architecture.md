@@ -94,18 +94,18 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
-> | What | v128 (`main`, 2026-09-17) | Where it is measured |
+> | What | v129 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
 > | Cogs | **21** (`cogs/community/frontdoor.py` at v125; 20 at v113) | `bot.py:COGS` |
 > | Top-level slash commands | **31** — 15 staff-locked, 16 member-visible (`/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
 > | Schema version | **43** (v128, `moved_to` on requests / events / modmail_tickets; 42 at v123, 41 at v119) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **256** (was 254 at v126; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Registry keys | **262** (was 256 at v128; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **19 pages / 180 routes / 15 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **6406** | the v128 deploy gate |
-> | Deploys | **125**, last `a0fa7f3` (v128) at 2026-09-17 16:09 | `../deploys.log` |
+> | Mock contract | **19 pages / 180 routes / 17 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
+> | Tests | **6455** | the v129 deploy gate |
+> | Deploys | **126**, last `60958ec` (v129) at 2026-09-17 17:00 | `../deploys.log` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 >
@@ -127,6 +127,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v129 `60958ec`, 2026-09-17** | **21** | **31** | **43** | **180** | **6455** |
 > | **v128 `a0fa7f3`, 2026-09-17** | **21** | **31** | **43** | **180** | **6406** |
 > | **v127 `de91282`, 2026-09-17** | **21** | **31** | **42** | **180** | **6305** |
 > | **v126 `e537b2c`, 2026-09-17** | **21** | **31** | **42** | **180** | **6304** |
