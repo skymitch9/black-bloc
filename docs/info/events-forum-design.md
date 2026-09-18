@@ -1,6 +1,6 @@
 # Events as a forum under BlackMail — one post per event, like requests and modmail
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatching to Opus 2026-09-17 21:3x
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatched to Opus 2026-09-17 21:22
 > as branch `events-forum`**. **Last verified: 2026-09-17 21:2x** against `main` `0707768` (v135): `black_bloc/events.py`
 > `make_review_channel` (~1785, `guild.create_text_channel` under `events_category_id` or the test category, `staff_reach`
 > overwrites, then `guard.own_channel`), `set_review` (~975: `review_channel_id`, `review_message_id`, `card_channel_id`),
