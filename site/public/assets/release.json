@@ -1,8 +1,5 @@
 {
-  "release": "v129",
-  "commit": "7badc43",
-  "changed_features": [
-    "modmail",
-    "posts"
-  ]
+  "release": "v130",
+  "commit": "6312b4a",
+  "changed_features": []
 }
