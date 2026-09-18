@@ -1,6 +1,16 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-17 23:1x** — row **`WH-a`** added at the foot for the WHERE HINT build (branch
+> `events-where-hint`, off `main` `27f08f2`; design
+> [`../info/where-picker-design.md`](../info/where-picker-design.md) ▸ `## Follow-up 5`; ⚠️ **not
+> merged, not deployed, and never seen in Discord**): the Where panel now says *"If you do not see
+> your channel, start typing the channel name and it should appear."* directly above the picker, and
+> the draft card carries the same sentence in italics while nothing is picked. It is the settings key
+> `events_where_hint`, so `WH-a` also checks that editing it on the Settings page shows on the next
+> open and that emptying it hides the line. ⚠️ **Nothing else in this file was re-checked then**, and
+> the row is unnumbered — `main` took **603–607** for the forum-move rows while this was building, so
+> the conductor numbers it at the merge. Before that,
 > **2026-09-17** — rows **`YL-o`** and **`YL-p`** added to the same section for the YOUTUBE LIVE
 > follow-up (branch `youtube-live-seen`, off `main` `568c177`; design
 > `info/youtube-live-design.md` ▸ Deviations ▸ *The silent open-session path*; ⚠️ **not merged,
@@ -1936,3 +1946,15 @@ back to **room** is what switches it off again.
 | **600** (was `EF-e`) | On a third post, press **Delete this post** as staff and type a line | A modal titled **Remove this post?**. The post goes for good, the event is cancelled, and the DM reads *"staff removed its post."* plus your line. Pressing it as the host instead answers *"Only staff can remove this post"* and nothing happens |
 | **601** (was `EF-f`) | With an event still open in a room from before the flip, approve it | The ROOM is renamed `approved-…` exactly as it always was, and no post is made for it. A mode flip reaches new events only |
 | **602** (was `EF-g`) | On the dashboard's **Events** page, open the event from row 597 | Its detail card reads **Review post** (not *Review channel*) and its button reads **Remove its post**. The link opens the post |
+
+
+## THE WHERE PICKER SAYS TO START TYPING (`WH-a`, branch `events-where-hint`, design [`../info/where-picker-design.md`](../info/where-picker-design.md) ▸ `## Follow-up 5`)
+
+⚠️ **Never seen in Discord.** Discord's own paging of a native channel select cannot be exercised
+from a worktree, so this row is the only proof the sentence is in the right place and says the right
+thing. Measured 22:3x: **136 channels** in this guild pass the picker's filter and Discord lists
+about the first **25** until somebody types.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`WH-a`** | `/event` ▸ **Propose an event** ▸ **Where** | Under the two paragraphs, on its own line directly above the channel dropdown: *"If you do not see your channel, start typing the channel name and it should appear."* Type three letters of a channel far down the list — it appears. Press **Back**: while nothing is picked the draft card's Where line reads **(not set)** with the same sentence in italics after it, and the italics vanish the moment a channel or a place is set. Then open the dashboard ▸ **Settings** ▸ **events**, change `events_where_hint` to words you will recognise, save, and open the panel again — the new words are there, with no restart. Empty the key and save: the line is gone from both the panel and the draft card, and nothing else about either moves |

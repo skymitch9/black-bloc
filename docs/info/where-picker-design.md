@@ -22,11 +22,14 @@
 > `EventDraft`/`draft_lines`, `update_event`, `create_scheduled_event`), `cogs/community/events.py`
 > (`build_draft`, `EventTextModal`, the staff `EditModal`), `storage/db.py` (`events` table, schema
 > **33**), `api/tools/events.py`, `site/public/assets/page-events.js`, and `site/public/assets/api.js`
-> (`/api/ref/channels` is already cached client-side). ⚠️ **The FOUR follow-up sections below this one are each their own
+> (`/api/ref/channels` is already cached client-side). ⚠️ **The FIVE follow-up sections below this one are each their own
 > build with their own status line and their own deviations foot** — §1–§8 and the `## Deviations`
-> foot describe the FIRST build only, and the header above is that build's. **All four are LIVE:**
+> foot describe the FIRST build only, and the header above is that build's. **The first four are LIVE:**
 > follow-up 1 as **v106** (merge `6c10b9d`, 17:41), follow-ups 2+3 as **v107** (merge `ac43a20`,
-> 23:41), follow-up 4 as **v108** (merge `73e2e44`, 2026-09-11 00:37). The newest is
+> 23:41), follow-up 4 as **v108** (merge `73e2e44`, 2026-09-11 00:37). ⚠️ **There are now FIVE
+> follow-ups, and the newest is `## Follow-up 5`** (the sentence that says to start typing, branch
+> `events-where-hint`, 2026-09-17) — built and gated, **NOT merged and NOT deployed**; its own
+> header and its `## Follow-up 5 deviations` foot carry its measurements. Before that,
 > **`## Follow-up 4`**, built 2026-09-11 00:21 on branch `where-smart` off `main` at `9fc3a33`
 > — ⚠️ never seen in Discord; measured there: suite **5502 → 5546**
 > forward and `BB_REVERSE=1`, `ruff` clean, `node site/mock/check.mjs` *ok - 17 pages, 150 routes,
@@ -700,3 +703,89 @@ silent; the aliases key edited on Settings; the old-row case), `info/code-notes.
   `HEADER_BYTES = 65536`; re-probed, `x.com` is `ok` in 0.28 s for a missing handle and 0.46 s for a
   real one. Nothing else changed; the fix cannot be unit-tested (the conftest guard forbids a real
   GET, and an injected `fetch` never sees the session), so it is recorded here as a measurement.
+
+## Follow-up 5 — the picker says to start typing (owner, 2026-09-17 22:4x, verbatim: "have it be a clear direction, if you do not see your channel start typing the channel name and it should appear")
+
+> **Status: built on branch `events-where-hint`, off `main` at `27f08f2`** (commits below) — ⚠️ **NOT
+> merged, NOT deployed, and NOTHING here has met Discord**: no test can click a Discord button, the
+> ChannelSelect's paging is Discord's own behaviour and cannot be exercised from a worktree,
+> `python -m black_bloc` was NOT booted (a worktree holds no token), and no browser rendered the
+> Settings page. What IS measured, 2026-09-17 22:5x–23:1x in `C:/lcw/bb-where-hint` with the
+> bot-shaped environment cleared: the suite **6758 → 6773 collected**, green forward and under
+> `BB_REVERSE=1` (**6770 passed, 3 skipped**, 66 s and 54 s, `-n 8`); `ruff check .` clean; every
+> `site/public/assets/*.js` parses as an ES module; `node site/mock/check.mjs` *ok - 20 pages, 187
+> routes, 24 core settings, all keys present*; `discordmd.test.mjs` and `labels.test.mjs` green.
+> Registry keys **+1**; schema unchanged. Departures are the **`## Follow-up 5 deviations`** foot.
+> The owner's by-eye row is **`WH-a`** in [`../access/sweeps.md`](../access/sweeps.md).
+
+### The measurement that produced the ask (2026-09-17 22:3x)
+
+The guild has **136 channels the Where picker allows** (voice + stage + text). `WhereSelect` is a
+native `discord.ui.ChannelSelect`, and Discord renders **only its first page — about 25 — until the
+member types**, filtering server-side from there. The owner opened it, saw `#welcome` … `#opportunities`
+and Join To Create, and read that as *the rest are missing*. Nothing was missing and nothing about the
+picker is wrong; the panel simply never said how to reach the other 111.
+
+### The change
+
+| Piece | Before | After |
+|---|---|---|
+| the words | nothing said the picker filters as you type | one settings key, **`events_where_hint`**, type `text`, namespace `events` (derived from the prefix — no `NAMESPACE_OVERRIDE` row), default exactly *"If you do not see your channel, start typing the channel name and it should appear."* It is in `TEXT_MAY_BE_BLANK`, so it may be **emptied** from the dashboard and from the `/settings` key modal alike, and empty means the line is not drawn at all |
+| the Where panel | `description` = `WHERE_PANEL_INTRO` + `WHERE_JOIN_NOTE` | `where_panel_lines(hint)` in `black_bloc/events.py` returns those two and appends the hint LAST, so it is the paragraph **directly above the picker** (the ChannelSelect is row 0 of the view, which Discord draws under the embed). Plain text, no markdown the owner did not type |
+| the draft card | `**Where** — (not set)` | `**Where** — (not set) *<the same sentence>*`, in italics, **only while nothing is picked** — the moment a channel or a place is set the line is exactly what it was. The ⚠️ link-check note still wins where both could apply |
+| reading it | — | `where_hint(store, guild_id)` is called inside `open_where_panel` and `build_draft`, i.e. **at every render**, so a word changed on the Settings page shows the next time the panel opens. No cached copy anywhere |
+| everything else | — | untouched: no schema change, no new log kind, no API route, no `contract.json` entry (a text key with no bounds is in neither the `min`/`max` tables nor `core_keys`), `page-events.js` unchanged |
+
+### Tests (mirror the package)
+
+`tests/test_events.py` — `where_panel_lines` ends on the hint, a blank or whitespace-only hint leaves
+the two words it always had, `where_hint` reads whatever the guild stored and is clamped at
+`DESCRIPTION_LIMIT`; the draft Where line carries the sentence in italics while nothing is picked,
+drops it for a channel and for a typed place, and is byte-identical with a blank hint.
+`tests/test_settings_store.py` — the key's type, help, namespace, default and the round trip through
+`store.set`, plus `TEXT_MAY_BE_BLANK` and `coerce_value(key, "") == ""`.
+`tests/cogs/community/test_events.py` — the panel embed's LAST line is the stored sentence, an edited
+key shows the new words, an emptied key leaves `WHERE_JOIN_NOTE` last, and the draft card carries and
+loses the same sentence. The existing `labels.js` guard covers the new label by itself.
+
+### Docs the build touches
+
+This section, [`code-notes.md`](code-notes.md) (a by-NAME `## Where follow-up 5` block),
+[`../access/sweeps.md`](../access/sweeps.md) (one row, `WH-a`). NOT `TODO.md`, `DONE.md`,
+`KNOWN_ISSUES.md` or `deploys.log` — those are the conductor's at the landing.
+
+## Follow-up 5 deviations
+
+> Written at the build, 2026-09-17 23:1x, on branch `events-where-hint` off `main` at `27f08f2`.
+> ⚠️ **NOTHING here has met Discord.**
+
+- **J1 (build) The sentence is assembled by a pure `where_panel_lines(hint)` in `events.py`, not
+  joined in the cog.** The brief says only that the embed shows the hint as its own line. Building
+  the description in `cogs/community/events.py` would have put the panel's words half in the pure
+  module and half in the cog, which is the same argument as G9 and H9 in the two builds above: the
+  cog is not the home of any fact. The bonus is that the whole rule — *the hint goes last, a blank
+  one is not drawn* — is testable without a bot.
+- **J2 (build) The draft's copy travels as a `hint=` keyword on `draft_lines`, defaulting to `""`.**
+  `draft_lines` is pure and has no store; `build_draft` does, and already reads four other keys
+  there. A default of `""` leaves every existing caller — twenty-odd tests and `raidtrain.py`'s own
+  identically-named `draft_lines`, which is a different function — completely untouched.
+- **J3 (build) The draft line drops the hint for ANY Where, not only for a channel.** The brief says
+  "when nothing is picked yet". A typed place (`WHERE_OTHER`) is something picked, and the sentence
+  is about finding a channel in the dropdown, so beside *the park* it would be noise. The condition
+  is `where_line(draft.where)` being empty, which is exactly the case that prints `(not set)`.
+- **J4 (build) The hint is clamped to `DESCRIPTION_LIMIT` (1000), an existing constant, and no new
+  limit was added.** An owner can paste anything into a text key, and both surfaces it lands on are
+  embed descriptions with a 4096 ceiling that other lines also draw from. D8 and G5 added constants
+  because nothing in the repo named those numbers; this one is already named.
+- **J5 (build) The panel's line is PLAIN and the draft's is ITALIC.** The brief asks for italics on
+  the draft line only, and that is what shipped — on the panel the hint is its own paragraph and does
+  not need setting apart, and wrapping an editable string in markdown the owner did not type is the
+  code adding words to his words.
+- **J6 (could NOT verify) Discord's paging itself.** That the picker lists ~25 channels until
+  somebody types is Discord client behaviour: no test can see it, and the 136-channel count is the
+  conductor's measurement of 22:3x, read here and not re-measured. Whether the sentence actually
+  stops the confusion is `WH-a`, by eye, in the live guild.
+- **J7 (context) `main` moved during the build.** It was `27f08f2` at the cut and `a16f5e5`
+  (**v137**, the `events-move-to-forum` merge) by the time the gates ran. This branch is still off
+  `27f08f2` as briefed; the merge is small but it does touch the same six files, and the appended
+  `sweeps.md` block will need the conductor's usual renumber.

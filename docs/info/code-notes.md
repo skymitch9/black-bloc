@@ -6407,6 +6407,25 @@ as v106 `6c10b9d`, keyed by LINE against `1d090e5` since 2026-09-11)
 | ⚠️ `black_bloc/settings_store.py:162` (`WHERE_CHECK_MAX_SECONDS`) — the ceiling is 3 because DISCORD sets it | A modal that has not answered within three seconds is closed by Discord and whatever was typed into it is lost. The check has to fit inside that AND leave time to render the panel afterwards, which is why the default is 2 and the ceiling is not higher. Both refusals say so in words |
 | `black_bloc/events.py:396` (`checked_where`) — the website's door normalises but does NOT check | It is synchronous, and its caller already answers in words; making it `async` to open a socket would change every caller of a function whose job is validation. The dashboard's Where box therefore keeps a dead link without complaint, which is a deliberate difference from Discord's box and is written on the sweeps rows |
 
+## Where follow-up 5 — the sentence above the picker (branch `events-where-hint`, off `main` at `27f08f2`)
+
+> Keyed by NAME, because the branch is NOT merged and every line number in `black_bloc/events.py`,
+> `cogs/community/events.py` and `settings_store.py` moves at the merge — re-key with
+> `scripts/scan/rekey_code_notes.py` then, as the standing rule says. Why each half was decided this
+> way is [`where-picker-design.md`](where-picker-design.md) ▸ `## Follow-up 5` and its
+> `## Follow-up 5 deviations` foot; it is not repeated here.
+
+| Key | Note |
+|---|---|
+| ⚠️ `black_bloc/events.py` (`where_panel_lines`) — the hint is APPENDED, never inserted | It has to be the LAST paragraph of the embed description, because the ChannelSelect is row 0 of the view and Discord draws the components under the embed. Last line = directly above the picker. Anywhere else and the sentence is talking about something the reader has already scrolled past |
+| `black_bloc/events.py` (`where_panel_lines`) — a blank hint is not an empty line, it is no line | `if hint.strip()` before the append. A `""` joined in would leave a trailing newline in the description, which Discord renders as a gap under the words — an emptied key would look like a rendering bug rather than like a switch somebody turned off |
+| `black_bloc/events.py` (`where_hint`) — read at every render, never cached | `open_where_panel` and `build_draft` both call it on the way in. That is the whole reason the sentence is a settings key: a word changed on the Settings page is on the next panel that opens, with no restart and no posted copy to re-render |
+| `black_bloc/events.py` (`where_hint`) — clamped to `DESCRIPTION_LIMIT` | The two surfaces it lands on are embed descriptions that other lines also draw from. 1000 is an existing constant in this file and is ten times more than the sentence needs; the point is that a pasted essay cannot take the draft card over Discord's 4096 |
+| ⚠️ `black_bloc/events.py` (`draft_lines`) — `hint=` defaults to `""`, and the note still wins | `draft_lines` is pure and has no store, so the cog hands it the words. The default keeps twenty-odd existing callers untouched — including `raidtrain.py`'s identically-named, entirely different `draft_lines`. The `elif` order matters: a `where_note` (the ⚠️ link-check warning) only exists when something was typed, so the two can never both apply, and the note is the one that would |
+| `black_bloc/events.py` (`draft_lines`) — the hint goes with ANY pick, not just a channel | The test is `where_line(draft.where)` coming back empty, which is exactly the case that prints `(not set)`. A typed place is something picked, and a sentence about scrolling a dropdown does not belong beside *the park* |
+| `black_bloc/settings_store.py` (`WHERE_HINT_KEY`) — no `NAMESPACE_OVERRIDE` row, on purpose | The namespace is derived from the `events_` prefix, so the key lands in the events group on the dashboard and in `/settings` for free. `tests/api/test_contract.py::test_the_mock_groups_a_key_the_way_the_registry_does` compares the mock's override table to the registry's, and a row added to only one of them is what that test exists to catch — adding one here would have meant adding it twice for no behaviour |
+| ⚠️ `black_bloc/settings_store.py` (`TEXT_MAY_BE_BLANK`) — this is what makes the line hideable | `coerce_value` refuses empty text for every other `text` key. Membership here turns `""` into a stored `""` instead of a refusal, and it is also what `cogs/core.py` reads to decide whether the `/settings` key modal marks the field required — so the sentence can be emptied from Discord as well as from the site, which is what KI-28 was closed over for the go-live keys |
+
 ## Event rooms — the posts move into the room, and staff get a Delete button (branch `event-rooms`, off `main` at `bd0b31d`)
 
 > Keyed by LINE against the branch's own tree; every number will move at the merge, so re-key by
