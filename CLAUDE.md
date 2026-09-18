@@ -16,9 +16,11 @@ Thin on purpose. The living state is in `docs/` — **read `docs/README.md`,
   else reads `os.environ`.
 - Secrets: `.env` is gitignored; token custody is the Discord Developer Portal.
   Docs carry secret NAMES only.
-- ⚠️ **TEST POLICY (owner, 2026-08-26): the bot speaks ONLY in `#blackbloc-logs`
-  (`TEST_CHANNEL_ID`) and DMs until the owner lifts it.** Enforced by `black_bloc/guard.py`
-  (`TEST_MODE=true`). Never flip it, never post elsewhere, brief every subagent with this.
+- ✅ **TEST MODE LIFTED by the owner 2026-09-18 16:08** (`flyctl secrets set TEST_MODE=false`, cutover step P5; the
+  bot now speaks wherever its settings point). The 2026-08-26 test policy (speak only in `#blackbloc-logs` + DMs, enforced by
+  `black_bloc/guard.py` under `TEST_MODE=true`) is RETIRED for production; the guard code stays for any future rehearsal.
+  Still true: never flip `TEST_MODE` yourself — it is the owner's switch both ways — and shadow modes per feature
+  (`*_mode = shadow`) still route rehearsal copies to `shadow_channel_id`.
 - This is a GATEWAY bot (persistent websocket). It cannot run on Cloudflare
   Workers; hosting is an always-on container — `docs/info/hosting.md`.
 - ⚠️ **Only bot code gets committed (owner, 2026-08-26).** Scan/scrape/inventory
