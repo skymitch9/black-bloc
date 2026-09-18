@@ -1,6 +1,12 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-18** — rows **`RO-a`** and **`RO-b`** added at the foot for the BOOT RECONCILE FIX
+> (branch `boot-reconcile-once`, off `main` `1177bce`; design
+> [`../info/front-door-design.md`](../info/front-door-design.md) ▸ Deviations ▸ **14**). They are the
+> only proof of the 16:08 incident's fix and ⚠️ **neither can be run from a laptop** — both need the
+> live bot restarting on Fly. Rows are lettered; the conductor numbers them at the merge.
+> ⚠️ **Nothing else in this file was re-checked then.** Before that,
 > **2026-09-18** — rows **`YU-a` … `YU-d`** added at the foot for the YOUTUBE UPLOADS REMOVAL
 > (branch `youtube-uploads-removal`, off `main` `9bc1982`; design
 > [`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md); ⚠️ **not
@@ -2017,3 +2023,18 @@ post reads *Live now* with no thumbnail — that is **KI-30**, not a regression.
 | **610** (was `YU-b`) | Dashboard ▸ **Go-live** ▸ scroll to **YouTube channels** | The section is titled **YouTube channels**, not *YouTube uploads*. It holds the live-mode switch (**Live-stream announcements**), the **How live streams are spotted** card, the links table (**Member · Channel · Id · Linked · Unlink** — ⚠️ **no *Counted* column and no *Last video* column**), and **Link a member**. ⚠️ **There is no *How the sweep is doing* card and no *Recent uploads* table anywhere on the page.** Below it, **YouTube settings** lists only `youtube_log_level`, `youtube_panel_minutes`, `youtube_unlink_dms_them`, `youtube_live_poll_minutes` and `youtube_live_end_misses` — no `youtube_mode`, `youtube_channel_id`, `youtube_ping_role_id`, `youtube_ping_fan_roles`, `youtube_announce_shorts`, `youtube_template` or `youtube_poll_minutes` — and the logs card is titled **YouTube logs**. Link a member and unlink them again: both work, and the Audit tab shows one `web.youtube.link` and one `web.youtube.unlink` |
 | **611** (was `YU-c`) | Open `https://blackbloc.heygabi.ai/api/youtube/status` while signed in as staff (or read the Go-live card, which shows the same numbers) | The body carries `api_key_set`, `links` and every live field (`live_mode`, `live_minutes`, `live_end_misses`, `live_running`, `last_probe_at`, `last_probe_error`, `probed`, `quota_today`, `botcheck`, `live_now`, `reading_live`) — and ⚠️ **none of `running`, `last_ok_at`, `last_error`, `failures`, `fetches`, `unchanged`, `unchanged_ratio`, `videos` or `announced`**, not even as zeroes. `GET /api/youtube/videos` answers **404**. Dashboard ▸ **Settings** ▸ the **youtube** group shows the same five keys `YU-b` listed and nothing else |
 | **612** (was `YU-d`) | ⚠️ **On the LIVE bot only.** With `youtube_live_mode` **on** and `golive_mode` **on**, have a linked YouTube channel go live, then wait up to `youtube_live_poll_minutes` (5) | The go-live channel gets the usual card, **source YouTube** in its footer, exactly as it did before the uploads half was removed. `/youtube` ▸ **Logs** shows one `youtube.live_seen` row for the transition and nothing else per probe; the Go-live page's **Reading live now** reads **1**. Stop the stream: after `youtube_live_end_misses` (2) quiet probes the post is rewritten in the past tense. ⚠️ Behind the bot-check wall the title reads *Live now* with no thumbnail — **KI-30**, not a regression |
+
+## ONE DOOR PER BOOT — the reconciles no longer race (`RO-a` … `RO-b`, branch `boot-reconcile-once`, design [`../info/front-door-design.md`](../info/front-door-design.md) ▸ Deviations ▸ **14**)
+
+These two rows are the only proof that matters, and ⚠️ **neither can be run from a laptop** — they
+need the live bot restarting on Fly. The incident they answer is measured, not inferred: at
+**2026-09-18 16:08 Phoenix**, the boot that followed the TEST_MODE lift posted the front door twice
+(`frontdoor.posted` 23:08:28.529Z and 23:08:29.352Z) and the ticket button twice
+(`modmail.panel_posted` 23:08:28.110Z and 23:08:28.589Z), and hid only the FIRST ticket button —
+leaving two doors and one orphan in `#welcome`. ⚠️ **Nothing in this build has met Discord**: a
+worktree holds no token, no bot was booted, and the fix is proved by the suite alone.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`RO-a`** | Restart the machine (`flyctl machine restart <id>`, or any deploy) with `frontdoor_mode` **on** and the door posted in `#welcome`. When it is back, look at `#welcome`, then open the Logs page (or `/settings` ▸ Logs) filtered to the boot minute | **Exactly ONE front door** in `#welcome` and **no stray Open-a-ticket message** under it. The log holds **one** `frontdoor.posted`-family row for that boot at most — on a healthy restart, where the door is still up, it holds **none of them at all**, because the sweep found its message and left it alone. ⚠️ **No `frontdoor.duplicate_seen` and no `modmail.panel_duplicate_seen` row.** If one IS there, the guard fired: it names the stored id and every other id it found, nothing was deleted, and the two messages are waiting for you to pick which one stays |
+| **`RO-b`** | On the same boot, open an event that has been denied or cancelled for longer than the retention window and whose review room has already been deleted, then read the Logs page's events rows for the boot minute | **One** `event.room_forgotten` row for that event, never two. The event's card says **The review channel** is gone and the row keeps its status |

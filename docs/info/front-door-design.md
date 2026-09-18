@@ -1,6 +1,6 @@
 # The front door — one message and one command that route a member to a ticket, a request or an event
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v125** — merge `ae6eecb`, release `e8042a5`, deployed **2026-09-17 14:38** Phoenix; `frontdoor_channel_id` = #welcome since 14:38; sweeps **524–533** are the owner's. Was: ✅ BUILT on branch `front-door`, off `main` `0cee997` (v122); read the `## Deviations` foot before the sections above, thirteen
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v125** — merge `ae6eecb`, release `e8042a5`, deployed **2026-09-17 14:38** Phoenix; `frontdoor_channel_id` = #welcome since 14:38; sweeps **524–533** are the owner's. ⚠️ **Deviation 14 (2026-09-18) is an INCIDENT ON THE LIVE DOOR** — the boot that followed the TEST_MODE lift at 16:08 posted the door and the ticket button **twice** in `#welcome`; the fix is branch `boot-reconcile-once` (`pytest` **6723 → 6740**, both orders green), ⚠️ **not merged and not deployed**, and sweeps `RO-a`/`RO-b` in [`../access/sweeps.md`](../access/sweeps.md) are the proof that is still missing. Was: ✅ BUILT on branch `front-door`, off `main` `0cee997` (v122); read the `## Deviations` foot before the sections above, **fourteen**
 > things differ from what is written here. No schema change; registry **239 → 250**; mock **178 → 180 routes**;
 > `pytest` **6196 → 6276**, both orders green. **Last verified: 2026-09-17 12:5x** against `main`
 > `5e92e41`: the posted ticket button (`cogs/moderation/modmail.py` `TicketButton`, keys `modmail_panel_*`,
@@ -188,6 +188,49 @@ must post the door's card too: add it to the self-test's panel list); `/help` li
 13. **`docs/TODO.md`, `docs/DONE.md` and `docs/deploys.log` were not touched**, as the brief
     said. The 🔀 TRIAGE item and the landing entry are the conductor's.
 
+14. ⚠️ **THE DOOR POSTED ITSELF TWICE AT THE LIFT — the boot runs THREE reconciles, and two of
+    them raced** (incident 2026-09-18 16:08 Phoenix, fixed on branch `boot-reconcile-once`,
+    commit `23b3994`). §D says the sweep puts a deleted door back; it does not say how many
+    sweeps a boot starts. It starts three: `cog_load` runs `reconcile()` and then
+    `_reconcile_loop.start()`, `on_ready` runs `reconcile()` again, and the loop's own first
+    tick (after `loops.wait_ready`) is a third. **Measured on the live bot one second after the
+    boot that followed the TEST_MODE lift** — `action_log` holds `modmail.panel_posted` at
+    **23:08:28.110Z** (message `1550644707204407368`) and again at **23:08:28.589Z**
+    (`1550644708227944461`), `frontdoor.posted` at **23:08:28.529Z** (`1550644709138108427`) and
+    again at **23:08:29.352Z** (`1550644711646302299`), and exactly one
+    `frontdoor.ticket_button_hidden`, for the FIRST button only. Result in `#welcome`: **two
+    front doors and one orphaned ticket button**, which the conductor deleted by hand. Two
+    reconciles were in flight at once, both read *"no posted message id"* before either had
+    written one, and both posted. The re-read in `_redoor` was never wrong — it was simply not
+    inside anything that made it happen after the other run's write.
+
+    The fix is `black_bloc/loops.py:Reconciler`, beside `wait_ready` because it is the same
+    kind of thing (a rule about how a loop behaves, one home, one copy): **one `asyncio.Lock`
+    per cog**, the reconcile's state read happening INSIDE it, and a **60-second window**
+    (`loops.RECENT_SECONDS`) that `on_ready` skips on. The loop's tick never skips — it is the
+    sweep, and a sweep that can be talked out of running is not a sweep. `FrontDoor.reconcile`,
+    `Modmail.reconcile_tickets` and `Events.reconcile_events` are now thin locked wrappers over
+    a `_sweep`; `on_post_published` takes the same lock with `stamp=False`, because re-posting
+    one guild's door is not a full sweep and must not close the window on one.
+
+    The same race, in the same shape, was writing **two `event.room_forgotten` rows** for one
+    event at boot (`TODO.md`'s own item) — two reconciles both read the row while its
+    `review_channel_id` was still set. The lock fixes it for free, because the DB read moved
+    inside the lock with everything else.
+
+    ⚠️ **The guard that would have caught it anyway.** Before a reconcile posts, it now reads
+    the room's last **five minutes** for another of the bot's own messages wearing the same
+    custom-id family (`posted.duplicates_near`; `door:` for the front door,
+    `modmail:ticket:<guild>` for the ticket button). If it finds one, it does **not** post a
+    third: it writes one IMPORTANT `frontdoor.duplicate_seen` / `modmail.panel_duplicate_seen`
+    row naming the stored id and every other id, and leaves both messages where they are.
+    **It never deletes** — staff have the final say on what comes down (`CLAUDE.md`). The check
+    costs one `channel.history` call and only on the rare path where something is about to be
+    posted, never on the sweep that finds its door where it left it. It is deliberately
+    **blind to a duplicate sitting beside a healthy door**: that path returns before the check,
+    and paying for a history read every five minutes per guild to find a state the lock now
+    prevents was not worth it.
+
 ### What was NOT verified
 
 - **Nothing met Discord.** No boot, no token, no press in a client, no modal submitted, no
@@ -206,3 +249,21 @@ must post the door's card too: add it to the self-test's panel list); `/help` li
   reads exactly like a freshly re-shot one (`access/guides-capture.md` §1, the `count: 0`
   trap). The capture runbook's first-population pass is what fills it.
 - **No migration was needed and none was run** — eleven registry keys, no schema change.
+
+**Deviation 14 (2026-09-18, `boot-reconcile-once`) adds its own NOT-verified list:**
+
+- **The race is proved against fakes, not against a boot.** Both concurrency tests gather two
+  reconciles on a channel whose `send` yields first, and both FAIL (two `frontdoor.posted`
+  rows, two `modmail.panel_posted` rows) when the lock is taken out — measured by running them
+  against `_sweep` directly. **No bot was booted**, no gateway delivered `on_ready`, and the
+  three-reconcile boot sequence has never been watched end to end outside a test.
+- **The duplicate guard has never read a real `channel.history`.** `FakeText` cannot list its
+  own messages, so the two tests that exercise it attach a history of their own. The shape of
+  `message.components[*].children[*].custom_id` is taken from discord.py, not from a fetched
+  message, and **every failure inside `duplicates_near` is swallowed and read as "no
+  duplicates"** — so on a real channel the guard fails OPEN, back to the lock.
+- **The 60-second window is a constant nobody has tuned.** It exists to stop `on_ready` from
+  repeating `cog_load`'s work at boot, which takes milliseconds; a gateway RESUME an hour later
+  runs the reconcile as normal.
+- **Nothing was merged or deployed**, and the two orphan messages the incident left were
+  removed by the conductor by hand before this branch existed.
