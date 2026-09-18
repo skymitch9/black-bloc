@@ -516,3 +516,89 @@ async def test_one_web_write_leaves_one_action_row_with_the_web_head(
     kinds = [row["kind"] for row in await cur.fetchall()]
     assert kinds.count("web.event.channel_deleted") == 1
     assert "event.channel_deleted" not in kinds
+
+
+# --- Make the forum, from the website (events-forum-design.md §D) ------------------------
+
+
+async def test_the_website_makes_the_events_forum_and_leaves_one_web_row(
+    client, sign_in, web, guild, wf
+):
+    await web.store.set(wf.GUILD_ID, "modmail_category_id", wf.CATEGORY_ID)
+    sign_in(client)
+
+    made = client.post("/api/events/forum", json={})
+
+    assert made.status_code == 200 and made.json()["made"] is True
+    forum = guild.created[-1]
+    assert forum.name == "events" and forum.type.name == "forum"
+    assert [tag.name for tag in forum.available_tags] == [
+        "pending",
+        "approved",
+        "denied",
+        "live",
+        "done",
+        "cancelled",
+    ]
+    assert web.store.get(wf.GUILD_ID, "events_forum_channel_id") == forum.id
+    found = await wf.kinds_in(web.db)
+    assert "web.event.forum_made" in found and "event.forum_made" not in found
+
+
+async def test_the_website_refuses_a_second_events_forum_in_words(client, sign_in, web, wf):
+    await web.store.set(wf.GUILD_ID, "modmail_category_id", wf.CATEGORY_ID)
+    sign_in(client)
+    client.post("/api/events/forum", json={})
+
+    again = client.post("/api/events/forum", json={})
+
+    assert again.status_code == 409
+    assert "already the events forum" in again.json()["message"]
+
+
+async def test_the_website_says_which_key_an_events_forum_needs(client, sign_in):
+    sign_in(client)
+
+    refused = client.post("/api/events/forum", json={})
+
+    assert refused.status_code == 409
+    assert "modmail_category_id" in refused.json()["message"]
+
+
+def test_making_the_events_forum_needs_a_session(client):
+    assert client.post("/api/events/forum", json={}).status_code == 401
+
+
+def test_making_the_events_forum_refuses_a_member(client, sign_in):
+    sign_in(client, staff=False)
+    assert client.post("/api/events/forum", json={}).status_code == 403
+
+
+async def test_an_event_row_says_which_kind_of_place_it_is_reviewed_in(
+    client, sign_in, web, wf
+):
+    event_id = await an_event(web, wf)
+    sign_in(client)
+
+    assert client.get(f"/api/events/{event_id}").json()["event"]["review_kind"] == "room"
+
+    await web.db.conn.execute(
+        "UPDATE events SET review_kind = 'post' WHERE id = ?", (event_id,)
+    )
+    await web.db.conn.commit()
+
+    assert client.get(f"/api/events/{event_id}").json()["event"]["review_kind"] == "post"
+
+
+async def test_a_missing_post_is_refused_in_the_words_a_post_uses(client, sign_in, web, wf):
+    event_id = await an_event(web, wf)
+    await web.db.conn.execute(
+        "UPDATE events SET review_kind = 'post' WHERE id = ?", (event_id,)
+    )
+    await web.db.conn.commit()
+    sign_in(client)
+
+    answer = client.post(f"/api/events/{event_id}/room/delete", json={})
+
+    assert answer.status_code == 409
+    assert "no post of its own" in answer.json()["message"]

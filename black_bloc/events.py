@@ -1330,7 +1330,7 @@ async def tell_or_log(bot: Any, guild: Any, user: Any, row: Any, text: str) -> N
 async def rename_channel(bot: Any, guild: Any, row: Any, status: str, user_name: str) -> None:
     """A room says its status in its name; a post says it in its tag, and keeps its own name."""
     if review_kind(row) == POST:
-        await retag_post(bot, guild, row)
+        await retag_post(bot, guild, row, status)
         return
     channel = room_of(guild, row)
     if channel is None:
@@ -2158,13 +2158,13 @@ def post_is_right(place: Any, wanted: list[Any], archived: bool) -> bool:
     return found == asked and bool(getattr(place, "archived", False)) == archived
 
 
-async def retag_post(bot: Any, guild: Any, row: Any) -> None:
+async def retag_post(bot: Any, guild: Any, row: Any, status: Any = None) -> None:
     """The post's own state: one tag for the status, and an archive once it is settled."""
     place = post_of(bot, guild, row)
     if place is None:
         return
     forum = getattr(place, "parent", None) or forum_of(bot, guild)
-    status = row["status"]
+    status = str(status or row["status"])
     wanted = tags_for_status(forum, status)
     settled = archives_at(status)
     if post_is_right(place, wanted, settled):

@@ -10,8 +10,10 @@ from black_bloc import events as events_pure
 from black_bloc import logs_panel
 from black_bloc.cogs.community import events as events_cog
 from black_bloc.cogs.community.events import (
+    FORUM_CHANNEL_PLACEHOLDER,
     GOLIVE_MINUTES,
     RECONCILE_MINUTES,
+    REVIEW_MODE_PLACEHOLDER,
     CallOffPick,
     DecisionButton,
     DenyModal,
@@ -29,6 +31,9 @@ from black_bloc.cogs.community.events import (
     WhereModal,
     WherePanel,
     ZoneModal,
+    build_card,
+    build_forum,
+    build_rooms,
     decision_id,
     review_view,
     submit_draft,
@@ -43,6 +48,7 @@ from black_bloc.events import (
     LIVE,
     PANEL_TITLE,
     PENDING,
+    STATUSES,
     WHERE_OTHER,
     WHERE_PANEL_TITLE,
     WHERE_TEXT,
@@ -51,10 +57,12 @@ from black_bloc.events import (
     ZONE_PANEL_TITLE,
     EventDraft,
     Where,
+    cancel_event,
     create_event,
     event_for_channel,
     events_by_status,
     get_event,
+    make_forum,
     rename_channel,
     set_review,
     set_status,
@@ -64,12 +72,15 @@ from black_bloc.settings_store import (
     ERROR_RETRY_LABEL,
     ERROR_SENTENCE,
     EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_FORUM_CHANNEL_KEY,
     EVENTS_POSTS_WHERE_KEY,
+    EVENTS_REVIEW_MODE_KEY,
     EVENTS_ROOM_DELETE_KEY,
     EVENTS_ROOM_NOTICE_KEY,
     EVENTS_TEST_RETENTION_KEY,
     POSTS_ANNOUNCE,
     POSTS_BOTH,
+    REVIEW_FORUM,
     ROOM_DELETE_APPROVER,
     TIME_STEP_KEY,
     TIMEZONE_CHOICES_KEY,
@@ -4369,3 +4380,519 @@ async def test_the_row_a_zone_picker_crash_writes_names_the_panel_and_the_step(
     assert details["error"] == "HTTPException"
     assert details["step"].startswith("black_bloc/cogs/community/events.py:")
     assert "already been responded to" in details["message"]
+
+
+# --- events as a forum post under BlackMail (events-forum-design.md §B–§E) ---------------
+
+FORUM = 770000000000000001
+
+
+class FakeForumTag:
+    def __init__(self, tag_id, name, emoji=None):
+        self.id = tag_id
+        self.name = name
+        self.emoji = emoji
+
+
+class FakeThreadWithMessage:
+    def __init__(self, thread, message):
+        self.thread = thread
+        self.message = message
+
+
+class FakeThread(FakeText):
+    """A forum post: a channel that sends and deletes, plus tags and an archive flag."""
+
+    def __init__(self, thread_id, guild, parent, name="post"):
+        super().__init__(thread_id, guild, None, name=name)
+        self.type = discord.ChannelType.public_thread
+        self.parent = parent
+        self.parent_id = parent.id
+        self.category = parent.category
+        self.category_id = parent.category_id
+        self.applied_tags = []
+        self.archived = False
+
+    async def edit(self, **kwargs):
+        if self.edit_raises is not None:
+            raise self.edit_raises
+        self.edits.append(kwargs)
+        if "name" in kwargs:
+            self.name = kwargs["name"]
+        if "applied_tags" in kwargs:
+            self.applied_tags = list(kwargs["applied_tags"])
+        if "archived" in kwargs:
+            self.archived = bool(kwargs["archived"])
+
+    async def delete(self, reason=None):
+        if self.delete_raises is not None:
+            raise self.delete_raises
+        self.deleted = True
+        if self.guild is not None:
+            self.guild.threads.pop(self.id, None)
+
+
+class FakeForum:
+    def __init__(self, channel_id, guild=None, category=None, name="events", tags=()):
+        self.id = channel_id
+        self.guild = guild
+        self.category = category
+        self.category_id = category.id if category else None
+        self.name = name
+        self.type = discord.ChannelType.forum
+        self.mention = f"<#{channel_id}>"
+        self.available_tags = list(tags)
+        self.threads = []
+        self.create_raises = None
+        self.given_overwrites = None
+
+    async def create_thread(self, name, **kwargs):
+        if self.create_raises is not None:
+            raise self.create_raises
+        self.guild._next_id += 1
+        thread = FakeThread(self.guild._next_id, self.guild, self, name=name)
+        thread.applied_tags = list(kwargs.get("applied_tags") or ())
+        rest = {k: v for k, v in kwargs.items() if k != "content"}
+        message = FakeMessage(1, kwargs.get("content") or "", **rest)
+        thread.messages.append(message)
+        self.guild.threads[thread.id] = thread
+        self.threads.append(thread)
+        return FakeThreadWithMessage(thread, message)
+
+
+async def _create_forum(guild, name, **kwargs):
+    if guild.forum_raises is not None:
+        raise guild.forum_raises
+    guild._next_id += 1
+    forum = FakeForum(
+        guild._next_id,
+        guild,
+        kwargs.get("category"),
+        name=name,
+        tags=kwargs.get("available_tags") or (),
+    )
+    forum.given_overwrites = kwargs.get("overwrites")
+    forum.topic = kwargs.get("topic")
+    forum.auto_archive = kwargs.get("default_auto_archive_duration")
+    guild.channels[forum.id] = forum
+    guild.created.append(forum)
+    return forum
+
+
+def teach_the_guild_about_forums(guild):
+    """`FakeGuild` predates forums; these three are everything a post needs of it."""
+    guild.threads = {}
+    guild.forum_raises = None
+    guild.create_forum = lambda name, **kwargs: _create_forum(guild, name, **kwargs)
+    guild.get_thread = lambda thread_id: guild.threads.get(thread_id)
+
+
+@pytest.fixture
+def forum(bot):
+    teach_the_guild_about_forums(bot.guild)
+    made = FakeForum(
+        FORUM,
+        bot.guild,
+        bot.guild.channels[CATEGORY],
+        tags=[FakeForumTag(i, name) for i, name in enumerate(STATUSES, start=1)],
+    )
+    bot.guild.channels[FORUM] = made
+    return made
+
+
+@pytest.fixture
+async def in_forum_mode(bot, forum):
+    await bot.store.set(GUILD, EVENTS_REVIEW_MODE_KEY, REVIEW_FORUM)
+    await bot.store.set(GUILD, EVENTS_FORUM_CHANNEL_KEY, FORUM)
+    return forum
+
+
+def tags_on(thread):
+    return [tag.name for tag in thread.applied_tags]
+
+
+async def test_a_proposal_in_forum_mode_opens_a_post_whose_first_message_is_the_card(
+    cog, bot, member, db, in_forum_mode
+):
+    interaction = await submit(cog, bot, member)
+
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    post = in_forum_mode.threads[0]
+    assert row["review_channel_id"] == post.id
+    assert row["review_kind"] == "post"
+    assert row["review_message_id"] == post.messages[0].id
+    assert post.name.startswith("Block Party · ")
+    assert bot.guild.created == []
+    first = post.messages[0]
+    assert f"#{row['id']}" in first.content
+    assert first.kwargs["embed"].title is not None
+    labels = [item.item.label for item in first.kwargs["view"].children]
+    assert labels[:2] == ["Approve", "Deny"]
+    assert tags_on(post) == [PENDING]
+    assert "Block Party" in interaction.sent
+
+
+async def test_the_post_is_claimed_for_the_guard_so_test_mode_still_speaks_in_it(
+    cog, bot, member, db, in_forum_mode
+):
+    bot.guard = FakeGuard()
+
+    await submit(cog, bot, member)
+
+    post = in_forum_mode.threads[0]
+    assert FORUM in bot.guard.owned and post.id in bot.guard.owned
+
+
+async def test_the_host_gets_no_overwrite_because_a_forum_post_is_staff_side(
+    cog, bot, member, db, in_forum_mode
+):
+    """§C: BlackMail is staff-side, so the host hears by DM as a request's filer does."""
+    await submit(cog, bot, member)
+
+    post = in_forum_mode.threads[0]
+    assert not hasattr(post, "given_overwrites")
+    assert bot.guild.created == []
+
+
+async def test_the_delete_message_in_a_post_is_labelled_delete_this_post(
+    cog, bot, member, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+
+    post = in_forum_mode.threads[0]
+    notice = post.messages[1]
+    assert "This post is Black Bloc's" in notice.content
+    said = [item.item.label for item in notice.kwargs["view"].children]
+    assert said == ["Delete this post"]
+
+
+async def test_approving_an_event_in_the_forum_moves_its_tag(
+    cog, bot, member, lead, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await approve(bot, lead, row["id"])
+
+    post = in_forum_mode.threads[0]
+    assert tags_on(post) == [APPROVED]
+    assert post.archived is False
+
+
+async def test_denying_an_event_tags_it_and_archives_the_post(
+    cog, bot, member, lead, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await deny(bot, lead, row["id"])
+
+    post = in_forum_mode.threads[0]
+    assert tags_on(post) == [DENIED]
+    assert post.archived is True
+
+
+async def test_calling_an_event_off_tags_and_archives_its_post(
+    cog, bot, member, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+
+    await cancel_event(bot, bot.guild, row, "cancelled_by_1", by=1)
+
+    post = in_forum_mode.threads[0]
+    assert tags_on(post) == [CANCELLED]
+    assert post.archived is True
+
+
+async def test_an_event_that_ends_tags_its_post_done_and_archives_it(
+    cog, bot, member, lead, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await approve(bot, lead, row["id"])
+    await set_status(db, row["id"], LIVE)
+
+    await cog._finish(bot.guild, await get_event(db, row["id"]))
+
+    post = in_forum_mode.threads[0]
+    assert tags_on(post) == [DONE]
+    assert post.archived is True
+
+
+async def test_a_post_never_gets_renamed_the_way_a_room_does(
+    cog, bot, member, lead, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    named = in_forum_mode.threads[0].name
+
+    await approve(bot, lead, row["id"])
+
+    assert in_forum_mode.threads[0].name == named
+
+
+async def test_delete_this_post_removes_the_thread_and_settles_the_event(
+    cog, bot, member, lead, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    post = in_forum_mode.threads[0]
+
+    interaction = FakeInteraction(bot, lead, channel=post)
+    await DecisionButton(row["id"], "delete_room").callback(interaction)
+    modal = interaction.response.modals[0]
+    assert modal.title == "Remove this post?"
+    modal.note._value = "we are done in here"
+    submitted = FakeInteraction(bot, lead, channel=post)
+    await modal.on_submit(submitted)
+
+    fresh = await get_event(db, row["id"])
+    assert post.deleted is True
+    assert fresh["status"] == CANCELLED and fresh["review_channel_id"] is None
+    assert "The post is gone." in submitted.sent
+    assert "staff removed its post." in member.dms[-1]["content"]
+
+
+async def test_the_host_pressing_delete_this_post_is_refused_in_words(
+    cog, bot, member, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    post = in_forum_mode.threads[0]
+
+    interaction = FakeInteraction(bot, member, channel=post)
+    await DecisionButton(row["id"], "delete_room").callback(interaction)
+
+    said = interaction.response.messages[-1]["content"]
+    assert "Only staff can remove this post" in said
+    assert post.deleted is False
+
+
+async def test_a_post_the_cache_has_forgotten_is_not_a_cancelled_event(
+    cog, bot, member, db, in_forum_mode
+):
+    """An open post auto-archives out of the thread cache; that is not a deletion."""
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    bot.guild.threads.clear()
+
+    await cog.reconcile_events()
+    await cog.reconcile_events()
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["status"] == PENDING
+    assert fresh["review_channel_id"] == row["review_channel_id"]
+
+
+async def test_a_post_somebody_deletes_by_hand_cancels_the_event(
+    cog, bot, member, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    post = in_forum_mode.threads[0]
+
+    await cog.on_thread_delete(post)
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["status"] == CANCELLED
+    assert "review_channel_deleted" in str(member.dms[-1]["content"]) or member.dms
+
+
+async def test_a_deleted_post_on_a_settled_event_is_only_forgotten(
+    cog, bot, member, lead, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await deny(bot, lead, row["id"])
+    post = in_forum_mode.threads[0]
+
+    await cog.on_thread_delete(post)
+
+    fresh = await get_event(db, row["id"])
+    assert fresh["status"] == DENIED and fresh["review_channel_id"] is None
+    assert "event.room_forgotten" in await action_kinds(db)
+
+
+async def test_retention_archives_a_live_post_where_it_would_delete_a_room(
+    cog, bot, member, lead, db, in_forum_mode
+):
+    """`events_channel_retention_days` is a ROOM rule; a settled post is archived instead."""
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await deny(bot, lead, row["id"])
+    post = in_forum_mode.threads[0]
+    post.archived = False
+    await db.conn.execute(
+        "UPDATE events SET decided_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(days=400)).isoformat(), row["id"]),
+    )
+    await db.conn.commit()
+
+    await cog.reconcile_events()
+
+    assert post.deleted is False and post.archived is True
+    assert "event.post_archived" in await action_kinds(db)
+    assert (await get_event(db, row["id"]))["review_channel_id"] == post.id
+
+
+async def test_a_test_post_is_deleted_five_minutes_after_the_end_like_a_test_room(
+    cog, bot, member, lead, db, in_forum_mode
+):
+    bot.guard = FakeGuard()
+    await submit(cog, bot, member)
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    await deny(bot, lead, row["id"])
+    post = in_forum_mode.threads[0]
+    await db.conn.execute(
+        "UPDATE events SET decided_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=1)).isoformat(), row["id"]),
+    )
+    await db.conn.commit()
+
+    await cog.reconcile_events()
+
+    assert post.deleted is True
+    assert (await get_event(db, row["id"]))["review_channel_id"] is None
+    assert "event.channel_deleted" in await action_kinds(db)
+
+
+async def test_forum_mode_with_no_forum_refuses_a_proposal_in_words(cog, bot, member, db):
+    await bot.store.set(GUILD, EVENTS_REVIEW_MODE_KEY, REVIEW_FORUM)
+
+    interaction = await submit(cog, bot, member)
+
+    assert "Staff have not set up the events forum yet" in interaction.sent
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+    assert bot.guild.created == []
+
+
+async def test_forum_mode_with_no_forum_tells_staff_which_button_to_press(
+    cog, bot, lead, db
+):
+    await bot.store.set(GUILD, EVENTS_REVIEW_MODE_KEY, REVIEW_FORUM)
+
+    interaction = await submit(cog, bot, lead)
+
+    assert "Make the forum" in interaction.sent
+    assert await events_by_status(db, GUILD, (PENDING,)) == []
+
+
+async def test_a_mode_flip_leaves_an_open_room_a_room(cog, bot, member, lead, db, forum):
+    interaction = await submit(cog, bot, member)
+    room = bot.guild.created[0]
+    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
+    assert row["review_kind"] is None
+
+    await bot.store.set(GUILD, EVENTS_REVIEW_MODE_KEY, REVIEW_FORUM)
+    await bot.store.set(GUILD, EVENTS_FORUM_CHANNEL_KEY, FORUM)
+    await approve(bot, lead, row["id"])
+
+    assert room.name == "approved-alice-block-party"
+    assert forum.threads == []
+    assert (await get_event(db, row["id"]))["review_channel_id"] == room.id
+    assert "Block Party" in interaction.sent
+
+
+async def test_make_the_forum_builds_it_under_blackmail_and_writes_the_key(
+    cog, bot, lead, db
+):
+    teach_the_guild_about_forums(bot.guild)
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+
+    outcome = await make_forum(bot, bot.guild, lead)
+
+    made = bot.guild.created[-1]
+    assert outcome.ok is True and outcome.value == made.id
+    assert made.name == "events" and made.type is discord.ChannelType.forum
+    assert [tag.name for tag in made.available_tags] == list(STATUSES)
+    assert made.auto_archive == 1440
+    assert bot.store.get(GUILD, EVENTS_FORUM_CHANNEL_KEY) == made.id
+    assert "event.forum_made" in await action_kinds(db)
+
+
+async def test_make_the_forum_refuses_a_second_one_in_words(cog, bot, lead, in_forum_mode):
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+
+    outcome = await make_forum(bot, bot.guild, lead)
+
+    assert outcome.ok is False and outcome.code == "forum_exists"
+    assert "already the events forum" in outcome.message
+
+
+async def test_make_the_forum_says_which_key_it_needs(cog, bot, lead):
+    teach_the_guild_about_forums(bot.guild)
+
+    outcome = await make_forum(bot, bot.guild, lead)
+
+    assert outcome.ok is False and outcome.code == "no_category"
+    assert "modmail_category_id" in outcome.message
+
+
+async def test_a_server_whose_library_cannot_make_a_forum_is_told_so(cog, bot, lead):
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+
+    outcome = await make_forum(bot, bot.guild, lead)
+
+    assert outcome.ok is False and outcome.code == "no_forum_api"
+    assert "Make a forum by hand" in outcome.message
+
+
+async def test_a_refused_forum_creation_is_answered_in_words_and_logged(cog, bot, lead, db):
+    teach_the_guild_about_forums(bot.guild)
+    bot.guild.forum_raises = refused()
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+
+    outcome = await make_forum(bot, bot.guild, lead)
+
+    assert outcome.ok is False and outcome.code == "forum_failed"
+    assert "Manage Channels" in outcome.message
+    assert "event.forum_failed" in await action_kinds(db)
+
+
+async def test_the_test_mode_note_rides_on_the_reply_when_the_guard_is_on(cog, bot, lead):
+    teach_the_guild_about_forums(bot.guild)
+    bot.guard = FakeGuard()
+    await bot.store.set(GUILD, "modmail_category_id", CATEGORY)
+
+    outcome = await make_forum(bot, bot.guild, lead)
+
+    assert "test mode" in outcome.message
+    assert outcome.value in bot.guard.owned
+
+
+async def test_a_forum_somebody_deletes_is_forgotten_rather_than_kept_as_a_dead_id(
+    cog, bot, db, in_forum_mode
+):
+    await cog.on_guild_channel_delete(in_forum_mode)
+
+    assert bot.store.get(GUILD, EVENTS_FORUM_CHANNEL_KEY) is None
+    assert "event.forum_forgotten" in await action_kinds(db)
+
+
+async def test_the_forum_page_offers_the_mode_the_picker_and_the_make_button(cog, bot, lead):
+    teach_the_guild_about_forums(bot.guild)
+
+    _, view = build_forum(bot, bot.guild)
+
+    assert has_item(view, "Make the forum")
+    assert find_select(view, REVIEW_MODE_PLACEHOLDER) is not None
+    assert find_select(view, FORUM_CHANNEL_PLACEHOLDER) is not None
+
+
+async def test_the_rooms_page_leads_to_the_forum_page(cog, bot, lead):
+    _, view = build_rooms(bot, bot.guild)
+
+    assert has_item(view, "Forum…")
+
+
+async def test_the_event_card_links_the_post_by_its_own_name(
+    cog, bot, member, db, in_forum_mode
+):
+    await submit(cog, bot, member)
+    row = await get_event(db, (await events_by_status(db, GUILD, (PENDING,)))[0]["id"])
+
+    _, view = build_card(bot, bot.guild, row, member)
+
+    assert has_item(view, "The review post")
+    assert not has_item(view, "The review channel")

@@ -61,13 +61,17 @@ from black_bloc.events import (
 from black_bloc.linkcheck import LINK_MISSING, LINK_OK, LINK_UNREACHABLE
 from black_bloc.settings_store import (
     EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_FORUM_CHANNEL_KEY,
     EVENTS_POSTS_WHERE_KEY,
+    EVENTS_REVIEW_MODE_KEY,
     EVENTS_ROOM_DELETE_KEY,
     EVENTS_ROOM_NOTICE_KEY,
     EVENTS_TEST_RETENTION_KEY,
     POSTS_ANNOUNCE,
     POSTS_BOTH,
     POSTS_ROOM,
+    REVIEW_FORUM,
+    REVIEW_ROOM,
     ROOM_DELETE_APPROVER,
 )
 from black_bloc.timezones import START_EXAMPLE, local_time, unix
@@ -1315,3 +1319,180 @@ def test_an_approval_that_only_reached_the_room_does_not_claim_nothing_was_annou
     assert "the event's own room" in said
     assert "Nothing was announced" not in said
     assert "Nothing was announced" in events.approve_extra(None, None, where=POSTS_ANNOUNCE)
+
+
+# --- events as a forum post (events-forum-design.md §A, §C) -----------------------------
+
+
+class FakeTag:
+    def __init__(self, tag_id, name):
+        self.id = tag_id
+        self.name = name
+
+
+def a_forum(names=STATUSES):
+    return SimpleNamespace(
+        id=555, available_tags=[FakeTag(i, name) for i, name in enumerate(names, start=1)]
+    )
+
+
+def test_a_row_from_before_schema_45_reads_as_a_room_and_never_as_a_post():
+    assert events.review_kind(a_row()) == events.ROOM
+    assert events.review_kind(a_row(review_kind=None)) == events.ROOM
+    assert events.review_kind(a_row(review_kind="room")) == events.ROOM
+    assert events.review_kind(a_row(review_kind="post")) == events.POST
+    assert events.review_kind(a_row(review_kind="nonsense")) == events.ROOM
+
+
+def test_the_forum_carries_one_tag_for_every_status_an_event_can_hold():
+    """The design named five; `events.py` holds six, and the tags match it one for one."""
+    assert [tag.name for tag in events.forum_tags()] == list(STATUSES)
+    assert set(events.FORUM_TAG_EMOJI) == set(STATUSES)
+
+
+def test_a_post_wears_the_one_tag_its_status_names_and_nothing_when_the_forum_lacks_it():
+    forum = a_forum()
+
+    assert [tag.name for tag in events.tags_for_status(forum, APPROVED)] == [APPROVED]
+    assert events.tags_for_status(forum, "never heard of it") == []
+    assert events.tags_for_status(a_forum(names=(PENDING,)), DONE) == []
+    assert events.tags_for_status(None, PENDING) == []
+
+
+def test_only_a_settled_event_archives_its_post():
+    for status in (DENIED, DONE, CANCELLED):
+        assert events.archives_at(status) is True
+    for status in (PENDING, APPROVED, LIVE):
+        assert events.archives_at(status) is False
+
+
+def test_a_post_already_wearing_the_right_tag_costs_no_second_edit():
+    tag = FakeTag(1, PENDING)
+    place = SimpleNamespace(applied_tags=[tag], archived=False)
+
+    assert events.post_is_right(place, [tag], False) is True
+    assert events.post_is_right(place, [tag], True) is False
+    assert events.post_is_right(place, [FakeTag(2, DONE)], False) is False
+
+
+def test_the_posts_name_is_the_title_and_the_day_it_happens():
+    store = FakeStore(values={"default_timezone": "America/Phoenix"})
+    row = a_row(starts=datetime(2026, 9, 20, 2, 30, tzinfo=UTC))
+
+    assert events.post_title(store, row) == "Block Party · 2026-09-19"
+
+
+def test_a_post_name_with_an_unreadable_start_is_still_the_title():
+    store = FakeStore()
+    row = a_row()
+    row["starts_at"] = "not a time"
+
+    assert events.post_title(store, row) == "Block Party"
+
+
+def test_a_post_name_never_outgrows_what_discord_takes():
+    store = FakeStore(values={"default_timezone": "UTC"})
+    row = a_row(title="x" * 300)
+
+    assert len(events.post_title(store, row)) <= events.CHANNEL_NAME_LIMIT
+
+
+def test_events_are_reviewed_in_a_room_until_somebody_says_otherwise():
+    store = FakeStore()
+
+    assert events.review_mode(store, 7) == REVIEW_ROOM
+    assert events.reviews_in_forum(store, 7) is False
+    assert events.forum_channel_id(store, 7) is None
+
+    store.values[EVENTS_REVIEW_MODE_KEY] = REVIEW_FORUM
+    store.values[EVENTS_FORUM_CHANNEL_KEY] = 909
+
+    assert events.reviews_in_forum(store, 7) is True
+    assert events.forum_channel_id(store, 7) == 909
+
+
+def test_a_forum_key_that_is_not_a_number_is_read_as_no_forum_rather_than_raising():
+    store = FakeStore(values={EVENTS_FORUM_CHANNEL_KEY: "nonsense"})
+
+    assert events.forum_channel_id(store, 7) is None
+
+
+def test_every_sentence_the_delete_button_says_names_the_place_it_is_on():
+    room = events.PLACE_WORDS[events.ROOM]
+    post = events.PLACE_WORDS[events.POST]
+
+    assert post.button == "Delete this post" and room.button == "Delete this room"
+    for said in (post.not_staff, post.not_this_event, post.already_gone, post.deleted):
+        assert "post" in said and "this room" not in said
+    assert post.cancel_reason == "post_deleted"
+    assert events.CANCEL_WHY[post.cancel_reason] == "staff removed its post."
+
+
+def test_removing_a_post_never_cancels_an_event_twice_over():
+    """`post_deleted` joins the quiet reasons for the same reason `room_deleted` is there."""
+    assert "post_deleted" in events.ROOM_QUIET_REASONS
+
+
+def test_the_delete_message_counts_down_in_a_room_and_says_archive_in_a_live_post():
+    store = FakeStore(
+        values={"events_channel_retention_days": 7, EVENTS_TEST_RETENTION_KEY: 5}
+    )
+    room = a_row()
+    post = a_row(review_kind="post")
+
+    assert "7 days after it ends" in events.notice_said(store, 7, room, testing=False)
+    assert "5 minutes after it ends" in events.notice_said(store, 7, room, testing=True)
+    assert events.notice_said(store, 7, post, testing=False) == events.POST_NOTICE
+    assert "5 minutes after it ends" in events.notice_said(store, 7, post, testing=True)
+
+
+def test_an_approval_in_the_forum_says_the_post_not_the_room():
+    said = events.approve_extra(None, None, where=POSTS_ROOM, kind=events.POST)
+
+    assert "own post" in said and "own room" not in said
+
+
+def test_the_forum_page_says_the_mode_the_forum_and_what_is_missing():
+    store = FakeStore(values={EVENTS_REVIEW_MODE_KEY: REVIEW_FORUM})
+
+    lines = events.forum_lines(store, SimpleNamespace(id=7))
+
+    assert "one post in the events forum" in lines[0]
+    assert "not set" in lines[1]
+    assert "only reaches the ones" in lines[2]
+    assert events.MAKE_THE_FORUM in lines[-1]
+
+
+def test_the_forum_page_stops_warning_once_the_forum_is_there():
+    store = FakeStore(
+        values={EVENTS_REVIEW_MODE_KEY: REVIEW_FORUM, EVENTS_FORUM_CHANNEL_KEY: 909}
+    )
+
+    lines = events.forum_lines(store, SimpleNamespace(id=7))
+
+    assert "<#909>" in lines[1]
+    assert not any(events.MAKE_THE_FORUM in line for line in lines)
+
+
+def test_room_mode_with_no_forum_is_not_a_warning():
+    lines = events.forum_lines(FakeStore(), SimpleNamespace(id=7))
+
+    assert "a text channel of its own" in lines[0]
+    assert not any(events.MAKE_THE_FORUM in line for line in lines)
+
+
+def test_a_blank_forum_is_refused_in_words_that_differ_for_staff_and_a_member():
+    assert events.MAKE_THE_FORUM in events.FORUM_NOT_SET_STAFF
+    assert "events_review_mode" in events.FORUM_NOT_SET_STAFF
+    assert "Staff have not set up the events forum yet" in events.FORUM_NOT_SET_MEMBER
+    assert "events_forum_channel_id" not in events.FORUM_NOT_SET_MEMBER
+
+
+def test_the_two_forum_keys_reach_the_write_path_the_panel_uses():
+    assert EVENTS_REVIEW_MODE_KEY in events.SETTINGS_KEYS
+    assert EVENTS_FORUM_CHANNEL_KEY in events.SETTINGS_KEYS
+
+
+def test_the_card_link_says_which_kind_of_place_it_opens():
+    assert events.PLACE_LINK_BUTTON[events.ROOM] == "The review channel"
+    assert events.PLACE_LINK_BUTTON[events.POST] == "The review post"
