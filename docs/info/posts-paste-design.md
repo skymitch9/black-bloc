@@ -1,6 +1,6 @@
 # The post editor's paste converter — a Google Doc arrives as Discord markdown
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v140** — merge `698f33a`, release `413f939`, deployed **2026-09-18 16:38** Phoenix; the `## Deviations` foot is the truth; sweeps **613–615** are the owner's (613 = the first real Google Docs paste); verified: boot clean at 16:38:26 (no front door or ticket button posted this time — both channel keys are blank), /health ready, self-test 116/116, and the live site serves /assets/clipmd.js (200). No real Google Docs paste yet — row 613 is the owner's. Was: TRACKED · 🔨 **BUILT on branch
 > `posts-paste`** — off `main` at `0b4e7c4`, **not merged, not deployed, and NOBODY HAS PASTED
 > ANYTHING**. A companion to [`posts-design.md`](posts-design.md) (the Posts feature, ✅ LIVE
 > v113); it changes no row, no key, no route and no Python.
