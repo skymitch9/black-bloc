@@ -5,11 +5,17 @@
 > follow-up (branch `youtube-live-seen`, off `main` `568c177`; design
 > `info/youtube-live-design.md` ▸ Deviations ▸ *The silent open-session path*; ⚠️ **not merged,
 > not deployed, and NOT runnable from a laptop** either — they need the live bot and a streamer who
-> is live on Twitch and YouTube at once). They are UNNUMBERED: the conductor numbers them from 591
-> at the merge. What they prove: a probe that reads a channel live while another source already
+> is live on Twitch and YouTube at once). Numbered **594–595** at the merge (591–593 went to the boot-status rows). What they prove: a probe that reads a channel live while another source already
 > holds the go-live session now leaves one `youtube.live_seen` row saying `announced: false` and
 > `because: open_session:twitch`, and the Go-live card's new **Reading live now** says how many
 > channels the probe reads as live while **Live now** stays 0. Before that,
+> **2026-09-17** — rows **`BS-a` … `BS-c`** added at the foot for the BOOT STATUS build (branch
+> `boot-status`, off `main` `5ceea19`; design [`../info/boot-status-design.md`](../info/boot-status-design.md);
+> ⚠️ **not merged, not deployed, and NOTHING in it has met Discord — no member has seen a red
+> dot, a green dot or either sentence**): Black Bloc reads Do Not Disturb with *"Restarting and
+> booting — back in a moment"* from the first connect and flips to online with the head count at
+> ready. ⚠️ **`BS-a` is the row that decides whether the feature works at all**, and the one
+> thing it must never show is a GREEN bot still saying *"restarting"*. Numbered **591–593** at the merge (`main` had taken **586–590** for the YouTube live fix while this was building). Before that,
 > **2026-09-17** — rows **`YL-j` … `YL-n`** (numbered **586–590** — 572–585 went to the minutes rows the same evening) added at the foot for the YOUTUBE
 > LIVE FIX build (branch `youtube-live-fix`, off `main` `ddd6fdc`; design
 > `info/youtube-live-design.md` ▸ Deviations ▸ *The datacenter page*; ⚠️ **not merged, not deployed,
@@ -1870,8 +1876,8 @@ confirm you're not a bot* wall. Nothing here reproduces on a laptop. `youtube_li
 | **588** (was `YL-l`) | Open the go-live post itself | **With a key:** the ordinary card, the real `watch?v=…` link, the title and the thumbnail — indistinguishable from a stream spotted from a home address. **Without a key:** the link is the channel's own `/live` page, the title reads **Live now** and there is no thumbnail. Both are correct; the key is what buys the id |
 | **589** (was `YL-m`) | Leave the stream running for half an hour and watch the quota line on the **Go-live** page ▸ **How live streams are spotted** | **Quota used today** goes to **101** and STAYS there — 100 for the one search plus 1 for the confirm. ⚠️ A number climbing by 100 every probe is the bug this row exists to catch; 10,000 a day is the whole allowance and 100 per probe would burn it before lunch |
 | **590** (was `YL-n`) | On the same card, read **Bot check** | *yes — that page had no video id* while the wall is being served, *no* once it is not. The same line is on `/youtube`'s staff half. It is the only place that explains why a card ever reads *Live now* with a key set |
-| **`YL-o`** | ⚠️ **The row this follow-up exists for.** With the linked streamer live on YouTube AND already live on Twitch (so their go-live session is open from the Twitch side), wait `youtube_live_poll_minutes`, then open the dashboard's **Logs** ▸ YouTube | A `youtube.live_seen` (or `would_live_seen`) row is there. Open its Summary: it reads `announced: false` and `because: open_session:twitch`, with `botcheck: true` behind the wall. There is NO second go-live post and NO second session — one announcement per person still holds. ⚠️ Before this fix that probe left nothing at all, measured on the live bot 2026-09-17 18:5x. Leave the stream running and check again after another poll: still exactly ONE row |
-| **`YL-p`** | On the **Go-live** page ▸ **How live streams are spotted**, read **Reading live now** | It counts the channels the probe currently reads as live — **1** in the row above, while **Live now** stays **0** because that counts open go-live sessions whose source is YouTube. The two disagreeing is the point: the probe is working and the announcement was skipped on purpose. The same line is on `/youtube`'s staff half as **reading live now**. ⚠️ Once the stream ends it must fall back to 0 after `youtube_live_end_misses` quiet probes — a number that never comes down means the poller stopped or the miss counter is not running |
+| **594** (was `YL-o`) | ⚠️ **The row this follow-up exists for.** With the linked streamer live on YouTube AND already live on Twitch (so their go-live session is open from the Twitch side), wait `youtube_live_poll_minutes`, then open the dashboard's **Logs** ▸ YouTube | A `youtube.live_seen` (or `would_live_seen`) row is there. Open its Summary: it reads `announced: false` and `because: open_session:twitch`, with `botcheck: true` behind the wall. There is NO second go-live post and NO second session — one announcement per person still holds. ⚠️ Before this fix that probe left nothing at all, measured on the live bot 2026-09-17 18:5x. Leave the stream running and check again after another poll: still exactly ONE row |
+| **595** (was `YL-p`) | On the **Go-live** page ▸ **How live streams are spotted**, read **Reading live now** | It counts the channels the probe currently reads as live — **1** in the row above, while **Live now** stays **0** because that counts open go-live sessions whose source is YouTube. The two disagreeing is the point: the probe is working and the announcement was skipped on purpose. The same line is on `/youtube`'s staff half as **reading live now**. ⚠️ Once the stream ends it must fall back to 0 after `youtube_live_end_misses` quiet probes — a number that never comes down means the poller stopped or the miss counter is not running |
 
 ## When something fails
 Take a screenshot, note the time, and paste it to Claude with the row number — the Fly logs around that
@@ -1900,3 +1906,15 @@ offline, and nothing more.
 | **583** (was `MM-l`) | Start a meeting and have everybody leave the voice channel | Black Bloc leaves on its own and writes the notes. The log row's reason reads *everyone left* |
 | **584** (was `MM-m`) | Set `minutes_mode` to **off** on the Settings page ▸ **events**, wait a minute, press Ctrl+R in Discord | `/minutes` is gone from the picker. The Minutes page still lists every meeting and says in words that the prototype is off |
 | **585** (was `MM-n`) | Press **Delete this meeting** on the site | The notes and the transcript go. The message already posted in Discord is left where it is — delete that by hand if you want it gone |
+
+## BOOT STATUS — red while it restarts, green when it is ready (`BS-a` … `BS-c`, branch `boot-status`, design [`../info/boot-status-design.md`](../info/boot-status-design.md))
+
+⚠️ **Nothing below has ever met Discord.** The build proved it in the test suite and against a
+read of the installed discord.py; **no member has seen a red dot, a green dot, or either
+sentence.** `BS-a` is the row that decides whether the feature works at all.
+
+| Row | Do | Expect |
+|---|---|---|
+| **591** (was `BS-a`) | Watch Black Bloc in the member list through a whole deploy — start looking before `flyctl deploy` finishes and keep looking for a minute after | ⚫ grey for the seconds between processes (Discord's, not ours), then 🔴 **Do Not Disturb** reading *"Restarting and booting — back in a moment"*, then 🟢 **online** reading *"Cookout attendees: N"*. ⚠️ **It must never read green while still saying "restarting"** — that is the one thing the build is shaped to prevent |
+| **592** (was `BS-b`) | Open the dashboard ▸ **Settings** ▸ **core**, change `boot_status_text` to something you will recognise, save, then deploy again | The new words are what the red status says on the next boot. The old words never appear again |
+| **593** (was `BS-c`) | Set `boot_status_mode` to **off** on the same page and deploy once more | Black Bloc simply appears 🟢 online with the head count — no red, no sentence, and nothing red on the way down either. Put it back to **on** afterwards |

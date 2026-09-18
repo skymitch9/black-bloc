@@ -1,8 +1,10 @@
 from types import SimpleNamespace
 
+import discord
 from discord import app_commands
 
 from black_bloc import bot as bot_module
+from black_bloc import settings_store
 from black_bloc.bot import COGS, BlackBlocBot
 from black_bloc.logkinds import FEATURES
 
@@ -117,6 +119,77 @@ async def test_bot_builds_and_cogs_load(settings):
     names = {cmd.name for cmd in bot.tree.get_commands()}
     assert {"ping", "about"} <= names
     await bot.close()
+
+
+async def test_the_very_first_thing_discord_sees_is_red_and_says_it_is_restarting(settings):
+    """IDENTIFY carries it, so there is no moment where a booting bot reads as green."""
+    bot = BlackBlocBot(settings)
+
+    said = bot.activity
+    assert bot.status is discord.Status.dnd
+    assert isinstance(said, discord.CustomActivity)
+    assert said.name == settings_store.BOOT_STATUS_TEXT
+    await bot.close()
+
+
+async def test_the_mode_off_is_the_older_behaviour_of_simply_appearing(settings, monkeypatch):
+    monkeypatch.setattr(settings_store, "BOOT_STATUS_MODE_DEFAULT", "off")
+
+    bot = BlackBlocBot(settings)
+
+    assert bot.activity is None
+    assert bot._connection._status is None
+    await bot.close()
+
+
+async def test_the_stored_sentence_is_the_one_identify_carries(tmp_path, monkeypatch):
+    """The database is shut at construct time, so `setup_hook` re-reads it before it connects."""
+    from black_bloc.config import load_settings
+
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    bot = BlackBlocBot(
+        load_settings(_env_file=None, database_path=tmp_path / "boot.sqlite3", dev_guild_id=7)
+    )
+    await bot.db.connect()
+    await bot.store.set(7, settings_store.BOOT_STATUS_TEXT_KEY, "Back in five")
+
+    bot._apply_boot_presence()
+
+    said = bot.activity
+    assert bot.status is discord.Status.dnd
+    assert said.name == "Back in five"
+    await bot.close()
+
+
+async def test_a_planned_shutdown_goes_red_before_the_connection_closes(settings):
+    said = []
+    bot = BlackBlocBot(settings)
+
+    async def recorder(**kwargs):
+        said.append((kwargs, bot.is_closed()))
+
+    bot.change_presence = recorder
+    await bot.close()
+
+    assert len(said) == 1
+    assert said[0][0]["status"] is discord.Status.dnd
+    assert said[0][0]["activity"].name == settings_store.SHUTDOWN_STATUS_TEXT
+    assert said[0][1] is False
+    assert bot.is_closed()
+
+
+async def test_a_shutdown_status_discord_refuses_never_delays_the_close(settings, caplog):
+    bot = BlackBlocBot(settings)
+
+    async def refuses(**kwargs):
+        raise RuntimeError("the gateway went away")
+
+    bot.change_presence = refuses
+    with caplog.at_level("DEBUG", logger="black_bloc.bot"):
+        await bot.close()
+
+    assert bot.is_closed()
+    assert "the shutdown status was not set" in caplog.text
 
 
 async def test_an_at_mention_is_never_read_as_a_prefix_command(settings, caplog):

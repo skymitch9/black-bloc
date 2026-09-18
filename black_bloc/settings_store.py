@@ -1985,6 +1985,43 @@ KEY_HELP.update(
 )
 
 
+# Boot status (`docs/info/boot-status-design.md`) — red while it boots, green when it is ready.
+BOOT_STATUS_MODE = "boot_status_mode"
+BOOT_STATUS_TEXT_KEY = "boot_status_text"
+SHUTDOWN_STATUS_TEXT_KEY = "shutdown_status_text"
+BOOT_STATUS_MODES = ("off", "on")
+BOOT_STATUS_MODE_DEFAULT = "on"
+BOOT_STATUS_TEXT = "Restarting and booting — back in a moment"
+SHUTDOWN_STATUS_TEXT = "Restarting — back in a moment"
+
+KEY_TYPES.update(
+    {
+        BOOT_STATUS_MODE: "enum",
+        BOOT_STATUS_TEXT_KEY: "text",
+        SHUTDOWN_STATUS_TEXT_KEY: "text",
+    }
+)
+KEY_CHOICES[BOOT_STATUS_MODE] = BOOT_STATUS_MODES
+KEY_HELP.update(
+    {
+        BOOT_STATUS_MODE: (
+            "on makes Black Bloc read Do Not Disturb with the restarting sentence from the "
+            "moment Discord sees it until every cog is loaded and it is ready, and flip to it "
+            "again on the way down; off is the older behaviour, where it simply appears"
+        ),
+        BOOT_STATUS_TEXT_KEY: (
+            "the status Black Bloc carries while it is starting up, beside the red Do Not "
+            "Disturb dot. It is replaced by the member count the moment it is ready"
+        ),
+        SHUTDOWN_STATUS_TEXT_KEY: (
+            "the status Black Bloc carries on its way down, beside the red dot. Discord keeps "
+            "a bot's status only while it is connected, so this shows for the last second and "
+            "then it reads offline"
+        ),
+    }
+)
+
+
 # Operator read token — the token itself is the on/off switch; this is the one decision left.
 KEY_TYPES.update({"operator_read_log": "bool"})
 KEY_HELP.update(
@@ -2427,6 +2464,9 @@ CORE_KEYS = (
     ERROR_RETRY_LABEL_KEY,
     ERROR_RETRY_MINUTES_KEY,
     ERROR_RETRY_EXPIRED_KEY,
+    BOOT_STATUS_MODE,
+    BOOT_STATUS_TEXT_KEY,
+    SHUTDOWN_STATUS_TEXT_KEY,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -3244,6 +3284,12 @@ class SettingsStore:
             return ERROR_RETRY_MINUTES
         if key == ERROR_RETRY_EXPIRED_KEY:
             return ERROR_RETRY_EXPIRED
+        if key == BOOT_STATUS_MODE:
+            return BOOT_STATUS_MODE_DEFAULT
+        if key == BOOT_STATUS_TEXT_KEY:
+            return BOOT_STATUS_TEXT
+        if key == SHUTDOWN_STATUS_TEXT_KEY:
+            return SHUTDOWN_STATUS_TEXT
         if key == HIDE_COMMANDS_WHEN_OFF:
             return HIDE_COMMANDS_WHEN_OFF_DEFAULT
         if key == LOGS_COUNT:

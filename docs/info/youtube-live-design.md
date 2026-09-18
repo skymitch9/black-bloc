@@ -277,5 +277,5 @@ ran.*
 26. ⚠️ **none of this was verified against the live bot.** The suite proves the row, the
     once-per-stream rule and both health numbers against fixtures and a fake client; the wall
     itself is still unreachable from here (Deviation 23), and no browser rendered the Go-live card.
-    Sweeps **`YL-o`** and **`YL-p`** are the proof that is missing, and like 586-590 they can only
+    Sweeps **594–595** (`YL-o`, `YL-p`) are the proof that is missing, and like 586-590 they can only
     be run on Fly.

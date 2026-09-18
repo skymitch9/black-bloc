@@ -86,6 +86,9 @@ export const LABELS = {
   error_retry_label: 'What the Try again button is called',
   error_retry_minutes: 'How long a Try again button keeps working',
   error_retry_expired: 'What a Try again pressed too late says',
+  boot_status_mode: 'Whether the bot reads red while it is restarting',
+  boot_status_text: 'What its status says while it is starting up',
+  shutdown_status_text: 'What its status says on the way down',
 
   tempvoice_mode: 'Whether people can make their own voice rooms, and who sees the lobby',
   tempvoice_creator_ids: 'Which channels people join to get a room',

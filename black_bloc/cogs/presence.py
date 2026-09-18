@@ -8,7 +8,7 @@ import discord
 from discord.ext import commands, tasks
 
 from ..loops import wait_ready
-from ..presence import ensure_bio, update_status
+from ..presence import ensure_bio, go_green, update_status
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +94,8 @@ class Presence(commands.Cog):
     async def on_ready(self) -> None:
         if not self.status.is_running():
             self.status.start()
-        await self.apply_status()
+        if await self.apply_status() is None:
+            await go_green(self.bot)
         if self._bio_done:
             return
         self._bio_done = True

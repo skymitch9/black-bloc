@@ -2325,6 +2325,32 @@ async def test_the_rehearsal_home_help_says_it_widens_test_mode(store):
     assert "test mode" in said and "one channel" in said
 
 
+async def test_the_three_boot_status_keys_are_core_and_reachable_from_both_doors(store):
+    """Checklist 33, and the 25-group cap: `boot_` and `shutdown_` would each be a group."""
+    for key in (
+        settings_store.BOOT_STATUS_MODE,
+        settings_store.BOOT_STATUS_TEXT_KEY,
+        settings_store.SHUTDOWN_STATUS_TEXT_KEY,
+    ):
+        assert key in KEY_TYPES and KEY_HELP.get(key)
+        assert key in settings_store.CORE_KEYS
+        assert namespace_of(key) == "core"
+    assert KEY_TYPES[settings_store.BOOT_STATUS_MODE] == "enum"
+    assert KEY_CHOICES[settings_store.BOOT_STATUS_MODE] == ("off", "on")
+    assert KEY_TYPES[settings_store.BOOT_STATUS_TEXT_KEY] == "text"
+    assert KEY_TYPES[settings_store.SHUTDOWN_STATUS_TEXT_KEY] == "text"
+
+
+async def test_the_boot_status_ships_on_with_both_sentences_written(store):
+    assert store.get(7, settings_store.BOOT_STATUS_MODE) == "on"
+    assert store.get(7, settings_store.BOOT_STATUS_TEXT_KEY) == settings_store.BOOT_STATUS_TEXT
+    assert (
+        store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
+        == settings_store.SHUTDOWN_STATUS_TEXT
+    )
+    assert len(settings_store.CORE_KEYS) == 24
+
+
 async def test_stored_values_finds_every_guild_that_set_a_key(store):
     assert store.stored_values(settings_store.SHADOW_CHANNEL) == {}
 
