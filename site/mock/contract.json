@@ -1028,7 +1028,8 @@
         "probed",
         "quota_today",
         "botcheck",
-        "live_now"
+        "live_now",
+        "reading_live"
       ]
     },
     {

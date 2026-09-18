@@ -295,6 +295,7 @@ async def test_status_says_whether_the_key_is_set_and_how_the_sweep_is_doing(
     assert body["last_probe_error"] is None
     assert body["probed"] == 3 and body["quota_today"] == 0 and body["live_now"] == 0
     assert body["botcheck"] is False
+    assert body["reading_live"] == 0
 
 
 async def test_status_says_when_the_last_probe_was_served_youtubes_bot_check(
@@ -307,6 +308,20 @@ async def test_status_says_when_the_last_probe_was_served_youtubes_bot_check(
     sign_in(client)
 
     assert client.get("/api/youtube/status").json()["botcheck"] is True
+
+
+async def test_status_counts_the_channels_the_probe_reads_as_live_right_now(
+    client, sign_in, web, guild, wf
+):
+    """A probe that reads live while another source holds the session moves this, not live_now."""
+    cog = FakeCog(web.db, keyed=True)
+    cog.live_video = {CHANNEL: "?"}
+    web.cogs["YouTube"] = cog
+    sign_in(client)
+
+    body = client.get("/api/youtube/status").json()
+
+    assert body["reading_live"] == 1 and body["live_now"] == 0
 
 
 async def test_status_says_what_the_live_probe_is_doing_when_the_cog_is_loaded(

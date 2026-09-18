@@ -546,6 +546,7 @@ def live_lines(live: dict[str, Any] | None, *, keyed: bool = False) -> list[str]
         f"**last probe error** — {live.get('last_probe_error') or 'none'}",
         f"**channels probed** — {live.get('probed') or 0}",
         f"**live now** — {live.get('open') or 0}",
+        f"**reading live now** — {live.get('reading_live') or 0}",
         f"**bot check** — {BOT_CHECKED if live.get('botcheck') else 'no'}",
     ]
     if keyed:

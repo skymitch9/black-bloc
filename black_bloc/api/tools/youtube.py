@@ -195,6 +195,7 @@ def build_router(bot: Any) -> APIRouter:
             "quota_today": live["quota"],
             "botcheck": live["botcheck"],
             "live_now": live["open"],
+            "reading_live": live["reading_live"],
         }
 
     return router

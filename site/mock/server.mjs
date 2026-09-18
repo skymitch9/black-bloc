@@ -3815,6 +3815,7 @@ route('GET', '/api/youtube/status', (context) => {
     quota_today: 0,
     botcheck: false,
     live_now: 0,
+    reading_live: 0,
   };
 });
 

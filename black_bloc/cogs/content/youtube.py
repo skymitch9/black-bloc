@@ -86,6 +86,8 @@ log = logging.getLogger(__name__)
 COG_NAME = "YouTube"
 GOLIVE_COG = "GoLive"
 YOUTUBE_SOURCE = "youtube"
+OPEN_SESSION_BECAUSE = "open_session:{source}"
+UNKNOWN_SOURCE = "unknown"
 POLL_FAILURES_BEFORE_DEGRADED = 3
 NO_KEY = (
     "youtube: no YOUTUBE_API_KEY, so uploads run on the public feed alone — Shorts are still "
@@ -269,6 +271,16 @@ def _row_value(row: Any, key: str) -> Any:
         return row[key]
     except (IndexError, KeyError):
         return None
+
+
+def live_seen_details(channel_id: str, video_id: Any, probe: Any, mode: str) -> dict[str, Any]:
+    """The facts every `youtube.live_seen` row carries, announced or not."""
+    return {
+        "channel_id": channel_id,
+        "video_id": video_id,
+        "botcheck": bool(getattr(probe, "botcheck", False)),
+        "mode": mode,
+    }
 
 
 def cog_of(bot: Any) -> Any:
@@ -827,7 +839,21 @@ class YouTube(commands.Cog):
         if known is not None and (probe.video_id is None or known == probe.video_id):
             return
         guild = member.guild
-        if await self._any_open_session(guild, member) is not None:
+        open_session = await self._any_open_session(guild, member)
+        if open_session is not None:
+            if known is None:
+                await self._live_seen(
+                    guild,
+                    member,
+                    live_seen_details(channel_id, probe.video_id, probe, mode)
+                    | {
+                        "announced": False,
+                        "because": OPEN_SESSION_BECAUSE.format(
+                            source=_row_value(open_session, "source") or UNKNOWN_SOURCE
+                        ),
+                    },
+                    mode,
+                )
             self.live_video[channel_id] = probe.video_id or LIVE_ID_UNKNOWN
             return
         video_id = probe.video_id or await self._searched(guild, member, channel_id)
@@ -844,22 +870,30 @@ class YouTube(commands.Cog):
             if video_id
             else channel_info(channel_id)
         )
+        await self._live_seen(
+            guild,
+            member,
+            live_seen_details(channel_id, video_id, probe, mode)
+            | {
+                "url": info.url,
+                "title": info.title,
+                "confirmed": confirmed is not None,
+                "announced": True,
+            },
+            mode,
+        )
+        await self._go_live(guild, member, info)
+
+    async def _live_seen(
+        self, guild: Any, member: Any, details: dict[str, Any], mode: str
+    ) -> None:
         await log_action(
             self.bot,
             guild,
             "youtube.live_seen" if mode == "on" else "youtube.would_live_seen",
             target=member,
-            details={
-                "channel_id": channel_id,
-                "video_id": video_id,
-                "url": info.url,
-                "title": info.title,
-                "confirmed": confirmed is not None,
-                "botcheck": bool(getattr(probe, "botcheck", False)),
-                "mode": mode,
-            },
+            details=details,
         )
-        await self._go_live(guild, member, info)
 
     async def _searched(self, guild: Any, member: Any, channel_id: str) -> str | None:
         """100 units, on the transition only: the bot-check page carries no canonical link."""
@@ -1341,6 +1375,7 @@ async def live_health(bot: Any, guild: Any) -> dict[str, Any]:
 
     cog = cog_of(bot)
     store = bot.store
+    reading = sorted(str(one) for one in (getattr(cog, "live_video", None) or {}))
     open_now = 0
     if getattr(bot.db, "is_connected", False):
         open_now = len(
@@ -1361,6 +1396,8 @@ async def live_health(bot: Any, guild: Any) -> dict[str, Any]:
         "quota": int(getattr(cog, "confirms", 0) or 0),
         "botcheck": bool(getattr(cog, "last_botcheck", False)),
         "open": open_now,
+        "reading_live": len(reading),
+        "reading_live_channels": reading,
     }
 
 

@@ -642,6 +642,7 @@ function liveStatus(status) {
     ['Last probe error', status.last_probe_error || 'none'],
     ['Channels probed', `${status.probed || 0}, every ${status.live_minutes} minute(s)`],
     ['Live now', `${status.live_now || 0}, ended after ${status.live_end_misses} quiet probe(s)`],
+    ['Reading live now', `${status.reading_live || 0} channel(s)`],
     ['Quota used today', `${status.quota_today || 0} unit(s)`],
     ['Bot check', status.botcheck ? badge('yes — that page had no video id', 'warn') : 'no'],
   ];

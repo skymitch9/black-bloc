@@ -2101,3 +2101,116 @@ async def test_the_staff_panel_says_when_a_probe_was_served_the_bot_check(
     embed, _view = await build_panel(bot, bot.guild, member)
 
     assert "**bot check** — yes" in embed.description
+
+
+# --- a probe that reads live while another source's session is open (the silent path) -------------
+
+
+async def open_twitch_session(db):
+    await db.conn.execute(
+        "INSERT INTO golive_sessions(guild_id, user_id, source, platform, started_at, mode) "
+        "VALUES (?, ?, 'twitch', 'Twitch', '2026-09-17T18:00:00+00:00', 'on')",
+        (GUILD, STREAMER),
+    )
+    await db.conn.commit()
+
+
+async def test_a_stream_read_live_while_their_twitch_session_is_open_leaves_a_row_saying_so(
+    bot, cog, golive, db, member
+):
+    """The probe worked; the one-announcement-per-person rule is why nothing was posted."""
+    await live_on(bot)
+    await open_twitch_session(db)
+    client = await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
+
+    await cog.probe_all()
+
+    seen = await details_logged(db, "youtube.live_seen")
+    assert len(seen) == 1
+    assert seen[0]["announced"] is False
+    assert seen[0]["because"] == "open_session:twitch"
+    assert seen[0]["channel_id"] == CHANNEL and seen[0]["video_id"] is None
+    assert seen[0]["botcheck"] is True and seen[0]["mode"] == "on"
+    assert client.searched == [] and client.confirmed == [] and cog.confirms == 0
+    assert len(await sessions(db)) == 1
+    assert bot.guild.get_channel(GOLIVE_CHANNEL).posts == []
+    assert "golive.announce" not in await kinds_logged(db)
+
+
+async def test_that_row_is_written_once_per_stream_and_not_once_per_probe(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await open_twitch_session(db)
+    await live_linked(
+        db, cog, BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, keyed=True
+    )
+
+    await cog.probe_all()
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert len(await details_logged(db, "youtube.live_seen")) == 1
+
+
+async def test_the_row_shadows_with_the_live_half_exactly_as_the_announcing_one_does(
+    bot, cog, golive, db, member
+):
+    await live_on(bot, mode="shadow")
+    await open_twitch_session(db)
+    await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
+
+    await cog.probe_all()
+
+    assert await details_logged(db, "youtube.live_seen") == []
+    would = await details_logged(db, "youtube.would_live_seen")
+    assert len(would) == 1 and would[0]["because"] == "open_session:twitch"
+    assert would[0]["announced"] is False and would[0]["mode"] == "shadow"
+
+
+async def test_the_announcing_row_says_it_announced_and_gives_no_reason_not_to(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE)
+
+    await cog.probe_all()
+
+    seen = (await details_logged(db, "youtube.live_seen"))[0]
+    assert seen["announced"] is True and "because" not in seen
+    assert seen["video_id"] == LIVE_VIDEO and seen["url"] == LIVE_WATCH
+
+
+async def test_the_health_counts_the_channels_the_probe_reads_as_live_right_now(
+    bot, cog, golive, db, member
+):
+    """`live_now` counts YouTube-source sessions only, so a silent probe needs its own number."""
+    await live_on(bot)
+    await open_twitch_session(db)
+    await live_linked(db, cog, BOTCHECK_LIVE_PAGE, OFFLINE_PAGE, OFFLINE_PAGE, keyed=True)
+    assert (await live_health(bot, bot.guild))["reading_live"] == 0
+
+    await cog.probe_all()
+
+    health = await live_health(bot, bot.guild)
+    assert health["reading_live"] == 1
+    assert health["reading_live_channels"] == [CHANNEL]
+    assert health["open"] == 0
+
+    await cog.probe_all()
+    assert (await live_health(bot, bot.guild))["reading_live"] == 1
+
+    await cog.probe_all()
+    assert (await live_health(bot, bot.guild))["reading_live"] == 0
+
+
+async def test_the_staff_panel_says_how_many_channels_read_as_live(bot, cog, golive, db, member):
+    await live_on(bot)
+    await open_twitch_session(db)
+    await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
+    await cog.probe_all()
+    _staff(bot)
+
+    embed, _view = await build_panel(bot, bot.guild, member)
+
+    assert "**reading live now** — 1" in embed.description
