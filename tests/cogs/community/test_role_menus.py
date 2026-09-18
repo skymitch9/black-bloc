@@ -2024,6 +2024,8 @@ async def test_a_click_after_the_database_goes_away_answers_a_sentence(bot, db, 
     await self_serve_menu(db)
     interaction = await open_the_panel(bot, lead)
     bot.db = FakeDownDatabase()
+    interaction.response.deferred = False
+    interaction.response.is_done = lambda: interaction.response.deferred
 
     await press(interaction, "Grants…")
 

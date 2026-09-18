@@ -380,6 +380,7 @@ async def open_the_panel(cog, bot, who):
 async def open_the_card(cog, bot, who, train_id):
     """The select is one door onto the card; a finished train is only reachable this way."""
     interaction = await open_the_panel(cog, bot, who)
+    interaction.response.messages.clear()
     await cog_module.open_card(interaction, train_id, interaction.view)
     return interaction
 
@@ -1223,6 +1224,7 @@ async def test_every_move_defers_before_it_touches_discord(bot, cog, organizer, 
         lambda: press(interaction, "Refresh"),
     ):
         interaction.response.deferred = False
+        interaction.response.messages.clear()
         await doing()
         assert interaction.response.deferred is True
 
@@ -1233,6 +1235,8 @@ async def test_a_click_with_the_database_gone_answers_rather_than_crashing(
     train_id = await a_train(db)
     interaction = await open_the_panel(cog, bot, alice)
     db_is_down(monkeypatch)
+    interaction.response.deferred = False
+    interaction.response.is_done = lambda: interaction.response.deferred
 
     await pick_one(interaction, "A train…", str(train_id))
 
