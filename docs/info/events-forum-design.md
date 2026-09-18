@@ -5,7 +5,7 @@
 > foot BEFORE the sections above: **fifteen** things differ from what is written here, and deviations **1, 3, 5 and
 > 6** are the ones that matter (six tags not five; an archived post is NOT a gone post; the retention sweep logs
 > `event.post_archived` rather than claiming a deletion; there is no test-channel fall-back). Schema **44 → 45**
-> (`events.review_kind`) — ⚠️ **migrate before deploy.** Registry **+2**; `pytest -n 8` **6696 → 6755**, green
+> (`events.review_kind`) — ⚠️ **migrate before deploy.** Registry **280 → 282**; `pytest -n 8` **6696 → 6755**, green
 > forward and under `BB_REVERSE=1`; mock **20 pages / 187 routes**. `events_review_mode` ships **room**, so nothing
 > changes until the owner flips it. Was: 📐 DESIGN, dispatched to Opus 2026-09-17 21:3x. **Last verified: 2026-09-17 21:2x** against `main` `0707768` (v135): `black_bloc/events.py`
 > `make_review_channel` (~1785, `guild.create_text_channel` under `events_category_id` or the test category, `staff_reach`
