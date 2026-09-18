@@ -1,7 +1,7 @@
 {
-  "release": "v140",
-  "commit": "698f33a",
+  "release": "v141",
+  "commit": "d6c271d",
   "changed_features": [
-    "posts"
+    "modmail"
   ]
 }
