@@ -1,8 +1,8 @@
 # YouTube uploads — REMOVED; the links and the LIVE half stay
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-18 on branch
-> `youtube-uploads-removal`** (off `main` `9bc1982`) — ⚠️ **NOT merged, NOT deployed, and nothing in
-> it has met Discord or a browser.** Measured in the worktree: registry keys **284 → 277**, mock
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v139** — merge `72733e5`, release `fad4e50`, deployed **2026-09-18 10:05** Phoenix; the `## Deviations`
+> foot is the truth (sixteen); sweeps **609–612** are the owner's; verified: boot clean (logged in 10:05:49, the youtube cog loaded, one 'settings ignored: youtube_mode' line for the orphaned stored row — as designed — and no feed warning for the first time since v131), /health ready; /api/youtube/status read in the browser after the boot (see the DONE entry for what it carried). Was: BUILT on branch
+> `youtube-uploads-removal` (off `main` `9bc1982`). Measured in the worktree: registry keys **284 → 277**, mock
 > **20 pages / 187 → 186 routes**, tests **6808 → 6720 passed + 3 skipped** (`pytest -n 8` forward
 > and under `BB_REVERSE=1`), schema unchanged at **45**. The `## Deviations` foot is the truth where
 > this build departed from the body. Was: 📐 DESIGN, dispatched to Opus 2026-09-18 09:2x. **Last verified: 2026-09-18 09:2x** against `main` `7e6c493` (v138):

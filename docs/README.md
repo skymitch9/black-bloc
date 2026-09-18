@@ -62,8 +62,8 @@ for why).
 
 ⚠️ **Everything under `docs/` is reachable from this table.** The eight rows above
 are the *whole* top level (nothing else may live there — `DOCS_STANDARD.md` §1).
-The individual files in `access/` (**10** beside its index) and `info/` (**66**
-beside its index, plus the `mock-direction-a/` folder)
+The individual files in `access/` (**10** beside its index) and `info/` (**88**
+beside its index — measured 2026-09-18, the 66 had drifted since 2026-09-11 —, plus the `mock-direction-a/` folder)
 are listed by their own indexes, [`access/README.md`](access/README.md) and
 [`info/README.md`](info/README.md), not here — this page does not duplicate an
 index (§7). `archive/` holds the retired docs and the one-off `current-bots/`
