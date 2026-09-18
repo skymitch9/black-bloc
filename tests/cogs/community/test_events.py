@@ -61,6 +61,8 @@ from black_bloc.events import (
 )
 from black_bloc.settings_store import (
     DEFAULT_TIMEZONE_KEY,
+    ERROR_RETRY_LABEL,
+    ERROR_SENTENCE,
     EVENTS_APPROVER_ROLE_KEY,
     EVENTS_POSTS_WHERE_KEY,
     EVENTS_ROOM_DELETE_KEY,
@@ -4292,3 +4294,78 @@ async def test_the_filed_request_reaches_the_request_channel_like_any_other(
         and one.kwargs["embed"].to_dict()["title"] == "New request #1"
         for one in posted
     )
+
+
+# The 17:15 crash, end to end (`docs/info/errors-design.md`): the zone picker stored the zone,
+# handed the same interaction to the draft, and the draft's render raised. The member saw one
+# sentence and a stale card with nothing to press.
+
+
+async def click_and_catch(bot, who, item):
+    """discord.py routes an item's failure to its view's `on_error`; a direct call does not."""
+    interaction = FakeInteraction(bot, who)
+    try:
+        await item.callback(interaction)
+    except Exception as exc:
+        await item.view.on_error(interaction, exc, item)
+    return interaction
+
+
+def raises_once(monkeypatch, name="render_draft"):
+    """The render fails the first time and works the second — the shape of the real crash."""
+    real = getattr(events_cog, name)
+    broken = [True]
+
+    async def once(*args, **kwargs):
+        if broken:
+            broken.clear()
+            raise discord.HTTPException(
+                _Response(400), "This interaction has already been responded to"
+            )
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(events_cog, name, once)
+    return broken
+
+
+async def test_a_zone_picker_crash_offers_try_again_and_the_draft_comes_back_with_the_title(
+    cog, bot, member, db, monkeypatch
+):
+    _opened, draft = await open_draft_panel(cog, bot, member)
+    draft.fields.title = "Cookout in the park"
+    zone = await click(bot, member, find_item(draft, events_pure.ZONE_PANEL_BUTTON))
+    picker = pick(find_select(card_view(zone), ZONE_PLACEHOLDER), ["Europe/London"])
+    raises_once(monkeypatch)
+
+    failed = await click_and_catch(bot, member, picker)
+    said = failed.response.messages[-1]
+
+    assert await get_timezone(db, member.id) == "Europe/London"
+    assert said["content"] == ERROR_SENTENCE
+    assert [one.label for one in said["view"].children] == [ERROR_RETRY_LABEL]
+    assert "error.panel" in await action_kinds(db)
+
+    await said["view"].children[0].callback(FakeInteraction(bot, member))
+
+    assert card_embed(failed).title == DRAFT_TITLE
+    assert "Cookout in the park" in card_embed(failed).description
+    assert "Europe/London" in card_embed(failed).description
+
+
+async def test_the_row_a_zone_picker_crash_writes_names_the_panel_and_the_step(
+    cog, bot, member, db, monkeypatch
+):
+    _opened, draft = await open_draft_panel(cog, bot, member)
+    zone = await click(bot, member, find_item(draft, events_pure.ZONE_PANEL_BUTTON))
+    picker = pick(find_select(card_view(zone), ZONE_PLACEHOLDER), ["Europe/London"])
+    raises_once(monkeypatch)
+
+    await click_and_catch(bot, member, picker)
+
+    cur = await db.conn.execute("SELECT details FROM action_log WHERE kind = 'error.panel'")
+    details = json.loads((await cur.fetchone())["details"])
+
+    assert details["where"] == "ZonePanel"
+    assert details["error"] == "HTTPException"
+    assert details["step"].startswith("black_bloc/cogs/community/events.py:")
+    assert "already been responded to" in details["message"]

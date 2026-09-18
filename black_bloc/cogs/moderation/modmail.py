@@ -3092,7 +3092,28 @@ def pointed_keys(store: Any, guild: Any) -> list[str]:
 
 
 def new_panel(bot: Any, guild: Any, cog: Any) -> ModmailPanel:
-    return ModmailPanel(minutes_for(bot, guild.id), cog)
+    panel = ModmailPanel(minutes_for(bot, guild.id), cog)
+    panel.again = render_surface
+    return panel
+
+
+async def render_surface(
+    interaction: discord.Interaction, view: Any, surface: str | None = None
+) -> None:
+    """Redraw whichever surface a panel is sitting on; Back, Refresh and Try again all ask."""
+    found = getattr(view, "surface", ROOT) if surface is None else surface
+    if found == SETUP:
+        await open_setup(interaction, view)
+    elif found == BLOCKED_MOVE:
+        await open_blocked(interaction, view, picked=view.picked_block)
+    elif found == SNIPPETS:
+        await open_snippets(interaction, view, picked=view.picked_snippet)
+    elif found == FORGET:
+        await open_forget(interaction, view)
+    elif found == TICKET_BUTTON:
+        await open_ticket_button(interaction, view)
+    else:
+        await open_root(interaction, view, staff=getattr(view, "staff", True))
 
 
 def setup_lines(bot: Any, guild: Any) -> list[str]:
@@ -3792,19 +3813,9 @@ class MoveButton(discord.ui.Button):
 
     async def go_back(self, interaction: discord.Interaction, view: Any) -> None:
         """Back is always the root; Refresh redraws the surface the button is sitting on."""
-        surface = ROOT if self.move.action == BACK else getattr(view, "surface", ROOT)
-        if surface == SETUP:
-            await open_setup(interaction, view)
-        elif surface == BLOCKED_MOVE:
-            await open_blocked(interaction, view, picked=view.picked_block)
-        elif surface == SNIPPETS:
-            await open_snippets(interaction, view, picked=view.picked_snippet)
-        elif surface == FORGET:
-            await open_forget(interaction, view)
-        elif surface == TICKET_BUTTON:
-            await open_ticket_button(interaction, view)
-        else:
-            await open_root(interaction, view, staff=getattr(view, "staff", True))
+        await render_surface(
+            interaction, view, ROOT if self.move.action == BACK else None
+        )
 
     async def open_modal(self, interaction: discord.Interaction, view: Any) -> None:
         if not await still_staff(interaction):

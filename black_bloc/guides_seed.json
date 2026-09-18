@@ -114,6 +114,7 @@
       "faults": [
         {"symptom": "The day you typed was refused", "answer": "Write it as YYYY-MM-DD. The box reopens with what you typed."},
         {"symptom": "No Submit button", "answer": "A title and all three of Day, Hour and Minute are needed. The panel says which is missing."},
+        {"symptom": "Black Bloc says it hit an error", "answer": "Press **Try again** on that sentence — the card comes back with everything you had typed. Staff can read what broke on the dashboard’s Logs page under **Errors**."},
         {"symptom": "You want to withdraw it", "answer": "Press **Call one off…** on /event and confirm."}
       ],
       "facts": [

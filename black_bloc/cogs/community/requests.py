@@ -1001,6 +1001,7 @@ def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embe
     for action in handoff_actions(bot, guild, row):
         view.add_item(CardHandoffButton(row_value(row, "id"), action))
     view.add_item(BackButton())
+    view.again = lambda one, prev: open_card(one, int(row_value(row, "id")), prev)
     return embed, view
 
 
@@ -1062,6 +1063,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         view.add_item(LogsButton())
     if staff and not forum_channel_id(store, guild.id):
         view.add_item(MakeForumButton())
+    view.again = back_to_panel
     return embed, view
 
 

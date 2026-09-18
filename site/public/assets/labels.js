@@ -82,6 +82,10 @@ export const LABELS = {
   selftest_channel_id: 'Where the self-test posts the cards it is proving',
   selftest_purge_minutes: 'How long the self-test’s cards stay before the bot deletes them',
   selftest_log_level: 'How much of the self-test is repeated into Discord',
+  error_sentence: 'What somebody is told when a step fails and Try again can put them back',
+  error_retry_label: 'What the Try again button is called',
+  error_retry_minutes: 'How long a Try again button keeps working',
+  error_retry_expired: 'What a Try again pressed too late says',
 
   tempvoice_mode: 'Whether people can make their own voice rooms, and who sees the lobby',
   tempvoice_creator_ids: 'Which channels people join to get a room',

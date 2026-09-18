@@ -443,7 +443,7 @@ MODAL_LABELS = {
 
 class SettingsPanel(Panel):
     def __init__(self, minutes: int, *, back: Any = None) -> None:
-        super().__init__(minutes, footer=sp.PANEL_TIMEOUT_FOOTER)
+        super().__init__(minutes, footer=sp.PANEL_TIMEOUT_FOOTER, again=again)
         self.back = back or render_root
         self.rerender = render_root
 

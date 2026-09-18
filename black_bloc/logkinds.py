@@ -19,6 +19,13 @@ VIA_WORDS: dict[str, str] = {
     VIA_FORUM: "A forum post",
 }
 
+ERROR_HEAD = "error"
+ERROR_COMMAND = f"{ERROR_HEAD}.command"
+ERROR_PANEL = f"{ERROR_HEAD}.panel"
+ERROR_MODAL = f"{ERROR_HEAD}.modal"
+ERROR_BUTTON = f"{ERROR_HEAD}.button"
+ERROR_KINDS: tuple[str, ...] = (ERROR_COMMAND, ERROR_PANEL, ERROR_MODAL, ERROR_BUTTON)
+
 OFF = "off"
 IMPORTANT_ONLY = "important"
 ALL = "all"
@@ -50,6 +57,7 @@ FEATURES = (
 )
 
 HEADS: dict[str, str] = {
+    ERROR_HEAD: CORE,
     "settings": CORE,
     "commands": CORE,
     "presence": CORE,
@@ -155,6 +163,7 @@ IMPORTANT_SUFFIXES = (
 
 IMPORTANT: frozenset[str] = frozenset(
     {
+        *ERROR_KINDS,
         "automod.deleted",
         "case.restored",
         "case.voided",
@@ -585,6 +594,12 @@ __all__ = [
     "CHAT_POOL_RETIRED",
     "CHAT_POOL_SYNCED",
     "CORE",
+    "ERROR_BUTTON",
+    "ERROR_COMMAND",
+    "ERROR_HEAD",
+    "ERROR_KINDS",
+    "ERROR_MODAL",
+    "ERROR_PANEL",
     "FEATURES",
     "FEATURES_WITHOUT_A_COMMAND",
     "FEATURE_LABELS",

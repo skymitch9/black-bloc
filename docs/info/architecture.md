@@ -8,6 +8,24 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-17 (Errors — every failure on the site's Logs page, and a Try again that keeps the
+> member's place, branch `errors` off `e7093d7`; design `info/errors-design.md`; ⚠️ BUILT, NOT
+> MERGED, NOT DEPLOYED, nothing has met Discord):** schema **unchanged** — no migration and no
+> backfill. Registry keys **+4**, all under `core` through `CORE_KEYS` (`error_sentence` text,
+> `error_retry_label` text **Try again**, `error_retry_minutes` int 1–30 **10**,
+> `error_retry_expired` text) — `namespace_of` would otherwise have invented an `error` group and
+> `settings_panel.groups()` is at Discord's cap of 25. ⚠️ **No new module** — `command_errors.py`
+> grows `record()`, `offer()` and `RetryView`, and `panels.Panel` grows an `again` move with a
+> `render_again` property. **One new log-kind family: `error.command` / `error.panel` /
+> `error.modal` / `error.button`, all IMPORTANT, under `HEADS["error"] = "core"`** — the first
+> family whose rows are written by the error handler rather than by a feature, so the site's Logs
+> page can show staff a failure nobody reported. Row details are `where` / `error` / `message`
+> (truncated to 200, an `HTTPException` reduced to Discord's own code + text) / `step` (the
+> innermost `black_bloc/**` frame) / `interaction` (a command name or a custom id) and ⚠️ **never
+> a member's words**. The Logs page gains one `LOG_FEATURES` entry that narrows by the `error.`
+> KIND prefix rather than by feature; `site/mock` and `contract.json` mirror the four keys. Tests
+> **6456 → 6479**.
+>
 > **2026-09-17 (Send to… — staff hand-offs between requests, events and modmail tickets, branch
 > `send-to` off `8a27840`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord):**
 > schema **42 → 43** (measured: `SCHEMA_VERSION`) — `requests.moved_to`, `events.moved_to` and
@@ -117,18 +135,18 @@
 > [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
 > kinds: twelve `minutes.*`, four of them with a `web.` spelling.
 >
-> | What | v129 (`main`, 2026-09-17) | Where it is measured |
+> | What | v131 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
 > | Cogs | **21** (`cogs/community/frontdoor.py` at v125; 20 at v113) | `bot.py:COGS` |
 > | Top-level slash commands | **31** — 15 staff-locked, 16 member-visible (`/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
 > | Schema version | **43** (v128, `moved_to` on requests / events / modmail_tickets; 42 at v123, 41 at v119) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **262** (was 256 at v128; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Registry keys | **266** (was 262 at v129; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **19 pages / 180 routes / 17 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **6455** | the v129 deploy gate |
-> | Deploys | **126**, last `60958ec` (v129) at 2026-09-17 17:00 | `../deploys.log` |
+> | Mock contract | **19 pages / 180 routes / 21 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
+> | Tests | **6479** | the v131 deploy gate |
+> | Deploys | **128**, last `709defe` (v131) at 2026-09-17 18:12 | `../deploys.log` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 >
@@ -150,6 +168,8 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v131 `709defe`, 2026-09-17** | **21** | **31** | **43** | **180** | **6479** |
+> | **v130 `d739726`, 2026-09-17** | **21** | **31** | **43** | **180** | **6456** |
 > | **v129 `60958ec`, 2026-09-17** | **21** | **31** | **43** | **180** | **6455** |
 > | **v128 `a0fa7f3`, 2026-09-17** | **21** | **31** | **43** | **180** | **6406** |
 > | **v127 `de91282`, 2026-09-17** | **21** | **31** | **42** | **180** | **6305** |

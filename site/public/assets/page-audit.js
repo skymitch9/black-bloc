@@ -126,24 +126,43 @@ function logsSurface() {
     load();
   };
 
+  /** Keeps the Kind box and an `error.`-style chip saying the same thing. */
+  const showKind = () => {
+    const box = kind.querySelector('.input.search');
+    if (box) box.value = state.kind;
+  };
+
   const paintChips = () => {
-    const one = (label, value, title) => el('button', {
-      class: 'chip-filter',
-      type: 'button',
-      'aria-pressed': state.feature === value ? 'true' : 'false',
-      title,
-      text: label,
-      on: {
-        click: () => {
-          state.feature = state.feature === value ? '' : value;
-          paintChips();
-          again();
+    const one = (label, entry, title) => {
+      const value = entry.feature || '';
+      const prefix = entry.kind || '';
+      const pressed = prefix
+        ? state.kind === prefix
+        : state.feature === value && (value !== '' || !state.kind);
+      return el('button', {
+        class: 'chip-filter',
+        type: 'button',
+        'aria-pressed': pressed ? 'true' : 'false',
+        title,
+        text: label,
+        on: {
+          click: () => {
+            if (prefix) {
+              state.kind = pressed ? '' : prefix;
+              state.feature = '';
+              showKind();
+            } else {
+              state.feature = pressed ? '' : value;
+            }
+            paintChips();
+            again();
+          },
         },
-      },
-    });
+      });
+    };
     chips.replaceChildren(
-      one('Everything', '', 'Every part of Black Bloc'),
-      ...LOG_FEATURES.map((entry) => one(entry.label, entry.feature, `Only ${entry.label}`)),
+      one('Everything', {}, 'Every part of Black Bloc'),
+      ...LOG_FEATURES.map((entry) => one(entry.label, entry, `Only ${entry.label}`)),
     );
   };
 

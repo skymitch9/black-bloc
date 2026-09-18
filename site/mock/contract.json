@@ -4,6 +4,10 @@
     "_": "The registry IS the truth (black_bloc/settings_store.py). This block is the one table both halves read: tests/api/test_contract.py asserts it equals CORE_KEYS / KEY_MIN / KEY_MAX, and site/mock/check.mjs asserts the mock's own /api/settings matches it. A bound invented in the mock, or one added to the registry and not mirrored, fails one half or the other by name.",
     "core_keys": [
       "bot_bio",
+      "error_retry_expired",
+      "error_retry_label",
+      "error_retry_minutes",
+      "error_sentence",
       "log_channel_id",
       "operator_read_log",
       "personality_pool_peer_url",
@@ -23,6 +27,7 @@
     ],
     "min": {
       "chat_cooldown_seconds": 5,
+      "error_retry_minutes": 1,
       "events_channel_retention_days": 1,
       "events_default_minutes": 5,
       "events_test_retention_minutes": 1,
@@ -60,6 +65,7 @@
       "chat_monthly_cap_usd": 1000,
       "chat_person_hourly_turns": 10000,
       "cost_hosting_usd": 10000,
+      "error_retry_minutes": 30,
       "events_channel_retention_days": 365,
       "events_default_minutes": 10080,
       "events_max_late_minutes": 1440,

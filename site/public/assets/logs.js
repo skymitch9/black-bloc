@@ -35,9 +35,15 @@ export const LOG_FEATURES = [
   { feature: 'minutes', label: 'Meeting minutes', tab: 'minutes' },
   // Left out of the unfiltered view by the API itself, so this chip is the only way to it.
   { feature: 'selftest', label: 'Test', tab: 'health' },
+  // Every command, panel, modal and button failure is an `error.*` row, headed `core`. This one
+  // entry narrows by KIND rather than by feature, so staff can open just the failures without a
+  // second filter mechanism on the page (docs/info/errors-design.md §A).
+  { kind: 'error', label: 'Errors', tab: 'settings' },
 ];
 
-const LABELS = new Map(LOG_FEATURES.map((one) => [one.feature, one.label]));
+const LABELS = new Map(
+  LOG_FEATURES.filter((one) => one.feature).map((one) => [one.feature, one.label]),
+);
 
 export function featureLabel(feature) {
   return LABELS.get(feature) || String(feature || 'Black Bloc');
