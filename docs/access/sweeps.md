@@ -1851,17 +1851,17 @@ offline, and nothing more.
 
 | Row | Do | Expect |
 |---|---|---|
-| **MM-a** | Join *The Basement* ▸ **Meeting Room**, then run `/minutes` in `#blackbloc-logs` and press **Start taking notes** | Black Bloc joins the voice channel. ⚠️ If it refuses, read the sentence: **Connect** missing on that channel is a server-admin fix, and *the voice-recording extension is not installed* means the deployed image is wrong, not the permissions |
-| **MM-b** | Watch the channel the announcement should land in | `minutes_start_text` is posted BEFORE anything is recorded. Under test mode it lands in `#blackbloc-logs` and the panel says so in words |
-| **MM-c** | Say a few sentences, wait past `minutes_chunk_seconds` (60), then press the panel again | The top line names you under **Heard so far** and **Chunks transcribed** is at least 1. ⚠️ Nothing appears until a chunk is finished — that lag is the design, not a fault |
-| **MM-d** | Have a second person speak | Both names appear. The transcript keeps them apart: one line per speaker per chunk, in the order they spoke |
-| **MM-e** | Say **stop notes** in the meeting's own text chat | Black Bloc leaves, and within a moment posts the notes embed with the whole transcript attached as a `.txt` |
-| **MM-f** | Read the notes | A two-line summary, decisions, action items with names, open questions — in plain words, and nothing invented that was not said |
-| **MM-g** | Open the **Minutes** page on the dashboard | The meeting is listed. Open it: the notes are editable in place and the transcript is under them |
-| **MM-h** | Edit the notes, press **Save the notes**, then **Post again** | The saved wording is what gets posted. Exactly one `web.minutes.notes_edited` and one `web.minutes.posted` row on the Logs page — never a bare `minutes.*` beside them |
-| **MM-i** | Press **Write the notes again** | The model reads the transcript again and replaces the box. Anything typed by hand is lost — the confirm says so first |
-| **MM-j** | Give somebody the role named by `minutes_opt_out_role_id`, put them in the channel, and press **Start taking notes** | Refused in words, naming them, and Black Bloc does NOT join. ⚠️ This is the row that must never fail |
-| **MM-k** | With a meeting running, press **Start taking notes** from a second `/minutes` panel | Refused in words, naming the channel it is already in |
-| **MM-l** | Start a meeting and have everybody leave the voice channel | Black Bloc leaves on its own and writes the notes. The log row's reason reads *everyone left* |
-| **MM-m** | Set `minutes_mode` to **off** on the Settings page ▸ **events**, wait a minute, press Ctrl+R in Discord | `/minutes` is gone from the picker. The Minutes page still lists every meeting and says in words that the prototype is off |
-| **MM-n** | Press **Delete this meeting** on the site | The notes and the transcript go. The message already posted in Discord is left where it is — delete that by hand if you want it gone |
+| **572** (was `MM-a`) | Join *The Basement* ▸ **Meeting Room**, then run `/minutes` in `#blackbloc-logs` and press **Start taking notes** | Black Bloc joins the voice channel. ⚠️ If it refuses, read the sentence: **Connect** missing on that channel is a server-admin fix, and *the voice-recording extension is not installed* means the deployed image is wrong, not the permissions |
+| **573** (was `MM-b`) | Watch the channel the announcement should land in | `minutes_start_text` is posted BEFORE anything is recorded. Under test mode it lands in `#blackbloc-logs` and the panel says so in words |
+| **574** (was `MM-c`) | Say a few sentences, wait past `minutes_chunk_seconds` (60), then press the panel again | The top line names you under **Heard so far** and **Chunks transcribed** is at least 1. ⚠️ Nothing appears until a chunk is finished — that lag is the design, not a fault |
+| **575** (was `MM-d`) | Have a second person speak | Both names appear. The transcript keeps them apart: one line per speaker per chunk, in the order they spoke |
+| **576** (was `MM-e`) | Say **stop notes** in the meeting's own text chat | Black Bloc leaves, and within a moment posts the notes embed with the whole transcript attached as a `.txt` |
+| **577** (was `MM-f`) | Read the notes | A two-line summary, decisions, action items with names, open questions — in plain words, and nothing invented that was not said |
+| **578** (was `MM-g`) | Open the **Minutes** page on the dashboard | The meeting is listed. Open it: the notes are editable in place and the transcript is under them |
+| **579** (was `MM-h`) | Edit the notes, press **Save the notes**, then **Post again** | The saved wording is what gets posted. Exactly one `web.minutes.notes_edited` and one `web.minutes.posted` row on the Logs page — never a bare `minutes.*` beside them |
+| **580** (was `MM-i`) | Press **Write the notes again** | The model reads the transcript again and replaces the box. Anything typed by hand is lost — the confirm says so first |
+| **581** (was `MM-j`) | Give somebody the role named by `minutes_opt_out_role_id`, put them in the channel, and press **Start taking notes** | Refused in words, naming them, and Black Bloc does NOT join. ⚠️ This is the row that must never fail |
+| **582** (was `MM-k`) | With a meeting running, press **Start taking notes** from a second `/minutes` panel | Refused in words, naming the channel it is already in |
+| **583** (was `MM-l`) | Start a meeting and have everybody leave the voice channel | Black Bloc leaves on its own and writes the notes. The log row's reason reads *everyone left* |
+| **584** (was `MM-m`) | Set `minutes_mode` to **off** on the Settings page ▸ **events**, wait a minute, press Ctrl+R in Discord | `/minutes` is gone from the picker. The Minutes page still lists every meeting and says in words that the prototype is off |
+| **585** (was `MM-n`) | Press **Delete this meeting** on the site | The notes and the transcript go. The message already posted in Discord is left where it is — delete that by hand if you want it gone |

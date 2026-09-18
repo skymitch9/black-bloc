@@ -1,7 +1,8 @@
 # Meeting minutes — the bot joins a voice meeting, records per speaker, transcribes, and writes concise notes (PROTOTYPE)
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `minutes`
-> 2026-09-17, NOT merged, NOT deployed** — a PROTOTYPE that ships **off** (`minutes_mode` off) and is tested by
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v132** — merge `41a9f26`, release `82c3467`,
+> deployed **2026-09-17 18:32** Phoenix, `minutes_mode` **off**; the `## Deviations` foot is the truth where it departs from the body; sweeps **572–585**
+> are the owner's (572 = the real join). Was: 🔨 BUILT on branch `minutes` 2026-09-17 — a PROTOTYPE that ships **off** (`minutes_mode` off) and is tested by
 > staff only until the owner says it is ready. ✅ **The spike's verdict: voice receive WORKS on this stack** —
 > `discord-ext-voice-recv` **0.5.2a179** installs and imports on **Python 3.12.10** against the pinned
 > **discord.py 2.7.1**, and an Opus frame round-trips 96 bytes → 3,840 bytes of PCM through `discord.opus`

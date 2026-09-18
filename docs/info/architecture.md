@@ -112,8 +112,7 @@
 > importing them. Nothing else in this table moved — no cog, no command, no feature, and the
 > mock still reads 17 pages / 149 routes / 14 core settings.
 >
-> **2026-09-17 (MEETING MINUTES — the prototype, branch `minutes` off `d739726`; ⚠️ BUILT,
-> NOT MERGED, NOT DEPLOYED, and nothing has met Discord — `minutes_mode` ships **off**):**
+> **2026-09-17 (MEETING MINUTES — the prototype, branch `minutes` off `d739726`; ✅ MERGED `41a9f26`, LIVE as v132 `82c3467` 18:32; nothing has met Discord — `minutes_mode` ships **off**):**
 > cogs **21 → 22** (`cogs/community/minutes.py`), top-level slash commands **31 → 32**
 > (`/minutes`, staff-locked and `HIDDEN_WHEN_OFF`), schema **43 → 44** (measured:
 > `SCHEMA_VERSION`) — `meetings` and `meeting_lines`, new tables through the `SCHEMA`
@@ -135,18 +134,18 @@
 > [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
 > kinds: twelve `minutes.*`, four of them with a `web.` spelling.
 >
-> | What | v131 (`main`, 2026-09-17) | Where it is measured |
+> | What | v132 (`main`, 2026-09-17) | Where it is measured |
 > |---|---|---|
-> | Cogs | **21** (`cogs/community/frontdoor.py` at v125; 20 at v113) | `bot.py:COGS` |
-> | Top-level slash commands | **31** — 15 staff-locked, 16 member-visible (`/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
+> | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
+> | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **43** (v128, `moved_to` on requests / events / modmail_tickets; 42 at v123, 41 at v119) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **266** (was 262 at v129; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Schema version | **44** (v132, `meetings` + `meeting_lines`; 43 at v128, 42 at v123, 41 at v119) | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **277** (was 266 at v131 — the eleven `minutes_*` keys sit under events; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
-> | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **19 pages / 180 routes / 21 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
-> | Tests | **6479** | the v131 deploy gate |
-> | Deploys | **128**, last `709defe` (v131) at 2026-09-17 18:12 | `../deploys.log` |
+> | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
+> | Mock contract | **20 pages / 186 routes / 21 core settings** (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — figure read off the v108 gate line in `../deploys.log`, not re-run 2026-09-11 |
+> | Tests | **6649** (+3 skipped where the receive extension is absent) | the v132 deploy gate |
+> | Deploys | **129**, last `82c3467` (v132) at 2026-09-17 18:32 | `../deploys.log` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 >
@@ -168,6 +167,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v132 `82c3467`, 2026-09-17** | **22** | **32** | **44** | **186** | **6649** |
 > | **v131 `709defe`, 2026-09-17** | **21** | **31** | **43** | **180** | **6479** |
 > | **v130 `d739726`, 2026-09-17** | **21** | **31** | **43** | **180** | **6456** |
 > | **v129 `60958ec`, 2026-09-17** | **21** | **31** | **43** | **180** | **6455** |
