@@ -1,6 +1,15 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-17** — rows **`BS-a` … `BS-c`** added at the foot for the BOOT STATUS build (branch
+> `boot-status`, off `main` `5ceea19`; design [`../info/boot-status-design.md`](../info/boot-status-design.md);
+> ⚠️ **not merged, not deployed, and NOTHING in it has met Discord — no member has seen a red
+> dot, a green dot or either sentence**): Black Bloc reads Do Not Disturb with *"Restarting and
+> booting — back in a moment"* from the first connect and flips to online with the head count at
+> ready. ⚠️ **`BS-a` is the row that decides whether the feature works at all**, and the one
+> thing it must never show is a GREEN bot still saying *"restarting"*. Lettered rather than
+> numbered because `main` took **586–590** for the YouTube live fix while this was building;
+> they are renumbered at the merge. Before that,
 > **2026-09-17** — rows **`ST-a` … `ST-k`** added at the foot for the SEND TO… build (branch
 > `send-to`, off `main` `8a27840`; design `info/send-to-design.md`; ⚠️ **not merged, not
 > deployed, and nothing in it has met Discord — no draft has been opened from a request and no
@@ -1865,3 +1874,15 @@ offline, and nothing more.
 | **583** (was `MM-l`) | Start a meeting and have everybody leave the voice channel | Black Bloc leaves on its own and writes the notes. The log row's reason reads *everyone left* |
 | **584** (was `MM-m`) | Set `minutes_mode` to **off** on the Settings page ▸ **events**, wait a minute, press Ctrl+R in Discord | `/minutes` is gone from the picker. The Minutes page still lists every meeting and says in words that the prototype is off |
 | **585** (was `MM-n`) | Press **Delete this meeting** on the site | The notes and the transcript go. The message already posted in Discord is left where it is — delete that by hand if you want it gone |
+
+## BOOT STATUS — red while it restarts, green when it is ready (`BS-a` … `BS-c`, branch `boot-status`, design [`../info/boot-status-design.md`](../info/boot-status-design.md))
+
+⚠️ **Nothing below has ever met Discord.** The build proved it in the test suite and against a
+read of the installed discord.py; **no member has seen a red dot, a green dot, or either
+sentence.** `BS-a` is the row that decides whether the feature works at all.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`BS-a`** | Watch Black Bloc in the member list through a whole deploy — start looking before `flyctl deploy` finishes and keep looking for a minute after | ⚫ grey for the seconds between processes (Discord's, not ours), then 🔴 **Do Not Disturb** reading *"Restarting and booting — back in a moment"*, then 🟢 **online** reading *"Cookout attendees: N"*. ⚠️ **It must never read green while still saying "restarting"** — that is the one thing the build is shaped to prevent |
+| **`BS-b`** | Open the dashboard ▸ **Settings** ▸ **core**, change `boot_status_text` to something you will recognise, save, then deploy again | The new words are what the red status says on the next boot. The old words never appear again |
+| **`BS-c`** | Set `boot_status_mode` to **off** on the same page and deploy once more | Black Bloc simply appears 🟢 online with the head count — no red, no sentence, and nothing red on the way down either. Put it back to **on** afterwards |

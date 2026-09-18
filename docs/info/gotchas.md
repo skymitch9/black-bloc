@@ -207,3 +207,19 @@ the probe answered 200. Locally it never failed. The fix pins the drained key's 
 into the future, so no wall-clock gap can refill it. Any test that asserts "the bucket is empty" must
 do the same or pass `now=` explicitly; never rely on the drain and the probe being fast.
 
+## `Client.activity` gives a different answer the second time you read it (incident, 2026-09-17)
+
+Reading `bot.activity` twice in a row on a bot whose presence is a **custom** activity returns
+the right `CustomActivity` first and a bare `Activity` with `name=None` second. The property
+calls `discord.activity.create_activity(self._connection._activity, …)`, and that function
+**pops** `name` out of the payload it is handed (discord.py 2.7.1) — the stored dict is mutated,
+so the next read no longer recognises it as a custom status.
+
+It cost one confusing test failure on branch `boot-status`: an `isinstance(bot.activity,
+CustomActivity)` assertion passed and consumed the name, and the very next line's
+`bot.activity.name` compared `None` against the sentence. **Read it once into a variable.**
+
+⚠️ **The production edge, which is worse than the test one:** `ConnectionState._activity` is
+what IDENTIFY sends. Anything that reads `bot.activity` **before** `connect()` strips `name` out
+of the packet Discord is about to receive. Nothing in the tree does that today —
+`bot.py:_apply_boot_presence` only ever *assigns* — and `boot-status-design.md` says so.
