@@ -61,6 +61,8 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the label fixtures are not green." }
     node site/mock/clipmd.test.mjs
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the paste converter's fixtures are not green." }
+    node site/mock/golive-join.test.mjs
+    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the go-live streamers join's fixtures are not green." }
 }
 
 cmd /c "git push origin main 2>&1"
