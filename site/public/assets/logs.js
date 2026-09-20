@@ -33,6 +33,10 @@ export const LOG_FEATURES = [
   { feature: 'chat', label: 'Chat', tab: 'chat' },
   { feature: 'request', label: 'Requests', tab: 'requests' },
   { feature: 'minutes', label: 'Meeting minutes', tab: 'minutes' },
+  { feature: 'raidtrain', label: 'Raid trains', tab: 'events' },
+  { feature: 'applications', label: 'Applications', tab: 'requests' },
+  { feature: 'guides', label: 'Guides', tab: 'guides' },
+  { feature: 'posts', label: 'Posts', tab: 'posts' },
   // Left out of the unfiltered view by the API itself, so this chip is the only way to it.
   { feature: 'selftest', label: 'Test', tab: 'health' },
   // Every command, panel, modal and button failure is an `error.*` row, headed `core`. This one
