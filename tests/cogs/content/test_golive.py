@@ -2148,3 +2148,303 @@ async def test_every_panel_move_records_which_door_it_came_through(cog, bot, mem
     await submit_link(bot, member, panel.view, "alice")
 
     assert json.loads(await action_details(db, "golive.link"))["via"] == "discord"
+
+
+# --- co-streaming: one announcement, both platforms, edited in place ---------------------------
+
+
+TWITCH_INFO = StreamInfo(
+    url="https://www.twitch.tv/alice", game="Celeste", title="Any%", platform="Twitch"
+)
+YOUTUBE_INFO = StreamInfo(
+    url="https://www.youtube.com/watch?v=xyz", title="Live now", platform="YouTube"
+)
+COSTREAM_SENTENCE = (
+    "**Alice** is streaming on **Twitch** and **YouTube**! "
+    "Watch on Twitch: https://www.twitch.tv/alice · "
+    "also live on YouTube: <https://www.youtube.com/watch?v=xyz>"
+)
+
+
+class FakeYouTube:
+    """The YouTube cog as the reconcile sees it: one question, three answers."""
+
+    def __init__(self, live=True):
+        self.live = live
+        self.asked = []
+
+    async def is_live_now(self, user_id):
+        self.asked.append(user_id)
+        return self.live
+
+
+async def announcing(bot):
+    await bot.store.set(GUILD, "golive_mode", "on")
+
+
+async def only_session(db):
+    rows = await open_sessions(db, GUILD)
+    assert len(rows) == 1
+    return rows[0]
+
+
+async def test_a_youtube_stream_joins_the_twitch_announcement_instead_of_being_refused(
+    cog, bot, member, db
+):
+    await announcing(bot)
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    posted = bot.guild.channel.messages[0]
+
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+
+    row = await only_session(db)
+    assert row["source"] == "twitch" and row["platform"] == "Twitch"
+    assert row["also_source"] == "youtube" and row["also_platform"] == "YouTube"
+    assert row["also_url"] == YOUTUBE_INFO.url and row["also_started_at"]
+    assert len(bot.guild.channel.messages) == 1
+    assert len(posted.edits) == 1
+    assert posted.content == COSTREAM_SENTENCE
+    kinds = await action_kinds(db)
+    assert kinds.count("golive.announce") == 1
+    assert "golive.costream_added" in kinds
+    details = json.loads(await action_details(db, "golive.costream_added"))
+    assert details["source"] == "youtube" and details["first"] == "Twitch"
+    assert details["edited"] is True
+
+
+async def test_the_second_platform_is_an_edit_and_never_a_second_ping(
+    cog, bot, member, db, monkeypatch
+):
+    asked = fan_role_spy(monkeypatch, 4242)
+    await announcing(bot)
+    await bot.store.set(GUILD, "golive_ping_role_id", 5151)
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.startswith("<@&5151> <@&4242> ")
+
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+
+    assert len(bot.guild.channel.messages) == 1
+    assert posted.content.startswith("<@&5151> <@&4242> ")
+    assert posted.content.count("<@&5151>") == 1
+    assert asked == [USER, USER]
+
+
+async def test_a_twitch_stream_arriving_second_still_reads_twitch_first(cog, bot, member, db):
+    await announcing(bot)
+    await cog._go_live(member, YOUTUBE_INFO, "youtube")
+    posted = bot.guild.channel.messages[0]
+
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+
+    row = await only_session(db)
+    assert row["source"] == "youtube" and row["also_source"] == "twitch"
+    assert len(bot.guild.channel.messages) == 1
+    assert posted.content == COSTREAM_SENTENCE
+    assert posted.embed.title == "Any%"
+    assert posted.embed.author.name == "Alice is live on Twitch and YouTube"
+    assert posted.embed.footer.text == "Black Bloc · via Twitch + YouTube"
+
+
+async def test_the_card_keeps_the_twitch_art_when_youtube_joins_it(cog, bot, member, db):
+    await announcing(bot)
+    cog.helix = FakeHelix(games=[twitch_game("1", "Celeste", "https://boxart/celeste.jpg")])
+    await cog._go_live(
+        member,
+        StreamInfo(
+            url="https://www.twitch.tv/alice",
+            game="Celeste",
+            title="Any%",
+            platform="Twitch",
+            game_id="1",
+        ),
+        "twitch",
+    )
+    posted = bot.guild.channel.messages[0]
+    art = posted.embed.image.url
+
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+
+    assert art == "https://boxart/celeste.jpg"
+    assert posted.embed.image.url == art
+    assert posted.embed.footer.text == "Black Bloc · via Twitch + YouTube"
+
+
+async def test_the_also_side_ending_puts_the_message_back_on_one_platform(cog, bot, member, db):
+    await announcing(bot)
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+    posted = bot.guild.channel.messages[0]
+
+    await cog._end_live(bot.guild, member, "youtube")
+
+    row = await only_session(db)
+    assert row["ended_at"] is None
+    assert row["source"] == "twitch" and row["also_source"] is None
+    assert posted.content == (
+        "REGULATORS! Mount up! **Alice** is currently streaming **Celeste**! "
+        "Check it out: https://www.twitch.tv/alice"
+    )
+    assert posted.embed.author.name == "Alice is now live on Twitch!"
+    assert posted.embed.footer.text == "Black Bloc · via Twitch"
+    details = json.loads(await action_details(db, "golive.costream_dropped"))
+    assert details["promoted"] is False and details["side"] == "also"
+    assert details["source"] == "youtube" and details["platform"] == "Twitch"
+    assert "golive.end" not in await action_kinds(db)
+
+
+async def test_the_primary_ending_first_promotes_the_other_and_leaves_the_session_open(
+    cog, bot, member, db
+):
+    await announcing(bot)
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+    posted = bot.guild.channel.messages[0]
+
+    await cog._end_live(bot.guild, member, "twitch")
+
+    row = await only_session(db)
+    assert row["ended_at"] is None
+    assert row["source"] == "youtube" and row["platform"] == "YouTube"
+    assert row["url"] == YOUTUBE_INFO.url and row["also_source"] is None
+    assert posted.content.endswith("Check it out: https://www.youtube.com/watch?v=xyz")
+    assert posted.embed.author.name == "Alice is now live on YouTube!"
+    assert posted.embed.footer.text == "Black Bloc · via YouTube"
+    details = json.loads(await action_details(db, "golive.costream_dropped"))
+    assert details["promoted"] is True and details["side"] == "primary"
+    assert "golive.end" not in await action_kinds(db)
+
+
+async def test_the_last_platform_ending_is_todays_ended_path(cog, bot, member, db):
+    await announcing(bot)
+    await bot.store.set(GUILD, "golive_end_mode", "edit")
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+
+    await cog._end_live(bot.guild, member, "twitch")
+    await cog._end_live(bot.guild, member, "youtube")
+
+    assert await open_session_for(db, GUILD, USER) is None
+    assert bot.guild.channel.messages[0].content == (
+        "**Alice** was streaming **Celeste** — the stream has ended. "
+        "https://www.youtube.com/watch?v=xyz"
+    )
+    assert "golive.end" in await action_kinds(db)
+
+
+async def test_with_the_mode_off_the_second_platform_is_held_back_as_before(
+    cog, bot, member, db
+):
+    await announcing(bot)
+    await bot.store.set(GUILD, "golive_costream_mode", "off")
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    posted = bot.guild.channel.messages[0]
+
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+    await cog._go_live(member, YOUTUBE_INFO, "youtube")
+
+    row = await only_session(db)
+    assert row["also_source"] is None
+    assert posted.edits == []
+    assert len(bot.guild.channel.messages) == 1
+    assert "golive.costream_added" not in await action_kinds(db)
+
+
+async def test_the_same_platform_twice_is_still_a_duplicate_and_changes_nothing(
+    cog, bot, member, db
+):
+    await announcing(bot)
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    posted = bot.guild.channel.messages[0]
+
+    await cog._go_live(member, TWITCH_INFO, "presence")
+
+    assert (await only_session(db))["also_source"] is None
+    assert posted.edits == [] and len(bot.guild.channel.messages) == 1
+
+
+async def test_a_session_with_no_announcement_records_the_platform_and_edits_nothing(
+    cog, bot, member, db
+):
+    await bot.store.set(GUILD, "golive_mode", "shadow")
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+
+    row = await only_session(db)
+    assert row["announced_message_id"] is None
+    assert row["also_source"] == "youtube"
+    assert bot.guild.channel.messages == []
+    assert json.loads(await action_details(db, "golive.costream_added"))["edited"] is False
+
+
+async def test_the_reconcile_reads_one_dead_side_as_a_drop_and_not_as_the_end(
+    cog, bot, member, db
+):
+    await announcing(bot)
+    cog.helix = FakeHelix(streams=[])
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+    await set_link(db, USER, "alice")
+    bot.cog = FakeYouTube(live=True)
+
+    await cog.reconcile_open_sessions()
+
+    row = await only_session(db)
+    assert row["ended_at"] is None
+    assert row["source"] == "youtube" and row["also_source"] is None
+    assert "golive.end" not in await action_kinds(db)
+    assert "golive.costream_dropped" in await action_kinds(db)
+
+
+async def test_the_reconcile_closes_a_co_stream_only_when_neither_side_is_live(
+    cog, bot, member, db
+):
+    await announcing(bot)
+    cog.helix = FakeHelix(streams=[])
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+    await set_link(db, USER, "alice")
+    bot.cog = FakeYouTube(live=False)
+
+    await cog.reconcile_open_sessions()
+
+    assert await open_session_for(db, GUILD, USER) is None
+    assert "golive.end" in await action_kinds(db)
+
+
+async def test_the_reconcile_leaves_a_co_stream_alone_while_both_sides_are_live(
+    cog, bot, member, db
+):
+    await announcing(bot)
+    cog.helix = FakeHelix(streams=[twitch_stream("alice")])
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+    await set_link(db, USER, "alice")
+    bot.cog = FakeYouTube(live=True)
+
+    await cog.reconcile_open_sessions()
+
+    row = await only_session(db)
+    assert row["ended_at"] is None and row["also_source"] == "youtube"
+
+
+async def test_the_twitch_sweep_adds_itself_to_a_youtube_session_and_ends_only_its_own_side(
+    cog, bot, member, db
+):
+    await announcing(bot)
+    await set_link(db, USER, "alice")
+    cog.helix = FakeHelix(streams=[twitch_stream("alice", game="Hades")])
+    await cog._go_live(member, YOUTUBE_INFO, "youtube")
+
+    await cog.poll_once()
+
+    row = await only_session(db)
+    assert row["source"] == "youtube" and row["also_source"] == "twitch"
+
+    cog.helix = FakeHelix(streams=[])
+    await cog.poll_once()
+
+    row = await only_session(db)
+    assert row["ended_at"] is None and row["also_source"] is None
+    assert row["source"] == "youtube"

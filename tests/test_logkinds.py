@@ -917,6 +917,14 @@ def test_a_request_is_loud_only_when_it_is_answered_or_fails():
     assert feature_of("web.request.hold") == "request"
 
 
+def test_adding_a_platform_is_loud_because_it_rewrote_a_post_and_dropping_one_is_not():
+    """A co-stream edit changes what members are reading; one platform going quiet does not."""
+    assert is_important("golive.costream_added") is True
+    assert is_important("golive.costream_dropped") is False
+    assert feature_of("golive.costream_added") == "golive"
+    assert feature_of("golive.costream_dropped") == "golive"
+
+
 def test_taking_somebody_off_an_application_list_is_routine_because_the_dm_is_the_loud_part():
     """`.removed` is a loud suffix; this one is listed as routine on purpose."""
     assert "application.removed" in ROUTINE

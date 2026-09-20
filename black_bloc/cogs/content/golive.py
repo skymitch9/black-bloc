@@ -23,8 +23,13 @@ from ...golive import (
     TWITCH,
     YOUTUBE,
     StreamInfo,
+    again_render,
     announcement_embed,
+    as_info,
     card_lines,
+    costream_embed,
+    costream_order,
+    costream_render,
     edits_on_end,
     embed_summary,
     end_details,
@@ -35,6 +40,7 @@ from ...golive import (
     extract_stream,
     from_twitch,
     humanise_duration,
+    joins_session,
     now_iso,
     panel_buttons,
     panel_minutes,
@@ -42,6 +48,7 @@ from ...golive import (
     passes_role_filters,
     render,
     should_announce,
+    single_embed,
     site_page_url,
     twitch_enrichable,
     twitch_login_from_url,
@@ -59,7 +66,14 @@ from ...panels import (
     retire,
     still_staff,
 )
-from ...settings_store import DB_UNAVAILABLE, GOLIVE_MODES, GUILD_ONLY
+from ...settings_store import (
+    DB_UNAVAILABLE,
+    GOLIVE_COSTREAM_AUTHOR_KEY,
+    GOLIVE_COSTREAM_MODE_KEY,
+    GOLIVE_COSTREAM_TEMPLATE_KEY,
+    GOLIVE_MODES,
+    GUILD_ONLY,
+)
 from ...twitch import TwitchClient, TwitchError
 
 log = logging.getLogger(__name__)
@@ -164,6 +178,19 @@ TEST_STREAMS = {
         thumbnail_url="https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg",
     ),
 }
+
+
+RECONCILED = "reconciled_on_start"
+ENDED_ELSEWHERE = "ended"
+SIDE_ALSO = "also"
+SIDE_PRIMARY = "primary"
+
+
+def same_platform(seen: Any, wanted: Any) -> bool:
+    """A presence with no platform named proves nothing about which side is still live."""
+    if wanted is None:
+        return True
+    return bool(seen) and str(seen).casefold() == str(wanted).casefold()
 
 
 def _row_value(row: Any, key: str) -> Any:
@@ -300,6 +327,52 @@ async def open_session_for(
         params += (source,)
     cur = await db.conn.execute(sql + " ORDER BY id DESC LIMIT 1", params)
     return await cur.fetchone()
+
+
+async def open_session_on(db: Any, guild_id: int, user_id: int, source: str) -> Any:
+    """The open session this platform is part of, whichever side of a co-stream it is."""
+    cur = await db.conn.execute(
+        "SELECT * FROM golive_sessions WHERE guild_id = ? AND user_id = ? AND ended_at IS NULL "
+        "AND (source = ? OR also_source = ?) ORDER BY id DESC LIMIT 1",
+        (guild_id, user_id, source, source),
+    )
+    return await cur.fetchone()
+
+
+async def session_by_id(db: Any, session_id: int) -> Any:
+    cur = await db.conn.execute("SELECT * FROM golive_sessions WHERE id = ?", (session_id,))
+    return await cur.fetchone()
+
+
+async def add_also_platform(
+    db: Any, session_id: int, source: str, info: StreamInfo
+) -> None:
+    await db.conn.execute(
+        "UPDATE golive_sessions SET also_source = ?, also_url = ?, also_platform = ?, "
+        "also_started_at = ? WHERE id = ?",
+        (source, info.url, info.platform, now_iso(), session_id),
+    )
+    await db.conn.commit()
+
+
+async def clear_also_platform(db: Any, session_id: int) -> None:
+    await db.conn.execute(
+        "UPDATE golive_sessions SET also_source = NULL, also_url = NULL, also_platform = NULL, "
+        "also_started_at = NULL WHERE id = ?",
+        (session_id,),
+    )
+    await db.conn.commit()
+
+
+async def promote_also_platform(db: Any, session_id: int) -> None:
+    """The primary went off air first: the surviving platform becomes the session's own."""
+    await db.conn.execute(
+        "UPDATE golive_sessions SET source = COALESCE(also_source, source), "
+        "url = also_url, platform = also_platform, also_source = NULL, also_url = NULL, "
+        "also_platform = NULL, also_started_at = NULL WHERE id = ?",
+        (session_id,),
+    )
+    await db.conn.commit()
 
 
 async def open_sessions(db: Any, guild_id: int) -> list[Any]:
@@ -597,20 +670,43 @@ class GoLive(commands.Cog):
         """Close every session a stop left open, keeping the ones still genuinely live."""
         for guild in list(getattr(self.bot, "guilds", ())):
             for row in await open_sessions(self.bot.db, guild.id):
-                if await self._still_live(guild, row):
-                    continue
-                await self._close_session(guild, row, "reconciled_on_start")
+                await self._reconcile_one(guild, row)
+
+    async def _reconcile_one(self, guild: Any, row: Any) -> None:
+        if not _row_value(row, "also_source"):
+            if not await self._still_live(guild, row):
+                await self._close_session(guild, row, RECONCILED)
+            return
+        primary = await self._side_live(
+            guild, row, row["source"], row["url"], row["platform"]
+        )
+        other = await self._side_live(
+            guild, row, row["also_source"], row["also_url"], row["also_platform"]
+        )
+        if primary and other:
+            return
+        if primary or other:
+            gone = row["also_source"] if primary else row["source"]
+            await self.drop_platform(guild, row, gone, reason=RECONCILED)
+            return
+        await self._close_session(guild, row, RECONCILED)
 
     async def _still_live(self, guild: Any, row: Any) -> bool:
+        return await self._side_live(guild, row, row["source"], row["url"], None)
+
+    async def _side_live(
+        self, guild: Any, row: Any, source: Any, url: Any, platform: Any
+    ) -> bool:
         member = guild.get_member(row["user_id"])
-        if member is not None and extract_stream(getattr(member, "activities", ())) is not None:
+        seen = extract_stream(getattr(member, "activities", ())) if member is not None else None
+        if seen is not None and same_platform(seen.platform, platform):
             return True
-        if row["source"] == "youtube":
+        if source == "youtube":
             return await self._still_live_on_youtube(row)
-        if row["source"] != "twitch" or self.helix is None:
+        if source != "twitch" or self.helix is None:
             return False
         login = _row_value(await get_link(self.bot.db, row["user_id"]), "twitch_login")
-        login = login or twitch_login_from_url(row["url"])
+        login = login or twitch_login_from_url(url)
         if not login:
             return False
         try:
@@ -686,6 +782,190 @@ class GoLive(commands.Cog):
     async def end_live(self, guild: Any, member: Any, source: str | None) -> None:
         await self._end_live(guild, member, source)
 
+    async def add_platform(self, member: Any, info: StreamInfo, source: str) -> None:
+        """The other cog's door: a second platform joins the announcement already posted."""
+        if not self.bot.db.is_connected:
+            return
+        async with self._lock(member.id):
+            row = await open_session_for(self.bot.db, member.guild.id, member.id)
+            if row is None or not joins_session(
+                row, info.platform, self._costream_mode(member.guild.id)
+            ):
+                return
+            await self._add_platform_once(member, info, source, row)
+
+    async def _add_platform_once(
+        self, member: Any, info: StreamInfo, source: str, row: Any
+    ) -> None:
+        guild = member.guild
+        await add_also_platform(self.bot.db, row["id"], source, info)
+        first, second = costream_order(as_info(row), info)
+        name = display_name_of(guild, row["user_id"])
+        edited = await self._costream_edit(
+            guild, row, first, second, name, member, source, rebuilt=first is info
+        )
+        await log_action(
+            self.bot,
+            guild,
+            "golive.costream_added",
+            target=member,
+            details={
+                "session_id": row["id"],
+                "source": source,
+                "platform": info.platform,
+                "url": info.url,
+                "first": first.platform,
+                "edited": edited,
+            },
+        )
+
+    async def drop_platform(self, guild: Any, row: Any, source: str, *, reason: str) -> None:
+        """One platform went off air and the other did not: the session stays open."""
+        promoted = str(_row_value(row, "source")) == str(source)
+        if promoted:
+            await promote_also_platform(self.bot.db, row["id"])
+        else:
+            await clear_also_platform(self.bot.db, row["id"])
+        left = await session_by_id(self.bot.db, row["id"])
+        member = guild.get_member(row["user_id"])
+        name = display_name_of(guild, row["user_id"])
+        edited = await self._single_edit(guild, left, name)
+        await log_action(
+            self.bot,
+            guild,
+            "golive.costream_dropped",
+            target=member if member is not None else row["user_id"],
+            details={
+                "session_id": row["id"],
+                "source": source,
+                "side": SIDE_PRIMARY if promoted else SIDE_ALSO,
+                "promoted": promoted,
+                "platform": _row_value(left, "platform"),
+                "reason": reason,
+                "edited": edited,
+            },
+        )
+
+    async def _costream_edit(
+        self,
+        guild: Any,
+        row: Any,
+        first: Any,
+        second: Any,
+        name: str,
+        member: Any,
+        source: str,
+        *,
+        rebuilt: bool = False,
+    ) -> bool:
+        message = await self._announced_message(guild, row)
+        if message is None:
+            return False
+        store = self.bot.store
+        fan_role_id = await pings.announced_fan_role(
+            self.bot, guild, row["user_id"], notice=False
+        )
+        try:
+            await message.edit(
+                content=costream_render(
+                    store.get(guild.id, GOLIVE_COSTREAM_TEMPLATE_KEY),
+                    first,
+                    second,
+                    name,
+                    content=message.content,
+                ),
+                allowed_mentions=self._mentions(guild.id, fan_role_id),
+                **self._costream_card(
+                    guild, message, first, second, name, member, source, rebuilt
+                ),
+            )
+        except Exception as exc:
+            log.info(
+                "go-live: could not add a platform to message %s (%s: %s)",
+                row["announced_message_id"],
+                type(exc).__name__,
+                exc,
+            )
+            return False
+        return True
+
+    def _costream_card(
+        self,
+        guild: Any,
+        message: Any,
+        first: Any,
+        second: Any,
+        name: str,
+        member: Any,
+        source: str,
+        rebuilt: bool,
+    ) -> dict[str, Any]:
+        existing = list(getattr(message, "embeds", None) or ())
+        if not existing:
+            return {}
+        card = announcement_embed(first, member, source) if rebuilt else existing[0]
+        return {
+            "embed": costream_embed(
+                card,
+                first,
+                second,
+                name,
+                self.bot.store.get(guild.id, GOLIVE_COSTREAM_AUTHOR_KEY),
+            )
+        }
+
+    async def _single_edit(self, guild: Any, row: Any, name: str) -> bool:
+        message = await self._announced_message(guild, row)
+        if message is None:
+            return False
+        info = as_info(row)
+        fan_role_id = await pings.announced_fan_role(
+            self.bot, guild, row["user_id"], notice=False
+        )
+        existing = list(getattr(message, "embeds", None) or ())
+        try:
+            await message.edit(
+                content=again_render(
+                    self.bot.store.get(guild.id, "golive_template"),
+                    info,
+                    name,
+                    content=message.content,
+                ),
+                allowed_mentions=self._mentions(guild.id, fan_role_id),
+                **(
+                    {"embed": single_embed(existing[0], info, name, _row_value(row, "source"))}
+                    if existing
+                    else {}
+                ),
+            )
+        except Exception as exc:
+            log.info(
+                "go-live: could not take a platform off message %s (%s: %s)",
+                _row_value(row, "announced_message_id"),
+                type(exc).__name__,
+                exc,
+            )
+            return False
+        return True
+
+    async def _announced_message(self, guild: Any, row: Any) -> Any:
+        message_id = _row_value(row, "announced_message_id")
+        if not message_id:
+            return None
+        channel = self._channel(guild)
+        if channel is None:
+            return None
+        try:
+            return await channel.fetch_message(message_id)
+        except Exception as exc:
+            log.info(
+                "go-live: could not read message %s (%s: %s)",
+                message_id,
+                type(exc).__name__,
+                exc,
+            )
+            return None
+
     async def _note_streaming(self, member: Any, info: StreamInfo) -> None:
         """The streamer list, fed by BOTH doors: one upsert per go-live, never a second row."""
         login = _row_value(await get_link(self.bot.db, member.id), "twitch_login")
@@ -715,6 +995,11 @@ class GoLive(commands.Cog):
             store.get(guild.id, "golive_require_role_id"),
             store.get(guild.id, "golive_ignore_role_id"),
         ):
+            return
+        open_row = await open_session_for(self.bot.db, guild.id, member.id)
+        if open_row is not None:
+            if joins_session(open_row, info.platform, self._costream_mode(guild.id)):
+                await self._add_platform_once(member, info, source, open_row)
             return
         last = await latest_session(self.bot.db, guild.id, member.id)
         cooldown = store.get(guild.id, "golive_cooldown_minutes")
@@ -778,8 +1063,15 @@ class GoLive(commands.Cog):
     async def _end_live(self, guild: Any, member: Any, source: str | None) -> None:
         if not self.bot.db.is_connected:
             return
-        row = await open_session_for(self.bot.db, guild.id, member.id, source)
+        row = (
+            await open_session_for(self.bot.db, guild.id, member.id)
+            if source is None
+            else await open_session_on(self.bot.db, guild.id, member.id, source)
+        )
         if row is None:
+            return
+        if _row_value(row, "also_source") and source is not None:
+            await self.drop_platform(guild, row, source, reason=ENDED_ELSEWHERE)
             return
         end_mode = self._end_mode(guild.id)
         ended_at = now_iso()
@@ -1018,6 +1310,9 @@ class GoLive(commands.Cog):
     def _end_mode(self, guild_id: int) -> str:
         return self.bot.store.get(guild_id, "golive_end_mode")
 
+    def _costream_mode(self, guild_id: int) -> str:
+        return self.bot.store.get(guild_id, GOLIVE_COSTREAM_MODE_KEY)
+
     def _may_change_roles(self, guild_id: int) -> bool:
         return self._mode(guild_id) == "on" and getattr(self.bot, "guard", None) is None
 
@@ -1156,10 +1451,13 @@ class GoLive(commands.Cog):
                 continue
             guild_id = member.guild.id
             stream = live.get(login)
+            open_row = await open_session_for(self.bot.db, guild_id, user_id)
             if stream is not None:
-                if await open_session_for(self.bot.db, guild_id, user_id) is None:
+                if open_row is None or joins_session(
+                    open_row, TWITCH, self._costream_mode(guild_id)
+                ):
                     await self._go_live(member, from_twitch(stream), "twitch")
-            elif await open_session_for(self.bot.db, guild_id, user_id, "twitch") is not None:
+            elif await open_session_on(self.bot.db, guild_id, user_id, "twitch") is not None:
                 await self._end_live(member.guild, member, "twitch")
 
     async def _ready(self, interaction: discord.Interaction) -> bool:
