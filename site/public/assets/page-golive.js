@@ -1,27 +1,34 @@
 import { api, listOf, names, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { joinStreamers, liveStreams, placeSettings, routeTyped } from './golive-join.js';
 import { logsSection } from './logs.js';
 import {
+  ago,
   ask,
   badge,
   bar,
   button,
   card,
+  closeDrawer,
   el,
   field,
+  icon,
   idsIn,
+  keepSaying,
   memberPicker,
   modeSwitch,
   nameNode,
-  namespaceSettings,
   notice,
+  openDrawer,
   readSelect,
   roleSelect,
   run,
-  keepSaying,
   sayAgain,
+  sayNothing,
+  searchField,
   section,
   sentenceFor,
+  settingsPanel,
   table,
   templateEditor,
   when,
@@ -29,18 +36,57 @@ import {
 
 let refresh = () => {};
 
+const TWITCH = 'twitch';
+const YOUTUBE = 'youtube';
+const PLATFORM_WORDS = { twitch: 'Twitch', youtube: 'YouTube' };
+
 const TEMPLATE_KEY = 'golive_template';
 const PING_KEY = 'golive_ping_role_id';
 const END_MODE_KEY = 'golive_end_mode';
+const END_TEMPLATE_KEY = 'golive_end_template';
+const END_AUTHOR_KEY = 'golive_end_author';
+const END_SUFFIX_KEY = 'golive_end_suffix';
+const END_KEEP_KEY = 'golive_end_keep_mention';
+const GOLIVE_MODE_KEY = 'golive_mode';
+const LIVE_MODE_KEY = 'youtube_live_mode';
+const PINGS_MODE_KEY = 'pings_mode';
+const CHANNEL_KEY = 'golive_channel_id';
 const END_EDIT = 'edit';
 const GAME_FALLBACK = 'something';
 const DEFAULT_TEMPLATE = 'the default wording';
 
-const END_UNKNOWN = 'The bot did not report a golive_end_mode key, so what happens once a stream '
-  + 'ends is not shown rather than guessed at.';
-const END_HELP = 'edit rewrites the announcement once the stream is over; off leaves it as '
-  + 'posted. The Wording card below shows both.';
+const SUBTITLE = 'Who is streaming, who is set up to be announced, and what the announcement '
+  + 'says. One list of people, whichever platform they use.';
 
+const NOBODY_LIVE = 'Nobody is streaming right now. A Twitch stream shows up the moment Discord '
+  + 'sees it; a linked YouTube channel is looked at on the cadence in the strip above.';
+const LIVE_NOTE = 'One card per open stream, both platforms together.';
+const HELD_BACK = 'their {platform} stream already has the session';
+
+const STREAMERS_NOTE = 'One row per person. Click a row for everything about them.';
+const NO_STREAMERS = 'Nobody is linked and nobody has a ping role yet. Add a streamer above, or '
+  + 'a member links their own channel with /golive or /youtube.';
+const NOTHING_MATCHES = 'Nobody here matches what you typed.';
+const PUTTING_TOGETHER = 'Putting this person together…';
+const READY = 'ready';
+const OPTED_OUT = 'opted out';
+const LIVE_NOW = 'live now';
+const NOT_LINKED = 'not linked';
+const NO_ROLE_YET = 'none yet';
+const ROLE_GONE = 'deleted by hand';
+const HIDDEN = 'hidden';
+
+const ADD_TITLE = 'Add a streamer';
+const ADD_HELP = 'One box for both platforms. A Twitch name goes to the go-live watcher; a '
+  + 'YouTube channel address or @handle goes to the live probe. Nothing is guessed — a value '
+  + 'that could be either is refused and says so.';
+const ADD_FIELD_HELP = 'The name in twitch.tv/…, or the address that starts with '
+  + 'youtube.com/channel/UC…, or their @handle.';
+const ADD_PICK_FIRST = 'Pick the member this is about first.';
+
+const ANNOUNCEMENT_NOTE = 'One wording for both platforms. {platform} fills itself in.';
+const WHILE_LIVE_TITLE = 'While they are live';
+const ENDED_TITLE = 'Once the stream has ended';
 const WORDING_TITLE = 'Wording';
 const WORDING_NOTE = 'Both messages as the bot itself renders them — the same functions Discord '
   + 'gets, not a copy living on this page. The sample is a two-hour stream of Celeste.';
@@ -50,8 +96,20 @@ const WORDING_STALE = 'This card repaints itself whenever either wording above i
   + 'is for a change somebody else made, on the Settings page or from Discord.';
 const WHILE_LIVE = 'while live';
 const AFTER_THE_STREAM = 'after the stream';
+const END_HELP = 'edit rewrites the announcement once the stream is over; off leaves it as '
+  + 'posted. The Wording card below shows both.';
+const END_UNKNOWN = 'The bot did not report a golive_end_mode key, so what happens once a stream '
+  + 'ends is not shown rather than guessed at.';
+const END_NO_KEYS = 'The bot did not report a golive_end_template key, so the ending is edited '
+  + 'from Everything else rather than guessed at here.';
+const END_BLANK_TEMPLATE = 'Empty — the live sentence is kept and golive_end_suffix is added to '
+  + 'the end of it instead.';
+const END_BLANK_AUTHOR = 'Empty — the card’s top line keeps saying “was live on”.';
+const END_WORDING_WHERE = 'Once the stream is over';
+const NO_TEMPLATE = 'The bot did not report a golive_template key, so this editor is not shown '
+  + 'rather than guessed at.';
+const PLAYING_HELP = `Off shows what an empty game reads as: “${GAME_FALLBACK}”.`;
 
-const END_TEMPLATE_KEY = 'golive_end_template';
 const SUFFIX_ONLY = 'Just add the ending instead';
 const REWRITE_IT = 'Rewrite it instead';
 const SUFFIX_ASK_TITLE = 'Leave the sentence alone and just add the ending?';
@@ -62,25 +120,623 @@ const REWRITE_ASK_TITLE = 'Rewrite the whole announcement once the stream ends?'
 const REWRITE_ASK_BODY = 'The past-tense wording Black Bloc ships with comes back, and you edit '
   + 'it in the Once the stream is over box above.';
 
-const SAMPLE = {
-  name: 'Casey',
-  game: 'Lethal Company',
-  title: 'late night runs',
-  url: 'https://twitch.tv/caseyfast',
-  platform: 'Twitch',
+const SAMPLES = {
+  twitch: {
+    name: 'Casey',
+    game: 'Lethal Company',
+    title: 'late night runs',
+    url: 'https://twitch.tv/caseyfast',
+    platform: 'Twitch',
+  },
+  youtube: {
+    name: 'Casey',
+    game: 'Lethal Company',
+    title: 'late night runs',
+    url: 'https://youtube.com/watch?v=caseyfast',
+    platform: 'YouTube',
+  },
 };
+const ENDED_EXTRA = { duration: '2 h 10 min' };
 
-const END_AUTHOR_KEY = 'golive_end_author';
-const END_WORDING_WHERE = 'Once the stream is over';
-const END_WORDING_TITLE = 'What the ending looks like';
-const END_WORDING_NOTE = 'As you type, filled in with the same sample and a two-hour '
-  + '{duration}. The Wording card below is what the bot has actually stored.';
-const END_BLANK_TEMPLATE = 'Empty — the live sentence is kept and golive_end_suffix is added to '
-  + 'the end of it instead.';
-const END_BLANK_AUTHOR = 'Empty — the card’s top line keeps saying “was live on”.';
-const END_NO_KEYS = 'The bot did not report a golive_end_template key, so the ending is edited '
-  + 'from the Settings group on the right rather than guessed at here.';
-const ENDED_SAMPLE = { ...SAMPLE, duration: '2 h 10 min' };
+const REST_NOTE = 'The settings nobody touches weekly, and the log. Closed by default.';
+const NO_SETTINGS_HERE = 'The bot registers no settings under this heading.';
+const SETUP_HELP = 'Makes (or reuses) the Events role, points both feeds at it and puts it on '
+  + 'the Notifications panel. Post that panel from the Role menus tab.';
+const RAID_HELP = 'Makes (or reuses) the Raid trains role and points raidtrain_ping_role_id at '
+  + 'it, so a member opts in from /pings instead of asking staff.';
+const ONBOARDING_NOTE = 'The bot keeps two of Discord’s onboarding prompts in step with these '
+  + 'roles: what should ping you, and which streamers. It never touches a prompt it did not '
+  + 'make, and it never turns onboarding itself on or off.';
+const ONBOARDING_NO_COMMUNITY = 'This server is not a Community server, so Discord has no '
+  + 'onboarding screen. Turn Community on in Server Settings ▸ Enable Community; until then '
+  + 'the Notifications role menu is the fallback.';
+const ONBOARDING_OFF = 'The bot is not managing onboarding. The prompts stay exactly as '
+  + 'somebody left them.';
+const ONBOARDING_NEVER = 'Not written yet.';
+const ONBOARDING_NOTHING = 'Nothing to put on the screen yet — set up the Events role or the '
+  + 'raid-train role first.';
+const ONBOARDING_WHERE = 'Whether the bot manages them at all is '
+  + 'pings_onboarding_managed in the settings above, and Stop managing onboarding on /pings.';
+
+const PROBE_NOTE = 'A linked channel going live is announced through the go-live feed above, as '
+  + 'source youtube. golive_mode still decides whether anything is posted.';
+const PROBE_KEY_UNSET = 'With no YOUTUBE_API_KEY the stream is announced from the page alone, so '
+  + 'its title reads Live now and no quota is spent.';
+
+const NO_EVENTS_ROLE = 'No Events role yet';
+const ONBOARDING_DRIFTED = 'Onboarding has never been written';
+const SETUP_OPEN = 'open Ping roles';
+
+const GOLIVE_MODE_HELP = 'off watches nothing; shadow logs what it would have announced; on '
+  + 'posts it.';
+const LIVE_MODE_HELP = 'off probes nothing at all; shadow probes and logs what it would have '
+  + 'announced; on announces it. The post itself goes wherever go-live posts, so golive_mode and '
+  + 'golive_channel_id still decide whether anybody sees it.';
+const PINGS_MODE_HELP = 'off stops every opt-in and every fan-role ping; nobody loses a role.';
+
+const LOG_CHIPS = [
+  { id: 'all', label: 'All' },
+  { id: 'golive', label: 'Go-live' },
+  { id: 'youtube', label: 'YouTube' },
+  { id: 'pings', label: 'Ping roles' },
+];
+
+function platformPill(platform) {
+  return el('span', {
+    class: 'pill glplat',
+    'data-platform': platform,
+    text: PLATFORM_WORDS[platform] || platform,
+  });
+}
+
+function muted(text) {
+  return el('span', { class: 'muted', text });
+}
+
+function chipButton(label, pressed, onPick) {
+  return el('button', {
+    class: 'chip-filter',
+    type: 'button',
+    'aria-pressed': pressed ? 'true' : 'false',
+    text: label,
+    on: { click: onPick },
+  });
+}
+
+function drawer(title, children, { open = false } = {}) {
+  return el('details', { class: 'gldrawer', open: open || undefined }, [
+    el('summary', { class: 'gldrawer-head' }, [
+      icon('chevronDown', 14, 'sect-mark'),
+      el('span', { text: title }),
+    ]),
+    el('div', { class: 'gldrawer-body' }, [].concat(children).filter(Boolean)),
+  ]);
+}
+
+/** A logsSection node, demoted so the in-page rail still counts five sections. */
+function unsection(node) {
+  node.classList.remove('sect');
+  node.removeAttribute('data-sect');
+  node.removeAttribute('data-title');
+  const details = node.querySelector('details.sect-card');
+  if (details) details.open = true;
+  return node;
+}
+
+function settingWord(count) {
+  return `${count} setting${count === 1 ? '' : 's'}`;
+}
+
+function statCell(label, value, note) {
+  return el('div', { class: 'stat' }, [
+    el('span', { class: 'stat-label', text: label }),
+    el('span', { class: 'stat-value', text: value }),
+    note ? el('span', { class: 'stat-note', text: note }) : null,
+  ].filter(Boolean));
+}
+
+function modeCell(label, spec, note, help, say) {
+  if (!spec) return statCell(label, '—', `The bot did not report the ${label.toLowerCase()} key.`);
+  const made = modeSwitch(spec, { say, onSaved: () => refresh() });
+  made.node.setAttribute('title', help);
+  return el('div', { class: 'stat' }, [
+    el('span', { class: 'stat-label', text: label }),
+    made.node,
+    el('span', { class: 'stat-note', text: note }),
+  ]);
+}
+
+function warnCell(lines, onOpen) {
+  return el('button', {
+    class: 'stat',
+    type: 'button',
+    'data-tone': 'warn',
+    on: { click: onOpen },
+  }, [
+    el('span', { class: 'stat-label', text: 'Set-up' }),
+    el('span', { class: 'stat-value', text: String(lines.length) }),
+    el('span', { class: 'stat-note', text: `${lines.join(' · ')} — ${SETUP_OPEN}` }),
+  ]);
+}
+
+function channelWord(specs) {
+  const spec = specs.find((one) => one.key === CHANNEL_KEY);
+  const value = spec ? (spec.value ?? spec.default) : null;
+  return value ? 'posted where golive_channel_id points' : 'no announcement channel set';
+}
+
+function headerStrip({ golive, youtube, pings, rows, cards, status, warnings, onOpenPings, say }) {
+  const linked = rows.filter((row) => row.twitch || row.youtube).length;
+  const tw = rows.filter((row) => row.twitch).length;
+  const yt = rows.filter((row) => row.youtube).length;
+  const out = rows.filter((row) => row.opted_out).length;
+  const liveTw = cards.filter((one) => one.platforms.includes(TWITCH)).length;
+  const liveYt = cards.filter((one) => one.platforms.includes(YOUTUBE)).length;
+  const probe = status
+    ? `last look ${status.last_probe_at ? ago(status.last_probe_at).text : 'never'} · `
+      + `${status.quota_today || 0} unit(s) of quota today`
+    : 'the bot did not report the probe';
+  const cells = [
+    statCell('Live right now', String(cards.length), `${liveTw} Twitch · ${liveYt} YouTube`),
+    modeCell(
+      'Twitch announcements',
+      golive.find((one) => one.key === GOLIVE_MODE_KEY),
+      channelWord(golive),
+      GOLIVE_MODE_HELP,
+      say,
+    ),
+    modeCell(
+      'YouTube announcements',
+      youtube.find((one) => one.key === LIVE_MODE_KEY),
+      'posted through the go-live feed',
+      LIVE_MODE_HELP,
+      say,
+    ),
+    modeCell(
+      'Ping roles',
+      pings.find((one) => one.key === PINGS_MODE_KEY),
+      'the opt-in roles members pick with /pings',
+      PINGS_MODE_HELP,
+      say,
+    ),
+    statCell('Set up', String(linked), `${tw} Twitch · ${yt} YouTube · ${out} opted out`),
+    statCell(
+      'Watching',
+      status && status.live_minutes ? `every ${status.live_minutes} min` : '—',
+      probe,
+    ),
+  ];
+  if (warnings.length) cells.push(warnCell(warnings, onOpenPings));
+  return el('div', { class: 'statgrid' }, cells);
+}
+
+function liveCard(one) {
+  const words = one.platforms.map((platform) => PLATFORM_WORDS[platform] || platform);
+  return el('div', { class: 'livecard', 'data-held': one.announced ? undefined : 'true' }, [
+    el('div', { class: 'livecard-who' }, [
+      nameNode(one.user_id, one.name),
+      ...one.platforms.map(platformPill),
+    ]),
+    one.title ? el('p', { class: 'livecard-what', text: one.title }) : null,
+    el('div', { class: 'livecard-meta' }, [
+      one.announced ? badge('announced', 'ok') : badge('seen, not announced', 'warn'),
+      one.game ? badge(one.game) : null,
+      one.platforms.length > 1 ? muted(`one announcement covers ${words.join(' and ')}`) : null,
+      !one.announced && one.held_by
+        ? muted(HELD_BACK.replace('{platform}', PLATFORM_WORDS[one.held_by] || one.held_by))
+        : null,
+      one.started_at ? muted(`started ${ago(one.started_at).text}`) : null,
+      one.url ? el('a', { class: 'mono', href: one.url, rel: 'noreferrer', text: one.url }) : null,
+      one.also_url
+        ? el('a', { class: 'mono', href: one.also_url, rel: 'noreferrer', text: one.also_url })
+        : null,
+    ].filter(Boolean)),
+  ].filter(Boolean));
+}
+
+function liveSection(cards) {
+  const group = section('Live now', LIVE_NOTE, { count: cards.length });
+  group.body.append(cards.length
+    ? el('div', { class: 'golive-lives' }, cards.map(liveCard))
+    : sayNothing(NOBODY_LIVE));
+  return group.node;
+}
+
+function twitchMoves(row, say) {
+  if (row.twitch) {
+    return [
+      el('a', {
+        class: 'btn small quiet',
+        href: `https://twitch.tv/${row.twitch}`,
+        rel: 'noreferrer',
+        text: 'Open channel',
+      }),
+      button('Unlink', async () => {
+        const sure = await ask({
+          title: `Unlink ${row.name || row.user_id}?`,
+          body: [`Black Bloc stops watching twitch.tv/${row.twitch} for them. They can link it again themselves.`],
+          confirmLabel: 'Unlink',
+        });
+        if (!sure) return;
+        const done = await run(
+          say,
+          () => api(`/api/golive/links/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
+          'Unlinked.',
+        );
+        if (done.ok) {
+          keepSaying('golive.links', say);
+          refresh();
+        }
+      }, { tone: 'danger' }),
+    ];
+  }
+  const login = el('input', { class: 'input', type: 'text', placeholder: 'the name in twitch.tv/…' });
+  return [
+    login,
+    button('Link them', async () => {
+      const done = await run(
+        say,
+        () => send('/api/golive/links', 'POST', { user_id: row.user_id, twitch_login: login.value.trim() }),
+        (found) => found?.message || 'Linked.',
+      );
+      if (done.ok) {
+        keepSaying('golive.links', say);
+        refresh();
+      }
+    }, { tone: 'warn' }),
+  ];
+}
+
+function youtubeMoves(row, say) {
+  if (row.youtube_id) {
+    return [
+      el('a', {
+        class: 'btn small quiet',
+        href: `https://youtube.com/channel/${row.youtube_id}`,
+        rel: 'noreferrer',
+        text: 'Open channel',
+      }),
+      button('Unlink', async () => {
+        const sure = await ask({
+          title: `Unlink ${row.name || row.user_id}?`,
+          body: [
+            `Black Bloc stops watching ${row.youtube || row.youtube_id} for live streams.`,
+            'They can link it again themselves on /youtube, and a Lead can link it for them below.',
+          ],
+          confirmLabel: 'Unlink',
+        });
+        if (!sure) return;
+        const done = await run(
+          say,
+          () => api(`/api/youtube/links/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
+          'Unlinked.',
+        );
+        if (done.ok) {
+          keepSaying('youtube.links', say);
+          refresh();
+        }
+      }, { tone: 'danger' }),
+    ];
+  }
+  const channel = el('input', {
+    class: 'input',
+    type: 'text',
+    placeholder: 'youtube.com/channel/UC… or @handle',
+  });
+  return [
+    channel,
+    button('Link their channel', async () => {
+      const done = await run(
+        say,
+        () => send('/api/youtube/links', 'POST', { member_id: row.user_id, channel: channel.value.trim() }),
+        (found) => found?.message || 'Linked.',
+      );
+      if (done.ok) {
+        keepSaying('youtube.links', say);
+        refresh();
+      }
+    }, { tone: 'warn' }),
+  ];
+}
+
+async function roleMoves(row, say) {
+  const moves = [];
+  if (row.role_id) {
+    moves.push(button('Remove', async () => {
+      const sure = await ask({
+        title: `Take ${row.name || row.user_id}'s ping role away?`,
+        body: [
+          'Everybody who followed them stops being pinged.',
+          'Whether the Discord role itself is deleted is pings_fan_role_delete, in Everything else.',
+        ],
+        confirmLabel: 'Remove',
+      });
+      if (!sure) return;
+      const done = await run(
+        say,
+        () => api(`/api/pings/streamers/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
+        (found) => found?.message || 'Removed.',
+      );
+      if (done.ok) {
+        keepSaying('pings.streamers', say);
+        refresh();
+      }
+    }, { tone: 'danger' }));
+  } else {
+    const roles = await roleSelect(null);
+    moves.push(roles, button('Give them a ping role', async () => {
+      const done = await run(
+        say,
+        () => send('/api/pings/streamers', 'POST', {
+          member_id: row.user_id,
+          role_id: readSelect(roles, false),
+        }),
+        (found) => found?.message || 'Made the role.',
+      );
+      if (done.ok) {
+        keepSaying('pings.streamers', say);
+        refresh();
+      }
+    }, { tone: 'warn' }));
+  }
+  if (row.listed !== null) {
+    moves.push(button(row.listed ? 'Hide' : 'Restore', async () => {
+      if (row.listed) {
+        const sure = await ask({
+          title: `Take ${row.name || row.user_id} off the streamer list?`,
+          body: ['Nobody new can follow them, and going live does not put them back. Their '
+            + 'ping role goes too if nobody is wearing it.'],
+          confirmLabel: 'Hide',
+        });
+        if (!sure) return;
+      }
+      const done = await run(
+        say,
+        () => send(`/api/pings/list/${encodeURIComponent(row.user_id)}`, 'POST', { listed: !row.listed }),
+        (found) => found?.message || 'Done.',
+      );
+      if (done.ok) {
+        keepSaying('pings.streamer', say);
+        refresh();
+      }
+    }, { tone: row.listed ? 'danger' : 'warn' }));
+  }
+  return moves;
+}
+
+function announceMoves(row, say) {
+  if (row.opted_out) {
+    return [button('Announce them again', async () => {
+      const done = await run(
+        say,
+        () => api(`/api/golive/optouts/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
+        (found) => found?.message || 'The opt-out is gone.',
+      );
+      if (done.ok) {
+        keepSaying('golive.optouts', say);
+        refresh();
+      }
+    }, { tone: 'quiet' })];
+  }
+  return [button('Opt them out', async () => {
+    const done = await run(
+      say,
+      () => send('/api/golive/optouts', 'POST', { user_id: row.user_id }),
+      (found) => found?.message || 'Opted out.',
+    );
+    if (done.ok) {
+      keepSaying('golive.optouts', say);
+      refresh();
+    }
+  }, { tone: 'warn' })];
+}
+
+function panelGroup(label, said, moves) {
+  return card(label, [said, el('div', { class: 'bar' }, moves)]);
+}
+
+function rowFoot(row) {
+  const bits = [];
+  if (row.twitch_at) bits.push(`Twitch linked ${when(row.twitch_at)}`);
+  if (row.youtube_at) bits.push(`YouTube linked ${when(row.youtube_at)}`);
+  if (row.last_live_at) bits.push(`last live ${when(row.last_live_at)}`);
+  if (row.live_count !== null && row.live_count !== undefined) {
+    bits.push(`${row.live_count} go-live(s)`);
+  }
+  if (row.listed === false) bits.push('off the streamer list');
+  return bits.join(' · ') || 'Nothing has happened for this person yet.';
+}
+
+async function rowPanel(row, say) {
+  const twitchSaid = row.twitch
+    ? el('span', { class: 'mono', text: `twitch.tv/${row.twitch}` })
+    : muted(NOT_LINKED);
+  const youtubeSaid = row.youtube
+    ? el('span', {}, [
+      el('span', { text: row.youtube }),
+      row.youtube_id ? el('span', { class: 'mono glid', text: row.youtube_id }) : null,
+    ].filter(Boolean))
+    : muted(NOT_LINKED);
+  const roleSaid = row.role
+    ? el('span', { text: `${row.role} · ${row.role_wearers === null ? '—' : row.role_wearers} wearing it` })
+    : (row.role_id ? badge(ROLE_GONE, 'warn') : muted(NO_ROLE_YET));
+  const announceSaid = el('span', {
+    text: row.opted_out
+      ? 'Opted out — never announced'
+      : 'On — announced wherever they go live',
+  });
+
+  return [
+    panelGroup('Twitch', twitchSaid, twitchMoves(row, say)),
+    panelGroup('YouTube', youtubeSaid, youtubeMoves(row, say)),
+    panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
+    panelGroup('Announcements', announceSaid, announceMoves(row, say)),
+    el('p', { class: 'field-help', text: rowFoot(row) }),
+    say,
+  ];
+}
+
+/** The same construct Moderation's case rows use: the right-hand drawer, opened twice so
+    the panel appears at once and fills in when the role list has loaded. */
+async function showStreamer(row, say) {
+  const title = row.name || row.user_id;
+  openDrawer(title, sayNothing(PUTTING_TOGETHER));
+  openDrawer(title, await rowPanel(row, say));
+}
+
+function announcedCell(row) {
+  if (row.opted_out) return badge(OPTED_OUT, 'warn');
+  if (row.live) return badge(LIVE_NOW, 'ok');
+  return muted(READY);
+}
+
+const FILTERS = [
+  { id: 'all', label: 'All', keep: () => true },
+  { id: 'live', label: 'Live now', keep: (row) => Boolean(row.live) },
+  { id: 'yt', label: 'Has YouTube', keep: (row) => Boolean(row.youtube) },
+  { id: 'notyt', label: 'Twitch only', keep: (row) => Boolean(row.twitch) && !row.youtube },
+  { id: 'out', label: 'Opted out', keep: (row) => row.opted_out === true },
+];
+
+const COLUMNS = ['Member', 'Twitch', 'YouTube', 'Ping role', 'Announced'];
+
+function roleCell(row) {
+  if (row.role) {
+    return el('span', {
+      class: 'cell-quiet',
+      text: `${row.role} · ${row.role_wearers === null ? '—' : row.role_wearers}`,
+    });
+  }
+  return row.role_id ? badge(ROLE_GONE, 'warn') : muted('—');
+}
+
+function streamerRow(row, say) {
+  return el('button', {
+    class: 'grid-row',
+    type: 'button',
+    'data-search': (`${row.name || ''} ${row.user_id} ${row.twitch || ''} `
+      + `${row.youtube || ''} ${row.role || ''}`).toLowerCase(),
+    on: { click: () => showStreamer(row, say) },
+  }, [
+    el('span', { class: 'cell-name' }, [
+      nameNode(row.user_id, row.name),
+      row.listed === false ? badge(HIDDEN, 'warn') : null,
+    ].filter(Boolean)),
+    row.twitch ? el('span', { class: 'cell-quiet mono', text: row.twitch }) : muted('—'),
+    row.youtube ? el('span', { class: 'cell-quiet', text: row.youtube }) : muted('—'),
+    roleCell(row),
+    announcedCell(row),
+    icon('chevronRight', 16),
+  ]);
+}
+
+function streamersSection(rows, say) {
+  const group = section('Streamers', STREAMERS_NOTE, { count: rows.length });
+  const voice = sayAgain('golive.links', sayAgain('golive.optouts', sayAgain('youtube.links',
+    sayAgain('pings.streamers', sayAgain('pings.streamer', say)))));
+  if (rows.length === 0) {
+    group.body.append(sayNothing(NO_STREAMERS), voice);
+    return group.node;
+  }
+  const head = el('div', { class: 'grid-row head' }, [
+    ...COLUMNS.map((label) => el('span', { text: label })),
+    el('span'),
+  ]);
+  const lines = rows.map((row) => streamerRow(row, say));
+  const foot = el('div', { class: 'grid-foot' });
+  const none = sayNothing(NOTHING_MATCHES);
+  none.hidden = true;
+
+  const state = { filter: 'all', query: '' };
+  const paint = () => {
+    const found = FILTERS.find((one) => one.id === state.filter) || FILTERS[0];
+    let shown = 0;
+    lines.forEach((line, at) => {
+      const hit = found.keep(rows[at])
+        && (state.query === '' || (line.getAttribute('data-search') || '').includes(state.query));
+      line.hidden = !hit;
+      if (hit) shown += 1;
+    });
+    foot.textContent = shown === rows.length
+      ? `${rows.length} ${rows.length === 1 ? 'person' : 'people'}`
+      : `${shown} of the ${rows.length} ${rows.length === 1 ? 'person' : 'people'} here`;
+    none.hidden = shown > 0;
+    group.count(shown);
+  };
+
+  const chips = el('div', { class: 'chipbar' });
+  const paintChips = () => {
+    chips.replaceChildren(...FILTERS.map((one) => chipButton(one.label, state.filter === one.id, () => {
+      state.filter = one.id;
+      paintChips();
+      paint();
+    })));
+  };
+  paintChips();
+
+  group.body.append(
+    el('div', { class: 'table-tools' }, [
+      searchField({
+        label: 'Find a streamer',
+        placeholder: 'Find a person, a handle, a channel…',
+        onQuery: (query) => {
+          state.query = query;
+          paint();
+        },
+      }),
+      chips,
+    ]),
+    el('div', { class: 'table-scroll' }, [
+      el('div', { class: 'grid-table streamers' }, [head, ...lines, foot]),
+    ]),
+    none,
+    voice,
+  );
+  paint();
+  return group.node;
+}
+
+function addStreamerButton() {
+  return button(ADD_TITLE, () => {
+    const picker = memberPicker({ label: 'Member' });
+    const box = el('input', {
+      class: 'input',
+      type: 'text',
+      placeholder: 'twitch name, or youtube.com/channel/UC… or @handle',
+    });
+    const voice = notice();
+    const go = button('Link them', async () => {
+      if (!picker.id) {
+        voice.say(ADD_PICK_FIRST, 'warn');
+        return;
+      }
+      const routed = routeTyped(box.value);
+      if (!routed.where) {
+        voice.say(routed.why, 'warn');
+        return;
+      }
+      const done = await run(
+        voice,
+        () => (routed.where === YOUTUBE
+          ? send('/api/youtube/links', 'POST', { member_id: picker.id, channel: routed.value })
+          : send('/api/golive/links', 'POST', { user_id: picker.id, twitch_login: routed.value })),
+        (found) => found?.message || 'Linked.',
+      );
+      if (done.ok) {
+        keepSaying(routed.where === YOUTUBE ? 'youtube.links' : 'golive.links', voice);
+        closeDrawer();
+        refresh();
+      }
+    }, { tone: 'warn' });
+    openDrawer(ADD_TITLE, [
+      el('p', { class: 'field-help', text: ADD_HELP }),
+      picker.node,
+      el('div', { class: 'formrow' }, [field('Twitch name or YouTube channel', box, ADD_FIELD_HELP)]),
+      bar([go]),
+      voice,
+    ]);
+  });
+}
 
 async function pingPrefix(specs) {
   const spec = specs.find((one) => one.key === PING_KEY);
@@ -93,123 +749,10 @@ async function pingPrefix(specs) {
   }
 }
 
-/** B2: link a member to a Twitch channel without waiting for them to do it. */
-function linkCard(say) {
-  const picker = memberPicker({ label: 'Member' });
-  const login = el('input', { class: 'input', type: 'text', placeholder: 'the name in twitch.tv/…' });
-  const go = button('Link them', async () => {
-    if (!picker.id) {
-      say.say('Pick the member this is about first.', 'warn');
-      return;
-    }
-    const done = await run(
-      say,
-      () => send('/api/golive/links', 'POST', { user_id: picker.id, twitch_login: login.value.trim() }),
-      (found) => found?.message || 'Linked.',
-    );
-    if (done.ok) {
-      keepSaying('golive.links', say);
-      refresh();
-    }
-  }, { tone: 'warn' });
-  return card('Link a member', [
-    picker.node,
-    el('div', { class: 'formrow' }, [field('Twitch channel', login)]),
-    bar([go]),
-  ]);
-}
-
-/** B1: opt somebody out, or take the opt-out away again. */
-function optoutCard(say) {
-  const picker = memberPicker({ label: 'Member' });
-  const go = button('Opt them out', async () => {
-    if (!picker.id) {
-      say.say('Pick the member this is about first.', 'warn');
-      return;
-    }
-    const done = await run(
-      say,
-      () => send('/api/golive/optouts', 'POST', { user_id: picker.id }),
-      (found) => found?.message || 'Opted out.',
-    );
-    if (done.ok) {
-      keepSaying('golive.optouts', say);
-      refresh();
-    }
-  }, { tone: 'warn' });
-  return card('Opt somebody out', [picker.node, bar([go])]);
-}
-
-async function wordingCard(spec, prefix, endSpec, onEndMode, onSaved) {
-  const shown = el('p', { class: 'preview' });
-  const playing = el('input', { class: 'input switch', type: 'checkbox', checked: true });
-
-  const made = await templateEditor(spec, {
-    controls: [playing],
-    onSaved,
-    sample: () => ({ ...SAMPLE, game: playing.checked ? SAMPLE.game : GAME_FALLBACK }),
-    paint: (filled) => {
-      shown.textContent = filled === null
-        ? `Black Bloc would post ${DEFAULT_TEMPLATE} instead.`
-        : `${prefix}${filled}`;
-    },
-  });
-
-  const end = endSpec === null ? null : modeSwitch(endSpec, {
-    label: 'The stream-end wording',
-    onSaved: (key, value) => onEndMode(String(value)),
-  });
-
-  const preview = card('What an announcement looks like', [
-    el('div', { class: 'formrow' }, [
-      field('Playing a game', playing, `Off shows what an empty game reads as: “${GAME_FALLBACK}”.`),
-      end ? field('When a stream ends', end.node, END_HELP) : null,
-    ]),
-    shown,
-    end ? null : el('p', { class: 'field-help', text: END_UNKNOWN }),
-    end ? end.say : null,
-    made.say,
-  ].filter(Boolean));
-  return [made.row.node, preview];
-}
-
-/** C.2: the ended wording gets the editor the live one has — both keys, one save bar. */
-async function endWordingCard(endTemplate, endAuthor, onSaved) {
-  const drawn = {
-    [END_TEMPLATE_KEY]: el('p', { class: 'preview' }),
-    [END_AUTHOR_KEY]: el('p', { class: 'preview' }),
-  };
-  const blank = { [END_TEMPLATE_KEY]: END_BLANK_TEMPLATE, [END_AUTHOR_KEY]: END_BLANK_AUTHOR };
-  const specs = [{ ...endTemplate, editorType: 'longtext' }];
-  if (endAuthor) specs.push({ ...endAuthor, editorType: 'text' });
-
-  const made = await templateEditor(specs, {
-    where: END_WORDING_WHERE,
-    sample: () => ENDED_SAMPLE,
-    onSaved,
-    paint: (filled, key) => {
-      const node = drawn[key];
-      if (!node) return;
-      const empty = filled !== null && String(filled).trim() === '';
-      node.textContent = empty ? blank[key] : (filled === null ? '' : filled);
-      node.classList.toggle('field-help', empty);
-    },
-  });
-
-  const preview = card(END_WORDING_TITLE, [
-    el('p', { class: 'field-help', text: END_WORDING_NOTE }),
-    drawn[END_AUTHOR_KEY],
-    drawn[END_TEMPLATE_KEY],
-    made.say,
-  ]);
-  return [...made.rows.map((row) => row.node), preview];
-}
-
-/** One rendered message, in the shape the modmail tab already draws a bot line in. */
 function botLine(mark, line, text, footer) {
   return el('li', { class: 'msg', 'data-direction': 'out' }, [
     el('div', { class: 'msg-head' }, [
-      badge(mark, mark === WHILE_LIVE ? 'ok' : 'quiet'),
+      badge(mark, mark === WHILE_LIVE ? 'ok' : null),
       el('span', { text: line }),
     ]),
     el('p', { class: 'msg-body', text }),
@@ -217,7 +760,6 @@ function botLine(mark, line, text, footer) {
   ].filter(Boolean));
 }
 
-/** `<@&123>` reads as the role's name here; the bot sends the id, Discord draws the name. */
 function withRoleNames(text, roles) {
   return String(text || '').replace(/<@&(\d+)>/g, (whole, id) => {
     const role = roles.find((one) => String(one.id) === id);
@@ -225,8 +767,6 @@ function withRoleNames(text, roles) {
   });
 }
 
-/** The one control for "rewrite it" against "just add the ending": a blank golive_end_template
-    is the second shape, and emptying a settings row restores the default rather than blanking it. */
 function shapeButton(say, endTemplate) {
   const rewriting = String(endTemplate || '').trim() !== '';
   return button(rewriting ? SUFFIX_ONLY : REWRITE_IT, async () => {
@@ -248,7 +788,6 @@ function shapeButton(say, endTemplate) {
   }, { tone: 'quiet' });
 }
 
-/** C: the Wording card — both renderings, read from the bot, never rendered here. */
 async function wordingPreview(say, endMode, endTemplate) {
   const list = el('ul', { class: 'msglist' });
   const left = el('p', { class: 'field-help', text: WORDING_LEFT });
@@ -294,85 +833,137 @@ async function wordingPreview(say, endMode, endTemplate) {
   return { node, paint, showEnd };
 }
 
-async function wordingSection(specs) {
-  const wording = section('Announcement wording');
+async function announcementSection(specs, wordingSpecs) {
+  const group = section('The announcement', ANNOUNCEMENT_NOTE);
   const spec = specs.find((one) => one.key === TEMPLATE_KEY);
   if (!spec) {
-    wording.body.append(el('p', {
-      class: 'say-nothing',
-      text: 'The bot did not report a golive_template key, so this editor is not shown rather than guessed at.',
-    }));
-    return wording.node;
+    group.body.append(el('p', { class: 'say-nothing', text: NO_TEMPLATE }));
+    return group.node;
   }
+  const shape = { which: TWITCH };
+  const playing = el('input', { class: 'input switch', type: 'checkbox', checked: true });
   const prefix = await pingPrefix(specs);
   const endSpec = specs.find((one) => one.key === END_MODE_KEY) || null;
-  const endTemplate = specs.find((one) => one.key === END_TEMPLATE_KEY);
+  const endTemplate = specs.find((one) => one.key === END_TEMPLATE_KEY) || null;
+  const endAuthor = specs.find((one) => one.key === END_AUTHOR_KEY) || null;
   const preview = await wordingPreview(
     notice(),
     endSpec ? endSpec.value : null,
     endTemplate ? (endTemplate.value ?? endTemplate.default) : '',
   );
-  const onEndMode = (mode) => {
-    preview.showEnd(mode);
-    preview.paint();
+
+  const liveShown = el('p', { class: 'preview' });
+  const liveMade = await templateEditor(spec, {
+    controls: [playing],
+    onSaved: () => preview.paint(),
+    sample: () => ({
+      ...SAMPLES[shape.which],
+      game: playing.checked ? SAMPLES[shape.which].game : GAME_FALLBACK,
+    }),
+    paint: (filled) => {
+      liveShown.textContent = filled === null
+        ? `Black Bloc would post ${DEFAULT_TEMPLATE} instead.`
+        : `${prefix}${filled}`;
+    },
+  });
+
+  const endShown = {
+    [END_TEMPLATE_KEY]: el('p', { class: 'preview' }),
+    [END_AUTHOR_KEY]: el('p', { class: 'preview' }),
   };
-  const ended = endTemplate
-    ? await endWordingCard(
-      endTemplate,
-      specs.find((one) => one.key === END_AUTHOR_KEY) || null,
-      () => preview.paint(),
-    )
-    : [el('p', { class: 'say-nothing', text: END_NO_KEYS })];
-  wording.body.append(
-    ...await wordingCard(spec, prefix, endSpec, onEndMode, () => preview.paint()),
-    ...ended,
+  const blank = { [END_TEMPLATE_KEY]: END_BLANK_TEMPLATE, [END_AUTHOR_KEY]: END_BLANK_AUTHOR };
+  let endMade = null;
+  if (endTemplate) {
+    const wanted = [{ ...endTemplate, editorType: 'longtext' }];
+    if (endAuthor) wanted.push({ ...endAuthor, editorType: 'text' });
+    endMade = await templateEditor(wanted, {
+      where: END_WORDING_WHERE,
+      onSaved: () => preview.paint(),
+      sample: () => ({ ...SAMPLES[shape.which], ...ENDED_EXTRA }),
+      paint: (filled, key) => {
+        const node = endShown[key];
+        if (!node) return;
+        const empty = filled !== null && String(filled).trim() === '';
+        node.textContent = empty ? blank[key] : (filled === null ? '' : filled);
+        node.classList.toggle('field-help', empty);
+      },
+    });
+  }
+
+  const endMode = endSpec ? modeSwitch(endSpec, {
+    label: 'The stream-end wording',
+    onSaved: (key, value) => {
+      preview.showEnd(String(value));
+      preview.paint();
+    },
+  }) : null;
+
+  const chips = el('div', { class: 'chipbar' });
+  const paintChips = () => {
+    chips.replaceChildren(...[TWITCH, YOUTUBE].map((which) => chipButton(
+      `Preview as ${PLATFORM_WORDS[which]}`,
+      shape.which === which,
+      () => {
+        shape.which = which;
+        paintChips();
+        liveMade.repaint();
+        if (endMade) endMade.repaint();
+      },
+    )));
+  };
+  paintChips();
+
+  const endRows = wordingSpecs.filter(
+    (one) => one.key === END_SUFFIX_KEY || one.key === END_KEEP_KEY,
+  );
+
+  group.body.append(
+    chips,
+    card(WHILE_LIVE_TITLE, [
+      liveMade.row.node,
+      el('div', { class: 'formrow' }, [
+        field('Playing a game', playing, PLAYING_HELP),
+        endMode ? field('When a stream ends', endMode.node, END_HELP) : null,
+      ].filter(Boolean)),
+      endMode ? null : el('p', { class: 'field-help', text: END_UNKNOWN }),
+      liveShown,
+      endMode ? endMode.say : null,
+      liveMade.say,
+    ].filter(Boolean)),
+    card(ENDED_TITLE, [
+      ...(endMade
+        ? endMade.rows.map((row) => row.node)
+        : [el('p', { class: 'say-nothing', text: END_NO_KEYS })]),
+      endShown[END_AUTHOR_KEY],
+      endShown[END_TEMPLATE_KEY],
+      endRows.length
+        ? await settingsPanel(endRows, { onSaved: () => preview.paint(), where: ENDED_TITLE })
+        : null,
+      endMade ? endMade.say : null,
+    ].filter(Boolean)),
     preview.node,
   );
-  return wording.node;
+  return group.node;
 }
 
-const PINGS_MODE_KEY = 'pings_mode';
-const PINGS_NOTE = 'One opt-in role for go-live and event pings, one for raid trains, and a '
-  + 'role per streamer that only their followers wear. Members pick them with /pings, or from '
-  + 'Discord’s onboarding screen once this is a Community server.';
-const PINGS_NO_MODE = 'The bot did not report a pings_mode key, so the switch is not shown '
-  + 'rather than guessed at.';
-const NO_STREAMERS = 'Nobody has a ping role yet. Start one below, or a streamer starts their '
-  + 'own from /pings.';
-const NO_LISTED = 'The bot has not seen anybody streaming here yet. Nobody is added by hand — '
-  + 'going live is what puts somebody on this list.';
-const ROLE_GONE = 'deleted by hand';
-const NO_ROLE_YET = 'none yet';
-const HIDDEN = 'hidden';
-const LISTED = 'listed';
-const SETUP_HELP = 'Makes (or reuses) the Events role, points both feeds at it and puts it on '
-  + 'the Notifications panel. Post that panel from the Role menus tab.';
-const RAID_HELP = 'Makes (or reuses) the Raid trains role and points raidtrain_ping_role_id at '
-  + 'it, so a member opts in from /pings instead of asking staff.';
-const MODE_HELP = 'off stops every opt-in and every fan-role ping; nobody loses a role.';
+function recentSection(sessions) {
+  const group = section('Recent streams', null, { count: sessions.length });
+  group.body.append(table([
+    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
+    { label: 'Started', cell: (row) => when(row.started_at), className: 'mono' },
+    {
+      label: 'Ended',
+      cell: (row) => (row.ended_at ? when(row.ended_at) : badge(LIVE_NOW, 'ok')),
+      className: 'mono',
+    },
+    { label: 'Game', cell: (row) => row.game },
+    { label: 'Title', cell: (row) => row.title, className: 'wrap' },
+    { label: 'How', cell: (row) => (row.also_source ? `${row.source} + ${row.also_source}` : row.source) },
+    { label: 'Mode then', cell: (row) => badge(row.mode, row.mode === 'on' ? 'ok' : 'warn') },
+  ], sessions, { empty: 'No streams have been seen yet.' }));
+  return group.node;
+}
 
-const LIST_NOTE = 'Everybody the bot has ever seen streaming here. Hiding somebody stops new '
-  + 'followers and stops a later go-live putting them back; it never takes a role off anybody '
-  + 'who is wearing one.';
-const HIDE_TITLE = 'Take {name} off the streamer list?';
-const HIDE_BODY = 'Nobody new can follow them, and going live does not put them back. Their '
-  + 'ping role goes too if nobody is wearing it.';
-
-const ONBOARDING_NOTE = 'The bot keeps two of Discord’s onboarding prompts in step with these '
-  + 'roles: what should ping you, and which streamers. It never touches a prompt it did not '
-  + 'make, and it never turns onboarding itself on or off.';
-const ONBOARDING_NO_COMMUNITY = 'This server is not a Community server, so Discord has no '
-  + 'onboarding screen. Turn Community on in Server Settings ▸ Enable Community; until then '
-  + 'the Notifications role menu is the fallback.';
-const ONBOARDING_OFF = 'The bot is not managing onboarding. The prompts stay exactly as '
-  + 'somebody left them.';
-const ONBOARDING_NEVER = 'Not written yet.';
-const ONBOARDING_NOTHING = 'Nothing to put on the screen yet — set up the Events role or the '
-  + 'raid-train role first.';
-const ONBOARDING_WHERE = 'Whether the bot manages them at all is '
-  + 'pings_onboarding_managed in the settings below, and Stop managing onboarding on /pings.';
-
-/** D3: one button for the whole Events-role set-up, beside the role field it fills in. */
 function setupCard(say) {
   const go = button('Set up the Events role', async () => {
     const done = await run(
@@ -403,52 +994,6 @@ function setupCard(say) {
   ]);
 }
 
-/** C9: the streamer list, which the bot writes and staff only ever hide or restore from. */
-function streamerList(say, rows) {
-  return table([
-    { label: 'Streamer', cell: (row) => nameNode(row.member_id, row.member) },
-    {
-      label: 'On the list',
-      cell: (row) => (row.listed ? LISTED : badge(HIDDEN, 'warn')),
-    },
-    {
-      label: 'Role',
-      cell: (row) => (row.role || (row.role_id ? badge(ROLE_GONE, 'warn') : NO_ROLE_YET)),
-    },
-    {
-      label: 'Followers',
-      cell: (row) => (row.followers === null ? '—' : String(row.followers)),
-      className: 'mono',
-    },
-    { label: 'Last live', cell: (row) => when(row.last_live_at), className: 'mono' },
-    { label: 'Go-lives', cell: (row) => String(row.live_count), className: 'mono' },
-    {
-      label: '',
-      cell: (row) => button(row.listed ? 'Hide' : 'Restore', async () => {
-        if (row.listed) {
-          const sure = await ask({
-            title: HIDE_TITLE.replace('{name}', row.member || row.member_id),
-            body: [HIDE_BODY],
-            confirmLabel: 'Hide',
-          });
-          if (!sure) return;
-        }
-        const done = await run(
-          say,
-          () => send(`/api/pings/list/${encodeURIComponent(row.member_id)}`, 'POST', {
-            listed: !row.listed,
-          }),
-          (found) => found?.message || 'Done.',
-        );
-        if (done.ok) {
-          keepSaying('pings.streamer', say);
-          refresh();
-        }
-      }, { tone: row.listed ? 'danger' : 'warn' }),
-    },
-  ], rows, { empty: NO_LISTED });
-}
-
 function onboardingLines(found) {
   if (!found) return [ONBOARDING_NO_COMMUNITY];
   const lines = [];
@@ -466,12 +1011,8 @@ function onboardingLines(found) {
   return lines;
 }
 
-/** C9: what the bot's prompts hold and when they were last written. The managed switch is
-    `pings_onboarding_managed` in the settings block below — one fact, one control. */
 function onboardingCard(say, found) {
-  const lines = onboardingLines(found).map(
-    (text) => el('p', { class: 'field-help', text }),
-  );
+  const lines = onboardingLines(found).map((text) => el('p', { class: 'field-help', text }));
   const last = el('p', {
     class: 'field-help mono',
     text: found && found.last_synced_at
@@ -501,115 +1042,7 @@ function onboardingCard(say, found) {
   ].filter(Boolean));
 }
 
-/** D1: staff may start a streamer's role whatever pings_fan_role_creation says. */
-async function streamerCard(say) {
-  const picker = memberPicker({ label: 'Streamer' });
-  const roles = await roleSelect(null);
-  const go = button('Give them a ping role', async () => {
-    if (!picker.id) {
-      say.say('Pick the streamer this is about first.', 'warn');
-      return;
-    }
-    const done = await run(
-      say,
-      () => send('/api/pings/streamers', 'POST', {
-        member_id: picker.id,
-        role_id: readSelect(roles, false),
-      }),
-      (found) => found?.message || 'Made the role.',
-    );
-    if (done.ok) {
-      keepSaying('pings.streamers', say);
-      refresh();
-    }
-  }, { tone: 'warn' });
-  return card('Create for a streamer', [
-    picker.node,
-    el('div', { class: 'formrow' }, [
-      field('Use this role instead', roles, 'Leave it unset and Black Bloc makes one from '
-        + 'pings_fan_role_template.'),
-    ]),
-    bar([go]),
-  ]);
-}
-
-async function pingsSection(specs, streamers, listing, onboarding) {
-  const say = notice();
-  const group = section('Pings', PINGS_NOTE, { count: listing.length });
-  const spec = specs.find((one) => one.key === PINGS_MODE_KEY);
-  const mode = spec ? modeSwitch(spec, { say, onSaved: () => refresh() }) : null;
-
-  const rows = table([
-    { label: 'Streamer', cell: (row) => nameNode(row.member_id, row.member) },
-    {
-      label: 'Role',
-      cell: (row) => (row.role ? row.role : badge(ROLE_GONE, 'warn')),
-    },
-    {
-      label: 'Followers',
-      cell: (row) => (row.followers === null ? '—' : String(row.followers)),
-      className: 'mono',
-    },
-    { label: 'Started', cell: (row) => when(row.created_at), className: 'mono' },
-    { label: 'By', cell: (row) => nameNode(row.created_by, row.created_by_name) },
-    {
-      label: '',
-      cell: (row) => button('Remove', async () => {
-        const sure = await ask({
-          title: `Take ${row.member || row.member_id}'s ping role away?`,
-          body: [
-            'Everybody who followed them stops being pinged.',
-            'Whether the Discord role itself is deleted is pings_fan_role_delete, below.',
-          ],
-          confirmLabel: 'Remove',
-        });
-        if (!sure) return;
-        const done = await run(
-          say,
-          () => api(`/api/pings/streamers/${encodeURIComponent(row.member_id)}`, { method: 'DELETE' }),
-          (found) => found?.message || 'Removed.',
-        );
-        if (done.ok) {
-          keepSaying('pings.streamers', say);
-          refresh();
-        }
-      }, { tone: 'danger' }),
-    },
-  ], streamers, { empty: NO_STREAMERS });
-
-  group.body.append(...[
-    mode
-      ? el('div', { class: 'formrow' }, [field('Ping roles', mode.node, MODE_HELP)])
-      : el('p', { class: 'say-nothing', text: PINGS_NO_MODE }),
-    el('p', { class: 'field-help', text: LIST_NOTE }),
-    streamerList(say, listing),
-    rows,
-    setupCard(say),
-    await streamerCard(say),
-    onboardingCard(say, onboarding),
-    sayAgain('pings.streamers', sayAgain('pings.setup', say)),
-  ].filter(Boolean));
-  return group.node;
-}
-
-const LIVE_MODE_KEY = 'youtube_live_mode';
-const CHANNELS_NOTE = 'Somebody who links their YouTube channel here is announced when they go '
-  + 'live, in the same place a Twitch stream is. Uploads are not watched at all.';
-const CHANNELS_NO_MODE = 'The bot did not report a youtube_live_mode key, so the switch is not '
-  + 'shown rather than guessed at.';
-const CHANNELS_MODE_HELP = 'off probes nothing at all; shadow probes and logs what it would have '
-  + 'announced; on announces it. The post itself goes wherever go-live posts, so golive_mode and '
-  + 'golive_channel_id still decide whether anybody sees it.';
-const NO_YOUTUBE_LINKS = 'Nobody has linked a YouTube channel. Add one below, or a member opens '
-  + '/youtube and links their own.';
-
-const LIVE_NOTE = 'A linked channel going live is announced through the go-live feed above, as '
-  + 'source youtube. golive_mode still decides whether anything is posted.';
-const LIVE_KEY_UNSET = 'With no YOUTUBE_API_KEY the stream is announced from the page alone, so '
-  + 'its title reads Live now and no quota is spent.';
-
-/** What the live probe is doing, on the card the YouTube section reports from. */
-function liveStatus(status) {
+function probeCard(status) {
   if (!status) return null;
   const rows = [
     ['Live streams', badge(status.live_mode || 'off', status.live_mode === 'on' ? 'ok' : 'warn')],
@@ -623,94 +1056,86 @@ function liveStatus(status) {
     ['Bot check', status.botcheck ? badge('yes — that page had no video id', 'warn') : 'no'],
   ];
   return card('How live streams are spotted', [
-    el('p', { class: 'field-help', text: LIVE_NOTE }),
+    el('p', { class: 'field-help', text: PROBE_NOTE }),
     el('div', { class: 'formrow' }, rows.map(([label, value]) => field(label, (
       typeof value === 'string' ? el('p', { class: 'preview', text: value }) : value
     )))),
-    status.api_key_set ? null : el('p', { class: 'field-help', text: LIVE_KEY_UNSET }),
+    status.api_key_set ? null : el('p', { class: 'field-help', text: PROBE_KEY_UNSET }),
   ].filter(Boolean));
 }
 
-/** F3: staff link somebody's channel without waiting for them to open /youtube. */
-function youtubeLinkCard(say) {
-  const picker = memberPicker({ label: 'Member' });
-  const channel = el('input', {
-    class: 'input',
-    type: 'text',
-    placeholder: 'youtube.com/channel/UC… or @handle',
-  });
-  const go = button('Link their channel', async () => {
-    if (!picker.id) {
-      say.say('Pick the member this is about first.', 'warn');
-      return;
-    }
-    const done = await run(
-      say,
-      () => send('/api/youtube/links', 'POST', {
-        member_id: picker.id,
-        channel: channel.value.trim(),
-      }),
-      (found) => found?.message || 'Linked.',
-    );
-    if (done.ok) {
-      keepSaying('youtube.links', say);
-      refresh();
-    }
-  }, { tone: 'warn' });
-  return card('Link a member', [
-    picker.node,
-    el('div', { class: 'formrow' }, [field('YouTube channel', channel,
-      'The address that starts with youtube.com/channel/UC…, or their @handle.')]),
-    bar([go]),
+async function logDrawer() {
+  const blocks = await Promise.all([
+    logsSection('golive'),
+    logsSection('youtube', { title: 'YouTube logs' }),
+    logsSection('pings', { title: 'Ping role logs' }),
   ]);
+  const holders = LOG_CHIPS.slice(1).map((one, at) => ({ id: one.id, node: unsection(blocks[at]) }));
+  const chips = el('div', { class: 'chipbar' });
+  const state = { pick: 'all' };
+  const paint = () => {
+    chips.replaceChildren(...LOG_CHIPS.map((one) => chipButton(one.label, state.pick === one.id, () => {
+      state.pick = one.id;
+      paint();
+    })));
+    for (const holder of holders) {
+      holder.node.hidden = !(state.pick === 'all' || state.pick === holder.id);
+    }
+  };
+  paint();
+  return drawer('Log · both platforms and ping roles', [chips, ...holders.map((one) => one.node)]);
 }
 
-async function channelsSection(specs, links, status) {
-  const say = notice();
-  const group = section('YouTube channels', CHANNELS_NOTE, { count: links.length });
-  const spec = specs.find((one) => one.key === LIVE_MODE_KEY);
-  const mode = spec ? modeSwitch(spec, { say, onSaved: () => refresh() }) : null;
-
-  const linkTable = table([
-    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
-    { label: 'Channel', cell: (row) => row.title || row.channel_id, className: 'wrap' },
-    { label: 'Id', cell: (row) => row.channel_id, className: 'mono' },
-    { label: 'Linked', cell: (row) => when(row.linked_at), className: 'mono' },
-    {
-      label: '',
-      cell: (row) => button('Unlink', async () => {
-        const sure = await ask({
-          title: `Unlink ${row.user_name || row.user_id}?`,
-          body: [
-            `Black Bloc stops watching ${row.title || row.channel_id} for live streams.`,
-            'They can link it again themselves on /youtube, and a Lead can link it for them below.',
-          ],
-          confirmLabel: 'Unlink',
-        });
-        if (!sure) return;
-        const done = await run(
-          say,
-          () => api(`/api/youtube/links/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
-          'Unlinked.',
-        );
-        if (done.ok) {
-          keepSaying('youtube.links', say);
-          refresh();
-        }
-      }, { tone: 'danger' }),
-    },
-  ], links, { empty: NO_YOUTUBE_LINKS });
-
-  group.body.append(...[
-    mode
-      ? el('div', { class: 'formrow' }, [field('Live-stream announcements', mode.node, CHANNELS_MODE_HELP)])
-      : el('p', { class: 'say-nothing', text: CHANNELS_NO_MODE }),
-    liveStatus(status),
-    linkTable,
-    youtubeLinkCard(say),
-    sayAgain('youtube.links', say),
-  ].filter(Boolean));
+async function restSection({ placed, onboarding, status, pingHolder }) {
+  const group = section('Everything else', REST_NOTE, { count: placed.drawers.length + 1 });
+  const pingSay = notice();
+  const drawers = [];
+  for (const one of placed.drawers) {
+    const panel = await settingsPanel(one.specs, {
+      onSaved: () => refresh(),
+      where: one.title,
+      empty: NO_SETTINGS_HERE,
+    });
+    if (one.id === 'pings') {
+      const node = drawer(
+        `${one.title} · ${settingWord(one.specs.length)} · the shared roles · Discord onboarding`,
+        [
+          panel,
+          setupCard(pingSay),
+          onboardingCard(pingSay, onboarding),
+          sayAgain('pings.setup', sayAgain('pings.raidtrain_setup', sayAgain('pings.onboarding', pingSay))),
+        ],
+      );
+      pingHolder.node = node;
+      drawers.push(node);
+    } else if (one.id === 'spotted') {
+      drawers.push(drawer(
+        `${one.title} · ${settingWord(one.specs.length)} and the probe`,
+        [panel, probeCard(status)],
+      ));
+    } else {
+      drawers.push(drawer(`${one.title} · ${settingWord(one.specs.length)}`, [panel]));
+    }
+  }
+  group.body.append(...drawers, await logDrawer());
   return group.node;
+}
+
+function warningsFor(golive, onboarding) {
+  const lines = [];
+  const events = golive.find((one) => one.key === PING_KEY);
+  if (!events || !events.value) lines.push(NO_EVENTS_ROLE);
+  if (onboarding && onboarding.managed && onboarding.community && !onboarding.last_synced_at) {
+    lines.push(ONBOARDING_DRIFTED);
+  }
+  return lines;
+}
+
+function pageHead() {
+  const subtitle = document.getElementById('subtitle');
+  if (subtitle) subtitle.textContent = SUBTITLE;
+  const aside = document.getElementById('page-aside');
+  if (aside) aside.replaceChildren(addStreamerButton());
 }
 
 async function load() {
@@ -748,94 +1173,58 @@ async function load() {
     .concat(idsIn(listing, ['member_id', 'hidden_by']))
     .concat(idsIn(streamers, ['member_id', 'created_by'])));
 
-  const say = notice();
-
-  const linkTable = table([
-    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
-    { label: 'Twitch', cell: (row) => row.twitch_login, className: 'mono' },
-    { label: 'Linked', cell: (row) => when(row.linked_at), className: 'mono' },
-    {
-      label: '',
-      cell: (row) => button('Unlink', async () => {
-        const sure = await ask({
-          title: `Unlink ${row.user_name || row.user_id}?`,
-          body: [`Black Bloc stops watching twitch.tv/${row.twitch_login} for them. They can link it again themselves.`],
-          confirmLabel: 'Unlink',
-        });
-        if (!sure) return;
-        const done = await run(say, () => api(`/api/golive/links/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }), 'Unlinked.');
-        if (done.ok) {
-          keepSaying('golive.links', say);
-          refresh();
-        }
-      }, { tone: 'danger' }),
-    },
-  ], links, { empty: 'Nobody has linked a Twitch account.' });
-
-  const optoutSay = notice();
-  const optoutTable = table([
-    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
-    { label: 'Since', cell: (row) => when(row.at), className: 'mono' },
-    {
-      label: '',
-      cell: (row) => button('Announce them again', async () => {
-        const done = await run(
-          optoutSay,
-          () => api(`/api/golive/optouts/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
-          (found) => found?.message || 'The opt-out is gone.',
-        );
-        if (done.ok) {
-          keepSaying('golive.optouts', optoutSay);
-          refresh();
-        }
-      }, { tone: 'quiet' }),
-    },
-  ], optouts, { empty: 'Nobody has opted out.' });
-
-  const sessionTable = table([
-    { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
-    { label: 'Started', cell: (row) => when(row.started_at), className: 'mono' },
-    { label: 'Ended', cell: (row) => (row.ended_at ? when(row.ended_at) : badge('live now', 'ok')), className: 'mono' },
-    { label: 'Game', cell: (row) => row.game },
-    { label: 'Title', cell: (row) => row.title, className: 'wrap' },
-    { label: 'How', cell: (row) => row.source },
-    { label: 'Mode then', cell: (row) => badge(row.mode, row.mode === 'on' ? 'ok' : 'warn') },
-  ], sessions, { empty: 'No streams have been seen yet.' });
-
-  const one = section('Twitch links', null, { count: links.length });
-  one.body.append(linkTable, linkCard(say), sayAgain('golive.links', say));
-  const two = section('Opt-outs', 'These members are never announced, whatever else is set.', {
-    count: optouts.length,
+  const rows = joinStreamers({
+    links,
+    youtubeLinks,
+    optouts,
+    listing,
+    streamers,
+    sessions,
+    status: youtubeStatus,
   });
-  two.body.append(optoutTable, optoutCard(optoutSay), sayAgain('golive.optouts', optoutSay));
-  const three = section('Recent streams', null, { count: sessions.length });
-  three.body.append(sessionTable);
+  const cards = liveStreams(sessions);
 
   const golive = settingsNamespace(allSettings, 'golive');
   const pings = settingsNamespace(allSettings, 'pings');
   const youtube = settingsNamespace(allSettings, 'youtube');
+  const placed = placeSettings([...golive, ...pings, ...youtube]);
+
+  const say = notice();
+  pageHead();
+
+  const pingHolder = { node: null };
+  const openPings = () => {
+    if (!pingHolder.node) return;
+    const sect = pingHolder.node.closest('details.sect-card');
+    if (sect) sect.open = true;
+    pingHolder.node.open = true;
+    pingHolder.node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const rest = await restSection({
+    placed,
+    onboarding: onboardingPayload,
+    status: youtubeStatus,
+    pingHolder,
+  });
 
   document.getElementById('dash').replaceChildren(
-    one.node,
-    two.node,
-    three.node,
-    await wordingSection(golive),
-    await namespaceSettings('golive', { onSaved: () => refresh(), omit: [TEMPLATE_KEY, END_MODE_KEY] }),
-    await logsSection('golive'),
-    await channelsSection(youtube, youtubeLinks, youtubeStatus),
-    await namespaceSettings('youtube', {
-      title: 'YouTube settings',
-      onSaved: () => refresh(),
-      omit: [LIVE_MODE_KEY],
+    headerStrip({
+      golive,
+      youtube,
+      pings,
+      rows,
+      cards,
+      status: youtubeStatus,
+      warnings: warningsFor(golive, onboardingPayload),
+      onOpenPings: openPings,
+      say: notice(),
     }),
-    await logsSection('youtube', { title: 'YouTube logs' }),
-    await pingsSection(pings, streamers, listing, onboardingPayload),
-    await namespaceSettings('pings', {
-      title: 'Ping role settings',
-      onSaved: () => refresh(),
-      omit: [PINGS_MODE_KEY],
-    }),
-    await logsSection('pings', { title: 'Ping role logs' }),
+    liveSection(cards),
+    streamersSection(rows, say),
+    await announcementSection(golive, placed.wording),
+    recentSection(sessions),
+    rest,
   );
 }
 

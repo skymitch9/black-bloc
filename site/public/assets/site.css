@@ -2326,3 +2326,82 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 }
 .md-embed-body { flex: 1 1 auto; min-width: 0; padding: 10px 12px; }
 .md-embed-title { font-size: var(--et-ui-md); font-weight: var(--et-weight-medium); }
+
+/* ---- go-live: the strip, the live cards, the drawers --------------------- */
+/* TOKENS ONLY, like the rest of this file. The Streamers list is the shared
+   `.grid-table` + `.grid-row` construct with its own column template, the way
+   Members already extends it; see code-notes. */
+
+.stat-note { color: var(--et-muted); font-size: var(--et-ui-2xs); text-wrap: pretty; }
+.stat .seg { align-self: flex-start; }
+button.stat {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.stat:hover { background: var(--et-row-hover); }
+button.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+.stat[data-tone="warn"] { border-color: color-mix(in srgb, var(--et-warn) 45%, transparent); }
+.stat[data-tone="warn"] .stat-value,
+.stat[data-tone="warn"] .stat-label { color: var(--et-warn); }
+
+.golive-lives { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 12px; }
+.livecard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-left-width: calc(var(--et-border-w) * 3);
+  border-left-color: var(--et-ok);
+  border-radius: var(--et-radius-lg);
+  background: var(--et-surface);
+  box-shadow: var(--et-card-shadow);
+}
+.livecard[data-held="true"] { border-left-color: var(--et-warn); }
+.livecard-who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-weight: var(--et-weight-strong);
+}
+.livecard-what { margin: 0; color: var(--et-muted); font-size: var(--et-ui-sm); text-wrap: pretty; }
+.livecard-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--et-ui-xs);
+}
+.livecard-meta .mono { overflow-wrap: anywhere; }
+
+.pill.glplat[data-platform="twitch"] { color: var(--et-accent); border-color: color-mix(in srgb, var(--et-accent) 40%, transparent); }
+.pill.glplat[data-platform="youtube"] { color: var(--et-danger); border-color: color-mix(in srgb, var(--et-danger) 40%, transparent); }
+
+.grid-table.streamers { min-width: 780px; }
+.grid-table.streamers .grid-row {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.2fr) 7.5rem 24px;
+}
+.grid-row .cell-name { display: flex; align-items: center; gap: 8px; }
+.glid { display: block; color: var(--et-muted); font-size: var(--et-ui-2xs); }
+
+.gldrawer { border-top: var(--et-hairline-w) solid var(--et-hairline); }
+.gldrawer:first-child { border-top: 0; }
+.gldrawer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  color: var(--et-fg);
+  font-size: var(--et-ui-md);
+  font-weight: var(--et-weight-medium);
+  list-style: none;
+  cursor: pointer;
+}
+.gldrawer-head::-webkit-details-marker { display: none; }
+.gldrawer-head:hover { color: var(--et-accent); }
+.gldrawer-head:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
+.gldrawer-head .sect-mark { transform: rotate(-90deg); flex: none; }
+.gldrawer[open] > .gldrawer-head .sect-mark { transform: none; }
+.gldrawer-body { display: flex; flex-direction: column; gap: 12px; padding: 0 0 14px; }
