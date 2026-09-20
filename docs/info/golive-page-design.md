@@ -1,7 +1,10 @@
 # The Go-live page, rebuilt — one list of people, whichever platform they stream on
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatching to Opus
-> 2026-09-20 15:5x as branch `golive-page`.** **Last verified: 2026-09-20 15:4x** against `main`
+> **Audience:** Fable (to review), then the build agent. **Status:** TRACKED · ⏸️ **READY FOR REVIEW — NOT
+> DISPATCHED.** (The owner approved the mock 16:0x and a build was dispatched 15:56; he stopped it a minute
+> later — *"dont start it in 4 minutes, we're gonna swap to fable, just prepare it to be reviewed."* — before it
+> had written anything. No branch, no worktree, nothing to clean up.) **Read `## For the reviewer` at the foot
+> first: five judgement calls this document makes that a reviewer should rule on before any of it is built.** **Last verified: 2026-09-20 15:4x** against `main`
 > `3d8ee64` (v141 live): `site/public/assets/page-golive.js` read in full (845 lines, twelve top-level
 > sections, the `load()` order at `:716–845`), `ui.js:namespaceSettings` `:1279` / `modeSwitch` `:1366`,
 > `logs.js:logsSection` `:202`, and the 36 keys the three namespaces hold, measured by import
@@ -118,7 +121,46 @@ process tree only, never `taskkill /IM python.exe`.
 
 ## E. Docs
 
-This doc's `## Deviations` (dated) and `## What was NOT verified` · `code-notes.md` for the join's
+This doc's `## For the reviewer — five calls this design makes, each of which could be made differently
+
+The owner has approved the mock's **look**. What follows are the decisions underneath it that he did not
+rule on, in the order they would hurt if they are wrong. Ruling on them is the point of this review;
+nothing needs rewriting unless a ruling changes it.
+
+**1. The settings drawers replace a mechanical rule with a curated map.** Today three
+`namespaceSettings` calls dump three namespaces — nobody maintains that, and a new key appears on its own.
+§B4 sorts 36 keys by question into five drawers, which reads far better and must be maintained by hand for
+ever. The catch-all drawer and the every-key-lands-once test stop a key vanishing; they do not stop a key
+landing in a silly drawer. **The alternative:** keep namespace-shaped groups and spend the effort on their
+labels and help text instead. ⚠️ This is the call that the other 19 pages will copy.
+
+**2. Two cards that are NOT settings get buried in a closed drawer.** *The shared roles* and *Discord
+onboarding* carry real actions, and §B4 moves them into the Ping-roles drawer. That is in tension with the
+audit's own second test — the primary action must be reachable without learning the page. **The
+alternative:** they stay a visible section, and the page has six, not five.
+
+**3. *Live now* is a section AND a filter chip on the Streamers table.** One fact, two places, which is
+what §C test 3 forbids elsewhere in this same document. It is defensible — the section is a glanceable
+summary, the chip is navigation — but it is the design's own exception to its own rule and should be
+named as one or removed.
+
+**4. A row that opens an inline drawer becomes the house pattern.** It is the direct answer to Pop's
+finding, and this page is where it gets set for every other page that copies it. Worth blessing or
+rejecting deliberately rather than by precedent. ⚠️ It has a known cost this document does not solve:
+KI-20 says an ephemeral panel's buttons die on a restart, and an expanded row holds state that a refresh
+throws away.
+
+**5. The join lives in the browser, not in Python.** `joinStreamers` merges five payloads client-side so
+the build touches no route and no Python — which is why the blast radius is small and the gate is fast.
+But every other join in this estate lives next to its cog, and the site is meant to be a view. **The
+alternative:** one `GET /api/golive/streamers` that returns joined rows, which is a bigger build, needs a
+contract row and a Python test, and moves this out of front-end-only territory.
+
+**If all five stand as written**, the build is ready to dispatch exactly as the body describes: branch
+`golive-page`, front-end only, the brief already written and proven by the fact that it survived one
+dispatch unchanged.
+
+## Deviations` (dated) and `## What was NOT verified` · `code-notes.md` for the join's
 non-obvious choices · `docs/info/README.md` row · `docs/access/sweeps.md` rows `GP-a…` (a: the table shows
 one row per person with both platforms; b: a row opens and its moves work; c: Add a streamer takes a
 Twitch name and a YouTube address and refuses an ambiguous one in words; d: the two mode switches in the
