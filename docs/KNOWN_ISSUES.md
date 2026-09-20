@@ -2,7 +2,18 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-18** — **KI-11, KI-12 and KI-13 CLOSED as moot** on branch
+> Last verified: **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**
+> (2026-09-18 16:08). What moved: **KI-5 is MOOT** (its whole subject was what test mode did
+> and did not stop) and **KI-8's "which today is every panel outside `TEST_CHANNEL_ID`"**
+> clause is history — each gains a dated banner and keeps its body, nothing deleted.
+> **KI-26's count stands at TEN** (the tenth, 2026-09-18 16:5x, was the first on a `> file`
+> run — its own *what would change it* is therefore MET, and the session it asks for is
+> queued on [`TODO.md`](TODO.md)). ⚠️ **Nothing else in this file was re-tested:** no
+> symptom was reproduced, nothing met live Discord, no browser rendered a page, and the two
+> thresholds under KI-6 (">1 site user", ">1 person with `/data` access") are **still
+> unmeasured** — and now sharper, because the bot is live to members. Every OPEN entry's
+> `Status` word was re-read and is still the right word. Before that,
+> **2026-09-18** — **KI-11, KI-12 and KI-13 CLOSED as moot** on branch
 > `youtube-uploads-removal` (owner: *"the youtube uploader we should just fully trash"*; design
 > [`info/youtube-uploads-removal-design.md`](info/youtube-uploads-removal-design.md)). All three
 > described the UPLOADS half — the feed's flakiness, the ~25-minute lateness, and a live broadcast
@@ -168,6 +179,12 @@ quiet in production while every test and every home-machine check stayed green.
 **Status.** `WATCHING` — filed 2026-09-17 by the `youtube-live` build; **rewritten 2026-09-17 with
 the measured shape, and the fix is on branch `youtube-live-fix`** (design ▸ Deviations ▸ *The
 datacenter page*; sweeps **586–590**, which ⚠️ **can only be run against the live bot on Fly**).
+⚠️ **2026-09-19 — "on branch `youtube-live-fix`" is STALE: the fix MERGED and SHIPPED as v133**
+(2026-09-17 18:44, release `b20e4dc`) and the open-session row followed as **v135**
+(`2dd8fcd`, 19:11). The banner at the top of this entry and the 10:07 intermittency note are
+the current reading; this sentence is left in place, corrected rather than rewritten, because it
+is what the entry said when it was filed. Sweeps **586–590** are still the owner's and still
+un-run.
 What the fix does: `video_id` comes ONLY from the canonical link (the `"videoId"` fallback is gone —
 it returned a stranger's video); `live` is the routing fact, so *live, id unknown* is its own
 outcome; with `YOUTUBE_API_KEY` **one** `search.list(eventType=live)` — **100 units, once per
@@ -194,7 +211,11 @@ and are NOT one:** oEmbed on the `/live` URL is **404 everywhere**, and
 `https://www.youtube.com/embed/live_stream?channel=<id>` carries **no `videoId` anywhere**. Until
 then the regexes in `black_bloc/youtube_live.py` are the whole fix and the five fixtures under
 `tests/fixtures/youtube_*_page.html` — including the two hand-written bot-check pages — are where a
-new shape is pinned. `youtube_live_mode` still ships `off`.
+new shape is pinned. `youtube_live_mode` still ships `off`. ⚠️ **The DEFAULT is off; the LIVE
+value on this guild is `on`** (set by the owner 2026-09-17, read back on `/api/youtube/status`
+at the v139 boot, 2026-09-18 10:07) — so this entry describes a feature that is running, not a
+dormant one. ⚠️ **Not re-read 2026-09-19:** `/api/youtube/status` now answers `not_signed_in` to
+an anonymous request, so the live mode cannot be confirmed without a Discord session.
 
 ## KI-29 — A WITHDRAWN request's forum post keeps its tag and is never archived — `ACCEPTED`
 
@@ -276,6 +297,16 @@ xdist workers rather than the suite.
 or the count passing **10** — then spend a session on it: run the gate under `-n auto -p no:cacheprovider`
 with `PYTEST_DEBUG` and a worker log, and compare a hung run's `py-spy dump` against a live one.
 Runs since v103: v103–v110 (eight) all passed the gate first time.
+
+🔴 **2026-09-19 — BOTH TRIGGERS ARE NOW MET, and this entry is the record of that.** The tenth
+sighting (2026-09-18 16:5x) was on a `> file` run — the exact case the first clause said none of
+the five was — and the count has reached **10**, which is the second clause. So the debugging
+session above is no longer conditional; it is owed. It is queued on [`TODO.md`](TODO.md) behind
+the Sunday reset, and the two CI runs CANCELLED at the workflow's 20-minute timeout
+(2026-09-17 night) are the same stall reaching GitHub Actions, where nobody is watching for it.
+Status stays `WATCHING` only because nothing has been spent on it yet — ⚠️ **do not read that
+word as "still undecided"**. Number now: **0** — the next thing to do is the session, not another
+sighting.
 
 ## KI-25 — Discord is the ONLY sign-in; the phase-8 Google SSO for the owner was never built — `WAIVED`
 
@@ -488,6 +519,16 @@ ask for it — the same shape `TempVoicePanel`'s own buttons already use, minus
 the request-card state that currently lives only in the View's Python object.
 Number: **0 reports** so far; nothing planned.
 
+> ⚠️ **2026-09-19 — the EXPOSURE changed, the defect did not.** Until 2026-09-18 16:08 a panel
+> could only be opened in `#blackbloc-logs` by the owner or a mod, so "restarts are rare and
+> short" was a claim about two or three people. `TEST_MODE` is off and events, requests and
+> modmail are **live to members**, so an ordinary member can now be mid-`/request` when a deploy
+> lands — and every deploy is a restart. Nothing about the code moved; what moved is who meets
+> it. The number to watch is unchanged (**1 report** from a member that a card stopped
+> answering), but it is now a number a member can generate. Still `WATCHING`, still **0
+> reports**, and ⚠️ **not re-measured** — the eighteen `*_panel_minutes` keys were last counted
+> 2026-09-11 and were not re-imported today.
+
 ## KI-18 — Editing a question changes the form, never the answers already sent — `ACCEPTED`
 
 **Symptom.** An application stores its answers as a snapshot of `{label, answer}` pairs
@@ -682,7 +723,19 @@ same limitation. The transcript header says the links expire.
 **What would change it:** a staff request to keep attachments — then mirror
 them to the Fly volume (or R2) at close time. Number: **any** such request.
 
-## KI-5 — Test mode does not stop a web modmail reply or a web `/warn` from reaching a member — `ACCEPTED`
+## KI-5 — (MOOT 2026-09-18 — test mode is OFF) Test mode does not stop a web modmail reply or a web `/warn` from reaching a member — `ACCEPTED`
+
+> ⚠️ **MOOT since 2026-09-18 16:08.** The owner lifted `TEST_MODE` (cutover **P5**), so there is
+> no guard in production and nothing is being "stopped" for anything to leak past. Every door
+> this entry describes — a web modmail reply, a web `/warn`, honeypot and temp-voice setup —
+> now reaches a real member or makes a real channel **by design**, which was always the point
+> of the lift. What SURVIVES the lift and is worth keeping: **nothing in modmail may be read as
+> "safe because test mode is on"** — that sentence was true then and is trivially true now, and
+> the **practice ticket** is still the one place a reply DMs nobody. The proposed fix
+> (`TEST_DM_ALLOWLIST`) is dead with the guard; if a future rehearsal ever turns `TEST_MODE`
+> back on, read the body below as it stands. The body is kept, not deleted, as this file's other
+> closed entries are. ⚠️ Read from the settings/secret state reported at the lift, **not**
+> re-measured against the live bot.
 
 **Symptom:** while `TEST_MODE`, `POST /api/modmail/tickets/{id}/reply` and
 `POST /api/mod/warn` (and their slash-command twins) still DM the real
@@ -743,6 +796,13 @@ entries stay `ACCEPTED` until the owner rules; this note exists so the next
 session does not read the old threshold as still un-met.
 
 ## KI-8 — A role-menu panel in a channel Black Bloc cannot reach is retried on every flip — `ACCEPTED`
+
+> ⚠️ **2026-09-19 — one clause below is history: `role_menu.would_unpost`'s "which today is
+> every panel outside `TEST_CHANNEL_ID`".** `TEST_MODE` went off 2026-09-18 16:08, so the guard
+> no longer refuses any channel and `would_unpost` is not the normal path any more. **The entry
+> itself is UNAFFECTED and still `ACCEPTED`** — the real symptom is `role_menu.unpost_failed`
+> for a channel that is gone, invisible or refuses the delete, which has nothing to do with test
+> mode. ⚠️ `rolemenu_mode` is still **off**, so nothing here has been exercised either way.
 
 **Symptom:** turning `rolemenu_mode` **off** logs `role_menu.unpost_failed` for
 any menu whose channel is gone, invisible, or refuses the delete, and keeps the

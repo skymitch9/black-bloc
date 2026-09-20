@@ -6,7 +6,20 @@
 > This retires the 2026-08-26 local-only rule, under which the tree was
 > gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
 > so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
-> Last verified: **2026-09-11 08:32** — a docs-wide staleness pass (owner: "Update
+> Last verified: **2026-09-19** — a docs-wide staleness pass after the TEST_MODE lift
+> (owner: *"update all docs using opus and then im gonna swap"*), measured off `main`
+> at `ffea17e`, which is **v141 LIVE**: `len(settings_store.KEY_TYPES)` (**277**),
+> `storage/db.py:SCHEMA_VERSION` (**45**), `len(bot.COGS)` (**22**),
+> `tests/test_bot.py:TOP_LEVEL_NOW` (**32**), `settings_store.namespace_of` over
+> `KEY_TYPES` (**25** groups), `settings_store.FEATURES == logkinds.FEATURES`
+> (**21**), `docs/deploys.log` (**140** lines, last = v141), `git ls-files docs`
+> (**119** files), `ls docs/info/*.md` (**89** beside the index — this page said 88),
+> `ls docs/access/*.md` (**11** beside the index — this page said 10),
+> `ls site/public/*.html` (**20**). ⚠️ **NOT checked:** `pytest` was **not** run (the
+> test figure below is the v141 deploy gate's, off `deploys.log`); `node
+> site/mock/check.mjs` was **not** run (it needs a mock listening); nothing met live
+> Discord, no browser rendered a page, and `python -m black_bloc` was not booted.
+> Before that, **2026-09-11 08:32** — a docs-wide staleness pass (owner: "Update
 > all docs"), re-measured off `main` at `1d090e5`, which is **v108 LIVE** (merge
 > `73e2e44` of `where-smart`, deployed 2026-09-11 00:37): `pytest -n auto`
 > (**5,546 passed**, 40 s), `SCHEMA_VERSION` (**34**), `len(settings_store.KEY_TYPES)`
@@ -62,12 +75,33 @@ for why).
 
 ⚠️ **Everything under `docs/` is reachable from this table.** The eight rows above
 are the *whole* top level (nothing else may live there — `DOCS_STANDARD.md` §1).
-The individual files in `access/` (**10** beside its index) and `info/` (**88**
-beside its index — measured 2026-09-18, the 66 had drifted since 2026-09-11 —, plus the `mock-direction-a/` folder)
+The individual files in `access/` (**11** beside its index) and `info/` (**89**
+beside its index — both re-counted 2026-09-19; access said 10 and info said 88, plus the `mock-direction-a/` folder)
 are listed by their own indexes, [`access/README.md`](access/README.md) and
 [`info/README.md`](info/README.md), not here — this page does not duplicate an
 index (§7). `archive/` holds the retired docs and the one-off `current-bots/`
 dumps, indexed by [`archive/README.md`](archive/README.md).
+
+## Where the bot stands right now (2026-09-19)
+
+✅ **`TEST_MODE` is OFF since 2026-09-18 16:08** — the owner ran
+`flyctl secrets set TEST_MODE=false` (cutover step **P5**,
+[`info/cutover-plan.md`](info/cutover-plan.md)). The 2026-08-26 test policy — *the bot
+speaks only in `#blackbloc-logs` and DMs* — **is history**; `black_bloc/guard.py` is
+still in the tree but is not installed in production. Any doc sentence below that reads
+"while test mode is on" describes what WAS true; the dated notes say when it stopped.
+
+**What holds the bot back now is per-feature modes, not the guard:**
+
+| State | Features |
+|---|---|
+| **LIVE to members** | events (`events_mode`), requests (`request_mode`), modmail (`modmail_enabled`) — owner, 2026-09-18 17:1x: *"its live and people can use it"* |
+| **`shadow`** — the rehearsal copy goes to `shadow_channel_id` (`#welcome-test`), nothing to the real channel | `frontdoor_mode` (set 2026-09-18 16:57, aimed at `#welcome`), `golive_mode`, `poll_mode`, `birthday_mode`, `tempvoice_mode`, `honeypot_mode`, `automod_mode` |
+
+⚠️ **Never flip `TEST_MODE` yourself — it is the owner's switch, both ways.**
+⚠️ **These live values were reported by the conductor on 2026-09-18, not re-read here** —
+the Settings page needs a Discord sign-in. https://blackbloc.heygabi.ai/settings.html is
+the one place they can be read for certain.
 
 ## Ten-second orientation
 
