@@ -68,6 +68,26 @@ GOLIVE_END_MODES = (GOLIVE_END_OFF, GOLIVE_END_EDIT)
 GOLIVE_END_SUFFIX = " — stream ended"
 GOLIVE_END_TEMPLATE = "**{name}** was streaming **{game}** — the stream has ended. {url}"
 GOLIVE_END_AUTHOR = "{name} was live on {platform}"
+GOLIVE_COSTREAM_OFF = "off"
+GOLIVE_COSTREAM_ON = "on"
+GOLIVE_COSTREAM_MODES = (GOLIVE_COSTREAM_OFF, GOLIVE_COSTREAM_ON)
+GOLIVE_COSTREAM_MODE_KEY = "golive_costream_mode"
+GOLIVE_COSTREAM_TEMPLATE_KEY = "golive_costream_template"
+GOLIVE_COSTREAM_AUTHOR_KEY = "golive_costream_author"
+GOLIVE_COSTREAM_TEMPLATE = (
+    "**{name}** is streaming on **{platform}** and **{also_platform}**! "
+    "Watch on {platform}: {url} · also live on {also_platform}: {also_url}"
+)
+GOLIVE_COSTREAM_AUTHOR = "{name} is live on {platform} and {also_platform}"
+GOLIVE_COSTREAM_FIELDS = (
+    "name",
+    "game",
+    "title",
+    "url",
+    "platform",
+    "also_url",
+    "also_platform",
+)
 
 
 ROLEMENU_MODES = ("off", "on")
@@ -277,6 +297,9 @@ KEY_TYPES: dict[str, str] = {
     "golive_end_template": "text",
     "golive_end_author": "text",
     "golive_end_keep_mention": "bool",
+    GOLIVE_COSTREAM_MODE_KEY: "enum",
+    GOLIVE_COSTREAM_TEMPLATE_KEY: "text",
+    GOLIVE_COSTREAM_AUTHOR_KEY: "text",
     "golive_live_role_id": "role",
     "golive_require_role_id": "role",
     "golive_ignore_role_id": "role",
@@ -418,6 +441,7 @@ KEY_TYPES: dict[str, str] = {
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
     "golive_end_mode": GOLIVE_END_MODES,
+    GOLIVE_COSTREAM_MODE_KEY: GOLIVE_COSTREAM_MODES,
     "pings_mode": PINGS_MODES,
     "pings_fan_role_creation": PINGS_CREATORS,
     "pings_fan_role_on_unlink": PINGS_ON_UNLINK,
@@ -686,6 +710,20 @@ KEY_HELP: dict[str, str] = {
     "golive_end_keep_mention": (
         "on keeps the role mention at the front of the edited announcement; off drops it — "
         "nobody is pinged by an edit either way"
+    ),
+    GOLIVE_COSTREAM_MODE_KEY: (
+        "on names both platforms in one announcement when somebody streaming on Twitch also "
+        "goes live on YouTube (or the other way round) and edits the post that is already "
+        "there; off holds the second platform back, as it did before"
+    ),
+    GOLIVE_COSTREAM_TEMPLATE_KEY: (
+        "the announcement wording while two platforms are live; {name} {game} {title} {url} "
+        "{platform} {also_url} {also_platform}. Twitch is always written first and is the only "
+        "link Discord previews — {also_url} is always posted with its preview suppressed"
+    ),
+    GOLIVE_COSTREAM_AUTHOR_KEY: (
+        "the card's top line while two platforms are live; {name} {game} {title} {url} "
+        "{platform} {also_url} {also_platform}"
     ),
     "golive_live_role_id": "role given while someone is streaming",
     "golive_require_role_id": "only announce people who have this role",
@@ -2571,6 +2609,10 @@ MOVED_LINE_UNKNOWN = (
     "thing that line may stand in for is `{placeholder}`, the post the event moved into; write "
     "any other braces out as words."
 )
+COSTREAM_UNKNOWN = (
+    "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. A "
+    "co-streaming announcement may stand in for {allowed}; write any other braces out as words."
+)
 
 PLACEHOLDERS = re.compile(r"\{([^{}]*)\}")
 
@@ -2659,8 +2701,31 @@ def checked_moved_line(given: Any) -> str:
     return text
 
 
+def checked_costream(given: Any) -> str:
+    """The seven co-streaming placeholders and nothing else, so neither key can fail to fill."""
+    text = str(given or "").strip()
+    stray = next(
+        (
+            one.strip()
+            for one in PLACEHOLDERS.findall(text)
+            if one.strip() not in GOLIVE_COSTREAM_FIELDS
+        ),
+        None,
+    )
+    if stray is not None:
+        raise SettingError(
+            COSTREAM_UNKNOWN.format(
+                found=stray[:40],
+                allowed=", ".join(f"`{{{one}}}`" for one in GOLIVE_COSTREAM_FIELDS),
+            )
+        )
+    return text
+
+
 TEXT_CHECKS: dict[str, Any] = {
     DEFAULT_TIMEZONE_KEY: checked_zone,
+    GOLIVE_COSTREAM_TEMPLATE_KEY: checked_costream,
+    GOLIVE_COSTREAM_AUTHOR_KEY: checked_costream,
     TIMEZONE_CHOICES_KEY: checked_zones,
     WHERE_ALIASES_KEY: checked_aliases,
     EVENTS_SCHEDULED_NAME_KEY: checked_name_template,
@@ -2955,6 +3020,12 @@ class SettingsStore:
             return GOLIVE_END_AUTHOR
         if key == "golive_end_keep_mention":
             return False
+        if key == GOLIVE_COSTREAM_MODE_KEY:
+            return GOLIVE_COSTREAM_ON
+        if key == GOLIVE_COSTREAM_TEMPLATE_KEY:
+            return GOLIVE_COSTREAM_TEMPLATE
+        if key == GOLIVE_COSTREAM_AUTHOR_KEY:
+            return GOLIVE_COSTREAM_AUTHOR
         if key == "golive_cooldown_minutes":
             return 60
         if key == "golive_max_session_hours":

@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 45
+        assert SCHEMA_VERSION == 46
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -31,6 +31,13 @@ async def test_connect_bootstraps_schema(tmp_path):
         assert {"role_requests", "role_grants"} <= tables
         assert {"application_forms", "application_questions", "applications"} <= tables
         assert {"golive_links", "golive_optout", "golive_sessions"} <= tables
+        cur = await db.conn.execute("PRAGMA table_info(golive_sessions)")
+        assert {
+            "also_source",
+            "also_url",
+            "also_platform",
+            "also_started_at",
+        } <= {r["name"] for r in await cur.fetchall()}
         assert "golive_fan_roles" in tables
         cur = await db.conn.execute("PRAGMA table_info(golive_fan_roles)")
         columns = {r["name"] for r in await cur.fetchall()}

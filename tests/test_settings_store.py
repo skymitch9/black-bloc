@@ -29,6 +29,11 @@ from black_bloc.settings_store import (
     EVENTS_TEST_RETENTION_MAX_MINUTES,
     EVENTS_TEST_RETENTION_MIN_MINUTES,
     EVENTS_TEST_RETENTION_MINUTES,
+    GOLIVE_COSTREAM_AUTHOR,
+    GOLIVE_COSTREAM_AUTHOR_KEY,
+    GOLIVE_COSTREAM_MODE_KEY,
+    GOLIVE_COSTREAM_TEMPLATE,
+    GOLIVE_COSTREAM_TEMPLATE_KEY,
     GOLIVE_END_EDIT,
     GOLIVE_END_MODES,
     GOLIVE_END_OFF,
@@ -2389,3 +2394,49 @@ def test_the_moved_line_takes_post_and_refuses_any_other_placeholder():
         coerce_value(EVENTS_MOVED_LINE_KEY, "Off to {nowhere} we go.")
 
     assert "{nowhere}" in str(caught.value) and "{post}" in str(caught.value)
+
+
+# --- co-streaming: the switch and the two wordings (costream-design §B) ------------------------
+
+
+def test_the_three_co_stream_keys_sit_in_the_golive_namespace_with_help_and_a_default():
+    for key in (
+        GOLIVE_COSTREAM_MODE_KEY,
+        GOLIVE_COSTREAM_TEMPLATE_KEY,
+        GOLIVE_COSTREAM_AUTHOR_KEY,
+    ):
+        assert namespace_of(key) == "golive" and KEY_HELP[key]
+    assert KEY_TYPES[GOLIVE_COSTREAM_MODE_KEY] == "enum"
+    assert KEY_TYPES[GOLIVE_COSTREAM_TEMPLATE_KEY] == "text"
+    assert KEY_TYPES[GOLIVE_COSTREAM_AUTHOR_KEY] == "text"
+    assert KEY_CHOICES[GOLIVE_COSTREAM_MODE_KEY] == ("off", "on")
+
+
+async def test_co_streaming_ships_on_and_the_owner_can_turn_it_off_from_either_door(store):
+    assert store.get(7, GOLIVE_COSTREAM_MODE_KEY) == "on"
+    assert store.get(7, GOLIVE_COSTREAM_TEMPLATE_KEY) == GOLIVE_COSTREAM_TEMPLATE
+    assert store.get(7, GOLIVE_COSTREAM_AUTHOR_KEY) == GOLIVE_COSTREAM_AUTHOR
+
+    await store.set(7, GOLIVE_COSTREAM_MODE_KEY, "off")
+
+    assert store.get(7, GOLIVE_COSTREAM_MODE_KEY) == "off"
+    with pytest.raises(SettingError):
+        coerce_value(GOLIVE_COSTREAM_MODE_KEY, "shadow")
+
+
+def test_both_co_stream_wordings_take_the_same_seven_placeholders_and_no_others():
+    for key in (GOLIVE_COSTREAM_TEMPLATE_KEY, GOLIVE_COSTREAM_AUTHOR_KEY):
+        assert coerce_value(key, "  {name} {game} {title} {url} ") == "{name} {game} {title} {url}"
+        assert coerce_value(key, "{platform} {also_url} {also_platform}") == (
+            "{platform} {also_url} {also_platform}"
+        )
+
+        with pytest.raises(SettingError) as caught:
+            coerce_value(key, "and on {duration} too")
+
+        assert "{duration}" in str(caught.value) and "{also_url}" in str(caught.value)
+
+
+def test_the_shipped_co_stream_wordings_pass_their_own_validator():
+    assert coerce_value(GOLIVE_COSTREAM_TEMPLATE_KEY, GOLIVE_COSTREAM_TEMPLATE)
+    assert coerce_value(GOLIVE_COSTREAM_AUTHOR_KEY, GOLIVE_COSTREAM_AUTHOR)
