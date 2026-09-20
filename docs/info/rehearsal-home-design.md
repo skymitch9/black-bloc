@@ -1,6 +1,27 @@
 # The rehearsal home — one channel where every shadow copy lands, so staff can review before the cutover
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v129** — merge `7badc43`, release `60958ec`, deployed **2026-09-17 17:00** Phoenix; `shadow_channel_id` = `#welcome-test` since 17:01; the `## Deviations` foot is the truth where it departs from §A–§F; sweeps **554–564** are the owner's. Was: 🔨 BUILT, planned as v129. Read the `## Deviations` foot before
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v129**
+>
+> 🔴 **2026-09-19 — READ THIS FIRST: `TEST_MODE` WENT OFF ON 2026-09-18 16:08, AND THAT MAKES
+> THIS FEATURE MORE IMPORTANT, NOT LESS.** Every "under `TEST_MODE` today" table and sentence
+> below describes the world this was BUILT for, where the guard forced a copy into
+> `#blackbloc-logs` and `shadow_channel_id` redirected it somewhere the mods could read. The
+> guard is gone (`bot.guard` is `None` on Fly). **What survives, and is now the whole point:**
+> a feature whose own `*_mode` is `shadow` still sends its rehearsal copy to
+> `shadow_channel_id` — `#welcome-test` in The Basement — and nothing to the real channel.
+> `shadow.channel_id`'s fall-back chain still reads `shadow_channel_id` → the guard's channel →
+> `log_channel_id`, and with no guard the middle link is simply skipped, so a blank
+> `shadow_channel_id` would put rehearsals in the LOG channel. ⚠️ **Do not clear
+> `shadow_channel_id`** while anything is in `shadow`. The `rehearse_in` power on the guard is
+> the one part that is genuinely dormant — it existed to let the guard permit that channel, and
+> there is no guard to permit it. **Proved by the front door on 2026-09-18:** `frontdoor_mode`
+> was set to `shadow` at 16:57 with `frontdoor_channel_id` aimed at `#welcome`, the copy landed
+> in `#welcome-test` at 17:00 with the note and the three buttons, and `#welcome` was checked
+> clean at 17:03 — the first time this mechanism was the ONLY thing holding a message back.
+> ⚠️ Read from the settings state the conductor reported, **not** re-measured against the live
+> bot by this pass.
+>
+> — merge `7badc43`, release `60958ec`, deployed **2026-09-17 17:00** Phoenix; `shadow_channel_id` = `#welcome-test` since 17:01; the `## Deviations` foot is the truth where it departs from §A–§F; sweeps **554–564** are the owner's. Was: 🔨 BUILT, planned as v129. Read the `## Deviations` foot before
 > §A–§F — nine things differ. `pytest -n auto` **6406 → 6455**, forward and under `BB_REVERSE=1`; registry
 > **256 → 262** keys; no schema change. Was: 📐 DESIGN, dispatched to Opus 2026-09-17 16:2x (v129). **Last verified: 2026-09-17 16:16** against `main` `fbc4a48`: `black_bloc/shadow.py`
 > (`channel_id` = the guard's channel else `log_channel_id`; `channel_ids` = every place a copy could be),
@@ -17,7 +38,11 @@ category. I want the mods to test stuff for me and review what the rules output 
 
 ## What blocks it today (measured)
 
-| Piece | Under `TEST_MODE` today |
+⚠️ **"Today" in this table is 2026-09-17 16:16, before the lift** — it is the problem statement
+the design was written against, kept as written. Since 2026-09-18 16:08 none of these pieces is
+blocked by a guard; each is held only by its own `*_mode`.
+
+| Piece | Under `TEST_MODE` ~~today~~ *as it was, until 2026-09-18 16:08* |
 |---|---|
 | The welcome/rules post (`posts_mode = shadow`) | the real message is posted into **the guard's channel** (`#blackbloc-logs`) — `shadow.channel_id` |
 | The front door | `frontdoor.would_post` — a log row, **nothing posted** |

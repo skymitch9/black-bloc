@@ -2,7 +2,22 @@
 
 > **Audience:** every build agent (read BEFORE building) and every review
 > agent (score against it). **Status:** TRACKED (owner, 2026-08-31 — was
-> local-only until then). **Last verified: 2026-09-18** — item **37** added (a reconcile that POSTS
+> local-only until then). **Last verified: 2026-09-19** — the item COUNT was re-counted
+> (**37**, 1–37 with none missing) and one standing instruction to builders changed, because
+> `TEST_MODE` went off 2026-09-18 16:08:
+>
+> 🔴 **A BRIEF MUST NO LONGER TELL A BUILD AGENT "TEST_MODE WILL CATCH IT".** Until the lift,
+> every brief carried a line saying the guard confined the bot to `#blackbloc-logs`, and a
+> builder could reason that a stray post was harmless. It is not: `bot.guard` is `None` on Fly,
+> **events, requests and modmail are live to members**, and a feature's own `*_mode` is the only
+> brake. ⚠️ **Anything a build makes that POSTS ships `shadow` unless the owner says otherwise**,
+> and a `shadow` copy goes to `shadow_channel_id` (`#welcome-test`). Item **37** is the sharpest
+> case and is not a coincidence — it was traced to the boot that followed the lift itself.
+> ⚠️ **NOT re-checked 2026-09-19:** no item's wording was re-measured against the code, and no
+> item's named trace was re-verified; the last such sweep was 2026-09-11 and covered items 1–34.
+> ⚠️ **`CLAUDE.md` says "35 items" and is two behind — this file owns the count**, and editing
+> `CLAUDE.md` was out of scope for that pass.
+> Before that, **2026-09-18** — item **37** added (a reconcile that POSTS
 > runs under a lock and re-reads its stored id after taking it), **37 items**, traced to the
 > 2026-09-18 16:08 Phoenix boot that posted the front door and the ticket button twice. ⚠️ **Nothing
 > else on this page was re-checked at that pass** and no other item's wording was re-measured against

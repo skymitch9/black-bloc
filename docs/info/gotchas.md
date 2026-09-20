@@ -2,7 +2,16 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-11 08:40** — docs-wide staleness pass. **What was checked:** every
+> Last verified: **2026-09-19** — the docs staleness pass after the TEST_MODE lift. Only the
+> **xdist hang** entry moved: it is headed *incidents ×5* and there have been **ten**, and — the
+> part that changes what a reader should DO — ⚠️ **the tenth (2026-09-18 16:5x) was on a
+> PowerShell-tool `> file` run**, which is the very retry this entry recommends. The retry is
+> still the best thing to try and has still worked every time, but it is **no longer the
+> reliable escape it was when this was written**. `../KNOWN_ISSUES.md` **KI-26** owns the count
+> and both of its triggers are now met. ⚠️ **NOT re-checked:** every other entry — no path,
+> symbol or cross-reference in this file was re-read today, and nothing was re-tested. Before
+> that,
+> **2026-09-11 08:40** — docs-wide staleness pass. **What was checked:** every
 > path, symbol and cross-reference each entry names, read off `main` at `1d090e5` —
 > `intents.py:8–9`, `api/server.py:206 start_api`, `tests/conftest.py:55–56` and `:237–240`,
 > `command_visibility.py`, `../KNOWN_ISSUES.md` KI-1/KI-2, `../access/deploy.md` §4 and its
@@ -130,7 +139,7 @@ rule for the conductor is: **commit the design doc to main FIRST, then dispatch
 the worktree builders.** A dispatch that references any repo file must be cut
 from a commit that contains it.
 
-## `deploy.ps1` hangs mid-pytest with every xdist worker idle (incidents ×5, 2026-09-06 and 2026-09-10)
+## `deploy.ps1` hangs mid-pytest with every xdist worker idle (incidents ×**10**, 2026-09-06 → 2026-09-18)
 
 Recorded on `../deploys.log` at v94, v97, v98, v99 and v100 (re-read 2026-09-11 — the v103 line
 says *no hang*; an earlier version of this entry miscounted it). The
@@ -139,9 +148,20 @@ untouched for 72 s, CPU flat over 20 s.** Two shapes were seen — a hang at *sp
 morning ones) and a hang at **81–92 % of the run** (the rest). It is not a failing test and
 it is not stoppable from the console.
 
+⚠️ **FIVE MORE since this was written, taking it to TEN** (2026-09-17 ×2, 2026-09-18 ×3, all in
+build worktrees rather than at a deploy gate): three hung at **spawn** with the workers flat at
+~0.0156 s CPU ten minutes in, one hung **serial** with `-p no:cacheprovider` and no xdist at all,
+and one hung at ~91 % of a `BB_REVERSE=1` run. So the shape is **not xdist-only and not
+deploy-only**. ⚠️ **One build's `taskkill /F /IM python.exe` during a stall killed every python
+on the machine** while three agents were sharing the cores — **kill by process TREE, never by
+image name.**
+
 **What got past it, every time:** kill the process tree, then re-run the deploy **through
 the PowerShell tool with output redirected to a file** (`*> file`) rather than detached.
-The retry passed the gate in 26–30 s on each occasion. The count and the threshold that
+The retry passed the gate in 26–30 s on each occasion (and in 53–61 s in the worktree cases).
+🔴 **But the tenth sighting WAS a `> file` run** (2026-09-18 16:5x, ~91 %, log untouched for
+8 minutes, 10 idle workers; green in 58 s on the retry), so *"redirect to a file"* is no longer
+a guarantee — it is still the first thing to try, and a second retry has always been enough. The count and the threshold that
 would make it worth chasing live in [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) **KI-26**. ⚠️ **Do not conclude the suite is
 broken** — the same commit's tests pass forward and under `BB_REVERSE=1` on the retry. Cause
 never established; it is the retry, not a fix.

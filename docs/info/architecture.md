@@ -2,7 +2,38 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — was
 > local-only until then).
-> Last verified: **2026-09-18** — **three fact-table rows and two tree annotations**, on branch
+> Last verified: **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**.
+> ⚠️ **The fact table was carrying two figures that were simply WRONG, and one of them
+> contradicted the history table three rows below it.** Re-measured by import in this tree, off
+> `main` `ffea17e` (**v141 LIVE**):
+> **`storage/db.py:SCHEMA_VERSION` = 45** (the table said **44** — while its own *How the counts
+> moved* row for v141 already said 45);
+> **`../deploys.log` = 140 lines**, last `2e48d7c` v141 (the table said **138**);
+> `len(settings_store.KEY_TYPES)` = **277** (the figure was right but was still labelled *"on
+> branch `youtube-uploads-removal`"* — that branch merged as v139 and the number is `main`'s);
+> `len(bot.COGS)` = **22** ✅; `tests/test_bot.py:TOP_LEVEL_NOW` = **32** ✅;
+> `settings_store.namespace_of` over `KEY_TYPES` = **25** groups ✅;
+> `settings_store.FEATURES == logkinds.FEATURES` = **21** ✅.
+> **Two DUPLICATE rows were deleted from the fact table** — a second *Setting groups* and a
+> second *Features*, the latter reading **20** against the first's **21**, so the table
+> disagreed with itself about the same number in the same table.
+> **The Shape tree named 20 modules fewer than the package holds** and is redrawn:
+> `forums.py`, `frontdoor.py`, `guides.py`, `handoff.py`, `minutes.py`, `minutes_audio.py`,
+> `minutes_session.py`, `pings_onboarding.py`, `posted.py`, `posts.py`, `shadow.py`,
+> `spawned.py`, `api/tools/{frontdoor,guides,minutes,posts}.py` and
+> `cogs/community/{frontdoor,minutes,posts}.py` were all absent; `loops.py` named only
+> `wait_ready` and not `Reconciler` (v141); `command_errors.py` did not mention `record()`
+> (v131); `storage/db.py` was annotated *"SCHEMA_VERSION 44 on branch `minutes`"*;
+> `guard.py` did not say the flag is off in production; and the site block said **17 pages**
+> where disk holds **20**.
+> ⚠️ **NOT verified today:** `pytest` was **not** run (the Tests row is the v141 deploy gate's
+> figure, off `deploys.log`); `node site/mock/check.mjs` was **not** run (it needs a listening
+> mock — the Mock row is the 2026-09-18 reading and is labelled as such); the *prose* below the
+> tree (the rules, the library table, the API section) was **not** re-traced to the code; the
+> tree's per-file annotations beyond the ones listed above are still the 2026-08-31 reading; and
+> nothing here met Discord, the Fly console or a browser — `/health` was the only live thing read
+> (`ok:true, ready:true, guilds:1, personality_pool_version:1`).
+> Before that, **2026-09-18** — **three fact-table rows and two tree annotations**, on branch
 > `youtube-uploads-removal` (cut from `main` `9bc1982`, NOT merged and NOT deployed; design
 > `info/youtube-uploads-removal-design.md`). Re-measured by import and by running the thing in that
 > worktree: registry keys **284 → 277** (`len(settings_store.KEY_TYPES)`, before and after — the seven
@@ -197,15 +228,13 @@
 > | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
 > | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **44** (v132, `meetings` + `meeting_lines`; 43 at v128, 42 at v123, 41 at v119) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **277** on branch `youtube-uploads-removal` (284 on `main` at v138, minus the seven `youtube_*` upload keys); 280 on branch `boot-status`, 277 at v132 (was 266 at v131 — the three `boot_status_mode` / `boot_status_text` / `shutdown_status_text` keys sit under core; the eleven `minutes_*` keys sit under events; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Schema version | **45** (v136, `events.review_kind`; 44 at v132 `meetings` + `meeting_lines`, 43 at v128, 42 at v123, 41 at v119) — ⚠️ **this row read 44 until 2026-09-19 and contradicted the v141 row of the history table below it; re-imported, it is 45** | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **277** on `main` at v141 (⚠️ **re-labelled 2026-09-19** — it said *"on branch `youtube-uploads-removal`"*, and that branch merged as **v139**; 284 on `main` at v138, minus the seven `youtube_*` upload keys); 280 on branch `boot-status`, 277 at v132 (was 266 at v131 — the three `boot_status_mode` / `boot_status_text` / `shutdown_status_text` keys sit under core; the eleven `minutes_*` keys sit under events; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **20 pages / 186 routes / 24 core settings** on branch `youtube-uploads-removal` (187 on `main` at v138, minus `GET /api/youtube/videos`) (21 core at v133) (17/150 at v108; was 149 routes at v92) | `node site/mock/check.mjs` — re-RUN 2026-09-18 against a mock on a spare port |
-> | Tests | **6757** (+3 skipped where the receive extension is absent) | the v141 deploy gate |
-> | Deploys | **138**, last `2e48d7c` (v141) at 2026-09-18 16:55 | `../deploys.log` |
-> | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
-> | Features (log-level keys) | **20** (guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
+> | Mock contract | **20 pages / 186 routes / 24 core settings** — measured on branch `youtube-uploads-removal`, which is **v139** and merged (187 on `main` at v138, minus `GET /api/youtube/videos`) (21 core at v133) (17/150 at v108; was 149 routes at v92). ⚠️ **Not re-run 2026-09-19** — `check.mjs` needs `server.mjs` listening; `ls site/public/*.html` was re-counted off disk and is **20** | `node site/mock/check.mjs` — last RUN 2026-09-18 against a mock on a spare port |
+> | Tests | **6757** (+3 skipped where the receive extension is absent — **KI-31**) | the v141 deploy gate, read off `../deploys.log`. ⚠️ Not re-run 2026-09-19 |
+> | Deploys | **140** lines, last `2e48d7c` (v141) at 2026-09-18 16:55 — ⚠️ **this row said 138 until 2026-09-19**. The count is LINES, and a line is not always a version bump — the 2026-08-27 02:20 line records a secrets import against the commit already deployed — so **line count and Fly version number are two different numbers and must not be read as one** | `../deploys.log`, counted with `grep -c '^20'` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -280,9 +309,38 @@ black_bloc/
 ├── intents.py        ← build_intents(): the three privileged intents
 ├── invite.py         ← INVITE_PERMISSIONS + invite_url(bot)
 ├── command_sync.py   ← sync_dev_guild(): dev-guild slash-command sync, 403 handling
-├── command_errors.py ← the tree error handler: any unhandled slash-command failure answers with a sentence
+├── command_errors.py ← the tree error handler: any unhandled slash-command failure answers with a
+│                       sentence — plus `record()` / `offer()` / `RetryView` (v131), which write
+│                       the IMPORTANT `error.command|panel|modal|button` row and put **Try again**
+│                       under it. ⚠️ `record` never raises, and never carries a member's words
 ├── guard.py          ← TestModeGuard: the TEST_MODE gate (send + edit HTTP layer, interaction_check)
 │                     └ `allows_place` also allows a channel Black Bloc MADE (v117, 2026-09-17)
+│                     └ `rehearse_in` allows the rehearsal home too (v129, 2026-09-17)
+│                     └ ⚠️ NOT INSTALLED IN PRODUCTION since 2026-09-18 16:08 — `bot.py:71` only
+│                       builds it when `settings.test_mode`, so `bot.guard` is None on Fly.
+│                       The module stays for a future rehearsal; `.env.example` still ships
+│                       TEST_MODE=true, so a LOCAL run is still guarded
+├── shadow.py         ← the rehearsal home: `channel_id` (shadow_channel_id, else the guard's
+│                       channel, else log_channel_id) and `channel_ids` — where a *_mode=shadow
+│                       copy goes now that the guard is gone (v129)
+├── posted.py         ← one posted-and-kept-current message: the post/edit/take-down path the
+│                       front door and the ticket button share, and `duplicates_near`, which
+│                       reads the last five minutes and logs `*.duplicate_seen` rather than
+│                       posting a third (v141 — never deletes, fails open)
+├── frontdoor.py      ← the pure half of the front door: the three-button embed, the wording
+│                       keys, off/shadow/on (v125, shadow added v141)
+├── spawned.py        ← the staff allow every channel Black Bloc makes carries (v121)
+├── posts.py          ← the welcome/rules message: the row, the hash, the shadow copy (v113)
+├── forums.py         ← the forum helpers requests AND events share — `tag_named`, `forum_tags`,
+│                       `forum_overwrites`, AUTO_ARCHIVE_MINUTES (v136). One home, two callers
+├── handoff.py        ← Send to…: the request/event/ticket hand-off trail, wording, refusals (v128)
+├── guides.py         ← the guide rows, steps, faults, facts and media behind guides.html (v111)
+├── minutes.py        ← meeting minutes: the refusals, the transcript, the notes, the staff moves
+├── minutes_audio.py  ← the voice-receive sink: per-speaker 48 kHz stereo in, 16 kHz mono WAV out.
+│                       ⚠️ the ONLY importer of the pre-release extension, and never at module
+│                       level — KI-31
+├── minutes_session.py ← one meeting's runtime: the queue, the Whisper worker, how it ends
+├── pings_onboarding.py ← the two Community onboarding prompts the bot keeps in step (v116)
 ├── config.py         ← Settings (pydantic-settings). THE ONLY reader of the environment / .env
 ├── settings_store.py ← per-guild settings on SQLite + the staff check. The ONLY way features read config
 ├── actionlog.py      ← log_action(): one DB row always, one embed to the log channel when it can
@@ -323,7 +381,11 @@ black_bloc/
 ├── when_picker.py    ← the shared Day/Hour/Minute/How-long selects, WhenDraft, ZonePanel
 ├── linkcheck.py      ← ⚠️ the ONLY outbound HTTP in the events path: one bounded GET that tries
 │                       a typed link before it is kept (LINK_OK / MISSING / UNREACHABLE)
-├── loops.py          ← wait_ready, behind all fourteen before_loops so a failure reaches @loop.error
+├── loops.py          ← two things. `wait_ready`, behind every `before_loop` so a failure reaches
+│                       `@loop.error` (KI-24, v97) — and `Reconciler` (v141): one asyncio.Lock per
+│                       cog with the state read INSIDE it, `skip_if_recent` on the `on_ready` path
+│                       only. ⚠️ A reconcile that POSTS must go through it — checklist item 37,
+│                       traced to the boot that doubled the front door at the TEST_MODE lift
 ├── applications.py   ← Phase 19: pure application logic — the forms, the statuses, the roster
 ├── raidtrain.py      ← Phase 18: pure train logic — slots, claims, the lineup, the reminder clock
 ├── rolemenus.py      ← F16: pure role-menu logic, shared by the cog and the website
@@ -360,6 +422,12 @@ black_bloc/
 │   │   ├── birthdays.py   ← F6: the five-minute sweep, the /birthday panel, the day role, the daily import
 │   │   ├── polls.py       ← F15: /poll on native Discord polls + Black Bloc's own panel, /poll recur
 │   │   ├── requests.py    ← F18: /request, the member intake, the pending-features board
+│   │   ├── frontdoor.py   ← the posted front door + /ask (v125): three buttons onto the ticket,
+│   │   │                    request and event flows. Its reconcile goes through
+│   │   │                    `loops.Reconciler` (v141). `frontdoor_mode` off/shadow/on
+│   │   ├── posts.py       ← the welcome/rules message and /posts (v113); `posts_mode` shadow
+│   │   ├── minutes.py     ← the meeting-minutes prototype and /minutes (v132). ⚠️ ships OFF
+│   │   │                    (`minutes_mode`), staff-only, and the command is hidden
 │   │   └── applications.py ← Phase 19: /apply — ONE command, one panel (both groups retired);
 │   │                        the forms, the queue, approve/deny/remove, the roster
 │   ├── moderation/   ← one cog per moderation feature
@@ -385,7 +453,9 @@ black_bloc/
 │                        YOUTUBE_API_KEY is optional (it names the live video and resolves
 │                        an @handle). ⚠️ The UPLOADS half was removed 2026-09-18 —
 │                        `info/youtube-uploads-removal-design.md`
-├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION 44 on branch `minutes`, measured 2026-09-17)
+├── storage/db.py     ← aiosqlite connection + schema bootstrap (SCHEMA_VERSION **45** on `main`,
+│                       re-imported 2026-09-19 — this said "44 on branch `minutes`", and that
+│                       branch shipped as v132 two versions before 45 arrived at v136)
 └── api/             ← the dashboard API, one router per surface (API_ENABLED)
     ├── server.py    ← create_app: /health (public), security headers, routers, then site/ at /
     ├── auth.py      ← Discord OAuth2 + the signed session cookie. The site's ONLY gate.
@@ -419,6 +489,10 @@ black_bloc/
         ├── chat_memory.py ← Phase 17: the stored preference profiles and the opt-out list
         ├── applications.py ← Phase 19: forms, questions, the queue, approve/deny/remove, the roster
         ├── raidtrain.py  ← Phase 18: trains, slots, claims, the lineup post
+        ├── frontdoor.py  ← the Front door card on the modmail page (v125)
+        ├── posts.py      ← the Posts page: the body, the preview, Post it / Take it down (v113)
+        ├── guides.py     ← the Guides hub: read, edit in place, mark stale, replace a screenshot (v111)
+        ├── minutes.py    ← the Minutes page (v132) — like the cog, inert while `minutes_mode` is off
         ├── members.py    ← the Members tab: the roster, roles, grant chips
         └── roles.py      ← timed role grants: list, extend, end now
 site/                 ← THE DASHBOARD (8a status page, 8b tabs). Static, no build step, COMMITTED
@@ -432,11 +506,13 @@ site/                 ← THE DASHBOARD (8a status page, 8b tabs). Static, no bu
 └── public/
     ├── index.html    ← Overview; <meta name="api-origin"> is EMPTY = "the origin I came from"
     ├── {moderation,automod,modmail,events,golive,rolemenus,birthdays,tempvoice,honeypot,
-    │    polls,chat,requests,members,settings,audit,health}.html ← the other sixteen tabs
-    │                   (17 pages total, measured 2026-08-31). Each is an empty shell:
-    │                   #tabnav + #dash, filled by its page module. The nav is built from ONE
-    │                   array in app.js, never seventeen hand-written copies
-    │                   (17 `.html` files counted on disk 2026-09-11)
+    │    polls,chat,requests,members,settings,audit,health,posts,guides,minutes}.html
+    │                   ← the other nineteen tabs (**20** pages total, `ls site/public/*.html`
+    │                   counted on disk 2026-09-19; this block said 17, the 2026-09-11 reading,
+    │                   and missed `posts.html` v113, `guides.html` v111 and `minutes.html`
+    │                   v132). Each is an empty shell: #tabnav + #dash, filled by its page
+    │                   module. The nav is built from ONE array in app.js, never twenty
+    │                   hand-written copies
     └── assets/
         ├── api.js    ← the ONLY fetch. Outage vs refusal, the name cache, the ref caches
         ├── app.js    ← the shell: the tab list, the five permission states, start()/reload()
@@ -444,6 +520,12 @@ site/                 ← THE DASHBOARD (8a status page, 8b tabs). Static, no bu
         ├── page-*.js ← one module per tab, each exporting nothing and calling start()
         ├── labels.js ← ⚠️ the one home for every settings key's human sentence
         ├── logs.js   ← the shared Logs list every page embeds
+        ├── discordmd.js ← the Discord-markdown PREVIEW (v113). Escapes HTML first, never
+        │                  emits an anchor. Fixtures: `site/mock/discordmd.test.mjs`
+        ├── clipmd.js ← the paste CONVERTER (v140): a Google-Docs rich clipboard → Discord
+        │                markdown, a tag tokeniser + tree walk with **no `DOMParser`**, so
+        │                `site/mock/clipmd.test.mjs` runs the same code under plain node.
+        │                ⚠️ Site only — a Discord modal never sees the clipboard
         ├── shell.js / layout.js / theme.js / palette.js / icons.js / motion.js /
         │   permission-ux.js ← the restyle's shared chrome
         └── site.css  ← ours, beside a SNAPSHOT of the estate theme + fonts

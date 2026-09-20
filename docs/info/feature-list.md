@@ -3,7 +3,17 @@
 > **Audience:** the owner (to approve the shape and order) and every future
 > session (as the map of what gets built). **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> **Last verified: 2026-09-11 10:45** — F14 names `/pings` ▸ Set up the Events role instead of the retired `/pingroles setup`; **08:35** — docs-wide staleness pass on `main` at `1d090e5`.
+> **Last verified: 2026-09-19** — the docs staleness pass after the TEST_MODE lift. Two
+> cross-cutting bullets were the whole job here, and both were load-bearing: the **Test policy**
+> bullet said everything runs inside `#blackbloc-logs` + DMs *"until the owner lifts
+> `TEST_MODE`"* — he lifted it 2026-09-18 16:08 — and the build-order paragraph told a builder
+> to have the owner verify *"in the test channel"*. Row **F3**'s uploads half was **removed whole
+> at v139** and is struck. ⚠️ **The COUNTS in the paragraph below are the 2026-09-11 reading and
+> were NOT re-measured here** — the current figures are **32** commands / **22** cogs / schema
+> **45** / **277** keys / **25** groups / **140** deploy lines / **20** pages /
+> **6,757** tests, and [`architecture.md`](architecture.md) owns them; read them there rather
+> than trusting the sentence that follows.
+> Before that, **2026-09-11 10:45** — F14 names `/pings` ▸ Set up the Events role instead of the retired `/pingroles setup`; **08:35** — docs-wide staleness pass on `main` at `1d090e5`.
 > **Re-measured by import in a worktree of `main`:** **29** top-level slash commands with
 > **ZERO `app_commands.Group`s**, **19** cogs, schema **34**, **202** registry keys over
 > **23** groups; **107** deploys in `../deploys.log`, last `73e2e44` (**v108**) 2026-09-11
@@ -58,7 +68,7 @@ scoped.
 |---|---|---|---|---|
 | F1 | **Go-live feed** → `#live-now` | Decided | **Discord presence is PRIMARY**; Twitch EventSub is the fallback/enrichment for linked accounts; posts with the `REGULATORS! Mount up!` prefix; opt-out | Keep YAG's wording; `/golive` → **Link my Twitch channel** (the channel name ≠ the Discord name); debounce re-posts; fallback when game is empty; rich card = Discord link preview |
 | F2 | Twitch activity tracking | Decided → merged into F1 | Same detection; optional *Live* role; require/ignore role filters; no stats | "Scan for inactive streamers" still TBD |
-| F3 | YouTube — go-live **and new uploads** | Go-live via presence: shipped 2026-08-27. New-upload posts (Phase 16): ✅ **SHIPPED** merge `7295f61`, live 2026-09-02 (deploy line in `../deploys.log`); `youtube_mode` ships **off**, never yet run against a live channel. `/youtube` became ONE panel on 2026-09-03 (wave 2 — both groups and all nine subcommands retired, `commands synced` 42 → 41) | Go-live: Discord presence carries the platform, so a "Streaming on YouTube" activity announces with the member's YouTube URL; `{platform}` is a template field and the session records it. Uploads: `/youtube` → **Link my channel** stores a channel id, a 10-minute sweep reads the public Atom feed, and a new entry is posted to `youtube_channel_id` (blank = the go-live channel) with the uploader's fan role pinged. Ships `youtube_mode off` | Twitch enrichment is refused for any non-Twitch stream, so a Twitch-linked member streaming on YouTube is never overwritten. ⚠️ Go-live is **presence only** — a YouTube stream Discord does not show is invisible. Uploads need NO API key: the feed names every new video and marks a Short by its `/shorts/` address (measured 2026-09-02). `YOUTUBE_API_KEY` is optional and adds two things — @handle → channel id, and telling a live broadcast apart from an upload (**KI-11**). The feed itself answers only ~50% of the time (**KI-12**) and lags a publish by up to ~25 min (**KI-13**) |
+| F3 | YouTube — go-live ~~**and new uploads**~~ **and LIVE streams** | 🔴 **THE UPLOADS HALF WAS REMOVED WHOLE AT v139** (2026-09-18 10:05, merge `72733e5`; owner: *"the youtube uploader we should just fully trash"*; [`youtube-uploads-removal-design.md`](youtube-uploads-removal-design.md)) — the feed poll, the Atom parser, the seed-on-link, the announcement, seven `youtube_*` keys, `GET /api/youtube/videos` and the Setup sub-panel are gone, and **KI-11 / KI-12 / KI-13 are CLOSED as moot**. What replaced it: **YouTube LIVE detection** (v126, fixed v133, v135), which reads the channel's `/live` page and feeds go-live as `source=youtube` — its on/off is `youtube_live_mode`, and its open defect is **KI-30**. The channel LINKS survive untouched. Everything after this point in the row is the pre-v139 description, struck and kept so an old `youtube_*` key can be traced: ~~Go-live via presence: shipped 2026-08-27. New-upload posts (Phase 16): ✅ **SHIPPED** merge `7295f61`, live 2026-09-02 (deploy line in `../deploys.log`); `youtube_mode` ships **off**, never yet run against a live channel.~~ `/youtube` became ONE panel on 2026-09-03 (wave 2 — both groups and all nine subcommands retired, `commands synced` 42 → 41) | Go-live: Discord presence carries the platform, so a "Streaming on YouTube" activity announces with the member's YouTube URL; `{platform}` is a template field and the session records it. Uploads: `/youtube` → **Link my channel** stores a channel id, a 10-minute sweep reads the public Atom feed, and a new entry is posted to `youtube_channel_id` (blank = the go-live channel) with the uploader's fan role pinged. Ships `youtube_mode off` | Twitch enrichment is refused for any non-Twitch stream, so a Twitch-linked member streaming on YouTube is never overwritten. ⚠️ Go-live is **presence only** — a YouTube stream Discord does not show is invisible. Uploads need NO API key: the feed names every new video and marks a Short by its `/shorts/` address (measured 2026-09-02). `YOUTUBE_API_KEY` is optional and adds two things — @handle → channel id, and telling a live broadcast apart from an upload (**KI-11**). The feed itself answers only ~50% of the time (**KI-12**) and lags a publish by up to ~25 min (**KI-13**) |
 | F4 | **Event form** → review → Scheduled Event | Decided | `/event` opens ONE panel; **Propose an event** is a DRAFT PANEL (2026-09-10 — Day/Hour/Minute/How-long dropdowns and a text modal that never refuses; `when-picker-design.md`) → channel `pending-<user>-<event>` under *Events* → Approve/Reject → real Discord Scheduled Event + `<t:…>` announcement | Approvers = roles that can see the staff channel; the per-member zone is the **My time zone** button on the same panel (Discord exposes no tz — `/timezone` was retired 2026-09-03); create-event toggle ON |
 | F5 | Event go-live ping | Decided | Post in `#live-now` when an approved event starts; role ping is a setting (default none) | Channel + role editable in options |
 | F6 | **Birthdays** | Decided | Import 39 rows; opt-in; embed `Happy Birthday **{name}**!` in `#return-of-the-gen` | Incumbent fires at each member's OWN midnight — 15/16 land the evening before in Phoenix terms. Decided: per-member midnight, server midnight (Phoenix) as fallback |
@@ -81,8 +91,14 @@ scoped.
 
 ## Cross-cutting (every feature)
 
-- **Test policy** — everything runs inside `#blackbloc-logs` + DMs
-  until the owner lifts `TEST_MODE`; side effects check `bot.guard`.
+- ~~**Test policy** — everything runs inside `#blackbloc-logs` + DMs
+  until the owner lifts `TEST_MODE`; side effects check `bot.guard`.~~
+  ✅ **LIFTED 2026-09-18 16:08** (cutover **P5**). Black Bloc speaks wherever its settings
+  point it; **events, requests and modmail are live to members**. `bot.guard` is `None` on
+  Fly now, so a side-effect check reads as *allowed* — which is right, and is why a feature's
+  own `*_mode` is the whole brake. `shadow` sends the rehearsal copy to `shadow_channel_id`
+  (`#welcome-test`). ⚠️ `.env.example` still ships `TEST_MODE=true`, so a LOCAL run is still
+  guarded; ⚠️ flipping the flag is the owner's in both directions.
 - **Rollout** — anything that acts on members ships shadow/log → watch → on,
   flipped per feature; the incumbent stays on until parity is measured.
 - **Settings** — every knob named above is a stored setting with a slash
@@ -112,7 +128,9 @@ scoped.
 ## Proposed build order (owner to approve)
 
 Each phase = one design doc → one Opus build agent → review → deploy in
-shadow/test mode → owner verifies in the test channel.
+shadow mode → owner verifies in the rehearsal home. (⚠️ This read *"shadow/test mode → owner
+verifies in the test channel"* until 2026-09-19; there is no test channel since the lift, and the
+rehearsal home `shadow_channel_id` = `#welcome-test` is where a shadow copy goes.)
 
 | Phase | Features | Why this order |
 |---|---|---|

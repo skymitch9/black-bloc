@@ -2,7 +2,18 @@
 
 > **Audience:** the owner (this is a decision doc) and Claude sessions.
 > **Status:** TRACKED (owner, 2026-08-31 — was local-only until then; secret
-> NAMES only). Last verified: **2026-09-11 08:45** — docs-wide staleness pass. **What was
+> NAMES only). Last verified: **2026-09-19** — the docs staleness pass after the TEST_MODE lift.
+> Nothing about the HOSTING DECISION moved: it is still a gateway bot, still one always-on Fly
+> machine, still not a Worker, and the lift changed none of that. One number is corrected — the
+> deploy count below read **107 / v108** and `../deploys.log` holds **140** lines, last `2e48d7c`
+> **v141** (2026-09-18 16:55). ⚠️ **That number is [`architecture.md`](architecture.md)'s to
+> own** (its fact table says so); it is restated here only because the paragraph's argument is
+> *"the redeploy path is heavily exercised"*, and it now links rather than competing.
+> ⚠️ **NOT re-checked:** the *prices* are still from memory (knowledge cutoff Jan 2026) and must
+> be confirmed on the providers' pages before anyone relies on them; the gateway-vs-Workers
+> reasoning was not re-derived; `fly.toml` and the `Dockerfile` were not re-read; nothing met
+> Fly's console, Discord or a browser. Before that,
+> **2026-09-11 08:45** — docs-wide staleness pass. **What was
 > re-read off `main` at `1d090e5`:** `fly.toml`, `Dockerfile`, `scripts/deploy.ps1`,
 > `../deploys.log`. **What that FIXED:** the deploy count (37 → **107**, last `73e2e44`
 > v108 at 2026-09-11 00:37) and the last section, which said `fly.toml` deliberately has
@@ -17,8 +28,10 @@
 > ✅ **DECIDED and SHIPPED: Fly.io** (owner, 2026-08-26). The "PENDING the owner"
 > line that stood here until 2026-08-31 was stale — the app has been running on
 > Fly (`black-bloc`, machine `85e744c4d959d8`, region `lax`) since 2026-08-26,
-> with **107** deploys in [`../deploys.log`](../deploys.log) (37 when this line was
-> written). Runbook: [`../access/deploy.md`](../access/deploy.md).
+> with **140** lines in [`../deploys.log`](../deploys.log), last **v141** (counted 2026-09-19;
+> this said 107, and 37 when the line was written). ⚠️ The figure belongs to
+> [`architecture.md`](architecture.md)'s fact table — read it there.
+> Runbook: [`../access/deploy.md`](../access/deploy.md).
 
 ## The owner's ask
 
