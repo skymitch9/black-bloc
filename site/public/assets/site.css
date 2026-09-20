@@ -2405,3 +2405,9 @@ button.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; 
 .gldrawer-head .sect-mark { transform: rotate(-90deg); flex: none; }
 .gldrawer[open] > .gldrawer-head .sect-mark { transform: none; }
 .gldrawer-body { display: flex; flex-direction: column; gap: 12px; padding: 0 0 14px; }
+/* Preview pages (site/public/preview/*) — static-data previews of a redesign, staff-only, deleted when the real page ships. */
+.preview-banner { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 12px 0 4px; padding: 8px 12px; border-radius: 8px; font-size: var(--et-ui-sm, 13px); color: var(--et-warn, #b8860b); background: color-mix(in srgb, var(--et-warn, #b8860b) 14%, transparent); border: 1px solid color-mix(in srgb, var(--et-warn, #b8860b) 40%, transparent); }
+.preview-banner-text { flex: 1 1 320px; min-width: 0; }
+.preview-banner-toggle { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; cursor: pointer; }
+.preview-was { display: none; margin: 0 0 10px; padding: 6px 10px; border-radius: 6px; font-size: var(--et-ui-sm, 13px); color: var(--et-accent, inherit); background: color-mix(in srgb, var(--et-accent, currentColor) 12%, transparent); }
+body[data-show-was="1"] .preview-was { display: block; }

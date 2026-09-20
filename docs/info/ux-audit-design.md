@@ -31,9 +31,15 @@ how many separate places a person has to visit to do one thing.** This is the st
 on the **Posts** page: she could not tell whether the post had gone out, and she could not find where
 to edit an existing post. ⚠️ This is the most valuable thing in this document — an observed failure by
 somebody who was not looking for one. Whatever the audit recommends, it must explain how Pop's two
-minutes would have gone differently. Measured against `page-posts.js`: a post's editable fields live
-inside a per-post view reached by clicking the post's row in a list, and the list's own rows give no
-hint that they are clickable; "changes not yet posted" is text inside that view, not state on the row.
+minutes would have gone differently. ~~Measured against `page-posts.js`: "changes not yet posted" is text inside that view, not state on the row.~~
+⚠️ **CORRECTED by the audit (2026-09-20 16:2x, `ux-audit.md` §4.19):** the status IS on the row (`statusPills`,
+`page-posts.js:132`, fed by `status` per row from `/api/posts`). Four RENDERING defects made it invisible: the
+status dot is permanently grey (`data-tone` set where the stylesheet keys off `data-state`), *posted* and *not posted*
+draw in the same muted micro-caps (`badge(…, 'quiet')` — a tone no stylesheet defines), the sentence is one small
+line under a 160-character body preview, and the only way into a post is `button.row-name.link` — a class that
+matches no CSS rule, so it takes browser-default chrome with no word saying edit and no chevron — while the bold
+**Make it** button sits level with the list heading. The finding survives; the fix is attribute-level and cheaper
+than a redesign.
 
 **2. Go-live splits one job across twelve sections.** Measured in `page-golive.js:load()`: Twitch links ·
 Opt-outs · Recent streams · Announcement wording · Go-live settings · Go-live logs · YouTube channels ·
@@ -78,8 +84,11 @@ pages against, not as a design already approved.**
 | index (overview) | 0 | 0 |
 | members | 0 | 0 |
 
-⚠️ **The ratio is the tell, not the count.** `honeypot` has two sections of work and four of machinery;
-`birthdays` and `tempvoice` and `automod` are the same shape. `golive`'s eight is the worst in the tree.
+⚠️ **CORRECTED by the audit (2026-09-20 16:2x):** the *Settings + log blocks* column above counted each `import`
+line as a call, so it is inflated by one per imported name — `honeypot` is 2 work / **2** machinery, not 2 / 4, and the
+same for `birthdays` and `tempvoice`. The defect this paragraph was reaching for is real but lives on **`automod`
+(four of its five sections are machinery)** and `golive` (six). The *Sections* column was right for all 20. The
+audit's own table in [`ux-audit.md`](ux-audit.md) §1 is the measured one; this table stays as the pre-audit estimate.
 
 ## C. What "good" means here, concretely enough for an agent to judge
 
