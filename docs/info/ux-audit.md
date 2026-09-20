@@ -9,6 +9,10 @@
 > (`site.css`, `status-shell.css`, `estate-theme.css`) for every class the pages hand to
 > `el()`. The brief is [`ux-audit-design.md`](ux-audit-design.md); §C's six tests are applied
 > verbatim as Fable ruled them at 16:1x.
+> ⚠️ **Two docs-only commits landed on `main` while this was being measured** (`948ff05`,
+> `64ccfbc` — TODO, the info index and `costream-design.md`). `git diff --stat 5afd58c 64ccfbc`
+> touches **nothing under `site/` or `black_bloc/`**, so every `file:line` below is still exact
+> against `main` as this commit lands.
 >
 > ⏸️ **This is a LIST, not a build.** Nothing was changed. No code, no settings, no wording.
 > The one file written is this one.
