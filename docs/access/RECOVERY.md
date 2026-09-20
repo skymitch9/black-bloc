@@ -3,7 +3,23 @@
 > **Audience:** whoever has to rebuild this with no memory of it — a weaker
 > executor must be able to follow it cold. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then), secret NAMES
-> only. Last verified: **2026-09-11 08:36** — re-read against the repo (`fly.toml`,
+> only. Last verified: **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**.
+> What changed here: the `docs/` row's file count (**`git ls-files docs` = 119**, not 94) and —
+> the important one — **the secret-ROTATION gap is CLOSED, not open**. On 2026-09-18 17:1x the
+> owner settled it (*"i think we're good if we scrub git history"*) and the measurement backed
+> him: the `.env.enc` purge and force-push happened **2026-09-10 16:55**, the visibility flip
+> **20:06**, so the encrypted file was never in a PUBLIC history; the two commits that carried
+> it (`66eea8b`, `8e81a03`) are dangling in the local clone only. That is recorded in
+> [`../DONE.md`](../DONE.md) (*2026-09-18 — The repo is PUBLIC*), which **owns** the decision;
+> this file owns the CUSTODY. ⚠️ Leaving a recovery doc saying twenty-one secrets are due
+> rotation when the owner has ruled otherwise is exactly the kind of stale fact this file's own
+> header warns about, so the row below now says both. ⚠️ **NOT checked today:** anything against
+> the live Fly app, the Fly dashboard, the Discord Developer Portal, 1Password or a browser; no
+> restore was attempted, no drill was run, and the machine and volume ids are still the
+> 2026-08-26 reading. ⚠️ **`TEST_MODE` is a Fly secret and is now `false`** (2026-09-18 16:08) —
+> a rebuild that restores it as `true` would silence the bot in every channel but
+> `TEST_CHANNEL_ID`, which would look exactly like a broken restore. Before that,
+> **2026-09-11 08:36** — re-read against the repo (`fly.toml`,
 > `.env.example`, `black_bloc/config.py`, `.gitignore`, `git ls-files`). What changed:
 > 🔴 **the GitHub repo is PUBLIC** (since 2026-09-10 20:06) — the Inventory said
 > "private", which is the single most dangerous stale fact a recovery doc can carry
@@ -32,8 +48,8 @@
 
 | Gap | Consequence today | Closes when |
 |---|---|---|
-| ~~**`docs/` is local-only**~~ **CLOSED 2026-08-31** | Was: the whole docs tree existed on ONE machine under OneDrive sync. Now `docs/` is **tracked in git and pushed** to `github.com/skymitch9/black-bloc` (owner, 2026-08-31, commit `1eb8870`) — measured 2026-09-11: `git ls-files docs` returns **94** files (48 on 2026-08-31). A clone restores the docs tree with the code. | Closed. 🔴 Consequence, **sharper since the repo went PUBLIC 2026-09-10**: the docs tree is world-readable, so **never write a secret VALUE under `docs/`** — names and custody only. |
-| 🔴 **Every secret named in `.env.example` is due a ROTATION** | `.env.enc` (an OpenSSL-encrypted copy of the whole `.env`) sat in the tree and in two commits before the repo was made public. It was purged with `git filter-repo` and force-pushed on 2026-09-10 16:55, but the old commit stays fetchable by SHA on GitHub until GC, so the encrypted file must be treated as **exposed**. | The owner rotating all **21** names in `.env.example` — tracked as the repo-public item on [`../TODO.md`](../TODO.md), where the current status lives. Not closed at the time of writing (2026-09-11). |
+| ~~**`docs/` is local-only**~~ **CLOSED 2026-08-31** | Was: the whole docs tree existed on ONE machine under OneDrive sync. Now `docs/` is **tracked in git and pushed** to `github.com/skymitch9/black-bloc` (owner, 2026-08-31, commit `1eb8870`) — measured 2026-09-19: `git ls-files docs` returns **119** files (94 on 2026-09-11, 48 on 2026-08-31). A clone restores the docs tree with the code. | Closed. 🔴 Consequence, **sharper since the repo went PUBLIC 2026-09-10**: the docs tree is world-readable, so **never write a secret VALUE under `docs/`** — names and custody only. |
+| ~~🔴 **Every secret named in `.env.example` is due a ROTATION**~~ **CLOSED 2026-09-18 — no rotation needed** | Was: `.env.enc` (an OpenSSL-encrypted copy of the whole `.env`) sat in the tree and in two commits before the repo was made public, so it had to be treated as **exposed**. **Measured since:** the purge (`git filter-repo`, force-push) ran **2026-09-10 16:55** and the repo went public **2026-09-10 20:06** — the purge came FIRST, so the file was never in a public history, and the two commits that carried it (`66eea8b`, `8e81a03`) are dangling in the local clone only. Owner, 2026-09-18 17:1x: *"i think we're good if we scrub git history"*. | Closed. ⚠️ **The custody table below is still the live document** — every name in it must have a reachable copy whether or not it was rotated, and that is a different question from exposure. Reopen this row only if a NEW leak is found; the decision itself lives in [`../DONE.md`](../DONE.md) (*2026-09-18 — The repo is PUBLIC*). |
 | ~~DB backup is manual~~ **CLOSED 2026-09-01** | Windows scheduled task **"BlackBloc DB backup"** (daily 04:00, StartWhenAvailable, on the owner's main machine) runs `scripts/backup_db.ps1`: consistent snapshot via `python3 -m black_bloc.dbsnapshot` on the Fly machine, sftp pull to `%USERPROFILE%\black-bloc-backups\backup-<date>.sqlite3`, keeps 14, logs to `backup.log` there. **End-to-end tested 2026-09-01** (311,296 bytes pulled, "ok" logged). | Residual: runs only while THAT machine exists and is signed into flyctl — it is machine state; re-register with the one `Register-ScheduledTask` block in `deploy.md`-style docs (or re-run the drill by hand) after a rebuild. Check `backup.log` if in doubt — a silent stop is the failure mode. |
 
 ### DB backup — the drilled procedure (2026-08-31)

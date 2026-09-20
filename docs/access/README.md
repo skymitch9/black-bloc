@@ -1,7 +1,16 @@
 # access/ — how to OPERATE Black Bloc
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not
-> temporarily) — secret NAMES only. Last verified: **2026-09-11 08:34** — the index was checked BOTH
+> temporarily) — secret NAMES only. Last verified: **2026-09-19** — the index was re-checked BOTH ways by
+> script: `ls docs/access/*.md` returns **12** files (this index plus **11** rows), every row points at a
+> file that exists, and every file has exactly one row — **no duplicates, nothing unlisted**. Two rows
+> carried a stale NUMBER and are fixed: `deploy.md` said *107 lines, last v108* (**140** lines, last
+> **v141** — counted off [`../deploys.log`](../deploys.log)) and `sweeps.md` said *rows 1–350*
+> (**1–620**). ⚠️ **NOT checked here:** the facts INSIDE each file — this pass re-verified
+> `setup.md`, `testing.md`, `RECOVERY.md`, `runbook.md`, `OWNER_GUIDE.md` and `site.md` individually
+> (see each one's own *Last verified*) and did **not** re-read `deploy.md`, `operator-read.md`,
+> `personality-pool.md` or `guides-capture.md` beyond their headers. Nothing in this pass met live
+> Discord, the Fly console or a browser. Before that, **2026-09-11 08:34** — the index was checked BOTH
 > ways: every row below points at a file that exists, and `ls docs/access/*.md` returns exactly
 > **12** files — this index plus the **11** rows (2026-09-16: `guides-capture.md` added by the Guides G2 build) — so nothing in the folder is unlisted. Each row's
 > one-line hook was re-read against its file and is still true. ⚠️ **NOT checked here:** the facts
@@ -14,10 +23,10 @@
 |---|---|
 | [`OWNER_GUIDE.md`](OWNER_GUIDE.md) | **Start here, owner:** before the trip (encrypt `.env`, leave the session open), the laptop once, what to look at on the road, if something looks wrong, when you're back |
 | [`setup.md`](setup.md) | Local run: venv, `.env`, Developer Portal, invite, first start |
-| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **107** lines in [`../deploys.log`](../deploys.log), the last being **v108** on 2026-09-11 |
+| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **140** lines in [`../deploys.log`](../deploys.log), the last being **v141** on 2026-09-18 (counted 2026-09-19; it said 107 / v108) |
 | [`RECOVERY.md`](RECOVERY.md) | Rebuild from nothing: inventory, secret custody, named gaps |
 | [`runbook.md`](runbook.md) | **Day to day:** where everything is, the flyctl path, deploy/restart/rollback/logs, secret names, common failures and what they mean, local run, docs bookkeeping |
-| [`sweeps.md`](sweeps.md) | **What the owner has not yet exercised by hand**, in priority order, with what to expect — the verification checklist. Rows **1–350** as of 2026-09-11 |
+| [`sweeps.md`](sweeps.md) | **What the owner has not yet exercised by hand**, in priority order, with what to expect — the verification checklist. Rows **1–620** as of 2026-09-18 (counted 2026-09-19; it said 1–350) |
 | [`operator-read.md`](operator-read.md) | **`OPERATOR_READ_TOKEN`**: the one command the OWNER runs to mint it (it never prints the value), how a session reads live state with `scripts/read.ps1`, the table of readable paths, and how to rotate or revoke. Unset = the door does not exist |
 | [`personality-pool.md`](personality-pool.md) | **The shared mood manifest**: the order of operations for a roster change across both estate bots, `scripts/sync_personality_pool.py`, the two `personality_pool_*` settings, what the boot sync writes (and the one column it never touches), and how to read the `pool.in_step_with_gabi` self-test row. Added 2026-09-05; **both halves have landed since** (KI-23 closed 2026-09-05 19:45) |
 | [`site.md`](site.md) | The config website: the one-hostname deploy, the custom domain, the EXACT Discord OAuth redirect URI to register, the **17** pages and the mock. It is LIVE at https://blackbloc.heygabi.ai |

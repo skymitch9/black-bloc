@@ -2,7 +2,21 @@
 
 > **Audience:** the owner (also away from the machine) and Claude sessions. **Status:** TRACKED
 > (owner, 2026-08-31 — permanently; the purge-vs-keep question is settled, `docs/` stays in git).
-> Secret NAMES only. Last verified: **2026-09-11 08:35** — re-measured off `main` `1d090e5`, which
+> Secret NAMES only. Last verified: **2026-09-19** — the docs staleness pass after the
+> **TEST_MODE lift**. Re-measured off `main` `ffea17e`, which **IS** the live shape (**v141**,
+> release `2e48d7c`, deployed 2026-09-18 16:55): `SCHEMA_VERSION` **45** (said 34),
+> `len(bot.COGS)` **22** (said 19), `tests/test_bot.py:TOP_LEVEL_NOW` **32** with zero groups
+> (said 29), `len(settings_store.KEY_TYPES)` **277** (said 202), `../deploys.log` **140** lines
+> last **v141** (said 107 / v108). ⚠️ **The *Test policy* row was the most dangerous stale line
+> in this file** — it told an operator the bot speaks only in `#blackbloc-logs`, and it has not
+> since 2026-09-18 16:08; the failure table's *"expected until TEST_MODE is lifted"* row went
+> with it, and the boot-sequence and secrets paragraphs still described the removed YouTube
+> uploads half (v139). ⚠️ **NOT re-measured today:** the flyctl commands, the machine/volume ids,
+> the rest of the failure table and the laptop/phone steps — still the 2026-08-27 reading;
+> `site/mock/contract.json` was **not** re-run (the mock needs a listening server); nothing ran
+> against live Discord or a browser, and `/health` was the only live thing read (it answered
+> `ok:true, ready:true, guilds:1` on 2026-09-19). Before that,
+> **2026-09-11 08:35** — re-measured off `main` `1d090e5`, which
 > **IS** the live shape (**v108**, merge `73e2e44`, deployed 2026-09-11 00:37): `SCHEMA_VERSION`
 > **34**, `bot.py:COGS` **19**, **29** top-level slash commands with **zero** groups left, **202**
 > registry keys, `site/mock/contract.json` **17 pages / 150 routes**, `pytest -n auto` **5,546
@@ -20,12 +34,12 @@
 | Thing | Where |
 |---|---|
 | Bot process | Fly.io app `black-bloc`, machine `85e744c4d959d8`, region `lax`, volume `black_bloc_data` at `/data` |
-| Database | SQLite `/data/black_bloc.sqlite3` on that volume (schema **34** — `black_bloc/storage/db.py:SCHEMA_VERSION`, measured 2026-09-11; landmarks on the way: 17 `sessions`, 18 `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the Phase-14 chat tables, 30 the modmail ticket card, 31 the self-test, 34 `events.where_kind` + `where_channel_id`). Migrations are additive-only |
+| Database | SQLite `/data/black_bloc.sqlite3` on that volume (schema **45** — `black_bloc/storage/db.py:SCHEMA_VERSION`, measured 2026-09-19; it said 34, the 2026-09-11 reading. Landmarks on the way: 17 `sessions`, 18 `polls.vote_scheme`, 19 `golive_sessions.live_role_id`, 20 the Phase-14 chat tables, 30 the modmail ticket card, 31 the self-test, 34 `events.where_kind` + `where_channel_id`, 41 `requests.thread_id`, 43 the `moved_to` trail, 44 `meetings` + `meeting_lines`, 45 `events.review_kind`). Migrations are additive-only |
 | Dashboard | https://blackbloc.heygabi.ai (same Fly app; Discord sign-in; staff roles = roles that can see `#blackbloc-logs`) |
 | Health | https://blackbloc.heygabi.ai/health (public JSON: `ok`, `ready`, `guilds`, `latency_ms`) — and the dashboard's **Health** tab (loops, last 50 actions) |
 | Logs | `flyctl logs --app black-bloc --no-tail` (below), the dashboard **Logs/Audit** tab, and `/<feature> logs` in Discord (Phase 12, live since 2026-08-27 18:38) |
-| Test policy | `TEST_MODE=true`: the bot speaks only in `#blackbloc-logs` + DMs + the temp-voice channels it created. Owner lifts it (Fly secret), never Claude |
-| Code | GitHub `skymitch9/black-bloc` — 🔴 **PUBLIC since 2026-09-10 20:06** (so Actions run again; `.env.enc` was purged from history first and is gitignored). `docs/` is tracked, so **never write a secret VALUE under `docs/`**. Branch `main`; every deploy line in [`../deploys.log`](../deploys.log) (**107** lines, last v108) |
+| Test policy | ✅ **LIFTED 2026-09-18 16:08** — `TEST_MODE=false` on Fly (the owner's own `flyctl`, cutover **P5**). The bot speaks **wherever its settings point it**; the brake is each feature's own `*_mode`, and `shadow` sends the rehearsal copy to `shadow_channel_id` (`#welcome-test`). Events, requests and modmail are LIVE to members. ⚠️ Flipping `TEST_MODE` is the owner's, in **both** directions — never Claude. Was, until that moment: *`TEST_MODE=true`: the bot speaks only in `#blackbloc-logs` + DMs + the temp-voice channels it created* |
+| Code | GitHub `skymitch9/black-bloc` — 🔴 **PUBLIC since 2026-09-10 20:06** (so Actions run again; `.env.enc` was purged from history first and is gitignored). `docs/` is tracked, so **never write a secret VALUE under `docs/`**. Branch `main`; every deploy line in [`../deploys.log`](../deploys.log) (**140** lines, last **v141**, counted 2026-09-19; it said 107 / v108) |
 
 ## The flyctl binary
 The Claude session shells never have `flyctl` on PATH. Always spell it out:
@@ -93,16 +107,32 @@ push, deploy. Schema migrations are additive-only, so an older build runs agains
 <flyctl> logs --app black-bloc --no-tail | grep -i "error\|traceback"
 <flyctl> logs --app black-bloc --no-tail | grep "database:"      # migrations on boot
 ```
-Boot sequence to expect: `database ready` → `loaded cog …` ×**19** → `synced **29** app commands` → `logged in as
+Boot sequence to expect: `database ready` → `loaded cog …` ×**22** → `synced **32** app commands` → `logged in as
 Black_Bloc#6132` → `birthdays: the daily import …` → `chat: seeded N intent(s)` (first boot per guild only).
-With no `YOUTUBE_API_KEY` set you also get one INFO line at cog load — `youtube: no YOUTUBE_API_KEY,
-so uploads run on the public feed alone …`. That is the normal state, not a fault (see KI-11).
+(⚠️ **The counts said 19 / 29 until 2026-09-19** — that was the v108 reading; **22** is
+`len(bot.COGS)` and **32** is `tests/test_bot.py:TOP_LEVEL_NOW`, both measured at v141. There is
+**no `TEST MODE ON` line** on the deployed bot any more.)
+⚠️ **The "no `YOUTUBE_API_KEY`, so uploads run on the public feed alone" line is GONE** — the
+uploads half was removed at **v139** (2026-09-18 10:05,
+[`../info/youtube-uploads-removal-design.md`](../info/youtube-uploads-removal-design.md)), and
+the key IS set (2026-09-17 18:03). What a v139+ boot logs instead is one
+`settings ignored: youtube_mode` line for the orphaned stored row — **that** is the normal state,
+not a fault. KI-11 is CLOSED as moot.
 
 ## Secrets (names; custody in [`RECOVERY.md`](RECOVERY.md))
 `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `SESSION_SECRET`, `POLL_VOTE_SECRET` (⚠️ losing it makes polls created under it unvotable — they refuse in words rather than double-count), `ANTHROPIC_API_KEY` + `GROQ_API_KEY` (chat LLM tiers, Phase 14 — unset means those tiers don't exist, never an error), `TWITCH_CLIENT_ID`,
-`TWITCH_CLIENT_SECRET`, `YOUTUBE_API_KEY` (F3 upload posts — OPTIONAL and not yet minted; unset
-leaves uploads on the public feed, which still names every video and still spots a Short, but
-cannot tell a live broadcast from an upload — KI-11), `TEST_MODE`, `TEST_CHANNEL_ID`,
+`TWITCH_CLIENT_SECRET`, `YOUTUBE_API_KEY` (⚠️ **re-written 2026-09-19** — it said *"F3 upload
+posts — OPTIONAL and not yet minted"*, and both halves of that are false: it was **minted
+2026-09-17** and set on Fly 18:03, and there are no upload posts since **v139**. What it buys now
+is the LIVE half — one `search.list` per broadcast to name the video, plus the `@handle` lookup;
+unset, a live announcement links the channel's own `/live` page with the title *Live now*, which
+is the designed keyless shape — **KI-30**, not KI-11), `TEST_MODE` (⚠️ **`false` on Fly since
+2026-09-18 16:08**), `TEST_CHANNEL_ID` (⚠️ **whatever its value, it gates
+nothing now** — `bot.guard` is `None` when `TEST_MODE` is false, so the id is inert; the
+channel `#blackbloc-logs` is still where the self-test posts and where the log channel points,
+but that is the `selftest_channel_id` / `log_channel_id` **settings keys**, not this secret.
+⚠️ Whether the secret is still set on Fly was **not** checked — `flyctl secrets list` is the
+answer),
 `DEV_GUILD_ID`, `DATABASE_PATH`, and `OPERATOR_READ_TOKEN` (read-only API access for a session —
 Fly-only, never in `.env`; [`operator-read.md`](operator-read.md)).
 Set on Fly with `<flyctl> secrets set NAME=value --app black-bloc` (each set restarts the machine);
@@ -113,9 +143,10 @@ PowerShell pipe adds a BOM and the first key is rejected as `﻿KEY`.
 | Symptom | Cause | Fix |
 |---|---|---|
 | Dashboard looks old / broken layout after a deploy | (fixed 2026-08-27) assets now stamped `?v=` + `no-cache`; if it recurs, hard-reload once | — |
-| "This is for staff" on the dashboard | your roles cannot see the test channel | ask an Admin for the role; the page names the roles |
+| "This is for staff" on the dashboard | your roles cannot see `staff_channel_id` (⚠️ this row said *"the test channel"*, which is what that key pointed at before the cutover — **P3** re-points it at the real staff channel) | ask an Admin for the role; the page names the roles |
 | `/rolemenu` missing from the slash list | `rolemenu_mode` is off (commands hide when off) | Dashboard → Role menus → switch on |
-| A panel/announcement never appears | test mode refused the channel — the log shows `would_*` | expected until TEST_MODE is lifted |
+| A panel/announcement never appears, and the log shows `would_*` | ⚠️ **NOT test mode any more** (lifted 2026-09-18 16:08) — a `would_*` row now means the FEATURE's own mode is `shadow`, so the copy went to `shadow_channel_id` (`#welcome-test`) instead | look at `#welcome-test` first; if the wording is right, flip that feature's mode to `on` (Settings page, or its own panel). The cutover ladder is [`../info/cutover-plan.md`](../info/cutover-plan.md) §2 |
+| A panel/announcement never appears and there is **no** log row at all | the feature's channel key is blank, or its mode is `off` | check the key on https://blackbloc.heygabi.ai/settings.html — after the lift several channel keys were deliberately cleared by hand (2026-09-18 16:1x) |
 | `tempvoice.panel_failed` in the log | the Bots role lacks Send Messages in that voice channel | grant it |
 | `role.changed_by_hand` has no actor | the Bots role lacks View Audit Log | grant it |
 | Fly proxy `PU03 unreachable worker host` once | the 6-second restart gap | ignore unless it persists |
@@ -123,7 +154,8 @@ PowerShell pipe adds a BOM and the first key is rejected as `﻿KEY`.
 
 ## Local run (for testing without Fly)
 ```
-.venv/Scripts/python -m black_bloc          # needs .env; TEST_MODE=true there too
+.venv/Scripts/python -m black_bloc          # needs .env; TEST_MODE=true is still the LOCAL default
+                                            # (.env.example ships it true) — production is false
 node site/mock/server.mjs                   # dashboard against fake data on http://127.0.0.1:8788
 ```
 Stop a leftover mock server on Windows: find the `node` PID on the port (`Get-NetTCPConnection -LocalPort 8788`) and `Stop-Process`.

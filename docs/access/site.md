@@ -3,7 +3,19 @@
 > **Audience:** whoever deploys or fixes the site, and the reviewer doing the
 > first live sign-in. **Status:** TRACKED (owner, 2026-08-31 — was local-only
 > until then; secret NAMES only). **Last verified:
-> 2026-09-16** — the Guides G2 build (branch `guides-pages`, ⚠️ **not merged and not
+> 2026-09-19** — the docs staleness pass after the **TEST_MODE lift** (2026-09-18 16:08).
+> What changed here: three sentences that told a developer destructive routes answer **409**
+> *"while `TEST_MODE` is on"* — they do not any more on the DEPLOYED site, and a reader who
+> trusted that would expect a refusal where the bot will now act. ⚠️ **`MOCK_TEST_MODE` still
+> defaults ON in the mock**, and that is deliberate; it just no longer *"matches the bot's real
+> state"*, which is what its own paragraph claimed. Re-counted off disk: `ls site/public/*.html`
+> = **20** (this page said 18). ⚠️ **NOT re-measured:** the route count (**`node
+> site/mock/check.mjs` was not run** — it needs a listening mock; `../info/architecture.md`'s
+> fact table carries the last measured figure, 186 at v139), DNS, the certificate, the OAuth
+> redirect string, the CSP/HSTS/cookie claims, the first-sign-in drill and the route table's
+> completeness. Nothing in this pass touched the live app beyond reading `/health`.
+> Before that,
+> **2026-09-16** — the Guides G2 build (branch `guides-pages`, ⚠️ **not merged and not
 > deployed**) re-measured two figures only: `ls site/public/*.html` is **17 → 18**
 > (`guides.html`) and `site/mock/contract.json` is **159 → 160** routes, both green under
 > `node site/mock/check.mjs` on that branch. ⚠️ **NOT re-checked in that pass:** everything
@@ -235,7 +247,10 @@ emits an anchor: a masked link renders as link-coloured text with the address in
 The renderer has no Python half, so its fixtures are `site/mock/discordmd.test.mjs`, run by
 `scripts/deploy.ps1` and by CI beside `check.mjs`; an injection fixture and Carl's own seed
 text are both in it. Its routes are under `/api/posts`, staff-gated end to end, and
-**Post it** answers the guard's existing **409** while `TEST_MODE` is on.
+~~**Post it** answers the guard's existing **409** while `TEST_MODE` is on.~~ ⚠️ **Superseded
+2026-09-18 16:08:** there is no guard, so **Post it** posts. What keeps the welcome post out of
+`#welcome` now is `posts_mode` being **shadow** — the real message goes to `shadow_channel_id`
+(`#welcome-test`) and the page's pill reads *posted (shadow)*.
 
 ⚠️ **Every page links `/favicon.ico`** (added 2026-08-27 — the log showed a
 `GET /favicon.ico 404` on every single page load). The file is a 32×32 ICO
@@ -298,9 +313,13 @@ MOCK_PORT=9000 node site/mock/server.mjs  # somewhere else
 MOCK_TEST_MODE=0 node site/mock/server.mjs  # let destructive writes succeed
 ```
 
-`MOCK_TEST_MODE` defaults **on**, matching the bot's real state, so every
+`MOCK_TEST_MODE` defaults **on**, so every
 destructive write refuses with a 409 and the guard's sentence — the refusal path
-is the one a developer meets first rather than one nobody exercises.
+is the one a developer meets first rather than one nobody exercises. ⚠️ **It no longer
+"matches the bot's real state"** (that clause was true until 2026-09-18 16:08, when the owner
+lifted `TEST_MODE`); the default is kept because meeting the refusal first is still the safer
+shape for the mock, not because the deployed bot behaves that way. ⚠️ **Do not read a mock 409
+as proof the live bot would refuse** — it would not.
 
 **Try the five permission states** by appending `?as=` to any page or route; it
 also sets a cookie, so the rest of the session stays in that state:
@@ -321,7 +340,7 @@ MOCK_TEST_MODE=0 MOCK_PORT=8788 node site/mock/server.mjs &
 MOCK_PORT=8788 node site/mock/check.mjs
 ```
 
-It fetches all **19** pages and every route (**168** as of 2026-09-16) and asserts the keys in
+It fetches all **20** pages (counted off disk 2026-09-19; this said 19, and the header said 18 — `ls site/public/*.html`) and every route (**186** at v139, off [`../info/architecture.md`](../info/architecture.md)'s fact table, which owns the figure — ⚠️ **not re-run here**; this said 168 as of 2026-09-16) and asserts the keys in
 `site/mock/contract.json`. ⚠️ **`site/mock/contract.json` is the one home for
 those shapes**, and `tests/api/test_contract.py` asserts the **real** routers
 against the same file — so the mock cannot teach a shape the bot does not
@@ -333,9 +352,12 @@ destructive route answers 409 and the checker reports it as a failure.
 
 - **Phase 8b writes; 8a did not.** Every write goes through the same code path
   the slash command uses, so the audit trail stays one table and the bot sees
-  the change live. What it still does **not** do is act outside the test channel
+  the change live. ~~What it still does **not** do is act outside the test channel
   while `TEST_MODE` is on — those routes answer 409 with the same sentence the
-  slash command gives.
+  slash command gives.~~ ⚠️ **Superseded 2026-09-18 16:08** — `TEST_MODE` is off, so a write
+  from the website reaches the real server exactly as the slash command does. The website was
+  never a *wider* door than Discord and still is not; what changed is that neither is narrowed
+  any more. The 409 path survives in the code and in the mock for a future rehearsal.
 - **It has no connection to heygabi** beyond sharing a domain (owner decision,
   2026-08-26): no estate auth, no auth worker, no estate status endpoints, no
   shared deploy script. The theme is a **copied snapshot** — a new estate theme

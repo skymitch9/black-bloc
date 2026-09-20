@@ -1,7 +1,20 @@
 # Testing — the hermetic suite, the mock, and the live api
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — ⚠️ secret NAMES only.
-> Last verified: **2026-09-11 08:37** — re-measured off `main` `1d090e5` (**v108 LIVE**):
+> Last verified: **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**
+> (2026-09-18 16:08). What changed here: the fourth layer's *Needs* column said **"staff, in the
+> test channel"** and there is no test channel any more — a self-test run now posts its cards
+> into `selftest_channel_id`, which is `#blackbloc-logs` because that is where the key points,
+> not because a guard forces it. The hermetic layer's figure is re-read off the **v141** gate
+> (**6,757** passed + 3 skipped; it quoted 5,986 at v116). ⚠️ **NOTHING IN THIS FILE WAS RUN
+> TODAY** — not `pytest`, not `ruff`, not the mock (`check.mjs` needs `server.mjs` listening),
+> and not `tests/live/` (it needs `BLACK_BLOC_LIVE_TOKEN`, which this pass did not hold). The
+> live-suite results below are all 2026-09-06 readings against v97–v99 and have **not** been
+> re-run since; treat them as dated, not current. ⚠️ **One thing a future session should know:**
+> `/api/youtube/status` was anonymously readable at the v139 boot and is **not** now — it
+> answers `not_signed_in` (checked 2026-09-19), so `/health` is the only endpoint this suite's
+> world can read without a cookie. Before that,
+> **2026-09-11 08:37** — re-measured off `main` `1d090e5` (**v108 LIVE**):
 > `pytest -q -n auto` = **5,546 passed** in **40.1 s** (was 5087 on 2026-09-05);
 > `site/mock/contract.json` = **17 pages / 150 routes / 115 action kinds** (was 149 routes);
 > `pytest -m live tests/live --co` = **59 collected**, unchanged. Also corrected below:
@@ -34,10 +47,10 @@
 
 | Layer | Command | Proves | Needs |
 |---|---|---|---|
-| Hermetic | `pytest -q -n auto` | every module, every route shape, every panel card, against fakes — **5,986 tests, ~35 s** (2026-09-17, v116 gate) | nothing but the venv — ⚠️ and a CLEAN environment: a shell that exports the real `.env` names (`POLL_VOTE_SECRET`, `DEV_GUILD_ID`, `TWITCH_*`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`…) turns **nine** "no key" tests red; see `../info/gotchas.md` |
+| Hermetic | `pytest -q -n auto` | every module, every route shape, every panel card, against fakes — **6,757 passed + 3 skipped** (2026-09-18, the v141 gate off `../deploys.log`; the 3 skips are where the voice-receive extension is absent — **KI-31**; it read 5,986 at the v116 gate) | nothing but the venv — ⚠️ and a CLEAN environment: a shell that exports the real `.env` names (`POLL_VOTE_SECRET`, `DEV_GUILD_ID`, `TWITCH_*`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`…) turns **nine** "no key" tests red; see `../info/gotchas.md` |
 | Mock | `node site/mock/server.mjs` then `node site/mock/check.mjs` | the PAGES' half of the contract: the mock answers the same shapes the real routers do | node |
 | Live | `pytest -m live tests/live` | the DEPLOYED host answers, the bot is connected, a self-test run really exercises Discord and cleans up | two env names, below |
-| Live, in Discord | `/settings` ▸ **Self-test…** ▸ **Run the self-test** | the only thing no test can: what a card LOOKS like in the client | staff, in the test channel |
+| Live, in Discord | `/settings` ▸ **Self-test…** ▸ **Run the self-test** | the only thing no test can: what a card LOOKS like in the client | staff. ⚠️ **This said "in the test channel" until 2026-09-19** — there is no test channel since the `TEST_MODE` lift (2026-09-18 16:08). The cards go to `selftest_channel_id`, which points at `#blackbloc-logs` because that is what the KEY says, not because a guard forces it; re-point the key and they go elsewhere |
 
 ⚠️ **No API can click a Discord button.** Discord originates interactions; the bot can only answer
 them. Button, select and modal handlers are proven by the pytest fakes. The self-test proves
