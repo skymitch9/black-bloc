@@ -235,14 +235,16 @@ function statCell(label, value, note) {
   ].filter(Boolean));
 }
 
-function modeCell(label, spec, note, help, say) {
+function modeCell(label, spec, note, help) {
   if (!spec) return statCell(label, '—', `The bot did not report the ${label.toLowerCase()} key.`);
-  const made = modeSwitch(spec, { say, onSaved: () => refresh() });
+  const made = modeSwitch(spec, { onSaved: () => refresh() });
   made.node.setAttribute('title', help);
+  made.say.classList.add('stat-note');
   return el('div', { class: 'stat' }, [
     el('span', { class: 'stat-label', text: label }),
     made.node,
     el('span', { class: 'stat-note', text: note }),
+    made.say,
   ]);
 }
 
@@ -265,7 +267,7 @@ function channelWord(specs) {
   return value ? 'posted where golive_channel_id points' : 'no announcement channel set';
 }
 
-function headerStrip({ golive, youtube, pings, rows, cards, status, warnings, onOpenPings, say }) {
+function headerStrip({ golive, youtube, pings, rows, cards, status, warnings, onOpenPings }) {
   const linked = rows.filter((row) => row.twitch || row.youtube).length;
   const tw = rows.filter((row) => row.twitch).length;
   const yt = rows.filter((row) => row.youtube).length;
@@ -283,21 +285,18 @@ function headerStrip({ golive, youtube, pings, rows, cards, status, warnings, on
       golive.find((one) => one.key === GOLIVE_MODE_KEY),
       channelWord(golive),
       GOLIVE_MODE_HELP,
-      say,
     ),
     modeCell(
       'YouTube announcements',
       youtube.find((one) => one.key === LIVE_MODE_KEY),
       'posted through the go-live feed',
       LIVE_MODE_HELP,
-      say,
     ),
     modeCell(
       'Ping roles',
       pings.find((one) => one.key === PINGS_MODE_KEY),
       'the opt-in roles members pick with /pings',
       PINGS_MODE_HELP,
-      say,
     ),
     statCell('Set up', String(linked), `${tw} Twitch · ${yt} YouTube · ${out} opted out`),
     statCell(
@@ -578,10 +577,10 @@ async function rowPanel(row, say) {
 
 /** The same construct Moderation's case rows use: the right-hand drawer, opened twice so
     the panel appears at once and fills in when the role list has loaded. */
-async function showStreamer(row, say) {
+async function showStreamer(row) {
   const title = row.name || row.user_id;
   openDrawer(title, sayNothing(PUTTING_TOGETHER));
-  openDrawer(title, await rowPanel(row, say));
+  openDrawer(title, await rowPanel(row, notice()));
 }
 
 function announcedCell(row) {
@@ -610,13 +609,13 @@ function roleCell(row) {
   return row.role_id ? badge(ROLE_GONE, 'warn') : muted('—');
 }
 
-function streamerRow(row, say) {
+function streamerRow(row) {
   return el('button', {
     class: 'grid-row',
     type: 'button',
     'data-search': (`${row.name || ''} ${row.user_id} ${row.twitch || ''} `
       + `${row.youtube || ''} ${row.role || ''}`).toLowerCase(),
-    on: { click: () => showStreamer(row, say) },
+    on: { click: () => showStreamer(row) },
   }, [
     el('span', { class: 'cell-name' }, [
       nameNode(row.user_id, row.name),
@@ -642,7 +641,7 @@ function streamersSection(rows, say) {
     ...COLUMNS.map((label) => el('span', { text: label })),
     el('span'),
   ]);
-  const lines = rows.map((row) => streamerRow(row, say));
+  const lines = rows.map(streamerRow);
   const foot = el('div', { class: 'grid-foot' });
   const none = sayNothing(NOTHING_MATCHES);
   none.hidden = true;
@@ -1218,7 +1217,6 @@ async function load() {
       status: youtubeStatus,
       warnings: warningsFor(golive, onboardingPayload),
       onOpenPings: openPings,
-      say: notice(),
     }),
     liveSection(cards),
     streamersSection(rows, say),

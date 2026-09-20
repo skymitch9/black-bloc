@@ -2383,7 +2383,7 @@ button.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; 
 .grid-table.streamers .grid-row {
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.2fr) 7.5rem 24px;
 }
-.grid-row .cell-name { display: flex; align-items: center; gap: 8px; }
+.grid-table.streamers .cell-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .glid { display: block; color: var(--et-muted); font-size: var(--et-ui-2xs); }
 
 .gldrawer { border-top: var(--et-hairline-w) solid var(--et-hairline); }
