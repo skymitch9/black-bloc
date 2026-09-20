@@ -2,17 +2,95 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-11 08:32** — the HEADER only, by the docs-wide staleness
-> pass. Measured while here: the file is **3,964 lines**; the newest entry is
-> **2026-09-11 (v108, merge `73e2e44`)**, which matches the last line of
-> [`deploys.log`](deploys.log); both links in this header resolve. The entries below
-> are an append-only archive and were deliberately NOT re-verified or edited; a wrong
-> one gets a superseding entry, never a correction in place. ⚠️ **NOT checked:** any
+> Last verified: **2026-09-19** — the HEADER only, by the docs staleness pass after the
+> TEST_MODE lift. Measured while here: the file is **4,423 lines** (it said 3,964); the newest
+> entry is **2026-09-19 (the docs pass below)** and the one under it is **2026-09-18 (v141,
+> merge `d6c271d`)**, which matches the last line of [`deploys.log`](deploys.log) — the header
+> said the newest was 2026-09-11 / v108, ten releases ago. Both links in this header resolve.
+> The entries below are an append-only archive and were deliberately NOT re-verified or edited;
+> a wrong one gets a superseding entry, never a correction in place. ⚠️ **NOT checked:** any
 > individual entry's facts, and nothing in this pass met live Discord or a browser.
+> Before that, **2026-09-11 08:32** — the HEADER only, on the same terms.
 > Before that, **2026-08-31** — the HEADER only, on the same terms.
 >
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
+
+## 2026-09-19 — Docs staleness pass after the TEST_MODE lift (no code, no deploy)
+
+**Owner, 2026-09-19 20:0x, verbatim: *"update all docs using opus and then im gonna swap"*.** A
+docs-only pass over the whole tree so a cold session can start from `docs/` alone: every doc that
+still described test mode as ON got a dated note (never a rewrite of history — what was true is
+kept, marked with when it stopped, and followed by what is true now), the ten v132–v141 landings
+were reconciled against the repo, and the two indexes were checked both ways by script.
+
+**Measured off `main` `ffea17e` (v141 LIVE), by import and off disk:** `len(KEY_TYPES)` **277** ·
+`SCHEMA_VERSION` **45** · `len(bot.COGS)` **22** · `tests/test_bot.py:TOP_LEVEL_NOW` **32** ·
+`namespace_of` over `KEY_TYPES` **25** groups · `FEATURES == logkinds.FEATURES` **21** ·
+`deploys.log` **140** lines, last `2e48d7c` v141 · `git ls-files docs` **119** ·
+`ls docs/info/*.md` **90** (89 + index) · `ls docs/access/*.md` **12** (11 + index) ·
+`ls site/public/*.html` **20** · sweeps max row **620** · `review-checklist.md` **37** items ·
+`.env.example` ships `TEST_MODE=true` and `bot.py:69–72` builds the guard only when it is set,
+so `bot.guard` is `None` on Fly · `cogs/community/events.py:2182` proves
+`events_test_retention_minutes` was guard-gated and is therefore inert now. Live: `/health`
+answered `ok:true, ready:true, guilds:1, personality_pool_version:1`.
+
+⚠️ **NOT verified:** `pytest` was not run (the 6,757 figure is the v141 deploy gate's, off
+`deploys.log`); `node site/mock/check.mjs` was not run (it needs a listening mock, so 20 pages /
+186 routes stays the 2026-09-18 reading); no live SETTING was read — the Settings page needs a
+Discord sign-in, so every `*_mode` value quoted is the conductor's 2026-09-18 reading; nothing
+met Discord and no browser rendered a page.
+
+🔴 **Two findings handed back rather than fixed.** (1) `CLAUDE.md` says the review checklist has
+**35** items and it has **37** — that file is outside a docs-only pass. (2)
+**`/api/youtube/status` is no longer anonymously readable** — it answered `not_signed_in` on
+2026-09-19, where it was read in a browser without a cookie at the v139 boot; `/health` is now
+the only live endpoint a session can read unaided, which matters for every future "check the
+live state" instruction.
+
+**Three contradictions between docs, each resolved onto one owner:**
+
+- **The deploy count** lived in `architecture.md`'s fact table (**138**, wrong), in
+  `access/README.md` (**107**), in `access/runbook.md` (**107**) and in `info/hosting.md`
+  (**107**). It is **140**. `architecture.md` owns it; the other three now say the number and
+  link there.
+- **Secret rotation.** `access/RECOVERY.md` carried a 🔴 open gap saying all 21 names in
+  `.env.example` were due rotation, while `DONE.md`'s own 2026-09-18 entry recorded the owner
+  closing it (the `.env.enc` purge, 2026-09-10 16:55, preceded the visibility flip at 20:06, so
+  the file was never in a public history). A recovery doc asserting an open security gap the
+  owner has ruled on is the worst kind of stale. `DONE.md` owns the DECISION; `RECOVERY.md`
+  owns the CUSTODY, and its row now says both.
+- **The review-checklist count** disagreed three ways: `CLAUDE.md` **35**, `info/README.md`
+  **35**, the file itself **37**. `review-checklist.md` owns it; `info/README.md` corrected,
+  `CLAUDE.md` handed back.
+
+**Every file touched, one line each:**
+
+| File | What changed |
+|---|---|
+| `README.md` | Last-verified re-measured; `access/` 10 → **11** and `info/` 88 → **89** beside their indexes; a new **Where the bot stands right now** block — test mode OFF since 2026-09-18 16:08, which features are live to members, which are `shadow` |
+| `KNOWN_ISSUES.md` | Header re-dated; **KI-5 MOOT** (banner, body kept); **KI-8**'s "every panel outside `TEST_CHANNEL_ID`" clause marked history, entry itself unaffected; **KI-20** — the defect did not move but members can now meet it; **KI-26** — ⚠️ **both of its own triggers are MET** (a `> file` hang, count 10), the session is owed not optional; **KI-30** — "the fix is on branch `youtube-live-fix`" corrected to LIVE v133/v135, and the live `youtube_live_mode` is `on` though the default ships off |
+| `TODO.md` | The dated pass line at the top of the 🔁 resume block (the block itself untouched); the docs-pass item marked LANDED with its two hand-backs; the standing build brief no longer says "TEST_MODE confined"; checklist 33 → 37, sweeps 37 → 620 |
+| `DONE.md` | This entry; header re-measured (4,423 lines, newest entry v141 — it said 3,964 / v108) |
+| `access/README.md` | Index re-checked both ways by script (12 files, 11 rows, no duplicates, nothing unlisted); deploy row 107/v108 → **140/v141**; sweeps row 1–350 → **1–620** |
+| `access/setup.md` | The **Test policy** box marked LIFTED with what replaced it, and kept as the LOCAL shape (`.env.example` still ships `TEST_MODE=true` — verified); first-start cogs 19 → **22**, commands 29 → **32**, no `TEST MODE ON` line on the deployed bot; gate tests 5,546 → **6,757** |
+| `access/testing.md` | The live-in-Discord layer's *"staff, in the test channel"* corrected — the self-test posts where `selftest_channel_id` points; hermetic 5,986 → **6,757 + 3 skipped**; header states nothing here was RUN and the live-suite numbers are 2026-09-06 |
+| `access/runbook.md` | ⚠️ **The most dangerous stale line in the tree** — the *Test policy* row told an operator the bot speaks only in `#blackbloc-logs`; the *"A panel never appears → expected until TEST_MODE is lifted"* row split into the two things it can mean now; the boot line's YouTube-uploads sentence retired (v139) and `YOUTUBE_API_KEY` rewritten (it said *OPTIONAL and not yet minted*, both false); schema 34 → **45**, cogs → **22**, commands → **32**, deploys → **140** |
+| `access/RECOVERY.md` | The rotation gap **CLOSED** with the measurement behind it; `git ls-files docs` 94 → **119**; a warning that a rebuild restoring `TEST_MODE=true` would look exactly like a broken restore |
+| `access/OWNER_GUIDE.md` | *"Everything still runs in test mode"* and *"most things there are expected in test mode"* both replaced; the modmail card, the go-live panel line and `events_test_retention_minutes` each say what they mean now; the header flags that this page's COUNTS were not re-checked |
+| `access/site.md` | Three *"409 while `TEST_MODE` is on"* claims superseded; `MOCK_TEST_MODE` still defaults on but no longer *"matches the bot's real state"*; pages 18/19 → **20** off disk, routes pointed at `architecture.md` |
+| `info/README.md` | **Four duplicate rows removed** (polls-shadow ×3, golive-end ×2, staff-reach ×2 — the stale one every time); **`posted-strings-events-design.md` added**, it had no row at all; five statuses overtaken by landing fixed (posts-paste → LIVE v140, cutover-plan → STARTED, architecture → v141, checklist → 37, gotchas → ten) |
+| `info/architecture.md` | ⚠️ **Two fact-table figures were WRONG** — schema **44 → 45** (it contradicted its own v141 history row) and deploys **138 → 140**; two contradictory duplicate rows deleted (Features read 20 against 21); keys 277 re-labelled from a merged branch to `main`; the Shape tree gained **20 modules it had never named** plus `loops.Reconciler`, `command_errors.record`, `clipmd.js`, and says `guard.py` is not installed in production; `storage/db.py` and the 17-pages block fixed |
+| `info/cutover-plan.md` | The Status line said NOT STARTED while P5's own row said taken; row 3c (YouTube uploads) struck; **P4z records what ACTUALLY happened at the lift** — the doubled front door — against what it predicted, and names its one wrong sentence; rows 7 and 9 marked taken; P2 still not done and P5 went ahead anyway; §4 rewritten as the current state |
+| `info/gotchas.md` | The xdist hang is **×10, not ×5**, and the tenth was on the `> file` run this entry recommends — the retry is no longer a guarantee; kill by tree, never by image name |
+| `info/feature-list.md` | The **Test policy** cross-cutting bullet and *"owner verifies in the test channel"* retired; **F3**'s uploads half struck with where it went; counts pointed at `architecture.md` |
+| `info/hosting.md` | Deploys 107 → **140**, and now links `architecture.md` rather than competing with it; the hosting DECISION is unchanged by the lift |
+| `info/review-checklist.md` | ⚠️ **A brief may no longer tell a build agent "TEST_MODE will catch it"** — anything that posts ships `shadow`; count re-counted at **37** |
+| `info/rehearsal-home-design.md` | A banner saying the guard is gone and **this feature is now the only brake**, with the front door's 2026-09-18 16:57 flip as the proof; ⚠️ do not clear `shadow_channel_id`; the "under `TEST_MODE` today" table dated to before the lift |
+
+**Not touched, deliberately:** `black_bloc/`, `site/`, `tests/`, `scripts/`, `CLAUDE.md`, the
+`~/.claude/.../memory/` files (the conductor's), `deploys.log`, and every `archive/` and
+`phase*-design.md` doc that describes a design as it stood at its own date.
 
 ## 2026-09-18 — v141 (16:55): the boot double-post fixed, and the front door gains shadow mode
 
