@@ -1,6 +1,11 @@
 # The Go-live page, rebuilt — one list of people, whichever platform they stream on
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **REVIEWED by Fable 2026-09-20 16:1x — all five
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-20 on branch `golive-page`**
+> (off `main` `948ff05`), the body plus rulings 2 and 3. ⚠️ **NOT merged, NOT deployed, and NO BROWSER HAS RENDERED
+> IT ONCE** — read `## What was NOT verified` before believing anything about how it looks. Gate green: `ruff` clean,
+> `pytest -n 8` 6757 passed / 3 skipped forward **and** under `BB_REVERSE=1`, 35 asset modules parse, `check.mjs`
+> 20 pages / 186 routes unchanged, `discordmd` + `labels` + `clipmd` + the new `golive-join` fixtures green.
+> Before that: 📐 **REVIEWED by Fable 2026-09-20 16:1x — all five
 > calls stand (two with additions, see the rulings at the foot) — and DISPATCHED to Opus as branch `golive-page`.** Was: ⏸️ ready for review, not dispatched. (The owner approved the mock 16:0x and a build was dispatched 15:56; he stopped it a minute
 > later — *"dont start it in 4 minutes, we're gonna swap to fable, just prepare it to be reviewed."* — before it
 > had written anything. No branch, no worktree, nothing to clean up.) **Read `## For the reviewer` at the foot
@@ -193,3 +198,114 @@ between the three features). NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_
 ## Deviations
 
 *(the build agent writes here what it had to do differently, dated)*
+
+**2026-09-20, branch `golive-page`, off `main` `948ff05`.** Seventeen, in the order they would
+surprise a reader of the body.
+
+1. ⚠️ **A row opens the RIGHT-HAND DRAWER, not an inline panel under it.** §B2 and ruling 4 both
+   say inline. The UX audit landed mid-build with a measured finding that changed it: the
+   construct already exists and works — `page-moderation.js:144` builds each case row as a
+   `<button class="grid-row">` ending in a `chevronRight`, and `:391`'s `showCase` opens
+   `ui.js:openDrawer` (a native modal `<dialog>`, so Escape, the focus trap and the backdrop are
+   the platform's). The conductor directed this build to use it rather than write a second one,
+   which is the audit's whole point. The BEHAVIOUR the design asked for is unchanged — a row
+   opens a panel holding the four groups of moves — and *looks clickable at rest* is met by the
+   chevron plus `button.grid-row:hover`. Enter, Space and focus come free from a real `<button>`
+   instead of a hand-rolled `keydown`. The cost: the panel is modal, so the page under it does
+   not move and two people cannot be open side by side.
+2. **The Streamers list is `.grid-table` / `.grid-row`, not `ui.js:table()`.** `table()` renders
+   one `<tr>` per row and `filterRows` counts every `tbody` child, so a row that opens something
+   is not a shape it has. `.grid-table` already carries a second column template
+   (`.grid-table.members`); `.grid-table.streamers` is the same additive extension. `table()` is
+   untouched and still draws *Recent streams*.
+3. **The header strip has SIX cells, not the mock's five.** §B4 places `pings_mode` "in the
+   strip" while the mock shows only the two announcement switches, so a **Ping roles** cell was
+   added. Without it that key would have had to go in a drawer, which §B4's own exclusion list
+   forbids.
+4. **The set-up warning is a SEVENTH cell, a `<button class="stat">`** (ruling 2). It is drawn
+   only when `golive_ping_role_id` is unset, or when onboarding is managed and community and has
+   never been written. Pressing it opens *Everything else*, opens the Ping-roles drawer and
+   scrolls to it.
+5. **The Ping-roles drawer's summary is ruling 2's own line**, with the measured number:
+   *Ping roles · 11 settings · the shared roles · Discord onboarding*. Eleven, not the ruling's
+   illustrative eight — `pings` holds **13** keys, minus `pings_mode` (the strip) and
+   `pings_log_level` (the catch-all).
+6. **`ui.js:foldout()` was NOT used for the drawers.** Its summary is an uppercase label
+   (`text-transform: var(--et-label-transform)`), which turns that sentence into a shout, and its
+   count slot is mono. A page-local `drawer()` plus three CSS classes give the mock's bold title
+   and muted line, and are not a shared-module change.
+7. **The Log drawer holds THREE `logsSection` nodes and the chips show and hide them** — read,
+   not assumed, as §B5 required. `logs.js:logsSection(feature, …)` takes ONE feature and fetches
+   `/api/actions?feature=…`; there is no multi-feature call and no combined route, so **All**
+   shows all three stacked. ⚠️ The chips are labelled from `logs.js:LOG_FEATURES` — **Go-live**,
+   not the mock's *Twitch* — because the `golive` feature's log covers both platforms and calling
+   it Twitch would be a lie.
+8. **A `logsSection` node is demoted before it goes in the drawer** (`unsection`). It returns a
+   `section.sect`, and `layout.js:mountSections` finds sections by DESCENDANT query, so three
+   nested ones would have added three entries to the *On this page* rail and broken "five
+   sections". `logs.js` is not forked.
+9. **There is no RENAME of a ping role.** §B2 lists "make / rename / remove"; the routes are
+   `POST /api/pings/streamers` and `DELETE /api/pings/streamers/{id}` and nothing else, and this
+   build adds none. The group offers **Give them a ping role** (with the existing *use this role
+   instead* select), **Remove**, and **Hide**/**Restore** — the streamer-list move section 2
+   absorbs from *Pings*.
+10. **Two confirmation bodies are verbatim and now point at nothing.** The YouTube unlink body
+    still ends *"…a Lead can link it for them below"* and there is no card below it any more (the
+    form is in the same panel). Kept verbatim per §B2 — rewording is the other audit's job — and
+    flagged here for it. Two OTHER bodies were changed by one word, *below* → *in Everything
+    else*, because the settings they name genuinely moved.
+11. **`badge(mark, 'quiet')` became `badge(mark, null)`** in the Wording card. Measured by the
+    audit: `.badge[data-tone="quiet"]` matches no rule in any stylesheet, so the tone was a no-op.
+    Same appearance, no longer claiming something the CSS does not do.
+12. **Recent streams is unchanged except one cell:** *How* reads `source + also_source` when the
+    co-stream fields are present. The mock's five-column Recent table was NOT adopted — the
+    design's own table says "unchanged", and today's seven columns carry strictly more (Title,
+    Mode then).
+13. **`joinStreamers`'s `live` can be `'both'`,** which §B1's row shape
+    (`'twitch' | 'youtube' | null`) does not list. Required by the co-stream brief. Rows also
+    carry three fields §B1 does not name — `listed`, `last_live_at`, `live_count` — because the
+    Hide/Restore move and the panel's footer line need them.
+14. **A second pure export, `liveStreams(sessions)`,** builds the *Live now* cards, and a third,
+    `routeTyped(value)`, is §B3's shape routing. Traps 5 and 6 and the ambiguous-value refusal are
+    all behaviours worth a fixture, and a fixture needs a pure function.
+15. **An open session whose user matches nobody gets a Streamers ROW as well as a Live-now card.**
+    §B1 only requires the card, but a person the *Live now* chip filters to has to exist in the
+    list it filters.
+16. **`site.css` grew 79 lines** — the strip's note line and pressable stat, the live cards, the
+    platform pill, the streamers column template, the drawer. Tokens only, no raw colours.
+    `ui.js`, `logs.js`, `api.js`, `app.js` and `layout.js` are untouched, and `contract.json`'s
+    diff is zero.
+17. **The page head's subtitle is written from JS.** `golive.html` is untouched (its `<title>`,
+    `data-tab` and rail place stay as §C requires), so the new one-line subtitle is set into
+    `#subtitle` on load rather than in the markup.
+
+**KI-26 fired, sighting ELEVEN, and it was a `> file` run** (the second such): the `BB_REVERSE=1`
+`pytest -n 8` stalled at **87 %** with the log untouched for over seven minutes. Killed by its own
+process TREE — identified by the `PYTHONPATH=C:/lcw/bb-golive-page` in the `env -i` command line,
+because a second agent's suite was running beside it — and green in **83 s** on the retry. This
+build did not touch `KNOWN_ISSUES.md`; the count is reported to the conductor.
+
+## What was NOT verified
+
+⚠️ **NO BROWSER HAS RENDERED THIS PAGE. Not once, at any width, in any theme.** Every claim above
+about how it looks is a reading of `site.css`, not a screenshot — the strip, the live cards, the
+six-column streamers grid, the drawer, the chips and the whole small-screen story are unproven.
+Sweeps `GP-a` … `GP-f` are the only proof that will ever exist.
+
+- **Not merged, not deployed, no key flipped**, and nothing here met Discord or the live bot.
+- **No move in the row panel was ever pressed.** Every route call is a copy of the call today's
+  page makes, checked by reading; not one was exercised against the mock or anything else.
+- **`node site/mock/check.mjs` was run** (20 pages / 186 routes, unchanged) — but it checks routes
+  and page loads, not rendering, and **no page was opened in a browser against the mock**.
+- **The co-stream fields are fixture-only.** `also_source` and `also_url` do not exist in any
+  payload yet; the two fixtures pin what the join will do when the `costream` build lands them,
+  and nothing has proved the field names will be those.
+- **The every-key-lands-once test's 36-key list is a DATED FIXTURE**, measured 2026-09-20 off
+  `settings_store.KEY_TYPES`. It does not read the registry live, so a key added later is caught
+  by the catch-all at runtime (which IS tested) rather than by that list.
+- **Nobody has tried the page with 21 real rows**, and whether a modal drawer beats an inline
+  panel for that list is an untested judgement (Deviation 1).
+- The **search box and the five filter chips** were never typed into or pressed; the filter
+  functions are untested code.
+- `golive.html`, `contract.json` and every shared asset module are unchanged — **verified by
+  `git diff`**, which is the one claim here that was measured rather than read.
