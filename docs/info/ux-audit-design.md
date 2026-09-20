@@ -43,8 +43,10 @@ go live?*
 
 **The worked answer** is the mock published 2026-09-20: <https://claude.ai/artifact/VGiR2jgHui9E4D9MbCKyw6>
 — five sections instead of twelve, one row per person with both platforms on it, one announcement
-wording with a platform toggle, and everything rarely touched folded into one drawer. It is a picture to
-react to, not code; nothing in it is wired to the bot. **Treat it as the pattern the audit measures other
+wording with a platform toggle, and everything rarely touched folded into one drawer. **Version 2 (16:0x) puts it
+inside the REAL shell** — the rail with its four groups and mode dots, the top bar, the on-this-page list with
+Expand all / Collapse all, the page head with Refresh and one primary action — so it can be judged as a page
+rather than a fragment. It is a picture to react to, not code; nothing in it is wired to the bot. **Treat it as the pattern the audit measures other
 pages against, not as a design already approved.**
 
 ## B. What is there now (measured 2026-09-20, `main` `22753ae`)
