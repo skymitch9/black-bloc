@@ -4,7 +4,9 @@
 > 2026-08-31 — was local-only until then; secret NAMES only).
 > Last verified: **2026-09-19** — the HEADER only, by the docs staleness pass after the
 > TEST_MODE lift. Measured while here: the file was **4,423 lines** before this pass's own entry
-> was added and is **4,501** with it (it said 3,964); the newest
+> was added (it said 3,964). ⚠️ **The line count of this file cannot be stated inside this file
+> without being wrong the moment it is written** — 4,423 is the figure as the pass found it, and
+> `wc -l docs/DONE.md` is the only current answer. The newest
 > entry is **2026-09-19 (the docs pass below)** and the one under it is **2026-09-18 (v141,
 > merge `d6c271d`)**, which matches the last line of [`deploys.log`](deploys.log) — the header
 > said the newest was 2026-09-11 / v108, ten releases ago. Both links in this header resolve.
