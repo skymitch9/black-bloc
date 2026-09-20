@@ -105,6 +105,37 @@ async def test_a_session_row_says_which_platform_it_was_on(client, sign_in, web,
     assert rows[0]["platform"] == "YouTube"
 
 
+async def test_a_co_stream_row_names_the_other_platform_the_page_draws_beside_it(
+    client, sign_in, web, guild, wf
+):
+    """The Go-live page's join reads these three as optional; a single-platform row is null."""
+    wf.member(guild, 21, name="ada")
+    await web.db.conn.execute(
+        "INSERT INTO golive_sessions(guild_id, user_id, source, platform, url, also_source, "
+        "also_url, also_platform, also_started_at, started_at, mode) "
+        "VALUES (?, 21, 'twitch', 'Twitch', 'https://twitch.tv/ada', 'youtube', "
+        "'https://youtu.be/x', 'YouTube', '2026-08-27T00:30:00+00:00', "
+        "'2026-08-27T00:00:00+00:00', 'on')",
+        (wf.GUILD_ID,),
+    )
+    await web.db.conn.execute(
+        "INSERT INTO golive_sessions(guild_id, user_id, source, platform, started_at, "
+        "ended_at, mode) VALUES (?, 21, 'twitch', 'Twitch', '2026-08-26T00:00:00+00:00', "
+        "'2026-08-26T01:00:00+00:00', 'on')",
+        (wf.GUILD_ID,),
+    )
+    await web.db.conn.commit()
+    sign_in(client)
+
+    rows = client.get("/api/golive/sessions").json()
+
+    assert rows[1]["also_source"] == "youtube"
+    assert rows[1]["also_platform"] == "YouTube"
+    assert rows[1]["also_url"] == "https://youtu.be/x"
+    assert rows[0]["also_source"] is None and rows[0]["also_platform"] is None
+    assert rows[0]["also_url"] is None
+
+
 async def test_the_session_limit_is_clamped(client, sign_in, web):
     sign_in(client)
     assert client.get("/api/golive/sessions", params={"limit": 10000}).status_code == 200

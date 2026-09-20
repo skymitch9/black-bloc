@@ -10,7 +10,7 @@ from discord.ext import commands, tasks
 
 from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors
-from ...golive import now_iso
+from ...golive import YOUTUBE, joins_session, now_iso
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
 from ...panels import (
@@ -29,6 +29,7 @@ from ...panels import (
 from ...panels import site_page_url as library_site_page_url
 from ...settings_store import (
     DB_UNAVAILABLE,
+    GOLIVE_COSTREAM_MODE_KEY,
     GUILD_ONLY,
     YOUTUBE_LIVE_MODES,
     YOUTUBE_LIVE_POLL_MINUTES,
@@ -76,7 +77,10 @@ COG_NAME = "YouTube"
 GOLIVE_COG = "GoLive"
 YOUTUBE_SOURCE = "youtube"
 OPEN_SESSION_BECAUSE = "open_session:{source}"
+JOINED_BECAUSE = "joined_session"
 UNKNOWN_SOURCE = "unknown"
+GO_LIVE_DOOR = "go_live"
+ADD_PLATFORM_DOOR = "add_platform"
 NO_KEY = (
     "youtube: no YOUTUBE_API_KEY, so a live stream is announced from the channel's own live "
     "page alone — the post's title reads Live now and no video id is searched for"
@@ -524,7 +528,10 @@ class YouTube(commands.Cog):
             return
         guild = member.guild
         open_session = await self._any_open_session(guild, member)
-        if open_session is not None:
+        joins = open_session is not None and joins_session(
+            open_session, YOUTUBE, self.bot.store.get(guild.id, GOLIVE_COSTREAM_MODE_KEY)
+        )
+        if open_session is not None and not joins:
             if known is None:
                 await self._live_seen(
                     guild,
@@ -563,10 +570,15 @@ class YouTube(commands.Cog):
                 "title": info.title,
                 "confirmed": confirmed is not None,
                 "announced": True,
-            },
+            }
+            | ({"because": JOINED_BECAUSE} if joins else {}),
             mode,
         )
-        await self._go_live(guild, member, info)
+        await (
+            self._add_platform(guild, member, info)
+            if joins
+            else self._go_live(guild, member, info)
+        )
 
     async def _live_seen(
         self, guild: Any, member: Any, details: dict[str, Any], mode: str
@@ -641,7 +653,13 @@ class YouTube(commands.Cog):
         self.confirms += int(units)
 
     async def _go_live(self, guild: Any, member: Any, info: Any) -> None:
-        goer = getattr(self._golive(), "go_live", None)
+        await self._hand_off(guild, member, info, GO_LIVE_DOOR)
+
+    async def _add_platform(self, guild: Any, member: Any, info: Any) -> None:
+        await self._hand_off(guild, member, info, ADD_PLATFORM_DOOR)
+
+    async def _hand_off(self, guild: Any, member: Any, info: Any, door: str) -> None:
+        goer = getattr(self._golive(), door, None)
         if goer is None:
             log.warning(
                 "youtube: the go-live cog is not loaded; %s's stream is not announced", member.id

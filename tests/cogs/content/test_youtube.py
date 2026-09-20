@@ -1502,11 +1502,16 @@ async def open_twitch_session(db):
     await db.conn.commit()
 
 
+async def no_costreaming(bot):
+    await bot.store.set(GUILD, "golive_costream_mode", "off")
+
+
 async def test_a_stream_read_live_while_their_twitch_session_is_open_leaves_a_row_saying_so(
     bot, cog, golive, db, member
 ):
     """The probe worked; the one-announcement-per-person rule is why nothing was posted."""
     await live_on(bot)
+    await no_costreaming(bot)
     await open_twitch_session(db)
     client = await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
 
@@ -1528,6 +1533,7 @@ async def test_that_row_is_written_once_per_stream_and_not_once_per_probe(
     bot, cog, golive, db, member
 ):
     await live_on(bot)
+    await no_costreaming(bot)
     await open_twitch_session(db)
     await live_linked(
         db, cog, BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, keyed=True
@@ -1544,6 +1550,7 @@ async def test_the_row_shadows_with_the_live_half_exactly_as_the_announcing_one_
     bot, cog, golive, db, member
 ):
     await live_on(bot, mode="shadow")
+    await no_costreaming(bot)
     await open_twitch_session(db)
     await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
 
@@ -1601,3 +1608,43 @@ async def test_the_staff_panel_says_how_many_channels_read_as_live(bot, cog, gol
     embed, _view = await build_panel(bot, bot.guild, member)
 
     assert "**reading live now** — 1" in embed.description
+
+
+# --- a probe that reads live while a Twitch session is open, with co-streaming on ----------------
+
+
+async def test_a_second_platform_joins_the_open_session_instead_of_being_held_back(
+    bot, cog, golive, db, member
+):
+    """`golive_costream_mode` on: the hand-off is `add_platform`, and the row says why."""
+    await live_on(bot)
+    await open_twitch_session(db)
+    await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
+
+    await cog.probe_all()
+
+    seen = await details_logged(db, "youtube.live_seen")
+    assert len(seen) == 1
+    assert seen[0]["announced"] is True and seen[0]["because"] == "joined_session"
+    rows = await sessions(db)
+    assert len(rows) == 1
+    assert rows[0]["source"] == "twitch" and rows[0]["also_source"] == "youtube"
+    assert rows[0]["also_platform"] == "YouTube" and rows[0]["ended_at"] is None
+    assert "golive.announce" not in await kinds_logged(db)
+    assert "golive.costream_added" in await kinds_logged(db)
+    assert bot.guild.get_channel(GOLIVE_CHANNEL).posts == []
+
+
+async def test_a_missing_go_live_cog_cannot_add_a_platform_and_says_so(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await open_twitch_session(db)
+    await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=True)
+    bot.cogs.pop("GoLive")
+
+    await cog.probe_all()
+
+    failed = await details_logged(db, "youtube.live_announce_failed")
+    assert len(failed) == 1 and failed[0]["reason"] == "golive_cog_missing"
+    assert (await sessions(db))[0]["also_source"] is None
