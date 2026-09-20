@@ -1,0 +1,130 @@
+# The Go-live page, rebuilt — one list of people, whichever platform they stream on
+
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN, dispatching to Opus
+> 2026-09-20 15:5x as branch `golive-page`.** **Last verified: 2026-09-20 15:4x** against `main`
+> `3d8ee64` (v141 live): `site/public/assets/page-golive.js` read in full (845 lines, twelve top-level
+> sections, the `load()` order at `:716–845`), `ui.js:namespaceSettings` `:1279` / `modeSwitch` `:1366`,
+> `logs.js:logsSection` `:202`, and the 36 keys the three namespaces hold, measured by import
+> (`golive` 17, `pings` 13, `youtube` 6). ⚠️ Secret NAMES only.
+
+## The ask
+
+Owner, 2026-09-20 15:3x: *"on the golive page the youtube and twitch experiences are basically different
+experiences, this is crap. can we redesign this page to have less menus and a more unified experience?
+do a mock or fake page first so we don't effect what the end users see"* → the mock, twice
+(<https://claude.ai/artifact/VGiR2jgHui9E4D9MbCKyw6>, v2 inside the real shell) → **16:0x: *"okay i like
+that mock, make it happen"***.
+
+**The mock is the specification.** Where this document and the mock disagree, the mock wins on layout and
+wording; this document wins on behaviour, data and the guards below.
+
+## A. The single most important fact about this build
+
+⚠️ **It is a front-end rearrangement. Nothing under `black_bloc/` changes.** Every field the new page
+shows is already fetched by today's `load()`: `/api/golive/links`, `/api/golive/optouts`,
+`/api/golive/sessions?limit=50`, `/api/pings/streamers`, `/api/pings/list`, `/api/pings/onboarding`,
+`/api/youtube/links`, `/api/youtube/status`, `settings(true)`. **No new route, no schema change, no
+settings key, no log kind, no Python.** If the build finds it needs one, it STOPS and reports rather than
+adding it — that is the signal the design was wrong.
+
+Blast radius: `golive` is staff-only (`shell.js:MEMBER_TABS` is `['requests','guides']`) and
+`golive_mode` is **shadow**, so a mistake here is seen by staff, not by members.
+
+## B. What the page becomes — five sections, in this order
+
+| # | Section | Replaces |
+|---|---|---|
+| — | the header strip (live count, both mode switches, set-up count, watch cadence) | the mode rows inside two sections, the `Live now` line inside the YouTube status card |
+| 1 | **Live now** — a card per open stream | the live rows buried in *Recent streams* |
+| 2 | **Streamers** — ONE row per member | *Twitch links*, *YouTube channels*, *Opt-outs*, the streamer list inside *Pings*, and BOTH *Link a member* cards |
+| 3 | **The announcement** — one wording, a platform toggle on the preview | *Announcement wording* and its two preview cards |
+| 4 | **Recent streams** | unchanged |
+| 5 | **Everything else** — five closed drawers | *Go-live settings*, *YouTube settings*, *Ping role settings*, and all three *Logs* sections |
+
+### B1. The streamers join — a pure module, because it must be testable
+
+`site/public/assets/golive-join.js`, exporting `joinStreamers({ links, youtubeLinks, optouts, listing,
+streamers, sessions, status })` → one array of rows sorted by display name, each row
+`{ user_id, name, twitch, twitch_at, youtube, youtube_id, youtube_at, role, role_wearers, opted_out,
+live }` where `live` is `'twitch' | 'youtube' | null`. It is **pure** — no DOM, no fetch — and it is the
+one place the platforms meet. Its test is `site/mock/golive-join.test.mjs`, in the shape of
+`clipmd.test.mjs`, added to `scripts/deploy.ps1` and `.github/workflows/ci.yml` beside it.
+
+⚠️ **The join's own traps, each pinned by a fixture:** a member with Twitch and no YouTube (the common
+case — measured 21 to 1 on the live guild); a member with YouTube and no Twitch; a member who is opted
+out AND linked; a member with a ping role and no link at all (they must still appear, or a role goes
+invisible); an open session whose `user_id` matches nobody linked (it still shows in *Live now*, named by
+the session's own `user_name`); two open sessions for one member on two platforms (ONE row, `live` set
+from the session whose `source` is not `presence`, and *Live now* shows the state the mock shows —
+announced for one, held back for the other).
+
+### B2. The row and its drawer
+
+The table is Member · Twitch · YouTube · Ping role · Announced. Clicking a row (or Enter / Space on it)
+opens an inline panel under it with four groups, each carrying the moves that live in today's four
+sections: Twitch (open / unlink / link), YouTube (open / unlink / link), Ping role (make / rename /
+remove), Announcements (opt out / announce them again). **Every move calls the route it calls today, with
+the confirmation wording it uses today** — copy `ask({...})` bodies across verbatim rather than rewriting
+them; rewording is the other audit's job. ⚠️ A row must LOOK clickable at rest (the caret in the mock);
+that is finding 1 of [`ux-audit-design.md`](ux-audit-design.md) and this page is where the pattern is set.
+
+### B3. Add a streamer — one form, two destinations
+
+The page head's primary action opens one form: a member picker, then one text field that takes **either**
+a Twitch name **or** a YouTube channel address / `@handle`. Routed by shape: `youtube.com/…`, `UC…` or a
+leading `@` → `POST /api/youtube/links`; anything else → `POST /api/golive/links`. ⚠️ A value that could
+be either is **refused in words** naming both, never guessed. The two existing cards' help text is the
+source for the wording.
+
+### B4. The settings drawers — and the guard that stops a key vanishing
+
+Today three `namespaceSettings` calls dump three namespaces. The new page groups **36 keys** by question:
+
+| Drawer | Holds |
+|---|---|
+| Who gets announced | `golive_require_role_id`, `golive_ignore_role_id`, `golive_cooldown_minutes`, `golive_live_role_id`, `golive_max_session_hours` |
+| Where it goes | `golive_channel_id`, `golive_ping_role_id`, `golive_embed` |
+| Ping roles | every `pings_*` except `pings_mode` and `pings_log_level`, **plus the two cards that are not settings** — *The shared roles* (`setupCard`) and *Discord onboarding* (`onboardingCard`), moved here whole |
+| How streams are spotted | `youtube_live_poll_minutes`, `youtube_live_end_misses`, `youtube_unlink_dms_them`, and the read-only lines from `liveStatus()` |
+| Everything else | ⚠️ **the catch-all** — every key of the three namespaces not named above, minus the ones the page renders elsewhere (`golive_mode`, `youtube_live_mode`, `pings_mode` in the strip; `golive_template`, `golive_end_*` in section 3) |
+
+⚠️ **A test asserts every key in the three namespaces lands in exactly one drawer or one named surface.**
+Without it, the next settings key anybody adds appears nowhere and nobody notices — the failure this
+page's own history is full of. The catch-all is what makes that test satisfiable; it is not an excuse to
+leave keys unsorted.
+
+### B5. One log
+
+One **Log** drawer holding the three `logsSection` outputs with chips that switch between them (All ·
+Twitch · YouTube · Ping roles). If `logsSection` cannot take more than one feature — read it, do not
+assume — the drawer holds three of its nodes and the chips show and hide them. Say which in Deviations.
+⚠️ Do not fork `logs.js`; it is shared by nineteen other pages.
+
+## C. What must not change
+
+Every route and its payload · every refusal sentence and confirmation body · every log kind · the guard's
+behaviour · `modeSwitch`'s saving path (the strip uses it unchanged) · `logs.js`, `ui.js` and every other
+shared module, except additive exports if one is genuinely needed (say so). The page's `<title>`, its
+`data-tab` and its place in the rail stay as they are.
+
+## D. Tests and the gate
+
+`site/mock/golive-join.test.mjs` (the six traps in B1, dependency-free, added to `deploy.ps1` + CI) ·
+a test that every key in the three namespaces is placed exactly once (B4) · `node site/mock/check.mjs`
+unchanged at 20 pages / 186 routes · the ES-module parse of every `site/public/assets/*.js` ·
+`ruff check .` and `pytest -n 8` both orders, unchanged and still run, with the bot-shaped env cleared
+(`gotchas.md`). ⚠️ KI-26 (ten sightings, one on a `> file` run): a stalled pytest is killed by its own
+process tree only, never `taskkill /IM python.exe`.
+
+## E. Docs
+
+This doc's `## Deviations` (dated) and `## What was NOT verified` · `code-notes.md` for the join's
+non-obvious choices · `docs/info/README.md` row · `docs/access/sweeps.md` rows `GP-a…` (a: the table shows
+one row per person with both platforms; b: a row opens and its moves work; c: Add a streamer takes a
+Twitch name and a YouTube address and refuses an ambiguous one in words; d: the two mode switches in the
+strip still save; e: every setting that was on the old page is reachable; f: the log chips switch
+between the three features). NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_ISSUES.md`.
+
+## Deviations
+
+*(the build agent writes here what it had to do differently, dated)*
