@@ -10,7 +10,14 @@ import discord
 
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
-from .settings_store import GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, GOLIVE_TEMPLATE
+from .settings_store import (
+    GOLIVE_COSTREAM_AUTHOR,
+    GOLIVE_COSTREAM_ON,
+    GOLIVE_COSTREAM_TEMPLATE,
+    GOLIVE_END_EDIT,
+    GOLIVE_END_SUFFIX,
+    GOLIVE_TEMPLATE,
+)
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +33,8 @@ EMBED_COLOUR_DEFAULT = 0x5865F2
 EMBED_NO_TITLE = "Live now"
 EMBED_GAME_FIELD = "Game"
 EMBED_FOOTER = "Black Bloc · via {source}"
+COSTREAM_SOURCE = "{first} + {second}"
+SUPPRESSED = "<{url}>"
 EMBED_SOURCE_TWITCH = "Twitch"
 EMBED_SOURCE_PRESENCE = "Discord activity"
 EMBED_SOURCE_YOUTUBE = "YouTube"
@@ -391,6 +400,26 @@ def ping_prefix(*role_ids: Any) -> str:
     return "".join(f"<@&{role_id}> " for role_id in seen)
 
 
+def live_fields(info: StreamInfo, name: str) -> _Fields:
+    return _Fields(
+        name=name,
+        game=info.game or GAME_FALLBACK,
+        title=info.title or "",
+        url=info.url or "",
+        platform=info.platform or "",
+    )
+
+
+def _filled(template: Any, fields: _Fields, fallback: str) -> str:
+    try:
+        return template.format_map(fields)
+    except Exception as exc:
+        log.warning(
+            "go-live: template %r could not be rendered (%s); using the default", template, exc
+        )
+        return fallback.format_map(fields)
+
+
 def render(
     template: str,
     info: StreamInfo,
@@ -400,22 +429,104 @@ def render(
     fan_role_id: int | None = None,
 ) -> str:
     """The announcement sentence; an empty game reads 'something', never '****'."""
-    name = display_name(member)
-    fields = _Fields(
-        name=name,
-        game=info.game or GAME_FALLBACK,
-        title=info.title or "",
-        url=info.url or "",
-        platform=info.platform or "",
-    )
-    try:
-        text = template.format_map(fields)
-    except Exception as exc:
-        log.warning(
-            "go-live: template %r could not be rendered (%s); using the default", template, exc
+    fields = live_fields(info, display_name(member))
+    return ping_prefix(ping_role_id, fan_role_id) + _filled(template, fields, GOLIVE_TEMPLATE)
+
+
+def again_render(template: Any, info_or_row: Any, name: str, *, content: Any = "") -> str:
+    """The same sentence for an EDIT: the message keeps whatever prefix it already carries."""
+    fields = live_fields(as_info(info_or_row), name)
+    return mention_prefix(content) + _filled(template, fields, GOLIVE_TEMPLATE)
+
+
+def suppressed(url: Any) -> str:
+    """A link Discord must not preview; the fill wraps it, never the wording."""
+    text = _text(url)
+    return SUPPRESSED.format(url=text) if text else ""
+
+
+def leads(platform: Any) -> bool:
+    return (platform or "").casefold() == TWITCH.casefold()
+
+
+def costream_order(first: StreamInfo, second: StreamInfo) -> tuple[StreamInfo, StreamInfo]:
+    """Twitch is written first whichever arrived first, and is the only link with a preview."""
+    if leads(second.platform) and not leads(first.platform):
+        return second, first
+    return first, second
+
+
+def costream_fields(first: StreamInfo, second: StreamInfo, name: str) -> _Fields:
+    fields = live_fields(first, name)
+    fields["also_url"] = suppressed(second.url)
+    fields["also_platform"] = second.platform or ""
+    return fields
+
+
+def costream_render(
+    template: Any, first: StreamInfo, second: StreamInfo, name: str, *, content: Any = ""
+) -> str:
+    """Both platforms in one sentence, for an edit of the announcement already posted."""
+    fields = costream_fields(first, second, name)
+    return mention_prefix(content) + _filled(template, fields, GOLIVE_COSTREAM_TEMPLATE)
+
+
+def costream_author(
+    template: Any, first: StreamInfo, second: StreamInfo, name: str
+) -> str:
+    """The card's top line while two platforms are live; blank wording keeps today's."""
+    fields = costream_fields(first, second, name)
+    wanted = str(template or "").strip()
+    if wanted:
+        line = tidy(_filled(wanted, fields, GOLIVE_COSTREAM_AUTHOR))
+        if line:
+            return _clip(line, AUTHOR_LIMIT)
+    return author_line(name, first.platform)
+
+
+def costream_footer(first: StreamInfo, second: StreamInfo) -> str:
+    return EMBED_FOOTER.format(
+        source=COSTREAM_SOURCE.format(
+            first=first.platform or EMBED_SOURCE_PRESENCE,
+            second=second.platform or EMBED_SOURCE_PRESENCE,
         )
-        text = GOLIVE_TEMPLATE.format_map(fields)
-    return ping_prefix(ping_role_id, fan_role_id) + text
+    )
+
+
+def costream_embed(
+    embed: Any, first: StreamInfo, second: StreamInfo, name: str, author: Any = ""
+) -> discord.Embed:
+    """The same card with both platforms on it; the art and the Twitch link stay put."""
+    both = discord.Embed.from_dict(embed.to_dict())
+    both.set_author(name=costream_author(author, first, second, name))
+    both.colour = discord.Colour(embed_colour(first.platform))
+    both.url = first.url or None
+    both.set_footer(text=costream_footer(first, second))
+    return both
+
+
+def single_embed(embed: Any, info: StreamInfo, name: str, source: Any = None) -> discord.Embed:
+    """The card back on one platform once the other has gone; the session is still live."""
+    alone = discord.Embed.from_dict(embed.to_dict())
+    alone.set_author(name=author_line(name, info.platform))
+    alone.colour = discord.Colour(embed_colour(info.platform))
+    alone.url = info.url or None
+    alone.set_footer(text=embed_footer(source))
+    return alone
+
+
+def joins_session(row: Any, platform: Any, mode: Any) -> bool:
+    """True when a second platform joins the open session rather than being held back."""
+    if str(mode or "") != GOLIVE_COSTREAM_ON:
+        return False
+    if _text(_row_field(row, "also_source")):
+        return False
+    open_platform = _text(_row_field(row, "platform"))
+    wanted = _text(platform)
+    if not open_platform or not wanted:
+        return False
+    return open_platform.casefold() != wanted.casefold()
+
 
 
 def parse_ts(value: Any) -> datetime | None:

@@ -5,6 +5,7 @@ import pytest
 
 from black_bloc.golive import (
     EMBED_COLOUR_DEFAULT,
+    EMBED_COLOURS,
     EMBED_NO_TITLE,
     GAME_FALLBACK,
     PANEL_BUTTONS,
@@ -14,8 +15,14 @@ from black_bloc.golive import (
     SITE_BUTTON,
     STAFF_BUTTONS,
     StreamInfo,
+    again_render,
     announcement_embed,
     card_lines,
+    costream_author,
+    costream_embed,
+    costream_footer,
+    costream_order,
+    costream_render,
     edits_on_end,
     embed_summary,
     end_details,
@@ -29,6 +36,7 @@ from black_bloc.golive import (
     from_twitch,
     humanise_duration,
     is_streaming,
+    joins_session,
     panel_buttons,
     panel_minutes,
     parse_ts,
@@ -38,12 +46,16 @@ from black_bloc.golive import (
     presence_image,
     render,
     should_announce,
+    single_embed,
     site_page_url,
+    suppressed,
     twitch_enrichable,
     twitch_login_from_url,
     with_box_art,
 )
 from black_bloc.settings_store import (
+    GOLIVE_COSTREAM_AUTHOR,
+    GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_END_AUTHOR,
     GOLIVE_END_EDIT,
     GOLIVE_END_MODES,
@@ -783,3 +795,138 @@ def test_the_panel_minutes_key_reads_the_registry():
             return "12"
 
     assert panel_minutes(Store(), 7) == 12
+
+
+# --- co-streaming: one announcement naming both platforms, Twitch first ------------------------
+
+
+TWITCH_LIVE = StreamInfo(
+    url="https://www.twitch.tv/alice",
+    game="Celeste",
+    title="Any% attempts",
+    platform="Twitch",
+)
+YOUTUBE_LIVE = StreamInfo(
+    url="https://www.youtube.com/watch?v=xyz", title="Live now", platform="YouTube"
+)
+
+
+def test_twitch_is_written_first_whichever_platform_arrived_first():
+    assert costream_order(TWITCH_LIVE, YOUTUBE_LIVE) == (TWITCH_LIVE, YOUTUBE_LIVE)
+    assert costream_order(YOUTUBE_LIVE, TWITCH_LIVE) == (TWITCH_LIVE, YOUTUBE_LIVE)
+
+
+def test_two_platforms_that_are_neither_twitch_keep_the_order_they_arrived_in():
+    kick = StreamInfo(url="https://kick.com/alice", platform="Kick")
+    assert costream_order(YOUTUBE_LIVE, kick) == (YOUTUBE_LIVE, kick)
+
+
+def test_only_the_twitch_link_previews_and_the_fill_is_what_suppresses_the_other():
+    text = costream_render(GOLIVE_COSTREAM_TEMPLATE, TWITCH_LIVE, YOUTUBE_LIVE, "Alice")
+
+    assert "Watch on Twitch: https://www.twitch.tv/alice ·" in text
+    assert "<https://www.youtube.com/watch?v=xyz>" in text
+    assert "<https://www.twitch.tv/alice>" not in text
+
+
+def test_an_owner_cannot_unsuppress_the_second_link_by_rewriting_the_template():
+    text = costream_render("{also_url}", TWITCH_LIVE, YOUTUBE_LIVE, "Alice")
+
+    assert text == "<https://www.youtube.com/watch?v=xyz>"
+
+
+def test_the_second_platform_with_no_url_reads_as_nothing_rather_than_empty_brackets():
+    assert suppressed(None) == "" and suppressed("  ") == ""
+    assert suppressed("https://x.test") == "<https://x.test>"
+
+
+def test_the_co_stream_sentence_keeps_the_mention_the_message_already_carries():
+    text = costream_render(
+        GOLIVE_COSTREAM_TEMPLATE,
+        TWITCH_LIVE,
+        YOUTUBE_LIVE,
+        "Alice",
+        content="<@&77> REGULATORS! Mount up!",
+    )
+
+    assert text.startswith("<@&77> ")
+    assert text.count("<@&77>") == 1
+
+
+def test_an_unreadable_co_stream_template_falls_back_to_the_default_and_never_raises():
+    text = costream_render("{nope}{", TWITCH_LIVE, YOUTUBE_LIVE, "Alice")
+
+    assert text == costream_render(GOLIVE_COSTREAM_TEMPLATE, TWITCH_LIVE, YOUTUBE_LIVE, "Alice")
+
+
+def test_an_empty_game_reads_something_on_the_co_stream_sentence_too():
+    bare = StreamInfo(url="https://www.twitch.tv/alice", platform="Twitch")
+
+    assert GAME_FALLBACK in costream_render(
+        "{name} is playing {game}", bare, YOUTUBE_LIVE, "Alice"
+    )
+
+
+def test_the_card_top_line_names_both_platforms_and_blank_wording_keeps_todays():
+    assert (
+        costream_author(GOLIVE_COSTREAM_AUTHOR, TWITCH_LIVE, YOUTUBE_LIVE, "Alice")
+        == "Alice is live on Twitch and YouTube"
+    )
+    assert (
+        costream_author("", TWITCH_LIVE, YOUTUBE_LIVE, "Alice")
+        == "Alice is now live on Twitch!"
+    )
+
+
+def test_the_footer_names_both_platforms_in_the_order_they_are_written():
+    assert costream_footer(TWITCH_LIVE, YOUTUBE_LIVE) == "Black Bloc · via Twitch + YouTube"
+
+
+def test_the_co_stream_card_is_the_twitch_card_with_both_platforms_on_it():
+    card = announcement_embed(TWITCH_LIVE, None, "twitch")
+
+    both = costream_embed(card, TWITCH_LIVE, YOUTUBE_LIVE, "Alice", GOLIVE_COSTREAM_AUTHOR)
+
+    assert both.title == "Any% attempts"
+    assert both.url == "https://www.twitch.tv/alice"
+    assert both.colour.value == EMBED_COLOURS["twitch"]
+    assert both.author.name == "Alice is live on Twitch and YouTube"
+    assert both.footer.text == "Black Bloc · via Twitch + YouTube"
+    assert embed_summary(both)["game"] == "Celeste"
+
+
+def test_the_card_goes_back_to_one_platform_when_the_other_stops():
+    card = costream_embed(
+        announcement_embed(TWITCH_LIVE, None, "twitch"),
+        TWITCH_LIVE,
+        YOUTUBE_LIVE,
+        "Alice",
+        GOLIVE_COSTREAM_AUTHOR,
+    )
+
+    alone = single_embed(card, YOUTUBE_LIVE, "Alice", "youtube")
+
+    assert alone.author.name == "Alice is now live on YouTube!"
+    assert alone.url == "https://www.youtube.com/watch?v=xyz"
+    assert alone.colour.value == EMBED_COLOURS["youtube"]
+    assert alone.footer.text == "Black Bloc · via YouTube"
+
+
+def test_the_live_sentence_re_rendered_for_an_edit_never_adds_a_mention_of_its_own():
+    plain = again_render(GOLIVE_TEMPLATE, TWITCH_LIVE, "Alice")
+    kept = again_render(GOLIVE_TEMPLATE, TWITCH_LIVE, "Alice", content="<@&77> anything")
+
+    assert not plain.startswith("<@&")
+    assert kept == "<@&77> " + plain
+
+
+def test_a_second_platform_joins_only_when_the_mode_is_on_and_the_platform_is_new():
+    row = {"platform": "Twitch", "also_source": None}
+
+    assert joins_session(row, "YouTube", "on") is True
+    assert joins_session(row, "Twitch", "on") is False
+    assert joins_session(row, "twitch", "on") is False
+    assert joins_session(row, "YouTube", "off") is False
+    assert joins_session({"platform": None, "also_source": None}, "YouTube", "on") is False
+    assert joins_session(row, None, "on") is False
+    assert joins_session({"platform": "Twitch", "also_source": "youtube"}, "Kick", "on") is False
