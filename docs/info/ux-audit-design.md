@@ -1,8 +1,9 @@
 # The dashboard UX audit — good menus and good page content, page by page
 
 > **Audience:** Fable (to review and kick off), then the audit agent, then the per-page builds.
-> **Status:** TRACKED · 📐 **BRIEF, waiting on Fable's review and the owner's go.** Nothing has been
-> built and no page has been changed. **Last verified: 2026-09-20 15:3x** against `main` `22753ae`
+> **Status:** TRACKED · 📐 **REVIEWED by Fable 2026-09-20 16:1x — the six tests in §C stand as written — and
+> STAGE 1 DISPATCHED** (one read-only Opus agent → `docs/info/ux-audit.md`). Stage 3 is already running for
+> one page (`golive-page`, its own design). No other page has been changed. **Last verified: 2026-09-20 15:3x** against `main` `22753ae`
 > (v141 live): 20 pages under `site/public/*.html`, section counts measured per page (table in §B),
 > `site/public/assets/page-golive.js` read in full (845 lines, twelve top-level sections).
 > ⚠️ Secret NAMES only.

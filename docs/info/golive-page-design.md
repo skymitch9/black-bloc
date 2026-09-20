@@ -1,7 +1,7 @@
 # The Go-live page, rebuilt — one list of people, whichever platform they stream on
 
-> **Audience:** Fable (to review), then the build agent. **Status:** TRACKED · ⏸️ **READY FOR REVIEW — NOT
-> DISPATCHED.** (The owner approved the mock 16:0x and a build was dispatched 15:56; he stopped it a minute
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **REVIEWED by Fable 2026-09-20 16:1x — all five
+> calls stand (two with additions, see the rulings at the foot) — and DISPATCHED to Opus as branch `golive-page`.** Was: ⏸️ ready for review, not dispatched. (The owner approved the mock 16:0x and a build was dispatched 15:56; he stopped it a minute
 > later — *"dont start it in 4 minutes, we're gonna swap to fable, just prepare it to be reviewed."* — before it
 > had written anything. No branch, no worktree, nothing to clean up.) **Read `## For the reviewer` at the foot
 > first: five judgement calls this document makes that a reviewer should rule on before any of it is built.** **Last verified: 2026-09-20 15:4x** against `main`
@@ -156,9 +156,32 @@ But every other join in this estate lives next to its cog, and the site is meant
 alternative:** one `GET /api/golive/streamers` that returns joined rows, which is a bigger build, needs a
 contract row and a Python test, and moves this out of front-end-only territory.
 
-**If all five stand as written**, the build is ready to dispatch exactly as the body describes: branch
-`golive-page`, front-end only, the brief already written and proven by the fact that it survived one
-dispatch unchanged.
+**Rulings (Fable, 2026-09-20 16:1x) — all five stand, two with an addition:**
+
+1. **Stands.** Namespace-shaped groups are the twelve-section defect in miniature — *Go-live settings /
+   YouTube settings / Ping-role settings* is exactly the platform split the owner called crap. The
+   maintenance cost is real and the catch-all + the every-key-lands-once test is the answer to it. And
+   "one fact, one home" is satisfied by the **Settings page**, which still shows every key by namespace:
+   that is the canonical home; the drawers here are the feature's own door, the same relationship every
+   feature page already has with it.
+2. **Stands, with an addition.** The audit's test 2 is about the PRIMARY action, which on this page is *Add
+   a streamer*; the shared-roles and onboarding cards are setup done rarely. They stay in the drawer, but
+   **the drawer's summary line must name them** (*Ping roles · 8 settings · the shared roles · Discord
+   onboarding*) so they are findable without opening it, and **when setup is incomplete** (no events role,
+   onboarding drifted — both states the cards already know) **the header strip shows a warning that opens
+   that drawer.** State visible where listed, test 1, without a sixth section.
+3. **Stands, named as the deliberate exception.** The section answers *what is happening now*; the chip
+   answers *show me only those rows*. Different questions, so not one fact in two places — but the build
+   writes one line in `code-notes.md` saying so, so nobody "fixes" it later.
+4. **Stands.** The expanded row holds no unsaved input — every move in it is a button that acts at once
+   with its own confirm — so a refresh closing it costs nothing. KI-20 is about Discord's ephemeral panels
+   and does not transfer; the cross-reference is withdrawn. This IS the house pattern from here.
+5. **Stands, for this build.** Pure + tested in the browser is what makes this safe to ship today, and
+   today this page is the join's only consumer. The route becomes the right answer the day a second
+   consumer appears (the Members page, or the Discord `/golive` panel wanting the same rows) — that is
+   the trigger, recorded here, not a judgement call to re-argue.
+
+**Dispatched 2026-09-20 16:1x as branch `golive-page`, exactly as the body describes plus rulings 2 and 3.**
 
 ## Deviations` (dated) and `## What was NOT verified` · `code-notes.md` for the join's
 non-obvious choices · `docs/info/README.md` row · `docs/access/sweeps.md` rows `GP-a…` (a: the table shows
