@@ -19,6 +19,14 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-19 — The docs staleness pass landed (20:3x) — hand-off ready
+
+Owner: *"update all docs using opus and then im gonna swap"*. Opus pass in commits `0d2367d` → `5c2294b` (19 files; the pass's own DONE entry below lists each). Conductor follow-ups 20:3x: `CLAUDE.md`'s checklist count 35 → **37** (the one root-level file the pass could not touch); memory `black-bloc-test-mode-off` written and indexed; the superseded test-channel memory marked. The next session starts from `docs/README.md` → `docs/TODO.md`'s resume block → `docs/KNOWN_ISSUES.md`.
+
+**The TODO item, moved whole:**
+
+- 📚 **DOCS STALENESS PASS after the lift, then a session hand-off** (owner, 2026-09-19 20:0x, verbatim: *"update all docs using opus and then im gonna swap"*). Dispatched to Opus 20:1x: every doc that still describes test mode as on gets a dated note; the uploads-removal, the ten v132–v141 landings and the fact table re-verified; the indexes' status words matched to the files; KI-5 marked moot; one DONE entry for the pass. The conductor updates the memory files and the resume block after it lands. Status: ✅ **LANDED 2026-09-19** — the entry is at the top of [`DONE.md`](DONE.md) with every file touched; the one-line summary is at the top of the 🔁 resume block above. Findings handed back rather than fixed: `CLAUDE.md` says the review checklist has **35** items and it has **37** (that file is outside a docs-only pass); `/api/youtube/status` is **not** anonymously readable any more (it answers `not_signed_in`), so a session cannot read the live YouTube state without a Discord cookie.
+
 ## 2026-09-19 — Docs staleness pass after the TEST_MODE lift (no code, no deploy)
 
 **Owner, 2026-09-19 20:0x, verbatim: *"update all docs using opus and then im gonna swap"*.** A
