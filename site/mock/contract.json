@@ -4704,7 +4704,7 @@
         "channel_id": "{test_channel_id}"
       },
       "read_by": [
-        "page-posts.js save bar"
+        "page-posts.js row drawer ▸ Save Changes"
       ],
       "shape": "object",
       "keys": [

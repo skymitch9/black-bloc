@@ -219,7 +219,13 @@ document is a reading of Discord's CSS by a model, not a measurement.
   `ended_render` (which still takes a `suffix` argument with a default). The renderer never passes
   one and never names `golive_end_suffix` or `golive_end_mode`, so it should survive that build
   untouched — but the two have not been merged together and that is an expectation, not a result.
-- **`posts-page` has not landed either.** `page-posts.js` was edited at `be78bff`; the change is
-  four small edits (the import list, `discordMock` in the `ui.js` import, the preview pane, the
-  Versions **View** drawer) and **must be re-applied by hand if `posts-page` lands first**.
+- ✅ **`posts-page` WAS merged in** (`origin/posts-page` was pushed while this build ran; §C2 and the
+  brief allow that one merge). The posts wiring was re-applied by hand on top of the rebuilt page:
+  three conflicts, resolved as **theirs for the page, mine for the renderer** — the editor's mock is
+  named `mock` because the rebuilt page has a module-level `shown`, `PREVIEW_EVERY_MS` went with the
+  local debounce, and the Versions view is their inline `versionView` panel rather than the drawer
+  the design named. ⚠️ **The merged page was NOT re-rendered in the browser** — it parses, the node
+  tests and `check.mjs` are green against it, and `renderPreview` is gone from the file, but nobody
+  has opened the rebuilt Posts page with the mock in it. That is the one thing this build finished
+  without seeing.
 - **No `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_ISSUES.md` edit** — those are the conductor's.
