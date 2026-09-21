@@ -338,6 +338,7 @@ def helix_of(bot, *streams, games=(), raises=None):
 
 
 async def a_row(bot, login=GDQ, **fields):
+    fields.setdefault("spotlight", True)
     outcome, row = await spotlight_channel(
         bot, bot.guild, FakeActor(), login, keep=True, **fields
     )
@@ -369,7 +370,9 @@ async def test_a_name_that_is_not_a_channel_is_refused_rather_than_stored(bot):
 
 
 async def test_a_row_with_no_keep_takes_the_default_days(bot):
-    outcome, row = await spotlight_channel(bot, bot.guild, FakeActor(), "esamarathon")
+    outcome, row = await spotlight_channel(
+        bot, bot.guild, FakeActor(), "esamarathon", spotlight=True
+    )
     assert outcome == "added" and row["expires_at"] is not None
     assert words.until_words(row).startswith("until ")
 
@@ -786,7 +789,9 @@ async def test_a_kept_row_offers_let_it_expire_and_a_dated_one_offers_keep(bot, 
     assert "Let it expire" in interaction.labels()
     assert words.KEEP_FOREVER not in interaction.labels()
 
-    _, dated = await spotlight_channel(bot, bot.guild, FakeActor(), "esamarathon")
+    _, dated = await spotlight_channel(
+        bot, bot.guild, FakeActor(), "esamarathon", spotlight=True
+    )
     second = FakeInteraction(bot, FakeActor(), bot.guild)
     await render_spotlight(second, dated["id"])
     assert words.KEEP_FOREVER in second.labels() and words.EXTEND_WEEK in second.labels()
@@ -806,7 +811,9 @@ async def test_bump_now_only_shows_while_the_channel_is_live(bot, cog):
 
 
 async def test_extending_a_row_from_the_panel_moves_its_date_and_says_so(bot, cog):
-    _, row = await spotlight_channel(bot, bot.guild, FakeActor(), "esamarathon", days=2)
+    _, row = await spotlight_channel(
+        bot, bot.guild, FakeActor(), "esamarathon", days=2, spotlight=True
+    )
     said, kept = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "extend")
     assert "esamarathon" in said and kept is True
     fresh = await channel_by_id(bot.db, row["id"])
@@ -815,7 +822,9 @@ async def test_extending_a_row_from_the_panel_moves_its_date_and_says_so(bot, co
 
 
 async def test_keeping_a_row_for_ever_clears_its_date(bot, cog):
-    _, row = await spotlight_channel(bot, bot.guild, FakeActor(), "esamarathon", days=2)
+    _, row = await spotlight_channel(
+        bot, bot.guild, FakeActor(), "esamarathon", days=2, spotlight=True
+    )
     said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "keep")
     assert "kept for ever" in said
     assert (await channel_by_id(bot.db, row["id"]))["expires_at"] is None
@@ -940,7 +949,9 @@ async def test_a_bump_says_nothing_to_anybody_until_the_key_is_turned_on(bot, co
 async def test_an_expiring_channel_takes_its_ping_role_with_it(bot, cog):
     await bot.store.set(GUILD, "pings_mode", "on")
     await bot.store.set(GUILD, "pings_fan_role_delete", True)
-    outcome, row = await spotlight_channel(bot, bot.guild, FakeActor(), GDQ, days=1)
+    outcome, row = await spotlight_channel(
+        bot, bot.guild, FakeActor(), GDQ, days=1, spotlight=True
+    )
     assert outcome == "added"
     role_id = await a_fan_role(bot, row)
     await update_channel(
@@ -959,7 +970,9 @@ async def test_an_expiring_channel_takes_its_ping_role_with_it(bot, cog):
 async def test_an_expiry_keeps_the_discord_role_when_the_setting_says_keep(bot, cog):
     await bot.store.set(GUILD, "pings_mode", "on")
     await bot.store.set(GUILD, "pings_fan_role_delete", False)
-    outcome, row = await spotlight_channel(bot, bot.guild, FakeActor(), GDQ, days=1)
+    outcome, row = await spotlight_channel(
+        bot, bot.guild, FakeActor(), GDQ, days=1, spotlight=True
+    )
     assert outcome == "added"
     role_id = await a_fan_role(bot, row)
     await update_channel(

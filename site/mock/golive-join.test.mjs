@@ -377,11 +377,12 @@ const NAMESPACE_KEYS = [
   'spotlight_mode', 'spotlight_poll_minutes', 'spotlight_end_misses', 'spotlight_bump_hours',
   'spotlight_bump_template', 'spotlight_bump_cleanup', 'spotlight_bump_pings', 'spotlight_pin',
   'spotlight_default_days', 'spotlight_event_slack_hours',
+  'golive_channel_spotlight_default',
 ];
 
 {
   const where = 'every key lands once';
-  is(`${where} — the namespaces held 49 keys when this was measured`, NAMESPACE_KEYS.length, 49);
+  is(`${where} — the namespaces held 50 keys when this was measured`, NAMESPACE_KEYS.length, 50);
 
   const specs = NAMESPACE_KEYS.map((key) => ({ key, type: 'text', value: null }));
   const placed = placeSettings(specs);

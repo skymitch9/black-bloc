@@ -218,11 +218,20 @@ export function joinStreamers({
     made.twitch = one.twitch_login;
     made.twitch_at = one.added_at || null;
     made.spotlight = one;
-    made.live = one.live ? TWITCH : null;
+    made.youtube = one.youtube_handle || one.youtube_channel_id || null;
+    made.youtube_id = one.youtube_channel_id || null;
+    made.opted_out = one.opted_out === true;
+    made.live = one.live ? platformOfSession(one.session) : null;
     wearRole(made, one);
     found.push(made);
   }
   return found.sort(byName);
+}
+
+/** Nothing on a channel's session says which side opened it, so its own address does. */
+export function platformOfSession(session) {
+  const url = String((session && session.url) || '');
+  return YT_ADDRESS.test(url) ? YOUTUBE : TWITCH;
 }
 
 export function spotlightCards(spotlight) {
@@ -233,7 +242,7 @@ export function spotlightCards(spotlight) {
       user_id: `spotlight:${one.id}`,
       spotlight_id: one.id,
       name: one.display_name || one.twitch_login,
-      platforms: [TWITCH],
+      platforms: [platformOfSession(one.session)],
       title: one.session.title || null,
       game: one.session.game || null,
       url: one.session.url || one.url || null,
@@ -242,7 +251,7 @@ export function spotlightCards(spotlight) {
       mode: one.session.mode || null,
       started_at: one.session.started_at || null,
       held_by: null,
-      pinned: Boolean(one.pin),
+      pinned: Boolean(one.pin) && one.spotlight !== false,
       bump_count: one.session.bump_count || 0,
     }));
 }
@@ -256,7 +265,7 @@ export function spotlightSessions(spotlight) {
         user_id: `spotlight:${one.id}`,
         user_name: one.display_name || one.twitch_login,
         source: 'spotlight',
-        platform: 'Twitch',
+        platform: platformOfSession(session),
         url: session.url || one.url || null,
         game: session.game || null,
         title: session.title || null,
@@ -338,6 +347,7 @@ export const DRAWERS = [
       'spotlight_pin',
       'spotlight_default_days',
       'spotlight_event_slack_hours',
+      'golive_channel_spotlight_default',
     ],
   },
   { id: 'rest', title: 'Everything else' },

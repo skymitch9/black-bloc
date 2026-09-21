@@ -300,7 +300,7 @@ async def test_adding_a_channel_keeps_it_for_ever_when_no_days_are_given(
     sign_in(client)
 
     found = client.post(
-        "/api/golive/spotlight", json={"twitch_login": "GamesDoneQuick"}
+        "/api/golive/spotlight", json={"twitch_login": "GamesDoneQuick", "spotlight": True}
     ).json()
 
     assert found["twitch_login"] == "gamesdonequick" and found["kept"] is True
@@ -312,7 +312,8 @@ async def test_adding_a_channel_with_days_gives_it_a_date(client, sign_in, web, 
     sign_in(client)
 
     found = client.post(
-        "/api/golive/spotlight", json={"twitch_login": "esamarathon", "days": 3}
+        "/api/golive/spotlight",
+        json={"twitch_login": "esamarathon", "days": 3, "spotlight": True},
     ).json()
 
     assert found["kept"] is False and found["expires_at"] is not None

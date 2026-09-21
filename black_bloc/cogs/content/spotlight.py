@@ -29,6 +29,7 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
 from ...panels import Panel, answer, opened, retire, still_staff
 from ...settings_store import (
+    CHANNEL_SPOTLIGHT_DEFAULT_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
     SPOTLIGHT_BUMP_HOURS_KEY,
     SPOTLIGHT_BUMP_PINGS_KEY,
@@ -86,12 +87,17 @@ async def add_channel(
     note: str | None = None,
     event_id: int | None = None,
     twitch_user_id: str | None = None,
+    spotlight: bool = True,
+    announce: bool = True,
+    youtube_channel_id: str | None = None,
+    youtube_handle: str | None = None,
 ) -> int | None:
     try:
         cur = await db.conn.execute(
             "INSERT INTO spotlight_channels(guild_id, twitch_login, twitch_user_id, "
-            "display_name, note, added_by, added_at, expires_at, bump_hours, pin, event_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "display_name, note, added_by, added_at, expires_at, bump_hours, pin, event_id, "
+            "spotlight, announce, youtube_channel_id, youtube_handle) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 guild_id,
                 login,
@@ -104,6 +110,10 @@ async def add_channel(
                 bump_hours,
                 1 if pin else 0,
                 event_id,
+                1 if spotlight else 0,
+                1 if announce else 0,
+                youtube_channel_id,
+                youtube_handle,
             ),
         )
     except sqlite3.IntegrityError:
@@ -143,8 +153,27 @@ async def channel_for_event(db: Any, guild_id: int, event_id: int) -> Any:
     return await cur.fetchone()
 
 
+async def channels_with_youtube(db: Any) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_channels WHERE youtube_channel_id IS NOT NULL "
+        "AND youtube_channel_id <> '' ORDER BY guild_id, id"
+    )
+    return list(await cur.fetchall())
+
+
 async def update_channel(db: Any, spotlight_id: int, **fields: Any) -> None:
-    allowed = ("expires_at", "bump_hours", "pin", "note", "display_name", "twitch_user_id")
+    allowed = (
+        "expires_at",
+        "bump_hours",
+        "pin",
+        "note",
+        "display_name",
+        "twitch_user_id",
+        "spotlight",
+        "announce",
+        "youtube_channel_id",
+        "youtube_handle",
+    )
     wanted = [(name, fields[name]) for name in allowed if name in fields]
     if not wanted:
         return
@@ -380,7 +409,7 @@ class Spotlight(commands.Cog):
     async def sweep_expiries(self, guild: Any) -> None:
         """A row whose date has passed ends its open session first, then leaves the list."""
         for row in await channels_for(self.bot.db, guild.id):
-            if not words.is_expired(row):
+            if not words.is_spotlit(row) or not words.is_expired(row):
                 continue
             async with self._lock(row["id"]):
                 fresh = await channel_by_id(self.bot.db, row["id"])
@@ -421,7 +450,7 @@ class Spotlight(commands.Cog):
                 else:
                     await self._maybe_bump(guild, fresh, session, from_twitch(stream))
                 return
-            if session is None:
+            if session is None or words.platform_of(_cell(session, "url")) != words.PLATFORM:
                 return
             seen = self.misses.get(int(fresh["id"]), 0) + 1
             self.misses[int(fresh["id"])] = seen
@@ -432,11 +461,18 @@ class Spotlight(commands.Cog):
     # --- the three posts -------------------------------------------------------------------
 
     async def _announce(self, guild: Any, row: Any, stream: Any) -> None:
-        mode = self._mode(guild.id)
         info = await self._box_art(guild, from_twitch(stream))
         name = str(getattr(stream, "user_name", "") or "").strip() or words.display_for(row)
         if name != words.display_for(row):
             await update_channel(self.bot.db, row["id"], display_name=name)
+        await self.announce_info(guild, row, info, name)
+
+    async def announce_info(self, guild: Any, row: Any, info: Any, name: str) -> None:
+        """The one announcement, whichever sweep saw it: spotlight only decides the pin.
+        An opted-out channel stops here — no session, so no end and no reminders either."""
+        if not words.announces(row):
+            return
+        mode = self._mode(guild.id)
         session_id = await start_session(self.bot.db, guild.id, row["id"], info, mode)
         if session_id is None:
             return
@@ -469,7 +505,9 @@ class Spotlight(commands.Cog):
             "game": info.game,
             "title": info.title,
             "text": text,
-            "pin": bool(row["pin"]),
+            "pin": bool(row["pin"]) and words.is_spotlit(row),
+            "spotlight": words.is_spotlit(row),
+            "platform": info.platform,
             "fan_role_id": fan_role_id,
         }
         if embed is not None:
@@ -494,10 +532,12 @@ class Spotlight(commands.Cog):
             else "golive.would_spotlight_announce",
             details=details,
         )
-        if row["pin"]:
+        if row["pin"] and words.is_spotlit(row):
             await self._pin(guild, row, message)
 
     async def _maybe_bump(self, guild: Any, row: Any, session: Any, info: Any) -> None:
+        if not words.is_spotlit(row) or not words.announces(row):
+            return
         hours = words.bump_hours_for(row, self.bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
         if not words.bump_due(session, hours).due:
             return
@@ -919,6 +959,10 @@ async def spotlight_channel(
     note: str | None = None,
     event_id: int | None = None,
     expires_at: Any = False,
+    spotlight: Any = None,
+    announce: bool = True,
+    youtube_channel_id: str | None = None,
+    youtube_handle: str | None = None,
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """One door for the panel, the route and the event card: `(outcome, row)`."""
@@ -928,12 +972,15 @@ async def spotlight_channel(
     if await channel_by_login(bot.db, guild.id, clean) is not None:
         return ("already", None)
     store = bot.store
+    spotlit = bool(
+        store.get(guild.id, CHANNEL_SPOTLIGHT_DEFAULT_KEY) if spotlight is None else spotlight
+    )
     when = (
         expires_at
         if expires_at is not False
         else (
             None
-            if keep
+            if keep or not spotlit
             else words.expiry_in_days(
                 days if days is not None else store.get(guild.id, SPOTLIGHT_DEFAULT_DAYS_KEY)
             )
@@ -951,6 +998,10 @@ async def spotlight_channel(
         display_name=clean,
         note=note,
         event_id=event_id,
+        spotlight=spotlit,
+        announce=bool(announce),
+        youtube_channel_id=youtube_channel_id,
+        youtube_handle=youtube_handle,
     )
     if spotlight_id is None:
         return ("already", None)
@@ -965,12 +1016,100 @@ async def spotlight_channel(
             "login": clean,
             "expires_at": when,
             "pin": wanted_pin,
+            "spotlight": spotlit,
+            "announce": bool(announce),
+            "youtube_channel_id": youtube_channel_id,
             "bump_hours": bump_hours,
             "event_id": event_id,
             "via": via,
         },
     )
     return ("added", row)
+
+
+async def set_announce(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, on: bool, *, via: str = VIA_DISCORD
+) -> Any:
+    """A channel's own opt-out, the member opt-out's twin: the row, its role, its YouTube
+    link and its spotlight all stay, and nothing of its is posted while it is off."""
+    return await change_spotlight(
+        bot, guild, actor, spotlight_id, via=via, announce=1 if on else 0
+    )
+
+
+async def set_spotlight(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, on: bool, *, via: str = VIA_DISCORD
+) -> Any:
+    """The toggle: the row, its role and its sessions all stay; only the pin and the
+    reminders come and go. Staff final say, both ways, at any time."""
+    return await change_spotlight(
+        bot, guild, actor, spotlight_id, via=via, spotlight=1 if on else 0
+    )
+
+
+async def link_youtube(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, given: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any, str]:
+    """`(outcome, row, said)` — the resolver the member links go through, no key needed."""
+    from .youtube import cog_of as youtube_cog_of
+
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return ("no_row", None, words.NO_SUCH_ROW)
+    wanted = str(given or "").strip()
+    if not wanted:
+        return ("no_channel", row, words.NO_YOUTUBE_GIVEN)
+    cog = youtube_cog_of(bot)
+    client = getattr(cog, "client", None)
+    if client is None:
+        return ("no_cog", row, words.NO_YOUTUBE_COG.format(login=row["twitch_login"]))
+    try:
+        channel_id, title = await client.resolve(wanted)
+    except Exception as exc:
+        return ("bad_channel", row, str(exc))
+    handle = _youtube_handle_of(wanted)
+    fresh = await change_spotlight(
+        bot,
+        guild,
+        actor,
+        spotlight_id,
+        via=via,
+        youtube_channel_id=channel_id,
+        youtube_handle=handle,
+    )
+    said = words.YOUTUBE_LINKED.format(
+        login=row["twitch_login"], title=title or handle or channel_id
+    )
+    return ("linked", fresh, said)
+
+
+async def unlink_youtube(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, *, via: str = VIA_DISCORD
+) -> tuple[str, Any, str]:
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return ("no_row", None, words.NO_SUCH_ROW)
+    if not words.youtube_of(row):
+        return ("not_linked", row, words.NO_YOUTUBE_LINKED.format(login=row["twitch_login"]))
+    fresh = await change_spotlight(
+        bot,
+        guild,
+        actor,
+        spotlight_id,
+        via=via,
+        youtube_channel_id=None,
+        youtube_handle=None,
+    )
+    return ("unlinked", fresh, words.YOUTUBE_UNLINKED.format(login=row["twitch_login"]))
+
+
+def _youtube_handle_of(given: str) -> str | None:
+    from ...youtube import channel_id_in, handle_in
+
+    if channel_id_in(given):
+        return None
+    found = handle_in(given)
+    return f"@{found}" if found else None
 
 
 async def change_spotlight(
