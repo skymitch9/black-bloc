@@ -565,7 +565,7 @@ function headRow() {
   }, [
     el('span'),
     el('span', { text: 'Post' }),
-    el('span', { class: 'cell-center', text: 'Status' }),
+    el('span', { text: 'Status' }),
     el('span', { text: 'Channel' }),
     el('span', { text: 'Last saved' }),
     el('span'),

@@ -7220,11 +7220,31 @@ function send(response, status, body, headers = {}) {
 const CSP = "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net; "
   + "style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
+// A lower environment: with LIVE_ROOT set to a checkout of the deployed release, every path
+// outside /preview serves that release's site, and /preview/<page> serves the working tree's
+// preview page (or, failing that, its real page) on the working tree's assets — so what is
+// coming can be compared with what is live today at the normal URL.
+const LIVE_ROOT = process.env.LIVE_ROOT ? resolve(process.env.LIVE_ROOT, 'site', 'public') : null;
+const PREVIEW_ASSETS = /(src|href)="\/assets\//g;
+
+function whereFrom(wanted) {
+  if (!LIVE_ROOT) return { root: PUBLIC, path: wanted, rewrite: false };
+  if (wanted === '/previews' || wanted.startsWith('/previews/')) return { root: PUBLIC, path: wanted, rewrite: true };
+  if (wanted.startsWith('/preview/assets/')) return { root: PUBLIC, path: wanted.slice('/preview'.length), rewrite: false };
+  if (wanted.startsWith('/preview/')) return { root: PUBLIC, path: wanted, rewrite: true, fallback: wanted.slice('/preview'.length) };
+  return { root: LIVE_ROOT, path: wanted, rewrite: false };
+}
+
 async function serveStatic(request, response, path, asked) {
   const wanted = path === '/' ? '/index.html' : path;
   const cookie = asked ? { 'set-cookie': `mock_as=${asked}; Path=/; SameSite=Lax` } : {};
-  const target = join(PUBLIC, normalize(wanted).replace(/^([/\\])+/, ''));
-  if (!target.startsWith(PUBLIC)) {
+  const from = whereFrom(wanted);
+  const under = (rel) => join(from.root, normalize(rel).replace(/^([/\\])+/, ''));
+  let target = under(from.path);
+  if (from.fallback) {
+    try { await stat(target); } catch (e) { target = under(from.fallback); }
+  }
+  if (!target.startsWith(from.root)) {
     response.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
     response.end('outside the site directory');
     return;
@@ -7242,7 +7262,8 @@ async function serveStatic(request, response, path, asked) {
       info = await stat(file);
     }
     const html = extname(file) === '.html';
-    const body = html ? stamp(await readFile(file, 'utf8')) : await readFile(file);
+    let body = html ? stamp(await readFile(file, 'utf8')) : await readFile(file);
+    if (html && from.rewrite) body = body.replace(PREVIEW_ASSETS, '$1="/preview/assets/');
     response.writeHead(200, {
       'content-type': TYPES[extname(file)] || 'application/octet-stream',
       'cache-control': html ? NO_STORE : REVALIDATE,

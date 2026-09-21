@@ -1,9 +1,9 @@
 import { start } from './app.js';
 import { badge, card, el, section } from './ui.js';
 
-const NOTE = 'Each card has two doors: the preview (static data inside the real shell — nothing on it reaches the bot) and '
-  + 'today’s page, so the two can be compared side by side. Ranked as the UX audit ranked them, worst first. Go-live was '
-  + 'rebuilt first, so its card opens the real page: that IS the redesign.';
+const NOTE = 'Each card has two doors: what is coming, under /preview (a static-data preview inside the real shell, or the '
+  + 'rebuilt page itself where the rebuild already happened), and the page as it is live today. Ranked as the UX audit '
+  + 'ranked them, worst first.';
 
 const PAGES = [
   { slug: 'golive', title: 'Go-live', rank: 1, severity: 'danger', fails: 5, from: 12, to: 5, live: true,
@@ -37,12 +37,10 @@ const PAGES = [
 const SEVERITY = { danger: 'audit red', warn: 'audit orange' };
 
 function previewCard(page) {
-  const doors = page.live
-    ? [el('a', { class: 'btn small', href: `/${page.slug}.html`, text: 'Open the page (live redesign)' })]
-    : [
-      el('a', { class: 'btn small', href: `/preview/${page.slug}.html`, text: 'Open the preview' }),
-      el('a', { class: 'btn small quiet', href: `/${page.slug}.html`, text: 'Today’s page' }),
-    ];
+  const doors = [
+    el('a', { class: 'btn small', href: `/preview/${page.slug}.html`, text: page.live ? 'What is coming' : 'Open the preview' }),
+    el('a', { class: 'btn small quiet', href: `/${page.slug}.html`, text: 'Live today' }),
+  ];
   return el('div', { class: 'guidecard', 'data-slug': page.slug }, [
     el('div', { class: 'guidecard-head' }, [
       el('h3', { class: 'guidecard-title', text: page.title }),
