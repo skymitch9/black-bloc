@@ -39,6 +39,7 @@ export const LABELS = {
   spotlight_bump_hours: 'Hours between reminders that a spotlighted stream is still going',
   spotlight_bump_template: 'What a reminder says while a spotlighted stream runs on',
   spotlight_bump_cleanup: 'Whether a spotlighted stream’s reminders are deleted when it ends',
+  spotlight_bump_pings: 'Whether a reminder pings the go-live role and the channel’s own role',
   spotlight_pin: 'Whether a new spotlight pins its announcement while the channel streams',
   spotlight_default_days: 'How long a newly spotlighted channel lasts before it is purged',
   spotlight_event_slack_hours: "Hours past an event's end that its spotlight survives",

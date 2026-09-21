@@ -96,6 +96,7 @@ const ROLES = [
   { id: '900000000000000006', name: 'Server Booster', color: '#f47fff', position: 9, managed: true },
   { id: '900000000000000007', name: 'Events', color: '#8a8f98', position: 2, managed: false },
   { id: '900000000000000008', name: 'Casey pings', color: '#8a8f98', position: 3, managed: false },
+  { id: '900000000000000010', name: 'GamesDoneQuick pings', color: '#8a8f98', position: 3, managed: false },
 ];
 
 const CHANNELS = [
@@ -137,6 +138,9 @@ const EVENTS_ROLE_ID = '900000000000000007';
 // The second is deliberately NOT in ROLES: a fan role somebody deleted by hand, so the Pings
 // table has a row whose follower count is null rather than 0.
 const FAN_ROLE_IDS = ['900000000000000008', '900000000000000009'];
+// A spotlighted channel's own ping role (schema 50): keyed by spotlight id, worn by three
+// people, so the Ping-role cell on a channel row has a count to draw.
+const SPOTLIGHT_FAN_ROLE_ID = '900000000000000010';
 
 const FILLER_NAMES = [
   'ash', 'bex', 'cato', 'dee', 'echo', 'fen', 'gus', 'hana', 'ines', 'jory',
@@ -172,7 +176,9 @@ const ROSTER = [
           ? [STAFF_ROLE_IDS[1], LIVE_ROLE_ID, MEMBER_ROLE_ID, FAN_ROLE_IDS[0]]
           : at === 3
             ? [MEMBER_ROLE_ID, FAN_ROLE_IDS[0], EVENTS_ROLE_ID]
-            : [MEMBER_ROLE_ID],
+            : at >= 4 && at <= 6
+              ? [MEMBER_ROLE_ID, SPOTLIGHT_FAN_ROLE_ID]
+              : [MEMBER_ROLE_ID],
   })),
   ...BOT_NAMES.map((name, at) => rosterRow(100 + at, name.toLowerCase(), name, {
     bot: true,
@@ -504,6 +510,7 @@ const SETTING_SPECS = [
   ['spotlight_bump_hours', 'int', 4, 4, "hours between reminders that a spotlighted stream is still going; a row can set its own instead. 4 by default, which is the owner's number for a GDQ marathon", null, 48, 1],
   ['spotlight_bump_template', 'text', "**{name}** is still live — **{game}**, {duration} so far. {url}", "**{name}** is still live — **{game}**, {duration} so far. {url}", "what a reminder says while a spotlighted stream runs on; {name} {game} {title} {url} {duration}. It is a new short message, never pinned and never a ping"],
   ['spotlight_bump_cleanup', 'bool', true, true, "true to delete a spotlighted stream's reminders when it ends, so the channel is left with the one announcement"],
+  ['spotlight_bump_pings', 'bool', false, false, "true if a reminder mentions the go-live role and the channel's own ping role as the first announcement did; false — the default — because a ping every four hours through a 24-hour marathon is what makes people mute the channel"],
   ['spotlight_pin', 'bool', true, true, "true if a channel added to the spotlight list has its announcement pinned while it streams; each row can say otherwise"],
   ['spotlight_default_days', 'int', 7, 7, "how long a newly spotlighted channel lasts before it is purged, unless it is kept for ever", null, 365, 1],
   ['spotlight_event_slack_hours', 'int', 2, 2, "hours past an approved event's end that its spotlight row survives, so a marathon that overruns is still announced", null, 24, 0],
@@ -1101,8 +1108,14 @@ function seedState() {
     ],
     optouts: [{ user_id: MEMBERS[5].id, at: minutesAgo(2000) }],
     fanRoles: [
-      { user_id: MEMBERS[1].id, role_id: FAN_ROLE_IDS[0], created_at: minutesAgo(3000), created_by: STAFF.id },
-      { user_id: MEMBERS[2].id, role_id: FAN_ROLE_IDS[1], created_at: minutesAgo(2000), created_by: MEMBERS[2].id },
+      { user_id: MEMBERS[1].id, spotlight_id: null, role_id: FAN_ROLE_IDS[0], created_at: minutesAgo(3000), created_by: STAFF.id },
+      { user_id: MEMBERS[2].id, spotlight_id: null, role_id: FAN_ROLE_IDS[1], created_at: minutesAgo(2000), created_by: MEMBERS[2].id },
+      // GamesDoneQuick has one and the other two spotlighted channels do not, which is the
+      // Add a ping role... door the drawer draws for them.
+      { user_id: null, spotlight_id: 1, role_id: SPOTLIGHT_FAN_ROLE_ID, created_at: minutesAgo(900), created_by: STAFF.id },
+      // Frost Fatales is the row check.mjs takes moves on, so it has one too; its Discord role
+      // is deliberately NOT in ROLES, which is the "deleted by hand" half for a channel.
+      { user_id: null, spotlight_id: 3, role_id: '900000000000000011', role_name: 'Frost Fatales pings', created_at: minutesAgo(400), created_by: STAFF.id },
     ],
     // Mirrors the `streamers` table (schema 39). Nobody is added by hand — a go-live is what
     // puts somebody here — so the mock seeds three: two with a role, one with none yet, and
@@ -1435,6 +1448,7 @@ const NAMESPACE_OVERRIDE = {
   spotlight_bump_hours: 'golive',
   spotlight_bump_template: 'golive',
   spotlight_bump_cleanup: 'golive',
+  spotlight_bump_pings: 'golive',
   spotlight_pin: 'golive',
   spotlight_default_days: 'golive',
   spotlight_event_slack_hours: 'golive',
@@ -3922,7 +3936,12 @@ function spotlightUntil(row) {
 
 function spotlightRow(row) {
   const live = spotlightOpen(row.id);
+  const held = spotlightFanRole(row.id);
+  const role = held ? roleOf(held.role_id) : null;
   return {
+    role_id: held ? String(held.role_id) : null,
+    role: role ? role.name : null,
+    role_wearers: role ? followersOf(held.role_id) : null,
     id: row.id,
     twitch_login: row.twitch_login,
     display_name: row.display_name || row.twitch_login,
@@ -4433,12 +4452,26 @@ function followersOf(roleId) {
   return ROSTER.filter((row) => (row.role_ids || []).includes(String(roleId))).length;
 }
 
+function spotlightOf(id) {
+  return state.golive.spotlights.find((one) => String(one.id) === String(id)) || null;
+}
+
+// Mirrors black_bloc/api/tools/pings.py:streamer_row — a channel's row has no member_id at
+// all, which is how the page tells the two kinds apart.
 function fanRoleRow(row) {
   const role = roleOf(row.role_id);
   const name = role ? role.name : (row.role_name || null);
+  const channel = row.spotlight_id === null || row.spotlight_id === undefined
+    ? null
+    : spotlightOf(row.spotlight_id);
   return {
-    member_id: String(row.user_id),
-    member: memberName(row.user_id),
+    kind: channel === null ? 'member' : 'spotlight',
+    member_id: channel === null ? String(row.user_id) : null,
+    member: channel === null
+      ? memberName(row.user_id)
+      : (channel.display_name || channel.twitch_login),
+    spotlight_id: channel === null ? null : channel.id,
+    spotlight_login: channel === null ? null : channel.twitch_login,
     role_id: String(row.role_id),
     role: name,
     followers: name === null ? null : (role ? followersOf(row.role_id) : 0),
@@ -4448,13 +4481,46 @@ function fanRoleRow(row) {
   };
 }
 
+function spotlightFanRole(spotlightId) {
+  return state.golive.fanRoles.find(
+    (one) => String(one.spotlight_id ?? '') === String(spotlightId),
+  ) || null;
+}
+
+function spotlightListingRow(row) {
+  const held = spotlightFanRole(row.id);
+  const role = held ? roleOf(held.role_id) : null;
+  return {
+    kind: 'spotlight',
+    spotlight_id: row.id,
+    member_id: null,
+    member: row.display_name || row.twitch_login,
+    listed: true,
+    hidden_by: null,
+    hidden_by_name: null,
+    hidden_at: null,
+    first_live_at: row.added_at,
+    last_live_at: null,
+    live_count: 0,
+    platform: 'Twitch',
+    login: row.twitch_login,
+    role_id: held ? String(held.role_id) : null,
+    role: role ? role.name : (held && held.role_name ? held.role_name : null),
+    followers: role ? followersOf(held.role_id) : null,
+  };
+}
+
 // Mirrors black_bloc/api/tools/pings.py:listing_row — the list is who has STREAMED, and the
 // role is a column on it rather than the thing the list is made of.
 function listingRow(row) {
-  const held = state.golive.fanRoles.find((one) => String(one.user_id) === String(row.user_id));
+  const held = state.golive.fanRoles.find(
+    (one) => one.user_id !== null && String(one.user_id) === String(row.user_id),
+  );
   const role = held ? roleOf(held.role_id) : null;
   const name = held ? (role ? role.name : (held.role_name || null)) : null;
   return {
+    kind: 'member',
+    spotlight_id: null,
     member_id: String(row.user_id),
     member: memberName(row.user_id),
     listed: Boolean(row.listed),
@@ -4502,6 +4568,9 @@ route('GET', '/api/pings/streamers', (context) => {
 route('POST', '/api/pings/streamers', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
+  if (body.spotlight_id !== undefined && body.spotlight_id !== null && body.spotlight_id !== '') {
+    return giveSpotlightARole(body);
+  }
   const memberId = String(body.member_id || '');
   if (!memberId || !/^[0-9]+$/.test(memberId)) {
     throw new Refused(400, 'bad_request', `**${memberId || 'nothing'}** is not an id Black Bloc can read, so nothing was done. Ids are the long numbers Discord shows under Copy ID.`);
@@ -4535,6 +4604,70 @@ route('POST', '/api/pings/streamers', async (context) => {
   };
 });
 
+// Mirrors black_bloc/api/tools/pings.py's spotlight half: a channel is given a role by id,
+// never by member, and the refusals are the same sentences.
+function wantedSpotlightRow(given) {
+  const row = spotlightOf(given);
+  if (!row) {
+    throw new Refused(404, 'no_such_spotlight', `**${String(given).slice(0, 40)}** is not a spotlighted channel on this server, so nothing was changed. The Go-live page’s Streamers list shows which channels are spotlighted.`);
+  }
+  return row;
+}
+
+function giveSpotlightARole(body) {
+  const row = wantedSpotlightRow(body.spotlight_id);
+  const name = row.display_name || row.twitch_login;
+  const existing = spotlightFanRole(row.id);
+  if (existing && roleOf(existing.role_id)) {
+    throw new Refused(409, 'not_created', `**${name}** already has a ping role — <@&${existing.role_id}>. Nothing was changed; people follow it with **Follow a streamer…** on \`/pings\`.`);
+  }
+  const given = body.role_id ? String(body.role_id) : null;
+  if (given && !roleOf(given)) {
+    throw new Refused(400, 'no_such_role', `**${given}** is not a role in this server any more, so nothing was changed. Reload the page and pick the role again.`);
+  }
+  const roleName = given ? roleOf(given).name : `${name} pings`;
+  const roleId = given || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
+  const made = {
+    user_id: null,
+    spotlight_id: row.id,
+    role_id: roleId,
+    role_name: roleName,
+    created_at: now(),
+    created_by: STAFF.id,
+  };
+  state.golive.fanRoles.push(made);
+  logAction('web.pings.fan_role_created', { details: { role_id: roleId, role: roleName, reused: Boolean(given), spotlight_id: row.id, spotlight: row.twitch_login } });
+  return {
+    ...fanRoleRow(made),
+    message: given
+      ? `Used the role **${roleName}** for the channel **${name}**. People pick it with **Follow a streamer…** on \`/pings\`, and it is mentioned in front of that channel's announcement.`
+      : `Made **${roleName}** for the channel **${name}**. People pick it with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of that channel's spotlight announcement.`,
+  };
+}
+
+route('DELETE', '/api/pings/streamers/spotlight/:spotlight_id', (context) => {
+  requireStaff(context.session);
+  const row = wantedSpotlightRow(context.params.spotlight_id);
+  const name = row.display_name || row.twitch_login;
+  const held = spotlightFanRole(row.id);
+  if (!held) {
+    throw new Refused(404, 'no_fan_role', `**${name}** has no ping role, so there was nothing to take away. \`/pings\` ▸ **Streamers…** shows who has one.`);
+  }
+  state.golive.fanRoles = state.golive.fanRoles.filter((one) => one !== held);
+  const role = roleOf(held.role_id) || (held.role_name ? { name: held.role_name } : null);
+  const deleting = state.settings.get('pings_fan_role_delete') !== false && role !== null;
+  logAction('web.pings.fan_role_removed', { details: { role_id: held.role_id, deleted: deleting, spotlight_id: row.id, spotlight: row.twitch_login, because: 'staff_removed' } });
+  return {
+    removed: true,
+    member_id: null,
+    spotlight_id: row.id,
+    role_id: String(held.role_id),
+    message: deleting
+      ? `**${name}** no longer has a ping role, and the Discord role **${role.name}** is gone from the server. Everybody who followed them simply stops being pinged.`
+      : `**${name}** no longer has a ping role here, and the Discord role **${role ? role.name : ''}** was left on the server for you to tidy up. Nobody was announced differently in the meantime.`,
+  };
+});
+
 route('DELETE', '/api/pings/streamers/:member_id', (context) => {
   requireStaff(context.session);
   const memberId = String(context.params.member_id);
@@ -4549,6 +4682,7 @@ route('DELETE', '/api/pings/streamers/:member_id', (context) => {
   return {
     removed: true,
     member_id: memberId,
+    spotlight_id: null,
     role_id: String(row.role_id),
     message: deleting
       ? `**${memberName(memberId)}** no longer has a ping role, and the Discord role **${role.name}** is gone from the server. Everybody who followed them simply stops being pinged.`
@@ -4611,7 +4745,8 @@ route('GET', '/api/pings/list', (context) => {
   requireStaff(context.session);
   return [...state.golive.streamers]
     .sort((a, b) => String(b.last_live_at).localeCompare(String(a.last_live_at)))
-    .map(listingRow);
+    .map(listingRow)
+    .concat(state.golive.spotlights.map(spotlightListingRow));
 });
 
 route('POST', '/api/pings/list/:member_id', async (context) => {

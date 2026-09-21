@@ -239,6 +239,9 @@ const SPOTLIGHT = [
     twitch_login: 'gamesdonequick',
     display_name: 'GamesDoneQuick',
     note: "the owner's marathon channel",
+    role_id: '900000000000000010',
+    role: 'GamesDoneQuick pings',
+    role_wearers: 3,
     added_at: '2026-01-01T00:00:00+00:00',
     expires_at: null,
     kept: true,
@@ -269,6 +272,9 @@ const SPOTLIGHT = [
     twitch_login: 'esamarathon',
     display_name: 'ESA Marathon',
     note: null,
+    role_id: null,
+    role: null,
+    role_wearers: null,
     added_at: '2026-09-01T00:00:00+00:00',
     expires_at: '2026-09-30T00:00:00+00:00',
     kept: false,
@@ -286,6 +292,9 @@ const SPOTLIGHT = [
     twitch_login: 'supernamu',
     display_name: 'supernamu',
     note: null,
+    role_id: '900000000000000011',
+    role: 'supernamu pings',
+    role_wearers: 1,
     added_at: '2026-09-10T00:00:00+00:00',
     expires_at: null,
     kept: true,
@@ -310,6 +319,10 @@ const SPOTLIGHT = [
   is(`${where} — it reads kept`, gdq.spotlight.until, 'kept');
   is(`${where} — and it is live on Twitch`, gdq.live, 'twitch');
 
+  is(`${where} — a channel's own ping role lands on its row`, gdq.role, 'GamesDoneQuick pings');
+  is(`${where} — with the count that wears it`, gdq.role_wearers, 3);
+  is(`${where} — and its id as a string`, gdq.role_id, '900000000000000010');
+
   const esa = rows.find((one) => one.twitch === 'esamarathon');
   is(`${where} — a dated row says the day it runs out`, esa.spotlight.until, 'until 30 Sep');
   is(`${where} — and it is not live`, esa.live, null);
@@ -318,6 +331,8 @@ const SPOTLIGHT = [
   is(`${where} — a channel that is ALSO a member's login is ONE row`, shared.length, 1);
   is(`${where} — and it is the member's row`, shared[0].user_id, TWITCH_ONLY);
   is(`${where} — carrying the spotlight facts`, shared[0].spotlight.id, 3);
+  is(`${where} — and the MEMBER's own ping role wins that row's cell`, shared[0].role, 'Namu pings');
+  is(`${where} — a channel with no role of its own leaves the cell empty`, esa.role_id, null);
 
   ok(`${where} — an expired row is absent, because the sweep deletes it`,
     !rows.some((one) => one.twitch === 'frostfatales'), 'an expired row appeared');
@@ -340,7 +355,7 @@ const SPOTLIGHT = [
 }
 
 // --- ⚠️ every settings key lands in exactly one drawer or one named surface -------------------
-// The 49 keys the three namespaces held on 2026-09-20, measured with
+// The 50 keys the three namespaces held on 2026-09-20, measured with
 //   python -c "from black_bloc import settings_store as s; print([k for k in s.KEY_TYPES if
 //              s.namespace_of(k) in ('golive','pings','youtube')])"
 // The catch-all is what keeps this satisfiable: a key added tomorrow appears in Everything
@@ -360,13 +375,13 @@ const NAMESPACE_KEYS = [
   'youtube_log_level', 'youtube_panel_minutes', 'youtube_unlink_dms_them', 'youtube_live_mode',
   'youtube_live_poll_minutes', 'youtube_live_end_misses',
   'spotlight_mode', 'spotlight_poll_minutes', 'spotlight_end_misses', 'spotlight_bump_hours',
-  'spotlight_bump_template', 'spotlight_bump_cleanup', 'spotlight_pin',
+  'spotlight_bump_template', 'spotlight_bump_cleanup', 'spotlight_bump_pings', 'spotlight_pin',
   'spotlight_default_days', 'spotlight_event_slack_hours',
 ];
 
 {
   const where = 'every key lands once';
-  is(`${where} — the namespaces held 49 keys when this was measured`, NAMESPACE_KEYS.length, 49);
+  is(`${where} — the namespaces held 50 keys when this was measured`, NAMESPACE_KEYS.length, 50);
 
   const specs = NAMESPACE_KEYS.map((key) => ({ key, type: 'text', value: null }));
   const placed = placeSettings(specs);
@@ -414,5 +429,5 @@ process.stdout.write(
   'golive-join: ok - one row per person across five payloads; a ping role with no link still '
     + 'has a row; two open sessions are one row; a co-stream says both platforms; an ambiguous '
     + 'address is refused in words; a spotlighted channel with no member is its own row and one '
-    + 'that IS a linked login is not a second; all 49 settings keys land in exactly one place\n',
+    + 'that IS a linked login is not a second; all 50 settings keys land in exactly one place\n',
 );

@@ -477,9 +477,11 @@ function youtubeMoves(row, say) {
 
 let pingsTemplate = '{name} pings';
 
-/** The same door /pings has: an existing role, or a new one named by pings_fan_role_template. */
+/** The same door /pings has: an existing role, or a new one named by pings_fan_role_template.
+    A channel row asks by spotlight id, because there is no member behind it. */
 async function addPingRole(row, say) {
   const who = row.name || row.user_id;
+  const channel = spotlightOnly(row) ? row.spotlight.id : null;
   const roles = await roleSelect(null);
   const named = el('p', { class: 'field-help' });
   const sayName = () => {
@@ -494,7 +496,10 @@ async function addPingRole(row, say) {
   const sure = await ask({
     title: `Give ${who} a ping role`,
     body: [
-      'Members who press their name on /pings get this role, and it is pinged when they go live.',
+      channel === null
+      ? 'Members who press their name on /pings get this role, and it is pinged when they go live.'
+      : 'Members who press this channel on /pings get this role, and it is pinged when the '
+        + 'channel goes live — the announcement and, with spotlight_bump_pings on, the reminders.',
       field('Use an existing role, or leave it to make a new one', roles),
       named,
     ],
@@ -504,10 +509,9 @@ async function addPingRole(row, say) {
   if (!sure) return;
   const done = await run(
     say,
-    () => send('/api/pings/streamers', 'POST', {
-      member_id: row.user_id,
-      role_id: readSelect(roles, false),
-    }),
+    () => send('/api/pings/streamers', 'POST', channel === null
+      ? { member_id: row.user_id, role_id: readSelect(roles, false) }
+      : { spotlight_id: channel, role_id: readSelect(roles, false) }),
     (found) => found?.message || 'Made the role.',
   );
   if (done.ok) {
@@ -518,6 +522,7 @@ async function addPingRole(row, say) {
 
 async function roleMoves(row, say) {
   const moves = [];
+  const channel = spotlightOnly(row) ? row.spotlight.id : null;
   if (row.role_id) {
     moves.push(button('Remove', async () => {
       const sure = await ask({
@@ -529,9 +534,12 @@ async function roleMoves(row, say) {
         confirmLabel: 'Remove',
       });
       if (!sure) return;
+      const where = channel === null
+        ? `/api/pings/streamers/${encodeURIComponent(row.user_id)}`
+        : `/api/pings/streamers/spotlight/${encodeURIComponent(channel)}`;
       const done = await run(
         say,
-        () => api(`/api/pings/streamers/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
+        () => api(where, { method: 'DELETE' }),
         (found) => found?.message || 'Removed.',
       );
       if (done.ok) {
@@ -539,7 +547,7 @@ async function roleMoves(row, say) {
         refresh();
       }
     }, { tone: 'danger' }));
-  } else if (!String(row.user_id).startsWith('spotlight:')) {
+  } else {
     moves.push(button('Add a ping role…', () => addPingRole(row, say), { tone: 'warn' }));
   }
   if (row.listed !== null) {
@@ -689,10 +697,11 @@ async function rowPanel(row, say) {
       : 'On — announced wherever they go live',
   });
 
-  if (String(row.user_id).startsWith('spotlight:')) {
+  if (spotlightOnly(row)) {
     return [
       panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)),
       panelGroup('Twitch', twitchSaid, twitchMoves(row, say).slice(0, 1)),
+      panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
       el('p', { class: 'field-help', text: NO_MEMBER }),
       say,
     ];
@@ -735,6 +744,11 @@ function expiresCell(row) {
 
 function optedOutCell(row) {
   return row.opted_out ? el('span', { class: 'cell-kind' }, [badge(OPTED_OUT, 'warn')]) : muted('—');
+}
+
+/** A row with no member behind it: the join gives it a `spotlight:<id>` id of its own. */
+function spotlightOnly(row) {
+  return String(row.user_id).startsWith('spotlight:') && Boolean(row.spotlight);
 }
 
 function memberCell(row) {
