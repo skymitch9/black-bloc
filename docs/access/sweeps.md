@@ -1,7 +1,11 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-20** — row **`CM-d`** added at the foot for THE PIN IT SWITCH + A FULL RE-AUDIT FOR SIDE-DOCKED
+> **2026-09-20** — rows **`WP-a` … `WP-e`** added at the foot for THE DATE-TIME PICKER ON EVERY PAGE (branch
+> `when-picker-site`, off `main` `4a33938`; design
+> [`../info/when-picker-site-design.md`](../info/when-picker-site-design.md)). Owner: *"for raid train and events
+> and anywhere else we set a date time, put a date time picker."* ⚠️ **Not merged, not deployed; the build touches
+> the dashboard only and no Python changed.** Before that, **2026-09-20** — row **`CM-d`** added at the foot for THE PIN IT SWITCH + A FULL RE-AUDIT FOR SIDE-DOCKED
 > PANELS (branch `modal-sweep`, off `main` `941ee26`; design
 > [`../info/ux-audit-design.md`](../info/ux-audit-design.md) ▸ Deviations, 2026-09-20 entry). The audit found no
 > side-docked panel construct anywhere on the site beyond what `centre-modal`/`posts-two-col` already fixed — see
@@ -2549,3 +2553,21 @@ trains**.
 | `RT-c` | Open a train whose **Event** cell reads *no event* and press **Make an event for it** in the drawer's **The event** card | Before: *"No event is tied to this train yet…"*. The confirm says what is about to be raised and that calling the train off will call it off too. After: *"Event #K carries this train. It is pending, and the Events page is where it is decided."*, the notice reads *"Event #K for … is with the events review now."*, and **Make an event for it** has been replaced by **Open it on the Events page**. ⚠️ The already-has-one refusal was NOT pressed in a browser — the button does not render once a train has an event; it is covered by `tests/api/tools/test_raidtrain.py` and answers in words, never a bare 409 |
 | `RT-d` | Call that same train off from its drawer (**Call it off**, type a reason) | The confirm says *"… and any event this train carries is cancelled too."* Afterwards the train is off the **Coming up** list, its drawer offers no move at all, and the event it carried reads **cancelled** on the Events page. The log holds `web.raidtrain.cancel` **and** `web.raidtrain.event_cancelled` ⚠️ **— the mock's own rows, not the bot's** |
 | `RT-e` | In Discord: `/raidtrain` ▸ **Start a raid train**, look at the **Also make an event: no/yes** button, press it, then **Start**. Then open a train's card as staff and look for **Make an event** | ⚠️ **NOT VERIFIED — nothing in this build met Discord.** Expected: the toggle starts wherever `raidtrain_event_default` points, flips in place, and the draft card's *Also make an event* line follows it; **Start** then answers with the same two-part sentence the site gives. A staff card offers **Make an event** only while the train is open or locked and carries none. Raid trains have never run in production — `raidtrain_mode` is `off` |
+
+## `WP-a` … `WP-e` — the date-time picker on every page (branch `when-picker-site`, 2026-09-20)
+
+⚠️ **Not merged, not deployed, and NOTHING HERE HAS MET DISCORD** — this build touches the
+dashboard only, and every claim below was pressed against the local mock in
+`chrome-headless-shell` 149.0.7827.22 over raw CDP. No Python changed. Design:
+[`../info/when-picker-site-design.md`](../info/when-picker-site-design.md) (the audit table lists
+every date field on the site, including the four that were deliberately LEFT and why). Owner,
+2026-09-20: *"for raid train and events and anywhere else we set a date time, put a date time
+picker."*
+
+| Row | Do | Expect |
+|---|---|---|
+| `WP-a` | **Raid trains** ▸ **Start a raid train**. Look at **Starts**, then pick a day and a time from the calendar, fill in a title and press **Start it** | **Starts** is a calendar-and-clock box, not something to type into — pressing it opens the browser's own picker, and today's date backwards is greyed out. Beside it is a **time-zone dropdown** holding the 24 zones from `timezone_choices`, and the line under the pair reads *"The first slot opens then. Read in America/Phoenix."* Change the dropdown and that sentence changes with it. **Start it** answers *"… is up with N slot(s) of M minutes each."* — the train is really made |
+| `WP-b` | **Events** ▸ open an event that is still changeable ▸ **Change it**. Look at **Starts**, change the zone dropdown, pick a new day and time, press **Save** | **Starts** is already filled in with the event's own start, in the same calendar box with the same zone dropdown beside it, and its line reads *"When it begins. Read in <zone>."* — following the dropdown. Saving answers in words and the new time sticks. ⚠️ **How long** is still typed (`2h`, `1h30m`) — that is a duration, not a time, and it is meant to stay |
+| `WP-c` | **Polls** ▸ **Create a poll**. Set **Kind** to a date poll and look at **First slot**. Then set Kind back, set **Repeat** to weekly, and look at **Time of day** and **Timezone** | **First slot** is a calendar-and-clock box with **no** zone dropdown, and says *"Midnight means the slots are shown as plain dates, with no time on them. Black Bloc reads it in the server's own time zone."* ⚠️ That is deliberate — this one route takes no zone at all, so a dropdown there would do nothing. **Time of day** is a clock box (no date), and **Timezone** is now a **dropdown** whose first option is *the server's own zone*, not a box you type `America/Phoenix` into |
+| `WP-d` | **Logs** ▸ the **From** and **To** boxes under the filter chips | Both are calendar boxes with the same look as everything above — *The first day to include.* / *The last day to include.* — and no zone dropdown, because a day filter has no zone. Setting either one re-loads the results under it, and **Clear** empties both |
+| `WP-e` | Back on **Start a raid train**, type (do not pick) a date that has already gone by — `2020-01-02 10:00` — and press **Start it** | ⚠️ **The refusal is still in WORDS, not a browser tooltip:** *"2020-01-02 10:00 has already gone by, so nothing was submitted. Pick a time in the future."* The picker greys the past out of the calendar but never silently swallows a typed one — the server is still the thing that decides |

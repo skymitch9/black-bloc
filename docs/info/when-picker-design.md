@@ -259,7 +259,14 @@ is the registry itself. One fact, one home.
   first thing to revisit (a `when_drafts` table keyed on (guild, user, feature)).
 - **D3** Dates further than 24 days out are typed, not scrolled — a second page of days would
   cost a row the panel does not have.
-- **D4** The website forms keep their typed date; filed on TODO, not built here. ⚠️ **Still NOT
+- **D4** The website forms keep their typed date; filed on TODO, not built here. ✅ **BUILT
+  2026-09-20** on branch `when-picker-site` (off `main` `4a33938`, not merged) —
+  [`when-picker-site-design.md`](when-picker-site-design.md): `ui.js:whenField` is one native
+  `datetime-local` / `date` / `time` box plus a zone select fed from this build's own
+  `timezone_choices`, and it replaced the typed box on raid trains, the events editor, polls
+  (first slot, time of day and the typed Timezone box) and the logs page's From/To. The payloads
+  are unchanged — `parse_start` still gets `YYYY-MM-DD HH:MM`. Sweep rows `WP-a` … `WP-e`. The
+  paragraph below is what was true until then. ⚠️ **Was still NOT
   built at v108, deliberately** — `site/public/assets/page-events.js` and `page-raidtrain.js` still
   take a typed `YYYY-MM-DD HH:MM`. It is its own small item on [`../TODO.md`](../TODO.md) (the
   *When-picker follow-ups* bullet, item 1: a `datetime-local` input plus a zone select fed by
