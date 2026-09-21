@@ -50,6 +50,12 @@ adding it — that is the signal the design was wrong.
 Blast radius: `golive` is staff-only (`shell.js:MEMBER_TABS` is `['requests','guides']`) and
 `golive_mode` is **shadow**, so a mistake here is seen by staff, not by members.
 
+> 🔴 **AMENDED 2026-09-20 (branch `end-wording`, design [`end-wording-design.md`](end-wording-design.md)):** section 3's
+> *Once the stream has ended* card now holds **ONE** end-wording box. `golive_end_suffix` and `golive_end_mode` are
+> retired keys, so the suffix row and the **When a stream ends** mode switch are gone from the card, along with the
+> Wording card's *golive_end_mode is off, so…* paragraph and `END_UNKNOWN`. The announcement is **always** edited once a
+> stream ends. §B's *Everything else* catch-all row still reads `golive_end_*`, and still means the surviving three.
+
 ## B. What the page becomes — five sections, in this order
 
 | # | Section | Replaces |
