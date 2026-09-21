@@ -336,6 +336,7 @@ export const DRAWERS = [
     keys: [
       'golive_boot_sweep',
       'golive_autolink_presence',
+      'golive_autolink_youtube_video',
       'youtube_live_poll_minutes',
       'youtube_live_end_misses',
       'youtube_unlink_dms_them',

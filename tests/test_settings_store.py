@@ -2612,3 +2612,21 @@ def test_whether_a_new_raid_train_also_makes_an_event_is_a_key_and_not_a_constan
     assert store.get(1, key) is False
     assert coerce_value(key, True) is True
     assert settings_store.namespace_of(key) == "raidtrain"
+
+
+def test_whether_a_youtube_video_link_is_looked_up_is_a_key_that_ships_off(store):
+    """Owner, 2026-09-21: "Let's build it but keep it off for now" — checklist 33."""
+    key = settings_store.GOLIVE_AUTOLINK_VIDEO_KEY
+    assert key == "golive_autolink_youtube_video"
+    assert KEY_TYPES[key] == "bool"
+    assert store.get(1, key) is False
+    assert settings_store.GOLIVE_AUTOLINK_VIDEO_DEFAULT is False
+    assert coerce_value(key, True) is True
+    assert settings_store.namespace_of(key) == "golive"
+
+
+def test_the_video_lookup_key_says_in_words_why_it_is_off():
+    said = KEY_HELP[settings_store.GOLIVE_AUTOLINK_VIDEO_KEY]
+    assert "Off by default" in said
+    assert "reads YouTube's page" in said
+    assert "not always the streamer's own" in said

@@ -27,8 +27,10 @@ from black_bloc.youtube import (
     health_lines,
     link_lines,
     panel_minutes,
+    read_video_channel,
     status_lines,
     title_of,
+    video_id_in,
     where_words,
 )
 
@@ -223,6 +225,125 @@ async def test_the_live_search_asks_nothing_without_a_key_or_a_channel():
     assert await keyless.search_live(CHANNEL) is None
     assert await keyed.search_live("") is None
     assert request.calls == []
+
+
+# --- which channel a video belongs to --------------------------------------------------------
+
+
+VIDEO = "jNQXAC9IVRw"
+WATCH_PAGE = (
+    "<html><head><link rel=\"canonical\" href=\"https://www.youtube.com/watch?v="
+    f'{VIDEO}"></head><script>var x = {{"videoDetails":{{"videoId":"{VIDEO}",'
+    f'"channelId":"{CHANNEL}","ownerChannelName":"Kurzgesagt \\u2013 In a Nutshell"}}}};'
+    "</script></html>"
+)
+CHALLENGE_PAGE = "<html><body>Sign in to confirm you're not a bot</body></html>"
+
+
+@pytest.mark.parametrize(
+    "given",
+    [
+        f"https://www.youtube.com/watch?v={VIDEO}",
+        f"https://www.youtube.com/watch?list=PL1&v={VIDEO}",
+        f"https://youtu.be/{VIDEO}",
+        f"https://www.youtube.com/live/{VIDEO}",
+        f"https://www.youtube.com/shorts/{VIDEO}",
+        f"Watch me: https://m.youtube.com/watch?v={VIDEO} now",
+    ],
+)
+def test_a_video_id_is_read_out_of_every_address_shape(given):
+    assert video_id_in(given) == VIDEO
+
+
+@pytest.mark.parametrize(
+    "given",
+    [f"https://www.youtube.com/channel/{CHANNEL}", "@kurzgesagt", "kurzgesagt", "", None],
+)
+def test_a_channel_address_or_a_bare_word_is_never_read_as_a_video(given):
+    assert video_id_in(given) is None
+
+
+def test_the_watch_pages_player_json_names_the_owner_and_nobody_else():
+    """Measured 2026-09-21 on two real pages: every "channelId" on a watch page is the owner's."""
+    assert read_video_channel(WATCH_PAGE) == (CHANNEL, "Kurzgesagt – In a Nutshell")
+
+
+def test_the_meta_tag_is_taken_first_where_youtube_serves_one():
+    page = f'<meta itemprop="channelId" content="{OTHER}">' + WATCH_PAGE
+
+    assert read_video_channel(page)[0] == OTHER
+
+
+def test_a_page_with_no_channel_anywhere_names_nobody_rather_than_guessing():
+    assert read_video_channel(CHALLENGE_PAGE) is None
+    assert read_video_channel("") is None
+    assert read_video_channel(None) is None
+
+
+async def test_a_video_id_resolves_to_its_channel_off_the_watch_page_with_a_browser_agent():
+    request = _Request(ok(WATCH_PAGE))
+    client = YouTubeClient(None, request=request)
+
+    assert await client.resolve_video_channel(VIDEO) == (
+        CHANNEL,
+        "Kurzgesagt – In a Nutshell",
+    )
+    assert request.calls[0]["url"] == f"https://www.youtube.com/watch?v={VIDEO}"
+    assert "BlackBloc" in request.calls[0]["headers"]["User-Agent"]
+
+
+async def test_a_challenge_page_says_youtube_asked_the_bot_to_sign_in():
+    client = YouTubeClient(None, request=_Request(ok(CHALLENGE_PAGE)))
+
+    with pytest.raises(YouTubeError) as raised:
+        await client.resolve_video_channel(VIDEO)
+
+    assert "sign in" in str(raised.value)
+    assert raised.value.network is False
+
+
+async def test_a_watch_page_with_no_channel_at_all_says_what_to_paste_instead():
+    client = YouTubeClient(None, request=_Request(ok("<html>nothing here</html>")))
+
+    with pytest.raises(YouTubeError, match="youtube.com/channel/UC"):
+        await client.resolve_video_channel(VIDEO)
+
+
+async def test_a_watch_page_youtube_refuses_is_a_network_error():
+    client = YouTubeClient(None, request=_Request((429, {}, "")))
+
+    with pytest.raises(YouTubeError) as raised:
+        await client.resolve_video_channel(VIDEO)
+
+    assert raised.value.network is True
+
+
+async def test_something_that_is_not_a_video_id_is_refused_before_any_request():
+    request = _Request()
+    client = YouTubeClient(None, request=request)
+
+    with pytest.raises(YouTubeError, match="could not tell which channel"):
+        await client.resolve_video_channel("not-an-id")
+
+    assert request.calls == []
+
+
+async def test_a_key_asks_the_videos_endpoint_for_one_unit_and_never_reads_the_page():
+    body = f'{{"items": [{{"snippet": {{"channelId": "{CHANNEL}", "channelTitle": "Kurz"}}}}]}}'
+    request = _Request(ok(body))
+    client = YouTubeClient("k-e-y", request=request)
+
+    assert await client.resolve_video_channel(VIDEO) == (CHANNEL, "Kurz")
+    assert len(request.calls) == 1
+    assert request.calls[0]["url"].endswith("/videos")
+    assert request.calls[0]["params"]["part"] == "snippet"
+    assert request.calls[0]["params"]["id"] == VIDEO
+
+
+async def test_a_key_that_knows_nothing_about_the_video_falls_back_to_the_page():
+    client = YouTubeClient("k-e-y", request=_Request(ok("{}"), ok(WATCH_PAGE)))
+
+    assert (await client.resolve_video_channel(VIDEO))[0] == CHANNEL
 
 
 # --- the panel's table, as data ------------------------------------------------------------------

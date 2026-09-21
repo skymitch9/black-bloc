@@ -70,6 +70,7 @@ from ...panels import (
 from ...settings_store import (
     DB_UNAVAILABLE,
     GOLIVE_AUTOLINK_PRESENCE_KEY,
+    GOLIVE_AUTOLINK_VIDEO_KEY,
     GOLIVE_COSTREAM_AUTHOR_KEY,
     GOLIVE_COSTREAM_MODE_KEY,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
@@ -210,6 +211,7 @@ LINK_TAKEN_OUT = "taken"
 LINK_UNREADABLE = "unreadable"
 TWITCH_CHANNEL = "twitch.tv/{login}"
 YOUTUBE_CHANNEL = "youtube.com/channel/{channel}"
+YOUTUBE_CHANNEL_URL = "https://www.youtube.com/channel/{channel}"
 HISTORY_NAMED = "{name} → {channel}"
 
 
@@ -564,18 +566,49 @@ async def link_from_url(
         return LINK_UNREADABLE, ""
     if await youtube_link_of(bot.db, wanted) is not None:
         return LINK_ALREADY, ""
+    given: Any = url
+    named = ""
+    via_video = False
     if not (channel_id_in(url) or handle_in(url)):
-        return LINK_UNREADABLE, ""
+        found = await channel_behind_video(bot, guild, url)
+        if found is None:
+            return LINK_UNREADABLE, ""
+        channel, named = found
+        given = YOUTUBE_CHANNEL_URL.format(channel=channel)
+        via_video = True
     try:
-        _, row = await youtube_link(bot, guild, actor, target, url, via=via)
+        _, row = await youtube_link(
+            bot, guild, actor, target, given, via=via, because=because, via_video=via_video
+        )
     except LinkRefused as refused:
         return (
             LINK_TAKEN_OUT if refused.code == "link_taken" else LINK_UNREADABLE
-        ), ""
+        ), named
     if row is None:
         return LINK_UNREADABLE, ""
     channel_id = _row_value(row, "channel_id")
-    return LINKED_NEW, _row_value(row, "title") or YOUTUBE_CHANNEL.format(channel=channel_id)
+    return LINKED_NEW, (
+        _row_value(row, "title") or named or YOUTUBE_CHANNEL.format(channel=channel_id)
+    )
+
+
+async def channel_behind_video(bot: Any, guild: Any, url: Any) -> tuple[str, str] | None:
+    """`golive_autolink_youtube_video` off is the answer *unread*, with nothing asked."""
+    from ...youtube import YouTubeError, video_id_in
+    from .youtube import cog_of
+
+    video_id = video_id_in(url)
+    if not video_id or not bot.store.get(guild.id, GOLIVE_AUTOLINK_VIDEO_KEY):
+        return None
+    cog = cog_of(bot)
+    client = getattr(cog, "client", None)
+    if client is None:
+        return None
+    try:
+        return await client.resolve_video_channel(video_id)
+    except YouTubeError as exc:
+        log.info("go-live: the video %s did not name a channel (%s)", video_id, exc)
+        return None
 
 
 async def link_from_history(

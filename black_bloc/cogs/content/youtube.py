@@ -273,7 +273,15 @@ async def counts(db: Any) -> dict[str, int]:
 
 
 async def link_channel(
-    bot: Any, guild: Any, actor: Any, member: Any, given: Any, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    member: Any,
+    given: Any,
+    *,
+    via: str = VIA_DISCORD,
+    because: str | None = None,
+    via_video: bool = False,
 ) -> tuple[str, Any]:
     """Resolve, refuse a channel somebody else owns, store — one write, one log row."""
     cog = cog_of(bot)
@@ -316,7 +324,9 @@ async def link_channel(
         kind_via("youtube.link", via),
         actor=actor,
         target=member,
-        details={"title": title, "via": via},
+        details={"title": title, "via": via}
+        | ({"because": because} if because else {})
+        | ({"via_video": True} if via_video else {}),
     )
     return (said, row)
 
