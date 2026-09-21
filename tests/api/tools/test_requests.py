@@ -240,6 +240,38 @@ async def test_the_staff_list_is_open_first_and_counts_what_is_waiting(
     assert payload["open"] == 1
 
 
+async def test_the_rail_badge_asks_for_one_open_row_and_is_answered(as_staff, client, web):
+    """shell.js:featureRequestTally. It asked for `status=pending` until 2026-09-20, which is not
+    a state a request can be in, so every page in the site logged a 400 in the console."""
+    await file_one(client, what="one")
+    await file_one(client, what="two")
+    await pure.set_status(web.db, 2, pure.IN_PROGRESS, decided_by=LEAD)
+
+    answered = client.get("/api/requests?status=open&per_page=1")
+
+    assert answered.status_code == 200
+    payload = answered.json()
+    assert payload["total"] == 1 and payload["per_page"] == 1
+    assert len(payload["requests"]) == 1
+
+
+async def test_a_page_size_is_clamped_and_anything_odd_is_the_default(as_staff, client):
+    await file_one(client, what="one")
+
+    assert client.get("/api/requests?per_page=1").json()["per_page"] == 1
+    assert client.get("/api/requests?per_page=0").json()["per_page"] == 1
+    assert client.get("/api/requests?per_page=500").json()["per_page"] == pure.API_PAGE
+    assert client.get("/api/requests?per_page=six").json()["per_page"] == pure.API_PAGE
+    assert client.get("/api/requests?per_page=").json()["per_page"] == pure.API_PAGE
+
+
+async def test_a_status_nothing_can_be_in_is_refused_in_words(as_staff, client):
+    refused = client.get("/api/requests?status=pending&per_page=1")
+
+    assert refused.status_code == 400
+    assert "pending" in refused.json()["message"]
+
+
 async def test_the_staff_list_filters_by_status_by_assignee_and_by_words(as_staff, client, web):
     await file_one(client, what="a request board")
     await file_one(client, what="a karaoke night")

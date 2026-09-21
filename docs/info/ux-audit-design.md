@@ -185,3 +185,49 @@ request · Settings. `polls.html` left *Polls* / right *Pending review*, then *C
    or against the live site. The `wide()` / `data-span` half of `mountColumns` was not changed and
    not re-measured. Only `requests.html` and `polls.html` were measured; the other eighteen pages
    were not opened.
+
+### 2026-09-20 — every page logged a 400 on the rail badge (branch `small-fixes`, fix 2 of 4)
+
+`shell.js:featureRequestTally` — the badge beside **Requests** in the left rail, which every page
+draws — asked `/api/requests?status=pending&per_page=1`. **`pending` is not a state a request can
+be in.** `black_bloc/requests.py:STATUSES` is `open, in_progress, review, hold, done, declined,
+withdrawn, moved`, and `wanted_statuses` refuses anything else, so the route answered **400
+`unknown_status`** and the badge fell to `null` on every page in the site. Measured before, mock in
+a headless browser: `golive.html`, `polls.html` and `requests.html` each logged exactly one
+`HTTP 400 …/api/requests?status=pending&per_page=1` and one red console line.
+
+**Which side was wrong: both halves, differently.**
+
+- **`status=pending` is the caller's mistake.** A request waiting on an answer is `open` — that is
+  the state the route's own `open` count uses and the state the Requests page's first section
+  lists. `shell.js` now asks `status=open`.
+- **`per_page` was not the cause of the 400 — it was being ignored**, which is its own small bug:
+  `requests_index` hard-coded `API_PAGE` for the limit, the offset and the answer, so a badge that
+  wanted one row was served twenty and `page-requests.js` asked for `per_page=SHUT_PER_PAGE` (10) on
+  the Done and Declined lists and silently got pages of 20 with a pager computed off the server's
+  number. The route now takes `per_page` and clamps it, exactly as `api/tools/polls.py` does
+  (`wanted_per_page`: a digit string, at least 1, at most `API_PAGE`, anything else the default).
+
+**Measured after**, same browser, same mock: `golive.html`, `polls.html`, `requests.html` — *no 4xx,
+no failed load, no console error* on any of the three.
+
+**Guards so it cannot drift back:** a contract row for `/api/requests?status=open&per_page=1` in
+`site/mock/contract.json` (so `check.mjs` AND the bot's own
+`tests/api/test_contract.py::test_every_route_answers_with_the_keys_the_pages_read` fetch the
+badge's exact URL and require a 200), and three tests in `tests/api/tools/test_requests.py`: the
+badge's call is answered with one row, the page size is clamped, and `status=pending` is still
+refused in words.
+
+**Deviations.**
+
+1. **`per_page=0` clamps to 1, not to the default** — `wanted_per_page` is copied from the polls
+   route deliberately, and that is what the polls route does. One shape, two routes.
+2. **`/api/requests/mine` was NOT given `per_page`**, and the mock was not either: the bot's route
+   does not take it, and the mock must not accept what the bot ignores.
+3. **Honouring `per_page` changes what the Requests page's Done and Declined lists show** — ten rows
+   a page now, which is what the page was asking for all along, with the pager and the *Showing
+   n–m of t* line agreeing for the first time. Nobody has looked at that in a real browser.
+4. **What was NOT verified:** the real route was never called by the real site — everything here is
+   the mock plus the bot's test client. The other two badges (`requestTally`, `pollTally`) were read
+   and left alone: `/api/rolemenus/requests?status=pending` is a DIFFERENT route with its own status
+   words, where `pending` is correct, and `/api/polls?status=open&per_page=1` already works.

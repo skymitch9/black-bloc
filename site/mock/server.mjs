@@ -6821,16 +6821,18 @@ function asksSorted(rows) {
   });
 }
 
-function askPage(rows, page) {
+function askPage(rows, page, perPage) {
   const total = rows.length;
-  const pages = Math.max(1, Math.ceil(total / REQUEST_PAGE));
+  const asked = Number(perPage);
+  const size = Number.isInteger(asked) && asked > 0 ? Math.min(asked, REQUEST_PAGE) : REQUEST_PAGE;
+  const pages = Math.max(1, Math.ceil(total / size));
   const at = Math.max(1, Math.min(Number(page || 1), pages));
   return {
-    requests: rows.slice((at - 1) * REQUEST_PAGE, at * REQUEST_PAGE).map(askRow),
+    requests: rows.slice((at - 1) * size, at * size).map(askRow),
     total,
     page: at,
     pages,
-    per_page: REQUEST_PAGE,
+    per_page: size,
   };
 }
 
@@ -6945,7 +6947,7 @@ route('GET', '/api/requests', (context) => {
     return true;
   });
   return {
-    ...askPage(rows, url.searchParams.get('page')),
+    ...askPage(rows, url.searchParams.get('page'), url.searchParams.get('per_page')),
     open: state.asks.filter((row) => row.status === 'open').length,
   };
 });
