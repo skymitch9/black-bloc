@@ -305,7 +305,7 @@ async def test_the_pin_button_is_labelled_with_the_move_it_makes(bot, staff):
     assert "Pin it" in labels(two) and "Do not pin it" not in labels(two)
 
 
-async def test_the_shipped_post_offers_put_it_back_and_a_written_one_offers_delete(bot, staff):
+async def test_the_shipped_post_cannot_be_deleted_and_a_written_one_can(bot, staff):
     await posts.seed_posts(bot, bot.guild)
     seeded = await posts.get_post(bot.db, GUILD, "welcome")
     mine = await a_post(bot)
@@ -313,8 +313,54 @@ async def test_the_shipped_post_offers_put_it_back_and_a_written_one_offers_dele
     _, one = cog.build_card(bot, bot.guild, seeded)
     _, two = cog.build_card(bot, bot.guild, mine)
 
-    assert "Put the original back" in labels(one) and "Delete this post" not in labels(one)
-    assert "Delete this post" in labels(two) and "Put the original back" not in labels(two)
+    assert "Delete this post" not in labels(one)
+    assert "Delete this post" in labels(two)
+    assert "Put the original back" not in labels(one) + labels(two), "retired 2026-09-20"
+    assert "Versions…" in labels(one) and "Versions…" in labels(two)
+
+
+async def test_the_versions_sub_panel_lists_them_newest_first_and_marks_the_current_one(
+    bot, staff
+):
+    row = await a_post(bot)
+    await posts.save_post(bot, bot.guild, row, staff, body="The first.")
+    row = await posts.get_post(bot.db, GUILD, "notice")
+    await posts.save_post(bot, bot.guild, row, staff, body="The second.")
+    row = await posts.get_post(bot.db, GUILD, "notice")
+
+    embed, view = await cog.build_versions(bot, bot.guild, row)
+
+    assert embed.title == "Versions of A notice"
+    assert embed.description.index("v2 ") < embed.description.index("v1 ")
+    assert "current" in embed.description.split("\n")[1]
+    assert "The second." in embed.description and "The first." in embed.description
+    assert "A version…" in placeholders(view)
+    assert "View" not in labels(view), "nothing is picked yet, so no move is drawn"
+    assert "Use this version" not in labels(view)
+
+
+async def test_picking_a_version_draws_view_and_use_it_but_never_on_the_current_one(bot, staff):
+    row = await a_post(bot)
+    await posts.save_post(bot, bot.guild, row, staff, body="The first.")
+    row = await posts.get_post(bot.db, GUILD, "notice")
+    await posts.save_post(bot, bot.guild, row, staff, body="The second.")
+    row = await posts.get_post(bot.db, GUILD, "notice")
+
+    _, old = await cog.build_versions(bot, bot.guild, row, 1)
+    _, now = await cog.build_versions(bot, bot.guild, row, 2)
+
+    assert "View" in labels(old) and "Use this version" in labels(old)
+    assert "View" in labels(now) and "Use this version" not in labels(now)
+
+
+async def test_a_post_with_no_history_says_so_rather_than_drawing_an_empty_list(bot, staff):
+    row = await a_post(bot)
+
+    embed, view = await cog.build_versions(bot, bot.guild, row)
+
+    assert posts.VERSIONS_EMPTY in embed.description
+    assert "A version…" not in placeholders(view)
+    assert "Back" in labels(view)
 
 
 async def test_the_card_shows_the_first_of_the_words_and_never_the_whole_post(bot, staff):
