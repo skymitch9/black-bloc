@@ -719,6 +719,19 @@ failure as Minutes, on the page with the most to edit.
 
 ### 19. posts · 🔴 · 4 fails — **Pop's two minutes**
 
+> 🔧 **STAGE 3 SHIPPED 2026-09-20 (branch `posts-page`, off `main` `552af36`).** The approved preview
+> IS the page now, live against the real API, and `site/public/preview/posts.html` +
+> `assets/page-preview-posts.js` are **deleted**. All four fails below are answered: **T1** — the row
+> carries a `dot-sm[data-tone]` (a rule that exists) and pills toned `ok` / `info` / `warn` / `danger`
+> instead of the undefined `quiet`, with the *Channel* sentence as its own column; **T2** — the whole
+> row is a `button.grid-row` ending in a `chevronRight`, opening `ui.js:openDrawer`, and *New post* has
+> moved out of the column flow into the section's own toolbar; **T4** — two sections, one of them all
+> the machinery, both `data-span="full"` so `mountColumns` cannot reorder them (step 5's defect, fixed
+> at the cause); **T6** — the shadow behaviour is written once (the API's note, rendered in the section
+> head) and the logs and settings blocks keep their own notes instead of the page repeating them. The
+> body below is the measurement that produced the fix and is kept as written. ⚠️ **Nothing here has met
+> Discord, and nobody has watched a staff member use the new page** — sweeps `PP-a` … `PP-f`.
+
 **(a) Sections.** The list view renders three sections and one orphan
 (`page-posts.js:202–210`): **The posts** (`open: true`, `:192` — a `.row` per post) · *A new
 post* — **a bare `card()`, not a section** (`:151–175`), so it is absent from the "On this page"

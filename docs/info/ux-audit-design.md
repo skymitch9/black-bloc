@@ -4,7 +4,9 @@
 > **Status:** TRACKED · 📐 **REVIEWED by Fable 2026-09-20 16:1x — the six tests in §C stand as written — and
 > STAGE 1 DONE** (`docs/info/ux-audit.md`, 20 pages ranked) · **STAGE 2 SHIPPED as twelve in-site PREVIEW pages, v144 2026-09-20 17:34**
 > (`site/public/preview/<page>.html`, real shell + real components over static seeds — the owner switched from standalone mocks
-> to these 16:4x; each is deleted when its real page ships) · **STAGE 3 LIVE for one page** (go-live, v142, its own design);
+> to these 16:4x; each is deleted when its real page ships) · **STAGE 3 done for TWO pages** — go-live (v142, its own
+> design) and **posts (branch `posts-page`, 2026-09-20, ⚠️ not merged and not deployed; its preview is deleted and its
+> Deviations are at the foot of this file)**;
 > the rest wait on the owner's walk of the previews. No other real page has been changed. **Last verified: 2026-09-20 15:3x** against `main` `22753ae`
 > (v141 live): 20 pages under `site/public/*.html`, section counts measured per page (table in §B),
 > `site/public/assets/page-golive.js` read in full (845 lines, twelve top-level sections).
@@ -142,3 +144,77 @@ rows and a deploy. Never more than one page's structure in flight at once — th
 ## Deviations
 
 *(the audit agent and each build write here, dated)*
+
+**2026-09-20, branch `posts-page`, off `main` `552af36` — STAGE 3 for `posts`.** The preview the
+owner approved is the page now (`site/public/assets/page-posts.js`), live against the real API;
+`site/public/preview/posts.html` and `assets/page-preview-posts.js` are deleted, per *each preview
+is deleted when its real page ships*. Fourteen deviations, in the order they would surprise a
+reader of the preview.
+
+1. ⚠️ **`ui.js:saveBar` is NOT used in the drawer.** It docks itself into `#dockzone` at the foot
+   of the PAGE, and `openDrawer` is a modal `<dialog>` — the dock would render behind the backdrop
+   in an inert document and could never be pressed. The three things it did are in the drawer
+   instead: a **Save Changes** button, a **Discard** button drawn only while something is dirty,
+   and an *N changes pending* line. The docked bar is still what the Settings fold uses, because
+   that one is on the page.
+2. **Save with nothing changed is now a refusal in words** — *"Nothing has changed, so nothing was
+   saved."* Today's page sent the `PUT` regardless and said *Saved.* The over-limit refusal keeps
+   its own sentence and moves from the dock into the drawer's notice.
+3. **The editor's two-column `postgrid` is stacked inside the drawer** by one inline
+   `grid-template-columns` declaration (through `ui.js:el`, so the CSSOM, so `style-src 'self'`).
+   The drawer is `min(30rem, 100vw)`; the stylesheet's own single-column rule keys off the
+   VIEWPORT at 900 px, so on a wide window the box and the Discord preview would have been two
+   224 px columns. **`site.css` is untouched by this build.**
+4. **The Logs fold holds the REAL shared `logsSection('posts')`, demoted** — its `.sect-inner`
+   children are lifted into `ui.js:foldout`, so the block keeps its search, its Important/All
+   switch, its kind chips and its pager while the *On this page* rail still lists exactly two
+   sections. One step further than `page-golive.js:unsection`, which only strips the class.
+5. ⚠️ **View a version draws INSIDE the drawer, not in a second one.** `openDrawer` owns a single
+   `<dialog>` and replaces its contents, so the nested call today's page makes would have destroyed
+   the editor behind it. The version renders under a *Version N of <title>* heading with a **Hide**
+   beside it.
+6. **`ui.js:ask` DOES stack over the drawer** — it is a different `<dialog>` — so the Delete and
+   *Use this version* confirmations are unchanged. Measured in `chrome-headless-shell`, not
+   assumed: the confirm opened and the drawer stayed open under it.
+7. **The hash deep link survives.** `posts.html#welcome` opens that post's drawer on arrival,
+   clicking a row writes the hash, closing clears it. ⚠️ `forgetHash` checks the dialog is
+   genuinely shut first, because `close` is dispatched a task LATE: measured, the *New post →
+   create → open the new post* path had its hash wiped by the previous drawer's close event
+   landing on the new drawer's handler.
+8. **The mode is a read-only `modeChip` in the section head, not a `modeSwitch` in the page head**
+   (the page-head button goes, as the design asked). `posts_mode` is one of the three keys in the
+   Settings fold, so it is still changeable on this page — nothing is lost, it moved.
+9. **The API's notes and the test-mode sentence render through `ui.js:boldParts`**, not with their
+   `**` stripped as the preview did. Same words, and the emphasis the bot writes survives.
+10. **`site/public/posts.html` is UNCHANGED.** Diffed against the preview's shell: only the
+    `<title>`, the subtitle and the `<script src>` ever differed, and all three were already right
+    for the real page.
+11. **The Settings fold keeps today's three-key filter.** `posts_versions_keep` and
+    `posts_versions_summary_chars` are still reachable only from the Settings page — that is the
+    state this build inherited, and widening it was out of scope for a structure change. Named
+    here so the next pass does not have to re-measure it.
+12. **`page-previews.js:previewCard` now draws the *Open the preview* door only for a page that has
+    not shipped.** Posts gets the `live` badge and its **Live today** door alone. Side effect, and a
+    defect fix on the same page: go-live's card had been pointing at `/preview/golive.html`, which
+    has not existed since that preview was deleted.
+13. **`site/mock/contract.json` — one `read_by` label renamed** (*"page-posts.js save bar"* →
+    *"page-posts.js row drawer ▸ Save Changes"*). `read_by` is read by neither `check.mjs` nor
+    `tests/api/test_contract.py`; the route table is otherwise byte-identical, and `check.mjs`
+    still reports 20 pages / 192 routes.
+14. **No Python changed**, and `ui.js`, `layout.js`, `postversions.js`, `clipmd.js`, `logs.js`,
+    `api.js`, `app.js` and `site.css` are all untouched — verified by `git diff --stat`, which is
+    the one claim here that is measured rather than read.
+
+**The six tests of §C, against the page that shipped.** **T1 pass** — the state is on the row:
+`dot-sm[data-tone]` (a rule that exists, unlike the old `.row[data-tone]`), a *Status* column of
+pills toned `ok` / `info` / `warn` / `danger` instead of the undefined `quiet`, and a *Channel*
+column that is the whole *"Posted in #welcome. It is pinned."* sentence. **T2 pass** — the primary
+action is *edit an existing post*, and the distance is **0 sections, 1 click on a control that
+looks like one**: the row IS a `button.grid-row` with hover, focus and cursor rules and a trailing
+chevron. **T3 pass** — a post is in exactly one place, and the separate detail page that was its
+second home is gone. **T4 pass** — two sections, work first and open, machinery second and shut;
+one settings surface and one log surface, one fold each. **T5 pass** — *posted in shadow* is a
+pill on the row and a chip in the head, never a second section; the four chips filter one table.
+**T6 pass** — the shadow behaviour is written once (the API's note, rendered in the section head,
+with the page's own copy of it gone), the logs and settings blocks keep their own notes instead of
+the page repeating them, and every empty state is written exactly once.
