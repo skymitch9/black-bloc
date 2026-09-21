@@ -2,7 +2,12 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-11 08:35** — re-read against `fly.toml` and
+> Last verified: **2026-09-20 (evening), the ORDER of `scripts/deploy.ps1` only** — the
+> `release.json` write and its `Release vN: release.json` commit have MOVED to after every gate,
+> immediately before `git push` (branch `small-fixes`, fix 3 of 4; see *Where `release.json` is
+> written* below). ⚠️ **Nothing else on this page was re-checked at that pass and NO DEPLOY WAS
+> RUN** — the new order has never shipped anything. Before that,
+> **2026-09-11 08:35** — re-read against `fly.toml` and
 > `scripts/deploy.ps1`. 🔴 **One real error fixed:** this file said *"`fly.toml` has no
 > `[http_service]` on purpose"*, which has been false since the dashboard went live —
 > `fly.toml` **has** an `[http_service]` block, and the three settings in it
@@ -99,9 +104,11 @@ never run `fly launch` — it rewrites the file.
 # Dockerfile build ships what is on disk). It runs ruff -> the full test suite (-n auto)
 # -> an ES-module parse of every site/public/assets/*.js (the labels.js incident: plain
 # `node --check` parses a .js file as CommonJS and PASSED the file that blanked every
-# dashboard page) -> node site/mock/check.mjs -> the three node fixture files, each its own
+# dashboard page) -> node site/mock/check.mjs -> the five node fixture files, each its own
 # REFUSED line: site/mock/discordmd.test.mjs (the preview renderer), labels.test.mjs (what a
-# key and a channel are CALLED) and clipmd.test.mjs (the post editor's paste converter)
+# key and a channel are CALLED), clipmd.test.mjs (the post editor's paste converter),
+# golive-join.test.mjs (the go-live streamers join) and layout.test.mjs (which dashboard
+# column a section lands in) -> WRITES AND COMMITS site/public/assets/release.json
 # -> git push origin main -> flyctl deploy, then appends a
 # SKELETON line to docs/deploys.log that you must EDIT (what shipped; verified: what
 # was checked) and commit. Escape hatch BLACKBLOC_SKIP_GATE=1 - emergencies only.
@@ -109,6 +116,29 @@ never run `fly launch` — it rewrites the file.
 flyctl logs --app black-bloc --no-tail        # boot log: cogs loaded, "commands synced"
 flyctl releases --app black-bloc              # a NEW version number = it landed
 ```
+
+### Where `release.json` is written — LAST, after every gate (changed 2026-09-20)
+
+The order inside `scripts/deploy.ps1` is now:
+
+| # | Step | Why there |
+|---|---|---|
+| 1 | Read the last `docs/deploys.log` line, check its commit exists, diff `<that commit>..HEAD` | A refusal that costs nothing, so it comes before the 40-second suite. It only READS. |
+| 2 | **Refuse a dirty tree** | A Dockerfile build ships what is on disk. |
+| 3 | **The gate** — ruff, `pytest -n auto`, the ES-module parse, `check.mjs`, the five node fixture files | Nothing here reads `release.json`. |
+| 4 | **Write `site/public/assets/release.json` and commit it** as `Release vN: release.json` | Every gate has passed, so this is the last thing that can add a commit. |
+| 5 | `git push origin main` → `flyctl deploy` → the `deploys.log` skeleton line | The push carries the release commit, so the file ships inside the image exactly as before. |
+
+🔴 **It used to be step 0**, written and committed before the check-clean and the gate — so a
+refused gate left a `Release vN: release.json` commit sitting on `main`'s branch tip that had to
+be dropped before the retry, and a second refusal left a second one. **Three of them were dropped
+by hand landing v111.** Now a refused gate leaves the tree exactly as it found it and the retry is
+just `.\scripts\deploy.ps1` again.
+
+⚠️ **What this does NOT change:** the file's contents, the commit message, the escape hatch, and
+the fact that the deploy pushes one more commit than you wrote. ⚠️ **What could still go wrong:**
+`release_json.py` failing now costs a full gate run before you hear about it (it refuses in words
+and nothing is pushed). ⚠️ **NOT verified:** no deploy has been run since the move.
 
 ### After every deploy: move the live mirror, so the local lower environment stays honest
 
