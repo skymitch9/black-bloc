@@ -713,16 +713,18 @@ function seedRequestComments() {
 // Phase 18. Slots are built from the train's own start the way create_train does it, so the
 // times on the page are always consecutive and a swap never has to move one.
 const RAID_TRAIN_SEED = [
-  [1, 3, 'Saturday raid train', 'Eight hours, one streamer an hour, raid down the line.', -2880, 60, 4, 'open', ['830000000000000020', '830000000000000021']],
-  [2, 1, 'Launch-day train', 'The one that ran last month.', 43200, 60, 3, 'done', ['830000000000000022', null]],
+  [1, 3, 'Saturday raid train', 'Eight hours, one streamer an hour, raid down the line.', -2880, 60, 4, 'open', ['830000000000000020', '830000000000000021'], null],
+  [2, 1, 'Launch-day train', 'The one that ran last month.', 43200, 60, 3, 'done', ['830000000000000022', null], null],
+  [3, 3, 'Charity marathon', 'Twelve hours for the shelter.', -10080, 60, 3, 'open', ['830000000000000023', null], 4],
 ];
 const RAID_SLOT_SEED = {
   1: [[1, 1, 40], [2, 2, 30], [3, null, null], [4, null, null]],
   2: [[1, 1, 4300], [2, 2, 4200], [3, 3, 4100]],
+  3: [[1, 2, 120], [2, null, null], [3, null, null]],
 };
 
 function seedRaidTrains() {
-  return RAID_TRAIN_SEED.map(([id, who, title, description, aged, minutes, count, status, ids]) => ({
+  return RAID_TRAIN_SEED.map(([id, who, title, description, aged, minutes, count, status, ids, eventId]) => ({
     id,
     organizer_id: who === 3 ? STAFF.id : MEMBERS[who].id,
     title,
@@ -736,6 +738,7 @@ function seedRaidTrains() {
     thread_id: ids[1],
     scheduled_event_id: null,
     cancel_reason: null,
+    event_id: eventId,
     created_at: minutesAgo(aged + 6000),
   }));
 }
@@ -771,7 +774,7 @@ function seedState() {
   return {
   raidTrains,
   raidSlots: seedRaidSlots(raidTrains),
-  nextRaidTrain: 3,
+  nextRaidTrain: 4,
   settings: new Map(SETTING_SPECS.map((spec) => [spec[0], spec[2]])),
   audit: [
     { key: 'automod_mode', value: 'shadow', updated_by: STAFF.id, updated_at: minutesAgo(220) },
@@ -1153,6 +1156,7 @@ function seedState() {
     ],
   },
   events: [
+    { id: 4, requester_id: STAFF.id, title: 'Charity marathon', description: 'Twelve hours for the shelter.', location: 'https://twitch.tv/rivetplays', where_kind: 'other', where_channel_id: null, starts_at: minutesAgo(-10080), ends_at: minutesAgo(-9900), status: 'pending', created_at: minutesAgo(55), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' },
     { id: 3, requester_id: MEMBERS[3].id, title: 'Movie night', description: 'Bring snacks.', location: null, where_kind: 'voice', where_channel_id: '800000000000000010', starts_at: minutesAgo(-2880), ends_at: null, status: 'pending', created_at: minutesAgo(60), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' },
     { id: 2, requester_id: MEMBERS[1].id, title: 'Speedrun race', description: null, location: 'Twitch', starts_at: minutesAgo(-10080), ends_at: null, status: 'approved', created_at: minutesAgo(4000), decided_by: STAFF.id, decided_at: minutesAgo(3900), deny_reason: null },
     { id: 1, requester_id: MEMBERS[4].id, title: 'Crypto giveaway', description: 'trust me', location: 'DM', starts_at: minutesAgo(-500), ends_at: null, status: 'denied', created_at: minutesAgo(6000), decided_by: STAFF.id, decided_at: minutesAgo(5900), deny_reason: 'This is a scam.' },
@@ -2904,7 +2908,7 @@ const GUIDE_FEATURE_PAGES = {
   modmail: 'modmail.html', golive: 'golive.html', youtube: 'golive.html', events: 'events.html',
   birthday: 'birthdays.html', tempvoice: 'tempvoice.html', rolemenu: 'rolemenus.html',
   poll: 'polls.html', chat: 'chat.html', request: 'requests.html', pings: 'golive.html',
-  raidtrain: 'events.html', applications: 'rolemenus.html', selftest: 'health.html',
+  raidtrain: 'raidtrain.html', applications: 'rolemenus.html', selftest: 'health.html',
   guides: 'guides.html',
 };
 const GUIDE_CORE_KEYS = ['staff_channel_id', 'log_channel_id', 'modlog_channel_id', 'role_menu_channel_id'];
@@ -4506,6 +4510,57 @@ function raidSlotRow(row) {
   };
 }
 
+function raidEventStatus(row) {
+  if (row.event_id === null || row.event_id === undefined) return null;
+  const found = state.events.find((one) => Number(one.id) === Number(row.event_id));
+  return found ? found.status : 'gone';
+}
+
+// One train carries one event, and it goes through the events review like any proposal.
+function raidMakeEvent(train, session) {
+  if (train.event_id) {
+    throw new Refused(409, 'event_exists', '**' + train.title + '** already has event **#' + train.event_id + '**, so nothing was made. One train carries one event; call that event off on the Events page if it is the wrong one.');
+  }
+  if (train.status !== 'open' && train.status !== 'locked') {
+    throw new Refused(409, 'bad_move', '**' + train.title + '** is **' + train.status + '**, so no event was made for it. Only a train that is open or locked can raise one.');
+  }
+  const slots = raidSlotsOf(train.id);
+  const first = slots.find((one) => one.twitch_login);
+  const id = Math.max(0, ...state.events.map((one) => Number(one.id))) + 1;
+  const length = train.slot_minutes * 60000 * slots.length;
+  state.events.unshift({
+    id,
+    requester_id: session.id,
+    title: train.title,
+    description: train.description || raidLineup(train),
+    location: first ? 'https://twitch.tv/' + first.twitch_login : null,
+    where_kind: first ? 'other' : 'text',
+    where_channel_id: first ? null : train.channel_id,
+    starts_at: train.starts_at,
+    ends_at: new Date(Date.parse(train.starts_at) + length).toISOString(),
+    status: 'pending',
+    created_at: now(),
+    decided_by: null,
+    decided_at: null,
+    deny_reason: null,
+    review_channel_id: '800000000000000005',
+  });
+  train.event_id = id;
+  logAction('web.raidtrain.event_made', { details: { train_id: train.id, event_id: id } });
+  return 'Event **#' + id + '** for **' + train.title + '** is with the events review now.';
+}
+
+function raidCancelEvent(train, reason, session) {
+  if (!train.event_id) return;
+  const found = state.events.find((one) => Number(one.id) === Number(train.event_id));
+  if (!found || !['pending', 'approved', 'live'].includes(found.status)) return;
+  found.status = 'cancelled';
+  found.decided_by = session.id;
+  found.decided_at = now();
+  found.deny_reason = reason || null;
+  logAction('web.raidtrain.event_cancelled', { details: { train_id: train.id, event_id: found.id } });
+}
+
 function raidTrainRow(row) {
   const slots = raidSlotsOf(row.id);
   return {
@@ -4524,6 +4579,8 @@ function raidTrainRow(row) {
     thread_id: row.thread_id,
     scheduled: Boolean(row.scheduled_event_id),
     cancel_reason: row.cancel_reason,
+    event_id: row.event_id === null || row.event_id === undefined ? null : Number(row.event_id),
+    event_status: raidEventStatus(row),
     created_at: row.created_at,
     organizer_id: String(row.organizer_id),
     organizer_name: memberName(row.organizer_id) || String(row.organizer_id),
@@ -4618,6 +4675,7 @@ route('POST', '/api/raidtrains', async (context) => {
     thread_id: null,
     scheduled_event_id: null,
     cancel_reason: null,
+    event_id: null,
     created_at: now(),
   };
   state.raidTrains.push(train);
@@ -4640,9 +4698,19 @@ route('POST', '/api/raidtrains', async (context) => {
     });
   }
   logAction('web.raidtrain.create', { details: { train_id: id, title, slot_minutes: minutes, slot_count: count } });
-  return Object.assign(raidTrainRow(train), {
-    message: '**' + title + '** is up with ' + count + ' slot(s) of ' + minutes + ' minutes each.',
-  });
+  const wanted = body.make_event === undefined || body.make_event === null
+    ? Boolean(state.settings.get('raidtrain_event_default'))
+    : Boolean(body.make_event);
+  let said = '**' + title + '** is up with ' + count + ' slot(s) of ' + minutes + ' minutes each.';
+  if (wanted) said += ' ' + raidMakeEvent(train, context.session);
+  return Object.assign(raidTrainRow(train), { message: said });
+});
+
+route('POST', '/api/raidtrains/:train_id/event', (context) => {
+  requireStaff(context.session);
+  const train = raidTrainOf(context.params.train_id);
+  const said = raidMakeEvent(train, context.session);
+  return Object.assign(raidDetail(train), { message: said });
 });
 
 route('POST', '/api/raidtrains/:train_id/slots/:position', async (context) => {
@@ -4724,6 +4792,7 @@ route('POST', '/api/raidtrains/:train_id/status', async (context) => {
   }
   train.status = wanted;
   train.cancel_reason = wanted === 'cancelled' ? reason : null;
+  if (wanted === 'cancelled') raidCancelEvent(train, reason, context.session);
   if (wanted === 'cancelled') logAction('web.raidtrain.cancel', { reason, details: { train_id: train.id, title: train.title } });
   else logAction(wanted === 'locked' ? 'web.raidtrain.lock' : 'web.raidtrain.unlock', { details: { train_id: train.id, title: train.title } });
   return Object.assign(raidDetail(train), { message: '**' + train.title + '** is now **' + wanted + '**.' });

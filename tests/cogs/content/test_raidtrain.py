@@ -1301,7 +1301,7 @@ async def test_the_site_link_is_staff_only_because_every_route_behind_it_is(
     link_button = next(
         one for one in theirs.view.children if isinstance(one, discord.ui.Button) and one.url
     )
-    assert link_button.url.endswith("/events.html")
+    assert link_button.url.endswith("/raidtrain.html")
     assert not [
         one
         for one in (await open_the_panel(cog, bot, alice)).view.children

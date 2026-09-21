@@ -150,6 +150,10 @@ class WebChannel:
         self.voice_states: dict[int, Any] = {}
         self.overwrites: dict[Any, Any] = {}
         self.edit_raises: Any = None
+        # `events.events_category` tells a category from a channel by this attribute, so only
+        # a category-kind row carries it.
+        if kind == "category":
+            self.channels: list[Any] = []
 
     def permissions_for(self, role: Any) -> Permissions:
         return Permissions(view_channel=getattr(role, "id", None) in self.viewers)

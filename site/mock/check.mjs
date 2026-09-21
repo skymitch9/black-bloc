@@ -396,9 +396,11 @@ async function checkActionKinds() {
     headers: { cookie: 'mock_as=member', 'content-type': 'application/json' },
     body: '{}',
   });
-  // The seven web.raidtrain.* kinds, each left by the write that spells it. Lock and unlock are
-  // two kinds off one route, the way tempvoice's lock/unlock is.
+  // The nine web.raidtrain.* kinds, each left by the write that spells it. Lock and unlock are
+  // two kinds off one route, the way tempvoice's lock/unlock is; event_made and event_cancelled
+  // are the pair the cancel below cascades through, so the order here matters.
   await post('/api/raidtrains', { title: 'Contract train', start: '2099-09-14 19:30', tz: 'UTC', slot_minutes: 60, slot_count: 2 });
+  await post(`/api/raidtrains/${IDS.raid_train_id}/event`, {});
   await post(`/api/raidtrains/${IDS.raid_train_id}/slots/3`, { member_id: IDS.member_id });
   await post(`/api/raidtrains/${IDS.raid_train_id}/slots/3`, { member_id: null });
   await post(`/api/raidtrains/${IDS.raid_train_id}/swap`, { a: 1, b: 2 });

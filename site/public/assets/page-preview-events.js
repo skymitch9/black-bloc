@@ -636,7 +636,7 @@ function trainsSection() {
     id: 'raidtrains',
     open: true,
   });
-  one.body.append(previewWas('Replaces Raid trains, Train #N and the Start a raid train card — the lineup is in the drawer and Start it is the page’s action.'));
+  one.body.append(previewWas('Superseded 2026-09-20 — raid trains left the Events page for a page of their own, /raidtrain.html. This tab is kept only so the preview still shows what Events used to carry.'));
   if (DATA.trainMode !== 'on') {
     one.body.append(notice(TRAIN_OFF.replace('{mode}', DATA.trainMode), 'warn'));
   }
