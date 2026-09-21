@@ -1,6 +1,7 @@
 # Self-test — the bot proves itself against the real guild, then cleans up after itself
 
 > **Audience:** the build agent and the reviewer; the owner for §A and §H. **Status:** TRACKED ·
+> ✅ **§K LIVE as v146 2026-09-20 18:06** (merge `0f006ea`, release `6652b25`; the boot run follows test mode, `/test` for staff; sweeps 633–636; verified: boot log: logged in, NO selftest: line (the boot no longer runs it), no Traceback; /health ready=true latency 65 ms; the live Settings API reads selftest_on_boot value false / default false with the new help sentence, so no stored row overrides the default.) ·
 > ✅ **SHIPPED 2026-09-05 as v86** (merge of `worktree-agent-a4aa5efd43f249ba6`; sweeps 252–261; schema
 > 30 → 31; deviations in the `## Build deviations` foot — read C.2 (18 panels, not 29), C.3 (route table,
 > not the contract) and B (the operator token reads but never starts). ✅ **Run by a person** — the owner
