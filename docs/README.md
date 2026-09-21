@@ -75,8 +75,8 @@ for why).
 
 ⚠️ **Everything under `docs/` is reachable from this table.** The eight rows above
 are the *whole* top level (nothing else may live there — `DOCS_STANDARD.md` §1).
-The individual files in `access/` (**11** beside its index) and `info/` (**89**
-beside its index — both re-counted 2026-09-19; access said 10 and info said 88, plus the `mock-direction-a/` folder)
+The individual files in `access/` (**11** beside its index) and `info/` (**105**
+beside its index — re-counted **2026-09-21** at the v151 ritual, `ls docs/info/*.md`; this page said 89, counted 2026-09-19, before sixteen design docs landed across v150 and v151. `access/` is unchanged at 11. The `mock-direction-a/` folder is beside them)
 are listed by their own indexes, [`access/README.md`](access/README.md) and
 [`info/README.md`](info/README.md), not here — this page does not duplicate an
 index (§7). `archive/` holds the retired docs and the one-off `current-bots/`

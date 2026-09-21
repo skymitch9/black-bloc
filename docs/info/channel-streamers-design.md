@@ -1,8 +1,17 @@
 # Channel streamers — an org channel is a persistent row like any linked member; spotlight and the ping role are toggles on it
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `channel-streamers` 2026-09-21** (design: Fable, 08:2x, dispatched to Opus the
-> same turn). ⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET DISCORD, HELIX OR YOUTUBE LIVE**; the
-> migration has not run on the live database. The `## Deviations` foot is the truth where this body departs from
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE v151 (2026-09-21)** — release `c1b83f0`,
+> deployed commit `c7ef8f1`, **2026-09-21 09:51** Phoenix; merge `e3f873a`, 7 commits; sweeps **719–725** (were
+> `CS-a` … `CS-g`) are the owner's and **none has been walked**. ✅ **The migration RAN at this boot** — `database: added
+> spotlight_channels.spotlight / .announce / .youtube_channel_id / .youtube_handle`, schema **52**, four ADDED columns,
+> **no rebuild** (so no backup was needed). ✅ **Applied on live through the site 09:5x:** GDQ (row id 3) linked to
+> `@GamesDoneQuick` (`UCI3DTtB-a3fJPjKtQ5kYHfA`, *Games Done Quick*), ESA (row id 4) linked to `@esamarathon`
+> (`UC3Oe-jfrIqEGygxYBYyN6jQ`, *ESA Speedrunning*) with announce **OFF**, `rpglimitbreak` added as row id 5 kept +
+> spotlight on + announce **OFF**. ⚠️ **NOTHING IN IT HAS MET DISCORD, HELIX OR YOUTUBE LIVE**, and ⚠️ **ESA was
+> announced and pinned at the boot itself, before its opt-out could land** — the 🔇 *channel opt-out must end an open
+> session* item on [`../TODO.md`](../TODO.md), branch `channel-optout`. Was 🔨 BUILT on branch `channel-streamers`
+> 2026-09-21 (design: Fable, 08:2x, dispatched to Opus the
+> same turn). The `## Deviations` foot is the truth where this body departs from
 > what was built, and `## What was NOT verified` is the honest half; sweeps `CS-a` … `CS-g` in
 > [`../access/sweeps.md`](../access/sweeps.md) are the proof that is missing. ⚠️ **Schema is 52 and the migration
 > added FOUR columns, not three** — `announce` is the owner's mid-build ask. Was: **Last verified: 2026-09-21 08:2x** against `main` `c4cc672`

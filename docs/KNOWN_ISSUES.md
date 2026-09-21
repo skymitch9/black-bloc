@@ -2,7 +2,14 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**
+> Last verified: **2026-09-21 09:5x** — the v151 docs ritual. **KI-33 and KI-34 ADDED**, both `WATCHING`:
+> a node fixture with a date written into it (`discordmock.test.mjs` went red on 2026-09-21 on unchanged code,
+> on `main` AND on v150 alike), and one `say` node handed to two sections, which put the **Link from history**
+> report inside the COLLAPSED Recent streams — five notices still share that node. Both were found by the v151
+> builds, neither from an owner report. ⚠️ **Nothing else in this file was re-tested:** no symptom was
+> reproduced, nothing met live Discord, no browser rendered a page, and **KI-26's count stands unchanged at
+> TWENTY-TWO** — the v151 gate runs did not stall. Before that,
+> **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**
 > (2026-09-18 16:08). What moved: **KI-5 is MOOT** (its whole subject was what test mode did
 > and did not stop) and **KI-8's "which today is every panel outside `TEST_CHANNEL_ID`"**
 > clause is history — each gains a dated banner and keeps its body, nothing deleted.
@@ -122,6 +129,42 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-34 — One `say` node handed to two sections lives in ONE of them, so a notice can render inside a COLLAPSED section — `WATCHING`
+
+**Symptom.** On the Go-live page, `load()` hands **one** `say` node to both `streamersSection` and `recentSection`. A DOM
+node lives in exactly one place, so the notice is physically inside **Recent streams** — which is collapsed — and
+`keepSaying('golive.links', …)` put the **Link from history** report *in the tree and out of sight*. The accessibility
+tree said the sentence was there; the pixels did not. Found 2026-09-21 by the `autolink` build, which looked at the
+rendered page after the tree said it was fine, and fixed for that one door in `d56e899` — `sayAgain('golive.sweep',
+notice())`, under the button that was pressed. **Status: WATCHING** — one door fixed, **five notices still share the
+node**: `golive.links`, `golive.optouts`, `youtube.links`, `pings.streamers`, `pings.streamer`.
+**Why tolerated.** Each of the five is invisible only while the section that physically owns the node is collapsed, and
+each is a one-line fix at the door that needs it; re-plumbing the page's notices wholesale is a larger change than the
+symptom justifies. None of the five has been REPORTED invisible by anyone — this was found by reading the pixels, not
+from an incident — and every one of them is a *report*, never a refusal, so nobody is blocked by it.
+**What would change it.** ⚠️ **Each door keeping its OWN notice** — a per-door `sayAgain('<door>', notice())` beside the
+button that was pressed, the way the sweep report now does — taken as a ride-along by the next build that touches
+`site/public/assets/page-golive.js`. A report from the owner or staff that a move on this page "did nothing" promotes it
+from `WATCHING` to a build of its own; a sixth notice on the shared node promotes it too.
+
+## KI-33 — A node fixture with a DATE written into it goes red the next day, on unchanged code — `WATCHING`
+
+**Symptom.** `site/mock/discordmock.test.mjs` asserted the embed stamp read *Today at …*, against a fixture timestamp
+hard-coded as **2026-09-20**. On **2026-09-21** the same unchanged test read *Yesterday at …* and went red — and it went
+red **on `main` AND on the v150 release commit alike**, so nothing had regressed; the calendar had moved. Found by the
+`channel-streamers` build, fixed in `59716fe` by accepting all three stamp shapes (*Today at* / *Yesterday at* / a plain
+date). **Status: WATCHING** — one sighting of the PATTERN, one fixture repaired.
+**Why tolerated.** The fix is per-fixture and there is no guard: any node or python fixture that hard-codes a date and
+then asserts a human-readable RELATIVE stamp carries the same fuse, and it fires at midnight rather than at a commit.
+Sweeping the tree for every such literal today would cost more than the next sighting costs, and the failure is loud,
+dated and harmless — a red gate on a test nobody touched, green the moment the shape is widened. Nothing in the bot
+misbehaves; the test measures the wrong instant.
+**What would change it.** A second sighting in a DIFFERENT file → a sweep for date literals in fixtures plus a shared
+helper that builds the expected stamp from `Date.now()` instead of asserting a rendered word; a third, or one that
+blocks a deploy gate at an awkward hour → the node tests get a pinned fake clock the way the python suite freezes time.
+⚠️ Until then this stays a **read the log** item: a one-test red on a date-shaped assertion, green on a re-run the same
+day, is this issue and not the build — check the fixture's date before debugging the code.
 
 ## KI-32 — `test_replacing_a_steps_picture_takes_the_old_one_away` fails about one gate in N on Windows, and passes alone — `WATCHING`
 

@@ -270,19 +270,19 @@
 > [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
 > kinds: twelve `minutes.*`, four of them with a `web.` spelling.
 >
-> | What | v150 (`main`, 2026-09-20) | Where it is measured |
+> | What | v151 (`main`, 2026-09-21 — re-measured by import, 2026-09-21 09:55) | Where it is measured |
 > |---|---|---|
 > | Cogs | **23** (`cogs/content/spotlight.py` at v148; 22 at v132 `minutes`; 21 at v125) | `bot.py:COGS` |
 > | Top-level slash commands | **33** — 17 staff-locked, 16 member-visible (`/test` at v146; `/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114). `/test` landed at v146, so `main` reads **33** | `tree.get_commands()`, pinned by `tests/test_bot.py:TOP_LEVEL_NOW` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **52** on branch `channel-streamers` (`spotlight_channels.spotlight` / `.announce` / `.youtube_channel_id` / `.youtube_handle`, all additive — the spotlight row became the channel record); **51** on `main` (v150, `raid_trains.event_id`; **50** in the same release — `golive_fan_roles.spotlight_id` with `user_id` relaxed to NULL, which REBUILT the table at the boot; 49 at v149 `post_versions`; 48 at v148 the `spotlight_*` tables; 47 at v146) | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **295** on branch `channel-streamers` (`golive_channel_spotlight_default`); **294** on `main` at v150 — `spotlight_bump_pings`, `golive_live_author` and `raidtrain_event_default` in, `golive_end_suffix` and `golive_end_mode` out (293 at v149; 290 at v148) — **24 namespaces** | `len(settings_store.KEY_TYPES)` |
+> | Schema version | **52** on `main` at v151 (measured 2026-09-21: `spotlight_channels.spotlight` / `.announce` / `.youtube_channel_id` / `.youtube_handle`, all additive — the spotlight row became the channel record; ✅ the migration RAN at the v151 boot, four ADDED columns, **no rebuild**); 51 at v150 (`raid_trains.event_id`; **50** in the same release — `golive_fan_roles.spotlight_id` with `user_id` relaxed to NULL, which REBUILT the table at the boot; 49 at v149 `post_versions`; 48 at v148 the `spotlight_*` tables; 47 at v146) | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **296** on `main` at v151 (measured 2026-09-21) — `golive_channel_spotlight_default` (295, channel streamers) and `golive_autolink_presence` (296, auto-link) in; 294 at v150 — `spotlight_bump_pings`, `golive_live_author` and `raidtrain_event_default` in, `golive_end_suffix` and `golive_end_mode` out (293 at v149; 290 at v148) — **24 namespaces** (measured 2026-09-21) | `len(settings_store.KEY_TYPES)` |
 > | Setting groups | **24** at v150 — 25 until this release folded the two-key `event` group onto `events` through `NAMESPACE_OVERRIDE` (`event_panel_minutes` / `event_panel_own_list` named their prefix after the `/event` command and drew a second Events section beside `events`' 37 keys; a guard now refuses any singular/plural twin). The select's cap is still 25, so the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
-> | Mock contract | **21 pages / 197 routes / 24 core settings** at v150 — raid trains are page 21 (the previews were never in `contract.pages`, and they are deleted now); 20/186 at v139, 17/150 at v108, 149 routes at v92. `ls site/public/*.html` re-counted off disk 2026-09-20 23:4x: **21** | `site/mock/contract.json`, read 2026-09-20 23:4x. `node site/mock/check.mjs` was last RUN at the `raidtrain-page` landing — `check: ok - 21 pages, 197 routes, 24 core settings, all keys present`; ⚠️ NOT re-run after the deploy |
-> | Tests | **7118** (+3 skipped where the receive extension is absent — **KI-31**) | the v150 deploy gate |
+> | Mock contract | **21 pages / 198 routes / 24 core settings** at v151 (measured 2026-09-21: `POST /api/golive/links/sweep` is the 198th) — 21/197 at v150 when raid trains became page 21 (the previews were never in `contract.pages`, and they are deleted now); 20/186 at v139, 17/150 at v108, 149 routes at v92. `ls site/public/*.html` re-counted off disk 2026-09-21 09:55: **21** | `site/mock/contract.json`, read 2026-09-21 09:55. ⚠️ **`node site/mock/check.mjs` has NOT been re-run since the `raidtrain-page` landing** (`check: ok - 21 pages, 197 routes, 24 core settings, all keys present`), so 198 is read off `contract.json`, not off a live check |
+> | Tests | **7178** (+3 skipped where the receive extension is absent — **KI-31**); 7118 at v150 | the `autolink` merged-tree gate, **both orders** ([`autolink-design.md`](autolink-design.md) § *What was NOT verified*). ⚠️ **The v151 `deploys.log` line does NOT carry a gate figure** — unlike v150's — so this is the last measured run, not a line off the log |
 > | The Discord mock | `black_bloc/preview.py` — **15 renderers** over **20 settings keys**, behind `GET /api/preview/features` and `POST /api/preview/message` (staff); its predecessor `GET /api/golive/preview` was DELETED in the same release. LIVE at v150; the site draws them with `site/public/assets/discordmock.js`. ⚠️ **No human has yet compared one against a real Discord post** — sweep **676** | `len(preview.RENDERERS)` / `len(preview.KEY_FEATURES)` |
-> | Deploys | **149** lines, last `575dde2` (v150) at 2026-09-20 23:32 | `../deploys.log` |
+> | Deploys | **150** lines (counted 2026-09-21), last `c7ef8f1` (v151) at 2026-09-21 09:51 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -302,6 +302,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v151 `c7ef8f1`, 2026-09-21** | **23** | **33** | **52** | **198** | **7178** |
 > | **v150 `575dde2`, 2026-09-20** | **23** | **33** | **51** | **197** | **7118** |
 > | **v149 `ccce091`, 2026-09-20** | **23** | **33** | **49** | **192** | **6967** |
 > | **v148 `f73d3a7`, 2026-09-20** | **23** | **33** | **48** | **190** | **6920** |

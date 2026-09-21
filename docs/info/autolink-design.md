@@ -1,7 +1,12 @@
 # Auto-link — the go-live history links people to the channel they streamed from, and a presence go-live links them from then on
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `autolink` 2026-09-21, off
-> `main` `0d83065` (v150 live) — NOT merged, NOT deployed, and ⚠️ NOTHING IN IT HAS MET DISCORD.** Gate green both
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE v151 (2026-09-21)** — release `c1b83f0`,
+> deployed commit `c7ef8f1`, **2026-09-21 09:51** Phoenix; merge `731519e`, 4 commits; sweeps **726–729** (were
+> `AL-a` … `AL-d`) are the owner's and **none has been walked**. ✅ **Link from history was run ONCE on live 09:5x** —
+> the links count read **29** afterwards; ⚠️ **the report sentence itself was NOT captured**, so what it said about
+> kept / skipped / unreadable is unknown. ⚠️ **NOTHING IN IT HAS MET DISCORD** — `golive_autolink_presence` (**true**)
+> has never fired, because nobody has gone live since the deploy. Was 🔨 BUILT on branch `autolink` 2026-09-21, off
+> `main` `0d83065` (v150 live). Gate green both
 > orders. The `## Deviations` foot is the truth where this body departs from what was built, `## What was NOT
 > verified` is the honest half, and sweeps `AL-a` … `AL-d` in `../access/sweeps.md` are the proof that is missing.
 > 🔴 **Read Deviation 2 first:** the already-linked check has to run before the readable check, or a clean server is
