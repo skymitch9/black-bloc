@@ -1087,7 +1087,7 @@ def test_raid_trains_own_page_is_the_one_the_footer_and_the_panel_link_to():
 
 def test_the_member_optout_end_rows_are_routine_and_their_failures_important():
     """A refused delete or unpin must never look like a quiet success (checklist 2)."""
-    assert _classification("golive.post_deleted") == "ROUTINE"
-    assert _classification("golive.unpinned") == "ROUTINE"
-    assert _classification("golive.post_delete_failed") == "IMPORTANT"
-    assert _classification("golive.unpin_failed") == "IMPORTANT"
+    assert _classification("golive.post_deleted") == "routine"
+    assert _classification("golive.unpinned") == "routine"
+    assert _classification("golive.post_delete_failed") == "important (_failed)"
+    assert _classification("golive.unpin_failed") == "important (_failed)"
