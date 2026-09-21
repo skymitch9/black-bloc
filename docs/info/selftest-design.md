@@ -229,3 +229,35 @@ testing runbook; check `access/README.md` first).
 `pool.in_step_with_gabi` check landed (`personality-pool-design.md`). The measured total is the boot
 line on `../deploys.log` — `selftest: 107 ok, 0 failed, 24 messages posted` — not this table; the
 per-family split above is the v86 reading and was NOT re-derived on 2026-09-11.
+
+## K. 2026-09-20 — the boot run follows test mode, and `/test` for staff (owner ask, PRIORITY)
+
+Owner, 2026-09-20 17:3x, verbatim: *"i think now that we're no longer in test mode, we don't need to have black bloc post every
+panel in logs. Let's leave that as a default when in test mode and then a /test command that spews out all the panels for staff
+only. PRIORITY TASK"*. Measured: `selftest_on_boot` defaults `true` regardless of `TEST_MODE` (§G), so since the lift every boot
+still posts the 18 cards into `#blackbloc-logs` and purges them a minute later — that is the "every panel in logs".
+
+**K.1 The default follows test mode.** `settings_store.py:Store.default` gains a branch: `selftest_on_boot` → `self.settings.test_mode`
+(`SELFTEST_ON_BOOT_DEFAULT` goes; the `KEY_HELP` sentence says "the default is on while test mode is on and off otherwise"). The key
+stays a bool in group **core**, so either way is one change on the Settings page or `/settings set-value` (configurable both ways).
+`runs_on_boot` is unchanged — it reads the key. The mock server's `SETTING_SPECS` row and `labels.js` follow. ⚠️ An explicit stored
+`true` still wins: the conductor clears any stored row after the deploy (`DELETE /api/settings/selftest_on_boot`), the build does not
+touch data.
+
+**K.2 `/test` — a fourth door, staff only.** The owner named the command, so the minimise-slash rule yields for this one; it is the
+same function as the other three (`selftest.run(bot, guild, actor=…, via=VIA_DISCORD)`), never a fourth path. Shape:
+
+| | |
+|---|---|
+| command | `/test` in `cogs/core.py` beside the settings command; `default_member_permissions` as the other staff commands; the staff gate the way `/settings` gates (refused in words, ephemeral) |
+| `where` (optional channel) | the channel the cards are posted in for THIS run; default = the self-test channel (`selftest_channel_id`, unset → the test channel). `selftest.run` takes an optional `channel` that overrides the resolved one for that run only — the purge finds the messages by the stored ids, not by channel, so purging is unchanged |
+| `keep` (optional int, minutes, 1–1440) | how long the cards stay before the purge for THIS run; default = `selftest_purge_minutes`; the run's `purge_at` is computed from it (`Run` gains the field or the row does — the builder picks, and says which) |
+| the answer | ephemeral, in words: "Self-test done — 18 ok, 0 failed, 18 cards in #channel, gone in 10 minutes"; a busy run answers `BUSY` as today; no channel answers `NO_CHANNEL` |
+| logs | `selftest.started` / `selftest.finished` as today with `via: discord` and the actor; `where`/`keep` land in `details` when given |
+
+**K.3 Tests.** `tests/test_selftest.py` (default follows `test_mode` both ways; `run` honours a channel override and a keep override;
+the purge still finds an overridden run's messages), `tests/cogs/test_core.py` (`/test` exists, is staff-gated, passes the two
+options through, answers in words), the command-tree count guard (+1, the `zero Groups` assertion holds), `tests/test_settings_store.py`
+(the default branch). Docs: `code-notes.md`; this section's foot gets a dated `### K deviations`; `access/testing.md`'s live-in-Discord
+line names `/test`; `architecture.md` command count. NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_ISSUES.md`.
+
