@@ -555,3 +555,16 @@ async def test_linking_a_youtube_channel_with_no_youtube_half_running_refuses_in
 
     assert answer.status_code == 503
     assert "YouTube half is not running" in answer.json()["message"]
+
+
+async def test_a_channel_can_be_added_already_opted_out(client, sign_in, web, wf):
+    """The owner's flow for rpglimitbreak: on the list from the start, announcing nothing."""
+    sign_in(client)
+
+    found = client.post(
+        "/api/golive/spotlight", json={"twitch_login": "rpglimitbreak", "announce": False}
+    ).json()
+
+    assert found["announce"] is False and found["opted_out"] is True
+    rows = client.get("/api/golive/spotlight").json()
+    assert any(one["twitch_login"] == "rpglimitbreak" for one in rows)

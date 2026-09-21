@@ -326,6 +326,7 @@ def build_router(bot: Any) -> APIRouter:
             bump_hours=payload.get("bump_hours"),
             note=payload.get("note"),
             spotlight=payload.get("spotlight"),
+            announce=payload.get("announce", True),
             via=VIA_WEBSITE,
         )
         if outcome == "bad_login":
