@@ -34,6 +34,7 @@ from ...settings_store import (
     PINGS_ON_UNLINK,
 )
 from .golive import get_link, latest_session
+from .spotlight import channel_by_id, channels_for, give_fan_role, take_fan_role
 
 log = logging.getLogger(__name__)
 
@@ -114,6 +115,14 @@ ROLE_PICK_INTRO = (
 )
 ROLE_PICKED = "Using **{role}**."
 ROLE_NOT_PICKED = "Nothing picked, so a fresh role is made."
+
+CHANNEL_OPTION = "{name} · channel"
+CARD_CHANNEL = "a spotlighted Twitch channel — twitch.tv/{login}; nobody here is behind it"
+CARD_CHANNEL_NO_ROLE = "role — none yet; **Make the role again** starts one"
+NO_SUCH_CHANNEL = (
+    "**{given}** is not a spotlighted channel on this server any more, so nothing was changed. "
+    "Press **Refresh** and pick again."
+)
 
 CARD_HEAD = "**{name}**"
 CARD_LISTED = "on the list — {state} · last live {when} · seen live {count} time(s)"
@@ -209,6 +218,7 @@ async def panel_embed(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     staff = bot.store.is_staff(actor)
     rows = await pings.all_fan_roles(bot.db, guild.id)
     streamers = await pings.all_streamers(bot.db, guild.id)
+    channels = await channels_for(bot.db, guild.id)
     feeds = pings.all_feeds(bot, guild.id)
     state = pings.panel_state(
         bot,
@@ -218,6 +228,7 @@ async def panel_embed(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         streams=await streams_now(bot, guild, actor.id),
         streamers=streamers,
         mine=pings.row_for(streamers, actor.id),
+        channels=channels,
     )
     embed = discord.Embed(
         title=pings.PANEL_TITLE,
@@ -225,18 +236,23 @@ async def panel_embed(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
             panel_lines(guild, actor, rows, state, feeds, staff=staff, streamers=streamers)
         ),
     )
-    return (embed, (rows, streamers), state)
+    return (embed, (rows, streamers, channels), state)
 
 
 async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, PingsPanel]:
     """One command, one panel: the caller's own pings, and the staff half only for staff."""
     staff = bot.store.is_staff(actor)
-    embed, (rows, streamers), state = await panel_embed(bot, guild, actor)
+    embed, (rows, streamers, channels), state = await panel_embed(bot, guild, actor)
     view = PingsPanel(minutes_for(bot, guild.id))
     spare = pings.followable(guild, actor, streamers, rows)
+    spare_channels = pings.followable_channels(guild, actor, channels, rows)
     worn = pings.following(guild, actor, rows)
-    if state.mode_on and spare:
-        view.add_item(FollowPick(guild, spare, adding=True, row=0, staff=staff))
+    if state.mode_on and (spare or spare_channels):
+        view.add_item(
+            FollowPick(
+                guild, spare, adding=True, row=0, staff=staff, channels=spare_channels
+            )
+        )
     if worn:
         view.add_item(FollowPick(guild, worn, adding=False, row=1, staff=staff))
     moves = pings.panel_buttons(state, staff=staff)
@@ -251,13 +267,14 @@ async def build_streamers(bot: Any, guild: Any) -> tuple[discord.Embed, PingsPan
     """The staff list is the STREAMER list — Black Bloc puts people on it, nobody adds one."""
     rows = await pings.all_fan_roles(bot.db, guild.id)
     streamers = await pings.all_streamers(bot.db, guild.id)
+    channels = await channels_for(bot.db, guild.id)
     embed = discord.Embed(
         title=STREAMERS_TITLE, description=clamped(pings.streamer_lines(guild, streamers, rows))
     )
     view = PingsPanel(minutes_for(bot, guild.id))
     view.where = STREAMERS_VIEW
-    if streamers:
-        view.add_item(StreamerPick(guild, streamers, row=0))
+    if streamers or channels:
+        view.add_item(StreamerPick(guild, streamers, row=0, channels=channels))
     view.add_item(GivePick(row=1))
     view.add_item(MoveButton(pings.REFRESH_MOVE._replace(row=2)))
     view.add_item(MoveButton(pings.BACK_MOVE._replace(row=2)))
@@ -318,9 +335,58 @@ def card_lines(guild: Any, listing: Any, row: Any = None) -> list[str]:
     return lines
 
 
+def channel_card_lines(guild: Any, channel: Any, row: Any) -> list[str]:
+    """The same card for a channel: what it is, its role, and who started that role."""
+    lines = [
+        CARD_HEAD.format(name=str(channel["display_name"] or channel["twitch_login"])),
+        CARD_CHANNEL.format(login=channel["twitch_login"]),
+    ]
+    if row is None:
+        lines.append(CARD_CHANNEL_NO_ROLE)
+        return lines
+    role = pings.role_of(guild, row["role_id"])
+    started_by = row["created_by"]
+    who = guild.get_member(int(started_by)) if started_by else None
+    lines.append(
+        CARD_ROLE.format(role=f"<@&{row['role_id']}>" if role is not None else CARD_ROLE_GONE)
+    )
+    lines.append(CARD_FOLLOWERS.format(count=pings.followers_word(guild, row["role_id"])))
+    lines.append(
+        CARD_STARTED.format(
+            when=row["created_at"],
+            who=pings.display_name(who) if who is not None else (started_by or CARD_NOBODY),
+        )
+    )
+    return lines
+
+
+async def build_channel_card(
+    bot: Any, guild: Any, spotlight_id: int
+) -> tuple[discord.Embed, PingsPanel | None]:
+    channel = await channel_by_id(bot.db, spotlight_id)
+    if channel is None or int(channel["guild_id"]) != int(guild.id):
+        return (None, None)
+    row = await pings.get_spotlight_fan_role(bot.db, guild.id, spotlight_id)
+    embed = discord.Embed(
+        title=STREAMERS_TITLE, description=clamped(channel_card_lines(guild, channel, row))
+    )
+    view = PingsPanel(minutes_for(bot, guild.id))
+    view.where = CARD_VIEW
+    view.streamer_id = pings.spotlight_ref(spotlight_id)
+    gone = row is None or pings.role_of(guild, row["role_id"]) is None
+    for move in pings.card_buttons(role_gone=gone):
+        if move.action == pings.CARD_REMOVE and row is None:
+            continue
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
 async def build_card(
     bot: Any, guild: Any, user_id: Any
 ) -> tuple[discord.Embed, PingsPanel | None]:
+    spotlight_id = pings.spotlight_from_ref(user_id)
+    if spotlight_id is not None:
+        return await build_channel_card(bot, guild, spotlight_id)
     listing = await pings.get_streamer(bot.db, guild.id, int(user_id))
     row = await pings.get_fan_role(bot.db, guild.id, int(user_id))
     if listing is None and row is None:
@@ -563,7 +629,12 @@ async def open_card_confirm(
         return
     bot = interaction.client
     guild = interaction.guild
-    row = await pings.get_fan_role(bot.db, guild.id, int(user_id))
+    spotlight_id = pings.spotlight_from_ref(user_id)
+    row = (
+        await pings.get_spotlight_fan_role(bot.db, guild.id, spotlight_id)
+        if spotlight_id is not None
+        else await pings.get_fan_role(bot.db, guild.id, int(user_id))
+    )
     if row is None:
         await render_streamers(interaction, previous)
         await answer(interaction, pings.NO_SUCH_STREAMER.format(given=str(user_id)))
@@ -572,7 +643,7 @@ async def open_card_confirm(
     embed, _view = await build_card(bot, guild, user_id)
     view = PingsPanel(minutes_for(bot, guild.id))
     view.where = CARD_VIEW
-    view.streamer_id = int(user_id)
+    view.streamer_id = user_id if spotlight_id is not None else int(user_id)
     await confirm(
         interaction,
         view,
@@ -615,19 +686,35 @@ async def back_from(interaction: discord.Interaction, view: Any) -> None:
 
 
 async def run_follow(
-    interaction: discord.Interaction, user_id: Any, *, add: bool, previous: Any = None
+    interaction: discord.Interaction, given: Any, *, add: bool, previous: Any = None
 ) -> None:
-    """Following goes through the LIST and may make the role; stopping goes through the role."""
+    """Following goes through the LIST and may make the role; stopping goes through the role.
+
+    A channel is picked from the same select and its value is `spotlight:<id>`.
+    """
     if not await opened(interaction, staff=False):
         return
     bot = interaction.client
     guild = interaction.guild
-    if add:
-        said = await pings.follow_from_list(bot, guild, interaction.user, int(user_id))
-    else:
-        row = pings.row_for(await pings.all_fan_roles(bot.db, guild.id), user_id)
+    spotlight_id = pings.spotlight_from_ref(given)
+    if add and spotlight_id is not None:
+        channel = await channel_by_id(bot.db, spotlight_id)
         said = (
-            pings.NO_SUCH_STREAMER.format(given=str(user_id))
+            NO_SUCH_CHANNEL.format(given=str(given))
+            if channel is None or int(channel["guild_id"]) != int(guild.id)
+            else await pings.follow_spotlight(bot, guild, interaction.user, channel)
+        )
+    elif add:
+        said = await pings.follow_from_list(bot, guild, interaction.user, int(given))
+    else:
+        held = await pings.all_fan_roles(bot.db, guild.id)
+        row = (
+            pings.spotlight_row_for(held, spotlight_id)
+            if spotlight_id is not None
+            else pings.row_for(held, given)
+        )
+        said = (
+            pings.NO_SUCH_STREAMER.format(given=str(given))
             if row is None
             else await pings.follow_streamer(bot, guild, interaction.user, row, add=False)
         )
@@ -796,6 +883,15 @@ async def run_remove(
         return
     if not await opened(interaction, staff=False):
         return
+    spotlight_id = pings.spotlight_from_ref(user_id)
+    if spotlight_id is not None:
+        outcome, _row = await take_fan_role(
+            interaction.client, interaction.guild, interaction.user, spotlight_id
+        )
+        said = NO_SUCH_CHANNEL.format(given=str(user_id)) if outcome is None else outcome.message
+        await render_streamers(interaction, previous)
+        await answer(interaction, said)
+        return
     outcome = await pings.remove_fan_role(
         interaction.client, interaction.guild, int(user_id), by=interaction.user.id
     )
@@ -811,6 +907,18 @@ async def run_remake(
     if not await opened(interaction, staff=False):
         return
     guild = interaction.guild
+    spotlight_id = pings.spotlight_from_ref(user_id)
+    if spotlight_id is not None:
+        outcome, _row = await give_fan_role(
+            interaction.client, guild, interaction.user, spotlight_id
+        )
+        if outcome is None:
+            await render_streamers(interaction, previous)
+            await answer(interaction, NO_SUCH_CHANNEL.format(given=str(user_id)))
+            return
+        await render_card(interaction, user_id, previous)
+        await answer(interaction, outcome.message)
+        return
     member = guild.get_member(int(user_id)) if user_id else None
     if member is None:
         await render_streamers(interaction, previous)
@@ -929,30 +1037,62 @@ class MoveButton(discord.ui.Button):
         )
 
 
+def channel_option(row: Any) -> discord.SelectOption:
+    """A spotlighted channel on the same select as the people: `spotlight:<id>` is its value."""
+    name = str(row["display_name"] or row["twitch_login"])
+    return discord.SelectOption(
+        label=CHANNEL_OPTION.format(name=name)[:SELECT_OPTION_LIMIT],
+        value=pings.spotlight_ref(row["id"]),
+    )
+
+
+def role_option(guild: Any, row: Any) -> discord.SelectOption:
+    """One of the roles somebody wears, whichever kind of streamer it belongs to."""
+    return discord.SelectOption(
+        label=pings.option_label(guild, row)[:SELECT_OPTION_LIMIT],
+        value=(
+            pings.spotlight_ref(pings.spotlight_of(row))
+            if pings.is_spotlight(row)
+            else str(row["user_id"])
+        ),
+    )
+
+
 class FollowPick(discord.ui.Select):
     """Follow is over the LIST, stop-following over the ROLES worn; P10 caps both at 25."""
 
     def __init__(
-        self, guild: Any, rows: Any, *, adding: bool, row: int, staff: bool = False
+        self,
+        guild: Any,
+        rows: Any,
+        *,
+        adding: bool,
+        row: int,
+        staff: bool = False,
+        channels: Any = (),
     ) -> None:
-        found = list(rows)
-        shown = found[: pings.SELECT_CAP]
+        options = (
+            [
+                discord.SelectOption(
+                    label=pings.streamer_name(guild, one)[:SELECT_OPTION_LIMIT],
+                    value=str(one["user_id"]),
+                )
+                for one in rows
+            ]
+            + [channel_option(one) for one in channels or ()]
+            if adding
+            else [role_option(guild, one) for one in rows]
+        )
+        shown = options[: pings.SELECT_CAP]
         self.adding = adding
-        label = pings.streamer_name if adding else pings.option_label
         super().__init__(
             placeholder=capped_placeholder(
                 len(shown),
-                len(found),
+                len(options),
                 pick=FOLLOW_PLACEHOLDER if adding else UNFOLLOW_PLACEHOLDER,
                 capped=pings.STREAMERS_CAPPED if staff else pings.STREAMERS_CAPPED_MEMBER,
             ),
-            options=[
-                discord.SelectOption(
-                    label=label(guild, one)[:SELECT_OPTION_LIMIT],
-                    value=str(one["user_id"]),
-                )
-                for one in shown
-            ],
+            options=shown,
             min_values=1,
             max_values=1,
             row=row,
@@ -960,32 +1100,33 @@ class FollowPick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await run_follow(
-            interaction, int(self.values[0]), add=self.adding, previous=self.view
+            interaction, self.values[0], add=self.adding, previous=self.view
         )
 
 
 class StreamerPick(discord.ui.Select):
-    def __init__(self, guild: Any, rows: Any, row: int) -> None:
-        found = list(rows)
-        shown = found[: pings.SELECT_CAP]
+    def __init__(self, guild: Any, rows: Any, row: int, channels: Any = ()) -> None:
+        options = [
+            discord.SelectOption(
+                label=pings.streamer_name(guild, one)[:SELECT_OPTION_LIMIT],
+                value=str(one["user_id"]),
+            )
+            for one in rows
+        ] + [channel_option(one) for one in channels or ()]
+        shown = options[: pings.SELECT_CAP]
         super().__init__(
             placeholder=capped_placeholder(
-                len(shown), len(found), pick=STREAMER_PLACEHOLDER, capped=pings.STREAMERS_CAPPED
+                len(shown), len(options), pick=STREAMER_PLACEHOLDER,
+                capped=pings.STREAMERS_CAPPED,
             ),
-            options=[
-                discord.SelectOption(
-                    label=pings.streamer_name(guild, one)[:SELECT_OPTION_LIMIT],
-                    value=str(one["user_id"]),
-                )
-                for one in shown
-            ],
+            options=shown,
             min_values=1,
             max_values=1,
             row=row,
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await open_card(interaction, int(self.values[0]), self.view)
+        await open_card(interaction, self.values[0], self.view)
 
 
 class GivePick(discord.ui.UserSelect):

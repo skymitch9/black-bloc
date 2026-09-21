@@ -7,6 +7,7 @@ import pytest
 
 from black_bloc import pings as helpers
 from black_bloc.cogs.content.golive import set_link
+from black_bloc.cogs.content.spotlight import channel_by_id
 from black_bloc.cogs.content.pings import (
     CARD_ROLE_GONE,
     DELETE_OFF,
@@ -1336,3 +1337,103 @@ async def test_the_sweep_skips_a_guild_discord_says_is_unavailable(bot, cog, str
     await cog.sweep()
 
     assert len(await kinds(db)) == before
+
+
+# --- a spotlighted channel on the same panel (info/spotlight-pings-design.md §C) --------------
+
+
+GDQ = 1
+
+
+async def a_channel(bot, spotlight_id=GDQ, login="gamesdonequick", name="GamesDoneQuick"):
+    await bot.db.conn.execute(
+        "INSERT INTO spotlight_channels(id, guild_id, twitch_login, display_name, added_by, "
+        "added_at, pin) VALUES (?, ?, ?, ?, ?, '2026-09-20T00:00:00+00:00', 1)",
+        (spotlight_id, GUILD, login, name, STAFF),
+    )
+    await bot.db.conn.commit()
+    return await channel_by_id(bot.db, spotlight_id)
+
+
+async def test_a_channel_is_offered_to_follow_beside_the_people(bot, streamer, fan):
+    staff_is(bot, False)
+    await a_fan_role(bot, streamer)
+    await a_channel(bot)
+
+    _embed, view = await build_panel(bot, bot.guild, fan)
+
+    pick = picker(view, FollowPick)
+    assert [one.label for one in pick.options] == ["SuperNamu", "GamesDoneQuick · channel"]
+    assert [one.value for one in pick.options] == [str(STREAMER), "spotlight:1"]
+
+
+async def test_following_a_channel_makes_its_role_and_puts_it_on(bot, fan, db):
+    staff_is(bot, False)
+    await a_channel(bot)
+    _embed, view = await build_panel(bot, bot.guild, fan)
+    pick = picker(view, FollowPick)
+    pick._values = ["spotlight:1"]
+    interaction = FakeInteraction(bot, fan)
+
+    await pick.callback(interaction)
+
+    held = await helpers.get_spotlight_fan_role(db, GUILD, GDQ)
+    assert held is not None
+    assert [one.id for one in fan.roles] == [held["role_id"]]
+    assert "GamesDoneQuick pings" in interaction.said
+    assert [one for one in await kinds(db) if one == "pings.follow"] == ["pings.follow"]
+
+    _embed, again = await build_panel(bot, bot.guild, fan)
+    assert [one.value for one in picker(again, FollowPick).options] == ["spotlight:1"]
+    assert picker(again, FollowPick).placeholder == UNFOLLOW_PLACEHOLDER
+
+
+async def test_a_channel_that_has_gone_says_so_rather_than_a_bare_status(bot, fan):
+    staff_is(bot, False)
+    await a_channel(bot)
+    _embed, view = await build_panel(bot, bot.guild, fan)
+    pick = picker(view, FollowPick)
+    pick._values = ["spotlight:404"]
+    interaction = FakeInteraction(bot, fan)
+
+    await pick.callback(interaction)
+
+    assert "is not a spotlighted channel" in interaction.said
+    assert fan.roles == []
+
+
+async def test_staff_pick_a_channel_from_the_streamer_list_and_give_it_a_role(bot, lead, db):
+    staff_is(bot)
+    await a_channel(bot)
+    _embed, view = await build_streamers(bot, bot.guild)
+    pick = picker(view, StreamerPick)
+    assert [one.value for one in pick.options] == ["spotlight:1"]
+
+    embed, card = await build_card(bot, bot.guild, "spotlight:1")
+
+    assert "twitch.tv/gamesdonequick" in embed.description
+    assert MAKE_THE_ROLE not in labels(card)
+    assert "Make the role again" in labels(card)
+    assert "Remove their ping role" not in labels(card)
+
+    interaction = FakeInteraction(bot, lead)
+    await button(card, "Make the role again").callback(interaction)
+
+    held = await helpers.get_spotlight_fan_role(db, GUILD, GDQ)
+    assert held is not None and "GamesDoneQuick pings" in interaction.said
+    _embed, again = await build_card(bot, bot.guild, "spotlight:1")
+    assert "Remove their ping role" in labels(again)
+
+
+async def test_staff_take_a_channels_role_away_from_its_card(bot, lead, db):
+    staff_is(bot)
+    channel = await a_channel(bot)
+    await helpers.ensure_fan_role(bot, bot.guild, None, by=STAFF, staff=True, spotlight=channel)
+    _embed, card = await build_card(bot, bot.guild, "spotlight:1")
+    interaction = FakeInteraction(bot, lead)
+
+    await button(card, "Remove their ping role").callback(interaction)
+    view = interaction.edits[-1]["view"]
+    await button(view, helpers.CARD_REMOVE_YES).callback(FakeInteraction(bot, lead))
+
+    assert await helpers.get_spotlight_fan_role(db, GUILD, GDQ) is None

@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, Request
 
 from ... import pings
 from ... import pings_onboarding as onboarding
+from ... import spotlight as spot
+from ...cogs.content.spotlight import channel_by_id, channels_for
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import as_id, resolve_one
@@ -29,13 +31,38 @@ NO_SUCH_ROLE = (
 )
 
 
+MEMBER_KIND = "member"
+SPOTLIGHT_KIND = "spotlight"
+
+
 def streamer_row(guild: Any, row: Any) -> dict[str, Any]:
-    """One line of the Pings table; `followers` is null — never 0 — when the role has gone."""
+    """One line of the Pings table; `followers` is null — never 0 — when the role has gone.
+
+    A channel's row has no `member_id` at all, which is how the page tells the kinds apart.
+    """
     role = guild.get_role(int(row["role_id"])) if guild is not None else None
     by = row["created_by"]
+    channel = pings.is_spotlight(row)
+    if channel:
+        return {
+            "kind": SPOTLIGHT_KIND,
+            "member_id": None,
+            "member": pings.spotlight_name(row),
+            "spotlight_id": pings.spotlight_of(row),
+            "spotlight_login": pings.row_value(row, "spotlight_login"),
+            "role_id": str(row["role_id"]),
+            "role": role.name if role is not None else None,
+            "followers": len(getattr(role, "members", ()) or ()) if role is not None else None,
+            "created_at": row["created_at"],
+            "created_by": str(by) if by is not None else None,
+            "created_by_name": resolve_one(guild, by)["display_name"] if by is not None else None,
+        }
     return {
+        "kind": MEMBER_KIND,
         "member_id": str(row["user_id"]),
         "member": resolve_one(guild, row["user_id"])["display_name"],
+        "spotlight_id": None,
+        "spotlight_login": None,
         "role_id": str(row["role_id"]),
         "role": role.name if role is not None else None,
         "followers": len(getattr(role, "members", ()) or ()) if role is not None else None,
@@ -52,6 +79,8 @@ def listing_row(guild: Any, row: Any, held: Any) -> dict[str, Any]:
     )
     hidden_by = pings.row_value(row, "hidden_by")
     return {
+        "kind": MEMBER_KIND,
+        "spotlight_id": None,
         "member_id": str(row["user_id"]),
         "member": resolve_one(guild, row["user_id"])["display_name"],
         "listed": bool(row["listed"]),
@@ -65,6 +94,31 @@ def listing_row(guild: Any, row: Any, held: Any) -> dict[str, Any]:
         "live_count": int(row["live_count"]),
         "platform": pings.row_value(row, "platform"),
         "login": pings.row_value(row, "login"),
+        "role_id": str(held["role_id"]) if held is not None else None,
+        "role": role.name if role is not None else None,
+        "followers": len(getattr(role, "members", ()) or ()) if role is not None else None,
+    }
+
+
+def spotlight_listing_row(guild: Any, row: Any, held: Any) -> dict[str, Any]:
+    """A spotlighted channel on the same list: no member, never hidden, its role beside it."""
+    role = (
+        guild.get_role(int(held["role_id"])) if held is not None and guild is not None else None
+    )
+    return {
+        "kind": SPOTLIGHT_KIND,
+        "spotlight_id": int(row["id"]),
+        "member_id": None,
+        "member": str(row["display_name"] or row["twitch_login"]),
+        "listed": True,
+        "hidden_by": None,
+        "hidden_by_name": None,
+        "hidden_at": None,
+        "first_live_at": row["added_at"],
+        "last_live_at": None,
+        "live_count": 0,
+        "platform": spot.PLATFORM,
+        "login": row["twitch_login"],
         "role_id": str(held["role_id"]) if held is not None else None,
         "role": role.name if role is not None else None,
         "followers": len(getattr(role, "members", ()) or ()) if role is not None else None,
@@ -111,11 +165,38 @@ def build_router(bot: Any) -> APIRouter:
             streamer_row(guild, row) for row in await pings.all_fan_roles(bot.db, guild.id)
         ]
 
+    async def wanted_spotlight(spotlight_id: Any) -> Any:
+        row = await channel_by_id(bot.db, wanted_id(spotlight_id))
+        guild = require_guild(bot)
+        if row is None or int(row["guild_id"]) != int(guild.id):
+            raise Refused(
+                404,
+                "no_such_spotlight",
+                pings.NO_SUCH_SPOTLIGHT.format(given=str(spotlight_id)[:40]),
+            )
+        return row
+
     @router.post("/streamers")
     async def pings_streamer_add(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
+        if payload.get("spotlight_id") not in (None, ""):
+            row = await wanted_spotlight(payload.get("spotlight_id"))
+            outcome = await pings.ensure_fan_role(
+                bot,
+                guild,
+                None,
+                by=int(who["id"]),
+                existing_role=wanted_role(guild, payload.get("role_id")),
+                staff=True,
+                via=VIA_WEBSITE,
+                spotlight=row,
+            )
+            if not outcome.ok:
+                raise Refused(409, "not_created", outcome.message)
+            held = await pings.get_spotlight_fan_role(bot.db, guild.id, row["id"])
+            return streamer_row(guild, held) | {"message": outcome.message}
         member_id = wanted_id(payload.get("member_id"))
         member = guild.get_member(member_id)
         if member is None:
@@ -134,6 +215,31 @@ def build_router(bot: Any) -> APIRouter:
         row = await pings.get_fan_role(bot.db, guild.id, member_id)
         return streamer_row(guild, row) | {"message": outcome.message}
 
+    @router.delete("/streamers/spotlight/{spotlight_id}")
+    async def pings_spotlight_remove(request: Request, spotlight_id: str) -> dict[str, Any]:
+        """Staff always get the final say: the move that reverses the POST above."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await wanted_spotlight(spotlight_id)
+        outcome = await pings.remove_fan_role(
+            bot,
+            guild,
+            by=int(who["id"]),
+            via=VIA_WEBSITE,
+            spotlight=row,
+            because=spot.FAN_ROLE_TAKEN,
+        )
+        if not outcome.ok:
+            raise Refused(404, "no_fan_role", outcome.message)
+        return {
+            "removed": True,
+            "member_id": None,
+            "spotlight_id": int(row["id"]),
+            "role_id": str(outcome.role_id) if outcome.role_id else None,
+            "message": outcome.message,
+        }
+
     @router.delete("/streamers/{member_id}")
     async def pings_streamer_remove(request: Request, member_id: str) -> dict[str, Any]:
         who = await writer(request)
@@ -148,6 +254,7 @@ def build_router(bot: Any) -> APIRouter:
         return {
             "removed": True,
             "member_id": str(wanted),
+            "spotlight_id": None,
             "role_id": str(outcome.role_id) if outcome.role_id else None,
             "message": outcome.message,
         }
@@ -202,9 +309,13 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         held = await pings.all_fan_roles(bot.db, guild.id)
-        return [
+        found = [
             listing_row(guild, row, pings.row_for(held, row["user_id"]))
             for row in await pings.all_streamers(bot.db, guild.id)
+        ]
+        return found + [
+            spotlight_listing_row(guild, row, pings.spotlight_row_for(held, row["id"]))
+            for row in await channels_for(bot.db, guild.id)
         ]
 
     @router.post("/list/{member_id}")

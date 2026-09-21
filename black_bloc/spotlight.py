@@ -23,6 +23,7 @@ from .settings_store import SPOTLIGHT_BUMP_TEMPLATE
 log = logging.getLogger(__name__)
 
 LOGIN_MAX = 25
+PLATFORM = TWITCH
 CHANNEL_URL = "https://www.twitch.tv/{login}"
 PIN_REASON = "Black Bloc keeps this spotlight pinned while it streams"
 UNPIN_REASON = "Black Bloc unpinned this spotlight — the stream is over"
