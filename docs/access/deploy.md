@@ -2,7 +2,13 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-20 (evening), the ORDER of `scripts/deploy.ps1` only** — the
+> Last verified: **2026-09-21 — the *move the live mirror* step only, which is RETIRED**
+> (owner, 12:2x, verbatim: *"We don't need the preview pages anymore"*). The mock's `LIVE_ROOT`
+> live mirror and its `/preview/` door are **deleted from `site/mock/server.mjs`** (branch
+> `no-previews`), so there is nothing to move after a deploy and the mock's start line is
+> `MOCK_PORT=8797 node site/mock/server.mjs`. ⚠️ **Nothing else on this page was re-checked at
+> that pass** — no deploy was run, no command body below was re-run, and nothing touched Fly,
+> Discord or a browser. Before that, **2026-09-20 (evening), the ORDER of `scripts/deploy.ps1` only** — the
 > `release.json` write and its `Release vN: release.json` commit have MOVED to after every gate,
 > immediately before `git push` (branch `small-fixes`, fix 3 of 4; see *Where `release.json` is
 > written* below). ⚠️ **Nothing else on this page was re-checked at that pass.** ✅ **2026-09-20 23:32 — the new order SHIPPED v150** (`575dde2`); the measurement is under *Where `release.json` is written* below. Before that,
@@ -139,13 +145,20 @@ the fact that the deploy pushes one more commit than you wrote. ⚠️ **What co
 `release_json.py` failing now costs a full gate run before you hear about it (it refuses in words
 and nothing is pushed). ✅ **MEASURED 2026-09-20 23:32, v150.** The release commit `575dde2` (*Release v150: release.json*, 23:31:16) is the branch tip — written AFTER the gate (`7118 passed, 3 skipped`) and after the last content commit (`3d65025`, 23:29:32) — and `git push` carried it; the `deploys.log` line is 23:32:23. This was the **second** run of the new order. ⚠️ **Still NOT measured: a gate REFUSAL under the new order** — nothing has been refused since the move, and a refusal leaving the tree clean is the whole point of the change.
 
-### After every deploy: move the live mirror, so the local lower environment stays honest
+### ~~After every deploy: move the live mirror~~ — RETIRED 2026-09-21, there is no mirror
 
-`site/mock/server.mjs` with `LIVE_ROOT=C:/lcw/bb-live` serves the deployed release at normal URLs and the working tree
-under `/preview/` (adopted 2026-09-20, the owner's "the pages that are live now should be under the normal url").
-`C:/lcw/bb-live` is a DETACHED worktree; after each deploy move it to the release the log line names, then restart the
-mock: `git -C C:/lcw/bb-live checkout --detach <release>` · `MOCK_PORT=8797 LIVE_ROOT=C:/lcw/bb-live node site/mock/server.mjs`.
-A mirror left behind shows yesterday's site as "live today" — the silent-staleness trap in a new coat.
+⚠️ **Nothing happens to the mock after a deploy any more.** It serves the WORKING TREE at the normal
+URLs, always: `MOCK_PORT=8797 node site/mock/server.mjs`. Owner, 2026-09-21 12:2x: *"We don't need
+the preview pages anymore"* — `LIVE_ROOT`, `realChanged`, `whereFrom`, the `/preview/` route and the
+`/preview/assets/` rewrite are **deleted** from `site/mock/server.mjs` (branch `no-previews`), so a
+branch is reviewed at its normal URL and `/preview/<page>.html` is a 404.
+
+~~`site/mock/server.mjs` with `LIVE_ROOT=C:/lcw/bb-live` serves the deployed release at normal URLs
+and the working tree under `/preview/` (adopted 2026-09-20, the owner's "the pages that are live now
+should be under the normal url"). `C:/lcw/bb-live` is a DETACHED worktree; after each deploy move it
+to the release the log line names, then restart the mock: `git -C C:/lcw/bb-live checkout --detach
+<release>`.~~ The `C:/lcw/bb-live` worktree itself is the conductor's to remove
+(`git worktree remove C:/lcw/bb-live`) — it was left in place by this change.
 
 ### ⚠️ "Nine *no key* tests fail in the gate, and only in the gate" — the shell is carrying `.env`
 

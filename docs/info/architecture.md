@@ -2,7 +2,12 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — was
 > local-only until then).
-> Last verified: **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**.
+> Last verified: **2026-09-21 — the `site/mock/server.mjs` line of the Shape tree only**: the
+> `/preview/` door and its `LIVE_ROOT` live mirror of the deployed release are RETIRED (owner,
+> 12:2x, verbatim: *"We don't need the preview pages anymore"*) and **deleted** on branch
+> `no-previews` — the mock serves the WORKING TREE at the normal URLs. ⚠️ **Nothing else here was
+> re-measured at that pass**, and no figure in the fact table was re-read.
+> Before that, **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**.
 > ⚠️ **The fact table was carrying two figures that were simply WRONG, and one of them
 > contradicted the history table three rows below it.** Re-measured by import in this tree, off
 > `main` `ffea17e` (**v141 LIVE**):
@@ -557,7 +562,9 @@ site/                 ← THE DASHBOARD (8a status page, 8b tabs). Static, no bu
 ├── README.md         ← the developer-facing half (committed; `docs/access/site.md` is the runbook)
 ├── mock/             ← the contract's EXECUTABLE form. Node's own `http`, no dependency
 │   ├── server.mjs    ← serves site/public AND /api/* on one origin, as the real deployment does.
-│   │                   MOCK_TEST_MODE defaults ON, so refusals are what a developer meets first
+│   │                   MOCK_TEST_MODE defaults ON, so refusals are what a developer meets first.
+│   │                   It serves the WORKING TREE at the normal URLs: the `/preview/` door and
+│   │                   its `LIVE_ROOT` mirror of the deployed release retired 2026-09-21
 │   ├── contract.json ← ⚠️ THE ONE HOME for every route's shape, derived from the pages'
 │   │                   own property accesses. Read by BOTH halves of the contract check
 │   └── check.mjs     ← fetches every page and every route from the mock and asserts contract.json

@@ -2,7 +2,13 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**, and the
+> Last verified: **2026-09-21, one line only** — the `/preview/` door retired 2026-09-21; the mock
+> serves the working tree at the normal URL, so a design doc's review link is the page's normal
+> URL and `/preview/<page>` is a 404. ⚠️ **No row in the table below was re-checked at that pass,
+> and no design doc's history was rewritten** — the `/preview/` mentions still in `docs/info/*.md`
+> are either the DELETED static `site/public/preview/` audit pages (history, left as written) or
+> `/api/preview/message`, the Discord-look message preview, which STAYS.
+> Before that, **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**, and the
 > first time this table has been checked BOTH ways by script since 2026-09-11. **Measured:**
 > `ls docs/info/*.md` = **90** files — this index plus **89** design/reference docs — and
 > `mock-direction-a/`. What that found:

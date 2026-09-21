@@ -1,6 +1,5 @@
 ﻿import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8038,49 +8037,11 @@ function send(response, status, body, headers = {}) {
 const CSP = "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net; "
   + "style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
-// A lower environment: with LIVE_ROOT set to a checkout of the deployed release, every path
-// outside /preview serves that release's site, and /preview/<page> serves the working tree's
-// preview page (or, failing that, its real page) on the working tree's assets — so what is
-// coming can be compared with what is live today at the normal URL.
-// A page whose REAL files changed since the deployed release is served at /preview/<page> as that
-// real page, ahead of any static preview left over from the audit: what is coming wins.
-const LIVE_ROOT = process.env.LIVE_ROOT ? resolve(process.env.LIVE_ROOT, 'site', 'public') : null;
-const PREVIEW_ASSETS = /(src|href)="\/assets\//g;
-
-function sameFile(a, b) {
-  try { return readFileSync(a).equals(readFileSync(b)); } catch (e) { return false; }
-}
-
-// The real page counts as changed when its HTML or its page script differ from the deployed release.
-function realChanged(real) {
-  const page = real.match(/^\/([a-z0-9-]+)\.html$/);
-  if (!page || !LIVE_ROOT) return false;
-  const html = [join(PUBLIC, `${page[1]}.html`), join(LIVE_ROOT, `${page[1]}.html`)];
-  const js = [join(PUBLIC, 'assets', `page-${page[1]}.js`), join(LIVE_ROOT, 'assets', `page-${page[1]}.js`)];
-  return !sameFile(...html) || !sameFile(...js);
-}
-
-function whereFrom(wanted) {
-  if (!LIVE_ROOT) return { root: PUBLIC, path: wanted, rewrite: false };
-  if (wanted.startsWith('/preview/assets/')) return { root: PUBLIC, path: wanted.slice('/preview'.length), rewrite: false };
-  if (wanted.startsWith('/preview/')) {
-    const real = wanted.slice('/preview'.length);
-    if (realChanged(real)) return { root: PUBLIC, path: real, rewrite: true };
-    return { root: PUBLIC, path: wanted, rewrite: true, fallback: real };
-  }
-  return { root: LIVE_ROOT, path: wanted, rewrite: false };
-}
-
 async function serveStatic(request, response, path, asked) {
   const wanted = path === '/' ? '/index.html' : path;
   const cookie = asked ? { 'set-cookie': `mock_as=${asked}; Path=/; SameSite=Lax` } : {};
-  const from = whereFrom(wanted);
-  const under = (rel) => join(from.root, normalize(rel).replace(/^([/\\])+/, ''));
-  let target = under(from.path);
-  if (from.fallback) {
-    try { await stat(target); } catch (e) { target = under(from.fallback); }
-  }
-  if (!target.startsWith(from.root)) {
+  const target = join(PUBLIC, normalize(wanted).replace(/^([/\\])+/, ''));
+  if (!target.startsWith(PUBLIC)) {
     response.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
     response.end('outside the site directory');
     return;
@@ -8098,8 +8059,7 @@ async function serveStatic(request, response, path, asked) {
       info = await stat(file);
     }
     const html = extname(file) === '.html';
-    let body = html ? stamp(await readFile(file, 'utf8')) : await readFile(file);
-    if (html && from.rewrite) body = body.replace(PREVIEW_ASSETS, '$1="/preview/assets/');
+    const body = html ? stamp(await readFile(file, 'utf8')) : await readFile(file);
     response.writeHead(200, {
       'content-type': TYPES[extname(file)] || 'application/octet-stream',
       'cache-control': html ? NO_STORE : REVALIDATE,

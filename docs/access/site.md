@@ -3,7 +3,14 @@
 > **Audience:** whoever deploys or fixes the site, and the reviewer doing the
 > first live sign-in. **Status:** TRACKED (owner, 2026-08-31 — was local-only
 > until then; secret NAMES only). **Last verified:
-> 2026-09-19** — the docs staleness pass after the **TEST_MODE lift** (2026-09-18 16:08).
+> 2026-09-21 — the mock section only**: the `/preview/` door and its `LIVE_ROOT` live mirror of the
+> deployed release are RETIRED (owner, 12:2x, verbatim: *"We don't need the preview pages anymore"*)
+> and **deleted** from `site/mock/server.mjs` on branch `no-previews`; the mock serves the WORKING
+> TREE at the normal URLs, always. ⚠️ **Nothing else on this page was re-checked at that pass** —
+> not the page count, not the route count, not DNS, the certificate, the OAuth redirect string or
+> the CSP/HSTS/cookie claims, and nothing in it touched the live app or a browser.
+> Before that,
+> **2026-09-19** — the docs staleness pass after the **TEST_MODE lift** (2026-09-18 16:08).
 > What changed here: three sentences that told a developer destructive routes answer **409**
 > *"while `TEST_MODE` is on"* — they do not any more on the DEPLOYED site, and a reader who
 > trusted that would expect a refusal where the bot will now act. ⚠️ **`MOCK_TEST_MODE` still
@@ -306,6 +313,11 @@ needs a line there or it grows its own group. (A third key was in that map until
 `site/mock/server.mjs` serves `site/public` **and** `/api/*` on one origin, the
 way the real deployment does, with fixture data and no dependency beyond Node
 itself. It is how the pages are looked at without a Discord token or a database.
+
+⚠️ **It serves the WORKING TREE, and only that.** There is no lower environment and no
+`LIVE_ROOT`: the `/preview/<page>` door retired 2026-09-21 (owner: *"We don't need the preview
+pages anymore"*), `/preview/anything` is now the mock's own plain-text 404, and a branch is
+reviewed at the page's normal URL.
 
 ```bash
 node site/mock/server.mjs                 # http://127.0.0.1:8788
