@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import discord
@@ -239,28 +240,173 @@ async def test_seeding_twice_makes_nothing_and_never_overwrites_a_staff_edit(bot
     assert fresh["body"] == "Staff wrote this."
 
 
-async def test_put_the_original_back_restores_the_text_and_keeps_the_channel(bot, guild):
-    await posts.seed_posts(bot, guild)
-    row = await posts.get_post(bot.db, guild.id, "welcome")
-    await posts.save_post(bot, guild, row, STAFF, body="nope", channel_id=TEST_CHANNEL)
-    row = await posts.get_post(bot.db, guild.id, "welcome")
-
-    found = await posts.reset_post(bot, guild, row, STAFF)
-
-    assert found.ok
-    fresh = await posts.get_post(bot.db, guild.id, "welcome")
-    assert fresh["body"] == posts.seed_entries()[0]["body"]
-    assert fresh["channel_id"] == TEST_CHANNEL
-    assert "post.reset" in await kinds(bot.db)
+# --- the versions ------------------------------------------------------------------------------
 
 
-async def test_a_post_written_here_has_no_original_to_put_back(bot, guild):
+async def versions(bot, row):
+    return await posts.list_versions(bot.db, int(row["id"]))
+
+
+async def test_a_save_that_changes_something_writes_a_version_and_one_that_does_not_writes_none(
+    bot, guild
+):
     row = await a_post(bot, guild)
 
-    found = await posts.reset_post(bot, guild, row, STAFF)
+    await posts.save_post(bot, guild, row, STAFF, body="First words.")
+    row = await posts.get_post(bot.db, guild.id, "notice")
+    await posts.save_post(bot, guild, row, STAFF, body="First words.")
+    row = await posts.get_post(bot.db, guild.id, "notice")
+    await posts.save_post(bot, guild, row, STAFF, body="Second words.")
 
-    assert not found.ok and found.code == "not_seeded"
-    assert "**notice**" in found.message
+    found = await versions(bot, row)
+    assert [int(one["n"]) for one in found] == [2, 1]
+    assert [one["body"] for one in found] == ["Second words.", "First words."]
+    assert {one["because"] for one in found} == {posts.BECAUSE_SAVED}
+    assert [one["saved_by"] for one in found] == [STAFF.id, STAFF.id]
+
+
+async def test_the_saved_row_names_the_version_the_post_now_reads_as(bot, guild):
+    row = await a_post(bot, guild)
+
+    await posts.save_post(bot, guild, row, STAFF, body="First words.")
+    row = await posts.get_post(bot.db, guild.id, "notice")
+    await posts.save_post(bot, guild, row, STAFF, body="First words.")
+
+    said = [
+        json.loads(one["details"] or "{}")
+        for one in await logged(bot.db)
+        if one["kind"] == "post.saved"
+    ]
+    assert [one["version"] for one in said] == [1, 1], "a save that changed nothing keeps its n"
+
+
+async def test_a_publish_writes_a_version_only_when_the_row_has_moved_since_the_last_one(
+    bot, guild
+):
+    row = await a_post(bot, guild)
+    await posts.save_post(bot, guild, row, STAFF, body="What goes out.")
+    row = await posts.get_post(bot.db, guild.id, "notice")
+
+    await posts.publish_post(bot, guild, row, STAFF)
+    row = await posts.get_post(bot.db, guild.id, "notice")
+    await posts.publish_post(bot, guild, row, STAFF)
+
+    assert [int(one["n"]) for one in await versions(bot, row)] == [1]
+
+
+async def test_a_row_edited_without_a_version_gets_one_when_it_is_posted(bot, guild):
+    row = await a_post(bot, guild, body="Written before versions existed.")
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert found.ok
+    made = await versions(bot, row)
+    assert [one["because"] for one in made] == [posts.BECAUSE_POSTED]
+    assert made[0]["body"] == "Written before versions existed."
+    said = await details_of(bot.db, "post.posted")
+    assert said["version"] == 1
+
+
+async def test_use_this_version_writes_a_version_of_its_own_so_nothing_is_lost(bot, guild):
+    row = await a_post(bot, guild)
+    await posts.save_post(bot, guild, row, STAFF, body="The first.")
+    row = await posts.get_post(bot.db, guild.id, "notice")
+    await posts.save_post(bot, guild, row, STAFF, body="The second.")
+    row = await posts.get_post(bot.db, guild.id, "notice")
+
+    found = await posts.restore_version(bot, guild, row, LEAD, 1)
+
+    assert found.ok
+    fresh = await posts.get_post(bot.db, guild.id, "notice")
+    assert fresh["body"] == "The first."
+    made = await versions(bot, fresh)
+    assert [int(one["n"]) for one in made] == [3, 2, 1]
+    assert made[0]["because"] == "restored:1" and made[0]["body"] == "The first."
+    assert made[1]["body"] == "The second.", "what it said a moment ago is still here"
+    said = await details_of(bot.db, "post.restored")
+    assert said["from_version"] == 1 and said["new_version"] == 3
+
+
+async def test_restoring_the_version_the_post_already_says_is_refused_in_words(bot, guild):
+    row = await a_post(bot, guild)
+    await posts.save_post(bot, guild, row, STAFF, body="The only one.")
+    row = await posts.get_post(bot.db, guild.id, "notice")
+
+    found = await posts.restore_version(bot, guild, row, STAFF, 1)
+
+    assert not found.ok and found.code == "version_is_current"
+    assert "Version 1 is already what the post says" in found.message
+    assert "post.restored" not in await kinds(bot.db)
+
+
+async def test_a_version_that_was_never_written_is_refused_in_words(bot, guild):
+    row = await a_post(bot, guild)
+
+    found = await posts.restore_version(bot, guild, row, STAFF, 9)
+
+    assert not found.ok and found.code == "no_such_version"
+    assert "There is no version 9 of **A notice**" in found.message
+
+
+async def test_the_keep_limit_trims_the_oldest_and_never_the_last_one_standing(bot, guild):
+    await bot.store.set(GUILD, posts.VERSIONS_KEEP_KEY, 2)
+    row = await a_post(bot, guild)
+    for word in ("one", "two", "three", "four"):
+        await posts.save_post(bot, guild, row, STAFF, body=word)
+        row = await posts.get_post(bot.db, guild.id, "notice")
+
+    found = await versions(bot, row)
+    assert [int(one["n"]) for one in found] == [4, 3]
+    assert "post.versions_trimmed" in await kinds(bot.db)
+    said = await details_of(bot.db, "post.versions_trimmed")
+    assert said["versions"] == [1] and said["kept"] == 3
+
+    await bot.store.set(GUILD, posts.VERSIONS_KEEP_KEY, 1)
+    await posts.save_post(bot, guild, row, STAFF, body="five")
+    left = await versions(bot, row)
+    assert [int(one["n"]) for one in left] == [5]
+
+
+async def test_zero_keeps_every_version(bot, guild):
+    await bot.store.set(GUILD, posts.VERSIONS_KEEP_KEY, 0)
+    row = await a_post(bot, guild)
+    for word in ("one", "two", "three"):
+        await posts.save_post(bot, guild, row, STAFF, body=word)
+        row = await posts.get_post(bot.db, guild.id, "notice")
+
+    assert [int(one["n"]) for one in await versions(bot, row)] == [3, 2, 1]
+
+
+async def test_deleting_a_post_takes_its_versions_with_it(bot, guild):
+    row = await a_post(bot, guild, seed_hash=None)
+    await posts.save_post(bot, guild, row, STAFF, body="Something.")
+    row = await posts.get_post(bot.db, guild.id, "notice")
+
+    await posts.remove_post(bot, guild, row, STAFF)
+
+    cur = await bot.db.conn.execute("SELECT COUNT(*) AS n FROM post_versions")
+    assert (await cur.fetchone())["n"] == 0
+
+
+def test_a_version_because_reads_as_words_a_person_understands():
+    assert posts.because_words(posts.BECAUSE_SAVED) == "saved"
+    assert posts.because_words(posts.BECAUSE_POSTED) == "posted"
+    assert posts.because_words("restored:3") == "restored from 3"
+    assert posts.because_words(posts.BECAUSE_BACKFILL) == "what it said before"
+
+
+def test_a_versions_summary_is_one_line_however_the_message_is_written():
+    row = {"body": "A line\n\n> and a quote\nand more"}
+    assert posts.summary_of(row, 80) == "A line > and a quote and more"
+    assert posts.summary_of(row, 10) == "A line > a…"
+
+
+def test_when_words_are_what_a_select_option_can_carry():
+    at = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
+    assert posts.when_words((at - timedelta(days=2)).isoformat(), at=at) == "2 days ago"
+    assert posts.when_words((at - timedelta(hours=1)).isoformat(), at=at) == "1 hour ago"
+    assert posts.when_words((at - timedelta(seconds=5)).isoformat(), at=at) == "just now"
+    assert posts.when_words("not a time") == "just now"
 
 
 async def test_the_seed_hash_is_refreshed_without_touching_the_words(bot, guild):
@@ -969,3 +1115,30 @@ async def test_set_mode_answers_in_words_for_each_of_the_three(bot, guild):
     assert on == posts.MODE_ON_SAID
     assert await kinds(bot.db) == ["post.mode", "post.mode", "post.mode"]
     assert bot.store.get(GUILD, posts.MODE_KEY) == "on"
+
+
+async def test_the_shipped_chip_is_only_on_the_backfilled_words_the_bot_ships_with(bot, guild):
+    await posts.seed_posts(bot, guild)
+    seeded = await posts.get_post(bot.db, guild.id, "welcome")
+    await bot.db.conn.execute(
+        "INSERT INTO post_versions(guild_id, post_id, n, title, body, style, channel_id, pin, "
+        "saved_at, saved_by, via, because) SELECT guild_id, id, 1, title, body, style, "
+        "channel_id, pin, updated_at, updated_by, 'boot', 'backfill' FROM posts WHERE id = ?",
+        (int(seeded["id"]),),
+    )
+    await bot.db.conn.commit()
+    shipped = await posts.get_version(bot.db, int(seeded["id"]), 1)
+    assert posts.is_shipped_version(seeded, shipped)
+    assert posts.because_words(shipped["because"], shipped=True) == "shipped"
+
+    await posts.save_post(bot, guild, seeded, STAFF, body="Staff rewrote it.")
+    fresh = await posts.get_post(bot.db, guild.id, "welcome")
+    theirs = await posts.get_version(bot.db, int(fresh["id"]), 2)
+    assert not posts.is_shipped_version(fresh, theirs)
+    assert posts.is_shipped_version(fresh, shipped), "version 1 still holds the shipped words"
+
+    mine = await a_post(bot, guild)
+    await posts.save_post(bot, guild, mine, STAFF, body="Mine.")
+    ours = await posts.get_version(bot.db, int(mine["id"]), 1)
+    assert not posts.is_shipped_version(mine, ours)
+    assert posts.because_words(posts.BECAUSE_BACKFILL) == "what it said before"

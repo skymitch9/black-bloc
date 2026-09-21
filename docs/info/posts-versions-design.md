@@ -108,4 +108,118 @@ posts that already have a version).
 
 ## Deviations
 
-*(the build agent writes here what it had to do differently, dated)*
+> Written by the Opus build, 2026-09-20, branch `posts-versions`, rebased onto `main` at
+> `998317e` mid-build (the conductor's instruction, so the posts preview is built on
+> `f73e81c`'s row shape). Each one is a place the build did NOT do what the sections above
+> say, with the reason.
+
+1. **§A — `record_version` takes `(bot, guild, row, actor, …)`, not `(db, row, actor, via,
+   because)`.** The keep-limit trim of §D runs inside it, and the trim reads
+   `posts_versions_keep` off the store and writes a `post.versions_trimmed` row when it drops
+   any — both need the bot and the guild. Splitting them would have left a second door through
+   which a version can be written without being trimmed.
+
+2. **§A — the migration's backfill is plain SQL in `storage/db.py`, not a call into
+   `posts.py`.** `posts.py` reaches `actionlog` and the bot; `storage/db.py` is imported by
+   everything and stays leaf. Same behaviour, and the `WHERE NOT EXISTS` form is what makes it
+   idempotent on every boot rather than only on the one that migrates.
+
+3. **§A — schema is 49**, taken at dispatch because `main` was 47 and `spotlight` held 48.
+   ⚠️ `spotlight` LANDED during this build (v148, `main` is 48 now), so 49 is correct and
+   `tests/storage/test_db.py` pins it.
+
+4. **§B — `post.reset` is REMOVED from `logkinds`, not kept.** The brief said to keep the kind
+   and its label because the live database could not be read. It cannot be kept:
+   `tests/test_logkinds.py::test_no_classification_entry_is_dead` fails by name on any
+   `IMPORTANT`/`ROUTINE` entry nothing emits, and that guard is the mechanical one. ⚠️ **Measured,
+   and it costs nothing:** `is_important("post.reset")` answers `False` whether or not the entry
+   is in `ROUTINE` — it is not in `IMPORTANT` and ends in none of `IMPORTANT_SUFFIXES` — and
+   `feature_of("post.reset")` still answers `posts` off the `post` head. An old row on the live
+   Logs page therefore renders in the same place, in the same class, with the same words. The
+   contract's `action_kinds` still lists `web.post.reset`, because that list is a superset check
+   in both halves and dropping it would only make an old row unlistable.
+
+5. **§B — `ux-audit.md` needed no change.** The design says its posts row loses the button.
+   `grep -n "Put the original back" docs/info/ux-audit.md` → **zero hits**; the audit's posts
+   walk never mentions it. ⚠️ `docs/info/posted-strings-audit.md:2827` DOES carry a row for
+   `black_bloc/posts.py:178 | Put the original back`; it is a dated survey rather than a living
+   doc, so it was left as the record of what was there, not edited to hide it.
+
+6. **§C — the `because` chip for a backfilled version is `shipped` only when it IS the shipped
+   words, and `what it said before` otherwise.** §C's chip list says *shipped*. The migration
+   backfills EVERY post, including ones staff wrote here, so a flat *shipped* would say something
+   untrue on most rows. `posts.is_shipped_version` compares the backfilled title and body to
+   `posts_seed.json`, so the chip is earned. ⚠️ The conductor's mid-build note asked for the
+   `ships with the bot` badge to leave the list row and for that fact to live on the chip; both
+   are done, on the real page and on the preview.
+
+7. **§C — `GET /versions/{n}` answers a `preview` of three fields, not a "rendered preview".**
+   `posts.render_message` answers a `discord.Embed`, which is not JSON. The site owns the
+   renderer (`discordmd.js`), so the route hands it exactly what it takes — `style`, `title`,
+   `body`, plus the style's `cap` — and **View** draws a version through the same code the
+   editor's own preview uses.
+
+8. **§C — the foldout is its own module, `site/public/assets/postversions.js`.** The design has
+   the page and the preview each drawing it. Two copies of one list drift; the module is
+   imported by both, and the preview differs only in passing `wouldDo` handlers.
+
+9. **§C — the Discord sub-panel's `Versions…` button is on ROW 1**, beside `Back`, not on the
+   card's move row. Row 0 already holds five components on an unseeded posted post (Post it,
+   Take it down, Edit…, Pin it, Delete this post) and Discord caps a row at five.
+
+10. **§C — `Use this version` in Discord is a two-step select-then-press**, not a select that
+    acts. The select re-renders the sub-panel with the picked version, and **View** / **Use this
+    version** then act on it — *moves are buttons that render only when valid*, so the current
+    version never offers **Use this version** at all rather than offering it and refusing.
+
+11. **§C — the restore route answers `versions` as well as the row.** The design says "the row and
+    the new version". The page has the whole list open when somebody presses the button, so
+    answering the fresh list saves a second round trip and stops the foldout showing a history
+    that is one press stale.
+
+12. **§C — a versions read that FAILS draws a notice, not an empty foldout.** Not in the design.
+    The list is a second HTTP read and the editor is perfectly usable without it, so a failure
+    says so in words and leaves everything else working (the no-bare-status rule).
+
+13. **§E — `post.posted` and `post.updated` both gain `version`, and so does `post.saved` on a
+    save that changed nothing** (it carries the n the row still matches). §E names
+    `post.saved` and `post.posted`; `post.updated` is the same event with a message already
+    there, and a row with no `version` at all would be indistinguishable from one written before
+    this shipped.
+
+14. **§F — `tests/api/tools/test_posts.py` asserts `/reset` answers 404 or 405**, as asked. It is
+    405 in practice (FastAPI still has `POST /{slug}/takedown` and friends on the prefix), which
+    is why the test accepts either.
+
+15. **The `posts_versions_keep` trim never renumbers.** Not stated either way in §D. After a trim
+    the surviving versions keep their own `n`, so `v7` is `v7` for ever and a `post.restored` row
+    naming `from_version: 3` still points at the same words — or at a version that was trimmed,
+    which is honest, rather than at a different one.
+
+## What was NOT verified
+
+- ⚠️ **Nothing here has met Discord.** No `/posts` panel was opened in a real client, no version
+  was viewed or restored there, no message was sent or edited. Every Discord claim is the test
+  suite's, against fakes.
+- ⚠️ **The migration has NOT run on the live database.** `post_versions` does not exist on Fly and
+  the backfill has written nothing there. It is proved only against fresh SQLite files in
+  `tests/storage/test_db.py`, including the idempotence of a second and third `connect`. How many
+  posts the live database holds, and therefore how many backfill rows the deploy will write, is
+  **unknown** — it was not read.
+- **Both pages WERE rendered** in `chrome-headless-shell` 149.0.7827.22 against the mock —
+  `posts.html?as=staff#welcome` and `preview/posts.html` — so the foldout, its chips and the
+  outcome sentence were seen, with **no console errors** and **no horizontal overflow at 390 px**.
+  ⚠️ **What was NOT exercised in the browser:** nobody pressed **View** (the drawer was never
+  opened), nobody pressed **Use this version** (the confirm and the restore round trip were not
+  walked), and the screenshots were read as text through the accessibility-free DOM rather than
+  looked at — so **the chip COLOURS and the visual layout are still unseen**, only their classes.
+- **The `shipped` chip has not been seen on live data.** It is proved against the seed in
+  `tests/test_posts.py` and against the mock's own backfill row; whether the live `welcome` row
+  still matches `posts_seed.json` byte for byte — and so whether the chip will read *shipped* or
+  *what it said before* after the deploy — was not measured.
+- **The keep-limit trim has never dropped a real version.** `posts_versions_keep` defaults to 0
+  (keep everything), so the trim path runs only in tests and in the mock.
+- `tests/api/test_contract.py` was **not** run against the mock, and `check.mjs` was **not** run
+  against the real API — that split is the posts base build's and is unchanged.
+- **No deploy, no `deploys.log` line, no `TODO.md` / `DONE.md` / `KNOWN_ISSUES.md` edit** — those
+  are the conductor's, as §F says.

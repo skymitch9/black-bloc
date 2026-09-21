@@ -555,6 +555,15 @@ async def seed_world(client, web, guild, wf) -> dict:
     await posts.seed_posts(web, guild)
     welcome = await posts.get_post(db, guild_id, "welcome")
     await posts.set_post_fields(db, int(welcome["id"]), channel_id=wf.TEST_CHANNEL_ID)
+    # The version 1 `Database.connect` backfills for a post that predates the table: it is the
+    # `shipped` row the Versions entries read, written the same way the migration writes it.
+    await posts.write_version(
+        db,
+        await posts.get_post(db, guild_id, "welcome"),
+        None,
+        via="boot",
+        because=posts.BECAUSE_BACKFILL,
+    )
     posted_id = await posts.create_post(
         db,
         guild_id,
@@ -572,6 +581,15 @@ async def seed_world(client, web, guild, wf) -> dict:
         web, guild, await posts.get_post_by_id(db, posted_id), guild.get_member(7)
     )
     await posts.set_post_fields(db, posted_id, body="Edited since it was posted.")
+    # Two versions, so {post_version_n} is one the restore entry may take: restoring the
+    # CURRENT version is refused in words, which is a tools test rather than a contract one.
+    await posts.write_version(
+        db,
+        await posts.get_post_by_id(db, posted_id),
+        None,
+        via=wf.VIA_WEBSITE,
+        because=posts.BECAUSE_SAVED,
+    )
     await posts.create_post(
         db,
         guild_id,
@@ -665,6 +683,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "post_slug": "welcome",
         "posted_post_slug": "opening-hours",
         "scratch_post_slug": "scratch-post",
+        "post_version_n": "1",
         "spotlight_id": str(spotlight_id),
         "meeting_id": str(meeting_id),
         "recording_meeting_id": str(recording_meeting_id),

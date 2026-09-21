@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 48
+SCHEMA_VERSION = 49
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -815,6 +815,26 @@ CREATE TABLE IF NOT EXISTS posts (
 
 CREATE INDEX IF NOT EXISTS posts_by_guild ON posts(guild_id, id);
 
+CREATE TABLE IF NOT EXISTS post_versions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   INTEGER NOT NULL,
+    post_id    INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    n          INTEGER NOT NULL,
+    title      TEXT    NOT NULL,
+    body       TEXT    NOT NULL DEFAULT '',
+    style      TEXT    NOT NULL DEFAULT 'plain'
+               CHECK (style IN ('plain', 'embed')),
+    channel_id INTEGER,
+    pin        INTEGER NOT NULL DEFAULT 1,
+    saved_at   TEXT    NOT NULL,
+    saved_by   INTEGER,
+    via        TEXT    NOT NULL DEFAULT 'discord',
+    because    TEXT    NOT NULL DEFAULT 'saved',
+    UNIQUE (post_id, n)
+);
+
+CREATE INDEX IF NOT EXISTS post_versions_by_post ON post_versions(post_id, n);
+
 CREATE TABLE IF NOT EXISTS meetings (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id         INTEGER NOT NULL,
@@ -953,6 +973,14 @@ OPEN_THE_RETIRED_STATUSES = (
     f"({', '.join('?' for _ in RETIRED_REQUEST_STATUSES)})"
 )
 
+BACKFILL_POST_VERSIONS = (
+    "INSERT INTO post_versions(guild_id, post_id, n, title, body, style, channel_id, pin, "
+    "saved_at, saved_by, via, because) "
+    "SELECT guild_id, id, 1, title, body, style, channel_id, pin, "
+    "COALESCE(updated_at, ?), updated_by, 'boot', 'backfill' FROM posts "
+    "WHERE NOT EXISTS (SELECT 1 FROM post_versions WHERE post_versions.post_id = posts.id)"
+)
+
 MOD_CASES_CARRIED_OVER = (
     "id, guild_id, user_id, kind, moderator_id, reason, duration_s, at, mode, applied, "
     "log_message_id"
@@ -995,6 +1023,7 @@ class Database:
         await self._add_missing_columns()
         await self._restore_set_aside_mod_cases()
         await self._open_the_retired_request_statuses()
+        await self._backfill_post_versions()
         await self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -1063,6 +1092,14 @@ class Database:
         )
         if cur.rowcount and cur.rowcount > 0:
             log.warning("database: reopened %d request(s) into the new state machine", cur.rowcount)
+
+    async def _backfill_post_versions(self) -> None:
+        """Schema 49: every post that has no history gets version 1 from the row it is now."""
+        cur = await self.conn.execute(
+            BACKFILL_POST_VERSIONS, (datetime.now(UTC).isoformat(),)
+        )
+        if cur.rowcount and cur.rowcount > 0:
+            log.info("database: gave %d post(s) a first saved version", cur.rowcount)
 
     async def _add_missing_columns(self) -> None:
         for table, column, declaration in ADDED_COLUMNS:

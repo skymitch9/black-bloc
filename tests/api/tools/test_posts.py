@@ -11,7 +11,9 @@ ROUTES = [
     ("PUT", "/api/posts/notice", {"body": "hello"}),
     ("POST", "/api/posts/notice/publish", {}),
     ("POST", "/api/posts/notice/takedown", {}),
-    ("POST", "/api/posts/notice/reset", {}),
+    ("GET", "/api/posts/notice/versions", None),
+    ("GET", "/api/posts/notice/versions/1", None),
+    ("POST", "/api/posts/notice/versions/1/restore", {}),
     ("DELETE", "/api/posts/notice", None),
 ]
 
@@ -315,20 +317,112 @@ async def test_a_post_that_is_not_posted_refuses_the_take_down(client, sign_in, 
     assert response.json()["error"] == "not_posted"
 
 
-async def test_put_the_original_back_only_works_on_the_shipped_post(
-    client, sign_in, web, guild, wf
+async def test_the_put_back_route_is_gone(client, sign_in, web, wf):
+    sign_in(client)
+    await a_post(web, wf)
+
+    response = client.post("/api/posts/notice/reset", json={})
+
+    assert response.status_code in (404, 405)
+
+
+async def test_the_versions_list_is_newest_first_and_names_who_saved_each_one(
+    client, sign_in, web, wf
 ):
     sign_in(client)
-    await seeded_post(web, guild, wf)
     await a_post(web, wf)
-    client.put("/api/posts/welcome", json={"body": "Staff wrote this."})
+    client.put("/api/posts/notice", json={"body": "The first."})
+    client.put("/api/posts/notice", json={"body": "The second."})
 
-    found = client.post("/api/posts/welcome/reset", json={}).json()
-    refused = client.post("/api/posts/notice/reset", json={})
+    found = client.get("/api/posts/notice/versions").json()
 
-    assert found["post"]["body"] == posts.seed_entries()[0]["body"]
-    assert found["post"]["channel_id"] == str(wf.TEST_CHANNEL_ID), "the channel is kept"
-    assert refused.status_code == 409 and refused.json()["error"] == "not_seeded"
+    assert found["count"] == 2 and found["keep"] == 0
+    assert [one["n"] for one in found["versions"]] == [2, 1]
+    assert [one["current"] for one in found["versions"]] == [True, False]
+    assert [one["summary"] for one in found["versions"]] == ["The second.", "The first."]
+    assert {one["because"] for one in found["versions"]} == {"saved"}
+    assert {one["because_said"] for one in found["versions"]} == {"saved"}
+    assert {one["via"] for one in found["versions"]} == {"website"}
+    assert found["versions"][0]["saved_by_name"]
+
+
+async def test_one_version_answers_the_five_fields_and_what_the_preview_draws(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_post(web, wf)
+    client.put("/api/posts/notice", json={"body": "# A header", "style": "embed"})
+
+    found = client.get("/api/posts/notice/versions/1").json()
+
+    assert found["version"]["n"] == 1 and found["version"]["current"] is True
+    assert found["version"]["body"] == "# A header"
+    assert found["version"]["style"] == "embed" and found["version"]["pin"] is True
+    assert found["version"]["channel_id"] == str(wf.TEST_CHANNEL_ID)
+    assert found["preview"] == {
+        "style": "embed",
+        "title": "A notice",
+        "body": "# A header",
+        "cap": posts.CAPS["embed"],
+    }
+
+
+async def test_a_version_that_was_never_written_is_refused_in_words(client, sign_in, web, wf):
+    sign_in(client)
+    await a_post(web, wf)
+
+    response = client.get("/api/posts/notice/versions/9")
+
+    assert response.status_code == 404
+    assert response.json()["error"] == "no_such_version"
+    assert "There is no version 9" in response.json()["message"]
+
+
+async def test_use_this_version_puts_the_words_back_and_keeps_what_they_replaced(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_post(web, wf)
+    client.put("/api/posts/notice", json={"body": "The first."})
+    client.put("/api/posts/notice", json={"body": "The second."})
+
+    found = client.post("/api/posts/notice/versions/1/restore", json={}).json()
+
+    assert found["post"]["body"] == "The first."
+    assert found["from_version"] == 1
+    assert [one["n"] for one in found["versions"]] == [3, 2, 1]
+    assert found["versions"][0]["because_said"] == "restored from 1"
+    assert found["versions"][1]["summary"] == "The second."
+    assert "is back to version 1" in found["message"]
+
+
+async def test_restoring_the_version_the_post_already_says_is_refused_in_words(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_post(web, wf)
+    client.put("/api/posts/notice", json={"body": "The only one."})
+
+    response = client.post("/api/posts/notice/versions/1/restore", json={})
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "version_is_current"
+    assert "already what the post says" in response.json()["message"]
+
+
+async def test_a_restore_leaves_one_web_row_and_never_a_bare_one(client, sign_in, web, wf):
+    sign_in(client)
+    await a_post(web, wf)
+    client.put("/api/posts/notice", json={"body": "The first."})
+    client.put("/api/posts/notice", json={"body": "The second."})
+
+    client.post("/api/posts/notice/versions/1/restore", json={})
+
+    assert await wf.kinds_in(web.db) == [
+        "web.post.saved",
+        "web.post.saved",
+        "web.post.restored",
+    ]
 
 
 async def test_the_shipped_post_cannot_be_deleted_and_says_what_to_do_instead(

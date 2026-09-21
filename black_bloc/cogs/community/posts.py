@@ -30,6 +30,7 @@ from ...posts import (
     MODE_SHADOW_SAID,
     MODES,
     NO_SUCH_POST,
+    NO_SUCH_VERSION,
     PANEL_EMPTY,
     PANEL_INTRO,
     PANEL_TIMEOUT_FOOTER,
@@ -37,18 +38,27 @@ from ...posts import (
     PIN_IT,
     PLAIN,
     POSTS_OFF,
-    PUT_THE_ORIGINAL_BACK,
     SITE_BUTTON,
     STYLES,
     TAKE_IT_DOWN,
     TITLE_MAX,
+    USE_THIS_VERSION,
+    VERSIONS,
+    VERSIONS_EMPTY,
+    VERSIONS_INTRO,
+    VERSIONS_SELECT_CAP,
+    VERSIONS_TITLE,
+    VIEW_IT,
     cap_for,
     count_posts,
     get_post,
+    get_version,
     in_shadow,
     is_posted,
     is_seeded,
+    is_shipped_version,
     list_posts,
+    list_versions,
     make_post,
     mode_of,
     move_label,
@@ -59,7 +69,8 @@ from ...posts import (
     reconcile_posts,
     refresh_seeds,
     remove_post,
-    reset_post,
+    render_message,
+    restore_version,
     row_value,
     save_post,
     seed_posts,
@@ -68,7 +79,10 @@ from ...posts import (
     shadow_words,
     site_page_url,
     status_words,
+    summary_chars,
+    summary_of,
     take_down_post,
+    version_line,
     where_words,
 )
 from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY, require_staff
@@ -88,7 +102,12 @@ PICK_A_CHANNEL = "Channel…"
 PICK_A_STYLE = "Style…"
 DELETE_THIS_POST = "Delete this post"
 DELETE_YES = "Yes, delete it"
-RESET_YES = "Yes, put it back"
+USE_IT_YES = "Yes, use version {n}"
+PICK_A_VERSION = "A version…"
+VERSION_OPTION = "{line}"
+VERSION_SUMMARY = "{summary}"
+VERSION_DRAWER_TITLE = "Version {n} of {title}"
+NOTHING_IN_IT = "Version {n} has nothing written in it — it is an empty message."
 MODE_PICK = "Posts are: off / shadow / on"
 MODE_OPTION = "Posts are: {mode}"
 BACK = "Back"
@@ -98,9 +117,9 @@ STYLE_LABELS: dict[str, str] = {
     EMBED: f"Embed — {CAPS[EMBED]} characters, no headers",
 }
 NOT_POSTED_YET = "Nothing is in Discord for this one yet."
-RESET_QUESTION = (
-    "Every word goes back to the message Black Bloc ships with. Anything written here is lost; "
-    "the channel, the style and the pin are kept."
+USE_IT_QUESTION = (
+    "The post goes back to what version {n} said. What it says now is kept as a new version, so "
+    "nothing is lost — and nothing reaches Discord until somebody presses Post it."
 )
 DELETE_QUESTION = "Every word goes with it. Nothing puts it back."
 
@@ -160,14 +179,98 @@ def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, PostsView
         view.add_item(TakeDownButton(slug))
     view.add_item(EditButton(slug))
     view.add_item(PinButton(slug, bool(row_value(row, "pin"))))
-    if is_seeded(row):
-        view.add_item(ResetButton(slug))
-    else:
+    if not is_seeded(row):
         view.add_item(DeleteButton(slug))
+    view.add_item(VersionsButton(slug))
     view.add_item(BackButton())
     view.add_item(ChannelPick(slug))
     view.add_item(StylePick(slug, str(row_value(row, "style", PLAIN))))
     return embed, view
+
+
+def who_words(guild: Any, user_id: Any) -> str | None:
+    if not user_id:
+        return None
+    member = guild.get_member(int(user_id)) if guild is not None else None
+    return getattr(member, "display_name", None) or str(user_id)
+
+
+async def build_versions(
+    bot: Any, guild: Any, row: Any, picked: Any = None
+) -> tuple[discord.Embed, PostsView]:
+    rows = (await list_versions(bot.db, int(row["id"])))[:VERSIONS_SELECT_CAP]
+    top = int(rows[0]["n"]) if rows else None
+    shipped = frozenset(int(one["n"]) for one in rows if is_shipped_version(row, one))
+    limit = summary_chars(bot.store, guild.id)
+    lines = [VERSIONS_INTRO]
+    if not rows:
+        lines.append(VERSIONS_EMPTY)
+    for one in rows:
+        lines.append(
+            version_line(
+                one,
+                who=who_words(guild, row_value(one, "saved_by")),
+                current=int(one["n"]) == top,
+                shipped=is_shipped_version(row, one),
+            )
+        )
+        said = summary_of(one, limit)
+        if said:
+            lines.append(VERSION_SUMMARY.format(summary=said))
+    embed = discord.Embed(
+        title=VERSIONS_TITLE.format(title=row["title"]), description=clamped(lines)
+    )
+    slug = str(row["slug"])
+    view = PostsView(panel_minutes(bot.store, guild.id))
+    if picked is not None:
+        view.add_item(ViewVersionButton(slug, int(picked)))
+        if int(picked) != top:
+            view.add_item(UseVersionButton(slug, int(picked)))
+    view.add_item(CardButton(slug))
+    if rows:
+        view.add_item(VersionPick(slug, guild, rows, picked, top, shipped))
+    return embed, view
+
+
+async def render_versions(
+    interaction: discord.Interaction,
+    slug: str,
+    picked: Any = None,
+    previous: Any = None,
+    said: str | None = None,
+) -> None:
+    bot = interaction.client
+    row = await get_post(bot.db, interaction.guild.id, slug)
+    if row is None:
+        await render_panel(interaction, previous)
+    else:
+        embed, view = await build_versions(bot, interaction.guild, row, picked)
+        retire(previous)
+        view.message = await interaction.edit_original_response(
+            embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+        )
+    if said:
+        await interaction.followup.send(
+            said, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
+
+
+async def use_version(
+    interaction: discord.Interaction, slug: str, n: int, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    bot = interaction.client
+    guild = interaction.guild
+    if posts_are_off(bot.store, guild.id):
+        await render_card(interaction, slug, previous, POSTS_OFF)
+        return
+    row = await get_post(bot.db, guild.id, slug)
+    if row is None:
+        await render_panel(interaction, previous)
+        return
+    found = await restore_version(bot, guild, row, interaction.user, n)
+    await render_card(interaction, slug, previous, found.message)
 
 
 async def render_panel(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -353,30 +456,149 @@ class PinButton(discord.ui.Button):
         await run_move(interaction, self.slug, save_post, self.view, pin=self.wanted)
 
 
-class ResetButton(discord.ui.Button):
+class VersionsButton(discord.ui.Button):
     def __init__(self, slug: str) -> None:
-        super().__init__(label=PUT_THE_ORIGINAL_BACK, style=discord.ButtonStyle.secondary, row=0)
+        super().__init__(label=VERSIONS, style=discord.ButtonStyle.secondary, row=1)
         self.slug = slug
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction):
             return
-        row = await get_post(interaction.client.db, interaction.guild.id, self.slug)
+        await render_versions(interaction, self.slug, None, self.view)
+
+
+class CardButton(discord.ui.Button):
+    def __init__(self, slug: str) -> None:
+        super().__init__(label=BACK, style=discord.ButtonStyle.secondary, row=1)
+        self.slug = slug
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        await render_card(interaction, self.slug, self.view)
+
+
+class VersionPick(discord.ui.Select):
+    def __init__(
+        self,
+        slug: str,
+        guild: Any,
+        rows: list[Any],
+        picked: Any,
+        top: Any,
+        shipped: frozenset[int] = frozenset(),
+    ) -> None:
+        super().__init__(
+            placeholder=PICK_A_VERSION,
+            options=[
+                discord.SelectOption(
+                    label=VERSION_OPTION.format(
+                        line=version_line(
+                            one,
+                            who=who_words(guild, row_value(one, "saved_by")),
+                            current=int(one["n"]) == top,
+                            shipped=one["n"] in shipped,
+                        )
+                    )[:100],
+                    value=str(int(one["n"])),
+                    default=picked is not None and int(one["n"]) == int(picked),
+                )
+                for one in rows
+            ],
+            min_values=1,
+            max_values=1,
+            row=2,
+        )
+        self.slug = slug
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        await render_versions(interaction, self.slug, int(self.values[0]), self.view)
+
+
+class ViewVersionButton(discord.ui.Button):
+    def __init__(self, slug: str, n: int) -> None:
+        super().__init__(label=VIEW_IT, style=discord.ButtonStyle.primary, row=0)
+        self.slug = slug
+        self.n = n
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        bot = interaction.client
+        row = await get_post(bot.db, interaction.guild.id, self.slug)
         if row is None:
             await render_panel(interaction, self.view)
             return
+        version = await get_version(bot.db, int(row["id"]), self.n)
+        if version is None:
+            await render_versions(
+                interaction,
+                self.slug,
+                None,
+                self.view,
+                NO_SUCH_VERSION.format(n=self.n, title=row["title"]),
+            )
+            return
+        payload = render_message(version)
+        content = str(payload.get("content") or "")
+        embed = payload.get("embed")
+        if not content.strip() and embed is None:
+            await interaction.followup.send(
+                NOTHING_IN_IT.format(n=self.n),
+                ephemeral=True,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+        await interaction.followup.send(
+            content=content or None,
+            embed=embed,
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+
+class UseVersionButton(discord.ui.Button):
+    def __init__(self, slug: str, n: int) -> None:
+        super().__init__(label=USE_THIS_VERSION, style=discord.ButtonStyle.success, row=0)
+        self.slug = slug
+        self.n = n
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        bot = interaction.client
+        row = await get_post(bot.db, interaction.guild.id, self.slug)
+        if row is None:
+            await render_panel(interaction, self.view)
+            return
+        version = await get_version(bot.db, int(row["id"]), self.n)
+        if version is None:
+            await render_versions(
+                interaction,
+                self.slug,
+                None,
+                self.view,
+                NO_SUCH_VERSION.format(n=self.n, title=row["title"]),
+            )
+            return
+        said = summary_of(version, summary_chars(bot.store, interaction.guild.id))
         await confirm(
             interaction,
-            PostsView(panel_minutes(interaction.client.store, interaction.guild.id)),
-            discord.Embed(title=row["title"], description=preview_of(row)),
+            PostsView(panel_minutes(bot.store, interaction.guild.id)),
+            discord.Embed(
+                title=VERSION_DRAWER_TITLE.format(n=self.n, title=row["title"]),
+                description=said or NOTHING_IN_IT.format(n=self.n),
+            ),
             confirm_items(
-                yes=RESET_YES,
+                yes=USE_IT_YES.format(n=self.n),
                 no=KEEP_IT,
-                on_yes=lambda one, card: run_move(one, self.slug, reset_post, card),
-                on_no=back_to_panel,
+                on_yes=lambda one, card: use_version(one, self.slug, self.n, card),
+                on_no=lambda one, card: render_card(one, self.slug, card),
             ),
             self.view,
-            question=RESET_QUESTION,
+            question=USE_IT_QUESTION.format(n=self.n),
         )
 
 
@@ -611,16 +833,23 @@ __all__ = [
     "PostPick",
     "Posts",
     "PostsView",
-    "ResetButton",
     "StylePick",
     "TakeDownButton",
+    "UseVersionButton",
+    "VersionPick",
+    "VersionsButton",
+    "ViewVersionButton",
     "back_to_panel",
     "build_card",
     "build_panel",
+    "build_versions",
     "line_for",
     "option_label",
     "remove_and_go_back",
     "render_card",
     "render_panel",
+    "render_versions",
     "run_move",
+    "use_version",
+    "who_words",
 ]

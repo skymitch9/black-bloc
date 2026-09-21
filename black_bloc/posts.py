@@ -23,6 +23,8 @@ FEATURE = "posts"
 
 MODE_KEY = "posts_mode"
 PANEL_MINUTES_KEY = "posts_panel_minutes"
+VERSIONS_KEEP_KEY = "posts_versions_keep"
+VERSIONS_SUMMARY_KEY = "posts_versions_summary_chars"
 LOG_CHANNEL_KEY = "log_channel_id"
 ON = "on"
 OFF = "off"
@@ -51,13 +53,21 @@ WOULD_TAKE_DOWN = "post.would_take_down"
 PINNED = "post.pinned"
 PIN_FAILED = "post.pin_failed"
 MESSAGE_GONE = "post.message_gone"
-RESET = "post.reset"
+RESTORED = "post.restored"
+VERSIONS_TRIMMED = "post.versions_trimmed"
 CREATED = "post.created"
 DELETED = "post.deleted"
 SHADOW_POSTED = "post.shadow_posted"
 SHADOW_UPDATED = "post.shadow_updated"
 SHADOW_TAKEN_DOWN = "post.shadow_taken_down"
 SHADOW_MESSAGE_GONE = "post.shadow_message_gone"
+
+VERSION_FIELDS = ("title", "body", "style", "channel_id", "pin")
+BECAUSE_SAVED = "saved"
+BECAUSE_POSTED = "posted"
+BECAUSE_BACKFILL = "backfill"
+BECAUSE_RESTORED = "restored:{n}"
+VERSIONS_SELECT_CAP = 25
 
 NO_SUCH_POST = (
     "There is no post called **{slug}**, so nothing was done. It may have been renamed — open "
@@ -120,9 +130,13 @@ SEEDED_CANNOT_BE_DELETED = (
     "only put it back. Press **Take it down** instead: the message goes and every word you have "
     "written is kept."
 )
-NOT_SEEDED = (
-    "**{slug}** was written here rather than shipped with Black Bloc, so there is no original to "
-    "put back. Nothing was changed."
+NO_SUCH_VERSION = (
+    "There is no version {n} of **{title}**, so nothing was changed. Open **Versions** and pick "
+    "one from the list."
+)
+VERSION_IS_CURRENT = (
+    "Version {n} is already what the post says, so nothing was changed. Pick an older version, "
+    "or edit the words in the box."
 )
 POSTED_CANNOT_BE_DELETED = (
     "**{title}** is still posted in Discord, so it was not deleted. Press **Take it down** "
@@ -158,7 +172,10 @@ SHADOW_UPDATED_SAID = (
     "went to its own channel."
 )
 TAKEN_DOWN_SAID = "**{title}** is taken down. Every word is still here."
-RESET_SAID = "**{title}** is back to the words it shipped with."
+RESTORED_SAID = (
+    "**{title}** is back to version {n}. What it said a moment ago is kept as version {new}, so "
+    "nothing is lost either way. Press **Post it** to send the change to Discord."
+)
 DELETED_SAID = "**{title}** is gone."
 MODE_ON_SAID = "Posts are on. Staff can post from the site and from `/posts`."
 MODE_OFF_SAID = "Posts are off. `/posts` disappears within about a minute; the text is all kept."
@@ -175,9 +192,35 @@ SITE_BUTTON = "Open on the site"
 POST_IT = "Post it"
 UPDATE_THE_POST = "Update the post"
 TAKE_IT_DOWN = "Take it down"
-PUT_THE_ORIGINAL_BACK = "Put the original back"
+VERSIONS = "Versions…"
+VERSIONS_TITLE = "Versions of {title}"
+VERSIONS_INTRO = (
+    "Every press of Save changes or Post it that changed something is here. Nothing else writes "
+    "a version, and nothing ever removes one."
+)
+VERSIONS_EMPTY = "Nothing has been saved yet, so there is only what is in the box."
+VERSION_LINE = "v{n} · {ago} · {because}{who}"
+VIEW_IT = "View"
+USE_THIS_VERSION = "Use this version"
 PIN_IT = "Pin it"
 DO_NOT_PIN_IT = "Do not pin it"
+
+BECAUSE_WORDS: dict[str, str] = {
+    BECAUSE_SAVED: "saved",
+    BECAUSE_POSTED: "posted",
+    BECAUSE_BACKFILL: "what it said before",
+}
+RESTORED_WORDS = "restored from {n}"
+SHIPPED_WORD = "shipped"
+VERSION_CURRENT_WORD = "current"
+AGO = "{count} {unit}{s} ago"
+JUST_SAVED = "just now"
+BY_WHO = " · by {who}"
+AGO_UNITS: tuple[tuple[int, str], ...] = (
+    (86400, "day"),
+    (3600, "hour"),
+    (60, "minute"),
+)
 
 STATUS_POSTED = "posted"
 STATUS_POSTED_SHADOW = "posted (shadow)"
@@ -515,6 +558,170 @@ async def clear_posted(db: Any, post_id: int) -> None:
     await db.conn.commit()
 
 
+# --- the versions -----------------------------------------------------------------------------
+
+
+def version_fields(row: Any) -> tuple[Any, ...]:
+    """The five a version IS, read the same way off a post row and off a version row."""
+    return (
+        str(row_value(row, "title", "")),
+        str(row_value(row, "body", "")),
+        wanted_style(row_value(row, "style", PLAIN)),
+        as_channel_id(row_value(row, "channel_id")),
+        bool(row_value(row, "pin")),
+    )
+
+
+def because_words(because: Any, *, shipped: bool = False) -> str:
+    text = str(because or "")
+    head, dot, rest = text.partition(":")
+    if head == "restored" and rest:
+        return RESTORED_WORDS.format(n=rest)
+    if shipped and text == BECAUSE_BACKFILL:
+        return SHIPPED_WORD
+    return BECAUSE_WORDS.get(text, text)
+
+
+def is_shipped_version(post: Any, version: Any) -> bool:
+    """The `shipped` chip: the backfilled first version whose words ARE the shipped ones.
+
+    The `ships with the bot` badge used to sit on the list row; the Versions list is where
+    that fact lives now, and it is only true while nobody has rewritten the text."""
+    if not is_seeded(post) or str(row_value(version, "because")) != BECAUSE_BACKFILL:
+        return False
+    entry = seed_entry(row_value(post, "slug"))
+    if entry is None:
+        return False
+    return str(row_value(version, "title", "")) == str(entry.get("title", "")) and str(
+        row_value(version, "body", "")
+    ) == str(entry.get("body", ""))
+
+
+def when_words(value: Any, *, at: Any = None) -> str:
+    """`2 days ago`, in plain words — a select option cannot carry Discord's own `<t:…:R>`."""
+    try:
+        when = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return JUST_SAVED
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    seconds = ((at or datetime.now(UTC)) - when).total_seconds()
+    for size, word in AGO_UNITS:
+        if seconds >= size:
+            count = int(seconds // size)
+            return AGO.format(count=count, unit=word, s="" if count == 1 else "s")
+    return JUST_SAVED
+
+
+def version_line(
+    row: Any,
+    *,
+    who: Any = None,
+    current: bool = False,
+    shipped: bool = False,
+    at: Any = None,
+) -> str:
+    """One spelling of a version's headline, for the panel's lines and its select options."""
+    line = VERSION_LINE.format(
+        n=int(row["n"]),
+        ago=when_words(row_value(row, "saved_at"), at=at),
+        because=because_words(row_value(row, "because"), shipped=shipped),
+        who=BY_WHO.format(who=who) if who else "",
+    )
+    return f"{line} · {VERSION_CURRENT_WORD}" if current else line
+
+
+def summary_chars(store: Any, guild_id: int) -> int:
+    wanted = int(store.get(guild_id, VERSIONS_SUMMARY_KEY) or 0)
+    return wanted if wanted > 0 else 80
+
+
+def versions_keep(store: Any, guild_id: int) -> int:
+    return max(0, int(store.get(guild_id, VERSIONS_KEEP_KEY) or 0))
+
+
+def summary_of(row: Any, limit: int) -> str:
+    """One line, whatever the body does: every run of whitespace becomes one space."""
+    text = " ".join(str(row_value(row, "body", "") or "").split())
+    return text if len(text) <= limit else f"{text[:limit].rstrip()}…"
+
+
+async def list_versions(db: Any, post_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM post_versions WHERE post_id = ? ORDER BY n DESC", (int(post_id),)
+    )
+    return list(await cur.fetchall())
+
+
+async def get_version(db: Any, post_id: int, n: Any) -> Any:
+    try:
+        wanted = int(n)
+    except (TypeError, ValueError):
+        return None
+    cur = await db.conn.execute(
+        "SELECT * FROM post_versions WHERE post_id = ? AND n = ?", (int(post_id), wanted)
+    )
+    return await cur.fetchone()
+
+
+async def latest_version(db: Any, post_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM post_versions WHERE post_id = ? ORDER BY n DESC LIMIT 1",
+        (int(post_id),),
+    )
+    return await cur.fetchone()
+
+
+async def latest_n(db: Any, post_id: int) -> int | None:
+    found = await latest_version(db, int(post_id))
+    return int(found["n"]) if found is not None else None
+
+
+async def write_version(db: Any, row: Any, actor: Any, *, via: str, because: str) -> int:
+    title, body, style, channel_id, pin = version_fields(row)
+    n = (await latest_n(db, int(row["id"])) or 0) + 1
+    await db.conn.execute(
+        "INSERT INTO post_versions(guild_id, post_id, n, title, body, style, channel_id, pin, "
+        "saved_at, saved_by, via, because) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            int(row["guild_id"]),
+            int(row["id"]),
+            n,
+            title,
+            body,
+            style,
+            channel_id,
+            1 if pin else 0,
+            now(),
+            actor_id(actor),
+            str(via),
+            str(because),
+        ),
+    )
+    await db.conn.commit()
+    return n
+
+
+async def trim_versions(db: Any, post_id: int, keep: int) -> list[int]:
+    """The oldest beyond the keep limit; the last one standing is never one of them."""
+    if keep <= 0:
+        return []
+    cur = await db.conn.execute(
+        "SELECT n FROM post_versions WHERE post_id = ? ORDER BY n DESC", (int(post_id),)
+    )
+    found = [int(one["n"]) for one in await cur.fetchall()]
+    dropping = found[max(1, keep):]
+    if not dropping:
+        return []
+    marks = ", ".join("?" for _ in dropping)
+    await db.conn.execute(
+        f"DELETE FROM post_versions WHERE post_id = ? AND n IN ({marks})",
+        (int(post_id), *dropping),
+    )
+    await db.conn.commit()
+    return sorted(dropping)
+
+
 # --- the seed ---------------------------------------------------------------------------------
 
 
@@ -585,8 +792,7 @@ async def seed_posts(bot: Any, guild: Any) -> int:
 
 
 async def refresh_seeds(db: Any, guild_id: int) -> int:
-    """What **Put the original back** restores, brought up to the shipped seed. Staff text is
-    never touched."""
+    """The shipped mark, brought up to today's seed. Staff text is never touched."""
     changed = 0
     for entry in seed_entries():
         row = await get_post(db, guild_id, entry["slug"])
@@ -631,6 +837,36 @@ async def note(
         )
     except Exception as exc:
         log.warning("posts: %s not logged — %s: %s", kind, type(exc).__name__, exc)
+
+
+async def record_version(
+    bot: Any,
+    guild: Any,
+    row: Any,
+    actor: Any,
+    *,
+    via: str,
+    because: str,
+    always: bool = False,
+) -> int | None:
+    """The one door every version comes through; `None` means the row already had one."""
+    post_id = int(row["id"])
+    if not always:
+        latest = await latest_version(bot.db, post_id)
+        if latest is not None and version_fields(latest) == version_fields(row):
+            return None
+    made = await write_version(bot.db, row, actor, via=via, because=because)
+    dropped = await trim_versions(bot.db, post_id, versions_keep(bot.store, guild.id))
+    if dropped:
+        await note(
+            bot, guild, row, VERSIONS_TRIMMED, actor, via=via, versions=dropped, kept=made
+        )
+    return made
+
+
+async def version_now(bot: Any, row: Any, made: int | None) -> int | None:
+    """What version the row reads as after a write — the new one, or the one it matched."""
+    return made if made is not None else await latest_n(bot.db, int(row["id"]))
 
 
 async def make_post(
@@ -713,7 +949,17 @@ async def save_post(
         pin=1 if kept_pin else 0,
     )
     fresh = await get_post_by_id(bot.db, int(row["id"]))
-    await note(bot, guild, fresh, SAVED, actor, via=via, pending=changes_pending(fresh))
+    made = await record_version(bot, guild, fresh, actor, via=via, because=BECAUSE_SAVED)
+    await note(
+        bot,
+        guild,
+        fresh,
+        SAVED,
+        actor,
+        via=via,
+        pending=changes_pending(fresh),
+        version=await version_now(bot, fresh, made),
+    )
     return Outcome(True, SAVED_SAID.format(title=wanted_title), value=fresh)
 
 
@@ -898,7 +1144,17 @@ async def publish_post(
         )
     write = set_shadow_posted if shadow else set_posted
     await write(bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor))
-    await note(bot, guild, row, kind, actor, via=via, message_id=int(message.id))
+    made = await record_version(bot, guild, row, actor, via=via, because=BECAUSE_POSTED)
+    await note(
+        bot,
+        guild,
+        row,
+        kind,
+        actor,
+        via=via,
+        message_id=int(message.id),
+        version=await version_now(bot, row, made),
+    )
     if not shadow:
         await _drop_shadow(bot, guild, row, actor, via)
     await _pin(bot, guild, row, message, actor, via)
@@ -979,28 +1235,47 @@ async def take_down_post(
     return Outcome(True, TAKEN_DOWN_SAID.format(title=title), value=fresh)
 
 
-async def reset_post(
-    bot: Any, guild: Any, row: Any, actor: Any, *, via: str = VIA_DISCORD
+async def restore_version(
+    bot: Any, guild: Any, row: Any, actor: Any, wanted: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    """The words it shipped with, back. The channel a staffer chose is left alone."""
-    entry = seed_entry(row_value(row, "slug"))
-    if entry is None or not is_seeded(row):
+    """A saved version back into the row — always a version of its own, so nothing is lost."""
+    post_id = int(row["id"])
+    title = str(row_value(row, "title", ""))
+    version = await get_version(bot.db, post_id, wanted)
+    if version is None:
         return refusal(
-            NOT_SEEDED.format(slug=row_value(row, "slug")), "not_seeded", 409
+            NO_SUCH_VERSION.format(n=str(wanted)[:20], title=title), "no_such_version", 404
         )
+    n = int(version["n"])
+    if n == await latest_n(bot.db, post_id):
+        return refusal(VERSION_IS_CURRENT.format(n=n), "version_is_current", 409)
+    was_title, was_body, was_style, was_channel, was_pin = version_fields(version)
     await set_post_fields(
         bot.db,
-        int(row["id"]),
+        post_id,
         by=actor_id(actor),
-        title=entry["title"],
-        body=entry.get("body", ""),
-        style=wanted_style(entry.get("style")),
-        pin=1 if entry.get("pin", True) else 0,
-        seed_hash=seed_hash(entry),
+        title=was_title,
+        body=was_body,
+        style=was_style,
+        channel_id=was_channel,
+        pin=1 if was_pin else 0,
     )
-    fresh = await get_post_by_id(bot.db, int(row["id"]))
-    await note(bot, guild, fresh, RESET, actor, via=via)
-    return Outcome(True, RESET_SAID.format(title=entry["title"]), value=fresh)
+    fresh = await get_post_by_id(bot.db, post_id)
+    made = await record_version(
+        bot,
+        guild,
+        fresh,
+        actor,
+        via=via,
+        because=BECAUSE_RESTORED.format(n=n),
+        always=True,
+    )
+    await note(
+        bot, guild, fresh, RESTORED, actor, via=via, from_version=n, new_version=made
+    )
+    return Outcome(
+        True, RESTORED_SAID.format(title=was_title, n=n, new=made), value=fresh
+    )
 
 
 async def remove_post(
@@ -1106,12 +1381,21 @@ async def reconcile_posts(bot: Any) -> dict[str, int]:
 
 
 __all__ = [
+    "AGO",
+    "AGO_UNITS",
+    "BECAUSE_BACKFILL",
+    "BECAUSE_POSTED",
+    "BECAUSE_RESTORED",
+    "BECAUSE_SAVED",
+    "BECAUSE_WORDS",
+    "BY_WHO",
     "CAPS",
     "CHANNEL",
     "CREATED",
     "DELETED",
     "EMBED",
     "EMBED_TITLE_TOO_LONG",
+    "JUST_SAVED",
     "MESSAGE_GONE",
     "MODES",
     "MODE_KEY",
@@ -1123,6 +1407,7 @@ __all__ = [
     "NO_CHANNEL_YET",
     "NO_SHADOW_CHANNEL",
     "NO_SUCH_POST",
+    "NO_SUCH_VERSION",
     "OFF",
     "ON",
     "PAGE",
@@ -1140,8 +1425,9 @@ __all__ = [
     "POSTS_OFF",
     "POST_FAILED",
     "POST_IT",
-    "PUT_THE_ORIGINAL_BACK",
-    "RESET",
+    "RESTORED",
+    "RESTORED_SAID",
+    "RESTORED_WORDS",
     "SAVED",
     "SEEDED_CANNOT_BE_DELETED",
     "SHADOW",
@@ -1152,6 +1438,7 @@ __all__ = [
     "SHADOW_POSTED",
     "SHADOW_TAKEN_DOWN",
     "SHADOW_UPDATED",
+    "SHIPPED_WORD",
     "SITE_BUTTON",
     "SLUG_NEEDED",
     "SLUG_TAKEN",
@@ -1165,9 +1452,24 @@ __all__ = [
     "UNKNOWN_CHANNEL",
     "UPDATED",
     "UPDATE_THE_POST",
+    "USE_THIS_VERSION",
+    "VERSIONS",
+    "VERSIONS_EMPTY",
+    "VERSIONS_INTRO",
+    "VERSIONS_KEEP_KEY",
+    "VERSIONS_SELECT_CAP",
+    "VERSIONS_SUMMARY_KEY",
+    "VERSIONS_TITLE",
+    "VERSIONS_TRIMMED",
+    "VERSION_CURRENT_WORD",
+    "VERSION_FIELDS",
+    "VERSION_IS_CURRENT",
+    "VERSION_LINE",
+    "VIEW_IT",
     "WOULD_POST",
     "WOULD_TAKE_DOWN",
     "allowed_mentions_for",
+    "because_words",
     "body_hash",
     "cap_for",
     "changes_pending",
@@ -1180,14 +1482,19 @@ __all__ = [
     "forget_message",
     "get_post",
     "get_post_by_id",
+    "get_version",
     "guard_allows",
     "guard_refusal",
     "hash_of",
     "in_shadow",
     "is_posted",
     "is_seeded",
+    "is_shipped_version",
     "known_channel",
+    "latest_n",
+    "latest_version",
     "list_posts",
+    "list_versions",
     "load_seed",
     "make_post",
     "mode_of",
@@ -1200,12 +1507,13 @@ __all__ = [
     "preview_of",
     "publish_post",
     "reconcile_posts",
+    "record_version",
     "refresh_seeds",
     "refused_body",
     "refused_title",
     "remove_post",
     "render_message",
-    "reset_post",
+    "restore_version",
     "row_value",
     "save_post",
     "seed_entries",
@@ -1223,8 +1531,17 @@ __all__ = [
     "site_page_url",
     "slugify",
     "status_words",
+    "summary_chars",
+    "summary_of",
     "take_down_post",
     "too_long",
+    "trim_versions",
+    "version_fields",
+    "version_line",
+    "version_now",
+    "versions_keep",
     "wanted_style",
+    "when_words",
     "where_words",
+    "write_version",
 ]

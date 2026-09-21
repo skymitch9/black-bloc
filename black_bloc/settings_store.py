@@ -2471,6 +2471,53 @@ KEY_HELP.update(
     }
 )
 
+# Posts — version history (owner, 2026-09-20). A version is written only by Save changes or
+# Post it, so the two decisions the list makes are how many are kept and how long the one-line
+# summary on each row runs.
+POSTS_VERSIONS_KEEP_DEFAULT = 0
+POSTS_VERSIONS_KEEP_MIN = 0
+POSTS_VERSIONS_KEEP_MAX = 500
+POSTS_VERSIONS_SUMMARY_CHARS_DEFAULT = 80
+POSTS_VERSIONS_SUMMARY_CHARS_MIN = 20
+POSTS_VERSIONS_SUMMARY_CHARS_MAX = 300
+
+KEY_TYPES.update({"posts_versions_keep": "int", "posts_versions_summary_chars": "int"})
+KEY_MIN["posts_versions_keep"] = POSTS_VERSIONS_KEEP_MIN
+KEY_MAX["posts_versions_keep"] = POSTS_VERSIONS_KEEP_MAX
+KEY_MIN["posts_versions_summary_chars"] = POSTS_VERSIONS_SUMMARY_CHARS_MIN
+KEY_MAX["posts_versions_summary_chars"] = POSTS_VERSIONS_SUMMARY_CHARS_MAX
+KEY_MIN_REASON["posts_versions_keep"] = (
+    "{limit} is keep every version, and there is nothing below it — history is cheap, a lost "
+    "version is not."
+)
+KEY_MAX_REASON["posts_versions_keep"] = (
+    "Nobody scrolls past {limit} versions of one message, and the list has to be read by a "
+    "person."
+)
+KEY_MIN_REASON["posts_versions_summary_chars"] = (
+    "A summary under {limit} characters shows the first few words and tells nobody which "
+    "version they are looking at."
+)
+KEY_MAX_REASON["posts_versions_summary_chars"] = (
+    "The summary is one line beside two buttons, and past {limit} characters it wraps and the "
+    "list stops being skimmable."
+)
+KEY_HELP.update(
+    {
+        "posts_versions_keep": (
+            "how many saved versions of a post are kept; 0 (the default) keeps every one of "
+            "them, and 1 to 500 trims the oldest after each save. History is cheap and a lost "
+            "version is not, so raise it rather than lower it. The only remaining version is "
+            "never trimmed, whatever the number says"
+        ),
+        "posts_versions_summary_chars": (
+            "how many characters of a version's message are shown on its row in the Versions "
+            "list, 20 to 300; 80 by default. It is one line beside View and Use this version — "
+            "the whole message is in View"
+        ),
+    }
+)
+
 # Meeting minutes (prototype) — filed under `events` in NAMESPACE_OVERRIDE below, because the
 # `/settings` group select is at its cap of 25 and a meeting is an event's cousin.
 MINUTES_MODES = ("off", "on")
@@ -3634,6 +3681,10 @@ class SettingsStore:
             return POSTS_MODE_DEFAULT
         if key == "posts_panel_minutes":
             return POSTS_PANEL_MINUTES_DEFAULT
+        if key == "posts_versions_keep":
+            return POSTS_VERSIONS_KEEP_DEFAULT
+        if key == "posts_versions_summary_chars":
+            return POSTS_VERSIONS_SUMMARY_CHARS_DEFAULT
         if key == "guides_mode":
             return GUIDES_MODE_DEFAULT
         if key == "guides_who_edits":

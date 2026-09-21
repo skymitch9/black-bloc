@@ -85,6 +85,33 @@ def post_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
     }
 
 
+def version_row(
+    guild: Any, row: Any, *, current: bool, limit: int, shipped: bool = False
+) -> dict[str, Any]:
+    channel_id = posts.row_value(row, "channel_id")
+    return {
+        "n": int(row["n"]),
+        "title": row["title"],
+        "summary": posts.summary_of(row, limit),
+        "style": posts.wanted_style(posts.row_value(row, "style", posts.PLAIN)),
+        "channel_id": str(channel_id) if channel_id else None,
+        "channel_name": posts.channel_name(guild, channel_id),
+        "pin": bool(posts.row_value(row, "pin")),
+        "saved_at": row["saved_at"],
+        "saved_by": str(posts.row_value(row, "saved_by"))
+        if posts.row_value(row, "saved_by")
+        else None,
+        "saved_by_name": person(guild, posts.row_value(row, "saved_by")),
+        "via": posts.row_value(row, "via"),
+        "because": posts.row_value(row, "because"),
+        "because_said": posts.because_words(
+            posts.row_value(row, "because"), shipped=shipped
+        ),
+        "shipped": shipped,
+        "current": current,
+    }
+
+
 def guard_line(bot: Any, guild: Any) -> dict[str, Any]:
     """What the page's "how it will post" line reads; one home for the test-mode sentence."""
     testing = bool(getattr(bot.settings, "test_mode", False))
@@ -231,9 +258,80 @@ def build_router(bot: Any) -> APIRouter:
     async def post_takedown(request: Request, slug: str) -> dict[str, Any]:
         return await _move(request, slug, posts.take_down_post)
 
-    @router.post("/{slug}/reset")
-    async def post_reset(request: Request, slug: str) -> dict[str, Any]:
-        return await _move(request, slug, posts.reset_post)
+    async def _versions(guild: Any, row: Any) -> list[dict[str, Any]]:
+        rows = await posts.list_versions(bot.db, int(row["id"]))
+        limit = posts.summary_chars(bot.store, guild.id)
+        top = int(rows[0]["n"]) if rows else None
+        return [
+            version_row(
+                guild,
+                one,
+                current=int(one["n"]) == top,
+                limit=limit,
+                shipped=posts.is_shipped_version(row, one),
+            )
+            for one in rows
+        ]
+
+    @router.get("/{slug}/versions")
+    async def post_versions(request: Request, slug: str) -> dict[str, Any]:
+        guild = await _staff(request)
+        row = await _wanted(guild, slug)
+        found = await _versions(guild, row)
+        return {
+            "slug": str(row["slug"]),
+            "versions": found,
+            "count": len(found),
+            "keep": posts.versions_keep(bot.store, guild.id),
+            "read_at": now(),
+        }
+
+    @router.get("/{slug}/versions/{n}")
+    async def post_version(request: Request, slug: str, n: int) -> dict[str, Any]:
+        guild = await _staff(request)
+        row = await _wanted(guild, slug)
+        version = await posts.get_version(bot.db, int(row["id"]), n)
+        if version is None:
+            raise Refused(
+                404,
+                "no_such_version",
+                posts.NO_SUCH_VERSION.format(n=n, title=str(row["title"])),
+            )
+        top = await posts.latest_n(bot.db, int(row["id"]))
+        limit = posts.summary_chars(bot.store, guild.id)
+        return {
+            "slug": str(row["slug"]),
+            "version": version_row(
+                guild,
+                version,
+                current=int(n) == top,
+                limit=limit,
+                shipped=posts.is_shipped_version(row, version),
+            )
+            | {"body": posts.row_value(version, "body", "")},
+            "preview": {
+                "style": posts.wanted_style(posts.row_value(version, "style", posts.PLAIN)),
+                "title": version["title"],
+                "body": posts.row_value(version, "body", ""),
+                "cap": posts.cap_for(posts.row_value(version, "style", posts.PLAIN)),
+            },
+            "read_at": now(),
+        }
+
+    @router.post("/{slug}/versions/{n}/restore")
+    async def post_version_restore(request: Request, slug: str, n: int) -> dict[str, Any]:
+        who, guild = await _editor(request)
+        row = await _wanted(guild, slug)
+        found = await posts.restore_version(
+            bot, guild, row, actor_for(bot, who, guild), n, via=VIA_WEBSITE
+        )
+        if not found.ok:
+            refused(found)
+        fresh = found.value if found.value is not None else row
+        return _whole(guild, fresh, found.message) | {
+            "from_version": int(n),
+            "versions": await _versions(guild, fresh),
+        }
 
     @router.delete("/{slug}")
     async def post_delete(request: Request, slug: str) -> dict[str, Any]:
@@ -249,4 +347,11 @@ def build_router(bot: Any) -> APIRouter:
     return router
 
 
-__all__ = ["build_router", "guard_line", "post_row", "shadow_line", "styles"]
+__all__ = [
+    "build_router",
+    "guard_line",
+    "post_row",
+    "shadow_line",
+    "styles",
+    "version_row",
+]

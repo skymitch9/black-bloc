@@ -3,6 +3,7 @@ import { start } from './app.js';
 import { htmlToDiscordMarkdown } from './clipmd.js';
 import { renderPreview } from './discordmd.js';
 import { logsSection } from './logs.js';
+import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
 import {
   ago,
   ask,
@@ -16,6 +17,7 @@ import {
   keepSaying,
   modeSwitch,
   notice,
+  openDrawer,
   readSelect,
   run,
   saveBar,
@@ -64,8 +66,15 @@ const PASTE_KEPT = 'Pasted with formatting kept (headings, bold, bullets, links)
   + 'Undo with Ctrl+Z.';
 const PASTE_DISMISS = 'Dismiss';
 const DELETE_QUESTION = 'Every word goes with it. Nothing puts it back.';
-const RESET_QUESTION = 'Every word goes back to the message Black Bloc ships with. Anything '
-  + 'written here is lost; the channel, the style and the pin are kept.';
+const USE_IT_CONFIRM = 'Use version {n}';
+const VERSIONS_UNREADABLE = 'The version history could not be read just now. Everything else on '
+  + 'this page still works — try again in a moment, and tell a Lead if it keeps happening.';
+// Rule 3 of the owner's ask: Post it with unsaved edits saves first, so what goes out is
+// always a version. The sentence under the button says both.
+const WILL_POST_SAVED = 'Post it saves your changes first, then sends this to {where} as '
+  + '{style} and {pin}.';
+const WILL_UPDATE_SAVED = 'Update the post saves your changes first, then edits the message '
+  + 'already in {where}, as {style} and {pin}.';
 
 const state = { refs: null };
 let refresh = () => {};
@@ -132,7 +141,6 @@ function listCard(row, shadow) {
           on: { click: () => goTo(row.slug) },
         }),
         ...statusPills(row),
-        row.seeded ? badge('ships with the bot', 'quiet') : null,
       ]),
       el('p', { class: 'row-detail', text: postedLine(row, shadow) }),
       el('p', {
@@ -273,7 +281,7 @@ function markdownFromPaste(event) {
   return made && made !== plain ? made : '';
 }
 
-function willPost(draft, post, payload) {
+function willPost(draft, post, payload, dirty = false) {
   if (payload.mode === SHADOW) {
     const where = shadowWords(payload.shadow);
     if (!draft.channel_id) return WILL_SHADOW_NOWHERE.replace('{shadow}', where);
@@ -285,7 +293,8 @@ function willPost(draft, post, payload) {
       .replace('{where}', `#${draft.channel_name || post.channel_name || ''}`);
   }
   if (!draft.channel_id) return NEEDS_A_CHANNEL;
-  const template = post.posted ? WILL_UPDATE : WILL_POST;
+  const saving = post.posted ? WILL_UPDATE_SAVED : WILL_POST_SAVED;
+  const template = dirty ? saving : (post.posted ? WILL_UPDATE : WILL_POST);
   return template
     .replace('{where}', `#${draft.channel_name || post.channel_name || ''}`)
     .replace('{style}', STYLE_WORDS[draft.style] || STYLE_WORDS.plain)
@@ -308,7 +317,7 @@ function changeCount(now, was) {
     .filter((key) => String(now[key]) !== String(was[key])).length;
 }
 
-async function editor(payload, known) {
+async function editor(payload, known, history) {
   const post = payload.post;
   const draft = draftOf(post);
   const was = draftOf(post);
@@ -348,7 +357,7 @@ async function editor(payload, known) {
       members: known.members,
     });
     counter.paint(draft.body.length, capOf());
-    howLine.textContent = willPost(draft, post, payload);
+    howLine.textContent = willPost(draft, post, payload, Boolean(changeCount(draft, was)));
   };
   const schedule = () => {
     if (timer) clearTimeout(timer);
@@ -405,6 +414,14 @@ async function editor(payload, known) {
     paintPreview();
   };
 
+  const saveDraft = () => send(`/api/posts/${encodeURIComponent(post.slug)}`, 'PUT', {
+    title: draft.title.trim(),
+    body: draft.body,
+    style: draft.style,
+    pin: draft.pin,
+    channel_id: draft.channel_id || null,
+  });
+
   const write = async () => {
     if (draft.body.length > capOf()) {
       dock.say(0, 'Nothing was saved — the box is over its limit.', 'danger');
@@ -412,13 +429,7 @@ async function editor(payload, known) {
     }
     dock.say(0, 'Saving…', 'info');
     try {
-      const found = await send(`/api/posts/${encodeURIComponent(post.slug)}`, 'PUT', {
-        title: draft.title.trim(),
-        body: draft.body,
-        style: draft.style,
-        pin: draft.pin,
-        channel_id: draft.channel_id || null,
-      });
+      const found = await saveDraft();
       say.say(found?.message || 'Saved.', 'ok');
       keepSaying('post', say);
       refresh();
@@ -440,26 +451,68 @@ async function editor(payload, known) {
     refresh();
   }, { tone });
 
-  const buttons = [move(post.move, 'publish', 'warn')];
+  /** Rule 3: a dirty editor is SAVED first, so what went out is always a version. */
+  const publish = () => button(post.move, async () => {
+    const done = await run(
+      say,
+      async () => {
+        if (changeCount(draft, was)) await saveDraft();
+        return send(`/api/posts/${encodeURIComponent(post.slug)}/publish`, 'POST', {});
+      },
+      (found) => found?.message || 'Done.',
+    );
+    if (!done.ok) return;
+    keepSaying('post', say);
+    refresh();
+  }, { tone: 'warn' });
+
+  const viewVersion = async (version) => {
+    const found = await run(
+      say,
+      () => api(`/api/posts/${encodeURIComponent(post.slug)}/versions/${version.n}`),
+      () => '',
+    );
+    if (!found.ok) return;
+    const drawn = el('div', { class: 'preview' });
+    drawn.innerHTML = renderPreview(found.found.preview.body, {
+      style: found.found.preview.style,
+      title: found.found.preview.title,
+      channels: known.channels,
+      roles: known.roles,
+      members: known.members,
+    });
+    openDrawer(VIEWING.replace('{n}', String(version.n)).replace('{title}', post.title), [drawn]);
+  };
+
+  const useVersion = async (version) => {
+    const top = (history && history.versions && history.versions.length)
+      ? Number(history.versions[0].n) : Number(version.n);
+    const sure = await ask({
+      title: `Use version ${version.n} of “${post.title}”?`,
+      body: [useItQuestion(version, top + 1)],
+      confirmLabel: USE_IT_CONFIRM.replace('{n}', String(version.n)),
+      tone: 'warn',
+    });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => send(
+        `/api/posts/${encodeURIComponent(post.slug)}/versions/${version.n}/restore`, 'POST', {},
+      ),
+      (found) => found?.message || 'Put back.',
+    );
+    if (!done.ok) return;
+    keepSaying('post', say);
+    refresh();
+  };
+
+  const versions = history === null
+    ? notice(VERSIONS_UNREADABLE, 'warn')
+    : versionsFoldout(history.versions, { onView: viewVersion, onUse: useVersion });
+
+  const buttons = [publish()];
   if (post.posted) buttons.push(move('Take it down', 'takedown', 'quiet'));
-  if (post.seeded) {
-    buttons.push(button('Put the original back', async () => {
-      const sure = await ask({
-        title: `Put “${post.title}” back to the words it shipped with?`,
-        body: [RESET_QUESTION],
-        confirmLabel: 'Put it back',
-      });
-      if (!sure) return;
-      const done = await run(
-        say,
-        () => send(`/api/posts/${encodeURIComponent(post.slug)}/reset`, 'POST', {}),
-        (found) => found?.message || 'Put back.',
-      );
-      if (!done.ok) return;
-      keepSaying('post', say);
-      refresh();
-    }, { tone: 'quiet' }));
-  } else {
+  if (!post.seeded) {
     buttons.push(button('Delete this post', async () => {
       const sure = await ask({
         title: `Delete “${post.title}”?`,
@@ -531,6 +584,7 @@ async function editor(payload, known) {
       howLine,
       bar(buttons),
       say,
+      versions,
     ])),
   ];
 }
@@ -548,7 +602,13 @@ async function loadPost(slug) {
     );
     return;
   }
-  holder.replaceChildren(...(await editor(payload, await refs())));
+  let history = null;
+  try {
+    history = await api(`/api/posts/${encodeURIComponent(slug)}/versions`);
+  } catch (error) {
+    history = null;
+  }
+  holder.replaceChildren(...(await editor(payload, await refs(), history)));
 }
 
 async function load() {

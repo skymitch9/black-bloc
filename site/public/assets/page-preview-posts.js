@@ -17,6 +17,7 @@ import {
   section,
   table,
 } from './ui.js';
+import { VIEWING, versionsFoldout } from './postversions.js';
 import { previewBanner, previewWas, wouldDo } from './preview.js';
 
 const DATA = {
@@ -110,6 +111,78 @@ const DATA = {
       "updated_by_name": "Nick"
     }
   ],
+  "versions": {
+    "welcome": [
+      {
+        "n": 3,
+        "title": "Welcome and rules",
+        "summary": "Welcome to** Black in a Flash**, a dedicated space for Black gamers!",
+        "saved_at": "2026-09-20T23:35:42.365Z",
+        "saved_by": "700000000000000001",
+        "saved_by_name": "Nick",
+        "via": "website",
+        "because": "restored:1",
+        "because_said": "restored from 1",
+        "shipped": false,
+        "current": true
+      },
+      {
+        "n": 2,
+        "title": "Welcome and house rules",
+        "summary": "Welcome to Black in a Flash. Read the rules before you join the discord.",
+        "saved_at": "2026-09-18T17:02:10.000Z",
+        "saved_by": "700000000000000002",
+        "saved_by_name": "Sky",
+        "via": "discord",
+        "because": "posted",
+        "because_said": "posted",
+        "shipped": false,
+        "current": false
+      },
+      {
+        "n": 1,
+        "title": "Welcome and rules",
+        "summary": "Welcome to** Black in a Flash**, a dedicated space for Black gamers!",
+        "saved_at": "2026-09-16T17:36:00.000Z",
+        "saved_by": null,
+        "saved_by_name": null,
+        "via": "boot",
+        "because": "backfill",
+        "because_said": "shipped",
+        "shipped": true,
+        "current": false
+      }
+    ],
+    "opening-hours": [
+      {
+        "n": 2,
+        "title": "When staff are around",
+        "summary": "**Staff hours** Somebody is usually around between 6pm and 11pm Phoenix time.",
+        "saved_at": "2026-09-20T22:05:42.365Z",
+        "saved_by": "700000000000000001",
+        "saved_by_name": "Nick",
+        "via": "website",
+        "because": "saved",
+        "because_said": "saved",
+        "shipped": false,
+        "current": true
+      },
+      {
+        "n": 1,
+        "title": "When staff are around",
+        "summary": "**Staff hours** Somebody is usually around between 6pm and 10pm Phoenix time.",
+        "saved_at": "2026-09-19T14:00:00.000Z",
+        "saved_by": "700000000000000002",
+        "saved_by_name": "Sky",
+        "via": "discord",
+        "because": "posted",
+        "because_said": "posted",
+        "shipped": false,
+        "current": false
+      }
+    ],
+    "scratch-post": []
+  },
   "mode": "shadow",
   "styles": [
     {
@@ -427,11 +500,15 @@ function postDrawer(post) {
   if (post.posted) {
     moves.push(button('Take it down', () => wouldDo(say, `POST /api/posts/${post.slug}/takedown — delete the message in ${whereWords(post)} and leave every word written here`), { tone: 'quiet' }));
   }
-  if (post.seeded) {
-    moves.push(button('Put the original back', () => wouldDo(say, `POST /api/posts/${post.slug}/reset — put every word back to the message Black Bloc ships with, keeping the channel, the style and the pin`), { tone: 'quiet' }));
-  } else {
+  if (!post.seeded) {
     moves.push(button('Delete this post', () => wouldDo(say, `DELETE /api/posts/${post.slug} — remove the post and every word in it`), { tone: 'danger' }));
   }
+
+  const history = (DATA.versions || {})[post.slug] || [];
+  const versions = versionsFoldout(history, {
+    onView: (version) => wouldDo(say, `GET /api/posts/${post.slug}/versions/${version.n} — open “${VIEWING.replace('{n}', String(version.n)).replace('{title}', post.title)}” in the drawer, read-only`),
+    onUse: (version) => wouldDo(say, `POST /api/posts/${post.slug}/versions/${version.n}/restore — put version ${version.n}'s words back, keeping what the post says now as version ${Number(history[0] ? history[0].n : version.n) + 1}`),
+  });
 
   return [
     el('div', { class: 'postmarks' }, statusPills(post)),
@@ -452,6 +529,7 @@ function postDrawer(post) {
       ...moves,
     ]),
     say,
+    versions,
   ];
 }
 
@@ -469,10 +547,7 @@ function postRow(post) {
   }, [
     el('span', { class: 'dot-sm', 'data-tone': leadState(post) }),
     el('span', { class: 'cell-name', text: post.title }),
-    el('span', { class: 'cell-kind cell-center' }, [
-      ...statusPills(post),
-      post.seeded ? badge('ships with the bot') : null,
-    ]),
+    el('span', { class: 'cell-kind cell-center' }, statusPills(post)),
     el('span', { class: 'cell-quiet', text: postedLine(post, DATA.shadow) }),
     el('span', {
       class: 'cell-quiet',

@@ -565,6 +565,8 @@ const SETTING_SPECS = [
   // Posts (§C7) — black_bloc/settings_store.py owns them; these are the mock's copy.
   ['posts_mode', 'enum', 'shadow', 'shadow', "off, shadow (Post it sends the real message into the shadow channel — the test channel while test mode is on, otherwise the log channel — and keeps it edited there, whatever channel the post names) or on (Post it goes to the post's own channel, and the first real post removes the shadow copy). Shadow is the default, so nothing reaches members until a Lead turns posts on. Off hides `/posts` and refuses both doors in words; every word already written is kept in all three", ['off', 'shadow', 'on']],
   ['posts_panel_minutes', 'int', 10, 10, "minutes the /posts panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440, 1],
+  ['posts_versions_keep', 'int', 0, 0, 'how many saved versions of a post are kept; 0 (the default) keeps every one of them, and 1 to 500 trims the oldest after each save. History is cheap and a lost version is not, so raise it rather than lower it. The only remaining version is never trimmed, whatever the number says', null, 500, 0],
+  ['posts_versions_summary_chars', 'int', 80, 80, 'how many characters of a version’s message are shown on its row in the Versions list, 20 to 300; 80 by default. It is one line beside View and Use this version — the whole message is in View', null, 300, 20],
   // Guides (G1) — black_bloc/settings_store.py owns them; these are the mock's copy.
   ['guides_mode', 'enum', 'on', 'on', 'on to give members the Guides page and to put a guide link beside a command in /help; off hides both. Staff can still open a guide\u2019s web address while it is off, and the page says so. There is no slash command to hide either way', ['off', 'on']],
   ['guides_who_edits', 'enum', 'staff', 'staff', 'who may change a guide\u2019s wording and screenshots: staff (anybody who can see the staff channel, the default) or manage_guild (a Lead only). It is read when Save is pressed rather than when the page is drawn, so taking the role away stops the next save', ['staff', 'manage_guild']],
@@ -911,6 +913,14 @@ function seedState() {
   ],
   nextPost: 4,
   nextPostMessage: 820000000000000001,
+  // Version history. welcome carries the backfilled `shipped` row the migration writes, so
+  // the Versions foldout has a chip of every colour to look at; scratch-post has none, which
+  // is what a post nobody has saved yet looks like.
+  postVersions: [
+    { post_id: 1, n: 1, title: 'Welcome and rules', body: POST_SEED_BODY, style: 'plain', channel_id: '800000000000000001', pin: true, saved_at: minutesAgo(5000), saved_by: null, via: 'boot', because: 'backfill' },
+    { post_id: 2, n: 1, title: 'When staff are around', body: '**Staff hours**\n> Somebody is usually around between 6pm and 10pm Phoenix time.', style: 'embed', channel_id: '800000000000000003', pin: false, saved_at: minutesAgo(300), saved_by: STAFF.id, via: 'discord', because: 'posted' },
+    { post_id: 2, n: 2, title: 'When staff are around', body: '**Staff hours**\n> Somebody is usually around between 6pm and 11pm Phoenix time.\n> Outside that, open a modmail and it is answered in the morning.', style: 'embed', channel_id: '800000000000000003', pin: false, saved_at: minutesAgo(90), saved_by: STAFF.id, via: 'website', because: 'saved' },
+  ],
   // Meeting minutes (prototype). Meeting 1 is finished, written up and posted, with a short
   // transcript; meeting 2 is still recording, which is the state every notes move refuses from.
   meetings: [
@@ -2136,7 +2146,6 @@ const POST_STYLE_WORDS = { plain: 'a plain message', embed: 'an embed' };
 const POST_TITLE_MAX = 256;
 const POST_NO_SUCH = 'There is no post called **{slug}**, so nothing was done. It may have been renamed — open the Posts page and pick it from the list.';
 const POST_SEEDED = '**{slug}** is the post Black Bloc ships with, so it cannot be deleted — a deploy would only put it back. Press **Take it down** instead: the message goes and every word you have written is kept.';
-const POST_NOT_SEEDED = '**{slug}** was written here rather than shipped with Black Bloc, so there is no original to put back. Nothing was changed.';
 const POST_STILL_POSTED = '**{title}** is still posted in Discord, so it was not deleted. Press **Take it down** first — every word is kept either way.';
 const POST_NO_CHANNEL = '**{title}** has no channel to go in yet, so there is nothing to post it to. Pick one under **Channel**, press Save Changes, then press Post it.';
 const POST_NOTHING_TO_POST = '**{title}** has nothing written in it yet, so there is nothing to post. Write the message in the box, save it, then press Post it.';
@@ -2148,6 +2157,8 @@ const POST_SLUG_NEEDED = 'A post needs a title Black Bloc can turn into a web ad
 const POSTS_ARE_OFF = 'Posts are off for this server, so **Post it** and **Take it down** refuse in words and `/posts` is hidden. Every word written here is kept — a Lead turns them back on from the Settings page under **posts**.';
 const POST_TEST_MODE_NOTE = `Black Bloc is in test mode, so a post only reaches #${TEST_CHANNEL_NAME} or a channel it made itself. **Post it** on anything else writes down what it would have sent and sends nothing.`;
 const POSTS_ARE_SHADOW = 'Posts are in **shadow**: **Post it** sends the real message to {where} and keeps it edited there, whatever channel a post names, so nothing reaches members yet. Turning posts **on** is the go-live — the next **Post it** goes to the post\u2019s own channel and the shadow copy is removed.';
+const POST_NO_SUCH_VERSION = 'There is no version {n} of **{title}**, so nothing was changed. Open **Versions** and pick one from the list.';
+const POST_VERSION_IS_CURRENT = 'Version {n} is already what the post says, so nothing was changed. Pick an older version, or edit the words in the box.';
 const POST_NO_SHADOW_CHANNEL = 'Posts are in **shadow**, so **{title}** goes to the shadow channel rather than its own — and this server has neither a test channel nor a log channel, so there is nowhere to put it. A Lead sets **log_channel_id** on the Settings page, or turns posts on.';
 // The shadow channel: the guard's own while test mode is on, otherwise log_channel_id. The
 // mock has no guard object, so it reads the same two places the bot does.
@@ -2265,6 +2276,116 @@ function postNotes() {
   return [POSTS_ARE_SHADOW.split('{where}').join(`#${postChannelName(where)}`)];
 }
 
+function postVersionsOf(row) {
+  return state.postVersions
+    .filter((one) => one.post_id === row.id)
+    .sort((a, b) => b.n - a.n);
+}
+
+function postVersionTop(row) {
+  const found = postVersionsOf(row);
+  return found.length ? found[0].n : null;
+}
+
+function postSummaryChars() {
+  return Number(state.settings.get('posts_versions_summary_chars') ?? 80) || 80;
+}
+
+function postVersionsKeep() {
+  return Math.max(0, Number(state.settings.get('posts_versions_keep') ?? 0) || 0);
+}
+
+function postSummary(version) {
+  const limit = postSummaryChars();
+  const text = String(version.body || '').split(/\s+/).filter(Boolean).join(' ');
+  return text.length <= limit ? text : `${text.slice(0, limit).trimEnd()}\u2026`;
+}
+
+function postIsShipped(row, version) {
+  return Boolean(row.seeded) && version.because === 'backfill' && version.body === POST_SEED_BODY;
+}
+
+function postBecauseSaid(version, shipped) {
+  const [head, rest] = String(version.because || '').split(':');
+  if (head === 'restored' && rest) return `restored from ${rest}`;
+  if (shipped) return 'shipped';
+  if (version.because === 'backfill') return 'what it said before';
+  return version.because;
+}
+
+function postVersionRow(row, version) {
+  const shipped = postIsShipped(row, version);
+  return {
+    n: version.n,
+    title: version.title,
+    summary: postSummary(version),
+    style: version.style,
+    channel_id: version.channel_id ? String(version.channel_id) : null,
+    channel_name: postChannelName(version.channel_id),
+    pin: Boolean(version.pin),
+    saved_at: version.saved_at,
+    saved_by: version.saved_by ? String(version.saved_by) : null,
+    saved_by_name: version.saved_by ? memberName(version.saved_by) : null,
+    via: version.via,
+    because: version.because,
+    because_said: postBecauseSaid(version, shipped),
+    shipped,
+    current: version.n === postVersionTop(row),
+  };
+}
+
+function postVersionList(row) {
+  return postVersionsOf(row).map((one) => postVersionRow(row, one));
+}
+
+function postVersionFields(one) {
+  return [
+    String(one.title || ''),
+    String(one.body || ''),
+    one.style,
+    one.channel_id ? String(one.channel_id) : null,
+    Boolean(one.pin),
+  ].join('\u0000');
+}
+
+/** The mock's twin of posts.record_version: a version per press that CHANGED something. */
+function postRecordVersion(row, { because, always = false } = {}) {
+  const found = postVersionsOf(row);
+  const latest = found.length ? found[0] : null;
+  if (!always && latest && postVersionFields(latest) === postVersionFields(row)) return null;
+  const n = (latest ? latest.n : 0) + 1;
+  state.postVersions.push({
+    post_id: row.id,
+    n,
+    title: row.title,
+    body: row.body,
+    style: row.style,
+    channel_id: row.channel_id,
+    pin: Boolean(row.pin),
+    saved_at: now(),
+    saved_by: STAFF.id,
+    via: 'website',
+    because,
+  });
+  const keep = postVersionsKeep();
+  if (keep > 0) {
+    const left = postVersionsOf(row).slice(0, Math.max(1, keep)).map((one) => one.n);
+    const dropped = postVersionsOf(row).filter((one) => !left.includes(one.n)).map((one) => one.n);
+    if (dropped.length) {
+      state.postVersions = state.postVersions
+        .filter((one) => one.post_id !== row.id || left.includes(one.n));
+      logAction('web.post.versions_trimmed', {
+        details: { slug: row.slug, post_id: row.id, versions: dropped.sort(), kept: n, via: 'website' },
+      });
+    }
+  }
+  return n;
+}
+
+function postVersionNow(row, made) {
+  return made === null ? postVersionTop(row) : made;
+}
+
 function postWhole(row, said) {
   const found = {
     post: postRow(row),
@@ -2370,7 +2491,10 @@ route('PUT', '/api/posts/:slug', async (context) => {
   if ('pin' in body) row.pin = Boolean(body.pin);
   row.updated_at = now();
   row.updated_by = STAFF.id;
-  logAction('web.post.saved', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
+  const made = postRecordVersion(row, { because: 'saved' });
+  logAction('web.post.saved', {
+    details: { slug: row.slug, post_id: row.id, version: postVersionNow(row, made), via: 'website' },
+  });
   return postWhole(row, `**${row.title}** is saved.`);
 });
 
@@ -2400,8 +2524,15 @@ route('POST', '/api/posts/:slug/publish', (context) => {
   const kinds = shadow
     ? ['web.post.shadow_updated', 'web.post.shadow_posted']
     : ['web.post.updated', 'web.post.posted'];
+  const posted = postRecordVersion(row, { because: 'posted' });
   logAction(updating ? kinds[0] : kinds[1], {
-    details: { slug: row.slug, post_id: row.id, message_id: row[column], via: 'website' },
+    details: {
+      slug: row.slug,
+      post_id: row.id,
+      message_id: row[column],
+      version: postVersionNow(row, posted),
+      via: 'website',
+    },
   });
   // The first real post takes the rehearsal back down; a failure here would be logged and
   // not abort, which the mock has no way to produce.
@@ -2456,17 +2587,81 @@ route('POST', '/api/posts/:slug/takedown', (context) => {
   return postWhole(row, `**${row.title}** is taken down. Every word is still here.`);
 });
 
-route('POST', '/api/posts/:slug/reset', (context) => {
+route('GET', '/api/posts/:slug/versions', (context) => {
   requireStaff(context.session);
   const row = wantedPost(context.params.slug);
-  if (!row.seeded) throw new Refused(409, 'not_seeded', POST_NOT_SEEDED.split('{slug}').join(row.slug));
-  row.title = 'Welcome and rules';
-  row.body = POST_SEED_BODY;
-  row.style = 'plain';
-  row.pin = true;
+  const found = postVersionList(row);
+  return {
+    slug: row.slug,
+    versions: found,
+    count: found.length,
+    keep: postVersionsKeep(),
+    read_at: now(),
+  };
+});
+
+route('GET', '/api/posts/:slug/versions/:n', (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  const version = postVersionsOf(row).find((one) => String(one.n) === String(context.params.n));
+  if (!version) {
+    throw new Refused(404, 'no_such_version', POST_NO_SUCH_VERSION
+      .split('{n}').join(String(context.params.n))
+      .split('{title}').join(row.title));
+  }
+  return {
+    slug: row.slug,
+    version: { ...postVersionRow(row, version), body: version.body },
+    preview: {
+      style: version.style,
+      title: version.title,
+      body: version.body,
+      cap: postCap(version.style),
+    },
+    read_at: now(),
+  };
+});
+
+route('POST', '/api/posts/:slug/versions/:n/restore', (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  const version = postVersionsOf(row).find((one) => String(one.n) === String(context.params.n));
+  if (!version) {
+    throw new Refused(404, 'no_such_version', POST_NO_SUCH_VERSION
+      .split('{n}').join(String(context.params.n))
+      .split('{title}').join(row.title));
+  }
+  if (version.n === postVersionTop(row)) {
+    throw new Refused(409, 'version_is_current',
+      POST_VERSION_IS_CURRENT.split('{n}').join(String(version.n)));
+  }
+  row.title = version.title;
+  row.body = version.body;
+  row.style = version.style;
+  row.channel_id = version.channel_id;
+  row.pin = Boolean(version.pin);
   row.updated_at = now();
-  logAction('web.post.reset', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
-  return postWhole(row, `**${row.title}** is back to the words it shipped with.`);
+  row.updated_by = STAFF.id;
+  const made = postRecordVersion(row, { because: `restored:${version.n}`, always: true });
+  logAction('web.post.restored', {
+    details: {
+      slug: row.slug,
+      post_id: row.id,
+      from_version: version.n,
+      new_version: made,
+      via: 'website',
+    },
+  });
+  return {
+    ...postWhole(
+      row,
+      `**${row.title}** is back to version ${version.n}. What it said a moment ago is kept as `
+        + `version ${made}, so nothing is lost either way. Press **Post it** to send the change `
+        + 'to Discord.',
+    ),
+    from_version: version.n,
+    versions: postVersionList(row),
+  };
 });
 
 route('DELETE', '/api/posts/:slug', (context) => {
@@ -2475,6 +2670,7 @@ route('DELETE', '/api/posts/:slug', (context) => {
   if (row.seeded) throw new Refused(409, 'seeded_post', POST_SEEDED.split('{slug}').join(row.slug));
   if (postIsUp(row)) throw new Refused(409, 'still_posted', POST_STILL_POSTED.split('{title}').join(row.title));
   state.posts = state.posts.filter((one) => one.id !== row.id);
+  state.postVersions = state.postVersions.filter((one) => one.post_id !== row.id);
   logAction('web.post.deleted', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
   return { deleted: row.slug, message: `**${row.title}** is gone.` };
 });
