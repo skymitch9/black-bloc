@@ -2437,3 +2437,28 @@ below is **not verified**; everything else is). Staff door: **Runs the cookout**
 |---|---|---|
 | `ET-a` | Open the Events page, open **Queue**, and look at the buttons on every open (pending, approved, live) event's row — including one whose review room or post still exists | ⚠️ **No Remove its room / Remove its post anywhere.** The row offers only **Open**, **Approve** / **Deny** (pending only), **Cancel** (unless denied or cancelled) and, once the events forum exists and the event still has a room, **Move to the forum**. A settled event's detail card still shows its **Review channel** / **Review post** line — that display did not change, only the button that deleted it |
 | `ET-b` | Open **Settings**, find **The forum every event is posted in** (`events_forum_channel_id`) and **Whether an event gets its own room or a forum post** (`events_review_mode`). With the key blank, press **Make the forum**; then reload and look again | Both keys edit in place under **Settings**, same as every other `events_*` key — there is no separate **Events forum** section any more. **Make the forum** sits beside the `events_forum_channel_id` row and reads exactly as the old card's button did; pressing it makes the forum, fills the row with the new channel, and reloads — the button is then **gone**, because it renders only while the key is blank. ⚠️ **390 px overflow not verified this pass** — say so rather than guess |
+
+---
+
+## RAID TRAINS ARE PAGE 21, AND A TRAIN CAN MAKE AN EVENT (`RT-a` … `RT-e`, branch `raidtrain-page`, design [`../info/raidtrain-page-design.md`](../info/raidtrain-page-design.md))
+
+Owner, 2026-09-20 21:1x: *"raid train should be in its own page and it should have the option to
+make an event that ties to the event set up we use."* Raid trains left the Events page for
+`/raidtrain.html` — one list whose row opens the lineup in a drawer, **Start a raid train** in
+the list's own toolbar, and everything reference-only in one shut **Settings and logs** section.
+**Also make an event** on Start, and **Make an event for it** on a train that has none, both send
+the event through the ordinary events review; calling the train off calls the event off too.
+
+⚠️ **Nothing here has met Discord**, and ⚠️ **the migration has not run on the live database** —
+`raid_trains.event_id` (schema 51) is applied by `Database.connect` and has only ever run against
+a temporary file. Every row below was pressed against the local mock in `chrome-headless-shell`
+149.0.7827.22 driven over CDP, never against the bot. Staff door: **Runs the cookout** ▸ **Raid
+trains**.
+
+| Row | Do | Expect |
+|---|---|---|
+| `RT-a` | Open any page and look at the rail under **Runs the cookout**; then open **Events** | **Raid trains** sits directly under **Events**, with a mode dot of its own. The Events page is **Queue · Settings · Logs** and holds **no** raid-train section, no *Raid train settings* and no *Raid train logs*. ⚠️ An event RAISED from a train does still appear in the Events queue by title — that is the feature, not a leftover |
+| `RT-b` | On **Raid trains**, press **Start a raid train**, fill in a title and a start, set **Also make an event** to **Yes**, press **Start it** | One sentence covers both: *"… is up with N slot(s) of M minutes each. Event #K for … is with the events review now."* The new row appears in the list with an **Event** cell reading `#K pending`, and the Events page's queue holds the event with the train's title. Set the toggle to **No** instead and the row's Event cell reads *no event* |
+| `RT-c` | Open a train whose **Event** cell reads *no event* and press **Make an event for it** in the drawer's **The event** card | Before: *"No event is tied to this train yet…"*. The confirm says what is about to be raised and that calling the train off will call it off too. After: *"Event #K carries this train. It is pending, and the Events page is where it is decided."*, the notice reads *"Event #K for … is with the events review now."*, and **Make an event for it** has been replaced by **Open it on the Events page**. ⚠️ The already-has-one refusal was NOT pressed in a browser — the button does not render once a train has an event; it is covered by `tests/api/tools/test_raidtrain.py` and answers in words, never a bare 409 |
+| `RT-d` | Call that same train off from its drawer (**Call it off**, type a reason) | The confirm says *"… and any event this train carries is cancelled too."* Afterwards the train is off the **Coming up** list, its drawer offers no move at all, and the event it carried reads **cancelled** on the Events page. The log holds `web.raidtrain.cancel` **and** `web.raidtrain.event_cancelled` ⚠️ **— the mock's own rows, not the bot's** |
+| `RT-e` | In Discord: `/raidtrain` ▸ **Start a raid train**, look at the **Also make an event: no/yes** button, press it, then **Start**. Then open a train's card as staff and look for **Make an event** | ⚠️ **NOT VERIFIED — nothing in this build met Discord.** Expected: the toggle starts wherever `raidtrain_event_default` points, flips in place, and the draft card's *Also make an event* line follows it; **Start** then answers with the same two-part sentence the site gives. A staff card offers **Make an event** only while the train is open or locked and carries none. Raid trains have never run in production — `raidtrain_mode` is `off` |

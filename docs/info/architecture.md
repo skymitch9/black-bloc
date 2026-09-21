@@ -55,6 +55,33 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-20 (Raid trains on a page of their own, and a train that also makes an event, branch
+> `raidtrain-page` off `main` `e177b27`; design `info/raidtrain-page-design.md`; ⚠️ BUILT, NOT
+> MERGED, NOT DEPLOYED, nothing has met Discord and the migration has NOT run on the live
+> database):** schema **50 → 51** (measured: `SCHEMA_VERSION`) — `raid_trains` gains `event_id
+> INTEGER`, nullable, through `ADDED_COLUMNS` only, so ⚠️ **migrate-before-deploy is automatic
+> here**: `Database.connect` applies it as it applies every column before it, and there is no
+> backfill — every train made before this reads back with a null and behaves exactly as it does
+> today. Registry keys **292 → 293** (measured: `len(settings_store.KEY_TYPES)`) —
+> `raidtrain_event_default` (bool, ships **false**: whether **Also make an event** starts ticked).
+> Setting groups **unchanged at 25** and features **unchanged at 21** — the key sits in the
+> `raidtrain` namespace the prefix already gives it. Two log kinds: `raidtrain.event_made`
+> (IMPORTANT — a train just put something in front of the review) and `raidtrain.event_cancelled`
+> (routine, the cascade behind a cancel); both go through `kind_via`, so the website spellings
+> exist and are listed in `contract.json`. Cogs **unchanged at 23** — no new cog, no new command,
+> and `tests/test_bot.py`'s tree count did not move. Mock **20 → 21 pages / 196 → 197 routes / 24
+> core settings** (`node site/mock/check.mjs` re-RUN against a mock on port 8786, not quoted):
+> `/raidtrain.html` is page 21 and `POST /api/raidtrains/{id}/event` is the one new route; the six
+> existing `/api/raidtrains/*` rows gain `event_id` and `event_status`. Tests **7058 → 7098**
+> passed + 3 skipped (`pytest -n 8`, forward and under `BB_REVERSE=1`). ⚠️ **No new module:**
+> `site/public/raidtrain.html` + `assets/page-raidtrain.js` are the new FILES, and every Python
+> change is in `raidtrain.py`, `cogs/content/raidtrain.py`, `api/tools/raidtrain.py`,
+> `cogs/community/events.py` (one new `propose_from`), `settings_store.py`, `logkinds.py` and
+> `storage/db.py`. `logkinds.FEATURE_PAGES["raidtrain"]` moves `events.html` → `raidtrain.html`,
+> which re-points the action-log footer, the `/raidtrain` panel's **Open on the site** and the
+> guides hub in one edit. The Events page loses its two raid-train sections and the `raidtrain`
+> settings and logs blocks: **5 → 3** top-level sections.
+>
 > **2026-09-20 (Co-streaming — one announcement naming both platforms, branch `costream` off
 > `main` `64ccfbc`; design `info/costream-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing
 > has met Discord):** schema **45 → 46** (measured: `SCHEMA_VERSION`) — `golive_sessions` gains

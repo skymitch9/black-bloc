@@ -572,6 +572,19 @@ everything left. Two sections plus logs, instead of five.
 
 ### 15. events · 🟠 · 4 fails
 
+> 🔧 **2026-09-20 — the page LOST raid trains and is three sections, not seven.** Two builds did
+> it. First branch `events-trims` (merged `6738a8d`): *Remove its room/post* went and the forum
+> card folded into **Settings**. Then branch `raidtrain-page` (⚠️ built, NOT merged, NOT deployed;
+> design [`raidtrain-page-design.md`](raidtrain-page-design.md)): **Raid trains**, **Train #N**,
+> **Raid train settings** and **Raid train logs** are all gone from this page and are
+> `/raidtrain.html` instead. What is left, measured in `chrome-headless-shell` against the mock:
+> **Queue · Settings · Logs**. So **T5 is answered at the cause** — one page, one subject — and
+> **T4** is two blocks of machinery across three sections rather than four across seven.
+> ⚠️ **T3 and T6 are NOT answered here:** an opened event is still its queue row plus an
+> *Event #N* section, and the duplicated *times are read in …* / `YYYY-MM-DD HH:MM` sentences that
+> survive are still written twice. Those wait on the Events page's own stage 3. §B's table above
+> is the pre-trim reading and was NOT re-run.
+
 **(a) Sections.** Seven, nine with both details open (`page-events.js:559–567`): **Queue** (a
 show-filter and the event table, with Open/Approve/Deny/Cancel/Move-to-the-forum/Remove-its-room
 as buttons in the last column, `:188–278`) · **Event #N** when open, `open: true` (`:550`) ·
