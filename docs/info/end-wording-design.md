@@ -34,6 +34,20 @@ template, never to a second key. `golive_end_keep_mention` is untouched (it is a
 `suffix` argument; `GOLIVE_END_SUFFIX` goes (its text lives on inside the template default). The spotlight end path
 (`cogs/content/spotlight.py`) renders through the same function and needs no words of its own.
 
+## A2. The off / edit toggle goes too — the announcement is ALWAYS edited when the stream ends
+
+Owner, 20:0x, verbatim: *"also the when stream ends edit or off toggle to change whether we dynamically adjust is
+unneeded. we will also edit our message. remove this aption"*. **`golive_end_mode` (enum `off` / `edit`) is RETIRED**:
+the end path runs as if `edit` for everyone — `golive.py:576` (`ends_by_editing` or whatever `:576` names) returns True
+unconditionally and then goes, `cogs/content/golive.py:596` / `:1388` and `cogs/content/spotlight.py:554` stop reading
+it, `api/status.py` drops it from the status line, `end_details` stops reporting a mode. On the site: the mode switch in
+the Wording card and the *golive_end_mode is off, so…* / `END_UNKNOWN` sentences (`page-golive.js:102`, `:110`, `:1027`,
+`:1042`) go; `golive-join.js:placeSettings`, `labels.js`, the mock `SETTING_SPECS`, `page-preview-settings.js` lose the key;
+the join fixture drops by one more. Migration: delete any stored `golive_end_mode` row at the same boot pass as the
+suffix (the row is meaningless once nothing reads it; log it in the same `golive.end_wording_migrated` details as
+`dropped_mode: <value or null>`). **Keys 293 → 291.** A guild that had set `off` will now see its announcements edited
+when streams end — that is the owner's decision, stated above; say so in the sweep row.
+
 ## B. The migration — nobody's wording changes at the deploy
 
 At boot, once (`Database.connect` or the cog's first pass — the builder picks the idempotent spot and says which; the
