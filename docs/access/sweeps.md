@@ -1,6 +1,13 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-20** — rows **`BS-a` … `BS-e`** added at the foot for THE GO-LIVE BOOT SWEEP (branch `boot-sweep`, off `main`
+> `f73e81c`; design [`../info/golive-boot-sweep-design.md`](../info/golive-boot-sweep-design.md); ⚠️ **not merged, not
+> deployed, and NOTHING IN IT HAS MET DISCORD** — no bot has been restarted while somebody was streaming). Owner: *"have
+> the bot check all the channels with status and taht are linked on start up … so we dont miss people during reboots"*.
+> ⚠️ **`BS-a` … `BS-c` and `BS-e` all need a REDEPLOY while somebody is actually live**, which is the only way to make the thing
+> they test happen; `BS-d` can be read from a laptop after any deploy. ⚠️ **Nothing else in this file was re-checked
+> then.** Before that,
 > **2026-09-20 18:06** — rows **633–636** (were `ST-a` … `ST-d`, numbered at the v146 merge) for THE BOOT RUN FOLLOWING TEST MODE AND `/test`
 > (branch `selftest-boot`, off `main` `74c25bf`; design [`../info/selftest-design.md`](../info/selftest-design.md) ▸ §K;
 > ⚠️ **not merged, not deployed, and NOTHING IN IT HAS MET DISCORD** — no `/test` has been typed and no boot has
@@ -2244,3 +2251,34 @@ should wear the **shipped** chip.
 | **`PV-f`** | Look for **Use this version** on the top row, and for **Put the original back** anywhere | ⚠️ The current version has **View only** — there is no Use this version on it, and pressing the route by hand answers *"Version N is already what the post says…"* in words. **Put the original back is GONE**, on the page AND on the `/posts` card. ⚠️ The **ships with the bot** badge is gone from the list row too: that fact now lives on version 1's **shipped** chip, and only while nobody has rewritten those words |
 | **`PV-g`** | In Discord, run **`/posts`**, pick a post, press **Versions…**, choose one from the dropdown, press **View**, then **Use this version** and confirm | The sub-panel lists the last 25 newest-first with the same words the site uses (`v3 · 2 days ago · saved · by Sky`). **View** answers with the version's message, ephemeral, visible only to you. **Use this version** confirms first, then puts you back on the post's card with the outcome sentence. ⚠️ Pick the CURRENT version and there is no **Use this version** button at all |
 | **`PV-h`** | On **Settings** ▸ **posts**, read `posts_versions_keep` and `posts_versions_summary_chars`, set keep to **2**, then save a post three times and re-open **Versions** | Both keys are there with their help sentences; keep is **0** by default (*keep every version*) and the summary is **80**. With keep at 2 the list holds the newest **two** and the Logs page has a `post.versions_trimmed` row naming which n's went. ⚠️ **Put `posts_versions_keep` back to 0 when you are done** — a trimmed version is gone for good. Raise the summary to 200 and the rows get longer without the list reflowing |
+
+## NOBODY IS MISSED BECAUSE THE BOT WAS RESTARTING (rows `BS-a` … `BS-e`, branch `boot-sweep`, design [`../info/golive-boot-sweep-design.md`](../info/golive-boot-sweep-design.md))
+
+Owner, 2026-09-20 17:5x: *"also for go live detection, have the bot check all the channels with
+status and taht are linked on start up and make sure the most recent post regarding them in the
+golive channel is accurate so we dont miss people during reboots"*.
+
+⚠️ **Nothing below has ever happened on Discord.** No bot has been restarted while a member was
+streaming, no presence has been walked at boot, and no `golive.boot_swept` row has been read by a
+person. Every claim behind this build is the suite's, against fakes.
+
+🔴 **Two of these rows are confirming a DEFECT, not a feature.** The build found that
+`bot.py:setup_hook` loads the cogs before the bot has any guilds, so the v141 boot reconcile has
+been doing **nothing** on Fly — an open session left by a restart waited twelve hours for
+`golive_max_session_hours` to age it out. `BS-b` and `BS-c` are what prove the fix. **The
+spotlight cog shipped with the identical defect at v148** and is fixed on the same branch;
+`BS-e` is its row.
+
+What must be on first: `golive_channel_id` set, `golive_mode` **on** (it is per guild — check it,
+because in **shadow** everything below is a `would_announce` row and no message), and
+`golive_boot_sweep` **true** (its default). `golive_end_mode` must be **edit** for `BS-c`'s
+past-tense rewrite; it ships **off**. Staff door: **Runs the cookout** ▸ **Go-live**
+(https://blackbloc.heygabi.ai/golive.html) ▸ **How streams are spotted**.
+
+| Row | Do | Expect |
+|---|---|---|
+| `BS-a` | Have somebody **start streaming through Discord alone** — no Twitch channel linked to them, just Go Live in a voice channel or a Streaming status — wait for the announcement, then **redeploy the bot** (or restart the machine) | Within a minute of the bot coming back, **nothing new is posted** — their session is still open and still theirs. ⚠️ **Now the real one:** have somebody with NO link start streaming **while the bot is down**, then bring it back. Their announcement appears **within a minute of boot**, worded exactly like any other. Before this build it appeared only when their presence next changed, which after a deploy could be never. On the **Logs** page ▸ **golive**, one `golive.boot_swept` row for the boot says `presence_found`, `presence_announced` and `members_walked` |
+| `BS-b` | With a **linked Twitch** streamer live, redeploy | **ONE** announcement, not two — the poll's first tick sees them live, the cooldown against their last session's end holds the second one back. Their original post is untouched. `golive.boot_swept` says `sessions_kept: 1` |
+| `BS-c` | With a session open, have the streamer **stop while the bot is down** (end the stream, then redeploy — or redeploy and stop during it) | After boot the announcement **reads in the past tense** with how long it ran (needs `golive_end_mode` = **edit**; with it **off** the post is left alone, which is also correct and is what ships). The live role comes off. On the Logs page a `golive.end` row with `reason: reconciled_on_start`. ⚠️ **This is the row that proves the defect is fixed** — before this build nothing closed it until twelve hours had passed |
+| `BS-e` | ⚠️ **While a spotlighted channel is live** (GamesDoneQuick mid-marathon, or any row you added), **delete its announcement from the go-live channel by hand**, then redeploy | Within a minute of boot the session is **closed**, not left open for ever: on the **Logs** page ▸ **golive**, one `golive.spotlight_reconciled` row naming the login, with `reason` reading the reconciled wording. ⚠️ **This is the second defect row** — at v148 this never happened, because the spotlight boot reconcile ran before the bot had any guilds and then blocked the pass that did. The cheap half, if you do not want to wait for a marathon: any redeploy at all should leave the row's open session alone when its announcement is still there (that is `test_a_session_whose_message_is_still_there_survives_the_boot`, and the visible version is simply that nothing is re-announced) |
+| `BS-d` | After **any** deploy, open the **Logs** page ▸ **golive** (or the Logs section at the foot of the Go-live page) | Exactly **one** `golive.boot_swept` row per boot. Read two numbers on it: `members_walked` should be roughly the size of the server, and `members_cached` should be **true**. ⚠️ **A walk of 0, or `members_cached: false`, means the sweep ran before Discord had handed over the member list** — that is a bug to report, not a quiet server. `presence_skipped` says why anyone streaming was passed over (`cooldown` / `opted_out` / `role_filter` / `open_session`). Then set **Whether a restart looks for people already streaming** to **off** on the Go-live page, redeploy, and the next row reads `swept: false` with `members_walked: 0` — the switch works both ways |

@@ -291,6 +291,7 @@ ROUTINE: frozenset[str] = frozenset(
         "frontdoor.ticket_button_hidden",
         "golive.add_role",
         "golive.announce",
+        "golive.boot_swept",
         "golive.costream_dropped",
         "golive.end",
         "golive.link",

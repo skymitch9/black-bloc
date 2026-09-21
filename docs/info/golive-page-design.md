@@ -323,3 +323,11 @@ Sweeps `GP-a` … `GP-f` are the only proof that will ever exist.
   functions are untested code.
 - `golive.html`, `contract.json` and every shared asset module are unchanged — **verified by
   `git diff`**, which is the one claim here that was measured rather than read.
+
+---
+
+**2026-09-20 (branch `boot-sweep`)** — the *How streams are spotted* drawer gained a tenth control,
+`golive_boot_sweep` (bool, default true): whether a restart walks every member's Discord presence
+and announces anyone already streaming with no session. Nothing else on the page moved — the key
+goes through `placeSettings` and `settingsPanel` like the nine beside it, and the every-key-lands-once
+fixture in `golive-join.test.mjs` went **48 → 49**. Design: [`golive-boot-sweep-design.md`](golive-boot-sweep-design.md).

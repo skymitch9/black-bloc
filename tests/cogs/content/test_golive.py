@@ -94,7 +94,13 @@ class FakeGuild:
     def __init__(self):
         self.id = GUILD
         self.channels = {CHANNEL: FakeChannel(CHANNEL), LOG_CHANNEL: FakeChannel(LOG_CHANNEL)}
-        self.members = {}
+        self.by_id = {}
+        self.chunked = True
+
+    @property
+    def members(self):
+        """A real guild hands the boot sweep a list, so the fake does too."""
+        return list(self.by_id.values())
 
     @property
     def channel(self):
@@ -107,7 +113,7 @@ class FakeGuild:
         return FakeRole(role_id) if role_id in (LIVE_ROLE, OTHER_LIVE_ROLE) else None
 
     def get_member(self, user_id):
-        return self.members.get(user_id)
+        return self.by_id.get(user_id)
 
 
 class FakeMember:
@@ -122,7 +128,7 @@ class FakeMember:
         self.activities = activities
         self.added = []
         self.removed = []
-        guild.members[user_id] = self
+        guild.by_id[user_id] = self
 
     async def add_roles(self, *roles, reason=None):
         self.added += [role.id for role in roles]
@@ -2448,3 +2454,233 @@ async def test_the_twitch_sweep_adds_itself_to_a_youtube_session_and_ends_only_i
     row = await only_session(db)
     assert row["ended_at"] is None and row["also_source"] is None
     assert row["source"] == "youtube"
+
+
+# --- the boot sweep: nobody is missed because the bot was restarting ---------------------------
+# Design: docs/info/golive-boot-sweep-design.md. The five §A tests are the PROOF of what a reboot
+# already gets right — they boot the cog rather than calling the reconcile by hand.
+
+
+async def boot_row(db):
+    return json.loads(await action_details(db, "golive.boot_swept"))
+
+
+async def test_a_twitch_login_live_across_a_reboot_is_announced_by_the_first_poll(cog, bot, db):
+    await announcing(bot)
+    live = FakeMember(bot.guild)
+    await set_link(db, live.id, "alice")
+    cog.helix = FakeHelix(streams=[twitch_stream()])
+
+    await cog.boot_pass()
+    await cog.poll_once()
+
+    row = await only_session(db)
+    assert row["source"] == "twitch" and row["game"] == "Hades"
+    assert len(bot.guild.channel.messages) == 1
+
+    await cog._end_live(bot.guild, live, "twitch")
+    await cog.boot_pass()
+    await cog.poll_once()
+
+    assert len(bot.guild.channel.messages) == 1
+    assert await open_session_for(db, GUILD, live.id) is None
+
+
+async def test_a_boot_keeps_an_open_session_whose_streamer_is_still_live(cog, bot, db):
+    live = FakeMember(bot.guild, activities=(streaming_activity(),))
+    await start_session(db, GUILD, live.id, "presence", StreamInfo(url="u"), "on")
+
+    await cog.boot_pass()
+
+    assert await open_session_for(db, GUILD, live.id) is not None
+    details = await boot_row(db)
+    assert details["sessions_kept"] == 1 and details["sessions_closed"] == 0
+    assert details["presence_skipped"] == {"open_session": 1}
+
+
+async def test_a_boot_closes_a_session_whose_streamer_went_offline_and_marks_it_ended(
+    cog, bot, member, db
+):
+    await announcing(bot)
+    await bot.store.set(GUILD, "golive_end_mode", "edit")
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    await cog._go_live(member, TWITCH_INFO, "presence")
+    posted = bot.guild.channel.messages[0]
+    assert member.added == [LIVE_ROLE]
+
+    await cog.boot_pass()
+
+    assert await open_session_for(db, GUILD, member.id) is None
+    assert "the stream has ended" in posted.content
+    assert member.removed == [LIVE_ROLE]
+    assert json.loads(await action_details(db, "golive.end"))["reason"] == "reconciled_on_start"
+    details = await boot_row(db)
+    assert details["sessions_closed"] == 1 and details["sessions_kept"] == 0
+
+
+async def test_a_boot_drops_the_co_stream_side_that_ended_in_the_downtime(cog, bot, member, db):
+    await announcing(bot)
+    cog.helix = FakeHelix(streams=[])
+    await cog._go_live(member, TWITCH_INFO, "twitch")
+    await cog.add_platform(member, YOUTUBE_INFO, "youtube")
+    await set_link(db, USER, "alice")
+    bot.cog = FakeYouTube(live=True)
+
+    await cog.boot_pass()
+
+    row = await only_session(db)
+    assert row["source"] == "youtube" and row["also_source"] is None
+    assert "golive.end" not in await action_kinds(db)
+    details = await boot_row(db)
+    assert details["sessions_dropped"] == 1 and details["sessions_closed"] == 0
+
+
+async def test_the_boot_sweep_announces_somebody_already_streaming_with_no_link(cog, bot, db):
+    await announcing(bot)
+    live = FakeMember(bot.guild, activities=(streaming_activity(),))
+
+    await cog.boot_pass()
+
+    row = await only_session(db)
+    assert row["source"] == "presence" and row["user_id"] == live.id
+    assert len(bot.guild.channel.messages) == 1
+    details = await boot_row(db)
+    assert details["presence_found"] == 1 and details["presence_announced"] == 1
+    assert details["presence_skipped"] == {} and details["swept"] is True
+
+
+async def test_the_boot_sweep_leaves_somebody_who_already_has_a_session_alone(cog, bot, db):
+    await announcing(bot)
+    live = FakeMember(bot.guild, activities=(streaming_activity(),))
+    await cog._go_live(live, TWITCH_INFO, "presence")
+
+    await cog.boot_pass()
+
+    assert len(bot.guild.channel.messages) == 1
+    assert len(await open_sessions(db, GUILD)) == 1
+    assert (await boot_row(db))["presence_skipped"] == {"open_session": 1}
+
+
+async def test_the_boot_sweep_honours_the_cooldown_after_a_bounce(cog, bot, db):
+    await announcing(bot)
+    live = FakeMember(bot.guild, activities=(streaming_activity(),))
+    await cog._go_live(live, TWITCH_INFO, "presence")
+    await cog._end_live(bot.guild, live, "presence")
+
+    await cog.boot_pass()
+
+    assert len(bot.guild.channel.messages) == 1
+    details = await boot_row(db)
+    assert details["presence_announced"] == 0
+    assert details["presence_skipped"] == {"cooldown": 1}
+
+
+async def test_the_boot_sweep_does_nothing_at_all_when_the_key_is_off(cog, bot, db):
+    await announcing(bot)
+    await bot.store.set(GUILD, "golive_boot_sweep", False)
+    FakeMember(bot.guild, activities=(streaming_activity(),))
+
+    await cog.boot_pass()
+
+    assert await open_sessions(db, GUILD) == []
+    assert bot.guild.channel.messages == []
+    details = await boot_row(db)
+    assert details["swept"] is False and details["members_walked"] == 0
+    assert details["presence_found"] == 0
+
+
+async def test_one_boot_swept_row_is_written_per_boot_with_every_count(cog, bot, db):
+    await announcing(bot)
+    FakeMember(bot.guild, user_id=1, activities=(streaming_activity(),))
+    gone = FakeMember(bot.guild, user_id=2)
+    await start_session(db, GUILD, gone.id, "presence", StreamInfo(url="u"), "on")
+    still = FakeMember(bot.guild, user_id=3, activities=(streaming_activity(),))
+    await start_session(db, GUILD, still.id, "presence", StreamInfo(url="u"), "on")
+
+    await cog.boot_pass()
+
+    assert (await action_kinds(db)).count("golive.boot_swept") == 1
+    assert await boot_row(db) == {
+        "sessions_kept": 1,
+        "sessions_closed": 1,
+        "sessions_dropped": 0,
+        "swept": True,
+        "members_walked": 3,
+        "members_cached": True,
+        "presence_found": 2,
+        "presence_announced": 1,
+        "presence_skipped": {"open_session": 1},
+        "via": "discord",
+    }
+
+
+async def test_the_row_says_why_each_streaming_member_was_passed_over(cog, bot, db):
+    await announcing(bot)
+    await bot.store.set(GUILD, "golive_ignore_role_id", 77)
+    FakeMember(bot.guild, user_id=1, roles=(77,), activities=(streaming_activity(),))
+    quiet = FakeMember(bot.guild, user_id=2, activities=(streaming_activity(),))
+    await set_optout(db, quiet.id)
+
+    await cog.boot_pass()
+
+    details = await boot_row(db)
+    assert details["presence_skipped"] == {"role_filter": 1, "opted_out": 1}
+    assert details["presence_announced"] == 0
+
+
+async def test_the_boot_sweep_never_announces_a_bot(cog, bot, db):
+    await announcing(bot)
+    robot = FakeMember(bot.guild, user_id=5, activities=(streaming_activity(),))
+    robot.bot = True
+
+    await cog.boot_pass()
+
+    assert await open_sessions(db, GUILD) == []
+    details = await boot_row(db)
+    assert details["members_walked"] == 1 and details["presence_found"] == 0
+
+
+async def test_a_guild_whose_members_are_not_all_cached_says_so_on_the_row(cog, bot, db):
+    bot.guild.chunked = False
+
+    await cog.boot_pass()
+
+    assert (await boot_row(db))["members_cached"] is False
+
+
+async def test_two_boots_at_once_sweep_once_and_write_one_row(cog, bot, db):
+    await announcing(bot)
+    FakeMember(bot.guild, activities=(streaming_activity(),))
+
+    await cog.cog_load()
+    try:
+        await cog.on_ready()
+    finally:
+        await cog.cog_unload()
+
+    assert len(bot.guild.channel.messages) == 1
+    assert len(await open_sessions(db, GUILD)) == 1
+    assert (await action_kinds(db)).count("golive.boot_swept") == 1
+
+
+async def test_a_cog_load_with_no_guilds_yet_leaves_the_boot_to_on_ready(cog, bot, db):
+    """`setup_hook` loads the cogs before IDENTIFY, so `bot.guilds` is empty at `cog_load`.
+
+    A pass over nothing must not close the 60-second window, or the one pass that HAS guilds
+    is the one that gets skipped.
+    """
+    await announcing(bot)
+    guild = bot.guild
+    FakeMember(guild, activities=(streaming_activity(),))
+    bot.guilds = []
+
+    await cog.cog_load()
+    try:
+        assert await open_sessions(db, GUILD) == []
+        bot.guilds = [guild]
+        await cog.on_ready()
+    finally:
+        await cog.cog_unload()
+
+    assert len(await open_sessions(db, GUILD)) == 1
+    assert (await action_kinds(db)).count("golive.boot_swept") == 1

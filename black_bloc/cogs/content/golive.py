@@ -55,7 +55,7 @@ from ...golive import (
     with_box_art,
 )
 from ...logkinds import VIA_DISCORD, kind_via
-from ...loops import wait_ready
+from ...loops import Reconciler, wait_ready
 from ...panels import (
     SELECT_OPTION_LIMIT,
     Panel,
@@ -184,6 +184,18 @@ RECONCILED = "reconciled_on_start"
 ENDED_ELSEWHERE = "ended"
 SIDE_ALSO = "also"
 SIDE_PRIMARY = "primary"
+BOOT_SWEEP_KEY = "golive_boot_sweep"
+KEPT = "kept"
+CLOSED = "closed"
+DROPPED = "dropped"
+ANNOUNCED = "announced"
+OPEN_SESSION = "open_session"
+MODE_OFF = "mode_off"
+OPTED_OUT_SKIP = "opted_out"
+ROLE_FILTER = "role_filter"
+COOLDOWN = "cooldown"
+NO_SESSION = "no_session"
+POST_FAILED = "post_failed"
 
 
 def same_platform(seen: Any, wanted: Any) -> bool:
@@ -646,6 +658,7 @@ class GoLive(commands.Cog):
         self.helix: TwitchClient | None = None
         self._end_tasks: dict[int, asyncio.Task] = {}
         self._locks: dict[int, asyncio.Lock] = {}
+        self._reconciler = Reconciler()
         self.last_poll_ok_at: str | None = None
         self.last_poll_error: str | None = None
         self.poll_failures = 0
@@ -663,20 +676,82 @@ class GoLive(commands.Cog):
             log.info(TWITCH_OFF)
         if not self.bot.db.is_connected:
             return
-        await self.reconcile_open_sessions()
+        await self._reconciler.run(self.boot_pass, stamp=bool(self._guilds()))
         self.poller.start()
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        if not self.bot.db.is_connected:
+            return
+        await self._reconciler.run(self.boot_pass, skip_if_recent=True)
+
+    def _guilds(self) -> list[Any]:
+        return [
+            guild
+            for guild in list(getattr(self.bot, "guilds", ()) or ())
+            if not getattr(guild, "unavailable", False)
+        ]
+
+    async def boot_pass(self) -> None:
+        """Checklist 37: the reconcile and the presence sweep read their state inside one lock."""
+        for guild in self._guilds():
+            details = await self._reconcile_guild(guild)
+            details |= await self.sweep_presences(guild)
+            await log_action(self.bot, guild, "golive.boot_swept", details=details)
+
+    async def sweep_presences(self, guild: Any) -> dict[str, Any]:
+        """Discord replays no presence at boot, so somebody already streaming raises no update."""
+        swept = bool(self.bot.store.get(guild.id, BOOT_SWEEP_KEY))
+        members = list(getattr(guild, "members", ()) or ()) if swept else []
+        walked = found = announced = 0
+        skipped: dict[str, int] = {}
+        for member in members:
+            walked += 1
+            if getattr(member, "bot", False):
+                continue
+            info = extract_stream(getattr(member, "activities", ()))
+            if info is None:
+                continue
+            found += 1
+            outcome = (
+                OPEN_SESSION
+                if await open_session_for(self.bot.db, guild.id, member.id) is not None
+                else await self._go_live(member, info, "presence")
+            )
+            if outcome == ANNOUNCED:
+                announced += 1
+            else:
+                skipped[outcome] = skipped.get(outcome, 0) + 1
+        return {
+            "swept": swept,
+            "members_walked": walked,
+            "members_cached": bool(getattr(guild, "chunked", True)),
+            "presence_found": found,
+            "presence_announced": announced,
+            "presence_skipped": skipped,
+        }
 
     async def reconcile_open_sessions(self) -> None:
         """Close every session a stop left open, keeping the ones still genuinely live."""
         for guild in list(getattr(self.bot, "guilds", ())):
-            for row in await open_sessions(self.bot.db, guild.id):
-                await self._reconcile_one(guild, row)
+            await self._reconcile_guild(guild)
 
-    async def _reconcile_one(self, guild: Any, row: Any) -> None:
+    async def _reconcile_guild(self, guild: Any) -> dict[str, int]:
+        tally = {KEPT: 0, CLOSED: 0, DROPPED: 0}
+        for row in await open_sessions(self.bot.db, guild.id):
+            tally[await self._reconcile_one(guild, row)] += 1
+        return {
+            "sessions_kept": tally[KEPT],
+            "sessions_closed": tally[CLOSED],
+            "sessions_dropped": tally[DROPPED],
+        }
+
+    async def _reconcile_one(self, guild: Any, row: Any) -> str:
         if not _row_value(row, "also_source"):
-            if not await self._still_live(guild, row):
-                await self._close_session(guild, row, RECONCILED)
-            return
+            if await self._still_live(guild, row):
+                return KEPT
+            await self._close_session(guild, row, RECONCILED)
+            return CLOSED
         primary = await self._side_live(
             guild, row, row["source"], row["url"], row["platform"]
         )
@@ -684,12 +759,13 @@ class GoLive(commands.Cog):
             guild, row, row["also_source"], row["also_url"], row["also_platform"]
         )
         if primary and other:
-            return
+            return KEPT
         if primary or other:
             gone = row["also_source"] if primary else row["source"]
             await self.drop_platform(guild, row, gone, reason=RECONCILED)
-            return
+            return DROPPED
         await self._close_session(guild, row, RECONCILED)
+        return CLOSED
 
     async def _still_live(self, guild: Any, row: Any) -> bool:
         return await self._side_live(guild, row, row["source"], row["url"], None)
@@ -771,13 +847,13 @@ class GoLive(commands.Cog):
         elif was is not None:
             self._schedule_end(after)
 
-    async def _go_live(self, member: Any, info: StreamInfo, source: str) -> None:
+    async def _go_live(self, member: Any, info: StreamInfo, source: str) -> str:
         async with self._lock(member.id):
-            await self._go_live_once(member, info, source)
+            return await self._go_live_once(member, info, source)
 
-    async def go_live(self, member: Any, info: StreamInfo, source: str) -> None:
+    async def go_live(self, member: Any, info: StreamInfo, source: str) -> str:
         """The door another cog's poller comes in by — `source=youtube` today."""
-        await self._go_live(member, info, source)
+        return await self._go_live(member, info, source)
 
     async def end_live(self, guild: Any, member: Any, source: str | None) -> None:
         await self._end_live(guild, member, source)
@@ -981,37 +1057,37 @@ class GoLive(commands.Cog):
                 exc,
             )
 
-    async def _go_live_once(self, member: Any, info: StreamInfo, source: str) -> None:
+    async def _go_live_once(self, member: Any, info: StreamInfo, source: str) -> str:
         guild = member.guild
         mode = self._mode(guild.id)
         if mode == "off" or member.bot or not self.bot.db.is_connected:
-            return
+            return MODE_OFF
         await self._note_streaming(member, info)
         if await is_opted_out(self.bot.db, member.id):
-            return
+            return OPTED_OUT_SKIP
         store = self.bot.store
         if not passes_role_filters(
             [role.id for role in member.roles],
             store.get(guild.id, "golive_require_role_id"),
             store.get(guild.id, "golive_ignore_role_id"),
         ):
-            return
+            return ROLE_FILTER
         open_row = await open_session_for(self.bot.db, guild.id, member.id)
         if open_row is not None:
             if joins_session(open_row, info.platform, self._costream_mode(guild.id)):
                 await self._add_platform_once(member, info, source, open_row)
-            return
+            return OPEN_SESSION
         last = await latest_session(self.bot.db, guild.id, member.id)
         cooldown = store.get(guild.id, "golive_cooldown_minutes")
         if not should_announce(datetime.now(UTC), last, cooldown):
-            return
+            return COOLDOWN
         fan_role_id = await pings.announced_fan_role(self.bot, guild, member.id)
         if source == "presence":
             info = await self._enrich(member, info)
         info = await self._box_art(guild, info)
         session_id = await start_session(self.bot.db, guild.id, member.id, source, info, mode)
         if session_id is None:
-            return
+            return NO_SESSION
         text = render(
             store.get(guild.id, "golive_template"),
             info,
@@ -1048,7 +1124,7 @@ class GoLive(commands.Cog):
                 details=details | {"reason": result.reason},
             )
             await discard_session(self.bot.db, session_id)
-            return
+            return POST_FAILED
         await log_action(
             self.bot,
             guild,
@@ -1059,6 +1135,7 @@ class GoLive(commands.Cog):
         added = await self._live_role(guild, member, add=True)
         if added is not None:
             await set_live_role_added(self.bot.db, session_id, added)
+        return ANNOUNCED
 
     async def _end_live(self, guild: Any, member: Any, source: str | None) -> None:
         if not self.bot.db.is_connected:

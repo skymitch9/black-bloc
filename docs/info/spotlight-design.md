@@ -246,6 +246,26 @@ a choice had to be made, it says so.)*
     (the route is there and the card has it — the page button is one call on `page-events.js` and is
     named here rather than guessed at).
 
+19. 🔴 **2026-09-20, branch `boot-sweep` — the boot reconcile this build shipped was never
+    running on the real bot, and is fixed.** `Spotlight.reconcile_open_sessions` is correct;
+    nothing reached it. `bot.py:setup_hook` loads every cog **before IDENTIFY**, so
+    `self.bot.guilds` is **empty** at `cog_load` — and `cog_load`'s
+    `self._reconciler.run(self.reconcile_open_sessions)` used the default `stamp=True`, which
+    closed the `Reconciler`'s 60-second window from a pass that had walked **nothing**. The
+    `on_ready` pass, the only one with guilds, then hit `skip_if_recent=True` and skipped. Net
+    effect: an open spotlight session whose announcement had gone was never closed at boot, and
+    `golive.spotlight_reconciled` could not be emitted on a real restart. The fix is one
+    argument — `stamp=bool(self._guilds())` — plus `_guilds()` as the one home for *which guilds
+    a boot pass covers* (non-`unavailable`, checklist 32), which `reconcile_open_sessions` now
+    reads. Found while building the go-live boot sweep, which had the identical defect
+    ([`golive-boot-sweep-design.md`](golive-boot-sweep-design.md) ▸ Deviations ▸ **0**). Guarded
+    by `tests/cogs/content/test_spotlight.py::test_a_cog_load_with_no_guilds_yet_leaves_the_boot_to_on_ready`,
+    which was **falsified first** — it fails on the un-fixed cog. ⚠️ `poll_once` and
+    `_poll_minutes` still read `self.bot.guilds` directly and were deliberately left alone: they
+    run after ready, so the emptiness never bites them. ⚠️ **Still not verified against
+    Discord** — no bot has been restarted with a spotlight session open; the new sweep row
+    `BS-e` in `../access/sweeps.md` is the proof that does not exist yet.
+
 ## What was NOT verified
 
 ⚠️ **Nothing in this build has met Discord, and nothing has met Helix.** No spotlight has been

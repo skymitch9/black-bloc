@@ -110,7 +110,7 @@ class FakeMember:
         self.roles = []
         self.dms = []
         self.dm_error = None
-        guild.members[user_id] = self
+        guild.by_id[user_id] = self
 
     async def send(self, content=None, **kwargs):
         if self.dm_error is not None:
@@ -124,7 +124,8 @@ class FakeGuild:
         self.id = GUILD
         self.name = "Black Bloc"
         self.channels = {}
-        self.members = {}
+        self.by_id = {}
+        self.chunked = True
         self.roles = [FakeRole(FAN_ROLE), FakeRole(PING_ROLE)]
         self.unavailable = False
 
@@ -135,8 +136,13 @@ class FakeGuild:
     def get_channel(self, channel_id):
         return self.channels.get(channel_id)
 
+    @property
+    def members(self):
+        """A real guild hands the go-live boot sweep a list, so the fake does too."""
+        return list(self.by_id.values())
+
     def get_member(self, user_id):
-        return self.members.get(user_id)
+        return self.by_id.get(user_id)
 
     def get_role(self, role_id):
         return next((role for role in self.roles if role.id == role_id), None)
@@ -999,6 +1005,28 @@ async def test_a_linked_channel_going_live_is_announced_once_through_the_go_live
     posts = bot.guild.get_channel(GOLIVE_CHANNEL).posts
     assert len(posts) == 1 and LIVE_WATCH in posts[0]["content"]
     assert (await details_logged(db, "golive.announce"))[0]["source"] == "youtube"
+
+
+async def test_a_channel_live_across_a_reboot_is_announced_by_the_first_probe(
+    bot, cog, golive, db, member
+):
+    """Row 2 of `info/golive-boot-sweep-design.md` §A: the probe is what catches a YouTube
+    stream that was already running while the bot was down — the presence sweep never sees it."""
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE)
+
+    await golive.cog_load()
+    try:
+        await cog.probe_all()
+    finally:
+        await golive.cog_unload()
+
+    rows = await sessions(db)
+    assert len(rows) == 1 and rows[0]["source"] == "youtube" and rows[0]["ended_at"] is None
+    posts = bot.guild.get_channel(GOLIVE_CHANNEL).posts
+    assert len(posts) == 1 and LIVE_WATCH in posts[0]["content"]
+    swept = await details_logged(db, "golive.boot_swept")
+    assert len(swept) == 1 and swept[0]["presence_found"] == 0
 
 
 async def test_a_second_probe_while_the_stream_is_live_announces_nothing_more(

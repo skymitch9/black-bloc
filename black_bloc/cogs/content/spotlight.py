@@ -277,7 +277,7 @@ class Spotlight(commands.Cog):
     async def cog_load(self) -> None:
         if not self.bot.db.is_connected:
             return
-        await self._reconciler.run(self.reconcile_open_sessions)
+        await self._reconciler.run(self.reconcile_open_sessions, stamp=bool(self._guilds()))
         self.poller.start()
 
     async def cog_unload(self) -> None:
@@ -289,9 +289,16 @@ class Spotlight(commands.Cog):
             return
         await self._reconciler.run(self.reconcile_open_sessions, skip_if_recent=True)
 
+    def _guilds(self) -> list[Any]:
+        return [
+            guild
+            for guild in list(getattr(self.bot, "guilds", ()) or ())
+            if not getattr(guild, "unavailable", False)
+        ]
+
     async def reconcile_open_sessions(self) -> None:
         """Checklist 37: the state is read inside the lock, so two boots close one session once."""
-        for guild in list(getattr(self.bot, "guilds", ())):
+        for guild in self._guilds():
             for session in await open_sessions(self.bot.db, guild.id):
                 row = await channel_by_id(self.bot.db, session["spotlight_id"])
                 if row is not None and await self._message(guild, session) is not None:
