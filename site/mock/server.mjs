@@ -4147,6 +4147,19 @@ function previewButton(label, style = 'secondary', url = null) {
   return { label: String(label || ''), style: url ? 'link' : style, url, disabled: false, emoji: null };
 }
 
+// Mirrors black_bloc/preview.py:platform_facts — the platform owns the address and the
+// watcher, so the Preview-as-YouTube chip cannot leave a Twitch link behind.
+const PREVIEW_PLATFORMS = {
+  twitch: { platform: 'Twitch', url: 'https://twitch.tv/caseyfast', source: 'twitch' },
+  youtube: { platform: 'YouTube', url: 'https://youtube.com/watch?v=caseyfast', source: 'youtube' },
+};
+
+function previewStreamFacts(sample) {
+  const found = PREVIEW_PLATFORMS[String(sample.platform || '').trim().toLowerCase()]
+    || PREVIEW_PLATFORMS.twitch;
+  return { ...sample, ...found };
+}
+
 function previewStreamEmbed(fields, author, footer) {
   return {
     title: fields.title || 'Live now',
@@ -4161,13 +4174,13 @@ function previewStreamEmbed(fields, author, footer) {
 
 const PREVIEW_DRAW = {
   golive_live(read, sample) {
-    const fields = { ...sample };
+    const fields = previewStreamFacts(sample);
     const ping = read('golive_ping_role_id');
     const content = (ping ? `<@&${ping}> ` : '') + fillWording(read('golive_template'), fields);
     return previewMade(content, [previewStreamEmbed(fields, `${fields.name} is now live on ${fields.platform}!`, `Black Bloc · via ${fields.platform}`)]);
   },
   golive_ended(read, sample) {
-    const fields = { ...sample };
+    const fields = previewStreamFacts(sample);
     const live = fillWording(read('golive_template'), fields);
     const author = String(read('golive_end_author') || '').trim();
     const content = fillWording(String(read('golive_end_template') || '').trim() || '{live}', { ...fields, live });
@@ -4178,16 +4191,18 @@ const PREVIEW_DRAW = {
     )]);
   },
   golive_costream(read, sample) {
-    const fields = { ...sample, also_platform: 'YouTube', also_url: '<https://youtube.com/watch?v=caseyfast>' };
+    const lead = previewStreamFacts(sample);
+    const other = PREVIEW_PLATFORMS[lead.source === 'twitch' ? 'youtube' : 'twitch'];
+    const fields = { ...lead, also_platform: other.platform, also_url: `<${other.url}>` };
     const author = String(read('golive_costream_author') || '').trim();
     return previewMade(fillWording(read('golive_costream_template'), fields), [previewStreamEmbed(
       fields,
       author ? fillWording(author, fields) : `${fields.name} is now live on ${fields.platform}!`,
-      `Black Bloc · via ${fields.platform} + YouTube`,
+      `Black Bloc · via ${fields.platform} + ${other.platform}`,
     )]);
   },
   spotlight_bump(read, sample) {
-    return previewMade(fillWording(read('spotlight_bump_template'), sample));
+    return previewMade(fillWording(read('spotlight_bump_template'), previewStreamFacts(sample)));
   },
   frontdoor(read) {
     return previewMade('', [{

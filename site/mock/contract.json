@@ -1011,7 +1011,7 @@
       "method": "GET",
       "path": "/api/golive/preview",
       "read_by": [
-        "page-golive.js wordingCard"
+        "nothing since the Discord mock landed — the Go-live page asks /api/preview/message instead; kept for one release, see docs/info/discord-mock-design.md Deviations"
       ],
       "shape": "object",
       "keys": [
