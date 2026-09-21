@@ -1,6 +1,11 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-20 (evening)** — rows **`SF-a` … `SF-c`** added at the foot for FOUR SMALL FIXES (branch `small-fixes`,
+> off `main` `552af36`): the dashboard column order, the rail badge's 400, and the **Restart the bot** button.
+> ⚠️ **Not merged, not deployed, and nothing in them has met Discord or Fly.** `SF-a` and `SF-b` can be run from a
+> laptop the moment the branch ships; `SF-c` restarts the bot, so the site goes down with it for ~15 seconds.
+> ⚠️ **Nothing else in this file was re-checked then.** Before that,
 > **2026-09-20 19:28** — rows **652–656** (were `BS-a` … `BS-e`) and **644–651** (were `PV-a` … `PV-h`), numbered at the v149 merge, for THE GO-LIVE BOOT SWEEP (branch `boot-sweep`, off `main`
 > `f73e81c`; design [`../info/golive-boot-sweep-design.md`](../info/golive-boot-sweep-design.md); ⚠️ **not merged, not
 > deployed, and NOTHING IN IT HAS MET DISCORD** — no bot has been restarted while somebody was streaming). Owner: *"have
@@ -2282,3 +2287,13 @@ past-tense rewrite; it ships **off**. Staff door: **Runs the cookout** ▸ **Go-
 | **654** (was `BS-c`) | With a session open, have the streamer **stop while the bot is down** (end the stream, then redeploy — or redeploy and stop during it) | After boot the announcement **reads in the past tense** with how long it ran (needs `golive_end_mode` = **edit**; with it **off** the post is left alone, which is also correct and is what ships). The live role comes off. On the Logs page a `golive.end` row with `reason: reconciled_on_start`. ⚠️ **This is the row that proves the defect is fixed** — before this build nothing closed it until twelve hours had passed |
 | **656** (was `BS-e`) | ⚠️ **While a spotlighted channel is live** (GamesDoneQuick mid-marathon, or any row you added), **delete its announcement from the go-live channel by hand**, then redeploy | Within a minute of boot the session is **closed**, not left open for ever: on the **Logs** page ▸ **golive**, one `golive.spotlight_reconciled` row naming the login, with `reason` reading the reconciled wording. ⚠️ **This is the second defect row** — at v148 this never happened, because the spotlight boot reconcile ran before the bot had any guilds and then blocked the pass that did. The cheap half, if you do not want to wait for a marathon: any redeploy at all should leave the row's open session alone when its announcement is still there (that is `test_a_session_whose_message_is_still_there_survives_the_boot`, and the visible version is simply that nothing is re-announced) |
 | **655** (was `BS-d`) | After **any** deploy, open the **Logs** page ▸ **golive** (or the Logs section at the foot of the Go-live page) | Exactly **one** `golive.boot_swept` row per boot. Read two numbers on it: `members_walked` should be roughly the size of the server, and `members_cached` should be **true**. ⚠️ **A walk of 0, or `members_cached: false`, means the sweep ran before Discord had handed over the member list** — that is a bug to report, not a quiet server. `presence_skipped` says why anyone streaming was passed over (`cooldown` / `opted_out` / `role_filter` / `open_session`). Then set **Whether a restart looks for people already streaming** to **off** on the Go-live page, redeploy, and the next row reads `swept: false` with `members_walked: 0` — the switch works both ways |
+
+## FOUR SMALL FIXES (rows `SF-a` … `SF-c`; branch `small-fixes`, off `main` `552af36`, design notes in [`../info/ux-audit-design.md`](../info/ux-audit-design.md) ▸ *2026-09-20*, [`deploy.md`](deploy.md) and [`../info/restart-button-design.md`](../info/restart-button-design.md))
+
+⚠️ **Not merged, not deployed, and nothing below has met Discord or Fly.** Every claim behind
+these rows is the suite's, the mock's, or a headless browser against the mock. Rows are lettered;
+the conductor numbers them at the merge.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`SF-a`** | Open the **Requests** page (https://blackbloc.heygabi.ai/requests.html) on a wide window and read the two columns top to bottom | **Open** — the list of requests waiting on staff — is the FIRST section in the LEFT column, above everything else. Before this fix it was at the top of the right-hand column, under In progress, Ready to check and On hold. ⚠️ Check one narrow window too (a phone, or the window dragged under about 1000px): there are no columns at all there and the order is simply the page's own |

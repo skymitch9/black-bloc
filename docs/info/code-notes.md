@@ -7450,3 +7450,16 @@ Keys are CONSTRUCT NAMES, not `path:N`, so nothing here can go stale on a line n
 | `golive_boot_sweep` — in *How streams are spotted* | The drawer that already holds the YouTube probe cadence and the spotlight poll is where "how does Black Bloc find out somebody is live" lives. `announcementSection` renders a hand-picked set from the `golive` namespace, so a key placed there would pass the every-key-lands-once test while appearing nowhere; the drawer renders through `settingsPanel`, which is the surface that actually shows it. |
 | `FakeGuild.members` in both content test files | Was a dict keyed by member id; `discord.Guild.members` is a LIST. The sweep would have walked integers, found no activities, and passed for the wrong reason. The members live in `by_id` now and `members` is a property over its values. |
 | `Spotlight.cog_load` / `Spotlight._guilds` — the same fix, one cog over | The spotlight boot reconcile had the identical shape and the identical consequence: `cog_load` stamped the `Reconciler`'s window from a pass over zero guilds, so `on_ready`'s `skip_if_recent=True` threw away the only pass that could see anything, and an open spotlight session whose announcement had gone was never closed at boot. `stamp=bool(self._guilds())`, and the same non-`unavailable` guild source (checklist 32). ⚠️ `poll_once` and `_poll_minutes` still read `self.bot.guilds` directly — they run after ready, so the emptiness never bites them, and widening the change was out of scope. Falsified before it was kept: the guard fails on the un-fixed cog. |
+
+# Four small fixes (branch `small-fixes`, off `main` at `552af36`, 2026-09-20)
+
+> Four unrelated repairs in one branch, one commit each: the dashboard column order, the rail
+> badge's 400, where `deploy.ps1` writes `release.json`, and a **Restart the bot** button.
+> Keys are CONSTRUCT NAMES, never `path:N`, so a later merge cannot move them.
+> ⚠️ **Nothing here has met Discord or Fly** — every claim is the suite's, the mock's, or a
+> headless browser against the mock.
+
+| Key | Note |
+|---|---|
+| `columns.js:columnSplit` | The placement decision `layout.js:balance` used to make inline. It is its own module because `layout.js` imports `ui.js`, and `ui.js` touches `document` at import time (`document.documentElement.setAttribute('data-showkeys'…)`) — a node test importing `layout.js` dies on the first line. One pure function, one import, no DOM. |
+| `layout.js:balance` — document order, one break | Was greedy: each block joined whichever column was shorter, which is optimal for height and wrong for reading. Measured 2026-09-20 on the mock's `requests.html`: **Open**, the page's main list and its first section, came out at the top of the RIGHT column under In progress / Ready to check / On hold. A prefix split cannot do that — the left column is always a prefix of what the page rendered, so section one is section one. The cost is a slightly less even pair of columns; that is the trade the fix is. |
