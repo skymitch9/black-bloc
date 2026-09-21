@@ -2418,3 +2418,22 @@ row and no message), `golive_channel_id` set. Staff door: **Runs the cookout** �
 | **`EW-b`** | With the end wording box left **untouched**, have somebody stream and stop | The ended post reads **exactly what v149 posts** — *"**Ada** was streaming **Celeste** — the stream has ended. https://…"*. ⚠️ **Nothing about this row should look new, and that is the point:** the conductor ruled 2026-09-20 that nobody's ended announcement may change at the deploy, so `golive_end_template`'s default is v149's sentence untouched (it holds no `{live}`, so it still rewrites the whole post). The design had proposed a new default and it was **NOT** shipped — see **Deviation 1**. If this row reads anything else, something went wrong |
 | **`EW-c`** | ⚠️ **The row where the new placeholder actually does something.** Put **`{live} (over)`** in the box, save, then have somebody stream and stop | The ended post is the posted sentence with ` (over)` on the end, and the **card's footer** reads *Black Bloc · via Twitch · (over)* — the one box drives both halves. Blank the box instead and the post keeps its sentence with **nothing** added and the footer reads *Black Bloc · via Twitch* |
 | **`EW-d`** | ⚠️ **The one that changes behaviour for a server that had turned this OFF.** If any server had **When a stream ends** set to **off**, watch what happens after the first boot on this build | Its announcements **are now edited** when streams end — the off setting is deleted at boot and cannot be set again. **That is the owner's decision** (*"we will also edit our message. remove this aption"*, 2026-09-20), not a defect. On the **Logs** page ▸ **golive** the boot leaves ONE `golive.end_wording_migrated` row per server that had anything stored, saying `carried_suffix` (was a custom suffix folded into the box?) and `dropped_mode` (what the off/edit switch had been). A second boot leaves **no** second row. ⚠️ **Nobody has looked at the live `settings` table**, so which servers this touches is unknown until it runs |
+## EVENTS PAGE TRIMS — no Remove its room, the forum card folds into Settings (`ET-a` … `ET-b`, branch `events-trims`, design [`../info/events-forum-design.md`](../info/events-forum-design.md))
+
+Owner, 2026-09-20 20:4x: *"we dont need the remove its room option, that'll happen after it
+ends or is denied. whats the point of the events forum section?"* → *"yes make them settings"*.
+The **Remove its room** / **Remove its post** staff move is off the page (the bot's own end and
+deny paths still remove the room or post; nothing on the website triggers it any more), and the
+standalone **Events forum** card is gone — its **Make the forum** action now sits beside the
+`events_forum_channel_id` row in **Settings**, shown only while that key is blank.
+
+⚠️ **Nothing here has met Discord.** Every row was pressed against the local mock in a real
+Chrome tab (the claude-in-chrome extension controlling the session's own browser, not
+chrome-headless-shell — window resize was not available in this session, so the 390 px check
+below is **not verified**; everything else is). Staff door: **Runs the cookout** ▸ **Events**
+(https://blackbloc.heygabi.ai/events.html).
+
+| Row | Do | Expect |
+|---|---|---|
+| `ET-a` | Open the Events page, open **Queue**, and look at the buttons on every open (pending, approved, live) event's row — including one whose review room or post still exists | ⚠️ **No Remove its room / Remove its post anywhere.** The row offers only **Open**, **Approve** / **Deny** (pending only), **Cancel** (unless denied or cancelled) and, once the events forum exists and the event still has a room, **Move to the forum**. A settled event's detail card still shows its **Review channel** / **Review post** line — that display did not change, only the button that deleted it |
+| `ET-b` | Open **Settings**, find **The forum every event is posted in** (`events_forum_channel_id`) and **Whether an event gets its own room or a forum post** (`events_review_mode`). With the key blank, press **Make the forum**; then reload and look again | Both keys edit in place under **Settings**, same as every other `events_*` key — there is no separate **Events forum** section any more. **Make the forum** sits beside the `events_forum_channel_id` row and reads exactly as the old card's button did; pressing it makes the forum, fills the row with the new channel, and reloads — the button is then **gone**, because it renders only while the key is blank. ⚠️ **390 px overflow not verified this pass** — say so rather than guess |

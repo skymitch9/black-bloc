@@ -33,17 +33,11 @@ const HERE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const SETTLED = 'This one is settled, so its details cannot be changed — only an event waiting ' +
   'for a decision or already approved can be edited.';
 const PLACE_WORD = { room: 'Review channel', post: 'Review post' };
-const REMOVE_PLACE = { room: 'Remove its room', post: 'Remove its post' };
 const OPEN_STATUSES = ['pending', 'approved', 'live'];
 const MOVE_BUTTON = 'Move to the forum';
 const MOVE_BODY = 'A post goes up in the events forum carrying the same card and the same buttons, '
   + 'the room is told where it went, and then the room is removed. The event is NOT called off, '
   + 'and the messages already in the room are not carried over — Discord cannot move those.';
-const FORUM_NOTE = 'One forum under BlackMail, one post per event: the review card and its '
-  + 'buttons are the post\u2019s first message, the tag says where it has got to, and the list '
-  + 'never grows past the forum\u2019s own archive. events_review_mode decides which one a new '
-  + 'proposal gets; the events already open keep the room or post they have, and Move to the '
-  + 'forum on an open one takes its room into the forum.';
 const NOT_RESENT = 'Saving does not rewrite an announcement that is already up or a Discord ' +
   'scheduled event that already exists; the answer says when that applies.';
 
@@ -251,28 +245,6 @@ function decide(row, say, forum) {
       );
       if (done.ok) refresh();
     }, { tone: 'warn' }));
-  }
-  if (row.review_channel_id) {
-    const place = row.review_kind === 'post' ? 'post' : 'room';
-    buttons.push(button(REMOVE_PLACE[place], async () => {
-      const note = el('input', { class: 'input', type: 'text', placeholder: 'a line the host is sent — optional' });
-      const sure = await ask({
-        title: `Remove the ${place} for “${row.title}”?`,
-        body: [
-          `The ${place} goes for good. If the event is still open it is called off as well, and the person who asked is told why.`,
-          field('A line the host is sent', note),
-        ],
-        confirmLabel: 'Remove it',
-        tone: 'warn',
-      });
-      if (!sure) return;
-      const done = await run(
-        say,
-        () => send(`/api/events/${encodeURIComponent(row.id)}/room/delete`, 'POST', { note: note.value.trim() }),
-        (found) => found?.message,
-      );
-      if (done.ok) refresh();
-    }, { tone: 'danger' }));
   }
   return el('div', { class: 'bar' }, buttons);
 }
@@ -483,9 +455,19 @@ async function raidTrainsSection() {
   return [group.node];
 }
 
-/** The one place the events forum is made from the website; the bot presses the same path. */
-function eventForumCard(forumId) {
+/**
+ * The one place the events forum is made from the website; the bot presses the same path.
+ * `namespaceSettings` draws the `events_forum_channel_id` row but gives no per-row action
+ * slot, so this finds that row (by the `data-key` the shared code already stamps on it, in
+ * the block `namespaceSettings('events')` returned) and appends the action beside it — shown
+ * only while the key is unset, gone the moment Make the forum succeeds and the page reloads.
+ */
+function forumMakeAction(settingsNode, forumId) {
+  if (forumId) return;
+  const row = settingsNode.querySelector('[data-key="events_forum_channel_id"]');
+  if (!row) return;
   const say = notice();
+  say.classList.add('setrow-say');
   const make = button('Make the forum', async () => {
     const done = await run(
       say,
@@ -497,16 +479,7 @@ function eventForumCard(forumId) {
       refresh();
     }
   }, { tone: 'warn' });
-  return card('Events forum', [
-    el('p', { text: FORUM_NOTE }),
-    forumId
-      ? sayNothing('Set events_review_mode to forum and every event proposed from then on gets its own post there.')
-      : sayNothing('There is no events forum yet, so every proposal gets a review channel of its own.'),
-    forumId
-      ? sayNothing('Clear events_forum_channel_id below to let go of it.')
-      : bar([make]),
-    say,
-  ]);
+  row.append(bar([make]), say);
 }
 
 async function load() {
@@ -553,14 +526,12 @@ async function load() {
     nodes.push(detail.node);
   }
 
-  const forumBox = section('Events forum', null, { id: 'events-forum', open: true });
-  forumBox.node.setAttribute('data-span', 'full');
-  forumBox.body.append(eventForumCard(forum.id));
+  const eventsSettings = await namespaceSettings('events');
+  forumMakeAction(eventsSettings, forum.id);
 
   document.getElementById('dash').replaceChildren(
     ...nodes,
-    forumBox.node,
-    await namespaceSettings('events'),
+    eventsSettings,
     await logsSection('events'),
     ...(await raidTrainsSection()),
     await namespaceSettings('raidtrain', { title: 'Raid train settings' }),

@@ -18,6 +18,14 @@
 > (`make_forum` ~922, `open_forum_post` ~391, `thread_of` ~363, `forum_tags`, `tags_for_status`, `forum_of` claims the
 > forum for the guard on every read — v120). ⚠️ Secret NAMES only.
 
+**2026-09-20, branch `events-trims`.** The standalone **Events forum** card described in §D is
+GONE — its two keys were already rows in `namespaceSettings('events')`, so the card was a
+duplicate surface for the same two decisions; its one non-duplicate part, **Make the forum**,
+moved to sit beside the `events_forum_channel_id` row instead. The **Remove its room** / **Remove
+its post** website move (§C's `room_notice_view` twin on the site) is also gone from the page —
+the room or post is still removed by the bot's own end/deny paths, only the website's own delete
+button left. See `sweeps.md` ▸ `ET-a`/`ET-b` and `code-notes.md`.
+
 ## The ask, verbatim (owner, 2026-09-17 21:2x)
 
 *"can we have events also go down into the Black Mail section, and make a thread channel like we have for request and
