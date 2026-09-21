@@ -3,6 +3,15 @@ from __future__ import annotations
 import pytest
 
 from black_bloc.cogs.content.golive import get_link, is_opted_out, set_link, set_optout
+from black_bloc.cogs.content.spotlight import (
+    add_channel,
+    channel_by_id,
+    channel_by_login,
+    channels_for,
+    set_announced,
+    start_session,
+)
+from black_bloc.golive import StreamInfo
 
 ROUTES = [
     ("GET", "/api/golive/links"),
@@ -13,6 +22,11 @@ ROUTES = [
     ("DELETE", "/api/golive/optouts/7"),
     ("GET", "/api/golive/sessions"),
     ("GET", "/api/golive/preview"),
+    ("GET", "/api/golive/spotlight"),
+    ("POST", "/api/golive/spotlight"),
+    ("PATCH", "/api/golive/spotlight/1"),
+    ("DELETE", "/api/golive/spotlight/1"),
+    ("POST", "/api/golive/spotlight/1/bump"),
 ]
 
 
@@ -325,3 +339,166 @@ def test_the_preview_writes_nothing(client, sign_in):
     sign_in(client)
     assert client.get("/api/golive/preview").status_code == 200
     assert client.post("/api/golive/preview").status_code in (404, 405)
+
+
+# --- spotlight (v144) --------------------------------------------------------------------------
+
+
+async def a_spotlight(web, wf, login="gamesdonequick", **fields):
+    return await add_channel(
+        web.db,
+        wf.GUILD_ID,
+        login,
+        added_by=7,
+        expires_at=fields.pop("expires_at", None),
+        pin=fields.pop("pin", True),
+        **fields,
+    )
+
+
+async def test_the_list_says_kept_or_the_day_it_runs_out(client, sign_in, web, wf):
+    await a_spotlight(web, wf)
+    await a_spotlight(web, wf, "esamarathon", expires_at="2026-09-30T00:00:00+00:00")
+    sign_in(client)
+
+    rows = {one["twitch_login"]: one for one in client.get("/api/golive/spotlight").json()}
+
+    assert rows["gamesdonequick"]["kept"] is True
+    assert rows["gamesdonequick"]["until"] == "kept"
+    assert rows["esamarathon"]["kept"] is False
+    assert rows["esamarathon"]["until"] == "until 30 Sep"
+    assert rows["gamesdonequick"]["live"] is False
+    assert rows["gamesdonequick"]["url"] == "https://www.twitch.tv/gamesdonequick"
+
+
+async def test_adding_a_channel_keeps_it_for_ever_when_no_days_are_given(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+
+    found = client.post(
+        "/api/golive/spotlight", json={"twitch_login": "GamesDoneQuick"}
+    ).json()
+
+    assert found["twitch_login"] == "gamesdonequick" and found["kept"] is True
+    assert "kept" in found["message"] and "every 4 hours" in found["message"]
+    assert await wf.one_web_row(web.db, "web.golive.spotlight_added") is not None
+
+
+async def test_adding_a_channel_with_days_gives_it_a_date(client, sign_in, web, wf):
+    sign_in(client)
+
+    found = client.post(
+        "/api/golive/spotlight", json={"twitch_login": "esamarathon", "days": 3}
+    ).json()
+
+    assert found["kept"] is False and found["expires_at"] is not None
+
+
+async def test_a_name_that_is_not_a_channel_is_refused_in_words(client, sign_in, web, wf):
+    sign_in(client)
+
+    response = client.post("/api/golive/spotlight", json={"twitch_login": "games done quick"})
+
+    assert response.status_code == 400
+    assert "not a Twitch channel name" in response.json()["message"]
+    assert await channels_for(web.db, wf.GUILD_ID) == []
+
+
+async def test_a_duplicate_is_refused_and_offers_extend(client, sign_in, web, wf):
+    await a_spotlight(web, wf)
+    sign_in(client)
+
+    response = client.post("/api/golive/spotlight", json={"twitch_login": "gamesdonequick"})
+
+    assert response.status_code == 409
+    assert "Extend" in response.json()["message"]
+    assert len(await channels_for(web.db, wf.GUILD_ID)) == 1
+
+
+async def test_days_that_are_not_a_number_are_refused_rather_than_guessed(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+
+    response = client.post(
+        "/api/golive/spotlight", json={"twitch_login": "esamarathon", "days": "soon"}
+    )
+
+    assert response.status_code == 400
+    assert "not a number of days" in response.json()["message"]
+
+
+async def test_a_patch_can_keep_it_for_ever_and_turn_the_pin_off(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf, expires_at="2026-09-30T00:00:00+00:00")
+    sign_in(client)
+
+    found = client.patch(
+        f"/api/golive/spotlight/{spotlight_id}", json={"keep": True, "pin": False}
+    ).json()
+
+    assert found["kept"] is True and found["pin"] is False
+    row = await channel_by_id(web.db, spotlight_id)
+    assert row["expires_at"] is None and row["pin"] == 0
+    assert await wf.one_web_row(web.db, "web.golive.spotlight_updated") is not None
+
+
+async def test_a_patch_with_days_moves_the_date(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    sign_in(client)
+
+    found = client.patch(f"/api/golive/spotlight/{spotlight_id}", json={"days": 14}).json()
+
+    assert found["kept"] is False and found["expires_at"] is not None
+
+
+async def test_a_move_on_a_row_that_has_gone_is_a_404_in_words(client, sign_in, web, wf):
+    sign_in(client)
+
+    response = client.patch("/api/golive/spotlight/4242", json={"keep": True})
+
+    assert response.status_code == 404
+    assert "not there any more" in response.json()["message"]
+
+
+async def test_removing_a_channel_takes_it_off_the_list(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    sign_in(client)
+
+    found = client.delete(f"/api/golive/spotlight/{spotlight_id}").json()
+
+    assert found["removed"] is True and found["twitch_login"] == "gamesdonequick"
+    assert await channel_by_login(web.db, wf.GUILD_ID, "gamesdonequick") is None
+    assert await wf.one_web_row(web.db, "web.golive.spotlight_removed") is not None
+
+
+async def test_a_bump_refuses_in_words_when_the_channel_is_not_live(
+    client, sign_in, web, wf
+):
+    spotlight_id = await a_spotlight(web, wf)
+    sign_in(client)
+
+    response = client.post(f"/api/golive/spotlight/{spotlight_id}/bump")
+
+    assert response.status_code == 409
+    assert "not live right now" in response.json()["message"]
+
+
+async def test_a_live_row_carries_its_session_and_its_past_ones(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    session_id = await start_session(
+        web.db,
+        wf.GUILD_ID,
+        spotlight_id,
+        StreamInfo(url="https://www.twitch.tv/gamesdonequick", game="Celeste", title="AGDQ"),
+        "on",
+    )
+    await set_announced(web.db, session_id, 4242)
+    sign_in(client)
+
+    found = client.get("/api/golive/spotlight").json()[0]
+
+    assert found["live"] is True
+    assert found["session"]["title"] == "AGDQ"
+    assert found["session"]["announced_message_id"] == "4242"
+    assert [one["id"] for one in found["sessions"]] == [session_id]

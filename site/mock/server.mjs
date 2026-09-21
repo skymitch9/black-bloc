@@ -498,6 +498,15 @@ const SETTING_SPECS = [
   ['youtube_live_mode', 'enum', 'off', 'off', 'off, shadow (log what would be announced), or on — a linked YouTube channel going live is announced through the go-live feature, exactly like a Twitch stream', ['off', 'shadow', 'on']],
   ['youtube_live_poll_minutes', 'int', 5, 5, 'how often linked YouTube channels are probed for a live stream', null, 60, 2],
   ['youtube_live_end_misses', 'int', 2, 2, 'how many probes in a row must read offline before a stream is treated as ended', null, 5, 1],
+  ['spotlight_mode', 'enum', "shadow", "shadow", "off, shadow (post the rehearsal copy where shadow_channel_id points), or on — spotlighted Twitch channels are announced, bumped and pinned in the go-live channel even though nobody behind them is in this server", ['off', 'shadow', 'on']],
+  ['spotlight_poll_minutes', 'int', 5, 5, "how often Twitch is asked whether the spotlighted channels are live; one batched call covers the whole list", null, 30, 2],
+  ['spotlight_end_misses', 'int', 2, 2, "how many looks in a row must read offline before a spotlighted stream is treated as over", null, 5, 1],
+  ['spotlight_bump_hours', 'int', 4, 4, "hours between reminders that a spotlighted stream is still going; a row can set its own instead. 4 by default, which is the owner's number for a GDQ marathon", null, 48, 1],
+  ['spotlight_bump_template', 'text', "**{name}** is still live — **{game}**, {duration} so far. {url}", "**{name}** is still live — **{game}**, {duration} so far. {url}", "what a reminder says while a spotlighted stream runs on; {name} {game} {title} {url} {duration}. It is a new short message, never pinned and never a ping"],
+  ['spotlight_bump_cleanup', 'bool', true, true, "true to delete a spotlighted stream's reminders when it ends, so the channel is left with the one announcement"],
+  ['spotlight_pin', 'bool', true, true, "true if a channel added to the spotlight list has its announcement pinned while it streams; each row can say otherwise"],
+  ['spotlight_default_days', 'int', 7, 7, "how long a newly spotlighted channel lasts before it is purged, unless it is kept for ever", null, 365, 1],
+  ['spotlight_event_slack_hours', 'int', 2, 2, "hours past an approved event's end that its spotlight row survives, so a marathon that overruns is still announced", null, 24, 0],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['automod_arm_needs_confirm', 'bool', true, true, 'true to ask a second time before automod is turned on from the panel, naming what will start happening; turning it off or back to shadow is always one press'],
   ['raidtrain_panel_minutes', 'int', 10, 10, "minutes the /raidtrain panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -1099,6 +1108,18 @@ function seedState() {
       { id: 12, user_id: MEMBERS[1].id, source: 'twitch', platform: 'Twitch', url: 'https://twitch.tv/caseyfast', game: 'Lethal Company', title: 'late night runs', also_source: 'youtube', also_platform: 'YouTube', also_url: 'https://www.youtube.com/watch?v=caseyfastlive', also_started_at: minutesAgo(30), started_at: minutesAgo(120), ended_at: null, mode: 'shadow', announced_message_id: null },
       { id: 11, user_id: MEMBERS[2].id, source: 'presence', platform: 'Twitch', url: 'https://twitch.tv/rivetplays', game: 'Balatro', title: 'one more run', also_source: null, also_platform: null, also_url: null, also_started_at: null, started_at: minutesAgo(1500), ended_at: minutesAgo(1300), mode: 'shadow', announced_message_id: null },
     ],
+    // Spotlight (schema 48): Twitch channels with nobody here behind them. GamesDoneQuick is
+    // kept for ever and live right now; ESA runs out with its marathon; the expired one is
+    // absent, exactly as the sweep leaves it.
+    spotlights: [
+      { id: 1, twitch_login: 'gamesdonequick', display_name: 'GamesDoneQuick', note: "the owner's marathon channel", added_by: STAFF.id, added_at: minutesAgo(40000), expires_at: null, bump_hours: null, pin: true, event_id: null },
+      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2 },
+      { id: 3, twitch_login: 'frostfatales', display_name: 'Frost Fatales', note: null, added_by: STAFF.id, added_at: minutesAgo(20000), expires_at: daysAhead(30), bump_hours: null, pin: false, event_id: null },
+    ],
+    spotlightSessions: [
+      { id: 5, spotlight_id: 1, started_at: minutesAgo(560), ended_at: null, title: 'AGDQ 2027 — Day 4', game: 'Celeste', url: 'https://www.twitch.tv/gamesdonequick', mode: 'shadow', announced_message_id: '830000000000000020', last_bump_at: minutesAgo(80), bump_count: 2 },
+      { id: 4, spotlight_id: 1, started_at: minutesAgo(40000), ended_at: minutesAgo(38500), title: 'SGDQ 2026 — finale', game: 'Super Metroid', url: 'https://www.twitch.tv/gamesdonequick', mode: 'shadow', announced_message_id: '830000000000000019', last_bump_at: minutesAgo(38800), bump_count: 6 },
+    ],
   },
   youtube: {
     links: [
@@ -1396,6 +1417,15 @@ const NAMESPACE_OVERRIDE = {
   minutes_keep_days: 'events',
   minutes_panel_minutes: 'events',
   minutes_log_level: 'events',
+  spotlight_mode: 'golive',
+  spotlight_poll_minutes: 'golive',
+  spotlight_end_misses: 'golive',
+  spotlight_bump_hours: 'golive',
+  spotlight_bump_template: 'golive',
+  spotlight_bump_cleanup: 'golive',
+  spotlight_pin: 'golive',
+  spotlight_default_days: 'golive',
+  spotlight_event_slack_hours: 'golive',
 };
 
 function namespaceOf(key) {
@@ -3667,6 +3697,156 @@ function fillWording(template, fields) {
     .replace(/[ \t]+([.,;:!?])/g, '$1')
     .trim();
 }
+
+function spotlightSessionRow(row) {
+  return {
+    id: row.id,
+    started_at: row.started_at,
+    ended_at: row.ended_at,
+    title: row.title,
+    game: row.game,
+    url: row.url,
+    mode: row.mode,
+    bump_count: row.bump_count,
+    announced_message_id: row.announced_message_id === null ? null : String(row.announced_message_id),
+  };
+}
+
+function spotlightOpen(id) {
+  return state.golive.spotlightSessions.find((one) => one.spotlight_id === id && !one.ended_at) || null;
+}
+
+function spotlightUntil(row) {
+  if (!row.expires_at) return 'kept';
+  const when = new Date(row.expires_at);
+  return `until ${when.getUTCDate()} ${when.toLocaleString('en', { month: 'short', timeZone: 'UTC' })}`;
+}
+
+function spotlightRow(row) {
+  const live = spotlightOpen(row.id);
+  return {
+    id: row.id,
+    twitch_login: row.twitch_login,
+    display_name: row.display_name || row.twitch_login,
+    note: row.note,
+    added_by: row.added_by === null ? null : String(row.added_by),
+    added_by_name: row.added_by === null ? null : memberName(row.added_by),
+    added_at: row.added_at,
+    expires_at: row.expires_at,
+    kept: !row.expires_at,
+    until: spotlightUntil(row),
+    bump_hours: row.bump_hours,
+    pin: Boolean(row.pin),
+    event_id: row.event_id,
+    url: `https://www.twitch.tv/${row.twitch_login}`,
+    live: live !== null,
+    session: live === null ? null : spotlightSessionRow(live),
+    sessions: state.golive.spotlightSessions
+      .filter((one) => one.spotlight_id === row.id)
+      .map(spotlightSessionRow),
+  };
+}
+
+function wantedSpotlight(params) {
+  const row = state.golive.spotlights.find((one) => String(one.id) === String(params.spotlight_id));
+  if (!row) {
+    throw new Refused(404, 'no_spotlight', 'That spotlight row is not there any more, so nothing was changed. It may have run out, or somebody else may have removed it \u2014 the Go-live page\u2019s Streamers list shows what is left.');
+  }
+  return row;
+}
+
+function spotlightDays(given) {
+  if (given === null || given === undefined || String(given).trim() === '') return null;
+  if (!/^\d+$/.test(String(given).trim())) {
+    throw new Refused(400, 'bad_days', `**${String(given).slice(0, 40)}** is not a number of days, so nothing was changed. Give a whole number of days, or say it is kept for ever.`);
+  }
+  return Number(String(given).trim());
+}
+
+route('GET', '/api/golive/spotlight', (context) => {
+  requireStaff(context.session);
+  return state.golive.spotlights.map(spotlightRow);
+});
+
+route('POST', '/api/golive/spotlight', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const given = String(body.twitch_login || '');
+  const login = given.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').split(/[?/]/)[0].replace(/^@/, '');
+  if (!login || login.length > 25 || !/^[a-z0-9_]+$/.test(login)) {
+    throw new Refused(400, 'bad_login', `**${given || 'nothing'}** is not a Twitch channel name, so nothing was spotlighted. Use the name from the channel address \u2014 the part after twitch.tv/ \u2014 for example \`gamesdonequick\`.`);
+  }
+  if (state.golive.spotlights.some((one) => one.twitch_login === login)) {
+    throw new Refused(409, 'already_spotlit', `**${login}** is already on the spotlight list, so nothing was added. **Extend** on its own row moves the date it runs out instead \u2014 that is the move you want if this is a new marathon on the same channel.`);
+  }
+  const days = spotlightDays(body.days);
+  const keep = body.keep === true || days === null;
+  const row = {
+    id: state.golive.spotlights.reduce((top, one) => Math.max(top, one.id), 0) + 1,
+    twitch_login: login,
+    display_name: login,
+    note: body.note ?? null,
+    added_by: context.session.id,
+    added_at: now(),
+    expires_at: keep ? null : daysAhead(days),
+    bump_hours: body.bump_hours ?? null,
+    pin: body.pin === undefined || body.pin === null ? true : Boolean(body.pin),
+    event_id: null,
+  };
+  state.golive.spotlights.push(row);
+  logAction('web.golive.spotlight_added', { details: { login, expires_at: row.expires_at } });
+  const hours = row.bump_hours || state.settings.get('spotlight_bump_hours') || 4;
+  const pinWords = row.pin ? 'pins the announcement for the duration' : 'leaves the announcement unpinned';
+  return {
+    ...spotlightRow(row),
+    message: `**${login}** is on the spotlight list, ${spotlightUntil(row)}. Black Bloc announces it in the go-live channel whenever it goes live, reminds people every ${hours} hours while it runs, and ${pinWords}.`,
+  };
+});
+
+route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
+  requireStaff(context.session);
+  const row = wantedSpotlight(context.params);
+  const body = await context.body();
+  if (body.keep === true) row.expires_at = null;
+  else if ('expires_at' in body) row.expires_at = body.expires_at || null;
+  else if (body.days !== undefined && body.days !== null) row.expires_at = daysAhead(spotlightDays(body.days));
+  if ('bump_hours' in body) row.bump_hours = body.bump_hours || null;
+  if ('pin' in body) row.pin = Boolean(body.pin);
+  if ('note' in body) row.note = body.note || null;
+  logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login } });
+  return { ...spotlightRow(row), message: `**${row.twitch_login}** now runs ${spotlightUntil(row)}.` };
+});
+
+route('DELETE', '/api/golive/spotlight/:spotlight_id', (context) => {
+  requireStaff(context.session);
+  const row = wantedSpotlight(context.params);
+  state.golive.spotlights = state.golive.spotlights.filter((one) => one.id !== row.id);
+  state.golive.spotlightSessions = state.golive.spotlightSessions.filter((one) => one.spotlight_id !== row.id);
+  logAction('web.golive.spotlight_removed', { details: { login: row.twitch_login } });
+  return {
+    id: row.id,
+    twitch_login: row.twitch_login,
+    removed: true,
+    message: `**${row.twitch_login}** is off the spotlight list. Any announcement it has out there is left as posted; nothing else was changed.`,
+  };
+});
+
+route('POST', '/api/golive/spotlight/:spotlight_id/bump', (context) => {
+  requireStaff(context.session);
+  const row = wantedSpotlight(context.params);
+  const live = spotlightOpen(row.id);
+  if (live === null) {
+    throw new Refused(409, 'not_live', `**${row.twitch_login}** is not live right now, so there was nothing to remind anybody about. The reminder is offered again the moment Black Bloc sees it go live.`);
+  }
+  live.last_bump_at = now();
+  live.bump_count += 1;
+  logAction('web.golive.spotlight_bumped', { details: { login: row.twitch_login } });
+  return {
+    ...spotlightRow(row),
+    bumped: true,
+    message: `Reminded the go-live channel that **${row.twitch_login}** is still live.`,
+  };
+});
 
 route('GET', '/api/golive/preview', (context) => {
   requireStaff(context.session);

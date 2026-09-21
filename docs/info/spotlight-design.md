@@ -1,6 +1,6 @@
 # Spotlight — Twitch channels that are not Discord members, announced, bumped every N hours, pinned for the duration, staff-curated with an expiry
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-20 17:0x) — dispatches
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `spotlight`, 2026-09-20 — not merged, not deployed, NOTHING IN IT HAS MET DISCORD OR HELIX.** The `## Deviations` foot is the truth where this body departs from what shipped, and `## What was NOT verified` is the honest half; sweeps `SL-a` … `SL-g` in `../access/sweeps.md` are the proof that is missing. ⚠️ **Schema is 48, not the 47 this body says** — `selftest-boot` took 47 on `main` while this was being built. Was: 📐 **DESIGN (Fable, 2026-09-20 17:0x) — dispatches
 > AFTER `costream` lands**, because both touch the go-live cog, its keys and its sessions. **Last verified: 2026-09-20 17:0x**
 > against `main` `e88573d` (v142 deploying): `black_bloc/twitch.py` — `TwitchClient.get_streams(logins)` `:177` (Helix
 > `streams` by login, batched by 100), `get_users` `:185`, `get_games` `:192`; the go-live cog holds the client as
@@ -126,4 +126,156 @@ approved event with a twitch link → **Spotlight this stream** on its post → 
 
 ## Deviations
 
-*(the build agent writes here what it had to do differently, dated)*
+*(written by the build agent, branch `spotlight`, **2026-09-20**, off `main` `f0e7ef3` — the commit
+that carries `costream`. Every item is a departure from the body above; where the body is silent and
+a choice had to be made, it says so.)*
+
+1. ⚠️ **Schema is 48, not 47.** The body was written against a `main` where 46 was the top; the
+   `selftest-boot` branch merged as `0f006ea` and took **47** while this was in flight, so this build
+   takes **48**. Still two new tables plus `spotlight_bumps` through the `SCHEMA` bootstrap and
+   nothing in `ADDED_COLUMNS`, so migrate-before-deploy is automatic exactly as §F says.
+
+2. ⚠️ **The shadow kind is `golive.would_spotlight_announce`, not the body's
+   `golive.spotlight_would_announce`.** `logkinds.SHADOW` is the literal string `".would_"`, so
+   `is_shadow()` and `test_every_shadow_kind_is_routine_by_rule_not_by_being_listed` only recognise a
+   kind whose head is followed by `would_`. The body's spelling classifies as UNCLASSIFIED and fails
+   `test_every_emitted_kind_is_classified` by name. Checklist **2** asks for `<feature>.would_<action>`
+   anyway, so the house spelling is the one that gets the classification for free.
+
+3. **The default bump wording is `"… {duration} so far. {url}"`, not `"… {duration} in. {url}"`.**
+   The shared `tidy()` strips a dangling `in` before a full stop — that is what it exists to do for an
+   empty placeholder — so the body's wording renders *"4 h."* and silently eats the word. **Measured,
+   not reasoned**: `test_the_reminder_fills_the_five_placeholders_and_tidies_what_is_missing` failed
+   on exactly that before the wording changed. It is a settings key either way, so the owner can put
+   it back in one edit if he wants the gap.
+
+4. **The cog borrows the go-live cog's Helix client rather than making its own.** §E says "one Helix
+   call per poll for the whole list" and is silent on whose client. Two `TwitchClient`s would mean two
+   app tokens, two `aiohttp` sessions and two things to close; `_helix()` reads
+   `bot.get_cog("GoLive").helix`, so the credentials and the token refresh have one home. The
+   consequence the panel and the page both say out loud: with no key, nothing polls, and
+   `words.NO_KEY` is the sentence.
+
+5. **`render` and `announcement_embed` gained a keyword-only `name=`.** A spotlight has no member, and
+   `display_name(None)` is `"Someone"` — the card would have read *"Someone is now live on Twitch!"*.
+   The alternative was a fake object with a `display_name` attribute, which is a lie in the shape of a
+   member. Both changes are additive and every existing caller is byte-for-byte unchanged
+   (`test_the_card_names_the_channel_not_someone` is the guard).
+
+6. **The `/golive` sub-panel's moves are BUTTONS, not the select §C describes.** The owner's standing
+   rule (2026-09-03) is *"moves are buttons that render only when valid, never a status menu with two
+   spellings of the same move"*, and the Streamers sub-panel beside it already works that way (a
+   select to pick the row, buttons to act on it). So: `ChannelPick` selects the channel, and the row
+   gets **Extend a week** / **Keep for ever** *or* **Let it expire** (never both), **Bump now** only
+   while it is actually live, and **Remove**.
+
+7. **`bump_now` tells "no such row", "not live" and "the cog is not up" apart, and the route answers
+   404 / 409 / 503.** The first draft returned `no_row` when the cog was missing, so staff on a
+   perfectly good row were told it had gone — a bare-status failure in words' clothing. `words.NO_COG`
+   is its own sentence. Traced to `test_a_bump_refuses_in_words_when_the_channel_is_not_live` failing
+   with a 404 the first time it ran.
+
+8. **`POST /api/golive/spotlight/{id}/bump` and `POST /api/events/{id}/spotlight` are NOT in
+   `contract.json`, and that is deliberate.** `tests/api/test_contract.py` drives every listed route
+   against the real router and demands a 200; a bump needs a live session *and* a `Spotlight` cog
+   instance on the harness bot, and the event route needs the shared seed's event to be approved with
+   a twitch.tv Where. Both are covered instead where those can be arranged —
+   `tests/api/tools/test_golive.py` and `tests/cogs/community/test_events.py` — and both are in the
+   mock, so `check.mjs` still serves them to the page. The four CRUD routes ARE in the contract, with
+   a seeded `{spotlight_id}`.
+
+9. **`GET /api/golive/spotlight` carries each row's open session AND its last five, rather than a
+   second route.** §C says *"The Live-now card and Recent streams include spotlight sessions"* and
+   lists no route for them. One list with `session` (the open one, or null) and `sessions` (the recent
+   ones) is what lets `spotlightCards()` and `spotlightSessions()` be pure and testable without a
+   sixth fetch.
+
+10. **`spotlight_bump_template` lives in the *How streams are spotted* drawer, not in *The
+    announcement*.** It is the only posted wording this build adds, so §D's *"every posted word is a
+    key"* is satisfied either way — but `announcementSection` takes `placed.wording` and renders a
+    hand-picked set of keys from the `golive` namespace, so a key placed there would have passed the
+    every-key-lands-once test while appearing **nowhere on the page**. The drawer renders it through
+    `settingsPanel`, which is the surface that actually shows it.
+
+11. ⚠️ **The every-key-lands-once fixture was already two behind, and this build fixed it.**
+    `NAMESPACE_KEYS` in `golive-join.test.mjs` said **36**; the three `golive_costream_*` keys landed
+    after it was measured and nobody updated it, so the test was asserting a stale list against itself
+    and would never have caught them. It is now **48** — measured by import, not counted by hand — and
+    the catch-all assertion names the three costream keys explicitly.
+
+12. **`spotlight_mode` is the header strip's fourth mode cell.** §C does not say where the mode
+    switch goes. Putting it beside Twitch / YouTube / Ping roles is the one place staff already look
+    for "is this on", and its note says how many channels have no member behind them.
+
+13. **A spotlight-only row's `user_id` is the string `spotlight:<id>`.** The join keys rows by member
+    id and a spotlight has none. A synthetic prefix keeps one sorted list, keeps `blankRow`'s shape
+    intact, and is what `memberCell` reads to print *channel only* instead of calling `nameNode` with
+    something Discord has never heard of.
+
+14. **A cancelled event drops its spotlight from `events.cancel_for`, through a function-level
+    import.** §B says a cancelled event expires its row at once, and `cancel_for` is the one place
+    BOTH doors (the card and `POST /api/events/{id}/cancel`) pass through. `black_bloc/events.py` is
+    imported by the cog, so a module-level import of the cog would be a cycle; `drop_spotlight()`
+    imports inside the call and logs a warning rather than raising if the spotlight half is not up.
+
+15. **`forget_spotlight` closes an open session itself when the cog is not loaded.** Staff final say:
+    the row goes whatever state it is in, and leaving an orphan open session behind would have made
+    the next boot's reconcile clean up after a move that already reported success.
+
+16. **Three files outside the design's list had to change, and two of them are gate failures if they
+    do not.** `site/public/assets/labels.js` gains nine label lines, or
+    `test_every_registry_key_the_site_shows_has_a_label` fails by name. `tests/test_settings_panel.py`
+    gains `golive` to the over-the-cap list, because §D said the golive group grows past 25 and it
+    does — the guard asserts exactly which groups need the Find box. `tests/test_loops.py`
+    `BEFORE_LOOPS` goes 19 → 20 for the new poller's `before_loop`.
+
+17. **Four commits, not the six the brief sketched, and the reason is the AST guards.**
+    `tests/test_logkinds.py::test_no_classification_entry_is_dead` refuses a classified kind that
+    nothing emits, so `logkinds.py` had to land in the same commit as the cog that writes the kinds,
+    not with the storage and the keys. The routes, the contract, the mock, the page, the join and the
+    event action landed together because `check.mjs` and `test_contract.py` each read both halves and
+    a split would have left one commit red.
+
+18. **NOT done, deliberately:** nothing merged, nothing deployed, nothing pushed to `main`; no key
+    flipped — `spotlight_mode` ships **shadow** as its registry DEFAULT (checklist 37's standing rule
+    that anything which POSTS ships shadow), and no guild row was written; `TODO.md`, `DONE.md`,
+    `deploys.log` and `KNOWN_ISSUES.md` untouched; `C:/lcw/bb-preview-c` never entered and nothing
+    under `site/public/preview/` or `assets/page-preview-*.js` touched; no `twitch_user_id` is
+    resolved at add time (the design's column exists and is left NULL — `get_users` would be a second
+    Helix call for a fact nothing reads yet); the events PAGE has no **Spotlight this stream** button
+    (the route is there and the card has it — the page button is one call on `page-events.js` and is
+    named here rather than guessed at).
+
+## What was NOT verified
+
+⚠️ **Nothing in this build has met Discord, and nothing has met Helix.** No spotlight has been
+announced, pinned, bumped, unpinned or expired anywhere but in the suite, against `FakeChannel` /
+`FakeMessage` / `FakeHelix`. The sweep rows `SL-a` … `SL-g` in `../access/sweeps.md` are the proof
+that does not exist yet.
+
+Specifically NOT verified:
+
+- **That Discord pins and unpins as the code asks.** `message.pin(reason=…)` and `.unpin()` are
+  library knowledge; the tests prove the CALLS and the refusal words, not the pin. A channel's
+  50-pin ceiling and the **Manage Messages** permission have never been met — `SL-b` is the row that
+  turns the pin into a fact and `PIN_REFUSED` into a sentence somebody has actually read.
+- **That Helix answers for a channel nobody here is linked to.** `get_streams(["gamesdonequick"])`
+  is the same batched call the go-live poll already makes, but it has never been made for a login
+  that is not a member's. The whole feature rests on that one assumption.
+- **The four-hour bump against a real clock.** Every bump test moves `started_at` in the database
+  and polls again. Nothing has waited four hours, and no reminder has appeared in a channel.
+- **The migration on a real database.** Schema 48 was applied by `Database.connect` in the suite's
+  `tmp_path` databases only; the Fly volume has never seen `spotlight_channels`. It is additive
+  tables through the bootstrap, so migrate-before-deploy is automatic — but that is an argument,
+  not a measurement.
+- **Any browser.** The Go-live page was not opened. The channel-only row, the Spotlight chip, the
+  drawer's Spotlight group, the fourth mode cell in the strip and the Spotlight-a-channel form were
+  checked through `check.mjs` and the join's fixtures, and **rendered nowhere**.
+- **The `/golive` ▸ Spotlight… sub-panel in Discord.** Built and tested against a fake interaction;
+  no button has been pressed, and the modal has never been opened.
+- **A spotlight that goes live in the same tick as its row expires.** The per-row lock and the
+  partial unique index make one outcome the only possible one, and the tests drive the two in
+  sequence; nothing raced them.
+- **`spotlight_event_slack_hours` against a real event that overran.** The maths is unit-tested; no
+  event has ever run long.
+

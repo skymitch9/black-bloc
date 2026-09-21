@@ -102,6 +102,7 @@ function liveByUser(sessions) {
 function blankRow(id) {
   return {
     user_id: id,
+    spotlight: null,
     name: null,
     twitch: null,
     twitch_at: null,
@@ -133,6 +134,7 @@ export function joinStreamers({
   listing = [],
   streamers = [],
   sessions = [],
+  spotlight = [],
 } = {}) {
   const rows = new Map();
   const reach = (value, name) => {
@@ -188,7 +190,76 @@ export function joinStreamers({
 
   const live = liveByUser(sessions);
   for (const [id, row] of rows) row.live = live.get(id) || null;
-  return [...rows.values()].sort(byName);
+
+  // A spotlight is a streamer with no member behind it, so it is a ROW in the same list. A
+  // channel that is ALSO a linked member's Twitch login is ONE row — the member's — carrying
+  // the spotlight facts, never a second line saying the same thing about the same channel.
+  const found = [...rows.values()];
+  for (const one of spotlight || []) {
+    const login = String(one.twitch_login || '').toLowerCase();
+    const mine = found.find((row) => String(row.twitch || '').toLowerCase() === login);
+    if (mine) {
+      mine.spotlight = one;
+      if (one.live && !mine.live) mine.live = TWITCH;
+      continue;
+    }
+    const made = blankRow(`spotlight:${one.id}`);
+    made.name = one.display_name || one.twitch_login;
+    made.twitch = one.twitch_login;
+    made.twitch_at = one.added_at || null;
+    made.spotlight = one;
+    made.live = one.live ? TWITCH : null;
+    found.push(made);
+  }
+  return found.sort(byName);
+}
+
+export function spotlightCards(spotlight) {
+  return (spotlight || [])
+    .filter((one) => one && one.live && one.session)
+    .map((one) => ({
+      session_id: one.session.id,
+      user_id: `spotlight:${one.id}`,
+      spotlight_id: one.id,
+      name: one.display_name || one.twitch_login,
+      platforms: [TWITCH],
+      title: one.session.title || null,
+      game: one.session.game || null,
+      url: one.session.url || one.url || null,
+      also_url: null,
+      announced: Boolean(one.session.announced_message_id),
+      mode: one.session.mode || null,
+      started_at: one.session.started_at || null,
+      held_by: null,
+      pinned: Boolean(one.pin),
+      bump_count: one.session.bump_count || 0,
+    }));
+}
+
+export function spotlightSessions(spotlight) {
+  const found = [];
+  for (const one of spotlight || []) {
+    for (const session of one.sessions || []) {
+      found.push({
+        id: `spotlight:${session.id}`,
+        user_id: `spotlight:${one.id}`,
+        user_name: one.display_name || one.twitch_login,
+        source: 'spotlight',
+        platform: 'Twitch',
+        url: session.url || one.url || null,
+        game: session.game || null,
+        title: session.title || null,
+        also_source: null,
+        also_url: null,
+        also_platform: null,
+        started_at: session.started_at || null,
+        ended_at: session.ended_at || null,
+        mode: session.mode || null,
+        announced_message_id: session.announced_message_id || null,
+      });
+    }
+  }
+  return found;
 }
 
 export function routeTyped(given) {
@@ -207,7 +278,7 @@ export function routeTyped(given) {
   return { where: null, why: `**${value}**${NEITHER}` };
 }
 
-export const STRIP_KEYS = ['golive_mode', 'youtube_live_mode', 'pings_mode'];
+export const STRIP_KEYS = ['golive_mode', 'youtube_live_mode', 'pings_mode', 'spotlight_mode'];
 
 export const WORDING_KEYS = [
   'golive_template',
@@ -243,7 +314,19 @@ export const DRAWERS = [
   {
     id: 'spotted',
     title: 'How streams are spotted',
-    keys: ['youtube_live_poll_minutes', 'youtube_live_end_misses', 'youtube_unlink_dms_them'],
+    keys: [
+      'youtube_live_poll_minutes',
+      'youtube_live_end_misses',
+      'youtube_unlink_dms_them',
+      'spotlight_poll_minutes',
+      'spotlight_end_misses',
+      'spotlight_bump_hours',
+      'spotlight_bump_template',
+      'spotlight_bump_cleanup',
+      'spotlight_pin',
+      'spotlight_default_days',
+      'spotlight_event_slack_hours',
+    ],
   },
   { id: 'rest', title: 'Everything else' },
 ];

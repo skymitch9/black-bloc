@@ -33,6 +33,7 @@ COGS: tuple[str, ...] = (
     "black_bloc.cogs.community.polls",
     "black_bloc.cogs.moderation.honeypot",
     "black_bloc.cogs.content.golive",
+    "black_bloc.cogs.content.spotlight",
     "black_bloc.cogs.community.birthdays",
     "black_bloc.cogs.moderation.modmail",
     "black_bloc.cogs.moderation.automod",

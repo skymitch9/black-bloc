@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 47
+SCHEMA_VERSION = 48
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -845,6 +845,50 @@ CREATE TABLE IF NOT EXISTS meeting_lines (
 
 CREATE INDEX IF NOT EXISTS meeting_lines_by_meeting
     ON meeting_lines(meeting_id, started_at, id);
+
+CREATE TABLE IF NOT EXISTS spotlight_channels (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id       INTEGER NOT NULL,
+    twitch_login   TEXT    NOT NULL,
+    twitch_user_id TEXT,
+    display_name   TEXT,
+    note           TEXT,
+    added_by       INTEGER,
+    added_at       TEXT    NOT NULL,
+    expires_at     TEXT,
+    bump_hours     INTEGER,
+    pin            INTEGER NOT NULL DEFAULT 1,
+    event_id       INTEGER,
+    UNIQUE (guild_id, twitch_login)
+);
+
+CREATE TABLE IF NOT EXISTS spotlight_sessions (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id             INTEGER NOT NULL,
+    spotlight_id         INTEGER NOT NULL,
+    started_at           TEXT    NOT NULL,
+    ended_at             TEXT,
+    title                TEXT,
+    game                 TEXT,
+    url                  TEXT,
+    mode                 TEXT    NOT NULL,
+    announced_message_id INTEGER,
+    last_bump_at         TEXT,
+    bump_count           INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS spotlight_open_session
+    ON spotlight_sessions(spotlight_id) WHERE ended_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS spotlight_sessions_by_guild
+    ON spotlight_sessions(guild_id, id);
+
+CREATE TABLE IF NOT EXISTS spotlight_bumps (
+    session_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    at         TEXT    NOT NULL,
+    PRIMARY KEY (session_id, message_id)
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

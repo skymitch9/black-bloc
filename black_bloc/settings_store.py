@@ -1601,6 +1601,139 @@ KEY_HELP.update(
 )
 
 
+# Spotlight (v144) — Twitch channels with no Discord member behind them. Every key is
+# NAMESPACE_OVERRIDE'd onto `golive` below, because a spotlight is a streamer without a member
+# and the go-live page is where staff already look. Design: info/spotlight-design.md §D.
+SPOTLIGHT_MODES = ("off", "shadow", "on")
+SPOTLIGHT_MODE_KEY = "spotlight_mode"
+SPOTLIGHT_POLL_MINUTES_KEY = "spotlight_poll_minutes"
+SPOTLIGHT_END_MISSES_KEY = "spotlight_end_misses"
+SPOTLIGHT_BUMP_HOURS_KEY = "spotlight_bump_hours"
+SPOTLIGHT_BUMP_TEMPLATE_KEY = "spotlight_bump_template"
+SPOTLIGHT_BUMP_CLEANUP_KEY = "spotlight_bump_cleanup"
+SPOTLIGHT_PIN_KEY = "spotlight_pin"
+SPOTLIGHT_DEFAULT_DAYS_KEY = "spotlight_default_days"
+SPOTLIGHT_EVENT_SLACK_KEY = "spotlight_event_slack_hours"
+SPOTLIGHT_POLL_MINUTES = 5
+SPOTLIGHT_POLL_MIN_MINUTES = 2
+SPOTLIGHT_POLL_MAX_MINUTES = 30
+SPOTLIGHT_END_MISSES = 2
+SPOTLIGHT_END_MISSES_MIN = 1
+SPOTLIGHT_END_MISSES_MAX = 5
+SPOTLIGHT_BUMP_HOURS = 4
+SPOTLIGHT_BUMP_HOURS_MIN = 1
+SPOTLIGHT_BUMP_HOURS_MAX = 48
+SPOTLIGHT_DEFAULT_DAYS = 7
+SPOTLIGHT_DEFAULT_DAYS_MIN = 1
+SPOTLIGHT_DEFAULT_DAYS_MAX = 365
+SPOTLIGHT_EVENT_SLACK_HOURS = 2
+SPOTLIGHT_EVENT_SLACK_MIN = 0
+SPOTLIGHT_EVENT_SLACK_MAX = 24
+SPOTLIGHT_BUMP_TEMPLATE = (
+    "**{name}** is still live — **{game}**, {duration} so far. {url}"
+)
+SPOTLIGHT_BUMP_FIELDS = ("name", "game", "title", "url", "duration")
+KEY_TYPES.update(
+    {
+        SPOTLIGHT_MODE_KEY: "enum",
+        SPOTLIGHT_POLL_MINUTES_KEY: "int",
+        SPOTLIGHT_END_MISSES_KEY: "int",
+        SPOTLIGHT_BUMP_HOURS_KEY: "int",
+        SPOTLIGHT_BUMP_TEMPLATE_KEY: "text",
+        SPOTLIGHT_BUMP_CLEANUP_KEY: "bool",
+        SPOTLIGHT_PIN_KEY: "bool",
+        SPOTLIGHT_DEFAULT_DAYS_KEY: "int",
+        SPOTLIGHT_EVENT_SLACK_KEY: "int",
+    }
+)
+KEY_CHOICES[SPOTLIGHT_MODE_KEY] = SPOTLIGHT_MODES
+KEY_MIN[SPOTLIGHT_POLL_MINUTES_KEY] = SPOTLIGHT_POLL_MIN_MINUTES
+KEY_MAX[SPOTLIGHT_POLL_MINUTES_KEY] = SPOTLIGHT_POLL_MAX_MINUTES
+KEY_MIN[SPOTLIGHT_END_MISSES_KEY] = SPOTLIGHT_END_MISSES_MIN
+KEY_MAX[SPOTLIGHT_END_MISSES_KEY] = SPOTLIGHT_END_MISSES_MAX
+KEY_MIN[SPOTLIGHT_BUMP_HOURS_KEY] = SPOTLIGHT_BUMP_HOURS_MIN
+KEY_MAX[SPOTLIGHT_BUMP_HOURS_KEY] = SPOTLIGHT_BUMP_HOURS_MAX
+KEY_MIN[SPOTLIGHT_DEFAULT_DAYS_KEY] = SPOTLIGHT_DEFAULT_DAYS_MIN
+KEY_MAX[SPOTLIGHT_DEFAULT_DAYS_KEY] = SPOTLIGHT_DEFAULT_DAYS_MAX
+KEY_MIN[SPOTLIGHT_EVENT_SLACK_KEY] = SPOTLIGHT_EVENT_SLACK_MIN
+KEY_MAX[SPOTLIGHT_EVENT_SLACK_KEY] = SPOTLIGHT_EVENT_SLACK_MAX
+KEY_MIN_REASON[SPOTLIGHT_POLL_MINUTES_KEY] = (
+    "Asking Twitch about the same handful of channels more often than every {limit} minutes "
+    "spends the quota and finds a marathon no sooner."
+)
+KEY_MAX_REASON[SPOTLIGHT_POLL_MINUTES_KEY] = (
+    "A gap longer than {limit} minutes means a spotlighted stream can be well under way before "
+    "anybody is told it started."
+)
+KEY_MIN_REASON[SPOTLIGHT_END_MISSES_KEY] = (
+    "Ending on {limit} quiet look means one hiccup at Twitch unpins a marathon that is still "
+    "running."
+)
+KEY_MAX_REASON[SPOTLIGHT_END_MISSES_KEY] = (
+    "Waiting for {limit} quiet looks leaves a pinned announcement saying a marathon is live "
+    "long after it has finished."
+)
+KEY_MIN_REASON[SPOTLIGHT_BUMP_HOURS_KEY] = (
+    "Bumping more often than every {limit} hour turns a reminder into the thing people mute."
+)
+KEY_MAX_REASON[SPOTLIGHT_BUMP_HOURS_KEY] = (
+    "A gap longer than {limit} hours is longer than most marathons, so the reminder never "
+    "arrives at all."
+)
+KEY_MIN_REASON[SPOTLIGHT_DEFAULT_DAYS_KEY] = (
+    "A row that expires in under {limit} day is gone before the marathon it was added for."
+)
+KEY_MAX_REASON[SPOTLIGHT_DEFAULT_DAYS_KEY] = (
+    "More than {limit} days is a year — use **keep forever** if that is what is meant, so the "
+    "list says so out loud."
+)
+KEY_MAX_REASON[SPOTLIGHT_EVENT_SLACK_KEY] = (
+    "More than {limit} hours past an event's end is a whole extra day of spotlight for an "
+    "event that finished."
+)
+KEY_HELP.update(
+    {
+        SPOTLIGHT_MODE_KEY: (
+            "off, shadow (post the rehearsal copy where shadow_channel_id points), or on — "
+            "spotlighted Twitch channels are announced, bumped and pinned in the go-live "
+            "channel even though nobody behind them is in this server"
+        ),
+        SPOTLIGHT_POLL_MINUTES_KEY: (
+            "how often Twitch is asked whether the spotlighted channels are live; one batched "
+            "call covers the whole list"
+        ),
+        SPOTLIGHT_END_MISSES_KEY: (
+            "how many looks in a row must read offline before a spotlighted stream is treated "
+            "as over"
+        ),
+        SPOTLIGHT_BUMP_HOURS_KEY: (
+            "hours between reminders that a spotlighted stream is still going; a row can set "
+            "its own instead. 4 by default, which is the owner's number for a GDQ marathon"
+        ),
+        SPOTLIGHT_BUMP_TEMPLATE_KEY: (
+            "what a reminder says while a spotlighted stream runs on; {name} {game} {title} "
+            "{url} {duration}. It is a new short message, never pinned and never a ping"
+        ),
+        SPOTLIGHT_BUMP_CLEANUP_KEY: (
+            "true to delete a spotlighted stream's reminders when it ends, so the channel is "
+            "left with the one announcement"
+        ),
+        SPOTLIGHT_PIN_KEY: (
+            "true if a channel added to the spotlight list has its announcement pinned while "
+            "it streams; each row can say otherwise"
+        ),
+        SPOTLIGHT_DEFAULT_DAYS_KEY: (
+            "how long a newly spotlighted channel lasts before it is purged, unless it is kept "
+            "for ever"
+        ),
+        SPOTLIGHT_EVENT_SLACK_KEY: (
+            "hours past an approved event's end that its spotlight row survives, so a marathon "
+            "that overruns is still announced"
+        ),
+    }
+)
+
+
 # Pings panel (wave 2) — the one decision `/pings`'s panel introduces, in its own block so the
 # parallel wave-2 branches merge textually.
 KEY_TYPES.update({"pings_panel_minutes": "int"})
@@ -2563,6 +2696,15 @@ NAMESPACE_OVERRIDE = {
     "minutes_keep_days": "events",
     "minutes_panel_minutes": "events",
     log_level_key("minutes"): "events",
+    SPOTLIGHT_MODE_KEY: "golive",
+    SPOTLIGHT_POLL_MINUTES_KEY: "golive",
+    SPOTLIGHT_END_MISSES_KEY: "golive",
+    SPOTLIGHT_BUMP_HOURS_KEY: "golive",
+    SPOTLIGHT_BUMP_TEMPLATE_KEY: "golive",
+    SPOTLIGHT_BUMP_CLEANUP_KEY: "golive",
+    SPOTLIGHT_PIN_KEY: "golive",
+    SPOTLIGHT_DEFAULT_DAYS_KEY: "golive",
+    SPOTLIGHT_EVENT_SLACK_KEY: "golive",
 }
 
 
@@ -2629,6 +2771,11 @@ MOVED_LINE_UNKNOWN = (
 COSTREAM_UNKNOWN = (
     "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. A "
     "co-streaming announcement may stand in for {allowed}; write any other braces out as words."
+)
+
+BUMP_UNKNOWN = (
+    "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. A "
+    "spotlight reminder may stand in for {allowed}; write any other braces out as words."
 )
 
 PLACEHOLDERS = re.compile(r"\{([^{}]*)\}")
@@ -2739,6 +2886,27 @@ def checked_costream(given: Any) -> str:
     return text
 
 
+def checked_bump(given: Any) -> str:
+    """The five bump placeholders and nothing else, so a reminder can never fail to fill."""
+    text = str(given or "").strip()
+    stray = next(
+        (
+            one.strip()
+            for one in PLACEHOLDERS.findall(text)
+            if one.strip() not in SPOTLIGHT_BUMP_FIELDS
+        ),
+        None,
+    )
+    if stray is not None:
+        raise SettingError(
+            BUMP_UNKNOWN.format(
+                found=stray[:40],
+                allowed=", ".join(f"`{{{one}}}`" for one in SPOTLIGHT_BUMP_FIELDS),
+            )
+        )
+    return text
+
+
 def checked_filed_line(given: Any) -> str:
     """`{request_id}` and nothing else, and it may be left out."""
     text = str(given or "").strip()
@@ -2762,6 +2930,7 @@ TEXT_CHECKS: dict[str, Any] = {
     EVENTS_MOVED_LINE_KEY: checked_moved_line,
     REQUEST_FILED_KEY: checked_filed_line,
     RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
+    SPOTLIGHT_BUMP_TEMPLATE_KEY: checked_bump,
 }
 
 TEXT_MAY_BE_BLANK = (
@@ -3057,6 +3226,24 @@ class SettingsStore:
             return GOLIVE_COSTREAM_TEMPLATE
         if key == GOLIVE_COSTREAM_AUTHOR_KEY:
             return GOLIVE_COSTREAM_AUTHOR
+        if key == SPOTLIGHT_MODE_KEY:
+            return "shadow"
+        if key == SPOTLIGHT_POLL_MINUTES_KEY:
+            return SPOTLIGHT_POLL_MINUTES
+        if key == SPOTLIGHT_END_MISSES_KEY:
+            return SPOTLIGHT_END_MISSES
+        if key == SPOTLIGHT_BUMP_HOURS_KEY:
+            return SPOTLIGHT_BUMP_HOURS
+        if key == SPOTLIGHT_BUMP_TEMPLATE_KEY:
+            return SPOTLIGHT_BUMP_TEMPLATE
+        if key == SPOTLIGHT_BUMP_CLEANUP_KEY:
+            return True
+        if key == SPOTLIGHT_PIN_KEY:
+            return True
+        if key == SPOTLIGHT_DEFAULT_DAYS_KEY:
+            return SPOTLIGHT_DEFAULT_DAYS
+        if key == SPOTLIGHT_EVENT_SLACK_KEY:
+            return SPOTLIGHT_EVENT_SLACK_HOURS
         if key == "golive_cooldown_minutes":
             return 60
         if key == "golive_max_session_hours":

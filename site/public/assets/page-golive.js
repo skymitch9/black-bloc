@@ -1,6 +1,13 @@
 import { api, listOf, names, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
-import { joinStreamers, liveStreams, placeSettings, routeTyped } from './golive-join.js';
+import {
+  joinStreamers,
+  liveStreams,
+  placeSettings,
+  routeTyped,
+  spotlightCards,
+  spotlightSessions,
+} from './golive-join.js';
 import { logsSection } from './logs.js';
 import {
   ago,
@@ -50,6 +57,7 @@ const END_KEEP_KEY = 'golive_end_keep_mention';
 const GOLIVE_MODE_KEY = 'golive_mode';
 const LIVE_MODE_KEY = 'youtube_live_mode';
 const PINGS_MODE_KEY = 'pings_mode';
+const SPOTLIGHT_MODE_KEY = 'spotlight_mode';
 const CHANNEL_KEY = 'golive_channel_id';
 const END_EDIT = 'edit';
 const GAME_FALLBACK = 'something';
@@ -181,6 +189,22 @@ const LOG_CHIPS = [
   { id: 'pings', label: 'Ping roles' },
 ];
 
+const CHANNEL_ONLY = 'channel only';
+const SPOTLIGHT_MODE_HELP = 'off, shadow (rehearse where shadow_channel_id points) or on \u2014 '
+  + 'Twitch channels with nobody here behind them are announced, reminded and pinned in the '
+  + 'go-live channel.';
+const SPOTLIGHT_NOTE = 'Watched by name. No member here is behind them.';
+const SPOTLIGHT_KEPT = 'Kept for ever \u2014 no purge takes it off the list.';
+const SPOTLIGHT_ADD_TITLE = 'Spotlight a channel';
+const SPOTLIGHT_ADD_HELP = 'For an org channel like GamesDoneQuick, or a marathon nobody here '
+  + 'runs. Black Bloc announces it in the go-live channel whenever it goes live, reminds people '
+  + 'while it runs, and pins the announcement for the duration.';
+const SPOTLIGHT_DAYS_HELP = 'Days before it is purged. Leave it blank to keep it for ever, the '
+  + 'way GamesDoneQuick is kept.';
+const SPOTLIGHT_REMOVE_ASK = 'Take **{login}** off the spotlight list? Any announcement it has '
+  + 'out there is left as posted, and it can be added again at any time.';
+const NO_MEMBER = 'Nobody here \u2014 this is a channel Black Bloc watches by name.';
+
 function platformPill(platform) {
   return el('span', {
     class: 'pill glplat',
@@ -267,7 +291,9 @@ function channelWord(specs) {
   return value ? 'posted where golive_channel_id points' : 'no announcement channel set';
 }
 
-function headerStrip({ golive, youtube, pings, rows, cards, status, warnings, onOpenPings }) {
+function headerStrip({
+  golive, youtube, pings, rows, cards, status, warnings, onOpenPings,
+}) {
   const linked = rows.filter((row) => row.twitch || row.youtube).length;
   const tw = rows.filter((row) => row.twitch).length;
   const yt = rows.filter((row) => row.youtube).length;
@@ -298,6 +324,12 @@ function headerStrip({ golive, youtube, pings, rows, cards, status, warnings, on
       'the opt-in roles members pick with /pings',
       PINGS_MODE_HELP,
     ),
+    modeCell(
+      'Spotlight',
+      golive.find((one) => one.key === SPOTLIGHT_MODE_KEY),
+      `${rows.filter((row) => row.spotlight).length} channel(s) with no member`,
+      SPOTLIGHT_MODE_HELP,
+    ),
     statCell('Set up', String(linked), `${tw} Twitch · ${yt} YouTube · ${out} opted out`),
     statCell(
       'Watching',
@@ -324,6 +356,9 @@ function liveCard(one) {
       !one.announced && one.held_by
         ? muted(HELD_BACK.replace('{platform}', PLATFORM_WORDS[one.held_by] || one.held_by))
         : null,
+      one.spotlight_id ? badge(CHANNEL_ONLY) : null,
+      one.pinned ? badge('pinned') : null,
+      one.bump_count ? muted(`${one.bump_count} reminder(s) so far`) : null,
       one.started_at ? muted(`started ${ago(one.started_at).text}`) : null,
       one.url ? el('a', { class: 'mono', href: one.url, rel: 'noreferrer', text: one.url }) : null,
       one.also_url
@@ -530,6 +565,66 @@ function announceMoves(row, say) {
   }, { tone: 'warn' })];
 }
 
+function spotlightMoves(row, say) {
+  const one = row.spotlight;
+  const after = (done) => {
+    if (!done.ok) return;
+    keepSaying('golive.spotlight', say);
+    closeDrawer();
+    refresh();
+  };
+  const patch = (body, fallback) => run(
+    say,
+    () => send(`/api/golive/spotlight/${one.id}`, 'PATCH', body),
+    (found) => found?.message || fallback,
+  );
+  const moves = [
+    button('Extend a week', async () => after(await patch({ days: 7 }, 'Extended.')), { tone: 'quiet' }),
+  ];
+  if (one.kept) {
+    moves.push(button('Let it expire', async () => after(await patch({ days: 7 }, 'It runs out in a week.')), { tone: 'quiet' }));
+  } else {
+    moves.push(button('Keep for ever', async () => after(await patch({ keep: true }, 'Kept for ever.')), { tone: 'quiet' }));
+  }
+  if (one.live) {
+    moves.push(button('Bump now', async () => {
+      const done = await run(
+        say,
+        () => send(`/api/golive/spotlight/${one.id}/bump`, 'POST', {}),
+        (found) => found?.message || 'Reminded the channel.',
+      );
+      after(done);
+    }, { tone: 'quiet' }));
+  }
+  moves.push(button(one.pin ? 'Stop pinning it' : 'Pin it while it streams', async () => (
+    after(await patch({ pin: !one.pin }, one.pin ? 'It will not be pinned.' : 'It will be pinned.'))
+  ), { tone: 'quiet' }));
+  moves.push(button('Remove', async () => {
+    const yes = await ask({
+      title: `Remove ${one.twitch_login} from the spotlight?`,
+      body: [SPOTLIGHT_REMOVE_ASK.replace('{login}', one.twitch_login)],
+      confirmLabel: 'Remove it',
+    });
+    if (!yes) return;
+    const done = await run(
+      say,
+      () => api(`/api/golive/spotlight/${one.id}`, { method: 'DELETE' }),
+      (found) => found?.message || 'Off the list.',
+    );
+    after(done);
+  }, { tone: 'warn' }));
+  return moves;
+}
+
+function spotlightSaid(row) {
+  const one = row.spotlight;
+  const bits = [one.kept ? SPOTLIGHT_KEPT : `Runs out ${when(one.expires_at)}.`];
+  if (one.bump_hours) bits.push(`Reminders every ${one.bump_hours} h.`);
+  if (one.event_id) bits.push(`Set up for event #${one.event_id}.`);
+  if (one.note) bits.push(one.note);
+  return el('span', { text: bits.join(' ') });
+}
+
 function panelGroup(label, said, moves) {
   return card(label, [said, el('div', { class: 'bar' }, moves)]);
 }
@@ -565,7 +660,18 @@ async function rowPanel(row, say) {
       : 'On — announced wherever they go live',
   });
 
+  if (String(row.user_id).startsWith('spotlight:')) {
+    return [
+      panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)),
+      panelGroup('Twitch', twitchSaid, twitchMoves(row, say).slice(0, 1)),
+      el('p', { class: 'field-help', text: NO_MEMBER }),
+      say,
+    ];
+  }
   return [
+    ...(row.spotlight
+      ? [panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say))]
+      : []),
     panelGroup('Twitch', twitchSaid, twitchMoves(row, say)),
     panelGroup('YouTube', youtubeSaid, youtubeMoves(row, say)),
     panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
@@ -586,7 +692,22 @@ async function showStreamer(row) {
 function announcedCell(row) {
   if (row.opted_out) return badge(OPTED_OUT, 'warn');
   if (row.live) return badge(LIVE_NOW, 'ok');
+  if (row.spotlight) return badge(`spotlight \u00b7 ${row.spotlight.until}`);
   return muted(READY);
+}
+
+function memberCell(row) {
+  if (String(row.user_id).startsWith('spotlight:')) {
+    return el('span', { class: 'cell-name' }, [
+      el('span', { text: row.name }),
+      badge(CHANNEL_ONLY),
+    ]);
+  }
+  return el('span', { class: 'cell-name' }, [
+    nameNode(row.user_id, row.name),
+    row.listed === false ? badge(HIDDEN, 'warn') : null,
+    row.spotlight ? badge('spotlight') : null,
+  ].filter(Boolean));
 }
 
 const FILTERS = [
@@ -595,6 +716,7 @@ const FILTERS = [
   { id: 'yt', label: 'Has YouTube', keep: (row) => Boolean(row.youtube) },
   { id: 'notyt', label: 'Twitch only', keep: (row) => Boolean(row.twitch) && !row.youtube },
   { id: 'out', label: 'Opted out', keep: (row) => row.opted_out === true },
+  { id: 'spot', label: 'Spotlight', keep: (row) => Boolean(row.spotlight) },
 ];
 
 const COLUMNS = ['Member', 'Twitch', 'YouTube', 'Ping role', 'Announced'];
@@ -617,10 +739,7 @@ function streamerRow(row) {
       + `${row.youtube || ''} ${row.role || ''}`).toLowerCase(),
     on: { click: () => showStreamer(row) },
   }, [
-    el('span', { class: 'cell-name' }, [
-      nameNode(row.user_id, row.name),
-      row.listed === false ? badge(HIDDEN, 'warn') : null,
-    ].filter(Boolean)),
+    memberCell(row),
     row.twitch ? el('span', { class: 'cell-quiet mono', text: row.twitch }) : muted('—'),
     row.youtube ? el('span', { class: 'cell-quiet', text: row.youtube }) : muted('—'),
     roleCell(row),
@@ -693,6 +812,41 @@ function streamersSection(rows, say) {
   );
   paint();
   return group.node;
+}
+
+function addSpotlightButton() {
+  return button(SPOTLIGHT_ADD_TITLE, () => {
+    const box = el('input', {
+      class: 'input',
+      type: 'text',
+      placeholder: 'gamesdonequick',
+    });
+    const days = el('input', { class: 'input', type: 'number', min: '1', placeholder: '7' });
+    const voice = notice();
+    const go = button('Spotlight it', async () => {
+      const done = await run(
+        voice,
+        () => send('/api/golive/spotlight', 'POST', {
+          twitch_login: box.value,
+          days: days.value.trim() === '' ? null : days.value.trim(),
+          keep: days.value.trim() === '',
+        }),
+        (found) => found?.message || 'On the list.',
+      );
+      if (done.ok) {
+        keepSaying('golive.spotlight', voice);
+        closeDrawer();
+        refresh();
+      }
+    }, { tone: 'warn' });
+    openDrawer(SPOTLIGHT_ADD_TITLE, [
+      el('p', { class: 'field-help', text: SPOTLIGHT_ADD_HELP }),
+      el('div', { class: 'formrow' }, [field('The name after twitch.tv/', box, SPOTLIGHT_NOTE)]),
+      el('div', { class: 'formrow' }, [field('Days to keep it', days, SPOTLIGHT_DAYS_HELP)]),
+      bar([go]),
+      voice,
+    ]);
+  }, { tone: 'quiet' });
 }
 
 function addStreamerButton() {
@@ -1134,7 +1288,7 @@ function pageHead() {
   const subtitle = document.getElementById('subtitle');
   if (subtitle) subtitle.textContent = SUBTITLE;
   const aside = document.getElementById('page-aside');
-  if (aside) aside.replaceChildren(addStreamerButton());
+  if (aside) aside.replaceChildren(addStreamerButton(), addSpotlightButton());
 }
 
 async function load() {
@@ -1147,6 +1301,7 @@ async function load() {
     onboardingPayload,
     youtubeLinkPayload,
     youtubeStatus,
+    spotlightPayload,
     allSettings,
   ] = await Promise.all([
     api('/api/golive/links'),
@@ -1157,6 +1312,7 @@ async function load() {
     api('/api/pings/onboarding'),
     api('/api/youtube/links'),
     api('/api/youtube/status'),
+    api('/api/golive/spotlight'),
     settings(true),
   ]);
   const links = listOf(linkPayload, 'links');
@@ -1165,6 +1321,7 @@ async function load() {
   const streamers = listOf(streamerPayload, 'streamers');
   const listing = listOf(listingPayload, 'streamers');
   const youtubeLinks = listOf(youtubeLinkPayload, 'links');
+  const spotlight = listOf(spotlightPayload, 'spotlight');
   await names(idsIn(links, ['user_id'])
     .concat(idsIn(optouts, ['user_id']))
     .concat(idsIn(sessions, ['user_id']))
@@ -1179,9 +1336,13 @@ async function load() {
     listing,
     streamers,
     sessions,
+    spotlight,
     status: youtubeStatus,
   });
-  const cards = liveStreams(sessions);
+  const cards = [...liveStreams(sessions), ...spotlightCards(spotlight)];
+  const past = [...sessions, ...spotlightSessions(spotlight)].sort((a, b) => (
+    String(b.started_at || '') < String(a.started_at || '') ? -1 : 1
+  ));
 
   const golive = settingsNamespace(allSettings, 'golive');
   const pings = settingsNamespace(allSettings, 'pings');
@@ -1221,7 +1382,7 @@ async function load() {
     liveSection(cards),
     streamersSection(rows, say),
     await announcementSection(golive, placed.wording),
-    recentSection(sessions),
+    recentSection(past),
     rest,
   );
 }

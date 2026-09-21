@@ -1621,6 +1621,15 @@ async def run_move(interaction: discord.Interaction, move: Any, previous: Any = 
             return
         await render_streamers(interaction, None, previous)
         return
+    if action == "spotlight":
+        from .spotlight import render_spotlight
+
+        if not await still_staff(interaction):
+            return
+        if not await opened(interaction, staff=False):
+            return
+        await render_spotlight(interaction, None, previous)
+        return
     if not await opened(interaction, staff=False):
         return
     if action == "refresh":

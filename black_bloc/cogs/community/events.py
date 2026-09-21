@@ -9,6 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import spotlight as spotlight_words
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
 from ...events import (
@@ -93,6 +94,7 @@ from ...events import (
     card_buttons,
     card_footer_override,
     card_for,
+    cell,
     checked_numbers,
     clamp,
     counts_line,
@@ -105,6 +107,8 @@ from ...events import (
     draft_lines,
     drop_lock,
     due_events,
+    duration_minutes,
+    ends_at,
     event_for_channel,
     event_line,
     event_lock,
@@ -187,6 +191,7 @@ from ...handoff import (
 from ...handoff import REQUEST as HANDOFF_REQUEST
 from ...handoff import TICKET as HANDOFF_TICKET
 from ...linkcheck import LINK_OK, link_answers
+from ...logkinds import VIA_DISCORD
 from ...loops import Reconciler, wait_ready
 from ...panels import (
     KEEP_IT,
@@ -213,6 +218,7 @@ from ...settings_store import (
     EVENTS_ROOM_NOTICE_KEY,
     EVENTS_TEST_RETENTION_KEY,
     GUILD_ONLY,
+    SPOTLIGHT_EVENT_SLACK_KEY,
     WHERE_CHECK_OFF,
     WHERE_CHECK_REFUSE,
     require_staff,
@@ -231,17 +237,20 @@ from ...when_picker import ZoneModal as WhenZoneModal
 log = logging.getLogger(__name__)
 
 DECISION_TEMPLATE = (
-    r"event:(?P<event_id>[0-9]+):(?P<action>approve|deny|delete_room|make_request|move_forum)"
+    r"event:(?P<event_id>[0-9]+):"
+    r"(?P<action>approve|deny|delete_room|make_request|move_forum|spotlight)"
 )
 DELETE_ROOM = "delete_room"
 MAKE_REQUEST = "make_request"
 MOVE_FORUM = "move_forum"
+SPOTLIGHT = "spotlight"
 DECISION_LABELS: dict[str, str] = {
     "approve": "Approve",
     "deny": "Deny",
     DELETE_ROOM: ROOM_DELETE_BUTTON,
     MAKE_REQUEST: NOT_AN_EVENT,
     MOVE_FORUM: MOVE_TO_FORUM_BUTTON,
+    SPOTLIGHT: spotlight_words.EVENT_SPOTLIGHT_LABEL,
 }
 GOLIVE_MINUTES = 1
 RECONCILE_MINUTES = 5
@@ -282,6 +291,7 @@ DECISION_STYLES: dict[str, discord.ButtonStyle] = {
     DELETE_ROOM: discord.ButtonStyle.danger,
     MAKE_REQUEST: discord.ButtonStyle.secondary,
     MOVE_FORUM: discord.ButtonStyle.primary,
+    SPOTLIGHT: discord.ButtonStyle.primary,
 }
 NOTE_TITLES: dict[str, str] = {"deny": "Why not?", "cancel": "Why is it off?"}
 NOTE_LABELS: dict[str, str] = {
@@ -506,6 +516,8 @@ def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embe
         bot.store, guild.id, actor
     ):
         view.add_item(DecisionButton(row["id"], MOVE_FORUM, row=2))
+    if bot.store.is_staff(actor) and spotlight_login(row) is not None:
+        view.add_item(DecisionButton(row["id"], SPOTLIGHT, row=2))
     view.add_item(BackButton())
     if room is not None:
         view.add_item(
@@ -1811,6 +1823,9 @@ class DecisionButton(
         if self.action == MOVE_FORUM:
             await move_into_the_forum(interaction, self.event_id)
             return
+        if self.action == SPOTLIGHT:
+            await spotlight_this_stream(interaction, self.event_id)
+            return
         row = await decision_context(interaction, self.event_id)
         if row is None:
             return
@@ -1844,6 +1859,60 @@ async def ask_to_delete_room(interaction: discord.Interaction, event_id: int) ->
         await interaction.response.send_message(said, ephemeral=True)
         return
     await interaction.response.send_modal(RoomDeleteModal(event_id, words))
+
+
+def spotlight_login(row: Any) -> str | None:
+    """Only an approved event whose Where IS one twitch.tv address can be spotlighted."""
+    if row["status"] != APPROVED:
+        return None
+    return spotlight_words.login_from_url(where_link(read_where(row).text))
+
+
+async def spotlight_this_stream(interaction: discord.Interaction, event_id: int) -> None:
+    """Staff final say: an approved twitch link joins the spotlight list for the event's run."""
+    row = await decision_context(interaction, event_id)
+    if row is None:
+        return
+    bot = interaction.client
+    guild = interaction.guild
+    login = spotlight_login(row)
+    if login is None:
+        await interaction.response.send_message(
+            spotlight_words.EVENT_NOT_TWITCH, ephemeral=True
+        )
+        return
+    said = await spotlight_an_event(bot, guild, interaction.user, row, login)
+    await interaction.response.send_message(said, ephemeral=True)
+
+
+async def spotlight_an_event(
+    bot: Any, guild: Any, actor: Any, row: Any, login: str, *, via: str = VIA_DISCORD
+) -> str:
+    """One door for the card and the route; the row runs to the event's end plus the slack."""
+    from ...cogs.content.spotlight import spotlight_channel
+
+    over = cell(row, "ends_at") or ends_at(
+        parse_ts(row["starts_at"]), duration_minutes(row)
+    ).isoformat()
+    when = spotlight_words.expiry_for_event(
+        over, bot.store.get(guild.id, SPOTLIGHT_EVENT_SLACK_KEY)
+    )
+    outcome, _ = await spotlight_channel(
+        bot,
+        guild,
+        actor,
+        login,
+        expires_at=when,
+        event_id=int(row["id"]),
+        via=via,
+    )
+    if outcome == "bad_login":
+        return spotlight_words.EVENT_NOT_TWITCH
+    if outcome == "already":
+        return spotlight_words.ALREADY_SPOTLIT_EVENT.format(login=login)
+    return spotlight_words.EVENT_SPOTLIT.format(
+        login=login, when=spotlight_words.when_words(when)
+    )
 
 
 async def move_into_the_forum(interaction: discord.Interaction, event_id: int) -> None:

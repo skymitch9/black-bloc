@@ -2555,10 +2555,23 @@ async def cancel_for(
         return (NOT_OPEN.format(event_id=row["id"], status=status), None)
     fresh = await get_event(bot.db, row["id"])
     member = guild.get_member(fresh["requester_id"])
+    await drop_spotlight(bot, guild, row["id"])
     await rename_channel(
         bot, guild, fresh, CANCELLED, getattr(member, "display_name", str(fresh["requester_id"]))
     )
     return (CANCELLED_SAID.format(event_id=row["id"]), fresh)
+
+
+async def drop_spotlight(bot: Any, guild: Any, event_id: Any) -> None:
+    """A called-off event takes its spotlight with it, rather than at its old end."""
+    from .cogs.content.spotlight import expire_for_event
+
+    try:
+        await expire_for_event(bot, guild, int(event_id))
+    except Exception as exc:
+        log.warning(
+            "events: the spotlight for #%s stays — %s: %s", event_id, type(exc).__name__, exc
+        )
 
 
 def wanted_event_id(given: Any) -> int | None:
