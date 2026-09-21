@@ -342,3 +342,53 @@ messages. 390 px wide: `scrollWidth` equals `innerWidth` (390) on both `events.h
 
 **What was NOT verified:** the owner's own browser window, not chrome-headless-shell 149 at a
 simulated 1512×802 — nothing here reaches Discord, and none of it needed to.
+
+### 2026-09-20 — `events` loses Remove its room and the Events forum card (branch `events-trims`)
+
+Owner, looking at the mock: *"we dont need the remove its room option, that'll happen after it
+ends or is denied. whats the point of the events forum section?"* → (told it is the review-mode
+card with the two settings controls) → *"yes make them settings"*. Two changes, one page,
+`site/public/assets/page-events.js` only.
+
+1. **The `Remove its room` / `Remove its post` staff button is off every event row.** The room or
+   post is still removed by the bot's own end and deny paths (`black_bloc/events.py`, untouched) —
+   only the website's `POST /api/events/{id}/room/delete` door and the `REMOVE_PLACE` wording are
+   gone from the page. The route itself is left alone server-side, out of scope for a page-only
+   build.
+2. **The standalone `Events forum` card (`eventForumCard`, `forumBox`) is deleted.** Both things it
+   explained — `events_review_mode` and `events_forum_channel_id` — were already rows in
+   `namespaceSettings('events')`; the card was a second place showing the same two decisions,
+   which is the duplicate-surface defect §C exists to catch. Its one non-duplicate part, **Make the
+   forum**, now renders beside the `events_forum_channel_id` row (found by the `data-key` attribute
+   `settingRow` already stamps on every row) and only while that key is blank — `namespaceSettings`
+   and `section` give no per-row or head action slot, and neither was edited to add one; the row's
+   returned DOM is extended in place instead, the same technique yesterday's spacing fix already
+   used on a `namespaceSettings` return value.
+3. `FORUM_NOTE`'s wording is dropped rather than folded into `events_review_mode`'s help — that
+   help lives in `black_bloc/settings_store.py` (Python), out of scope for this page-only build; the
+   existing `EVENTS_REVIEW_MODE_KEY` help already covers the room/forum distinction and "Make the
+   forum on `/event` first", so nothing load-bearing was lost, though it does not repeat
+   `FORUM_NOTE`'s line about the post being the review card's first message or the forum's own
+   archive being the list's ceiling. Named here as a departure, not a decision.
+
+**Measured after**, removing `Events forum` also removed the reason yesterday's fix (`data-span`
+on `forumBox`) existed: with the card gone, `Settings` is alone in its run (`Queue` and `Logs` are
+both wide, so nothing pairs with it) rather than being forced full-width — the same visual result,
+reached because the lopsided pair no longer exists rather than because it is pinned. In a real
+Chrome tab (`claude-in-chrome`, against the local mock, fresh load, no localStorage) at whatever
+width the session's window happened to be: `#dash` children in order — `Queue` 210 px standalone
+(has a table), `Settings` 33 px standalone (collapsed), `Logs` 33 px standalone, `Raid trains` 33
+px standalone, then the pre-existing `.twocol` pairing `Raid train settings` / `Raid train logs`
+(33/33) — no `Events forum` section, no lopsided pair, zero console messages before or after
+pressing **Make the forum**. `node --input-type=module --check` on every `site/public/assets/*.js`,
+`MOCK_PORT=8788 node site/mock/check.mjs` (20 pages, 194 routes, 24 core settings, all keys
+present) and the five `site/mock/*.test.mjs` files all pass.
+
+**What was NOT verified:** ⚠️ **1512×802 and 390 px were not measured** — `resize_window` reported
+success but `window.innerWidth` never moved off the session's own (much larger) window size in
+this session, and a same-origin iframe sized to those dimensions could not be read back
+(`SecurityError: Blocked a frame with origin … from accessing a cross-origin frame`, from the
+extension's own execution context rather than the page). No CSS changed and the only DOM addition
+is a button + a `.setrow-say`-classed notice appended inside the existing flex-wrap `.setrow`, so
+overflow risk is low, but that is reasoning, not a measurement — say so rather than claim the
+number. Nothing here reached Discord.

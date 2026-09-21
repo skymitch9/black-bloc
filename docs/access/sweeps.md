@@ -2365,3 +2365,22 @@ in Discord; the member door is `/pings`.
 | `SP-c` | ⚠️ **When GamesDoneQuick is actually live** (a marathon, or any stream on that channel), look at the announcement in the go-live channel | It mentions **two roles** in front of the wording — the Events/go-live role and **GamesDoneQuick pings** — and everybody wearing either is pinged once. On the **Logs** page ▸ **golive**, the `golive.spotlight_announced` row carries `fan_role_id`. ⚠️ With no ping role on the channel it mentions only the go-live role, exactly as it did at v148 |
 | `SP-d` | Four hours into that stream, look at the reminder | ⚠️ **It pings NOBODY** — no role mention, nothing bold at the top — and its `golive.spotlight_bumped` row says `pinged: false`. That is `spotlight_bump_pings`, which ships **false**. Now turn it **on** (Go-live page ▸ **How streams are spotted** ▸ *Whether a reminder pings…*) and press **Bump now** on the row's drawer: the reminder that appears mentions the same two roles the announcement did, and its row says `pinged: true`. ⚠️ A ping every four hours through a 24-hour marathon is what the default is protecting you from |
 | `SP-e` | Add a channel with **Days to keep it** = 1, give it a ping role (`SP-a`), then let it run out — or press **Remove** on its Spotlight group | The row leaves the list AND its ping role goes with it: on the **Logs** page ▸ **pings**, one `pings.fan_role_removed` row whose `because` reads `spotlight_expired` (or `spotlight_removed`). ⚠️ **Whether the Discord ROLE is deleted is `pings_fan_role_delete`** — with it on the role is gone from Server Settings ▸ Roles; with it off the role is left behind for you to tidy up and the row says `deleted: false`. Anybody wearing it simply stops being pinged either way |
+## EVENTS PAGE TRIMS — no Remove its room, the forum card folds into Settings (`ET-a` … `ET-b`, branch `events-trims`, design [`../info/events-forum-design.md`](../info/events-forum-design.md))
+
+Owner, 2026-09-20 20:4x: *"we dont need the remove its room option, that'll happen after it
+ends or is denied. whats the point of the events forum section?"* → *"yes make them settings"*.
+The **Remove its room** / **Remove its post** staff move is off the page (the bot's own end and
+deny paths still remove the room or post; nothing on the website triggers it any more), and the
+standalone **Events forum** card is gone — its **Make the forum** action now sits beside the
+`events_forum_channel_id` row in **Settings**, shown only while that key is blank.
+
+⚠️ **Nothing here has met Discord.** Every row was pressed against the local mock in a real
+Chrome tab (the claude-in-chrome extension controlling the session's own browser, not
+chrome-headless-shell — window resize was not available in this session, so the 390 px check
+below is **not verified**; everything else is). Staff door: **Runs the cookout** ▸ **Events**
+(https://blackbloc.heygabi.ai/events.html).
+
+| Row | Do | Expect |
+|---|---|---|
+| `ET-a` | Open the Events page, open **Queue**, and look at the buttons on every open (pending, approved, live) event's row — including one whose review room or post still exists | ⚠️ **No Remove its room / Remove its post anywhere.** The row offers only **Open**, **Approve** / **Deny** (pending only), **Cancel** (unless denied or cancelled) and, once the events forum exists and the event still has a room, **Move to the forum**. A settled event's detail card still shows its **Review channel** / **Review post** line — that display did not change, only the button that deleted it |
+| `ET-b` | Open **Settings**, find **The forum every event is posted in** (`events_forum_channel_id`) and **Whether an event gets its own room or a forum post** (`events_review_mode`). With the key blank, press **Make the forum**; then reload and look again | Both keys edit in place under **Settings**, same as every other `events_*` key — there is no separate **Events forum** section any more. **Make the forum** sits beside the `events_forum_channel_id` row and reads exactly as the old card's button did; pressing it makes the forum, fills the row with the new channel, and reloads — the button is then **gone**, because it renders only while the key is blank. ⚠️ **390 px overflow not verified this pass** — say so rather than guess |
