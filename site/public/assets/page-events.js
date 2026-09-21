@@ -554,6 +554,7 @@ async function load() {
   }
 
   const forumBox = section('Events forum', null, { id: 'events-forum', open: true });
+  forumBox.node.setAttribute('data-span', 'full');
   forumBox.body.append(eventForumCard(forum.id));
 
   document.getElementById('dash').replaceChildren(
