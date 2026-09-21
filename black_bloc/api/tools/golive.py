@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ... import spotlight as spot
 from ...cogs.content.golive import (
     LINK_TAKEN,
     all_links,
@@ -17,6 +18,16 @@ from ...cogs.content.golive import (
     recent_sessions,
     unlink_channel,
 )
+from ...cogs.content.spotlight import (
+    bump_now,
+    change_spotlight,
+    channel_by_id,
+    channels_for,
+    forget_spotlight,
+    open_session,
+    spotlight_channel,
+)
+from ...cogs.content.spotlight import recent_sessions as recent_spotlight_sessions
 from ...golive import (
     TWITCH,
     StreamInfo,
@@ -29,6 +40,7 @@ from ...golive import (
     render,
 )
 from ...logkinds import VIA_WEBSITE
+from ...settings_store import SPOTLIGHT_BUMP_HOURS_KEY
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
 from ..writes import (
@@ -71,6 +83,13 @@ LINKED = (
 )
 OPTED_OUT = "**{name}** is opted out, so no stream of theirs is announced from now on."
 OPTED_IN = "**{name}** is no longer opted out, so their streams can be announced again."
+SPOTLIGHT_SESSIONS = 5
+BAD_DAYS = (
+    "**{given}** is not a number of days, so nothing was changed. Give a whole number of "
+    "days, or say it is kept for ever."
+)
+SPOTLIGHT_CHANGED = "**{login}** now runs {when}."
+SPOTLIGHT_BUMPED = "Reminded the go-live channel that **{login}** is still live."
 
 
 def with_name(guild: Any, user_id: Any) -> dict[str, Any]:
@@ -106,6 +125,79 @@ def session_row(guild: Any, row: Any) -> dict[str, Any]:
             str(row["announced_message_id"]) if row["announced_message_id"] else None
         ),
     }
+
+
+def spotlight_session_row(row: Any) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "started_at": row["started_at"],
+        "ended_at": row["ended_at"],
+        "title": row["title"],
+        "game": row["game"],
+        "url": row["url"],
+        "mode": row["mode"],
+        "bump_count": row["bump_count"],
+        "announced_message_id": (
+            str(row["announced_message_id"]) if row["announced_message_id"] else None
+        ),
+    }
+
+
+def spotlight_row(guild: Any, row: Any, live: Any, sessions: list[Any]) -> dict[str, Any]:
+    """A spotlight as the Go-live page reads it: a streamer row with no member behind it."""
+    return {
+        "id": row["id"],
+        "twitch_login": row["twitch_login"],
+        "display_name": row["display_name"] or row["twitch_login"],
+        "note": row["note"],
+        "added_by": str(row["added_by"]) if row["added_by"] else None,
+        "added_by_name": (
+            resolve_one(guild, row["added_by"])["display_name"] if row["added_by"] else None
+        ),
+        "added_at": row["added_at"],
+        "expires_at": row["expires_at"],
+        "kept": spot.keeps_forever(row),
+        "until": spot.until_words(row),
+        "bump_hours": row["bump_hours"],
+        "pin": bool(row["pin"]),
+        "event_id": row["event_id"],
+        "url": spot.channel_url(row["twitch_login"]),
+        "live": live is not None,
+        "session": spotlight_session_row(live) if live is not None else None,
+        "sessions": [spotlight_session_row(one) for one in sessions],
+    }
+
+
+async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
+    recent = await recent_spotlight_sessions(bot.db, guild.id, 200)
+    found = []
+    for row in await channels_for(bot.db, guild.id):
+        mine = [one for one in recent if int(one["spotlight_id"]) == int(row["id"])]
+        found.append(
+            spotlight_row(
+                guild,
+                row,
+                await open_session(bot.db, row["id"]),
+                mine[:SPOTLIGHT_SESSIONS],
+            )
+        )
+    return found
+
+
+async def one_spotlight(bot: Any, guild: Any, spotlight_id: int) -> dict[str, Any]:
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
+    return spotlight_row(guild, row, await open_session(bot.db, spotlight_id), [])
+
+
+def wanted_days(payload: dict[str, Any]) -> Any:
+    given = payload.get("days")
+    if given is None or str(given).strip() == "":
+        return None
+    if not str(given).strip().isdigit():
+        raise Refused(400, "bad_days", BAD_DAYS.format(given=str(given)[:40]))
+    return int(str(given).strip())
 
 
 def preview_payload(bot: Any, guild: Any, actor: Any) -> dict[str, Any]:
@@ -236,6 +328,124 @@ def build_router(bot: Any) -> APIRouter:
         return named | {
             "opted_out": False,
             "message": OPTED_IN.format(name=named["user_name"] or wanted),
+        }
+
+    @router.get("/spotlight")
+    async def golive_spotlight_list() -> list[dict[str, Any]]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return await spotlight_rows(bot, guild)
+
+    @router.post("/spotlight")
+    async def golive_spotlight_add(
+        request: Request, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        given = str(payload.get("twitch_login") or "")
+        days = wanted_days(payload)
+        keep = bool(payload.get("keep")) or days is None
+        outcome, row = await spotlight_channel(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            given,
+            days=days,
+            keep=keep,
+            pin=payload.get("pin"),
+            bump_hours=payload.get("bump_hours"),
+            note=payload.get("note"),
+            via=VIA_WEBSITE,
+        )
+        if outcome == "bad_login":
+            raise Refused(
+                400, "bad_login", spot.BAD_LOGIN.format(given=given[:40] or "nothing")
+            )
+        if outcome == "already":
+            raise Refused(
+                409,
+                "already_spotlit",
+                spot.ALREADY_SPOTLIT.format(login=spot.clean_login(given) or given[:25]),
+            )
+        hours = spot.bump_hours_for(row, bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
+        return await one_spotlight(bot, guild, row["id"]) | {
+            "message": spot.added_said(row, hours)
+        }
+
+    @router.patch("/spotlight/{spotlight_id}")
+    async def golive_spotlight_change(
+        request: Request, spotlight_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await one_spotlight(bot, guild, spotlight_id)
+        fields: dict[str, Any] = {}
+        if payload.get("keep") is True:
+            fields["expires_at"] = None
+        elif "expires_at" in payload:
+            fields["expires_at"] = payload["expires_at"] or None
+        elif payload.get("days") is not None:
+            fields["expires_at"] = spot.expiry_in_days(wanted_days(payload))
+        if "bump_hours" in payload:
+            fields["bump_hours"] = payload["bump_hours"] or None
+        if "pin" in payload:
+            fields["pin"] = 1 if payload["pin"] else 0
+        if "note" in payload:
+            fields["note"] = payload["note"] or None
+        fresh = await change_spotlight(
+            bot, guild, actor_for(bot, who, guild), spotlight_id, via=VIA_WEBSITE, **fields
+        )
+        if fresh is None:
+            raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
+        return await one_spotlight(bot, guild, spotlight_id) | {
+            "message": SPOTLIGHT_CHANGED.format(
+                login=fresh["twitch_login"], when=spot.until_words(fresh)
+            )
+        }
+
+    @router.delete("/spotlight/{spotlight_id}")
+    async def golive_spotlight_remove(request: Request, spotlight_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        gone = await forget_spotlight(
+            bot, guild, actor_for(bot, who, guild), spotlight_id, via=VIA_WEBSITE
+        )
+        if gone is None:
+            raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
+        return {
+            "id": spotlight_id,
+            "twitch_login": gone["twitch_login"],
+            "removed": True,
+            "message": spot.REMOVED.format(login=gone["twitch_login"]),
+        }
+
+    @router.post("/spotlight/{spotlight_id}/bump")
+    async def golive_spotlight_bump(request: Request, spotlight_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await one_spotlight(bot, guild, spotlight_id)
+        outcome, row = await bump_now(
+            bot, guild, actor_for(bot, who, guild), spotlight_id, via=VIA_WEBSITE
+        )
+        if outcome == "no_row":
+            raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
+        if outcome == "not_live":
+            raise Refused(409, "not_live", spot.NOT_LIVE.format(login=row["twitch_login"]))
+        if outcome == "no_cog":
+            raise Refused(503, "no_cog", spot.NO_COG.format(login=row["twitch_login"]))
+        if outcome == "bump_failed":
+            raise Refused(
+                502,
+                "bump_failed",
+                spot.BUMP_FAILED.format(login=row["twitch_login"], reason=spot.NO_CHANNEL),
+            )
+        return await one_spotlight(bot, guild, spotlight_id) | {
+            "bumped": True,
+            "message": SPOTLIGHT_BUMPED.format(login=row["twitch_login"]),
         }
 
     @router.get("/sessions")

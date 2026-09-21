@@ -95,6 +95,11 @@ NOT_LIVE = (
     "**{login}** is not live right now, so there was nothing to remind anybody about. The "
     "reminder is offered again the moment Black Bloc sees it go live."
 )
+NO_COG = (
+    "Black Bloc's spotlight half is not running right now, so no reminder could be posted. "
+    "Nothing about **{login}** changed, and the next reminder is still due on time — tell a "
+    "Lead if the bot has not finished starting up."
+)
 BUMP_FAILED = (
     "**{login}** is live, but the reminder could not be posted ({reason}). Nothing about the "
     "spotlight changed and the next one is still due on time."

@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ...cogs.community.events import spotlight_an_event, spotlight_login
 from ...events import (
     APPROVED,
     CANCEL_NOTE_LIMIT,
@@ -57,6 +58,11 @@ DENY_NEEDS_A_REASON = (
 )
 NOT_CANCELLABLE = (
     "Event **#{event_id}** is **{status}** already, so there was nothing to cancel."
+)
+NOT_SPOTLIGHTABLE = (
+    "Event **#{event_id}** cannot be spotlighted: it has to be approved, and its **Where** has "
+    "to be one twitch.tv address and nothing else. Change the Where to the channel's own address "
+    "and try again."
 )
 NOT_EDITABLE = (
     "Event **#{event_id}** is **{status}**, so its details cannot be changed — only an event "
@@ -286,6 +292,26 @@ def build_router(bot: Any) -> APIRouter:
                 NOT_CANCELLABLE.format(event_id=event_id, status=row["status"]),
             )
         return {"event": event_row(guild, fresh), "message": "Cancelled."}
+
+    @router.post("/{event_id}/spotlight")
+    async def event_spotlight(request: Request, event_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        row = await wanted_event(bot, guild, event_id)
+        login = spotlight_login(row)
+        if login is None:
+            raise Refused(
+                409, "not_spotlightable", NOT_SPOTLIGHTABLE.format(event_id=event_id)
+            )
+        said = await spotlight_an_event(
+            bot, guild, actor_for(bot, who, guild), row, login, via=VIA_WEBSITE
+        )
+        return {
+            "event": event_row(guild, row),
+            "twitch_login": login,
+            "message": said,
+        }
 
     @router.post("/{event_id}/room/delete")
     async def event_room_delete(

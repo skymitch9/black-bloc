@@ -34,6 +34,7 @@ from black_bloc.cogs.community.tempvoice import add_channel
 from black_bloc.cogs.content.golive import set_link, set_optout, start_session
 from black_bloc.cogs.content.raidtrain import create_train
 from black_bloc.cogs.content.raidtrain import set_status as set_train_status
+from black_bloc.cogs.content.spotlight import add_channel as add_spotlight
 from black_bloc.cogs.content.youtube import YouTube
 from black_bloc.cogs.content.youtube import set_link as set_youtube_link
 from black_bloc.cogs.moderation.honeypot import record_hit
@@ -615,6 +616,16 @@ async def seed_world(client, web, guild, wf) -> dict:
         granted_by=7,
         until=grants.expires_at(7),
     )
+    spotlight_id = await add_spotlight(
+        db,
+        guild_id,
+        "gamesdonequick",
+        added_by=7,
+        expires_at=None,
+        pin=True,
+        display_name="GamesDoneQuick",
+        note="the owner's marathon channel",
+    )
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
     arm_minutes(web)
     return {
@@ -654,6 +665,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "post_slug": "welcome",
         "posted_post_slug": "opening-hours",
         "scratch_post_slug": "scratch-post",
+        "spotlight_id": str(spotlight_id),
         "meeting_id": str(meeting_id),
         "recording_meeting_id": str(recording_meeting_id),
     }

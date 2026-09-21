@@ -8,6 +8,7 @@ import pytest
 
 from black_bloc import events as events_pure
 from black_bloc import logs_panel
+from black_bloc import spotlight as spotlight_words
 from black_bloc.cogs.community import events as events_cog
 from black_bloc.cogs.community.events import (
     FORUM_CHANNEL_PLACEHOLDER,
@@ -40,6 +41,9 @@ from black_bloc.cogs.community.events import (
     room_notice_view,
     submit_draft,
 )
+from black_bloc.cogs.content.spotlight import Spotlight as SpotlightCog
+from black_bloc.cogs.content.spotlight import channel_by_login as spotlight_by_login
+from black_bloc.cogs.content.spotlight import channels_for as spotlight_rows_for
 from black_bloc.config import load_settings
 from black_bloc.events import (
     APPROVED,
@@ -5210,3 +5214,101 @@ async def test_on_ready_does_not_reconcile_again_right_after_cog_load_did(cog, b
         assert await cog.reconcile_events(skip_if_recent=True) is False
     finally:
         await cog.cog_unload()
+
+
+# --- Spotlight this stream (spotlight-design §B) ----------------------------------------------
+
+
+def card_labels(view):
+    """A DynamicItem keeps its label on the button it wraps, not on itself."""
+    return [
+        getattr(one, "label", None) or getattr(getattr(one, "item", None), "label", None)
+        for one in view.children
+    ]
+
+
+def card_ids(view):
+    return [
+        getattr(one, "custom_id", None) or getattr(getattr(one, "item", None), "custom_id", None)
+        for one in view.children
+    ]
+
+
+async def a_twitch_event(cog, bot, member, lead, where="twitch.tv/gamesdonequick"):
+    """An approved event whose Where IS one twitch.tv address and nothing else."""
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, where))
+    row = (await events_by_status(bot.db, GUILD, (PENDING,)))[0]
+    await approve(bot, lead, row["id"])
+    return (await events_by_status(bot.db, GUILD, (APPROVED,)))[0]
+
+
+async def test_an_approved_twitch_event_offers_spotlight_this_stream(cog, bot, member, lead):
+    row = await a_twitch_event(cog, bot, member, lead)
+
+    _, view = build_card(bot, bot.guild, row, lead)
+
+    assert spotlight_words.EVENT_SPOTLIGHT_LABEL in card_labels(view)
+    assert decision_id(row["id"], events_cog.SPOTLIGHT) in card_ids(view)
+
+
+async def test_an_event_whose_where_is_not_a_link_offers_nothing_to_spotlight(
+    cog, bot, member, lead
+):
+    await submit(cog, bot, member, where=Where(WHERE_OTHER, None, "the bar at 8"))
+    row = (await events_by_status(bot.db, GUILD, (PENDING,)))[0]
+    await approve(bot, lead, row["id"])
+    fresh = (await events_by_status(bot.db, GUILD, (APPROVED,)))[0]
+
+    _, view = build_card(bot, bot.guild, fresh, lead)
+
+    assert spotlight_words.EVENT_SPOTLIGHT_LABEL not in card_labels(view)
+
+
+async def test_a_member_never_sees_the_move(cog, bot, member, lead):
+    row = await a_twitch_event(cog, bot, member, lead)
+    bot.store.is_staff = lambda who: False
+
+    _, view = build_card(bot, bot.guild, row, member)
+
+    assert spotlight_words.EVENT_SPOTLIGHT_LABEL not in card_labels(view)
+
+
+async def test_pressing_it_spotlights_the_channel_until_the_events_end_plus_the_slack(
+    cog, bot, member, lead, db
+):
+    row = await a_twitch_event(cog, bot, member, lead)
+    interaction = FakeInteraction(bot, lead)
+
+    await DecisionButton(row["id"], events_cog.SPOTLIGHT).callback(interaction)
+
+    stored = await spotlight_by_login(db, GUILD, "gamesdonequick")
+    assert stored is not None and stored["event_id"] == row["id"]
+    assert stored["expires_at"] is not None
+    assert "spotlighted until" in interaction.response.messages[-1]["content"]
+    assert "golive.spotlight_added" in await action_kinds(db)
+
+
+async def test_pressing_it_twice_refuses_in_words_and_adds_nothing(
+    cog, bot, member, lead, db
+):
+    row = await a_twitch_event(cog, bot, member, lead)
+    await DecisionButton(row["id"], events_cog.SPOTLIGHT).callback(FakeInteraction(bot, lead))
+    second = FakeInteraction(bot, lead)
+
+    await DecisionButton(row["id"], events_cog.SPOTLIGHT).callback(second)
+
+    assert len(await spotlight_rows_for(db, GUILD)) == 1
+    assert "already on the spotlight list" in second.response.messages[-1]["content"]
+
+
+async def test_calling_the_event_off_takes_its_spotlight_with_it(cog, bot, member, lead, db):
+    row = await a_twitch_event(cog, bot, member, lead)
+    await DecisionButton(row["id"], events_cog.SPOTLIGHT).callback(FakeInteraction(bot, lead))
+    assert len(await spotlight_rows_for(db, GUILD)) == 1
+
+    bot._cog = SpotlightCog(bot)
+    await events_pure.cancel_for(bot, bot.guild, row, lead.id, reason="staff")
+
+    assert await spotlight_rows_for(db, GUILD) == []
+    details = await action_details(db, "golive.spotlight_expired")
+    assert details["because"] == "event_cancelled"

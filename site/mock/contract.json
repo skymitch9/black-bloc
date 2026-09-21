@@ -904,6 +904,107 @@
     },
     {
       "method": "GET",
+      "path": "/api/golive/spotlight",
+      "read_by": [
+        "page-golive.js"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "twitch_login",
+        "display_name",
+        "note",
+        "added_by",
+        "added_by_name",
+        "added_at",
+        "expires_at",
+        "kept",
+        "until",
+        "bump_hours",
+        "pin",
+        "event_id",
+        "url",
+        "live",
+        "sessions"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/golive/spotlight",
+      "body": {
+        "twitch_login": "rpglimitbreak",
+        "days": 7
+      },
+      "read_by": [
+        "page-golive.js addStreamerButton"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "twitch_login",
+        "display_name",
+        "note",
+        "added_by",
+        "added_by_name",
+        "added_at",
+        "expires_at",
+        "kept",
+        "until",
+        "bump_hours",
+        "pin",
+        "event_id",
+        "url",
+        "live",
+        "sessions",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/golive/spotlight/{spotlight_id}",
+      "body": {
+        "days": 14
+      },
+      "read_by": [
+        "page-golive.js spotlightMoves"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "twitch_login",
+        "display_name",
+        "note",
+        "added_by",
+        "added_by_name",
+        "added_at",
+        "expires_at",
+        "kept",
+        "until",
+        "bump_hours",
+        "pin",
+        "event_id",
+        "url",
+        "live",
+        "sessions",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/golive/spotlight/{spotlight_id}",
+      "read_by": [
+        "page-golive.js spotlightMoves"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "twitch_login",
+        "removed",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/golive/preview",
       "read_by": [
         "page-golive.js wordingCard"

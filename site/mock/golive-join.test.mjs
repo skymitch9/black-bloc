@@ -19,6 +19,8 @@ import {
   liveStreams,
   placeSettings,
   routeTyped,
+  spotlightCards,
+  spotlightSessions,
 } from '../public/assets/golive-join.js';
 
 const failures = [];
@@ -225,6 +227,118 @@ const PAYLOAD = {
   is(`${where} — nothing typed`, routeTyped(null).where, null);
 }
 
+
+// --- spotlight: a channel with no member behind it ---------------------------------------------
+// docs/info/spotlight-design.md §C. GamesDoneQuick is kept for ever and live; the ESA row runs
+// out with its marathon; `caseyfast` is ALSO a linked member's login, so it must be ONE row (the
+// member's) carrying the spotlight facts; a row that has already expired is simply absent,
+// because the sweep deletes it rather than hiding it.
+const SPOTLIGHT = [
+  {
+    id: 1,
+    twitch_login: 'gamesdonequick',
+    display_name: 'GamesDoneQuick',
+    note: "the owner's marathon channel",
+    added_at: '2026-01-01T00:00:00+00:00',
+    expires_at: null,
+    kept: true,
+    until: 'kept',
+    bump_hours: null,
+    pin: true,
+    event_id: null,
+    url: 'https://www.twitch.tv/gamesdonequick',
+    live: true,
+    session: {
+      id: 5,
+      started_at: '2026-09-20T02:00:00+00:00',
+      ended_at: null,
+      title: 'AGDQ 2027 — Day 4',
+      game: 'Celeste',
+      url: 'https://www.twitch.tv/gamesdonequick',
+      mode: 'on',
+      bump_count: 2,
+      announced_message_id: '830000000000000020',
+    },
+    sessions: [
+      { id: 5, started_at: '2026-09-20T02:00:00+00:00', ended_at: null, title: 'AGDQ 2027 — Day 4', game: 'Celeste', url: 'https://www.twitch.tv/gamesdonequick', mode: 'on', bump_count: 2, announced_message_id: '830000000000000020' },
+      { id: 4, started_at: '2026-06-01T02:00:00+00:00', ended_at: '2026-06-08T02:00:00+00:00', title: 'SGDQ 2026', game: 'Super Metroid', url: 'https://www.twitch.tv/gamesdonequick', mode: 'on', bump_count: 6, announced_message_id: '830000000000000019' },
+    ],
+  },
+  {
+    id: 2,
+    twitch_login: 'esamarathon',
+    display_name: 'ESA Marathon',
+    note: null,
+    added_at: '2026-09-01T00:00:00+00:00',
+    expires_at: '2026-09-30T00:00:00+00:00',
+    kept: false,
+    until: 'until 30 Sep',
+    bump_hours: 6,
+    pin: true,
+    event_id: 2,
+    url: 'https://www.twitch.tv/esamarathon',
+    live: false,
+    session: null,
+    sessions: [],
+  },
+  {
+    id: 3,
+    twitch_login: 'supernamu',
+    display_name: 'supernamu',
+    note: null,
+    added_at: '2026-09-10T00:00:00+00:00',
+    expires_at: null,
+    kept: true,
+    until: 'kept',
+    bump_hours: null,
+    pin: false,
+    event_id: null,
+    url: 'https://www.twitch.tv/supernamu',
+    live: false,
+    session: null,
+    sessions: [],
+  },
+];
+
+{
+  const where = 'spotlight';
+  const rows = joinStreamers({ links: LINKS, optouts: OPTOUTS, listing: LISTING, sessions: SESSIONS, spotlight: SPOTLIGHT });
+
+  const gdq = rows.find((one) => one.twitch === 'gamesdonequick');
+  ok(`${where} — a channel with no member is still a row`, Boolean(gdq), 'gamesdonequick has no row');
+  is(`${where} — and it has no member id`, gdq.user_id, 'spotlight:1');
+  is(`${where} — it reads kept`, gdq.spotlight.until, 'kept');
+  is(`${where} — and it is live on Twitch`, gdq.live, 'twitch');
+
+  const esa = rows.find((one) => one.twitch === 'esamarathon');
+  is(`${where} — a dated row says the day it runs out`, esa.spotlight.until, 'until 30 Sep');
+  is(`${where} — and it is not live`, esa.live, null);
+
+  const shared = rows.filter((one) => one.twitch === 'supernamu');
+  is(`${where} — a channel that is ALSO a member's login is ONE row`, shared.length, 1);
+  is(`${where} — and it is the member's row`, shared[0].user_id, TWITCH_ONLY);
+  is(`${where} — carrying the spotlight facts`, shared[0].spotlight.id, 3);
+
+  ok(`${where} — an expired row is absent, because the sweep deletes it`,
+    !rows.some((one) => one.twitch === 'frostfatales'), 'an expired row appeared');
+
+  const plain = joinStreamers({ links: LINKS, optouts: OPTOUTS, listing: LISTING, sessions: SESSIONS });
+  ok(`${where} — with no spotlight payload nothing changes`,
+    plain.every((one) => one.spotlight === null), 'a row has a spotlight with no payload');
+
+  const cards = spotlightCards(SPOTLIGHT);
+  is(`${where} — only a live spotlight is a Live-now card`, cards.length, 1);
+  is(`${where} — the card names the channel`, cards[0].name, 'GamesDoneQuick');
+  is(`${where} — the card says it was announced`, cards[0].announced, true);
+  is(`${where} — the card says it is pinned`, cards[0].pinned, true);
+  same(`${where} — a spotlight is a Twitch card`, cards[0].platforms, ['twitch']);
+
+  const past = spotlightSessions(SPOTLIGHT);
+  is(`${where} — every spotlight session joins Recent streams`, past.length, 2);
+  is(`${where} — with its own source`, past[0].source, 'spotlight');
+  is(`${where} — named by the channel`, past[1].user_name, 'GamesDoneQuick');
+}
+
 // --- ⚠️ every settings key lands in exactly one drawer or one named surface -------------------
 // The 36 keys the three namespaces held on 2026-09-20, measured with
 //   python -c "from black_bloc import settings_store as s; print([k for k in s.KEY_TYPES if
@@ -236,18 +350,22 @@ const NAMESPACE_KEYS = [
   'golive_end_template', 'golive_end_author', 'golive_end_keep_mention', 'golive_live_role_id',
   'golive_require_role_id', 'golive_ignore_role_id', 'golive_cooldown_minutes',
   'golive_ping_role_id', 'golive_max_session_hours', 'golive_embed', 'golive_log_level',
-  'golive_panel_minutes',
+  'golive_panel_minutes', 'golive_costream_mode', 'golive_costream_template',
+  'golive_costream_author',
   'pings_mode', 'pings_events_role_name', 'pings_fan_role_creation', 'pings_fan_role_template',
   'pings_fan_role_on_unlink', 'pings_fan_role_delete', 'pings_streamer_stale_days',
   'pings_empty_role_days', 'pings_onboarding_managed', 'pings_onboarding_prompt_title',
   'pings_onboarding_option_cap', 'pings_log_level', 'pings_panel_minutes',
   'youtube_log_level', 'youtube_panel_minutes', 'youtube_unlink_dms_them', 'youtube_live_mode',
   'youtube_live_poll_minutes', 'youtube_live_end_misses',
+  'spotlight_mode', 'spotlight_poll_minutes', 'spotlight_end_misses', 'spotlight_bump_hours',
+  'spotlight_bump_template', 'spotlight_bump_cleanup', 'spotlight_pin',
+  'spotlight_default_days', 'spotlight_event_slack_hours',
 ];
 
 {
   const where = 'every key lands once';
-  is(`${where} — the namespaces held 36 keys when this was measured`, NAMESPACE_KEYS.length, 36);
+  is(`${where} — the namespaces held 48 keys when this was measured`, NAMESPACE_KEYS.length, 48);
 
   const specs = NAMESPACE_KEYS.map((key) => ({ key, type: 'text', value: null }));
   const placed = placeSettings(specs);
@@ -276,6 +394,7 @@ const NAMESPACE_KEYS = [
   same(`${where} — the catch-all holds what nobody claimed`, home('rest'), sorted([
     'golive_log_level', 'golive_panel_minutes', 'pings_log_level',
     'youtube_log_level', 'youtube_panel_minutes',
+    'golive_costream_mode', 'golive_costream_template', 'golive_costream_author',
   ]));
 
   const tomorrow = placeSettings([{ key: 'golive_brand_new_thing', type: 'text', value: null }]);
@@ -293,5 +412,6 @@ if (failures.length) {
 process.stdout.write(
   'golive-join: ok - one row per person across five payloads; a ping role with no link still '
     + 'has a row; two open sessions are one row; a co-stream says both platforms; an ambiguous '
-    + 'address is refused in words; all 36 settings keys land in exactly one place\n',
+    + 'address is refused in words; a spotlighted channel with no member is its own row and one '
+    + 'that IS a linked login is not a second; all 48 settings keys land in exactly one place\n',
 );

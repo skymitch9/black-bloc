@@ -57,6 +57,9 @@ const IDS = {
   ping_member_id: '700000000000000004',
   // Phase 18: train 1 is the upcoming one, still open, so lock/assign/swap all reach it.
   raid_train_id: '1',
+  // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
+  // reach it without ending a stream the other entries expect to still be live.
+  spotlight_id: '3',
   // Phase 19: form 1 is the Twitch Team form with three questions and people waiting on it;
   // form 2 is the closed one nobody has applied to, so the DELETE entry has something to remove.
   application_form_id: '1',

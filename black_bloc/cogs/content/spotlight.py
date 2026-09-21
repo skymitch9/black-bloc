@@ -25,6 +25,7 @@ from ...golive import (
     render,
     with_box_art,
 )
+from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
 from ...panels import Panel, answer, opened, retire, still_staff
 from ...settings_store import (
@@ -484,7 +485,16 @@ class Spotlight(commands.Cog):
             return
         await self.bump(guild, row, session, info)
 
-    async def bump(self, guild: Any, row: Any, session: Any, info: Any = None) -> Any:
+    async def bump(
+        self,
+        guild: Any,
+        row: Any,
+        session: Any,
+        info: Any = None,
+        *,
+        via: str = VIA_DISCORD,
+        actor: Any = None,
+    ) -> Any:
         """One short reminder, never pinned and never a ping; its id is kept for the cleanup."""
         stream = info if info is not None else words.info_of(session, row["twitch_login"])
         at = now_iso()
@@ -514,7 +524,8 @@ class Spotlight(commands.Cog):
         await log_action(
             self.bot,
             guild,
-            "golive.spotlight_bumped",
+            kind_via("golive.spotlight_bumped", via),
+            actor=actor,
             details={
                 "spotlight_id": row["id"],
                 "session_id": session["id"],
@@ -523,6 +534,7 @@ class Spotlight(commands.Cog):
                 "text": text,
                 "message_id": str(message.id),
                 "bump": int(_cell(session, "bump_count") or 0) + 1,
+                "via": via,
             },
         )
         return message
@@ -807,6 +819,7 @@ async def spotlight_channel(
     note: str | None = None,
     event_id: int | None = None,
     expires_at: Any = False,
+    via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """One door for the panel, the route and the event card: `(outcome, row)`."""
     clean = words.clean_login(login)
@@ -845,7 +858,7 @@ async def spotlight_channel(
     await log_action(
         bot,
         guild,
-        "golive.spotlight_added",
+        kind_via("golive.spotlight_added", via),
         actor=actor,
         details={
             "spotlight_id": spotlight_id,
@@ -854,13 +867,14 @@ async def spotlight_channel(
             "pin": wanted_pin,
             "bump_hours": bump_hours,
             "event_id": event_id,
+            "via": via,
         },
     )
     return ("added", row)
 
 
 async def change_spotlight(
-    bot: Any, guild: Any, actor: Any, spotlight_id: int, **fields: Any
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, *, via: str = VIA_DISCORD, **fields: Any
 ) -> Any:
     row = await channel_by_id(bot.db, spotlight_id)
     if row is None or int(row["guild_id"]) != int(guild.id):
@@ -870,15 +884,17 @@ async def change_spotlight(
     await log_action(
         bot,
         guild,
-        "golive.spotlight_updated",
+        kind_via("golive.spotlight_updated", via),
         actor=actor,
-        details={"spotlight_id": spotlight_id, "login": row["twitch_login"]}
+        details={"spotlight_id": spotlight_id, "login": row["twitch_login"], "via": via}
         | {name: fields[name] for name in sorted(fields)},
     )
     return fresh
 
 
-async def forget_spotlight(bot: Any, guild: Any, actor: Any, spotlight_id: int) -> Any:
+async def forget_spotlight(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, *, via: str = VIA_DISCORD
+) -> Any:
     """Staff final say: a row goes whatever state it is in, and its session is closed first."""
     cog = cog_of(bot)
     row = await channel_by_id(bot.db, spotlight_id)
@@ -894,12 +910,13 @@ async def forget_spotlight(bot: Any, guild: Any, actor: Any, spotlight_id: int) 
     await log_action(
         bot,
         guild,
-        "golive.spotlight_removed",
+        kind_via("golive.spotlight_removed", via),
         actor=actor,
         details={
             "spotlight_id": spotlight_id,
             "login": row["twitch_login"],
             "event_id": row["event_id"],
+            "via": via,
         },
     )
     return row
@@ -919,19 +936,23 @@ async def expire_for_event(bot: Any, guild: Any, event_id: int) -> Any:
     return fresh
 
 
-async def bump_now(bot: Any, guild: Any, actor: Any, spotlight_id: int) -> tuple[str, Any]:
-    cog = cog_of(bot)
+async def bump_now(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
     row = await channel_by_id(bot.db, spotlight_id)
-    if row is None or int(row["guild_id"]) != int(guild.id) or cog is None:
+    if row is None or int(row["guild_id"]) != int(guild.id):
         return ("no_row", None)
     session = await open_session(bot.db, spotlight_id)
     if session is None:
         return ("not_live", row)
+    cog = cog_of(bot)
+    if cog is None:
+        return ("no_cog", row)
     async with cog._lock(spotlight_id):
         fresh = await open_session(bot.db, spotlight_id)
         if fresh is None:
             return ("not_live", row)
-        message = await cog.bump(guild, row, fresh)
+        message = await cog.bump(guild, row, fresh, via=via, actor=actor)
     return ("bumped" if message is not None else "bump_failed", row)
 
 
@@ -1105,6 +1126,8 @@ async def run_spotlight_move(
             return (words.BUMPED_SAID.format(login=login), True)
         if outcome == "not_live":
             return (words.NOT_LIVE.format(login=login), True)
+        if outcome == "no_cog":
+            return (words.NO_COG.format(login=login), True)
         return (words.BUMP_FAILED.format(login=login, reason=words.NO_CHANNEL), True)
     fresh = await change_spotlight(
         bot,
