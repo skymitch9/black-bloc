@@ -32,6 +32,7 @@ from ...cogs.content.spotlight import (
     unlink_youtube,
 )
 from ...cogs.content.spotlight import recent_sessions as recent_spotlight_sessions
+from ...golive import optout_said
 from ...logkinds import VIA_WEBSITE
 from ...settings_store import SPOTLIGHT_BUMP_HOURS_KEY
 from ..auth import Refused, staff_dependency
@@ -66,7 +67,10 @@ LINKED = (
     "finds that out the first time it looks for a stream."
 )
 OPTED_OUT = "**{name}** is opted out, so no stream of theirs is announced from now on."
-OPTED_IN = "**{name}** is no longer opted out, so their streams can be announced again."
+OPTED_IN = (
+    "**{name}** is no longer opted out, so their streams can be announced again. A stream they "
+    "are already running is not announced after the fact; the next one they start is."
+)
 SPOTLIGHT_SESSIONS = 5
 BAD_DAYS = (
     "**{given}** is not a number of days, so nothing was changed. Give a whole number of "
@@ -289,11 +293,15 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         wanted = wanted_id(payload.get("user_id"))
-        await opt_out(bot, guild, actor_for(bot, who, guild), wanted, via=VIA_WEBSITE)
+        _, settled = await opt_out(
+            bot, guild, actor_for(bot, who, guild), wanted, via=VIA_WEBSITE
+        )
         named = with_name(guild, wanted)
         return named | {
             "opted_out": True,
-            "message": OPTED_OUT.format(name=named["user_name"] or wanted),
+            "message": optout_said(
+                OPTED_OUT.format(name=named["user_name"] or wanted), settled
+            ),
         }
 
     @router.delete("/optouts/{user_id}")

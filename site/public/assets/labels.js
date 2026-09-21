@@ -44,6 +44,7 @@ export const LABELS = {
   spotlight_event_slack_hours: "Hours past an event's end that its spotlight survives",
   golive_channel_spotlight_default: 'Whether a channel added with nobody behind it starts out spotlighted',
   golive_channel_optout_post: 'What happens to a channel’s announcement when it is opted out mid-stream',
+  golive_member_optout_post: 'What happens to a member’s announcement when they are opted out mid-stream',
   golive_live_role_id: 'Which role a live streamer wears',
   golive_require_role_id: 'Only announce people with this role',
   golive_ignore_role_id: 'Never announce people with this role',

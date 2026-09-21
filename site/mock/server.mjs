@@ -516,6 +516,7 @@ const SETTING_SPECS = [
   ['spotlight_event_slack_hours', 'int', 2, 2, "hours past an approved event's end that its spotlight row survives, so a marathon that overruns is still announced", null, 24, 0],
   ['golive_channel_spotlight_default', 'bool', false, false, "true if a channel added through **Add a streamer** with nobody behind it is spotlighted from the start — pinned while it streams and reminded every few hours; false — the default — announces it like any other stream, and its own row's **Spotlight on** adds the pin and the reminders whenever staff want them"],
   ['golive_channel_optout_post', 'enum', 'end', 'end', "what happens to an announcement that is already out when a channel is opted out of announcements mid-stream: end — the default — unpins it and edits it to the ended wording exactly as any stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so no reminder follows and nothing waits on Twitch", ['end', 'delete', 'leave']],
+  ['golive_member_optout_post', 'enum', 'end', 'end', "what happens to an announcement that is already out when a MEMBER opts out of announcements mid-stream — the same three treatments the channel key has: end — the default — unpins it and edits it to the ended wording exactly as any stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so the live role comes off and nothing waits on Twitch or on their presence", ['end', 'delete', 'leave']],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['automod_arm_needs_confirm', 'bool', true, true, 'true to ask a second time before automod is turned on from the panel, naming what will start happening; turning it off or back to shadow is always one press'],
   ['raidtrain_panel_minutes', 'int', 10, 10, "minutes the /raidtrain panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -3949,6 +3950,33 @@ route('GET', '/api/golive/optouts', (context) => {
   return state.golive.optouts.map((row) => ({ user_id: String(row.user_id), user_name: memberName(row.user_id), at: row.at }));
 });
 
+// The bot's golive.OPTED_OUT_POST_SAID and the settle the cog does under the member's own
+// lock: opting a LIVE member out ends the announcement that is already out.
+const MEMBER_OPTED_OUT_POST_SAID = {
+  end: 'The announcement that was out has been unpinned and edited to say the stream has ended, exactly as any stream end does, the live role is off and the session is closed (per `golive_member_optout_post`).',
+  delete: 'The announcement that was out has been deleted, the live role is off and the session is closed (per `golive_member_optout_post`).',
+  leave: 'The announcement that was out is left exactly as it was posted — only the pin came off — and the live role is off with the session closed (per `golive_member_optout_post`).',
+};
+
+function settleOpenMemberSession(userId) {
+  const session = state.golive.sessions.find((one) => String(one.user_id) === String(userId) && !one.ended_at);
+  if (!session) return null;
+  const post = String(state.settings.get('golive_member_optout_post') || 'end');
+  session.ended_at = now();
+  if (post === 'delete') {
+    logAction('golive.post_deleted', { target_id: userId, details: { session_id: session.id, message_id: session.announced_message_id } });
+    session.announced_message_id = null;
+  }
+  logAction('golive.end', { target_id: userId, details: { session_id: session.id, source: session.source, reason: 'opted_out', post } });
+  return post;
+}
+
+function memberOptedOutSaid(userId, settled) {
+  const said = `**${memberName(userId) || userId}** is opted out, so no stream of theirs is announced from now on.`;
+  const clause = MEMBER_OPTED_OUT_POST_SAID[settled];
+  return clause ? `${said} ${clause}` : said;
+}
+
 route('POST', '/api/golive/optouts', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
@@ -3959,11 +3987,12 @@ route('POST', '/api/golive/optouts', async (context) => {
   if (at >= 0) state.golive.optouts[at] = row;
   else state.golive.optouts.unshift(row);
   logAction('web.golive.optout', { target_id: userId });
+  const settled = settleOpenMemberSession(userId);
   return {
     user_id: userId,
     user_name: memberName(userId),
     opted_out: true,
-    message: `**${memberName(userId) || userId}** is opted out, so no stream of theirs is announced from now on.`,
+    message: memberOptedOutSaid(userId, settled),
   };
 });
 
@@ -3979,7 +4008,7 @@ route('DELETE', '/api/golive/optouts/:user_id', (context) => {
     user_id: context.params.user_id,
     user_name: memberName(context.params.user_id),
     opted_out: false,
-    message: `**${memberName(context.params.user_id) || context.params.user_id}** is no longer opted out, so their streams can be announced again.`,
+    message: `**${memberName(context.params.user_id) || context.params.user_id}** is no longer opted out, so their streams can be announced again. A stream they are already running is not announced after the fact; the next one they start is.`,
   };
 });
 

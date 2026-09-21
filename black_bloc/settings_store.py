@@ -1624,6 +1624,11 @@ CHANNEL_OPTOUT_END = "end"
 CHANNEL_OPTOUT_DELETE = "delete"
 CHANNEL_OPTOUT_LEAVE = "leave"
 CHANNEL_OPTOUT_POSTS = (CHANNEL_OPTOUT_END, CHANNEL_OPTOUT_DELETE, CHANNEL_OPTOUT_LEAVE)
+MEMBER_OPTOUT_POST_KEY = "golive_member_optout_post"
+MEMBER_OPTOUT_END = CHANNEL_OPTOUT_END
+MEMBER_OPTOUT_DELETE = CHANNEL_OPTOUT_DELETE
+MEMBER_OPTOUT_LEAVE = CHANNEL_OPTOUT_LEAVE
+MEMBER_OPTOUT_POSTS = CHANNEL_OPTOUT_POSTS
 SPOTLIGHT_POLL_MINUTES = 5
 SPOTLIGHT_POLL_MIN_MINUTES = 2
 SPOTLIGHT_POLL_MAX_MINUTES = 30
@@ -1657,10 +1662,12 @@ KEY_TYPES.update(
         SPOTLIGHT_EVENT_SLACK_KEY: "int",
         CHANNEL_SPOTLIGHT_DEFAULT_KEY: "bool",
         CHANNEL_OPTOUT_POST_KEY: "enum",
+        MEMBER_OPTOUT_POST_KEY: "enum",
     }
 )
 KEY_CHOICES[SPOTLIGHT_MODE_KEY] = SPOTLIGHT_MODES
 KEY_CHOICES[CHANNEL_OPTOUT_POST_KEY] = CHANNEL_OPTOUT_POSTS
+KEY_CHOICES[MEMBER_OPTOUT_POST_KEY] = MEMBER_OPTOUT_POSTS
 KEY_MIN[SPOTLIGHT_POLL_MINUTES_KEY] = SPOTLIGHT_POLL_MIN_MINUTES
 KEY_MAX[SPOTLIGHT_POLL_MINUTES_KEY] = SPOTLIGHT_POLL_MAX_MINUTES
 KEY_MIN[SPOTLIGHT_END_MISSES_KEY] = SPOTLIGHT_END_MISSES_MIN
@@ -1761,6 +1768,14 @@ KEY_HELP.update(
             "ended wording exactly as any stream end does; delete removes the post outright; "
             "leave takes the pin off and leaves the words as they were posted. The session is "
             "closed either way, so no reminder follows and nothing waits on Twitch"
+        ),
+        MEMBER_OPTOUT_POST_KEY: (
+            "what happens to an announcement that is already out when a MEMBER opts out of "
+            "announcements mid-stream — the same three treatments the channel key has: end — "
+            "the default — unpins it and edits it to the ended wording exactly as any stream "
+            "end does; delete removes the post outright; leave takes the pin off and leaves the "
+            "words as they were posted. The session is closed either way, so the live role comes "
+            "off and nothing waits on Twitch or on their presence"
         ),
     }
 )
@@ -3388,6 +3403,8 @@ class SettingsStore:
             return False
         if key == CHANNEL_OPTOUT_POST_KEY:
             return CHANNEL_OPTOUT_END
+        if key == MEMBER_OPTOUT_POST_KEY:
+            return MEMBER_OPTOUT_END
         if key == "golive_cooldown_minutes":
             return 60
         if key == "golive_max_session_hours":

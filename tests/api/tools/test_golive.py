@@ -237,6 +237,55 @@ async def test_opting_a_member_out_and_back_in_again(client, sign_in, web, guild
     assert await wf.kinds_in(web.db) == ["web.golive.optout", "web.golive.optin"]
 
 
+async def test_opting_a_live_member_out_ends_the_announcement_that_is_already_out(
+    client, sign_in, web, guild, wf
+):
+    """The site's door reaches the same settle `/golive` does — one path, one sentence."""
+    from black_bloc.cogs.content.golive import GoLive, open_session_for
+
+    wf.member(guild, 21, name="ada")
+    session_id = await start_golive_session(
+        web.db, wf.GUILD_ID, 21, "twitch", StreamInfo(url="u", game="g", title="t"), "on"
+    )
+    assert session_id is not None
+    web.cogs["GoLive"] = GoLive(web)
+    sign_in(client)
+
+    out = client.post("/api/golive/optouts", json={"user_id": "21"}).json()
+
+    assert "is opted out" in out["message"]
+    assert "edited to say the stream has ended" in out["message"]
+    assert "golive_member_optout_post" in out["message"]
+    assert await open_session_for(web.db, wf.GUILD_ID, 21) is None
+
+
+async def test_opting_a_member_out_with_nothing_running_says_only_the_plain_sentence(
+    client, sign_in, web, guild, wf
+):
+    from black_bloc.cogs.content.golive import GoLive
+
+    wf.member(guild, 21, name="ada")
+    web.cogs["GoLive"] = GoLive(web)
+    sign_in(client)
+
+    out = client.post("/api/golive/optouts", json={"user_id": "21"}).json()
+
+    assert "is opted out" in out["message"]
+    assert "golive_member_optout_post" not in out["message"]
+
+
+async def test_opting_a_member_back_in_never_announces_a_stream_already_running(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    await set_optout(web.db, 21)
+    sign_in(client)
+
+    back = client.delete("/api/golive/optouts/21").json()
+
+    assert "not announced after the fact" in back["message"]
+
+
 def test_taking_away_an_optout_nobody_has_says_so_in_words(client, sign_in):
     sign_in(client)
 

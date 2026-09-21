@@ -626,6 +626,26 @@ def test_a_retention_of_zero_days_is_refused_because_it_deletes_an_unread_record
     assert "before anybody has read it" in str(caught.value)
 
 
+def test_the_member_optout_post_key_is_an_enum_of_three_with_end_as_the_default(store):
+    """A member's opt-out ends the announcement that is out; this says what becomes of it."""
+    key = settings_store.MEMBER_OPTOUT_POST_KEY
+    assert key == "golive_member_optout_post"
+    assert KEY_TYPES[key] == "enum"
+    assert KEY_CHOICES[key] == ("end", "delete", "leave")
+    assert store.get(1, key) == settings_store.MEMBER_OPTOUT_END == "end"
+    assert "opts out of" in KEY_HELP[key] and "live role" in KEY_HELP[key]
+    assert settings_store.namespace_of(key) == "golive"
+
+
+def test_the_member_and_channel_optout_posts_are_two_keys_over_one_set_of_words(store):
+    """One fact, one home (checklist 15): the member names point AT the channel's values."""
+    assert settings_store.MEMBER_OPTOUT_POSTS is settings_store.CHANNEL_OPTOUT_POSTS
+    assert settings_store.MEMBER_OPTOUT_DELETE == settings_store.CHANNEL_OPTOUT_DELETE
+    assert settings_store.MEMBER_OPTOUT_LEAVE == settings_store.CHANNEL_OPTOUT_LEAVE
+    assert settings_store.MEMBER_OPTOUT_POST_KEY != settings_store.CHANNEL_OPTOUT_POST_KEY
+    assert store.get(1, settings_store.CHANNEL_OPTOUT_POST_KEY) == "end"
+
+
 def test_the_test_mode_retention_is_its_own_key_in_minutes(store):
     """Follow-up 3: seven days of test rooms is clutter, so test mode counts in minutes."""
     assert KEY_TYPES[EVENTS_TEST_RETENTION_KEY] == "int"

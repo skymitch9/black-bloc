@@ -42,6 +42,7 @@ from ...golive import (
     humanise_duration,
     joins_session,
     now_iso,
+    optout_said,
     panel_buttons,
     panel_minutes,
     parse_ts,
@@ -76,6 +77,9 @@ from ...settings_store import (
     GOLIVE_LIVE_AUTHOR_KEY,
     GOLIVE_MODES,
     GUILD_ONLY,
+    MEMBER_OPTOUT_DELETE,
+    MEMBER_OPTOUT_LEAVE,
+    MEMBER_OPTOUT_POST_KEY,
     carry_end_wording,
 )
 from ...twitch import TwitchClient, TwitchError
@@ -100,7 +104,8 @@ OPTED_OUT = (
     "same panel changes your mind."
 )
 OPTED_IN = (
-    "Done — Black Bloc will announce your streams again when it sees you go live. "
+    "Done — Black Bloc will announce your streams again when it sees you go live. A stream you "
+    "are already running is not announced after the fact; the next one you start is. "
     "**Stop announcing my streams** turns it back off."
 )
 BAD_LOGIN = (
@@ -160,7 +165,10 @@ STREAMER_UNLINK_CONFIRM = (
 )
 THEY_UNLINKED = "Done — **{name}** is no longer linked to a Twitch channel."
 THEY_OPTED_OUT = "Done — no stream of **{name}**'s is announced from now on."
-THEY_OPTED_IN = "Done — **{name}**'s streams can be announced again."
+THEY_OPTED_IN = (
+    "Done — **{name}**'s streams can be announced again. A stream they are already running is "
+    "not announced after the fact; the next one they start is."
+)
 UNLINK_THEM = "Unlink them"
 OPT_THEM_OUT = "Opt them out"
 OPT_THEM_IN = "Opt them back in"
@@ -185,6 +193,8 @@ TEST_STREAMS = {
 
 
 RECONCILED = "reconciled_on_start"
+OPTED_OUT_ENDED = "opted_out"
+UNPIN_REASON = "Black Bloc go-live — opted out"
 ENDED_ELSEWHERE = "ended"
 SIDE_ALSO = "also"
 SIDE_PRIMARY = "primary"
@@ -654,8 +664,10 @@ async def unlink_channel(
 
 async def opt_out(
     bot: Any, guild: Any, actor: Any, target: Any, *, via: str = VIA_DISCORD
-) -> str:
-    await set_optout(bot.db, target_id(target))
+) -> tuple[str, str | None]:
+    """(the fan-role sentence, what an OPEN announcement had done to it)."""
+    user_id = target_id(target)
+    await set_optout(bot.db, user_id)
     extra = await fan_role_after_leaving(bot, guild, target, by=target_id(actor))
     await log_action(
         bot,
@@ -665,7 +677,16 @@ async def opt_out(
         target=target,
         details={"via": via},
     )
-    return extra
+    return (extra, await settle_open_session(bot, guild, user_id))
+
+
+async def settle_open_session(bot: Any, guild: Any, user_id: int) -> str | None:
+    """Opting out ENDS the announcement that is already out; nothing here waits on presence,
+    which never reports a stream over while the member is still on it."""
+    cog = cog_of(bot)
+    if cog is None or not bot.db.is_connected:
+        return None
+    return await cog.end_for_optout(guild, int(user_id))
 
 
 async def opt_in(
@@ -992,6 +1013,96 @@ class GoLive(commands.Cog):
 
     async def end_live(self, guild: Any, member: Any, source: str | None) -> None:
         await self._end_live(guild, member, source)
+
+    async def end_for_optout(self, guild: Any, user_id: int) -> str | None:
+        """Checklist 6: the open row is re-read INSIDE the lock the presence and poller paths
+        hold, so a second press of Opt out ends nothing twice."""
+        async with self._lock(int(user_id)):
+            row = await open_session_for(self.bot.db, guild.id, int(user_id))
+            if row is None:
+                return None
+            self._cancel_end(int(user_id))
+            post = str(self.bot.store.get(guild.id, MEMBER_OPTOUT_POST_KEY))
+            await self._end_opted_out(guild, row, post)
+            return post
+
+    async def _end_opted_out(self, guild: Any, row: Any, post: str) -> None:
+        """The state moves before any message does — a refusal from Discord never leaves a
+        session half-ended (checklist 12)."""
+        member = guild.get_member(row["user_id"])
+        ended_at = now_iso()
+        await end_session(self.bot.db, row["id"], ended_at)
+        await self._remove_live_role(guild, member, row)
+        await log_action(
+            self.bot,
+            guild,
+            "golive.end",
+            target=member if member is not None else row["user_id"],
+            details={
+                "session_id": row["id"],
+                "source": row["source"],
+                "reason": OPTED_OUT_ENDED,
+                "post": post,
+            },
+        )
+        message = await self._announced_message(guild, row)
+        if post == MEMBER_OPTOUT_DELETE and await self._delete_announcement(guild, row, message):
+            return
+        await self._unpin_announcement(guild, row, message)
+        if post != MEMBER_OPTOUT_LEAVE:
+            await self._mark_ended(guild, row, ended_at, message=message)
+
+    async def _delete_announcement(self, guild: Any, row: Any, message: Any) -> bool:
+        """Whether the post is gone; a refusal falls back to the words the caller would use."""
+        if message is None:
+            return True
+        details = {"session_id": row["id"], "message_id": str(getattr(message, "id", ""))}
+        try:
+            await message.delete()
+        except Exception as exc:
+            reason = f"{type(exc).__name__}: {exc}"
+            log.warning(
+                "go-live: could not delete message %s (%s)", details["message_id"], reason
+            )
+            await log_action(
+                self.bot,
+                guild,
+                "golive.post_delete_failed",
+                target=row["user_id"],
+                details=details | {"reason": reason},
+            )
+            return False
+        await log_action(
+            self.bot, guild, "golive.post_deleted", target=row["user_id"], details=details
+        )
+        return True
+
+    async def _unpin_announcement(self, guild: Any, row: Any, message: Any) -> None:
+        """Checklist 3: the pin comes off because the MESSAGE carries one — this feature never
+        pins, so the only pin here is one somebody put on by hand."""
+        if message is None or not bool(getattr(message, "pinned", False)):
+            return
+        details = {"session_id": row["id"], "message_id": str(getattr(message, "id", ""))}
+        try:
+            await message.unpin(reason=UNPIN_REASON)
+        except Exception as exc:
+            reason = f"{type(exc).__name__}: {exc}"
+            log.warning("go-live: could not unpin message %s (%s)", details["message_id"], reason)
+            await log_action(
+                self.bot,
+                guild,
+                "golive.unpin_failed",
+                target=row["user_id"],
+                details=details | {"reason": reason, "because": OPTED_OUT_ENDED},
+            )
+            return
+        await log_action(
+            self.bot,
+            guild,
+            "golive.unpinned",
+            target=row["user_id"],
+            details=details | {"because": OPTED_OUT_ENDED},
+        )
 
     async def add_platform(self, member: Any, info: StreamInfo, source: str) -> None:
         """The other cog's door: a second platform joins the announcement already posted."""
@@ -1335,7 +1446,9 @@ class GoLive(commands.Cog):
         )
         await self._mark_ended(guild, row, ended_at)
 
-    async def _mark_ended(self, guild: Any, row: Any, ended_at: str | None = None) -> None:
+    async def _mark_ended(
+        self, guild: Any, row: Any, ended_at: str | None = None, *, message: Any = None
+    ) -> None:
         message_id = row["announced_message_id"]
         if not message_id:
             return
@@ -1352,7 +1465,8 @@ class GoLive(commands.Cog):
             self.bot, guild, row["user_id"], notice=False
         )
         try:
-            message = await channel.fetch_message(message_id)
+            if message is None:
+                message = await channel.fetch_message(message_id)
             await message.edit(
                 content=ended_render(
                     template,
@@ -1779,7 +1893,8 @@ async def own_unlink(bot: Any, guild: Any, actor: Any) -> str:
 
 
 async def own_opt_out(bot: Any, guild: Any, actor: Any) -> str:
-    return OPTED_OUT + await opt_out(bot, guild, actor, actor)
+    extra, settled = await opt_out(bot, guild, actor, actor)
+    return optout_said(OPTED_OUT + extra, settled)
 
 
 async def own_opt_in(bot: Any, guild: Any, actor: Any) -> str:
@@ -1801,8 +1916,8 @@ async def their_move(bot: Any, guild: Any, actor: Any, user_id: int, action: str
         await unlink_channel(bot, guild, actor, user_id)
         return THEY_UNLINKED.format(name=name)
     if action == "optout":
-        await opt_out(bot, guild, actor, user_id)
-        return THEY_OPTED_OUT.format(name=name)
+        _, settled = await opt_out(bot, guild, actor, user_id)
+        return optout_said(THEY_OPTED_OUT.format(name=name), settled)
     await opt_in(bot, guild, actor, user_id)
     return THEY_OPTED_IN.format(name=name)
 
