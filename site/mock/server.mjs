@@ -1117,6 +1117,7 @@ function seedState() {
     sessions: [
       { id: 12, user_id: MEMBERS[1].id, source: 'twitch', platform: 'Twitch', url: 'https://twitch.tv/caseyfast', game: 'Lethal Company', title: 'late night runs', also_source: 'youtube', also_platform: 'YouTube', also_url: 'https://www.youtube.com/watch?v=caseyfastlive', also_started_at: minutesAgo(30), started_at: minutesAgo(120), ended_at: null, mode: 'shadow', announced_message_id: null },
       { id: 11, user_id: MEMBERS[2].id, source: 'presence', platform: 'Twitch', url: 'https://twitch.tv/rivetplays', game: 'Balatro', title: 'one more run', also_source: null, also_platform: null, also_url: null, also_started_at: null, started_at: minutesAgo(1500), ended_at: minutesAgo(1300), mode: 'shadow', announced_message_id: null },
+      { id: 10, user_id: MEMBERS[3].id, source: 'presence', platform: 'Twitch', url: 'https://twitch.tv/mothlight', game: 'Hades II', title: 'first time, be nice', also_source: null, also_platform: null, also_url: null, also_started_at: null, started_at: minutesAgo(1500), ended_at: minutesAgo(1300), mode: 'shadow', announced_message_id: null },
     ],
     // Spotlight (schema 48): Twitch channels with nobody here behind them. GamesDoneQuick is
     // kept for ever and live right now; ESA runs out with its marathon; the expired one is

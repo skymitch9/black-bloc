@@ -1170,7 +1170,42 @@ async function announcementSection(specs, wordingSpecs) {
   return group.node;
 }
 
-function recentSection(sessions) {
+const LINK_FROM_HISTORY = 'Link them';
+const LINKED_ALREADY = '—';
+
+/** A stream seen by presence alone is one press from a real link: the row already knows who and where. */
+function linkFromHistory(row, linked, say) {
+  const id = String(row.user_id || '');
+  if (!id || id.startsWith('spotlight:') || linked.has(id) || !row.url) return muted(LINKED_ALREADY);
+  const routed = routeTyped(String(row.url));
+  if (!routed.where) return muted(LINKED_ALREADY);
+  const who = row.user_name || id;
+  return button(LINK_FROM_HISTORY, async () => {
+    const sure = await ask({
+      title: `Link ${who} to ${routed.value}?`,
+      body: [
+        `Black Bloc will watch ${routed.where === YOUTUBE ? 'that YouTube channel' : 'that Twitch channel'} for ${who} `
+          + 'and announce them when they go live, instead of relying on their Discord status alone.',
+      ],
+      confirmLabel: 'Link them',
+      tone: 'warn',
+    });
+    if (!sure) return;
+    const done = await run(
+      say,
+      () => (routed.where === YOUTUBE
+        ? send('/api/youtube/links', 'POST', { member_id: id, channel: routed.value })
+        : send('/api/golive/links', 'POST', { user_id: id, twitch_login: routed.value })),
+      (found) => found?.message || 'Linked.',
+    );
+    if (done.ok) {
+      keepSaying(routed.where === YOUTUBE ? 'youtube.links' : 'golive.links', say);
+      refresh();
+    }
+  }, { tone: 'warn' });
+}
+
+function recentSection(sessions, linked = new Set(), say = notice()) {
   const group = section('Recent streams', null, { count: sessions.length });
   group.body.append(table([
     { label: 'Member', cell: (row) => nameNode(row.user_id, row.user_name) },
@@ -1184,7 +1219,8 @@ function recentSection(sessions) {
     { label: 'Title', cell: (row) => row.title, className: 'wrap' },
     { label: 'How', cell: (row) => (row.also_source ? `${row.source} + ${row.also_source}` : row.source) },
     { label: 'Mode then', cell: (row) => badge(row.mode, row.mode === 'on' ? 'ok' : 'warn') },
-  ], sessions, { empty: 'No streams have been seen yet.' }));
+    { label: 'Link', cell: (row) => linkFromHistory(row, linked, say) },
+  ], sessions, { empty: 'No streams have been seen yet.' }), say);
   return group.node;
 }
 
@@ -1462,7 +1498,7 @@ async function load() {
     liveSection(cards),
     streamersSection(rows, say),
     await announcementSection(golive, placed.wording),
-    recentSection(past),
+    recentSection(past, new Set([...links, ...youtubeLinks].map((one) => String(one.user_id ?? one.member_id ?? ''))), say),
     rest,
   );
 }
