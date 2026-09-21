@@ -19,15 +19,19 @@ from black_bloc.cogs.content.spotlight import (
     end_session,
     expire_for_event,
     forget_spotlight,
+    link_youtube,
     mode_lines,
     open_session,
     open_sessions,
     recent_sessions,
     render_spotlight,
     run_spotlight_move,
+    set_announce,
     set_announced,
+    set_spotlight,
     spotlight_channel,
     start_session,
+    unlink_youtube,
     update_channel,
 )
 from black_bloc.config import load_settings
@@ -189,6 +193,23 @@ class FakeHelix:
 class FakeGoLive:
     def __init__(self, helix=None):
         self.helix = helix
+
+
+class FakeYouTubeClient:
+    def __init__(self, channel_id=None, title="", raises=None):
+        self.channel_id = channel_id
+        self.title = title
+        self.raises = raises
+
+    async def resolve(self, given):
+        if self.raises is not None:
+            raise self.raises
+        return (self.channel_id, self.title)
+
+
+class FakeYouTube:
+    def __init__(self, channel_id=None, title="", raises=None):
+        self.client = FakeYouTubeClient(channel_id, title, raises)
 
 
 class FakeBot:
@@ -1044,3 +1065,242 @@ async def test_the_first_announcement_writes_twitchs_own_spelling_onto_the_row(b
         bot, bot.guild, None, by=STAFF, staff=True, spotlight=fresh
     )
     assert bot.guild.get_role(made.role_id).name == "GamesDoneQuick pings"
+
+
+# --- the channel record: spotlight and the opt-out are toggles on a row that persists ---------
+
+
+async def test_a_channel_with_the_spotlight_off_is_announced_like_a_member_and_never_pinned(
+    bot, cog
+):
+    row = await a_row(bot, spotlight=False)
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    assert bot.guild.channel.texts, "nothing was announced at all"
+    message = bot.guild.channel.messages[-1]
+    assert message.pinned is False and message.pins == []
+    said = await details_of(bot.db, "golive.spotlight_announced")
+    assert said["spotlight"] is False and said["pin"] is False
+    assert await open_session(bot.db, row["id"]) is not None
+
+
+async def test_the_spotlight_off_announcement_is_the_same_wording_a_member_gets(bot, cog):
+    await bot.store.set(GUILD, "golive_template", "{name} is live: {url}")
+    row = await a_row(bot, spotlight=False)
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    assert bot.guild.channel.texts[-1] == (
+        "GamesDoneQuick is live: https://www.twitch.tv/gamesdonequick"
+    )
+    assert row is not None
+
+
+async def test_a_channel_with_the_spotlight_off_is_never_bumped(bot, cog):
+    row = await a_row(bot, spotlight=False, bump_hours=1)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    session = await open_session(bot.db, row["id"])
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET started_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=9)).isoformat(), session["id"]),
+    )
+    await bot.db.conn.commit()
+
+    await cog.poll_once()
+
+    assert len(bot.guild.channel.messages) == 1
+    assert "golive.spotlight_bumped" not in await kinds(bot.db)
+
+
+async def test_the_end_still_rewrites_a_spotlight_off_announcement_in_the_past_tense(bot, cog):
+    await bot.store.set(GUILD, SPOTLIGHT_END_MISSES_KEY, 1)
+    row = await a_row(bot, spotlight=False)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    message = bot.guild.channel.messages[-1]
+    helix_of(bot)
+
+    await cog.poll_once()
+
+    assert message.edits, "the announcement was never marked ended"
+    assert await open_session(bot.db, row["id"]) is None
+    assert message.unpins == []
+
+
+async def test_the_toggle_keeps_the_row_its_role_and_its_sessions(bot, cog):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    row = await a_row(bot)
+    role_id = await a_fan_role(bot, row)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    session = await open_session(bot.db, row["id"])
+
+    said, picked = await run_spotlight_move(
+        bot, bot.guild, FakeActor(), row["id"], "spotlight_off"
+    )
+
+    assert picked is True and "like anybody else" in said
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert fresh is not None and words.is_spotlit(fresh) is False
+    held = await pings.get_spotlight_fan_role(bot.db, GUILD, row["id"])
+    assert held is not None and int(held["role_id"]) == int(role_id)
+    assert (await open_session(bot.db, row["id"]))["id"] == session["id"]
+
+    back, _ = await run_spotlight_move(
+        bot, bot.guild, FakeActor(), row["id"], "spotlight_on"
+    )
+    assert "is spotlighted" in back
+    assert words.is_spotlit(await channel_by_id(bot.db, row["id"])) is True
+
+
+async def test_a_channel_with_the_spotlight_off_is_never_purged(bot, cog):
+    row = await a_row(bot, spotlight=False)
+    await update_channel(
+        bot.db, row["id"], expires_at=(datetime.now(UTC) - timedelta(days=30)).isoformat()
+    )
+
+    await cog.sweep_expiries(bot.guild)
+
+    assert await channel_by_id(bot.db, row["id"]) is not None
+
+
+async def test_an_opted_out_channel_is_listed_and_never_announced(bot, cog):
+    row = await a_row(bot)
+    said, picked = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_out")
+    assert picked is True and "is opted out" in said
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    assert bot.guild.channel.texts == []
+    assert await open_session(bot.db, row["id"]) is None
+    assert await channel_by_id(bot.db, row["id"]) is not None
+    assert "golive.spotlight_announced" not in await kinds(bot.db)
+
+
+async def test_opting_a_channel_back_in_announces_the_next_time(bot, cog):
+    row = await a_row(bot)
+    await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_out")
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    assert bot.guild.channel.texts == []
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_in")
+
+    assert "opted back in" in said
+    await cog.poll_once()
+    assert bot.guild.channel.texts, "opting back in did not start it announcing"
+
+
+async def test_an_opted_out_channel_keeps_its_role_and_its_youtube_link(bot, cog):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    row = await a_row(bot)
+    role_id = await a_fan_role(bot, row)
+    await update_channel(bot.db, row["id"], youtube_channel_id="UC" + "x" * 22)
+
+    await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_out")
+
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert words.youtube_of(fresh) == "UC" + "x" * 22
+    held = await pings.get_spotlight_fan_role(bot.db, GUILD, row["id"])
+    assert held is not None and int(held["role_id"]) == int(role_id)
+
+
+async def test_the_panel_only_offers_the_spotlight_moves_while_the_spotlight_is_on(bot, cog):
+    row = await a_row(bot, spotlight=False)
+
+    _embed, view = await build_spotlight(bot, bot.guild, row["id"])
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert words.SPOTLIGHT_ON in labels
+    assert words.EXTEND_WEEK not in labels and words.KEEP_FOREVER not in labels
+    assert "Let it expire" not in labels and words.BUMP_NOW not in labels
+    assert words.OPT_OUT in labels and words.LINK_YOUTUBE in labels
+    assert words.REMOVE in labels
+
+    await set_spotlight(bot, bot.guild, FakeActor(), row["id"], True)
+    _embed, on = await build_spotlight(bot, bot.guild, row["id"])
+    now_labels = [getattr(one, "label", None) for one in on.children]
+    assert words.SPOTLIGHT_OFF in now_labels and "Let it expire" in now_labels
+
+
+async def test_an_opted_out_channel_is_never_offered_a_bump(bot, cog):
+    row = await a_row(bot)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    await set_announce(bot, bot.guild, FakeActor(), row["id"], False)
+
+    _embed, view = await build_spotlight(bot, bot.guild, row["id"])
+
+    assert words.BUMP_NOW not in [getattr(one, "label", None) for one in view.children]
+
+
+async def test_a_yes_or_no_that_is_neither_is_refused_rather_than_guessed(bot):
+    assert words.wanted_spotlight("yes", False) is True
+    assert words.wanted_spotlight("no", True) is False
+    assert words.wanted_spotlight("", True) is True
+    assert words.wanted_spotlight("maybe", True) is None
+
+
+async def test_linking_a_youtube_channel_to_a_row_and_unlinking_it_again(bot, cog):
+    row = await a_row(bot)
+    bot.cogs["YouTube"] = FakeYouTube("UCI3DTtB-a3fJPjKtQ5kYHfA", "Games Done Quick")
+
+    outcome, fresh, said = await link_youtube(
+        bot, bot.guild, FakeActor(), row["id"], "@GamesDoneQuick"
+    )
+
+    assert outcome == "linked" and "Games Done Quick" in said
+    assert words.youtube_of(fresh) == "UCI3DTtB-a3fJPjKtQ5kYHfA"
+    assert fresh["youtube_handle"] == "@GamesDoneQuick"
+
+    gone, after, unsaid = await unlink_youtube(bot, bot.guild, FakeActor(), row["id"])
+
+    assert gone == "unlinked" and "only its Twitch side" in unsaid
+    assert words.youtube_of(after) is None
+    second, _, refused = await unlink_youtube(bot, bot.guild, FakeActor(), row["id"])
+    assert second == "not_linked" and "nothing to unlink" in refused
+
+
+async def test_a_youtube_channel_that_cannot_be_resolved_is_refused_in_words(bot, cog):
+    row = await a_row(bot)
+    bot.cogs["YouTube"] = FakeYouTube(raises=RuntimeError("no such channel"))
+
+    outcome, _fresh, said = await link_youtube(
+        bot, bot.guild, FakeActor(), row["id"], "@nope"
+    )
+
+    assert outcome == "bad_channel" and "no such channel" in said
+    assert words.youtube_of(await channel_by_id(bot.db, row["id"])) is None
+
+
+async def test_with_no_youtube_half_running_the_refusal_says_so(bot, cog):
+    row = await a_row(bot)
+
+    outcome, _fresh, said = await link_youtube(
+        bot, bot.guild, FakeActor(), row["id"], "@GamesDoneQuick"
+    )
+
+    assert outcome == "no_cog" and "YouTube half is not running" in said
+
+
+async def test_the_twitch_sweep_never_ends_a_session_the_youtube_side_opened(bot, cog):
+    await bot.store.set(GUILD, SPOTLIGHT_END_MISSES_KEY, 1)
+    row = await a_row(bot)
+    await cog.announce_info(
+        bot.guild,
+        row,
+        StreamInfo(url="https://www.youtube.com/watch?v=abc", platform="YouTube"),
+        "GamesDoneQuick",
+    )
+    session = await open_session(bot.db, row["id"])
+    assert session is not None
+    helix_of(bot)
+
+    await cog.poll_once()
+    await cog.poll_once()
+
+    assert await open_session(bot.db, row["id"]) is not None
