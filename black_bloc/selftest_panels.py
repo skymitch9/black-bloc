@@ -8,6 +8,7 @@ from typing import Any
 import discord
 
 from .selftest import Check, CheckFailed, Run
+from .settings_store import GOLIVE_LIVE_AUTHOR_KEY
 
 MEMBER = "member"
 GUILD = "guild"
@@ -128,8 +129,14 @@ async def send_golive(one: Run) -> str:
         platform="twitch",
     )
     member = _member(one)
-    text = golive.render(one.bot.store.get(one.guild.id, "golive_template"), info, member)
-    await one.post(content=text, embed=golive.announcement_embed(info, member, "presence"))
+    store = one.bot.store
+    text = golive.render(store.get(one.guild.id, "golive_template"), info, member)
+    await one.post(
+        content=text,
+        embed=golive.announcement_embed(
+            info, member, "presence", author=store.get(one.guild.id, GOLIVE_LIVE_AUTHOR_KEY)
+        ),
+    )
     return SENT.format(what="the go-live card, with its sentence")
 
 

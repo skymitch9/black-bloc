@@ -1392,6 +1392,15 @@ async def test_the_end_wording_a_guild_set_reaches_both_halves_of_the_message(
     assert posted.embed.footer.text == "Black Bloc · via Twitch · (that's a wrap)"
 
 
+async def test_the_live_author_a_guild_set_reaches_the_card_it_posts(cog, bot, member):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_live_author", "{name} went live on {platform}")
+
+    await cog._go_live(member, from_twitch(twitch_stream()), "twitch")
+
+    assert bot.guild.channel.messages[0].embed.author.name == "Alice went live on Twitch"
+
+
 async def test_the_end_template_and_author_a_guild_set_reach_the_edit_with_the_length(
     cog, bot, member, db
 ):

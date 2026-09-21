@@ -36,6 +36,8 @@ from black_bloc.settings_store import (
     GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
     GOLIVE_END_TEMPLATE,
+    GOLIVE_LIVE_AUTHOR,
+    GOLIVE_LIVE_AUTHOR_KEY,
     GOLIVE_LIVE_FIELD,
     GOLIVE_TEMPLATE,
     HONEYPOT_PURGE_MAX_DAYS,
@@ -2500,6 +2502,38 @@ def test_the_moved_line_takes_post_and_refuses_any_other_placeholder():
         coerce_value(EVENTS_MOVED_LINE_KEY, "Off to {nowhere} we go.")
 
     assert "{nowhere}" in str(caught.value) and "{post}" in str(caught.value)
+
+
+# --- the live card's top line (end-wording-design §C2) -----------------------------------------
+
+
+def test_the_live_author_is_a_golive_text_key_with_help_and_the_words_the_card_reads_today():
+    assert KEY_TYPES[GOLIVE_LIVE_AUTHOR_KEY] == "text"
+    assert namespace_of(GOLIVE_LIVE_AUTHOR_KEY) == "golive"
+    assert "{name}" in KEY_HELP[GOLIVE_LIVE_AUTHOR_KEY]
+    assert "{platform}" in KEY_HELP[GOLIVE_LIVE_AUTHOR_KEY]
+    assert "{duration}" not in KEY_HELP[GOLIVE_LIVE_AUTHOR_KEY]
+
+
+async def test_the_live_author_ships_the_line_the_card_already_drew(store):
+    assert store.get(7, GOLIVE_LIVE_AUTHOR_KEY) == GOLIVE_LIVE_AUTHOR
+    assert GOLIVE_LIVE_AUTHOR == "{name} is now live on {platform}!"
+
+
+def test_the_live_author_takes_name_and_platform_and_refuses_duration():
+    assert coerce_value(GOLIVE_LIVE_AUTHOR_KEY, "  {name} on {platform}  ") == (
+        "{name} on {platform}"
+    )
+
+    with pytest.raises(SettingError) as caught:
+        coerce_value(GOLIVE_LIVE_AUTHOR_KEY, "{name} has streamed {duration}")
+
+    assert "{duration}" in str(caught.value) and "{platform}" in str(caught.value)
+
+
+def test_the_live_author_may_be_left_blank_so_the_card_keeps_its_own_line():
+    assert coerce_value(GOLIVE_LIVE_AUTHOR_KEY, "") == ""
+    assert coerce_value(GOLIVE_LIVE_AUTHOR_KEY, GOLIVE_LIVE_AUTHOR) == GOLIVE_LIVE_AUTHOR
 
 
 # --- co-streaming: the switch and the two wordings (costream-design §B) ------------------------

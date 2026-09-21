@@ -415,6 +415,18 @@ async def test_the_card_names_the_channel_not_someone(bot, cog):
     assert "Someone" not in card.author.name
 
 
+async def test_the_spotlight_card_uses_the_guilds_own_live_top_line(bot, cog):
+    await a_row(bot)
+    await bot.store.set(bot.guild.id, "golive_live_author", "{name} is streaming on {platform}")
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    assert bot.guild.channel.messages[0].embed.author.name == (
+        "GamesDoneQuick is streaming on Twitch"
+    )
+
+
 async def test_a_row_with_pin_off_is_announced_and_left_unpinned(bot, cog):
     await a_row(bot, pin=False)
     helix_of(bot, twitch_stream())

@@ -147,6 +147,24 @@ def test_a_mention_of_something_gone_is_named_rather_than_left_as_an_id(store):
     assert found["channels"] == [{"id": "2", "name": "deleted-channel"}]
 
 
+def test_the_live_top_line_is_drawn_from_the_draft_the_editor_holds(bot, guild):
+    found = preview.render(
+        bot, guild, "golive_live", {"golive_live_author": "{name} just went live on {platform}"}
+    )
+
+    assert found.embeds[0]["author"]["name"] == "Casey just went live on Twitch"
+
+
+def test_the_live_editor_may_override_both_of_its_own_keys_and_nothing_else(bot, guild):
+    assert preview.RENDERERS["golive_live"].keys == (
+        "golive_template",
+        "golive_live_author",
+    )
+
+    with pytest.raises(preview.PreviewRefused):
+        preview.render(bot, guild, "golive_live", {"golive_end_author": "nope"})
+
+
 def test_the_ended_wording_reads_only_the_end_keys(bot, guild):
     found = preview.render(
         bot, guild, "golive_ended", {"golive_end_author": "{name} has finished"}

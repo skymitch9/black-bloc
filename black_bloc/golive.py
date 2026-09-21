@@ -206,6 +206,24 @@ def author_line(name: str, platform: str | None, *, ended: bool = False) -> str:
     return _clip(line if ended else line + "!", AUTHOR_LIMIT)
 
 
+def live_author(template: Any, name: str, platform: str | None) -> str:
+    """The card's top line while they are live; blank wording keeps 'is now live on'."""
+    wanted = str(template or "").strip()
+    if wanted:
+        try:
+            line = tidy(wanted.format_map(_Fields(name=name, platform=platform or "")))
+        except Exception as exc:
+            log.warning(
+                "go-live: live author %r could not be rendered (%s); using the default",
+                template,
+                exc,
+            )
+            line = ""
+        if line:
+            return _clip(line, AUTHOR_LIMIT)
+    return author_line(name, platform)
+
+
 def embed_colour(platform: str | None) -> int:
     return EMBED_COLOURS.get((platform or "").casefold(), EMBED_COLOUR_DEFAULT)
 
@@ -216,7 +234,12 @@ def embed_footer(source: str | None) -> str:
 
 
 def announcement_embed(
-    info: StreamInfo, member: Any = None, source: str | None = None, *, name: Any = None
+    info: StreamInfo,
+    member: Any = None,
+    source: str | None = None,
+    *,
+    name: Any = None,
+    author: Any = "",
 ) -> discord.Embed:
     """The go-live card: the streamer, the game and the game's art, never an avatar."""
     embed = discord.Embed(
@@ -225,7 +248,7 @@ def announcement_embed(
         colour=discord.Colour(embed_colour(info.platform)),
         timestamp=datetime.now(UTC),
     )
-    embed.set_author(name=author_line(name or display_name(member), info.platform))
+    embed.set_author(name=live_author(author, name or display_name(member), info.platform))
     embed.add_field(name=EMBED_GAME_FIELD, value=_clip(info.game or GAME_FALLBACK, FIELD_LIMIT))
     image = info.box_art_url or info.thumbnail_url
     if image:
@@ -515,10 +538,12 @@ def costream_embed(
     return both
 
 
-def single_embed(embed: Any, info: StreamInfo, name: str, source: Any = None) -> discord.Embed:
+def single_embed(
+    embed: Any, info: StreamInfo, name: str, source: Any = None, author: Any = ""
+) -> discord.Embed:
     """The card back on one platform once the other has gone; the session is still live."""
     alone = discord.Embed.from_dict(embed.to_dict())
-    alone.set_author(name=author_line(name, info.platform))
+    alone.set_author(name=live_author(author, name, info.platform))
     alone.colour = discord.Colour(embed_colour(info.platform))
     alone.url = info.url or None
     alone.set_footer(text=embed_footer(source))

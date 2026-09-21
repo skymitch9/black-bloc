@@ -24,6 +24,7 @@ from .settings_store import (
 log = logging.getLogger(__name__)
 
 GOLIVE_TEMPLATE_KEY = "golive_template"
+GOLIVE_LIVE_AUTHOR_KEY = "golive_live_author"
 GOLIVE_PING_ROLE_KEY = "golive_ping_role_id"
 GOLIVE_END_TEMPLATE_KEY = "golive_end_template"
 GOLIVE_END_AUTHOR_KEY = "golive_end_author"
@@ -252,7 +253,13 @@ def _live(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> tuple[str
         name=name,
         ping_role_id=store.get(guild.id, GOLIVE_PING_ROLE_KEY),
     )
-    return content, gl.announcement_embed(info, source=facts.get("source"), name=name)
+    embed = gl.announcement_embed(
+        info,
+        source=facts.get("source"),
+        name=name,
+        author=store.get(guild.id, GOLIVE_LIVE_AUTHOR_KEY),
+    )
+    return content, embed
 
 
 def golive_live(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
@@ -451,7 +458,7 @@ RENDERERS: dict[str, Renderer] = {
             "The announcement while they are live",
             "golive.html",
             golive_live,
-            keys=(GOLIVE_TEMPLATE_KEY,),
+            keys=(GOLIVE_TEMPLATE_KEY, GOLIVE_LIVE_AUTHOR_KEY),
             sample=dict(GOLIVE_SAMPLE),
         ),
         Renderer(

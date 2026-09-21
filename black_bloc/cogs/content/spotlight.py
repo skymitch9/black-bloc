@@ -49,6 +49,7 @@ GOLIVE_COG = "GoLive"
 CHANNEL_KEY = "golive_channel_id"
 PING_KEY = "golive_ping_role_id"
 TEMPLATE_KEY = "golive_template"
+LIVE_AUTHOR_KEY = "golive_live_author"
 EMBED_KEY = "golive_embed"
 END_TEMPLATE_KEY = "golive_end_template"
 END_AUTHOR_KEY = "golive_end_author"
@@ -449,7 +450,12 @@ class Spotlight(commands.Cog):
             name=name,
         )
         embed = (
-            announcement_embed(info, source=SOURCE, name=name)
+            announcement_embed(
+                info,
+                source=SOURCE,
+                name=name,
+                author=store.get(guild.id, LIVE_AUTHOR_KEY),
+            )
             if store.get(guild.id, EMBED_KEY)
             else None
         )

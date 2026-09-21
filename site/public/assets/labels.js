@@ -24,6 +24,7 @@ export const LABELS = {
   golive_mode: 'Whether the bot announces streams',
   golive_channel_id: 'Where a go-live announcement is posted',
   golive_template: 'What a go-live announcement says',
+  golive_live_author: "What the card's top line says while they are live",
   golive_embed: 'Whether the announcement is posted as an embed',
   golive_end_template: 'What the announcement says once the stream is over',
   golive_end_author: "What the card's top line says once the stream is over",

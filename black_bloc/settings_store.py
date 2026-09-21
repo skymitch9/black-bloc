@@ -63,6 +63,9 @@ GOLIVE_TEMPLATE = (
 )
 GOLIVE_MODES = ("off", "shadow", "on")
 GOLIVE_LIVE_FIELD = "{live}"
+GOLIVE_LIVE_AUTHOR_KEY = "golive_live_author"
+GOLIVE_LIVE_AUTHOR = "{name} is now live on {platform}!"
+GOLIVE_AUTHOR_FIELDS = ("name", "platform")
 GOLIVE_END_TEMPLATE = "**{name}** was streaming **{game}** — the stream has ended. {url}"
 GOLIVE_END_SUFFIX_RETIRED = "golive_end_suffix"
 GOLIVE_END_MODE_RETIRED = "golive_end_mode"
@@ -297,6 +300,7 @@ KEY_TYPES: dict[str, str] = {
     "golive_mode": "enum",
     "golive_channel_id": "channel",
     "golive_template": "text",
+    GOLIVE_LIVE_AUTHOR_KEY: "text",
     "golive_end_template": "text",
     "golive_end_author": "text",
     "golive_end_keep_mention": "bool",
@@ -694,6 +698,9 @@ KEY_HELP: dict[str, str] = {
     "golive_mode": "off, shadow (log only) or on (post go-live announcements)",
     "golive_channel_id": "where go-live announcements are posted",
     "golive_template": "the announcement wording; {name} {game} {title} {url} {platform}",
+    GOLIVE_LIVE_AUTHOR_KEY: (
+        "the card's top line while they are live; {name} {platform}; blank keeps 'is now live on'"
+    ),
     "golive_end_template": (
         "the announcement once the stream is over, and the only place that wording lives. "
         "{live} is the sentence exactly as it was posted, so {live} — stream ended appends "
@@ -2827,6 +2834,11 @@ BUMP_UNKNOWN = (
     "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. A "
     "spotlight reminder may stand in for {allowed}; write any other braces out as words."
 )
+LIVE_AUTHOR_UNKNOWN = (
+    "`{{{found}}}` is not something Black Bloc knows while a stream is still running, so "
+    "nothing was changed. The card's top line may stand in for {allowed}; write any other "
+    "braces out as words."
+)
 
 PLACEHOLDERS = re.compile(r"\{([^{}]*)\}")
 
@@ -2957,6 +2969,27 @@ def checked_bump(given: Any) -> str:
     return text
 
 
+def checked_live_author(given: Any) -> str:
+    """`{name}` and `{platform}` only — a stream that has not ended has no `{duration}`."""
+    text = str(given or "").strip()
+    stray = next(
+        (
+            one.strip()
+            for one in PLACEHOLDERS.findall(text)
+            if one.strip() not in GOLIVE_AUTHOR_FIELDS
+        ),
+        None,
+    )
+    if stray is not None:
+        raise SettingError(
+            LIVE_AUTHOR_UNKNOWN.format(
+                found=stray[:40],
+                allowed=", ".join(f"`{{{one}}}`" for one in GOLIVE_AUTHOR_FIELDS),
+            )
+        )
+    return text
+
+
 def checked_filed_line(given: Any) -> str:
     """`{request_id}` and nothing else, and it may be left out."""
     text = str(given or "").strip()
@@ -2972,6 +3005,7 @@ def checked_filed_line(given: Any) -> str:
 
 TEXT_CHECKS: dict[str, Any] = {
     DEFAULT_TIMEZONE_KEY: checked_zone,
+    GOLIVE_LIVE_AUTHOR_KEY: checked_live_author,
     GOLIVE_COSTREAM_TEMPLATE_KEY: checked_costream,
     GOLIVE_COSTREAM_AUTHOR_KEY: checked_costream,
     TIMEZONE_CHOICES_KEY: checked_zones,
@@ -2985,6 +3019,7 @@ TEXT_CHECKS: dict[str, Any] = {
 
 TEXT_MAY_BE_BLANK = (
     "golive_end_template",
+    GOLIVE_LIVE_AUTHOR_KEY,
     "golive_end_author",
     REHEARSAL_NOTE,
     WHERE_HINT_KEY,
@@ -3260,6 +3295,8 @@ class SettingsStore:
             return "shadow"
         if key == "golive_template":
             return GOLIVE_TEMPLATE
+        if key == GOLIVE_LIVE_AUTHOR_KEY:
+            return GOLIVE_LIVE_AUTHOR
         if key == "golive_end_template":
             return GOLIVE_END_TEMPLATE
         if key == "golive_end_author":

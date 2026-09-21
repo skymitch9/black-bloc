@@ -34,6 +34,7 @@ import {
   sayNothing,
   searchField,
   section,
+  segment,
   sentenceFor,
   settingsPanel,
   table,
@@ -48,6 +49,7 @@ const YOUTUBE = 'youtube';
 const PLATFORM_WORDS = { twitch: 'Twitch', youtube: 'YouTube' };
 
 const TEMPLATE_KEY = 'golive_template';
+const LIVE_AUTHOR_KEY = 'golive_live_author';
 const PING_KEY = 'golive_ping_role_id';
 const END_TEMPLATE_KEY = 'golive_end_template';
 const END_AUTHOR_KEY = 'golive_end_author';
@@ -88,8 +90,18 @@ const ADD_FIELD_HELP = 'The name in twitch.tv/…, or the address that starts wi
 const ADD_PICK_FIRST = 'Pick the member this is about first.';
 
 const ANNOUNCEMENT_NOTE = 'One wording for both platforms. {platform} fills itself in.';
-const WHILE_LIVE_TITLE = 'While they are live';
-const ENDED_TITLE = 'Once the stream has ended';
+const WORDING_TITLE = 'The wording';
+const STARTING = 'starting';
+const ENDING = 'ending';
+const SIDES = [
+  { value: STARTING, label: 'Starting' },
+  { value: ENDING, label: 'Ending' },
+];
+const SIDES_LABEL = 'Which announcement this edits';
+const LIVE_WORDING_WHERE = 'While the stream is on';
+const LIVE_HELP = 'The sentence and the card’s top line the moment they go live. The wording '
+  + 'takes {name} {game} {title} {url} {platform}; the top line takes {name} and {platform} '
+  + 'only, because a stream that is still running has no length yet.';
 const END_LIVE_HELP = '{live} is the sentence exactly as it was posted, so “{live} — stream '
   + 'ended” adds to the end of it and a wording without {live} replaces the whole post. The '
   + 'rest of the fields are {name} {game} {title} {url} {platform} {duration}. The announcement '
@@ -100,7 +112,8 @@ const END_WORDING_WHERE = 'Once the stream is over';
 const NO_TEMPLATE = 'The bot did not report a golive_template key, so this editor is not shown '
   + 'rather than guessed at.';
 const MOCK_NOTE = 'Every box below is drawn by the bot itself — the same functions Discord gets, '
-  + 'not a copy living on this page. The mock under each one repaints as you type.';
+  + 'not a copy living on this page. The mock under each one repaints as you type. Starting and '
+  + 'ending are the same two boxes, so they share one card.';
 const LIVE_FEATURE = 'golive_live';
 const ENDED_FEATURE = 'golive_ended';
 
@@ -946,7 +959,8 @@ async function announcementSection(specs, wordingSpecs) {
     group.body.append(el('p', { class: 'say-nothing', text: NO_TEMPLATE }));
     return group.node;
   }
-  const shape = { which: TWITCH };
+  const shape = { which: TWITCH, side: STARTING };
+  const liveAuthor = specs.find((one) => one.key === LIVE_AUTHOR_KEY) || null;
   const endTemplate = specs.find((one) => one.key === END_TEMPLATE_KEY) || null;
   const endAuthor = specs.find((one) => one.key === END_AUTHOR_KEY) || null;
 
@@ -956,7 +970,10 @@ async function announcementSection(specs, wordingSpecs) {
     game: SAMPLES[shape.which].game,
   });
 
-  const liveMade = await templateEditor(spec, {
+  const liveWanted = [{ ...spec, editorType: 'longtext' }];
+  if (liveAuthor) liveWanted.push({ ...liveAuthor, editorType: 'longtext' });
+  const liveMade = await templateEditor(liveWanted, {
+    where: LIVE_WORDING_WHERE,
     sample: () => ({ ...SAMPLES[shape.which] }),
     preview: { feature: LIVE_FEATURE, sample: facts },
   });
@@ -989,30 +1006,43 @@ async function announcementSection(specs, wordingSpecs) {
 
   const endRows = wordingSpecs.filter((one) => one.key === END_KEEP_KEY);
 
+  const starting = el('div', { 'data-side': STARTING }, [
+    el('p', { class: 'field-help', text: LIVE_HELP }),
+    ...liveMade.rows.map((row) => row.node),
+    liveMade.mock.node,
+    liveMade.mock.say,
+    liveMade.say,
+  ].filter(Boolean));
+
+  const ending = el('div', { 'data-side': ENDING, hidden: true }, [
+    el('p', { class: 'field-help', text: END_LIVE_HELP }),
+    ...(endMade
+      ? endMade.rows.map((row) => row.node)
+      : [el('p', { class: 'say-nothing', text: END_NO_KEYS })]),
+    endMade ? endMade.mock.node : null,
+    endMade ? endMade.mock.say : null,
+    endRows.length
+      ? await settingsPanel(endRows, {
+        onSaved: () => { if (endMade) endMade.repaint(); },
+        where: END_WORDING_WHERE,
+      })
+      : null,
+    endMade ? endMade.say : null,
+  ].filter(Boolean));
+
+  const sides = segment(SIDES, shape.side, {
+    onChange: () => {
+      shape.side = sides.readValue() || STARTING;
+      starting.hidden = shape.side !== STARTING;
+      ending.hidden = shape.side !== ENDING;
+    },
+  });
+  sides.setAttribute('aria-label', SIDES_LABEL);
+
   group.body.append(
     el('p', { class: 'field-help', text: MOCK_NOTE }),
     chips,
-    card(WHILE_LIVE_TITLE, [
-      liveMade.row.node,
-      liveMade.mock.node,
-      liveMade.mock.say,
-      liveMade.say,
-    ].filter(Boolean)),
-    card(ENDED_TITLE, [
-      el('p', { class: 'field-help', text: END_LIVE_HELP }),
-      ...(endMade
-        ? endMade.rows.map((row) => row.node)
-        : [el('p', { class: 'say-nothing', text: END_NO_KEYS })]),
-      endMade ? endMade.mock.node : null,
-      endMade ? endMade.mock.say : null,
-      endRows.length
-        ? await settingsPanel(endRows, {
-          onSaved: () => { if (endMade) endMade.repaint(); },
-          where: ENDED_TITLE,
-        })
-        : null,
-      endMade ? endMade.say : null,
-    ].filter(Boolean)),
+    card(WORDING_TITLE, [starting, ending], { actions: [sides] }),
   );
   return group.node;
 }
