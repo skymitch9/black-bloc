@@ -2,7 +2,13 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-21 09:5x** — the v151 docs ritual. **KI-33 and KI-34 ADDED**, both `WATCHING`:
+> Last verified: **2026-09-21 10:38** — the v152 docs ritual. **KI-35 ADDED**, `WATCHING`: an unexplained
+> random-order flake in the v152 deploy gate — **2 tests failed on ONE of six runs and the two names were LOST**;
+> five later runs were clean. It is NOT KI-32 and NOT KI-26 on the evidence available, because nothing records
+> which tests they were. ⚠️ **Nothing else in this file was re-tested at v152:** no symptom was reproduced, nothing
+> met live Discord, no browser rendered a page, **KI-26's count stands unchanged at TWENTY-TWO** (the v152 gate
+> runs did not stall) and **KI-32 stands at ONE sighting** (the v152 gate did not name that test). Before that,
+> **2026-09-21 09:5x** — the v151 docs ritual. **KI-33 and KI-34 ADDED**, both `WATCHING`:
 > a node fixture with a date written into it (`discordmock.test.mjs` went red on 2026-09-21 on unchanged code,
 > on `main` AND on v150 alike), and one `say` node handed to two sections, which put the **Link from history**
 > report inside the COLLAPSED Recent streams — five notices still share that node. Both were found by the v151
@@ -129,6 +135,26 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-35 — The v152 deploy gate went red on TWO tests in one run of six and the names were LOST — `WATCHING`
+
+**Symptom.** Running the v152 gate (`pytest`, random order) the suite reported **2 failed** on **one of six runs**;
+**five later runs were clean** and the release shipped on a green pair (**7189 passed, 3 skipped**, both orders). ⚠️
+**The two test names were not captured** — the summary was read and the run scrolled away — so there is nothing to
+reproduce, nothing to name, and no file to point at. **Status: WATCHING** (one sighting, zero evidence).
+**Why tolerated.** Nothing in the bot is known to misbehave: the release's own gate was green in both orders before
+the deploy, and the boot, `/health` and `release.json` all answered correctly on live afterwards. The three shapes
+this could be are all already tolerated and all already say *read the log, re-run, move on* — a Windows file-handle
+race (**KI-32**), the xdist stall family (**KI-26**, which this was not: the run finished and reported) and a
+date-dependent fixture (**KI-33**, whose fuse fires at midnight and fired the day before). Chasing a failure with no
+name would mean re-running the suite until it reproduces, which costs more than the next sighting costs — and the
+next sighting, if the names are captured, resolves it into one of the three or into a real bug in one call.
+**What would change it.** ⚠️ **A re-run that CAPTURES THE TWO NAMES** — that is the whole ask, and it is the number
+this entry is missing. Any gate or agent that sees a red run on unchanged code writes the `FAILED` lines down before
+re-running; with the names in hand this entry either folds into KI-32 / KI-33 or becomes a build of its own. A second
+nameless sighting promotes it anyway: the gate starts running with the failures teed to a file
+(`pytest --tb=no -q > <file>`) so a name can never be lost again. Until then this stays a **read the log** item — a
+two-test red on a random-order run that is green on a re-run the same day is this entry, not the build.
 
 ## KI-34 — One `say` node handed to two sections lives in ONE of them, so a notice can render inside a COLLAPSED section — `WATCHING`
 

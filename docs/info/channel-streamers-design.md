@@ -12,10 +12,14 @@
 > session* item on [`../TODO.md`](../TODO.md), branch `channel-optout`. Was 🔨 BUILT on branch `channel-streamers`
 > 2026-09-21 (design: Fable, 08:2x, dispatched to Opus the
 > same turn). The `## Deviations` foot is the truth where this body departs from
-> 🔨 **FOLLOW-UP merged to `main` 2026-09-21 10:1x from branch `channel-optout`** — *opting a channel out while it is LIVE
-> now ends the announcement that is already out*, which Deviation 5 below got wrong; read
+> ✅ **FOLLOW-UP LIVE v152 (2026-09-21 10:35)** — release commit `32d3c0b` (which is also the deployed commit),
+> `release.json` says `v152` at `8dcb52f`; merge `8dcb52f` of branch `channel-optout`, 2 commits, key
+> **`golive_channel_optout_post`**, registry keys **297**, sweeps **730–731** (were `CO-a` / `CO-b`) and **neither has been
+> walked**. *Opting a channel out while it is LIVE now ends the announcement that is already out*, which Deviation 5 below
+> got wrong; read
 > [**§ Follow-up 2026-09-21**](#follow-up-2026-09-21-opting-out-ends-the-announcement-that-is-already-out) before trusting
-> Deviation 5. ⚠️ The follow-up is on the local mock, NOT deployed, and has not met Discord.
+> Deviation 5. ⚠️ **Nothing in the follow-up has met Discord or Helix** — the only live move after the v152 boot was ESA
+> being opted back in and out once through the site to settle its open session, and ⚠️ **its result was not captured**.
 > what was built, and `## What was NOT verified` is the honest half; sweeps `CS-a` … `CS-g` in
 > [`../access/sweeps.md`](../access/sweeps.md) are the proof that is missing. ⚠️ **Schema is 52 and the migration
 > added FOUR columns, not three** — `announce` is the owner's mid-build ask. Was: **Last verified: 2026-09-21 08:2x** against `main` `c4cc672`
@@ -106,8 +110,9 @@ drawer in both toggle states and Add a streamer with no member. Docs: `code-note
 
 ## Follow-up 2026-09-21: opting out ENDS the announcement that is already out
 
-> 🔨 **BUILT on branch `channel-optout` 2026-09-21**, off `main` `1a35d75` (v151 live). ⚠️ **Not
-> merged, not deployed, and nothing in it has met Discord.** Sweeps `CO-a` and `CO-b`.
+> ✅ **LIVE v152 (2026-09-21 10:35)** — built on branch `channel-optout` off `main` `1a35d75` (v151 live), merged as
+> `8dcb52f`, deployed commit `32d3c0b`. ⚠️ **Nothing in it has met Discord or Helix.** Sweeps **730–731** (were `CO-a`
+> and `CO-b`), neither walked.
 
 **The defect, owner verbatim (2026-09-21 09:5x):** *"the bot went live and annouced esam and pinned
 it, it should have been in the list silent. i opted out of the spotlight for it and opted out of
