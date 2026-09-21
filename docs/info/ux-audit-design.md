@@ -306,3 +306,39 @@ refused in words.
    the mock plus the bot's test client. The other two badges (`requestTally`, `pollTally`) were read
    and left alone: `/api/rolemenus/requests?status=pending` is a DIFFERENT route with its own status
    words, where `pending` is correct, and `/api/polls?status=open&per_page=1` already works.
+
+### 2026-09-20 — `events` had a huge gap and a bunched left column (branch `events-spacing`)
+
+The owner, looking at the mock at ~1512 px wide: *"the events page is too crowded, huge gap in the
+middle and the left is bunched, space this out."* Two events pages exist on the mock
+(`site/public/events.html` and the audit's static `site/public/preview/events.html`); only the real
+one has the defect — the preview's every `#dash` child is already `wide()` (the banner is
+`data-span="full"`, the tab switch is a `.bar`, and both `Queue` and `Reference` carry a table), so
+`layout.js:mountColumns` never pairs anything into a `.twocol` there. Measured in
+`chrome-headless-shell` at 1512×802, fresh load, no localStorage:
+
+`site/public/events.html` `#dash` children in order: **Queue** (wide, table, 228 px, standalone) ·
+**a `.twocol` pairing `Events forum` (348 px — forced `open: true`, `page-events.js:556`) against
+`Settings` (34 px — collapsed by default, the ordinary state)**. `columnSplit` on a run of exactly
+two blocks always puts one per column (`columns.js:columnSplit` only has one candidate split point
+when `heights.length === 2`), so document order alone decided the pairing, not the heights — and
+`Events forum`'s `open: true` means it is *always* taller than a `Settings` block nobody has opened
+yet. That produced a 314 px gap under `Settings` on every fresh load, not just this one seed. Below
+that: `Logs` (34 px, standalone) · `Raid trains` (34 px, standalone) · a second `.twocol` pairing
+`Raid train settings` / `Raid train logs` (34/34, both collapsed, already even).
+
+**Fix:** `page-events.js:557` — `forumBox.node.setAttribute('data-span', 'full')`, the same
+attribute `page-guides.js` and `page-posts.js` already use to pin a block out of the balancer
+(`code-notes.md:6451`, `:7468`). `Events forum` now stands full-width like `Queue`/`Logs`/`Raid
+trains` around it; `Settings` is left alone in its run (below `RUN_MIN`) and also renders
+full-width instead of pairing lopsided. No change to `columns.js` or `layout.js` — both are owned
+by other agents right now and the defect did not require touching either.
+
+**Measured after**, same page, same browser: no `.twocol` before `Raid train settings`/`Raid train
+logs`; `Queue` 228 px, `Events forum` 287 px (full width lets its paragraph re-wrap shorter),
+`Settings`/`Logs`/`Raid trains` each 34 px standalone, the trailing pair still 34/34. Zero console
+messages. 390 px wide: `scrollWidth` equals `innerWidth` (390) on both `events.html` and
+`preview/events.html` — no horizontal overflow either page.
+
+**What was NOT verified:** the owner's own browser window, not chrome-headless-shell 149 at a
+simulated 1512×802 — nothing here reaches Discord, and none of it needed to.
