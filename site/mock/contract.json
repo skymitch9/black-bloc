@@ -943,6 +943,12 @@
         "until",
         "bump_hours",
         "pin",
+        "spotlight",
+        "announce",
+        "opted_out",
+        "youtube_channel_id",
+        "youtube_handle",
+        "youtube_url",
         "event_id",
         "role_id",
         "role",
@@ -956,8 +962,9 @@
       "method": "POST",
       "path": "/api/golive/spotlight",
       "body": {
-        "twitch_login": "rpglimitbreak",
-        "days": 7
+        "twitch_login": "contractchannel",
+        "days": 7,
+        "spotlight": true
       },
       "read_by": [
         "page-golive.js addStreamerButton"
@@ -976,6 +983,12 @@
         "until",
         "bump_hours",
         "pin",
+        "spotlight",
+        "announce",
+        "opted_out",
+        "youtube_channel_id",
+        "youtube_handle",
+        "youtube_url",
         "event_id",
         "role_id",
         "role",
@@ -990,7 +1003,7 @@
       "method": "PATCH",
       "path": "/api/golive/spotlight/{spotlight_id}",
       "body": {
-        "days": 14
+        "spotlight": false
       },
       "read_by": [
         "page-golive.js spotlightMoves"
@@ -1009,6 +1022,12 @@
         "until",
         "bump_hours",
         "pin",
+        "spotlight",
+        "announce",
+        "opted_out",
+        "youtube_channel_id",
+        "youtube_handle",
+        "youtube_url",
         "event_id",
         "role_id",
         "role",

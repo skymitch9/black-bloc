@@ -10,6 +10,7 @@ from typing import Any
 from .golive import (
     GAME_FALLBACK,
     TWITCH,
+    YOUTUBE,
     StreamInfo,
     _Fields,
     humanise_duration,
@@ -25,6 +26,7 @@ log = logging.getLogger(__name__)
 LOGIN_MAX = 25
 PLATFORM = TWITCH
 CHANNEL_URL = "https://www.twitch.tv/{login}"
+YOUTUBE_URL = "https://www.youtube.com/channel/{channel_id}"
 PIN_REASON = "Black Bloc keeps this spotlight pinned while it streams"
 UNPIN_REASON = "Black Bloc unpinned this spotlight — the stream is over"
 KEPT = "kept"
@@ -82,6 +84,11 @@ ADDED = (
 )
 ADDED_PIN = "pins the announcement for the duration"
 ADDED_NO_PIN = "leaves the announcement unpinned"
+ADDED_PLAIN = (
+    "**{login}** is on the list, {when}. Black Bloc announces it in the go-live channel "
+    "whenever it goes live, exactly as it announces anybody else's stream, and edits the post "
+    "to past tense when it ends. **Spotlight on** adds the pin and the reminders."
+)
 REMOVED = (
     "**{login}** is off the spotlight list. Any announcement it has out there is left as "
     "posted; nothing else was changed."
@@ -112,9 +119,11 @@ PANEL_INTRO = (
     "server behind them. Adding one is staff-only."
 )
 PANEL_EMPTY = "No channel is spotlighted yet."
-PANEL_ROW = "**{login}** — {when}{live}{note}"
+PANEL_ROW = "**{login}** — {when}{spot}{youtube}{live}{note}"
 PANEL_LIVE = " · **live now**"
 PANEL_NOTE = " · {note}"
+PANEL_SPOTLIT = " · spotlit"
+PANEL_YOUTUBE = " · {said}"
 ADD_BUTTON = "Add a channel…"
 ADD_MODAL_TITLE = "Spotlight a Twitch channel"
 ADD_LOGIN_LABEL = "The name after twitch.tv/"
@@ -131,7 +140,7 @@ EXTEND_WEEK = "Extend a week"
 KEEP_FOREVER = "Keep for ever"
 BUMP_NOW = "Bump now"
 REMOVE = "Remove"
-SPOTLIGHT_BUTTON = "Spotlight…"
+SPOTLIGHT_BUTTON = "Channels…"
 EVENT_SPOTLIGHT_LABEL = "Spotlight this stream"
 EVENT_NOT_TWITCH = (
     "This event's **Where** is not a twitch.tv address, so there is no channel to spotlight. "
@@ -147,6 +156,91 @@ SPOTLIT_UNTIL = "Spotlighted until {when}."
 GIVE_PING_ROLE = "Give it a ping role"
 TAKE_PING_ROLE = "Remove its ping role"
 PING_ROLE_LINE = " · <@&{role_id}>"
+
+SPOTLIGHT_ON = "Spotlight on"
+SPOTLIGHT_OFF = "Spotlight off"
+SPOTLIT_SAID = (
+    "**{login}** is spotlighted: its announcement is pinned while it streams and a reminder "
+    "goes out every so often. Everything else about the channel stays as it is."
+)
+NOT_SPOTLIT_SAID = (
+    "**{login}** is announced like anybody else's stream now — one post when it goes live, "
+    "edited to past tense when it ends, no pin and no reminders. It stays on the list."
+)
+SPOTLIT_STATE = "Spotlighted — pinned while it streams, reminded every {hours} h."
+NOT_SPOTLIT_STATE = "Announced like any other stream — no pin, no reminders."
+CHANNEL_ONLY_NOTE = "A channel Black Bloc watches by name. Nobody here is behind it."
+
+NEEDS_A_TWITCH_NAME = (
+    "**{given}** is a YouTube channel, and a channel row still needs a Twitch name to hang "
+    "on, so nothing was added. Add the channel by its Twitch name first, then **Link a "
+    "YouTube channel** on its own row puts the YouTube side on it."
+)
+NO_YOUTUBE_GIVEN = (
+    "No YouTube channel was given, so nothing was linked. Paste the address that starts with "
+    "youtube.com/channel/UC…, or the @handle."
+)
+YOUTUBE_LINKED = (
+    "**{login}** is linked to {title}. Black Bloc watches that YouTube channel for live "
+    "streams as well as its Twitch one."
+)
+YOUTUBE_UNLINKED = (
+    "**{login}**'s YouTube channel is unlinked, so only its Twitch side is watched now. "
+    "Nothing else about the channel changed."
+)
+NO_YOUTUBE_LINKED = (
+    "**{login}** has no YouTube channel linked, so there was nothing to unlink. Its row on "
+    "the Go-live page has the move that links one."
+)
+NO_YOUTUBE_COG = (
+    "Black Bloc's YouTube half is not running right now, so the channel could not be looked "
+    "up and nothing was linked. Nothing about **{login}** changed."
+)
+REMOVE_CHANNEL_ASK = (
+    "Removes {name} from the list, its spotlight, its YouTube link and its ping role (per "
+    "pings_fan_role_delete). Nothing in Discord is deleted except the role if that setting "
+    "says so."
+)
+CHANNEL_REMOVED = (
+    "**{login}** is off the list. Any announcement it has out there is left as posted; "
+    "nothing else was changed."
+)
+
+OPT_OUT = "Opt out of announcements"
+OPT_IN = "Opt back in"
+OPTED_OUT_SAID = (
+    "**{login}** is opted out, so nothing of its is announced from now on — no post, no pin "
+    "and no reminders, whatever its spotlight says. It stays on the list, it keeps its ping "
+    "role and it keeps its YouTube link, and **Opt back in** starts it announcing again."
+)
+OPTED_IN_SAID = (
+    "**{login}** is opted back in, so the next stream it starts is announced again. Nothing "
+    "that happened while it was opted out is posted after the fact."
+)
+OPTED_OUT_STATE = "Opted out — nothing of its is announced, whatever the spotlight says."
+OPTED_OUT_CELL = "opted out"
+
+LINK_YOUTUBE = "Link a YouTube channel"
+UNLINK_YOUTUBE = "Unlink it"
+REMOVE_CHANNEL = "Remove this channel"
+CHANNELS_BUTTON = "Channels…"
+CHANNELS_TITLE = "Channels"
+CHANNELS_INTRO = (
+    "Twitch channels watched by name, for org channels and marathons that have nobody in this "
+    "server behind them. Each one is announced like any other stream; **Spotlight on** adds "
+    "the pin and the reminders. Adding one is staff-only."
+)
+ADD_CHANNEL_MODAL_TITLE = "Add a channel"
+ADD_YOUTUBE_LABEL = "Its YouTube channel — blank for none"
+ADD_YOUTUBE_PLACEHOLDER = "@GamesDoneQuick"
+ADD_SPOTLIGHT_LABEL = "Spotlight it? yes or no"
+ADD_SPOTLIGHT_PLACEHOLDER = "no"
+BAD_SPOTLIGHT_ANSWER = (
+    "**{given}** is not a yes or a no, so nothing was added. Write `yes` to pin and remind "
+    "while it streams, `no` to announce it like any other stream, or leave it blank."
+)
+YES_WORDS = ("y", "yes", "on", "true", "1")
+NO_WORDS = ("n", "no", "off", "false", "0")
 
 RECONCILED = "reconciled_on_start"
 ENDED = "ended"
@@ -194,8 +288,65 @@ def channel_url(login: Any) -> str:
     return CHANNEL_URL.format(login=str(login or ""))
 
 
+def youtube_url(channel_id: Any) -> str | None:
+    wanted = str(channel_id or "").strip()
+    return YOUTUBE_URL.format(channel_id=wanted) if wanted else None
+
+
 def display_for(row: Any) -> str:
     return str(_cell(row, "display_name") or _cell(row, "twitch_login") or "")
+
+
+def announces(row: Any) -> bool:
+    """A row with no `announce` cell is one the migration has not reached: announced."""
+    found = _cell(row, "announce")
+    return True if found is None else bool(found)
+
+
+def is_spotlit(row: Any) -> bool:
+    """A row with no `spotlight` cell is one the migration has not reached: spotlighted."""
+    found = _cell(row, "spotlight")
+    return True if found is None else bool(found)
+
+
+def youtube_of(row: Any) -> str | None:
+    return str(_cell(row, "youtube_channel_id") or "").strip() or None
+
+
+def youtube_said(row: Any) -> str | None:
+    """What a channel's YouTube side is called: its handle where there is one, else its id."""
+    handle = str(_cell(row, "youtube_handle") or "").strip()
+    return handle or youtube_of(row)
+
+
+def wanted_spotlight(given: Any, fallback: bool) -> bool | None:
+    """`None` is the refusal: a word that is neither a yes nor a no, never a silent default."""
+    word = str(given or "").strip().lower()
+    if not word:
+        return fallback
+    if word in YES_WORDS:
+        return True
+    if word in NO_WORDS:
+        return False
+    return None
+
+
+def spotlight_state(row: Any, hours: Any) -> str:
+    if not announces(row):
+        return OPTED_OUT_STATE
+    if not is_spotlit(row):
+        return NOT_SPOTLIT_STATE
+    return SPOTLIT_STATE.format(hours=hours)
+
+
+def spotlight_said(row: Any) -> str:
+    login = _cell(row, "twitch_login")
+    return (SPOTLIT_SAID if is_spotlit(row) else NOT_SPOTLIT_SAID).format(login=login)
+
+
+def announce_said(row: Any) -> str:
+    login = _cell(row, "twitch_login")
+    return (OPTED_IN_SAID if announces(row) else OPTED_OUT_SAID).format(login=login)
 
 
 def keeps_forever(row: Any) -> bool:
@@ -297,13 +448,19 @@ def extended_by_days(row: Any, days: int, now: datetime | None = None) -> str:
     return (base + timedelta(days=days)).isoformat()
 
 
+def platform_of(url: Any) -> str:
+    """Which side opened a session, read off its own address — no column says it."""
+    return YOUTUBE if "youtu" in str(url or "").lower() else TWITCH
+
+
 def info_of(session: Any, login: Any) -> StreamInfo:
-    """The StreamInfo a spotlight session stands for — always Twitch, never a member."""
+    """The StreamInfo a session stands for — never a member, and the side its url names."""
+    url = _cell(session, "url") or channel_url(login)
     return StreamInfo(
-        url=_cell(session, "url") or channel_url(login),
+        url=url,
         game=_cell(session, "game"),
         title=_cell(session, "title"),
-        platform=TWITCH,
+        platform=platform_of(url),
     )
 
 
@@ -338,9 +495,12 @@ def bump_render(template: Any, info: StreamInfo, name: str, duration: str) -> st
 
 def panel_line(row: Any, live: bool, role_id: Any = None) -> str:
     note = _cell(row, "note")
+    said_youtube = youtube_said(row)
     said = PANEL_ROW.format(
         login=_cell(row, "twitch_login"),
-        when=until_words(row),
+        when=until_words(row) if is_spotlit(row) else "on the list",
+        spot=PANEL_SPOTLIT if is_spotlit(row) else "",
+        youtube=PANEL_YOUTUBE.format(said=said_youtube) if said_youtube else "",
         live=PANEL_LIVE if live else "",
         note=PANEL_NOTE.format(note=note) if note else "",
     )
@@ -348,6 +508,8 @@ def panel_line(row: Any, live: bool, role_id: Any = None) -> str:
 
 
 def added_said(row: Any, hours: int) -> str:
+    if not is_spotlit(row):
+        return ADDED_PLAIN.format(login=_cell(row, "twitch_login"), when=until_words(row))
     return ADDED.format(
         login=_cell(row, "twitch_login"),
         when=until_words(row),

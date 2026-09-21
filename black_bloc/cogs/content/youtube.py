@@ -487,9 +487,131 @@ class YouTube(commands.Cog):
             self.probed += 1
             self.last_botcheck = bool(getattr(probe, "botcheck", False))
             await self._probed(member, channel_id, probe, mode)
+        channels, channel_failed = await self._probe_channels()
+        worked += channels
         if worked:
             self.last_probe_at = now_iso()
-        self.last_probe_error = failed
+        self.last_probe_error = failed or channel_failed
+
+    async def _probe_channels(self) -> tuple[int, str | None]:
+        """The same sweep over channel rows — a streamer with no member is still a streamer."""
+        from .spotlight import channels_with_youtube
+
+        worked = 0
+        failed: str | None = None
+        for row in await channels_with_youtube(self.bot.db):
+            guild = self._guild_of(int(row["guild_id"]))
+            if guild is None:
+                continue
+            mode = self._live_mode(guild.id)
+            if mode == "off":
+                continue
+            channel_id = str(row["youtube_channel_id"])
+            try:
+                probe = await self.client.probe_live(channel_id)
+            except YouTubeError as exc:
+                failed = str(exc)
+                log.warning("youtube: could not probe channel %s: %s", channel_id, exc)
+                continue
+            worked += 1
+            self.probed += 1
+            self.last_botcheck = bool(getattr(probe, "botcheck", False))
+            if probe.live:
+                await self._channel_live(guild, row, channel_id, probe, mode)
+            else:
+                await self._channel_not_live(guild, row, channel_id)
+        return (worked, failed)
+
+    def _guild_of(self, guild_id: int) -> Any:
+        for guild in getattr(self.bot, "guilds", ()) or ():
+            if int(getattr(guild, "id", 0)) == guild_id:
+                return guild
+        return None
+
+    async def _channel_live(
+        self, guild: Any, row: Any, channel_id: str, probe: Any, mode: str
+    ) -> None:
+        """One session per channel row: whichever side sees it first opens it, and the other
+        side notes it rather than announcing the same stream twice."""
+        from ... import spotlight as spot
+        from . import spotlight as spot_cog
+
+        self.live_misses[channel_id] = 0
+        known = self.live_video.get(channel_id)
+        if known is not None and (probe.video_id is None or known == probe.video_id):
+            return
+        cog = spot_cog.cog_of(self.bot)
+        open_row = await spot_cog.open_session(self.bot.db, row["id"])
+        self.live_video[channel_id] = probe.video_id or LIVE_ID_UNKNOWN
+        if open_row is not None:
+            await self._channel_seen(guild, row, channel_id, probe, mode, joined=True)
+            return
+        info = (
+            stream_info(probe.video_id, "", "")
+            if probe.video_id
+            else channel_info(channel_id)
+        )
+        await self._channel_seen(guild, row, channel_id, probe, mode, url=info.url)
+        if cog is None:
+            log.warning(
+                "youtube: the spotlight cog is not loaded; %s is not announced", channel_id
+            )
+            return
+        async with cog._lock(row["id"]):
+            fresh = await spot_cog.channel_by_id(self.bot.db, row["id"])
+            if fresh is None or await spot_cog.open_session(self.bot.db, row["id"]):
+                return
+            await cog.announce_info(guild, fresh, info, spot.display_for(fresh))
+
+    async def _channel_seen(
+        self,
+        guild: Any,
+        row: Any,
+        channel_id: str,
+        probe: Any,
+        mode: str,
+        *,
+        joined: bool = False,
+        url: str | None = None,
+    ) -> None:
+        details = live_seen_details(channel_id, probe.video_id, probe, mode) | {
+            "spotlight_id": row["id"],
+            "login": row["twitch_login"],
+            "announced": not joined,
+        }
+        if joined:
+            details["because"] = JOINED_BECAUSE
+        if url:
+            details["url"] = url
+        await log_action(
+            self.bot,
+            guild,
+            "youtube.live_seen" if mode == "on" else "youtube.would_live_seen",
+            details=details,
+        )
+
+    async def _channel_not_live(self, guild: Any, row: Any, channel_id: str) -> None:
+        """Only the side that opened the session ends it; a Twitch one is the Twitch sweep's."""
+        from ... import spotlight as spot
+        from . import spotlight as spot_cog
+
+        misses = after_probe(self.live_misses.get(channel_id), False)
+        self.live_misses[channel_id] = misses
+        if not is_over(misses, self._end_misses(guild.id)):
+            return
+        self.live_misses[channel_id] = 0
+        self.live_video.pop(channel_id, None)
+        cog = spot_cog.cog_of(self.bot)
+        session = await spot_cog.open_session(self.bot.db, row["id"])
+        if cog is None or session is None:
+            return
+        if spot.platform_of(session["url"]) != spot.YOUTUBE:
+            return
+        async with cog._lock(row["id"]):
+            fresh = await spot_cog.open_session(self.bot.db, row["id"])
+            if fresh is None:
+                return
+            await cog._end(guild, row, fresh, spot.ENDED)
 
     async def _probed(self, member: Any, channel_id: str, probe: Any, mode: str) -> None:
         if not probe.readable:

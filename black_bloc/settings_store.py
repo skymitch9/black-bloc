@@ -1618,6 +1618,7 @@ SPOTLIGHT_BUMP_PINGS_KEY = "spotlight_bump_pings"
 SPOTLIGHT_PIN_KEY = "spotlight_pin"
 SPOTLIGHT_DEFAULT_DAYS_KEY = "spotlight_default_days"
 SPOTLIGHT_EVENT_SLACK_KEY = "spotlight_event_slack_hours"
+CHANNEL_SPOTLIGHT_DEFAULT_KEY = "golive_channel_spotlight_default"
 SPOTLIGHT_POLL_MINUTES = 5
 SPOTLIGHT_POLL_MIN_MINUTES = 2
 SPOTLIGHT_POLL_MAX_MINUTES = 30
@@ -1649,6 +1650,7 @@ KEY_TYPES.update(
         SPOTLIGHT_PIN_KEY: "bool",
         SPOTLIGHT_DEFAULT_DAYS_KEY: "int",
         SPOTLIGHT_EVENT_SLACK_KEY: "int",
+        CHANNEL_SPOTLIGHT_DEFAULT_KEY: "bool",
     }
 )
 KEY_CHOICES[SPOTLIGHT_MODE_KEY] = SPOTLIGHT_MODES
@@ -1739,6 +1741,12 @@ KEY_HELP.update(
         SPOTLIGHT_EVENT_SLACK_KEY: (
             "hours past an approved event's end that its spotlight row survives, so a marathon "
             "that overruns is still announced"
+        ),
+        CHANNEL_SPOTLIGHT_DEFAULT_KEY: (
+            "true if a channel added through **Add a streamer** with nobody behind it is "
+            "spotlighted from the start — pinned while it streams and reminded every few "
+            "hours; false — the default — announces it like any other stream, and its own "
+            "row's **Spotlight on** adds the pin and the reminders whenever staff want them"
         ),
     }
 )
@@ -3362,6 +3370,8 @@ class SettingsStore:
             return SPOTLIGHT_DEFAULT_DAYS
         if key == SPOTLIGHT_EVENT_SLACK_KEY:
             return SPOTLIGHT_EVENT_SLACK_HOURS
+        if key == CHANNEL_SPOTLIGHT_DEFAULT_KEY:
+            return False
         if key == "golive_cooldown_minutes":
             return 60
         if key == "golive_max_session_hours":

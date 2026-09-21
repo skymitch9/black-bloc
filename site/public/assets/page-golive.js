@@ -85,10 +85,17 @@ const HIDDEN = 'hidden';
 const ADD_TITLE = 'Add a streamer';
 const ADD_HELP = 'One box for both platforms. A Twitch name goes to the go-live watcher; a '
   + 'YouTube channel address or @handle goes to the live probe. Nothing is guessed — a value '
-  + 'that could be either is refused and says so.';
+  + 'that could be either is refused and says so. Leave the member blank for an org channel '
+  + 'with nobody here behind it, like GamesDoneQuick.';
 const ADD_FIELD_HELP = 'The name in twitch.tv/…, or the address that starts with '
   + 'youtube.com/channel/UC…, or their @handle.';
 const ADD_PICK_FIRST = 'Pick the member this is about first.';
+const ADD_NO_MEMBER_HELP = 'Leave this blank for a channel with nobody here behind it. It goes '
+  + 'on the same list, is announced the same way, and its own row turns the spotlight, the '
+  + 'ping role and announcements on and off.';
+const ADD_CHANNEL_NEEDS_TWITCH = '**{given}** is a YouTube channel, and a channel with nobody '
+  + 'behind it needs a Twitch name to hang on, so nothing was added. Put the name from '
+  + 'twitch.tv/… here and link its YouTube channel on its own row afterwards.';
 const SWEEP_TITLE = 'Link from history';
 const SWEEP_ASK_TITLE = 'Link everyone the go-live history knows about?';
 const SWEEP_ASK_BODY = 'Every person who has streamed here and has no channel linked is linked to '
@@ -194,7 +201,7 @@ const SPOTLIGHT_MODE_HELP = 'off, shadow (rehearse where shadow_channel_id point
   + 'Twitch channels with nobody here behind them are announced, reminded and pinned in the '
   + 'go-live channel.';
 const SPOTLIGHT_NOTE = 'Watched by name. No member here is behind them.';
-const SPOTLIGHT_MEMBER_NOTE = 'Not spotlighted. Spotlighting their channel bumps it every few hours and pins it while they stream — for a marathon, say.';
+const SPOTLIGHT_MEMBER_NOTE = 'Not spotlighted. Spotlighting a channel pins its announcement while it streams and reminds people every few hours — for a marathon, say. A linked Twitch account is preferred but not needed: the form takes any channel name.';
 const SPOTLIGHT_KEPT = 'Kept for ever \u2014 no purge takes it off the list.';
 const SPOTLIGHT_ADD_TITLE = 'Spotlight a channel';
 const SPOTLIGHT_ADD_HELP = 'For an org channel like GamesDoneQuick, or a marathon nobody here '
@@ -202,9 +209,27 @@ const SPOTLIGHT_ADD_HELP = 'For an org channel like GamesDoneQuick, or a maratho
   + 'while it runs, and pins the announcement for the duration.';
 const SPOTLIGHT_DAYS_HELP = 'Days before it is purged. Leave it blank to keep it for ever, the '
   + 'way GamesDoneQuick is kept.';
-const SPOTLIGHT_REMOVE_ASK = 'Take **{login}** off the spotlight list? Any announcement it has '
-  + 'out there is left as posted, and it can be added again at any time.';
 const NO_MEMBER = 'Nobody here \u2014 this is a channel Black Bloc watches by name.';
+
+const SPOTLIGHT_ON = 'Spotlight on';
+const SPOTLIGHT_OFF = 'Spotlight off';
+const SPOTLIT_STATE = 'Spotlighted \u2014 pinned while it streams, reminded every {hours} h.';
+const NOT_SPOTLIT_STATE = 'Announced like any other stream \u2014 no pin, no reminders, and no '
+  + 'purge takes it off the list.';
+const CHANNEL_OPTED_OUT_STATE = 'Opted out \u2014 nothing of its is announced, whatever the '
+  + 'spotlight says. The row, its ping role and its YouTube link all stay.';
+const CHANNEL_OPT_OUT = 'Opt out of announcements';
+const CHANNEL_OPT_IN = 'Opt back in';
+const CHANNEL_LINK_YOUTUBE = 'Link a YouTube channel';
+const CHANNEL_UNLINK_YOUTUBE = 'Unlink it';
+const CHANNEL_YOUTUBE_HELP = 'The address that starts with youtube.com/channel/UC\u2026, or the '
+  + '@handle. The same resolver a member\u2019s link goes through.';
+const CHANNEL_REMOVE = 'Remove this channel';
+const CHANNEL_REMOVE_ASK = 'Removes {name} from the list, its spotlight, its YouTube link and '
+  + 'its ping role (per pings_fan_role_delete). Nothing in Discord is deleted except the role '
+  + 'if that setting says so.';
+const CHANNEL_KEEP_MOVES = 'The kept / expires / bump / pin moves are the spotlight\u2019s, so '
+  + 'they show while it is on.';
 
 function platformPill(platform) {
   return el('span', {
@@ -740,31 +765,108 @@ function spotlightMoves(row, say) {
     () => send(`/api/golive/spotlight/${one.id}`, 'PATCH', body),
     (found) => found?.message || fallback,
   );
+  const spotlit = one.spotlight !== false;
   const moves = [
-    button('Extend a week', async () => after(await patch({ days: 7 }, 'Extended.')), { tone: 'quiet' }),
+    button(spotlit ? SPOTLIGHT_OFF : SPOTLIGHT_ON, async () => (
+      after(await patch({ spotlight: !spotlit }, spotlit ? 'Spotlight off.' : 'Spotlight on.'))
+    ), { tone: spotlit ? 'quiet' : 'warn' }),
   ];
-  if (one.kept) {
-    moves.push(button('Let it expire', async () => after(await patch({ days: 7 }, 'It runs out in a week.')), { tone: 'quiet' }));
-  } else {
-    moves.push(button('Keep for ever', async () => after(await patch({ keep: true }, 'Kept for ever.')), { tone: 'quiet' }));
+  // The kept / expires / bump / pin moves belong to the spotlight, so they only render
+  // while it is on — never a control that would refuse.
+  if (spotlit) {
+    moves.push(button('Extend a week', async () => after(await patch({ days: 7 }, 'Extended.')), { tone: 'quiet' }));
+    if (one.kept) {
+      moves.push(button('Let it expire', async () => after(await patch({ days: 7 }, 'It runs out in a week.')), { tone: 'quiet' }));
+    } else {
+      moves.push(button('Keep for ever', async () => after(await patch({ keep: true }, 'Kept for ever.')), { tone: 'quiet' }));
+    }
+    if (one.live && one.announce !== false) {
+      moves.push(button('Bump now', async () => {
+        const done = await run(
+          say,
+          () => send(`/api/golive/spotlight/${one.id}/bump`, 'POST', {}),
+          (found) => found?.message || 'Reminded the channel.',
+        );
+        after(done);
+      }, { tone: 'quiet' }));
+    }
+    moves.push(button(one.pin ? 'Stop pinning it' : 'Pin it while it streams', async () => (
+      after(await patch({ pin: !one.pin }, one.pin ? 'It will not be pinned.' : 'It will be pinned.'))
+    ), { tone: 'quiet' }));
   }
-  if (one.live) {
-    moves.push(button('Bump now', async () => {
-      const done = await run(
+  return moves;
+}
+
+function channelAnnounceMoves(row, say) {
+  const one = row.spotlight;
+  const out = one.announce === false;
+  return [button(out ? CHANNEL_OPT_IN : CHANNEL_OPT_OUT, async () => {
+    const done = await run(
+      say,
+      () => send(`/api/golive/spotlight/${one.id}`, 'PATCH', { announce: out }),
+      (found) => found?.message || (out ? 'Opted back in.' : 'Opted out.'),
+    );
+    if (!done.ok) return;
+    keepSaying('golive.spotlight', say);
+    closeDrawer();
+    refresh();
+  }, { tone: out ? 'quiet' : 'warn' })];
+}
+
+function channelYoutubeMoves(row, say) {
+  const one = row.spotlight;
+  const after = (done) => {
+    if (!done.ok) return;
+    keepSaying('golive.spotlight', say);
+    closeDrawer();
+    refresh();
+  };
+  if (one.youtube_channel_id) {
+    return [
+      el('a', {
+        class: 'btn small quiet',
+        href: one.youtube_url || `https://www.youtube.com/channel/${one.youtube_channel_id}`,
+        rel: 'noreferrer',
+        text: 'Open channel',
+      }),
+      button(CHANNEL_UNLINK_YOUTUBE, async () => {
+        const yes = await ask({
+          title: `Unlink ${one.twitch_login}'s YouTube channel?`,
+          body: [`Black Bloc stops watching ${one.youtube_handle || one.youtube_channel_id} for live streams. Its Twitch side and everything else about the row stay as they are.`],
+          confirmLabel: 'Unlink it',
+        });
+        if (!yes) return;
+        after(await run(
+          say,
+          () => send(`/api/golive/spotlight/${one.id}`, 'PATCH', { youtube: null }),
+          (found) => found?.message || 'Unlinked.',
+        ));
+      }, { tone: 'danger' }),
+    ];
+  }
+  const box = el('input', {
+    class: 'input',
+    type: 'text',
+    placeholder: 'youtube.com/channel/UC… or @handle',
+  });
+  return [
+    box,
+    button(CHANNEL_LINK_YOUTUBE, async () => {
+      after(await run(
         say,
-        () => send(`/api/golive/spotlight/${one.id}/bump`, 'POST', {}),
-        (found) => found?.message || 'Reminded the channel.',
-      );
-      after(done);
-    }, { tone: 'quiet' }));
-  }
-  moves.push(button(one.pin ? 'Stop pinning it' : 'Pin it while it streams', async () => (
-    after(await patch({ pin: !one.pin }, one.pin ? 'It will not be pinned.' : 'It will be pinned.'))
-  ), { tone: 'quiet' }));
-  moves.push(button('Remove', async () => {
+        () => send(`/api/golive/spotlight/${one.id}`, 'PATCH', { youtube: box.value.trim() }),
+        (found) => found?.message || 'Linked.',
+      ));
+    }, { tone: 'warn' }),
+  ];
+}
+
+function channelRemoveMoves(row, say) {
+  const one = row.spotlight;
+  return [button(CHANNEL_REMOVE, async () => {
     const yes = await ask({
-      title: `Remove ${one.twitch_login} from the spotlight?`,
-      body: [SPOTLIGHT_REMOVE_ASK.replace('{login}', one.twitch_login)],
+      title: `${CHANNEL_REMOVE}?`,
+      body: [CHANNEL_REMOVE_ASK.replace('{name}', one.display_name || one.twitch_login)],
       confirmLabel: 'Remove it',
     });
     if (!yes) return;
@@ -773,18 +875,34 @@ function spotlightMoves(row, say) {
       () => api(`/api/golive/spotlight/${one.id}`, { method: 'DELETE' }),
       (found) => found?.message || 'Off the list.',
     );
-    after(done);
-  }, { tone: 'warn' }));
-  return moves;
+    if (!done.ok) return;
+    keepSaying('golive.spotlight', say);
+    closeDrawer();
+    refresh();
+  }, { tone: 'danger' })];
 }
 
 function spotlightSaid(row) {
   const one = row.spotlight;
-  const bits = [one.kept ? SPOTLIGHT_KEPT : `Runs out ${when(one.expires_at)}.`];
-  if (one.bump_hours) bits.push(`Reminders every ${one.bump_hours} h.`);
+  const bits = [];
+  if (one.announce === false) bits.push(CHANNEL_OPTED_OUT_STATE);
+  else if (one.spotlight === false) bits.push(NOT_SPOTLIT_STATE);
+  else bits.push(SPOTLIT_STATE.replace('{hours}', String(one.bump_hours || 4)));
+  if (one.spotlight !== false) {
+    bits.push(one.kept ? SPOTLIGHT_KEPT : `Runs out ${when(one.expires_at)}.`);
+    bits.push(CHANNEL_KEEP_MOVES);
+  }
   if (one.event_id) bits.push(`Set up for event #${one.event_id}.`);
   if (one.note) bits.push(one.note);
   return el('span', { text: bits.join(' ') });
+}
+
+function announcedSaidFor(row) {
+  return el('span', {
+    text: row.spotlight.announce === false
+      ? CHANNEL_OPTED_OUT_STATE
+      : 'On — announced in the go-live channel whenever it goes live.',
+  });
 }
 
 function panelGroup(label, said, moves) {
@@ -823,22 +941,30 @@ async function rowPanel(row, say) {
   });
 
   if (spotlightOnly(row)) {
+    const channelYoutube = row.spotlight.youtube_channel_id
+      ? el('span', {}, [
+        el('span', { text: row.spotlight.youtube_handle || row.spotlight.youtube_channel_id }),
+        el('span', { class: 'mono glid', text: row.spotlight.youtube_channel_id }),
+      ])
+      : muted(NOT_LINKED);
     return [
       panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)),
       panelGroup('Twitch', twitchSaid, twitchMoves(row, say).slice(0, 1)),
+      panelGroup('YouTube', channelYoutube, channelYoutubeMoves(row, say)),
       panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
-      el('p', { class: 'field-help', text: NO_MEMBER }),
+      panelGroup('Announcements', announcedSaidFor(row), channelAnnounceMoves(row, say)),
+      panelGroup('Remove', el('span', { class: 'cell-quiet', text: NO_MEMBER }), channelRemoveMoves(row, say)),
       say,
     ];
   }
   return [
     ...(row.spotlight
       ? [panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say))]
-      : (row.twitch
-        ? [panelGroup('Spotlight', el('span', { class: 'cell-quiet', text: SPOTLIGHT_MEMBER_NOTE }), [
-          button('Spotlight this channel…', () => openSpotlightForm(row.twitch), { tone: 'quiet' }),
-        ])]
-        : [])),
+      // Owner, 2026-09-21: a link is PREFERRED but never required to spotlight, so the move
+      // renders whether or not they have one; with no link the form's box starts empty.
+      : [panelGroup('Spotlight', el('span', { class: 'cell-quiet', text: SPOTLIGHT_MEMBER_NOTE }), [
+        button('Spotlight this channel…', () => openSpotlightForm(row.twitch || ''), { tone: 'quiet' }),
+      ])]),
     panelGroup('Twitch', twitchSaid, twitchMoves(row, say)),
     panelGroup('YouTube', youtubeSaid, youtubeMoves(row, say)),
     panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
@@ -862,7 +988,9 @@ function announcedCell(row) {
 }
 
 function expiresCell(row) {
-  if (!row.spotlight) return muted('—');
+  // A row whose spotlight is off never expires, so the cell says nothing rather than a date
+  // the sweep would ignore.
+  if (!row.spotlight || row.spotlight.spotlight === false) return muted('—');
   if (row.spotlight.kept) return el('span', { class: 'cell-kind' }, [badge('kept for ever', 'ok')]);
   return el('span', { class: 'cell-quiet', text: row.spotlight.until });
 }
@@ -890,20 +1018,26 @@ function memberCell(row) {
   ].filter(Boolean));
 }
 
+function spotlightChip(row) {
+  return Boolean(row.spotlight) && row.spotlight.spotlight !== false;
+}
+
 const FILTERS = [
   { id: 'all', label: 'All', keep: () => true },
   { id: 'live', label: 'Live now', keep: (row) => Boolean(row.live) },
   { id: 'yt', label: 'Has YouTube', keep: (row) => Boolean(row.youtube) },
   { id: 'notyt', label: 'Twitch only', keep: (row) => Boolean(row.twitch) && !row.youtube },
   { id: 'out', label: 'Opted out', keep: (row) => row.opted_out === true },
-  { id: 'spot', label: 'Spotlight', keep: (row) => Boolean(row.spotlight) },
+  { id: 'spot', label: 'Spotlight', keep: spotlightChip },
+  { id: 'chan', label: 'Channels', keep: (row) => Boolean(row.spotlight) },
   { id: 'kept', label: 'Kept forever', keep: (row) => Boolean(row.spotlight && row.spotlight.kept) },
 ];
 
 function spotlightWords(rows) {
-  const spots = rows.filter((row) => row.spotlight);
-  const kept = spots.filter((row) => row.spotlight.kept).length;
-  return `${spots.length} channel(s) with no member · ${kept} kept for ever · ${spots.length - kept} expiring`;
+  const channels = rows.filter((row) => row.spotlight);
+  const spots = channels.filter(spotlightChip).length;
+  const out = channels.filter((row) => row.spotlight.announce === false).length;
+  return `${channels.length} channel(s) with no member · ${spots} spotlighted · ${out} opted out`;
 }
 
 const COLUMNS = ['Member', 'Twitch', 'YouTube', 'Ping role', 'Announced', 'Expires', 'Opted out'];
@@ -1028,6 +1162,7 @@ function openSpotlightForm(preset = '') {
           twitch_login: box.value,
           days: days.value.trim() === '' ? null : days.value.trim(),
           keep: days.value.trim() === '',
+          spotlight: true,
         }),
         (found) => found?.message || 'On the list.',
       );
@@ -1057,13 +1192,28 @@ function addStreamerButton() {
     });
     const voice = notice();
     const go = button('Link them', async () => {
-      if (!picker.id) {
-        voice.say(ADD_PICK_FIRST, 'warn');
-        return;
-      }
       const routed = routeTyped(box.value);
       if (!routed.where) {
         voice.say(routed.why, 'warn');
+        return;
+      }
+      // No member picked: this is a channel with nobody behind it, so it goes on the same
+      // list as a spotlight row — which is what makes it persist.
+      if (!picker.id) {
+        if (routed.where === YOUTUBE) {
+          voice.say(ADD_CHANNEL_NEEDS_TWITCH.replace('{given}', box.value.trim()), 'warn');
+          return;
+        }
+        const made = await run(
+          voice,
+          () => send('/api/golive/spotlight', 'POST', { twitch_login: routed.value }),
+          (found) => found?.message || 'On the list.',
+        );
+        if (made.ok) {
+          keepSaying('golive.spotlight', voice);
+          closeDrawer();
+          refresh();
+        }
         return;
       }
       const done = await run(
@@ -1082,6 +1232,7 @@ function addStreamerButton() {
     openDrawer(ADD_TITLE, [
       el('p', { class: 'field-help', text: ADD_HELP }),
       picker.node,
+      el('p', { class: 'field-help', text: ADD_NO_MEMBER_HELP }),
       el('div', { class: 'formrow' }, [field('Twitch name or YouTube channel', box, ADD_FIELD_HELP)]),
       bar([go]),
       voice,

@@ -172,16 +172,42 @@ made, it says so.)*
 14. **`platform_of` was refactored onto the new `platform_of_url`** rather than a second copy of the
     same three lines (checklist **15**). The presence's own `platform` still wins over the address.
 
-15. **NOT done, deliberately:** nothing merged, deployed or pushed to `main`; `TODO.md`, `DONE.md`,
+15. **NOT done, deliberately:** nothing deployed or pushed to `main`; `TODO.md`, `DONE.md`,
     `deploys.log` and `KNOWN_ISSUES.md` untouched; **`architecture.md` NOT edited** — its *Registry
-    keys* line says **294 on `main` at v150** and is correct until this branch merges, at which
-    point it is **295** (`len(KEY_TYPES)` measured here); the conductor's docs ritual owns that
-    number, and a concurrent branch is adding keys of its own. **`golive-design.md` does not
+    keys* line says **294 on `main` at v150**; with `channel-streamers` and this branch both in it
+    is **296**, measured (`len(KEY_TYPES)`), and the conductor's docs ritual owns that number.
+    **`golive-design.md` does not
     exist** — §E names it; the dated line went to
     [`golive-page-design.md`](golive-page-design.md) instead, which is the page this build changes.
     No schema change, so no migration; no new loop; `golive_autolink_presence` ships **true** as its
     registry default, which is what §B asks for, and the brake on the announcement it rides along
     with is `golive_mode`, which is per-guild and already set.
+
+16. **`origin/main` was MERGED INTO this branch on 2026-09-21, at the conductor's explicit
+    instruction, after the build was already committed and pushed.** The brief said never to merge
+    and that the conductor resolves it; the conductor then asked for the merge by name, because
+    `main` had since taken the `channel-streamers` build (which touches five of the same files) and
+    a one-line fix to `discordmock.test.mjs`. Seven conflicts, all resolved by keeping BOTH sides:
+
+    - `black_bloc/golive.py` — `main` renamed `SPOTLIGHT` to **Channels…**; that label is kept and
+      `LINK_HISTORY` sits beside it. `STAFF_BUTTONS` is now four, and row 2 is still at five.
+    - `site/public/assets/page-golive.js` — both constant blocks kept; `streamerDoors` auto-merged
+      and still carries the sweep door.
+    - `tests/api/tools/test_golive.py`, `docs/access/sweeps.md` — both appended blocks kept.
+    - `docs/info/code-notes.md` — both appended sections kept, and ⚠️ its header is a STACK of dated
+      lines where git took only one: `channel-streamers`' line was put back by hand under this
+      build's.
+    - `docs/info/README.md` — this design's BUILT row and `channel-streamers`' BUILT row, both kept.
+    - `site/mock/golive-join.test.mjs` — ⚠️ **both branches bumped the every-key-lands-once fixture
+      49 → 50 independently**, so the merged list holds 51 and the assertion, the comment and the
+      printed sentence all moved to **51**. A merge that took either side alone would have passed
+      the count and silently lost a key.
+
+    The gate was re-run whole on the merged tree: **7178 passed / 3 skipped** both orders, ruff
+    clean, 39 modules parse, `check.mjs` 21 pages / 198 routes, all six node tests green —
+    `discordmock` included, which is `main`'s fix for a date-dependent fixture that failed on the
+    base commit from 2026-09-21 onward (confirmed pre-existing in a throwaway worktree of
+    `0d83065` before the merge). The site half was re-rendered in a browser against the merged mock.
 
 ## What was NOT verified
 

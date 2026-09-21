@@ -1676,3 +1676,122 @@ async def test_a_missing_go_live_cog_cannot_add_a_platform_and_says_so(
     failed = await details_logged(db, "youtube.live_announce_failed")
     assert len(failed) == 1 and failed[0]["reason"] == "golive_cog_missing"
     assert (await sessions(db))[0]["also_source"] is None
+
+
+# --- the sweep walks channel rows too --------------------------------------------------------
+# docs/info/channel-streamers-design.md §A: a streamer with no member is still a streamer, so a
+# channel row with a youtube_channel_id is probed beside the member links.
+
+
+async def a_channel_row(bot, *, youtube=CHANNEL, spotlight=False, announce=True):
+    from black_bloc.cogs.content.spotlight import spotlight_channel, update_channel
+
+    outcome, row = await spotlight_channel(
+        bot, bot.guild, None, "gamesdonequick", keep=True, spotlight=spotlight
+    )
+    assert outcome == "added"
+    await update_channel(
+        bot.db,
+        row["id"],
+        youtube_channel_id=youtube,
+        announce=1 if announce else 0,
+    )
+    from black_bloc.cogs.content.spotlight import channel_by_id
+
+    return await channel_by_id(bot.db, row["id"])
+
+
+def a_spotlight_cog(bot):
+    from black_bloc.cogs.content.spotlight import Spotlight
+
+    made = Spotlight(bot)
+    bot.cogs["Spotlight"] = made
+    return made
+
+
+async def channel_sessions(db):
+    cur = await db.conn.execute("SELECT * FROM spotlight_sessions ORDER BY id")
+    return list(await cur.fetchall())
+
+
+async def test_the_sweep_probes_a_channel_row_and_announces_it_once(bot, cog, db):
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    row = await a_channel_row(bot)
+    cog.client = _Live(LIVE_PAGE)
+
+    await cog.probe_all()
+
+    assert cog.client.probed == [CHANNEL]
+    open_rows = await channel_sessions(db)
+    assert len(open_rows) == 1 and open_rows[0]["spotlight_id"] == row["id"]
+    assert open_rows[0]["url"] == LIVE_WATCH
+    posts = bot.guild.get_channel(GOLIVE_CHANNEL).posts
+    assert len(posts) == 1 and LIVE_WATCH in posts[0]["content"]
+
+
+async def test_a_channel_row_with_no_youtube_channel_is_not_probed(bot, cog, db):
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await a_channel_row(bot, youtube=None)
+    cog.client = _Live(LIVE_PAGE)
+
+    await cog.probe_all()
+
+    assert cog.client.probed == []
+
+
+async def test_an_opted_out_channel_row_is_probed_but_never_announced(bot, cog, db):
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await a_channel_row(bot, announce=False)
+    cog.client = _Live(LIVE_PAGE)
+
+    await cog.probe_all()
+
+    assert await channel_sessions(db) == []
+    assert bot.guild.get_channel(GOLIVE_CHANNEL).posts == []
+
+
+async def test_a_channel_already_live_on_twitch_joins_rather_than_announcing_twice(bot, cog, db):
+    from black_bloc.golive import StreamInfo
+
+    await live_on(bot)
+    spot = a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    row = await a_channel_row(bot)
+    await spot.announce_info(
+        bot.guild,
+        row,
+        StreamInfo(url="https://www.twitch.tv/gamesdonequick", platform="Twitch"),
+        "GamesDoneQuick",
+    )
+    before = len(bot.guild.get_channel(GOLIVE_CHANNEL).posts)
+    cog.client = _Live(LIVE_PAGE)
+
+    await cog.probe_all()
+
+    assert len(await channel_sessions(db)) == 1
+    assert len(bot.guild.get_channel(GOLIVE_CHANNEL).posts) == before
+    said = [one for one in await details_logged(db, "youtube.live_seen") if "because" in one]
+    assert said and said[-1]["announced"] is False
+
+
+async def test_the_youtube_side_ends_the_session_it_opened(bot, cog, db):
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await bot.store.set(GUILD, "youtube_live_end_misses", 1)
+    row = await a_channel_row(bot)
+    cog.client = _Live(LIVE_PAGE, OFFLINE_PAGE, OFFLINE_PAGE)
+
+    await cog.probe_all()
+    assert len(await channel_sessions(db)) == 1
+    await cog.probe_all()
+    await cog.probe_all()
+
+    rows = await channel_sessions(db)
+    assert rows[0]["ended_at"] is not None
+    assert row is not None

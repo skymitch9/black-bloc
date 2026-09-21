@@ -310,7 +310,7 @@ async def test_adding_a_channel_keeps_it_for_ever_when_no_days_are_given(
     sign_in(client)
 
     found = client.post(
-        "/api/golive/spotlight", json={"twitch_login": "GamesDoneQuick"}
+        "/api/golive/spotlight", json={"twitch_login": "GamesDoneQuick", "spotlight": True}
     ).json()
 
     assert found["twitch_login"] == "gamesdonequick" and found["kept"] is True
@@ -322,7 +322,8 @@ async def test_adding_a_channel_with_days_gives_it_a_date(client, sign_in, web, 
     sign_in(client)
 
     found = client.post(
-        "/api/golive/spotlight", json={"twitch_login": "esamarathon", "days": 3}
+        "/api/golive/spotlight",
+        json={"twitch_login": "esamarathon", "days": 3, "spotlight": True},
     ).json()
 
     assert found["kept"] is False and found["expires_at"] is not None
@@ -451,6 +452,132 @@ async def test_a_spotlight_row_carries_the_ping_role_the_page_draws(client, sign
 
     assert after["role"] == "GamesDoneQuick pings" and after["role_wearers"] == 0
     assert after["role_id"]
+
+
+# --- the channel record over HTTP ------------------------------------------------------------
+
+
+async def test_a_channel_added_with_no_spotlight_takes_the_key_and_never_expires(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+
+    found = client.post(
+        "/api/golive/spotlight", json={"twitch_login": "rpglimitbreak", "days": 3}
+    ).json()
+
+    assert found["spotlight"] is False and found["kept"] is True
+    assert found["expires_at"] is None
+    assert "adds the pin and the reminders" in found["message"]
+
+
+async def test_the_key_can_make_a_channel_spotlit_from_the_start(client, sign_in, web, wf):
+    sign_in(client)
+    await web.store.set(web.guild.id, "golive_channel_spotlight_default", True)
+
+    found = client.post("/api/golive/spotlight", json={"twitch_login": "frostfatales"}).json()
+
+    assert found["spotlight"] is True
+
+
+async def test_a_youtube_channel_with_no_twitch_name_is_refused_in_words(client, sign_in, web):
+    sign_in(client)
+
+    answer = client.post(
+        "/api/golive/spotlight", json={"twitch_login": "", "youtube": "@GamesDoneQuick"}
+    )
+
+    assert answer.status_code == 400
+    said = answer.json()["message"]
+    assert "needs a Twitch name" in said and "Link a YouTube channel" in said
+
+
+async def test_a_row_carries_its_spotlight_its_optout_and_its_youtube_side(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    made = client.post(
+        "/api/golive/spotlight", json={"twitch_login": "esamarathon", "spotlight": True}
+    ).json()
+
+    rows = client.get("/api/golive/spotlight").json()
+
+    row = next(one for one in rows if one["id"] == made["id"])
+    assert row["spotlight"] is True and row["announce"] is True
+    assert row["opted_out"] is False
+    assert row["youtube_channel_id"] is None and row["youtube_handle"] is None
+    assert row["youtube_url"] is None
+
+
+async def test_the_spotlight_toggle_keeps_the_row_and_says_which_way_it_went(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    made = client.post(
+        "/api/golive/spotlight", json={"twitch_login": "esamarathon", "spotlight": True}
+    ).json()
+
+    off = client.patch(
+        f"/api/golive/spotlight/{made['id']}", json={"spotlight": False}
+    ).json()
+
+    assert off["spotlight"] is False and off["id"] == made["id"]
+    assert "no pin and no reminders" in off["message"]
+
+    on = client.patch(f"/api/golive/spotlight/{made['id']}", json={"spotlight": True}).json()
+    assert on["spotlight"] is True and "is spotlighted" in on["message"]
+
+
+async def test_a_channel_can_be_opted_out_of_announcements_and_back_in(client, sign_in, web, wf):
+    sign_in(client)
+    made = client.post("/api/golive/spotlight", json={"twitch_login": "esamarathon"}).json()
+
+    out = client.patch(f"/api/golive/spotlight/{made['id']}", json={"announce": False}).json()
+
+    assert out["announce"] is False and out["opted_out"] is True
+    assert "is opted out" in out["message"] and "stays on the list" in out["message"]
+
+    back = client.patch(f"/api/golive/spotlight/{made['id']}", json={"announce": True}).json()
+    assert back["announce"] is True and "opted back in" in back["message"]
+
+
+async def test_unlinking_a_youtube_channel_that_is_not_there_says_so_rather_than_a_status(
+    client, sign_in, web
+):
+    sign_in(client)
+    made = client.post("/api/golive/spotlight", json={"twitch_login": "esamarathon"}).json()
+
+    answer = client.patch(f"/api/golive/spotlight/{made['id']}", json={"youtube": None})
+
+    assert answer.status_code == 404
+    assert "nothing to unlink" in answer.json()["message"]
+
+
+async def test_linking_a_youtube_channel_with_no_youtube_half_running_refuses_in_words(
+    client, sign_in, web
+):
+    sign_in(client)
+    made = client.post("/api/golive/spotlight", json={"twitch_login": "esamarathon"}).json()
+
+    answer = client.patch(
+        f"/api/golive/spotlight/{made['id']}", json={"youtube": "@GamesDoneQuick"}
+    )
+
+    assert answer.status_code == 503
+    assert "YouTube half is not running" in answer.json()["message"]
+
+
+async def test_a_channel_can_be_added_already_opted_out(client, sign_in, web, wf):
+    """The owner's flow for rpglimitbreak: on the list from the start, announcing nothing."""
+    sign_in(client)
+
+    found = client.post(
+        "/api/golive/spotlight", json={"twitch_login": "rpglimitbreak", "announce": False}
+    ).json()
+
+    assert found["announce"] is False and found["opted_out"] is True
+    rows = client.get("/api/golive/spotlight").json()
+    assert any(one["twitch_login"] == "rpglimitbreak" for one in rows)
 
 
 # --- Link from history: the Streamers toolbar's one bulk door ---------------------------------

@@ -13,7 +13,13 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 51
+        assert SCHEMA_VERSION == 52
+        cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
+        assert {
+            "spotlight",
+            "youtube_channel_id",
+            "youtube_handle",
+        } <= {r["name"] for r in await cur.fetchall()}
         cur = await db.conn.execute("PRAGMA table_info(raid_trains)")
         assert "event_id" in {r["name"] for r in await cur.fetchall()}
         cur = await db.conn.execute("PRAGMA table_info(requests)")

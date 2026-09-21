@@ -1924,6 +1924,7 @@ async def spotlight_an_event(
         login,
         expires_at=when,
         event_id=int(row["id"]),
+        spotlight=True,
         via=via,
     )
     if outcome == "bad_login":

@@ -26,8 +26,10 @@ from ...cogs.content.spotlight import (
     channel_by_id,
     channels_for,
     forget_spotlight,
+    link_youtube,
     open_session,
     spotlight_channel,
+    unlink_youtube,
 )
 from ...cogs.content.spotlight import recent_sessions as recent_spotlight_sessions
 from ...logkinds import VIA_WEBSITE
@@ -148,6 +150,12 @@ def spotlight_row(
         "until": spot.until_words(row),
         "bump_hours": row["bump_hours"],
         "pin": bool(row["pin"]),
+        "spotlight": spot.is_spotlit(row),
+        "announce": spot.announces(row),
+        "opted_out": not spot.announces(row),
+        "youtube_channel_id": spot.youtube_of(row),
+        "youtube_handle": row["youtube_handle"],
+        "youtube_url": spot.youtube_url(spot.youtube_of(row)),
         "event_id": row["event_id"],
         "url": spot.channel_url(row["twitch_login"]),
         "live": live is not None,
@@ -316,8 +324,15 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         given = str(payload.get("twitch_login") or "")
+        wanted_youtube = str(payload.get("youtube") or "").strip()
         days = wanted_days(payload)
         keep = bool(payload.get("keep")) or days is None
+        if not str(given).strip() and wanted_youtube:
+            raise Refused(
+                400,
+                "needs_twitch",
+                spot.NEEDS_A_TWITCH_NAME.format(given=wanted_youtube[:60]),
+            )
         outcome, row = await spotlight_channel(
             bot,
             guild,
@@ -328,6 +343,8 @@ def build_router(bot: Any) -> APIRouter:
             pin=payload.get("pin"),
             bump_hours=payload.get("bump_hours"),
             note=payload.get("note"),
+            spotlight=payload.get("spotlight"),
+            announce=payload.get("announce", True),
             via=VIA_WEBSITE,
         )
         if outcome == "bad_login":
@@ -340,9 +357,21 @@ def build_router(bot: Any) -> APIRouter:
                 "already_spotlit",
                 spot.ALREADY_SPOTLIT.format(login=spot.clean_login(given) or given[:25]),
             )
+        said = ""
+        if wanted_youtube:
+            linked, fresh, said = await link_youtube(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                row["id"],
+                wanted_youtube,
+                via=VIA_WEBSITE,
+            )
+            if linked == "linked" and fresh is not None:
+                row = fresh
         hours = spot.bump_hours_for(row, bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
         return await one_spotlight(bot, guild, row["id"]) | {
-            "message": spot.added_said(row, hours)
+            "message": f"{spot.added_said(row, hours)} {said}".strip()
         }
 
     @router.patch("/spotlight/{spotlight_id}")
@@ -366,13 +395,42 @@ def build_router(bot: Any) -> APIRouter:
             fields["pin"] = 1 if payload["pin"] else 0
         if "note" in payload:
             fields["note"] = payload["note"] or None
-        fresh = await change_spotlight(
-            bot, guild, actor_for(bot, who, guild), spotlight_id, via=VIA_WEBSITE, **fields
-        )
+        if "spotlight" in payload:
+            fields["spotlight"] = 1 if payload["spotlight"] else 0
+        if "announce" in payload:
+            fields["announce"] = 1 if payload["announce"] else 0
+        who_acts = actor_for(bot, who, guild)
+        said = None
+        fresh: Any = None
+        if "youtube" in payload:
+            given = str(payload["youtube"] or "").strip()
+            move = unlink_youtube if not given else link_youtube
+            outcome, fresh, said = await (
+                move(bot, guild, who_acts, spotlight_id, via=VIA_WEBSITE)
+                if not given
+                else move(bot, guild, who_acts, spotlight_id, given, via=VIA_WEBSITE)
+            )
+            if outcome == "no_row":
+                raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
+            if outcome == "bad_channel":
+                raise Refused(400, "bad_channel", said)
+            if outcome == "no_cog":
+                raise Refused(503, "no_cog", said)
+            if outcome == "not_linked":
+                raise Refused(404, "not_linked", said)
+        if fields or said is None:
+            fresh = await change_spotlight(
+                bot, guild, who_acts, spotlight_id, via=VIA_WEBSITE, **fields
+            )
         if fresh is None:
             raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
+        if said is None and "announce" in payload:
+            said = spot.announce_said(fresh)
+        elif said is None and "spotlight" in payload:
+            said = spot.spotlight_said(fresh)
         return await one_spotlight(bot, guild, spotlight_id) | {
-            "message": SPOTLIGHT_CHANGED.format(
+            "message": said
+            or SPOTLIGHT_CHANGED.format(
                 login=fresh["twitch_login"], when=spot.until_words(fresh)
             )
         }

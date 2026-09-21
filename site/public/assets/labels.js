@@ -42,6 +42,7 @@ export const LABELS = {
   spotlight_pin: 'Whether a new spotlight pins its announcement while the channel streams',
   spotlight_default_days: 'How long a newly spotlighted channel lasts before it is purged',
   spotlight_event_slack_hours: "Hours past an event's end that its spotlight survives",
+  golive_channel_spotlight_default: 'Whether a channel added with nobody behind it starts out spotlighted',
   golive_live_role_id: 'Which role a live streamer wears',
   golive_require_role_id: 'Only announce people with this role',
   golive_ignore_role_id: 'Never announce people with this role',
