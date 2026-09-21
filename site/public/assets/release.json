@@ -1,5 +1,8 @@
 {
-  "release": "v147",
-  "commit": "84157d1",
-  "changed_features": []
+  "release": "v148",
+  "commit": "e7f54c9",
+  "changed_features": [
+    "events",
+    "golive"
+  ]
 }
