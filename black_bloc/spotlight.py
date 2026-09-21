@@ -140,7 +140,7 @@ EXTEND_WEEK = "Extend a week"
 KEEP_FOREVER = "Keep for ever"
 BUMP_NOW = "Bump now"
 REMOVE = "Remove"
-SPOTLIGHT_BUTTON = "Spotlight…"
+SPOTLIGHT_BUTTON = "Channels…"
 EVENT_SPOTLIGHT_LABEL = "Spotlight this stream"
 EVENT_NOT_TWITCH = (
     "This event's **Where** is not a twitch.tv address, so there is no channel to spotlight. "

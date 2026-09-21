@@ -1248,7 +1248,7 @@ async def build_spotlight(
         pings.spotlight_of(one): one["role_id"]
         for one in await pings.spotlight_fan_roles(bot.db, guild.id)
     }
-    lines = [words.PANEL_INTRO] + mode_lines(bot, guild)
+    lines = [words.CHANNELS_INTRO] + mode_lines(bot, guild)
     lines += (
         [
             words.panel_line(row, int(row["id"]) in open_by_id, held.get(int(row["id"])))
@@ -1263,19 +1263,35 @@ async def build_spotlight(
     if chosen is not None:
         live = int(chosen["id"]) in open_by_id
         held = await pings.get_spotlight_fan_role(bot.db, guild.id, chosen["id"])
-        if words.keeps_forever(chosen):
-            view.add_item(SpotlightMoveButton("expire", chosen["id"]))
-        else:
-            view.add_item(SpotlightMoveButton("extend", chosen["id"]))
-            view.add_item(SpotlightMoveButton("keep", chosen["id"]))
-        if live:
-            view.add_item(SpotlightMoveButton("bump", chosen["id"]))
+        spotlit = words.is_spotlit(chosen)
+        view.add_item(
+            SpotlightMoveButton("spotlight_off" if spotlit else "spotlight_on", chosen["id"])
+        )
+        # Panels over slash: the kept / expires / bump moves belong to the spotlight, so they
+        # render only while it is on, and Bump only while something is live to bump.
+        if spotlit:
+            if words.keeps_forever(chosen):
+                view.add_item(SpotlightMoveButton("expire", chosen["id"]))
+            else:
+                view.add_item(SpotlightMoveButton("extend", chosen["id"]))
+                view.add_item(SpotlightMoveButton("keep", chosen["id"]))
+            if live and words.announces(chosen):
+                view.add_item(SpotlightMoveButton("bump", chosen["id"]))
+        view.add_item(
+            SpotlightMoveButton(
+                "opt_in" if not words.announces(chosen) else "opt_out", chosen["id"]
+            )
+        )
         view.add_item(SpotlightMoveButton("take_role" if held is not None else "give_role",
                                          chosen["id"]))
+        if words.youtube_of(chosen):
+            view.add_item(SpotlightMoveButton("unlink_youtube", chosen["id"]))
+        else:
+            view.add_item(LinkYouTubeButton(chosen["id"]))
         view.add_item(SpotlightMoveButton("remove", chosen["id"]))
     view.add_item(AddChannelButton())
     view.add_item(SpotlightBackButton())
-    embed = discord.Embed(title=words.PANEL_TITLE, description="\n".join(lines))
+    embed = discord.Embed(title=words.CHANNELS_TITLE, description="\n".join(lines))
     return embed, view
 
 
@@ -1320,6 +1336,11 @@ class SpotlightMoveButton(discord.ui.Button):
         "keep": words.KEEP_FOREVER,
         "expire": "Let it expire",
         "bump": words.BUMP_NOW,
+        "spotlight_on": words.SPOTLIGHT_ON,
+        "spotlight_off": words.SPOTLIGHT_OFF,
+        "opt_out": words.OPT_OUT,
+        "opt_in": words.OPT_IN,
+        "unlink_youtube": words.UNLINK_YOUTUBE,
         "give_role": words.GIVE_PING_ROLE,
         "take_role": words.TAKE_PING_ROLE,
         "remove": words.REMOVE,
@@ -1329,13 +1350,30 @@ class SpotlightMoveButton(discord.ui.Button):
         "keep": discord.ButtonStyle.success,
         "expire": discord.ButtonStyle.secondary,
         "bump": discord.ButtonStyle.primary,
+        "spotlight_on": discord.ButtonStyle.success,
+        "spotlight_off": discord.ButtonStyle.secondary,
+        "opt_out": discord.ButtonStyle.secondary,
+        "opt_in": discord.ButtonStyle.success,
+        "unlink_youtube": discord.ButtonStyle.secondary,
         "give_role": discord.ButtonStyle.success,
         "take_role": discord.ButtonStyle.secondary,
         "remove": discord.ButtonStyle.danger,
     }
+    ROWS = {
+        "opt_out": 2,
+        "opt_in": 2,
+        "give_role": 2,
+        "take_role": 2,
+        "unlink_youtube": 2,
+        "remove": 2,
+    }
 
     def __init__(self, action: str, spotlight_id: Any) -> None:
-        super().__init__(label=self.LABELS[action], style=self.STYLES[action], row=1)
+        super().__init__(
+            label=self.LABELS[action],
+            style=self.STYLES[action],
+            row=self.ROWS.get(action, 1),
+        )
         self.action = action
         self.spotlight_id = int(spotlight_id)
 
@@ -1374,6 +1412,17 @@ async def run_spotlight_move(
         when = words.expiry_in_days(bot.store.get(guild.id, SPOTLIGHT_DEFAULT_DAYS_KEY))
         await change_spotlight(bot, guild, actor, spotlight_id, expires_at=when)
         return (words.EXPIRES_SAID.format(login=login, when=words.when_words(when)), True)
+    if action in ("spotlight_on", "spotlight_off"):
+        fresh = await set_spotlight(
+            bot, guild, actor, spotlight_id, action == "spotlight_on"
+        )
+        return (words.spotlight_said(fresh), True)
+    if action in ("opt_out", "opt_in"):
+        fresh = await set_announce(bot, guild, actor, spotlight_id, action == "opt_in")
+        return (words.announce_said(fresh), True)
+    if action == "unlink_youtube":
+        _, _, said = await unlink_youtube(bot, guild, actor, spotlight_id)
+        return (said, True)
     if action in ("give_role", "take_role"):
         move = give_fan_role if action == "give_role" else take_fan_role
         outcome, _ = await move(bot, guild, actor, spotlight_id)
@@ -1402,7 +1451,7 @@ async def run_spotlight_move(
 class AddChannelButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(
-            label=words.ADD_BUTTON, style=discord.ButtonStyle.primary, row=2
+            label=words.ADD_BUTTON, style=discord.ButtonStyle.primary, row=3
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -1411,11 +1460,64 @@ class AddChannelButton(discord.ui.Button):
         await interaction.response.send_modal(AddChannelModal(self.view))
 
 
-class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_MODAL_TITLE):
+class LinkYouTubeButton(discord.ui.Button):
+    def __init__(self, spotlight_id: Any) -> None:
+        super().__init__(
+            label=words.LINK_YOUTUBE, style=discord.ButtonStyle.primary, row=2
+        )
+        self.spotlight_id = int(spotlight_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await interaction.response.send_modal(
+            LinkYouTubeModal(self.spotlight_id, self.view)
+        )
+
+
+class LinkYouTubeModal(AnswersErrors, discord.ui.Modal, title=words.LINK_YOUTUBE):
+    channel = discord.ui.TextInput(
+        label=words.ADD_YOUTUBE_LABEL,
+        placeholder=words.ADD_YOUTUBE_PLACEHOLDER,
+        max_length=120,
+    )
+
+    def __init__(self, spotlight_id: int, previous: Any = None) -> None:
+        super().__init__()
+        self.spotlight_id = int(spotlight_id)
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        _, _, said = await link_youtube(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.spotlight_id,
+            str(self.channel),
+        )
+        await render_spotlight(interaction, self.spotlight_id, self.previous)
+        await answer(interaction, said)
+
+
+class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_CHANNEL_MODAL_TITLE):
     channel = discord.ui.TextInput(
         label=words.ADD_LOGIN_LABEL,
         placeholder=words.ADD_LOGIN_PLACEHOLDER,
         max_length=words.LOGIN_MAX,
+    )
+    spotlight = discord.ui.TextInput(
+        label=words.ADD_SPOTLIGHT_LABEL,
+        placeholder=words.ADD_SPOTLIGHT_PLACEHOLDER,
+        required=False,
+        max_length=5,
+    )
+    youtube = discord.ui.TextInput(
+        label=words.ADD_YOUTUBE_LABEL,
+        placeholder=words.ADD_YOUTUBE_PLACEHOLDER,
+        required=False,
+        max_length=120,
     )
     days = discord.ui.TextInput(
         label=words.ADD_DAYS_LABEL,
@@ -1431,24 +1533,43 @@ class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_MODAL_TIT
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction, staff=False):
             return
+        bot = interaction.client
         given = str(self.channel)
         typed = str(self.days).strip()
         if typed and not typed.isdigit():
             await render_spotlight(interaction, None, self.previous)
             await answer(interaction, words.BAD_DAYS.format(given=typed[:40]))
             return
+        asked = str(self.spotlight).strip()
+        wanted = words.wanted_spotlight(
+            asked, bool(bot.store.get(interaction.guild.id, CHANNEL_SPOTLIGHT_DEFAULT_KEY))
+        )
+        if wanted is None:
+            await render_spotlight(interaction, None, self.previous)
+            await answer(
+                interaction, words.BAD_SPOTLIGHT_ANSWER.format(given=asked[:40])
+            )
+            return
         outcome, row = await spotlight_channel(
-            interaction.client,
+            bot,
             interaction.guild,
             interaction.user,
             given,
             days=int(typed) if typed else None,
             keep=not typed,
+            spotlight=wanted,
         )
+        said = add_said(bot, interaction.guild, outcome, row, given)
+        wanted_youtube = str(self.youtube).strip()
+        if row is not None and wanted_youtube:
+            _, fresh, linked = await link_youtube(
+                bot, interaction.guild, interaction.user, row["id"], wanted_youtube
+            )
+            row = fresh if fresh is not None else row
+            said = f"{said} {linked}"
         await render_spotlight(
             interaction, row["id"] if row is not None else None, self.previous
         )
-        said = add_said(interaction.client, interaction.guild, outcome, row, given)
         await answer(interaction, said)
 
 
@@ -1466,7 +1587,7 @@ def add_said(bot: Any, guild: Any, outcome: str, row: Any, given: Any) -> str:
 
 class SpotlightBackButton(discord.ui.Button):
     def __init__(self) -> None:
-        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=2)
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=3)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction, staff=False):

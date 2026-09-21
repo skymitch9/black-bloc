@@ -665,7 +665,7 @@ ANNOUNCE_AGAIN = PanelMove("Announce my streams again", "success", "optin", row=
 REFRESH = PanelMove("Refresh", "secondary", "refresh", row=2)
 LOGS = PanelMove("Logs", "secondary", "logs", row=2)
 STREAMERS = PanelMove("Streamers…", "secondary", "streamers", row=2)
-SPOTLIGHT = PanelMove("Spotlight…", "secondary", "spotlight", row=2)
+SPOTLIGHT = PanelMove("Channels…", "secondary", "spotlight", row=2)
 
 PANEL_BUTTONS: dict[tuple[bool, bool], tuple[PanelMove, ...]] = {
     (False, False): (LINK_CHANNEL, STOP_ANNOUNCING, REFRESH),
