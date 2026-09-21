@@ -1,7 +1,8 @@
 # Go-live boot sweep — nobody is missed because the bot was restarting
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `boot-sweep` 2026-09-20**, off
-> `main` `f73e81c` (spotlight v148) — **nothing in it has met Discord**. Gate green both orders. The `## Deviations` foot
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v149** — release `ccce091`, deployed **2026-09-20 19:28** Phoenix
+> (the boot log is the first real boot with the fix; sweeps **652–656** are the owner's; verified: boot log: 'database: gave 1 post(s) a first saved version' (the backfill, on the live database), every cog loaded, logged in, no Traceback; /health ready=true latency 65 ms; the FIRST real golive.boot_swept row, read on the Logs page 19:3x — sessions_kept=2, sessions_closed=0, sessions_dropped=0, swept=True, members_walked=123, members_cached=True, presence_found=2, presence_announced=0, presence_skipped={'open_session': 2} — so the boot pass now sees the guild (123 members walked), kept both live sessions and announced nobody twice.). Was: 🔨 BUILT on branch
+> `boot-sweep` 2026-09-20, off `main` `f73e81c` — nothing in it had met Discord. Gate green both orders. The `## Deviations` foot
 > is the truth where this body departs from what was built, `## What was NOT verified` is the honest half, and sweeps
 > `BS-a` … `BS-d` in `../access/sweeps.md` are the proof that is missing. 🔴 **Read Deviation 0 first:** §A described the
 > reconcile correctly and the boot never reached it — `cog_load` runs before the bot has any guilds, so the v141 boot

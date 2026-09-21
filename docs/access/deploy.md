@@ -110,6 +110,14 @@ flyctl logs --app black-bloc --no-tail        # boot log: cogs loaded, "commands
 flyctl releases --app black-bloc              # a NEW version number = it landed
 ```
 
+### After every deploy: move the live mirror, so the local lower environment stays honest
+
+`site/mock/server.mjs` with `LIVE_ROOT=C:/lcw/bb-live` serves the deployed release at normal URLs and the working tree
+under `/preview/` (adopted 2026-09-20, the owner's "the pages that are live now should be under the normal url").
+`C:/lcw/bb-live` is a DETACHED worktree; after each deploy move it to the release the log line names, then restart the
+mock: `git -C C:/lcw/bb-live checkout --detach <release>` · `MOCK_PORT=8797 LIVE_ROOT=C:/lcw/bb-live node site/mock/server.mjs`.
+A mirror left behind shows yesterday's site as "live today" — the silent-staleness trap in a new coat.
+
 ### ⚠️ "Nine *no key* tests fail in the gate, and only in the gate" — the shell is carrying `.env`
 
 Measured 2026-09-20 17:3x: the v144 gate failed `test_the_inventory_says_set_or_unset_and_never_a_value`, four polls

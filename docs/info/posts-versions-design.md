@@ -1,7 +1,8 @@
 # Posts — version history instead of "Put the original back"
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-20 18:2x) — dispatch
-> when the conductor says** (independent of `spotlight`; touches `posts.py`, its cog, its routes, its page and the
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v149** — release `ccce091`, deployed **2026-09-20 19:28** Phoenix;
+> the fifteen `## Deviations` are the truth where they depart from the body; sweeps **644–651** are the owner's; verified: boot log: 'database: gave 1 post(s) a first saved version' (the backfill, on the live database), every cog loaded, logged in, no Traceback; /health ready=true latency 65 ms; the FIRST real golive.boot_swept row, read on the Logs page 19:3x — sessions_kept=2, sessions_closed=0, sessions_dropped=0, swept=True, members_walked=123, members_cached=True, presence_found=2, presence_announced=0, presence_skipped={'open_session': 2} — so the boot pass now sees the guild (123 members walked), kept both live sessions and announced nobody twice.
+> Was: 📐 DESIGN (Fable, 2026-09-20 18:2x) (independent of `spotlight`; touches `posts.py`, its cog, its routes, its page and the
 > schema). **Last verified: 2026-09-20 18:2x** against `main` `84157d1` (v147 deploying): `black_bloc/posts.py` —
 > `save_post` `:665` (*"the one write both doors make"*), `publish_post` `:840` (posts the ROW's body — it never reads
 > a draft), `reset_post` + `PUT_THE_ORIGINAL_BACK` `:178` / `:588` (what this design removes), `render_message` `:350`;
