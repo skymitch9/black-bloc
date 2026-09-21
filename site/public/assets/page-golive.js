@@ -119,14 +119,7 @@ const NO_TEMPLATE = 'The bot did not report a golive_template key, so this edito
   + 'rather than guessed at.';
 const PLAYING_HELP = `Off shows what an empty game reads as: “${GAME_FALLBACK}”.`;
 
-const SUFFIX_ONLY = 'Just add the ending instead';
-const REWRITE_IT = 'Rewrite it instead';
-const SUFFIX_ASK_TITLE = 'Leave the sentence alone and just add the ending?';
-const SUFFIX_ASK_BODY = 'The announcement keeps its present-tense sentence and golive_end_suffix '
-  + 'is added to the end of it, the way it worked before. The wording you have written is '
   + 'forgotten, so write it again to go back.';
-const REWRITE_ASK_TITLE = 'Rewrite the whole announcement once the stream ends?';
-const REWRITE_ASK_BODY = 'The past-tense wording Black Bloc ships with comes back, and you edit '
   + 'it in the Once the stream is over box above.';
 
 const SAMPLES = {
@@ -988,27 +981,6 @@ function withRoleNames(text, roles) {
   });
 }
 
-function shapeButton(say, endTemplate) {
-  const rewriting = String(endTemplate || '').trim() !== '';
-  return button(rewriting ? SUFFIX_ONLY : REWRITE_IT, async () => {
-    const sure = await ask({
-      title: rewriting ? SUFFIX_ASK_TITLE : REWRITE_ASK_TITLE,
-      body: [rewriting ? SUFFIX_ASK_BODY : REWRITE_ASK_BODY],
-      confirmLabel: rewriting ? 'Just add the ending' : 'Rewrite it',
-    });
-    if (!sure) return;
-    const done = await run(
-      say,
-      () => (rewriting
-        ? send(`/api/settings/${END_TEMPLATE_KEY}`, 'PUT', { value: '' })
-        : api(`/api/settings/${END_TEMPLATE_KEY}`, { method: 'DELETE' })),
-      rewriting ? 'Saved — the ending is added to the live sentence again.' : 'Saved — the '
-        + 'announcement is rewritten once the stream ends.',
-    );
-    if (done.ok) refresh();
-  }, { tone: 'quiet' });
-}
-
 async function wordingPreview(say, endMode, endTemplate) {
   const list = el('ul', { class: 'msglist' });
   const left = el('p', { class: 'field-help', text: WORDING_LEFT });
@@ -1049,7 +1021,6 @@ async function wordingPreview(say, endMode, endTemplate) {
     say,
   ], {
     actions: [
-      shapeButton(say, endTemplate),
       button('Refresh', () => paint(), { tone: 'quiet' }),
     ],
   });
