@@ -802,6 +802,106 @@ function optionNode(value, label, selected) {
   return el('option', { value: String(value), text: label, selected: selected || undefined });
 }
 
+export const HERE_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+/** The `YYYY-MM-DD HH:MM` the typed-string routes read, in this browser's own zone. */
+export function localWhen(at = new Date()) {
+  if (at === null || at === undefined || at === '') return '';
+  const when = at instanceof Date ? at : new Date(at);
+  if (Number.isNaN(when.getTime())) return '';
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} `
+    + `${pad(when.getHours())}:${pad(when.getMinutes())}`;
+}
+
+let zonesAsked = null;
+
+function zoneChoices() {
+  if (zonesAsked === null) {
+    zonesAsked = settings()
+      .then((all) => settingsNamespace(all, 'events').find((one) => one.key === 'timezone_choices'))
+      .then((spec) => String((spec ? spec.value ?? spec.default : '') || '')
+        .split(',')
+        .map((one) => one.trim())
+        .filter(Boolean))
+      .catch(() => []);
+  }
+  return zonesAsked;
+}
+
+export function zoneSelect(value = null, { blank = null, id = null } = {}) {
+  const wanted = value === null || value === undefined ? '' : String(value);
+  const select = el('select', { class: 'input', id: id || undefined });
+  if (blank !== null) select.append(optionNode('', blank, wanted === ''));
+  if (wanted) select.append(optionNode(wanted, wanted, true));
+  zoneChoices().then((names) => {
+    for (const name of names) if (name !== wanted) select.append(optionNode(name, name, false));
+  });
+  return select;
+}
+
+let whenCount = 0;
+
+/**
+ * One date-and-time control for the whole site: a native picker, the zone it is
+ * read in, and a help line that says so.
+ */
+export function whenField({
+  label = 'When',
+  value = '',
+  tz = null,
+  min = null,
+  help = null,
+  dateOnly = false,
+  timeOnly = false,
+  zoned = null,
+  zoneWord = null,
+} = {}) {
+  whenCount += 1;
+  const id = `when-${whenCount}`;
+  const shape = (raw) => String(raw || '').trim().replace(' ', 'T');
+  const input = el('input', {
+    class: 'input',
+    id,
+    type: dateOnly ? 'date' : timeOnly ? 'time' : 'datetime-local',
+    value: shape(value) || undefined,
+    min: shape(min) || undefined,
+  });
+  const zone = zoned === null ? !dateOnly && !timeOnly : Boolean(zoned);
+  const picked = zone ? zoneSelect(tz || HERE_ZONE) : null;
+  const control = picked
+    ? el('div', { class: 'whenrow field-control' }, [input, picked])
+    : input;
+  if (!picked) control.classList.add('field-control');
+  const line = el('p', { class: 'field-help' });
+  const named = () => (picked ? picked.value : tz || (zone ? HERE_ZONE : null));
+  const say = () => {
+    const zoneLine = zoneWord === null
+      ? (named() ? `Read in ${named()}.` : null)
+      : zoneWord;
+    line.textContent = [help, zoneLine].filter(Boolean).join(' ');
+  };
+  if (picked) picked.addEventListener('change', say);
+  say();
+  return {
+    node: el('div', { class: 'field' }, [
+      el('label', { class: 'field-label', for: id, text: label }),
+      control,
+      line,
+    ]),
+    input,
+    zone: picked,
+    value: () => {
+      const raw = input.value.trim();
+      if (!raw) return '';
+      if (dateOnly) return raw.slice(0, 10);
+      if (timeOnly) return raw.slice(0, 5);
+      return raw.replace('T', ' ').slice(0, 16);
+    },
+    tz: () => named() || '',
+  };
+}
+
 export async function channelSelect(value, { multiple = false, id = null } = {}) {
   const channels = await refChannels();
   const chosen = new Set((multiple ? value || [] : [value]).filter(Boolean).map(String));

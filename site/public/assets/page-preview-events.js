@@ -19,6 +19,7 @@ import {
   section,
   segment,
   when,
+  whenField,
 } from './ui.js';
 import { previewBanner, previewWas, wouldDo } from './preview.js';
 
@@ -352,7 +353,7 @@ function editCard(row) {
   const title = el('input', { class: 'input', type: 'text', value: row.title || '' });
   const description = el('textarea', { class: 'input area', rows: '3' });
   description.value = row.description || '';
-  const start = el('input', { class: 'input', type: 'text', value: '', placeholder: '2026-09-14 19:30' });
+  const start = whenField({ label: 'Starts', tz: HERE, zoned: false, help: 'When it begins.' });
   const duration = el('input', { class: 'input', type: 'text', value: row.duration || '', placeholder: '2h' });
   const where = el('select', { class: 'input' });
   where.append(el('option', { value: '', text: '— nowhere in particular —' }));
@@ -376,12 +377,12 @@ function editCard(row) {
   }, { tone: 'warn', small: false });
 
   return [card('Change it', [
-    el('p', { class: 'field-help', text: `Times are read in ${HERE}. ${NOT_RESENT}` }),
+    el('p', { class: 'field-help', text: NOT_RESENT }),
     field('Title', title),
     field('What it is', description),
     field('Where', where, 'A voice or stage channel gives everybody a Join button on the Discord event; anything else is written on it as words.'),
     field('Where, or a link', typed, 'Only used when it is somewhere else.'),
-    field('Starts', start, 'YYYY-MM-DD HH:MM on a 24-hour clock.'),
+    start.node,
     field('How long', duration, 'Like 1h30m, 2h or 45m; blank means two hours.'),
     bar([save]),
     say,
@@ -678,17 +679,17 @@ function newTrainDrawer() {
   const say = notice();
   const title = el('input', { class: 'input', type: 'text', placeholder: 'Saturday raid train' });
   const description = el('textarea', { class: 'input area', rows: '2' });
-  const start = el('input', { class: 'input', type: 'text', placeholder: '2026-09-14 19:30' });
+  const start = whenField({ label: 'Starts', tz: HERE, zoned: false, help: 'The first slot opens then.' });
   const minutes = el('input', { class: 'input', type: 'text', value: '60' });
   const count = el('input', { class: 'input', type: 'text', value: '8' });
   const make = button('Start it', () => {
     wouldDo(say, 'POST /api/raidtrains — build the lineup and post it once, editing it in place after that');
   }, { tone: 'warn', small: false });
   openDrawer('Start a raid train', [card(null, [
-    el('p', { class: 'field-help', text: `Times are read in ${HERE}. The lineup is posted once and edited in place after that.` }),
+    el('p', { class: 'field-help', text: 'The lineup is posted once and edited in place after that.' }),
     field('Title', title),
     field('What it is', description),
-    field('Starts', start, 'YYYY-MM-DD HH:MM on a 24-hour clock.'),
+    start.node,
     field('Minutes per slot', minutes, '15 to 720.'),
     field('How many slots', count, '1 to 24 — Discord will not carry a longer lineup in one message.'),
     bar([make]),

@@ -21,6 +21,7 @@ import {
   segment,
   textAction,
   untilWhen,
+  whenField,
 } from './ui.js';
 
 const minutesAgo = (m) => new Date(Date.now() - m * 60000).toISOString();
@@ -145,7 +146,10 @@ const NEED_A_WEEKDAY = 'Pick the day of the week it runs on.';
 const NEED_A_MONTH_DAY = 'A monthly poll runs on a day from 1 to 28 — every month has those.';
 const REPEAT_HELP = 'A repeating poll is a template rather than a poll: nothing is posted when ' +
   'you save it, and Black Bloc opens a fresh copy each time it comes round.';
-const TZ_HELP = 'Blank uses the server’s own zone. Write it the tzdata way — America/Phoenix.';
+const TZ_HELP = 'The zone the time of day is read in. Blank uses the server’s own zone.';
+const FIRST_SLOT_HELP = 'Midnight means the slots are shown as plain dates, with no time on them.';
+const FIRST_SLOT_ZONE = 'Black Bloc reads it in the server’s own time zone.';
+const OPENS_AT_HELP = 'When each copy opens.';
 const REPEATED = 'Saves “{question}” as a template that opens in {where} {cadence}, each one ' +
   'open for {hours} hour(s). Nothing is posted until it first comes round.';
 const CREATE_LABEL = 'Create the poll';
@@ -748,7 +752,12 @@ function createForm() {
   const anonymous = segment([{ value: 'false', label: 'Named' }, { value: 'true', label: 'Anonymous' }], 'false');
   const results = segment([{ value: 'live', label: 'Live bars' }, { value: 'close', label: 'Hidden until close' }], 'live');
   const thread = segment([{ value: 'false', label: 'No thread' }, { value: 'true', label: 'Open a thread' }], 'false');
-  const start = el('input', { class: 'input', type: 'text', placeholder: '2026-09-05 or 2026-09-05 19:00' });
+  const start = whenField({
+    label: 'First slot',
+    zoned: false,
+    help: FIRST_SLOT_HELP,
+    zoneWord: FIRST_SLOT_ZONE,
+  });
   const slots = el('input', { class: 'input', type: 'number', min: '2', max: '25', value: '5' });
   const step = el('input', { class: 'input', type: 'number', min: '1', max: '168', value: '1' });
   const stepUnit = segment([{ value: 'days', label: 'Days' }, { value: 'hours', label: 'Hours' }], 'days');
@@ -757,7 +766,7 @@ function createForm() {
   const weekday = el('select', { class: 'input' });
   for (const [value, label] of WEEKDAYS) weekday.append(el('option', { value, text: label }));
   const monthDay = el('input', { class: 'input', type: 'number', min: '1', max: '28', value: '1' });
-  const at = el('input', { class: 'input', type: 'text', placeholder: '19:00', maxlength: '5' });
+  const at = whenField({ label: 'Time of day', timeOnly: true, help: OPENS_AT_HELP });
   const zone = el('input', { class: 'input', type: 'text', placeholder: 'America/Phoenix' });
 
   const list = el('div');
@@ -770,11 +779,11 @@ function createForm() {
     anonymous,
     results,
     thread,
-    start,
+    start: start.input,
     repeat,
     weekday,
     monthDay,
-    at,
+    at: at.input,
     zone,
     repeating: () => repeat.value !== NO_REPEAT && kind.value !== 'date',
     labels: () => (GENERATED[kind.value]
@@ -806,7 +815,7 @@ function createForm() {
     bar([button('Add option', () => addOption(''), { tone: 'quiet' })]),
   ]);
   const dateBlock = el('div', { class: 'formrow' }, [
-    field('First slot', start, 'A date, or a date and a time when the hour matters.'),
+    start.node,
     field('How many slots', slots, 'Two to twenty-five.'),
     field('Gap between slots', step),
     field('Counted in', stepUnit),
@@ -817,7 +826,7 @@ function createForm() {
   const repeatWhen = el('div', { class: 'formrow' }, [
     weekdayField,
     monthDayField,
-    field('Time of day', at, 'On the 24-hour clock, like 19:00.'),
+    at.node,
     field('Timezone', zone, TZ_HELP),
   ]);
   const repeatBlock = el('div', {}, [
@@ -852,7 +861,7 @@ function createForm() {
   kind.addEventListener('change', paintKind);
   repeat.addEventListener('change', paintRepeat);
   weekday.addEventListener('change', repaint);
-  for (const box of [question, hours, start, slots, step, monthDay, at, zone]) {
+  for (const box of [question, hours, start.input, slots, step, monthDay, at.input, zone]) {
     box.addEventListener('input', repaint);
   }
   where.addEventListener('change', repaint);

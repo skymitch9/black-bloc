@@ -1175,6 +1175,9 @@ a.btn { text-decoration: none; }
   .formrow .field > .field-help,
   .formrow .field > .field-current { grid-column: 1; }
 }
+.whenrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.whenrow > input { flex: 2 1 11rem; min-width: 0; }
+.whenrow > select { flex: 1 1 10rem; min-width: 0; }
 .field-label {
   color: var(--et-muted);
   font-size: var(--et-ui-xs);

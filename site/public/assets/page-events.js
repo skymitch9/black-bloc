@@ -12,6 +12,7 @@ import {
   field,
   idsIn,
   keepSaying,
+  localWhen,
   nameNode,
   namespaceSettings,
   notice,
@@ -21,6 +22,7 @@ import {
   section,
   table,
   when,
+  whenField,
 } from './ui.js';
 
 const state = { status: 'pending', open: null };
@@ -29,10 +31,10 @@ let refresh = () => {};
 
 const TONE = { pending: 'warn', approved: 'ok', denied: null, cancelled: null };
 
-const HERE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const SETTLED = 'This one is settled, so its details cannot be changed — only an event waiting ' +
   'for a decision or already approved can be edited.';
 const PLACE_WORD = { room: 'Review channel', post: 'Review post' };
+const START_HELP = 'When it begins.';
 const OPEN_STATUSES = ['pending', 'approved', 'live'];
 const MOVE_BUTTON = 'Move to the forum';
 const MOVE_BODY = 'A post goes up in the events forum carrying the same card and the same buttons, '
@@ -46,15 +48,6 @@ async function forumState() {
   const specs = settingsNamespace(await settings(true), 'events');
   const held = (key) => ((specs.find((one) => one.key === key) || {}).value ?? null);
   return { id: held('events_forum_channel_id'), mode: held('events_review_mode') };
-}
-
-/** The `YYYY-MM-DD HH:MM` the API reads, in this browser's own zone. */
-function localStart(iso) {
-  const when = iso ? new Date(iso) : null;
-  if (when === null || Number.isNaN(when.getTime())) return '';
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} `
-    + `${pad(when.getHours())}:${pad(when.getMinutes())}`;
 }
 
 function line(label, value) {
@@ -146,7 +139,7 @@ async function editCard(row, say) {
   const description = el('textarea', { class: 'input area', rows: '3' });
   description.value = row.description || '';
   const where = whereControl(row, await refChannels());
-  const start = el('input', { class: 'input', type: 'text', value: localStart(row.starts_at), placeholder: '2026-09-14 19:30' });
+  const start = whenField({ label: 'Starts', value: localWhen(row.starts_at), min: localWhen(), help: START_HELP });
   const duration = el('input', { class: 'input', type: 'text', value: row.duration || '', placeholder: '2h' });
 
   const save = button('Save', async () => {
@@ -155,9 +148,9 @@ async function editCard(row, say) {
       () => send(`/api/events/${encodeURIComponent(row.id)}`, 'PUT', {
         title: title.value.trim(),
         description: description.value.trim(),
-        start: start.value.trim(),
+        start: start.value(),
         duration: duration.value.trim(),
-        tz: HERE,
+        tz: start.tz(),
         ...where.payload(),
       }),
       (found) => [found?.message, ...(found?.notes || [])].filter(Boolean).join(' '),
@@ -169,11 +162,11 @@ async function editCard(row, say) {
   }, { tone: 'warn', small: false });
 
   return card('Change it', [
-    el('p', { class: 'field-help', text: `Times are read in ${HERE}. ${NOT_RESENT}` }),
+    el('p', { class: 'field-help', text: NOT_RESENT }),
     field('Title', title),
     field('What it is', description),
     ...where.nodes,
-    field('Starts', start, 'YYYY-MM-DD HH:MM on a 24-hour clock.'),
+    start.node,
     field('How long', duration, 'Like 1h30m, 2h or 45m; blank means two hours.'),
     bar([save]),
   ]);

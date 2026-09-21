@@ -20,6 +20,7 @@ import {
   textAction,
   valueNode,
   when,
+  whenField,
 } from './ui.js';
 
 const PER_PAGE = 25;
@@ -27,6 +28,8 @@ const PER_PAGE = 25;
 const LOGS_NOTE = 'Every line Black Bloc has written, whether or not it said so in Discord. ' +
   'Important means it acted on a member or something failed; everything else is routine.';
 const AUDIT_NOTE = 'Every settings change, whoever made it and however they made it.';
+const FROM_HELP = 'The first day to include.';
+const TO_HELP = 'The last day to include.';
 
 function paramsFor(state, { paged = true } = {}) {
   const found = new URLSearchParams();
@@ -59,10 +62,10 @@ function nothingSaid(state) {
     : `Nothing has been logged${said}.`;
 }
 
-function dateBox(value, onSet) {
-  const input = el('input', { class: 'input', type: 'date', value: value || undefined });
-  input.addEventListener('change', () => onSet(input.value));
-  return input;
+function dateBox(label, help, value, onSet) {
+  const box = whenField({ label, help, value, dateOnly: true });
+  box.input.addEventListener('change', () => onSet(box.value()));
+  return box;
 }
 
 function settingsTable(rows) {
@@ -225,11 +228,11 @@ function logsSurface() {
     },
   });
 
-  const from = dateBox(state.since, (value) => {
+  const from = dateBox('From', FROM_HELP, state.since, (value) => {
     state.since = value;
     again();
   });
-  const to = dateBox(state.until, (value) => {
+  const to = dateBox('To', TO_HELP, state.until, (value) => {
     state.until = value;
     again();
   });
@@ -269,8 +272,8 @@ function logsSurface() {
     });
     actor.clear();
     target.clear();
-    from.value = '';
-    to.value = '';
+    from.input.value = '';
+    to.input.value = '';
     for (const box of [search, kind]) box.querySelector('.input.search').value = '';
     paintChips();
     again();
@@ -286,8 +289,8 @@ function logsSurface() {
     ]),
     chips,
     el('div', { class: 'formrow' }, [
-      field('From', from, 'The first day to include.'),
-      field('To', to, 'The last day to include.'),
+      from.node,
+      to.node,
       field('Kind', kind, 'The start of a kind, like automod.'),
     ]),
     el('div', { class: 'pickerrow' }, [actor.node, target.node]),

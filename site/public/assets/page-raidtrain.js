@@ -15,6 +15,7 @@ import {
   icon,
   idsIn,
   keepSaying,
+  localWhen,
   modeChip,
   nameNode,
   notice,
@@ -29,14 +30,13 @@ import {
   settingsPanel,
   table,
   when,
+  whenField,
 } from './ui.js';
 
 const state = { scope: 'upcoming', query: '' };
 const shown = { id: null };
 let refresh = () => {};
 let deepLinked = false;
-
-const HERE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
 const TONE = { open: 'ok', locked: 'warn', live: 'warn', done: null, cancelled: null };
 const STATE_OF = { open: 'ok', locked: 'warn', live: 'info', done: null, cancelled: 'danger' };
@@ -68,8 +68,8 @@ const MAKE_EVENT_BODY = 'An event is raised from this train — its title, its s
 const SETTLED = 'This train is settled, so its lineup cannot be changed any more.';
 const NO_SLOTS = 'This train has no slots, which should not be possible — tell a Lead.';
 const SWAP_NOTE = 'The people move; the times belong to the position and stay put.';
-const NEW_NOTE = 'Times are read in {tz}. The lineup is posted once and edited in place after '
-  + 'that.';
+const NEW_NOTE = 'The lineup is posted once and edited in place after that.';
+const START_HELP = 'The first slot opens then.';
 const ALSO_EVENT_HELP = 'The event goes to the events review, where a Lead approves or denies '
   + 'it. Which way this starts is raidtrain_event_default, under Settings and logs below.';
 const PUT_IN_BODY = 'They need a Twitch channel linked, because the lineup carries the name the '
@@ -330,7 +330,7 @@ function newTrainDrawer(eventDefault) {
   const say = notice();
   const title = el('input', { class: 'input', type: 'text', placeholder: 'Saturday raid train' });
   const description = el('textarea', { class: 'input area', rows: '2' });
-  const startsAt = el('input', { class: 'input', type: 'text', placeholder: '2026-09-14 19:30' });
+  const startsAt = whenField({ label: 'Starts', min: localWhen(), help: START_HELP });
   const minutes = el('input', { class: 'input', type: 'text', value: '60' });
   const count = el('input', { class: 'input', type: 'text', value: '8' });
   const alsoEvent = segment(
@@ -342,8 +342,8 @@ function newTrainDrawer(eventDefault) {
     const done = await run(say, () => send('/api/raidtrains', 'POST', {
       title: title.value.trim(),
       description: description.value.trim(),
-      start: startsAt.value.trim(),
-      tz: HERE,
+      start: startsAt.value(),
+      tz: startsAt.tz(),
       slot_minutes: Number(minutes.value.trim() || 60),
       slot_count: Number(count.value.trim() || 0),
       make_event: alsoEvent.readValue() === 'true',
@@ -355,10 +355,10 @@ function newTrainDrawer(eventDefault) {
   }, { tone: 'warn', small: false });
 
   return [
-    el('p', { class: 'field-help', text: said(NEW_NOTE, { tz: HERE }) }),
+    el('p', { class: 'field-help', text: NEW_NOTE }),
     field('Title', title),
     field('What it is', description),
-    field('Starts', startsAt, 'YYYY-MM-DD HH:MM on a 24-hour clock.'),
+    startsAt.node,
     field('Minutes per slot', minutes, '15 to 720.'),
     field('How many slots', count, '1 to 24 — Discord will not carry a longer lineup in one message.'),
     field('Also make an event', alsoEvent, ALSO_EVENT_HELP),
