@@ -1,16 +1,9 @@
 {
-  "release": "v150",
-  "commit": "3d65025",
+  "release": "v151",
+  "commit": "9ebf15b",
   "changed_features": [
-    "birthday",
     "events",
     "golive",
-    "guides",
-    "pings",
-    "poll",
-    "posts",
-    "raidtrain",
-    "request",
-    "selftest"
+    "youtube"
   ]
 }
