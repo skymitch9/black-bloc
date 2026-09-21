@@ -420,7 +420,7 @@ const SPOTLIGHT = [
 }
 
 // --- ⚠️ every settings key lands in exactly one drawer or one named surface -------------------
-// The 51 keys the three namespaces held on 2026-09-21, measured with
+// The 52 keys the three namespaces held on 2026-09-21, measured with
 //   python -c "from black_bloc import settings_store as s; print([k for k in s.KEY_TYPES if
 //              s.namespace_of(k) in ('golive','pings','youtube')])"
 // The catch-all is what keeps this satisfiable: a key added tomorrow appears in Everything
@@ -442,12 +442,12 @@ const NAMESPACE_KEYS = [
   'spotlight_mode', 'spotlight_poll_minutes', 'spotlight_end_misses', 'spotlight_bump_hours',
   'spotlight_bump_template', 'spotlight_bump_cleanup', 'spotlight_bump_pings', 'spotlight_pin',
   'spotlight_default_days', 'spotlight_event_slack_hours',
-  'golive_channel_spotlight_default',
+  'golive_channel_spotlight_default', 'golive_channel_optout_post',
 ];
 
 {
   const where = 'every key lands once';
-  is(`${where} — the namespaces held 51 keys when this was measured`, NAMESPACE_KEYS.length, 51);
+  is(`${where} — the namespaces held 52 keys when this was measured`, NAMESPACE_KEYS.length, 52);
 
   const specs = NAMESPACE_KEYS.map((key) => ({ key, type: 'text', value: null }));
   const placed = placeSettings(specs);

@@ -307,6 +307,7 @@ ROUTINE: frozenset[str] = frozenset(
         "golive.spotlight_bumped",
         "golive.spotlight_ended",
         "golive.spotlight_pinned",
+        "golive.spotlight_post_deleted",
         "golive.spotlight_reconciled",
         "golive.spotlight_unpinned",
         "golive.spotlight_updated",

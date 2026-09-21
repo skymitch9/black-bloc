@@ -22,7 +22,7 @@ from ...cogs.content.golive import (
 )
 from ...cogs.content.spotlight import (
     bump_now,
-    change_spotlight,
+    changed_spotlight,
     channel_by_id,
     channels_for,
     forget_spotlight,
@@ -418,16 +418,17 @@ def build_router(bot: Any) -> APIRouter:
                 raise Refused(503, "no_cog", said)
             if outcome == "not_linked":
                 raise Refused(404, "not_linked", said)
+        settled = None
         if fields or said is None:
-            fresh = await change_spotlight(
+            fresh, settled = await changed_spotlight(
                 bot, guild, who_acts, spotlight_id, via=VIA_WEBSITE, **fields
             )
         if fresh is None:
             raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
         if said is None and "announce" in payload:
-            said = spot.announce_said(fresh)
+            said = spot.announce_said(fresh, settled)
         elif said is None and "spotlight" in payload:
-            said = spot.spotlight_said(fresh)
+            said = spot.spotlight_said(fresh, settled)
         return await one_spotlight(bot, guild, spotlight_id) | {
             "message": said
             or SPOTLIGHT_CHANGED.format(

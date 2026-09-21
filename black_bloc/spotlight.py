@@ -19,7 +19,12 @@ from .golive import (
     tidy,
     twitch_login_from_url,
 )
-from .settings_store import SPOTLIGHT_BUMP_TEMPLATE
+from .settings_store import (
+    CHANNEL_OPTOUT_DELETE,
+    CHANNEL_OPTOUT_END,
+    CHANNEL_OPTOUT_LEAVE,
+    SPOTLIGHT_BUMP_TEMPLATE,
+)
 
 log = logging.getLogger(__name__)
 
@@ -219,6 +224,26 @@ OPTED_IN_SAID = (
 )
 OPTED_OUT_STATE = "Opted out — nothing of its is announced, whatever the spotlight says."
 OPTED_OUT_CELL = "opted out"
+OPTED_OUT_POST_SAID = {
+    CHANNEL_OPTOUT_END: (
+        "The announcement that was out has been unpinned and edited to say the stream has "
+        "ended, exactly as any stream end does, and the session is closed (per "
+        "`golive_channel_optout_post`)."
+    ),
+    CHANNEL_OPTOUT_DELETE: (
+        "The announcement that was out has been deleted and the session is closed (per "
+        "`golive_channel_optout_post`)."
+    ),
+    CHANNEL_OPTOUT_LEAVE: (
+        "The announcement that was out is left exactly as it was posted — only the pin came "
+        "off — and the session is closed (per `golive_channel_optout_post`)."
+    ),
+}
+UNPINNED = "unpinned"
+UNPINNED_NOW = (
+    "The announcement that is out now has been unpinned; it stays posted, no reminder follows "
+    "it, and it is edited to past tense when the stream ends."
+)
 
 LINK_YOUTUBE = "Link a YouTube channel"
 UNLINK_YOUTUBE = "Unlink it"
@@ -246,6 +271,8 @@ RECONCILED = "reconciled_on_start"
 ENDED = "ended"
 EXPIRED = "expired"
 REMOVED_BECAUSE = "removed"
+OPTED_OUT_ENDED = "opted_out"
+SPOTLIGHT_OFF_BECAUSE = "spotlight_off"
 FAN_ROLE_EXPIRED = "spotlight_expired"
 FAN_ROLE_REMOVED = "spotlight_removed"
 FAN_ROLE_TAKEN = "staff_removed"
@@ -339,14 +366,23 @@ def spotlight_state(row: Any, hours: Any) -> str:
     return SPOTLIT_STATE.format(hours=hours)
 
 
-def spotlight_said(row: Any) -> str:
+def spotlight_said(row: Any, settled: Any = None) -> str:
+    """One sentence for both doors; `settled` is what the open announcement had done to it."""
     login = _cell(row, "twitch_login")
-    return (SPOTLIT_SAID if is_spotlit(row) else NOT_SPOTLIT_SAID).format(login=login)
+    if is_spotlit(row):
+        return SPOTLIT_SAID.format(login=login)
+    said = NOT_SPOTLIT_SAID.format(login=login)
+    return f"{said} {UNPINNED_NOW}" if settled == UNPINNED else said
 
 
-def announce_said(row: Any) -> str:
+def announce_said(row: Any, settled: Any = None) -> str:
+    """One sentence for both doors; the clause lands only when a session was open."""
     login = _cell(row, "twitch_login")
-    return (OPTED_IN_SAID if announces(row) else OPTED_OUT_SAID).format(login=login)
+    if announces(row):
+        return OPTED_IN_SAID.format(login=login)
+    said = OPTED_OUT_SAID.format(login=login)
+    clause = OPTED_OUT_POST_SAID.get(str(settled or ""))
+    return f"{said} {clause}" if clause else said
 
 
 def keeps_forever(row: Any) -> bool:

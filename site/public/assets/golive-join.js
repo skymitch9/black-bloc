@@ -349,6 +349,7 @@ export const DRAWERS = [
       'spotlight_default_days',
       'spotlight_event_slack_hours',
       'golive_channel_spotlight_default',
+      'golive_channel_optout_post',
     ],
   },
   { id: 'rest', title: 'Everything else' },

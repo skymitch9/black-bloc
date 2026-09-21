@@ -37,6 +37,7 @@ from black_bloc.cogs.content.spotlight import (
 from black_bloc.config import load_settings
 from black_bloc.golive import StreamInfo, now_iso
 from black_bloc.settings_store import (
+    CHANNEL_OPTOUT_POST_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
     SPOTLIGHT_END_MISSES_KEY,
     SPOTLIGHT_MODE_KEY,
@@ -1208,6 +1209,117 @@ async def test_an_opted_out_channel_keeps_its_role_and_its_youtube_link(bot, cog
     assert words.youtube_of(fresh) == "UC" + "x" * 22
     held = await pings.get_spotlight_fan_role(bot.db, GUILD, row["id"])
     assert held is not None and int(held["role_id"]) == int(role_id)
+
+
+async def a_live_row(bot, cog, **fields):
+    """A channel with an announcement out there, pinned, and its reminder already due."""
+    row = await a_row(bot, **fields)
+    helix = helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    session = await open_session(bot.db, row["id"])
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET started_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=5)).isoformat(), session["id"]),
+    )
+    await bot.db.conn.commit()
+    return row, helix, bot.guild.channel.messages[0]
+
+
+async def test_opting_a_live_channel_out_ends_the_stream_that_is_out_there(bot, cog):
+    """The defect: ESA was announced and pinned at boot, opted out, and nothing ended it
+    because a 24/7 rerun channel never reads offline."""
+    row, helix, announcement = await a_live_row(bot, cog)
+    assert announcement.pinned is True
+
+    said, picked = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_out")
+
+    assert picked is True and "is opted out" in said
+    assert "edited to say the stream has ended" in said
+    assert announcement.pinned is False and announcement.unpins == [words.UNPIN_REASON]
+    assert "has ended" in announcement.content
+    assert await open_session(bot.db, row["id"]) is None
+    ended = await details_of(bot.db, "golive.spotlight_ended")
+    assert ended["reason"] == words.OPTED_OUT_ENDED and ended["post"] == "end"
+    assert (await details_of(bot.db, "golive.spotlight_unpinned"))["because"] == (
+        words.OPTED_OUT_ENDED
+    )
+
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1, "a reminder went out after the opt-out"
+    assert helix.streams, "the channel is still live; only the announcement ended"
+
+
+async def test_the_optout_post_key_deletes_the_announcement_instead(bot, cog):
+    await bot.store.set(GUILD, CHANNEL_OPTOUT_POST_KEY, "delete")
+    row, _helix, announcement = await a_live_row(bot, cog)
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_out")
+
+    assert "has been deleted" in said
+    assert announcement.deleted is True and bot.guild.channel.messages == []
+    assert await open_session(bot.db, row["id"]) is None
+    assert "golive.spotlight_post_deleted" in await kinds(bot.db)
+    assert (await details_of(bot.db, "golive.spotlight_ended"))["post"] == "delete"
+
+
+async def test_the_optout_post_key_leaves_the_words_exactly_as_posted(bot, cog):
+    await bot.store.set(GUILD, CHANNEL_OPTOUT_POST_KEY, "leave")
+    row, _helix, announcement = await a_live_row(bot, cog)
+    posted = announcement.content
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_out")
+
+    assert "left exactly as it was posted" in said
+    assert announcement.deleted is False and announcement.content == posted
+    assert announcement.pinned is False
+    assert await open_session(bot.db, row["id"]) is None
+    assert (await details_of(bot.db, "golive.spotlight_ended"))["post"] == "leave"
+
+
+async def test_opting_out_with_nothing_live_says_the_plain_sentence(bot, cog):
+    row = await a_row(bot)
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_out")
+
+    assert "is opted out" in said
+    assert "announcement that was out" not in said
+    assert "golive.spotlight_ended" not in await kinds(bot.db)
+
+
+async def test_opting_out_twice_settles_the_announcement_once(bot, cog):
+    row, _helix, announcement = await a_live_row(bot, cog)
+    await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_out")
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "opt_out")
+
+    assert "announcement that was out" not in said
+    assert (await kinds(bot.db)).count("golive.spotlight_ended") == 1
+    assert announcement.unpins == [words.UNPIN_REASON]
+
+
+async def test_taking_the_spotlight_off_a_live_channel_unpins_it_and_leaves_it_running(bot, cog):
+    row, helix, announcement = await a_live_row(bot, cog)
+    posted = announcement.content
+
+    said, _ = await run_spotlight_move(
+        bot, bot.guild, FakeActor(), row["id"], "spotlight_off"
+    )
+
+    assert "like anybody else" in said and "has been unpinned" in said
+    assert announcement.pinned is False and announcement.content == posted
+    assert await open_session(bot.db, row["id"]) is not None
+    assert (await details_of(bot.db, "golive.spotlight_unpinned"))["because"] == (
+        words.SPOTLIGHT_OFF_BECAUSE
+    )
+
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1, "a bump went out with the spotlight off"
+
+    helix.streams = []
+    await cog.poll_once()
+    await cog.poll_once()
+    assert await open_session(bot.db, row["id"]) is None
+    assert "has ended" in announcement.content
 
 
 async def test_the_panel_only_offers_the_spotlight_moves_while_the_spotlight_is_on(bot, cog):

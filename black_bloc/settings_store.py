@@ -1619,6 +1619,11 @@ SPOTLIGHT_PIN_KEY = "spotlight_pin"
 SPOTLIGHT_DEFAULT_DAYS_KEY = "spotlight_default_days"
 SPOTLIGHT_EVENT_SLACK_KEY = "spotlight_event_slack_hours"
 CHANNEL_SPOTLIGHT_DEFAULT_KEY = "golive_channel_spotlight_default"
+CHANNEL_OPTOUT_POST_KEY = "golive_channel_optout_post"
+CHANNEL_OPTOUT_END = "end"
+CHANNEL_OPTOUT_DELETE = "delete"
+CHANNEL_OPTOUT_LEAVE = "leave"
+CHANNEL_OPTOUT_POSTS = (CHANNEL_OPTOUT_END, CHANNEL_OPTOUT_DELETE, CHANNEL_OPTOUT_LEAVE)
 SPOTLIGHT_POLL_MINUTES = 5
 SPOTLIGHT_POLL_MIN_MINUTES = 2
 SPOTLIGHT_POLL_MAX_MINUTES = 30
@@ -1651,9 +1656,11 @@ KEY_TYPES.update(
         SPOTLIGHT_DEFAULT_DAYS_KEY: "int",
         SPOTLIGHT_EVENT_SLACK_KEY: "int",
         CHANNEL_SPOTLIGHT_DEFAULT_KEY: "bool",
+        CHANNEL_OPTOUT_POST_KEY: "enum",
     }
 )
 KEY_CHOICES[SPOTLIGHT_MODE_KEY] = SPOTLIGHT_MODES
+KEY_CHOICES[CHANNEL_OPTOUT_POST_KEY] = CHANNEL_OPTOUT_POSTS
 KEY_MIN[SPOTLIGHT_POLL_MINUTES_KEY] = SPOTLIGHT_POLL_MIN_MINUTES
 KEY_MAX[SPOTLIGHT_POLL_MINUTES_KEY] = SPOTLIGHT_POLL_MAX_MINUTES
 KEY_MIN[SPOTLIGHT_END_MISSES_KEY] = SPOTLIGHT_END_MISSES_MIN
@@ -1747,6 +1754,13 @@ KEY_HELP.update(
             "spotlighted from the start — pinned while it streams and reminded every few "
             "hours; false — the default — announces it like any other stream, and its own "
             "row's **Spotlight on** adds the pin and the reminders whenever staff want them"
+        ),
+        CHANNEL_OPTOUT_POST_KEY: (
+            "what happens to an announcement that is already out when a channel is opted out "
+            "of announcements mid-stream: end — the default — unpins it and edits it to the "
+            "ended wording exactly as any stream end does; delete removes the post outright; "
+            "leave takes the pin off and leaves the words as they were posted. The session is "
+            "closed either way, so no reminder follows and nothing waits on Twitch"
         ),
     }
 )
@@ -3372,6 +3386,8 @@ class SettingsStore:
             return SPOTLIGHT_EVENT_SLACK_HOURS
         if key == CHANNEL_SPOTLIGHT_DEFAULT_KEY:
             return False
+        if key == CHANNEL_OPTOUT_POST_KEY:
+            return CHANNEL_OPTOUT_END
         if key == "golive_cooldown_minutes":
             return 60
         if key == "golive_max_session_hours":
