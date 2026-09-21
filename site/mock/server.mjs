@@ -6851,12 +6851,21 @@ async function serveStatic(request, response, path, asked) {
     return;
   }
   try {
-    const info = await stat(target);
-    if (info.isDirectory()) throw new Error('directory');
-    const html = extname(target) === '.html';
-    const body = html ? stamp(await readFile(target, 'utf8')) : await readFile(target);
+    let info = await stat(target);
+    let file = target;
+    if (info.isDirectory()) {
+      if (!wanted.endsWith('/')) {
+        response.writeHead(307, { location: `${wanted}/`, ...cookie });
+        response.end();
+        return;
+      }
+      file = join(target, 'index.html');
+      info = await stat(file);
+    }
+    const html = extname(file) === '.html';
+    const body = html ? stamp(await readFile(file, 'utf8')) : await readFile(file);
     response.writeHead(200, {
-      'content-type': TYPES[extname(target)] || 'application/octet-stream',
+      'content-type': TYPES[extname(file)] || 'application/octet-stream',
       'cache-control': html ? NO_STORE : REVALIDATE,
       ...cookie,
     });
