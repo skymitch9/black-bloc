@@ -463,17 +463,17 @@ function postRow(post) {
   return el('button', {
     class: 'grid-row',
     type: 'button',
-    style: 'grid-template-columns: 12px minmax(0, 1.4fr) 260px 150px 140px 24px',
+    style: 'grid-template-columns: 12px minmax(0, 1.4fr) 190px 280px 140px 24px',
     'data-search': `${post.title} ${post.channel_name || ''} ${(post.status || []).join(' ')} ${post.body || ''}`.toLowerCase(),
     on: { click: () => openDrawer(post.title, postDrawer(post)) },
   }, [
     el('span', { class: 'dot-sm', 'data-tone': leadState(post) }),
     el('span', { class: 'cell-name', text: post.title }),
-    el('span', { class: 'cell-kind' }, [
+    el('span', { class: 'cell-quiet', text: postedLine(post, DATA.shadow) }),
+    el('span', { class: 'cell-kind cell-center' }, [
       ...statusPills(post),
       post.seeded ? badge('ships with the bot') : null,
     ]),
-    el('span', { class: 'cell-quiet', text: postedLine(post, DATA.shadow) }),
     el('span', {
       class: 'cell-quiet',
       title: ago(post.updated_at).title,
@@ -486,12 +486,12 @@ function postRow(post) {
 function headRow() {
   return el('div', {
     class: 'grid-row head',
-    style: 'grid-template-columns: 12px minmax(0, 1.4fr) 260px 150px 140px 24px',
+    style: 'grid-template-columns: 12px minmax(0, 1.4fr) 190px 280px 140px 24px',
   }, [
     el('span'),
     el('span', { text: 'Post' }),
-    el('span', { text: 'How it stands' }),
-    el('span', { text: 'Where it is' }),
+    el('span', { text: 'Channel' }),
+    el('span', { class: 'cell-center', text: 'Status' }),
     el('span', { text: 'Last saved' }),
     el('span'),
   ]);
@@ -568,6 +568,8 @@ function postsSection() {
 
   const say = notice();
   const mode = el('span', { class: 'mode-chip', 'data-mode': DATA.mode, text: DATA.mode });
+  const newPost = button('New post', () => openDrawer('A new post', newPostDrawer()), { tone: 'warn' });
+  newPost.style.marginLeft = 'auto';
   paint();
 
   list.body.append(
@@ -582,7 +584,7 @@ function postsSection() {
       ? el('p', { class: 'field-help', text: DATA.guard.said.replace(/\*\*/g, '') })
       : null,
     card(null, [
-      el('div', { class: 'card-head' }, [search, chips]),
+      el('div', { class: 'card-head' }, [search, chips, newPost]),
       DATA.posts.length === 0
         ? sayNothing(NOTHING_YET)
         : el('div', { class: 'table-scroll' }, [grid]),
@@ -635,13 +637,6 @@ function machinerySection() {
 }
 
 async function load() {
-  const aside = document.getElementById('page-aside');
-  if (aside) {
-    aside.replaceChildren(button('New post', () => openDrawer('A new post', newPostDrawer()), {
-      tone: 'warn',
-      small: false,
-    }));
-  }
   document.getElementById('dash').replaceChildren(
     full(previewBanner({
       today: 3,

@@ -921,6 +921,7 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
 .grid-row .cell-name { font-weight: var(--et-weight-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grid-row .cell-quiet { color: var(--et-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grid-row .cell-kind { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.grid-row .cell-center { justify-content: center; text-align: center; }
 .grid-row .cell-reason { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grid-foot {
   display: flex;
