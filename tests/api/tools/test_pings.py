@@ -95,6 +95,41 @@ async def test_the_site_may_hand_an_existing_role_over(client, sign_in, on, guil
     assert guild.made_roles == []
 
 
+async def test_the_site_names_the_role_it_is_making(client, sign_in, on, guild, wf):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+
+    response = client.post(
+        "/api/pings/streamers", json={"member_id": "21", "name": "  Namu   crew "}
+    )
+
+    assert response.status_code == 200 and response.json()["role"] == "Namu crew"
+    assert [role.name for role in guild.made_roles] == ["Namu crew"]
+
+
+def test_a_name_a_role_already_has_is_a_sentence_and_never_a_bare_status(
+    client, sign_in, on, guild, wf
+):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+
+    response = client.post("/api/pings/streamers", json={"member_id": "21", "name": "member"})
+
+    assert response.status_code == 409 and response.json()["error"] == "duplicate_role"
+    assert "already exists in this server" in response.json()["message"]
+    assert guild.made_roles == []
+
+
+def test_a_name_that_is_blank_is_a_sentence(client, sign_in, on, guild, wf):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+
+    response = client.post("/api/pings/streamers", json={"member_id": "21", "name": "  "})
+
+    assert response.status_code == 400 and response.json()["error"] == "blank_role_name"
+    assert "needs a name" in response.json()["message"]
+
+
 def test_a_member_black_bloc_cannot_see_is_a_sentence(client, sign_in, on):
     sign_in(client)
     response = client.post("/api/pings/streamers", json={"member_id": "999"})

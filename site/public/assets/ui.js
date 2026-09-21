@@ -727,6 +727,62 @@ export function ask({ title, body, confirmLabel = 'Do it', tone = 'danger' }) {
   });
 }
 
+let formDialog = null;
+const WORKING = 'Working…';
+
+/**
+ * ask()'s dialog for a form that must survive a refusal. `onConfirm` returns
+ * null to close and resolve true, or a sentence to show INSIDE and stay open
+ * with every field as it was typed; a throw becomes that sentence. `ready`
+ * hands the caller the confirm button, so a body can grey it while what is
+ * typed cannot be sent.
+ */
+export function askForm({
+  title, body, confirmLabel = 'Do it', tone = 'danger', onConfirm = null, ready = null,
+}) {
+  if (formDialog === null) {
+    formDialog = el('dialog', { class: 'ask' });
+    document.body.append(formDialog);
+  }
+  return new Promise((resolve) => {
+    const finish = (answer) => {
+      if (formDialog.open) formDialog.close();
+      resolve(answer);
+    };
+    const said = notice();
+    const confirm = button(confirmLabel, async () => {
+      confirm.disabled = true;
+      said.say(WORKING);
+      let refusal = null;
+      try {
+        refusal = onConfirm ? await onConfirm() : null;
+      } catch (error) {
+        refusal = sentenceFor(error).text;
+      }
+      confirm.disabled = false;
+      if (refusal === null || refusal === undefined) {
+        finish(true);
+        return;
+      }
+      said.say(String(refusal), 'danger');
+    }, { tone, small: false });
+    const lines = [].concat(body).filter(Boolean).map((line) =>
+      (line instanceof Node ? line : el('p', { class: 'ask-body', text: String(line) })));
+    formDialog.replaceChildren(el('div', { class: 'ask-inner' }, [
+      el('h2', { text: title }),
+      ...lines,
+      said,
+      bar([confirm, button('Cancel', () => finish(false), { tone: 'quiet', small: false })]),
+    ]));
+    formDialog.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      finish(false);
+    }, { once: true });
+    formDialog.showModal();
+    if (ready) ready({ confirm, say: said });
+  });
+}
+
 /**
  * The control is tagged by name so the CSS can place it in the middle row of
  * the field's grid. Placing it as "the child that is not a label or help"

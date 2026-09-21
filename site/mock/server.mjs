@@ -4740,6 +4740,35 @@ function followersOf(roleId) {
   return ROSTER.filter((row) => (row.role_ids || []).includes(String(roleId))).length;
 }
 
+// Mirrors black_bloc/pings.py:typed_role_name and the duplicate check ensure_fan_role makes: the
+// name the modal typed is refused against the roles the server already has, never against the
+// rows — a role the mock "made" is not in ROLES, exactly as the note above says.
+const MOCK_ROLE_NAME_MAX = 100;
+const MOCK_BLANK_ROLE_NAME = 'A ping role needs a name, so nothing was made. Type the name the role should have, or pick one that is already here as the existing role.';
+
+function tidyRoleName(given) {
+  return String(given ?? '').trim().replace(/\s+/g, ' ').slice(0, MOCK_ROLE_NAME_MAX);
+}
+
+function roleNamed(name) {
+  const wanted = tidyRoleName(name).toLowerCase();
+  return wanted ? ROLES.find((role) => tidyRoleName(role.name).toLowerCase() === wanted) || null : null;
+}
+
+/** The name a fan role gets, or the Refused the modal shows in place without closing. */
+function wantedRoleName(body, fallback) {
+  if (body.name === undefined || body.name === null || body.role_id) {
+    const there = roleNamed(fallback);
+    return { name: fallback, reuse: there ? there.id : null };
+  }
+  const typed = tidyRoleName(body.name);
+  if (!typed) throw new Refused(400, 'blank_role_name', MOCK_BLANK_ROLE_NAME);
+  if (roleNamed(typed)) {
+    throw new Refused(409, 'duplicate_role', `A role named **${typed}** already exists in this server, so nothing was made — pick it as the existing role, or choose another name.`);
+  }
+  return { name: typed, reuse: null };
+}
+
 function spotlightOf(id) {
   return state.golive.spotlights.find((one) => String(one.id) === String(id)) || null;
 }
@@ -4873,8 +4902,13 @@ route('POST', '/api/pings/streamers', async (context) => {
   if (given && !roleOf(given)) {
     throw new Refused(400, 'no_such_role', `**${given}** is not a role in this server any more, so nothing was changed. Reload the page and pick the role again.`);
   }
-  const name = given ? roleOf(given).name : `${memberName(memberId)} pings`;
-  const roleId = given || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
+  const wanted = given
+    ? { name: roleOf(given).name, reuse: given }
+    : wantedRoleName(body, `${memberName(memberId)} pings`);
+  const name = wanted.name;
+  const reused = Boolean(given || wanted.reuse);
+  const roleId = given || wanted.reuse
+    || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
   const row = {
     user_id: memberId,
     role_id: roleId,
@@ -4883,10 +4917,10 @@ route('POST', '/api/pings/streamers', async (context) => {
     created_by: STAFF.id,
   };
   state.golive.fanRoles.push(row);
-  logAction('web.pings.fan_role_created', { target_id: memberId, details: { role_id: roleId, role: name, reused: Boolean(given) } });
+  logAction('web.pings.fan_role_created', { target_id: memberId, details: { role_id: roleId, role: name, reused } });
   return {
     ...fanRoleRow(row),
-    message: given
+    message: reused
       ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`.`
       : `Made **${name}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of their go-live announcement.`,
   };
@@ -4913,8 +4947,13 @@ function giveSpotlightARole(body) {
   if (given && !roleOf(given)) {
     throw new Refused(400, 'no_such_role', `**${given}** is not a role in this server any more, so nothing was changed. Reload the page and pick the role again.`);
   }
-  const roleName = given ? roleOf(given).name : `${name} pings`;
-  const roleId = given || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
+  const wanted = given
+    ? { name: roleOf(given).name, reuse: given }
+    : wantedRoleName(body, `${name} pings`);
+  const roleName = wanted.name;
+  const reused = Boolean(given || wanted.reuse);
+  const roleId = given || wanted.reuse
+    || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
   const made = {
     user_id: null,
     spotlight_id: row.id,
@@ -4924,10 +4963,10 @@ function giveSpotlightARole(body) {
     created_by: STAFF.id,
   };
   state.golive.fanRoles.push(made);
-  logAction('web.pings.fan_role_created', { details: { role_id: roleId, role: roleName, reused: Boolean(given), spotlight_id: row.id, spotlight: row.twitch_login } });
+  logAction('web.pings.fan_role_created', { details: { role_id: roleId, role: roleName, reused, spotlight_id: row.id, spotlight: row.twitch_login } });
   return {
     ...fanRoleRow(made),
-    message: given
+    message: reused
       ? `Used the role **${roleName}** for the channel **${name}**. People pick it with **Follow a streamer…** on \`/pings\`, and it is mentioned in front of that channel's announcement.`
       : `Made **${roleName}** for the channel **${name}**. People pick it with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of that channel's spotlight announcement.`,
   };

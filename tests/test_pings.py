@@ -21,13 +21,17 @@ class FakeRole:
         self.name = name
         self.members = []
         self.deleted = False
+        self.guild = None
         self._assignable = assignable
 
     def is_assignable(self):
         return self._assignable
 
     async def delete(self, reason=None):
+        """Discord takes a deleted role off the guild, so the fake has to as well."""
         self.deleted = True
+        if self.guild is not None:
+            self.guild.roles = [role for role in self.guild.roles if role is not self]
 
 
 class FakeMember:
@@ -100,6 +104,7 @@ class FakeGuild:
         return self.channel if channel_id == self.channel.id else None
 
     def add_role(self, role):
+        role.guild = self
         self.roles.append(role)
         return role
 
@@ -173,6 +178,13 @@ def test_a_role_name_is_clamped_to_what_discord_will_take():
     assert len(long) == pings.ROLE_NAME_LIMIT
 
 
+def test_a_typed_name_keeps_its_own_words_and_is_clamped():
+    assert pings.typed_role_name("  Namu   crew ") == "Namu crew"
+    assert pings.typed_role_name("   ") == ""
+    assert pings.typed_role_name(None) == ""
+    assert len(pings.typed_role_name("x" * 400)) == pings.ROLE_NAME_LIMIT
+
+
 def test_a_template_that_renders_to_nothing_still_names_the_streamer():
     assert pings.fan_role_name("   ", "Ada") == "Ada pings"
 
@@ -229,6 +241,77 @@ async def test_a_staff_given_role_is_used_instead_of_making_one(bot, streamer):
     assert outcome.ok and outcome.created is False and outcome.role_id == 4242
     assert bot.guild.made == []
     assert (await details(bot.db, "pings.fan_role_created"))["reused"] is True
+
+
+async def test_a_name_typed_on_the_site_is_what_the_role_is_called(bot, streamer):
+    outcome = await pings.ensure_fan_role(
+        bot, bot.guild, streamer, by=STAFF, name="  Namu   crew  ", staff=True
+    )
+
+    assert outcome.ok and outcome.created
+    assert bot.guild.made == [("Namu crew", False, pings.ROLE_REASON)]
+    assert bot.guild.get_role(outcome.role_id).name == "Namu crew"
+
+
+async def test_a_name_another_role_already_has_is_refused_and_nothing_is_made(bot, streamer):
+    bot.guild.add_role(FakeRole(4242, "Namu crew"))
+
+    outcome = await pings.ensure_fan_role(
+        bot, bot.guild, streamer, by=STAFF, name="namu CREW", staff=True
+    )
+
+    assert outcome.ok is False and outcome.code == pings.DUPLICATE_CODE
+    assert "already exists in this server" in outcome.message and "namu CREW" in outcome.message
+    assert bot.guild.made == []
+    assert await pings.get_fan_role(bot.db, GUILD, STREAMER) is None
+
+
+async def test_a_name_that_is_nothing_at_all_is_refused_in_words(bot, streamer):
+    outcome = await pings.ensure_fan_role(
+        bot, bot.guild, streamer, by=STAFF, name="   ", staff=True
+    )
+
+    assert outcome.ok is False and outcome.code == pings.BLANK_NAME_CODE
+    assert "needs a name" in outcome.message
+    assert bot.guild.made == []
+
+
+async def test_a_typed_name_is_clamped_to_what_discord_will_take(bot, streamer):
+    outcome = await pings.ensure_fan_role(
+        bot, bot.guild, streamer, by=STAFF, name="x" * 400, staff=True
+    )
+
+    assert outcome.ok and len(bot.guild.get_role(outcome.role_id).name) == pings.ROLE_NAME_LIMIT
+
+
+async def test_a_picked_role_wins_over_a_name_and_is_never_a_duplicate(bot, streamer):
+    role = bot.guild.add_role(FakeRole(4242, "Namu Squad"))
+
+    outcome = await pings.ensure_fan_role(
+        bot, bot.guild, streamer, by=STAFF, existing_role=role, name="Namu Squad", staff=True
+    )
+
+    assert outcome.ok and outcome.role_id == 4242 and bot.guild.made == []
+
+
+async def test_the_template_reuses_a_role_of_that_name_rather_than_making_a_second(bot, streamer):
+    bot.guild.add_role(FakeRole(4242, "supernamu PINGS"))
+
+    outcome = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+
+    assert outcome.ok and outcome.created is False and outcome.role_id == 4242
+    assert bot.guild.made == []
+    assert (await details(bot.db, "pings.fan_role_created"))["reused"] is True
+    assert "Used the role" in outcome.message
+
+
+async def test_a_same_named_role_black_bloc_cannot_hand_out_is_not_reused(bot, streamer):
+    bot.guild.add_role(FakeRole(4242, "SuperNamu pings", assignable=False))
+
+    outcome = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+
+    assert outcome.ok and outcome.created and outcome.role_id != 4242
+    assert bot.guild.made == [("SuperNamu pings", False, pings.ROLE_REASON)]
 
 
 async def test_a_role_black_bloc_cannot_hand_out_is_refused_in_words(bot, streamer):
@@ -1282,6 +1365,22 @@ async def test_a_channels_ping_role_is_named_by_the_same_template_a_persons_is(b
     }
 
 
+async def test_a_channels_role_can_be_named_from_the_site_and_a_duplicate_is_refused(bot):
+    channel = await a_channel(bot.db)
+    bot.guild.add_role(FakeRole(4242, "GDQ crew"))
+
+    refused = await pings.ensure_fan_role(
+        bot, bot.guild, None, by=STAFF, name="gdq CREW", spotlight=channel
+    )
+    made = await pings.ensure_fan_role(
+        bot, bot.guild, None, by=STAFF, name="GDQ friends", spotlight=channel
+    )
+
+    assert refused.ok is False and refused.code == pings.DUPLICATE_CODE
+    assert made.ok and bot.guild.get_role(made.role_id).name == "GDQ friends"
+    assert await pings.get_spotlight_fan_role(bot.db, GUILD, GDQ) is not None
+
+
 async def test_a_channel_cannot_be_given_a_second_ping_role(bot):
     channel = await a_channel(bot.db)
     first = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
@@ -1311,13 +1410,14 @@ async def test_a_channels_row_and_a_members_row_never_stand_in_for_each_other(bo
 async def test_taking_a_channels_ping_role_away_obeys_the_delete_setting(bot):
     channel = await a_channel(bot.db)
     made = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+    role = bot.guild.get_role(made.role_id)
     await bot.store.set(GUILD, pings.DELETE_KEY, True)
 
     gone = await pings.remove_fan_role(
         bot, bot.guild, by=STAFF, spotlight=channel, because="spotlight_expired"
     )
 
-    assert gone.ok and bot.guild.get_role(made.role_id).deleted is True
+    assert gone.ok and role.deleted is True and bot.guild.get_role(made.role_id) is None
     assert await pings.get_spotlight_fan_role(bot.db, GUILD, GDQ) is None
     assert await details(bot.db, "pings.fan_role_removed") == {
         "role_id": made.role_id,

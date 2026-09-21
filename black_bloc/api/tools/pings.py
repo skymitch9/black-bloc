@@ -33,6 +33,14 @@ NO_SUCH_ROLE = (
 
 MEMBER_KIND = "member"
 SPOTLIGHT_KIND = "spotlight"
+NOT_CREATED = "not_created"
+REFUSAL_STATUS = {pings.DUPLICATE_CODE: 409, pings.BLANK_NAME_CODE: 400}
+
+
+def refuse_outcome(outcome: Any) -> Refused:
+    """A refusal the modal shows in place, named for what it refused rather than `not_created`."""
+    code = outcome.code or NOT_CREATED
+    return Refused(REFUSAL_STATUS.get(code, 409), code, outcome.message)
 
 
 def streamer_row(guild: Any, row: Any) -> dict[str, Any]:
@@ -189,12 +197,13 @@ def build_router(bot: Any) -> APIRouter:
                 None,
                 by=int(who["id"]),
                 existing_role=wanted_role(guild, payload.get("role_id")),
+                name=payload.get("name"),
                 staff=True,
                 via=VIA_WEBSITE,
                 spotlight=row,
             )
             if not outcome.ok:
-                raise Refused(409, "not_created", outcome.message)
+                raise refuse_outcome(outcome)
             held = await pings.get_spotlight_fan_role(bot.db, guild.id, row["id"])
             return streamer_row(guild, held) | {"message": outcome.message}
         member_id = wanted_id(payload.get("member_id"))
@@ -207,11 +216,12 @@ def build_router(bot: Any) -> APIRouter:
             member,
             by=int(who["id"]),
             existing_role=wanted_role(guild, payload.get("role_id")),
+            name=payload.get("name"),
             staff=True,
             via=VIA_WEBSITE,
         )
         if not outcome.ok:
-            raise Refused(409, "not_created", outcome.message)
+            raise refuse_outcome(outcome)
         row = await pings.get_fan_role(bot.db, guild.id, member_id)
         return streamer_row(guild, row) | {"message": outcome.message}
 

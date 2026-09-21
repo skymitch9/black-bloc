@@ -50,6 +50,8 @@ KEEP = "keep"
 DELETE = "delete"
 
 ROLE_NAME_LIMIT = 100
+DUPLICATE_CODE = "duplicate_role"
+BLANK_NAME_CODE = "blank_role_name"
 SPOTLIGHT_REF = "spotlight:"
 SPOTLIGHT_WORD = "channel"
 FAN_ROLE_SELECT = (
@@ -92,6 +94,14 @@ ROLE_UNASSIGNABLE = (
     "Black Bloc cannot hand out **{name}**, so it was not used. That role is either above Black "
     "Bloc's own role in Server Settings ▸ Roles, or managed by another app. Ask an admin to move "
     "Black Bloc's role above it, then try again."
+)
+DUPLICATE_ROLE = (
+    "A role named **{name}** already exists in this server, so nothing was made — pick it as the "
+    "existing role, or choose another name."
+)
+BLANK_ROLE_NAME = (
+    "A ping role needs a name, so nothing was made. Type the name the role should have, or pick "
+    "one that is already here as the existing role."
 )
 NOT_A_STREAMER = (
     "Black Bloc does not know you stream yet, so there is nothing to make a role for. Link your "
@@ -161,6 +171,7 @@ class Outcome:
     message: str
     role_id: int | None = None
     created: bool = False
+    code: str = ""
 
 
 def mode_of(bot: Any, guild_id: int) -> str:
@@ -184,6 +195,11 @@ def fan_role_name(template: Any, name: str) -> str:
         found = PINGS_FAN_ROLE_TEMPLATE.format(name=name)
     found = " ".join(found.split())[:ROLE_NAME_LIMIT]
     return found or PINGS_FAN_ROLE_TEMPLATE.format(name=name)[:ROLE_NAME_LIMIT]
+
+
+def typed_role_name(given: Any) -> str:
+    """What Discord will take of a name somebody typed; empty when they typed nothing."""
+    return " ".join(str(given or "").split())[:ROLE_NAME_LIMIT]
 
 
 def display_name(member: Any) -> str:
@@ -504,6 +520,7 @@ async def ensure_fan_role(
     *,
     by: int | None,
     existing_role: Any = None,
+    name: str | None = None,
     staff: bool = False,
     via: str = VIA_DISCORD,
     spotlight: Any = None,
@@ -512,7 +529,7 @@ async def ensure_fan_role(
     if not staff and not is_on(bot, guild.id):
         return Outcome(False, OFF)
     channel = spotlight is not None
-    name = spotlight_name(spotlight) if channel else display_name(member)
+    who = spotlight_name(spotlight) if channel else display_name(member)
     held = (
         await get_spotlight_fan_role(bot.db, guild.id, spotlight["id"])
         if channel
@@ -520,17 +537,29 @@ async def ensure_fan_role(
     )
     if held is not None and guild.get_role(int(held["role_id"])) is not None:
         return Outcome(
-            False, ALREADY_HAS_ONE.format(name=name, role_id=held["role_id"]),
+            False, ALREADY_HAS_ONE.format(name=who, role_id=held["role_id"]),
             role_id=int(held["role_id"]),
         )
     role, refusal = existing_role, None
     if role is not None and not assignable(role):
         return Outcome(False, ROLE_UNASSIGNABLE.format(name=role.name))
-    if role is None:
-        wanted = fan_role_name(bot.store.get(guild.id, TEMPLATE_KEY), name)
+    reused = role is not None
+    if role is None and name is not None:
+        wanted = typed_role_name(name)
+        if not wanted:
+            return Outcome(False, BLANK_ROLE_NAME, code=BLANK_NAME_CODE)
+        if named_role(guild, wanted) is not None:
+            return Outcome(False, DUPLICATE_ROLE.format(name=wanted), code=DUPLICATE_CODE)
         role, refusal = await make_role(guild, wanted)
+    elif role is None:
+        wanted = fan_role_name(bot.store.get(guild.id, TEMPLATE_KEY), who)
+        there = named_role(guild, wanted)
+        if there is not None and assignable(there):
+            role, reused = there, True
+        else:
+            role, refusal = await make_role(guild, wanted)
     if role is None:
-        return Outcome(False, refusal or CANNOT_MAKE_ROLE.format(name=name))
+        return Outcome(False, refusal or CANNOT_MAKE_ROLE.format(name=who))
     await set_fan_role(
         bot.db,
         guild.id,
@@ -539,8 +568,7 @@ async def ensure_fan_role(
         by,
         spotlight_id=spotlight["id"] if channel else None,
     )
-    details = {"role_id": role.id, "role": role.name, "reused": existing_role is not None,
-               "via": via}
+    details = {"role_id": role.id, "role": role.name, "reused": reused, "via": via}
     if channel:
         details |= {
             "spotlight_id": int(spotlight["id"]),
@@ -556,14 +584,14 @@ async def ensure_fan_role(
     )
     await sync_streamer_menus(bot, guild)
     if channel:
-        said = REUSED_CHANNEL if existing_role is not None else CREATED_CHANNEL
+        said = REUSED_CHANNEL if reused else CREATED_CHANNEL
     else:
-        said = REUSED if existing_role is not None else CREATED
+        said = REUSED if reused else CREATED
     return Outcome(
         True,
-        said.format(role=role.name, name=name, menu=STREAMERS_MENU),
+        said.format(role=role.name, name=who, menu=STREAMERS_MENU),
         role_id=int(role.id),
-        created=existing_role is None,
+        created=not reused,
     )
 
 
