@@ -85,7 +85,9 @@ def post_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
     }
 
 
-def version_row(guild: Any, row: Any, *, current: bool, limit: int) -> dict[str, Any]:
+def version_row(
+    guild: Any, row: Any, *, current: bool, limit: int, shipped: bool = False
+) -> dict[str, Any]:
     channel_id = posts.row_value(row, "channel_id")
     return {
         "n": int(row["n"]),
@@ -102,7 +104,10 @@ def version_row(guild: Any, row: Any, *, current: bool, limit: int) -> dict[str,
         "saved_by_name": person(guild, posts.row_value(row, "saved_by")),
         "via": posts.row_value(row, "via"),
         "because": posts.row_value(row, "because"),
-        "because_said": posts.because_words(posts.row_value(row, "because")),
+        "because_said": posts.because_words(
+            posts.row_value(row, "because"), shipped=shipped
+        ),
+        "shipped": shipped,
         "current": current,
     }
 
@@ -258,7 +263,13 @@ def build_router(bot: Any) -> APIRouter:
         limit = posts.summary_chars(bot.store, guild.id)
         top = int(rows[0]["n"]) if rows else None
         return [
-            version_row(guild, one, current=int(one["n"]) == top, limit=limit)
+            version_row(
+                guild,
+                one,
+                current=int(one["n"]) == top,
+                limit=limit,
+                shipped=posts.is_shipped_version(row, one),
+            )
             for one in rows
         ]
 
@@ -290,7 +301,13 @@ def build_router(bot: Any) -> APIRouter:
         limit = posts.summary_chars(bot.store, guild.id)
         return {
             "slug": str(row["slug"]),
-            "version": version_row(guild, version, current=int(n) == top, limit=limit)
+            "version": version_row(
+                guild,
+                version,
+                current=int(n) == top,
+                limit=limit,
+                shipped=posts.is_shipped_version(row, version),
+            )
             | {"body": posts.row_value(version, "body", "")},
             "preview": {
                 "style": posts.wanted_style(posts.row_value(version, "style", posts.PLAIN)),

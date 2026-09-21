@@ -211,6 +211,7 @@ BECAUSE_WORDS: dict[str, str] = {
     BECAUSE_BACKFILL: "what it said before",
 }
 RESTORED_WORDS = "restored from {n}"
+SHIPPED_WORD = "shipped"
 VERSION_CURRENT_WORD = "current"
 AGO = "{count} {unit}{s} ago"
 JUST_SAVED = "just now"
@@ -571,12 +572,29 @@ def version_fields(row: Any) -> tuple[Any, ...]:
     )
 
 
-def because_words(because: Any) -> str:
+def because_words(because: Any, *, shipped: bool = False) -> str:
     text = str(because or "")
     head, dot, rest = text.partition(":")
     if head == "restored" and rest:
         return RESTORED_WORDS.format(n=rest)
+    if shipped and text == BECAUSE_BACKFILL:
+        return SHIPPED_WORD
     return BECAUSE_WORDS.get(text, text)
+
+
+def is_shipped_version(post: Any, version: Any) -> bool:
+    """The `shipped` chip: the backfilled first version whose words ARE the shipped ones.
+
+    The `ships with the bot` badge used to sit on the list row; the Versions list is where
+    that fact lives now, and it is only true while nobody has rewritten the text."""
+    if not is_seeded(post) or str(row_value(version, "because")) != BECAUSE_BACKFILL:
+        return False
+    entry = seed_entry(row_value(post, "slug"))
+    if entry is None:
+        return False
+    return str(row_value(version, "title", "")) == str(entry.get("title", "")) and str(
+        row_value(version, "body", "")
+    ) == str(entry.get("body", ""))
 
 
 def when_words(value: Any, *, at: Any = None) -> str:
@@ -596,13 +614,18 @@ def when_words(value: Any, *, at: Any = None) -> str:
 
 
 def version_line(
-    row: Any, *, who: Any = None, current: bool = False, at: Any = None
+    row: Any,
+    *,
+    who: Any = None,
+    current: bool = False,
+    shipped: bool = False,
+    at: Any = None,
 ) -> str:
     """One spelling of a version's headline, for the panel's lines and its select options."""
     line = VERSION_LINE.format(
         n=int(row["n"]),
         ago=when_words(row_value(row, "saved_at"), at=at),
-        because=because_words(row_value(row, "because")),
+        because=because_words(row_value(row, "because"), shipped=shipped),
         who=BY_WHO.format(who=who) if who else "",
     )
     return f"{line} · {VERSION_CURRENT_WORD}" if current else line
@@ -712,6 +735,10 @@ def load_seed() -> dict[str, Any]:
 
 def seed_entries() -> list[dict[str, Any]]:
     return list(load_seed().get("posts") or ())
+
+
+def seed_entry(slug: Any) -> dict[str, Any] | None:
+    return next((one for one in seed_entries() if one["slug"] == str(slug)), None)
 
 
 def seed_hash(entry: dict[str, Any]) -> str:
@@ -1411,6 +1438,7 @@ __all__ = [
     "SHADOW_POSTED",
     "SHADOW_TAKEN_DOWN",
     "SHADOW_UPDATED",
+    "SHIPPED_WORD",
     "SITE_BUTTON",
     "SLUG_NEEDED",
     "SLUG_TAKEN",
@@ -1461,6 +1489,7 @@ __all__ = [
     "in_shadow",
     "is_posted",
     "is_seeded",
+    "is_shipped_version",
     "known_channel",
     "latest_n",
     "latest_version",
@@ -1488,6 +1517,7 @@ __all__ = [
     "row_value",
     "save_post",
     "seed_entries",
+    "seed_entry",
     "seed_hash",
     "seed_posts",
     "set_mode",

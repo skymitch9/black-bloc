@@ -299,6 +299,8 @@ export const LABELS = {
   posts_mode: 'Whether staff can post the server’s standing messages',
   posts_panel_minutes: 'How long the /posts panel stays live',
   posts_log_level: 'How much of the posts is repeated into Discord',
+  posts_versions_keep: 'How many saved versions of a post are kept',
+  posts_versions_summary_chars: 'How much of a version is shown on its row',
 
   guides_mode: 'Whether members can read the guides',
   guides_who_edits: 'Who may rewrite a guide',

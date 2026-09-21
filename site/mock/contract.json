@@ -47,6 +47,8 @@
       "poll_archive_days": 1,
       "poll_default_hours": 1,
       "posts_panel_minutes": 1,
+      "posts_versions_keep": 0,
+      "posts_versions_summary_chars": 20,
       "raidtrain_poll_minutes": 1,
       "raidtrain_reminder_minutes": 5,
       "raidtrain_slot_minutes": 15,
@@ -93,6 +95,8 @@
       "poll_draft_days": 365,
       "poll_reminder_minutes": 10080,
       "posts_panel_minutes": 1440,
+      "posts_versions_keep": 500,
+      "posts_versions_summary_chars": 300,
       "raidtrain_max_slots_per_member": 24,
       "raidtrain_poll_minutes": 60,
       "raidtrain_reminder_minutes": 1440,
@@ -4888,11 +4892,86 @@
       }
     },
     {
+      "_": "Posts version history. A version is written only by a press of Save changes or Post it that CHANGED something, and by Use this version; the migration backfills one per post that predates the table, which is the `shipped` row on {post_slug}. Nothing ever edits or removes a version except the posts_versions_keep trim.",
+      "method": "GET",
+      "path": "/api/posts/{post_slug}/versions",
+      "read_by": [
+        "page-posts.js Versions foldout"
+      ],
+      "shape": "object",
+      "keys": [
+        "slug",
+        "versions",
+        "count",
+        "keep",
+        "read_at"
+      ],
+      "rows": {
+        "versions": [
+          "n",
+          "title",
+          "summary",
+          "style",
+          "channel_id",
+          "channel_name",
+          "pin",
+          "saved_at",
+          "saved_by",
+          "saved_by_name",
+          "via",
+          "because",
+          "because_said",
+          "shipped",
+          "current"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/posts/{post_slug}/versions/{post_version_n}",
+      "read_by": [
+        "page-posts.js Versions foldout ▸ View"
+      ],
+      "shape": "object",
+      "keys": [
+        "slug",
+        "version",
+        "preview",
+        "read_at"
+      ],
+      "nested": {
+        "version": [
+          "n",
+          "title",
+          "summary",
+          "style",
+          "channel_id",
+          "channel_name",
+          "pin",
+          "saved_at",
+          "saved_by",
+          "saved_by_name",
+          "via",
+          "because",
+          "because_said",
+          "shipped",
+          "current",
+          "body"
+        ],
+        "preview": [
+          "style",
+          "title",
+          "body",
+          "cap"
+        ]
+      }
+    },
+    {
       "method": "POST",
-      "path": "/api/posts/{post_slug}/reset",
+      "path": "/api/posts/{posted_post_slug}/versions/{post_version_n}/restore",
       "body": {},
       "read_by": [
-        "page-posts.js Put the original back"
+        "page-posts.js Versions foldout ▸ Use this version"
       ],
       "shape": "object",
       "keys": [
@@ -4903,7 +4982,9 @@
         "read_at",
         "message",
         "mode",
-        "shadow"
+        "shadow",
+        "from_version",
+        "versions"
       ],
       "nested": {
         "post": [
@@ -4948,6 +5029,23 @@
           "style",
           "cap",
           "label"
+        ],
+        "versions": [
+          "n",
+          "title",
+          "summary",
+          "style",
+          "channel_id",
+          "channel_name",
+          "pin",
+          "saved_at",
+          "saved_by",
+          "saved_by_name",
+          "via",
+          "because",
+          "because_said",
+          "shipped",
+          "current"
         ]
       }
     },
@@ -5397,6 +5495,8 @@
     "web.minutes.notes_edited",
     "web.minutes.posted",
     "web.minutes.post_failed",
-    "web.minutes.deleted"
+    "web.minutes.deleted",
+    "web.post.restored",
+    "web.post.versions_trimmed"
   ]
 }

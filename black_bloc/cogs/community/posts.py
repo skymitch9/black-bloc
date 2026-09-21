@@ -56,6 +56,7 @@ from ...posts import (
     in_shadow,
     is_posted,
     is_seeded,
+    is_shipped_version,
     list_posts,
     list_versions,
     make_post,
@@ -199,6 +200,7 @@ async def build_versions(
 ) -> tuple[discord.Embed, PostsView]:
     rows = (await list_versions(bot.db, int(row["id"])))[:VERSIONS_SELECT_CAP]
     top = int(rows[0]["n"]) if rows else None
+    shipped = frozenset(int(one["n"]) for one in rows if is_shipped_version(row, one))
     limit = summary_chars(bot.store, guild.id)
     lines = [VERSIONS_INTRO]
     if not rows:
@@ -209,6 +211,7 @@ async def build_versions(
                 one,
                 who=who_words(guild, row_value(one, "saved_by")),
                 current=int(one["n"]) == top,
+                shipped=is_shipped_version(row, one),
             )
         )
         said = summary_of(one, limit)
@@ -225,7 +228,7 @@ async def build_versions(
             view.add_item(UseVersionButton(slug, int(picked)))
     view.add_item(CardButton(slug))
     if rows:
-        view.add_item(VersionPick(slug, guild, rows, picked, top))
+        view.add_item(VersionPick(slug, guild, rows, picked, top, shipped))
     return embed, view
 
 
@@ -477,7 +480,13 @@ class CardButton(discord.ui.Button):
 
 class VersionPick(discord.ui.Select):
     def __init__(
-        self, slug: str, guild: Any, rows: list[Any], picked: Any, top: Any
+        self,
+        slug: str,
+        guild: Any,
+        rows: list[Any],
+        picked: Any,
+        top: Any,
+        shipped: frozenset[int] = frozenset(),
     ) -> None:
         super().__init__(
             placeholder=PICK_A_VERSION,
@@ -488,6 +497,7 @@ class VersionPick(discord.ui.Select):
                             one,
                             who=who_words(guild, row_value(one, "saved_by")),
                             current=int(one["n"]) == top,
+                            shipped=one["n"] in shipped,
                         )
                     )[:100],
                     value=str(int(one["n"])),

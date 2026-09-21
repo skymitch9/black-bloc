@@ -77,12 +77,16 @@ const IDS = {
   // is the other way round.
   guide_slug: 'golive-announce',
   scratch_guide_slug: 'house-rules',
-  // Posts (§C4): welcome is the one Black Bloc SHIPS with, so /reset takes it and DELETE
-  // refuses it; opening-hours already has a message in the test channel, which is the only
+  // Posts (§C4): welcome is the one Black Bloc SHIPS with, so DELETE refuses it and its
+  // version 1 wears the `shipped` chip; opening-hours already has a message in the test channel, which is the only
   // channel the guard lets a takedown reach; scratch-post is staff's own and unposted.
   post_slug: 'welcome',
   posted_post_slug: 'opening-hours',
   scratch_post_slug: 'scratch-post',
+  // Version 1 everywhere: on welcome it is the backfilled `shipped` row View draws, and on
+  // opening-hours it is the older of two, which is the only kind Use this version accepts —
+  // restoring the CURRENT version is refused in words, and the seed runs before every entry.
+  post_version_n: '1',
   // Meeting minutes: 1 is finished, written up and posted, with a three-line transcript, so
   // every notes move reaches it; 2 is still recording, which /write and /post refuse from.
   meeting_id: '1',
@@ -423,7 +427,7 @@ async function checkActionKinds() {
   await post(`/api/posts/${IDS.post_slug}/publish`, {});
   await post(`/api/posts/${IDS.post_slug}/publish`, {});
   await post(`/api/posts/${IDS.post_slug}/takedown`, {});
-  await post(`/api/posts/${IDS.post_slug}/reset`, {});
+  await post(`/api/posts/${IDS.posted_post_slug}/versions/${IDS.post_version_n}/restore`, {});
   await send('DELETE', `/api/posts/${IDS.scratch_post_slug}`, undefined);
   // The four web.minutes.* kinds a staff move can leave. The meeting is deleted last, so the
   // other three act on a row that is still there.

@@ -1115,3 +1115,30 @@ async def test_set_mode_answers_in_words_for_each_of_the_three(bot, guild):
     assert on == posts.MODE_ON_SAID
     assert await kinds(bot.db) == ["post.mode", "post.mode", "post.mode"]
     assert bot.store.get(GUILD, posts.MODE_KEY) == "on"
+
+
+async def test_the_shipped_chip_is_only_on_the_backfilled_words_the_bot_ships_with(bot, guild):
+    await posts.seed_posts(bot, guild)
+    seeded = await posts.get_post(bot.db, guild.id, "welcome")
+    await bot.db.conn.execute(
+        "INSERT INTO post_versions(guild_id, post_id, n, title, body, style, channel_id, pin, "
+        "saved_at, saved_by, via, because) SELECT guild_id, id, 1, title, body, style, "
+        "channel_id, pin, updated_at, updated_by, 'boot', 'backfill' FROM posts WHERE id = ?",
+        (int(seeded["id"]),),
+    )
+    await bot.db.conn.commit()
+    shipped = await posts.get_version(bot.db, int(seeded["id"]), 1)
+    assert posts.is_shipped_version(seeded, shipped)
+    assert posts.because_words(shipped["because"], shipped=True) == "shipped"
+
+    await posts.save_post(bot, guild, seeded, STAFF, body="Staff rewrote it.")
+    fresh = await posts.get_post(bot.db, guild.id, "welcome")
+    theirs = await posts.get_version(bot.db, int(fresh["id"]), 2)
+    assert not posts.is_shipped_version(fresh, theirs)
+    assert posts.is_shipped_version(fresh, shipped), "version 1 still holds the shipped words"
+
+    mine = await a_post(bot, guild)
+    await posts.save_post(bot, guild, mine, STAFF, body="Mine.")
+    ours = await posts.get_version(bot.db, int(mine["id"]), 1)
+    assert not posts.is_shipped_version(mine, ours)
+    assert posts.because_words(posts.BECAUSE_BACKFILL) == "what it said before"
