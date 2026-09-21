@@ -119,7 +119,7 @@ ok('timeWords of now', 'says Today', timeWords(new Date()).startsWith('Today at 
   is('the image placeholder names the file', media[0].children[1].text, 'live_user_caseyfast-1280x720.jpg');
   is('the thumbnail is marked as one', media[1]['data-kind'], 'thumbnail');
   ok(where, 'drops the footer', allText(tree).includes('Black Bloc · via Twitch'));
-  ok(where, 'drops the embed stamp', allText(tree).includes('Today at ') || allText(tree).includes('/'));
+  ok(where, 'drops the embed stamp', /(Today|Yesterday) at |\//.test(allText(tree)));
 
   // An embed description renders no `#` headers, the way Discord does not.
   const headed = embedTree({ description: '# not a header', color: null }, { roles: [], channels: [] });
