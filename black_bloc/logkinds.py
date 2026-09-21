@@ -167,6 +167,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "automod.deleted",
         "case.restored",
         "case.voided",
+        "core.restart_requested",
         "event.cancelled",
         "event.missed",
         "event.announce_skipped_late",

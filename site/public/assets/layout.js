@@ -1,3 +1,4 @@
+import { columnSplit } from './columns.js';
 import { el } from './ui.js';
 
 const SECTIONS_KEY = (tab) => `bb_sections_${tab}`;
@@ -147,26 +148,17 @@ function wide(node) {
 }
 
 /**
- * Greedy longest-first-in-document-order balance: each block joins whichever
- * column is shorter right now. Heights are read BEFORE anything moves, because
- * wrapping changes every one of them.
+ * Document-order balance: the run breaks at the one place that makes the two
+ * columns most even, so the left column holds the blocks the page rendered
+ * first. Heights are read BEFORE anything moves, because wrapping changes
+ * every one of them.
  */
 function balance(run) {
-  const heights = run.map((node) => node.offsetHeight || 1);
-  const left = el('div', { class: 'colstack' });
-  const right = el('div', { class: 'colstack' });
-  let leftAt = 0;
-  let rightAt = 0;
-  run.forEach((node, at) => {
-    if (leftAt <= rightAt) {
-      left.append(node);
-      leftAt += heights[at];
-    } else {
-      right.append(node);
-      rightAt += heights[at];
-    }
-  });
-  return el('div', { class: 'twocol' }, [left, right]);
+  const at = columnSplit(run.map((node) => node.offsetHeight || 1));
+  return el('div', { class: 'twocol' }, [
+    el('div', { class: 'colstack' }, run.slice(0, at)),
+    el('div', { class: 'colstack' }, run.slice(at)),
+  ]);
 }
 
 /**

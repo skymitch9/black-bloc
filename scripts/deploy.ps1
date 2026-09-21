@@ -1,8 +1,10 @@
 # The one deploy path (incident 2026-09-01: an ungated chain deployed on a red suite).
 # Refuses a dirty tree and a failing gate; escape hatch BLACKBLOC_SKIP_GATE=1 for a
 # genuine emergency only. Appends the deploys.log line skeleton on success.
-# It also writes and commits site/public/assets/release.json FIRST, so the tree the
-# check-clean gate looks at is clean and the file ships inside the image.
+# It also writes and commits site/public/assets/release.json, AFTER every gate and just
+# before the push: a refused gate must not leave a "Release vN: release.json" commit
+# behind (three of them had to be dropped before v111 would go). Nothing in the gate
+# reads the file, and the push still carries it, so it ships inside the image.
 $ErrorActionPreference = "Stop"
 $repo = Split-Path $PSScriptRoot -Parent
 Set-Location $repo
@@ -19,17 +21,6 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "REFUSED: $lastCommit (column 3 of the last docs\deploys.log line) is not a commit in this tree, so this deploy cannot tell which features changed. Fix that line and run again."
 }
 $changed = git diff --name-only "$lastCommit..HEAD"
-$releaseFile = "site/public/assets/release.json"
-$env:BB_LAST_DEPLOY_LINE = $logLine
-$changed | & .venv/Scripts/python scripts/release_json.py (git rev-parse --short HEAD) $releaseFile
-if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $releaseFile could not be written." }
-if (git status --porcelain -- $releaseFile) {
-    git add -- $releaseFile
-    $release = ((Get-Content $releaseFile -Raw) | ConvertFrom-Json).release
-    git commit -q -m "Release ${release}: release.json"
-    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $releaseFile could not be committed." }
-    Write-Host "Wrote and committed $releaseFile for $release."
-}
 
 $dirty = git status --porcelain
 if ($dirty) { Write-Error "REFUSED: the working tree is dirty. Commit first.`n$dirty" }
@@ -63,6 +54,21 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the paste converter's fixtures are not green." }
     node site/mock/golive-join.test.mjs
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the go-live streamers join's fixtures are not green." }
+    node site/mock/layout.test.mjs
+    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the dashboard column fixtures are not green." }
+}
+
+# Every gate has passed, so this is the last thing that can add a commit.
+$releaseFile = "site/public/assets/release.json"
+$env:BB_LAST_DEPLOY_LINE = $logLine
+$changed | & .venv/Scripts/python scripts/release_json.py (git rev-parse --short HEAD) $releaseFile
+if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $releaseFile could not be written." }
+if (git status --porcelain -- $releaseFile) {
+    git add -- $releaseFile
+    $release = ((Get-Content $releaseFile -Raw) | ConvertFrom-Json).release
+    git commit -q -m "Release ${release}: release.json"
+    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $releaseFile could not be committed." }
+    Write-Host "Wrote and committed $releaseFile for $release."
 }
 
 cmd /c "git push origin main 2>&1"

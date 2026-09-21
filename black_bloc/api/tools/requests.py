@@ -238,6 +238,12 @@ def wanted_filter(given: Any) -> Any:
     return UNASSIGNED if text.lower() == UNASSIGNED else as_id(text)
 
 
+def wanted_per_page(given: Any) -> int:
+    """A badge asks for one row, a list asks for its own size; anything odd is the default."""
+    text = str(given or API_PAGE).strip()
+    return min(max(int(text), 1), API_PAGE) if text.isdigit() else API_PAGE
+
+
 def members_matching(guild: Any, query: str) -> list[int]:
     """`q` reaches the requester's NAME, which lives in the gateway cache and not in SQL."""
     if not query:
@@ -321,7 +327,11 @@ def build_router(bot: Any) -> APIRouter:
 
     @router.get("", dependencies=[Depends(reader)])
     async def requests_index(
-        status: str = "", assignee: str = "", q: str = "", page: int = 1
+        status: str = "",
+        assignee: str = "",
+        q: str = "",
+        page: int = 1,
+        per_page: str = str(API_PAGE),
     ) -> dict[str, Any]:
         guild = require_guild(bot)
         require_db(bot)
@@ -332,6 +342,7 @@ def build_router(bot: Any) -> APIRouter:
         wanted_by = wanted_filter(assignee)
         query = clamp(q, SEARCH_LIMIT)
         named = members_matching(guild, query)
+        size = wanted_per_page(per_page)
         total = await count_requests(
             bot.db,
             guild.id,
@@ -340,7 +351,7 @@ def build_router(bot: Any) -> APIRouter:
             query=query,
             named=named,
         )
-        pages = max(1, -(-total // API_PAGE))
+        pages = max(1, -(-total // size))
         at = max(1, min(int(page or 1), pages))
         rows = await list_requests(
             bot.db,
@@ -349,15 +360,15 @@ def build_router(bot: Any) -> APIRouter:
             assignee_id=wanted_by,
             query=query,
             named=named,
-            limit=API_PAGE,
-            offset=(at - 1) * API_PAGE,
+            limit=size,
+            offset=(at - 1) * size,
         )
         return {
             "requests": await _rows(guild, rows),
             "total": total,
             "page": at,
             "pages": pages,
-            "per_page": API_PAGE,
+            "per_page": size,
             "open": await count_requests(bot.db, guild.id, statuses=(OPEN,)),
         }
 

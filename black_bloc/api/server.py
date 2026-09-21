@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import __version__, personas
-from . import auth, costs, ref, selftest_api, settings_api, status
+from . import auth, bot_api, costs, ref, selftest_api, settings_api, status
 from .assets import NO_STORE, SiteFiles, build_id
 from .auth import Refused, refused_handler, validation_handler
 from .status import latency_ms
@@ -193,6 +193,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(posts.build_router(bot))
     app.include_router(minutes.build_router(bot))
     app.include_router(selftest_api.build_router(bot))
+    app.include_router(bot_api.build_router(bot))
 
     root = Path(bot.settings.site_root)
     if root.is_dir():

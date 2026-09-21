@@ -3043,6 +3043,23 @@
       }
     },
     {
+      "_": "The rail badge beside Requests, every page in the site. It asks for ONE row because it reads `total` and nothing else. Measured 2026-09-20: it used to ask for `status=pending`, which is not a state a request can be in, so every page logged a 400 in the console. `per_page` is honoured and clamped to the route's own page size.",
+      "method": "GET",
+      "path": "/api/requests?status=open&per_page=1",
+      "read_by": [
+        "shell.js featureRequestTally, the badge beside Requests"
+      ],
+      "shape": "object",
+      "keys": [
+        "requests",
+        "total",
+        "page",
+        "pages",
+        "per_page",
+        "open"
+      ]
+    },
+    {
       "method": "POST",
       "path": "/api/requests/forum",
       "read_by": [

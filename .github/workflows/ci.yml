@@ -47,3 +47,6 @@ jobs:
 
       - name: Go-live streamers join
         run: node site/mock/golive-join.test.mjs
+
+      - name: Dashboard columns
+        run: node site/mock/layout.test.mjs

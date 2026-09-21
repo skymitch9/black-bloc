@@ -102,7 +102,7 @@ export function pollTally() {
 /** Feature requests still waiting on an answer, for the badge beside Requests. */
 export function featureRequestTally() {
   if (featureOnce === null) {
-    featureOnce = api('/api/requests?status=pending&per_page=1')
+    featureOnce = api('/api/requests?status=open&per_page=1')
       .then((found) => (found && typeof found.total === 'number' ? found.total : null))
       .catch(() => null);
   }

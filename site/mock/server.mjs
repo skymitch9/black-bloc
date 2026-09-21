@@ -1973,6 +1973,21 @@ function wantedSelftestRun(runId) {
   return found;
 }
 
+// The Overview page's Restart the bot. The real route writes one web.core.restart_requested
+// row, closes the gateway cleanly and exits non-zero so Fly starts a fresh process; the mock
+// answers the same sentence and stays up, because a lower environment nobody can look at is
+// not a lower environment.
+const RESTART_SECONDS = 15;
+
+route('POST', '/api/bot/restart', (context) => {
+  requireStaff(context.session);
+  logAction('web.core.restart_requested', { details: { seconds: RESTART_SECONDS, via: 'website' } });
+  return {
+    message: `Black Bloc is restarting. This site is served by the bot itself, so it stops answering for about ${RESTART_SECONDS} seconds — reload this page then.`,
+    seconds: RESTART_SECONDS,
+  };
+});
+
 route('POST', '/api/selftest', (context) => {
   requireStaff(context.session);
   const going = state.selftestRuns.find((row) => !row.finished_at);
@@ -6821,16 +6836,18 @@ function asksSorted(rows) {
   });
 }
 
-function askPage(rows, page) {
+function askPage(rows, page, perPage) {
   const total = rows.length;
-  const pages = Math.max(1, Math.ceil(total / REQUEST_PAGE));
+  const asked = Number(perPage);
+  const size = Number.isInteger(asked) && asked > 0 ? Math.min(asked, REQUEST_PAGE) : REQUEST_PAGE;
+  const pages = Math.max(1, Math.ceil(total / size));
   const at = Math.max(1, Math.min(Number(page || 1), pages));
   return {
-    requests: rows.slice((at - 1) * REQUEST_PAGE, at * REQUEST_PAGE).map(askRow),
+    requests: rows.slice((at - 1) * size, at * size).map(askRow),
     total,
     page: at,
     pages,
-    per_page: REQUEST_PAGE,
+    per_page: size,
   };
 }
 
@@ -6945,7 +6962,7 @@ route('GET', '/api/requests', (context) => {
     return true;
   });
   return {
-    ...askPage(rows, url.searchParams.get('page')),
+    ...askPage(rows, url.searchParams.get('page'), url.searchParams.get('per_page')),
     open: state.asks.filter((row) => row.status === 'open').length,
   };
 });
