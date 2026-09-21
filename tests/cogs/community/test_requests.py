@@ -689,7 +689,7 @@ async def test_filing_through_the_panel_still_files_exactly_as_before(cog, bot, 
     row = await pure.get_request(db, 1)
 
     assert row["status"] == pure.OPEN and row["user_id"] == member.id
-    assert "#1" in interaction.sent and "staff will see it" in interaction.sent
+    assert "#1" in interaction.sent and "Request has been received" in interaction.sent
     assert "request.filed" in await action_kinds(db)
 
 
