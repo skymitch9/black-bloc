@@ -7,7 +7,6 @@ import pytest
 
 from black_bloc import pings as helpers
 from black_bloc.cogs.content.golive import set_link
-from black_bloc.cogs.content.spotlight import channel_by_id
 from black_bloc.cogs.content.pings import (
     CARD_ROLE_GONE,
     DELETE_OFF,
@@ -39,6 +38,7 @@ from black_bloc.cogs.content.pings import (
     run_own,
     run_settings,
 )
+from black_bloc.cogs.content.spotlight import channel_by_id
 from black_bloc.config import load_settings
 from black_bloc.settings_store import DB_UNAVAILABLE, SettingsStore
 
