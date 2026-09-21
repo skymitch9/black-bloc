@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 48
+        assert SCHEMA_VERSION == 49
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -1840,3 +1840,47 @@ async def test_a_schema_42_file_gains_the_three_moved_to_columns_all_empty(tmp_p
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()
+
+
+async def test_every_post_that_predates_versions_gets_version_one_and_only_once(tmp_path):
+    """48 → 49: the backfill is what stops View meeting an empty list on a post written
+    before the table existed, and running it twice must not write a second row."""
+    path = tmp_path / "posts49.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute(
+        "INSERT INTO posts(id, guild_id, slug, title, channel_id, body, style, pin, "
+        "updated_at, updated_by) VALUES "
+        "(1, 7, 'welcome', 'Welcome and rules', 500, 'The words.', 'plain', 1, "
+        "'2026-09-01T00:00:00+00:00', 42)"
+    )
+    await db.conn.execute("DELETE FROM post_versions")
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT * FROM post_versions ORDER BY n")
+        rows = [dict(row) for row in await cur.fetchall()]
+        assert len(rows) == 1
+        one = rows[0]
+        assert one["post_id"] == 1 and one["n"] == 1 and one["guild_id"] == 7
+        assert one["title"] == "Welcome and rules" and one["body"] == "The words."
+        assert one["style"] == "plain" and one["channel_id"] == 500 and one["pin"] == 1
+        assert one["because"] == "backfill" and one["via"] == "boot"
+        assert one["saved_at"] == "2026-09-01T00:00:00+00:00" and one["saved_by"] == 42
+    finally:
+        await again.close()
+
+    third = Database(path)
+    await third.connect()
+    try:
+        cur = await third.conn.execute("SELECT COUNT(*) AS n FROM post_versions")
+        assert (await cur.fetchone())["n"] == 1, "the backfill is idempotent"
+        cur = await third.conn.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await third.close()

@@ -215,6 +215,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "post.shadow_posted",
         "post.shadow_updated",
         "post.taken_down",
+        "post.restored",
     }
 )
 
@@ -485,8 +486,8 @@ ROUTINE: frozenset[str] = frozenset(
         "post.message_gone",
         "post.mode",
         "post.pinned",
-        "post.reset",
         "post.saved",
+        "post.versions_trimmed",
         "post.shadow_message_gone",
         "post.shadow_taken_down",
         "post.seeded",
