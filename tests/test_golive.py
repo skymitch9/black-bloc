@@ -23,14 +23,13 @@ from black_bloc.golive import (
     costream_footer,
     costream_order,
     costream_render,
-    edits_on_end,
     embed_summary,
-    end_details,
+    end_marker,
     end_summary,
     ended_author,
     ended_embed,
+    ended_footer,
     ended_render,
-    ended_text,
     enriched,
     extract_stream,
     from_twitch,
@@ -57,11 +56,8 @@ from black_bloc.settings_store import (
     GOLIVE_COSTREAM_AUTHOR,
     GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_END_AUTHOR,
-    GOLIVE_END_EDIT,
-    GOLIVE_END_MODES,
-    GOLIVE_END_OFF,
-    GOLIVE_END_SUFFIX,
     GOLIVE_END_TEMPLATE,
+    GOLIVE_LIVE_FIELD,
     GOLIVE_TEMPLATE,
 )
 from black_bloc.twitch import TwitchGame, TwitchStream
@@ -334,70 +330,47 @@ def test_from_twitch_builds_a_full_streaminfo():
     )
 
 
-def test_only_the_edit_mode_touches_the_announcement():
-    assert edits_on_end("edit") is True
-    assert edits_on_end("off") is False
-    assert edits_on_end(None) is False
-    assert edits_on_end("on") is False
-
-
-def test_the_end_log_says_the_announcement_was_left_alone_only_when_it_was():
-    assert end_details("off") == {"announcement": "left"}
-    assert end_details(None) == {"announcement": "left"}
-    assert end_details("edit") == {}
-
-
-def test_the_edit_mode_name_is_the_registrys_and_not_a_second_copy():
-    assert edits_on_end(GOLIVE_END_EDIT) is True
-    assert GOLIVE_END_MODES == (GOLIVE_END_OFF, GOLIVE_END_EDIT)
-
-
-def test_the_end_summary_names_the_mode_and_shows_the_wording_only_when_it_is_used():
-    assert end_summary(GOLIVE_END_OFF) == "off (left as posted)"
-    assert end_summary(GOLIVE_END_EDIT) == f'edit (suffix "{GOLIVE_END_SUFFIX}")'
-    assert end_summary(GOLIVE_END_EDIT, " (over)") == 'edit (suffix " (over)")'
-
-
 def test_the_end_summary_says_which_of_the_three_shapes_is_in_force():
-    assert end_summary(GOLIVE_END_OFF, GOLIVE_END_SUFFIX, "{name} was live") == (
-        "off (left as posted)"
+    assert end_summary(GOLIVE_END_TEMPLATE) == (
+        'edited (rewritten: "**{name}** was streaming **{game}** — t…")'
     )
-    assert end_summary(GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, "{name} was live") == (
-        'edit (rewritten: "{name} was live")'
-    )
-    assert end_summary(GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, "   ") == (
-        f'edit (suffix "{GOLIVE_END_SUFFIX}")'
-    )
+    assert end_summary("{live} — stream ended") == 'edited (appended: "{live} — stream ended")'
+    assert end_summary("{name} was live") == 'edited (rewritten: "{name} was live")'
+    assert end_summary("   ") == "edited (the sentence as posted, nothing added)"
+    assert end_summary(None) == "edited (the sentence as posted, nothing added)"
 
 
 def test_the_end_summary_clips_a_long_rewrite_rather_than_filling_the_panel():
-    said = end_summary(GOLIVE_END_EDIT, GOLIVE_END_SUFFIX, "x" * 200)
-    assert said == 'edit (rewritten: "' + "x" * 39 + '…")'
+    assert end_summary("x" * 200) == 'edited (rewritten: "' + "x" * 39 + '…")'
 
 
-def test_the_end_summary_never_calls_an_unreadable_mode_off():
-    assert end_summary("wibble") == "wibble (left as posted)"
-    assert end_summary(None) == "None (left as posted)"
+def test_the_card_mark_is_whatever_the_one_end_wording_adds_after_live():
+    assert end_marker("{live} — stream ended") == "stream ended"
+    assert end_marker("{live} (over)") == "(over)"
+    assert end_marker(f"{GOLIVE_LIVE_FIELD} — that is a wrap") == "that is a wrap"
 
 
-def test_ended_text_is_appended_once():
-    assert ended_text("live!") == "live! — stream ended"
-    assert ended_text("live! — stream ended") == "live! — stream ended"
+def test_a_blank_end_wording_marks_the_card_with_nothing():
+    assert end_marker("") == ""
+    assert end_marker(None) == ""
+    assert end_marker(GOLIVE_LIVE_FIELD) == ""
 
 
-def test_the_default_ended_wording_is_the_registrys_and_not_a_second_copy():
-    assert ended_text("live!") == "live!" + GOLIVE_END_SUFFIX
+def test_an_end_wording_that_rewrites_keeps_the_default_card_mark():
+    assert end_marker(GOLIVE_END_TEMPLATE) == "stream ended"
+    assert end_marker("**{name}** was streaming **{game}**. {url}") == "stream ended"
+    assert end_marker("{live} — {name} is done") == "stream ended"
 
 
-def test_ended_text_uses_the_wording_the_guild_set():
-    assert ended_text("live!", " (over)") == "live! (over)"
-    assert ended_text("live! (over)", " (over)") == "live! (over)"
-
-
-def test_an_empty_ended_wording_adds_nothing():
-    assert ended_text("live!", "") == "live!"
-    assert ended_text("live!", "   ") == "live!"
-    assert ended_text("live!", None) == "live!"
+def test_the_card_footer_takes_the_mark_once_and_never_twice():
+    assert ended_footer("Black Bloc · via Twitch", GOLIVE_END_TEMPLATE) == (
+        "Black Bloc · via Twitch · stream ended"
+    )
+    assert ended_footer("Black Bloc · via Twitch · stream ended", GOLIVE_END_TEMPLATE) == (
+        "Black Bloc · via Twitch · stream ended"
+    )
+    assert ended_footer("Black Bloc · via Twitch", "") == "Black Bloc · via Twitch"
+    assert ended_footer("", GOLIVE_END_TEMPLATE) == "· stream ended"
 
 
 ENDED_INFO = StreamInfo(
@@ -410,16 +383,38 @@ LIVE_CONTENT = "<@&55> **Sky** is currently streaming **Celeste**! Check it out:
 
 
 def test_the_shipped_end_wording_reads_in_the_past_tense():
+    """⚠️ The default is v149's REWRITE, by the conductor's call 2026-09-20 — see Deviation 1."""
     assert ended_render(GOLIVE_END_TEMPLATE, ENDED_INFO, "Sky", content=LIVE_CONTENT) == (
         "**Sky** was streaming **Celeste** — the stream has ended. https://www.twitch.tv/alice"
     )
+    assert GOLIVE_LIVE_FIELD not in GOLIVE_END_TEMPLATE
 
 
-def test_a_blank_end_wording_keeps_the_live_sentence_and_the_suffix():
-    assert ended_render("", ENDED_INFO, "Sky", content="live!") == "live! — stream ended"
-    assert ended_render(None, ENDED_INFO, "Sky", content="live!", suffix=" (over)") == (
-        "live! (over)"
+def test_the_live_field_appends_to_the_sentence_that_was_posted():
+    assert ended_render("{live} — stream ended", ENDED_INFO, "Sky", content=LIVE_CONTENT) == (
+        "**Sky** is currently streaming **Celeste**! Check it out: u — stream ended"
     )
+
+
+def test_the_live_field_sits_anywhere_in_a_longer_wording():
+    assert ended_render(
+        "That is a wrap on {game}: {live} (ran {duration})",
+        ENDED_INFO,
+        "Sky",
+        content="live!",
+        duration="2 h 10 min",
+    ) == "That is a wrap on Celeste: live! (ran 2 h 10 min)"
+
+
+def test_a_wording_without_the_live_field_rewrites_the_whole_post():
+    assert ended_render(
+        "**{name}** was streaming **{game}**. {url}", ENDED_INFO, "Sky", content=LIVE_CONTENT
+    ) == "**Sky** was streaming **Celeste**. https://www.twitch.tv/alice"
+
+
+def test_a_blank_end_wording_keeps_the_bare_sentence_and_adds_nothing():
+    assert ended_render("", ENDED_INFO, "Sky", content="live!") == "live!"
+    assert ended_render(None, ENDED_INFO, "Sky", content="live!") == "live!"
     assert ended_render("   ", ENDED_INFO, "Sky", content="live! — stream ended") == (
         "live! — stream ended"
     )
@@ -432,12 +427,12 @@ def test_the_mention_is_dropped_unless_the_guild_keeps_it():
     assert ended_render(
         "{name} is done", ENDED_INFO, "Sky", content=LIVE_CONTENT, keep_mention=True
     ) == "<@&55> Sky is done"
-    assert ended_render("", ENDED_INFO, "Sky", content=LIVE_CONTENT) == (
+    assert ended_render("{live} — stream ended", ENDED_INFO, "Sky", content=LIVE_CONTENT) == (
         "**Sky** is currently streaming **Celeste**! Check it out: u — stream ended"
     )
-    assert ended_render("", ENDED_INFO, "Sky", content=LIVE_CONTENT, keep_mention=True) == (
-        LIVE_CONTENT + " — stream ended"
-    )
+    assert ended_render(
+        "{live} — stream ended", ENDED_INFO, "Sky", content=LIVE_CONTENT, keep_mention=True
+    ) == (LIVE_CONTENT + " — stream ended")
 
 
 def test_the_length_is_shown_when_there_is_one_and_leaves_no_gap_when_there_is_not():
@@ -458,9 +453,16 @@ def test_an_empty_game_and_an_empty_url_never_show_as_a_gap():
     assert ended_render("{name} played ({title})", bare, "Sky", content="x") == "Sky played"
 
 
-def test_an_unreadable_end_wording_falls_back_to_the_suffix_and_never_raises(caplog):
+def test_an_unreadable_end_wording_falls_back_to_the_default_and_never_raises(caplog):
     said = ended_render("{name} is {not closed", ENDED_INFO, "Sky", content="live!")
-    assert said == "live! — stream ended"
+    assert said == "**Sky** was streaming **Celeste** — the stream has ended. " + ENDED_INFO.url
+    assert "could not be rendered" in caplog.text
+
+
+def test_a_positional_field_falls_back_to_the_default_rather_than_raising(caplog):
+    assert ended_render("{0} is done", ENDED_INFO, "Sky", content="live!") == (
+        "**Sky** was streaming **Celeste** — the stream has ended. " + ENDED_INFO.url
+    )
     assert "could not be rendered" in caplog.text
 
 
@@ -603,10 +605,10 @@ def test_the_ended_embed_keeps_the_art_and_says_the_stream_is_over():
 def test_the_ended_embed_footer_says_what_the_guild_set():
     live = announcement_embed(twitch_info(), FakeMember("Alice"), "twitch")
 
-    over = ended_embed(live, "Alice", "Twitch", " (over)")
+    over = ended_embed(live, "Alice", "Twitch", "{live} (over)")
 
     assert over.footer.text == "Black Bloc · via Twitch · (over)"
-    assert ended_embed(over, "Alice", "Twitch", " (over)").footer.text == over.footer.text
+    assert ended_embed(over, "Alice", "Twitch", "{live} (over)").footer.text == over.footer.text
 
 
 def test_an_empty_ended_wording_leaves_the_embed_footer_alone():

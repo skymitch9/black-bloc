@@ -33,6 +33,15 @@ a role when a stream goes live. We'll end up tagging the related fan group but n
 | Duration | `golive_sessions.started_at` / `ended_at` exist; nothing renders a length |
 | Guard | an edit in a real channel is refused under `TEST_MODE`; `_mark_ended` already catches and logs (`go-live: could not mark message …`). With `golive_mode` shadow nothing is announced, so nothing is edited |
 
+> 🔴 **SUPERSEDED IN PART, 2026-09-20 (branch `end-wording`, design [`end-wording-design.md`](end-wording-design.md)):**
+> the owner retired **both** of the last two rows in §A. `golive_end_suffix` is **gone** — its job is now the `{live}`
+> placeholder inside `golive_end_template`. ⚠️ **This row's DEFAULT is unchanged** — the conductor ruled 2026-09-20
+> that nobody's ended announcement may move at the deploy, so it is still `**{name}** was streaming **{game}** — the
+> stream has ended. {url}`, which holds no `{live}` and therefore still rewrites. `golive_end_mode` is **gone**
+> — the announcement is **always** edited when a stream ends, there is no off. So §B's *"falls back to
+> `ended_text(live_content, suffix)`"* is now *falls back to the DEFAULT template*, and a blank template keeps the
+> posted sentence and adds nothing. Registry keys 293 → **291**.
+
 ## A. Keys (registry + mock contract; every one reachable from the Settings page and `/settings set-value`)
 
 | Key | Kind | Default | Help (registry voice) |

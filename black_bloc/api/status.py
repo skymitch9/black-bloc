@@ -25,7 +25,6 @@ log = logging.getLogger(__name__)
 
 HONEYPOT_WINDOW_DAYS = 7
 NOT_A_FEATURE = (
-    "golive_end_mode",
     "poll_review_mode",
     "chat_llm_mode",
     "chat_memory_mode",

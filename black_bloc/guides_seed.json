@@ -52,7 +52,7 @@
         {"do": "If you also stream on YouTube, type **/youtube** and press **Link my channel**.", "expect": "Your live streams are announced here too. Black Bloc checks the channel every few minutes and a live stream comes out of this same feed, so there is nothing else to switch on. With no YouTube API key set the post's title reads Live now."}
       ],
       "faults": [
-        {"symptom": "The post still reads as if you are live", "answer": "A Lead turns golive_end_mode to edit on the Go-live page. Once the stream is over, right under the live wording, is where the ending is written, and the Wording card below both shows what the bot has stored before anybody streams."},
+        {"symptom": "The post still reads as if you are live", "answer": "Black Bloc always edits the post once the stream is over. What it says is the one Once the stream is over box on the Go-live page, right under the live wording, and the Wording card below both shows what the bot has stored before anybody streams."},
         {"symptom": "Nothing posted", "answer": "Announcements are in shadow. The panel's Announcements line says so; a Lead flips it."},
         {"symptom": "Discord does not show you streaming", "answer": "Reconnect Twitch under Discord's Connections and turn Display on profile on. The bot reads Discord, not Twitch."},
         {"symptom": "You went live twice in a short time", "answer": "The second one waits for the cooldown shown above."},

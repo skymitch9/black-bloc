@@ -295,6 +295,7 @@ ROUTINE: frozenset[str] = frozenset(
         "golive.boot_swept",
         "golive.costream_dropped",
         "golive.end",
+        "golive.end_wording_migrated",
         "golive.link",
         "golive.mode",
         "golive.optin",

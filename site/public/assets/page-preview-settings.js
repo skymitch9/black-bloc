@@ -32,8 +32,7 @@ const SETTINGS = {
     {"key":"golive_mode","type":"enum","value":"shadow","default":"off","help":"off, shadow (log only) or on (post go-live announcements)","choices":["off","shadow","on"]},
     {"key":"golive_channel_id","type":"channel","value":"800000000000000006","default":null,"help":"where go-live announcements are posted"},
     {"key":"golive_template","type":"text","value":"{name} is live playing {game} — {title} {url}","default":"{name} is live: {url}","help":"the announcement wording; {name} {game} {title} {url} {platform}"},
-    {"key":"golive_end_mode","type":"enum","value":"off","default":"off","help":"what happens to the announcement when the stream ends: off leaves it as posted, edit appends the ended wording and marks the card","choices":["off","edit"]},
-    {"key":"golive_end_suffix","type":"text","value":" — stream ended","default":" — stream ended","help":"what is added to an announcement once the stream has ended; only used when golive_end_mode is edit"},
+    {"key":"golive_end_template","type":"text","value":"{live} — stream ended","default":"**{name}** was streaming **{game}** — the stream has ended. {url}","help":"the announcement once the stream is over, and the only place that wording lives. {live} is the sentence exactly as it was posted, so {live} — stream ended appends and a wording without {live} rewrites the whole post; the other fields are {name} {game} {title} {url} {platform} {duration}. Blank keeps the posted sentence and adds nothing; wording that cannot be rendered falls back to the default"},
   ],
   "pings": [
     {"key":"pings_mode","type":"enum","value":"off","default":"off","help":"off, or on (members can opt in to go-live and event pings, and a streamer can have a role of their own that only their followers wear)","choices":["off","on"]},

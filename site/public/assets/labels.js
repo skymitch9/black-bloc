@@ -25,8 +25,6 @@ export const LABELS = {
   golive_channel_id: 'Where a go-live announcement is posted',
   golive_template: 'What a go-live announcement says',
   golive_embed: 'Whether the announcement is posted as an embed',
-  golive_end_mode: 'What happens when a stream ends',
-  golive_end_suffix: 'What is added once a stream has ended',
   golive_end_template: 'What the announcement says once the stream is over',
   golive_end_author: "What the card's top line says once the stream is over",
   golive_end_keep_mention: 'Whether the role mention stays on the rewritten announcement',

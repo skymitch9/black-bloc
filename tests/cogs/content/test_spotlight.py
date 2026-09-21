@@ -318,7 +318,6 @@ async def bot(db, monkeypatch):
     await store.set(GUILD, "golive_channel_id", CHANNEL)
     await store.set(GUILD, "shadow_channel_id", SHADOW_CHANNEL)
     await store.set(GUILD, SPOTLIGHT_MODE_KEY, "on")
-    await store.set(GUILD, "golive_end_mode", "edit")
     made = FakeBot(db, store, settings, FakeGuild())
     made.store.is_staff = lambda member: True
     return made

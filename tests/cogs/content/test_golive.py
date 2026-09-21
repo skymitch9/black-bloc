@@ -562,7 +562,6 @@ async def test_the_cooldown_blocks_a_quick_second_stream(cog, bot, member, db):
 
 async def test_ending_a_session_edits_the_announcement(cog, bot, member, db):
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
 
     await cog._end_live(bot.guild, member, "presence")
@@ -576,9 +575,8 @@ async def test_ending_a_session_edits_the_announcement(cog, bot, member, db):
     assert "announcement" not in json.loads(await action_details(db, "golive.end"))
 
 
-async def test_the_end_edit_is_off_by_default_and_leaves_the_announcement_alone(
-    cog, bot, member, db
-):
+async def test_the_announcement_is_edited_with_no_mode_left_to_turn_it_off(cog, bot, member, db):
+    """The off/edit toggle went 2026-09-20; every ended stream now gets its post edited."""
     await bot.store.set(GUILD, "golive_mode", "on")
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
     posted = bot.guild.channel.messages[0]
@@ -586,14 +584,14 @@ async def test_the_end_edit_is_off_by_default_and_leaves_the_announcement_alone(
 
     await cog._end_live(bot.guild, member, "presence")
 
-    assert bot.store.get(GUILD, "golive_end_mode") == "off"
-    assert posted.edits == []
-    assert posted.content == said
+    assert posted.edits != []
+    assert posted.content != said
+    assert posted.content == "**Alice** was streaming **Celeste** — the stream has ended. u"
     assert await open_session_for(db, GUILD, USER) is None
-    assert json.loads(await action_details(db, "golive.end"))["announcement"] == "left"
+    assert "announcement" not in json.loads(await action_details(db, "golive.end"))
 
 
-async def test_the_end_edit_being_off_still_takes_the_live_role_back(cog, bot, member, db):
+async def test_ending_a_session_still_takes_the_live_role_back(cog, bot, member, db):
     await bot.store.set(GUILD, "golive_mode", "on")
     await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
     bot.guard = None
@@ -603,21 +601,19 @@ async def test_the_end_edit_being_off_still_takes_the_live_role_back(cog, bot, m
     await cog._end_live(bot.guild, member, "presence")
 
     assert member.removed == [LIVE_ROLE]
-    assert bot.guild.channel.messages[0].edits == []
+    assert bot.guild.channel.messages[0].edits != []
 
 
-async def test_a_reconciled_session_leaves_the_announcement_alone_when_the_edit_is_off(
-    cog, bot, member, db
-):
+async def test_a_reconciled_session_edits_its_announcement_too(cog, bot, member, db):
     await bot.store.set(GUILD, "golive_mode", "on")
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
 
     await cog.reconcile_open_sessions()
 
     posted = bot.guild.channel.messages[0]
-    assert posted.edits == []
+    assert posted.edits != []
     details = json.loads(await action_details(db, "golive.end"))
-    assert details["reason"] == "reconciled_on_start" and details["announcement"] == "left"
+    assert details["reason"] == "reconciled_on_start" and "announcement" not in details
 
 
 async def test_ending_without_an_open_session_does_nothing(cog, bot, member, db):
@@ -1114,8 +1110,7 @@ async def test_the_end_edit_carries_the_fan_role_without_adding_a_mention(
 ):
     fan_role_spy(monkeypatch, 4242)
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
-    await bot.store.set(GUILD, "golive_end_template", "")
+    await bot.store.set(GUILD, "golive_end_template", "{live} — stream ended")
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
     posted = bot.guild.channel.messages[0].content
 
@@ -1132,7 +1127,6 @@ async def test_the_end_edit_keeps_the_mention_when_the_guild_asks_for_it(
 ):
     fan_role_spy(monkeypatch, 4242)
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     await bot.store.set(GUILD, "golive_end_keep_mention", True)
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
 
@@ -1145,7 +1139,6 @@ async def test_the_end_edit_keeps_the_mention_when_the_guild_asks_for_it(
 
 async def test_the_end_edit_also_carries_allowed_mentions(cog, bot, member):
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
 
     await cog._end_live(bot.guild, member, "presence")
@@ -1187,7 +1180,6 @@ async def test_a_second_open_session_is_refused_by_the_database(db):
 
 async def test_a_failed_end_edit_does_not_abort_the_role_or_the_log(cog, bot, member, db):
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
     bot.guard = None
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
@@ -1204,7 +1196,6 @@ async def test_a_message_that_cannot_be_fetched_leaves_a_log_line_and_nothing_el
     cog, bot, member, db, caplog
 ):
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
     bot.guild.channel.messages.clear()
 
@@ -1370,7 +1361,6 @@ async def test_shadow_mode_logs_what_the_card_would_have_said(cog, bot, member, 
 
 async def test_ending_a_stream_rewrites_the_card_and_keeps_the_art(cog, bot, member, db):
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     cog.helix = FakeHelix(games=[twitch_game()])
     await cog._go_live(member, from_twitch(twitch_stream()), "twitch")
 
@@ -1391,9 +1381,7 @@ async def test_the_end_wording_a_guild_set_reaches_both_halves_of_the_message(
     cog, bot, member, db
 ):
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
-    await bot.store.set(GUILD, "golive_end_template", "")
-    await bot.store.set(GUILD, "golive_end_suffix", " (that's a wrap)")
+    await bot.store.set(GUILD, "golive_end_template", "{live} (that's a wrap)")
     cog.helix = FakeHelix(games=[twitch_game()])
     await cog._go_live(member, from_twitch(twitch_stream()), "twitch")
 
@@ -1408,7 +1396,6 @@ async def test_the_end_template_and_author_a_guild_set_reach_the_edit_with_the_l
     cog, bot, member, db
 ):
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     await bot.store.set(
         GUILD, "golive_end_template", "{name} streamed {game} for {duration}. {url}"
     )
@@ -1434,7 +1421,6 @@ async def test_ending_a_stream_posted_without_a_card_still_marks_the_sentence(
     cog, bot, member, db
 ):
     await bot.store.set(GUILD, "golive_mode", "on")
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     await bot.store.set(GUILD, "golive_embed", False)
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
 
@@ -1556,7 +1542,10 @@ async def test_the_staff_panel_is_the_member_panel_plus_the_status_lines(
     assert "twitch.tv/alice" in interaction.words
     assert "**mode** — shadow" in interaction.words
     assert f"**channel** — <#{CHANNEL}>" in interaction.words
-    assert "**stream end** — off (left as posted)" in interaction.words
+    assert (
+        '**stream end** — edited (rewritten: "**{name}** was streaming **{game}** — t…")'
+        in interaction.words
+    )
     assert "no Twitch credentials" in interaction.words
     assert "ages sessions out" in interaction.words
     assert "**links** — 1" in interaction.words
@@ -1576,29 +1565,36 @@ async def test_the_status_channel_line_says_test_mode_is_why_nothing_real_posts(
     assert "**channel** — <#999> — but test mode means nothing is posted" in interaction.words
 
 
-async def test_the_status_lines_quote_the_end_wording_when_the_end_mode_is_edit(
-    cog, bot, member, db
-):
+async def test_the_status_lines_quote_the_end_wording_that_appends(cog, bot, member, db):
     as_staff(bot)
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
-    await bot.store.set(GUILD, "golive_end_template", "")
-    await bot.store.set(GUILD, "golive_end_suffix", " (that's a wrap)")
+    await bot.store.set(GUILD, "golive_end_template", "{live} (that's a wrap)")
 
     interaction = await open_panel(cog, bot, member)
 
-    assert "**stream end** — edit (suffix \" (that's a wrap)\")" in interaction.words
+    assert "**stream end** — edited (appended: \"{live} (that's a wrap)\")" in interaction.words
 
 
 async def test_the_status_lines_quote_the_rewrite_when_one_is_set(cog, bot, member, db):
     as_staff(bot)
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
+    await bot.store.set(GUILD, "golive_end_template", "**{name}** was streaming **{game}**")
 
     interaction = await open_panel(cog, bot, member)
 
     assert (
-        '**stream end** — edit (rewritten: "**{name}** was streaming **{game}** — t…")'
+        '**stream end** — edited (rewritten: "**{name}** was streaming **{game}**")'
         in interaction.words
     )
+
+
+async def test_the_status_lines_say_the_sentence_stays_when_the_end_wording_is_blank(
+    cog, bot, member, db
+):
+    as_staff(bot)
+    await bot.store.set(GUILD, "golive_end_template", "")
+
+    interaction = await open_panel(cog, bot, member)
+
+    assert "**stream end** — edited (the sentence as posted, nothing added)" in interaction.words
 
 
 async def test_the_status_lines_name_the_platform_of_everyone_live(cog, bot, member, db):
@@ -2323,7 +2319,6 @@ async def test_the_primary_ending_first_promotes_the_other_and_leaves_the_sessio
 
 async def test_the_last_platform_ending_is_todays_ended_path(cog, bot, member, db):
     await announcing(bot)
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     await cog._go_live(member, TWITCH_INFO, "twitch")
     await cog.add_platform(member, YOUTUBE_INFO, "youtube")
 
@@ -2465,6 +2460,42 @@ async def boot_row(db):
     return json.loads(await action_details(db, "golive.boot_swept"))
 
 
+async def _retired_row(db, guild_id, key, value):
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO settings(guild_id, key, value, updated_by, updated_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (guild_id, key, json.dumps(value), None, "2026-09-01T00:00:00+00:00"),
+    )
+    await db.conn.commit()
+
+
+async def test_the_boot_pass_carries_the_end_wording_over_and_says_what_it_did(cog, bot, db):
+    await _retired_row(db, GUILD, "golive_end_suffix", " (that's a wrap)")
+    await _retired_row(db, GUILD, "golive_end_mode", "off")
+
+    await cog.boot_pass()
+
+    assert bot.store.get(GUILD, "golive_end_template") == "{live} (that's a wrap)"
+    details = json.loads(await action_details(db, "golive.end_wording_migrated"))
+    assert details["carried_suffix"] is True and details["dropped_mode"] == "off"
+
+
+async def test_a_second_boot_leaves_no_second_migration_row(cog, bot, db):
+    await _retired_row(db, GUILD, "golive_end_suffix", " (over)")
+
+    await cog.boot_pass()
+    await cog.boot_pass()
+
+    kinds = await action_kinds(db)
+    assert kinds.count("golive.end_wording_migrated") == 1
+
+
+async def test_a_guild_with_nothing_to_carry_leaves_no_migration_row(cog, bot, db):
+    await cog.boot_pass()
+
+    assert "golive.end_wording_migrated" not in await action_kinds(db)
+
+
 async def test_a_twitch_login_live_across_a_reboot_is_announced_by_the_first_poll(cog, bot, db):
     await announcing(bot)
     live = FakeMember(bot.guild)
@@ -2502,7 +2533,6 @@ async def test_a_boot_closes_a_session_whose_streamer_went_offline_and_marks_it_
     cog, bot, member, db
 ):
     await announcing(bot)
-    await bot.store.set(GUILD, "golive_end_mode", "edit")
     await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
     await cog._go_live(member, TWITCH_INFO, "presence")
     posted = bot.guild.channel.messages[0]

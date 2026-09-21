@@ -25,6 +25,16 @@
 > 2026-09-16, and **`SP-c`/`SP-d` need GamesDoneQuick to actually be live**; `SP-a` and `SP-e` can be run from a laptop
 > any time. Rows are lettered; the conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked
 > then.** Before that,
+> **2026-09-20 21:0x** — rows **`EW-a` … `EW-d`** added at the foot for ONE BOX FOR THE END-OF-STREAM WORDING
+> (branch `end-wording`, off `main` `be78bff`; design [`../info/end-wording-design.md`](../info/end-wording-design.md);
+> ⚠️ **not merged, not deployed, NOTHING IN IT HAS MET DISCORD, and the boot migration has never run on the live
+> database**). Owner: *"we have a text box to edit the ending annoucement and to edit was is appended at the end of a
+> stream, redundant"* and *"the when stream ends edit or off toggle … remove this aption"*. Rows are lettered; the
+> conductor numbers them at the merge. ⚠️ **`EW-b` is the row that proves NOTHING moved:** the conductor
+> ruled during the build that no server's ended announcement may change at the deploy, so the default end wording is
+> v149's, untouched — see Deviation 1 in the design; `EW-c` is where the new `{live}` placeholder does anything. ⚠️ **One older row was CORRECTED in the
+> same pass** — row **654**'s prerequisite named `golive_end_mode`, which no longer exists. ⚠️ **Nothing else in this
+> file was re-checked then.** Before that,
 > **2026-09-20 19:28** — rows **652–656** (were `BS-a` … `BS-e`) and **644–651** (were `PV-a` … `PV-h`), numbered at the v149 merge, for THE GO-LIVE BOOT SWEEP (branch `boot-sweep`, off `main`
 > `f73e81c`; design [`../info/golive-boot-sweep-design.md`](../info/golive-boot-sweep-design.md); ⚠️ **not merged, not
 > deployed, and NOTHING IN IT HAS MET DISCORD** — no bot has been restarted while somebody was streaming). Owner: *"have
@@ -2295,15 +2305,18 @@ spotlight cog shipped with the identical defect at v148** and is fixed on the sa
 
 What must be on first: `golive_channel_id` set, `golive_mode` **on** (it is per guild — check it,
 because in **shadow** everything below is a `would_announce` row and no message), and
-`golive_boot_sweep` **true** (its default). `golive_end_mode` must be **edit** for `BS-c`'s
-past-tense rewrite; it ships **off**. Staff door: **Runs the cookout** ▸ **Go-live**
+`golive_boot_sweep` **true** (its default). ⚠️ **Corrected 2026-09-20 (branch `end-wording`):** this line used to
+say *`golive_end_mode` must be **edit** for `BS-c`'s past-tense rewrite; it ships **off***. There is no
+`golive_end_mode` any more — the announcement is ALWAYS edited when a stream ends, so `BS-c` needs no setting at all,
+and the wording it produces is v149's, unchanged.
+Staff door: **Runs the cookout** ▸ **Go-live**
 (https://blackbloc.heygabi.ai/golive.html) ▸ **How streams are spotted**.
 
 | Row | Do | Expect |
 |---|---|---|
 | **652** (was `BS-a`) | Have somebody **start streaming through Discord alone** — no Twitch channel linked to them, just Go Live in a voice channel or a Streaming status — wait for the announcement, then **redeploy the bot** (or restart the machine) | Within a minute of the bot coming back, **nothing new is posted** — their session is still open and still theirs. ⚠️ **Now the real one:** have somebody with NO link start streaming **while the bot is down**, then bring it back. Their announcement appears **within a minute of boot**, worded exactly like any other. Before this build it appeared only when their presence next changed, which after a deploy could be never. On the **Logs** page ▸ **golive**, one `golive.boot_swept` row for the boot says `presence_found`, `presence_announced` and `members_walked` |
 | **653** (was `BS-b`) | With a **linked Twitch** streamer live, redeploy | **ONE** announcement, not two — the poll's first tick sees them live, the cooldown against their last session's end holds the second one back. Their original post is untouched. `golive.boot_swept` says `sessions_kept: 1` |
-| **654** (was `BS-c`) | With a session open, have the streamer **stop while the bot is down** (end the stream, then redeploy — or redeploy and stop during it) | After boot the announcement **reads in the past tense** with how long it ran (needs `golive_end_mode` = **edit**; with it **off** the post is left alone, which is also correct and is what ships). The live role comes off. On the Logs page a `golive.end` row with `reason: reconciled_on_start`. ⚠️ **This is the row that proves the defect is fixed** — before this build nothing closed it until twelve hours had passed |
+| **654** (was `BS-c`) | With a session open, have the streamer **stop while the bot is down** (end the stream, then redeploy — or redeploy and stop during it) | After boot the announcement **reads in the past tense** with how long it ran (⚠️ the old parenthetical here named `golive_end_mode` = **edit**; that key is retired on branch `end-wording` — the announcement is ALWAYS edited now, and the default wording did not change, so this row reads as it always did). The live role comes off. On the Logs page a `golive.end` row with `reason: reconciled_on_start`. ⚠️ **This is the row that proves the defect is fixed** — before this build nothing closed it until twelve hours had passed |
 | **656** (was `BS-e`) | ⚠️ **While a spotlighted channel is live** (GamesDoneQuick mid-marathon, or any row you added), **delete its announcement from the go-live channel by hand**, then redeploy | Within a minute of boot the session is **closed**, not left open for ever: on the **Logs** page ▸ **golive**, one `golive.spotlight_reconciled` row naming the login, with `reason` reading the reconciled wording. ⚠️ **This is the second defect row** — at v148 this never happened, because the spotlight boot reconcile ran before the bot had any guilds and then blocked the pass that did. The cheap half, if you do not want to wait for a marathon: any redeploy at all should leave the row's open session alone when its announcement is still there (that is `test_a_session_whose_message_is_still_there_survives_the_boot`, and the visible version is simply that nothing is re-announced) |
 | **655** (was `BS-d`) | After **any** deploy, open the **Logs** page ▸ **golive** (or the Logs section at the foot of the Go-live page) | Exactly **one** `golive.boot_swept` row per boot. Read two numbers on it: `members_walked` should be roughly the size of the server, and `members_cached` should be **true**. ⚠️ **A walk of 0, or `members_cached: false`, means the sweep ran before Discord had handed over the member list** — that is a bug to report, not a quiet server. `presence_skipped` says why anyone streaming was passed over (`cooldown` / `opted_out` / `role_filter` / `open_session`). Then set **Whether a restart looks for people already streaming** to **off** on the Go-live page, redeploy, and the next row reads `swept: false` with `members_walked: 0` — the switch works both ways |
 
@@ -2387,3 +2400,21 @@ in Discord; the member door is `/pings`.
 | `SP-c` | ⚠️ **When GamesDoneQuick is actually live** (a marathon, or any stream on that channel), look at the announcement in the go-live channel | It mentions **two roles** in front of the wording — the Events/go-live role and **GamesDoneQuick pings** — and everybody wearing either is pinged once. On the **Logs** page ▸ **golive**, the `golive.spotlight_announced` row carries `fan_role_id`. ⚠️ With no ping role on the channel it mentions only the go-live role, exactly as it did at v148 |
 | `SP-d` | Four hours into that stream, look at the reminder | ⚠️ **It pings NOBODY** — no role mention, nothing bold at the top — and its `golive.spotlight_bumped` row says `pinged: false`. That is `spotlight_bump_pings`, which ships **false**. Now turn it **on** (Go-live page ▸ **How streams are spotted** ▸ *Whether a reminder pings…*) and press **Bump now** on the row's drawer: the reminder that appears mentions the same two roles the announcement did, and its row says `pinged: true`. ⚠️ A ping every four hours through a 24-hour marathon is what the default is protecting you from |
 | `SP-e` | Add a channel with **Days to keep it** = 1, give it a ping role (`SP-a`), then let it run out — or press **Remove** on its Spotlight group | The row leaves the list AND its ping role goes with it: on the **Logs** page ▸ **pings**, one `pings.fan_role_removed` row whose `because` reads `spotlight_expired` (or `spotlight_removed`). ⚠️ **Whether the Discord ROLE is deleted is `pings_fan_role_delete`** — with it on the role is gone from Server Settings ▸ Roles; with it off the role is left behind for you to tidy up and the row says `deleted: false`. Anybody wearing it simply stops being pinged either way |
+## `EW-a` … `EW-d` — one box for the end-of-stream wording (branch `end-wording`, 2026-09-20)
+
+⚠️ **Not merged, not deployed, and NOTHING here has met Discord.** Design:
+[`../info/end-wording-design.md`](../info/end-wording-design.md). The two boxes became one: the
+**Once the stream has ended** box is the only end wording there is, and `{live}` inside it means
+*the sentence exactly as it was posted*. The **When a stream ends** off/edit switch is gone — an
+ended stream's announcement is **always** edited now.
+
+What must be on first: `golive_mode` **on** (in **shadow** everything below is a `would_announce`
+row and no message), `golive_channel_id` set. Staff door: **Runs the cookout** ▸ **Go-live**
+(https://blackbloc.heygabi.ai/golive.html) ▸ **The announcement**.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`EW-a`** | Open the **Go-live** page and read the **The announcement** section top to bottom, then open the **Settings** page and search the go-live group | **ONE** end-wording box, headed *Once the stream has ended*, with the `{live}` sentence above it. **No suffix box anywhere on the site** and **no When a stream ends switch** — and nothing on either page says *golive_end_suffix*, *golive_end_mode*, or *is off, so an announcement is left exactly as posted*. The Wording card below still shows both messages and a footer reading *Black Bloc · via Twitch · stream ended* |
+| **`EW-b`** | With the end wording box left **untouched**, have somebody stream and stop | The ended post reads **exactly what v149 posts** — *"**Ada** was streaming **Celeste** — the stream has ended. https://…"*. ⚠️ **Nothing about this row should look new, and that is the point:** the conductor ruled 2026-09-20 that nobody's ended announcement may change at the deploy, so `golive_end_template`'s default is v149's sentence untouched (it holds no `{live}`, so it still rewrites the whole post). The design had proposed a new default and it was **NOT** shipped — see **Deviation 1**. If this row reads anything else, something went wrong |
+| **`EW-c`** | ⚠️ **The row where the new placeholder actually does something.** Put **`{live} (over)`** in the box, save, then have somebody stream and stop | The ended post is the posted sentence with ` (over)` on the end, and the **card's footer** reads *Black Bloc · via Twitch · (over)* — the one box drives both halves. Blank the box instead and the post keeps its sentence with **nothing** added and the footer reads *Black Bloc · via Twitch* |
+| **`EW-d`** | ⚠️ **The one that changes behaviour for a server that had turned this OFF.** If any server had **When a stream ends** set to **off**, watch what happens after the first boot on this build | Its announcements **are now edited** when streams end — the off setting is deleted at boot and cannot be set again. **That is the owner's decision** (*"we will also edit our message. remove this aption"*, 2026-09-20), not a defect. On the **Logs** page ▸ **golive** the boot leaves ONE `golive.end_wording_migrated` row per server that had anything stored, saying `carried_suffix` (was a custom suffix folded into the box?) and `dropped_mode` (what the off/edit switch had been). A second boot leaves **no** second row. ⚠️ **Nobody has looked at the live `settings` table**, so which servers this touches is unknown until it runs |

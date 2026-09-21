@@ -312,9 +312,7 @@ const SETTING_SPECS = [
   ['golive_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post go-live announcements)', ['off', 'shadow', 'on']],
   ['golive_channel_id', 'channel', '800000000000000006', null, 'where go-live announcements are posted'],
   ['golive_template', 'text', '{name} is live playing {game} — {title} {url}', '{name} is live: {url}', 'the announcement wording; {name} {game} {title} {url} {platform}'],
-  ['golive_end_mode', 'enum', 'off', 'off', 'what happens to the announcement when the stream ends: off leaves it as posted, edit appends the ended wording and marks the card', ['off', 'edit']],
-  ['golive_end_suffix', 'text', ' — stream ended', ' — stream ended', 'what is added to an announcement once the stream has ended; only used when golive_end_mode is edit'],
-  ['golive_end_template', 'text', '**{name}** was streaming **{game}** — the stream has ended. {url}', '**{name}** was streaming **{game}** — the stream has ended. {url}', 'the whole announcement once the stream is over; {name} {game} {title} {url} {platform} {duration}; blank keeps the live sentence and appends golive_end_suffix as before'],
+  ['golive_end_template', 'text', '{live} — stream ended', '**{name}** was streaming **{game}** — the stream has ended. {url}', 'the announcement once the stream is over, and the only place that wording lives. {live} is the sentence exactly as it was posted, so {live} — stream ended appends and a wording without {live} rewrites the whole post; the other fields are {name} {game} {title} {url} {platform} {duration}. Blank keeps the posted sentence and adds nothing; wording that cannot be rendered falls back to the default'],
   ['golive_end_author', 'text', '{name} was live on {platform}', '{name} was live on {platform}', "the card's top line once the stream is over; {name} {platform} {duration}; blank keeps 'was live on'"],
   ['golive_end_keep_mention', 'bool', false, false, 'on keeps the role mention at the front of the edited announcement; off drops it — nobody is pinged by an edit either way'],
   ['golive_costream_mode', 'enum', 'on', 'on', 'on names both platforms in one announcement when somebody streaming on Twitch also goes live on YouTube (or the other way round) and edits the post that is already there; off holds the second platform back, as it did before', ['off', 'on']],
@@ -1408,7 +1406,7 @@ function seedActions() {
 let state = seedState();
 
 const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text'];
-const NOT_A_FEATURE = ['golive_end_mode'];
+const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',
   mod_dm_on_action: 'automod',
@@ -3926,6 +3924,17 @@ function fillWording(template, fields) {
     .trim();
 }
 
+const END_TRIM = /^[\s—–\-·|,;:]+|[\s—–\-·|,;:]+$/g;
+const END_MARK_DEFAULT = 'stream ended';
+
+function endMark(template) {
+  const wanted = String(template || '').trim();
+  if (!wanted) return '';
+  if (!wanted.includes('{live}')) return END_MARK_DEFAULT;
+  const tail = wanted.slice(wanted.lastIndexOf('{live}') + '{live}'.length).replace(END_TRIM, '');
+  return tail.includes('{') ? END_MARK_DEFAULT : tail;
+}
+
 function spotlightSessionRow(row) {
   return {
     id: row.id,
@@ -4087,21 +4096,20 @@ route('GET', '/api/golive/preview', (context) => {
   const fields = { ...PREVIEW_SAMPLE, name: STAFF.display_name || PREVIEW_SAMPLE.name };
   const pingRole = value('golive_ping_role_id');
   const prefix = pingRole ? `<@&${pingRole}> ` : '';
-  const suffix = String(value('golive_end_suffix') || '');
   const live = prefix + fillWording(value('golive_template'), fields);
   const template = String(value('golive_end_template') || '').trim();
   const author = String(value('golive_end_author') || '').trim();
   const keep = Boolean(value('golive_end_keep_mention'));
   const plain = live.replace(/^(?:<@&\d+>[ \t]*)+/, '');
-  const ended = template
-    ? (keep ? prefix : '') + fillWording(template, fields)
-    : (keep ? prefix : '') + (plain.endsWith(suffix) ? plain : plain + suffix);
+  const head = keep ? prefix : '';
+  const ended = template ? head + fillWording(template, { ...fields, live: plain }) : head + plain;
+  const mark = endMark(template);
   return {
     live: { text: live, author: `${fields.name} is now live on ${fields.platform}!` },
     ended: {
       text: ended,
       author: author ? fillWording(author, fields) : `${fields.name} was live on ${fields.platform}`,
-      footer: suffix.trim() ? `Black Bloc · via Twitch · ${suffix.replace(/^[\s—–\-·|,;:]+/, '')}` : 'Black Bloc · via Twitch',
+      footer: mark ? `Black Bloc · via Twitch · ${mark}` : 'Black Bloc · via Twitch',
     },
   };
 });

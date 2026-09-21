@@ -127,8 +127,8 @@ def test_every_mode_key_in_the_registry_is_reported():
     }
 
 
-def test_the_go_live_end_switch_is_not_offered_as_a_feature_of_its_own():
-    assert "golive_end_mode" in KEY_TYPES
+def test_the_retired_go_live_end_switch_is_not_a_feature_because_it_is_not_a_key():
+    assert "golive_end_mode" not in KEY_TYPES
     assert "golive_end_mode" not in mode_keys()
 
 

@@ -49,17 +49,14 @@ const PLATFORM_WORDS = { twitch: 'Twitch', youtube: 'YouTube' };
 
 const TEMPLATE_KEY = 'golive_template';
 const PING_KEY = 'golive_ping_role_id';
-const END_MODE_KEY = 'golive_end_mode';
 const END_TEMPLATE_KEY = 'golive_end_template';
 const END_AUTHOR_KEY = 'golive_end_author';
-const END_SUFFIX_KEY = 'golive_end_suffix';
 const END_KEEP_KEY = 'golive_end_keep_mention';
 const GOLIVE_MODE_KEY = 'golive_mode';
 const LIVE_MODE_KEY = 'youtube_live_mode';
 const PINGS_MODE_KEY = 'pings_mode';
 const SPOTLIGHT_MODE_KEY = 'spotlight_mode';
 const CHANNEL_KEY = 'golive_channel_id';
-const END_EDIT = 'edit';
 
 const SUBTITLE = 'Who is streaming, who is set up to be announced, and what the announcement '
   + 'says. One list of people, whichever platform they use.';
@@ -93,10 +90,10 @@ const ADD_PICK_FIRST = 'Pick the member this is about first.';
 const ANNOUNCEMENT_NOTE = 'One wording for both platforms. {platform} fills itself in.';
 const WHILE_LIVE_TITLE = 'While they are live';
 const ENDED_TITLE = 'Once the stream has ended';
-const END_HELP = 'edit rewrites the announcement once the stream is over; off leaves it as '
-  + 'posted. The Wording card below shows both.';
-const END_UNKNOWN = 'The bot did not report a golive_end_mode key, so what happens once a stream '
-  + 'ends is not shown rather than guessed at.';
+const END_LIVE_HELP = '{live} is the sentence exactly as it was posted, so “{live} — stream '
+  + 'ended” adds to the end of it and a wording without {live} replaces the whole post. The '
+  + 'rest of the fields are {name} {game} {title} {url} {platform} {duration}. The announcement '
+  + 'is always edited once the stream is over.';
 const END_NO_KEYS = 'The bot did not report a golive_end_template key, so the ending is edited '
   + 'from Everything else rather than guessed at here.';
 const END_WORDING_WHERE = 'Once the stream is over';
@@ -950,7 +947,6 @@ async function announcementSection(specs, wordingSpecs) {
     return group.node;
   }
   const shape = { which: TWITCH };
-  const endSpec = specs.find((one) => one.key === END_MODE_KEY) || null;
   const endTemplate = specs.find((one) => one.key === END_TEMPLATE_KEY) || null;
   const endAuthor = specs.find((one) => one.key === END_AUTHOR_KEY) || null;
 
@@ -976,13 +972,6 @@ async function announcementSection(specs, wordingSpecs) {
     });
   }
 
-  const endMode = endSpec ? modeSwitch(endSpec, {
-    label: 'The stream-end wording',
-    onSaved: () => {
-      if (endMade) endMade.repaint();
-    },
-  }) : null;
-
   const chips = el('div', { class: 'chipbar' });
   const paintChips = () => {
     chips.replaceChildren(...[TWITCH, YOUTUBE].map((which) => chipButton(
@@ -998,25 +987,19 @@ async function announcementSection(specs, wordingSpecs) {
   };
   paintChips();
 
-  const endRows = wordingSpecs.filter(
-    (one) => one.key === END_SUFFIX_KEY || one.key === END_KEEP_KEY,
-  );
+  const endRows = wordingSpecs.filter((one) => one.key === END_KEEP_KEY);
 
   group.body.append(
     el('p', { class: 'field-help', text: MOCK_NOTE }),
     chips,
     card(WHILE_LIVE_TITLE, [
       liveMade.row.node,
-      el('div', { class: 'formrow' }, [
-        endMode ? field('When a stream ends', endMode.node, END_HELP) : null,
-      ].filter(Boolean)),
-      endMode ? null : el('p', { class: 'field-help', text: END_UNKNOWN }),
       liveMade.mock.node,
       liveMade.mock.say,
-      endMode ? endMode.say : null,
       liveMade.say,
     ].filter(Boolean)),
     card(ENDED_TITLE, [
+      el('p', { class: 'field-help', text: END_LIVE_HELP }),
       ...(endMade
         ? endMade.rows.map((row) => row.node)
         : [el('p', { class: 'say-nothing', text: END_NO_KEYS })]),

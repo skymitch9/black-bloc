@@ -355,13 +355,13 @@ const SPOTLIGHT = [
 }
 
 // --- ⚠️ every settings key lands in exactly one drawer or one named surface -------------------
-// The 50 keys the three namespaces held on 2026-09-20, measured with
+// The 48 keys the three namespaces held on 2026-09-20, measured with
 //   python -c "from black_bloc import settings_store as s; print([k for k in s.KEY_TYPES if
 //              s.namespace_of(k) in ('golive','pings','youtube')])"
 // The catch-all is what keeps this satisfiable: a key added tomorrow appears in Everything
 // else rather than vanishing from the page, and the last assertion below pins that.
 const NAMESPACE_KEYS = [
-  'golive_mode', 'golive_channel_id', 'golive_template', 'golive_end_mode', 'golive_end_suffix',
+  'golive_mode', 'golive_channel_id', 'golive_template',
   'golive_end_template', 'golive_end_author', 'golive_end_keep_mention', 'golive_live_role_id',
   'golive_require_role_id', 'golive_ignore_role_id', 'golive_cooldown_minutes',
   'golive_ping_role_id', 'golive_max_session_hours', 'golive_embed', 'golive_boot_sweep',
@@ -381,7 +381,7 @@ const NAMESPACE_KEYS = [
 
 {
   const where = 'every key lands once';
-  is(`${where} — the namespaces held 50 keys when this was measured`, NAMESPACE_KEYS.length, 50);
+  is(`${where} — the namespaces held 48 keys when this was measured`, NAMESPACE_KEYS.length, 48);
 
   const specs = NAMESPACE_KEYS.map((key) => ({ key, type: 'text', value: null }));
   const placed = placeSettings(specs);
@@ -429,5 +429,5 @@ process.stdout.write(
   'golive-join: ok - one row per person across five payloads; a ping role with no link still '
     + 'has a row; two open sessions are one row; a co-stream says both platforms; an ambiguous '
     + 'address is refused in words; a spotlighted channel with no member is its own row and one '
-    + 'that IS a linked login is not a second; all 50 settings keys land in exactly one place\n',
+    + 'that IS a linked login is not a second; all 48 settings keys land in exactly one place\n',
 );

@@ -297,7 +297,7 @@ async def test_the_preview_reads_the_wording_this_guild_saved(
     assert found["ended"]["author"] == "that was Twitch"
 
 
-async def test_a_blank_end_wording_previews_the_suffix_the_old_way(
+async def test_a_blank_end_wording_previews_the_sentence_with_nothing_added(
     client, sign_in, web, guild, wf
 ):
     wf.member(guild, 7, name="ada", staff=True)
@@ -306,7 +306,8 @@ async def test_a_blank_end_wording_previews_the_suffix_the_old_way(
 
     found = client.get("/api/golive/preview").json()
 
-    assert found["ended"]["text"] == found["live"]["text"] + " — stream ended"
+    assert found["ended"]["text"] == found["live"]["text"]
+    assert found["ended"]["footer"] == "Black Bloc · via Twitch"
 
 
 async def test_the_preview_drops_the_ping_unless_the_guild_keeps_it(

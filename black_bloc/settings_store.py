@@ -62,11 +62,10 @@ GOLIVE_TEMPLATE = (
     "Check it out: {url}"
 )
 GOLIVE_MODES = ("off", "shadow", "on")
-GOLIVE_END_OFF = "off"
-GOLIVE_END_EDIT = "edit"
-GOLIVE_END_MODES = (GOLIVE_END_OFF, GOLIVE_END_EDIT)
-GOLIVE_END_SUFFIX = " — stream ended"
+GOLIVE_LIVE_FIELD = "{live}"
 GOLIVE_END_TEMPLATE = "**{name}** was streaming **{game}** — the stream has ended. {url}"
+GOLIVE_END_SUFFIX_RETIRED = "golive_end_suffix"
+GOLIVE_END_MODE_RETIRED = "golive_end_mode"
 GOLIVE_END_AUTHOR = "{name} was live on {platform}"
 GOLIVE_COSTREAM_OFF = "off"
 GOLIVE_COSTREAM_ON = "on"
@@ -298,8 +297,6 @@ KEY_TYPES: dict[str, str] = {
     "golive_mode": "enum",
     "golive_channel_id": "channel",
     "golive_template": "text",
-    "golive_end_mode": "enum",
-    "golive_end_suffix": "text",
     "golive_end_template": "text",
     "golive_end_author": "text",
     "golive_end_keep_mention": "bool",
@@ -448,7 +445,6 @@ KEY_TYPES: dict[str, str] = {
 
 KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "golive_mode": GOLIVE_MODES,
-    "golive_end_mode": GOLIVE_END_MODES,
     GOLIVE_COSTREAM_MODE_KEY: GOLIVE_COSTREAM_MODES,
     "pings_mode": PINGS_MODES,
     "pings_fan_role_creation": PINGS_CREATORS,
@@ -698,18 +694,12 @@ KEY_HELP: dict[str, str] = {
     "golive_mode": "off, shadow (log only) or on (post go-live announcements)",
     "golive_channel_id": "where go-live announcements are posted",
     "golive_template": "the announcement wording; {name} {game} {title} {url} {platform}",
-    "golive_end_mode": (
-        "what happens to the announcement when the stream ends: off leaves it as posted, "
-        "edit appends the ended wording and marks the card"
-    ),
-    "golive_end_suffix": (
-        "what is added to an announcement once the stream has ended; only used when "
-        "golive_end_mode is edit"
-    ),
     "golive_end_template": (
-        "the whole announcement once the stream is over; {name} {game} {title} {url} "
-        "{platform} {duration}; blank keeps the live sentence and appends golive_end_suffix "
-        "as before"
+        "the announcement once the stream is over, and the only place that wording lives. "
+        "{live} is the sentence exactly as it was posted, so {live} — stream ended appends "
+        "and a wording without {live} rewrites the whole post; the other fields are {name} "
+        "{game} {title} {url} {platform} {duration}. Blank keeps the posted sentence and adds "
+        "nothing; wording that cannot be rendered falls back to the default"
     ),
     "golive_end_author": (
         "the card's top line once the stream is over; {name} {platform} {duration}; blank "
@@ -3270,10 +3260,6 @@ class SettingsStore:
             return "shadow"
         if key == "golive_template":
             return GOLIVE_TEMPLATE
-        if key == "golive_end_mode":
-            return GOLIVE_END_OFF
-        if key == "golive_end_suffix":
-            return GOLIVE_END_SUFFIX
         if key == "golive_end_template":
             return GOLIVE_END_TEMPLATE
         if key == "golive_end_author":
@@ -3810,3 +3796,34 @@ class SettingsStore:
             f"Manage Server permission or a role that can see {where}. Ask a server admin to "
             "give you one of those, or to run the command for you."
         )
+
+
+async def _stored_row(store: SettingsStore, guild_id: int, key: str) -> Any:
+    cur = await store.db.conn.execute(
+        "SELECT value FROM settings WHERE guild_id = ? AND key = ?", (guild_id, key)
+    )
+    row = await cur.fetchone()
+    if row is None:
+        return None
+    try:
+        return json.loads(row["value"])
+    except (TypeError, ValueError):
+        return None
+
+
+async def carry_end_wording(store: SettingsStore, guild_id: int) -> dict[str, Any] | None:
+    """Schema 50: the two retired end keys fold into golive_end_template, once, at boot."""
+    suffix = await _stored_row(store, guild_id, GOLIVE_END_SUFFIX_RETIRED)
+    mode = await _stored_row(store, guild_id, GOLIVE_END_MODE_RETIRED)
+    if suffix is None and mode is None:
+        return None
+    carried = False
+    if isinstance(suffix, str) and not store.is_stored(guild_id, "golive_end_template"):
+        await store.set(guild_id, "golive_end_template", GOLIVE_LIVE_FIELD + suffix)
+        carried = True
+    await store.db.conn.execute(
+        "DELETE FROM settings WHERE guild_id = ? AND key IN (?, ?)",
+        (guild_id, GOLIVE_END_SUFFIX_RETIRED, GOLIVE_END_MODE_RETIRED),
+    )
+    await store.db.conn.commit()
+    return {"carried_suffix": carried, "dropped_mode": mode}
