@@ -51,6 +51,11 @@
       "raidtrain_reminder_minutes": 5,
       "raidtrain_slot_minutes": 15,
       "selftest_purge_minutes": 1,
+      "spotlight_bump_hours": 1,
+      "spotlight_default_days": 1,
+      "spotlight_end_misses": 1,
+      "spotlight_event_slack_hours": 0,
+      "spotlight_poll_minutes": 2,
       "time_step_minutes": 5,
       "youtube_live_end_misses": 1,
       "youtube_live_poll_minutes": 2
@@ -93,6 +98,11 @@
       "raidtrain_reminder_minutes": 1440,
       "raidtrain_slot_minutes": 720,
       "selftest_purge_minutes": 1440,
+      "spotlight_bump_hours": 48,
+      "spotlight_default_days": 365,
+      "spotlight_end_misses": 5,
+      "spotlight_event_slack_hours": 24,
+      "spotlight_poll_minutes": 30,
       "time_step_minutes": 60,
       "youtube_live_end_misses": 5,
       "youtube_live_poll_minutes": 60

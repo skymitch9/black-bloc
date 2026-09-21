@@ -197,10 +197,11 @@ def test_the_settings_groups_fit_the_select():
 
 
 def test_three_groups_are_over_the_cap_and_find_is_what_reaches_the_rest():
-    """`events` joined them when meeting minutes filed its eleven keys there — the group select
-    is at its 25-cap, so a `minutes` namespace would have been dropped silently instead."""
+    """`events` joined them when meeting minutes filed its eleven keys there, and `golive` when
+    spotlight filed its nine — the group select is at its 25-cap, so a `spotlight` namespace
+    would have been dropped silently instead."""
     over = [group for group in groups() if needs_find(group)]
-    assert over == ["chat", "events", "modmail"]
+    assert over == ["chat", "events", "golive", "modmail"]
 
     every = editable_options("chat")
     assert len(every.keys) == SELECT_LIMIT
