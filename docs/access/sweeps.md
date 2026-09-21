@@ -1,6 +1,13 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-21** — rows `MO-a` and `MO-b` added at the foot for THE MEMBER OPT-OUT THAT NOW ENDS THE
+> ANNOUNCEMENT ALREADY OUT (branch `member-optout`, off `main` `20b615d`; design
+> [`../info/golive-panel-design.md`](../info/golive-panel-design.md) ▸ **Follow-up 2026-09-21**).
+> Owner, 10:4x: *"opt out should end their annoucement"*. ⚠️ **Not merged, not deployed, and NOTHING IN IT
+> HAS MET DISCORD** — no live role has come off a real member and no announcement has been edited or deleted
+> by this branch. Rows are lettered; the conductor numbers them at the merge. ⚠️ **Nothing else in this file
+> was re-checked then.** Before that,
 > **2026-09-21** — rows `CO-a` and `CO-b` added at the foot for THE CHANNEL OPT-OUT THAT NOW ENDS THE
 > ANNOUNCEMENT ALREADY OUT (branch `channel-optout`, off `main` `1a35d75`; design
 > [`../info/channel-streamers-design.md`](../info/channel-streamers-design.md) ▸ **Follow-up 2026-09-21**).
@@ -2715,3 +2722,23 @@ it bit. ESA is live most of the time, which is why it is the row to use. The new
 |---|---|---|
 | **730** (was `CO-a`) | While **ESA Marathon** is LIVE and its announcement is pinned in `#go-live`, open **Go-live** ▸ its row ▸ **Announcements** and press **Opt out of announcements**. Watch `#go-live` | ⚠️ **The row the whole defect is about.** Within a second: the pinned post is **unpinned** and its words are **edited to the one end wording** (past tense — `golive_end_template`, whatever it says today), exactly as if the stream had ended. The drawer's answer says *"… is opted out …"* **and** names what became of the post — *"The announcement that was out has been unpinned and edited to say the stream has ended … (per `golive_channel_optout_post`)."* The Streamers list's **Opted out** cell reads *opted out* and the row is no longer *live now*. **No reminder follows, however long ESA keeps streaming**, and the channel is NOT announced again while it stays opted out. The Logs page's **golive** chip holds `golive.spotlight_ended` with `reason: opted_out` and `post: end`, plus `golive.spotlight_unpinned`. ⚠️ Press **Opt out** a second time and NOTHING more happens — no second end row. Then set `golive_channel_optout_post` to `delete` and repeat on another live channel: the post **disappears** instead (`golive.spotlight_post_deleted`); set it to `leave` and the post stays word-for-word as posted with only the pin off. The same move from Discord — `/golive` ▸ **Channels…** ▸ pick the channel ▸ **Opt out of announcements** — says the same sentence and does the same thing |
 | **731** (was `CO-b`) | While a channel is LIVE and PINNED, press **Spotlight off** on its row instead (not Opt out). Then leave it and wait for the stream to really end | The announcement is **unpinned and nothing else** — the words stay exactly as posted, saying the channel is live, because it still is. The answer says *"… is announced like anybody else's stream now … The announcement that is out now has been unpinned; it stays posted, no reminder follows it, and it is edited to past tense when the stream ends."* The row is STILL *live now* and its session is still open; `golive.spotlight_unpinned` carries `because: spotlight_off`. **No reminder goes out** for the rest of the stream. When Twitch finally reads offline the post is edited to past tense the normal way. ⚠️ Pressing **Spotlight on** again mid-stream does NOT re-pin the post that is already out — the pin is taken at announce time (sweep row **721** says the same) |
+
+## Rows `MO-a`, `MO-b` — a MEMBER's opt-out ends the announcement that is already out (branch `member-optout`, 2026-09-21)
+
+⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET DISCORD.** Owner, 2026-09-21 10:4x: *"opt
+out should end their annoucement"* — said of a member, the morning after v152 (`CO-a`/`CO-b`, now
+sweeps **730–731**) made a *channel's* opt-out do it. Until now `opt_out` wrote the opt-out row and
+dropped the fan role and nothing else: the open session and its posted announcement ran on until
+presence went quiet or the Twitch poller read offline. Design:
+[`../info/golive-panel-design.md`](../info/golive-panel-design.md) ▸ **Follow-up 2026-09-21**.
+Review link: <https://blackbloc.heygabi.ai/golive.html> ▸ a live member's row ▸ **Opt out**.
+
+⚠️ **Both rows want a member who is actually LIVE** — that is the whole case, and it is why the
+defect was invisible from a list of opted-out people. The new key `golive_member_optout_post` is in
+**Settings** ▸ **Go-live** ▸ *How streams are spotted*, beside `golive_channel_optout_post`, and
+`/settings` reaches it too.
+
+| Row | Do | Expect |
+|---|---|---|
+| `MO-a` | While you are LIVE and your announcement is in `#go-live`, run `/golive` and press **Stop announcing my streams**. Watch `#go-live` and your own roles | ⚠️ **The row the whole ask is about.** Within a second the post is **edited to the one end wording** (past tense — `golive_end_template`, whatever it says today), exactly as if the stream had ended, and if anybody had pinned it the pin comes off. **The live role is gone** from you. The panel's answer says *"Done — Black Bloc will not announce your streams…"* **and** names what became of the post — *"The announcement that was out has been unpinned and edited to say the stream has ended… the live role is off and the session is closed (per `golive_member_optout_post`)."* The Logs page's **golive** chip holds `golive.end` with `reason: opted_out` and `post: end`, plus `golive.optout`. ⚠️ Press **Stop announcing my streams** a second time (opt back in first is NOT needed — press it from a fresh `/golive`) and NOTHING more happens: no second `golive.end`, and the answer is the plain sentence with no clause. Then set `golive_member_optout_post` to `delete` and repeat with another live member: the post **disappears** (`golive.post_deleted`); set it to `leave` and the post stays word-for-word as posted, only the pin coming off, with the session still closed and the role still removed |
+| `MO-b` | The same move through the other two doors. On <https://blackbloc.heygabi.ai/golive.html>, open a LIVE member's row and press **Opt them out**. Then, with somebody else live, opt them out and immediately press **Announce them again** while their stream is still running | The site drawer's answer says the SAME clause, word for word, as `/golive` did — one sentence function, three doors — and the row leaves *live now*. Opting back in mid-stream **announces nothing**: no new post in `#go-live`, no second `golive.announce` row, and the answer says so in words — *"A stream they are already running is not announced after the fact; the next one they start is."* ⚠️ Check the Logs page after the opt-out from the site: exactly ONE actor row (`web.golive.optout`) and ONE `golive.end`, never a doubled pair (checklist 34) |
