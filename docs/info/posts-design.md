@@ -52,7 +52,12 @@ posts  id, guild_id, slug UNIQUE(guild_id, slug), title, channel_id (NULL ok), b
 - `posted_hash` = sha256 of (`style`, `title`, `body`) at the moment it was sent; **"changes not yet
   posted"** = `posted_hash` differs from the same hash of the row now. One home: `posts.body_hash`.
 - `seed_hash` marks the shipped post (same convention as guides): it cannot be deleted, only taken down
-  and emptied; **Put the original back** restores the seed text.
+  and emptied; ~~**Put the original back** restores the seed text~~ **RETIRED 2026-09-20 on branch
+  `posts-versions`** (owner: *"for all post lets remove the put back original and add a version
+  history"*). `reset_post`, its route and both put-back buttons are gone; the shipped words are
+  **version 1** in the new `post_versions` history, restored with **Use this version** like any
+  other. `seed_hash` stays — it is still what refuses a delete and what earns the `shipped` chip.
+  See [`posts-versions-design.md`](posts-versions-design.md).
 
 ### C2. `black_bloc/posts.py` (new pure module) — the moves, each with `via`
 
