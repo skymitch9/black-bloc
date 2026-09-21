@@ -33,6 +33,19 @@ NO_SUCH_ROLE = (
 
 MEMBER_KIND = "member"
 SPOTLIGHT_KIND = "spotlight"
+NOT_CREATED = "not_created"
+NOT_RENAMED = "not_renamed"
+REFUSAL_STATUS = {
+    pings.DUPLICATE_CODE: 409,
+    pings.BLANK_NAME_CODE: 400,
+    pings.ROLE_GONE_CODE: 404,
+}
+
+
+def refuse_outcome(outcome: Any, default: str = NOT_CREATED) -> Refused:
+    """A refusal the modal shows in place, named for what it refused rather than `not_created`."""
+    code = outcome.code or default
+    return Refused(REFUSAL_STATUS.get(code, 409), code, outcome.message)
 
 
 def streamer_row(guild: Any, row: Any) -> dict[str, Any]:
@@ -189,12 +202,13 @@ def build_router(bot: Any) -> APIRouter:
                 None,
                 by=int(who["id"]),
                 existing_role=wanted_role(guild, payload.get("role_id")),
+                name=payload.get("name"),
                 staff=True,
                 via=VIA_WEBSITE,
                 spotlight=row,
             )
             if not outcome.ok:
-                raise Refused(409, "not_created", outcome.message)
+                raise refuse_outcome(outcome)
             held = await pings.get_spotlight_fan_role(bot.db, guild.id, row["id"])
             return streamer_row(guild, held) | {"message": outcome.message}
         member_id = wanted_id(payload.get("member_id"))
@@ -207,12 +221,64 @@ def build_router(bot: Any) -> APIRouter:
             member,
             by=int(who["id"]),
             existing_role=wanted_role(guild, payload.get("role_id")),
+            name=payload.get("name"),
             staff=True,
             via=VIA_WEBSITE,
         )
         if not outcome.ok:
-            raise Refused(409, "not_created", outcome.message)
+            raise refuse_outcome(outcome)
         row = await pings.get_fan_role(bot.db, guild.id, member_id)
+        return streamer_row(guild, row) | {"message": outcome.message}
+
+    @router.patch("/streamers/spotlight/{spotlight_id}")
+    async def pings_spotlight_rename(
+        request: Request, spotlight_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Staff rename a channel's ping role from the row they made it on."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        channel = await wanted_spotlight(spotlight_id)
+        held = await pings.get_spotlight_fan_role(bot.db, guild.id, channel["id"])
+        if held is None:
+            raise Refused(
+                404,
+                "no_fan_role",
+                pings.NO_FAN_ROLE.format(name=pings.spotlight_name(channel)),
+            )
+        outcome = await pings.rename_fan_role(
+            bot, guild, held, payload.get("name"), by=int(who["id"]), via=VIA_WEBSITE
+        )
+        if not outcome.ok:
+            raise refuse_outcome(outcome, NOT_RENAMED)
+        row = await pings.get_spotlight_fan_role(bot.db, guild.id, channel["id"])
+        return streamer_row(guild, row) | {"message": outcome.message}
+
+    @router.patch("/streamers/{member_id}")
+    async def pings_streamer_rename(
+        request: Request, member_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Staff rename a streamer's ping role from the row they made it on."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        wanted = wanted_id(member_id)
+        held = await pings.get_fan_role(bot.db, guild.id, wanted)
+        if held is None:
+            member = guild.get_member(wanted)
+            raise Refused(
+                404,
+                "no_fan_role",
+                pings.NO_FAN_ROLE.format(
+                    name=pings.display_name(member) if member is not None else str(wanted)
+                ),
+            )
+        outcome = await pings.rename_fan_role(
+            bot, guild, held, payload.get("name"), by=int(who["id"]), via=VIA_WEBSITE
+        )
+        if not outcome.ok:
+            raise refuse_outcome(outcome, NOT_RENAMED)
+        row = await pings.get_fan_role(bot.db, guild.id, wanted)
         return streamer_row(guild, row) | {"message": outcome.message}
 
     @router.delete("/streamers/spotlight/{spotlight_id}")

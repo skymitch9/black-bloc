@@ -647,6 +647,20 @@ async def seed_world(client, web, guild, wf) -> dict:
     # A ping role of the channel's own (schema 50). Its Discord role is deliberately one the
     # fake guild does NOT have, so the DELETE entry cannot take a role another entry reads.
     await pings.set_fan_role(db, guild_id, None, 999_999, 7, spotlight_id=spotlight_id)
+    # A second channel whose ping role IS a role this guild has, because the rename PATCH edits
+    # the role itself. `rewind` builds a fresh guild per entry, so the new name never escapes.
+    role_spotlight_id = await add_spotlight(
+        db,
+        guild_id,
+        "esamarathon",
+        added_by=7,
+        expires_at=None,
+        pin=False,
+        display_name="ESA Marathon",
+    )
+    await pings.set_fan_role(
+        db, guild_id, None, wf.PLAIN_ROLE_ID, 7, spotlight_id=role_spotlight_id
+    )
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
     arm_minutes(web)
     return {
@@ -688,6 +702,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "scratch_post_slug": "scratch-post",
         "post_version_n": "1",
         "spotlight_id": str(spotlight_id),
+        "spotlight_role_id": str(role_spotlight_id),
         "meeting_id": str(meeting_id),
         "recording_meeting_id": str(recording_meeting_id),
     }

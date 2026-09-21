@@ -1,4 +1,4 @@
-import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
+import { api, listOf, names, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import {
   joinStreamers,
@@ -12,6 +12,7 @@ import { logsSection } from './logs.js';
 import {
   ago,
   ask,
+  askForm,
   badge,
   bar,
   button,
@@ -465,53 +466,179 @@ function youtubeMoves(row, say) {
 
 let pingsTemplate = '{name} pings';
 
-/** The same door /pings has: an existing role, or a new one named by pings_fan_role_template.
+const MAKE_ROLE = 'make';
+const PICK_ROLE = 'pick';
+const MAKE_ROLE_LABEL = 'Make a new role';
+const PICK_ROLE_LABEL = 'Use an existing role';
+const ROLE_NAME_LABEL = 'Role name';
+const ROLE_NAME_MAX = 100;
+const PING_ROLE_MEMBER = 'Members who press their name on /pings get this role, and it is pinged '
+  + 'when they go live.';
+const PING_ROLE_CHANNEL = 'Members who press this channel on /pings get this role, and it is '
+  + 'pinged when the channel goes live — the announcement and, with spotlight_bump_pings on, the '
+  + 'reminders.';
+const ROLE_NAME_FREE = 'Black Bloc will make **{name}**.';
+const ROLE_NAME_TAKEN = '⚠️ A role named **{name}** already exists — pick it under Use an '
+  + 'existing role, or choose another name.';
+const ROLE_NAME_BLANK = 'Type the name the role should have, or use an existing role instead.';
+const ROLE_PICKED = 'That role becomes their ping role; nobody is added to it.';
+const ROLE_PICK_ONE = 'Pick the role that becomes their ping role.';
+const ROLE_MADE = 'Made the role.';
+const ROLE_RENAMED = 'Renamed the role.';
+const RENAME_ROLE_TITLE = "Rename {name}'s ping role";
+const RENAME_ROLE_LINE = 'The Discord role is renamed where it stands — everybody wearing it keeps '
+  + 'it, and the panels people follow from say the new name.';
+const RENAME_ROLE_FREE = 'The role will be called **{name}**.';
+const RENAME_ROLE_TAKEN = '⚠️ A role named **{name}** already exists — choose another name.';
+const RENAME_ROLE_BLANK = 'Type the name the role should have.';
+const RENAME_LABEL = 'Rename…';
+const RENAME_CONFIRM = 'Rename the role';
+
+/** `{name}` everywhere it appears, the way the bot's own template does — never a regexp. */
+function fillName(template, name) {
+  return String(template).split('{name}').join(name);
+}
+
+/** What Discord will take of a typed name; mirrors black_bloc/pings.py:typed_role_name. */
+function tidyName(given) {
+  return String(given ?? '').trim().replace(/\s+/g, ' ').slice(0, ROLE_NAME_MAX);
+}
+
+/** The roles this server has, folded for the live duplicate check both dialogs make. */
+async function roleNamesHere() {
+  return (await refRoles()).map((role) => tidyName(role.name).toLowerCase());
+}
+
+/** The Role name box and the sentence under it; `keep` is the name it may keep (a rename). */
+function roleNameBox(value, here, { free = ROLE_NAME_FREE, taken = ROLE_NAME_TAKEN,
+  blank = ROLE_NAME_BLANK, keep = null } = {}) {
+  const typed = el('input', {
+    class: 'input',
+    type: 'text',
+    maxlength: String(ROLE_NAME_MAX),
+    set: { value },
+  });
+  const kept = tidyName(keep).toLowerCase();
+  const check = (named) => {
+    const wanted = tidyName(typed.value);
+    if (!wanted) {
+      named.say(blank, 'warn');
+      return false;
+    }
+    if (wanted.toLowerCase() !== kept && here.includes(wanted.toLowerCase())) {
+      named.say(fillName(taken, wanted), 'warn');
+      return false;
+    }
+    named.say(fillName(free, wanted));
+    return true;
+  };
+  return { typed, node: field(ROLE_NAME_LABEL, typed), check, read: () => tidyName(typed.value) };
+}
+
+/** The same door /pings has: a role named here and made, or one that already exists.
     A channel row asks by spotlight id, because there is no member behind it. */
 async function addPingRole(row, say) {
   const who = row.name || row.user_id;
   const channel = spotlightOnly(row) ? row.spotlight.id : null;
   const roles = await roleSelect(null);
-  const named = el('p', { class: 'field-help' });
-  const sayName = () => {
-    const picked = readSelect(roles, false);
-    named.textContent = picked
-      ? 'That role becomes their ping role; nobody gets added to it by this.'
-      : `Black Bloc makes a new role named “${pingsTemplate.replace('{name}', who)}” — the name comes from `
-        + 'pings_fan_role_template, in Everything else ▸ Ping roles.';
+  const box = roleNameBox(fillName(pingsTemplate, who), await roleNamesHere());
+  const making = segment(
+    [{ value: MAKE_ROLE, label: MAKE_ROLE_LABEL }, { value: PICK_ROLE, label: PICK_ROLE_LABEL }],
+    MAKE_ROLE,
+    { onChange: () => showName() },
+  );
+  const picking = field(PICK_ROLE_LABEL, roles);
+  const swap = el('div', {}, [box.node]);
+  const named = notice();
+  const held = { confirm: null };
+  const showName = () => {
+    const makes = making.readValue() === MAKE_ROLE;
+    swap.replaceChildren(makes ? box.node : picking);
+    let ready = true;
+    if (makes) {
+      ready = box.check(named);
+    } else if (readSelect(roles, false)) {
+      named.say(ROLE_PICKED);
+    } else {
+      named.say(ROLE_PICK_ONE, 'warn');
+      ready = false;
+    }
+    if (held.confirm) held.confirm.disabled = !ready;
   };
-  roles.addEventListener('change', sayName);
-  sayName();
-  const sure = await ask({
+  box.typed.addEventListener('input', showName);
+  roles.addEventListener('change', showName);
+  let made = null;
+  const sure = await askForm({
     title: `Give ${who} a ping role`,
-    body: [
-      channel === null
-      ? 'Members who press their name on /pings get this role, and it is pinged when they go live.'
-      : 'Members who press this channel on /pings get this role, and it is pinged when the '
-        + 'channel goes live — the announcement and, with spotlight_bump_pings on, the reminders.',
-      field('Use an existing role, or leave it to make a new one', roles),
-      named,
-    ],
+    body: [channel === null ? PING_ROLE_MEMBER : PING_ROLE_CHANNEL, making, swap, named],
     confirmLabel: 'Add the ping role',
     tone: 'warn',
+    ready: ({ confirm }) => {
+      held.confirm = confirm;
+      showName();
+    },
+    onConfirm: async () => {
+      const asks = channel === null ? { member_id: row.user_id } : { spotlight_id: channel };
+      made = await send('/api/pings/streamers', 'POST', making.readValue() === MAKE_ROLE
+        ? { ...asks, name: box.read() }
+        : { ...asks, role_id: readSelect(roles, false) });
+      return null;
+    },
   });
   if (!sure) return;
-  const done = await run(
-    say,
-    () => send('/api/pings/streamers', 'POST', channel === null
-      ? { member_id: row.user_id, role_id: readSelect(roles, false) }
-      : { spotlight_id: channel, role_id: readSelect(roles, false) }),
-    (found) => found?.message || 'Made the role.',
-  );
-  if (done.ok) {
-    keepSaying('pings.streamers', say);
-    refresh();
-  }
+  say.say(made?.message || ROLE_MADE, 'ok');
+  keepSaying('pings.streamers', say);
+  refresh();
+}
+
+/** The owner's "it should be editable right away": the role's name, on the row that made it. */
+async function renamePingRole(row, say) {
+  const who = row.name || row.user_id;
+  const channel = spotlightOnly(row) ? row.spotlight.id : null;
+  const box = roleNameBox(row.role || '', await roleNamesHere(), {
+    free: RENAME_ROLE_FREE,
+    taken: RENAME_ROLE_TAKEN,
+    blank: RENAME_ROLE_BLANK,
+    keep: row.role || '',
+  });
+  const named = notice();
+  const held = { confirm: null };
+  const showName = () => {
+    const ready = box.check(named);
+    if (held.confirm) held.confirm.disabled = !ready;
+  };
+  box.typed.addEventListener('input', showName);
+  let done = null;
+  const sure = await askForm({
+    title: fillName(RENAME_ROLE_TITLE, who),
+    body: [RENAME_ROLE_LINE, box.node, named],
+    confirmLabel: RENAME_CONFIRM,
+    tone: 'warn',
+    ready: ({ confirm }) => {
+      held.confirm = confirm;
+      showName();
+    },
+    onConfirm: async () => {
+      const where = channel === null
+        ? `/api/pings/streamers/${encodeURIComponent(row.user_id)}`
+        : `/api/pings/streamers/spotlight/${encodeURIComponent(channel)}`;
+      done = await send(where, 'PATCH', { name: box.read() });
+      return null;
+    },
+  });
+  if (!sure) return;
+  say.say(done?.message || ROLE_RENAMED, 'ok');
+  keepSaying('pings.streamers', say);
+  refresh();
 }
 
 async function roleMoves(row, say) {
   const moves = [];
   const channel = spotlightOnly(row) ? row.spotlight.id : null;
   if (row.role_id) {
+    if (row.role) {
+      moves.push(button(RENAME_LABEL, () => renamePingRole(row, say), { tone: 'warn' }));
+    }
     moves.push(button('Remove', async () => {
       const sure = await ask({
         title: `Take ${row.name || row.user_id}'s ping role away?`,

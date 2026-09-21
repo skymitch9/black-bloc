@@ -8,6 +8,8 @@ from black_bloc.cogs.content.spotlight import add_channel
 ROUTES = [
     ("GET", "/api/pings/streamers"),
     ("POST", "/api/pings/streamers"),
+    ("PATCH", "/api/pings/streamers/21"),
+    ("PATCH", "/api/pings/streamers/spotlight/1"),
     ("DELETE", "/api/pings/streamers/21"),
     ("DELETE", "/api/pings/streamers/spotlight/1"),
     ("POST", "/api/pings/setup"),
@@ -93,6 +95,74 @@ async def test_the_site_may_hand_an_existing_role_over(client, sign_in, on, guil
 
     assert response.json()["role_id"] == str(wf.PLAIN_ROLE_ID)
     assert guild.made_roles == []
+
+
+async def test_the_site_names_the_role_it_is_making(client, sign_in, on, guild, wf):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+
+    response = client.post(
+        "/api/pings/streamers", json={"member_id": "21", "name": "  Namu   crew "}
+    )
+
+    assert response.status_code == 200 and response.json()["role"] == "Namu crew"
+    assert [role.name for role in guild.made_roles] == ["Namu crew"]
+
+
+def test_a_name_a_role_already_has_is_a_sentence_and_never_a_bare_status(
+    client, sign_in, on, guild, wf
+):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+
+    response = client.post("/api/pings/streamers", json={"member_id": "21", "name": "member"})
+
+    assert response.status_code == 409 and response.json()["error"] == "duplicate_role"
+    assert "already exists in this server" in response.json()["message"]
+    assert guild.made_roles == []
+
+
+def test_a_name_that_is_blank_is_a_sentence(client, sign_in, on, guild, wf):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+
+    response = client.post("/api/pings/streamers", json={"member_id": "21", "name": "  "})
+
+    assert response.status_code == 400 and response.json()["error"] == "blank_role_name"
+    assert "needs a name" in response.json()["message"]
+
+
+async def test_staff_rename_a_ping_role_from_the_row_that_made_it(client, sign_in, on, guild, wf):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+    client.post("/api/pings/streamers", json={"member_id": "21"})
+
+    response = client.patch("/api/pings/streamers/21", json={"name": "Namu crew"})
+
+    assert response.status_code == 200 and response.json()["role"] == "Namu crew"
+    assert guild.get_role(int(response.json()["role_id"])).name == "Namu crew"
+    assert "web.pings.fan_role_renamed" in await wf.kinds_in(on.db)
+
+
+def test_renaming_to_a_name_a_role_already_has_is_a_sentence(client, sign_in, on, guild, wf):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+    client.post("/api/pings/streamers", json={"member_id": "21"})
+
+    response = client.patch("/api/pings/streamers/21", json={"name": "Member"})
+
+    assert response.status_code == 409 and response.json()["error"] == "duplicate_role"
+    assert "already exists in this server" in response.json()["message"]
+
+
+def test_renaming_a_role_nobody_has_is_a_sentence(client, sign_in, on, guild, wf):
+    wf.member(guild, 21, name="namu")
+    sign_in(client)
+
+    response = client.patch("/api/pings/streamers/21", json={"name": "Namu crew"})
+
+    assert response.status_code == 404 and response.json()["error"] == "no_fan_role"
+    assert "no ping role" in response.json()["message"]
 
 
 def test_a_member_black_bloc_cannot_see_is_a_sentence(client, sign_in, on):
@@ -436,3 +506,29 @@ async def test_the_streamer_list_names_the_channels_beside_the_people(
     assert channel["member_id"] is None and channel["member"] == "GamesDoneQuick"
     assert channel["login"] == "gamesdonequick" and channel["listed"] is True
     assert channel["role"] == "GamesDoneQuick pings"
+
+
+async def test_a_channels_ping_role_is_renamed_by_spotlight_id(client, sign_in, on, guild, wf):
+    spotlight_id = await a_spotlight(on, wf)
+    sign_in(client)
+    client.post("/api/pings/streamers", json={"spotlight_id": str(spotlight_id)})
+
+    response = client.patch(
+        f"/api/pings/streamers/spotlight/{spotlight_id}", json={"name": "GDQ crew"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["role"] == "GDQ crew" and response.json()["kind"] == "spotlight"
+    assert "web.pings.fan_role_renamed" in await wf.kinds_in(on.db)
+
+
+async def test_renaming_a_channels_role_that_is_not_there_says_so(client, sign_in, on, wf):
+    spotlight_id = await a_spotlight(on, wf)
+    sign_in(client)
+
+    response = client.patch(
+        f"/api/pings/streamers/spotlight/{spotlight_id}", json={"name": "GDQ crew"}
+    )
+
+    assert response.status_code == 404 and response.json()["error"] == "no_fan_role"
+    assert "has no ping role" in response.json()["message"]

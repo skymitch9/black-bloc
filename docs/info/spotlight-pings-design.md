@@ -1,6 +1,13 @@
 # A ping role for a spotlight channel — GamesDoneQuick pings, the way a member's fan role pings
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `spotlight-pings`, 2026-09-20**,
+> **Audience:** the build agent and reviewers. **2026-09-20 22:xx — the modal §C gave a channel row
+> now NAMES the role and can RENAME it.** `page-golive.js:addPingRole` is a form dialog that stays
+> open on a refusal, with a **Make a new role** / **Use an existing role** segment and a pre-filled
+> editable **Role name** box; the drawer's Ping-role group gained **Rename…**. Both reach a channel
+> by `spotlight_id` exactly as this design's `POST` does — Deviation 6's point (a channel's door is
+> the site and `StreamerPick`, never `GivePick`) is untouched. Branch `ping-role-modal`, design
+> [`ping-role-modal-design.md`](ping-role-modal-design.md); ⚠️ not merged, not deployed, nothing in
+> it has met Discord. **Status:** TRACKED · 🔨 **BUILT on branch `spotlight-pings`, 2026-09-20**,
 > off `main` `552af36` (v149 live) — schema **50**, registry **294**, mock **193 routes**; ⚠️ **NOT merged, NOT deployed,
 > and nothing in it has met Discord.** **Read `## Deviations` (thirteen) and `## What was NOT verified` at the foot BEFORE
 > reading §A–§F as built** — the biggest is that `golive_fan_roles` had to be REBUILT, not widened, so the live database

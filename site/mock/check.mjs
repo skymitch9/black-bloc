@@ -60,6 +60,9 @@ const IDS = {
   // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
   // reach it without ending a stream the other entries expect to still be live.
   spotlight_id: '3',
+  // …and 1 is GamesDoneQuick, the only spotlighted channel whose ping role is a role the server
+  // still HAS, so it is the one the rename PATCH can reach — 3's is "deleted by hand" on purpose.
+  spotlight_role_id: '1',
   // Phase 19: form 1 is the Twitch Team form with three questions and people waiting on it;
   // form 2 is the closed one nobody has applied to, so the DELETE entry has something to remove.
   application_form_id: '1',
@@ -351,10 +354,11 @@ async function checkActionKinds() {
   // POST re-links rather than tripping the 409 a second owner would get.
   await post('/api/youtube/links', { member_id: IDS.member_id, channel: 'UCsXVk37bltHxD1rDPwtNM8Q' });
   await send('DELETE', `/api/youtube/links/${IDS.member_id}`, undefined);
-  // The six web.pings.* kinds, each left by the write that spells it. `ping_member_id` is
+  // The seven web.pings.* kinds, each left by the write that spells it. `ping_member_id` is
   // seeded HIDDEN, so restoring first and hiding after leaves the list as it found it.
   await post('/api/pings/setup', {});
   await post('/api/pings/streamers', { member_id: IDS.ping_member_id });
+  await send('PATCH', `/api/pings/streamers/${IDS.ping_member_id}`, { name: 'Contract crew' });
   await send('DELETE', `/api/pings/streamers/${IDS.ping_member_id}`, undefined);
   await post('/api/pings/raidtrain-role', {});
   await post(`/api/pings/list/${IDS.ping_member_id}`, { listed: true });

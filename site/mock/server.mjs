@@ -1107,6 +1107,9 @@ function seedState() {
       { user_id: MEMBERS[2].id, twitch_login: 'rivetplays', twitch_user_id: '445566', linked_at: minutesAgo(9000) },
     ],
     optouts: [{ user_id: MEMBERS[5].id, at: minutesAgo(2000) }],
+    // Roles the mock has made or renamed this run; `roleOf` reads it before ROLES, and `seed()`
+    // empties it, which is what keeps a module-level ROLES honest between check.mjs's routes.
+    madeRoles: [],
     fanRoles: [
       { user_id: MEMBERS[1].id, spotlight_id: null, role_id: FAN_ROLE_IDS[0], created_at: minutesAgo(3000), created_by: STAFF.id },
       { user_id: MEMBERS[2].id, spotlight_id: null, role_id: FAN_ROLE_IDS[1], created_at: minutesAgo(2000), created_by: MEMBERS[2].id },
@@ -2066,7 +2069,7 @@ route('GET', '/api/ref/channels', (context) => {
 
 route('GET', '/api/ref/roles', (context) => {
   requireStaff(context.session);
-  return ROLES;
+  return everyRole();
 });
 
 route('GET', '/api/ref/members', (context) => {
@@ -4715,14 +4718,60 @@ route('POST', '/api/raidtrains/:train_id/status', async (context) => {
 
 // F14. The mock keeps the fan roles beside the go-live state because that is where the real
 // bot keeps them (`golive_fan_roles`), and the Pings section that reads them is on the same page.
-// A role the mock "makes" is remembered on the ROW, never pushed into ROLES: check.mjs re-seeds
-// `state` between routes and ROLES is module-level, so a mutation there would outlive the reset.
+// A role the mock "makes" or renames goes in `state.golive.madeRoles`, never into ROLES:
+// check.mjs re-seeds `state` between routes and ROLES is module-level, so a mutation there would
+// outlive the reset. A renamed seeded role is a COPY under the same id, which is why made roles
+// win the lookup.
 function roleOf(roleId) {
-  return ROLES.find((role) => role.id === String(roleId)) || null;
+  const id = String(roleId);
+  const made = (state.golive.madeRoles || []).find((role) => role.id === id);
+  return made || ROLES.find((role) => role.id === id) || null;
+}
+
+function everyRole() {
+  const made = state.golive.madeRoles || [];
+  const extra = made.filter((role) => !ROLES.some((one) => one.id === role.id));
+  return [...ROLES.map((role) => roleOf(role.id)), ...extra];
+}
+
+function rememberRole(roleId, name) {
+  const made = state.golive.madeRoles || (state.golive.madeRoles = []);
+  const found = made.find((role) => role.id === String(roleId));
+  if (found) found.name = name;
+  else made.push({ id: String(roleId), name, color: '#8a8f98', position: 3, managed: false });
 }
 
 function followersOf(roleId) {
   return ROSTER.filter((row) => (row.role_ids || []).includes(String(roleId))).length;
+}
+
+// Mirrors black_bloc/pings.py:typed_role_name and the duplicate check ensure_fan_role makes: the
+// name the modal typed is refused against the roles the server already has, never against the
+// rows — a role the mock "made" is not in ROLES, exactly as the note above says.
+const MOCK_ROLE_NAME_MAX = 100;
+const MOCK_BLANK_ROLE_NAME = 'A ping role needs a name, so nothing was made. Type the name the role should have, or pick one that is already here as the existing role.';
+
+function tidyRoleName(given) {
+  return String(given ?? '').trim().replace(/\s+/g, ' ').slice(0, MOCK_ROLE_NAME_MAX);
+}
+
+function roleNamed(name) {
+  const wanted = tidyRoleName(name).toLowerCase();
+  return wanted ? everyRole().find((role) => tidyRoleName(role.name).toLowerCase() === wanted) || null : null;
+}
+
+/** The name a fan role gets, or the Refused the modal shows in place without closing. */
+function wantedRoleName(body, fallback) {
+  if (body.name === undefined || body.name === null || body.role_id) {
+    const there = roleNamed(fallback);
+    return { name: fallback, reuse: there ? there.id : null };
+  }
+  const typed = tidyRoleName(body.name);
+  if (!typed) throw new Refused(400, 'blank_role_name', MOCK_BLANK_ROLE_NAME);
+  if (roleNamed(typed)) {
+    throw new Refused(409, 'duplicate_role', `A role named **${typed}** already exists in this server, so nothing was made — pick it as the existing role, or choose another name.`);
+  }
+  return { name: typed, reuse: null };
 }
 
 function spotlightOf(id) {
@@ -4858,8 +4907,13 @@ route('POST', '/api/pings/streamers', async (context) => {
   if (given && !roleOf(given)) {
     throw new Refused(400, 'no_such_role', `**${given}** is not a role in this server any more, so nothing was changed. Reload the page and pick the role again.`);
   }
-  const name = given ? roleOf(given).name : `${memberName(memberId)} pings`;
-  const roleId = given || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
+  const wanted = given
+    ? { name: roleOf(given).name, reuse: given }
+    : wantedRoleName(body, `${memberName(memberId)} pings`);
+  const name = wanted.name;
+  const reused = Boolean(given || wanted.reuse);
+  const roleId = given || wanted.reuse
+    || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
   const row = {
     user_id: memberId,
     role_id: roleId,
@@ -4868,10 +4922,11 @@ route('POST', '/api/pings/streamers', async (context) => {
     created_by: STAFF.id,
   };
   state.golive.fanRoles.push(row);
-  logAction('web.pings.fan_role_created', { target_id: memberId, details: { role_id: roleId, role: name, reused: Boolean(given) } });
+  if (!reused) rememberRole(roleId, name);
+  logAction('web.pings.fan_role_created', { target_id: memberId, details: { role_id: roleId, role: name, reused } });
   return {
     ...fanRoleRow(row),
-    message: given
+    message: reused
       ? `Used the role **${name}** for **${memberName(memberId)}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`.`
       : `Made **${name}** and put it on the *streamers* panel. People pick it there, or with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of their go-live announcement.`,
   };
@@ -4898,8 +4953,13 @@ function giveSpotlightARole(body) {
   if (given && !roleOf(given)) {
     throw new Refused(400, 'no_such_role', `**${given}** is not a role in this server any more, so nothing was changed. Reload the page and pick the role again.`);
   }
-  const roleName = given ? roleOf(given).name : `${name} pings`;
-  const roleId = given || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
+  const wanted = given
+    ? { name: roleOf(given).name, reuse: given }
+    : wantedRoleName(body, `${name} pings`);
+  const roleName = wanted.name;
+  const reused = Boolean(given || wanted.reuse);
+  const roleId = given || wanted.reuse
+    || String(910000000000000000n + BigInt(state.golive.fanRoles.length + 1));
   const made = {
     user_id: null,
     spotlight_id: row.id,
@@ -4909,14 +4969,67 @@ function giveSpotlightARole(body) {
     created_by: STAFF.id,
   };
   state.golive.fanRoles.push(made);
-  logAction('web.pings.fan_role_created', { details: { role_id: roleId, role: roleName, reused: Boolean(given), spotlight_id: row.id, spotlight: row.twitch_login } });
+  if (!reused) rememberRole(roleId, roleName);
+  logAction('web.pings.fan_role_created', { details: { role_id: roleId, role: roleName, reused, spotlight_id: row.id, spotlight: row.twitch_login } });
   return {
     ...fanRoleRow(made),
-    message: given
+    message: reused
       ? `Used the role **${roleName}** for the channel **${name}**. People pick it with **Follow a streamer…** on \`/pings\`, and it is mentioned in front of that channel's announcement.`
       : `Made **${roleName}** for the channel **${name}**. People pick it with **Follow a streamer…** on \`/pings\`, and Black Bloc mentions it in front of that channel's spotlight announcement.`,
   };
 }
+
+// Mirrors black_bloc/pings.py:rename_fan_role — the Discord role is renamed where it stands, a
+// name another role has is refused, and a role the server no longer has is refused in words.
+function renameFanRole(held, who, body) {
+  const typed = tidyRoleName(body.name);
+  if (!typed) throw new Refused(400, 'blank_role_name', MOCK_BLANK_ROLE_NAME);
+  const role = roleOf(held.role_id);
+  if (!role) {
+    throw new Refused(404, 'fan_role_gone', `**${who}**'s ping role is set to **${held.role_id}**, and that is not a role in this server any more, so there was nothing to rename. Take the ping role away and give them a fresh one.`);
+  }
+  const clash = roleNamed(typed);
+  if (clash && String(clash.id) !== String(held.role_id)) {
+    throw new Refused(409, 'duplicate_role', `A role named **${typed}** already exists in this server, so nothing was made — pick it as the existing role, or choose another name.`);
+  }
+  const was = role.name;
+  rememberRole(held.role_id, typed);
+  held.role_name = typed;
+  const channel = held.spotlight_id === null || held.spotlight_id === undefined
+    ? null
+    : spotlightOf(held.spotlight_id);
+  const note = channel === null
+    ? { target_id: String(held.user_id), details: { role_id: held.role_id, from: was, to: typed, user_id: Number(held.user_id) } }
+    : { details: { role_id: held.role_id, from: was, to: typed, spotlight_id: channel.id, spotlight: channel.twitch_login } };
+  logAction('web.pings.fan_role_renamed', note);
+  return {
+    ...fanRoleRow(held),
+    message: `**${who}**'s ping role is called **${typed}** from now on — it was **${was}**. Nobody was added to it or taken off it, and the *streamers* panel says the new name.`,
+  };
+}
+
+route('PATCH', '/api/pings/streamers/spotlight/:spotlight_id', async (context) => {
+  requireStaff(context.session);
+  const row = wantedSpotlightRow(context.params.spotlight_id);
+  const name = row.display_name || row.twitch_login;
+  const held = spotlightFanRole(row.id);
+  if (!held) {
+    throw new Refused(404, 'no_fan_role', `**${name}** has no ping role, so there was nothing to rename. \`/pings\` ▸ **Streamers…** shows who has one.`);
+  }
+  return renameFanRole(held, name, await context.body());
+});
+
+route('PATCH', '/api/pings/streamers/:member_id', async (context) => {
+  requireStaff(context.session);
+  const memberId = String(context.params.member_id || '');
+  const held = state.golive.fanRoles.find(
+    (one) => one.user_id !== null && String(one.user_id) === memberId,
+  );
+  if (!held) {
+    throw new Refused(404, 'no_fan_role', `**${memberName(memberId)}** has no ping role, so there was nothing to rename. \`/pings\` ▸ **Streamers…** shows who has one.`);
+  }
+  return renameFanRole(held, memberName(memberId), await context.body());
+});
 
 route('DELETE', '/api/pings/streamers/spotlight/:spotlight_id', (context) => {
   requireStaff(context.session);

@@ -15,6 +15,15 @@
 > `chrome-headless-shell` against the local mock. All three rows can be run from a laptop any
 > time. Rows are lettered; the conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked
 > then.** Before that,
+> **2026-09-20 22:xx** — rows **`PR-a` … `PR-e`** appended at the foot for THE PING-ROLE MODAL (branch
+> `ping-role-modal`, off `main` `495d7b6`; design [`../info/ping-role-modal-design.md`](../info/ping-role-modal-design.md);
+> ⚠️ **not merged, not deployed, and NOTHING IN IT HAS MET DISCORD** — every row was pressed against the local mock in
+> `chrome-headless-shell`, so the wording and the greying are proven and Discord's own behaviour is not). Owner: *"i see
+> the ability to set a ping but not to make a ping role"* → *"we have a new role button, the name is automatically
+> generated in an editable text box"* → *"i wasnt able to edit it on the go live screen where i made it, it should be
+> editable right away"*. ⚠️ **Each of these five MAKES OR RENAMES A REAL DISCORD ROLE when the owner runs it**; `PR-d`
+> needs a second pair of hands (or a second tab) to make a role after the page has loaded. Rows are lettered; the
+> conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked then.** Before that,
 > **2026-09-20 20:4x** — rows **`DM-a` … `DM-d`** appended at the foot for THE DISCORD MOCK (branch `discord-mock`, off
 > `main` `be78bff`; design [`../info/discord-mock-design.md`](../info/discord-mock-design.md); ⚠️ **not merged, not
 > deployed, and NOTHING IN IT HAS MET DISCORD** — `DM-b` is the only row that can ever prove the mock matches a real
@@ -2488,3 +2497,30 @@ and therefore no top line). Staff door: **Runs the cookout** ▸ **Go-live**
 | **`EW-f`** | On the **Go-live** page open **The announcement** and press **Ending**, then **Starting**, then reload | ⚠️ **There is ONE card now, headed *The wording*,** with a two-button **Starting / Ending** toggle in its header where two stacked cards (*While they are live*, *Once the stream has ended*) used to be. **Starting** shows the announcement wording, the live top line and one Discord mock of the going-live message; **Ending** shows the end wording, the ended top line, *Whether the role mention stays…* and one Discord mock of the ended message. Exactly **one** mock is on screen at a time. The *Preview as Twitch / YouTube* chips sit **above** the card and move whichever mock is showing. ⚠️ **Type into a box, switch sides and switch back: your typing is still there** (unsaved) — the toggle hides, it does not rebuild. Reloading throws it away, as it always did. ⚠️ **Nothing else on the page may have moved** — the streamers table, the drawers and *Everything else* are exactly where they were |
 | `CM-c` | On a wide window (about 1500px or wider), open a post and look at the editor's layout, then shrink to phone width | The message box and *What Discord will show* now sit **side by side, two columns**, inside the modal — the mock is no longer squeezed underneath the editor. Shrink the window (or open on a phone): they **stack**, message box on top, mock below, with no side-to-side scrolling |
 | `CM-d` | Open the **Posts** page, click a post row, and look at the foot of the editor (where **Save Changes** / **Discard** / **Post it** sit); then, on **Posts**, **Go-live**, **Moderation**, **Modmail**, **Requests** and **Events**, do whatever opens each page's own dialog (a row click, or a confirm like Approve/Deny/Close ticket) | **Pin it** is no longer a block up in the Style row — it is a small **on/off switch** labelled *Pin it* sitting on the same row as the buttons at the bottom, not taking a row of its own. Hovering it shows the same explanation it always had. Toggling it and pressing **Save Changes** still saves the pin state exactly as before. Across every page checked — **Posts, Go-live, Moderation, Modmail, Requests, Events** — every dialog that opens is a **box floating in the middle of the screen with equal gaps left and right**, never docked to a side; this was already true for the post/streamer/case editor and the confirm boxes, and a full grep of the site found no other side-docked panel construct anywhere to convert |
+
+## THE PING-ROLE MODAL — name the role, refuse a duplicate in place, rename it after (`PR-a` … `PR-e`, branch `ping-role-modal`, design [`../info/ping-role-modal-design.md`](../info/ping-role-modal-design.md))
+
+Owner, 2026-09-20 21:3x: *"in the golive i see the ability to set a ping but not to make a ping
+role. I should be able to make a role and set it in the golive menu, also if 2 roles have the same
+name when trying to make a new one give a warning so they know it already exist. dont close the
+modal in error though just inform the user and dont let them set a duplicate."* → *"i see that i was
+partially wrong, leaving it blank sets an auto role. how about we don't do that and we have a new
+role button, the name is automatically generated in an editable text box so the end user can change
+the role name or hit confirm and take the role name we auto generated"* → after pressing it: *"i was
+able to set an auto generated one, i wasnt able to edit it on the go live screen where i made it, it
+should be editable right away."*
+
+⚠️ **Nothing here has met Discord** — no role has been made, named, renamed or refused on a real
+server. Every row below was pressed against the LOCAL MOCK in `chrome-headless-shell`, so what is
+proven is the wording, the greying and the dialog's behaviour, not Discord's. ⚠️ **`PR-a` … `PR-e`
+all make or rename a REAL Discord role when the owner runs them** — a fresh name is safest.
+Staff door: **Runs the cookout** ▸ **Go-live** (https://blackbloc.heygabi.ai/golive.html) ▸ any row
+in **Streamers** ▸ the row drawer ▸ **Ping role**.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PR-a`** | Open a streamer with **no ping role** (a person or a *channel only* row) and press **Add a ping role…**. Read the dialog without touching it, then press **Add the ping role** | Two choices, **Make a new role** already chosen, and a **Role name** box already holding the template's name — *Casey pings* for a person, *GamesDoneQuick pings* for a channel — with the line *"Black Bloc will make **Casey pings**."* under it. ⚠️ **There is no "leave it blank" path any more**, by the owner's own correction. Confirming makes exactly that role, the dialog closes, the page says what it did and the row's **Ping role** cell shows the new name with `· 0` wearers |
+| **`PR-b`** | ⚠️ **The row the whole ask is about.** In the same dialog, type the name of a role the server ALREADY has (*Aunties / Uncles* will do; case and extra spaces should not matter) | As you type: ⚠️ *"A role named **Aunties / Uncles** already exists — pick it under Use an existing role, or choose another name."* and **Add the ping role goes grey and cannot be pressed**. The dialog does NOT close and nothing is sent. Clear the box and it says *"Type the name the role should have…"*, still grey; type a fresh name and the line and the button both come back |
+| **`PR-c`** | Press **Use an existing role**, pick a role from the list, confirm | The name box is replaced by the role list and the line reads *"That role becomes their ping role; nobody is added to it."* — grey until something is picked. Confirming uses that role as it stands, makes nothing, and the row shows it. ⚠️ Picking a role members already wear means they are all followers of that streamer from that moment |
+| **`PR-d`** | ⚠️ **The row that proves a refusal does not lose your typing.** Have somebody make a role named *X pings* in Discord (or in another browser tab) AFTER this page was loaded, then type *X pings* into the box here and confirm | The page cannot know about the new role — its role list was read when the page loaded — so the warning does NOT appear and the button is pressable. The SERVER refuses, and the sentence *"A role named **X pings** already exists in this server, so nothing was made — pick it as the existing role, or choose another name."* appears **inside the dialog, which stays open with the name still in the box**. No bare 409, no page reload, nothing made. Change the name and confirm and it goes through |
+| **`PR-e`** | ⚠️ **The owner's follow-up: editable right away.** On a row that HAS a ping role, press **Rename…** beside Remove. Read the box, then type an existing role's name, then a fresh one and confirm | The box opens on the role's **current** name with *"The role will be called **Moth crew**."*; leaving it exactly as it is, is allowed (its own name is not a duplicate of itself). An existing OTHER role's name greys the button with ⚠️ *"A role named **X** already exists — choose another name."* A fresh name renames the **Discord role itself** — ⚠️ **everybody wearing it keeps it**, the role's colour and position do not change, the row and the *streamers* role-menu panel both say the new name, and the Logs page ▸ **pings** shows one `pings.fan_role_renamed` row carrying `from` and `to`. ⚠️ **Rename… is not offered on a row whose role was deleted by hand** (it says *deleted by hand*) — Remove is the move there |
