@@ -215,6 +215,8 @@ between the three features). NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_
 
 ## Deviations
 
+**2026-09-20, branch `golive-toggle`:** *The announcement* is now ONE card, **The wording**, with a `Starting` / `Ending` segment in its head (`ui.js:segment`, in `card`'s `actions`): each side holds its own wording box, its own top-line box and its own Discord mock, and the *Preview as Twitch / YouTube* chips stay above both. The two stacked cards (*While they are live* / *Once the stream has ended*) are GONE, `golive_end_keep_mention` stays on the Ending side, and the Starting side gained the new `golive_live_author` box beside `golive_template`. Both editors and both mocks are built at load and the toggle only flips `hidden`, so a draft survives a trip to the other side. Owner, 20:1x: *"instead of a stack have a toggle for starting and ending since theyre duplicates and we can save space"*; see [`end-wording-design.md`](end-wording-design.md) ▸ §C2 ▸ C2 deviations. This page's own deletion of `GET /api/golive/preview` landed here too.
+
 **2026-09-20, branch `discord-mock`:** *The announcement*'s two wording editors now carry a LIVE **Discord mock** each (`ui.js:discordMock` → `POST /api/preview/message`), and the **Wording** card, `drawCard`, `botLine`, `withRoleNames` and `wordingPreview` are GONE — there is one rendering per message now, it is the bot's own, and it sits under the box that writes it. The *Preview as Twitch / YouTube* chips set the BOT's sample platform rather than a client-side fill, so the address and the card colour follow. This page no longer reads `GET /api/golive/preview`; see [`discord-mock-design.md`](discord-mock-design.md) ▸ Deviations 1 and 8.
 
 *(the build agent writes here what it had to do differently, dated)*

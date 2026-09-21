@@ -1,6 +1,6 @@
 # One box for the end-of-stream wording — `{live}` replaces the separate suffix
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-20 21:0x on branch
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **§C2 BUILT 2026-09-20 21:4x on branch `golive-toggle`, off `main` `417827a`** — `golive_live_author`, the ONE Wording card with a Starting / Ending segment, and `GET /api/golive/preview` deleted; ⚠️ **not merged, not deployed, nothing has met Discord**; its `### C2 deviations` and `### C2 — what was NOT verified` sit under §C2 below. Sweeps `EW-e`, `EW-f`. Before that: ✅ **BUILT 2026-09-20 21:0x on branch
 > `end-wording`, off `main` `be78bff`** — ⚠️ **not merged, not deployed, nothing has met Discord and the boot migration
 > has never run on the live database**; the `## Deviations` foot is the truth where it departs from the body, and
 > **Deviation 1 was decided by the conductor 2026-09-20 21:2x — the default does NOT move**. Sweeps `EW-a … EW-d`.
@@ -86,10 +86,7 @@ agent — the conductor decides at landing), so three agents stop editing one fu
    `render` read it through a `live_author(template, name, platform)` that mirrors `ended_author` `:343` (blank keeps
    the default; unrenderable → the default; `{name} {platform}` are the fields — `{duration}` is meaningless while live
    and is refused by the validator). `TEXT_CHECKS`, `KEY_HELP` (*"the card's top line while they are live; {name}
-   {platform}"*), mock row, label, `placeSettings` in the same drawer as `golive_end_author`, the join fixture (+1: after
-   §A/§A2's −2 the page has **292 → 292 keys?** — count it; the fixture asserts the number), `api/status.py` if it lists
-   author keys, the preview route (v149's `/api/golive/preview` and/or the Discord mock's renderer) answers it. Keys:
-   291 after §A2, **292** after this.
+   {platform}"*), mock row, label, `placeSettings` in the same drawer as `golive_end_author`, the join fixture (+1), `api/status.py` if it lists author keys, the preview route (v149's `/api/golive/preview` and/or the Discord mock's renderer) answers it. ~~Keys: 291 after §A2, **292** after this.~~ 🔴 **MEASURED WRONG and corrected at the build, 2026-09-20 (C2 deviation 1): `main` `417827a` already held **292** (§A2's −2 was counted, and spotlight-pings added one), so this key takes it to **293**, and the join fixture's three-namespace count 48 → 49.**
 2. **The Wording card is ONE editor with a segmented toggle `Starting` / `Ending`** (the `segment` construct `ui.js`
    already has — the go-live strip and the polls preview use it): the same three things for whichever is picked — the
    wording box (`golive_template` / `golive_end_template`), the top-line box (`golive_live_author` / `golive_end_author`),
@@ -99,6 +96,85 @@ agent — the conductor decides at landing), so three agents stop editing one fu
 3. Tests: `live_author` (default, custom, blank, unrenderable, `{duration}` refused), the key guards, the fixture; a
    headless render of the card in both toggle states with the console read. Sweep rows `EW-e` (the Starting side's top
    line edits and the live card shows it) and `EW-f` (the toggle swaps the three boxes; nothing else on the page moves).
+
+### C2 deviations
+
+**2026-09-20, branch `golive-toggle`, off `main` `417827a`.** Six, worst first.
+
+1. ⚠️ **§C2's key arithmetic was wrong in both directions, and the measurement is the answer.**
+   The body asks *"292 → 292 keys? — count it"* and then says *"Keys: 291 after §A2, **292** after
+   this"*. Measured on `main` `417827a` before this build: **292**, because §A2's −2 had ALREADY
+   been counted in the 292 the architecture doc records, and the spotlight-pings merge added one
+   the design never saw. So the true arithmetic is **292 → 293**, and the join fixture's
+   three-namespace count is **48 → 49**, not 47 → 48. Nothing in the code depended on the design's
+   number; the fixture asserts the measured one.
+2. **`single_embed` reads the key too, which §C2 does not name.** §C2 lists `announcement_embed` /
+   `render` and the spotlight. `single_embed` is the third place a LIVE top line is drawn — the
+   card that goes back to one platform when the second stream ends while the first is still
+   running — and it was still calling `author_line` directly. Leaving it would have meant a guild
+   that rewrote its top line watched the card silently revert to *is now live on* mid-stream. It
+   takes `author` positionally (its `source` already is) rather than keyword-only.
+3. **`render` does NOT read the key, because `render` builds the SENTENCE, not the card.** §C2 says
+   *"`announcement_embed` / `render` read it"*. `golive.render` returns the message content —
+   `golive_template`'s job — and has no author line in it. The key is read where the author line is
+   set: `announcement_embed`, `single_embed`, and through them the five call sites (the go-live
+   cog's `_embed` and `preview`, `spotlight._announce`, `selftest_panels.send_golive`,
+   `preview._live`).
+4. **`_costream_embed` deliberately does NOT pass the key.** `costream_embed` sets the author from
+   `golive_costream_author` on the following line, so a live author passed there could never
+   reach a card. Wiring it would have been a key with no effect. The co-stream card keeps its own
+   top-line key and its own `author_line` fallback, unchanged.
+5. **`site/mock/server.mjs:endMark` was RE-WIRED, not deleted.** Deviation 1 of
+   `discord-mock-design.md` names the mock's `/api/golive/preview` route for deletion, and `endMark`
+   was that route's only caller. It is a copy of the bot's `end_marker`, and the bot's `golive_ended`
+   renderer derives the card footer's mark from the wording — so it now feeds
+   `PREVIEW_DRAW.golive_ended`'s footer. The mock's ended footer therefore follows the wording the
+   way the bot's does, where before it said `· stream ended` unconditionally.
+6. **The Ending side keeps its own help paragraph and the Starting side gained one.** §C2 asks only
+   that the three boxes swap. A card whose title is the constant *The wording* needs each side to
+   say which fields IT takes — `{duration}` is legal on one side and refused by the validator on the
+   other — so `LIVE_HELP` was written to mirror `END_LIVE_HELP`. The segment sits in the card's
+   `actions` (its head) rather than its body, so the title never changes with it.
+
+### C2 — what was NOT verified
+
+⚠️ **NOTHING HERE HAS MET DISCORD.** No stream has started, no card has been posted, and no top
+line has been seen in a real channel. Every claim about what a card reads is the suite's, against
+fakes. In particular **the claim that "no server's card changes" is a claim about two strings
+being equal** — `live_author(GOLIVE_LIVE_AUTHOR, …)` and `author_line(…)` — proved by unit test,
+not by a before-and-after screenshot of one real announcement.
+
+- **Not merged, not deployed, no key flipped.** `v149` is still live.
+- **No guild's stored settings were read.** `golive_live_author` is a NEW key with no stored rows
+  anywhere, so there is no migration and nothing to carry — but nobody has looked at the live
+  `settings` table to confirm no row of that name already exists.
+- **The browser check was the MOCK on `127.0.0.1:8787`, not the live site**, in
+  `chrome-headless-shell` 149.0.7827.22, signed in as the mock's staff, at 800 px and again at
+  390 px, in one theme. Seen: ONE card headed **The wording** with a two-button segment
+  (*Starting* pressed, *Ending*) in its head; the Starting holder visible with two textareas keyed
+  `golive_template` and `golive_live_author`, one Discord mock whose embed author read *Ada is now
+  live on Twitch!*; the Ending holder `hidden` with `golive_end_template`, `golive_end_author` and
+  `golive_end_keep_mention`; pressing *Ending* flipped `hidden` both ways and left exactly one mock
+  visible; typing `{name} just went live on {platform}` into the live top-line box repainted the
+  mock's author to *Ada just went live on Twitch* within the debounce. `scrollWidth ===
+  clientWidth` at 390 px, so no horizontal overflow. **The console logged NOTHING at all** — not
+  even the `GET /api/requests?status=pending&per_page=1` 400 the two sibling builds saw, which is
+  a difference nobody has explained.
+- ⚠️ **The page was read as a DOM, not LOOKED AT.** Attributes, keys and text content were
+  measured; no screenshot was taken and no human eye has seen the toggle. Whether the segment reads
+  as a toggle rather than as two buttons is unjudged, and **the owner's "we can save space" is
+  unmeasured — nobody counted the pixels the stacked cards used against the one card's.**
+- **Nothing was SAVED from the page.** No `PUT /api/settings` was made from either side, so the
+  save path, the docked save bar's behaviour when the OTHER side is hidden, and the repaint after a
+  save are unexercised outside the suite. ⚠️ Two `templateEditor`s are alive at once with one
+  hidden; whether their two docked bars can both be on screen has not been looked at.
+- **The validator's refusal has never been read by a person.** `checked_live_author`'s sentence is
+  asserted by a unit test; nobody has typed `{duration}` into the box and seen what the page shows.
+- **`GET /api/golive/preview`'s deletion is proved by absence, not by a 404 from the real API.**
+  The route is gone from the router, the mock, the contract and the tests, and `check.mjs` passes —
+  but nothing has asked the deployed bot for it.
+- **The self-test card was not run.** `selftest_panels.send_golive` reads the new key and is
+  covered by the suite; nobody has run `/selftest` and looked at the posted card.
 
 ## D. Tests, docs, gate
 
