@@ -547,7 +547,7 @@ function postRow(post) {
   }, [
     el('span', { class: 'dot-sm', 'data-tone': leadState(post) }),
     el('span', { class: 'cell-name', text: post.title }),
-    el('span', { class: 'cell-kind cell-center' }, statusPills(post)),
+    el('span', { class: 'cell-kind' }, statusPills(post)),
     el('span', { class: 'cell-quiet', text: postedLine(post, DATA.shadow) }),
     el('span', {
       class: 'cell-quiet',
