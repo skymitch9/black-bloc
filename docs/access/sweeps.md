@@ -6,6 +6,17 @@
 > [`../info/when-picker-site-design.md`](../info/when-picker-site-design.md)). Owner: *"for raid train and events
 > and anywhere else we set a date time, put a date time picker."* ⚠️ **Not merged, not deployed; the build touches
 > the dashboard only and no Python changed.** Before that, **2026-09-20** — row **`CM-d`** added at the foot for THE PIN IT SWITCH + A FULL RE-AUDIT FOR SIDE-DOCKED
+> **2026-09-20** — rows **`RQ-a` … `RQ-f`** added at the foot for THE REQUESTS PAGE REBUILD (stage 3, branch
+> `requests-page`, off `main` `53a0ba3`; design [`../info/ux-audit-design.md`](../info/ux-audit-design.md) ▸
+> Deviations and [`../info/ux-audit.md`](../info/ux-audit.md) ▸ §4.11). Owner: *"the request page is too much, we
+> cant see that many request at once, it needs to show a list with filters and then click on one to open it"*.
+> Nine sections became two; the static preview and its module are **deleted** and the Requests card on
+> `/preview/index.html` is marked live. ⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET DISCORD** — every
+> move was pressed against the local mock in `chrome-headless-shell` 149.0.7827.22 over CDP, never against the bot,
+> and ⚠️ **requests are LIVE to members**, so `RQ-b` DMs a real person the moment it runs in production. `RQ-a`
+> … `RQ-d` and `RQ-f` can be run from a laptop any time; `RQ-e` wants a phone. Rows are lettered; the conductor
+> numbers them at the merge. ⚠️ **Nothing else in this file was re-checked then.** Before that,
+> **2026-09-20** — row **`CM-d`** added at the foot for THE PIN IT SWITCH + A FULL RE-AUDIT FOR SIDE-DOCKED
 > PANELS (branch `modal-sweep`, off `main` `941ee26`; design
 > [`../info/ux-audit-design.md`](../info/ux-audit-design.md) ▸ Deviations, 2026-09-20 entry). The audit found no
 > side-docked panel construct anywhere on the site beyond what `centre-modal`/`posts-two-col` already fixed — see
@@ -2571,3 +2582,28 @@ picker."*
 | `WP-c` | **Polls** ▸ **Create a poll**. Set **Kind** to a date poll and look at **First slot**. Then set Kind back, set **Repeat** to weekly, and look at **Time of day** and **Timezone** | **First slot** is a calendar-and-clock box with **no** zone dropdown, and says *"Midnight means the slots are shown as plain dates, with no time on them. Black Bloc reads it in the server's own time zone."* ⚠️ That is deliberate — this one route takes no zone at all, so a dropdown there would do nothing. **Time of day** is a clock box (no date), and **Timezone** is now a **dropdown** whose first option is *the server's own zone*, not a box you type `America/Phoenix` into |
 | `WP-d` | **Logs** ▸ the **From** and **To** boxes under the filter chips | Both are calendar boxes with the same look as everything above — *The first day to include.* / *The last day to include.* — and no zone dropdown, because a day filter has no zone. Setting either one re-loads the results under it, and **Clear** empties both |
 | `WP-e` | Back on **Start a raid train**, type (do not pick) a date that has already gone by — `2020-01-02 10:00` — and press **Start it** | ⚠️ **The refusal is still in WORDS, not a browser tooltip:** *"2020-01-02 10:00 has already gone by, so nothing was submitted. Pick a time in the future."* The picker greys the past out of the calendar but never silently swallows a typed one — the server is still the thing that decides |
+---
+
+## ONE LIST WITH FILTERS, AND A ROW OPENS THE REQUEST (`RQ-a` … `RQ-f`, branch `requests-page`, design [`../info/ux-audit-design.md`](../info/ux-audit-design.md) ▸ Deviations)
+
+Owner, 2026-09-20: *"the request page is too much, we cant see that many request at once, it
+needs to show a list with filters and then click on one to open it."* Stage 3 of the UX audit
+for `requests`, the same shape Posts and Raid trains took. Nine stacked card lists became
+**Requests** (one `button.grid-row` list under a toolbar of chips) and **Settings and logs**
+(shut). A row opens the request in the centred modal with its card, the legal moves and the
+staff thread.
+
+⚠️ **Nothing here has met Discord**, and ⚠️ **requests are LIVE to members** (test mode was
+lifted 2026-09-18) — so every move pressed in `RQ-b` DMs a real person and posts a real card.
+Every row below was pressed against the local mock in `chrome-headless-shell` 149.0.7827.22
+driven over CDP, never against the bot. Staff door: **Runs the cookout** ▸ **Requests**, or
+<https://blackbloc.heygabi.ai/requests.html>.
+
+| Row | Do | Expect |
+|---|---|---|
+| `RQ-a` | Open **Requests** and look at the toolbar, then press each status chip in turn, then **On me** and **Nobody yet** | ⚠️ **The row the whole ask is about.** ONE list, not seven — *Request · Who · Status · Assignee · Updated*, the why clamped to one line under the title. Six chips carry their own counts (*Open · 13 · In progress · 4 · Ready to check · 1 · On hold · 2 · Closed · 10 · All · 30*), **Open** is the one pressed on arrival, and pressing another swaps the whole list and the foot line (*Showing 1–13 of 13 requests*). **On me** and **Nobody yet** are toggles — pressing a pressed one clears it back to everybody — and every chip count re-tallies under whatever is narrowing the list. Hovering a status chip says what that state means (today's six section notes, kept, one per chip) |
+| `RQ-b` | ⚠️ **This one reaches a real person.** Press a row to open it, read the card, then press a move — **Pick it up** on an open one, or **Put it on hold** / **Decline** and read the confirm before you answer it | The modal opens centred over the list with the request's own card: who asked with their face, what and why, the status pill, any *was:* / *ready by* / *asked by* / due chips, and ONLY the moves legal from where it is. One line above the buttons says *"Put it on hold, Decline, Send back and Ready to check each ask for a line, and whoever it concerns is sent exactly what you type"* — once on the whole page, where it used to be written six times. Confirming a move redraws the list underneath and re-opens the modal over the fresh row with the bot's own sentence (*"Request #30 is now being worked on."*). Confirming **Put it on hold** with the reason box EMPTY refuses in words inside the modal and moves nothing: *"A request put on hold needs one line the person who asked is sent, so nothing was changed. Say why it is waiting and send it again."* ⚠️ A real move DMs the requester and edits the card in Discord — that half has never been exercised |
+| `RQ-c` | In the same modal, open **Notes**, add a note, then close the modal with Escape. Then press **File a request** at the right of the toolbar and file one | The thread is in the modal with its box — no second fetch, the notes travel with the request. Escape closes the modal and clears `#r-N` off the address bar. **File a request** opens the same three fields as `/request` with the live sentence under the button (*"Files “…” under your name. It lands open, whoever files it, and you are DMed every time staff move it."*), and filing shuts it, reloads the list and keeps the sentence. **Export CSV** sits beside it |
+| `RQ-d` | Paste a link from one of Black Bloc's own request cards in Discord — `…/requests.html#r-11` — into the address bar | That request's modal opens on arrival, drawn as whatever the row IS (a *ready to check* one offers **Accept**, **Ask them to check**, **Send back**, **Hold**, **Decline** and the two editable lines; a *done* one offers no move at all). `#11` with no `r-` works too. A number that is not a request, or not one you may read, says so in words inside the modal rather than showing a bare 404 |
+| `RQ-e` | 📱 On a phone, open **Requests**, press a row, press a move's confirm, then Escape twice | No sideways scrolling anywhere on the page — the table scrolls inside its own box. The modal is edge to edge at phone width, the confirm stacks above it, and the first Escape closes the confirm while the modal stays open under it. Measured at 390 px: `scrollWidth` equals `innerWidth`, both 390, staff and member |
+| `RQ-f` | Sign in as an ordinary member (or ask one to look) and open **Requests**. Then open `/preview/index.html` and find the **Requests** card | A member sees ONE section, **Your requests** — the same list scoped to their own rows, *Request · Status · Updated*, the same chips with their own counts, **File a request**, and no staff control anywhere: no priority, no assignee, no staff note, no thread. A row opens their request with **Take it back** on one still open or on hold and nothing on one that has moved on. A link to somebody else's says *"That request is not one you filed, and only staff read the rest. Your own are behind this."* On the previews page the Requests card carries the **live** badge and ONE door, **Live today**; `/preview/requests.html` is **404** |

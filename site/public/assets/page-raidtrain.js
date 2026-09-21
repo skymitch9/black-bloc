@@ -309,7 +309,7 @@ function trainDrawer(train, say, message) {
 async function openTrain(trainId, title, message = '') {
   shown.id = String(trainId);
   if (String(location.hash).replace(/^#/, '') !== shown.id) {
-    history.replaceState(null, '', `${location.pathname}#${shown.id}`);
+    history.replaceState(null, '', `${location.pathname}${location.search}#${shown.id}`);
   }
   openDrawer(title || `Train #${trainId}`, sayNothing(GETTING_IT), { onClose: forgetHash });
   try {

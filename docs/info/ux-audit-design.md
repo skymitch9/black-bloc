@@ -4,8 +4,9 @@
 > **Status:** TRACKED · 📐 **REVIEWED by Fable 2026-09-20 16:1x — the six tests in §C stand as written — and
 > STAGE 1 DONE** (`docs/info/ux-audit.md`, 20 pages ranked) · **STAGE 2 SHIPPED as twelve in-site PREVIEW pages, v144 2026-09-20 17:34**
 > (`site/public/preview/<page>.html`, real shell + real components over static seeds — the owner switched from standalone mocks
-> to these 16:4x; each is deleted when its real page ships) · **STAGE 3 done for TWO pages** — go-live (v142, its own
-> design) and **posts (branch `posts-page`, 2026-09-20, ⚠️ not merged and not deployed; its preview is deleted and its
+> to these 16:4x; each is deleted when its real page ships) · **STAGE 3 done for THREE pages** — go-live (v142, its own
+> design), **requests (branch `requests-page`, 2026-09-20, ⚠️ not merged and not deployed; its
+> preview is deleted and its Deviations are at the foot of this file)** and **posts (branch `posts-page`, 2026-09-20, ⚠️ not merged and not deployed; its preview is deleted and its
 > Deviations are at the foot of this file)**;
 > the rest wait on the owner's walk of the previews. No other real page has been changed. **Last verified: 2026-09-20 15:3x** against `main` `22753ae`
 > (v141 live): 20 pages under `site/public/*.html`, section counts measured per page (table in §B),
@@ -627,3 +628,167 @@ shared constructs. There was no fourth side-docked construct to find.
    measured centred in an earlier entry in this file; it was not re-measured here. `page-posts.js`'s
    `pinBarButtons` structural check (`.textContent` of each button) was read as plain text, not
    compared against a screenshot.
+
+### 2026-09-20 — `requests` becomes ONE list with filters (branch `requests-page`, off `main` `53a0ba3`)
+
+Owner, verbatim: *"the request page is too much, we cant see that many request at once, it needs
+to show a list with filters and then click on one to open it."* Stage 3 for `requests`, the tenth
+page in the ranking and one of the three the audit flagged LIVE-to-members. `page-requests.js`
+goes from **1338 lines and nine sections** to **~1000 lines and two**; `site/public/preview/requests.html`
+and `assets/page-preview-requests.js` are deleted, per *each preview is deleted when its real page
+ships*. Files touched: `site/public/assets/page-requests.js`, `site/public/assets/page-previews.js`
+(one row), `site/mock/contract.json` (six `read_by` labels), and the two deletions.
+⚠️ **No Python changed, and `ui.js`, `logs.js`, `api.js`, `app.js`, `layout.js` and `site.css` are all
+untouched, as is `site/public/requests.html`** — verified by `git diff --stat`, which is the one claim
+here that is measured rather than read.
+
+**The ruling that matters: the audit's own proposal was overruled.** §4.11(d) said *"Keep the status
+split — it is a queue, and it is the one thing on this page nobody should touch"* and proposed seven
+sections. The approved preview built exactly that. The owner then looked at the real page and asked
+for the opposite. **The chips ARE the status split**, carrying their own counts, over one list — which
+is the answer the Logs page had already (`ux-audit.md` §5: *filters as chips over ONE table, never a
+section per filter*). Nothing about the queue is lost; it stopped being nine scroll-lengths.
+
+Fourteen deviations, in the order they would surprise a reader of the deleted preview.
+
+1. ⚠️ **The list is SERVER-filtered and paged; the preview's was not.** Posts and Raid trains load every
+   row and hide the misses with `node.hidden` — right for 20 posts, wrong here: today's search box
+   already reaches `what`, `why`, the staff `notes` AND the requester's display name **across every
+   status**, server-side (`/api/requests?q=`), and a client-side filter over one page of 20 would have
+   silently narrowed that to whatever happened to be loaded. So the chip sets `status`, the search sets
+   `q`, the On-me chip sets `assignee`, and the pager is the shared `ui.js:pager` — every one of them
+   the same parameter the page sent before.
+2. **The six chip counts are six extra `per_page=1` calls, and the page makes FEWER calls than it did**
+   — one list + six tallies + `settings()` is 8, against today's seven list calls + `settings()`. ⚠️
+   **A tally that FAILS leaves its chip with no number rather than showing `0`** (`tallyOf` catches and
+   returns `null`); a zero that is really an outage is the silent-staleness trap in miniature.
+3. **`Closed` is `status=done,declined,withdrawn` in one call**, which both the mock and
+   `requests.py:wanted_statuses` already split on commas. ⚠️ **`moved` is NOT in it** — the mock's
+   `REQUEST_STATUSES` has no `moved` and would refuse the call in words, while the real API accepts it.
+   A `moved` request therefore reaches staff under **All** only. It reached them under NO section
+   before this build, so nothing is lost; `movedBlock` (today's member-only *Moved → event #N, open it*
+   line) is now drawn on the staff card too, which is a small gain.
+4. **Three assignee chips become two toggles.** *Anybody* is now "neither pressed", so *On me* and
+   *Nobody yet* each clear themselves on a second press. Every filter today's page had survives; the
+   brief asked for an On-me chip, and losing `assignee=none` would have been a capability going quietly.
+5. ⚠️ **The `.grid-row` cells are today's constructs, and `site.css` was NOT touched.** The Request
+   column is a `.req-headtext` (already `display:flex; flex-direction:column; min-width:0`) holding a
+   `.cell-name` and a `.cell-quiet` — so the why is clamped to exactly one line by a rule that already
+   exists. The column template goes through `style:` on the row and the head, i.e. `ui.js:el`'s CSSOM
+   path, so `style-src 'self'` is untouched.
+6. **The requester is a plain `<span>` on the row and the full `requesterNode` link only in the modal.**
+   The row IS a `<button>`, and an `<a>` inside a `<button>` is invalid HTML; the row keeps the name and
+   the modal keeps the face, the link to Members and the id in its `title`.
+7. ⚠️ **There is no `updated_at` on a request** — not in `api/tools/requests.py:request_row`, not in the
+   mock. The **Updated** column shows `decided_at` and says which stamp it is: *moved 2h ago*, or
+   *filed 40m ago* when nothing has moved it, with the full timestamp in the `title`. Naming the column
+   *Updated* and quietly printing `created_at` would have been a number wearing a measurement's clothes.
+8. **A move keeps the modal open**, the way `page-raidtrain.js:after` does rather than the way
+   `page-posts.js:andClose` does: the list is reloaded underneath and the modal re-opened over the fresh
+   row with the bot's own sentence. A request MOVES between chips when it is decided, so closing the
+   modal would leave the reader hunting for it. Measured: **Pick it up** on #30 → *"Request #30 is now
+   being worked on."*, marks `in progress`, the board controls appear, the chips re-tally 13/4 → 12/5
+   and the list under it drops to 12 rows.
+9. **A partial save (priority, assignee, staff note, built, how-to-test) now also reloads the list.**
+   Today's page did not, because there was no list to be wrong; a row saying *nobody yet* beside an
+   assignee somebody has just set is exactly the T1 failure this audit exists to catch.
+10. ⚠️ **The "they are sent exactly what you type" promise is written ONCE** — the T6 failure §4.11(c)
+    recorded was that it appeared **six times in six different sentences**. It is now one `field-help`
+    line above the move bar, and the `ask()` bodies and hints keep their own specific words without
+    repeating it. **The REFUSALS keep every word they had**, including `NEED_A_BUILT`'s and
+    `NEED_A_SENDBACK`'s own restatements of it — a refusal is the one place repeating it is free.
+11. **The six section notes are not lost: each is its chip's `title`.** One home per sentence, reachable
+    where the state is chosen. `DONE_NOTE` and `DECLINED_NOTE` merge into the preview's already-blessed
+    `CLOSED_NOTE`, and with them `NO_DONE` / `NO_DECLINED` / `NO_WITHDRAWN` retire in favour of
+    `NO_CLOSED`. The *"N open · M in progress"* line in today's toolbar is gone — the chips say it, and
+    say it per state.
+12. **The hash takes `#r-12` AND `#12`, and always writes `#r-12` back.** The brief said `#12` as Posts
+    does; `requests.py:request_url` builds `{origin}/requests.html#r-N` and every Discord card's link
+    button carries it, so accepting only the bare number would have broken the bot's own links.
+    ⚠️ **And the hash write preserves `location.search`** — `page-raidtrain.js:openTrain` writes
+    `${location.pathname}#${id}`, which drops the query string; measured here, that wiped `?as=member`
+    off the mock's own session lane. The same bug is NAMED rather than fixed in `page-raidtrain.js`,
+    which is out of this branch's scope.
+13. ⚠️ **`flashLinked` and the pinned-card pair are DELETED, and with them the `#r-N` anchor on every
+    card.** They solved "open everything shut above it, wait a frame, scroll, flash" — a problem a modal
+    does not have. `pinnedCard` / `pinnedSaid` / `NO_SUCH_ONE` / `NOT_YOURS_TO_SEE` become the modal's
+    own body; both sentences keep their words, with *"The lists below"* → *"The list behind this"* and
+    *"Your own are below"* → *"Your own are behind this"*. ⚠️ `ux-audit.md` §5 still cites `flashLinked`
+    as a construct to copy — **`page-settings.js:jumpToKey` is the surviving copy**, and the comment at
+    today's `:1178` recording both traps it was measured against is now history.
+14. **`logsSection('request')` keeps today's feature string**, not `'requests'` as the brief wrote it.
+    The mock aliases both to `request`; the real `/api/logs` was not read to prove it does, and a
+    silently empty log block is not worth the tidier spelling.
+
+**The six tests of §C, against the page that shipped.** **T1 pass** — the state is on the row: a
+`dot-sm[data-tone]` (a rule that exists), a `.cell-kind` of pills toned exactly as today's (`open` warn,
+`in progress` / `ready to check` info, `on hold` warn plus *was: …*, `done` ok), the due chip, the
+assignee by name, and *moved 2h ago*. **T2 pass** — the primary action is *move a request along*, and
+the distance is **0 sections, 1 click on a control that looks like one**: the row IS a
+`button.grid-row` with the hover, focus and cursor rules `site.css:910` gives it and a trailing chevron,
+and **Open** is the chip pressed on arrival. **T3 pass** — a request is in exactly ONE place: one list,
+and a deep-linked one opens in the modal instead of being pinned above a second copy of itself.
+**T4 pass** — two sections, work first and open, machinery second and shut; one settings surface (with
+the Request forum card inside it, where it was) and one log surface, one fold each, and the *On this
+page* rail reads **Requests · Settings and logs**. **T5 pass** — status is a chip over one table and a
+pill on the row, never a section; so is *on me*. **T6 pass** — the *sent exactly what you type* promise
+is written once, each status note lives once (on its chip), and every empty state is written once, with
+the page-past-the-end sentence kept verbatim because it is about the LIST and not about the filter.
+
+**Measured**, `chrome-headless-shell` 149.0.7827.22 over raw CDP (no `puppeteer` package in this tree;
+driven with Node's native `WebSocket`/`fetch` against `--remote-debugging-port`), against this
+worktree's own mock on `MOCK_PORT=8781`, `?as=staff` and `?as=member`:
+
+- **1512×802, staff:** `#dash` holds exactly **Requests** and **Settings and logs**; head cells
+  *Request · Who · Status · Assignee · Updated*; chips *Open · 13 [pressed] · In progress · 4 · Ready to
+  check · 1 · On hold · 2 · Closed · 10 · All · 30 · On me · Nobody yet*; 13 rows; foot *Showing 1–13 of
+  13 requests*. Pressing **Ready to check** → 1 row; **Closed** → 10; **On me** → 3 rows and every chip
+  re-tallied (*Open · 1 · In progress · 2 · … · All · 9*).
+- **A row opens the modal centred:** rect `left: 244px, right: 244px, width: 1024px`, title
+  *#30 — A #suggestions channel with a poll under every idea*, hash `#r-30`, the card's
+  who / what / why / meta, marks `[open]`, moves *Decline · Put it on hold · Pick it up*, the one promise
+  line, and the **Notes** fold carrying its 2 comments — in **one** HTTP call, because the thread travels
+  with the request.
+- **A move's confirm opens ABOVE it, verified not assumed:** both dialogs `.open`, and
+  `document.elementFromPoint()` at the centre of the `ask` rect returns a node the `ask` dialog contains.
+  **Escape closes the confirm and leaves the modal open**; a second Escape closes the modal and clears
+  the hash. ⚠️ Measured via `Input.dispatchKeyEvent` **with `userGesture: true` on the click that opened
+  the confirm** — without it Chrome groups the two `CloseWatcher`s and ONE Escape closes both, which is
+  a harness artifact and not the page.
+- **The refusal:** **Put it on hold** confirmed with the reason box empty → *"A request put on hold needs
+  one line the person who asked is sent, so nothing was changed. Say why it is waiting and send it
+  again."* inside the modal, and the request did not move.
+- **Search:** typing `birthday` → 2 rows, foot *Showing 1–2 of 2 requests*, and the chips re-tally to
+  *Open · 1 · … · Closed · 1 · All · 2*. `keepTyping` put the text back in the box after the rebuild;
+  ⚠️ **the CARET was not confirmed** — `document.activeElement` read `body` in an unfocused headless
+  window, which is the harness, not evidence either way.
+- **Deep link `#r-11`** (a *ready to check* row) opened with *Accept · Ask them to check · Send back ·
+  Decline · Put it on hold* and its two editable lines.
+- **Member (`?as=member`):** one section, **Your requests**; head cells *Request · Status · Updated*;
+  chips *All · 5 · Open · 1 · …* filtering client-side over the loaded page; the toolbar holds
+  **File a request** alone. A row opens with **Take it back** and nothing else — no priority, no
+  assignee, no staff note, no thread. Taking one back closed the modal, reloaded the list and kept
+  *"Request #30 is withdrawn. Nobody will pick it up now."* `#r-25` (somebody else's) answered *"That
+  request is not one you filed, and only staff read the rest. Your own are behind this."*
+- **390 px:** `document.documentElement.scrollWidth === window.innerWidth === 390` on both the staff and
+  the member page, and with a modal open (`left: 0, width: 390`). The table scrolls inside its own
+  `.table-scroll`.
+- **Zero console errors** on every staff and member load; the only 4xx logged anywhere was the deliberate
+  400 the empty-reason refusal answers with.
+
+**Deviations of the harness, not of the page.**
+
+1. ⚠️ **`?as=staff` does not undo `?as=member` in one browser profile** — `app.js` caches the identity
+   under `localStorage['blackbloc.me']`, so a profile that has been a member renders the member shape on
+   a staff URL even though `/api/auth/me` answers `staff: true` (checked by hand: the cookie DID flip and
+   the route DID answer staff). Pre-existing and nothing to do with this build; it cost two probe runs to
+   find. Every measurement above was taken in a **fresh** profile.
+2. **`check.mjs` MUTATES the seed** (it exercises hold / resume / decline / accept against real rows), so
+   a render run after it reads a moved board. The numbers above are from a freshly restarted mock.
+3. **What was NOT verified:** headless only — no real browser window, no real Discord, no human eye, and
+   the owner's own device/DPI was not checked. ⚠️ **Nothing here reached the bot**: every sentence quoted
+   is the MOCK's copy of the API's words, and whether a move's DM and card edit still land is `RQ-b`'s
+   job. The real `/api/logs?feature=request` was never called. The CSV export was not downloaded, only
+   its link read. No `moved` row exists in the mock, so deviation 3's **All**-only claim is reasoning
+   about the two route implementations, not a measurement. The pager was not walked past page 1 — 30
+   seeded requests never fill two pages of 20 under any one chip.
