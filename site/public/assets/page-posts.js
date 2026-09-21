@@ -316,8 +316,15 @@ async function postDrawer(payload, known, history) {
       text: `${one.label} — ${one.cap.toLocaleString()} characters`,
       selected: one.style === draft.style || undefined,
     })));
-  const pin = el('input', { class: 'switch', type: 'checkbox', id: 'post-pin' });
+  const pin = el('input', { class: 'input switch', type: 'checkbox', id: 'post-pin' });
   pin.checked = draft.pin;
+  const pinLine = el('label', {
+    class: 'switchline',
+    title: 'Black Bloc pins the message once it is posted, and re-pins it if somebody unpins it.',
+  }, [
+    pin,
+    el('span', { class: 'field-label', text: 'Pin it' }),
+  ]);
 
   const box = el('textarea', { class: 'input area postbox', id: 'post-body', rows: '14', spellcheck: 'true' });
   box.value = draft.body;
@@ -552,8 +559,6 @@ async function postDrawer(payload, known, history) {
     ]),
     el('div', { class: 'formrow' }, [
       field('Style', style, 'A plain message renders # headers; an embed holds more but does not.'),
-      field('Pin it', pin, 'Black Bloc pins the message once it is posted, and re-pins it if '
-        + 'somebody unpins it.'),
     ]),
     el('div', { class: 'postgrid' }, [
       el('div', { class: 'postcol' }, [
@@ -576,7 +581,7 @@ async function postDrawer(payload, known, history) {
     ]),
     howLine,
     pending,
-    bar(moves),
+    bar([pinLine, ...moves]),
     say,
     versionsBox,
     versionView,
