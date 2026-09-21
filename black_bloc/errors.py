@@ -10,6 +10,7 @@ from .config import ConfigError
 
 EXIT_CONFIG = 2
 EXIT_LOGIN = 3
+EXIT_RESTART = 4
 
 LOGIN_FAILURE = (
     "black-bloc: Discord rejected DISCORD_TOKEN. Reset it in the Developer Portal "

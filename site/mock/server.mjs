@@ -1973,6 +1973,21 @@ function wantedSelftestRun(runId) {
   return found;
 }
 
+// The Overview page's Restart the bot. The real route writes one web.core.restart_requested
+// row, closes the gateway cleanly and exits non-zero so Fly starts a fresh process; the mock
+// answers the same sentence and stays up, because a lower environment nobody can look at is
+// not a lower environment.
+const RESTART_SECONDS = 15;
+
+route('POST', '/api/bot/restart', (context) => {
+  requireStaff(context.session);
+  logAction('web.core.restart_requested', { details: { seconds: RESTART_SECONDS, via: 'website' } });
+  return {
+    message: `Black Bloc is restarting. This site is served by the bot itself, so it stops answering for about ${RESTART_SECONDS} seconds — reload this page then.`,
+    seconds: RESTART_SECONDS,
+  };
+});
+
 route('POST', '/api/selftest', (context) => {
   requireStaff(context.session);
   const going = state.selftestRuns.find((row) => !row.finished_at);

@@ -160,6 +160,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.chat.line_added",
         "web.chat.line_deleted",
         "web.chat.line_edited",
+        "web.core.restart_requested",
         "web.event.edited",
         "web.guide.confirmed",
         "web.guide.created",

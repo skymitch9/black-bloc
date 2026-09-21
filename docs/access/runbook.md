@@ -96,6 +96,15 @@ native command is ever added to the script, wrap it the same way from the start.
 <flyctl> machine start   85e744c4d959d8 --app black-bloc
 ```
 
+**From the site, with no laptop (2026-09-20, branch `small-fixes`):** Overview ▸ **Restart the
+bot** ▸ **Restart it**. Needs **Manage Server** in Discord — any other staffer is refused in
+words. Black Bloc writes one `core.restart_requested` line (Logs page, filter `core`), shuts the
+gateway down cleanly and **exits non-zero**, so Fly's `on-failure` policy starts a fresh process;
+the site goes down with the bot for ~15 seconds, because the dashboard is served by the bot
+itself. **It cannot reach a bot that has already crashed** — that is Fly's own job (10 retries) —
+so if the site does not answer at all, use the flyctl line above. ⚠️ **NOT yet exercised against
+Fly** (see [`../info/restart-button-design.md`](../info/restart-button-design.md)).
+
 ## Roll back
 Every deploy is a commit in `deploys.log`. To roll back: `git checkout <good commit> -- .` is NOT the way
 (dirty tree); instead `git revert <bad merge> -m 1` (or `git reset --hard <good>` on a throwaway branch),

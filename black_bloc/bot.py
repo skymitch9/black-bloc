@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from datetime import UTC, datetime
 
 import discord
@@ -67,6 +68,7 @@ class BlackBlocBot(commands.Bot):
         self.db = db
         self.store = store
         self._background: list[asyncio.Task] = []
+        self.exit_now = os._exit
         self.guard: TestModeGuard | None = None
         if settings.test_mode:
             self.guard = TestModeGuard(self, settings.test_channel_id)

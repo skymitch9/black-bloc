@@ -1,7 +1,21 @@
-import { api, listOf, names, notesOf, settings } from './api.js';
+import { api, listOf, names, notesOf, send, settings } from './api.js';
 import { FEATURE_TABS, start, tabHref } from './app.js';
 import { GROUPS, shellStatus } from './shell.js';
-import { card, el, icon, idsIn, modeSwitch, nameNode, notice, sayNothing, shortWhen } from './ui.js';
+import {
+  ask,
+  bar,
+  button,
+  card,
+  el,
+  icon,
+  idsIn,
+  modeSwitch,
+  nameNode,
+  notice,
+  run,
+  sayNothing,
+  shortWhen,
+} from './ui.js';
 
 const LIST_LAST = ' and ';
 
@@ -223,6 +237,39 @@ function actionsCard(rows) {
   return card('Last actions', lines, { actions: [allLink()], flush: true });
 }
 
+const RESTART_TITLE = 'Restart the bot';
+const RESTART_SECONDS = 15;
+const RESTART_NOTE = 'Only somebody with Manage Server can do this. Black Bloc serves this site, ' +
+  'so the page goes down with it while it restarts.';
+const RESTART_ASK_TITLE = 'Restart Black Bloc?';
+const RESTART_ASK = [
+  `Black Bloc stops and starts again. It is usually back within about ${RESTART_SECONDS} seconds.`,
+  'This site goes down with it — the dashboard is served by the bot itself — so this page stops ' +
+    'answering until it is back. Reload it then.',
+  'Nothing is posted in Discord, and nothing anybody has saved is lost.',
+];
+const RESTART_CONFIRM = 'Restart it';
+const RESTART_SAID = `Restarting. This page stops answering for about ${RESTART_SECONDS} ` +
+  'seconds — reload it then.';
+
+function restartCard() {
+  const say = notice();
+  const go = button(RESTART_TITLE, async () => {
+    const sure = await ask({
+      title: RESTART_ASK_TITLE,
+      body: RESTART_ASK,
+      confirmLabel: RESTART_CONFIRM,
+    });
+    if (!sure) return;
+    await run(say, () => send('/api/bot/restart', 'POST', {}), (found) => found?.message || RESTART_SAID);
+  }, { tone: 'danger', small: false });
+  return card(RESTART_TITLE, [
+    el('p', { class: 'section-note', text: RESTART_NOTE }),
+    bar([go]),
+    say,
+  ]);
+}
+
 async function load() {
   const [status, actions, payload] = await Promise.all([
     shellStatus(),
@@ -238,7 +285,7 @@ async function load() {
     ...(notes.length ? [el('p', { class: 'section-note', text: notes.join(' ') })] : []),
     el('div', { class: 'twocol' }, [
       featuresCard(status, payload),
-      el('div', { class: 'colstack' }, [actionsCard(rows)]),
+      el('div', { class: 'colstack' }, [actionsCard(rows), restartCard()]),
     ]),
   );
 }
