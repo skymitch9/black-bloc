@@ -204,7 +204,7 @@ def preview_payload(bot: Any, guild: Any, actor: Any) -> dict[str, Any]:
     """Both wordings through the bot's own renderers, so the page carries no second copy."""
     store = bot.store
     name = display_name(actor)
-    suffix = store.get(guild.id, "golive_end_suffix")
+    end_template = store.get(guild.id, "golive_end_template")
     live = render(
         store.get(guild.id, "golive_template"),
         PREVIEW_STREAM,
@@ -215,11 +215,10 @@ def preview_payload(bot: Any, guild: Any, actor: Any) -> dict[str, Any]:
         "live": {"text": live, "author": author_line(name, PREVIEW_STREAM.platform)},
         "ended": {
             "text": ended_render(
-                store.get(guild.id, "golive_end_template"),
+                end_template,
                 PREVIEW_STREAM,
                 name,
                 content=live,
-                suffix=suffix,
                 duration=PREVIEW_DURATION,
                 keep_mention=bool(store.get(guild.id, "golive_end_keep_mention")),
             ),
@@ -229,7 +228,7 @@ def preview_payload(bot: Any, guild: Any, actor: Any) -> dict[str, Any]:
                 PREVIEW_STREAM.platform,
                 duration=PREVIEW_DURATION,
             ),
-            "footer": ended_footer(embed_footer(PREVIEW_SOURCE), suffix),
+            "footer": ended_footer(embed_footer(PREVIEW_SOURCE), end_template),
         },
     }
 

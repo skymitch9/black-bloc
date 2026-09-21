@@ -30,9 +30,7 @@ from ...golive import (
     costream_embed,
     costream_order,
     costream_render,
-    edits_on_end,
     embed_summary,
-    end_details,
     end_summary,
     ended_embed,
     ended_render,
@@ -73,6 +71,7 @@ from ...settings_store import (
     GOLIVE_COSTREAM_TEMPLATE_KEY,
     GOLIVE_MODES,
     GUILD_ONLY,
+    carry_end_wording,
 )
 from ...twitch import TwitchClient, TwitchError
 
@@ -592,11 +591,7 @@ async def status_lines(bot: Any, cog: Any, guild: Any) -> list[str]:
     channel_id = store.get(guild.id, "golive_channel_id")
     note = test_mode_note(bot, guild)
     where = f"<#{channel_id}>" if channel_id else "not set"
-    ending = end_summary(
-        store.get(guild.id, "golive_end_mode"),
-        store.get(guild.id, "golive_end_suffix"),
-        store.get(guild.id, "golive_end_template"),
-    )
+    ending = end_summary(store.get(guild.id, "golive_end_template"))
     failures = getattr(cog, "poll_failures", 0)
     lines = [
         f"**mode** — {store.get(guild.id, 'golive_mode')}",
@@ -695,9 +690,26 @@ class GoLive(commands.Cog):
     async def boot_pass(self) -> None:
         """Checklist 37: the reconcile and the presence sweep read their state inside one lock."""
         for guild in self._guilds():
+            await self._carry_end_wording(guild)
             details = await self._reconcile_guild(guild)
             details |= await self.sweep_presences(guild)
             await log_action(self.bot, guild, "golive.boot_swept", details=details)
+
+    async def _carry_end_wording(self, guild: Any) -> None:
+        try:
+            moved = await carry_end_wording(self.bot.store, guild.id)
+        except Exception as exc:
+            log.warning(
+                "go-live: the end wording of guild %s could not be carried over (%s: %s)",
+                guild.id,
+                type(exc).__name__,
+                exc,
+            )
+            return
+        if moved is not None:
+            await log_action(
+                self.bot, guild, "golive.end_wording_migrated", details=moved
+            )
 
     async def sweep_presences(self, guild: Any) -> dict[str, Any]:
         """Discord replays no presence at boot, so somebody already streaming raises no update."""
@@ -812,7 +824,6 @@ class GoLive(commands.Cog):
 
     async def _close_session(self, guild: Any, row: Any, reason: str) -> None:
         member = guild.get_member(row["user_id"])
-        end_mode = self._end_mode(guild.id)
         ended_at = now_iso()
         await end_session(self.bot.db, row["id"], ended_at)
         await self._remove_live_role(guild, member, row)
@@ -821,10 +832,9 @@ class GoLive(commands.Cog):
             guild,
             "golive.end",
             target=member if member is not None else row["user_id"],
-            details={"session_id": row["id"], "source": row["source"], "reason": reason}
-            | end_details(end_mode),
+            details={"session_id": row["id"], "source": row["source"], "reason": reason},
         )
-        await self._mark_ended(guild, row, end_mode, ended_at)
+        await self._mark_ended(guild, row, ended_at)
 
     async def cog_unload(self) -> None:
         self.poller.cancel()
@@ -1150,7 +1160,6 @@ class GoLive(commands.Cog):
         if _row_value(row, "also_source") and source is not None:
             await self.drop_platform(guild, row, source, reason=ENDED_ELSEWHERE)
             return
-        end_mode = self._end_mode(guild.id)
         ended_at = now_iso()
         await end_session(self.bot.db, row["id"], ended_at)
         await self._remove_live_role(guild, member, row)
@@ -1159,21 +1168,19 @@ class GoLive(commands.Cog):
             guild,
             "golive.end",
             target=member,
-            details={"session_id": row["id"], "source": row["source"]} | end_details(end_mode),
+            details={"session_id": row["id"], "source": row["source"]},
         )
-        await self._mark_ended(guild, row, end_mode, ended_at)
+        await self._mark_ended(guild, row, ended_at)
 
-    async def _mark_ended(
-        self, guild: Any, row: Any, end_mode: str, ended_at: str | None = None
-    ) -> None:
+    async def _mark_ended(self, guild: Any, row: Any, ended_at: str | None = None) -> None:
         message_id = row["announced_message_id"]
-        if not edits_on_end(end_mode) or not message_id:
+        if not message_id:
             return
         channel = self._channel(guild)
         if channel is None:
             return
         store = self.bot.store
-        suffix = store.get(guild.id, "golive_end_suffix")
+        template = store.get(guild.id, "golive_end_template")
         duration = humanise_duration(
             _row_value(row, "started_at"), ended_at or _row_value(row, "ended_at")
         )
@@ -1185,16 +1192,15 @@ class GoLive(commands.Cog):
             message = await channel.fetch_message(message_id)
             await message.edit(
                 content=ended_render(
-                    store.get(guild.id, "golive_end_template"),
+                    template,
                     row,
                     name,
                     content=message.content,
-                    suffix=suffix,
                     duration=duration,
                     keep_mention=bool(store.get(guild.id, "golive_end_keep_mention")),
                 ),
                 allowed_mentions=self._mentions(guild.id, fan_role_id),
-                **self._ended_embed(guild, row, message, suffix, name, duration),
+                **self._ended_embed(guild, row, message, template, name, duration),
             )
         except Exception as exc:
             log.info(
@@ -1210,7 +1216,7 @@ class GoLive(commands.Cog):
         return announcement_embed(info, member, source)
 
     def _ended_embed(
-        self, guild: Any, row: Any, message: Any, suffix: str | None, name: str, duration: str
+        self, guild: Any, row: Any, message: Any, template: Any, name: str, duration: str
     ) -> dict[str, Any]:
         existing = list(getattr(message, "embeds", None) or ())
         if not existing:
@@ -1220,7 +1226,7 @@ class GoLive(commands.Cog):
                 existing[0],
                 name,
                 _row_value(row, "platform"),
-                suffix,
+                template,
                 author=self.bot.store.get(guild.id, "golive_end_author"),
                 duration=duration,
             )
@@ -1383,9 +1389,6 @@ class GoLive(commands.Cog):
 
     def _mode(self, guild_id: int) -> str:
         return self.bot.store.get(guild_id, "golive_mode")
-
-    def _end_mode(self, guild_id: int) -> str:
-        return self.bot.store.get(guild_id, "golive_end_mode")
 
     def _costream_mode(self, guild_id: int) -> str:
         return self.bot.store.get(guild_id, GOLIVE_COSTREAM_MODE_KEY)

@@ -1,3 +1,4 @@
+import json
 import pathlib
 import re
 
@@ -34,10 +35,8 @@ from black_bloc.settings_store import (
     GOLIVE_COSTREAM_MODE_KEY,
     GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
-    GOLIVE_END_EDIT,
-    GOLIVE_END_MODES,
-    GOLIVE_END_OFF,
-    GOLIVE_END_SUFFIX,
+    GOLIVE_END_TEMPLATE,
+    GOLIVE_LIVE_FIELD,
     GOLIVE_TEMPLATE,
     HONEYPOT_PURGE_MAX_DAYS,
     KEY_CHOICES,
@@ -88,6 +87,7 @@ from black_bloc.settings_store import (
     WHERE_HINT_KEY,
     SettingError,
     SettingsStore,
+    carry_end_wording,
     coerce_value,
     display_value,
     is_staff_command,
@@ -300,23 +300,89 @@ async def test_golive_defaults(store):
     assert store.get(1, "golive_ping_role_id") is None
 
 
-async def test_the_stream_end_edit_is_off_until_a_guild_asks_for_it(store):
-    assert store.get(1, "golive_end_mode") == GOLIVE_END_OFF == "off"
-    assert KEY_TYPES["golive_end_mode"] == "enum"
-    assert coerce_value("golive_end_mode", "edit") == GOLIVE_END_EDIT
-    for name in GOLIVE_END_MODES:
-        assert await store.set(1, "golive_end_mode", name) == name
-        assert store.get(1, "golive_end_mode") == name
-    with pytest.raises(SettingError):
-        coerce_value("golive_end_mode", "delete")
+async def test_the_end_wording_is_one_key_whose_default_appends_to_the_sentence(store):
+    """The two boxes became one, 2026-09-20: no mode, no suffix, {live} in the template."""
+    assert store.get(1, "golive_end_template") == GOLIVE_END_TEMPLATE == "{live} — stream ended"
+    assert KEY_TYPES["golive_end_template"] == "text"
+    assert GOLIVE_LIVE_FIELD in KEY_HELP["golive_end_template"]
+    assert await store.set(1, "golive_end_template", "{live} (over)") == "{live} (over)"
+    assert await store.set(1, "golive_end_template", "   ") == ""
 
 
-async def test_the_stream_ended_wording_is_a_setting_with_the_hardcoded_text_as_its_default(store):
-    assert store.get(1, "golive_end_suffix") == GOLIVE_END_SUFFIX
-    assert KEY_TYPES["golive_end_suffix"] == "text"
-    assert await store.set(1, "golive_end_suffix", " (over)") == " (over)"
+async def _store_retired(store, guild_id, key, value):
+    await store.db.conn.execute(
+        "INSERT OR REPLACE INTO settings(guild_id, key, value, updated_by, updated_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (guild_id, key, json.dumps(value), None, "2026-09-01T00:00:00+00:00"),
+    )
+    await store.db.conn.commit()
+
+
+async def _rows(store, guild_id):
+    cur = await store.db.conn.execute(
+        "SELECT key FROM settings WHERE guild_id = ?", (guild_id,)
+    )
+    return {row["key"] for row in await cur.fetchall()}
+
+
+async def test_a_custom_suffix_with_no_template_becomes_the_template(store):
+    await _store_retired(store, 1, "golive_end_suffix", " (that's a wrap)")
+    await _store_retired(store, 1, "golive_end_mode", "edit")
+
+    said = await carry_end_wording(store, 1)
+
+    assert said == {"carried_suffix": True, "dropped_mode": "edit"}
+    assert store.get(1, "golive_end_template") == "{live} (that's a wrap)"
+    assert await _rows(store, 1) == {"golive_end_template"}
+
+
+async def test_a_guild_with_a_template_keeps_it_because_the_suffix_was_never_used(store):
+    await store.set(1, "golive_end_template", "{name} was live")
+    await _store_retired(store, 1, "golive_end_suffix", " (over)")
+
+    said = await carry_end_wording(store, 1)
+
+    assert said == {"carried_suffix": False, "dropped_mode": None}
+    assert store.get(1, "golive_end_template") == "{name} was live"
+    assert await _rows(store, 1) == {"golive_end_template"}
+
+
+async def test_a_guild_that_had_only_the_off_mode_loses_it_and_gets_the_default_wording(store):
+    await _store_retired(store, 1, "golive_end_mode", "off")
+
+    said = await carry_end_wording(store, 1)
+
+    assert said == {"carried_suffix": False, "dropped_mode": "off"}
+    assert store.get(1, "golive_end_template") == GOLIVE_END_TEMPLATE
+    assert await _rows(store, 1) == set()
+
+
+async def test_a_second_boot_finds_nothing_to_carry_and_says_so(store):
+    await _store_retired(store, 1, "golive_end_suffix", " (over)")
+
+    assert await carry_end_wording(store, 1) is not None
+    assert await carry_end_wording(store, 1) is None
+    assert await carry_end_wording(store, 2) is None
+
+
+async def test_the_carry_only_touches_the_guild_it_was_asked_about(store):
+    await _store_retired(store, 1, "golive_end_suffix", " (one)")
+    await _store_retired(store, 2, "golive_end_suffix", " (two)")
+
+    await carry_end_wording(store, 1)
+
+    assert store.get(1, "golive_end_template") == "{live} (one)"
+    assert await _rows(store, 2) == {"golive_end_suffix"}
+
+
+async def test_the_retired_end_keys_are_gone_from_the_registry(store):
+    """A stored row is harmless and the boot pass drops it; a key is not."""
+    gone = {"golive_end_mode", "golive_end_suffix"}
+
+    assert gone & set(KEY_TYPES) == set()
+    assert gone & set(KEY_HELP) == set()
     with pytest.raises(SettingError):
-        await store.set(1, "golive_end_suffix", "   ")
+        coerce_value("golive_end_mode", "edit")
 
 
 async def test_the_emoji_skin_tone_defaults_to_dark_and_takes_only_the_six_tones(store):
@@ -1977,14 +2043,13 @@ async def test_the_golive_panel_stays_up_ten_minutes_by_default(store):
     assert parse_value("golive_panel_minutes", "45") == 45
 
 
-async def test_the_twelve_golive_keys_the_site_owns_are_untouched(store):
+async def test_the_eleven_golive_keys_the_site_owns_are_untouched(store):
     """The panel WRITES only golive_mode; the rest stay the Go-live page's to edit."""
     wanted = {
         "golive_mode": "shadow",
         "golive_channel_id": None,
         "golive_template": None,
-        "golive_end_mode": "off",
-        "golive_end_suffix": None,
+        "golive_end_template": GOLIVE_END_TEMPLATE,
         "golive_live_role_id": None,
         "golive_require_role_id": None,
         "golive_ignore_role_id": None,

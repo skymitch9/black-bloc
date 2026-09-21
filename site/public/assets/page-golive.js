@@ -50,17 +50,14 @@ const PLATFORM_WORDS = { twitch: 'Twitch', youtube: 'YouTube' };
 
 const TEMPLATE_KEY = 'golive_template';
 const PING_KEY = 'golive_ping_role_id';
-const END_MODE_KEY = 'golive_end_mode';
 const END_TEMPLATE_KEY = 'golive_end_template';
 const END_AUTHOR_KEY = 'golive_end_author';
-const END_SUFFIX_KEY = 'golive_end_suffix';
 const END_KEEP_KEY = 'golive_end_keep_mention';
 const GOLIVE_MODE_KEY = 'golive_mode';
 const LIVE_MODE_KEY = 'youtube_live_mode';
 const PINGS_MODE_KEY = 'pings_mode';
 const SPOTLIGHT_MODE_KEY = 'spotlight_mode';
 const CHANNEL_KEY = 'golive_channel_id';
-const END_EDIT = 'edit';
 const GAME_FALLBACK = 'something';
 const DEFAULT_TEMPLATE = 'the default wording';
 
@@ -99,20 +96,18 @@ const ENDED_TITLE = 'Once the stream has ended';
 const WORDING_TITLE = 'Wording';
 const WORDING_NOTE = 'Both messages as the bot itself renders them — the same functions Discord '
   + 'gets, not a copy living on this page. The sample is a two-hour stream of Celeste.';
-const WORDING_LEFT = 'golive_end_mode is off, so an announcement is left exactly as posted. This '
-  + 'is what edit would write instead.';
-const WORDING_STALE = 'This card repaints itself whenever either wording above is saved. Refresh '
+const WORDING_STALE ='This card repaints itself whenever either wording above is saved. Refresh '
   + 'is for a change somebody else made, on the Settings page or from Discord.';
 const WHILE_LIVE = 'while live';
 const AFTER_THE_STREAM = 'after the stream';
-const END_HELP = 'edit rewrites the announcement once the stream is over; off leaves it as '
-  + 'posted. The Wording card below shows both.';
-const END_UNKNOWN = 'The bot did not report a golive_end_mode key, so what happens once a stream '
-  + 'ends is not shown rather than guessed at.';
 const END_NO_KEYS = 'The bot did not report a golive_end_template key, so the ending is edited '
   + 'from Everything else rather than guessed at here.';
-const END_BLANK_TEMPLATE = 'Empty — the live sentence is kept and golive_end_suffix is added to '
-  + 'the end of it instead.';
+const END_LIVE_HELP = '{live} is the sentence exactly as it was posted, so “{live} — stream '
+  + 'ended” adds to the end of it and a wording without {live} replaces the whole post. The '
+  + 'rest of the fields are {name} {game} {title} {url} {platform} {duration}. The announcement '
+  + 'is always edited once the stream is over.';
+const END_BLANK_TEMPLATE = 'Empty — the sentence stays exactly as it was posted and nothing is '
+  + 'added to it.';
 const END_BLANK_AUTHOR = 'Empty — the card’s top line keeps saying “was live on”.';
 const END_WORDING_WHERE = 'Once the stream is over';
 const NO_TEMPLATE = 'The bot did not report a golive_template key, so this editor is not shown '
@@ -981,9 +976,8 @@ function withRoleNames(text, roles) {
   });
 }
 
-async function wordingPreview(say, endMode, endTemplate) {
+async function wordingPreview(say) {
   const list = el('ul', { class: 'msglist' });
-  const left = el('p', { class: 'field-help', text: WORDING_LEFT });
   let roles = [];
   const heads = { live: '', ended: '', roles };
   const paint = async () => {
@@ -1016,7 +1010,6 @@ async function wordingPreview(say, endMode, endTemplate) {
   const node = card(WORDING_TITLE, [
     el('p', { class: 'field-help', text: WORDING_NOTE }),
     list,
-    left,
     el('p', { class: 'field-help', text: WORDING_STALE }),
     say,
   ], {
@@ -1024,9 +1017,7 @@ async function wordingPreview(say, endMode, endTemplate) {
       button('Refresh', () => paint(), { tone: 'quiet' }),
     ],
   });
-  const showEnd = (mode) => { left.hidden = String(mode) === END_EDIT; };
-  showEnd(endMode);
-  return { node, paint, showEnd, heads };
+  return { node, paint, heads };
 }
 
 async function announcementSection(specs, wordingSpecs) {
@@ -1039,14 +1030,9 @@ async function announcementSection(specs, wordingSpecs) {
   const shape = { which: TWITCH };
   const playing = el('input', { class: 'input switch', type: 'checkbox', checked: true });
   const prefix = await pingPrefix(specs);
-  const endSpec = specs.find((one) => one.key === END_MODE_KEY) || null;
   const endTemplate = specs.find((one) => one.key === END_TEMPLATE_KEY) || null;
   const endAuthor = specs.find((one) => one.key === END_AUTHOR_KEY) || null;
-  const preview = await wordingPreview(
-    notice(),
-    endSpec ? endSpec.value : null,
-    endTemplate ? (endTemplate.value ?? endTemplate.default) : '',
-  );
+  const preview = await wordingPreview(notice());
 
   const liveShown = el('div', { class: 'preview discord-preview' });
   const liveMade = await templateEditor(spec, {
@@ -1096,14 +1082,6 @@ async function announcementSection(specs, wordingSpecs) {
     });
   }
 
-  const endMode = endSpec ? modeSwitch(endSpec, {
-    label: 'The stream-end wording',
-    onSaved: (key, value) => {
-      preview.showEnd(String(value));
-      preview.paint();
-    },
-  }) : null;
-
   const chips = el('div', { class: 'chipbar' });
   const paintChips = () => {
     chips.replaceChildren(...[TWITCH, YOUTUBE].map((which) => chipButton(
@@ -1119,9 +1097,7 @@ async function announcementSection(specs, wordingSpecs) {
   };
   paintChips();
 
-  const endRows = wordingSpecs.filter(
-    (one) => one.key === END_SUFFIX_KEY || one.key === END_KEEP_KEY,
-  );
+  const endRows = wordingSpecs.filter((one) => one.key === END_KEEP_KEY);
 
   group.body.append(
     chips,
@@ -1129,14 +1105,12 @@ async function announcementSection(specs, wordingSpecs) {
       liveMade.row.node,
       el('div', { class: 'formrow' }, [
         field('Playing a game', playing, PLAYING_HELP),
-        endMode ? field('When a stream ends', endMode.node, END_HELP) : null,
-      ].filter(Boolean)),
-      endMode ? null : el('p', { class: 'field-help', text: END_UNKNOWN }),
+      ]),
       liveShown,
-      endMode ? endMode.say : null,
       liveMade.say,
     ].filter(Boolean)),
     card(ENDED_TITLE, [
+      el('p', { class: 'field-help', text: END_LIVE_HELP }),
       ...(endMade
         ? endMade.rows.map((row) => row.node)
         : [el('p', { class: 'say-nothing', text: END_NO_KEYS })]),

@@ -294,7 +294,6 @@ async def bot(db, monkeypatch):
     await store.set(GUILD, "golive_channel_id", CHANNEL)
     await store.set(GUILD, "shadow_channel_id", SHADOW_CHANNEL)
     await store.set(GUILD, SPOTLIGHT_MODE_KEY, "on")
-    await store.set(GUILD, "golive_end_mode", "edit")
     made = FakeBot(db, store, settings, FakeGuild())
     made.store.is_staff = lambda member: True
     return made
@@ -568,7 +567,7 @@ async def test_the_end_unpins_rewrites_in_the_past_tense_and_takes_the_bumps_awa
     assert await open_session(bot.db, row["id"]) is None
     announcement = bot.guild.channel.messages[0]
     assert announcement.pinned is False and announcement.unpins == [words.UNPIN_REASON]
-    assert "has ended" in announcement.content
+    assert announcement.content.endswith(" — stream ended")
     assert len(bot.guild.channel.messages) == 1
     assert await bumps_of(bot.db, session["id"]) == []
     assert "golive.spotlight_ended" in await kinds(bot.db)

@@ -14,8 +14,8 @@ from .settings_store import (
     GOLIVE_COSTREAM_AUTHOR,
     GOLIVE_COSTREAM_ON,
     GOLIVE_COSTREAM_TEMPLATE,
-    GOLIVE_END_EDIT,
-    GOLIVE_END_SUFFIX,
+    GOLIVE_END_TEMPLATE,
+    GOLIVE_LIVE_FIELD,
     GOLIVE_TEMPLATE,
 )
 
@@ -40,8 +40,8 @@ EMBED_SOURCE_PRESENCE = "Discord activity"
 EMBED_SOURCE_YOUTUBE = "YouTube"
 EMBED_SOURCES = {"twitch": EMBED_SOURCE_TWITCH, "youtube": EMBED_SOURCE_YOUTUBE}
 EMBED_END_MARK = "·"
-ANNOUNCEMENT_LEFT = "left"
 END_TRIM = " \t—–-·|,;:"
+END_MARK_DEFAULT = GOLIVE_END_TEMPLATE.split(GOLIVE_LIVE_FIELD)[-1].strip(END_TRIM)
 LIVE_VERB = "is now live"
 ENDED_VERB = "was live"
 DURATION_SHORT = "under a minute"
@@ -234,13 +234,19 @@ def announcement_embed(
     return embed
 
 
-def end_marker(suffix: str | None) -> str:
-    """The stream-ended wording with its leading separator taken off, for the footer."""
-    return (suffix or "").strip(END_TRIM)
+def end_marker(template: Any) -> str:
+    """What the one end wording adds after `{live}`, for the card's footer."""
+    wanted = str(template or "").strip()
+    if not wanted:
+        return ""
+    if GOLIVE_LIVE_FIELD not in wanted:
+        return END_MARK_DEFAULT
+    tail = wanted.rsplit(GOLIVE_LIVE_FIELD, 1)[-1].strip(END_TRIM)
+    return END_MARK_DEFAULT if "{" in tail else tail
 
 
-def ended_footer(footer: str, suffix: str | None) -> str:
-    marker = end_marker(suffix)
+def ended_footer(footer: str, template: Any) -> str:
+    marker = end_marker(template)
     if not marker:
         return footer
     tail = f"{EMBED_END_MARK} {marker}"
@@ -321,23 +327,26 @@ def ended_render(
     name: str,
     *,
     content: Any = "",
-    suffix: Any = GOLIVE_END_SUFFIX,
     duration: str = "",
     keep_mention: bool = False,
 ) -> str:
-    """The announcement once the stream is over; blank or unreadable wording keeps the suffix."""
+    """The announcement once the stream is over; `{live}` is the sentence as it was posted."""
     prefix = mention_prefix(content) if keep_mention else ""
     plain = without_mention(content)
+    fields = ended_fields(info_or_row, name, duration)
+    fields["live"] = plain
     wanted = str(template or "").strip()
     if not wanted:
-        return prefix + ended_text(plain, suffix)
+        return prefix + plain
     try:
-        return prefix + tidy(wanted.format_map(ended_fields(info_or_row, name, duration)))
+        return prefix + tidy(wanted.format_map(fields))
     except Exception as exc:
         log.warning(
-            "go-live: end wording %r could not be rendered (%s); using the suffix", template, exc
+            "go-live: end wording %r could not be rendered (%s); using the default wording",
+            template,
+            exc,
         )
-        return prefix + ended_text(plain, suffix)
+        return prefix + tidy(GOLIVE_END_TEMPLATE.format_map(fields))
 
 
 def ended_author(
@@ -368,7 +377,7 @@ def ended_embed(
     embed: Any,
     name: str,
     platform: str | None,
-    suffix: str | None = GOLIVE_END_SUFFIX,
+    template: Any = GOLIVE_END_TEMPLATE,
     *,
     author: Any = "",
     duration: str = "",
@@ -377,7 +386,7 @@ def ended_embed(
     finished = discord.Embed.from_dict(embed.to_dict())
     finished.set_author(name=ended_author(author, name, platform, duration=duration))
     footer = _text(getattr(getattr(embed, "footer", None), "text", None)) or ""
-    finished.set_footer(text=ended_footer(footer, suffix) or None)
+    finished.set_footer(text=ended_footer(footer, template) or None)
     return finished
 
 
@@ -571,32 +580,14 @@ def passes_role_filters(
     return True
 
 
-def edits_on_end(end_mode: Any) -> bool:
-    """True only for the one mode that touches the announcement once the stream is over."""
-    return end_mode == GOLIVE_END_EDIT
-
-
-def end_details(end_mode: Any) -> dict[str, str]:
-    return {} if edits_on_end(end_mode) else {"announcement": ANNOUNCEMENT_LEFT}
-
-
-def end_summary(
-    end_mode: Any, suffix: str | None = GOLIVE_END_SUFFIX, template: Any = ""
-) -> str:
-    """One phrase for the staff panel: what happens to an announcement once the stream ends."""
-    if not edits_on_end(end_mode):
-        return f"{end_mode} (left as posted)"
+def end_summary(template: Any = "") -> str:
+    """One phrase for the staff panel: what an announcement says once the stream ends."""
     wanted = str(template or "").strip()
-    if wanted:
-        return f'{GOLIVE_END_EDIT} (rewritten: "{_clip(wanted, SUMMARY_CHARS)}")'
-    return f'{GOLIVE_END_EDIT} (suffix "{suffix or ""}")'
-
-
-def ended_text(text: str, suffix: str | None = GOLIVE_END_SUFFIX) -> str:
-    tail = suffix or ""
-    if not tail.strip() or text.endswith(tail):
-        return text
-    return text + tail
+    if not wanted:
+        return "edited (the sentence as posted, nothing added)"
+    if GOLIVE_LIVE_FIELD in wanted:
+        return f'edited (appended: "{_clip(wanted, SUMMARY_CHARS)}")'
+    return f'edited (rewritten: "{_clip(wanted, SUMMARY_CHARS)}")'
 
 
 PANEL_MINUTES_KEY = "golive_panel_minutes"

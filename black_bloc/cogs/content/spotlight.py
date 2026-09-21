@@ -14,9 +14,7 @@ from ...actionlog import log_action
 from ...command_errors import AnswersErrors
 from ...golive import (
     announcement_embed,
-    edits_on_end,
     embed_summary,
-    end_details,
     ended_embed,
     ended_render,
     from_twitch,
@@ -49,9 +47,7 @@ CHANNEL_KEY = "golive_channel_id"
 PING_KEY = "golive_ping_role_id"
 TEMPLATE_KEY = "golive_template"
 EMBED_KEY = "golive_embed"
-END_MODE_KEY = "golive_end_mode"
 END_TEMPLATE_KEY = "golive_end_template"
-END_SUFFIX_KEY = "golive_end_suffix"
 END_AUTHOR_KEY = "golive_end_author"
 MODE_ON = "on"
 MODE_OFF = "off"
@@ -551,7 +547,6 @@ class Spotlight(commands.Cog):
         ended_at = now_iso()
         await end_session(self.bot.db, session["id"], ended_at)
         self.misses.pop(int(row["id"]), None)
-        end_mode = self.bot.store.get(guild.id, END_MODE_KEY)
         await log_action(
             self.bot,
             guild,
@@ -562,12 +557,11 @@ class Spotlight(commands.Cog):
                 "login": row["twitch_login"],
                 "reason": reason,
                 "bumps": int(_cell(session, "bump_count") or 0),
-            }
-            | end_details(end_mode),
+            },
         )
         message = await self._message(guild, session)
         await self._unpin(guild, row, message)
-        await self._mark_ended(guild, row, session, message, end_mode, ended_at)
+        await self._mark_ended(guild, row, session, message, ended_at)
         if self.bot.store.get(guild.id, SPOTLIGHT_BUMP_CLEANUP_KEY):
             await self._clear_bumps(guild, session)
 
@@ -577,13 +571,12 @@ class Spotlight(commands.Cog):
         row: Any,
         session: Any,
         message: Any,
-        end_mode: str,
         ended_at: str,
     ) -> None:
-        if message is None or not edits_on_end(end_mode):
+        if message is None:
             return
         store = self.bot.store
-        suffix = store.get(guild.id, END_SUFFIX_KEY)
+        template = store.get(guild.id, END_TEMPLATE_KEY)
         name = words.display_for(row)
         duration = humanise_duration(session["started_at"], ended_at)
         info = words.info_of(session, row["twitch_login"])
@@ -591,11 +584,10 @@ class Spotlight(commands.Cog):
         try:
             await message.edit(
                 content=ended_render(
-                    store.get(guild.id, END_TEMPLATE_KEY),
+                    template,
                     info,
                     name,
                     content=message.content,
-                    suffix=suffix,
                     duration=duration,
                 ),
                 allowed_mentions=self._mentions(guild.id),
@@ -605,7 +597,7 @@ class Spotlight(commands.Cog):
                             existing[0],
                             name,
                             info.platform,
-                            suffix,
+                            template,
                             author=store.get(guild.id, END_AUTHOR_KEY),
                             duration=duration,
                         )
