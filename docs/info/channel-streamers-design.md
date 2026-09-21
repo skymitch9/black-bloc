@@ -186,10 +186,13 @@ body and the code disagree, the code is what shipped and this section is why.
   pages, which is a real network read — but `probe_live` was never called against either, so no
   channel row has been announced from a YouTube stream and the either-side join has never run
   outside a fixture.
-- ⚠️ **The migration has NOT run on the live database.** Schema 51 → 52 applies at the next boot.
-  It is additive, and the live GDQ and ESA rows keep `spotlight = 1` / `announce = 1` from the
-  columns' defaults — but that is reasoning about `ALTER TABLE … DEFAULT`, not a measurement
-  against the production file.
+- ⚠️ **The migration has NOT run on the live database.** Schema 51 → 52 applies at the next
+  boot. ✅ **What IS measured (2026-09-21): a hand-built schema-51 `spotlight_channels` holding a
+  `gamesdonequick` and an `esamarathon` row was opened by `Database.connect()` and came back at
+  schema 52 with `spotlight = 1` and `announce = 1` on both**, the two new text columns NULL — so
+  the four `ALTER TABLE … DEFAULT` statements do keep an existing channel behaving exactly as it
+  did. What is still NOT measured is that run against the PRODUCTION file, which has rows,
+  sessions and fan roles this fixture did not.
 - ⚠️ **The site half was pressed against the LOCAL MOCK only**, in `chrome-headless-shell`
   149.0.7827.22 over raw CDP, at 1280 px and 390 px, with **zero console rows** of any kind.
   Verified there: the GamesDoneQuick drawer in BOTH toggle states (spotlight on offers
