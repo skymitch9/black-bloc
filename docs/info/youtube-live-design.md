@@ -245,7 +245,14 @@ sessions whose source is YouTube only - so `/api/youtube/status` read `live_now 
 and no `youtube.*` row existed. A probe that worked was indistinguishable from a probe that never
 ran.*
 
-24. **The open-session branch writes ONE routine `youtube.live_seen` row, `announced: false`,
+24. ⚠️ **SUPERSEDED 2026-09-20, branch `costream`** (checklist 35) — the HOLD-BACK this deviation
+    describes is now only what `golive_costream_mode` **off** does. With the mode on (the default) a
+    probe that reads live while another platform holds the session calls the go-live cog's
+    `add_platform`, the announcement already posted is EDITED to name both platforms, and the row
+    reads `announced: true, because: "joined_session"`. Design:
+    [`costream-design.md`](costream-design.md) §C. The text below stands as the description of the
+    off path, which is still tested by name. Was:
+    **The open-session branch writes ONE routine `youtube.live_seen` row, `announced: false`,
     `because: "open_session:<source>"`.** Same kind as the announcing path - and the same ternary,
     so a shadow live half writes `youtube.would_live_seen` (both kinds already exist; nothing was
     added to `logkinds.py`, and its guard wants a STRING LITERAL at the `log_action` call, so the

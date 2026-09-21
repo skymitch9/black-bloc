@@ -1,6 +1,13 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-20** — rows **`CS-a` … `CS-f`** added at the foot for CO-STREAMING (branch `costream`, off
+> `main` `64ccfbc`; design [`../info/costream-design.md`](../info/costream-design.md); ⚠️ **not merged,
+> not deployed, and NOTHING IN IT HAS MET DISCORD** — no announcement has ever been edited to name two
+> platforms). Owner: *"It would be silly to suppress one of the live avenues someone is on"*. ⚠️ **Five of
+> the six need a real person live on Twitch AND YouTube at the same time** and cannot be run from a
+> laptop; `CS-f` (the off switch) is the only one that can. Rows are lettered; the conductor numbers
+> them at the merge. ⚠️ **Nothing else in this file was re-checked then.** Before that,
 > **2026-09-18** — rows **`FS-a` … `FS-c`** added at the foot for the FRONT DOOR'S SHADOW MODE
 > (branch `frontdoor-shadow`, off `main` `58fb7d6`, v139; design
 > [`../info/front-door-design.md`](../info/front-door-design.md) ▸ `## Shadow mode (2026-09-18)`; ⚠️ **not
@@ -2092,3 +2099,28 @@ These rows need nothing turned on: no key, no mode, no schema. Go to **Runs the 
 | **613** (was `PP-a`) | Open a Google Doc with a **heading**, some **bold**, some *italic*, a bulleted list with one item indented under another, a numbered list and a link whose words are not the address. Select all of it, copy, then click into **The message** box on a post and paste | The box fills with markdown, not flat text: `# ` before the heading, `**` around the bold words, `*` around the italic ones, `- ` on each bullet with **two spaces** of indent on the nested one, `1. ` / `2. ` on the numbered list, and the link as `[words](https://…)`. **What Discord will show** beside it redraws immediately with the heading big, the bold bold and the bullets as bullets. Under the box: *"Pasted with formatting kept (headings, bold, bullets, links). Undo with Ctrl+Z."* with a **Dismiss** that hides it. ⚠️ **The whole document must NOT be bold** — if it is, the `docs-internal-guid` wrapper got through and that is the bug to report. Beside the **The message** label, **Paste keeps formatting** |
 | **614** (was `PP-b`) | In Notepad (or the Discord message box), type a plain line with no formatting, copy it, and paste it into the same box | The words land exactly as they were — **no `**`, no `#`, nothing added** — and ⚠️ **no note appears under the box at all**. Do the same with a line copied from a Google Doc that has no formatting in it: same result, still no note. The counter moves by the number of characters you pasted and nothing else on the page changes |
 | **615** (was `PP-c`) | Straight after the `PP-a` paste, press **Ctrl+Z** once | The pasted markdown comes out again and the box is exactly what it was before the paste — including anything you had selected when you pasted, which comes back selected. The preview follows it back. Press **Ctrl+Y** (or Ctrl+Shift+Z): the markdown returns. Nothing was saved by any of this — the save bar still says the same number of changes it said before you pressed anything, and **Discard** puts the whole box back to the saved post |
+
+## SOMEBODY CO-STREAMING GETS ONE ANNOUNCEMENT NAMING BOTH PLATFORMS (`CS-a` … `CS-f`, branch `costream`, design [`../info/costream-design.md`](../info/costream-design.md))
+
+Owner, 2026-09-20 16:1x: *"for when someone is co streaming I would like the message to say this
+person is streaming on twitch and youtube, have the twitch stream first and only link preview the
+twitch stream… It would be silly to suppress one of the live avenues someone is on"*.
+
+⚠️ **Nothing below has ever happened on Discord.** No announcement has been edited to name two
+platforms, and no message has been seen with one preview suppressed — every claim behind this build
+is the suite's, against fakes. ⚠️ **These rows cannot be run from a laptop alone**: `CS-a` … `CS-e`
+need a real person actually going live on Twitch AND on YouTube, with a Twitch channel linked on
+`/golive` and a YouTube channel linked on `/youtube`. `CS-f` is the only one that needs neither.
+
+What must be on first: `golive_mode` **on**, `golive_channel_id` set, `youtube_live_mode` **on**, and
+`golive_costream_mode` **on** (it ships on — check it on the Settings page, Go-live group, rather
+than assuming). Rows are lettered; the conductor numbers them at the merge.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`CS-a`** | Go live on **Twitch** and wait for the announcement to appear. Then, without stopping Twitch, start a **YouTube** live stream on the linked channel and wait one YouTube poll (up to `youtube_live_poll_minutes`) | ⚠️ **The message already there is EDITED — no second post.** It reads *"**<you>** is streaming on **Twitch** and **YouTube**! Watch on Twitch: <twitch url> · also live on YouTube: <youtube url>"*, with **Twitch written first**. ⚠️ **Exactly ONE link preview, and it is the TWITCH one** — the YouTube address shows as plain text with no preview card under it. The card keeps the Twitch game art, its top line reads *"<you> is live on Twitch and YouTube"* and its footer reads *"Black Bloc · via Twitch + YouTube"*. ⚠️ **Nobody is pinged a second time** — no new notification, no new unread badge for the go-live role. The Logs page (Go-live) holds one `golive.costream_added` row and **no** second `golive.announce` |
+| **`CS-b`** | The reverse order, on a different day (or after both streams have ended and the cooldown has passed): go live on **YouTube** first, wait for the announcement, then start **Twitch** and wait for the Twitch sweep (up to a minute) | The same message as `CS-a`, word for word — **Twitch first even though YouTube arrived first**, the Twitch link previewing and the YouTube one not. ⚠️ The card CHANGES to the Twitch one here: the Twitch stream's title, its game, its art and Twitch's purple. Footer *"Black Bloc · via Twitch + YouTube"*. Still one message, still no second ping |
+| **`CS-c`** | From the `CS-a` state (both live), **stop the YouTube stream** and leave Twitch running. Wait for YouTube to miss `youtube_live_end_misses` probes | The message goes back to the ordinary Twitch announcement — *"REGULATORS! Mount up! …"* with the Twitch link and its preview, the card's top line back to *"<you> is now live on Twitch!"* and the footer back to *"Black Bloc · via Twitch"*. ⚠️ **It is still a LIVE announcement — not the past-tense one.** `/golive` (staff half) still lists you under **live now**, and the Logs page holds a `golive.costream_dropped` row and **no** `golive.end` |
+| **`CS-d`** | From the `CS-a` state (both live), **stop the TWITCH stream instead** and leave YouTube running. Wait for the Twitch sweep (up to a minute) | ⚠️ **The one the design exists to get right.** The message becomes a plain **YouTube** announcement — the YouTube link, now WITH its preview, the card's top line *"<you> is now live on YouTube!"*, red, footer *"Black Bloc · via YouTube"* — and the game it names is still the game it was naming. ⚠️ **The session stays OPEN**: `/golive` still shows you live, and there is **no** `golive.end` row. The Logs row is `golive.costream_dropped` with `promoted` true |
+| **`CS-e`** | From wherever `CS-c` or `CS-d` left it, stop the remaining stream and wait | Today's ending, unchanged: with `golive_end_mode` **edit** the announcement is rewritten in the past tense (*"**<you>** was streaming **<game>** — the stream has ended."*) and the card is marked *· stream ended*; with it **off** the post is left as it is. Either way `/golive` no longer lists you, the live role comes off, and there is **one** `golive.end` row |
+| **`CS-f`** | On the Settings page ▸ **Go-live**, set **golive_costream_mode** to **off**. Then repeat the first half of `CS-a` (Twitch live, then start YouTube) | Today's behaviour, back exactly: the Twitch announcement stays as it was, **nothing is edited**, and the YouTube stream is not announced at all. The Logs page (YouTube) holds one `youtube.live_seen` row reading `announced: false`, `because: open_session:twitch`, and **no** `golive.costream_added`. ⚠️ Put the key back to **on** afterwards, or co-streaming stays off |

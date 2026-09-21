@@ -55,6 +55,26 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-20 (Co-streaming — one announcement naming both platforms, branch `costream` off
+> `main` `64ccfbc`; design `info/costream-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing
+> has met Discord):** schema **45 → 46** (measured: `SCHEMA_VERSION`) — `golive_sessions` gains
+> `also_source`, `also_url`, `also_platform` and `also_started_at`, all `TEXT` and all nullable,
+> through `ADDED_COLUMNS` only, so ⚠️ **migrate-before-deploy is automatic here**: `Database.connect`
+> applies them as it applies every column before them, and there is no backfill — an existing open
+> session simply has four nulls and behaves exactly as it does today. Registry keys **277 → 280**
+> (measured: `len(settings_store.KEY_TYPES)`) — `golive_costream_mode` (enum `off`/`on`, ships
+> **on**), `golive_costream_template` and `golive_costream_author`, both text and both validated by
+> `checked_costream` against the seven placeholders the fill knows (`{name} {game} {title} {url}
+> {platform} {also_url} {also_platform}`). Setting groups **unchanged at 25** and features
+> **unchanged at 21** — the three keys sit in the `golive` namespace the prefix already gives them.
+> Two log kinds: `golive.costream_added` (IMPORTANT — it rewrote a post members are reading) and
+> `golive.costream_dropped` (routine); `HEADS` already maps `golive` to the `golive` feature, so
+> nothing moved there. Mock **unchanged at 20 pages / 186 routes** — the change is three keys on the
+> existing `/api/golive/sessions` row, not a route. Tests **6757 → 6796**. ⚠️ **No new module:** the
+> render lives in `black_bloc/golive.py` beside `render` and `ended_render`, and the three moves
+> (`add_platform`, `drop_platform`, the unchanged end) are methods on the go-live cog, so the
+> YouTube cog still renders nothing.
+>
 > **2026-09-17 (Move an open event's room into the forum, branch `events-move-to-forum` off
 > `90252a6`; design `info/events-forum-design.md` §H; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing
 > has met Discord):** schema **unchanged at 45** (measured: `SCHEMA_VERSION`) — the move re-points
