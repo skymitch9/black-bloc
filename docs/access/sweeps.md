@@ -1,6 +1,14 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-20 20:0x** — rows **`SP-a` … `SP-e`** added at the foot for A PING ROLE FOR A SPOTLIGHT CHANNEL
+> (branch `spotlight-pings`, off `main` `552af36`; design
+> [`../info/spotlight-pings-design.md`](../info/spotlight-pings-design.md); ⚠️ **not merged, not deployed, and NOTHING IN
+> IT HAS MET DISCORD** — no channel's ping role has ever been made, worn or mentioned). Owner: *"i dont see how to add a
+> role to the games done quick entry in streamers"*. ⚠️ **`SP-b` needs `pings_mode` ON**, which has been off since
+> 2026-09-16, and **`SP-c`/`SP-d` need GamesDoneQuick to actually be live**; `SP-a` and `SP-e` can be run from a laptop
+> any time. Rows are lettered; the conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked
+> then.** Before that,
 > **2026-09-20 19:28** — rows **652–656** (were `BS-a` … `BS-e`) and **644–651** (were `PV-a` … `PV-h`), numbered at the v149 merge, for THE GO-LIVE BOOT SWEEP (branch `boot-sweep`, off `main`
 > `f73e81c`; design [`../info/golive-boot-sweep-design.md`](../info/golive-boot-sweep-design.md); ⚠️ **not merged, not
 > deployed, and NOTHING IN IT HAS MET DISCORD** — no bot has been restarted while somebody was streaming). Owner: *"have
@@ -2282,3 +2290,29 @@ past-tense rewrite; it ships **off**. Staff door: **Runs the cookout** ▸ **Go-
 | **654** (was `BS-c`) | With a session open, have the streamer **stop while the bot is down** (end the stream, then redeploy — or redeploy and stop during it) | After boot the announcement **reads in the past tense** with how long it ran (needs `golive_end_mode` = **edit**; with it **off** the post is left alone, which is also correct and is what ships). The live role comes off. On the Logs page a `golive.end` row with `reason: reconciled_on_start`. ⚠️ **This is the row that proves the defect is fixed** — before this build nothing closed it until twelve hours had passed |
 | **656** (was `BS-e`) | ⚠️ **While a spotlighted channel is live** (GamesDoneQuick mid-marathon, or any row you added), **delete its announcement from the go-live channel by hand**, then redeploy | Within a minute of boot the session is **closed**, not left open for ever: on the **Logs** page ▸ **golive**, one `golive.spotlight_reconciled` row naming the login, with `reason` reading the reconciled wording. ⚠️ **This is the second defect row** — at v148 this never happened, because the spotlight boot reconcile ran before the bot had any guilds and then blocked the pass that did. The cheap half, if you do not want to wait for a marathon: any redeploy at all should leave the row's open session alone when its announcement is still there (that is `test_a_session_whose_message_is_still_there_survives_the_boot`, and the visible version is simply that nothing is re-announced) |
 | **655** (was `BS-d`) | After **any** deploy, open the **Logs** page ▸ **golive** (or the Logs section at the foot of the Go-live page) | Exactly **one** `golive.boot_swept` row per boot. Read two numbers on it: `members_walked` should be roughly the size of the server, and `members_cached` should be **true**. ⚠️ **A walk of 0, or `members_cached: false`, means the sweep ran before Discord had handed over the member list** — that is a bug to report, not a quiet server. `presence_skipped` says why anyone streaming was passed over (`cooldown` / `opted_out` / `role_filter` / `open_session`). Then set **Whether a restart looks for people already streaming** to **off** on the Go-live page, redeploy, and the next row reads `swept: false` with `members_walked: 0` — the switch works both ways |
+
+## A SPOTLIGHTED CHANNEL CAN HAVE A PING ROLE OF ITS OWN (rows `SP-a` … `SP-e`; branch `spotlight-pings`, design [`../info/spotlight-pings-design.md`](../info/spotlight-pings-design.md))
+
+Owner, 2026-09-20 19:3x: *"i dont see how to add a role to the games done quick entry in
+streamers"* → *"yes design and build it"*.
+
+⚠️ **Nothing below has ever happened on Discord.** No channel's ping role has been made, worn,
+mentioned or deleted anywhere but in the suite and on the local mock; the rows are the proof that
+does not exist yet. ⚠️ **This build changes the SHAPE of `golive_fan_roles`** — the first boot after
+the deploy rebuilds that table (two rows today) to let a channel own a role. Take a copy of the
+database first if that matters to you.
+
+What must be on first: `pings_mode` **on** (it has been off since 2026-09-16 — with it off nobody
+can follow anything and `SP-b` cannot be run), `golive_channel_id` set, `spotlight_mode` **on** for
+`SP-c`/`SP-d` (it ships **shadow**, which puts the announcement where `shadow_channel_id` points
+instead). `spotlight_bump_pings` ships **false**, which is what `SP-d` proves. Staff doors: **Runs
+the cookout** ▸ **Go-live** (https://blackbloc.heygabi.ai/golive.html) and `/golive` ▸ **Spotlight…**
+in Discord; the member door is `/pings`.
+
+| Row | Do | Expect |
+|---|---|---|
+| `SP-a` | On the Go-live page open the **GamesDoneQuick** row (the Streamers table — it has a **channel only** badge), and in its drawer press **Add a ping role…** in the new **Ping role** group. Leave the role picker empty and press **Add the ping role** | A role called **GamesDoneQuick pings** exists in Server Settings ▸ Roles, and the drawer now reads *GamesDoneQuick pings · 0 wearing it* with a **Remove** button where **Add a ping role…** was. The Streamers table's **Ping role** cell reads the same. ⚠️ Press **Add a ping role…** again (reload first): it is not offered — and the same move on the `/golive` ▸ **Spotlight…** sub-panel reads **Remove its ping role**, not *Give it a ping role*. ⚠️ If the row's name still reads `gamesdonequick` in lower case, the role is called *gamesdonequick pings*: that is correct and it fixes itself the first time the channel goes live, when Twitch's own spelling is saved |
+| `SP-b` | As a member (not staff), run **`/pings`** and open **Follow a streamer…** | **GamesDoneQuick · channel** is in the list, beside the people. Pick it: you are told you now wear **GamesDoneQuick pings**, the role is on you in Discord, and the panel's list of what pings you names it. **Stop following…** offers it too and takes it off. ⚠️ Try it on a channel with NO role yet (ESA Marathon, or anything you add): the first person to follow is what MAKES the role — unless `pings_fan_role_creation` is **staff**, in which case you get a sentence saying so, and no role is made |
+| `SP-c` | ⚠️ **When GamesDoneQuick is actually live** (a marathon, or any stream on that channel), look at the announcement in the go-live channel | It mentions **two roles** in front of the wording — the Events/go-live role and **GamesDoneQuick pings** — and everybody wearing either is pinged once. On the **Logs** page ▸ **golive**, the `golive.spotlight_announced` row carries `fan_role_id`. ⚠️ With no ping role on the channel it mentions only the go-live role, exactly as it did at v148 |
+| `SP-d` | Four hours into that stream, look at the reminder | ⚠️ **It pings NOBODY** — no role mention, nothing bold at the top — and its `golive.spotlight_bumped` row says `pinged: false`. That is `spotlight_bump_pings`, which ships **false**. Now turn it **on** (Go-live page ▸ **How streams are spotted** ▸ *Whether a reminder pings…*) and press **Bump now** on the row's drawer: the reminder that appears mentions the same two roles the announcement did, and its row says `pinged: true`. ⚠️ A ping every four hours through a 24-hour marathon is what the default is protecting you from |
+| `SP-e` | Add a channel with **Days to keep it** = 1, give it a ping role (`SP-a`), then let it run out — or press **Remove** on its Spotlight group | The row leaves the list AND its ping role goes with it: on the **Logs** page ▸ **pings**, one `pings.fan_role_removed` row whose `because` reads `spotlight_expired` (or `spotlight_removed`). ⚠️ **Whether the Discord ROLE is deleted is `pings_fan_role_delete`** — with it on the role is gone from Server Settings ▸ Roles; with it off the role is left behind for you to tidy up and the row says `deleted: false`. Anybody wearing it simply stops being pinged either way |

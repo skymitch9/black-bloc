@@ -1,6 +1,10 @@
 # A ping role for a spotlight channel — GamesDoneQuick pings, the way a member's fan role pings
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-20 19:4x), dispatched to
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `spotlight-pings`, 2026-09-20**,
+> off `main` `552af36` (v149 live) — schema **50**, registry **294**, mock **193 routes**; ⚠️ **NOT merged, NOT deployed,
+> and nothing in it has met Discord.** **Read `## Deviations` (thirteen) and `## What was NOT verified` at the foot BEFORE
+> reading §A–§F as built** — the biggest is that `golive_fan_roles` had to be REBUILT, not widened, so the live database
+> gets a table rebuild on the next boot. Was: 📐 **DESIGN (Fable, 2026-09-20 19:4x), dispatched to
 > Opus as branch `spotlight-pings`** the same turn (owner: *"yes design and build it … I dont see why we're waiting for
 > something i just asked for"*). **Last verified: 2026-09-20 19:3x** against `main` `6df0635` (v149 live):
 > `black_bloc/pings.py` — the fan-role table is **`golive_fan_roles`** (`get_fan_role(db, guild_id, user_id)` `:187`,
@@ -96,4 +100,136 @@ deploy: an added column + a partial index through the bootstrap; `Database.conne
 
 ## Deviations
 
-*(the build agent writes here what it had to do differently, dated)*
+*(written by the build agent, branch `spotlight-pings`, **2026-09-20**, off `main` `552af36` (v149
+live). Everything §A–§F asks for that is not listed here was built exactly as the body says.)*
+
+1. ⚠️ **The table is REBUILT, not just widened, and the primary key is gone.** §A says relax `user_id`
+   "the way `posts.channel_id` is nullable" — but `golive_fan_roles` declared `user_id INTEGER NOT
+   NULL` *inside a `PRIMARY KEY (guild_id, user_id)`*, and SQLite cannot drop NOT NULL with `ALTER
+   TABLE`. So `Database._set_aside_fan_roles_that_require_a_member` renames the old table before the
+   bootstrap and `_restore_set_aside_fan_roles` copies it back afterwards, column by column (the
+   intersection of the two shapes, so a file that never got `unworn_since` migrates too) — the same
+   two-step `mod_cases` uses. The new shape has **no PRIMARY KEY at all**: two partial unique indexes,
+   `golive_fan_roles_one_member (guild_id, user_id) WHERE user_id IS NOT NULL` and
+   `golive_fan_roles_one_spotlight (guild_id, spotlight_id) WHERE spotlight_id IS NOT NULL`. Relying
+   on SQLite's legacy "NULLs are allowed in a PRIMARY KEY" quirk would have worked and is exactly the
+   kind of thing a later `STRICT` table or a rebuild breaks silently. `spotlight_id` is in
+   `ADDED_COLUMNS` as well, so a file whose table is already loosened still gains the column.
+
+2. **`all_fan_roles` returns both kinds through a LEFT JOIN, and the member-only callers say so.**
+   §A asks for rows carrying `spotlight_login` / `spotlight_name`, which is one join on
+   `spotlight_channels`. The cost: every caller that did `int(row["user_id"])` would have raised on a
+   channel's row. `pings.member_fan_roles` / `spotlight_fan_roles` are the filtered readers, and
+   `row_for` skips a NULL member rather than crashing. Named because the next feature that reads this
+   table has to make the same choice: **`prune_empty_roles`, `follower_counts` and the onboarding
+   prompt are deliberately members-only.** A channel's role is not pruned after 30 unworn days — it
+   goes when the channel goes (§A), the only lifetime the owner asked for — and Discord's onboarding
+   *Which streamers?* prompt is built from the streamer LIST, which a channel is not on.
+
+3. **The announcement's detail is `fan_role_id`, not §E's `pinged_role`.** §E says to copy
+   `golive.announce`'s detail name, and the name it actually uses is `fan_role_id`
+   (`cogs/content/golive.py:1114`). One name, both feeds.
+
+4. **A reminder that pings mentions BOTH roles, not just the channel's.** §B says only *"unless
+   `spotlight_bump_pings`"* and names no roles. It uses the same `ping_prefix(golive_ping_role_id,
+   fan_role_id)` the announcement does, so a reminder either reads exactly like the announcement or
+   pings nobody — there is no third spelling. With the key off the prefix is empty AND
+   `allowed_mentions` is `roles=False`, so a role id typed into the template by hand cannot ping.
+
+5. **The `/golive` ▸ Spotlight… sub-panel's move is ONE button that flips**, *Give it a ping role* or
+   *Remove its ping role*, never both — the owner's 2026-09-03 rule (a move renders only when it is
+   valid). Worst case the row's button row is five, which is Discord's per-row cap exactly: Extend a
+   week · Keep for ever · Bump now · the role button · Remove.
+
+6. ⚠️ **`GivePick` was NOT taught `spotlight:<id>`, because it cannot be.** §C asks for
+   `FollowPick`/`StreamerPick`/`GivePick` to understand the value; `GivePick` is a
+   `discord.ui.UserSelect` and Discord only lets it offer members. A channel's staff door is
+   `StreamerPick` (which does list channels, and whose card carries **Make the role again** /
+   **Remove their ping role**) and the `/golive` ▸ Spotlight… button. Say the word and it becomes a
+   second select beside the user picker.
+
+7. **The `/pings` counts line gains a fourth clause rather than being rewritten.** §C asks for *"N
+   people and M channels"*; the line already said *"N streamer(s) seen · M on the list · K with a role
+   Discord still has"*, so it now ends *"· **C** spotlighted channel(s) with one"* and `with_role`
+   counts people only. One number, one meaning.
+
+8. **The first announcement writes Twitch's own spelling onto the row.** A row added by hand only
+   knows the login, so its ping role would have been called *gamesdonequick pings*. `_announce`
+   already reads `stream.user_name` for the card; it now saves it as `display_name` when it differs,
+   which is what makes the role, the drawer and the Ping-role cell all read **GamesDoneQuick**.
+   Measured, not reasoned: the give-a-role test asserted *gamesdonequick pings* before this and
+   **GamesDoneQuick pings** after one announcement has run.
+
+9. **`GET /api/pings/list` carries a channel with `last_live_at: null` and `live_count: 0`.** §C says
+   the list includes channels with `kind: 'spotlight'` and says nothing about streaming history; the
+   sessions live on the Go-live page's own spotlight payload, and copying them here would be the same
+   fact in two places. `first_live_at` is the row's `added_at`, the only date this table honestly
+   knows. `golive-join.js` skips these rows (a null member id never reaches `reach`), so the page is
+   unchanged by them.
+
+10. **The contract's `{spotlight_id}` is Frost Fatales, so the mock seeds IT a ping role too.**
+    `check.mjs` pins `spotlight_id: '3'` (the row with no open session), so
+    `DELETE /api/pings/streamers/spotlight/{spotlight_id}` needs row 3 to have a role or it answers
+    the 404 it should. The mock now holds two channel roles: GamesDoneQuick's (a real `ROLES` entry,
+    worn by three people, which is what the page draws) and Frost Fatales' (a role id deliberately NOT
+    in `ROLES` — the deleted-by-hand half for a channel). ESA Marathon has none, which is the **Add a
+    ping role…** door.
+
+11. **The python contract seed's channel role points at a role the fake guild does not have** (id
+    `999999`). The DELETE entry has to succeed on every run, and pointing it at `PLAIN_ROLE_ID` would
+    have let `pings_fan_role_delete` take a role the role-grant entries read out of the shared seed.
+
+12. **A row that is BOTH a member's login and a spotlight keeps the MEMBER's ping role in its cell.**
+    The join fills a row's `role_*` from the spotlight payload only when the row has none, so the two
+    can never disagree about one cell. Both roles still exist and both are still mentioned by their
+    own announcement.
+
+13. **NOT done, deliberately:** nothing merged, nothing deployed, nothing pushed to `main`; no key
+    flipped — `spotlight_bump_pings` ships **false** as its registry default and no guild row was
+    written; `TODO.md`, `DONE.md`, `deploys.log` and `KNOWN_ISSUES.md` untouched; no role is made
+    automatically for a channel (there is no `pings_fan_role_creation auto` path for one — staff or
+    the first follower makes it, exactly as §A's one path does for a person); the Live-now card and
+    Recent streams say nothing about a channel's ping role; `pings_empty_role_days` still ignores
+    channels (deviation 2).
+
+## What was NOT verified
+
+⚠️ **Nothing here has met Discord.** No announcement has pinged a channel's fan role in a real
+channel, no reminder has been posted with or without `spotlight_bump_pings`, no button on `/golive` ▸
+Spotlight… or `/pings` has been pressed, and no member has followed GamesDoneQuick. The whole
+verification is `pytest` (both orders), `ruff`, the ES-module parse, `site/mock/check.mjs`, the four
+node fixture files and **one headless-browser pass over the MOCK's Go-live page**.
+
+⚠️ **The migration has NOT run on the live database.** Schema 50 was applied by `Database.connect`
+into the suite's `tmp_path` files only; the Fly volume has never seen a `golive_fan_roles` without a
+PRIMARY KEY. ⚠️ **This one is a table REBUILD, not an added column** (Deviations 1) — the live fan-role
+rows are copied out and back inside `connect()`, so migrate-before-deploy is automatic only in the
+sense that `connect()` runs before anything reads. A copy of `data/blackbloc.sqlite3` taken before the
+deploy is cheap insurance. The rebuild has been exercised on a hand-built schema-49 file
+(`tests/storage/test_db.py::test_a_schema_49_file_lets_a_ping_role_belong_to_a_channel_and_keeps_its_rows`)
+and nowhere else.
+
+Specifically NOT verified:
+
+- **That Discord renders two role mentions in one announcement prefix.** `ping_prefix` is the
+  construct a member's announcement already uses, so this is inherited rather than new — but nothing
+  here has been seen in a channel.
+- **That deleting a channel's role on expiry is what staff expect.** `pings_fan_role_delete` is a
+  server-wide setting and it now reaches channels too; nobody has watched a spotlight expire and found
+  the role gone from the server.
+- **The 25-option cap with channels on the select.** `FollowPick` caps the COMBINED list at 25, so a
+  server with 25 followable people would show no channels at all. The cap is tested; the crowded case
+  has never been rendered in Discord.
+- **Any browser but the mock's.** What WAS rendered, 2026-09-20 on `MOCK_PORT=8794` through
+  `chrome-headless-shell` 149 driven over CDP: the GamesDoneQuick row reads *GamesDoneQuick · CHANNEL
+  ONLY · gamesdonequick · — · **GamesDoneQuick pings · 3** · LIVE NOW · KEPT FOR EVER · —*, and its
+  drawer carries *Ping role | GamesDoneQuick pings · 3 wearing it | Remove*; the ESA Marathon row's
+  Ping-role cell is *—* and its drawer carries *Ping role | none yet | Add a ping role…*. ⚠️ **Neither
+  button was pressed in the browser** — the routes behind them are covered by `check.mjs` and the
+  suite, not by a click.
+- ⚠️ **One pre-existing 400 was seen and left alone:** `GET /api/requests?status=pending&per_page=1`
+  answers 400 on the mock (`pending` was retired at schema 23). Nothing on this branch touches that
+  route or its caller, and `KNOWN_ISSUES.md` was out of scope.
+- **A channel followed by somebody who then leaves the server**, and **two staff pressing Add a ping
+  role on the same channel at once** — the partial unique index makes one of them lose and the loser
+  gets the *already has a ping role* sentence, but nothing raced them.
