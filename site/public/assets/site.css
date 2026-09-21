@@ -1471,24 +1471,35 @@ dialog.palette::backdrop { background: var(--bb-scrim); }
 }
 .palette .say-nothing { padding: 14px; }
 
-/* The right-hand detail drawer. A native <dialog> so Escape, the focus trap
-   and the backdrop come from the platform; the margins are what put it on the
-   right edge instead of the middle. */
+/* The floating, centred detail modal (a right-hand drawer until the owner
+   asked to swap it so the Discord mock inside it is readable). A native
+   <dialog> so Escape, the focus trap and the backdrop come from the
+   platform; the width is wide enough for the editor and the mock together,
+   the height fits the content up to a cap, and the modal scrolls inside
+   itself past that. */
 dialog.drawer {
-  width: min(30rem, 100vw);
-  max-width: 100vw;
-  height: 100dvh;
-  max-height: 100dvh;
-  margin: 0 0 0 auto;
+  width: min(64rem, 96vw);
+  max-width: 96vw;
+  height: auto;
+  max-height: min(90vh, 100dvh);
+  margin: auto;
   padding: 0;
-  border: 0;
-  border-left: var(--et-border-w) solid var(--et-hairline);
-  border-radius: 0;
+  border: var(--et-border-w) solid var(--et-hairline);
+  border-radius: var(--et-radius-lg);
   background: var(--et-bg-2);
   color: var(--et-fg);
   box-shadow: var(--et-shadow-lift);
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity var(--et-dur-fast) var(--et-ease), transform var(--et-dur-fast) var(--et-ease);
 }
 dialog.drawer::backdrop { background: var(--bb-scrim); }
+@starting-style {
+  dialog.drawer[open] { opacity: 0; transform: scale(.97); }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.drawer { transition: none; }
+}
 .drawer-inner { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .drawer-head {
   display: flex;
@@ -1499,6 +1510,7 @@ dialog.drawer::backdrop { background: var(--bb-scrim); }
   padding: 0 16px;
   border-bottom: var(--et-hairline-w) solid var(--et-hairline);
   background: var(--et-shell-bg);
+  border-radius: var(--et-radius-lg) var(--et-radius-lg) 0 0;
 }
 .drawer-title {
   flex-grow: 1;
@@ -1513,6 +1525,19 @@ dialog.drawer::backdrop { background: var(--bb-scrim); }
 }
 .drawer-body { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 16px; }
 .drawer-body > .card { border: 0; background: transparent; box-shadow: none; }
+
+@media (max-width: 600px) {
+  dialog.drawer {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .drawer-head { border-radius: 0; }
+}
 .ask-inner { padding: 16px; display: grid; gap: 8px; }
 .ask-inner h2 { margin: 0; font-family: var(--bb-chrome-font); font-size: var(--et-ui-lg); }
 .ask-body { margin: 0; font-size: var(--et-ui-md); text-wrap: pretty; }

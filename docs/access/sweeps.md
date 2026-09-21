@@ -1,6 +1,13 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-20** — rows **`CM-a` … `CM-b`** added at the foot for THE CENTRED MODAL (branch `centre-modal`, off
+> `main` `e177b27`; design [`../info/ux-audit-design.md`](../info/ux-audit-design.md) ▸ Deviations, 2026-09-20 entry).
+> Owner: *"for post the side modal is cool but its hard to see the how this will render in discord section, lets swap
+> the left hand modals for floating center modals."* ⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET
+> DISCORD** — every claim is `chrome-headless-shell` against the local mock. Both rows can be run from a laptop any
+> time. Rows are lettered; the conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked
+> then.** Before that,
 > **2026-09-20 20:4x** — rows **`DM-a` … `DM-d`** appended at the foot for THE DISCORD MOCK (branch `discord-mock`, off
 > `main` `be78bff`; design [`../info/discord-mock-design.md`](../info/discord-mock-design.md); ⚠️ **not merged, not
 > deployed, and NOTHING IN IT HAS MET DISCORD** — `DM-b` is the only row that can ever prove the mock matches a real
@@ -2437,3 +2444,19 @@ below is **not verified**; everything else is). Staff door: **Runs the cookout**
 |---|---|---|
 | `ET-a` | Open the Events page, open **Queue**, and look at the buttons on every open (pending, approved, live) event's row — including one whose review room or post still exists | ⚠️ **No Remove its room / Remove its post anywhere.** The row offers only **Open**, **Approve** / **Deny** (pending only), **Cancel** (unless denied or cancelled) and, once the events forum exists and the event still has a room, **Move to the forum**. A settled event's detail card still shows its **Review channel** / **Review post** line — that display did not change, only the button that deleted it |
 | `ET-b` | Open **Settings**, find **The forum every event is posted in** (`events_forum_channel_id`) and **Whether an event gets its own room or a forum post** (`events_review_mode`). With the key blank, press **Make the forum**; then reload and look again | Both keys edit in place under **Settings**, same as every other `events_*` key — there is no separate **Events forum** section any more. **Make the forum** sits beside the `events_forum_channel_id` row and reads exactly as the old card's button did; pressing it makes the forum, fills the row with the new channel, and reloads — the button is then **gone**, because it renders only while the key is blank. ⚠️ **390 px overflow not verified this pass** — say so rather than guess |
+## THE DRAWER BECOMES A CENTRED MODAL (rows `CM-a` … `CM-b`; branch `centre-modal`, off `main` `e177b27`, design [`../info/ux-audit-design.md`](../info/ux-audit-design.md) ▸ Deviations, 2026-09-20)
+
+Owner, looking at the posts drawer with the Discord mock under the editor: *"for post the side
+modal is cool but its hard to see the how this will render in discord section, lets swap the left
+hand modals for floating center modals."* CSS only — `ui.js:openDrawer`/`closeDrawer` did not
+change, and neither did any page file. Every page that opens a drawer (Posts, Go-live, Moderation,
+Modmail, post versions) gets the new shape for free.
+
+⚠️ **Not merged, not deployed, and NOTHING below has met Discord.** Every claim is
+`chrome-headless-shell` against the local mock, driven over raw CDP (no `puppeteer` package in this
+tree).
+
+| Row | Do | Expect |
+|---|---|---|
+| `CM-a` | On a wide window (about 1500px or wider), open the **Posts** page and click a post row | The editor opens in a box **floating in the middle of the screen**, not docked to the right edge — equal gaps left and right, a dark scrim behind it, rounded corners and a drop shadow. It is wide enough that the message box and the *What Discord will show* pane underneath it are both easy to read without squinting. **Escape** closes it, clicking the dark area outside it closes it, and the header still shows the post's title with a **Close** button |
+| `CM-b` | With a post open, press **Delete this post** | The confirmation ("Delete "…"?") appears **on top of** the post editor, which stays visible (dimmed) behind it — not hidden, not replaced. Cancel it and the editor is exactly as it was. Then shrink the window to a phone width (or open the page on a phone): the same post editor now **fills the whole screen**, edge to edge, with no side-to-side scrolling anywhere on the page |
