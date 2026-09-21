@@ -71,7 +71,7 @@ const SWAP_NOTE = 'The people move; the times belong to the position and stay pu
 const NEW_NOTE = 'Times are read in {tz}. The lineup is posted once and edited in place after '
   + 'that.';
 const ALSO_EVENT_HELP = 'The event goes to the events review, where a Lead approves or denies '
-  + 'it. Its starting position is the raid_train_event_default setting below.';
+  + 'it. Which way this starts is raidtrain_event_default, under Settings and logs below.';
 const PUT_IN_BODY = 'They need a Twitch channel linked, because the lineup carries the name the '
   + 'streamer before them raids.';
 
