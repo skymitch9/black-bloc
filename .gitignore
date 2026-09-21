@@ -27,3 +27,7 @@ scripts/scan/
 
 # .env.enc (scripts/env-lock.sh) is NEVER committed — purged from history 2026-09-10 before the repo went public
 .env.enc
+
+# Gate logs written by a build run, never committed (only bot code goes in)
+/gate.log
+/gate-reverse.log
