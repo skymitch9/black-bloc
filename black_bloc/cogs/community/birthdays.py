@@ -34,8 +34,6 @@ from ...birthdays import (
     clamp_month_day,
     date_modal_title,
     date_problem,
-    import_as_of_year,
-    load_import_rows,
     local_today,
     member_zone_name,
     month_day_text,
@@ -48,14 +46,12 @@ from ...birthdays import (
     parse_birthday_input,
     parse_color,
     render_description,
-    resolve,
     status_lines,
     stored_line,
     stored_prefill,
     stored_sentence,
     upcoming,
     upcoming_lines,
-    year_from_age,
     year_problem,
 )
 from ...command_errors import AnswersErrors
@@ -81,8 +77,6 @@ from ..core import clear_key
 log = logging.getLogger(__name__)
 
 LOOP_MINUTES = 5
-IMPORT_HOURS = 24
-CANDIDATES_SHOWN = 3
 ROLE_REASON = "Black Bloc birthday"
 COG_NAME = "Birthdays"
 
@@ -109,7 +103,7 @@ OPTED_IN = "You are opted back in. Black Bloc will post on the day again."
 ALREADY_OPTED = "You were already opted {state}, so nothing changed."
 NOBODY_YET = (
     "Nobody has a birthday stored yet. People add their own with **Set my birthday** on "
-    "`/birthday`, and the Birthday Bot list is brought over automatically once a day."
+    "`/birthday`."
 )
 NONE_THIS_MONTH = "Nobody has a birthday stored in **{month}**."
 NOTHING_UPCOMING = (
@@ -245,14 +239,6 @@ async def stored_counts(db: Any, guild_id: int) -> dict[str, int]:
     return totals
 
 
-def candidate_text(match: Any) -> str:
-    shown = ", ".join(
-        f"{c.display_name} (<@{c.user_id}>)" for c in match.candidates[:CANDIDATES_SHOWN]
-    )
-    more = len(match.candidates) - CANDIDATES_SHOWN
-    return shown + (f" and {more} more" if more > 0 else "")
-
-
 async def members_of(guild: Any) -> list[Any]:
     """Every member Black Bloc can see, chunking first when the cache is short."""
     members = list(getattr(guild, "members", ()) or ())
@@ -264,70 +250,6 @@ async def members_of(guild: Any) -> list[Any]:
             log.warning("birthdays: could not fill the member cache (%s)", exc)
         members = list(getattr(guild, "members", ()) or ())
     return members
-
-
-async def import_rows(
-    bot: Any, guild: Any, rows: list[Any], as_of: int, members: list[Any]
-) -> dict[str, list[str]]:
-    """The Birthday Bot seed, for slash and web alike: what was taken and what was not."""
-    result: dict[str, list[str]] = {
-        "imported": [],
-        "already": [],
-        "ambiguous": [],
-        "not_found": [],
-    }
-    for row in rows:
-        where = f"{row.display_name} — {month_day_text(row.month, row.day)}"
-        match = resolve(row, members)
-        if match.status == "not_found":
-            result["not_found"].append(where)
-            continue
-        if match.status == "ambiguous":
-            result["ambiguous"].append(f"{where} → {candidate_text(match)}")
-            continue
-        user_id = match.member_id
-        existing = await get_birthday(bot.db, user_id)
-        if existing is not None:
-            result["already"].append(
-                f"{where} → <@{user_id}> (kept the {existing['source']} entry)"
-            )
-            continue
-        await save_birthday(
-            bot.db,
-            guild.id,
-            user_id,
-            row.month,
-            row.day,
-            year_from_age(row.age_shown, as_of),
-            "import",
-        )
-        result["imported"].append(f"{where} → <@{user_id}>")
-    return result
-
-
-def report_lines(result: dict[str, list[str]], as_of_year: int, searched: int = 0) -> list[str]:
-    lines = [
-        f"**{len(result['imported'])} imported** · {len(result['already'])} already stored · "
-        f"{len(result['ambiguous'])} ambiguous · {len(result['not_found'])} not found",
-        f"Matched against the **{searched}** members Black Bloc can see in this server.",
-    ]
-    if result["imported"]:
-        lines.append(
-            f"Ages came from the {as_of_year} export, so a stored year can be a year out until "
-            "the person corrects their own birthday."
-        )
-    for heading, key in (
-        ("Imported", "imported"),
-        ("Already stored, left alone", "already"),
-        ("Ambiguous — set these by hand, from the Birthdays page or the `/birthday` panel",
-         "ambiguous"),
-        ("Not found — nobody in the server matched", "not_found"),
-    ):
-        if not result[key]:
-            continue
-        lines.append(f"**{heading}**")
-        lines += [f"· {entry}" for entry in result[key]]
-    return lines
 
 
 async def dm(user: Any, text: str) -> bool:
@@ -765,10 +687,7 @@ async def send_status(interaction: discord.Interaction) -> None:
         "staff": staff_roles_sentence(store.staff_roles(guild)),
         "last_run_at": cog.last_run_at,
         "last_error": cog.last_error,
-        "last_import_at": cog.last_import_at,
-        "last_import_error": cog.last_import_error,
         "loop_minutes": LOOP_MINUTES,
-        "import_hours": IMPORT_HOURS,
     }
     await said_after(interaction, "\n".join(status_lines(values)))
 
@@ -888,8 +807,6 @@ class ForgetTheirsButton(discord.ui.Button):
         await open_forget_confirm(interaction, self.member, self.view)
 
 
-
-
 class DateModal(AnswersErrors, discord.ui.Modal):
     typed = discord.ui.TextInput(
         label=DATE_LABEL, placeholder=DATE_PLACEHOLDER, max_length=DATE_INPUT_LIMIT
@@ -943,25 +860,19 @@ class Birthdays(commands.Cog):
         self._said: dict[tuple[int, str], str] = {}
         self.last_run_at: str | None = None
         self.last_error: str | None = None
-        self.last_import_at: str | None = None
-        self.last_import_error: str | None = None
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name == "_sweep":
             return (self.last_run_at, self.last_error)
-        if name == "_import_loop":
-            return (self.last_import_at, self.last_import_error)
         return (None, None)
 
     async def cog_load(self) -> None:
         if not self.bot.db.is_connected:
             return
         self._sweep.start()
-        self._import_loop.start()
 
     async def cog_unload(self) -> None:
         self._sweep.cancel()
-        self._import_loop.cancel()
 
     @tasks.loop(minutes=LOOP_MINUTES)
     async def _sweep(self) -> None:
@@ -987,63 +898,12 @@ class Birthdays(commands.Cog):
         log.error("birthdays: the sweep stopped; restarting it", exc_info=exc)
         self._sweep.restart()
 
-    @tasks.loop(hours=IMPORT_HOURS)
-    async def _import_loop(self) -> None:
-        if not self.bot.db.is_connected:
-            return
-        try:
-            await self.import_once()
-        except Exception as exc:
-            self.last_import_error = f"{type(exc).__name__}: {exc}"
-            log.exception("birthdays: the daily import failed")
-            return
-        self.last_import_error = None
-        self.last_import_at = datetime.now(UTC).isoformat()
-
-    @_import_loop.before_loop
-    async def _before_import(self) -> None:
-        await wait_ready(self.bot, self._import_stopped)
-
-    @_import_loop.error
-    async def _import_stopped(self, exc: BaseException) -> None:
-        """The loop stops for the life of the process unless it is started again."""
-        self.last_import_error = f"{type(exc).__name__}: {exc}"
-        log.error("birthdays: the daily import stopped; restarting it", exc_info=exc)
-        self._import_loop.restart()
-
-    async def import_once(self) -> None:
-        """One pass of the Birthday Bot seed; the log channel only hears about new rows."""
-        rows = load_import_rows()
-        if not rows:
-            log.warning("birthdays: the seed file has no rows, so there was nothing to import")
-            return
-        as_of = import_as_of_year()
-        for guild in list(getattr(self.bot, "guilds", ())):
-            if getattr(guild, "unavailable", False):
-                log.info("birthdays: import skipped %s — the server is unavailable", guild.id)
-                continue
-            members = await self.members_of(guild)
-            result = await self._import(guild, rows, as_of, members)
-            counts = {key: len(value) for key, value in result.items()}
-            if not result["imported"]:
-                log.info("birthdays: the daily import took nothing new — %s", counts)
-                continue
-            await log_action(
-                self.bot,
-                guild,
-                "birthday.import",
-                actor=None,
-                details=counts | {"searched": len(members), "trigger": "daily"},
-            )
-
     @commands.Cog.listener()
     async def on_ready(self) -> None:
         if not self.bot.db.is_connected:
             return
         if not self._sweep.is_running():
             self._sweep.start()
-        if not self._import_loop.is_running():
-            self._import_loop.start()
 
     async def run_once(self, now: datetime | None = None) -> None:
         """One pass: today's birthdays announced once, yesterday's role taken back."""
@@ -1297,14 +1157,6 @@ class Birthdays(commands.Cog):
         else:
             await render_card(interaction, member, previous)
         await said_after(interaction, said)
-
-    async def members_of(self, guild: Any) -> list[Any]:
-        return await members_of(guild)
-
-    async def _import(
-        self, guild: Any, rows: list[Any], as_of: int, members: list[Any]
-    ) -> dict[str, list[str]]:
-        return await import_rows(self.bot, guild, rows, as_of, members)
 
 
 async def setup(bot: commands.Bot) -> None:

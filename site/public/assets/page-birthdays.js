@@ -1,4 +1,4 @@
-import { api, listOf, names, notesOf, send, settings, settingsNamespace } from './api.js';
+import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
 import {
@@ -26,7 +26,6 @@ import {
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 let refresh = () => {};
-let lastImport = null;
 
 const TEMPLATE_KEY = 'birthday_template';
 const COLOR_KEY = 'birthday_color';
@@ -85,36 +84,6 @@ function setCard() {
     el('p', { class: 'field-help', text: 'The year is optional, and only used when birthday_show_age is on.' }),
     bar([save]),
     say,
-  ]);
-}
-
-function importCard() {
-  const say = notice();
-  const report = el('div');
-  for (const line of notesOf(lastImport || {})) report.append(el('p', { class: 'field-help', text: line }));
-
-  const go = button('Import the Birthday Bot list', async () => {
-    const sure = await ask({
-      title: 'Import the Birthday Bot export?',
-      body: [
-        'Black Bloc reads the export it ships with, matches each row against the members it can see, and stores the ones it is sure about.',
-        'A birthday somebody already has is left exactly as it is; ambiguous rows are listed for you to set by hand.',
-      ],
-      confirmLabel: 'Import it',
-      tone: 'warn',
-    });
-    if (!sure) return;
-    const done = await run(say, () => send('/api/birthdays/import', 'POST', {}), 'Imported.');
-    if (!done.ok) return;
-    lastImport = done.found;
-    refresh();
-  }, { tone: 'warn', small: false });
-
-  return card('Import from Birthday Bot', [
-    el('p', { class: 'field-help', text: 'Safe to run twice — nothing already stored is overwritten.' }),
-    bar([go]),
-    say,
-    report,
   ]);
 }
 
@@ -197,7 +166,7 @@ async function load() {
   months.body.append(sayAgain('birthdays.months', say));
 
   const add = section('Add or change one');
-  add.body.append(setCard(), importCard());
+  add.body.append(setCard());
 
   const wording = section('Birthday wording');
   if (template) {

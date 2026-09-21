@@ -73,7 +73,7 @@ from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CH = 111
-GROUP_COUNT = 25
+GROUP_COUNT = 24
 
 
 @pytest.fixture
@@ -176,6 +176,24 @@ def test_every_key_lands_in_exactly_one_of_the_twenty_four_groups():
     counted = Counter(key for group in found for key in keys_in(group))
     assert set(counted) == set(KEY_TYPES)
     assert set(counted.values()) == {1}
+
+
+def test_no_group_is_the_singular_of_another_one():
+    """Owner, 2026-09-20: "there are 2 events areas, event and events. find all and combine them."
+
+    `event_panel_minutes` / `event_panel_own_list` named their prefix after the `/event`
+    command, so `namespace_of` opened an `event` group of two beside the `events` group of
+    37 — two Events sections on the Settings page and two entries in `/settings` ▸ **A
+    setting group…**. Both are NAMESPACE_OVERRIDE'd onto `events`; this is what stops the
+    next `*_panel_*` key doing it again."""
+    found = groups()
+    twins = [group for group in found if f"{group}s" in found]
+
+    assert twins == [], (
+        f"{twins} each have a plural group beside them, so the Settings page draws two "
+        "sections for one feature and /settings offers two groups. Put the odd keys under "
+        "the existing namespace with settings_store.NAMESPACE_OVERRIDE."
+    )
 
 
 def test_the_settings_groups_fit_the_select():

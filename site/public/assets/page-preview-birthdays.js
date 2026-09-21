@@ -7,7 +7,6 @@ import {
   el,
   field,
   fillTemplate,
-  foldout,
   humanLabel,
   nameNode,
   notice,
@@ -261,17 +260,6 @@ function setForm(say) {
   ];
 }
 
-function importFoldout(say) {
-  return foldout('Import from Birthday Bot', [
-    el('p', { class: 'field-help', text: 'Safe to run twice — nothing already stored is overwritten.' }),
-    el('p', { class: 'field-help', text: 'Black Bloc reads the export it ships with, matches each row against the members it can see, and stores the ones it is sure about. A birthday somebody already has is left exactly as it is; ambiguous rows are listed for you to set by hand.' }),
-    bar([button('Import the Birthday Bot list', () => {
-      wouldDo(say, 'POST /api/birthdays/import — read the Birthday Bot export, match each row against the members it can see and store the ones it is sure about');
-    }, { tone: 'warn', small: false })]),
-    say,
-  ]);
-}
-
 function wordingCard(say, onDirty) {
   const spec = DATA.settings.find((one) => one.key === TEMPLATE_KEY);
   const color = DATA.settings.find((one) => one.key === COLOR_KEY).value;
@@ -330,7 +318,7 @@ async function load() {
   const banner = previewBanner({
     today: 5,
     preview: 3,
-    note: 'Set a birthday and the Birthday Bot import are one drawer off the page head; the wording moved into Settings, beside the colour it is drawn in.',
+    note: 'Set a birthday is one drawer off the page head; the wording moved into Settings, beside the colour it is drawn in.',
   });
   banner.setAttribute('data-span', 'full');
 
@@ -339,10 +327,7 @@ async function load() {
   if (aside) {
     aside.replaceChildren(button('Set a birthday', () => {
       const drawerSay = notice();
-      openDrawer('Set a birthday', [
-        ...setForm(drawerSay),
-        importFoldout(notice()),
-      ]);
+      openDrawer('Set a birthday', setForm(drawerSay));
     }, { small: false }));
   }
 
@@ -380,7 +365,7 @@ async function load() {
     box.append(card(MONTHS[at - 1], [monthTable(list)]));
   }
   months.body.append(
-    previewWas('Replaces By month and Add or change one. The list is section one and it is open on arrival, so the page opens on the birthdays rather than on a blank form; Set a birthday and the import are the page-head action.'),
+    previewWas('Replaces By month and Add or change one. The list is section one and it is open on arrival, so the page opens on the birthdays rather than on a blank form; Set a birthday is the page-head action.'),
     searchOver(box, {
       label: 'Search the birthday list',
       placeholder: 'a name, a month or a day',

@@ -1,5 +1,19 @@
 # Phase 5 design — birthdays (F6)
 
+> 🔴 **RETIRED IN PART, 2026-09-20 (branch `events-group`, off `main` `5ea8d44`) — THE BIRTHDAY BOT
+> IMPORT IS GONE, WHOLE.** Owner: *"in bvirthdays remove the import from birthday bot, its been
+> kicked"* — the bot that produced the export was kicked from the server, so the source no longer
+> exists. ~~Every bullet below about importing the 39-row export~~ is history: the seed file
+> `black_bloc/data/birthday_import_2026-08-05.json`, `birthdays.parse_export` / `ImportRow` /
+> `load_import_rows` / `import_as_of_year` / `resolve` / `score_member(s)` / `strip_tags` /
+> `year_from_age`, the cog's `import_rows` / `report_lines` / `candidate_text` / `_import_loop` /
+> `import_once`, `POST /api/birthdays/import`, the site's **Import from Birthday Bot** card and
+> the `birthday.import` log kind are all DELETED. The **stored** birthdays are untouched — a row
+> whose `source` is `import` keeps it, and the status line still counts them. The transcribed
+> export survives as the archive doc
+> [`../archive/current-bots/birthday-bot-export-2026-08-05.md`](../archive/current-bots/birthday-bot-export-2026-08-05.md),
+> which is the only copy left.
+>
 > ⚠️ **SUPERSEDED IN PART, 2026-09-03 (v63, `616adb3`) — the slash surface is gone.**
 > `/birthday` is ONE command that opens an ephemeral panel and all twelve subcommands are
 > retired. See [`birthdays-panel-design.md`](birthdays-panel-design.md) and

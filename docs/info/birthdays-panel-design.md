@@ -1,5 +1,13 @@
 # Birthdays — `/birthday` is ONE command that opens a panel
 
+> 🔴 **2026-09-20 (branch `events-group`, off `main` `5ea8d44`): the BIRTHDAY BOT IMPORT is gone,
+> whole** — owner, *"in bvirthdays remove the import from birthday bot, its been kicked"*. This
+> document's *"Five strings and `report_lines` name retired commands and are rewritten"* is
+> history: ~~`report_lines`~~ is DELETED along with the rest of the importer, and `NOBODY_YET`
+> no longer promises that *"the Birthday Bot list is brought over automatically once a day"*.
+> Every other birthdays behaviour in this document is unchanged. Retirement banner and the full
+> deletion list: [`phase5-design.md`](phase5-design.md).
+>
 > **Audience:** the build agent and the reviewer. **Status:** TRACKED · ✅ **LIVE** — built on
 > `worktree-agent-a19bdce15408f8243` (2026-09-03; branched from `main` at `d3da02c`), Fable-reviewed
 > with no defect found, merged `58974e1` 13:47, **live since v63** (`616adb3`, 2026-09-03 13:58;

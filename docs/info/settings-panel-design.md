@@ -173,8 +173,13 @@ underscore. That yields **22 groups** — under Discord's 25-option cap, so ONE 
 every group with no `capped_placeholder`.
 
 > ⚠️ **Six of the 22 are singletons produced by a naming mismatch, and the Settings page
-> already shows them that way.** `event_panel_minutes`/`event_panel_own_list` → **`event`**
-> while `events_mode` → **`events`**; `voice_panel_minutes` → **`voice`** while
+> already shows them that way.** ~~`event_panel_minutes`/`event_panel_own_list` → **`event`**
+> while `events_mode` → **`events`**~~ — **REVERSED 2026-09-20** on branch `events-group`
+> (owner: *"there are 2 events areas, event and events. find all and combine them"*): both
+> keys are `NAMESPACE_OVERRIDE`'d onto **`events`**, so there is one Events group, the count
+> drops to 24, and `tests/test_settings_panel.py::test_no_group_is_the_singular_of_another_one`
+> fails the next key that re-opens a plural twin. The other five stand:
+> `voice_panel_minutes` → **`voice`** while
 > `tempvoice_mode` → **`tempvoice`**; `memory_panel_minutes` → **`memory`** while
 > `chat_memory_mode` → **`chat`**; and `hide_commands_when_off` → **`hide`**,
 > `emoji_skin_tone` → **`emoji`**, `cost_hosting_usd` → **`cost`**. §J reports it; §B reuses

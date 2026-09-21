@@ -4,11 +4,9 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from black_bloc.birthdays import (
-    DATA_FILE,
     DESCRIPTION_LIMIT,
     FALLBACK_ZONE,
     PANEL_BUTTONS,
-    ImportRow,
     age,
     card_lines,
     celebrates_today,
@@ -16,8 +14,6 @@ from black_bloc.birthdays import (
     clamp_month_day,
     date_modal_title,
     date_problem,
-    import_as_of_year,
-    load_import_rows,
     local_today,
     member_zone_name,
     month_day_text,
@@ -27,19 +23,13 @@ from black_bloc.birthdays import (
     panel_buttons,
     parse_birthday_input,
     parse_color,
-    parse_export,
     render_description,
-    resolve,
-    score_member,
-    score_members,
     stamp,
     status_lines,
     stored_prefill,
     stored_sentence,
-    strip_tags,
     upcoming,
     upcoming_lines,
-    year_from_age,
     year_problem,
 )
 from black_bloc.settings_store import BIRTHDAY_TEMPLATE, BIRTHDAY_TZ
@@ -47,24 +37,6 @@ from black_bloc.settings_store import BIRTHDAY_TEMPLATE, BIRTHDAY_TZ
 PHOENIX = ZoneInfo(BIRTHDAY_TZ)
 NEW_YORK = ZoneInfo("America/New_York")
 TOKYO = ZoneInfo("Asia/Tokyo")
-
-SAMPLE_EXPORT = """
-| Month | Day | Display name (as exported) | Age shown |
-|---|---|---|---|
-| January | 2 | [Straight Hands] ShinDarkShadow | |
-| August | 10 | [Tired of Planes] PT | 39 |
-| July | 26 | (Umazing) nadia | |
-| December | 12 | milkywaymatcha | |
-| December | 12 | nbobbit | |
-| Smarch | 4 | nobody | |
-"""
-
-
-class FakeMember:
-    def __init__(self, user_id, display_name, username=None):
-        self.id = user_id
-        self.display_name = display_name
-        self.name = username or display_name
 
 
 def test_clamp_keeps_every_pair_inside_a_real_calendar():
@@ -155,9 +127,6 @@ def test_age_is_the_years_they_turn_this_year():
     ahead = next_occurrence(1, 2, PHOENIX, datetime(2026, 8, 26, 12, 0, tzinfo=UTC))
     assert age(1990, ahead.date()) == 37
     assert age(1990, today) == 36
-    assert year_from_age(39, 2026) == 1987
-    assert year_from_age(None, 2026) is None
-    assert year_from_age(-2, 2026) is None
 
 
 def test_the_colour_falls_back_when_it_is_not_a_hex_code():
@@ -173,99 +142,6 @@ def test_a_broken_template_falls_back_to_the_default_wording():
     assert render_description("{nope}", "PT") == "Happy Birthday **PT**!"
     assert "@everyone" in render_description(BIRTHDAY_TEMPLATE, "@everyone")
     assert len(render_description("{name}", "x" * 5000)) == DESCRIPTION_LIMIT
-
-
-def test_bracket_and_paren_prefixes_are_stripped():
-    assert strip_tags("[Straight Hands] ShinDarkShadow") == "ShinDarkShadow"
-    assert strip_tags("(Umazing) nadia") == "nadia"
-    assert strip_tags("[40] PT") == "PT"
-    assert strip_tags("[Canadian] PopNoTartsEh 🇨🇦") == "PopNoTartsEh 🇨🇦"
-    assert strip_tags("itsmeowkie") == "itsmeowkie"
-    assert strip_tags("[all tag]") == "[all tag]"
-
-
-def test_scoring_is_three_two_one():
-    assert score_member("PT", "PT", "pt_the_pilot") == 3
-    assert score_member("PT", "Something", "pt") == 2
-    assert score_member("PT", "Something", "someone", "pt") == 2
-    assert score_member("PT", "[40] PT", "someone") == 2
-    assert score_member("PT", "PTolemy", "someone") == 1
-    assert score_member("PT", "nobody", "nobody") == 0
-    assert score_member("", "PT", "PT") == 0
-    assert score_member("pt", "PT", "x") == 3
-
-
-def test_a_tagged_nickname_is_matched_on_the_name_inside_the_tag():
-    row = ImportRow("[Straight Hands] ShinDarkShadow", 1, 2, None)
-    tagged = FakeMember(11, "[Straight Hands] ShinDarkShadow", "shin_dark")
-    assert score_member("ShinDarkShadow", tagged.display_name, tagged.name) == 2
-    assert resolve(row, [tagged]).member_id == 11
-
-
-def test_a_unique_best_of_two_or_more_imports_and_everything_else_is_reported():
-    row = ImportRow("[Tired of Planes] PT", 8, 10, 39)
-
-    matched = resolve(row, [FakeMember(1, "PT"), FakeMember(2, "PTolemy")])
-    assert matched.status == "matched" and matched.member_id == 1
-
-    by_username = resolve(row, [FakeMember(3, "Peaches", "pt")])
-    assert by_username.status == "matched" and by_username.member_id == 3
-
-    ambiguous = resolve(row, [FakeMember(4, "PT"), FakeMember(5, "PT")])
-    assert ambiguous.status == "ambiguous" and len(ambiguous.candidates) == 2
-    assert ambiguous.member_id is None
-
-    tagged = resolve(row, [FakeMember(6, "[40] PT")])
-    assert tagged.status == "matched" and tagged.member_id == 6
-
-    weak = resolve(row, [FakeMember(10, "PTolemy")])
-    assert weak.status == "ambiguous" and weak.candidates[0].user_id == 10
-
-    assert resolve(row, [FakeMember(7, "nobody")]).status == "not_found"
-    assert resolve(row, []).status == "not_found"
-
-
-def test_the_paren_shape_resolves_the_same_way():
-    row = ImportRow("(Umazing) nadia", 7, 26, None)
-    assert resolve(row, [FakeMember(8, "nadia"), FakeMember(9, "nadja")]).member_id == 8
-
-
-def test_candidates_come_back_best_first():
-    hits = score_members("PT", [FakeMember(1, "[40] PT"), FakeMember(2, "PT")])
-    assert [c.user_id for c in hits] == [2, 1]
-    assert [c.score for c in hits] == [3, 2]
-
-
-def test_the_export_parser_reads_the_table_and_splits_a_shared_day():
-    rows = parse_export(SAMPLE_EXPORT)
-    assert [(r.month, r.day) for r in rows] == [(1, 2), (8, 10), (7, 26), (12, 12), (12, 12)]
-    assert rows[1].age_shown == 39
-    assert rows[0].age_shown is None
-    assert rows[3].display_name == "milkywaymatcha" and rows[4].display_name == "nbobbit"
-    assert parse_export("") == []
-
-
-def test_the_shipped_seed_file_is_the_thirty_nine_row_export():
-    rows = load_import_rows()
-    assert len(rows) == 39
-    assert import_as_of_year() == 2026
-    assert [r.display_name for r in rows if r.month == 12 and r.day == 12] == [
-        "milkywaymatcha",
-        "nbobbit",
-    ]
-    pt = next(r for r in rows if r.display_name == "[Tired of Planes] PT")
-    assert (pt.month, pt.day, pt.age_shown) == (8, 10, 39)
-    assert year_from_age(pt.age_shown, import_as_of_year()) == 1987
-    assert all(date_problem(r.month, r.day) is None for r in rows)
-    assert DATA_FILE.exists()
-
-
-def test_an_unreadable_seed_file_is_no_rows_not_a_crash(tmp_path):
-    assert load_import_rows(tmp_path / "missing.json") == []
-    broken = tmp_path / "broken.json"
-    broken.write_text('{"exported": "2026-08-05", "rows": [{"day": 1}]}', encoding="utf-8")
-    assert load_import_rows(broken) == []
-    assert import_as_of_year(broken) == 2026
 
 
 def test_upcoming_orders_by_the_next_local_midnight():
@@ -435,10 +311,7 @@ def test_the_status_wording_is_health_not_liveness():
             "staff": "2 role(s)",
             "last_run_at": None,
             "last_error": None,
-            "last_import_at": None,
-            "last_import_error": None,
             "loop_minutes": 5,
-            "import_hours": 24,
         }
     )
 
@@ -448,7 +321,8 @@ def test_the_status_wording_is_health_not_liveness():
     assert "**role** — none (test mode gives no roles)" in text
     assert "**stored** — 2 (1 opted in · 1 imported · 1 set by the person)" in text
     assert "**last sweep** — not yet (every 5 minutes)" in text
-    assert "**last import error** — none" in text
+    assert "**last error** — none" in text
+    assert "import" not in text.replace("1 imported", "")
 
 
 def test_the_modal_title_never_passes_discords_forty_five_characters():
