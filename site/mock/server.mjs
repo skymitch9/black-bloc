@@ -1,5 +1,6 @@
 ﻿import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7378,16 +7379,32 @@ const CSP = "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com
 // outside /preview serves that release's site, and /preview/<page> serves the working tree's
 // preview page (or, failing that, its real page) on the working tree's assets — so what is
 // coming can be compared with what is live today at the normal URL.
-// /next/<page> is the working tree's REAL page on its own assets — the normal URL after the next deploy —
-// for pages whose static preview still exists.
+// A page whose REAL files changed since the deployed release is served at /preview/<page> as that
+// real page, ahead of any static preview left over from the audit: what is coming wins.
 const LIVE_ROOT = process.env.LIVE_ROOT ? resolve(process.env.LIVE_ROOT, 'site', 'public') : null;
 const PREVIEW_ASSETS = /(src|href)="\/assets\//g;
+
+function sameFile(a, b) {
+  try { return readFileSync(a).equals(readFileSync(b)); } catch (e) { return false; }
+}
+
+// The real page counts as changed when its HTML or its page script differ from the deployed release.
+function realChanged(real) {
+  const page = real.match(/^\/([a-z0-9-]+)\.html$/);
+  if (!page || !LIVE_ROOT) return false;
+  const html = [join(PUBLIC, `${page[1]}.html`), join(LIVE_ROOT, `${page[1]}.html`)];
+  const js = [join(PUBLIC, 'assets', `page-${page[1]}.js`), join(LIVE_ROOT, 'assets', `page-${page[1]}.js`)];
+  return !sameFile(...html) || !sameFile(...js);
+}
 
 function whereFrom(wanted) {
   if (!LIVE_ROOT) return { root: PUBLIC, path: wanted, rewrite: false };
   if (wanted.startsWith('/preview/assets/')) return { root: PUBLIC, path: wanted.slice('/preview'.length), rewrite: false };
-  if (wanted.startsWith('/preview/')) return { root: PUBLIC, path: wanted, rewrite: true, fallback: wanted.slice('/preview'.length) };
-  if (wanted.startsWith('/next/')) return { root: PUBLIC, path: wanted.slice('/next'.length), rewrite: true };
+  if (wanted.startsWith('/preview/')) {
+    const real = wanted.slice('/preview'.length);
+    if (realChanged(real)) return { root: PUBLIC, path: real, rewrite: true };
+    return { root: PUBLIC, path: wanted, rewrite: true, fallback: real };
+  }
   return { root: LIVE_ROOT, path: wanted, rewrite: false };
 }
 

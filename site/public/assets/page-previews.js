@@ -41,7 +41,6 @@ function previewCard(page) {
     page.live
       ? null
       : el('a', { class: 'btn small', href: `/preview/${page.slug}.html`, text: 'Open the preview' }),
-    el('a', { class: 'btn small quiet', href: `/next/${page.slug}.html`, text: 'After the next deploy' }),
     el('a', { class: 'btn small quiet', href: `/${page.slug}.html`, text: 'Live today' }),
   ];
   return el('div', { class: 'guidecard', 'data-slug': page.slug }, [
