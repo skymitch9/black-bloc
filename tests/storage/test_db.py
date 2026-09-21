@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 49
+        assert SCHEMA_VERSION == 50
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -48,6 +48,7 @@ async def test_connect_bootstraps_schema(tmp_path):
             "created_at",
             "created_by",
             "unworn_since",
+            "spotlight_id",
         } == columns
         assert "streamers" in tables
         assert {"youtube_links", "youtube_videos"} <= tables
@@ -1884,3 +1885,78 @@ async def test_every_post_that_predates_versions_gets_version_one_and_only_once(
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await third.close()
+
+
+SCHEMA_49_FAN_ROLES = (
+    "CREATE TABLE golive_fan_roles (guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, "
+    "role_id INTEGER NOT NULL, created_at TEXT NOT NULL, created_by INTEGER, "
+    "unworn_since TEXT, PRIMARY KEY (guild_id, user_id))"
+)
+
+
+async def test_a_schema_49_file_lets_a_ping_role_belong_to_a_channel_and_keeps_its_rows(tmp_path):
+    """49 → 50: `user_id` was NOT NULL and part of the key, so a spotlight could not hold a
+    role at all. The rebuild keeps every member's row and its `unworn_since` stamp."""
+    path = tmp_path / "fanroles50.sqlite3"
+    old = await aiosqlite.connect(path)
+    await old.execute("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    await old.execute("INSERT INTO schema_meta(key, value) VALUES ('schema_version', '49')")
+    await old.execute(SCHEMA_49_FAN_ROLES)
+    await old.execute(
+        "INSERT INTO golive_fan_roles(guild_id, user_id, role_id, created_at, created_by, "
+        "unworn_since) VALUES (7, 900, 5000, '2026-09-01T00:00:00+00:00', 42, "
+        "'2026-09-10T00:00:00+00:00')"
+    )
+    await old.commit()
+    await old.close()
+
+    db = Database(path)
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(golive_fan_roles)")
+        columns = {row["name"]: row for row in await cur.fetchall()}
+        assert "spotlight_id" in columns
+        assert not columns["user_id"]["notnull"]
+
+        cur = await db.conn.execute("SELECT * FROM golive_fan_roles")
+        rows = [dict(row) for row in await cur.fetchall()]
+        assert len(rows) == 1
+        assert rows[0]["user_id"] == 900 and rows[0]["role_id"] == 5000
+        assert rows[0]["created_by"] == 42 and rows[0]["spotlight_id"] is None
+        assert rows[0]["unworn_since"] == "2026-09-10T00:00:00+00:00"
+
+        await db.conn.execute(
+            "INSERT INTO golive_fan_roles(guild_id, user_id, role_id, created_at, created_by, "
+            "spotlight_id) VALUES (7, NULL, 6000, '2026-09-20T00:00:00+00:00', 42, 1)"
+        )
+        await db.conn.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO golive_fan_roles(guild_id, user_id, role_id, created_at, "
+                "created_by, spotlight_id) VALUES (7, NULL, 6001, "
+                "'2026-09-20T00:00:00+00:00', 42, 1)"
+            )
+        await db.conn.rollback()
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO golive_fan_roles(guild_id, user_id, role_id, created_at, "
+                "created_by) VALUES (7, 900, 6002, '2026-09-20T00:00:00+00:00', 42)"
+            )
+        await db.conn.rollback()
+
+        cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT COUNT(*) AS n FROM golive_fan_roles")
+        assert (await cur.fetchone())["n"] == 2, "the rebuild is not run a second time"
+        cur = await again.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'golive_fan%'"
+        )
+        assert {row["name"] for row in await cur.fetchall()} == {"golive_fan_roles"}
+    finally:
+        await again.close()

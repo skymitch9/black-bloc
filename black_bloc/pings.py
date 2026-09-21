@@ -50,6 +50,12 @@ KEEP = "keep"
 DELETE = "delete"
 
 ROLE_NAME_LIMIT = 100
+SPOTLIGHT_REF = "spotlight:"
+SPOTLIGHT_WORD = "channel"
+FAN_ROLE_SELECT = (
+    "SELECT r.*, s.twitch_login AS spotlight_login, s.display_name AS spotlight_name "
+    "FROM golive_fan_roles r LEFT JOIN spotlight_channels s ON s.id = r.spotlight_id"
+)
 STREAMERS_MENU = "streamers"
 STREAMERS_TITLE = "Streamer pings"
 NOTIFICATIONS_MENU = "notifications"
@@ -126,6 +132,18 @@ REMOVED_ALREADY_GONE = (
     "**{name}** no longer has a ping role here. The Discord role had already been deleted by "
     "hand, so there was nothing to take off the server."
 )
+CREATED_CHANNEL = (
+    "Made **{role}** for the channel **{name}**. People pick it with **Follow a streamer…** on "
+    "`/pings`, and Black Bloc mentions it in front of that channel's spotlight announcement."
+)
+REUSED_CHANNEL = (
+    "Used the role **{role}** for the channel **{name}**. People pick it with **Follow a "
+    "streamer…** on `/pings`, and it is mentioned in front of that channel's announcement."
+)
+NO_SUCH_SPOTLIGHT = (
+    "**{given}** is not a spotlighted channel on this server, so nothing was changed. The "
+    "Go-live page's Streamers list shows which channels are spotlighted."
+)
 SETUP_CREATED = "Made the role **{role}** and pointed go-live and event pings at it."
 SETUP_REUSED = "Used the role **{role}** that was already here and pointed both feeds at it."
 SETUP_UNCHANGED = "Both feeds already pointed at **{role}**, so nothing was changed."
@@ -173,31 +191,94 @@ def display_name(member: Any) -> str:
                getattr(member, "id", "somebody"))
 
 
+def is_spotlight(row: Any) -> bool:
+    return row_value(row, "spotlight_id") is not None
+
+
+def spotlight_of(row: Any) -> int | None:
+    found = row_value(row, "spotlight_id")
+    return None if found is None else int(found)
+
+
+def spotlight_ref(spotlight_id: Any) -> str:
+    return f"{SPOTLIGHT_REF}{int(spotlight_id)}"
+
+
+def spotlight_from_ref(value: Any) -> int | None:
+    """`spotlight:12` out of a select's value; a plain member id reads as None."""
+    given = str(value or "")
+    if not given.startswith(SPOTLIGHT_REF):
+        return None
+    rest = given[len(SPOTLIGHT_REF):]
+    return int(rest) if rest.isdigit() else None
+
+
+def spotlight_name(row: Any) -> str:
+    """What a spotlight's ping role is named after: its display name, else its Twitch login."""
+    return str(
+        row_value(row, "spotlight_name")
+        or row_value(row, "display_name")
+        or row_value(row, "spotlight_login")
+        or row_value(row, "twitch_login")
+        or spotlight_of(row)
+        or ""
+    )
+
+
 async def set_fan_role(
-    db: Any, guild_id: int, user_id: int, role_id: int, created_by: int | None
+    db: Any,
+    guild_id: int,
+    user_id: int | None,
+    role_id: int,
+    created_by: int | None,
+    *,
+    spotlight_id: int | None = None,
 ) -> None:
     await db.conn.execute(
         "INSERT OR REPLACE INTO golive_fan_roles(guild_id, user_id, role_id, created_at, "
-        "created_by) VALUES (?, ?, ?, ?, ?)",
-        (int(guild_id), int(user_id), int(role_id), now_iso(), created_by),
+        "created_by, spotlight_id) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            int(guild_id),
+            None if user_id is None else int(user_id),
+            int(role_id),
+            now_iso(),
+            created_by,
+            None if spotlight_id is None else int(spotlight_id),
+        ),
     )
     await db.conn.commit()
 
 
 async def get_fan_role(db: Any, guild_id: int, user_id: int) -> Any:
     cur = await db.conn.execute(
-        "SELECT * FROM golive_fan_roles WHERE guild_id = ? AND user_id = ?",
+        f"{FAN_ROLE_SELECT} WHERE r.guild_id = ? AND r.user_id = ?",
         (int(guild_id), int(user_id)),
+    )
+    return await cur.fetchone()
+
+
+async def get_spotlight_fan_role(db: Any, guild_id: int, spotlight_id: int) -> Any:
+    cur = await db.conn.execute(
+        f"{FAN_ROLE_SELECT} WHERE r.guild_id = ? AND r.spotlight_id = ?",
+        (int(guild_id), int(spotlight_id)),
     )
     return await cur.fetchone()
 
 
 async def all_fan_roles(db: Any, guild_id: int) -> list[Any]:
     cur = await db.conn.execute(
-        "SELECT * FROM golive_fan_roles WHERE guild_id = ? ORDER BY created_at, user_id",
+        f"{FAN_ROLE_SELECT} WHERE r.guild_id = ? ORDER BY r.created_at, r.user_id, r.spotlight_id",
         (int(guild_id),),
     )
     return list(await cur.fetchall())
+
+
+async def member_fan_roles(db: Any, guild_id: int) -> list[Any]:
+    return [row for row in await all_fan_roles(db, guild_id) if not is_spotlight(row)]
+
+
+async def spotlight_fan_roles(db: Any, guild_id: int) -> list[Any]:
+    return [row for row in await all_fan_roles(db, guild_id) if is_spotlight(row)]
 
 
 async def forget_fan_role(db: Any, guild_id: int, user_id: int) -> bool:
@@ -209,13 +290,22 @@ async def forget_fan_role(db: Any, guild_id: int, user_id: int) -> bool:
     return cur.rowcount > 0
 
 
+async def forget_spotlight_fan_role(db: Any, guild_id: int, spotlight_id: int) -> bool:
+    cur = await db.conn.execute(
+        "DELETE FROM golive_fan_roles WHERE guild_id = ? AND spotlight_id = ?",
+        (int(guild_id), int(spotlight_id)),
+    )
+    await db.conn.commit()
+    return cur.rowcount > 0
+
+
 async def owner_of(db: Any, guild_id: int, role_id: int) -> int | None:
     cur = await db.conn.execute(
         "SELECT user_id FROM golive_fan_roles WHERE guild_id = ? AND role_id = ? LIMIT 1",
         (int(guild_id), int(role_id)),
     )
     row = await cur.fetchone()
-    return int(row["user_id"]) if row else None
+    return None if row is None or row["user_id"] is None else int(row["user_id"])
 
 
 async def announced_fan_role(
@@ -239,6 +329,39 @@ async def announced_fan_role(
         "pings.fan_role_missing",
         target=user_id,
         details={"role_id": role_id, "user_id": user_id},
+    )
+    return None
+
+
+async def announced_spotlight_fan_role(
+    bot: Any, guild: Any, spotlight_id: int, *, notice: bool = True
+) -> int | None:
+    """What a spotlight announcement mentions for its channel, or None with a log line."""
+    if not is_on(bot, guild.id) or not getattr(bot.db, "is_connected", False):
+        return None
+    row = await get_spotlight_fan_role(bot.db, guild.id, spotlight_id)
+    if row is None:
+        return None
+    role_id = int(row["role_id"])
+    if guild.get_role(role_id) is not None:
+        return role_id
+    log.warning(
+        "pings: fan role %s for spotlight %s is not in this server any more",
+        role_id,
+        spotlight_id,
+    )
+    if not notice:
+        return None
+    await log_action(
+        bot,
+        guild,
+        "pings.fan_role_missing",
+        target=int(spotlight_id),
+        details={
+            "role_id": role_id,
+            "spotlight_id": int(spotlight_id),
+            "spotlight": row_value(row, "spotlight_login"),
+        },
     )
     return None
 
@@ -320,6 +443,8 @@ def option_label(guild: Any, row: Any) -> str:
     role = guild.get_role(int(row["role_id"]))
     if role is not None:
         return str(role.name)
+    if is_spotlight(row):
+        return spotlight_name(row)
     member = guild.get_member(int(row["user_id"]))
     return display_name(member) if member is not None else str(row["user_id"])
 
@@ -381,16 +506,22 @@ async def ensure_fan_role(
     existing_role: Any = None,
     staff: bool = False,
     via: str = VIA_DISCORD,
+    spotlight: Any = None,
 ) -> Outcome:
-    """The one path that gives a streamer a role of their own, whoever asked for it."""
+    """The one path that gives a streamer a role of their own, member or channel."""
     if not staff and not is_on(bot, guild.id):
         return Outcome(False, OFF)
-    name = display_name(member)
-    row = await get_fan_role(bot.db, guild.id, member.id)
-    if row is not None and guild.get_role(int(row["role_id"])) is not None:
+    channel = spotlight is not None
+    name = spotlight_name(spotlight) if channel else display_name(member)
+    held = (
+        await get_spotlight_fan_role(bot.db, guild.id, spotlight["id"])
+        if channel
+        else await get_fan_role(bot.db, guild.id, member.id)
+    )
+    if held is not None and guild.get_role(int(held["role_id"])) is not None:
         return Outcome(
-            False, ALREADY_HAS_ONE.format(name=name, role_id=row["role_id"]),
-            role_id=int(row["role_id"]),
+            False, ALREADY_HAS_ONE.format(name=name, role_id=held["role_id"]),
+            role_id=int(held["role_id"]),
         )
     role, refusal = existing_role, None
     if role is not None and not assignable(role):
@@ -400,18 +531,34 @@ async def ensure_fan_role(
         role, refusal = await make_role(guild, wanted)
     if role is None:
         return Outcome(False, refusal or CANNOT_MAKE_ROLE.format(name=name))
-    await set_fan_role(bot.db, guild.id, member.id, role.id, by)
+    await set_fan_role(
+        bot.db,
+        guild.id,
+        None if channel else member.id,
+        role.id,
+        by,
+        spotlight_id=spotlight["id"] if channel else None,
+    )
+    details = {"role_id": role.id, "role": role.name, "reused": existing_role is not None,
+               "via": via}
+    if channel:
+        details |= {
+            "spotlight_id": int(spotlight["id"]),
+            "spotlight": str(spotlight["twitch_login"]),
+        }
     await log_action(
         bot,
         guild,
         kind_via("pings.fan_role_created", via),
         actor=by,
-        target=member,
-        details={"role_id": role.id, "role": role.name, "reused": existing_role is not None,
-                 "via": via},
+        target=int(spotlight["id"]) if channel else member,
+        details=details,
     )
     await sync_streamer_menus(bot, guild)
-    said = REUSED if existing_role is not None else CREATED
+    if channel:
+        said = REUSED_CHANNEL if existing_role is not None else CREATED_CHANNEL
+    else:
+        said = REUSED if existing_role is not None else CREATED
     return Outcome(
         True,
         said.format(role=role.name, name=name, menu=STREAMERS_MENU),
@@ -421,12 +568,25 @@ async def ensure_fan_role(
 
 
 async def remove_fan_role(
-    bot: Any, guild: Any, user_id: int, *, by: int | None, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    user_id: int | None = None,
+    *,
+    by: int | None,
+    via: str = VIA_DISCORD,
+    spotlight: Any = None,
+    because: str = "",
 ) -> Outcome:
     """Forget a streamer's role, and delete it from the server when the setting says so."""
-    row = await get_fan_role(bot.db, guild.id, user_id)
-    member = guild.get_member(int(user_id))
-    name = display_name(member) if member is not None else str(user_id)
+    channel = spotlight is not None
+    if channel:
+        row = await get_spotlight_fan_role(bot.db, guild.id, spotlight["id"])
+        member = None
+        name = spotlight_name(spotlight)
+    else:
+        row = await get_fan_role(bot.db, guild.id, user_id)
+        member = guild.get_member(int(user_id))
+        name = display_name(member) if member is not None else str(user_id)
     if row is None:
         return Outcome(False, NO_FAN_ROLE.format(name=name))
     role_id = int(row["role_id"])
@@ -440,14 +600,29 @@ async def remove_fan_role(
             log.warning(
                 "pings: could not delete the role %s — %s: %s", role_id, type(exc).__name__, exc
             )
-    await forget_fan_role(bot.db, guild.id, user_id)
+    details: dict[str, Any] = {"role_id": role_id, "deleted": deleted, "via": via}
+    if because:
+        details["because"] = because
+    if channel:
+        await forget_spotlight_fan_role(bot.db, guild.id, spotlight["id"])
+        details |= {
+            "spotlight_id": int(spotlight["id"]),
+            "spotlight": str(spotlight["twitch_login"]),
+        }
+    else:
+        await forget_fan_role(bot.db, guild.id, user_id)
+        details["user_id"] = int(user_id)
     await log_action(
         bot,
         guild,
         kind_via("pings.fan_role_removed", via),
         actor=by,
-        target=member if member is not None else int(user_id),
-        details={"role_id": role_id, "deleted": deleted, "user_id": int(user_id), "via": via},
+        target=(
+            int(spotlight["id"])
+            if channel
+            else (member if member is not None else int(user_id))
+        ),
+        details=details,
     )
     await sync_streamer_menus(bot, guild)
     if role is None:
@@ -641,7 +816,7 @@ FOLLOWERS_KNOWN = "{count} follower(s)"
 FOLLOWERS_UNKNOWN = "the role is gone from the server"
 COUNTS_LINE = (
     "**{streamers}** streamer(s) seen · **{listed}** on the list · **{with_role}** with a role "
-    "Discord still has"
+    "Discord still has · **{channels}** spotlighted channel(s) with one"
 )
 CAPPED_FOLLOW = "{shown} of {total} — the rest are on Discord's onboarding screen"
 TEMPLATE_OK = "Saved. A streamer's ping role will be called **{example}**."
@@ -821,7 +996,23 @@ def followers_word(guild: Any, role_id: Any) -> str:
 
 
 def row_for(rows: Any, user_id: Any) -> Any:
-    return next((row for row in rows or () if int(row["user_id"]) == int(user_id)), None)
+    """A spotlight's row has no member, so it never answers to a member id."""
+    return next(
+        (
+            row
+            for row in rows or ()
+            if row_value(row, "user_id") is not None
+            and int(row["user_id"]) == int(user_id)
+        ),
+        None,
+    )
+
+
+def spotlight_row_for(rows: Any, spotlight_id: Any) -> Any:
+    return next(
+        (row for row in rows or () if spotlight_of(row) == int(spotlight_id)),
+        None,
+    )
 
 
 def streamer_name(guild: Any, row: Any) -> str:
@@ -841,6 +1032,17 @@ def followable(guild: Any, member: Any, streamers: Any, roles: Any) -> list[Any]
         if user_id == mine or not row["listed"]:
             continue
         held = row_for(roles, user_id)
+        if held is not None and wears(member, held["role_id"]):
+            continue
+        found.append(row)
+    return found
+
+
+def followable_channels(guild: Any, member: Any, channels: Any, roles: Any) -> list[Any]:
+    """The spotlighted channels a member could still follow; one with no role yet is offered."""
+    found = []
+    for row in channels or ():
+        held = spotlight_row_for(roles, row["id"])
         if held is not None and wears(member, held["role_id"]):
             continue
         found.append(row)
@@ -904,11 +1106,13 @@ def panel_state(
     streams: bool,
     streamers: Any = None,
     mine: Any = None,
+    channels: Any = None,
 ) -> PanelState:
     found = list(rows or ())
     resolved = [row for row in found if role_of(guild, row["role_id"]) is not None]
     worn = [row for row in resolved if wears(member, row["role_id"])]
     offered = followable(guild, member, streamers, found) if streamers is not None else []
+    offered += followable_channels(guild, member, channels, found)
     return PanelState(
         mode_on=is_on(bot, guild.id),
         events=tuple(
@@ -1069,12 +1273,14 @@ def streamer_lines(guild: Any, streamers: Any, roles: Any = None) -> list[str]:
 
 
 def counts_of(streamers: Any, roles: Any, guild: Any) -> dict[str, int]:
+    """A channel's role is counted apart from a person's — the two lists are different sizes."""
     found = list(streamers or ())
-    held = list(roles or ())
+    held = [row for row in roles or () if role_of(guild, row["role_id"]) is not None]
     return {
         "streamers": len(found),
         "listed": sum(1 for row in found if row["listed"]),
-        "with_role": sum(1 for row in held if role_of(guild, row["role_id"]) is not None),
+        "with_role": sum(1 for row in held if not is_spotlight(row)),
+        "channels": sum(1 for row in held if is_spotlight(row)),
     }
 
 
@@ -1119,7 +1325,13 @@ async def follow_streamer(
         kind_via("pings.follow" if add else "pings.unfollow", via),
         actor=member,
         target=member,
-        details={"role_id": role.id, "streamer_id": int(row["user_id"]), "via": via},
+        details={
+            "role_id": role.id,
+            "streamer_id": (
+                spotlight_ref(spotlight_of(row)) if is_spotlight(row) else int(row["user_id"])
+            ),
+            "via": via,
+        },
     )
     if add:
         return FOLLOWING.format(role=role.name, name=name)
@@ -1150,6 +1362,30 @@ async def follow_from_list(
         row = await get_fan_role(bot.db, guild.id, streamer_id)
         if row is None:
             return NO_SUCH_STREAMER.format(given=name[:60])
+    return await follow_streamer(bot, guild, member, row, add=True, via=via)
+
+
+async def follow_spotlight(
+    bot: Any, guild: Any, member: Any, spotlight: Any, *, via: str = VIA_DISCORD
+) -> str:
+    """A channel is followed exactly as a person is: the first follow makes the role."""
+    if not is_on(bot, guild.id):
+        return OFF
+    if spotlight is None:
+        return NO_SUCH_SPOTLIGHT.format(given="That channel")
+    name = spotlight_name(spotlight)
+    row = await get_spotlight_fan_role(bot.db, guild.id, spotlight["id"])
+    if row is None or role_of(guild, row["role_id"]) is None:
+        if bot.store.get(guild.id, CREATION_KEY) == STAFF:
+            return STAFF_ONLY_FOLLOW.format(name=name)
+        made = await ensure_fan_role(
+            bot, guild, None, by=getattr(member, "id", None), via=via, spotlight=spotlight
+        )
+        if not made.ok:
+            return made.message
+        row = await get_spotlight_fan_role(bot.db, guild.id, spotlight["id"])
+        if row is None:
+            return NO_SUCH_SPOTLIGHT.format(given=name[:60])
     return await follow_streamer(bot, guild, member, row, add=True, via=via)
 
 
@@ -1498,7 +1734,7 @@ async def prune_empty_roles(bot: Any, guild: Any, *, now: Any = None) -> list[in
     stamp = when.isoformat()
     deleted: list[int] = []
     touched = False
-    for row in await all_fan_roles(bot.db, guild.id):
+    for row in await member_fan_roles(bot.db, guild.id):
         user_id = int(row["user_id"])
         role = role_of(guild, row["role_id"])
         if role is None:
@@ -1547,7 +1783,7 @@ async def prune_empty_roles(bot: Any, guild: Any, *, now: Any = None) -> list[in
 async def follower_counts(bot: Any, guild: Any) -> dict[int, int]:
     """How many people wear each streamer's role — what orders the onboarding prompt."""
     found: dict[int, int] = {}
-    for row in await all_fan_roles(bot.db, guild.id):
+    for row in await member_fan_roles(bot.db, guild.id):
         role = role_of(guild, row["role_id"])
         if role is not None:
             found[int(row["user_id"])] = len(getattr(role, "members", ()) or ())

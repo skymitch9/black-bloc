@@ -945,6 +945,7 @@ async def test_the_counts_tell_the_list_apart_from_roles_discord_still_has(bot, 
         "streamers": 1,
         "listed": 1,
         "with_role": 1,
+        "channels": 0,
     }
 
     bot.guild.roles = [one for one in bot.guild.roles if one.id != made.role_id]
@@ -952,6 +953,7 @@ async def test_the_counts_tell_the_list_apart_from_roles_discord_still_has(bot, 
         "streamers": 1,
         "listed": 1,
         "with_role": 0,
+        "channels": 0,
     }
     assert "**1** streamer(s) seen" in pings.counts_line(streamers, rows, bot.guild)
 
@@ -1237,3 +1239,180 @@ async def test_a_raid_train_toggle_with_no_role_says_who_to_ask(bot, fan):
     on = await pings.set_event_pings(bot, bot.guild, fan, add=True, feed=pings.RAID_FEED)
     assert "raid-train pings" in on
     assert (await details(bot.db, "pings.events_on"))["feed"] == pings.RAID_FEED
+
+
+# --- a ping role for a spotlight channel (info/spotlight-pings-design.md §A) ---------------
+
+
+GDQ = 1
+
+
+async def a_channel(db, spotlight_id=GDQ, login="gamesdonequick", name="GamesDoneQuick"):
+    await db.conn.execute(
+        "INSERT INTO spotlight_channels(id, guild_id, twitch_login, display_name, added_by, "
+        "added_at, pin) VALUES (?, ?, ?, ?, ?, '2026-09-20T00:00:00+00:00', 1)",
+        (spotlight_id, GUILD, login, name, STAFF),
+    )
+    await db.conn.commit()
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_channels WHERE id = ?", (spotlight_id,)
+    )
+    return await cur.fetchone()
+
+
+async def test_a_channels_ping_role_is_named_by_the_same_template_a_persons_is(bot):
+    channel = await a_channel(bot.db)
+
+    made = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+
+    assert made.ok and made.created
+    role = bot.guild.get_role(made.role_id)
+    assert role.name == "GamesDoneQuick pings"
+    row = await pings.get_spotlight_fan_role(bot.db, GUILD, GDQ)
+    assert row["user_id"] is None and pings.spotlight_of(row) == GDQ
+    assert row["spotlight_login"] == "gamesdonequick"
+    assert pings.is_spotlight(row) is True
+    assert await details(bot.db, "pings.fan_role_created") == {
+        "role_id": role.id,
+        "role": "GamesDoneQuick pings",
+        "reused": False,
+        "via": "discord",
+        "spotlight_id": GDQ,
+        "spotlight": "gamesdonequick",
+    }
+
+
+async def test_a_channel_cannot_be_given_a_second_ping_role(bot):
+    channel = await a_channel(bot.db)
+    first = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+
+    again = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+
+    assert not again.ok
+    assert "GamesDoneQuick" in again.message and str(first.role_id) in again.message
+    assert len(await pings.spotlight_fan_roles(bot.db, GUILD)) == 1
+
+
+async def test_a_channels_row_and_a_members_row_never_stand_in_for_each_other(bot, streamer):
+    channel = await a_channel(bot.db)
+    await pings.ensure_fan_role(bot, bot.guild, streamer, by=STAFF)
+    await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+
+    every = await pings.all_fan_roles(bot.db, GUILD)
+
+    assert len(every) == 2
+    assert pings.row_for(every, STREAMER) is not None
+    assert pings.row_for(every, GDQ) is None, "a spotlight id is not a member id"
+    assert pings.spotlight_row_for(every, GDQ) is not None
+    assert [row["user_id"] for row in await pings.member_fan_roles(bot.db, GUILD)] == [STREAMER]
+    assert pings.counts_of([], every, bot.guild)["channels"] == 1
+
+
+async def test_taking_a_channels_ping_role_away_obeys_the_delete_setting(bot):
+    channel = await a_channel(bot.db)
+    made = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+    await bot.store.set(GUILD, pings.DELETE_KEY, True)
+
+    gone = await pings.remove_fan_role(
+        bot, bot.guild, by=STAFF, spotlight=channel, because="spotlight_expired"
+    )
+
+    assert gone.ok and bot.guild.get_role(made.role_id).deleted is True
+    assert await pings.get_spotlight_fan_role(bot.db, GUILD, GDQ) is None
+    assert await details(bot.db, "pings.fan_role_removed") == {
+        "role_id": made.role_id,
+        "deleted": True,
+        "via": "discord",
+        "because": "spotlight_expired",
+        "spotlight_id": GDQ,
+        "spotlight": "gamesdonequick",
+    }
+
+
+async def test_a_kept_role_is_left_on_the_server_when_the_setting_says_keep(bot):
+    channel = await a_channel(bot.db)
+    made = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+    await bot.store.set(GUILD, pings.DELETE_KEY, False)
+
+    gone = await pings.remove_fan_role(bot, bot.guild, by=STAFF, spotlight=channel)
+
+    assert gone.ok and bot.guild.get_role(made.role_id).deleted is False
+    assert "left on the server" in gone.message
+    assert await pings.get_spotlight_fan_role(bot.db, GUILD, GDQ) is None
+
+
+async def test_a_channel_with_no_role_refuses_the_removal_in_words(bot):
+    channel = await a_channel(bot.db)
+
+    gone = await pings.remove_fan_role(bot, bot.guild, by=STAFF, spotlight=channel)
+
+    assert not gone.ok and "has no ping role" in gone.message
+    assert await kinds(bot.db) == []
+
+
+async def test_an_announcement_mentions_a_channels_role_and_says_so_when_it_is_gone(bot, caplog):
+    channel = await a_channel(bot.db)
+    made = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+
+    assert await pings.announced_spotlight_fan_role(bot, bot.guild, GDQ) == made.role_id
+
+    bot.guild.roles = [one for one in bot.guild.roles if one.id != made.role_id]
+    with caplog.at_level("WARNING"):
+        assert await pings.announced_spotlight_fan_role(bot, bot.guild, GDQ) is None
+    assert "not in this server any more" in caplog.text
+    assert "pings.fan_role_missing" in await kinds(bot.db)
+    assert (await details(bot.db, "pings.fan_role_missing"))["spotlight_id"] == GDQ
+
+
+async def test_nothing_is_mentioned_for_a_channel_nobody_has_given_a_role(bot):
+    await a_channel(bot.db)
+
+    assert await pings.announced_spotlight_fan_role(bot, bot.guild, GDQ) is None
+    assert await kinds(bot.db) == []
+
+
+async def test_a_member_follows_a_channel_exactly_as_they_follow_a_person(bot, streamer):
+    channel = await a_channel(bot.db)
+    fan = FakeMember(bot.guild, FAN, "Fan")
+
+    said = await pings.follow_spotlight(bot, bot.guild, fan, channel)
+
+    row = await pings.get_spotlight_fan_role(bot.db, GUILD, GDQ)
+    assert "GamesDoneQuick pings" in said
+    assert pings.wears(fan, row["role_id"])
+    assert (await details(bot.db, "pings.follow"))["streamer_id"] == "spotlight:1"
+    assert pings.followable_channels(bot.guild, fan, [channel], [row]) == []
+    assert pings.following(bot.guild, fan, [row])[0]["role_id"] == row["role_id"]
+
+
+async def test_a_channel_with_no_role_yet_is_still_offered_to_follow(bot):
+    channel = await a_channel(bot.db)
+    fan = FakeMember(bot.guild, FAN, "Fan")
+
+    offered = pings.followable_channels(bot.guild, fan, [channel], [])
+
+    assert [row["twitch_login"] for row in offered] == ["gamesdonequick"]
+
+
+async def test_only_staff_start_a_channels_role_when_the_setting_says_so(bot):
+    channel = await a_channel(bot.db)
+    fan = FakeMember(bot.guild, FAN, "Fan")
+    await bot.store.set(GUILD, pings.CREATION_KEY, pings.STAFF)
+
+    said = await pings.follow_spotlight(bot, bot.guild, fan, channel)
+
+    assert "only staff start one" in said
+    assert await pings.get_spotlight_fan_role(bot.db, GUILD, GDQ) is None
+
+
+async def test_the_unworn_prune_never_reaches_a_channels_role(bot):
+    """A channel's role goes when the channel does (§A), never on the 30-day sweep — the
+    prune is keyed by member and a spotlight has none."""
+    channel = await a_channel(bot.db)
+    made = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+    await bot.store.set(GUILD, pings.EMPTY_ROLE_DAYS_KEY, 1)
+    later = datetime.now(UTC) + timedelta(days=90)
+
+    assert await pings.prune_empty_roles(bot, bot.guild, now=later) == []
+    assert await pings.prune_empty_roles(bot, bot.guild, now=later) == []
+    assert bot.guild.get_role(made.role_id) is not None
