@@ -1,0 +1,1197 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+import sqlite3
+from typing import Any
+
+import discord
+from discord.ext import commands, tasks
+
+from ... import shadow as shadow_home
+from ... import spotlight as words
+from ...actionlog import log_action
+from ...command_errors import AnswersErrors
+from ...golive import (
+    announcement_embed,
+    edits_on_end,
+    embed_summary,
+    end_details,
+    ended_embed,
+    ended_render,
+    from_twitch,
+    humanise_duration,
+    now_iso,
+    render,
+    with_box_art,
+)
+from ...loops import Reconciler, wait_ready
+from ...panels import Panel, answer, opened, retire, still_staff
+from ...settings_store import (
+    SPOTLIGHT_BUMP_CLEANUP_KEY,
+    SPOTLIGHT_BUMP_HOURS_KEY,
+    SPOTLIGHT_BUMP_TEMPLATE_KEY,
+    SPOTLIGHT_DEFAULT_DAYS_KEY,
+    SPOTLIGHT_END_MISSES_KEY,
+    SPOTLIGHT_MODE_KEY,
+    SPOTLIGHT_PIN_KEY,
+    SPOTLIGHT_POLL_MINUTES,
+    SPOTLIGHT_POLL_MINUTES_KEY,
+)
+from ...twitch import TwitchError
+
+log = logging.getLogger(__name__)
+
+COG_NAME = "Spotlight"
+GOLIVE_COG = "GoLive"
+CHANNEL_KEY = "golive_channel_id"
+PING_KEY = "golive_ping_role_id"
+TEMPLATE_KEY = "golive_template"
+EMBED_KEY = "golive_embed"
+END_MODE_KEY = "golive_end_mode"
+END_TEMPLATE_KEY = "golive_end_template"
+END_SUFFIX_KEY = "golive_end_suffix"
+END_AUTHOR_KEY = "golive_end_author"
+MODE_ON = "on"
+MODE_OFF = "off"
+MODE_SHADOW = "shadow"
+SOURCE = "spotlight"
+EXTEND_DAYS = 7
+SELECT_CAP = 25
+NO_CHANNEL = "no_channel_configured"
+NOT_VISIBLE = "channel_not_visible"
+TEST_MODE = "test_mode"
+
+
+def _cell(row: Any, key: str) -> Any:
+    if row is None:
+        return None
+    try:
+        return row[key]
+    except (IndexError, KeyError, TypeError):
+        return getattr(row, key, None)
+
+
+async def add_channel(
+    db: Any,
+    guild_id: int,
+    login: str,
+    *,
+    added_by: int | None,
+    expires_at: str | None,
+    pin: bool,
+    bump_hours: int | None = None,
+    display_name: str | None = None,
+    note: str | None = None,
+    event_id: int | None = None,
+    twitch_user_id: str | None = None,
+) -> int | None:
+    try:
+        cur = await db.conn.execute(
+            "INSERT INTO spotlight_channels(guild_id, twitch_login, twitch_user_id, "
+            "display_name, note, added_by, added_at, expires_at, bump_hours, pin, event_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                guild_id,
+                login,
+                twitch_user_id,
+                display_name,
+                note,
+                added_by,
+                now_iso(),
+                expires_at,
+                bump_hours,
+                1 if pin else 0,
+                event_id,
+            ),
+        )
+    except sqlite3.IntegrityError:
+        return None
+    await db.conn.commit()
+    return cur.lastrowid
+
+
+async def channels_for(db: Any, guild_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_channels WHERE guild_id = ? ORDER BY twitch_login",
+        (guild_id,),
+    )
+    return list(await cur.fetchall())
+
+
+async def channel_by_id(db: Any, spotlight_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_channels WHERE id = ?", (int(spotlight_id),)
+    )
+    return await cur.fetchone()
+
+
+async def channel_by_login(db: Any, guild_id: int, login: str) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_channels WHERE guild_id = ? AND twitch_login = ?",
+        (guild_id, login),
+    )
+    return await cur.fetchone()
+
+
+async def channel_for_event(db: Any, guild_id: int, event_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_channels WHERE guild_id = ? AND event_id = ? LIMIT 1",
+        (guild_id, int(event_id)),
+    )
+    return await cur.fetchone()
+
+
+async def update_channel(db: Any, spotlight_id: int, **fields: Any) -> None:
+    allowed = ("expires_at", "bump_hours", "pin", "note", "display_name", "twitch_user_id")
+    wanted = [(name, fields[name]) for name in allowed if name in fields]
+    if not wanted:
+        return
+    sets = ", ".join(f"{name} = ?" for name, _ in wanted)
+    await db.conn.execute(
+        f"UPDATE spotlight_channels SET {sets} WHERE id = ?",
+        tuple(value for _, value in wanted) + (int(spotlight_id),),
+    )
+    await db.conn.commit()
+
+
+async def discard_session(db: Any, session_id: int) -> None:
+    await db.conn.execute("DELETE FROM spotlight_sessions WHERE id = ?", (int(session_id),))
+    await db.conn.commit()
+
+
+async def delete_channel(db: Any, spotlight_id: int) -> bool:
+    cur = await db.conn.execute(
+        "DELETE FROM spotlight_channels WHERE id = ?", (int(spotlight_id),)
+    )
+    await db.conn.commit()
+    return cur.rowcount > 0
+
+
+async def start_session(
+    db: Any, guild_id: int, spotlight_id: int, info: Any, mode: str
+) -> int | None:
+    try:
+        cur = await db.conn.execute(
+            "INSERT INTO spotlight_sessions(guild_id, spotlight_id, started_at, title, game, "
+            "url, mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (guild_id, int(spotlight_id), now_iso(), info.title, info.game, info.url, mode),
+        )
+    except sqlite3.IntegrityError:
+        log.info("spotlight: a session for %s is already open", spotlight_id)
+        return None
+    await db.conn.commit()
+    return cur.lastrowid
+
+
+async def open_session(db: Any, spotlight_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_sessions WHERE spotlight_id = ? AND ended_at IS NULL "
+        "ORDER BY id DESC LIMIT 1",
+        (int(spotlight_id),),
+    )
+    return await cur.fetchone()
+
+
+async def open_sessions(db: Any, guild_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_sessions WHERE guild_id = ? AND ended_at IS NULL ORDER BY id",
+        (guild_id,),
+    )
+    return list(await cur.fetchall())
+
+
+async def recent_sessions(db: Any, guild_id: int, limit: int = 50) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_sessions WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
+        (guild_id, int(limit)),
+    )
+    return list(await cur.fetchall())
+
+
+async def end_session(db: Any, session_id: int, at: str) -> None:
+    await db.conn.execute(
+        "UPDATE spotlight_sessions SET ended_at = ? WHERE id = ? AND ended_at IS NULL",
+        (at, int(session_id)),
+    )
+    await db.conn.commit()
+
+
+async def set_announced(db: Any, session_id: int, message_id: int) -> None:
+    await db.conn.execute(
+        "UPDATE spotlight_sessions SET announced_message_id = ? WHERE id = ?",
+        (int(message_id), int(session_id)),
+    )
+    await db.conn.commit()
+
+
+async def note_bump(db: Any, session_id: int, message_id: Any, at: str) -> None:
+    await db.conn.execute(
+        "UPDATE spotlight_sessions SET last_bump_at = ?, bump_count = bump_count + 1 "
+        "WHERE id = ?",
+        (at, int(session_id)),
+    )
+    if message_id:
+        await db.conn.execute(
+            "INSERT OR IGNORE INTO spotlight_bumps(session_id, message_id, at) VALUES (?, ?, ?)",
+            (int(session_id), int(message_id), at),
+        )
+    await db.conn.commit()
+
+
+async def bumps_of(db: Any, session_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_bumps WHERE session_id = ? ORDER BY at, message_id",
+        (int(session_id),),
+    )
+    return list(await cur.fetchall())
+
+
+async def forget_bumps(db: Any, session_id: int) -> None:
+    await db.conn.execute(
+        "DELETE FROM spotlight_bumps WHERE session_id = ?", (int(session_id),)
+    )
+    await db.conn.commit()
+
+
+def cog_of(bot: Any) -> Any:
+    getter = getattr(bot, "get_cog", None)
+    return getter(COG_NAME) if callable(getter) else None
+
+
+class Spotlight(commands.Cog):
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot = bot
+        self._locks: dict[int, asyncio.Lock] = {}
+        self._reconciler = Reconciler()
+        self.misses: dict[int, int] = {}
+        self.last_poll_ok_at: str | None = None
+        self.last_poll_error: str | None = None
+
+    def loop_health(self, name: str) -> tuple[str | None, str | None]:
+        if name != "poller":
+            return (None, None)
+        return (self.last_poll_ok_at, self.last_poll_error)
+
+    async def cog_load(self) -> None:
+        if not self.bot.db.is_connected:
+            return
+        await self._reconciler.run(self.reconcile_open_sessions)
+        self.poller.start()
+
+    async def cog_unload(self) -> None:
+        self.poller.cancel()
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        if not self.bot.db.is_connected:
+            return
+        await self._reconciler.run(self.reconcile_open_sessions, skip_if_recent=True)
+
+    async def reconcile_open_sessions(self) -> None:
+        """Checklist 37: the state is read inside the lock, so two boots close one session once."""
+        for guild in list(getattr(self.bot, "guilds", ())):
+            for session in await open_sessions(self.bot.db, guild.id):
+                row = await channel_by_id(self.bot.db, session["spotlight_id"])
+                if row is not None and await self._message(guild, session) is not None:
+                    continue
+                await end_session(self.bot.db, session["id"], now_iso())
+                await log_action(
+                    self.bot,
+                    guild,
+                    "golive.spotlight_reconciled",
+                    details={
+                        "session_id": session["id"],
+                        "spotlight_id": session["spotlight_id"],
+                        "login": _cell(row, "twitch_login"),
+                        "reason": words.RECONCILED,
+                    },
+                )
+
+    # --- the sweep -------------------------------------------------------------------------
+
+    @tasks.loop(minutes=SPOTLIGHT_POLL_MINUTES)
+    async def poller(self) -> None:
+        try:
+            await self.poll_once()
+        except Exception as exc:
+            self.last_poll_error = words.reason_of(exc)
+            log.exception("spotlight: the sweep failed")
+        self._retime()
+
+    @poller.before_loop
+    async def _before_poller(self) -> None:
+        if await wait_ready(self.bot, self._poller_stopped):
+            self._retime()
+
+    @poller.error
+    async def _poller_stopped(self, exc: BaseException) -> None:
+        """The loop stops for the life of the process unless it is started again."""
+        self.last_poll_error = words.reason_of(exc)
+        log.error("spotlight: the sweep stopped; restarting it", exc_info=exc)
+        self.poller.restart()
+
+    def _retime(self) -> None:
+        wanted = self._poll_minutes()
+        if self.poller.minutes != wanted:
+            self.poller.change_interval(minutes=wanted)
+
+    def _poll_minutes(self) -> int:
+        guild = next(iter(getattr(self.bot, "guilds", ()) or ()), None)
+        if guild is None:
+            return SPOTLIGHT_POLL_MINUTES
+        return max(1, int(self.bot.store.get(guild.id, SPOTLIGHT_POLL_MINUTES_KEY)))
+
+    async def poll_once(self) -> None:
+        """One batched Helix call for the whole list, plus the expiry sweep on the same tick."""
+        if not self.bot.db.is_connected:
+            return
+        for guild in list(getattr(self.bot, "guilds", ())):
+            if self._mode(guild.id) == MODE_OFF:
+                continue
+            await self.sweep_expiries(guild)
+            rows = await channels_for(self.bot.db, guild.id)
+            if not rows:
+                continue
+            helix = self._helix()
+            if helix is None:
+                self.last_poll_error = words.NO_KEY
+                continue
+            try:
+                streams = await helix.get_streams([row["twitch_login"] for row in rows])
+            except TwitchError as exc:
+                self.last_poll_error = str(exc)
+                log.warning("spotlight: could not ask Twitch about the list — %s", exc)
+                continue
+            self.last_poll_ok_at = now_iso()
+            self.last_poll_error = None
+            live = {stream.user_login: stream for stream in streams}
+            for row in rows:
+                await self._seen(guild, row, live.get(row["twitch_login"]))
+
+    async def sweep_expiries(self, guild: Any) -> None:
+        """A row whose date has passed ends its open session first, then leaves the list."""
+        for row in await channels_for(self.bot.db, guild.id):
+            if not words.is_expired(row):
+                continue
+            async with self._lock(row["id"]):
+                fresh = await channel_by_id(self.bot.db, row["id"])
+                if fresh is None or not words.is_expired(fresh):
+                    continue
+                await self._expire(guild, fresh, words.EXPIRED)
+
+    async def _expire(self, guild: Any, row: Any, because: str) -> None:
+        session = await open_session(self.bot.db, row["id"])
+        if session is not None:
+            await self._end(guild, row, session, words.EXPIRED)
+        await delete_channel(self.bot.db, row["id"])
+        self.misses.pop(int(row["id"]), None)
+        await log_action(
+            self.bot,
+            guild,
+            "golive.spotlight_expired",
+            details={
+                "spotlight_id": row["id"],
+                "login": row["twitch_login"],
+                "expires_at": row["expires_at"],
+                "event_id": row["event_id"],
+                "because": because,
+            },
+        )
+
+    async def _seen(self, guild: Any, row: Any, stream: Any) -> None:
+        async with self._lock(row["id"]):
+            fresh = await channel_by_id(self.bot.db, row["id"])
+            if fresh is None:
+                return
+            session = await open_session(self.bot.db, fresh["id"])
+            if stream is not None:
+                self.misses[int(fresh["id"])] = 0
+                if session is None:
+                    await self._announce(guild, fresh, stream)
+                else:
+                    await self._maybe_bump(guild, fresh, session, from_twitch(stream))
+                return
+            if session is None:
+                return
+            seen = self.misses.get(int(fresh["id"]), 0) + 1
+            self.misses[int(fresh["id"])] = seen
+            if seen < self._end_misses(guild.id):
+                return
+            await self._end(guild, fresh, session, words.ENDED)
+
+    # --- the three posts -------------------------------------------------------------------
+
+    async def _announce(self, guild: Any, row: Any, stream: Any) -> None:
+        mode = self._mode(guild.id)
+        info = await self._box_art(guild, from_twitch(stream))
+        name = str(getattr(stream, "user_name", "") or "").strip() or words.display_for(row)
+        session_id = await start_session(self.bot.db, guild.id, row["id"], info, mode)
+        if session_id is None:
+            return
+        store = self.bot.store
+        text = render(
+            store.get(guild.id, TEMPLATE_KEY),
+            info,
+            ping_role_id=store.get(guild.id, PING_KEY),
+            name=name,
+        )
+        embed = (
+            announcement_embed(info, source=SOURCE, name=name)
+            if store.get(guild.id, EMBED_KEY)
+            else None
+        )
+        message, reason = await self._post(guild, text, embed, mode)
+        details = {
+            "spotlight_id": row["id"],
+            "session_id": session_id,
+            "login": row["twitch_login"],
+            "mode": mode,
+            "url": info.url,
+            "game": info.game,
+            "title": info.title,
+            "text": text,
+            "pin": bool(row["pin"]),
+        }
+        if embed is not None:
+            details["embed"] = embed_summary(embed)
+        if message is None:
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_post_failed",
+                details=details | {"reason": reason},
+            )
+            await discard_session(self.bot.db, session_id)
+            return
+        await set_announced(self.bot.db, session_id, message.id)
+        details["message_id"] = str(message.id)
+        details["channel_id"] = str(getattr(getattr(message, "channel", None), "id", "") or "")
+        await log_action(
+            self.bot,
+            guild,
+            "golive.spotlight_announced"
+            if mode == MODE_ON
+            else "golive.would_spotlight_announce",
+            details=details,
+        )
+        if row["pin"]:
+            await self._pin(guild, row, message)
+
+    async def _maybe_bump(self, guild: Any, row: Any, session: Any, info: Any) -> None:
+        hours = words.bump_hours_for(row, self.bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
+        if not words.bump_due(session, hours).due:
+            return
+        await self.bump(guild, row, session, info)
+
+    async def bump(self, guild: Any, row: Any, session: Any, info: Any = None) -> Any:
+        """One short reminder, never pinned and never a ping; its id is kept for the cleanup."""
+        stream = info if info is not None else words.info_of(session, row["twitch_login"])
+        at = now_iso()
+        text = words.bump_render(
+            self.bot.store.get(guild.id, SPOTLIGHT_BUMP_TEMPLATE_KEY),
+            stream,
+            words.display_for(row),
+            words.bump_duration(session, at),
+        )
+        message, reason = await self._post(guild, text, None, self._mode(guild.id))
+        if message is None:
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_post_failed",
+                details={
+                    "spotlight_id": row["id"],
+                    "session_id": session["id"],
+                    "login": row["twitch_login"],
+                    "what": "bump",
+                    "text": text,
+                    "reason": reason,
+                },
+            )
+            return None
+        await note_bump(self.bot.db, session["id"], message.id, at)
+        await log_action(
+            self.bot,
+            guild,
+            "golive.spotlight_bumped",
+            details={
+                "spotlight_id": row["id"],
+                "session_id": session["id"],
+                "login": row["twitch_login"],
+                "mode": self._mode(guild.id),
+                "text": text,
+                "message_id": str(message.id),
+                "bump": int(_cell(session, "bump_count") or 0) + 1,
+            },
+        )
+        return message
+
+    async def _end(self, guild: Any, row: Any, session: Any, reason: str) -> None:
+        """The caller holds the row's lock; the state moves before any message does."""
+        ended_at = now_iso()
+        await end_session(self.bot.db, session["id"], ended_at)
+        self.misses.pop(int(row["id"]), None)
+        end_mode = self.bot.store.get(guild.id, END_MODE_KEY)
+        await log_action(
+            self.bot,
+            guild,
+            "golive.spotlight_ended",
+            details={
+                "spotlight_id": row["id"],
+                "session_id": session["id"],
+                "login": row["twitch_login"],
+                "reason": reason,
+                "bumps": int(_cell(session, "bump_count") or 0),
+            }
+            | end_details(end_mode),
+        )
+        message = await self._message(guild, session)
+        await self._unpin(guild, row, message)
+        await self._mark_ended(guild, row, session, message, end_mode, ended_at)
+        if self.bot.store.get(guild.id, SPOTLIGHT_BUMP_CLEANUP_KEY):
+            await self._clear_bumps(guild, session)
+
+    async def _mark_ended(
+        self,
+        guild: Any,
+        row: Any,
+        session: Any,
+        message: Any,
+        end_mode: str,
+        ended_at: str,
+    ) -> None:
+        if message is None or not edits_on_end(end_mode):
+            return
+        store = self.bot.store
+        suffix = store.get(guild.id, END_SUFFIX_KEY)
+        name = words.display_for(row)
+        duration = humanise_duration(session["started_at"], ended_at)
+        info = words.info_of(session, row["twitch_login"])
+        existing = list(getattr(message, "embeds", None) or ())
+        try:
+            await message.edit(
+                content=ended_render(
+                    store.get(guild.id, END_TEMPLATE_KEY),
+                    info,
+                    name,
+                    content=message.content,
+                    suffix=suffix,
+                    duration=duration,
+                ),
+                allowed_mentions=self._mentions(guild.id),
+                **(
+                    {
+                        "embed": ended_embed(
+                            existing[0],
+                            name,
+                            info.platform,
+                            suffix,
+                            author=store.get(guild.id, END_AUTHOR_KEY),
+                            duration=duration,
+                        )
+                    }
+                    if existing
+                    else {}
+                ),
+            )
+        except Exception as exc:
+            log.info(
+                "spotlight: could not mark message %s as ended (%s)",
+                _cell(session, "announced_message_id"),
+                words.reason_of(exc),
+            )
+
+    async def _clear_bumps(self, guild: Any, session: Any) -> None:
+        channel = await self._channel_of(guild, session)
+        for bump in await bumps_of(self.bot.db, session["id"]):
+            if channel is None:
+                continue
+            try:
+                found = await channel.fetch_message(int(bump["message_id"]))
+                await found.delete()
+            except Exception as exc:
+                log.info(
+                    "spotlight: a reminder under session %s stays — %s",
+                    session["id"],
+                    words.reason_of(exc),
+                )
+        await forget_bumps(self.bot.db, session["id"])
+
+    # --- pinning ---------------------------------------------------------------------------
+
+    async def _pin(self, guild: Any, row: Any, message: Any) -> str | None:
+        """Checklist 12: the session is already recorded; a pin that fails changes nothing."""
+        if message is None or bool(getattr(message, "pinned", False)):
+            return None
+        try:
+            await message.pin(reason=words.PIN_REASON)
+        except Exception as exc:
+            reason = words.reason_of(exc)
+            log.warning("spotlight: could not pin %s — %s", row["twitch_login"], reason)
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_pin_failed",
+                details={
+                    "spotlight_id": row["id"],
+                    "login": row["twitch_login"],
+                    "message_id": str(getattr(message, "id", "")),
+                    "reason": reason,
+                },
+            )
+            return words.PIN_REFUSED.format(login=row["twitch_login"], reason=reason)
+        await log_action(
+            self.bot,
+            guild,
+            "golive.spotlight_pinned",
+            details={
+                "spotlight_id": row["id"],
+                "login": row["twitch_login"],
+                "message_id": str(message.id),
+            },
+        )
+        return None
+
+    async def _unpin(self, guild: Any, row: Any, message: Any) -> str | None:
+        """Checklist 3: the pin comes off because the MESSAGE carries one, not because the key
+        still says pin — a mid-stream flip must not strand it."""
+        if message is None or not bool(getattr(message, "pinned", False)):
+            return None
+        try:
+            await message.unpin(reason=words.UNPIN_REASON)
+        except Exception as exc:
+            reason = words.reason_of(exc)
+            log.warning("spotlight: could not unpin %s — %s", row["twitch_login"], reason)
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_unpin_failed",
+                details={
+                    "spotlight_id": row["id"],
+                    "login": row["twitch_login"],
+                    "message_id": str(getattr(message, "id", "")),
+                    "reason": reason,
+                },
+            )
+            return words.UNPIN_REFUSED.format(login=row["twitch_login"], reason=reason)
+        await log_action(
+            self.bot,
+            guild,
+            "golive.spotlight_unpinned",
+            details={
+                "spotlight_id": row["id"],
+                "login": row["twitch_login"],
+                "message_id": str(message.id),
+            },
+        )
+        return None
+
+    # --- where the posts go ------------------------------------------------------------------
+
+    async def _post(
+        self, guild: Any, text: str, embed: Any, mode: str
+    ) -> tuple[Any, str | None]:
+        """`on` posts in the go-live channel; `shadow` rehearses where shadow_channel_id says."""
+        channel_id = self.bot.store.get(guild.id, CHANNEL_KEY)
+        if not channel_id:
+            log.warning("spotlight: not posted — %s is not set", CHANNEL_KEY)
+            return (None, NO_CHANNEL)
+        said = ""
+        if mode != MODE_ON:
+            where = shadow_home.channel_id(self.bot, guild)
+            if not where:
+                return (None, NO_CHANNEL)
+            said = shadow_home.note_line(self.bot, guild, f"<#{int(channel_id)}>")
+            channel_id = where
+        guard = getattr(self.bot, "guard", None)
+        if guard is not None and not guard.allows_channel(channel_id):
+            log.warning("spotlight: TEST MODE — refused to post to channel %s", channel_id)
+            return (None, TEST_MODE)
+        channel = shadow_home.channel_of(self.bot, guild, channel_id)
+        if channel is None:
+            log.warning("spotlight: not posted — channel %s is not visible", channel_id)
+            return (None, NOT_VISIBLE)
+        try:
+            message = await channel.send(
+                f"{said}\n{text}" if said else text,
+                allowed_mentions=self._mentions(guild.id),
+                **({"embed": embed} if embed is not None else {}),
+            )
+        except Exception as exc:
+            reason = words.reason_of(exc)
+            log.warning("spotlight: not posted — %s", reason)
+            return (None, reason)
+        return (message, None)
+
+    async def _channel_of(self, guild: Any, session: Any) -> Any:
+        mode = str(_cell(session, "mode") or MODE_ON)
+        channel_id = (
+            self.bot.store.get(guild.id, CHANNEL_KEY)
+            if mode == MODE_ON
+            else shadow_home.channel_id(self.bot, guild)
+        )
+        return shadow_home.channel_of(self.bot, guild, channel_id)
+
+    async def _message(self, guild: Any, session: Any) -> Any:
+        message_id = _cell(session, "announced_message_id")
+        if not message_id:
+            return None
+        channel = await self._channel_of(guild, session)
+        if channel is None:
+            return None
+        try:
+            return await channel.fetch_message(int(message_id))
+        except Exception as exc:
+            log.info(
+                "spotlight: could not read message %s — %s", message_id, words.reason_of(exc)
+            )
+            return None
+
+    async def _box_art(self, guild: Any, info: Any) -> Any:
+        helix = self._helix()
+        if helix is None or info.box_art_url or not info.game_id:
+            return info
+        if not self.bot.store.get(guild.id, EMBED_KEY):
+            return info
+        try:
+            games = await helix.get_games([info.game_id])
+        except TwitchError as exc:
+            log.warning("spotlight: no box art for game %s (%s)", info.game_id, exc)
+            return info
+        return with_box_art(info, games[0]) if games else info
+
+    # --- the small stuff ---------------------------------------------------------------------
+
+    def _helix(self) -> Any:
+        """The go-live cog's client, so one app token and one session serve both sweeps."""
+        getter = getattr(self.bot, "get_cog", None)
+        cog = getter(GOLIVE_COG) if callable(getter) else None
+        return getattr(cog, "helix", None)
+
+    def _lock(self, spotlight_id: Any) -> asyncio.Lock:
+        key = int(spotlight_id)
+        lock = self._locks.get(key)
+        if lock is None:
+            lock = self._locks[key] = asyncio.Lock()
+        return lock
+
+    def _mode(self, guild_id: int) -> str:
+        return self.bot.store.get(guild_id, SPOTLIGHT_MODE_KEY)
+
+    def _end_misses(self, guild_id: int) -> int:
+        return max(1, int(self.bot.store.get(guild_id, SPOTLIGHT_END_MISSES_KEY)))
+
+    def _mentions(self, guild_id: int) -> discord.AllowedMentions:
+        role_id = self.bot.store.get(guild_id, PING_KEY)
+        return discord.AllowedMentions(
+            everyone=False,
+            users=False,
+            roles=[discord.Object(int(role_id))] if role_id else False,
+        )
+
+
+# --- the shared moves, which the routes and the panel both come in by -------------------------
+
+
+async def spotlight_channel(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    login: str,
+    *,
+    days: Any = None,
+    keep: bool = False,
+    pin: Any = None,
+    bump_hours: int | None = None,
+    note: str | None = None,
+    event_id: int | None = None,
+    expires_at: Any = False,
+) -> tuple[str, Any]:
+    """One door for the panel, the route and the event card: `(outcome, row)`."""
+    clean = words.clean_login(login)
+    if clean is None:
+        return ("bad_login", None)
+    if await channel_by_login(bot.db, guild.id, clean) is not None:
+        return ("already", None)
+    store = bot.store
+    when = (
+        expires_at
+        if expires_at is not False
+        else (
+            None
+            if keep
+            else words.expiry_in_days(
+                days if days is not None else store.get(guild.id, SPOTLIGHT_DEFAULT_DAYS_KEY)
+            )
+        )
+    )
+    wanted_pin = bool(store.get(guild.id, SPOTLIGHT_PIN_KEY) if pin is None else pin)
+    spotlight_id = await add_channel(
+        bot.db,
+        guild.id,
+        clean,
+        added_by=getattr(actor, "id", actor),
+        expires_at=when,
+        pin=wanted_pin,
+        bump_hours=bump_hours,
+        display_name=clean,
+        note=note,
+        event_id=event_id,
+    )
+    if spotlight_id is None:
+        return ("already", None)
+    row = await channel_by_id(bot.db, spotlight_id)
+    await log_action(
+        bot,
+        guild,
+        "golive.spotlight_added",
+        actor=actor,
+        details={
+            "spotlight_id": spotlight_id,
+            "login": clean,
+            "expires_at": when,
+            "pin": wanted_pin,
+            "bump_hours": bump_hours,
+            "event_id": event_id,
+        },
+    )
+    return ("added", row)
+
+
+async def change_spotlight(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, **fields: Any
+) -> Any:
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return None
+    await update_channel(bot.db, spotlight_id, **fields)
+    fresh = await channel_by_id(bot.db, spotlight_id)
+    await log_action(
+        bot,
+        guild,
+        "golive.spotlight_updated",
+        actor=actor,
+        details={"spotlight_id": spotlight_id, "login": row["twitch_login"]}
+        | {name: fields[name] for name in sorted(fields)},
+    )
+    return fresh
+
+
+async def forget_spotlight(bot: Any, guild: Any, actor: Any, spotlight_id: int) -> Any:
+    """Staff final say: a row goes whatever state it is in, and its session is closed first."""
+    cog = cog_of(bot)
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return None
+    session = await open_session(bot.db, spotlight_id)
+    if session is not None and cog is not None:
+        async with cog._lock(spotlight_id):
+            await cog._end(guild, row, session, words.REMOVED_BECAUSE)
+    await delete_channel(bot.db, spotlight_id)
+    if cog is not None:
+        cog.misses.pop(int(spotlight_id), None)
+    await log_action(
+        bot,
+        guild,
+        "golive.spotlight_removed",
+        actor=actor,
+        details={
+            "spotlight_id": spotlight_id,
+            "login": row["twitch_login"],
+            "event_id": row["event_id"],
+        },
+    )
+    return row
+
+
+async def expire_for_event(bot: Any, guild: Any, event_id: int) -> Any:
+    """A cancelled event takes its spotlight with it, at once rather than at its old end."""
+    cog = cog_of(bot)
+    row = await channel_for_event(bot.db, guild.id, event_id)
+    if row is None or cog is None:
+        return None
+    async with cog._lock(row["id"]):
+        fresh = await channel_by_id(bot.db, row["id"])
+        if fresh is None:
+            return None
+        await cog._expire(guild, fresh, words.EVENT_CANCELLED_BECAUSE)
+    return fresh
+
+
+async def bump_now(bot: Any, guild: Any, actor: Any, spotlight_id: int) -> tuple[str, Any]:
+    cog = cog_of(bot)
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id) or cog is None:
+        return ("no_row", None)
+    session = await open_session(bot.db, spotlight_id)
+    if session is None:
+        return ("not_live", row)
+    async with cog._lock(spotlight_id):
+        fresh = await open_session(bot.db, spotlight_id)
+        if fresh is None:
+            return ("not_live", row)
+        message = await cog.bump(guild, row, fresh)
+    return ("bumped" if message is not None else "bump_failed", row)
+
+
+async def live_now(bot: Any, guild: Any) -> dict[int, Any]:
+    return {
+        int(session["spotlight_id"]): session
+        for session in await open_sessions(bot.db, guild.id)
+    }
+
+
+# --- the /golive sub-panel --------------------------------------------------------------------
+
+
+def minutes_for(bot: Any, guild_id: int) -> int:
+    from ...golive import panel_minutes
+
+    return panel_minutes(bot.store, guild_id)
+
+
+class SpotlightPanel(Panel):
+    def __init__(self, minutes: int) -> None:
+        from ...golive import PANEL_TIMEOUT_FOOTER
+
+        super().__init__(minutes, footer=PANEL_TIMEOUT_FOOTER)
+
+
+def mode_lines(bot: Any, guild: Any) -> list[str]:
+    said: list[str] = []
+    mode = bot.store.get(guild.id, SPOTLIGHT_MODE_KEY)
+    if mode == MODE_OFF:
+        said.append(words.MODE_OFF)
+    elif mode == MODE_SHADOW:
+        said.append(words.MODE_SHADOW)
+    cog = cog_of(bot)
+    if cog is not None and cog._helix() is None:
+        said.append(words.NO_KEY)
+    if not bot.store.get(guild.id, CHANNEL_KEY):
+        said.append(words.NO_CHANNEL)
+    return said
+
+
+async def build_spotlight(
+    bot: Any, guild: Any, picked: Any = None
+) -> tuple[discord.Embed, Any]:
+    rows = await channels_for(bot.db, guild.id)
+    open_by_id = await live_now(bot, guild)
+    chosen = (
+        next((row for row in rows if int(row["id"]) == int(picked)), None)
+        if picked is not None
+        else None
+    )
+    lines = [words.PANEL_INTRO] + mode_lines(bot, guild)
+    lines += (
+        [words.panel_line(row, int(row["id"]) in open_by_id) for row in rows[:SELECT_CAP]]
+        if rows
+        else [words.PANEL_EMPTY]
+    )
+    view = SpotlightPanel(minutes_for(bot, guild.id))
+    if rows:
+        view.add_item(ChannelPick(rows[:SELECT_CAP], chosen))
+    if chosen is not None:
+        live = int(chosen["id"]) in open_by_id
+        if words.keeps_forever(chosen):
+            view.add_item(SpotlightMoveButton("expire", chosen["id"]))
+        else:
+            view.add_item(SpotlightMoveButton("extend", chosen["id"]))
+            view.add_item(SpotlightMoveButton("keep", chosen["id"]))
+        if live:
+            view.add_item(SpotlightMoveButton("bump", chosen["id"]))
+        view.add_item(SpotlightMoveButton("remove", chosen["id"]))
+    view.add_item(AddChannelButton())
+    view.add_item(SpotlightBackButton())
+    embed = discord.Embed(title=words.PANEL_TITLE, description="\n".join(lines))
+    return embed, view
+
+
+async def render_spotlight(
+    interaction: discord.Interaction, picked: Any = None, previous: Any = None
+) -> None:
+    embed, view = await build_spotlight(interaction.client, interaction.guild, picked)
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+class ChannelPick(discord.ui.Select):
+    def __init__(self, rows: list[Any], chosen: Any = None) -> None:
+        super().__init__(
+            placeholder=words.PICK_A_CHANNEL,
+            options=[
+                discord.SelectOption(
+                    label=f"{row['twitch_login']} — {words.until_words(row)}"[:100],
+                    value=str(row["id"]),
+                    default=chosen is not None and int(row["id"]) == int(chosen["id"]),
+                )
+                for row in rows
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await opened(interaction, staff=False):
+            return
+        await render_spotlight(interaction, int(self.values[0]), self.view)
+
+
+class SpotlightMoveButton(discord.ui.Button):
+    LABELS = {
+        "extend": words.EXTEND_WEEK,
+        "keep": words.KEEP_FOREVER,
+        "expire": "Let it expire",
+        "bump": words.BUMP_NOW,
+        "remove": words.REMOVE,
+    }
+    STYLES = {
+        "extend": discord.ButtonStyle.primary,
+        "keep": discord.ButtonStyle.success,
+        "expire": discord.ButtonStyle.secondary,
+        "bump": discord.ButtonStyle.primary,
+        "remove": discord.ButtonStyle.danger,
+    }
+
+    def __init__(self, action: str, spotlight_id: Any) -> None:
+        super().__init__(label=self.LABELS[action], style=self.STYLES[action], row=1)
+        self.action = action
+        self.spotlight_id = int(spotlight_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await opened(interaction, staff=False):
+            return
+        said, keep_picked = await run_spotlight_move(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.spotlight_id,
+            self.action,
+        )
+        await render_spotlight(
+            interaction, self.spotlight_id if keep_picked else None, self.view
+        )
+        await answer(interaction, said)
+
+
+async def run_spotlight_move(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, action: str
+) -> tuple[str, bool]:
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return (words.NO_SUCH_ROW, False)
+    login = row["twitch_login"]
+    if action == "remove":
+        await forget_spotlight(bot, guild, actor, spotlight_id)
+        return (words.REMOVED.format(login=login), False)
+    if action == "keep":
+        await change_spotlight(bot, guild, actor, spotlight_id, expires_at=None)
+        return (words.KEPT_SAID.format(login=login), True)
+    if action == "expire":
+        when = words.expiry_in_days(bot.store.get(guild.id, SPOTLIGHT_DEFAULT_DAYS_KEY))
+        await change_spotlight(bot, guild, actor, spotlight_id, expires_at=when)
+        return (words.EXPIRES_SAID.format(login=login, when=words.when_words(when)), True)
+    if action == "bump":
+        outcome, _ = await bump_now(bot, guild, actor, spotlight_id)
+        if outcome == "bumped":
+            return (words.BUMPED_SAID.format(login=login), True)
+        if outcome == "not_live":
+            return (words.NOT_LIVE.format(login=login), True)
+        return (words.BUMP_FAILED.format(login=login, reason=words.NO_CHANNEL), True)
+    fresh = await change_spotlight(
+        bot,
+        guild,
+        actor,
+        spotlight_id,
+        expires_at=words.extended_by_days(row, EXTEND_DAYS),
+    )
+    return (words.EXTENDED.format(login=login, when=words.until_words(fresh)), True)
+
+
+class AddChannelButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label=words.ADD_BUTTON, style=discord.ButtonStyle.primary, row=2
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await interaction.response.send_modal(AddChannelModal(self.view))
+
+
+class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_MODAL_TITLE):
+    channel = discord.ui.TextInput(
+        label=words.ADD_LOGIN_LABEL,
+        placeholder=words.ADD_LOGIN_PLACEHOLDER,
+        max_length=words.LOGIN_MAX,
+    )
+    days = discord.ui.TextInput(
+        label=words.ADD_DAYS_LABEL,
+        placeholder=words.ADD_DAYS_PLACEHOLDER,
+        required=False,
+        max_length=4,
+    )
+
+    def __init__(self, previous: Any = None) -> None:
+        super().__init__()
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        given = str(self.channel)
+        typed = str(self.days).strip()
+        if typed and not typed.isdigit():
+            await render_spotlight(interaction, None, self.previous)
+            await answer(interaction, words.BAD_DAYS.format(given=typed[:40]))
+            return
+        outcome, row = await spotlight_channel(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            given,
+            days=int(typed) if typed else None,
+            keep=not typed,
+        )
+        await render_spotlight(
+            interaction, row["id"] if row is not None else None, self.previous
+        )
+        said = add_said(interaction.client, interaction.guild, outcome, row, given)
+        await answer(interaction, said)
+
+
+def add_said(bot: Any, guild: Any, outcome: str, row: Any, given: Any) -> str:
+    if outcome == "bad_login":
+        return words.BAD_LOGIN.format(given=str(given or "nothing")[:40])
+    if outcome == "already":
+        return words.ALREADY_SPOTLIT.format(
+            login=words.clean_login(given) or str(given or "")[: words.LOGIN_MAX]
+        )
+    return words.added_said(
+        row, words.bump_hours_for(row, bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
+    )
+
+
+class SpotlightBackButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=2)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        from .golive import render_panel
+
+        await render_panel(interaction, self.view)
+
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(Spotlight(bot))

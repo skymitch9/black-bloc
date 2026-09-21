@@ -216,7 +216,7 @@ def embed_footer(source: str | None) -> str:
 
 
 def announcement_embed(
-    info: StreamInfo, member: Any = None, source: str | None = None
+    info: StreamInfo, member: Any = None, source: str | None = None, *, name: Any = None
 ) -> discord.Embed:
     """The go-live card: the streamer, the game and the game's art, never an avatar."""
     embed = discord.Embed(
@@ -225,7 +225,7 @@ def announcement_embed(
         colour=discord.Colour(embed_colour(info.platform)),
         timestamp=datetime.now(UTC),
     )
-    embed.set_author(name=author_line(display_name(member), info.platform))
+    embed.set_author(name=author_line(name or display_name(member), info.platform))
     embed.add_field(name=EMBED_GAME_FIELD, value=_clip(info.game or GAME_FALLBACK, FIELD_LIMIT))
     image = info.box_art_url or info.thumbnail_url
     if image:
@@ -427,9 +427,10 @@ def render(
     *,
     ping_role_id: int | None = None,
     fan_role_id: int | None = None,
+    name: Any = None,
 ) -> str:
     """The announcement sentence; an empty game reads 'something', never '****'."""
-    fields = live_fields(info, display_name(member))
+    fields = live_fields(info, name or display_name(member))
     return ping_prefix(ping_role_id, fan_role_id) + _filled(template, fields, GOLIVE_TEMPLATE)
 
 
@@ -648,6 +649,7 @@ ANNOUNCE_AGAIN = PanelMove("Announce my streams again", "success", "optin", row=
 REFRESH = PanelMove("Refresh", "secondary", "refresh", row=2)
 LOGS = PanelMove("Logs", "secondary", "logs", row=2)
 STREAMERS = PanelMove("Streamers…", "secondary", "streamers", row=2)
+SPOTLIGHT = PanelMove("Spotlight…", "secondary", "spotlight", row=2)
 
 PANEL_BUTTONS: dict[tuple[bool, bool], tuple[PanelMove, ...]] = {
     (False, False): (LINK_CHANNEL, STOP_ANNOUNCING, REFRESH),
@@ -655,7 +657,7 @@ PANEL_BUTTONS: dict[tuple[bool, bool], tuple[PanelMove, ...]] = {
     (True, False): (CHANGE_CHANNEL, UNLINK_CHANNEL, STOP_ANNOUNCING, REFRESH),
     (True, True): (CHANGE_CHANNEL, UNLINK_CHANNEL, ANNOUNCE_AGAIN, REFRESH),
 }
-STAFF_BUTTONS: tuple[PanelMove, ...] = (LOGS, STREAMERS)
+STAFF_BUTTONS: tuple[PanelMove, ...] = (LOGS, STREAMERS, SPOTLIGHT)
 
 
 def panel_buttons(
