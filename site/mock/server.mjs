@@ -7231,7 +7231,6 @@ const PREVIEW_ASSETS = /(src|href)="\/assets\//g;
 
 function whereFrom(wanted) {
   if (!LIVE_ROOT) return { root: PUBLIC, path: wanted, rewrite: false };
-  if (wanted === '/previews' || wanted.startsWith('/previews/')) return { root: PUBLIC, path: wanted, rewrite: true };
   if (wanted.startsWith('/preview/assets/')) return { root: PUBLIC, path: wanted.slice('/preview'.length), rewrite: false };
   if (wanted.startsWith('/preview/')) return { root: PUBLIC, path: wanted, rewrite: true, fallback: wanted.slice('/preview'.length) };
   return { root: LIVE_ROOT, path: wanted, rewrite: false };
