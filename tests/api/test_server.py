@@ -164,7 +164,7 @@ def test_a_page_that_is_not_on_disk_is_still_the_sites_own_404(bot):
 WRITE_ROUTES = (
     "/api/honeypot/setup",
     "/api/tempvoice/setup",
-    "/api/birthdays/import",
+    "/api/birthdays/7/optin",
     "/api/mod/cases/1/apply",
 )
 

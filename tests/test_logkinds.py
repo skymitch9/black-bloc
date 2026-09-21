@@ -152,7 +152,6 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     ),
     "black_bloc/api/writes.py::kind": (
         "web.birthday.clear",
-        "web.birthday.import",
         "web.birthday.optin",
         "web.birthday.set",
         "web.chat.intent_created",

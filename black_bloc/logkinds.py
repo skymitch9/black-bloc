@@ -228,7 +228,6 @@ ROUTINE: frozenset[str] = frozenset(
         "handoff.refused",
         "birthday.announce",
         "birthday.clear",
-        "birthday.import",
         "birthday.member_missing",
         "birthday.mode",
         "birthday.optin",

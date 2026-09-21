@@ -1445,7 +1445,7 @@ half being DELETED — treat every row naming uploads, videos, the feed, shorts 
 | `black_bloc/api/tools/birthdays.py:45` | A birthday needs a month and a day, so nothing was stored. Pick both and send it… | ephemeral answer | no | `birthday_needs_a_date` | 2 |
 | `black_bloc/api/tools/birthdays.py:48` | **{name}** gets a birthday wish again. | ephemeral answer | no | `birthday_wished` | 2 |
 | `black_bloc/api/tools/birthdays.py:49` | **{name}** is opted out, so Black Bloc says nothing on their birthday. | ephemeral answer | no | `birthday_not_wished` | 2 |
-| `black_bloc/api/tools/birthdays.py:50` | There is no Birthday Bot export to read, so nothing was imported. The seed file … | ephemeral answer | no | `birthday_import_empty` | 2 |
+| ~~`black_bloc/api/tools/birthdays.py:50`~~ | ~~There is no Birthday Bot export to read, so nothing was imported. The seed file …~~ 🔴 **DELETED 2026-09-20** (branch `events-group`) with the whole Birthday Bot import; there is no key to make | — | — | ~~`birthday_import_empty`~~ | — |
 | `black_bloc/birthdays.py:33` | **Next birthdays** | ephemeral answer | no | `birthday_panel_next_heading` | 2 |
 | `black_bloc/birthdays.py:34` | The list of birthdays coming up is for staff in this server, so it is not shown … | ephemeral answer | no | `birthday_panel_next_is_staff_only` | 2 |
 | `black_bloc/birthdays.py:37` | ⚠️ Birthday wishes are **off**, so nothing is posted on the day yet. Your birthd… | ephemeral answer | no | `birthday_mode_warnings` | 2 |

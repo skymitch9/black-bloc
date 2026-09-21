@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import UTC, datetime
 
 import discord
@@ -7,7 +6,6 @@ import pytest
 
 from black_bloc import logs_panel
 from black_bloc.birthdays import (
-    ImportRow,
     local_today,
     next_occurrence,
     panel_buttons,
@@ -20,8 +18,7 @@ from black_bloc.cogs.community.birthdays import (
     change_opt,
     forget_birthday,
     get_birthday,
-    report_lines,
-    rows_for_guild,
+    members_of,
     save_birthday,
     stored_counts,
 )
@@ -1308,167 +1305,21 @@ async def test_a_staffer_demoted_while_the_panel_is_open_moves_nothing(
     assert await action_kinds(bot.db) == []
 
 
-async def test_import_matches_the_member_list_including_tagged_nicknames(bot, cog):
-    shin = FakeMember(bot.guild, user_id=2000, display_name="[Straight Hands] ShinDarkShadow")
-    pt = FakeMember(bot.guild, user_id=2001, display_name="PT")
-    nadia = FakeMember(bot.guild, user_id=2002, display_name="nadia")
-    FakeMember(bot.guild, user_id=2003, display_name="Prez")
-    FakeMember(bot.guild, user_id=2004, display_name="Prez")
-    rows = [
-        ImportRow("[Straight Hands] ShinDarkShadow", 1, 2, None),
-        ImportRow("[Tired of Planes] PT", 8, 10, 39),
-        ImportRow("(Umazing) nadia", 7, 26, None),
-        ImportRow("Prez", 6, 17, 39),
-        ImportRow("ghost", 1, 1, None),
-    ]
-
-    result = await cog._import(bot.guild, rows, 2026, bot.guild.members)
-
-    assert len(result["imported"]) == 3
-    assert f"<@{shin.id}>" in result["imported"][0]
-    assert f"<@{pt.id}>" in result["imported"][1]
-    assert f"<@{nadia.id}>" in result["imported"][2]
-    assert len(result["ambiguous"]) == 1 and "Prez" in result["ambiguous"][0]
-    assert result["not_found"] == ["ghost — January 1"]
-    assert bot.guild.queries == []
-    stored_pt = await get_birthday(bot.db, 2001)
-    assert (stored_pt["month"], stored_pt["day"], stored_pt["year"]) == (8, 10, 1987)
-    assert stored_pt["source"] == "import"
-
-    again = await cog._import(bot.guild, rows, 2026, bot.guild.members)
-    assert again["imported"] == []
-    assert len(again["already"]) == 3
-    assert len(await rows_for_guild(bot.db, GUILD)) == 3
-
-
-async def test_import_never_overwrites_what_someone_set_themselves(bot, cog):
-    pt = FakeMember(bot.guild, user_id=2001, display_name="PT")
-    await save_birthday(bot.db, GUILD, pt.id, 3, 3, None, "self")
-
-    rows = [ImportRow("[Tired of Planes] PT", 8, 10, 39)]
-    result = await cog._import(bot.guild, rows, 2026, bot.guild.members)
-
-    row = await get_birthday(bot.db, 2001)
-    assert (row["month"], row["day"], row["source"]) == (3, 3, "self")
-    assert "kept the self entry" in result["already"][0]
-
-
-async def test_a_half_filled_member_cache_is_chunked_before_anyone_is_matched(bot, cog):
+async def test_a_half_filled_member_cache_is_chunked_before_anyone_is_matched(bot):
     late = FakeMember(bot.guild, user_id=2001, display_name="PT")
     bot.guild.member_cache.pop(late.id)
     bot.guild.hidden = [late]
     bot.guild.member_count = 1
 
-    members = await cog.members_of(bot.guild)
-    result = await cog._import(bot.guild, [ImportRow("PT", 8, 10, None)], 2026, members)
+    members = await members_of(bot.guild)
 
     assert bot.guild.chunks == 1
     assert [m.id for m in members] == [late.id]
-    assert len(result["imported"]) == 1
     assert bot.guild.queries == []
 
 
-def seed(monkeypatch, rows, as_of=2026):
-    monkeypatch.setattr(birthdays_cog, "load_import_rows", lambda *a, **k: list(rows))
-    monkeypatch.setattr(birthdays_cog, "import_as_of_year", lambda *a, **k: as_of)
-
-
-def test_the_import_is_no_longer_a_slash_command():
-    assert not hasattr(Birthdays, "import_seed")
+def test_the_birthday_command_is_a_panel_and_not_a_group():
     assert not hasattr(Birthdays.birthday, "commands")
-
-
-async def test_the_daily_loop_brings_the_seed_over_and_records_that_it_ran(
-    bot, cog, monkeypatch
-):
-    pt = FakeMember(bot.guild, user_id=2001, display_name="PT")
-    seed(monkeypatch, [ImportRow("[Tired of Planes] PT", 8, 10, 39)])
-
-    await cog._import_loop()
-
-    row = await get_birthday(bot.db, pt.id)
-    assert (row["month"], row["day"], row["source"]) == (8, 10, "import")
-    assert cog.last_import_at is not None
-    assert cog.last_import_error is None
-    assert await action_kinds(bot.db) == ["birthday.import"]
-    details = json.loads((await details_for(bot.db, "birthday.import"))[0])
-    assert details["imported"] == 1
-    assert details["trigger"] == "daily"
-    assert details["searched"] == len(bot.guild.members)
-    assert bot.guild.queries == []
-
-
-async def test_a_second_daily_run_that_takes_nothing_new_writes_no_log_line(
-    bot, cog, monkeypatch
-):
-    """A daily `0 imported` line in the log channel is noise, so it stays in the process log."""
-    FakeMember(bot.guild, user_id=2001, display_name="PT")
-    seed(monkeypatch, [ImportRow("[Tired of Planes] PT", 8, 10, 39)])
-
-    await cog._import_loop()
-    await cog._import_loop()
-
-    assert await action_kinds(bot.db) == ["birthday.import"]
-    assert len(await rows_for_guild(bot.db, GUILD)) == 1
-    assert cog.last_import_error is None
-
-
-async def test_an_empty_seed_file_logs_nothing_and_does_not_raise(bot, cog, monkeypatch):
-    seed(monkeypatch, [])
-
-    await cog._import_loop()
-
-    assert await action_kinds(bot.db) == []
-    assert await rows_for_guild(bot.db, GUILD) == []
-    assert cog.last_import_error is None
-    assert cog.last_import_at is not None
-
-
-async def test_an_import_that_throws_is_recorded_and_does_not_kill_the_loop(
-    bot, cog, monkeypatch
-):
-    async def boom(*args, **kwargs):
-        raise RuntimeError("nope")
-
-    seed(monkeypatch, [ImportRow("PT", 8, 10, None)])
-    monkeypatch.setattr(cog, "_import", boom)
-
-    await cog._import_loop()
-
-    assert cog.last_import_error == "RuntimeError: nope"
-    assert cog.last_import_at is None
-    assert await action_kinds(bot.db) == []
-
-
-async def test_the_daily_import_leaves_an_unavailable_server_alone(bot, cog, monkeypatch):
-    FakeMember(bot.guild, user_id=2001, display_name="PT")
-    seed(monkeypatch, [ImportRow("[Tired of Planes] PT", 8, 10, 39)])
-    bot.guild.unavailable = True
-
-    await cog._import_loop()
-
-    assert await rows_for_guild(bot.db, GUILD) == []
-    assert cog.last_import_error is None
-
-
-async def test_an_import_loop_that_stops_is_recorded_and_started_again(bot, cog):
-    await cog._import_stopped(RuntimeError("gateway went away"))
-
-    assert cog.last_import_error == "RuntimeError: gateway went away"
-
-
-async def test_the_report_counts_every_bucket_and_carries_the_age_caveat():
-    result = {
-        "imported": ["a → <@1>"],
-        "already": ["b"],
-        "ambiguous": ["c"],
-        "not_found": ["d"],
-    }
-    text = "\n".join(report_lines(result, 2026, 412))
-    assert "**1 imported** · 1 already stored · 1 ambiguous · 1 not found" in text
-    assert "**412** members" in text
-    assert "a year out" in text
-    assert "2026 export" in text
 
 
 async def test_the_counts_used_by_status(bot):
@@ -1489,14 +1340,12 @@ async def set_opted_out(db, user_id):
 async def test_the_loops_are_registered_on_load_and_cancelled_on_unload(bot, cog):
     await cog.cog_load()
     assert cog._sweep.is_running()
-    assert cog._import_loop.is_running()
 
     await cog.cog_unload()
     await asyncio.sleep(0)
     await asyncio.sleep(0)
 
     assert not cog._sweep.is_running()
-    assert not cog._import_loop.is_running()
 
 
 async def test_the_loops_are_started_from_on_ready_when_the_database_was_late(bot, cog):
@@ -1507,12 +1356,10 @@ async def test_the_loops_are_started_from_on_ready_when_the_database_was_late(bo
     bot.db = Closed()
     await cog.cog_load()
     assert not cog._sweep.is_running()
-    assert not cog._import_loop.is_running()
 
     bot.db = live
     await cog.on_ready()
     assert cog._sweep.is_running()
-    assert cog._import_loop.is_running()
 
     await cog.cog_unload()
     await asyncio.sleep(0)

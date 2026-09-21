@@ -6008,30 +6008,6 @@ route('DELETE', '/api/birthdays/:user_id', (context) => {
   return { removed: true, user_id: context.params.user_id };
 });
 
-route('POST', '/api/birthdays/import', (context) => {
-  requireStaff(context.session);
-  const searched = MEMBERS.length;
-  const asOf = 2026;
-  const report = {
-    imported: ['Dax — March 3 → <@700000000000000007>'],
-    already: ['Casey — February 14 → <@700000000000000002> (kept the self entry)'],
-    ambiguous: ['moth — June 1 → Moth, moth_light'],
-    not_found: ['someonewholeft — August 9'],
-  };
-  const counts = Object.fromEntries(Object.entries(report).map(([key, value]) => [key, value.length]));
-  logAction('web.birthday.import', { details: counts });
-  return {
-    counts,
-    searched,
-    as_of_year: asOf,
-    report,
-    notes: [
-      `**${counts.imported} imported** · ${counts.already} already stored · ${counts.ambiguous} ambiguous · ${counts.not_found} not found`,
-      `Matched against the **${searched}** members Black Bloc can see in this server.`,
-    ],
-  };
-});
-
 function roomRow(row) {
   const live = CHANNELS.find((channel) => channel.id === String(row.channel_id)) || null;
   return {

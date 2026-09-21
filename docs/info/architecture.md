@@ -460,8 +460,6 @@ black_bloc/
 │                       the hidden/archive categories, and the "name no channel at all" fallback
 ├── dbsnapshot.py     ← a consistent snapshot of the live database, for the nightly backup pull
 ├── personality_pool.json ← the SKELETON shared with GABI (see personality-pool-design.md)
-├── data/             ← shipped package data (`pyproject.toml` → package-data)
-│   └── birthday_import_2026-08-05.json  ← the 39-row Birthday Bot export, seed for the daily import loop
 ├── logging_setup.py
 ├── cogs/
 │   ├── core.py       ← /ping, /about, /help, /settings — always loaded
@@ -536,7 +534,7 @@ black_bloc/
         │                    route went with the uploads half, 2026-09-18)
         ├── pings.py      ← F14: the streamer table, staff create/remove, the Events-role set-up
         ├── rolemenus.py  ← menus, options, post
-        ├── birthdays.py  ← the list, set / remove, and the Birthday Bot import
+        ├── birthdays.py  ← the list, set / remove (the Birthday Bot import went 2026-09-20)
         ├── honeypot.py   ← hits, Ban-now, setup
         ├── tempvoice.py  ← the live channel list, setup / repair
         ├── polls.py      ← the poll list, create, end / cancel, results

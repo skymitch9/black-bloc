@@ -321,7 +321,7 @@ REAL_COGS = [
     (
         "black_bloc.cogs.community.birthdays",
         "Birthdays",
-        {"_sweep": _record("last_run_at"), "_import_loop": _record("last_import_at")},
+        {"_sweep": _record("last_run_at")},
     ),
     (
         "black_bloc.cogs.community.events",

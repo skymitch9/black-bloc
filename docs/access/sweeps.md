@@ -1,7 +1,9 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-20** — row **`EG-a`** added at the foot for ONE `events` GROUP, NOT `event` AND `events`
+> **2026-09-20** — rows **`EG-a`** and **`EG-b`** added at the foot for ONE `events` GROUP, NOT `event` AND `events`,
+> and for THE BIRTHDAY BOT IMPORT BEING GONE (owner: *"in bvirthdays remove the import from birthday bot, its
+> been kicked"*; retirement banner in [`../info/phase5-design.md`](../info/phase5-design.md))
 > (branch `events-group`, off `main` `5ea8d44`). Owner: *"in the settings and i think everywhere there are 2
 > events areas, event and events. find all and combine them."* ⚠️ **Not merged, not deployed, and the
 > Discord half has NOT met Discord** — the site half was pressed against the local mock in
@@ -671,8 +673,9 @@ form for a full pass.
   is one panel now and every subcommand this block named is retired. The sweep the
   wishes themselves still get is: set your own birthday to today on the panel → within
   5 min expect a `birthday.would_announce` line in the test channel (`Wishes are… → on`
-  to see the actual embed, colour `#4eefff`). The daily Birthday Bot import runs on its
-  own loop; there has been no `/birthday import` since 2026-08-27.
+  to see the actual embed, colour `#4eefff`). ~~The daily Birthday Bot import runs on its
+  own loop~~ — **the whole Birthday Bot import is GONE since branch `events-group`,
+  2026-09-20** (owner: the bot was kicked); see row `EG-b` at the foot.
 - **Phase 7 (live, `modmail_enabled` false; rewritten 2026-09-05 AGAIN for Build B — every
   `/modmail …`, `/snippet …`, `/areply`, `/note` and `/close` this block used to name is
   gone):** `/modmail` is ONE command that opens a panel carrying the whole status block
@@ -2587,3 +2590,7 @@ and i think everywhere there are 2 events areas, event and events. find all and 
 | Row | Do | Expect |
 |---|---|---|
 | `EG-a` | **Settings** ▸ read the group headings down both columns, then type `event_panel` into the Find box | **ONE** Events section, not an **Event** and an **Events**. `event_panel_minutes` and `event_panel_own_list` sit inside it beside `events_mode`, `events_category_id`, `events_announce_channel_id`, `events_ping_role_id` and `events_create_scheduled`, and the section's own count includes them. The rail and the jump list hold one `events` entry. ⚠️ **In Discord, NOT VERIFIED:** `/settings` ▸ **A setting group…** should offer 24 groups with one **events** among them, and because `events` is over the 25-key cap it opens on **Find a setting…** rather than a full list |
+
+| Row | Do | Expect |
+|---|---|---|
+| `EG-b` | **Birthdays** ▸ read the page top to bottom, then open the **Set a birthday** drawer | There is **no Import from Birthday Bot** card and no **Import the Birthday Bot list** button anywhere — on the page, in the drawer, or in the preview lane. **Add or change one** holds the date form alone. Everything else is unchanged: the by-month list, the wording card, Settings and Logs. ⚠️ **In Discord, NOT VERIFIED:** `/birthday` ▸ **Status** should no longer print **last import** or **last import error**, and the Health page's loop list should hold one birthdays loop (the 5-minute sweep) instead of two. `POST /api/birthdays/import` is **measured** at **405** against the real app with the dashboard's own `unknown_route` sentence, never a bare status — the path still matches `PUT/DELETE /api/birthdays/{user_id}`, so it is a method refusal; the mock answers **404** because its router matches method and path together |

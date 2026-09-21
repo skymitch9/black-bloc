@@ -1878,36 +1878,6 @@
       ]
     },
     {
-      "method": "POST",
-      "path": "/api/birthdays/import",
-      "body": {},
-      "read_by": [
-        "page-birthdays.js importCard"
-      ],
-      "shape": "object",
-      "keys": [
-        "counts",
-        "searched",
-        "as_of_year",
-        "report",
-        "notes"
-      ],
-      "nested": {
-        "counts": [
-          "imported",
-          "already",
-          "ambiguous",
-          "not_found"
-        ],
-        "report": [
-          "imported",
-          "already",
-          "ambiguous",
-          "not_found"
-        ]
-      }
-    },
-    {
       "method": "DELETE",
       "path": "/api/birthdays/{member_id}",
       "read_by": [
@@ -5526,7 +5496,6 @@
     "web.birthday.set",
     "web.birthday.optin",
     "web.birthday.clear",
-    "web.birthday.import",
     "web.tempvoice.setup",
     "web.tempvoice.creator_removed",
     "web.tempvoice.rename",
