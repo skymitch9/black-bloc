@@ -2,8 +2,10 @@
 
 > **Audience:** Fable (to review and kick off), then the audit agent, then the per-page builds.
 > **Status:** TRACKED · 📐 **REVIEWED by Fable 2026-09-20 16:1x — the six tests in §C stand as written — and
-> STAGE 1 DISPATCHED** (one read-only Opus agent → `docs/info/ux-audit.md`). Stage 3 is already running for
-> one page (`golive-page`, its own design). No other page has been changed. **Last verified: 2026-09-20 15:3x** against `main` `22753ae`
+> STAGE 1 DONE** (`docs/info/ux-audit.md`, 20 pages ranked) · **STAGE 2 SHIPPED as twelve in-site PREVIEW pages, v144 2026-09-20 17:34**
+> (`site/public/preview/<page>.html`, real shell + real components over static seeds — the owner switched from standalone mocks
+> to these 16:4x; each is deleted when its real page ships) · **STAGE 3 LIVE for one page** (go-live, v142, its own design);
+> the rest wait on the owner's walk of the previews. No other real page has been changed. **Last verified: 2026-09-20 15:3x** against `main` `22753ae`
 > (v141 live): 20 pages under `site/public/*.html`, section counts measured per page (table in §B),
 > `site/public/assets/page-golive.js` read in full (845 lines, twelve top-level sections).
 > ⚠️ Secret NAMES only.

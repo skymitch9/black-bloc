@@ -110,6 +110,24 @@ flyctl logs --app black-bloc --no-tail        # boot log: cogs loaded, "commands
 flyctl releases --app black-bloc              # a NEW version number = it landed
 ```
 
+### ⚠️ "Nine *no key* tests fail in the gate, and only in the gate" — the shell is carrying `.env`
+
+Measured 2026-09-20 17:3x: the v144 gate failed `test_the_inventory_says_set_or_unset_and_never_a_value`, four polls
+"no key" tests, two chat, one minutes and one costs test — **nine, all of the shape "when the key is absent, say so"** — while
+the same tree had passed 6800 green an hour earlier. The tool shell had inherited every name in `.env` (`ANTHROPIC_API_KEY`,
+`GROQ_API_KEY`, `DISCORD_TOKEN`, all nineteen), so pydantic-settings found keys the tests assume are unset. A hand-written
+regex of "bot-shaped" names had missed the AI keys. **Clear every name `config.py` declares, mechanically, before the gate:**
+
+```powershell
+$names = Select-String -Path black_bloc\config.py -Pattern '^\s+([a-z_]+)\s*:' -AllMatches |
+  ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value.ToUpper() } | Sort-Object -Unique
+Get-ChildItem env: | Where-Object { $names -contains $_.Name } | ForEach-Object { Remove-Item "env:$($_.Name)" }
+powershell -NoProfile -File scripts\deploy.ps1 *> deploy.log
+```
+
+The gate refuses before `git push`, so a red run of this shape costs one re-run and nothing else. (Never print the values —
+`Get-ChildItem env:` alone would; select the names.)
+
 ### ⚠️ "The deploy printed nothing after *Waiting for depot builder*" — run it DETACHED
 
 The script USED to take **~10 minutes** end to end (measured 2026-09-03 morning: pytest
