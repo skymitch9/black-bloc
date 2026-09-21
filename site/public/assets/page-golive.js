@@ -98,6 +98,7 @@ const SWEEP_ASK_BODY = 'Every person who has streamed here and has no channel li
 const SWEEP_ASK_UNDO = 'Every link this makes can be undone one at a time with Unlink.';
 const SWEEP_CONFIRM = 'Link them';
 const SWEEP_DONE = 'The sweep ran.';
+const SWEEP_SAID = 'golive.sweep';
 
 const ANNOUNCEMENT_NOTE = 'One wording for both platforms. {platform} fills itself in.';
 const WORDING_TITLE = 'The wording';
@@ -1413,7 +1414,7 @@ function pageHead() {
 
 /** The two ways a row gets onto the list, beside the list (the owner: the page head was too far away). */
 function streamerDoors() {
-  const voice = notice();
+  const voice = sayAgain(SWEEP_SAID, notice());
   const sweep = button(SWEEP_TITLE, async () => {
     const sure = await ask({
       title: SWEEP_ASK_TITLE,
@@ -1427,7 +1428,7 @@ function streamerDoors() {
       (found) => found?.message || SWEEP_DONE,
     );
     if (done.ok) {
-      keepSaying('golive.links', voice);
+      keepSaying(SWEEP_SAID, voice);
       refresh();
     }
   }, { tone: 'quiet' });
