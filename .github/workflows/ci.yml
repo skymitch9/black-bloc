@@ -44,3 +44,6 @@ jobs:
 
       - name: Paste converter
         run: node site/mock/clipmd.test.mjs
+
+      - name: Go-live streamers join
+        run: node site/mock/golive-join.test.mjs

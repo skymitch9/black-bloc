@@ -14,6 +14,7 @@ from .panels import CAPPED_PLACEHOLDER, capped_placeholder
 from .panels import option_label as library_option_label
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
+from .settings_store import REQUEST_FILED, REQUEST_FILED_KEY, REQUEST_ID_PLACEHOLDER
 from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
@@ -211,10 +212,13 @@ CHECK_ASKED_DESCRIPTION = (
     "Try it and tell {asked_by} how it went — say what works and what does not. Staff mark it "
     "done once you are happy."
 )
-FILED = (
-    "Filed as **#{request_id}** — staff will see it on the site. You will get a DM every time it "
-    "moves."
-)
+FILED = REQUEST_FILED
+
+
+def filed_line(store: Any, guild_id: int, request_id: Any) -> str:
+    """The stored sentence, never `.format()` on owner-edited text."""
+    text = str(store.get(guild_id, REQUEST_FILED_KEY) or REQUEST_FILED)
+    return text.replace(REQUEST_ID_PLACEHOLDER, str(request_id))
 NOTHING_FILED_YET = "Nothing has been filed yet — `/request` puts the first one in."
 NOTHING_OPEN = "Nothing is open — every request has been finished, declined or withdrawn."
 NOTHING_OF_YOURS = "You have not filed a request yet — `/request` puts one in."

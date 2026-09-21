@@ -236,6 +236,7 @@ export const LABELS = {
   chat_memory_model: 'Which model writes a profile up after a conversation',
 
   request_mode: 'Whether people can ask for things',
+  request_filed_line: 'What a member is told the moment their request is filed',
   request_who_can_file: 'Who may file a request',
   request_notify_channel_id: 'Where a new request is announced',
   request_status_channel_id: 'Where a request’s status changes are announced',

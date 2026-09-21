@@ -983,3 +983,20 @@ async def test_a_post_is_found_by_its_thread_id_within_its_own_server_only(db):
     assert found is not None and found["id"] == request_id
     assert await pure.request_for_thread(db, OTHER_GUILD, 4242) is None
     assert await pure.request_for_thread(db, GUILD, 9999) is None
+
+
+class _Store:
+    def __init__(self, value=None):
+        self.value = value
+
+    def get(self, guild_id, key):
+        return self.value
+
+
+def test_the_filed_answer_reads_the_stored_sentence_and_fills_only_the_number():
+    assert pure.filed_line(_Store(None), 1, 11) == (
+        "Filed as **#11** — Request has been received. You will get a DM every time the status "
+        "is updated."
+    )
+    stored = _Store("Logged as {request_id}, {name}.")
+    assert pure.filed_line(stored, 1, 7) == "Logged as 7, {name}."

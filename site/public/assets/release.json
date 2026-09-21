@@ -1,7 +1,7 @@
 {
-  "release": "v141",
-  "commit": "d6c271d",
+  "release": "v142",
+  "commit": "e88573d",
   "changed_features": [
-    "modmail"
+    "golive"
   ]
 }

@@ -159,6 +159,12 @@ EVENTS_MOVED_LINE = (
     "This event now lives in its own post: {post}. This room is being removed."
 )
 POST_PLACEHOLDER = "{post}"
+REQUEST_FILED_KEY = "request_filed_line"
+REQUEST_FILED = (
+    "Filed as **#{request_id}** — Request has been received. You will get a DM every time "
+    "the status is updated."
+)
+REQUEST_ID_PLACEHOLDER = "{request_id}"
 
 WHERE_ALIASES_KEY = "events_where_link_aliases"
 WHERE_ALIAS_MAX = 32
@@ -350,6 +356,7 @@ KEY_TYPES: dict[str, str] = {
     EVENTS_REVIEW_MODE_KEY: "enum",
     EVENTS_FORUM_CHANNEL_KEY: "channel",
     EVENTS_MOVED_LINE_KEY: "text",
+    REQUEST_FILED_KEY: "text",
     DEFAULT_TIMEZONE_KEY: "text",
     TIMEZONE_CHOICES_KEY: "text",
     TIME_STEP_KEY: "int",
@@ -882,6 +889,11 @@ KEY_HELP: dict[str, str] = {
         f"the one line left in an event's old review room when staff press **Move to the "
         f"forum**; `{POST_PLACEHOLDER}` stands for the new post and is the only thing that may "
         "be filled in. The room is removed straight after, so this is the last thing said in it"
+    ),
+    REQUEST_FILED_KEY: (
+        "what a member is told the moment their request is filed; "
+        f"`{REQUEST_ID_PLACEHOLDER}` stands for the request's number and is the only thing "
+        "that may be filled in"
     ),
     "events_max_late_minutes": (
         "minutes an event may start late and still be announced; later than that it goes live "
@@ -2604,6 +2616,11 @@ NAME_TEMPLATE_UNKNOWN = (
     "thing a calendar name may stand in for is `{placeholder}`, the event's own title; write "
     "any other braces out as words."
 )
+FILED_LINE_UNKNOWN = (
+    "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. The only "
+    "thing that line may stand in for is `{placeholder}`, the request's number; write any other "
+    "braces out as words."
+)
 MOVED_LINE_UNKNOWN = (
     "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. The only "
     "thing that line may stand in for is `{placeholder}`, the post the event moved into; write "
@@ -2722,6 +2739,19 @@ def checked_costream(given: Any) -> str:
     return text
 
 
+def checked_filed_line(given: Any) -> str:
+    """`{request_id}` and nothing else, and it may be left out."""
+    text = str(given or "").strip()
+    stray = next(
+        (one.strip() for one in PLACEHOLDERS.findall(text) if one.strip() != "request_id"), None
+    )
+    if stray is not None:
+        raise SettingError(
+            FILED_LINE_UNKNOWN.format(found=stray[:40], placeholder=REQUEST_ID_PLACEHOLDER)
+        )
+    return text
+
+
 TEXT_CHECKS: dict[str, Any] = {
     DEFAULT_TIMEZONE_KEY: checked_zone,
     GOLIVE_COSTREAM_TEMPLATE_KEY: checked_costream,
@@ -2730,6 +2760,7 @@ TEXT_CHECKS: dict[str, Any] = {
     WHERE_ALIASES_KEY: checked_aliases,
     EVENTS_SCHEDULED_NAME_KEY: checked_name_template,
     EVENTS_MOVED_LINE_KEY: checked_moved_line,
+    REQUEST_FILED_KEY: checked_filed_line,
     RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
 }
 
@@ -3108,6 +3139,8 @@ class SettingsStore:
             return EVENTS_REVIEW_MODE
         if key == EVENTS_MOVED_LINE_KEY:
             return EVENTS_MOVED_LINE
+        if key == REQUEST_FILED_KEY:
+            return REQUEST_FILED
         if key == DEFAULT_TIMEZONE_KEY:
             return DEFAULT_TZ
         if key == TIMEZONE_CHOICES_KEY:
