@@ -1,5 +1,11 @@
 # The Go-live page, rebuilt — one list of people, whichever platform they stream on
 
+> **2026-09-21 (branch `autolink`, not merged):** the Streamers toolbar gains a third door, **Link from history** —
+> one `ask()` confirm, `POST /api/golive/links/sweep`, and the report sentence under the button. It keeps its OWN
+> notice (`sayAgain('golive.sweep', …)`) because this page hands one `say` node to both `streamersSection` and
+> `recentSection`, so the section's notice physically lives inside the collapsed **Recent streams** — see
+> [`autolink-design.md`](autolink-design.md) ▸ Deviations ▸ **6**, which names the five other keys still caught by it.
+>
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v142** — merge `e88573d`, release `6a6f8e4`,
 > deployed **2026-09-20 17:02** Phoenix, **and RENDERED in a browser by the conductor** (the strip, the live cards, the row drawer with its
 > four groups; one gap found and fixed on `main` `4b1731d`: the Streamers list arrived shut). The seventeen `## Deviations` are
