@@ -474,6 +474,47 @@ function youtubeMoves(row, say) {
   ];
 }
 
+let pingsTemplate = '{name} pings';
+
+/** The same door /pings has: an existing role, or a new one named by pings_fan_role_template. */
+async function addPingRole(row, say) {
+  const who = row.name || row.user_id;
+  const roles = await roleSelect(null);
+  const named = el('p', { class: 'field-help' });
+  const sayName = () => {
+    const picked = readSelect(roles, false);
+    named.textContent = picked
+      ? 'That role becomes their ping role; nobody gets added to it by this.'
+      : `Black Bloc makes a new role named “${pingsTemplate.replace('{name}', who)}” — the name comes from `
+        + 'pings_fan_role_template, in Everything else ▸ Ping roles.';
+  };
+  roles.addEventListener('change', sayName);
+  sayName();
+  const sure = await ask({
+    title: `Give ${who} a ping role`,
+    body: [
+      'Members who press their name on /pings get this role, and it is pinged when they go live.',
+      field('Use an existing role, or leave it to make a new one', roles),
+      named,
+    ],
+    confirmLabel: 'Add the ping role',
+    tone: 'warn',
+  });
+  if (!sure) return;
+  const done = await run(
+    say,
+    () => send('/api/pings/streamers', 'POST', {
+      member_id: row.user_id,
+      role_id: readSelect(roles, false),
+    }),
+    (found) => found?.message || 'Made the role.',
+  );
+  if (done.ok) {
+    keepSaying('pings.streamers', say);
+    refresh();
+  }
+}
+
 async function roleMoves(row, say) {
   const moves = [];
   if (row.role_id) {
@@ -497,22 +538,8 @@ async function roleMoves(row, say) {
         refresh();
       }
     }, { tone: 'danger' }));
-  } else {
-    const roles = await roleSelect(null);
-    moves.push(roles, button('Give them a ping role', async () => {
-      const done = await run(
-        say,
-        () => send('/api/pings/streamers', 'POST', {
-          member_id: row.user_id,
-          role_id: readSelect(roles, false),
-        }),
-        (found) => found?.message || 'Made the role.',
-      );
-      if (done.ok) {
-        keepSaying('pings.streamers', say);
-        refresh();
-      }
-    }, { tone: 'warn' }));
+  } else if (!String(row.user_id).startsWith('spotlight:')) {
+    moves.push(button('Add a ping role…', () => addPingRole(row, say), { tone: 'warn' }));
   }
   if (row.listed !== null) {
     moves.push(button(row.listed ? 'Hide' : 'Restore', async () => {
@@ -691,10 +718,18 @@ async function showStreamer(row) {
 }
 
 function announcedCell(row) {
-  if (row.opted_out) return badge(OPTED_OUT, 'warn');
   if (row.live) return badge(LIVE_NOW, 'ok');
-  if (row.spotlight) return badge(`spotlight \u00b7 ${row.spotlight.until}`);
   return muted(READY);
+}
+
+function expiresCell(row) {
+  if (!row.spotlight) return muted('—');
+  if (row.spotlight.kept) return el('span', {}, [badge('kept for ever', 'ok')]);
+  return el('span', { class: 'cell-quiet', text: row.spotlight.until });
+}
+
+function optedOutCell(row) {
+  return row.opted_out ? el('span', {}, [badge(OPTED_OUT, 'warn')]) : muted('—');
 }
 
 function memberCell(row) {
@@ -736,7 +771,8 @@ function drawCard(node, text, head, roles) {
   });
 }
 
-const COLUMNS = ['Member', 'Twitch', 'YouTube', 'Ping role', 'Announced'];
+const COLUMNS = ['Member', 'Twitch', 'YouTube', 'Ping role', 'Announced', 'Expires', 'Opted out'];
+const STREAMER_GRID = 'grid-template-columns: minmax(200px, 1.4fr) 150px 150px 170px 120px 130px 100px 24px';
 
 function roleCell(row) {
   if (row.role) {
@@ -752,6 +788,7 @@ function streamerRow(row) {
   return el('button', {
     class: 'grid-row',
     type: 'button',
+    style: STREAMER_GRID,
     'data-search': (`${row.name || ''} ${row.user_id} ${row.twitch || ''} `
       + `${row.youtube || ''} ${row.role || ''}`).toLowerCase(),
     on: { click: () => showStreamer(row) },
@@ -761,6 +798,8 @@ function streamerRow(row) {
     row.youtube ? el('span', { class: 'cell-quiet', text: row.youtube }) : muted('—'),
     roleCell(row),
     announcedCell(row),
+    expiresCell(row),
+    optedOutCell(row),
     icon('chevronRight', 16),
   ]);
 }
@@ -773,7 +812,7 @@ function streamersSection(rows, say) {
     group.body.append(sayNothing(NO_STREAMERS), voice);
     return group.node;
   }
-  const head = el('div', { class: 'grid-row head' }, [
+  const head = el('div', { class: 'grid-row head', style: STREAMER_GRID }, [
     ...COLUMNS.map((label) => el('span', { text: label })),
     el('span'),
   ]);
@@ -1377,6 +1416,8 @@ async function load() {
 
   const golive = settingsNamespace(allSettings, 'golive');
   const pings = settingsNamespace(allSettings, 'pings');
+  const nameSpec = pings.find((one) => one.key === 'pings_fan_role_template');
+  if (nameSpec) pingsTemplate = String(nameSpec.value ?? nameSpec.default ?? pingsTemplate);
   const youtube = settingsNamespace(allSettings, 'youtube');
   const placed = placeSettings([...golive, ...pings, ...youtube]);
 
