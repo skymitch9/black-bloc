@@ -1,6 +1,14 @@
-# Owner sweeps — what is shipped but never exercised by a person
+﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-21** — rows `CO-a` and `CO-b` added at the foot for THE CHANNEL OPT-OUT THAT NOW ENDS THE
+> ANNOUNCEMENT ALREADY OUT (branch `channel-optout`, off `main` `1a35d75`; design
+> [`../info/channel-streamers-design.md`](../info/channel-streamers-design.md) ▸ **Follow-up 2026-09-21**).
+> Owner, 09:5x: *"the bot went live and annouced esam and pinned it, it should have been in the list silent. i
+> opted out of the spotlight for it and opted out of notifications"*. ⚠️ **Not merged, not deployed, and
+> NOTHING IN IT HAS MET DISCORD** — no pin has come off a real message and no announcement has been edited or
+> deleted by this branch. Rows are lettered; the conductor numbers them at the merge. ⚠️ **Nothing else in
+> this file was re-checked then.** Before that,
 > **2026-09-21** — rows `AL-a` … `AL-d` added at the foot for THE AUTO-LINK (a staff sweep over the go-live history,
 > and a presence go-live that links the member from then on; branch `autolink`, off `main` `0d83065`; design
 > [`../info/autolink-design.md`](../info/autolink-design.md)). Owner: *"can we do a sweep of the golive channel and
@@ -2685,3 +2693,25 @@ the conductor numbers them at the merge. Staff door: **Runs the cookout** ▸ **
 | **727** (was `AL-b`) | Go live on Twitch as somebody with **no** channel linked (Discord's own Streaming status, not the Twitch poller), and watch the go-live channel and then **Go-live** ▸ **Streamers** | The announcement posts as it always did, **and** that person's Twitch column now reads their login without anybody typing it. The Logs page's **golive** chip holds a `golive.link` row whose details say `because: presence`. ⚠️ **Then do the same on YouTube:** the open question this row exists to settle is whether a YouTube presence's URL is a `watch?v=…` (in which case nothing is linked and that is correct — Deviation 3) or a channel address (in which case the YouTube column fills in). Either answer is a result; write down which |
 | **728** (was `AL-c`) | **Settings** ▸ find `golive_autolink_presence`, turn it **off**, then go live from presence again | Announced exactly as before, and **nothing linked** — the Twitch column stays empty and no `golive.link` row appears. Turn it back on. The key sits in **Go-live** ▸ **Everything else** ▸ *How streams are spotted*, beside `golive_boot_sweep`, and `/settings` reaches it too |
 | **729** (was `AL-d`) | Have somebody press **Stop announcing my streams** on `/golive`, then run **Link from history** again. Separately, link a login to member A by hand and put member B's presence on that same login | The opted-out person is **not** linked and the report counts them (*"skipped 1 who asked not to be announced"*) — an opt-out is never quietly overridden. For the clash: B is **not** linked, A keeps the login, B's announcement still goes out, and the Logs page holds a routine `golive.autolink_refused` row naming the channel. The history sweep's version of the same clash says *"1 channel already belongs to somebody else (B → twitch.tv/login)"* rather than moving it |
+
+## Rows `CO-a`, `CO-b` — opting a LIVE channel out ends the announcement that is already out (branch `channel-optout`, 2026-09-21)
+
+⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET DISCORD.** The defect, measured on live:
+ESA's spotlight session 2 opened at **16:51:16Z, the same second the bot logged in after the v151
+deploy** — the boot poll announced and pinned it under the migration's `announce = 1` default. The
+owner then turned `announce` off and `spotlight` off, and **nothing ended it**: only
+`spotlight_end_misses` quiet Helix polls end a session, and ESA runs reruns around the clock.
+Owner, 2026-09-21 09:5x: *"the bot went live and annouced esam and pinned it, it should have been in
+the list silent. i opted out of the spotlight for it and opted out of notifications"*. Design:
+[`../info/channel-streamers-design.md`](../info/channel-streamers-design.md) ▸ **Follow-up 2026-09-21**.
+Review link: <https://blackbloc.heygabi.ai/golive.html> ▸ the **ESA Marathon** row ▸ **Announcements**.
+
+⚠️ **Both rows want a channel that is actually LIVE**, which is what made the defect invisible until
+it bit. ESA is live most of the time, which is why it is the row to use. The new key
+`golive_channel_optout_post` is in **Settings** ▸ **Go-live** ▸ *How streams are spotted*, beside
+`golive_channel_spotlight_default`, and `/settings` reaches it too.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`CO-a`** | While **ESA Marathon** is LIVE and its announcement is pinned in `#go-live`, open **Go-live** ▸ its row ▸ **Announcements** and press **Opt out of announcements**. Watch `#go-live` | ⚠️ **The row the whole defect is about.** Within a second: the pinned post is **unpinned** and its words are **edited to the one end wording** (past tense — `golive_end_template`, whatever it says today), exactly as if the stream had ended. The drawer's answer says *"… is opted out …"* **and** names what became of the post — *"The announcement that was out has been unpinned and edited to say the stream has ended … (per `golive_channel_optout_post`)."* The Streamers list's **Opted out** cell reads *opted out* and the row is no longer *live now*. **No reminder follows, however long ESA keeps streaming**, and the channel is NOT announced again while it stays opted out. The Logs page's **golive** chip holds `golive.spotlight_ended` with `reason: opted_out` and `post: end`, plus `golive.spotlight_unpinned`. ⚠️ Press **Opt out** a second time and NOTHING more happens — no second end row. Then set `golive_channel_optout_post` to `delete` and repeat on another live channel: the post **disappears** instead (`golive.spotlight_post_deleted`); set it to `leave` and the post stays word-for-word as posted with only the pin off. The same move from Discord — `/golive` ▸ **Channels…** ▸ pick the channel ▸ **Opt out of announcements** — says the same sentence and does the same thing |
+| **`CO-b`** | While a channel is LIVE and PINNED, press **Spotlight off** on its row instead (not Opt out). Then leave it and wait for the stream to really end | The announcement is **unpinned and nothing else** — the words stay exactly as posted, saying the channel is live, because it still is. The answer says *"… is announced like anybody else's stream now … The announcement that is out now has been unpinned; it stays posted, no reminder follows it, and it is edited to past tense when the stream ends."* The row is STILL *live now* and its session is still open; `golive.spotlight_unpinned` carries `because: spotlight_off`. **No reminder goes out** for the rest of the stream. When Twitch finally reads offline the post is edited to past tense the normal way. ⚠️ Pressing **Spotlight on** again mid-stream does NOT re-pin the post that is already out — the pin is taken at announce time (sweep row **721** says the same) |

@@ -496,5 +496,5 @@ process.stdout.write(
     + 'has a row; two open sessions are one row; a co-stream says both platforms; an ambiguous '
     + 'address is refused in words; a spotlighted channel with no member is its own row and one '
     + 'that IS a linked login is not a second; a channel row carries its YouTube link, its '
-    + 'opt-out and the side its session opened on; all 51 settings keys land in exactly one place\n',
+    + 'opt-out and the side its session opened on; all 52 settings keys land in exactly one place\n',
 );
