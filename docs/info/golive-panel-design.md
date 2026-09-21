@@ -539,3 +539,121 @@ The design already lists five. These are the ones this build met:
    are keyed against UNMERGED branches**, as their own banners say. This build re-keyed only the
    golive keys; the conductor's merge-order re-key still owes the rest.
 
+## Follow-up 2026-09-21: a member's opt-out ends the announcement that is already out
+
+> 🔨 **BUILT 2026-09-21 on branch `member-optout`, off `main` `20b615d`** (v152 live + one TODO
+> commit). ⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET DISCORD.** Sweeps `MO-a` and
+> `MO-b` — the conductor numbers them. Review link:
+> <https://blackbloc.heygabi.ai/golive.html> ▸ a live member's row ▸ **Opt out**.
+
+**The ask, owner verbatim (2026-09-21 10:4x):** *"opt out should end their annoucement"* — said of a
+MEMBER's opt-out, the morning after v152 made a *channel's* opt-out end the announcement already
+out. The channel half is
+[`channel-streamers-design.md`](channel-streamers-design.md) ▸ **Follow-up 2026-09-21**, and its
+Deviation **5** is exactly this asymmetry, recorded there as "worth the owner's word if he wants
+both". He did.
+
+**What was wrong.** `opt_out` wrote the `golive_optout` row and dropped the fan role, and nothing
+else. An open `golive_sessions` row and its posted announcement ran on until presence went quiet,
+the Twitch poller read offline, or the boot sweep aged the row out — so a member who pressed **Stop
+announcing my streams** mid-stream was still announced, still wearing the live role, with the post
+still reading in the present tense. Three doors reach `opt_out` and all three behaved this way:
+`/golive` ▸ **Stop announcing my streams**, the site's member drawer ▸ **Opt them out**, and staff's
+`POST /api/golive/optouts`.
+
+**The rule after.** `opt_out` returns `(the fan-role sentence, what an OPEN announcement had done to
+it)` and funnels through `settle_open_session`, which hands the work to the cog's `end_for_optout`.
+That takes the member's own `asyncio.Lock` — the same one `_go_live` holds while it announces — and
+**re-reads the open row inside it** (checklist 6), so a second press of Opt out ends nothing twice.
+
+The end itself is the usual member end path, with two things added:
+
+- the `golive.end` row carries **`reason: "opted_out"`** and a **`post`** detail naming which of the
+  three treatments ran;
+- the live role comes off (`_remove_live_role`, which already records `role_stuck` when it cannot),
+  the session is closed, and any scheduled grace-period end is cancelled.
+
+**The key — `golive_member_optout_post`** (enum, group `golive`, default **`end`**): registry
+(`KEY_TYPES` / `KEY_CHOICES` / `KEY_HELP` / the default chain) + the mock's `SETTING_SPECS` row +
+`labels.js` + `golive-join.js:placeSettings` (the *How streams are spotted* drawer, beside
+`golive_channel_optout_post`) + the join fixture (**52 → 53** keys in the three namespaces).
+⚠️ **Registry keys measured 2026-09-21 on this branch: 298** (`297` before this key).
+
+| Value | What happens to the post that is out |
+|---|---|
+| **`end`** (default) | Unpinned and edited to the ONE end wording, exactly as any stream end does |
+| `delete` | Deleted outright (`golive.post_deleted`); a refusal logs and falls back to the words |
+| `leave` | Left exactly as posted — only the pin comes off |
+
+The session is closed and the live role comes off in all three, so nothing waits on Twitch or on the
+member's presence.
+
+**The sentence.** `golive.optout_said(said, settled)` is the ONE sentence function all three doors
+use: each door passes its own base sentence and the clause lands only when a session was actually
+open, naming `golive_member_optout_post` so a reader knows what to change. The API answer's
+`message` carries it, and the site drawer prints what the route answers. Opting back **in** says in
+the same breath that a stream already running is not announced after the fact — the member's own
+`OPTED_IN`, staff's `THEY_OPTED_IN` and the route's `OPTED_IN` all say it.
+
+### Follow-up deviations
+
+1. ⚠️ **`optout_said` takes the base SENTENCE, not a row — it is not `announce_said`'s exact
+   shape.** The brief said to mirror `spotlight.announce_said(row, settled)`, which picks its own
+   base because a channel row keys one sentence. A member's three doors address three different
+   people — *your* streams, *their* streams, **{name}**'s streams — so a row-keyed function would
+   have to carry the door as an argument anyway. One function, three bases, one clause table:
+   `optout_said(said, settled)`. It is still the single place the clause is decided, which is what
+   "one sentence function" was for.
+2. **`MEMBER_OPTOUT_END` / `_DELETE` / `_LEAVE` / `_POSTS` are ASSIGNED FROM the channel
+   constants**, not re-spelled. The three value words are one fact (checklist 15) and the member
+   names point at it, so they cannot drift; only the KEY is new.
+   `tests/test_settings_store.py::test_the_member_and_channel_optout_posts_are_two_keys_over_one_set_of_words`
+   guards the identity. The alternative — renaming `CHANNEL_OPTOUT_*` to a neutral `OPTOUT_POST_*` —
+   would have churned `spotlight.py`, the spotlight cog and their tests a day after v152 shipped,
+   for no behaviour.
+3. **A failure kind was invented rather than reused: `golive.post_delete_failed` /
+   `golive.post_deleted`, and `golive.unpin_failed` / `golive.unpinned`.** The spotlight family
+   folds its delete failure into `golive.spotlight_post_failed` with `what: "delete"`, because that
+   kind already existed there for the bump path. The member family has no such kind, so inventing
+   one is cheaper than inventing a `what` field with one value. Checklist 2: an `on`-mode failure
+   never shares a kind with a success.
+4. **`_mark_ended` gained a keyword-only `message`**, so the opt-out path fetches the announcement
+   ONCE and hands the same object to the unpin and to the edit. Every other caller passes nothing
+   and fetches as before.
+5. ⚠️ **The unpin is defensive, not a mirror.** This feature never pins a member's announcement —
+   only the spotlight half pins — so the only pin `_unpin_announcement` can find is one a human put
+   on by hand. It comes off because the MESSAGE carries one (checklist 3), never because a key says
+   so. A reader comparing this to the channel path should not conclude that members get pinned.
+6. **`_end_live` was NOT changed.** The ordinary end (presence quiet, poller offline, grace expired)
+   still does not unpin and still writes `golive.end` with no `reason` and no `post`. Only the
+   opt-out path is new, which keeps the diff to the case the owner asked about; the cost is that a
+   hand-pinned announcement ended the ordinary way still strands its pin.
+7. **This section lives in `golive-panel-design.md`, not the `docs/info/golive-design.md` the brief
+   named** — there is no such file, and the go-live feature already has five design docs
+   (`golive-panel`, `golive-page`, `golive-end`, `golive-boot-sweep`, `channel-streamers`). This
+   doc owns the member opt-out move across all three doors, so a sixth would have split the fact.
+8. **No warning before the press.** The sentence is the *result* sentence, exactly as the channel
+   follow-up's Deviation 6 decided; the drawer and the panel still say nothing in advance about
+   what will happen to a post that is out.
+
+### Follow-up — what was NOT verified
+
+- ⚠️ **NOTHING HERE HAS MET DISCORD.** No member was opted out in a real server, no pin came off a
+  real message, nothing was deleted, no announcement was edited and no live role was removed. Every
+  claim about what a post reads is the suite's, against fakes. **A Discord run is impossible from a
+  build worktree** — it needs the token and a live gateway.
+- ⚠️ **The live role removal is proved only against `FakeMember.remove_roles`.** The `role_stuck`
+  branch (role gone, member not visible, HTTP refusal) was not exercised by this build at all; it is
+  the pre-existing code reached unchanged.
+- **No browser check was made.** The site half is the route's sentence and the mock's mirror of it,
+  proved by `check.mjs`, the node tests and the suite — not by a page anybody looked at.
+- **The mock's settle is a hand-written mirror**, not shared code: `site/mock/server.mjs`
+  (`settleOpenMemberSession`, `MEMBER_OPTED_OUT_POST_SAID`, `memberOptedOutSaid`) restates the three
+  sentences and the session close, and the mock has no live role and no pin to move. If the Python
+  wording changes and the mock's does not, nothing fails — the two copies are only checked by eye.
+  It WAS exercised by hand on `MOCK_PORT=8780`: the first opt-out of the seeded live member
+  (`Casey`, session 12) answered with the `end` clause, a second answered with the plain sentence.
+- **`delete` and `leave` were never exercised against the mock** — only against the Python suite;
+  the mock's `leave` branch does nothing but close the session, which is all it can do.
+- **No migration was written and none is needed** — the key is a settings row with a default, so an
+  unset guild reads `end` from the default chain.

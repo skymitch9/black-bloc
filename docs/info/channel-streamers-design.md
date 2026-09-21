@@ -187,11 +187,18 @@ what the route answers. The clause lands only when a session was actually open, 
    expire, `link_youtube`, `unlink_youtube`) want the row and nothing else, so the `(row, settled)` pair
    lives on `changed_spotlight` and `change_spotlight` is a one-line wrapper. The PATCH route and
    `set_announce` / `set_spotlight` are the three callers that take the pair.
-5. **The member opt-out (`cogs/content/golive.py:opt_out`) was NOT changed to match.** The brief
+5. ~~**The member opt-out (`cogs/content/golive.py:opt_out`) was NOT changed to match.** The brief
    said to mirror it if it ends an open session; it does not — it writes the opt-out row and drops
    the fan role, and a member's open go-live session runs on until presence or the poller says it
    is over. That asymmetry is now deliberate rather than accidental: a member's session ends by
-   itself within the hour, a 24/7 channel's never does. Worth the owner's word if he wants both.
+   itself within the hour, a 24/7 channel's never does. Worth the owner's word if he wants both.~~
+   ⚠️ **REVERSED 2026-09-21 by the owner — "opt out should end their annoucement"** — branch
+   `member-optout`, off `main` `20b615d`. The asymmetry is gone: a member's opt-out now ends the
+   open session the same way, under the member's own lock, with its own key
+   `golive_member_optout_post`. The reasoning above was wrong about the stakes rather than the
+   mechanism — a member's session does end by itself within the hour, but an hour of a post that
+   says somebody is live when they have asked not to be announced is exactly what the owner did not
+   want. Design: [`golive-panel-design.md`](golive-panel-design.md) ▸ **Follow-up 2026-09-21**.
 6. **No forward-looking warning was added to the drawer or the panel before the press.** The Opt-out
    sentence is the *result* sentence, per the brief's "both doors use the one sentence function";
    saying it in advance on the site would mean putting `golive_channel_optout_post` into the

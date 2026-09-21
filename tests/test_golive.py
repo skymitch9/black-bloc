@@ -10,6 +10,7 @@ from black_bloc.golive import (
     GAME_FALLBACK,
     HISTORY_NOTHING,
     LINK_HISTORY,
+    OPTED_OUT_POST_SAID,
     PANEL_BUTTONS,
     PANEL_MINUTES_KEY,
     PANEL_TIMEOUT_FOOTER,
@@ -41,6 +42,7 @@ from black_bloc.golive import (
     is_streaming,
     joins_session,
     live_author,
+    optout_said,
     panel_buttons,
     panel_minutes,
     parse_ts,
@@ -1072,3 +1074,21 @@ def test_the_staff_panel_gains_link_from_history_and_nothing_else_moved():
     assert "Link from history" not in [
         move.label for move in panel_buttons(linked=True, opted_out=False)
     ]
+
+
+def test_the_opt_out_sentence_gains_a_clause_only_when_a_session_was_open():
+    """The ONE sentence function all three doors use, mirroring the channel's announce_said."""
+    plain = "Done — Black Bloc will not announce your streams."
+
+    assert optout_said(plain) == plain
+    assert optout_said(plain, None) == plain
+    assert optout_said(plain, "") == plain
+    assert optout_said(plain, "something else") == plain
+
+    ended = optout_said(plain, "end")
+    assert ended.startswith(plain)
+    assert "edited to say the stream has ended" in ended
+    assert "golive_member_optout_post" in ended
+    assert "has been deleted" in optout_said(plain, "delete")
+    assert "left exactly as it was posted" in optout_said(plain, "leave")
+    assert set(OPTED_OUT_POST_SAID) == {"end", "delete", "leave"}

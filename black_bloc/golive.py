@@ -17,6 +17,9 @@ from .settings_store import (
     GOLIVE_END_TEMPLATE,
     GOLIVE_LIVE_FIELD,
     GOLIVE_TEMPLATE,
+    MEMBER_OPTOUT_DELETE,
+    MEMBER_OPTOUT_END,
+    MEMBER_OPTOUT_LEAVE,
 )
 
 log = logging.getLogger(__name__)
@@ -717,6 +720,28 @@ MODE_LINES = {
         "posted and nothing is."
     ),
 }
+OPTED_OUT_POST_SAID = {
+    MEMBER_OPTOUT_END: (
+        "The announcement that was out has been unpinned and edited to say the stream has "
+        "ended, exactly as any stream end does, the live role is off and the session is closed "
+        "(per `golive_member_optout_post`)."
+    ),
+    MEMBER_OPTOUT_DELETE: (
+        "The announcement that was out has been deleted, the live role is off and the session "
+        "is closed (per `golive_member_optout_post`)."
+    ),
+    MEMBER_OPTOUT_LEAVE: (
+        "The announcement that was out is left exactly as it was posted — only the pin came "
+        "off — and the live role is off with the session closed (per "
+        "`golive_member_optout_post`)."
+    ),
+}
+
+
+def optout_said(said: str, settled: Any = None) -> str:
+    """One sentence for all three doors; the clause lands only when a session was open."""
+    clause = OPTED_OUT_POST_SAID.get(str(settled or ""))
+    return f"{said} {clause}" if clause else said
 
 
 @dataclass(frozen=True)

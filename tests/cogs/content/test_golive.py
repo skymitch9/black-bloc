@@ -60,12 +60,26 @@ class FakeMessage:
         self.kwargs = kwargs
         self.edits = []
         self.embeds = [kwargs["embed"]] if kwargs.get("embed") is not None else []
+        self.pinned = False
+        self.deleted = False
+        self.refuses_delete = False
+        self.refuses_unpin = False
 
     async def edit(self, content=None, **kwargs):
         self.content = content
         self.edits.append(kwargs)
         if kwargs.get("embed") is not None:
             self.embeds = [kwargs["embed"]]
+
+    async def unpin(self, reason=None):
+        if self.refuses_unpin:
+            raise RuntimeError("no")
+        self.pinned = False
+
+    async def delete(self):
+        if self.refuses_delete:
+            raise RuntimeError("no")
+        self.deleted = True
 
     @property
     def embed(self):
@@ -1673,6 +1687,134 @@ async def test_opting_out_and_back_in_from_the_panel(cog, bot, member, db):
     assert await is_opted_out(db, member.id) is False
     assert "again" in back.sent
     assert await action_kinds(db) == ["golive.optout", "golive.optin"]
+
+
+async def live_and_pinned(cog, bot, member, *, pin=True):
+    """One member live with the announcement out, the live role on and a pin somebody added."""
+    await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_live_role_id", LIVE_ROLE)
+    await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
+    posted = bot.guild.channel.messages[0]
+    posted.pinned = pin
+    return posted
+
+
+async def test_opting_out_while_live_ends_the_announcement_that_is_already_out(
+    cog, bot, member, db
+):
+    """The owner's ask, 2026-09-21: 'opt out should end their annoucement'."""
+    posted = await live_and_pinned(cog, bot, member)
+    panel = await open_panel(cog, bot, member)
+
+    out = await press(bot, member, panel.view, "Stop announcing my streams")
+
+    assert posted.content == "**Alice** was streaming **Celeste** — the stream has ended. u"
+    assert posted.pinned is False and posted.deleted is False
+    assert await open_session_for(db, GUILD, USER) is None
+    assert member.removed == [LIVE_ROLE]
+    assert "edited to say the stream has ended" in out.sent
+    assert "golive_member_optout_post" in out.sent
+
+    details = json.loads(await action_details(db, "golive.end"))
+    assert details["reason"] == "opted_out" and details["post"] == "end"
+    kinds = await action_kinds(db)
+    assert "golive.unpinned" in kinds and "golive.optout" in kinds
+
+
+async def test_opting_out_while_live_deletes_the_post_when_the_key_says_delete(
+    cog, bot, member, db
+):
+    await bot.store.set(GUILD, "golive_member_optout_post", "delete")
+    posted = await live_and_pinned(cog, bot, member)
+    panel = await open_panel(cog, bot, member)
+
+    out = await press(bot, member, panel.view, "Stop announcing my streams")
+
+    assert posted.deleted is True and posted.edits == []
+    assert "has been deleted" in out.sent
+    assert json.loads(await action_details(db, "golive.end"))["post"] == "delete"
+    assert "golive.post_deleted" in await action_kinds(db)
+
+
+async def test_a_refused_delete_falls_back_to_the_end_wording_and_says_why(cog, bot, member, db):
+    await bot.store.set(GUILD, "golive_member_optout_post", "delete")
+    posted = await live_and_pinned(cog, bot, member)
+    posted.refuses_delete = True
+    panel = await open_panel(cog, bot, member)
+
+    await press(bot, member, panel.view, "Stop announcing my streams")
+
+    assert posted.deleted is False
+    assert posted.content == "**Alice** was streaming **Celeste** — the stream has ended. u"
+    assert posted.pinned is False
+    assert "golive.post_delete_failed" in await action_kinds(db)
+
+
+async def test_opting_out_while_live_leaves_the_words_alone_when_the_key_says_leave(
+    cog, bot, member, db
+):
+    await bot.store.set(GUILD, "golive_member_optout_post", "leave")
+    posted = await live_and_pinned(cog, bot, member)
+    said = posted.content
+    panel = await open_panel(cog, bot, member)
+
+    out = await press(bot, member, panel.view, "Stop announcing my streams")
+
+    assert posted.content == said and posted.edits == [] and posted.deleted is False
+    assert posted.pinned is False
+    assert "left exactly as it was posted" in out.sent
+    assert await open_session_for(db, GUILD, USER) is None
+    assert json.loads(await action_details(db, "golive.end"))["post"] == "leave"
+
+
+async def test_opting_out_with_nothing_running_says_only_the_plain_sentence(cog, bot, member, db):
+    panel = await open_panel(cog, bot, member)
+
+    out = await press(bot, member, panel.view, "Stop announcing my streams")
+
+    assert "will not announce" in out.sent
+    assert "golive_member_optout_post" not in out.sent
+    assert await action_kinds(db) == ["golive.optout"]
+
+
+async def test_a_second_opt_out_ends_nothing_twice(cog, bot, member, db):
+    await live_and_pinned(cog, bot, member)
+    panel = await open_panel(cog, bot, member)
+    first = await press(bot, member, panel.view, "Stop announcing my streams")
+
+    again = await cog_module.own_opt_out(bot, bot.guild, member)
+
+    assert "golive_member_optout_post" in first.sent
+    assert "golive_member_optout_post" not in again
+    assert (await action_kinds(db)).count("golive.end") == 1
+
+
+async def test_staff_opting_a_live_member_out_says_the_same_clause(cog, bot, member, db):
+    as_staff(bot)
+    other = FakeMember(bot.guild, user_id=4242, display_name="Bo")
+    await set_link(db, other.id, "bo", "9")
+    await live_and_pinned(cog, bot, other)
+
+    said = await cog_module.their_move(bot, bot.guild, member, other.id, "optout")
+
+    assert "no stream of **Bo**'s is announced" in said
+    assert "edited to say the stream has ended" in said
+    assert await open_session_for(db, GUILD, other.id) is None
+
+
+async def test_opting_back_in_mid_stream_never_announces_what_is_already_running(
+    cog, bot, member, db
+):
+    await live_and_pinned(cog, bot, member)
+    panel = await open_panel(cog, bot, member)
+    out = await press(bot, member, panel.view, "Stop announcing my streams")
+
+    back = await press(bot, member, out.view, "Announce my streams again")
+
+    assert len(bot.guild.channel.messages) == 1
+    assert "not announced after the fact" in back.sent
+    assert (await action_kinds(db)).count("golive.announce") == 1
+    assert await open_session_for(db, GUILD, USER) is None
 
 
 async def test_linking_and_unlinking_from_the_panel(cog, bot, member, db):
