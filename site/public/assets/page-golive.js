@@ -61,7 +61,6 @@ const PINGS_MODE_KEY = 'pings_mode';
 const SPOTLIGHT_MODE_KEY = 'spotlight_mode';
 const CHANNEL_KEY = 'golive_channel_id';
 const END_EDIT = 'edit';
-const GAME_FALLBACK = 'something';
 const DEFAULT_TEMPLATE = 'the default wording';
 
 const SUBTITLE = 'Who is streaming, who is set up to be announced, and what the announcement '
@@ -117,7 +116,6 @@ const END_BLANK_AUTHOR = 'Empty — the card’s top line keeps saying “was li
 const END_WORDING_WHERE = 'Once the stream is over';
 const NO_TEMPLATE = 'The bot did not report a golive_template key, so this editor is not shown '
   + 'rather than guessed at.';
-const PLAYING_HELP = `Off shows what an empty game reads as: “${GAME_FALLBACK}”.`;
 
   + 'forgotten, so write it again to go back.';
   + 'it in the Once the stream is over box above.';
@@ -1037,7 +1035,6 @@ async function announcementSection(specs, wordingSpecs) {
     return group.node;
   }
   const shape = { which: TWITCH };
-  const playing = el('input', { class: 'input switch', type: 'checkbox', checked: true });
   const prefix = await pingPrefix(specs);
   const endSpec = specs.find((one) => one.key === END_MODE_KEY) || null;
   const endTemplate = specs.find((one) => one.key === END_TEMPLATE_KEY) || null;
@@ -1050,12 +1047,8 @@ async function announcementSection(specs, wordingSpecs) {
 
   const liveShown = el('div', { class: 'preview discord-preview' });
   const liveMade = await templateEditor(spec, {
-    controls: [playing],
     onSaved: () => preview.paint(),
-    sample: () => ({
-      ...SAMPLES[shape.which],
-      game: playing.checked ? SAMPLES[shape.which].game : GAME_FALLBACK,
-    }),
+    sample: () => ({ ...SAMPLES[shape.which] }),
     paint: (filled) => {
       drawCard(liveShown, filled === null ? DEFAULT_TEMPLATE : `${prefix}${filled}`, preview.heads.live, preview.heads.roles);
     },
@@ -1128,7 +1121,6 @@ async function announcementSection(specs, wordingSpecs) {
     card(WHILE_LIVE_TITLE, [
       liveMade.row.node,
       el('div', { class: 'formrow' }, [
-        field('Playing a game', playing, PLAYING_HELP),
         endMode ? field('When a stream ends', endMode.node, END_HELP) : null,
       ].filter(Boolean)),
       endMode ? null : el('p', { class: 'field-help', text: END_UNKNOWN }),
