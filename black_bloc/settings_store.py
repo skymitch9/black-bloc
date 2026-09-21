@@ -313,6 +313,7 @@ KEY_TYPES: dict[str, str] = {
     "golive_ping_role_id": "role",
     "golive_max_session_hours": "int",
     "golive_embed": "bool",
+    "golive_boot_sweep": "bool",
     "pings_mode": "enum",
     "pings_events_role_name": "text",
     "pings_fan_role_creation": "enum",
@@ -740,6 +741,10 @@ KEY_HELP: dict[str, str] = {
     "golive_max_session_hours": "hours before a stream still marked live is closed anyway",
     "golive_embed": (
         "post the announcement as an embed with the game's art; off = the sentence only"
+    ),
+    "golive_boot_sweep": (
+        "true walks every member's Discord presence at boot and announces anyone already "
+        "streaming with no session; false trusts presence updates alone, as before v149"
     ),
     "pings_mode": (
         "off, or on (members can opt in to go-live and event pings, and a streamer can have a "
@@ -3249,6 +3254,8 @@ class SettingsStore:
         if key == "golive_max_session_hours":
             return 12
         if key == "golive_embed":
+            return True
+        if key == "golive_boot_sweep":
             return True
         if key == "pings_mode":
             return "off"
