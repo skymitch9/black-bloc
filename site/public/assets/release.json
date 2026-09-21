@@ -1,7 +1,5 @@
 {
-  "release": "v146",
-  "commit": "0f006ea",
-  "changed_features": [
-    "selftest"
-  ]
+  "release": "v147",
+  "commit": "84157d1",
+  "changed_features": []
 }
