@@ -1486,7 +1486,7 @@ async def test_both_new_settings_keys_file_under_core_not_a_group_of_their_own(s
     """
     assert namespace_of("settings_panel_minutes") == "core"
     assert namespace_of("settings_core_keys_admin_only") == "core"
-    assert len({namespace_of(key) for key in KEY_TYPES}) == 25
+    assert len({namespace_of(key) for key in KEY_TYPES}) == 24
 
 
 async def test_the_automod_panel_stays_up_ten_minutes_by_default(store):
@@ -2027,6 +2027,7 @@ async def test_the_event_panel_stays_up_ten_minutes_by_default(store):
     assert "15" in KEY_HELP["event_panel_minutes"]
     assert KEY_TYPES["event_panel_minutes"] == "int"
     assert reachable_on_the_panel("event_panel_minutes")
+    assert namespace_of("event_panel_minutes") == "events"
     await store.set(7, "event_panel_minutes", 30)
     assert store.get(7, "event_panel_minutes") == 30
     with pytest.raises(SettingError):
@@ -2086,6 +2087,7 @@ async def test_the_event_panel_keeps_a_members_own_events_to_themselves_until_a_
     assert KEY_TYPES["event_panel_own_list"] == "bool"
     assert "staff always" in KEY_HELP["event_panel_own_list"]
     assert reachable_on_the_panel("event_panel_own_list")
+    assert namespace_of("event_panel_own_list") == "events"
     await store.set(7, "event_panel_own_list", True)
     assert store.get(7, "event_panel_own_list") is True
     assert coerce_value("event_panel_own_list", True) is True

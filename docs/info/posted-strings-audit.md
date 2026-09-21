@@ -2990,10 +2990,12 @@ The plan is therefore not a redesign, it is a naming rule the build must follow,
 | `mod_*` | a 26th group `mod` | already handled — `NAMESPACE_OVERRIDE` puts it on `automod` |
 | `error_*`, `boot_status_*`, `rehearsal_*`, `status_*`, `bot_*` | a 26th group each | add to **`CORE_KEYS`**, which sends them to `core` |
 
-If a genuinely new group is ever needed, six of the 25 are singletons that could be folded onto a
+If a genuinely new group is ever needed, five of the 24 are singletons that could be folded onto a
 neighbour through `NAMESPACE_OVERRIDE` to free a slot: `cost` (1 key), `emoji` (1), `hide` (1),
-`memory` (1), `voice` (1), `event` (2, and confusingly distinct from `events`), `logs` (2).
-⚠️ `event` vs `events` is a real trap — `event_panel_minutes` is in `event`, everything else in `events`.
+`memory` (1), `voice` (1), `logs` (2).
+⚠️ ~~`event` vs `events` is a real trap — `event_panel_minutes` is in `event`, everything else in
+`events`.~~ **Folded 2026-09-20** on branch `events-group`: both `event_panel_*` keys are
+`NAMESPACE_OVERRIDE`'d onto `events`, the `event` group is gone and the count is **24**.
 
 ⚠️ **The cap that actually bites is the one INSIDE a group, and this audit will hit it hard.**
 `editable_options` shows `found[:25]` and `needs_find(group)` is already true for `events` (37 keys),

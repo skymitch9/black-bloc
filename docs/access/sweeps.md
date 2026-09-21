@@ -1,6 +1,11 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-20** — row **`EG-a`** added at the foot for ONE `events` GROUP, NOT `event` AND `events`
+> (branch `events-group`, off `main` `5ea8d44`). Owner: *"in the settings and i think everywhere there are 2
+> events areas, event and events. find all and combine them."* ⚠️ **Not merged, not deployed, and the
+> Discord half has NOT met Discord** — the site half was pressed against the local mock in
+> `chrome-headless-shell`. ⚠️ **Nothing else in this file was re-checked then.** Before that,
 > **2026-09-20** — rows **`WP-a` … `WP-e`** added at the foot for THE DATE-TIME PICKER ON EVERY PAGE (branch
 > `when-picker-site`, off `main` `4a33938`; design
 > [`../info/when-picker-site-design.md`](../info/when-picker-site-design.md)). Owner: *"for raid train and events
@@ -2571,3 +2576,14 @@ picker."*
 | `WP-c` | **Polls** ▸ **Create a poll**. Set **Kind** to a date poll and look at **First slot**. Then set Kind back, set **Repeat** to weekly, and look at **Time of day** and **Timezone** | **First slot** is a calendar-and-clock box with **no** zone dropdown, and says *"Midnight means the slots are shown as plain dates, with no time on them. Black Bloc reads it in the server's own time zone."* ⚠️ That is deliberate — this one route takes no zone at all, so a dropdown there would do nothing. **Time of day** is a clock box (no date), and **Timezone** is now a **dropdown** whose first option is *the server's own zone*, not a box you type `America/Phoenix` into |
 | `WP-d` | **Logs** ▸ the **From** and **To** boxes under the filter chips | Both are calendar boxes with the same look as everything above — *The first day to include.* / *The last day to include.* — and no zone dropdown, because a day filter has no zone. Setting either one re-loads the results under it, and **Clear** empties both |
 | `WP-e` | Back on **Start a raid train**, type (do not pick) a date that has already gone by — `2020-01-02 10:00` — and press **Start it** | ⚠️ **The refusal is still in WORDS, not a browser tooltip:** *"2020-01-02 10:00 has already gone by, so nothing was submitted. Pick a time in the future."* The picker greys the past out of the calendar but never silently swallows a typed one — the server is still the thing that decides |
+
+## `EG-a` — one Events group in the settings (branch `events-group`, 2026-09-20)
+
+⚠️ **Not merged, not deployed.** `EG-a` was pressed against the local mock in
+`chrome-headless-shell`; the Discord half (`/settings` ▸ **A setting group…**) is
+⚠️ **NOT VERIFIED — nothing in this build met Discord.** Owner, 2026-09-20: *"in the settings
+and i think everywhere there are 2 events areas, event and events. find all and combine them."*
+
+| Row | Do | Expect |
+|---|---|---|
+| `EG-a` | **Settings** ▸ read the group headings down both columns, then type `event_panel` into the Find box | **ONE** Events section, not an **Event** and an **Events**. `event_panel_minutes` and `event_panel_own_list` sit inside it beside `events_mode`, `events_category_id`, `events_announce_channel_id`, `events_ping_role_id` and `events_create_scheduled`, and the section's own count includes them. The rail and the jump list hold one `events` entry. ⚠️ **In Discord, NOT VERIFIED:** `/settings` ▸ **A setting group…** should offer 24 groups with one **events** among them, and because `events` is over the 25-key cap it opens on **Find a setting…** rather than a full list |

@@ -59,6 +59,8 @@ const SETTINGS = {
     {"key":"events_announce_channel_id","type":"channel","value":"800000000000000006","default":null,"help":"where an approved event is announced"},
     {"key":"events_ping_role_id","type":"role","value":null,"default":null,"help":"role mentioned when an event is announced and when it starts"},
     {"key":"events_create_scheduled","type":"bool","value":true,"default":false,"help":"true to make a real Discord scheduled event when one is approved"},
+    {"key":"event_panel_minutes","type":"int","value":10,"default":10,"help":"minutes the /event panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"},
+    {"key":"event_panel_own_list","type":"bool","value":false,"default":false,"help":"true to show members the events they proposed on the /event panel; staff always see theirs, and members can still propose one and call one off either way"},
   ],
   "poll": [
     {"key":"poll_mode","type":"enum","value":"on","default":"on","help":"off, shadow (every poll is posted for real, but into the log channel with a line saying why, so staff can rehearse), or on (polls go where they are pointed)","choices":["off","shadow","on"]},
@@ -144,10 +146,6 @@ const SETTINGS = {
   ],
   "emoji": [
     {"key":"emoji_skin_tone","type":"enum","value":"dark","default":"dark","help":"the skin tone Black Bloc's hand and people emoji wear: none, light, medium-light, medium, medium-dark, dark","choices":["none","light","medium-light","medium","medium-dark","dark"]},
-  ],
-  "event": [
-    {"key":"event_panel_minutes","type":"int","value":10,"default":10,"help":"minutes the /event panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"},
-    {"key":"event_panel_own_list","type":"bool","value":false,"default":false,"help":"true to show members the events they proposed on the /event panel; staff always see theirs, and members can still propose one and call one off either way"},
   ],
   "hide": [
     {"key":"hide_commands_when_off","type":"bool","value":true,"default":true,"help":"true to take a feature's slash command out of this server's command list while that feature is turned off, so nobody is offered a command that cannot do anything; turning the feature back on brings the command back within about a minute. false leaves every command showing all the time and an off feature explains itself when it is opened. Only off hides a command — shadow does not"},

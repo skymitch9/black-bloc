@@ -2742,6 +2742,8 @@ NAMESPACE_OVERRIDE = {
     DEFAULT_TIMEZONE_KEY: "events",
     TIMEZONE_CHOICES_KEY: "events",
     TIME_STEP_KEY: "events",
+    "event_panel_minutes": "events",
+    "event_panel_own_list": "events",
     FRONTDOOR_MODE: "modmail",
     FRONTDOOR_CHANNEL: "modmail",
     FRONTDOOR_MESSAGE: "modmail",

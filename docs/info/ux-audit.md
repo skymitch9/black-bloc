@@ -91,7 +91,8 @@ matters to a person: it counts the `section.sect` nodes actually in `#dash` afte
 which includes the sections `namespaceSettings()` and `logsSection()` build (`ui.js:1288`,
 `logs.js:208`) and multiplies a `section()` called in a loop. **The `settings` page is the case
 that proves the difference: §B credits it with 1 section; it renders about 26**, one per
-settings namespace (`page-settings.js:142–148`; the docs tree measures 25 namespaces).
+settings namespace (`page-settings.js:142–148`; the docs tree measures 24 namespaces since
+branch `events-group`, 2026-09-20, folded `event` onto `events` — it was 25).
 
 ---
 

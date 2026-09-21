@@ -1424,6 +1424,8 @@ const NAMESPACE_OVERRIDE = {
   default_timezone: 'events',
   timezone_choices: 'events',
   time_step_minutes: 'events',
+  event_panel_minutes: 'events',
+  event_panel_own_list: 'events',
   frontdoor_mode: 'modmail',
   frontdoor_channel_id: 'modmail',
   frontdoor_message_id: 'modmail',
