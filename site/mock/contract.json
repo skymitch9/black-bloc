@@ -1170,6 +1170,56 @@
       ]
     },
     {
+      "method": "PATCH",
+      "path": "/api/pings/streamers/{member_id}",
+      "body": {
+        "name": "Contract crew"
+      },
+      "read_by": [
+        "page-golive.js renamePingRole"
+      ],
+      "shape": "object",
+      "keys": [
+        "member_id",
+        "member",
+        "kind",
+        "spotlight_id",
+        "spotlight_login",
+        "role_id",
+        "role",
+        "followers",
+        "created_at",
+        "created_by",
+        "created_by_name",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/pings/streamers/spotlight/{spotlight_role_id}",
+      "body": {
+        "name": "Contract channel crew"
+      },
+      "read_by": [
+        "page-golive.js renamePingRole"
+      ],
+      "shape": "object",
+      "keys": [
+        "member_id",
+        "member",
+        "kind",
+        "spotlight_id",
+        "spotlight_login",
+        "role_id",
+        "role",
+        "followers",
+        "created_at",
+        "created_by",
+        "created_by_name",
+        "message"
+      ]
+    },
+    {
       "method": "DELETE",
       "path": "/api/pings/streamers/{member_id}",
       "read_by": [
@@ -5455,6 +5505,7 @@
     "web.youtube.unlink",
     "web.pings.setup",
     "web.pings.fan_role_created",
+    "web.pings.fan_role_renamed",
     "web.pings.fan_role_removed",
     "web.pings.raidtrain_setup",
     "web.pings.streamer_hidden",

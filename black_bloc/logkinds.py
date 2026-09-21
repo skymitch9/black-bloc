@@ -356,6 +356,7 @@ ROUTINE: frozenset[str] = frozenset(
         "pings.events_off",
         "pings.events_on",
         "pings.fan_role_missing",
+        "pings.fan_role_renamed",
         "pings.follow",
         "pings.onboarding_synced",
         "pings.raidtrain_setup",

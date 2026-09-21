@@ -22,10 +22,17 @@ class FakeRole:
         self.members = []
         self.deleted = False
         self.guild = None
+        self.refuse_edit = None
         self._assignable = assignable
 
     def is_assignable(self):
         return self._assignable
+
+    async def edit(self, name=None, reason=None):
+        if self.refuse_edit is not None:
+            raise self.refuse_edit
+        if name is not None:
+            self.name = name
 
     async def delete(self, reason=None):
         """Discord takes a deleted role off the guild, so the fake has to as well."""
@@ -312,6 +319,93 @@ async def test_a_same_named_role_black_bloc_cannot_hand_out_is_not_reused(bot, s
 
     assert outcome.ok and outcome.created and outcome.role_id != 4242
     assert bot.guild.made == [("SuperNamu pings", False, pings.ROLE_REASON)]
+
+
+async def test_staff_rename_a_ping_role_where_it_stands(bot, streamer, fan):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    role = bot.guild.get_role(made.role_id)
+    role.members.append(fan)
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+
+    outcome = await pings.rename_fan_role(bot, bot.guild, row, "  Namu   crew ", by=STAFF)
+
+    assert outcome.ok and outcome.role_id == made.role_id
+    assert role.name == "Namu crew" and role.members == [fan]
+    assert "SuperNamu pings" in outcome.message and "Namu crew" in outcome.message
+    assert (await details(bot.db, "pings.fan_role_renamed")) == {
+        "role_id": made.role_id,
+        "from": "SuperNamu pings",
+        "to": "Namu crew",
+        "via": "discord",
+        "user_id": STREAMER,
+    }
+    menu = await get_menu(bot.db, GUILD, "streamers")
+    assert [option["label"] for option in await get_options(bot.db, menu["id"])] == ["Namu crew"]
+
+
+async def test_renaming_to_a_name_another_role_has_is_refused(bot, streamer):
+    await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    bot.guild.add_role(FakeRole(4242, "Namu crew"))
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+
+    outcome = await pings.rename_fan_role(bot, bot.guild, row, "NAMU CREW", by=STAFF)
+
+    assert outcome.ok is False and outcome.code == pings.DUPLICATE_CODE
+    assert bot.guild.get_role(int(row["role_id"])).name == "SuperNamu pings"
+
+
+async def test_renaming_a_role_to_the_name_it_already_has_is_not_a_duplicate(bot, streamer):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+
+    outcome = await pings.rename_fan_role(bot, bot.guild, row, "supernamu pings", by=STAFF)
+
+    assert outcome.ok and bot.guild.get_role(made.role_id).name == "supernamu pings"
+
+
+async def test_renaming_refuses_a_blank_name_and_a_role_that_is_gone(bot, streamer):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+
+    blank = await pings.rename_fan_role(bot, bot.guild, row, "   ", by=STAFF)
+    assert blank.ok is False and blank.code == pings.BLANK_NAME_CODE
+
+    bot.guild.roles = [role for role in bot.guild.roles if role.id != made.role_id]
+    gone = await pings.rename_fan_role(bot, bot.guild, row, "Namu crew", by=STAFF)
+    assert gone.ok is False and gone.code == pings.ROLE_GONE_CODE
+    assert "not a role in this server any more" in gone.message
+
+
+async def test_discord_refusing_the_rename_is_a_sentence_not_a_traceback(bot, streamer):
+    made = await pings.ensure_fan_role(bot, bot.guild, streamer, by=STREAMER)
+    role = bot.guild.get_role(made.role_id)
+    role.refuse_edit = RuntimeError("Missing Permissions")
+    row = await pings.get_fan_role(bot.db, GUILD, STREAMER)
+
+    outcome = await pings.rename_fan_role(bot, bot.guild, row, "Namu crew", by=STAFF)
+
+    assert outcome.ok is False and "Manage Roles" in outcome.message
+    assert role.name == "SuperNamu pings"
+    assert "pings.fan_role_renamed" not in await kinds(bot.db)
+
+
+async def test_a_channels_ping_role_is_renamed_the_same_way(bot):
+    channel = await a_channel(bot.db)
+    made = await pings.ensure_fan_role(bot, bot.guild, None, by=STAFF, spotlight=channel)
+    row = await pings.get_spotlight_fan_role(bot.db, GUILD, GDQ)
+
+    outcome = await pings.rename_fan_role(bot, bot.guild, row, "GDQ crew", by=STAFF, via="website")
+
+    assert outcome.ok and bot.guild.get_role(made.role_id).name == "GDQ crew"
+    assert "GamesDoneQuick" in outcome.message
+    assert (await details(bot.db, "web.pings.fan_role_renamed")) == {
+        "role_id": made.role_id,
+        "from": "GamesDoneQuick pings",
+        "to": "GDQ crew",
+        "via": "website",
+        "spotlight_id": GDQ,
+        "spotlight": "gamesdonequick",
+    }
 
 
 async def test_a_role_black_bloc_cannot_hand_out_is_refused_in_words(bot, streamer):

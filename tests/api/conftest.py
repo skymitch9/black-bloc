@@ -62,6 +62,10 @@ class WebRole:
     async def delete(self, reason: str | None = None) -> None:
         self.deleted = True
 
+    async def edit(self, name: str | None = None, reason: str | None = None) -> None:
+        if name is not None:
+            self.name = name
+
 
 class WebMember:
     def __init__(

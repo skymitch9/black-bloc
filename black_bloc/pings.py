@@ -52,6 +52,7 @@ DELETE = "delete"
 ROLE_NAME_LIMIT = 100
 DUPLICATE_CODE = "duplicate_role"
 BLANK_NAME_CODE = "blank_role_name"
+ROLE_GONE_CODE = "fan_role_gone"
 SPOTLIGHT_REF = "spotlight:"
 SPOTLIGHT_WORD = "channel"
 FAN_ROLE_SELECT = (
@@ -102,6 +103,14 @@ DUPLICATE_ROLE = (
 BLANK_ROLE_NAME = (
     "A ping role needs a name, so nothing was made. Type the name the role should have, or pick "
     "one that is already here as the existing role."
+)
+FAN_ROLE_GONE = (
+    "**{name}**'s ping role is set to **{role_id}**, and that is not a role in this server any "
+    "more, so there was nothing to rename. Take the ping role away and give them a fresh one."
+)
+RENAMED = (
+    "**{name}**'s ping role is called **{now}** from now on — it was **{was}**. Nobody was added "
+    "to it or taken off it, and the *{menu}* panel says the new name."
 )
 NOT_A_STREAMER = (
     "Black Bloc does not know you stream yet, so there is nothing to make a role for. Link your "
@@ -592,6 +601,70 @@ async def ensure_fan_role(
         said.format(role=role.name, name=who, menu=STREAMERS_MENU),
         role_id=int(role.id),
         created=not reused,
+    )
+
+
+async def rename_fan_role(
+    bot: Any,
+    guild: Any,
+    row: Any,
+    name: Any,
+    *,
+    by: int | None,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """The one path that renames a streamer's ping role, member or channel."""
+    channel = is_spotlight(row)
+    if channel:
+        who = spotlight_name(row)
+        target: Any = spotlight_of(row)
+    else:
+        member = guild.get_member(int(row["user_id"]))
+        who = display_name(member) if member is not None else str(row["user_id"])
+        target = member if member is not None else int(row["user_id"])
+    wanted = typed_role_name(name)
+    if not wanted:
+        return Outcome(False, BLANK_ROLE_NAME, code=BLANK_NAME_CODE)
+    role_id = int(row["role_id"])
+    role = guild.get_role(role_id)
+    if role is None:
+        return Outcome(
+            False, FAN_ROLE_GONE.format(name=who, role_id=role_id), code=ROLE_GONE_CODE
+        )
+    if not assignable(role):
+        return Outcome(False, ROLE_UNASSIGNABLE.format(name=role.name))
+    clash = named_role(guild, wanted)
+    if clash is not None and int(clash.id) != role_id:
+        return Outcome(False, DUPLICATE_ROLE.format(name=wanted), code=DUPLICATE_CODE)
+    was = str(role.name)
+    try:
+        await role.edit(name=wanted, reason=ROLE_REASON)
+    except Exception as exc:
+        log.warning(
+            "pings: could not rename the role %s — %s: %s", role_id, type(exc).__name__, exc
+        )
+        return Outcome(False, FORBIDDEN.format(role=was))
+    details: dict[str, Any] = {"role_id": role_id, "from": was, "to": wanted, "via": via}
+    if channel:
+        details |= {
+            "spotlight_id": int(spotlight_of(row)),
+            "spotlight": str(row_value(row, "spotlight_login") or ""),
+        }
+    else:
+        details["user_id"] = int(row["user_id"])
+    await log_action(
+        bot,
+        guild,
+        kind_via("pings.fan_role_renamed", via),
+        actor=by,
+        target=target,
+        details=details,
+    )
+    await sync_streamer_menus(bot, guild)
+    return Outcome(
+        True,
+        RENAMED.format(name=who, was=was, now=wanted, menu=STREAMERS_MENU),
+        role_id=role_id,
     )
 
 
