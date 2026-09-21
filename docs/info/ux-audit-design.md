@@ -529,3 +529,101 @@ tree), against the worktree's own mock (`MOCK_PORT=8783`):
    device/DPI was not checked. Only `posts.html` was measured at both widths; `golive.html` and
    `settings.html` were smoke-checked for console errors only, not measured pixel-by-pixel. The
    `discordMock` repaint was confirmed by reading the DOM's text content, not by a screenshot.
+
+### 2026-09-20 — the Pin it switch, and a full re-audit for side-docked panels (branch `modal-sweep`, off `main` `941ee26`)
+
+Owner, verbatim: *"pin it is in a weird place, its just kind of floating there taking a ton of
+space up. maybe make it an on off toggle near the bottom. also lets make all left side modals on
+the whole website floating middle modals."* Two pieces: move the post editor's Pin it control, and
+re-check the whole site for any side-docked panel the `centre-modal` branch (above) might have
+missed.
+
+**Pin it.** `site/public/assets/page-posts.js:319` — `pin`'s class changes from bare `switch` to
+`input switch` (the bare form never matched `site.css`'s `.input.switch` sizing rule, so it was an
+unstyled checkbox before this move — a latent bug fixed as a side effect of reusing the real
+construct `page-automod.js`/`page-modmail.js` use). It is wrapped in a new `<label
+class="switchline">` with a `field-label` span reading *Pin it*, and the help sentence that used to
+sit under it as a `.field-help` line now lives on the label's `title` (a tooltip), so the whole
+control is one row. It moved out of the Style `.formrow` (Style now stands alone there) into
+`bar([pinLine, ...moves])`, first, beside Save Changes / Discard / Post it. Nothing about the wiring
+moved — `draft.pin`, `willPost`'s outcome sentence and the save payload all still read the same
+`pin` element. New CSS: `.switchline` in `site.css`, beside `.input.switch`.
+
+**Measured**, `chrome-headless-shell` 149.0.7827.22 over raw CDP (no `puppeteer` package in this
+tree), this worktree's mock on `MOCK_PORT=8782`, against a `941ee26` baseline checkout's own mock on
+`MOCK_PORT=8783` (a throwaway `git worktree add` of the base commit, removed after measuring), same
+seeded post (`welcome`, body 1461 chars) on both:
+
+- **`.drawer-body.scrollHeight` is identical: `921px` on both the baseline and the modified page** —
+  the editor is not taller than before it moved.
+- **The switch is in the foot bar**: `document.getElementById('post-pin').closest('.bar')` is
+  truthy, and that bar's buttons read `Pin it / Save Changes / Discard / Post it`. `pin`'s
+  `className` is `input switch`; its wrapping label's `title` is the original help sentence.
+  `Style`'s `.formrow` now has exactly one `.field`.
+- **Toggling flips the draft and the outcome sentence**: with posts live (not shadow), the outcome
+  line read `"Post it sends this to #blackbloc-logs as a plain message and pins it."` unchecked to
+  `"...and leaves it unpinned."` after the switch was flipped.
+- **Save persists it**: unchecked the switch, clicked **Save Changes**, then `GET
+  /api/posts/welcome` (a fresh fetch from the page) read back `pin: false` — the mock's own store,
+  not the DOM, confirming the save round-trip actually wrote the flipped value.
+- **390px, a post open**: `document.documentElement.scrollWidth === window.innerWidth === 390`, no
+  horizontal overflow.
+- **Zero console errors** at both widths, on every page load in this section.
+
+**The audit.** Grepped every `site/public/assets/*.js` for `showModal`, `<dialog`, `el('dialog'`,
+`class: 'side`, `sheet`, `panel-side`, `slide`, `flyout`, `offcanvas`, `dock` (excluding the unsaved
+-changes dock bar, `ui.js:saveBar`/`clearDock`, which is a bottom-anchored bar, not a side panel),
+and `site.css` for `dialog.` rules and any `position: fixed` full-height panel:
+
+- **Only three `<dialog>` constructs exist anywhere on the site**: `dialog.ask` (`ui.js:703`),
+  `dialog.palette` (`palette.js:201`), `dialog.drawer` (`ui.js:679`) — all three already centred (the
+  `centre-modal` branch above did `drawer`; `ask` and `palette` were centred before it). **No fourth
+  dialog and no side-docked drawer/sheet/flyout construct exists anywhere in `site/public/assets`.**
+- The only other `position: fixed` rules in `site.css` are `.side` (the nav rail — explicitly out of
+  scope, it is the rail) and `.user-menu` (`:262`, a small anchored dropdown pinned near the user
+  chip — `top: 60px; right: 68px`, not full-height, not a panel).
+- **Verified live** (`chrome-headless-shell` over raw CDP, `MOCK_PORT=8782`, 1512×802, `?as=staff`),
+  one dialog opened per page, bounding box read from `getBoundingClientRect()`:
+
+  | Page | Dialog opened | How | `left` | `right` (viewport width − rect.right) | `width` | Console errors |
+  |---|---|---|---|---|---|---|
+  | `posts.html` | `dialog.drawer` (a post) | click first `button.grid-row` | `244px` | `244px` | `1024px` | 0 |
+  | `golive.html` | `dialog.drawer` (a streamer row) | click first `button.grid-row` | `244px` | `244px` | `1024px` | 0 |
+  | `moderation.html` | `dialog.drawer` (a case) | click first `button.grid-row` | `244px` | `244px` | `1024px` | 0 |
+  | `modmail.html` | `dialog.ask` | invoked `ui.js:ask()` directly (page has no drawer — a ticket opens inline, not in a dialog; its only `<dialog>` use is `ask()`) | `500px` | `500px` | `512px` | 0 |
+  | `requests.html` | `dialog.ask` | invoked `ui.js:ask()` directly (same reason — every confirm on this page goes through `ask()`, no drawer) | `500px` | `500px` | `512px` | 0 |
+  | `events.html` | `dialog.ask` | invoked `ui.js:ask()` directly (same reason) | `500px` | `500px` | `512px` | 0 |
+
+  `left === right` on every row — every dialog that opens on every one of the six named pages is
+  centred. `modmail`/`requests`/`events` were driven through `ask()` directly (`await
+  import('/assets/ui.js')` in the page context, then `mod.ask({...})`, then dismissed) rather than
+  through a specific button, because all three pages' only `<dialog>` usage IS the shared `ask()`
+  construct — `page-modmail.js`, `page-requests.js` and `page-events.js` call `openDrawer` zero
+  times between them (checked by grep). The rendered dialog and its CSS are identical either way;
+  only the trigger path differs.
+
+**Conclusion: nothing to convert.** The `centre-modal` branch's fix (dialog defaults, no page-level
+positioning) already covers every dialog on the site, because every dialog is one of the same three
+shared constructs. There was no fourth side-docked construct to find.
+
+**Deviations.**
+
+1. **`pin`'s class gained `input`, not just a wrapper** — see above. Named because it is a
+   behavioural fix (the switch now actually renders at switch size) riding along with a pure layout
+   move; the brief asked to "reuse the same classes" and the literal same classes were a checkbox
+   that had never been switch-sized.
+2. **The help sentence became a `title` attribute, not a visible `.field-help` line** — chosen so
+   the control is exactly one row at every width, per the owner's "not a block". It is reachable by
+   hover/focus like `logs.js`'s `cell-quiet` tooltip pattern elsewhere in this codebase, not a new
+   idiom.
+3. **`modmail.html`/`requests.html`/`events.html` were audited by invoking `ask()` directly**, not
+   by clicking a real page button — see above. This measures the same shared, already-styled dialog
+   construct with zero risk of a wrong click mutating mock data, but it is not the same as a human
+   clicking "Close ticket"/"Approve"/"Deny" and watching the confirm appear.
+4. **What was NOT verified:** headless only, same as every entry in this file — no real browser
+   window, no real Discord, no human eye. The owner's own device/DPI was not checked. The command
+   palette (`Ctrl+K`, `dialog.palette`) was not re-opened on every one of the six pages this round —
+   it is one shared construct reachable from `shell.js` on every page alike, and it was already
+   measured centred in an earlier entry in this file; it was not re-measured here. `page-posts.js`'s
+   `pinBarButtons` structural check (`.textContent` of each button) was read as plain text, not
+   compared against a screenshot.
