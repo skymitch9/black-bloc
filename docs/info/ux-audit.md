@@ -478,6 +478,8 @@ empty state. Seven sections, same behaviour.
 
 **(e) Severity: 🟠** — it works; it is simply very long.
 
+✅ **STAGE 3 SHIPPED 2026-09-20, branch `requests-page` off `main` `53a0ba3` — and the proposal in (d) was NOT what was built.** The owner ruled on the page before the proposal reached him: *"the request page is too much, we cant see that many request at once, it needs to show a list with filters and then click on one to open it"* — so the status split is **gone**, not kept: nine sections are **two** (**Requests**, one `button.grid-row` list under a toolbar of six counted status chips, and a shut **Settings and logs**), and a row opens the request in `ui.js:openDrawer`. **T4 and T6 both pass now** — two sections, and the *"sent exactly what you type"* promise is written **once**, above the moves in the modal, instead of six times. ⚠️ The preview this row's proposal fed (`/preview/requests.html`, seven sections) is **deleted**. Deviations, with the six-test tally: [`ux-audit-design.md`](ux-audit-design.md) ▸ Deviations ▸ the 2026-09-20 `requests-page` entry. ⚠️ **Not merged and not deployed when this line was written**, and nothing in it has met Discord.
+
 ---
 
 ### 12. modmail · 🟠 · 3 fails
