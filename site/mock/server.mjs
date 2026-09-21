@@ -7378,6 +7378,8 @@ const CSP = "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com
 // outside /preview serves that release's site, and /preview/<page> serves the working tree's
 // preview page (or, failing that, its real page) on the working tree's assets — so what is
 // coming can be compared with what is live today at the normal URL.
+// /next/<page> is the working tree's REAL page on its own assets — the normal URL after the next deploy —
+// for pages whose static preview still exists.
 const LIVE_ROOT = process.env.LIVE_ROOT ? resolve(process.env.LIVE_ROOT, 'site', 'public') : null;
 const PREVIEW_ASSETS = /(src|href)="\/assets\//g;
 
@@ -7385,6 +7387,7 @@ function whereFrom(wanted) {
   if (!LIVE_ROOT) return { root: PUBLIC, path: wanted, rewrite: false };
   if (wanted.startsWith('/preview/assets/')) return { root: PUBLIC, path: wanted.slice('/preview'.length), rewrite: false };
   if (wanted.startsWith('/preview/')) return { root: PUBLIC, path: wanted, rewrite: true, fallback: wanted.slice('/preview'.length) };
+  if (wanted.startsWith('/next/')) return { root: PUBLIC, path: wanted.slice('/next'.length), rewrite: true };
   return { root: LIVE_ROOT, path: wanted, rewrite: false };
 }
 
