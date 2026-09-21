@@ -243,18 +243,18 @@
 > [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
 > kinds: twelve `minutes.*`, four of them with a `web.` spelling.
 >
-> | What | v142 (`main`, 2026-09-20) | Where it is measured |
+> | What | v143 (`main`, 2026-09-20) | Where it is measured |
 > |---|---|---|
 > | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
 > | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **45** (v136, `events.review_kind`; 44 at v132 `meetings` + `meeting_lines`, 43 at v128, 42 at v123, 41 at v119) — ⚠️ **this row read 44 until 2026-09-19 and contradicted the v141 row of the history table below it; re-imported, it is 45** | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **277** on `main` at v141 (⚠️ **re-labelled 2026-09-19** — it said *"on branch `youtube-uploads-removal`"*, and that branch merged as **v139**; 284 on `main` at v138, minus the seven `youtube_*` upload keys); 280 on branch `boot-status`, 277 at v132 (was 266 at v131 — the three `boot_status_mode` / `boot_status_text` / `shutdown_status_text` keys sit under core; the eleven `minutes_*` keys sit under events; the eleven `frontdoor_*` keys sit under the modmail group — the 25-namespace cap is FULL) — **25 namespaces, the `/settings` select's cap** | `settings_store.KEY_TYPES` |
+> | Schema version | **46** (v143, `also_*` on `golive_sessions`; 45 at v136 `events.review_kind`, 44 at v132) | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **281** on `main` at v143 (three `golive_costream_*` + `request_filed_line`; 277 at v141) — **25 namespaces** | `len(settings_store.KEY_TYPES)` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **20 pages / 186 routes / 24 core settings** — measured on branch `youtube-uploads-removal`, which is **v139** and merged (187 on `main` at v138, minus `GET /api/youtube/videos`) (21 core at v133) (17/150 at v108; was 149 routes at v92). ⚠️ **Not re-run 2026-09-19** — `check.mjs` needs `server.mjs` listening; `ls site/public/*.html` was re-counted off disk and is **20** | `node site/mock/check.mjs` — last RUN 2026-09-18 against a mock on a spare port |
-> | Tests | **6757** (+3 skipped where the receive extension is absent — **KI-31**) | the v142 deploy gate |
-> | Deploys | **141** lines, last `6a6f8e4` (v142) at 2026-09-20 17:02 | `../deploys.log` |
+> | Tests | **6800** (+3 skipped where the receive extension is absent — **KI-31**) | the v143 deploy gate |
+> | Deploys | **142** lines, last `84e33fa` (v143) at 2026-09-20 17:24 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -274,6 +274,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v143 `84e33fa`, 2026-09-20** | **22** | **32** | **46** | **186** | **6800** |
 > | **v142 `6a6f8e4`, 2026-09-20** | **22** | **32** | **45** | **186** | **6757** |
 > | **v141 `2e48d7c`, 2026-09-18** | **22** | **32** | **45** | **186** | **6757** |
 > | **v140 `413f939`, 2026-09-18** | **22** | **32** | **45** | **186** | **6720** |

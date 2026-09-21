@@ -1,7 +1,7 @@
 # Co-streaming — one announcement naming both platforms, Twitch first, edited in place as platforms come and go
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch `costream`, 2026-09-20 — not merged, not
-> deployed, nothing has met Discord.** The `## Deviations` foot is the truth where this body departs
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v143** — merge `a195df5`, release `84e33fa`, deployed **2026-09-20 17:24** Phoenix;
+> verified: boot log shows the three also_* columns added, golive cog loaded, logged in, no Traceback; /health ready=true latency 62 ms (17:25). Sweeps `CS-a` … `CS-f` are now rows **627–632** (five need a person live on both platforms). Was: 🔨 BUILT on branch `costream` 2026-09-20, not merged. The `## Deviations` foot is the truth where this body departs
 > from what shipped, and `## What was NOT verified` is the honest half; sweeps `CS-a` … `CS-f` in
 > `../access/sweeps.md` are the proof that is missing. Was: 📐 DESIGN, dispatched to Opus
 > 2026-09-20 16:2x as branch `costream`. **Last verified: 2026-09-20 16:1x** against `main` `5afd58c`
