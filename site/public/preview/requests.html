@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en" data-default-theme="blackbloc" data-default-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Black Bloc — requests (preview)</title>
+<meta name="description" content="Preview of a redesigned Black Bloc requests page (the staff shape), built on static copies of the seed rows.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="api-origin" content="">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="stylesheet" href="/assets/estate-theme.css">
+<link rel="stylesheet" href="/assets/status-shell.css">
+<link rel="stylesheet" href="/assets/site.css">
+<script src="/assets/theme.js"></script>
+</head>
+<body data-tab="requests">
+
+<div class="shell">
+  <aside class="side" id="side">
+    <a class="side-brand" href="/index.html">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2"></polygon></svg>
+      <span class="side-wordmark">BLACK BLOC</span>
+    </a>
+    <div class="side-scroll">
+      <nav class="sidenav" id="tabnav" aria-label="Dashboard"></nav>
+      <nav class="subnav" id="subnav" aria-label="Sections on this page" hidden></nav>
+    </div>
+  </aside>
+
+  <div class="shell-main">
+    <header class="topbar">
+      <button class="topbar-menu" id="side-toggle" type="button" aria-expanded="false" aria-controls="side" aria-label="Show the menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line></svg></button>
+      <span class="topbar-guild" id="topbar-guild">Black Bloc</span>
+      <span class="pill-health" id="health-pill" hidden><span class="dot-sm"></span><span id="health-text"></span></span>
+      <span class="topbar-gap"></span>
+      <button class="user-chip" id="user-chip" type="button" aria-expanded="false" aria-controls="user-menu" hidden>
+        <span class="user-avatar" id="user-initial" aria-hidden="true">?</span>
+        <span class="user-name" id="user-name"></span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chev"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+      <button id="hg-cog" class="hg-cog" type="button" aria-expanded="false" aria-controls="hg-cog-panel" aria-label="Display settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/></svg></button>
+    </header>
+
+    <main class="content">
+      <div class="page-head">
+        <div class="page-head-text">
+          <h1>Requests</h1>
+          <p class="sub" id="subtitle">A preview of this page redesigned for staff: nine sections become seven, Done and Declined become one Closed list, and File a request moves to the button beside the heading. Static data — nothing here reaches the bot.</p>
+        </div>
+        <div class="page-head-aside" id="page-aside"></div>
+      </div>
+
+      <section id="gate" hidden aria-live="polite">
+        <div class="row" id="gate-row" data-state="pending">
+          <span class="dot"></span>
+          <div class="row-body">
+            <div class="row-head"><span class="row-name" id="gate-title">Checking…</span></div>
+            <p class="row-detail" id="gate-message">Asking the bot whether you are signed in.</p>
+            <p class="row-note" id="gate-note" hidden></p>
+          </div>
+        </div>
+        <div class="bar" id="gate-actions" hidden>
+          <a class="btn" id="signin" href="#">Sign in with Discord</a>
+          <button class="btn quiet" id="retry" type="button" hidden>Try again</button>
+        </div>
+      </section>
+
+      <div id="dash" hidden></div>
+    </main>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+
+<div class="user-menu" id="user-menu" hidden>
+  <div class="bar" id="footbar" hidden>
+    <button class="btn quiet small" id="refresh" type="button">Refresh</button>
+    <button class="btn quiet small" id="signout" type="button">Sign out</button>
+    <span class="checked" id="checked"></span>
+  </div>
+</div>
+
+<div id="hg-cog-panel" class="hg-cog-panel" hidden>
+  <div class="hg-row">
+    <label class="hg-label" for="hg-theme-select">Theme</label>
+    <select id="hg-theme-select"></select>
+  </div>
+  <div class="hg-row">
+    <span class="hg-label" id="hg-mode-label">Appearance</span>
+    <div class="hg-mode-group" role="group" aria-labelledby="hg-mode-label">
+      <button type="button" data-hg-mode="auto" aria-pressed="true">Auto</button>
+      <button type="button" data-hg-mode="light" aria-pressed="false">Light</button>
+      <button type="button" data-hg-mode="dark" aria-pressed="false">Dark</button>
+    </div>
+  </div>
+  <p class="hg-cog-note">Remembered on this site only.</p>
+</div>
+
+<script type="module" src="/assets/page-preview-requests.js"></script>
+<script type="module" src="/assets/motion.js"></script>
+</body>
+</html>
