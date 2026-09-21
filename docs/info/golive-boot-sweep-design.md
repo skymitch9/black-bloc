@@ -83,11 +83,16 @@ and a choice had to be made, it says so.)*
    `stamp=bool(self._guilds())` on the `cog_load` call: **a pass over no guilds must not close the
    60-second window**, or the one pass that HAS guilds is exactly the one `skip_if_recent` throws
    away. Guarded by `test_a_cog_load_with_no_guilds_yet_leaves_the_boot_to_on_ready`.
-   ⚠️ **The same shape is worth checking in `cogs/content/spotlight.py`** — `cog_load` there calls
-   `self._reconciler.run(self.reconcile_open_sessions)` with the default `stamp=True` and its
-   `on_ready` passes `skip_if_recent=True`, which is the arrangement this deviation had to undo.
-   It was **not** touched here (out of scope, and a fix wants its own tests); naming it rather
-   than guessing at it.
+   ✅ **The same shape WAS in `cogs/content/spotlight.py`, and the conductor asked for it on this
+   branch, so it is fixed too** (the third commit here): `stamp=bool(self._guilds())`, the same
+   non-`unavailable` guild source, and the mirror guard `tests/cogs/content/test_spotlight.py::
+   test_a_cog_load_with_no_guilds_yet_leaves_the_boot_to_on_ready`, **falsified against the
+   un-fixed cog before it was kept**. Recorded at
+   [`spotlight-design.md`](spotlight-design.md) ▸ Deviations ▸ **19**, sweep row `BS-e`.
+   ⚠️ **NOT audited: `frontdoor.py`, `modmail.py` and `events.py`**, which each hold a
+   `Reconciler` with a `cog_load` + `on_ready` pair. They POST rather than sweep, and their
+   incident (2026-09-18) was a DOUBLE post — which means their `cog_load` pass did see guilds,
+   so the same reasoning may not apply to them. Named, not guessed at, and not touched.
 
 1. ⚠️ **Every one of §A's five rows was TRUE as a description of the code it names** — see 0 for
    the boot path that never reached them. All five now have a test

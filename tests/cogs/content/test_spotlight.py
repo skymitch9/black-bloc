@@ -698,6 +698,32 @@ async def test_two_reconciles_at_boot_close_a_gone_session_once(bot, cog):
     cog.poller.cancel()
 
 
+async def test_a_cog_load_with_no_guilds_yet_leaves_the_boot_to_on_ready(bot, cog):
+    """`setup_hook` loads the cogs before IDENTIFY, so `bot.guilds` is empty at `cog_load`.
+
+    A pass over nothing must not close the 60-second window, or the one pass that HAS guilds
+    is the one `skip_if_recent` throws away. Mirrors the go-live cog's guard.
+    """
+    row = await a_row(bot)
+    session_id = await start_session(
+        bot.db, GUILD, row["id"], StreamInfo(url="u", game="g", title="t"), "on"
+    )
+    await set_announced(bot.db, session_id, 9999)
+    guild = bot.guild
+    bot.guilds = []
+
+    await cog.cog_load()
+    try:
+        assert await open_session(bot.db, row["id"]) is not None
+        bot.guilds = [guild]
+        await cog.on_ready()
+    finally:
+        cog.poller.cancel()
+
+    assert await open_session(bot.db, row["id"]) is None
+    assert (await kinds(bot.db)).count("golive.spotlight_reconciled") == 1
+
+
 async def test_a_session_whose_message_is_still_there_survives_the_boot(bot, cog):
     row = await a_row(bot)
     helix_of(bot, twitch_stream())
