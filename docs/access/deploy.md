@@ -5,8 +5,7 @@
 > Last verified: **2026-09-20 (evening), the ORDER of `scripts/deploy.ps1` only** — the
 > `release.json` write and its `Release vN: release.json` commit have MOVED to after every gate,
 > immediately before `git push` (branch `small-fixes`, fix 3 of 4; see *Where `release.json` is
-> written* below). ⚠️ **Nothing else on this page was re-checked at that pass and NO DEPLOY WAS
-> RUN** — the new order has never shipped anything. Before that,
+> written* below). ⚠️ **Nothing else on this page was re-checked at that pass.** ✅ **2026-09-20 23:32 — the new order SHIPPED v150** (`575dde2`); the measurement is under *Where `release.json` is written* below. Before that,
 > **2026-09-11 08:35** — re-read against `fly.toml` and
 > `scripts/deploy.ps1`. 🔴 **One real error fixed:** this file said *"`fly.toml` has no
 > `[http_service]` on purpose"*, which has been false since the dashboard went live —
@@ -138,7 +137,7 @@ just `.\scripts\deploy.ps1` again.
 ⚠️ **What this does NOT change:** the file's contents, the commit message, the escape hatch, and
 the fact that the deploy pushes one more commit than you wrote. ⚠️ **What could still go wrong:**
 `release_json.py` failing now costs a full gate run before you hear about it (it refuses in words
-and nothing is pushed). ⚠️ **NOT verified:** no deploy has been run since the move.
+and nothing is pushed). ✅ **MEASURED 2026-09-20 23:32, v150.** The release commit `575dde2` (*Release v150: release.json*, 23:31:16) is the branch tip — written AFTER the gate (`7118 passed, 3 skipped`) and after the last content commit (`3d65025`, 23:29:32) — and `git push` carried it; the `deploys.log` line is 23:32:23. This was the **second** run of the new order. ⚠️ **Still NOT measured: a gate REFUSAL under the new order** — nothing has been refused since the move, and a refusal leaving the tree clean is the whole point of the change.
 
 ### After every deploy: move the live mirror, so the local lower environment stays honest
 

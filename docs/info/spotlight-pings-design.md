@@ -6,10 +6,8 @@
 > editable **Role name** box; the drawer's Ping-role group gained **Rename…**. Both reach a channel
 > by `spotlight_id` exactly as this design's `POST` does — Deviation 6's point (a channel's door is
 > the site and `StreamerPick`, never `GivePick`) is untouched. Branch `ping-role-modal`, design
-> [`ping-role-modal-design.md`](ping-role-modal-design.md); ⚠️ not merged, not deployed, nothing in
-> it has met Discord. **Status:** TRACKED · 🔨 **BUILT on branch `spotlight-pings`, 2026-09-20**,
-> off `main` `552af36` (v149 live) — schema **50**, registry **294**, mock **193 routes**; ⚠️ **NOT merged, NOT deployed,
-> and nothing in it has met Discord.** **Read `## Deviations` (thirteen) and `## What was NOT verified` at the foot BEFORE
+> [`ping-role-modal-design.md`](ping-role-modal-design.md); LIVE as v150; nothing in it has met Discord. **Status:** TRACKED · ✅ **LIVE as v150** (release `575dde2`, deployed 2026-09-20 23:32 Phoenix; sweeps **685–689**, were `SP-a` … `SP-e`. ⚠️ **The `golive_fan_roles` REBUILD ran at this boot** — `database: rebuilding golive_fan_roles so a role may belong to a channel`; a database backup was taken at 23:30 first. ⚠️ `pings_mode` is still OFF, so `/pings` cannot list channels yet) · was 🔨 BUILT on branch `spotlight-pings`, 2026-09-20,
+> off `main` `552af36` (v149 live) — schema **50**, registry **294**, mock **193 routes**; ⚠️ **Merged and LIVE at v150; nothing in it has met Discord.** **Read `## Deviations` (thirteen) and `## What was NOT verified` at the foot BEFORE
 > reading §A–§F as built** — the biggest is that `golive_fan_roles` had to be REBUILT, not widened, so the live database
 > gets a table rebuild on the next boot. Was: 📐 **DESIGN (Fable, 2026-09-20 19:4x), dispatched to
 > Opus as branch `spotlight-pings`** the same turn (owner: *"yes design and build it … I dont see why we're waiting for

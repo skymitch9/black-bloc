@@ -1,9 +1,7 @@
 # Add a ping role — make a NAMED role from the modal, and refuse a duplicate name without closing it
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **BUILT on branch
-> `ping-role-modal`** (off `main` `495d7b6`, 2026-09-20 22:xx — commits `95788f6` the modal,
-> `4f8dac5` the rename). ⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET DISCORD** — see
-> `## Deviations` and `## What was NOT verified` at the foot, and sweeps `PR-a` … `PR-e`. Was
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v150** (release `575dde2`, deployed 2026-09-20 23:32 Phoenix) · was BUILT on branch `ping-role-modal` (off `main` `495d7b6`, 2026-09-20 22:xx — commits `95788f6` the modal, `4f8dac5` the rename). ⚠️ **NOTHING IN IT HAS MET DISCORD YET** — see
+> `## Deviations` and `## What was NOT verified` at the foot, and sweeps **701–705** (were `PR-a` … `PR-e`; ⚠️ each MAKES OR RENAMES A REAL ROLE). Was
 > 📐 **DESIGN (Fable, 2026-09-20 21:3x), dispatched to
 > Opus as branch `ping-role-modal`** the same turn. **Last verified: 2026-09-20 21:3x** against `main` `e177b27`:
 > `page-golive.js:addPingRole` `:457` — an `ask()` modal with a role select (*Use an existing role, or leave it to make a new
@@ -164,7 +162,7 @@ branch rather than a second one, because it is the same files and the same dialo
 
 - ⚠️ **NOTHING IN THIS BUILD HAS MET DISCORD.** No role has been made, named, renamed or refused on
   a real server; `guild.create_role`, `role.edit` and `named_role` were exercised only against the
-  fakes. The owner's sweeps `PR-a` … `PR-e` are the only proof that will exist until somebody
+  fakes. The owner's sweeps **701–705** (were `PR-a` … `PR-e`; ⚠️ each MAKES OR RENAMES A REAL ROLE) are the only proof that will exist until somebody
   presses the buttons.
 - **Not merged and not deployed.** The branch is `ping-role-modal`; nothing has been pushed to Fly
   and the live site still has the old modal.

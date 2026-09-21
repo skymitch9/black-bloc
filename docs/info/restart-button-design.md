@@ -1,12 +1,12 @@
 # Restart the bot — a button on the Overview page
 
 > **Audience:** whoever touches the restart path next, and the owner. **Status:** TRACKED ·
-> **BUILT on branch `small-fixes`** (off `main` `552af36`, fix 4 of 4) · **Last verified:
+> ✅ **LIVE as v150** (release `575dde2`, deployed 2026-09-20 23:32 Phoenix; sweep **674**, was `SF-c`, is the owner's — ⚠️ **nothing here has met Fly**: no process has been restarted by pressing it, so the ~15 s and the Fly restart are still read off the policy, not measured) · was **BUILT on branch `small-fixes`** (off `main` `552af36`, fix 4 of 4) · **Last verified:
 > 2026-09-20** — the route, the module and the page were exercised by the suite and by a
 > headless browser against `site/mock/server.mjs`. ⚠️ **NOTHING HERE HAS MET FLY OR DISCORD.**
 > No process has been restarted by pressing it, no `core.restart_requested` row has been read on
 > the live Logs page, and the claim that Fly starts a fresh machine on a non-zero exit is read
-> off Fly's restart policy (`on-failure`, 10 retries), not measured. The sweep rows (`SF-c` in
+> off Fly's restart policy (`on-failure`, 10 retries), not measured. The sweep rows (**674**, was `SF-c`, in
 > [`../access/sweeps.md`](../access/sweeps.md)) are how that gets checked. Secret NAMES only.
 
 ## The ask

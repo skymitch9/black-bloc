@@ -1,8 +1,6 @@
 # Raid trains — their own dashboard page, and a train that makes an event through the events set-up
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT on branch
-> `raidtrain-page`, 2026-09-20 — ⚠️ NOT MERGED, NOT DEPLOYED, and the migration has NOT run on the live
-> database.** Commits `5afbf99` / `69ddebc` / `a31599a` plus the doc sweep; the `## Deviations` foot (14
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v150** (release `575dde2`, deployed 2026-09-20 23:32 Phoenix; sweeps **696–700**, were `RT-a` … `RT-e`). ✅ **The migration RAN at this boot** — `database: added raid_trains.event_id`, schema **51**. ⚠️ `raidtrain_mode` is OFF in production, so the page is live and the feature is dark, and `RT-e` (the Discord doors) is unverified. Was BUILT on branch `raidtrain-page`, 2026-09-20. Commits `5afbf99` / `69ddebc` / `a31599a` plus the doc sweep; the `## Deviations` foot (14
 > items) and `## What was NOT verified` are the BUILD agent's. Gate at the landing: `pytest -n 8` **7098
 > passed, 3 skipped** in both orders, `ruff` clean, every `site/public/assets/*.js` parses, `node
 > site/mock/check.mjs` **21 pages, 197 routes, 24 core settings**, all six node tests, and the new page

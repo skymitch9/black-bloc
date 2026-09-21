@@ -1,9 +1,8 @@
 # One box for the end-of-stream wording — `{live}` replaces the separate suffix
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **§C2 BUILT 2026-09-20 21:4x on branch `golive-toggle`, off `main` `417827a`** — `golive_live_author`, the ONE Wording card with a Starting / Ending segment, and `GET /api/golive/preview` deleted; ⚠️ **not merged, not deployed, nothing has met Discord**; its `### C2 deviations` and `### C2 — what was NOT verified` sit under §C2 below. Sweeps `EW-e`, `EW-f`. Before that: ✅ **BUILT 2026-09-20 21:0x on branch
-> `end-wording`, off `main` `be78bff`** — ⚠️ **not merged, not deployed, nothing has met Discord and the boot migration
-> has never run on the live database**; the `## Deviations` foot is the truth where it departs from the body, and
-> **Deviation 1 was decided by the conductor 2026-09-20 21:2x — the default does NOT move**. Sweeps `EW-a … EW-d`.
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v150** (release `575dde2`, deployed 2026-09-20 23:32 Phoenix; sweeps **679–682** for the first half and **683–684** for §C2. ⚠️ **The boot migration RAN on the live database at this deploy and nothing moved:** `golive.end_wording_migrated` — carried_suffix=False, dropped_mode=`edit`, the default the guild already had) · was **§C2 BUILT 2026-09-20 21:4x on branch `golive-toggle`, off `main` `417827a`** — `golive_live_author`, the ONE Wording card with a Starting / Ending segment, and `GET /api/golive/preview` deleted; ⚠️ **not merged, not deployed, nothing has met Discord**; its `### C2 deviations` and `### C2 — what was NOT verified` sit under §C2 below. Sweeps `EW-e`, `EW-f`. Before that: ✅ **BUILT 2026-09-20 21:0x on branch
+> `end-wording`, off `main` `be78bff`** — ⚠️ **LIVE as v150 — the boot migration HAS now run on the live database and changed nothing for anyone; nothing else in it has met Discord**; the `## Deviations` foot is the truth where it departs from the body, and
+> **Deviation 1 was decided by the conductor 2026-09-20 21:2x — the default does NOT move**. Sweeps **679–682** (were `EW-a` … `EW-d`); §C2's are **683–684**.
 > Was: 📐 DESIGN (Fable, 2026-09-20 20:0x).
 > **Last verified: 2026-09-20 20:0x** against `main` `3c803db` (v149 live): `black_bloc/golive.py:ended_render` `:318` —
 > a blank `golive_end_template` keeps the live sentence and appends `golive_end_suffix` (`GOLIVE_END_SUFFIX = " — stream

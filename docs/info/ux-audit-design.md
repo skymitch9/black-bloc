@@ -1,7 +1,7 @@
 # The dashboard UX audit — good menus and good page content, page by page
 
 > **Audience:** Fable (to review and kick off), then the audit agent, then the per-page builds.
-> **Status:** TRACKED · 📐 **REVIEWED by Fable 2026-09-20 16:1x — the six tests in §C stand as written — and
+> **Status:** TRACKED · ✅ **STAGE 3 IS LIVE FOR THREE PAGES as v150** (2026-09-20 23:32, release `575dde2`) — go-live (v142), **posts** (sweeps **666–671**) and **requests** (sweeps **706–711**); raid trains took a page of their own the same night (page 21, sweeps **696–700**). ⚠️ **Every static preview from stage 2 is DELETED** (the owner: *"the previews can become the real things on live"*), so §B's and `ux-audit.md`'s readings are the v141 ones for those four pages; the next stage-3 pick is his · 📐 **REVIEWED by Fable 2026-09-20 16:1x — the six tests in §C stand as written — and
 > STAGE 1 DONE** (`docs/info/ux-audit.md`, 20 pages ranked) · **STAGE 2 SHIPPED as twelve in-site PREVIEW pages, v144 2026-09-20 17:34**
 > (`site/public/preview/<page>.html`, real shell + real components over static seeds — the owner switched from standalone mocks
 > to these 16:4x; each is deleted when its real page ships) · **STAGE 3 done for THREE pages** — go-live (v142, its own

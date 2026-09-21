@@ -1,6 +1,6 @@
 # The Discord mock — every editable posted text shows staff exactly what Discord will draw
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT (Opus, 2026-09-20 20:2x, branch `discord-mock` off `main` `be78bff`) — not merged, not deployed; see `## Deviations` (14) and `## What was NOT verified`.** Was: 📐 DESIGN (Fable, 2026-09-20 20:0x), dispatched
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v150** — release `575dde2`, deployed **2026-09-20 23:32** Phoenix; sweeps **675–678** (were `DM-a` … `DM-d`) are the owner's and 🔴 **676** is the only row that can ever prove the mock is honest — nobody has walked it. Was BUILT (Opus, 2026-09-20 20:2x, branch `discord-mock` off `main` `be78bff`); `## Deviations` (14) and `## What was NOT verified` are the truth where they depart from the body — ✅ Deviation 1's follow-up landed in the same release: `GET /api/golive/preview` is DELETED.** Was: 📐 DESIGN (Fable, 2026-09-20 20:0x), dispatched
 > at the 20:50 session reset. **Last verified: 2026-09-20 20:0x** against
 > `main` `cb59eca` (v149 live): the go-live wording previews are `discordmd.renderPreview` embed boxes (`page-golive.js:drawCard`,
 > v149 — markdown in a box, NOT Discord's chrome); the posts editor previews with the same renderer

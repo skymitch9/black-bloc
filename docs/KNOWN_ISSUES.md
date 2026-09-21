@@ -6,7 +6,7 @@
 > (2026-09-18 16:08). What moved: **KI-5 is MOOT** (its whole subject was what test mode did
 > and did not stop) and **KI-8's "which today is every panel outside `TEST_CHANNEL_ID`"**
 > clause is history — each gains a dated banner and keeps its body, nothing deleted.
-> **KI-26's count stands at TEN** (the tenth, 2026-09-18 16:5x, was the first on a `> file`
+> **KI-26's count stands at TWENTY-TWO** (re-counted 2026-09-20 23:3x at the v150 landing; it read TEN here) (the tenth, 2026-09-18 16:5x, was the first on a `> file`
 > run — its own *what would change it* is therefore MET, and the session it asks for is
 > queued on [`TODO.md`](TODO.md)). ⚠️ **Nothing else in this file was re-tested:** no
 > symptom was reproduced, nothing met live Discord, no browser rendered a page, and the two
@@ -137,6 +137,8 @@ replace's next sweep or the next replace removes it — so this is a test that m
 replace path retries the unlink; a third → the media store is given a `remove()` that retries on `PermissionError` the way
 `shutil.rmtree`'s Windows handler does. Either way it stays a **read the log** item: the gate names the test, and a
 one-test red on THIS test with a green re-run is this issue, not the build.
+
+**2026-09-20 23:3x — still ONE sighting, so nothing changes.** The v150 gate (**7118 passed, 3 skipped**) did not reproduce it and no build report between v148 and v150 names this test; the only test-run trouble across thirteen builds was KI-26. Status unchanged: `WATCHING`.
 
 ## KI-31 — Voice RECEIVE rests on a PRE-RELEASE extension, and it pins the image to Python 3.12 — `ACCEPTED`
 
@@ -284,6 +286,7 @@ panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
 
+> 🔴 **2026-09-20 23:3x — the count stands at TWENTY-TWO, and the debugging session this entry's own triggers called for has STILL not been run.** Nine sightings (fourteen to twenty-two) piled up between the note below and the v150 landing; each was recorded where its build reported it (`TODO.md` / `DONE.md`) and not here, which is how this entry came to say THIRTEEN while the real figure was twenty-two — that gap is the finding. Tonight's, in order: the **sixteenth** killed a v150 deploy attempt outright (stalled at 99 % for 14 minutes with three suites on the box, killed by its own process tree; nothing shipped and its stray `Release v150` commit was dropped unpushed); **seventeen** and **eighteen** on the `end-wording` build and **twenty-one** on its wording-default fix; **nineteen** and **twenty** on the `discord-mock` build; **twenty-two** on the `raidtrain-page` build. Every one was green on a retry, and the v150 gate that finally shipped passed **7118 passed, 3 skipped**. ⚠️ So the cost is still lost time and never a bad deploy — but it is now lost time on nine runs and one killed deploy. Before that —
 > **2026-09-20 17:2x — THIRTEEN sightings: the `costream` build hit it TWICE, both on `> file` runs** (spawn-shape, 8 workers flat at 0.0156 s CPU, no output for 10+ minutes against an 82 s baseline; both green on one retry). Its trick for killing the right tree with two suites on the box: `-o cache_dir=<its worktree>/.pytest_cache` so its own root is identifiable on the command line. Before that —
 > **2026-09-20 16:5x — ELEVEN sightings, the SECOND on a `> file` run, and ⚠️ this entry's own trigger is now met on both counts** (the `golive-page` build's `BB_REVERSE=1 pytest -n 8` stalled at 87 % with the log untouched for seven minutes; killed by its own process tree — picked out by the `PYTHONPATH` in its `env -i` line, because a sibling suite was running beside it; green in 83 s on the retry). ⚠️ New measured fact: **the killed xdist run's exit code read 0** while the log said `[gw0] node down: Not properly terminated` — a wrapper that trusts the code will call a killed run green; read the log. The debugging session this entry asks for is on the TODO's queue. Before that —
 > **2026-09-18 16:5x — TEN sightings, and ⚠️ one of them was on a `> file` run** (the `frontdoor-shadow` build's post-commit `BB_REVERSE=1` run stalled at ~91 % with the log untouched for 8 minutes, 10 idle workers; killed by process tree, green in 58 s on the retry). The `boot-reconcile-once` build also hit a SERIAL hang with output going to the tool's pipe (empty log past 600 s; 8.9 s with `> file`). This entry's own *what would change it* says a `> file` hang means spend a session on it — that session is queued after the Sunday reset. Before that —

@@ -2,7 +2,7 @@
 
 > **Audience:** the owner, and Fable (to pick what gets a mock next). **Status:** TRACKED
 > — `docs/` is in git, so **secret NAMES only** (this file holds none).
-> **Last verified: 2026-09-20** against `main` `5afd58c` (v141 live). Measured by reading all
+> ⚠️ **2026-09-20 23:32 — FOUR of the twenty pages have been REBUILT since this was measured** and are live as v150 (release `575dde2`): go-live (v142), posts, requests, and the events page (raid trains left it for a page of their own — **21** pages now). Every section count, rank and one-line change below is the v141 reading and is stale for those four. **Last verified: 2026-09-20** against `main` `5afd58c` (v141 live). Measured by reading all
 > **20** `site/public/*.html` and all **20** `site/public/assets/page-*.js` (**10,790** lines)
 > in full, plus the shared modules they are built from — `ui.js` (1,429), `layout.js` (287),
 > `logs.js` (322), `shell.js` (334), `app.js` (314) — and the three stylesheets

@@ -1,8 +1,7 @@
 # The date-time picker on the SITE — one `whenField` for every page
 
 > **Audience:** whoever touches a date or a time box on the dashboard.
-> **Status:** TRACKED, **BUILT, NOT MERGED, NOT DEPLOYED** — branch `when-picker-site`, worktree
-> `C:/lcw/bb-when-picker-site`, off `main` at `4a33938`. **Last verified: 2026-09-20** — measured
+> **Status:** TRACKED · ✅ **LIVE as v150** (release `575dde2`, deployed 2026-09-20 23:32 Phoenix; sweeps **712–716**, were `WP-a` … `WP-e`, all unwalked) · was BUILT, NOT MERGED, NOT DEPLOYED on branch `when-picker-site`, worktree `C:/lcw/bb-when-picker-site`, off `main` at `4a33938`. **Last verified: 2026-09-20** — measured
 > in `chrome-headless-shell` 149.0.7827.22 over raw CDP against this worktree's mock on
 > `MOCK_PORT=8780`; the gate lines are in the build's report and repeated under
 > [What was NOT verified](#what-was-not-verified). ⚠️ **Nothing here has met Discord or the live
