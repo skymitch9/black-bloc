@@ -27,6 +27,21 @@ YOUTUBE = "YouTube"
 END_GRACE_SECONDS = 120
 POLL_SECONDS = 60
 
+HISTORY_NAME_CAP = 10
+HISTORY_AND_MORE = "{shown}, and {more} more"
+HISTORY_PERSON = "person"
+HISTORY_PEOPLE = "people"
+HISTORY_NOTHING = (
+    "Nothing to link — nobody in the go-live history is missing a channel, so nothing changed."
+)
+HISTORY_NOBODY = "Linked nobody new"
+HISTORY_LINKED = "Linked {count} {people} ({names})"
+HISTORY_OPTED_OUT = "skipped {count} who asked not to be announced"
+HISTORY_TAKEN_ONE = "1 channel already belongs to somebody else ({names})"
+HISTORY_TAKEN_MANY = "{count} channels already belong to somebody else ({names})"
+HISTORY_UNREADABLE = "{count} could not be read ({names})"
+HISTORY_LEFT = "skipped {count} who have left"
+
 NOBODY = "Someone"
 EMBED_COLOURS = {TWITCH.casefold(): 0x9146FF, YOUTUBE.casefold(): 0xFF0000}
 EMBED_COLOUR_DEFAULT = 0x5865F2
@@ -93,16 +108,18 @@ def is_streaming(activity: Any) -> bool:
     return getattr(activity, "type", None) == discord.ActivityType.streaming
 
 
-def platform_of(activity: Any, url: str | None) -> str | None:
-    named = _text(getattr(activity, "platform", None))
-    if named:
-        return named
-    lowered = (url or "").lower()
+def platform_of_url(url: Any) -> str | None:
+    lowered = str(url or "").lower()
     if "twitch.tv" in lowered:
         return TWITCH
     if "youtube.com" in lowered or "youtu.be" in lowered:
         return YOUTUBE
     return None
+
+
+def platform_of(activity: Any, url: str | None) -> str | None:
+    named = _text(getattr(activity, "platform", None))
+    return named or platform_of_url(url)
 
 
 def presence_image(activity: Any) -> str | None:
@@ -320,6 +337,62 @@ def _row_field(source: Any, key: str) -> Any:
         return source[key]
     except (IndexError, KeyError, TypeError):
         return getattr(source, key, None)
+
+
+def history_urls(rows: Any) -> dict[int, dict[str, str]]:
+    """The newest address per member per platform, out of session rows newest first."""
+    found: dict[int, dict[str, str]] = {}
+    for row in rows or ():
+        user_id = _row_field(row, "user_id")
+        if user_id is None:
+            continue
+        mine = found.setdefault(int(user_id), {})
+        for key in ("url", "also_url"):
+            url = _text(_row_field(row, key))
+            platform = platform_of_url(url)
+            if url and platform and platform not in mine:
+                mine[platform] = url
+    return {user_id: urls for user_id, urls in found.items() if urls}
+
+
+def _named(names: Any) -> str:
+    found = list(names or ())
+    shown = ", ".join(found[:HISTORY_NAME_CAP])
+    if len(found) <= HISTORY_NAME_CAP:
+        return shown
+    return HISTORY_AND_MORE.format(shown=shown, more=len(found) - HISTORY_NAME_CAP)
+
+
+def history_said(
+    *,
+    linked: Any,
+    opted_out: Any,
+    taken: Any,
+    unreadable: Any,
+    left: Any,
+) -> str:
+    """The sweep's answer in words: who was linked, and everybody it would not touch."""
+    if not any((linked, opted_out, taken, unreadable, left)):
+        return HISTORY_NOTHING
+    bits = [
+        HISTORY_LINKED.format(
+            count=len(linked),
+            people=HISTORY_PERSON if len(linked) == 1 else HISTORY_PEOPLE,
+            names=_named(linked),
+        )
+        if linked
+        else HISTORY_NOBODY
+    ]
+    if opted_out:
+        bits.append(HISTORY_OPTED_OUT.format(count=len(opted_out)))
+    if taken:
+        said = HISTORY_TAKEN_ONE if len(taken) == 1 else HISTORY_TAKEN_MANY
+        bits.append(said.format(count=len(taken), names=_named(taken)))
+    if unreadable:
+        bits.append(HISTORY_UNREADABLE.format(count=len(unreadable), names=_named(unreadable)))
+    if left:
+        bits.append(HISTORY_LEFT.format(count=len(left)))
+    return ", ".join(bits) + "."
 
 
 def mention_prefix(content: Any) -> str:
@@ -666,6 +739,7 @@ REFRESH = PanelMove("Refresh", "secondary", "refresh", row=2)
 LOGS = PanelMove("Logs", "secondary", "logs", row=2)
 STREAMERS = PanelMove("Streamers…", "secondary", "streamers", row=2)
 SPOTLIGHT = PanelMove("Channels…", "secondary", "spotlight", row=2)
+LINK_HISTORY = PanelMove("Link from history", "secondary", "history", row=1)
 
 PANEL_BUTTONS: dict[tuple[bool, bool], tuple[PanelMove, ...]] = {
     (False, False): (LINK_CHANNEL, STOP_ANNOUNCING, REFRESH),
@@ -673,7 +747,7 @@ PANEL_BUTTONS: dict[tuple[bool, bool], tuple[PanelMove, ...]] = {
     (True, False): (CHANGE_CHANNEL, UNLINK_CHANNEL, STOP_ANNOUNCING, REFRESH),
     (True, True): (CHANGE_CHANNEL, UNLINK_CHANNEL, ANNOUNCE_AGAIN, REFRESH),
 }
-STAFF_BUTTONS: tuple[PanelMove, ...] = (LOGS, STREAMERS, SPOTLIGHT)
+STAFF_BUTTONS: tuple[PanelMove, ...] = (LOGS, STREAMERS, SPOTLIGHT, LINK_HISTORY)
 
 
 def panel_buttons(

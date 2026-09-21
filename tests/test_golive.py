@@ -8,6 +8,8 @@ from black_bloc.golive import (
     EMBED_COLOURS,
     EMBED_NO_TITLE,
     GAME_FALLBACK,
+    HISTORY_NOTHING,
+    LINK_HISTORY,
     PANEL_BUTTONS,
     PANEL_MINUTES_KEY,
     PANEL_TIMEOUT_FOOTER,
@@ -33,6 +35,8 @@ from black_bloc.golive import (
     enriched,
     extract_stream,
     from_twitch,
+    history_said,
+    history_urls,
     humanise_duration,
     is_streaming,
     joins_session,
@@ -43,6 +47,7 @@ from black_bloc.golive import (
     passes_role_filters,
     ping_prefix,
     platform_of,
+    platform_of_url,
     presence_image,
     render,
     should_announce,
@@ -990,3 +995,80 @@ def test_a_second_platform_joins_only_when_the_mode_is_on_and_the_platform_is_ne
     assert joins_session({"platform": None, "also_source": None}, "YouTube", "on") is False
     assert joins_session(row, None, "on") is False
     assert joins_session({"platform": "Twitch", "also_source": "youtube"}, "Kick", "on") is False
+
+
+# --- The auto-link's pure half: which platform an address is, and the sweep's own report -----
+
+
+def test_a_platform_is_told_from_the_address_alone():
+    assert platform_of_url("https://www.twitch.tv/mothlight?x=1") == "Twitch"
+    assert platform_of_url("https://youtu.be/abc") == "YouTube"
+    assert platform_of_url("https://www.youtube.com/channel/UC1") == "YouTube"
+    assert platform_of_url("https://kick.com/moth") is None
+    assert platform_of_url(None) is None
+
+
+def test_the_presence_platform_still_wins_over_the_address():
+    """Checklist 15: `platform_of` and the sweep read the same one function."""
+
+    class Named:
+        platform = "Twitch"
+
+    assert platform_of(Named(), "https://www.youtube.com/watch?v=x") == "Twitch"
+    assert platform_of(object(), "https://www.youtube.com/watch?v=x") == "YouTube"
+
+
+def test_the_newest_address_per_member_per_platform_wins():
+    rows = [
+        {"user_id": 1, "url": "https://twitch.tv/newest", "also_url": None},
+        {"user_id": 2, "url": "https://www.youtube.com/channel/UC2", "also_url": None},
+        {"user_id": 1, "url": "https://twitch.tv/older", "also_url": "https://youtu.be/v"},
+    ]
+
+    assert history_urls(rows) == {
+        1: {"Twitch": "https://twitch.tv/newest", "YouTube": "https://youtu.be/v"},
+        2: {"YouTube": "https://www.youtube.com/channel/UC2"},
+    }
+
+
+def test_a_session_with_no_readable_address_leaves_nobody_in_the_sweep():
+    assert history_urls([{"user_id": 1, "url": None, "also_url": ""}]) == {}
+    assert history_urls([{"user_id": 1, "url": "https://kick.com/moth"}]) == {}
+    assert history_urls(None) == {}
+
+
+def test_the_sweep_report_is_a_sentence_and_never_a_status_code():
+    nothing = dict(linked=[], opted_out=[], taken=[], unreadable=[], left=[])
+
+    assert history_said(**nothing) == HISTORY_NOTHING
+    assert history_said(**nothing | {"linked": ["Moth → twitch.tv/mothlight"]}) == (
+        "Linked 1 person (Moth → twitch.tv/mothlight)."
+    )
+    assert history_said(**nothing | {"linked": ["a", "b"], "opted_out": ["c"]}) == (
+        "Linked 2 people (a, b), skipped 1 who asked not to be announced."
+    )
+    assert history_said(**nothing | {"taken": ["a"]}) == (
+        "Linked nobody new, 1 channel already belongs to somebody else (a)."
+    )
+    assert history_said(**nothing | {"taken": ["a", "b"], "unreadable": ["c"], "left": ["9"]}) == (
+        "Linked nobody new, 2 channels already belong to somebody else (a, b), "
+        "1 could not be read (c), skipped 1 who have left."
+    )
+
+
+def test_a_long_list_of_names_is_capped_so_the_report_still_fits_a_message():
+    said = history_said(
+        linked=[f"name{n}" for n in range(14)], opted_out=[], taken=[], unreadable=[], left=[]
+    )
+
+    assert "Linked 14 people (name0, " in said
+    assert said.endswith("name9, and 4 more).")
+
+
+def test_the_staff_panel_gains_link_from_history_and_nothing_else_moved():
+    assert LINK_HISTORY in STAFF_BUTTONS
+    assert LINK_HISTORY.action == "history" and LINK_HISTORY.needs_modal is False
+    assert LINK_HISTORY not in {move for row in PANEL_BUTTONS.values() for move in row}
+    assert "Link from history" not in [
+        move.label for move in panel_buttons(linked=True, opted_out=False)
+    ]

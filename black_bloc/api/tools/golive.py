@@ -14,6 +14,7 @@ from ...cogs.content.golive import (
     clean_login,
     get_link,
     link_channel,
+    link_from_history,
     opt_in,
     opt_out,
     recent_sessions,
@@ -254,6 +255,23 @@ def build_router(bot: Any) -> APIRouter:
             "message": LINKED.format(
                 name=row["user_name"] or wanted, login=row["twitch_login"]
             ),
+        }
+
+    @router.post("/links/sweep")
+    async def golive_link_sweep(request: Request) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        found = await link_from_history(
+            bot, guild, actor_for(bot, who, guild), via=VIA_WEBSITE
+        )
+        return {
+            "linked": len(found["linked"]),
+            "opted_out": len(found["opted_out"]),
+            "taken": len(found["taken"]),
+            "unreadable": len(found["unreadable"]),
+            "left": len(found["left"]),
+            "message": found["message"],
         }
 
     @router.get("/optouts")

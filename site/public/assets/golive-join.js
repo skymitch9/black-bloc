@@ -335,6 +335,7 @@ export const DRAWERS = [
     title: 'How streams are spotted',
     keys: [
       'golive_boot_sweep',
+      'golive_autolink_presence',
       'youtube_live_poll_minutes',
       'youtube_live_end_misses',
       'youtube_unlink_dms_them',

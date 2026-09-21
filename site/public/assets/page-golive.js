@@ -89,12 +89,23 @@ const ADD_HELP = 'One box for both platforms. A Twitch name goes to the go-live 
   + 'with nobody here behind it, like GamesDoneQuick.';
 const ADD_FIELD_HELP = 'The name in twitch.tv/…, or the address that starts with '
   + 'youtube.com/channel/UC…, or their @handle.';
+const ADD_PICK_FIRST = 'Pick the member this is about first.';
 const ADD_NO_MEMBER_HELP = 'Leave this blank for a channel with nobody here behind it. It goes '
   + 'on the same list, is announced the same way, and its own row turns the spotlight, the '
   + 'ping role and announcements on and off.';
 const ADD_CHANNEL_NEEDS_TWITCH = '**{given}** is a YouTube channel, and a channel with nobody '
   + 'behind it needs a Twitch name to hang on, so nothing was added. Put the name from '
   + 'twitch.tv/… here and link its YouTube channel on its own row afterwards.';
+const SWEEP_TITLE = 'Link from history';
+const SWEEP_ASK_TITLE = 'Link everyone the go-live history knows about?';
+const SWEEP_ASK_BODY = 'Every person who has streamed here and has no channel linked is linked to '
+  + 'the newest Twitch or YouTube address their go-live carried. Anybody who already has one, has '
+  + 'asked not to be announced, or has left is left alone, and a channel that belongs to somebody '
+  + 'else is refused by name rather than moved.';
+const SWEEP_ASK_UNDO = 'Every link this makes can be undone one at a time with Unlink.';
+const SWEEP_CONFIRM = 'Link them';
+const SWEEP_DONE = 'The sweep ran.';
+const SWEEP_SAID = 'golive.sweep';
 
 const ANNOUNCEMENT_NOTE = 'One wording for both platforms. {platform} fills itself in.';
 const WORDING_TITLE = 'The wording';
@@ -1554,7 +1565,28 @@ function pageHead() {
 
 /** The two ways a row gets onto the list, beside the list (the owner: the page head was too far away). */
 function streamerDoors() {
-  const doors = el('div', { class: 'bar' }, [addStreamerButton(), addSpotlightButton()]);
+  const voice = sayAgain(SWEEP_SAID, notice());
+  const sweep = button(SWEEP_TITLE, async () => {
+    const sure = await ask({
+      title: SWEEP_ASK_TITLE,
+      body: [SWEEP_ASK_BODY, SWEEP_ASK_UNDO],
+      confirmLabel: SWEEP_CONFIRM,
+    });
+    if (!sure) return;
+    const done = await run(
+      voice,
+      () => send('/api/golive/links/sweep', 'POST', {}),
+      (found) => found?.message || SWEEP_DONE,
+    );
+    if (done.ok) {
+      keepSaying(SWEEP_SAID, voice);
+      refresh();
+    }
+  }, { tone: 'quiet' });
+  const doors = el('div', {}, [
+    el('div', { class: 'bar' }, [addStreamerButton(), addSpotlightButton(), sweep]),
+    voice,
+  ]);
   doors.style.marginLeft = 'auto';
   return doors;
 }

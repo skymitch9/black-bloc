@@ -50,6 +50,7 @@ export const LABELS = {
   golive_ping_role_id: 'Who is pinged when someone goes live',
   golive_max_session_hours: 'How long a stream may run before it is closed',
   golive_boot_sweep: 'Whether a restart looks for people already streaming',
+  golive_autolink_presence: 'Whether going live links a person to that channel',
   golive_panel_minutes: 'How long the /golive panel stays live',
   golive_log_level: 'How much of go-live is repeated into Discord',
 

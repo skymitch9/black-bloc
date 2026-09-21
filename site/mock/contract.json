@@ -839,6 +839,23 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/golive/links/sweep",
+      "body": {},
+      "read_by": [
+        "page-golive.js streamerDoors"
+      ],
+      "shape": "object",
+      "keys": [
+        "linked",
+        "opted_out",
+        "taken",
+        "unreadable",
+        "left",
+        "message"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/golive/optouts",
       "read_by": [

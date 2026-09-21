@@ -37,6 +37,8 @@ from ...golive import (
     enriched,
     extract_stream,
     from_twitch,
+    history_said,
+    history_urls,
     humanise_duration,
     joins_session,
     now_iso,
@@ -44,6 +46,7 @@ from ...golive import (
     panel_minutes,
     parse_ts,
     passes_role_filters,
+    platform_of_url,
     render,
     should_announce,
     single_embed,
@@ -66,6 +69,7 @@ from ...panels import (
 )
 from ...settings_store import (
     DB_UNAVAILABLE,
+    GOLIVE_AUTOLINK_PRESENCE_KEY,
     GOLIVE_COSTREAM_AUTHOR_KEY,
     GOLIVE_COSTREAM_MODE_KEY,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
@@ -196,6 +200,17 @@ ROLE_FILTER = "role_filter"
 COOLDOWN = "cooldown"
 NO_SESSION = "no_session"
 POST_FAILED = "post_failed"
+
+HISTORY_SESSIONS = 2000
+HISTORY_BECAUSE = "history_sweep"
+PRESENCE_BECAUSE = "presence"
+LINKED_NEW = "linked"
+LINK_ALREADY = "already"
+LINK_TAKEN_OUT = "taken"
+LINK_UNREADABLE = "unreadable"
+TWITCH_CHANNEL = "twitch.tv/{login}"
+YOUTUBE_CHANNEL = "youtube.com/channel/{channel}"
+HISTORY_NAMED = "{name} → {channel}"
 
 
 def same_platform(seen: Any, wanted: Any) -> bool:
@@ -477,6 +492,7 @@ async def link_channel(
     *,
     helix: Any = None,
     via: str = VIA_DISCORD,
+    because: str | None = None,
 ) -> tuple[str, str]:
     """The one place a Twitch channel is linked: (what happened, the fan-role sentence)."""
     cleaned = clean_login(str(given or ""))
@@ -506,9 +522,115 @@ async def link_channel(
         kind_via("golive.link", via),
         actor=actor,
         target=target,
-        details={"login": cleaned, "checked": checked, "via": via},
+        details={"login": cleaned, "checked": checked, "via": via}
+        | ({"because": because} if because else {}),
     )
     return ("linked_unchecked" if helix is not None and not checked else "linked"), extra
+
+
+async def link_from_url(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    target: Any,
+    url: Any,
+    *,
+    via: str = VIA_DISCORD,
+    because: str | None = None,
+) -> tuple[str, str]:
+    """One home for 'that address is their channel': (what happened, the channel in words)."""
+    from ...youtube import channel_id_in, handle_in
+    from .youtube import LinkRefused
+    from .youtube import get_link as youtube_link_of
+    from .youtube import link_channel as youtube_link
+
+    platform = platform_of_url(url)
+    wanted = target_id(target)
+    if platform == TWITCH:
+        if await get_link(bot.db, wanted) is not None:
+            return LINK_ALREADY, ""
+        login = twitch_login_from_url(url)
+        if not login:
+            return LINK_UNREADABLE, ""
+        outcome, _ = await link_channel(
+            bot, guild, actor, target, login, helix=None, via=via, because=because
+        )
+        if outcome in ("linked", "linked_unchecked"):
+            return LINKED_NEW, TWITCH_CHANNEL.format(login=clean_login(login) or login)
+        if outcome == "taken":
+            return LINK_TAKEN_OUT, TWITCH_CHANNEL.format(login=clean_login(login) or login)
+        return LINK_UNREADABLE, ""
+    if platform != YOUTUBE:
+        return LINK_UNREADABLE, ""
+    if await youtube_link_of(bot.db, wanted) is not None:
+        return LINK_ALREADY, ""
+    if not (channel_id_in(url) or handle_in(url)):
+        return LINK_UNREADABLE, ""
+    try:
+        _, row = await youtube_link(bot, guild, actor, target, url, via=via)
+    except LinkRefused as refused:
+        return (
+            LINK_TAKEN_OUT if refused.code == "link_taken" else LINK_UNREADABLE
+        ), ""
+    if row is None:
+        return LINK_UNREADABLE, ""
+    channel_id = _row_value(row, "channel_id")
+    return LINKED_NEW, _row_value(row, "title") or YOUTUBE_CHANNEL.format(channel=channel_id)
+
+
+async def link_from_history(
+    bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD
+) -> dict[str, Any]:
+    """The go-live history read once: everybody who streamed and has no channel gets one."""
+    found: dict[str, list[str]] = {
+        "linked": [],
+        "opted_out": [],
+        "taken": [],
+        "unreadable": [],
+        "left": [],
+    }
+    rows = await recent_sessions(bot.db, guild.id, HISTORY_SESSIONS)
+    for user_id, urls in history_urls(rows).items():
+        member = guild.get_member(user_id)
+        if member is None:
+            found["left"].append(str(user_id))
+            continue
+        name = display_name_of(guild, user_id)
+        if await is_opted_out(bot.db, user_id):
+            found["opted_out"].append(name)
+            continue
+        for url in urls.values():
+            try:
+                outcome, channel = await link_from_url(
+                    bot, guild, actor, member, url, via=via, because=HISTORY_BECAUSE
+                )
+            except Exception as exc:
+                log.warning(
+                    "go-live: the history sweep could not read %s (%s: %s)",
+                    url,
+                    type(exc).__name__,
+                    exc,
+                )
+                outcome, channel = LINK_UNREADABLE, ""
+            if outcome == LINK_ALREADY:
+                continue
+            said = HISTORY_NAMED.format(name=name, channel=channel or url)
+            if outcome == LINKED_NEW:
+                found["linked"].append(said)
+            elif outcome == LINK_TAKEN_OUT:
+                found["taken"].append(said)
+            else:
+                found["unreadable"].append(said)
+    message = history_said(**found)
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.history_swept", via),
+        actor=actor,
+        details={key: len(value) for key, value in found.items()}
+        | {"via": via, "message": message, "who": found["linked"]},
+    )
+    return found | {"message": message}
 
 
 async def unlink_channel(
@@ -1156,7 +1278,37 @@ class GoLive(commands.Cog):
         added = await self._live_role(guild, member, add=True)
         if added is not None:
             await set_live_role_added(self.bot.db, session_id, added)
+        await self._autolink_presence(member, info, source)
         return ANNOUNCED
+
+    async def _autolink_presence(self, member: Any, info: Any, source: str) -> None:
+        """The announcement has already gone out, so nothing here may stop it."""
+        guild = member.guild
+        if source != "presence" or not self.bot.store.get(
+            guild.id, GOLIVE_AUTOLINK_PRESENCE_KEY
+        ):
+            return
+        try:
+            outcome, channel = await link_from_url(
+                self.bot, guild, member, member, info.url, because=PRESENCE_BECAUSE
+            )
+        except Exception as exc:
+            log.warning(
+                "go-live: %s could not be linked from their presence (%s: %s)",
+                member.id,
+                type(exc).__name__,
+                exc,
+            )
+            return
+        if outcome != LINK_TAKEN_OUT:
+            return
+        await log_action(
+            self.bot,
+            guild,
+            "golive.autolink_refused",
+            target=member,
+            details={"url": info.url, "platform": info.platform, "channel": channel},
+        )
 
     async def _end_live(self, guild: Any, member: Any, source: str | None) -> None:
         if not self.bot.db.is_connected:
@@ -1713,6 +1865,17 @@ async def run_move(interaction: discord.Interaction, move: Any, previous: Any = 
         if not await opened(interaction, staff=False):
             return
         await render_streamers(interaction, None, previous)
+        return
+    if action == "history":
+        if not await still_staff(interaction):
+            return
+        if not await opened(interaction, staff=False):
+            return
+        found = await link_from_history(
+            interaction.client, interaction.guild, interaction.user
+        )
+        await render_panel(interaction, previous)
+        await answer(interaction, found["message"])
         return
     if action == "spotlight":
         from .spotlight import render_spotlight

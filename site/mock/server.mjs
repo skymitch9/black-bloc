@@ -553,6 +553,7 @@ const SETTING_SPECS = [
   ["event_panel_own_list", "bool", false, false, "true to show members the events they proposed on the /event panel; staff always see theirs, and members can still propose one and call one off either way"],
   ["golive_embed", "bool", true, true, "post the announcement as an embed with the game's art; off = the sentence only"],
   ["golive_boot_sweep", "bool", true, true, "true walks every member's Discord presence at boot and announces anyone already streaming with no session; false trusts presence updates alone, as before v149"],
+  ["golive_autolink_presence", "bool", true, true, "true links a member to the Twitch or YouTube channel their Discord status names the first time they are announced from it; false leaves linking to the person or to staff"],
   ["hide_commands_when_off", "bool", true, true, "true to take a feature's slash command out of this server's command list while that feature is turned off, so nobody is offered a command that cannot do anything; turning the feature back on brings the command back within about a minute. false leaves every command showing all the time and an off feature explains itself when it is opened. Only off hides a command \u2014 shadow does not"],
   ["logs_count", "int", 10, 10, "how many lines a Logs button shows to begin with, from 1 to 50; 10 by default. Show more adds the same number again, and stops being offered once the log has run out or 50 lines are shown", null, 50, 1],
   ["logs_important_only", "bool", false, false, "true to open every Logs button already filtered to the lines that matter — refusals, errors and staff moves — with Show everything beside the list to see the rest; false opens on everything, which is what it did before"],
@@ -3852,6 +3853,95 @@ route('POST', '/api/golive/links', async (context) => {
     message: `**${memberName(userId) || userId}** is linked to twitch.tv/${login}. Black Bloc did not check that channel exists — it finds that out the first time it looks for a stream.`,
   };
 });
+
+// The history sweep: the newest address each member streamed from, linked where they have none.
+// The seed leaves exactly one candidate — Moth's presence-only session on twitch.tv/mothlight.
+route('POST', '/api/golive/links/sweep', (context) => {
+  requireStaff(context.session);
+  const found = { linked: [], opted_out: [], taken: [], unreadable: [], left: [] };
+  const newest = new Map();
+  for (const row of state.golive.sessions) {
+    const mine = newest.get(String(row.user_id)) || new Map();
+    for (const url of [row.url, row.also_url]) {
+      const platform = sweepPlatform(url);
+      if (platform && !mine.has(platform)) mine.set(platform, url);
+    }
+    if (mine.size) newest.set(String(row.user_id), mine);
+  }
+  for (const [userId, urls] of newest) {
+    const name = memberName(userId);
+    if (!MEMBERS.some((one) => one.id === userId)) { found.left.push(userId); continue; }
+    if (state.golive.optouts.some((one) => String(one.user_id) === userId)) {
+      found.opted_out.push(name);
+      continue;
+    }
+    for (const [platform, url] of urls) {
+      const said = sweepOne(userId, name, platform, url);
+      if (said) found[said.where].push(said.text);
+    }
+  }
+  const message = sweepSaid(found);
+  logAction('web.golive.history_swept', { details: { linked: found.linked.length, who: found.linked, message } });
+  return {
+    linked: found.linked.length,
+    opted_out: found.opted_out.length,
+    taken: found.taken.length,
+    unreadable: found.unreadable.length,
+    left: found.left.length,
+    message,
+  };
+});
+
+function sweepPlatform(url) {
+  const lowered = String(url || '').toLowerCase();
+  if (lowered.includes('twitch.tv')) return 'Twitch';
+  if (lowered.includes('youtube.com') || lowered.includes('youtu.be')) return 'YouTube';
+  return null;
+}
+
+function sweepOne(userId, name, platform, url) {
+  if (platform === 'Twitch') {
+    if (state.golive.links.some((one) => String(one.user_id) === userId)) return null;
+    const login = String(url).toLowerCase().replace(/^.*twitch\.tv\//, '').split(/[?/]/)[0];
+    if (!login) return { where: 'unreadable', text: `${name} → ${url}` };
+    const owner = state.golive.links.find((one) => one.twitch_login === login);
+    if (owner) return { where: 'taken', text: `${name} → twitch.tv/${login}` };
+    state.golive.links.unshift({ user_id: userId, twitch_login: login, twitch_user_id: null, linked_at: now() });
+    logAction('web.golive.link', { target_id: userId, details: { login, checked: false, because: 'history_sweep' } });
+    return { where: 'linked', text: `${name} → twitch.tv/${login}` };
+  }
+  if (state.youtube.links.some((one) => String(one.user_id) === userId)) return null;
+  const channel = /youtube\.com\/channel\/(UC[A-Za-z0-9_-]{22})/.exec(String(url));
+  const handle = /youtube\.com\/(?:@|c\/|user\/)([A-Za-z0-9._-]{1,60})/.exec(String(url));
+  if (!channel && !handle) return { where: 'unreadable', text: `${name} → ${url}` };
+  const channelId = channel ? channel[1] : 'UCsweptfromhistory00000';
+  const owner = state.youtube.links.find((one) => one.channel_id === channelId);
+  if (owner) return { where: 'taken', text: `${name} → youtube.com/channel/${channelId}` };
+  state.youtube.links.unshift({ user_id: userId, channel_id: channelId, handle: handle ? `@${handle[1]}` : null, title: null, linked_at: now() });
+  logAction('web.youtube.link', { target_id: userId, details: { title: null } });
+  return { where: 'linked', text: `${name} → youtube.com/channel/${channelId}` };
+}
+
+function sweepNamed(names) {
+  return names.length <= 10 ? names.join(', ') : `${names.slice(0, 10).join(', ')}, and ${names.length - 10} more`;
+}
+
+function sweepSaid(found) {
+  const any = Object.values(found).some((one) => one.length);
+  if (!any) return 'Nothing to link — nobody in the go-live history is missing a channel, so nothing changed.';
+  const bits = [found.linked.length
+    ? `Linked ${found.linked.length} ${found.linked.length === 1 ? 'person' : 'people'} (${sweepNamed(found.linked)})`
+    : 'Linked nobody new'];
+  if (found.opted_out.length) bits.push(`skipped ${found.opted_out.length} who asked not to be announced`);
+  if (found.taken.length) {
+    bits.push(found.taken.length === 1
+      ? `1 channel already belongs to somebody else (${sweepNamed(found.taken)})`
+      : `${found.taken.length} channels already belong to somebody else (${sweepNamed(found.taken)})`);
+  }
+  if (found.unreadable.length) bits.push(`${found.unreadable.length} could not be read (${sweepNamed(found.unreadable)})`);
+  if (found.left.length) bits.push(`skipped ${found.left.length} who have left`);
+  return `${bits.join(', ')}.`;
+}
 
 route('GET', '/api/golive/optouts', (context) => {
   requireStaff(context.session);
