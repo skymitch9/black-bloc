@@ -1,6 +1,13 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-20** — rows **`BS-a` … `BS-d`** added at the foot for THE GO-LIVE BOOT SWEEP (branch `boot-sweep`, off `main`
+> `f73e81c`; design [`../info/golive-boot-sweep-design.md`](../info/golive-boot-sweep-design.md); ⚠️ **not merged, not
+> deployed, and NOTHING IN IT HAS MET DISCORD** — no bot has been restarted while somebody was streaming). Owner: *"have
+> the bot check all the channels with status and taht are linked on start up … so we dont miss people during reboots"*.
+> ⚠️ **`BS-a` … `BS-c` all need a REDEPLOY while somebody is actually live**, which is the only way to make the thing
+> they test happen; `BS-d` can be read from a laptop after any deploy. ⚠️ **Nothing else in this file was re-checked
+> then.** Before that,
 > **2026-09-20 18:06** — rows **633–636** (were `ST-a` … `ST-d`, numbered at the v146 merge) for THE BOOT RUN FOLLOWING TEST MODE AND `/test`
 > (branch `selftest-boot`, off `main` `74c25bf`; design [`../info/selftest-design.md`](../info/selftest-design.md) ▸ §K;
 > ⚠️ **not merged, not deployed, and NOTHING IN IT HAS MET DISCORD** — no `/test` has been typed and no boot has
@@ -2216,3 +2223,32 @@ the rehearsal line above it, and **not** in the go-live channel. That is deliber
 | **641** (was `SL-e`) | Press **Spotlight a channel** again, type a marathon channel that is NOT GamesDoneQuick, and put **1** in **Days to keep it**. Check the row reads **spotlight · until \<tomorrow\>**. Come back the day after | ⚠️ **The row is GONE** — not greyed out, not marked expired: deleted, because that is what "the rest get purged after a set amount of time" means. A `golive.spotlight_expired` row on the Logs page is the only trace. GamesDoneQuick is **still there**, because it is kept. ⚠️ If it was live when it expired, the stream was ended first — unpinned, past tense, reminders gone — and only then was the row removed |
 | **642** (was `SL-f`) | Propose an event whose **Where** is nothing but a twitch.tv address (`twitch.tv/somemarathon`), approve it, then open the event's card | Staff see a sixth button: **Spotlight this stream**. Press it: it answers *"**somemarathon** is spotlighted until \<the event's end + 2 h\>"*, and the channel appears on the Go-live page as a row whose panel says **Set up for event #N**. ⚠️ An event whose Where is *the bar at 8* has **no such button at all** — not a button that refuses. Press it twice: refused in words, offering to extend instead. ⚠️ Now **call the event off**: the spotlight row disappears at once rather than at its old end, with `because: event_cancelled` on its log row |
 | **643** (was `SL-g`) | In Discord run `/golive` and press **Spotlight…** | The panel lists every spotlighted channel with its date (*kept*, or *until 30 Sep*) and says which is **live now**. **Add a channel…** opens a modal with the name and a days box — leaving days blank keeps it for ever. Pick a channel from the dropdown: the buttons that appear are only the ones that make sense — **Keep for ever** on a dated row, **Let it expire** on a kept one, **Bump now** only while it is live, and **Remove** always. ⚠️ Nothing a member can press is on this panel; a member running `/golive` never sees **Spotlight…** at all |
+
+
+## NOBODY IS MISSED BECAUSE THE BOT WAS RESTARTING (rows `BS-a` … `BS-d`, branch `boot-sweep`, design [`../info/golive-boot-sweep-design.md`](../info/golive-boot-sweep-design.md))
+
+Owner, 2026-09-20 17:5x: *"also for go live detection, have the bot check all the channels with
+status and taht are linked on start up and make sure the most recent post regarding them in the
+golive channel is accurate so we dont miss people during reboots"*.
+
+⚠️ **Nothing below has ever happened on Discord.** No bot has been restarted while a member was
+streaming, no presence has been walked at boot, and no `golive.boot_swept` row has been read by a
+person. Every claim behind this build is the suite's, against fakes.
+
+🔴 **One of these rows is confirming a DEFECT, not a feature.** The build found that
+`bot.py:setup_hook` loads the cogs before the bot has any guilds, so the v141 boot reconcile has
+been doing **nothing** on Fly — an open session left by a restart waited twelve hours for
+`golive_max_session_hours` to age it out. `BS-b` and `BS-c` are what prove the fix.
+
+What must be on first: `golive_channel_id` set, `golive_mode` **on** (it is per guild — check it,
+because in **shadow** everything below is a `would_announce` row and no message), and
+`golive_boot_sweep` **true** (its default). `golive_end_mode` must be **edit** for `BS-c`'s
+past-tense rewrite; it ships **off**. Staff door: **Runs the cookout** ▸ **Go-live**
+(https://blackbloc.heygabi.ai/golive.html) ▸ **How streams are spotted**.
+
+| Row | Do | Expect |
+|---|---|---|
+| `BS-a` | Have somebody **start streaming through Discord alone** — no Twitch channel linked to them, just Go Live in a voice channel or a Streaming status — wait for the announcement, then **redeploy the bot** (or restart the machine) | Within a minute of the bot coming back, **nothing new is posted** — their session is still open and still theirs. ⚠️ **Now the real one:** have somebody with NO link start streaming **while the bot is down**, then bring it back. Their announcement appears **within a minute of boot**, worded exactly like any other. Before this build it appeared only when their presence next changed, which after a deploy could be never. On the **Logs** page ▸ **golive**, one `golive.boot_swept` row for the boot says `presence_found`, `presence_announced` and `members_walked` |
+| `BS-b` | With a **linked Twitch** streamer live, redeploy | **ONE** announcement, not two — the poll's first tick sees them live, the cooldown against their last session's end holds the second one back. Their original post is untouched. `golive.boot_swept` says `sessions_kept: 1` |
+| `BS-c` | With a session open, have the streamer **stop while the bot is down** (end the stream, then redeploy — or redeploy and stop during it) | After boot the announcement **reads in the past tense** with how long it ran (needs `golive_end_mode` = **edit**; with it **off** the post is left alone, which is also correct and is what ships). The live role comes off. On the Logs page a `golive.end` row with `reason: reconciled_on_start`. ⚠️ **This is the row that proves the defect is fixed** — before this build nothing closed it until twelve hours had passed |
+| `BS-d` | After **any** deploy, open the **Logs** page ▸ **golive** (or the Logs section at the foot of the Go-live page) | Exactly **one** `golive.boot_swept` row per boot. Read two numbers on it: `members_walked` should be roughly the size of the server, and `members_cached` should be **true**. ⚠️ **A walk of 0, or `members_cached: false`, means the sweep ran before Discord had handed over the member list** — that is a bug to report, not a quiet server. `presence_skipped` says why anyone streaming was passed over (`cooldown` / `opted_out` / `role_filter` / `open_session`). Then set **Whether a restart looks for people already streaming** to **off** on the Go-live page, redeploy, and the next row reads `swept: false` with `members_walked: 0` — the switch works both ways |
