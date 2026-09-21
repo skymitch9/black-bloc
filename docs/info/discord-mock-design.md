@@ -1,6 +1,6 @@
 # The Discord mock — every editable posted text shows staff exactly what Discord will draw
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT (Opus, 2026-09-20 20:2x, branch `discord-mock` off `main` `be78bff`) — not merged, not deployed; see `## Deviations` (13) and `## What was NOT verified`.** Was: 📐 DESIGN (Fable, 2026-09-20 20:0x), dispatched
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT (Opus, 2026-09-20 20:2x, branch `discord-mock` off `main` `be78bff`) — not merged, not deployed; see `## Deviations` (14) and `## What was NOT verified`.** Was: 📐 DESIGN (Fable, 2026-09-20 20:0x), dispatched
 > at the 20:50 session reset. **Last verified: 2026-09-20 20:0x** against
 > `main` `cb59eca` (v149 live): the go-live wording previews are `discordmd.renderPreview` embed boxes (`page-golive.js:drawCard`,
 > v149 — markdown in a box, NOT Discord's chrome); the posts editor previews with the same renderer
@@ -158,7 +158,13 @@ they would surprise a reader of the body.
     row is what stops the two halves drifting. ⚠️ Its wording is CLOSE but not identical to the
     bot's (its `fillWording` is not Python's `format_map`, its poll bars are a fixed string), so a
     difference seen on `127.0.0.1` is not evidence about the deployed bot.
-13. **`page-golive.js` lost two orphaned string fragments** that `cb59eca` left behind when it
+13. **The Birthdays page's *What a birthday wish looks like* card became the mock.** It held a
+    `templateEditor` `paint:` line — the wording filled in as plain text. With deviation 5 the row
+    above it would also have carried a mock, so the card was about to show the same fact twice; it
+    now holds `made.mock.node` and nothing else. **Tempvoice's `tempvoice_name_template` card was
+    left exactly as it is** and is the counter-example the rule needs: a spawned channel's NAME is
+    not a message the bot posts, so it has no renderer and gets no mock — which is `DM-d`.
+14. **`page-golive.js` lost two orphaned string fragments** that `cb59eca` left behind when it
     removed the end-mode button — two `+ '…'` continuation lines with nothing to continue. They
     parsed and did nothing.
 
