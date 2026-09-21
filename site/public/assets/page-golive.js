@@ -1,5 +1,6 @@
 import { api, listOf, names, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { renderPreview } from './discordmd.js';
 import {
   joinStreamers,
   liveStreams,
@@ -327,7 +328,7 @@ function headerStrip({
     modeCell(
       'Spotlight',
       golive.find((one) => one.key === SPOTLIGHT_MODE_KEY),
-      `${rows.filter((row) => row.spotlight).length} channel(s) with no member`,
+      spotlightWords(rows),
       SPOTLIGHT_MODE_HELP,
     ),
     statCell('Set up', String(linked), `${tw} Twitch · ${yt} YouTube · ${out} opted out`),
@@ -717,7 +718,23 @@ const FILTERS = [
   { id: 'notyt', label: 'Twitch only', keep: (row) => Boolean(row.twitch) && !row.youtube },
   { id: 'out', label: 'Opted out', keep: (row) => row.opted_out === true },
   { id: 'spot', label: 'Spotlight', keep: (row) => Boolean(row.spotlight) },
+  { id: 'kept', label: 'Kept forever', keep: (row) => Boolean(row.spotlight && row.spotlight.kept) },
 ];
+
+function spotlightWords(rows) {
+  const spots = rows.filter((row) => row.spotlight);
+  const kept = spots.filter((row) => row.spotlight.kept).length;
+  return `${spots.length} channel(s) with no member · ${kept} kept for ever · ${spots.length - kept} expiring`;
+}
+
+/** The card as Discord would draw it: the top line, then the wording with its markdown. */
+function drawCard(node, text, head, roles) {
+  node.innerHTML = renderPreview(String(text || ''), {
+    style: 'embed',
+    title: head || '',
+    roles: (roles || []).map((one) => ({ id: String(one.id), name: one.name })),
+  });
+}
 
 const COLUMNS = ['Member', 'Twitch', 'YouTube', 'Ping role', 'Announced'];
 
@@ -728,7 +745,7 @@ function roleCell(row) {
       text: `${row.role} · ${row.role_wearers === null ? '—' : row.role_wearers}`,
     });
   }
-  return row.role_id ? badge(ROLE_GONE, 'warn') : muted('—');
+  return row.role_id ? el('span', {}, [badge(ROLE_GONE, 'warn')]) : muted('—');
 }
 
 function streamerRow(row) {
@@ -945,9 +962,13 @@ async function wordingPreview(say, endMode, endTemplate) {
   const list = el('ul', { class: 'msglist' });
   const left = el('p', { class: 'field-help', text: WORDING_LEFT });
   let roles = [];
+  const heads = { live: '', ended: '', roles };
   const paint = async () => {
     try {
       const found = await api('/api/golive/preview');
+      heads.live = found.live.author || '';
+      heads.ended = found.ended.author || '';
+      heads.roles = roles;
       list.replaceChildren(
         botLine(WHILE_LIVE, found.live.author, withRoleNames(found.live.text, roles)),
         botLine(
@@ -983,7 +1004,7 @@ async function wordingPreview(say, endMode, endTemplate) {
   });
   const showEnd = (mode) => { left.hidden = String(mode) === END_EDIT; };
   showEnd(endMode);
-  return { node, paint, showEnd };
+  return { node, paint, showEnd, heads };
 }
 
 async function announcementSection(specs, wordingSpecs) {
@@ -1005,7 +1026,7 @@ async function announcementSection(specs, wordingSpecs) {
     endTemplate ? (endTemplate.value ?? endTemplate.default) : '',
   );
 
-  const liveShown = el('p', { class: 'preview' });
+  const liveShown = el('div', { class: 'preview discord-preview' });
   const liveMade = await templateEditor(spec, {
     controls: [playing],
     onSaved: () => preview.paint(),
@@ -1014,21 +1035,20 @@ async function announcementSection(specs, wordingSpecs) {
       game: playing.checked ? SAMPLES[shape.which].game : GAME_FALLBACK,
     }),
     paint: (filled) => {
-      liveShown.textContent = filled === null
-        ? `Black Bloc would post ${DEFAULT_TEMPLATE} instead.`
-        : `${prefix}${filled}`;
+      drawCard(liveShown, filled === null ? DEFAULT_TEMPLATE : `${prefix}${filled}`, preview.heads.live, preview.heads.roles);
     },
   });
 
   const endShown = {
-    [END_TEMPLATE_KEY]: el('p', { class: 'preview' }),
+    [END_TEMPLATE_KEY]: el('div', { class: 'preview discord-preview' }),
     [END_AUTHOR_KEY]: el('p', { class: 'preview' }),
   };
+  const endHead = { text: '' };
   const blank = { [END_TEMPLATE_KEY]: END_BLANK_TEMPLATE, [END_AUTHOR_KEY]: END_BLANK_AUTHOR };
   let endMade = null;
   if (endTemplate) {
     const wanted = [{ ...endTemplate, editorType: 'longtext' }];
-    if (endAuthor) wanted.push({ ...endAuthor, editorType: 'text' });
+    if (endAuthor) wanted.push({ ...endAuthor, editorType: 'longtext' });
     endMade = await templateEditor(wanted, {
       where: END_WORDING_WHERE,
       onSaved: () => preview.paint(),
@@ -1037,8 +1057,19 @@ async function announcementSection(specs, wordingSpecs) {
         const node = endShown[key];
         if (!node) return;
         const empty = filled !== null && String(filled).trim() === '';
-        node.textContent = empty ? blank[key] : (filled === null ? '' : filled);
-        node.classList.toggle('field-help', empty);
+        if (key === END_AUTHOR_KEY) {
+          endHead.text = empty || filled === null ? '' : String(filled);
+          node.textContent = empty ? blank[key] : (filled === null ? '' : filled);
+          node.classList.toggle('field-help', empty);
+          return;
+        }
+        if (empty) {
+          node.textContent = blank[key];
+          node.classList.add('field-help');
+          return;
+        }
+        node.classList.remove('field-help');
+        drawCard(node, filled === null ? '' : filled, endHead.text || preview.heads.ended, preview.heads.roles);
       },
     });
   }
