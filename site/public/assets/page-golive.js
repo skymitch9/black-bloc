@@ -718,18 +718,18 @@ async function showStreamer(row) {
 }
 
 function announcedCell(row) {
-  if (row.live) return badge(LIVE_NOW, 'ok');
+  if (row.live) return el('span', { class: 'cell-kind' }, [badge(LIVE_NOW, 'ok')]);
   return muted(READY);
 }
 
 function expiresCell(row) {
   if (!row.spotlight) return muted('—');
-  if (row.spotlight.kept) return el('span', {}, [badge('kept for ever', 'ok')]);
+  if (row.spotlight.kept) return el('span', { class: 'cell-kind' }, [badge('kept for ever', 'ok')]);
   return el('span', { class: 'cell-quiet', text: row.spotlight.until });
 }
 
 function optedOutCell(row) {
-  return row.opted_out ? el('span', {}, [badge(OPTED_OUT, 'warn')]) : muted('—');
+  return row.opted_out ? el('span', { class: 'cell-kind' }, [badge(OPTED_OUT, 'warn')]) : muted('—');
 }
 
 function memberCell(row) {
@@ -781,7 +781,7 @@ function roleCell(row) {
       text: `${row.role} · ${row.role_wearers === null ? '—' : row.role_wearers}`,
     });
   }
-  return row.role_id ? el('span', {}, [badge(ROLE_GONE, 'warn')]) : muted('—');
+  return row.role_id ? el('span', { class: 'cell-kind' }, [badge(ROLE_GONE, 'warn')]) : muted('—');
 }
 
 function streamerRow(row) {

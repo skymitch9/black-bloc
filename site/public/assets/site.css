@@ -922,6 +922,8 @@ button.grid-row:focus-visible { outline: var(--et-focus-ring); outline-offset: -
 .grid-row .cell-quiet { color: var(--et-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grid-row .cell-kind { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .grid-row .cell-center { justify-content: center; text-align: center; }
+/* A badge dropped straight into a grid cell keeps its own width — the posts page's cell-kind shape, everywhere. */
+.grid-row > .badge, .grid-row > .mode-chip { justify-self: start; }
 .preview.discord-preview { min-height: 0; max-height: none; padding: 6px; white-space: normal; }
 .grid-row .cell-reason { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grid-foot {
