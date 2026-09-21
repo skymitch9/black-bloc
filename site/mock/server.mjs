@@ -515,6 +515,7 @@ const SETTING_SPECS = [
   ['spotlight_default_days', 'int', 7, 7, "how long a newly spotlighted channel lasts before it is purged, unless it is kept for ever", null, 365, 1],
   ['spotlight_event_slack_hours', 'int', 2, 2, "hours past an approved event's end that its spotlight row survives, so a marathon that overruns is still announced", null, 24, 0],
   ['golive_channel_spotlight_default', 'bool', false, false, "true if a channel added through **Add a streamer** with nobody behind it is spotlighted from the start — pinned while it streams and reminded every few hours; false — the default — announces it like any other stream, and its own row's **Spotlight on** adds the pin and the reminders whenever staff want them"],
+  ['golive_channel_optout_post', 'enum', 'end', 'end', "what happens to an announcement that is already out when a channel is opted out of announcements mid-stream: end — the default — unpins it and edits it to the ended wording exactly as any stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so no reminder follows and nothing waits on Twitch", ['end', 'delete', 'leave']],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['automod_arm_needs_confirm', 'bool', true, true, 'true to ask a second time before automod is turned on from the panel, naming what will start happening; turning it off or back to shadow is always one press'],
   ['raidtrain_panel_minutes', 'int', 10, 10, "minutes the /raidtrain panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -4124,16 +4125,52 @@ function spotlightAdded(row) {
   return `**${row.twitch_login}** is on the spotlight list, ${spotlightUntil(row)}. Black Bloc announces it in the go-live channel whenever it goes live, reminds people every ${hours} hours while it runs, and ${pinWords}.`;
 }
 
-function channelSpotlightSaid(row) {
+function channelSpotlightSaid(row, settled) {
   if (row.spotlight === false) {
-    return `**${row.twitch_login}** is announced like anybody else's stream now — one post when it goes live, edited to past tense when it ends, no pin and no reminders. It stays on the list.`;
+    const said = `**${row.twitch_login}** is announced like anybody else's stream now — one post when it goes live, edited to past tense when it ends, no pin and no reminders. It stays on the list.`;
+    return settled === 'unpinned' ? `${said} ${UNPINNED_NOW}` : said;
   }
   return `**${row.twitch_login}** is spotlighted: its announcement is pinned while it streams and a reminder goes out every so often. Everything else about the channel stays as it is.`;
 }
 
-function channelAnnounceSaid(row) {
+// The bot's spotlight.OPTED_OUT_POST_SAID / UNPINNED_NOW, and the settle the cog does under
+// the row's lock: opting a LIVE channel out ends the stream that is out there.
+const OPTED_OUT_POST_SAID = {
+  end: 'The announcement that was out has been unpinned and edited to say the stream has ended, exactly as any stream end does, and the session is closed (per `golive_channel_optout_post`).',
+  delete: 'The announcement that was out has been deleted and the session is closed (per `golive_channel_optout_post`).',
+  leave: 'The announcement that was out is left exactly as it was posted — only the pin came off — and the session is closed (per `golive_channel_optout_post`).',
+};
+const UNPINNED_NOW = 'The announcement that is out now has been unpinned; it stays posted, no reminder follows it, and it is edited to past tense when the stream ends.';
+
+function openSpotlightSession(row) {
+  return state.golive.spotlightSessions.find((one) => one.spotlight_id === row.id && !one.ended_at) || null;
+}
+
+function settleOpenSession(row, wasAnnouncing, wasSpotlit) {
+  const optedOut = wasAnnouncing && row.announce === false;
+  const dimmed = wasSpotlit && row.spotlight === false;
+  if (!optedOut && !dimmed) return null;
+  const session = openSpotlightSession(row);
+  if (!session) return null;
+  if (!optedOut) {
+    logAction('golive.spotlight_unpinned', { details: { login: row.twitch_login, because: 'spotlight_off' } });
+    return 'unpinned';
+  }
+  const post = String(state.settings.get('golive_channel_optout_post') || 'end');
+  session.ended_at = now();
+  if (post === 'delete') {
+    logAction('golive.spotlight_post_deleted', { details: { login: row.twitch_login, message_id: session.announced_message_id } });
+    session.announced_message_id = null;
+  }
+  logAction('golive.spotlight_ended', { details: { login: row.twitch_login, reason: 'opted_out', post } });
+  return post;
+}
+
+function channelAnnounceSaid(row, settled) {
   if (row.announce === false) {
-    return `**${row.twitch_login}** is opted out, so nothing of its is announced from now on — no post, no pin and no reminders, whatever its spotlight says. It stays on the list, it keeps its ping role and it keeps its YouTube link, and **Opt back in** starts it announcing again.`;
+    const said = `**${row.twitch_login}** is opted out, so nothing of its is announced from now on — no post, no pin and no reminders, whatever its spotlight says. It stays on the list, it keeps its ping role and it keeps its YouTube link, and **Opt back in** starts it announcing again.`;
+    const clause = OPTED_OUT_POST_SAID[settled];
+    return clause ? `${said} ${clause}` : said;
   }
   return `**${row.twitch_login}** is opted back in, so the next stream it starts is announced again. Nothing that happened while it was opted out is posted after the fact.`;
 }
@@ -4222,8 +4259,11 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   if ('bump_hours' in body) row.bump_hours = body.bump_hours || null;
   if ('pin' in body) row.pin = Boolean(body.pin);
   if ('note' in body) row.note = body.note || null;
+  const wasSpotlit = 'spotlight' in body && row.spotlight !== false;
+  const wasAnnouncing = 'announce' in body && row.announce !== false;
   if ('spotlight' in body) row.spotlight = Boolean(body.spotlight);
   if ('announce' in body) row.announce = Boolean(body.announce);
+  const settled = settleOpenSession(row, wasAnnouncing, wasSpotlit);
   let said = null;
   if ('youtube' in body) {
     const given = String(body.youtube || '').trim();
@@ -4240,8 +4280,8 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
     }
   }
   if (said === null) logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login } });
-  if (said === null && 'announce' in body) said = channelAnnounceSaid(row);
-  else if (said === null && 'spotlight' in body) said = channelSpotlightSaid(row);
+  if (said === null && 'announce' in body) said = channelAnnounceSaid(row, settled);
+  else if (said === null && 'spotlight' in body) said = channelSpotlightSaid(row, settled);
   return { ...spotlightRow(row), message: said || `**${row.twitch_login}** now runs ${spotlightUntil(row)}.` };
 });
 

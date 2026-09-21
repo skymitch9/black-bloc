@@ -12,6 +12,10 @@
 > session* item on [`../TODO.md`](../TODO.md), branch `channel-optout`. Was 🔨 BUILT on branch `channel-streamers`
 > 2026-09-21 (design: Fable, 08:2x, dispatched to Opus the
 > same turn). The `## Deviations` foot is the truth where this body departs from
+> 🔨 **FOLLOW-UP merged to `main` 2026-09-21 10:1x from branch `channel-optout`** — *opting a channel out while it is LIVE
+> now ends the announcement that is already out*, which Deviation 5 below got wrong; read
+> [**§ Follow-up 2026-09-21**](#follow-up-2026-09-21-opting-out-ends-the-announcement-that-is-already-out) before trusting
+> Deviation 5. ⚠️ The follow-up is on the local mock, NOT deployed, and has not met Discord.
 > what was built, and `## What was NOT verified` is the honest half; sweeps `CS-a` … `CS-g` in
 > [`../access/sweeps.md`](../access/sweeps.md) are the proof that is missing. ⚠️ **Schema is 52 and the migration
 > added FOUR columns, not three** — `announce` is the owner's mid-build ask. Was: **Last verified: 2026-09-21 08:2x** against `main` `c4cc672`
@@ -100,6 +104,111 @@ sessions; Remove takes everything; the YouTube side announces and co-streams), `
 `pytest -n 8` orders, `ruff`, ES parse, `check.mjs`, the six node tests, env cleared. A headless render of the row
 drawer in both toggle states and Add a streamer with no member. Docs: `code-notes.md`; this doc's `
 
+## Follow-up 2026-09-21: opting out ENDS the announcement that is already out
+
+> 🔨 **BUILT on branch `channel-optout` 2026-09-21**, off `main` `1a35d75` (v151 live). ⚠️ **Not
+> merged, not deployed, and nothing in it has met Discord.** Sweeps `CO-a` and `CO-b`.
+
+**The defect, owner verbatim (2026-09-21 09:5x):** *"the bot went live and annouced esam and pinned
+it, it should have been in the list silent. i opted out of the spotlight for it and opted out of
+notifications"*.
+
+**Measured on live.** ESA's spotlight session 2 opened at **16:51:16Z — the same second the bot
+logged in after the v151 deploy**. The boot poll found the channel live and announced and pinned it
+under the migration's `announce = 1` default, before the owner could set the row otherwise. He then
+turned `announce` off and `spotlight` off. ⚠️ **Deviation 5 above says an opted-out channel "gets no
+post, no session, no pin and no reminder" — true of a channel that is opted out BEFORE it goes live,
+and false of one opted out while a session is open**, which is the case the whole build never
+considered. `change_spotlight` only wrote the row: the session stayed open, the announcement stayed
+posted and PINNED, and the only thing that ends a spotlight session is `_seen` counting
+`spotlight_end_misses` quiet Helix polls. ⚠️ **ESA runs reruns around the clock, so that never
+happens** — the pin was permanent. `_maybe_bump` is gated on `announces(row)`, so at least no
+reminder followed.
+
+**The rule after.** `change_spotlight` funnels through `changed_spotlight`, which returns `(row,
+settled)` and, after the row has moved, settles an OPEN session **under the row's own lock**
+(checklist 6 — the poller holds the same lock while it announces or ends):
+
+- **`announce` 1 → 0 with a session open** runs the existing `_end` path with the reason word
+  `opted_out`: the session is closed, the usual `golive.spotlight_ended` row is written, and what
+  becomes of the post is the new key's decision.
+- **`spotlight` 1 → 0 with a session open** only **unpins** the announcement
+  (`golive.spotlight_unpinned` with `because: spotlight_off`). The session stays open and the post
+  stays live-worded — the channel is announced like a member's from now on, and the post is edited
+  to past tense when the stream really ends. Turning the spotlight back ON mid-stream still does
+  NOT retro-pin (sweep row 721 already says so).
+- Turning either back ON settles nothing: nothing that happened while it was off is posted after
+  the fact.
+
+**The key — `golive_channel_optout_post`** (enum, group `golive`, default **`end`**), registry +
+mock `SETTING_SPECS` + `labels.js` + `golive-join.js:placeSettings` (the *How streams are spotted*
+drawer, beside `golive_channel_spotlight_default`) + the join fixture (**51 → 52** keys in the
+three namespaces). ⚠️ **Registry keys measured 2026-09-21 on this branch: 297** (`296` before this
+key) — `architecture.md`'s **295** was measured on `channel-streamers` and two more have landed on
+`main` since, so do not arithmetic off that number.
+
+| Value | What happens to the post that is out |
+|---|---|
+| **`end`** (default) | Unpinned and edited to the ONE end wording, exactly as any stream end does |
+| `delete` | Deleted outright (`golive.spotlight_post_deleted`); deleting takes the pin with it |
+| `leave` | Left exactly as posted — only the pin comes off |
+
+The session is closed in all three, so no reminder follows and nothing waits on Twitch.
+
+**The sentence.** `spotlight.announce_said(row, settled)` and `spotlight.spotlight_said(row,
+settled)` are the ONE sentence function both doors use — `/golive` ▸ **Channels…** ▸ **Opt out of
+announcements** and `PATCH /api/golive/spotlight/{id}` both return it, and the site drawer prints
+what the route answers. The clause lands only when a session was actually open, and names
+`golive_channel_optout_post` so a reader knows what to change.
+
+### Follow-up deviations
+
+1. ⚠️ **`golive.spotlight_ended` carries `reason: "opted_out"`, NOT `because: "opted_out"`.** The
+   brief asked for `because`. Every other end row in the family already spells this field `reason`
+   (`ended` / `expired` / `removed` / `reconciled_on_start`), and splitting one event's *why* across
+   two field names would mean a reader filtering the family has to know which build wrote the row.
+   `because` IS used where the family already uses it: `golive.spotlight_expired` keeps its own, and
+   `golive.spotlight_unpinned` / `_unpin_failed` **gain** one (`spotlight_off` from the toggle, and
+   the end's reason word from every other path) because those rows had no *why* field at all.
+2. **`_end` gained a `post` argument and the end row a `"post"` detail**, which the brief did not
+   name. The three key values are three different treatments of the same message, and the end row is
+   the only place a reader can see which one ran; without it, `leave` and a failed edit look
+   identical in the log — checklist 2.
+3. **`delete` reuses `golive.spotlight_post_failed` with `what: "delete"`** for its failure, the way
+   the bump path already does, rather than inventing a failure kind. Its success is a new routine
+   kind, `golive.spotlight_post_deleted`, because a deleted announcement is a thing staff will look
+   for and it has no other row.
+4. **`change_spotlight` kept its signature and return.** Its five other call sites (extend, keep,
+   expire, `link_youtube`, `unlink_youtube`) want the row and nothing else, so the `(row, settled)` pair
+   lives on `changed_spotlight` and `change_spotlight` is a one-line wrapper. The PATCH route and
+   `set_announce` / `set_spotlight` are the three callers that take the pair.
+5. **The member opt-out (`cogs/content/golive.py:opt_out`) was NOT changed to match.** The brief
+   said to mirror it if it ends an open session; it does not — it writes the opt-out row and drops
+   the fan role, and a member's open go-live session runs on until presence or the poller says it
+   is over. That asymmetry is now deliberate rather than accidental: a member's session ends by
+   itself within the hour, a 24/7 channel's never does. Worth the owner's word if he wants both.
+6. **No forward-looking warning was added to the drawer or the panel before the press.** The Opt-out
+   sentence is the *result* sentence, per the brief's "both doors use the one sentence function";
+   saying it in advance on the site would mean putting `golive_channel_optout_post` into the
+   spotlight row payload, which is an API contract change for a warning the answer already gives.
+
+### Follow-up — what was NOT verified
+
+- ⚠️ **NOTHING HERE HAS MET DISCORD.** No channel was opted out in a real server, no pin came off a
+  real message, nothing was deleted and no announcement was edited. Every claim about what a post
+  reads is the suite's, against fakes. **A Discord run is impossible from a build worktree** — it
+  needs the token and a live gateway.
+- ⚠️ **Nothing has met Helix, and the live ESA row was not touched.** The measurement in the body
+  is the conductor's reading of the live logs, not this build's.
+- **No browser check was made** — the site half is the route's sentence and the mock's mirror of it,
+  proved by `check.mjs` and the suite, not by a page anybody looked at.
+- **The mock's settle is a hand-written mirror**, not shared code: `site/mock/server.mjs`
+  (`settleOpenSession`, `OPTED_OUT_POST_SAID`, `UNPINNED_NOW`) restates the three sentences and the
+  session close. If the Python wording changes and the mock's does not, nothing fails — the two
+  copies are only checked by eye.
+- **`delete` was never exercised against a message Discord refused to delete**; the failure branch
+  is proved by the unit path alone.
+
 ## Deviations
 
 **Built 2026-09-21 on branch `channel-streamers` off `main` `9b865b8` (v150 live).** Where this
@@ -152,6 +261,13 @@ body and the code disagree, the code is what shipped and this section is why.
    either — while the row, its ping role, its YouTube link and its spotlight all stay exactly as
    they were. The **Opted out** column on the Streamers list reads it for a channel row the way
    it already reads a member's. Sweep row `CS-g`.
+   🔴 **HALF WRONG, and it cost the owner a permanently pinned post — corrected 2026-09-21 on
+   branch `channel-optout` (checklist 35).** ~~"no post, no session, no pin and no reminder, and
+   therefore no end either"~~ is true ONLY of a channel opted out **before** it goes live. Opted
+   out **while a session is open**, the sentence above described nothing that happened: the post
+   stayed, the pin stayed, and the session stayed open for ever on a 24/7 rerun channel. The
+   opt-out now settles the open announcement per `golive_channel_optout_post` — see
+   [**§ Follow-up 2026-09-21**](#follow-up-2026-09-21-opting-out-ends-the-announcement-that-is-already-out).
 
 6. **A member row offers Spotlight whether or not they are linked** (owner, mid-build: *"It
    seems like you need to be linked to be spotlighted. While this is preferred I don't think this

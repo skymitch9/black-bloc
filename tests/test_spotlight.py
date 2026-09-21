@@ -185,3 +185,26 @@ def test_a_pin_refusal_says_what_happened_what_it_needs_and_what_did_not_change(
 def test_display_falls_back_to_the_login_when_nobody_has_named_the_channel():
     assert spotlight.display_for(row(display_name=None)) == "gamesdonequick"
     assert spotlight.display_for(row()) == "GamesDoneQuick"
+
+
+def test_the_opt_out_sentence_says_what_became_of_an_announcement_that_was_out():
+    off = row(announce=0)
+    assert "announcement that was out" not in spotlight.announce_said(off)
+    for post in ("end", "delete", "leave"):
+        said = spotlight.announce_said(off, post)
+        assert "is opted out" in said and "golive_channel_optout_post" in said
+    assert "edited to say the stream has ended" in spotlight.announce_said(off, "end")
+    assert "has been deleted" in spotlight.announce_said(off, "delete")
+    assert "left exactly as it was posted" in spotlight.announce_said(off, "leave")
+
+
+def test_opting_back_in_never_carries_the_clause_and_neither_does_an_unknown_word():
+    assert "announcement that was out" not in spotlight.announce_said(row(announce=1), "end")
+    assert "announcement that was out" not in spotlight.announce_said(row(announce=0), "nope")
+
+
+def test_the_spotlight_off_sentence_says_the_pin_came_off_when_one_did():
+    off = row(spotlight=0)
+    assert "unpinned" not in spotlight.spotlight_said(off)
+    assert "has been unpinned" in spotlight.spotlight_said(off, spotlight.UNPINNED)
+    assert "unpinned" not in spotlight.spotlight_said(row(spotlight=1), spotlight.UNPINNED)

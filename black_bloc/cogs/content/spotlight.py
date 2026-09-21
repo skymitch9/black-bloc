@@ -29,6 +29,9 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
 from ...panels import Panel, answer, opened, retire, still_staff
 from ...settings_store import (
+    CHANNEL_OPTOUT_DELETE,
+    CHANNEL_OPTOUT_END,
+    CHANNEL_OPTOUT_POST_KEY,
     CHANNEL_SPOTLIGHT_DEFAULT_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
     SPOTLIGHT_BUMP_HOURS_KEY,
@@ -615,7 +618,9 @@ class Spotlight(commands.Cog):
         )
         return message
 
-    async def _end(self, guild: Any, row: Any, session: Any, reason: str) -> None:
+    async def _end(
+        self, guild: Any, row: Any, session: Any, reason: str, *, post: str = CHANNEL_OPTOUT_END
+    ) -> None:
         """The caller holds the row's lock; the state moves before any message does."""
         ended_at = now_iso()
         await end_session(self.bot.db, session["id"], ended_at)
@@ -629,14 +634,54 @@ class Spotlight(commands.Cog):
                 "session_id": session["id"],
                 "login": row["twitch_login"],
                 "reason": reason,
+                "post": post,
                 "bumps": int(_cell(session, "bump_count") or 0),
             },
         )
         message = await self._message(guild, session)
-        await self._unpin(guild, row, message)
-        await self._mark_ended(guild, row, session, message, ended_at)
+        if post == CHANNEL_OPTOUT_DELETE:
+            await self._delete_post(guild, row, session, message)
+        else:
+            await self._unpin(guild, row, message, because=reason)
+            if post == CHANNEL_OPTOUT_END:
+                await self._mark_ended(guild, row, session, message, ended_at)
         if self.bot.store.get(guild.id, SPOTLIGHT_BUMP_CLEANUP_KEY):
             await self._clear_bumps(guild, session)
+
+    async def _delete_post(self, guild: Any, row: Any, session: Any, message: Any) -> None:
+        """Deleting takes the pin with it, so there is nothing left to unpin afterwards."""
+        if message is None:
+            return
+        try:
+            await message.delete()
+        except Exception as exc:
+            reason = words.reason_of(exc)
+            log.warning("spotlight: could not delete %s — %s", row["twitch_login"], reason)
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_post_failed",
+                details={
+                    "spotlight_id": row["id"],
+                    "session_id": session["id"],
+                    "login": row["twitch_login"],
+                    "what": "delete",
+                    "message_id": str(getattr(message, "id", "")),
+                    "reason": reason,
+                },
+            )
+            return
+        await log_action(
+            self.bot,
+            guild,
+            "golive.spotlight_post_deleted",
+            details={
+                "spotlight_id": row["id"],
+                "session_id": session["id"],
+                "login": row["twitch_login"],
+                "message_id": str(getattr(message, "id", "")),
+            },
+        )
 
     async def _mark_ended(
         self,
@@ -737,11 +782,14 @@ class Spotlight(commands.Cog):
         )
         return None
 
-    async def _unpin(self, guild: Any, row: Any, message: Any) -> str | None:
+    async def _unpin(
+        self, guild: Any, row: Any, message: Any, *, because: str | None = None
+    ) -> str | None:
         """Checklist 3: the pin comes off because the MESSAGE carries one, not because the key
         still says pin — a mid-stream flip must not strand it."""
         if message is None or not bool(getattr(message, "pinned", False)):
             return None
+        said = {"because": because} if because else {}
         try:
             await message.unpin(reason=words.UNPIN_REASON)
         except Exception as exc:
@@ -756,7 +804,8 @@ class Spotlight(commands.Cog):
                     "login": row["twitch_login"],
                     "message_id": str(getattr(message, "id", "")),
                     "reason": reason,
-                },
+                }
+                | said,
             )
             return words.UNPIN_REFUSED.format(login=row["twitch_login"], reason=reason)
         await log_action(
@@ -767,7 +816,8 @@ class Spotlight(commands.Cog):
                 "spotlight_id": row["id"],
                 "login": row["twitch_login"],
                 "message_id": str(message.id),
-            },
+            }
+            | said,
         )
         return None
 
@@ -1029,20 +1079,21 @@ async def spotlight_channel(
 
 async def set_announce(
     bot: Any, guild: Any, actor: Any, spotlight_id: int, on: bool, *, via: str = VIA_DISCORD
-) -> Any:
+) -> tuple[Any, str | None]:
     """A channel's own opt-out, the member opt-out's twin: the row, its role, its YouTube
-    link and its spotlight all stay, and nothing of its is posted while it is off."""
-    return await change_spotlight(
+    link and its spotlight all stay, and nothing of its is posted while it is off.
+    Turning it off with a stream OPEN settles that announcement now — `(row, settled)`."""
+    return await changed_spotlight(
         bot, guild, actor, spotlight_id, via=via, announce=1 if on else 0
     )
 
 
 async def set_spotlight(
     bot: Any, guild: Any, actor: Any, spotlight_id: int, on: bool, *, via: str = VIA_DISCORD
-) -> Any:
+) -> tuple[Any, str | None]:
     """The toggle: the row, its role and its sessions all stay; only the pin and the
     reminders come and go. Staff final say, both ways, at any time."""
-    return await change_spotlight(
+    return await changed_spotlight(
         bot, guild, actor, spotlight_id, via=via, spotlight=1 if on else 0
     )
 
@@ -1115,9 +1166,18 @@ def _youtube_handle_of(given: str) -> str | None:
 async def change_spotlight(
     bot: Any, guild: Any, actor: Any, spotlight_id: int, *, via: str = VIA_DISCORD, **fields: Any
 ) -> Any:
+    fresh, _ = await changed_spotlight(bot, guild, actor, spotlight_id, via=via, **fields)
+    return fresh
+
+
+async def changed_spotlight(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, *, via: str = VIA_DISCORD, **fields: Any
+) -> tuple[Any, str | None]:
+    """The one write both doors reach: `(the row after it, what an OPEN announcement had
+    done to it)`. The row moves first, so a refusal from Discord never leaves it half-flipped."""
     row = await channel_by_id(bot.db, spotlight_id)
     if row is None or int(row["guild_id"]) != int(guild.id):
-        return None
+        return (None, None)
     await update_channel(bot.db, spotlight_id, **fields)
     fresh = await channel_by_id(bot.db, spotlight_id)
     await log_action(
@@ -1128,7 +1188,33 @@ async def change_spotlight(
         details={"spotlight_id": spotlight_id, "login": row["twitch_login"], "via": via}
         | {name: fields[name] for name in sorted(fields)},
     )
-    return fresh
+    return (fresh, await settle_open_session(bot, guild, row, fresh, fields))
+
+
+async def settle_open_session(
+    bot: Any, guild: Any, was: Any, now: Any, fields: dict[str, Any]
+) -> str | None:
+    """Opting a live channel out ENDS the stream that is out there; taking its spotlight off
+    only unpins it. Nothing here waits on Twitch, which never reports a 24/7 rerun offline."""
+    cog = cog_of(bot)
+    if cog is None or now is None:
+        return None
+    opted_out = "announce" in fields and words.announces(was) and not words.announces(now)
+    dimmed = "spotlight" in fields and words.is_spotlit(was) and not words.is_spotlit(now)
+    if not (opted_out or dimmed):
+        return None
+    spotlight_id = int(now["id"])
+    async with cog._lock(spotlight_id):
+        session = await open_session(bot.db, spotlight_id)
+        if session is None:
+            return None
+        if opted_out:
+            post = str(bot.store.get(guild.id, CHANNEL_OPTOUT_POST_KEY))
+            await cog._end(guild, now, session, words.OPTED_OUT_ENDED, post=post)
+            return post
+        message = await cog._message(guild, session)
+        await cog._unpin(guild, now, message, because=words.SPOTLIGHT_OFF_BECAUSE)
+        return words.UNPINNED
 
 
 async def forget_spotlight(
@@ -1413,13 +1499,15 @@ async def run_spotlight_move(
         await change_spotlight(bot, guild, actor, spotlight_id, expires_at=when)
         return (words.EXPIRES_SAID.format(login=login, when=words.when_words(when)), True)
     if action in ("spotlight_on", "spotlight_off"):
-        fresh = await set_spotlight(
+        fresh, settled = await set_spotlight(
             bot, guild, actor, spotlight_id, action == "spotlight_on"
         )
-        return (words.spotlight_said(fresh), True)
+        return (words.spotlight_said(fresh, settled), True)
     if action in ("opt_out", "opt_in"):
-        fresh = await set_announce(bot, guild, actor, spotlight_id, action == "opt_in")
-        return (words.announce_said(fresh), True)
+        fresh, settled = await set_announce(
+            bot, guild, actor, spotlight_id, action == "opt_in"
+        )
+        return (words.announce_said(fresh, settled), True)
     if action == "unlink_youtube":
         _, _, said = await unlink_youtube(bot, guild, actor, spotlight_id)
         return (said, True)

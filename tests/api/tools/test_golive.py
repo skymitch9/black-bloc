@@ -541,6 +541,32 @@ async def test_a_channel_can_be_opted_out_of_announcements_and_back_in(client, s
     assert back["announce"] is True and "opted back in" in back["message"]
 
 
+async def test_opting_a_live_channel_out_from_the_site_ends_the_open_session(
+    client, sign_in, web, wf
+):
+    """The site's door reaches the same settle the panel's does — one path, one sentence."""
+    from black_bloc.cogs.content.spotlight import Spotlight, open_session
+
+    spotlight_id = await a_spotlight(web, wf)
+    session_id = await start_session(
+        web.db,
+        wf.GUILD_ID,
+        spotlight_id,
+        StreamInfo(url="https://www.twitch.tv/gamesdonequick", game="Celeste", title="AGDQ"),
+        "on",
+    )
+    await set_announced(web.db, session_id, 4242)
+    web.cogs["Spotlight"] = Spotlight(web)
+    sign_in(client)
+
+    out = client.patch(f"/api/golive/spotlight/{spotlight_id}", json={"announce": False}).json()
+
+    assert out["announce"] is False and out["live"] is False
+    assert "is opted out" in out["message"]
+    assert "edited to say the stream has ended" in out["message"]
+    assert await open_session(web.db, spotlight_id) is None
+
+
 async def test_unlinking_a_youtube_channel_that_is_not_there_says_so_rather_than_a_status(
     client, sign_in, web
 ):
