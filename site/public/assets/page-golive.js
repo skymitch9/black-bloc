@@ -630,7 +630,7 @@ function streamerRow(row) {
 }
 
 function streamersSection(rows, say) {
-  const group = section('Streamers', STREAMERS_NOTE, { count: rows.length });
+  const group = section('Streamers', STREAMERS_NOTE, { count: rows.length, open: true });
   const voice = sayAgain('golive.links', sayAgain('golive.optouts', sayAgain('youtube.links',
     sayAgain('pings.streamers', sayAgain('pings.streamer', say)))));
   if (rows.length === 0) {
