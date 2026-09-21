@@ -4016,6 +4016,53 @@ function wantedSpotlight(params) {
   return row;
 }
 
+const CHANNEL_HANDLE = /^@?([A-Za-z0-9._-]{3,30})$/;
+const CHANNEL_UC = /(UC[A-Za-z0-9_-]{22})(?![A-Za-z0-9_-])/;
+// The bot resolves a handle off the channel page's canonical link; the mock cannot reach
+// YouTube, so it knows the two the owner asked for by name and invents nothing else.
+const KNOWN_CHANNELS = {
+  gamesdonequick: ['UCI3DTtB-a3fJPjKtQ5kYHfA', 'Games Done Quick'],
+  esamarathon: ['UC3Oe-jfrIqEGygxYBYyN6jQ', 'ESA Speedrunning'],
+};
+
+function spotlightAdded(row) {
+  if (row.spotlight === false) {
+    return `**${row.twitch_login}** is on the list, ${spotlightUntil(row)}. Black Bloc announces it in the go-live channel whenever it goes live, exactly as it announces anybody else's stream, and edits the post to past tense when it ends. **Spotlight on** adds the pin and the reminders.`;
+  }
+  const hours = row.bump_hours || state.settings.get('spotlight_bump_hours') || 4;
+  const pinWords = row.pin ? 'pins the announcement for the duration' : 'leaves the announcement unpinned';
+  return `**${row.twitch_login}** is on the spotlight list, ${spotlightUntil(row)}. Black Bloc announces it in the go-live channel whenever it goes live, reminds people every ${hours} hours while it runs, and ${pinWords}.`;
+}
+
+function channelSpotlightSaid(row) {
+  if (row.spotlight === false) {
+    return `**${row.twitch_login}** is announced like anybody else's stream now — one post when it goes live, edited to past tense when it ends, no pin and no reminders. It stays on the list.`;
+  }
+  return `**${row.twitch_login}** is spotlighted: its announcement is pinned while it streams and a reminder goes out every so often. Everything else about the channel stays as it is.`;
+}
+
+function channelAnnounceSaid(row) {
+  if (row.announce === false) {
+    return `**${row.twitch_login}** is opted out, so nothing of its is announced from now on — no post, no pin and no reminders, whatever its spotlight says. It stays on the list, it keeps its ping role and it keeps its YouTube link, and **Opt back in** starts it announcing again.`;
+  }
+  return `**${row.twitch_login}** is opted back in, so the next stream it starts is announced again. Nothing that happened while it was opted out is posted after the fact.`;
+}
+
+function linkChannelYoutube(row, given) {
+  const wanted = String(given || '').trim();
+  const found = CHANNEL_UC.exec(wanted);
+  const handle = found ? null : (CHANNEL_HANDLE.exec(wanted) || [])[1] || null;
+  const known = handle ? KNOWN_CHANNELS[handle.toLowerCase()] : null;
+  const channelId = found ? found[1] : (known ? known[0] : null);
+  if (!channelId) {
+    throw new Refused(400, 'bad_channel', `Black Bloc could not work out which YouTube channel **${wanted.slice(0, 60) || 'nothing'}** is, so nothing was linked. Paste the address that starts with youtube.com/channel/UC…, or the @handle.`);
+  }
+  row.youtube_channel_id = channelId;
+  row.youtube_handle = handle ? `@${handle}` : null;
+  logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login, youtube_channel_id: channelId } });
+  return `**${row.twitch_login}** is linked to ${known ? known[1] : channelId}. Black Bloc watches that YouTube channel for live streams as well as its Twitch one.`;
+}
+
 function spotlightDays(given) {
   if (given === null || given === undefined || String(given).trim() === '') return null;
   if (!/^\d+$/.test(String(given).trim())) {
@@ -4085,8 +4132,27 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   if ('bump_hours' in body) row.bump_hours = body.bump_hours || null;
   if ('pin' in body) row.pin = Boolean(body.pin);
   if ('note' in body) row.note = body.note || null;
-  logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login } });
-  return { ...spotlightRow(row), message: `**${row.twitch_login}** now runs ${spotlightUntil(row)}.` };
+  if ('spotlight' in body) row.spotlight = Boolean(body.spotlight);
+  if ('announce' in body) row.announce = Boolean(body.announce);
+  let said = null;
+  if ('youtube' in body) {
+    const given = String(body.youtube || '').trim();
+    if (given) {
+      said = linkChannelYoutube(row, given);
+    } else {
+      if (!row.youtube_channel_id) {
+        throw new Refused(404, 'not_linked', `**${row.twitch_login}** has no YouTube channel linked, so there was nothing to unlink. Its row on the Go-live page has the move that links one.`);
+      }
+      row.youtube_channel_id = null;
+      row.youtube_handle = null;
+      said = `**${row.twitch_login}**'s YouTube channel is unlinked, so only its Twitch side is watched now. Nothing else about the channel changed.`;
+      logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login, youtube_channel_id: null } });
+    }
+  }
+  if (said === null) logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login } });
+  if (said === null && 'announce' in body) said = channelAnnounceSaid(row);
+  else if (said === null && 'spotlight' in body) said = channelSpotlightSaid(row);
+  return { ...spotlightRow(row), message: said || `**${row.twitch_login}** now runs ${spotlightUntil(row)}.` };
 });
 
 route('DELETE', '/api/golive/spotlight/:spotlight_id', (context) => {

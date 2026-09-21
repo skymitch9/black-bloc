@@ -220,7 +220,7 @@ export function joinStreamers({
     made.spotlight = one;
     made.youtube = one.youtube_handle || one.youtube_channel_id || null;
     made.youtube_id = one.youtube_channel_id || null;
-    made.opted_out = one.opted_out === true;
+    made.opted_out = one.opted_out === true || one.announce === false;
     made.live = one.live ? platformOfSession(one.session) : null;
     wearRole(made, one);
     found.push(made);
