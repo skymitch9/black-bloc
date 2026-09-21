@@ -1,9 +1,5 @@
 {
-  "release": "v151",
-  "commit": "9ebf15b",
-  "changed_features": [
-    "events",
-    "golive",
-    "youtube"
-  ]
+  "release": "v152",
+  "commit": "8dcb52f",
+  "changed_features": []
 }
