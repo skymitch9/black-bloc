@@ -1,15 +1,15 @@
 import { start } from './app.js';
 import { badge, card, el, section } from './ui.js';
 
-const NOTE = 'Each card has two doors: what is coming, under /preview (a static-data preview inside the real shell, or the '
-  + 'rebuilt page itself where the rebuild already happened), and the page as it is live today. Ranked as the UX audit '
-  + 'ranked them, worst first.';
+const NOTE = 'Each card that is still waiting has two doors: what is coming, under /preview (a static-data preview inside '
+  + 'the real shell), and the page as it is live today. A card marked live has shipped — its preview was deleted and the '
+  + 'one door is the real page. Ranked as the UX audit ranked them, worst first.';
 
 const PAGES = [
   { slug: 'golive', title: 'Go-live', rank: 1, severity: 'danger', fails: 5, from: 12, to: 5, live: true,
     what: 'Rebuilt and live since v142: twelve sections became five, one Streamers list across Twitch and YouTube with a row drawer, and since v148 the spotlight rows for channels with no member.' },
-  { slug: 'posts', title: 'Posts', rank: 2, severity: 'danger', fails: 4, from: 3, to: 2,
-    what: 'One section of posts and one of machinery, instead of two sections, a loose card and a separate detail page. A row opens the post in a drawer.' },
+  { slug: 'posts', title: 'Posts', rank: 2, severity: 'danger', fails: 4, from: 3, to: 2, live: true,
+    what: 'Rebuilt and live: one section of posts and one of machinery, instead of two sections, a loose card and a separate detail page. A row opens the post in a drawer, with the editor, the moves and its version history.' },
   { slug: 'rolemenus', title: 'Role menus', rank: 3, severity: 'danger', fails: 4, from: 9, to: 4,
     what: 'Four sections instead of nine, Applications lifted out to a page of its own, and a menu’s editor opening in a drawer over its row.' },
   { slug: 'minutes', title: 'Meeting minutes', rank: 4, severity: 'danger', fails: 3, from: 4, to: 2,
@@ -38,7 +38,9 @@ const SEVERITY = { danger: 'audit red', warn: 'audit orange' };
 
 function previewCard(page) {
   const doors = [
-    el('a', { class: 'btn small', href: `/preview/${page.slug}.html`, text: page.live ? 'What is coming' : 'Open the preview' }),
+    page.live
+      ? null
+      : el('a', { class: 'btn small', href: `/preview/${page.slug}.html`, text: 'Open the preview' }),
     el('a', { class: 'btn small quiet', href: `/${page.slug}.html`, text: 'Live today' }),
   ];
   return el('div', { class: 'guidecard', 'data-slug': page.slug }, [
