@@ -12,13 +12,14 @@ from ...cogs.content.raidtrain import (
     create_and_publish,
     get_train,
     list_trains,
+    make_event_for,
     move_train,
     slots_for,
     swap_slots,
     twitch_login_of,
     unassign_slot,
 )
-from ...events import START_IN_THE_PAST, clamp, start_error
+from ...events import START_IN_THE_PAST, clamp, get_event, start_error
 from ...golive import parse_ts
 from ...logkinds import VIA_WEBSITE
 from ...raidtrain import (
@@ -33,6 +34,7 @@ from ...raidtrain import (
     STATUS_WORDS,
     STATUSES,
     TITLE_LIMIT,
+    event_default,
     filled,
     may_move,
     move_refusal,
@@ -69,12 +71,18 @@ BAD_STATUS = (
     "**{status}** is not a state a raid train can be in. It is one of open, locked, live, done "
     "or cancelled, and only some of those can be reached from where this one is."
 )
-CREATED = "**{title}** is up with {count} slot(s) of {minutes} minutes each."
 STATUS_SET = "**{title}** is now **{status}**."
 CANCEL_NEEDS_REASON = (
     "Cancelling tells everybody who signed up, so it needs a reason to tell them. Type one and "
     "try again."
 )
+
+
+def _cell(row: Any, name: str) -> Any:
+    try:
+        return row[name]
+    except (IndexError, KeyError, TypeError):
+        return None
 
 
 def with_name(guild: Any, user_id: Any) -> dict[str, Any]:
@@ -101,9 +109,12 @@ def slot_row(guild: Any, row: Any) -> dict[str, Any]:
     }
 
 
-def train_row(guild: Any, row: Any, slots: Any) -> dict[str, Any]:
+def train_row(guild: Any, row: Any, slots: Any, event: Any = None) -> dict[str, Any]:
     rows = list(slots or ())
+    event_id = _cell(row, "event_id")
     return {
+        "event_id": (int(event_id) if event_id else None),
+        "event_status": (_cell(event, "status") if event is not None else None),
         "id": row["id"],
         "title": row["title"],
         "description": row["description"],
@@ -149,6 +160,13 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(404, "not_found", NO_SUCH_TRAIN.format(train_id=train_id))
         return row
 
+    async def linked(db: Any, row: Any) -> Any:
+        event_id = _cell(row, "event_id")
+        return await get_event(db, int(event_id)) if event_id else None
+
+    async def answered_train(guild: Any, db: Any, row: Any, slots: Any) -> dict[str, Any]:
+        return train_row(guild, row, slots, await linked(db, row))
+
     @router.get("/status")
     async def raidtrain_status() -> dict[str, Any]:
         """The sweep's health, the mode and the totals — the Health tab reads the same shape."""
@@ -178,7 +196,7 @@ def build_router(bot: Any) -> APIRouter:
         db = require_db(bot)
         wanted = scope if scope in SCOPES else "upcoming"
         return [
-            train_row(guild, row, await slots_for(db, row["id"]))
+            await answered_train(guild, db, row, await slots_for(db, row["id"]))
             for row in await list_trains(db, guild.id, scope=wanted)
         ]
 
@@ -188,7 +206,7 @@ def build_router(bot: Any) -> APIRouter:
         db = require_db(bot)
         row = await wanted_train(guild, db, train_id)
         slots = await slots_for(db, train_id)
-        return train_row(guild, row, slots) | {
+        return await answered_train(guild, db, row, slots) | {
             "slots": [slot_row(guild, one) for one in slots],
             "lineup": render_lineup(row, slots),
         }
@@ -240,13 +258,32 @@ def build_router(bot: Any) -> APIRouter:
                 starts_at=starts,
                 slot_minutes=minutes,
                 slot_count=count,
+                make_event=_wanted_event(bot, guild, payload.get("make_event")),
                 via=VIA_WEBSITE,
             )
         )
         train_id = made.value
         row = await get_train(db, guild.id, train_id)
-        return train_row(guild, row, await slots_for(db, train_id)) | {
-            "message": CREATED.format(title=title, count=count, minutes=minutes)
+        return await answered_train(guild, db, row, await slots_for(db, train_id)) | {
+            "message": made.message
+        }
+
+    @router.post("/{train_id}/event")
+    async def raidtrain_event(request: Request, train_id: int) -> dict[str, Any]:
+        """Make the event a train never had; one train carries one, and a second is refused."""
+        who = await writer(request)
+        guild = require_guild(bot)
+        db = require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        train = await wanted_train(guild, db, train_id)
+        made = answered(
+            await make_event_for(
+                bot, guild, actor_for(bot, who, guild), train, via=VIA_WEBSITE
+            )
+        )
+        fresh = await get_train(db, guild.id, train_id)
+        return await answered_train(guild, db, fresh, await slots_for(db, train_id)) | {
+            "message": made.message
         }
 
     @router.post("/{train_id}/slots/{position}")
@@ -281,7 +318,7 @@ def build_router(bot: Any) -> APIRouter:
                 )
             )
         fresh = await slots_for(db, train_id)
-        return train_row(guild, train, fresh) | {
+        return await answered_train(guild, db, train, fresh) | {
             "slots": [slot_row(guild, one) for one in fresh],
             "message": done.message,
         }
@@ -307,7 +344,7 @@ def build_router(bot: Any) -> APIRouter:
             )
         )
         fresh = await slots_for(db, train_id)
-        return train_row(guild, train, fresh) | {
+        return await answered_train(guild, db, train, fresh) | {
             "slots": [slot_row(guild, one) for one in fresh],
             "message": done.message,
         }
@@ -337,12 +374,19 @@ def build_router(bot: Any) -> APIRouter:
             answered(await move_train(bot, guild, actor, train, wanted, via=VIA_WEBSITE))
         fresh = await get_train(db, guild.id, train_id)
         slots = await slots_for(db, train_id)
-        return train_row(guild, fresh, slots) | {
+        return await answered_train(guild, db, fresh, slots) | {
             "slots": [slot_row(guild, one) for one in slots],
             "message": STATUS_SET.format(title=train["title"], status=wanted),
         }
 
     return router
+
+
+def _wanted_event(bot: Any, guild: Any, given: Any) -> bool:
+    """Nothing said means the key decides; anything said is what the person ticked."""
+    if given is None:
+        return event_default(bot.store, guild.id)
+    return bool(given) and str(given).strip().lower() not in ("false", "0", "no")
 
 
 def _whole(given: Any, fallback: int) -> int:

@@ -13,17 +13,27 @@ from ... import pings
 from ... import raidtrain as rt
 from ...actionlog import log_action, send_logs, stamp
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
+from ...events import CANCELLED as EVENT_CANCELLED
+from ...events import DESCRIPTION_LIMIT as EVENT_DESCRIPTION_LIMIT
 from ...events import (
+    LOCATION_LIMIT,
     TEXT_BUTTON,
     TEXT_MODAL_TITLE,
+    WHERE_OTHER,
+    WHERE_UNSET,
     ZONE_PANEL_BUTTON,
     ZONE_PANEL_INTRO,
     ZONE_PANEL_TITLE,
+    EventFields,
+    Where,
+    cancel_for,
     clamp,
+    get_event,
     guild_zone,
     minute_step,
     scheduled_name,
     stored_zone,
+    where_of_channel,
     zone_choices,
     zone_line,
 )
@@ -107,6 +117,7 @@ SLOT_TAKEN_CODE = "slot_taken"
 ALREADY_EMPTY_CODE = "already_empty"
 NOT_LINKED_CODE = "not_linked"
 BAD_MOVE_CODE = "bad_move"
+EVENT_EXISTS_CODE = "event_exists"
 
 NOT_AN_ORGANIZER = (
     "Building a raid train's lineup is for {who}, so nothing was changed. Ask one of them to "
@@ -308,6 +319,14 @@ async def set_status(db: Any, train_id: int, status: str, *, reason: Any = None)
     await db.conn.execute(
         "UPDATE raid_trains SET status = ?, cancel_reason = ?, updated_at = ? WHERE id = ?",
         (status, reason, now_iso(), int(train_id)),
+    )
+    await db.conn.commit()
+
+
+async def set_event(db: Any, train_id: int, event_id: Any) -> None:
+    await db.conn.execute(
+        "UPDATE raid_trains SET event_id = ?, updated_at = ? WHERE id = ?",
+        (None if event_id is None else int(event_id), now_iso(), int(train_id)),
     )
     await db.conn.commit()
 
@@ -628,6 +647,106 @@ async def move_train(
     return Outcome(True, said, value=to)
 
 
+def event_where(bot: Any, guild: Any, slots: Any) -> Where:
+    """The first claimed hour's Twitch channel, else the room the lineup post lives in."""
+    for slot in sorted(slots or (), key=lambda one: int(_row(one, "position") or 0)):
+        login = str(_row(slot, "twitch_login") or "").strip()
+        if login:
+            return Where(WHERE_OTHER, None, clamp(rt.twitch_url(login), LOCATION_LIMIT))
+    channel_id = lineup_channel(bot, guild.id)
+    channel = guild.get_channel(int(channel_id)) if channel_id else None
+    return where_of_channel(channel) if channel is not None else WHERE_UNSET
+
+
+def event_fields(bot: Any, guild: Any, train: Any, slots: Any) -> EventFields | None:
+    """What the events form would have been filled in with, derived from the train itself."""
+    starts = parse_ts(_row(train, "starts_at"))
+    finishes = rt.ends_at(train, slots)
+    if starts is None or finishes is None:
+        return None
+    minutes = max(1, int((finishes - starts).total_seconds() // 60))
+    described = clamp(_row(train, "description"), EVENT_DESCRIPTION_LIMIT)
+    return EventFields(
+        clamp(_row(train, "title"), TITLE_LIMIT),
+        described or clamp(render_lineup(train, slots), EVENT_DESCRIPTION_LIMIT),
+        event_where(bot, guild, slots),
+        starts,
+        minutes,
+    )
+
+
+async def make_event_for(
+    bot: Any, guild: Any, actor: Any, train: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """A train's event goes through the events review like any proposal, never around it."""
+    if _row(train, "event_id"):
+        return refusal(
+            rt.EVENT_ALREADY.format(
+                title=train["title"], event_id=int(_row(train, "event_id"))
+            ),
+            EVENT_EXISTS_CODE,
+            409,
+        )
+    status = str(_row(train, "status") or OPEN)
+    if status not in (OPEN, LOCKED):
+        return refusal(
+            rt.EVENT_NOT_NOW.format(title=train["title"], status=status), BAD_MOVE_CODE, 409
+        )
+    fields = event_fields(bot, guild, train, await slots_for(bot.db, train["id"]))
+    if fields is None:
+        return refusal(rt.EVENT_UNREADABLE.format(title=train["title"]), REFUSED, 409)
+    from ..community.events import propose_from
+
+    said, row = await propose_from(bot, guild, actor, fields, via=via)
+    if row is None:
+        return refusal(said, REFUSED, 409)
+    await set_event(bot.db, train["id"], row["id"])
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.event_made", via),
+        actor=actor,
+        details={"train_id": train["id"], "event_id": int(row["id"]), "via": via},
+    )
+    return Outcome(
+        True,
+        rt.EVENT_MADE.format(title=train["title"], event_id=int(row["id"])),
+        value=int(row["id"]),
+    )
+
+
+async def cancel_linked_event(
+    bot: Any, guild: Any, train: Any, actor: Any, *, reason: Any = None, via: str = VIA_DISCORD
+) -> None:
+    """A called-off train takes its event with it, through the door the card presses."""
+    event_id = _row(train, "event_id")
+    if not event_id:
+        return
+    row = await get_event(bot.db, int(event_id))
+    if row is None:
+        return
+    try:
+        await cancel_for(bot, guild, row, actor, reason=reason, via=via)
+    except Exception as exc:
+        log.warning(
+            "raidtrain: calling off event #%s for train %s did not finish — %s: %s",
+            event_id,
+            _row(train, "id"),
+            type(exc).__name__,
+            exc,
+        )
+    fresh = await get_event(bot.db, int(event_id))
+    if _row(fresh, "status") != EVENT_CANCELLED:
+        return
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.event_cancelled", via),
+        actor=actor,
+        details={"train_id": train["id"], "event_id": int(event_id), "via": via},
+    )
+
+
 async def create_and_publish(
     bot: Any,
     guild: Any,
@@ -638,6 +757,7 @@ async def create_and_publish(
     starts_at: datetime,
     slot_minutes: int,
     slot_count: int,
+    make_event: bool = False,
     via: str = VIA_DISCORD,
 ) -> Outcome:
     train_id = await create_train(
@@ -669,17 +789,19 @@ async def create_and_publish(
         await cog.publish_lineup(guild, train_id)
     channel_id = lineup_channel(bot, guild.id)
     where = LINEUP_HERE.format(channel_id=channel_id) if channel_id else LINEUP_NOWHERE
-    return Outcome(
-        True,
-        CREATED.format(
-            title=title,
-            count=slot_count,
-            minutes=slot_minutes,
-            when=unix(starts_at),
-            where=where,
-        ),
-        value=train_id,
+    said = CREATED.format(
+        title=title,
+        count=slot_count,
+        minutes=slot_minutes,
+        when=unix(starts_at),
+        where=where,
     )
+    if make_event:
+        made = await make_event_for(
+            bot, guild, actor, await get_train(bot.db, guild.id, train_id), via=via
+        )
+        said = f"{said} {made.message if made.ok else rt.EVENT_REFUSED.format(why=made.message)}"
+    return Outcome(True, said, value=train_id)
 
 
 def lineup_channel(bot: Any, guild_id: int) -> int | None:
@@ -787,6 +909,7 @@ GIVE_BACK_TITLE = "Give an hour back"
 CANCEL_TITLE = "Call off {title}"
 CANCEL_LABEL = "What the people who signed up are told"
 LINK_FIRST = "Before you can take an hour"
+EVENT_FIELD = "The event"
 
 TRAIN_PLACEHOLDER = "A train…"
 TRAIN_CAPPED = "{shown} of {total} — the rest are on the Events page"
@@ -897,6 +1020,15 @@ def add_site_button(view: Any, bot: Any, row: int) -> None:
     view.add_item(
         discord.ui.Button(style=discord.ButtonStyle.link, label=SITE_BUTTON, url=url, row=row)
     )
+
+
+async def linked_event_words(bot: Any, train: Any) -> str:
+    """The line a card, a row and a drawer all say about the event a train carries."""
+    event_id = _row(train, "event_id")
+    if not event_id:
+        return ""
+    row = await get_event(bot.db, int(event_id))
+    return rt.linked_event_line(event_id, _row(row, "status") or "gone")
 
 
 def names_in(guild: Any, slots: Any) -> dict[int, str]:
@@ -1011,6 +1143,10 @@ async def build_card(
     )
     if require and not login and str(train["status"]) == OPEN:
         embed.add_field(name=LINK_FIRST, value=NEEDS_LINK, inline=False)
+    staff = bot.store.is_staff(actor)
+    linked = await linked_event_words(bot, train)
+    if linked or staff:
+        embed.add_field(name=EVENT_FIELD, value=linked or rt.NO_EVENT_YET, inline=False)
     view = RaidPanel(minutes_for(bot, guild.id))
     view.where = CARD
     view.train_id = int(train["id"])
@@ -1045,6 +1181,8 @@ async def build_card(
         organizer=organizer,
         held=[one["position"] for one in slots_held(slots, actor.id)],
         slot_count=len(slots),
+        staff=staff,
+        has_event=bool(_row(train, "event_id")),
     ):
         view.add_item(MoveButton(move))
     return (embed, view)
@@ -1434,6 +1572,28 @@ async def run_swap(interaction: discord.Interaction, view: Any) -> None:
     )
 
 
+async def run_make_event(interaction: discord.Interaction, view: Any) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction):
+        return
+    await run_move(
+        interaction,
+        view,
+        lambda train: make_event_for(
+            interaction.client, interaction.guild, interaction.user, train
+        ),
+    )
+
+
+async def flip_event(interaction: discord.Interaction, view: Any) -> None:
+    """The draft's own tick box: one button, two states, nothing stored until Start."""
+    if not await still_organizer(interaction):
+        return
+    view.fields.make_event = not view.fields.make_event
+    await open_draft(interaction, view.fields, view)
+
+
 async def run_lock(interaction: discord.Interaction, view: Any) -> None:
     if not await still_organizer(interaction):
         return
@@ -1556,6 +1716,18 @@ class DraftTextButton(discord.ui.Button):
         await interaction.response.send_modal(TrainTextModal(self.view))
 
 
+class DraftEventButton(discord.ui.Button):
+    def __init__(self, wanted: bool) -> None:
+        super().__init__(
+            label=rt.event_toggle_label(wanted),
+            style=discord.ButtonStyle.success if wanted else discord.ButtonStyle.secondary,
+            row=DRAFT_BUTTON_ROW,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await flip_event(interaction, self.view)
+
+
 class DraftZoneButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(
@@ -1604,6 +1776,7 @@ async def build_draft(
     view.add_item(HourSelect(fields.when))
     view.add_item(MinuteSelect(fields.when, minute_step(store, guild.id)))
     view.add_item(DraftTextButton())
+    view.add_item(DraftEventButton(fields.make_event))
     view.add_item(DraftZoneButton())
     if checked is not None:
         view.add_item(StartButton())
@@ -1638,7 +1811,8 @@ async def start_new_train(interaction: discord.Interaction, previous: Any) -> No
     if not await db_up(interaction):
         return
     fields = rt.TrainDraft(
-        slot_minutes=str(int(bot.store.get(interaction.guild.id, "raidtrain_slot_minutes")))
+        slot_minutes=str(int(bot.store.get(interaction.guild.id, "raidtrain_slot_minutes"))),
+        make_event=rt.event_default(bot.store, interaction.guild.id),
     )
     await open_draft(interaction, fields, previous)
 
@@ -1664,6 +1838,7 @@ async def start_draft(interaction: discord.Interaction, previous: Any) -> None:
         starts_at=checked.starts,
         slot_minutes=checked.slot_minutes,
         slot_count=checked.slot_count,
+        make_event=fields.make_event,
     )
     await render_root(interaction, previous)
     await answer(interaction, made.message)
@@ -1759,6 +1934,8 @@ class MoveButton(discord.ui.Button):
             await run_setup(interaction, view, dict(view.setup))
         elif action == rt.START_TRAIN:
             await start_new_train(interaction, view)
+        elif action == rt.MAKE_EVENT:
+            await run_make_event(interaction, view)
         else:
             await self.open_modal(interaction, view, action)
 
@@ -2457,6 +2634,7 @@ class RaidTrains(commands.Cog):
                 "via": via,
             },
         )
+        await cancel_linked_event(self.bot, guild, train, actor, reason=said or None, via=via)
         told = 0
         if self._mode(guild.id) == "on":
             text = cancelled_text(train, said)

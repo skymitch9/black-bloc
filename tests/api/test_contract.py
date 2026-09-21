@@ -241,6 +241,9 @@ async def seed_world(client, web, guild, wf) -> dict:
     # each entry makes its own and neither is refused as already there.
     await web.store.set(guild_id, "modmail_category_id", wf.CATEGORY_ID, by=7)
     await web.store.set(guild_id, "events_create_scheduled", False, by=7)
+    # A raid train's own event is reviewed the way a proposal is, so it needs the category a
+    # review room is made in — without one `submit_event` refuses and so does the route.
+    await web.store.set(guild_id, "events_category_id", wf.CATEGORY_ID, by=7)
     await web.store.set(guild_id, "rolemenu_mode", "on", by=7)
     await web.store.set(guild_id, "pings_mode", "on", by=7)
     await pings.set_fan_role(db, guild_id, MEMBER_ID, wf.PLAIN_ROLE_ID, 7)

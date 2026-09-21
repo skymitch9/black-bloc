@@ -3509,7 +3509,7 @@
       "method": "GET",
       "path": "/api/raidtrains",
       "read_by": [
-        "18 page-events.js raid trains table"
+        "21 page-raidtrain.js raid trains table"
       ],
       "shape": "list",
       "keys": [
@@ -3524,14 +3524,16 @@
         "slots_total",
         "organizer_id",
         "organizer_name",
-        "editable"
+        "editable",
+        "event_id",
+        "event_status"
       ]
     },
     {
       "method": "GET",
       "path": "/api/raidtrains/status",
       "read_by": [
-        "18 page-events.js raid trains header"
+        "21 page-raidtrain.js raid trains header"
       ],
       "shape": "object",
       "keys": [
@@ -3551,7 +3553,7 @@
       "method": "GET",
       "path": "/api/raidtrains/{raid_train_id}",
       "read_by": [
-        "18 page-events.js raid train detail"
+        "21 page-raidtrain.js raid train detail"
       ],
       "shape": "object",
       "keys": [
@@ -3563,7 +3565,9 @@
         "slots_total",
         "slots",
         "lineup",
-        "editable"
+        "editable",
+        "event_id",
+        "event_status"
       ],
       "rows": {
         "slots": [
@@ -3588,10 +3592,11 @@
         "start": "2099-09-14 19:30",
         "tz": "UTC",
         "slot_minutes": 60,
-        "slot_count": 3
+        "slot_count": 3,
+        "make_event": false
       },
       "read_by": [
-        "18 page-events.js new train form"
+        "21 page-raidtrain.js new train form"
       ],
       "shape": "object",
       "keys": [
@@ -3599,7 +3604,9 @@
         "title",
         "status",
         "slots_total",
-        "message"
+        "message",
+        "event_id",
+        "event_status"
       ]
     },
     {
@@ -3609,7 +3616,7 @@
         "member_id": "{member_id}"
       },
       "read_by": [
-        "18 page-events.js slot grid"
+        "21 page-raidtrain.js slot grid"
       ],
       "shape": "object",
       "keys": [
@@ -3636,7 +3643,7 @@
         "b": 2
       },
       "read_by": [
-        "18 page-events.js slot grid"
+        "21 page-raidtrain.js slot grid"
       ],
       "shape": "object",
       "keys": [
@@ -3659,13 +3666,30 @@
         "status": "locked"
       },
       "read_by": [
-        "18 page-events.js lock, unlock and cancel"
+        "21 page-raidtrain.js lock, unlock and cancel"
       ],
       "shape": "object",
       "keys": [
         "id",
         "status",
         "status_word",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/raidtrains/{raid_train_id}/event",
+      "body": {},
+      "read_by": [
+        "21 page-raidtrain.js Make an event for it"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "title",
+        "status",
+        "event_id",
+        "event_status",
         "message"
       ]
     },
@@ -5447,6 +5471,7 @@
     "/automod.html",
     "/modmail.html",
     "/events.html",
+    "/raidtrain.html",
     "/golive.html",
     "/rolemenus.html",
     "/birthdays.html",
@@ -5580,6 +5605,8 @@
     "web.raidtrain.lock",
     "web.raidtrain.unlock",
     "web.raidtrain.cancel",
+    "web.raidtrain.event_cancelled",
+    "web.raidtrain.event_made",
     "web.application.form_created",
     "web.application.form_updated",
     "web.application.form_deleted",

@@ -6,8 +6,16 @@
 > tests, `commands synced` 38 → 37 measured at boot). The `## Deviations` foot (14 items) is the
 > BUILD agent's; landing entry in `DONE.md` 2026-09-04.
 >
-> ⚠️ **Since then — three things this document describes have moved on.** The body is the v76 build;
+> ⚠️ **Since then — four things this document describes have moved on.** The body is the v76 build;
 > read these beside it:
+> - **2026-09-20, branch `raidtrain-page` (⚠️ built, not merged, not deployed):** the site half is no
+>   longer "a section on the Events page" — raid trains are **page 21, `/raidtrain.html`**, and
+>   `logkinds.FEATURE_PAGES["raidtrain"]` is `raidtrain.html`, so §C's **Open on the site** button
+>   now lands there (`tests/cogs/content/test_raidtrain.py::test_the_site_link_is_staff_only…`
+>   asserts it). The draft panel gains an **Also make an event** toggle keyed on
+>   `raidtrain_event_default`, and the lineup card gains **Make an event** for staff when the train
+>   is `open` or `locked` and carries none — both call `cogs/content/raidtrain.make_event_for`, which
+>   goes through the events review. Design: [`raidtrain-page-design.md`](raidtrain-page-design.md).
 > - **`Start a raid train` is a DRAFT PANEL, not `TrainModal`** (the "When?" picker, **v100**, merge
 >   `1f35f28`). `TrainModal` was **deleted** — and the build found it had been broken all along,
 >   calling a `submit_train` no class defined

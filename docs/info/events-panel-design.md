@@ -1,5 +1,14 @@
 # Events — `/event` is ONE command that opens a panel (wave 1)
 
+> ⚠️ **ONE MORE DOOR, 2026-09-20, branch `raidtrain-page`** (⚠️ built, not merged, not deployed;
+> design [`raidtrain-page-design.md`](raidtrain-page-design.md)): a RAID TRAIN can now raise an
+> event, and it comes in through this same review — the room or forum post, the card, Approve and
+> Deny, all unchanged. `submit_event`'s two view factories are wrapped in a new
+> `cogs/community/events.propose_from`, which `submit_draft` now calls as well, so there is one
+> place that knows how a review card is wired. The event's words are the events feature's own
+> keys; raid trains add none. Its description is the train's, or the lineup when the train has no
+> words of its own, and cancelling the train calls the event off through `cancel_for`.
+
 > ⚠️ **PARTLY SUPERSEDED, 2026-09-10** by [`when-picker-design.md`](when-picker-design.md): `EventModal`
 > and the typed `My time zone` modal are both gone. Propose opens a DRAFT PANEL with Day / Hour /
 > Minute / How long dropdowns and a text modal that never refuses; `My time zone` opens a `ZonePanel`

@@ -99,6 +99,7 @@ CLAIM_HERE = (
 )
 
 PANEL_MINUTES_KEY = "raidtrain_panel_minutes"
+EVENT_DEFAULT_KEY = "raidtrain_event_default"
 PANEL_TITLE = "Raid trains"
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /raidtrain again"
 
@@ -128,8 +129,37 @@ CALL_OFF = "call_off"
 PUT_THEM_IN = "put_them_in"
 SWAP_THEM = "swap_them"
 SAVE = "save"
+MAKE_EVENT = "make_event"
 
 GIVE_BACK_LABEL = "Give back slot #{position}"
+
+EVENT_TOGGLE_LABEL = "Also make an event: {state}"
+EVENT_TOGGLE_ON = "yes"
+EVENT_TOGGLE_OFF = "no"
+EVENT_DRAFT_LINE = "**Also make an event** — {state}"
+EVENT_DRAFT_YES = (
+    "yes — it goes to the events review the way a proposal does, and a Lead approves it"
+)
+EVENT_DRAFT_NO = "no — this is a raid train and nothing else"
+LINKED_EVENT_LINE = "**Event #{event_id}** — {status}"
+NO_EVENT_YET = (
+    "No event is tied to this train yet. **Make an event** raises one and sends it to the "
+    "events review."
+)
+EVENT_ALREADY = (
+    "**{title}** already has event **#{event_id}**, so nothing was made. One train carries one "
+    "event; call that event off on the Events page if it is the wrong one."
+)
+EVENT_NOT_NOW = (
+    "**{title}** is **{status}**, so no event was made for it. Only a train that is open or "
+    "locked can raise one."
+)
+EVENT_MADE = "Event **#{event_id}** for **{title}** is with the events review now."
+EVENT_UNREADABLE = (
+    "**{title}** has a start Black Bloc cannot read, so no event was made for it. Tell a Lead — "
+    "the train itself is fine."
+)
+EVENT_REFUSED = "The train is up, but no event was made for it: {why}"
 
 DRAFT_TITLE = "Start a raid train — draft"
 START_BUTTON = "Start"
@@ -167,6 +197,7 @@ PUT_IN_MOVE = RaidMove(PUT_IN, "Put somebody in…", row=2)
 SWAP_MOVE = RaidMove(SWAP, "Change two slots round…", row=2)
 LOCK_MOVE = RaidMove(MOVE_TRAIN, "Lock the lineup", row=2)
 UNLOCK_MOVE = RaidMove(MOVE_TRAIN, "Open it for sign-ups", row=2)
+MAKE_EVENT_MOVE = RaidMove(MAKE_EVENT, "Make an event", "primary", 3)
 CALL_OFF_MOVE = RaidMove(CALL_OFF, "Call it off…", "danger", 3)
 PUT_THEM_IN_MOVE = RaidMove(PUT_THEM_IN, "Put them in", "primary", 2)
 SWAP_THEM_MOVE = RaidMove(SWAP_THEM, "Swap them", "primary", 2)
@@ -179,6 +210,7 @@ CARD_MOVES: tuple[RaidMove, ...] = (
     SWAP_MOVE,
     LOCK_MOVE,
     UNLOCK_MOVE,
+    MAKE_EVENT_MOVE,
     CALL_OFF_MOVE,
     BACK_MOVE,
     CARD_REFRESH_MOVE,
@@ -546,7 +578,13 @@ def card_selects(
 
 
 def card_buttons(
-    status: Any, *, organizer: bool, held: Any = (), slot_count: int = 0
+    status: Any,
+    *,
+    organizer: bool,
+    held: Any = (),
+    slot_count: int = 0,
+    staff: bool = False,
+    has_event: bool = False,
 ) -> tuple[RaidMove, ...]:
     """§C's card table as data — one spelling of each move, and never two doors onto one."""
     mine = sorted(int(one) for one in held or ())
@@ -564,9 +602,28 @@ def card_buttons(
             found.append(LOCK_MOVE)
         elif may_move(said, OPEN):
             found.append(UNLOCK_MOVE)
+    if may_event(said, staff=staff, has_event=has_event):
+        found.append(MAKE_EVENT_MOVE)
     if organizer and may_move(said, CANCELLED):
         found.append(CALL_OFF_MOVE)
     return (*found, BACK_MOVE, CARD_REFRESH_MOVE)
+
+
+def may_event(status: Any, *, staff: bool, has_event: bool) -> bool:
+    """Staff, no event on it yet, and a train still open enough to be worth announcing."""
+    return bool(staff) and not has_event and str(status) in (OPEN, LOCKED)
+
+
+def event_default(store: Any, guild_id: int) -> bool:
+    return bool(store.get(guild_id, EVENT_DEFAULT_KEY))
+
+
+def event_toggle_label(wanted: Any) -> str:
+    return EVENT_TOGGLE_LABEL.format(state=EVENT_TOGGLE_ON if wanted else EVENT_TOGGLE_OFF)
+
+
+def linked_event_line(event_id: Any, status: Any) -> str:
+    return LINKED_EVENT_LINE.format(event_id=int(event_id), status=status)
 
 
 def train_options(rows: Any) -> tuple[tuple[str, str], ...]:
@@ -647,6 +704,7 @@ class TrainDraft:
     description: str = ""
     slot_minutes: str = ""
     slot_count: str = ""
+    make_event: bool = False
 
 
 def read_numbers(slot_minutes: Any, slot_count: Any) -> tuple[int, int] | str:
@@ -713,6 +771,9 @@ def draft_lines(draft: TrainDraft, now: datetime, *, chosen: bool, why: str = ""
         f"**Minutes per slot** — {clamp(draft.slot_minutes, 40) or DRAFT_NEEDED}",
         f"**How many slots** — {clamp(draft.slot_count, 40) or DRAFT_NEEDED}",
         f"**What** — {clamp(draft.description, DRAFT_WHAT_LIMIT) or DRAFT_NOTHING_YET}",
+        EVENT_DRAFT_LINE.format(
+            state=EVENT_DRAFT_YES if draft.make_event else EVENT_DRAFT_NO
+        ),
         (DRAFT_ZONE if chosen else DRAFT_ZONE_HINT).format(tz=draft.when.zone),
     ]
     if why and why != when:
@@ -724,6 +785,20 @@ __all__ = [
     "ALL_SLOTS",
     "BACK",
     "BAD_NUMBER",
+    "EVENT_ALREADY",
+    "EVENT_DEFAULT_KEY",
+    "EVENT_MADE",
+    "EVENT_NOT_NOW",
+    "EVENT_REFUSED",
+    "EVENT_UNREADABLE",
+    "LINKED_EVENT_LINE",
+    "MAKE_EVENT",
+    "MAKE_EVENT_MOVE",
+    "NO_EVENT_YET",
+    "event_default",
+    "event_toggle_label",
+    "linked_event_line",
+    "may_event",
     "DRAFT_TITLE",
     "NO_TRAIN_TITLE",
     "OUT_OF_RANGE",

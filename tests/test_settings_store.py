@@ -2599,3 +2599,14 @@ def test_the_filed_line_takes_request_id_and_refuses_any_other_placeholder():
         coerce_value(REQUEST_FILED_KEY, "Got it, {who}.")
 
     assert "{who}" in str(caught.value) and "{request_id}" in str(caught.value)
+
+
+def test_whether_a_new_raid_train_also_makes_an_event_is_a_key_and_not_a_constant(store):
+    """Checklist 33: the default is decided on the Settings page, never in the code."""
+    key = settings_store.RAIDTRAIN_EVENT_DEFAULT_KEY
+    assert key == "raidtrain_event_default"
+    assert KEY_TYPES[key] == "bool"
+    assert KEY_HELP[key]
+    assert store.get(1, key) is False
+    assert coerce_value(key, True) is True
+    assert settings_store.namespace_of(key) == "raidtrain"

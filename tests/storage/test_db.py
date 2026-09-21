@@ -13,7 +13,9 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 50
+        assert SCHEMA_VERSION == 51
+        cur = await db.conn.execute("PRAGMA table_info(raid_trains)")
+        assert "event_id" in {r["name"] for r in await cur.fetchall()}
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -1960,3 +1962,44 @@ async def test_a_schema_49_file_lets_a_ping_role_belong_to_a_channel_and_keeps_i
         assert {row["name"] for row in await cur.fetchall()} == {"golive_fan_roles"}
     finally:
         await again.close()
+
+
+SCHEMA_50_RAID_TRAINS = (
+    "CREATE TABLE raid_trains (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, "
+    "organizer_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT, "
+    "starts_at TEXT NOT NULL, slot_minutes INTEGER NOT NULL, slot_count INTEGER NOT NULL, "
+    "status TEXT NOT NULL DEFAULT 'open', channel_id INTEGER, lineup_message_id INTEGER, "
+    "thread_id INTEGER, scheduled_event_id INTEGER, cancel_reason TEXT, "
+    "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+)
+
+
+async def test_a_schema_50_file_gains_the_trains_event_column_and_keeps_its_rows(tmp_path):
+    """50 -> 51: a train made before the link reads back with `event_id` NULL, not missing."""
+    path = tmp_path / "trains51.sqlite3"
+    old = await aiosqlite.connect(path)
+    await old.execute("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    await old.execute("INSERT INTO schema_meta(key, value) VALUES ('schema_version', '50')")
+    await old.execute(SCHEMA_50_RAID_TRAINS)
+    await old.execute(
+        "INSERT INTO raid_trains(guild_id, organizer_id, title, starts_at, slot_minutes, "
+        "slot_count, status, created_at, updated_at) VALUES (7, 42, 'Saturday', "
+        "'2026-10-01T18:00:00+00:00', 60, 4, 'open', '2026-09-01T00:00:00+00:00', "
+        "'2026-09-01T00:00:00+00:00')"
+    )
+    await old.commit()
+    await old.close()
+
+    db = Database(path)
+    await db.connect()
+    try:
+        cur = await db.conn.execute("PRAGMA table_info(raid_trains)")
+        assert "event_id" in {row["name"] for row in await cur.fetchall()}
+        cur = await db.conn.execute("SELECT * FROM raid_trains")
+        rows = [dict(row) for row in await cur.fetchall()]
+        assert len(rows) == 1
+        assert rows[0]["title"] == "Saturday" and rows[0]["event_id"] is None
+        cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await db.close()
