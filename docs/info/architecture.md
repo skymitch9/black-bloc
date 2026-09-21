@@ -246,9 +246,9 @@
 > | What | v144 (`main`, 2026-09-20) | Where it is measured |
 > |---|---|---|
 > | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
-> | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
+> | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114). ⚠️ **33 on branch `selftest-boot`** — 17 staff-locked once `/test` lands (`info/selftest-design.md` §K, 2026-09-20); NOT merged, so `main` still reads 32 | `tree.get_commands()`, pinned by `tests/test_bot.py:TOP_LEVEL_NOW` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **46** (v143, `also_*` on `golive_sessions`; 45 at v136 `events.review_kind`, 44 at v132) | `storage/db.py:SCHEMA_VERSION` |
+> | Schema version | **46** (v143, `also_*` on `golive_sessions`; 45 at v136 `events.review_kind`, 44 at v132). ⚠️ **47 on branch `selftest-boot`** (`selftest_runs.keep_minutes`, for `/test keep:`) — NOT merged | `storage/db.py:SCHEMA_VERSION` |
 > | Registry keys | **281** on `main` at v143 (three `golive_costream_*` + `request_filed_line`; 277 at v141) — **25 namespaces** | `len(settings_store.KEY_TYPES)` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
