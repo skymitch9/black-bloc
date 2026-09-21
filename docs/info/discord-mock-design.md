@@ -170,10 +170,12 @@ they would surprise a reader of the body.
 
 ⚠️ **One test of this build's own was FLAKY and is fixed.** `test_the_live_announcement_is_the_bot_s_own_render_and_not_a_copy` compared the renderer's embed against a second `announcement_embed` call, and `announcement_embed` stamps `datetime.now(UTC)` — so it failed once, on the reverse-order run after the `posts-page` merge, on a **half-millisecond** difference in `timestamp` and nothing else. It now compares everything BUT the stamp and asserts separately that a stamp is there. It passed four full runs before it failed, which is exactly how a time-dependent assertion behaves.
 
-**KI-26 fired once, sighting count +1.** The `BB_REVERSE=1` `pytest -n 8` stalled at **94 %** with
+**KI-26 fired TWICE, sighting count +2.** The `BB_REVERSE=1` `pytest -n 8` stalled at **94 %** with
 the log untouched for eight minutes and a single worker left alive; killed by its own tree
 (identified by `bb-discord-mock` in the command line, with two other agents' suites running beside
-it) and green in **85 s** on the retry. This build did not touch `KNOWN_ISSUES.md`.
+it) and green in **85 s** on the retry. It fired a second time on the forward-order run after the
+`posts-page` merge — same shape, same fix, green in **87 s**. This build did not touch
+`KNOWN_ISSUES.md`; the count is reported to the conductor.
 
 ## What was NOT verified
 
