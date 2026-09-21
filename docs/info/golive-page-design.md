@@ -209,6 +209,8 @@ between the three features). NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_
 
 ## Deviations
 
+**2026-09-20, branch `discord-mock`:** *The announcement*'s two wording editors now carry a LIVE **Discord mock** each (`ui.js:discordMock` → `POST /api/preview/message`), and the **Wording** card, `drawCard`, `botLine`, `withRoleNames` and `wordingPreview` are GONE — there is one rendering per message now, it is the bot's own, and it sits under the box that writes it. The *Preview as Twitch / YouTube* chips set the BOT's sample platform rather than a client-side fill, so the address and the card colour follow. This page no longer reads `GET /api/golive/preview`; see [`discord-mock-design.md`](discord-mock-design.md) ▸ Deviations 1 and 8.
+
 *(the build agent writes here what it had to do differently, dated)*
 
 **2026-09-20, branch `golive-page`, off `main` `948ff05`.** Seventeen, in the order they would
