@@ -28,6 +28,7 @@ from .settings_store import (
     SELFTEST_CHANNEL_ID,
     SELFTEST_ON_BOOT,
     SELFTEST_PURGE_MINUTES,
+    coerce_value,
     namespace_of,
 )
 
@@ -53,6 +54,10 @@ NO_CHANNEL = (
     "The self-test has nowhere to post: selftest_channel_id is not set and Black Bloc has no "
     "test channel either. Point selftest_channel_id at a channel Black Bloc can talk in, from "
     "the dashboard's Settings page or `/settings` ▸ **A setting group…** ▸ **core**."
+)
+TEST_DONE = (
+    "The self-test ran: **{ok} ok, {failed} failed**, {posted} card(s) posted in {channel}. "
+    "They are deleted again in {minutes} minute(s)."
 )
 NO_RUN = (
     "Black Bloc has no self-test run numbered {run_id} for this server, so there was nothing to "
@@ -128,6 +133,8 @@ class Run:
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     finished_at: datetime | None = None
     results: list[Result] = field(default_factory=list)
+    channel: Any = None
+    keep_minutes: int | None = None
 
     @property
     def ok(self) -> int:
@@ -143,7 +150,7 @@ class Run:
 
     async def post(self, **kwargs: Any) -> Any:
         """Every card the test posts goes through here, so nothing is posted unrecorded."""
-        channel = selftest_channel(self.bot, self.guild)
+        channel = self.channel or selftest_channel(self.bot, self.guild)
         if channel is None:
             raise CheckFailed(NO_CHANNEL)
         message = await channel.send(allowed_mentions=discord.AllowedMentions.none(), **kwargs)
@@ -185,6 +192,23 @@ def selftest_channel(bot: Any, guild: Any) -> Any:
 
 def purge_minutes(bot: Any, guild_id: int) -> int:
     return int(bot.store.get(guild_id, SELFTEST_PURGE_MINUTES) or 1)
+
+
+def minutes_of(bot: Any, one: Run) -> int:
+    """What THIS run's cards are kept for: its own `keep`, or the setting when it has none."""
+    return int(one.keep_minutes or purge_minutes(bot, one.guild.id))
+
+
+def keep_asked(minutes: Any) -> int | None:
+    """`/test keep:` goes through the registry's own bounds, so there is one set of them."""
+    if minutes is None:
+        return None
+    return int(coerce_value(SELFTEST_PURGE_MINUTES, minutes))
+
+
+def channel_words(channel: Any) -> str:
+    name = getattr(channel, "name", None)
+    return f"#{name}" if name else str(getattr(channel, "id", channel))
 
 
 def runs_on_boot(bot: Any, guild_id: int) -> bool:
@@ -425,12 +449,14 @@ CHECKS = config_checks()
 
 async def open_run(db: Any, one: Run) -> int:
     cur = await db.conn.execute(
-        "INSERT INTO selftest_runs(guild_id, started_at, via, actor_id) VALUES (?, ?, ?, ?)",
+        "INSERT INTO selftest_runs(guild_id, started_at, via, actor_id, keep_minutes) "
+        "VALUES (?, ?, ?, ?, ?)",
         (
             one.guild.id,
             one.started_at.isoformat(),
             one.via,
             getattr(one.actor, "id", None),
+            one.keep_minutes,
         ),
     )
     await db.conn.commit()
@@ -507,14 +533,15 @@ async def failures_of(db: Any, guild_id: int, run_id: int) -> list[dict[str, Any
 
 async def waiting_messages(db: Any, guild_id: int, run_id: int | None = None) -> list[Any]:
     sql = (
-        "SELECT id, run_id, channel_id, message_id, posted_at FROM selftest_messages "
-        "WHERE guild_id = ?"
+        "SELECT m.id, m.run_id, m.channel_id, m.message_id, m.posted_at, r.keep_minutes "
+        "FROM selftest_messages m LEFT JOIN selftest_runs r ON r.id = m.run_id "
+        "WHERE m.guild_id = ?"
     )
     params: tuple[Any, ...] = (int(guild_id),)
     if run_id is not None:
-        sql += " AND run_id = ?"
+        sql += " AND m.run_id = ?"
         params += (int(run_id),)
-    cur = await db.conn.execute(f"{sql} ORDER BY id", params)
+    cur = await db.conn.execute(f"{sql} ORDER BY m.id", params)
     return list(await cur.fetchall())
 
 
@@ -549,12 +576,38 @@ async def run_one(one: Run, check: Check) -> Result:
     return Result(check.name, check.feature, True, str(detail), at)
 
 
-async def begin(bot: Any, guild: Any, *, actor: Any = None, via: str = VIA_DISCORD) -> Run:
+def asked_for(one: Run) -> dict[str, Any]:
+    """`/test where:` and `/test keep:` are on the row only when somebody typed them."""
+    details: dict[str, Any] = {}
+    if one.channel is not None:
+        details["where"] = getattr(one.channel, "id", one.channel)
+    if one.keep_minutes is not None:
+        details["keep"] = int(one.keep_minutes)
+    return details
+
+
+async def begin(
+    bot: Any,
+    guild: Any,
+    *,
+    actor: Any = None,
+    via: str = VIA_DISCORD,
+    channel: Any = None,
+    keep_minutes: int | None = None,
+) -> Run:
     """The row and the `started` line, so the website's door has a run_id to answer with."""
     found = running(bot, guild.id)
     if found is not None:
         raise SelfTestBusy(busy_sentence(found))
-    one = Run(bot=bot, guild=guild, actor=actor, via=via, total=len(checks_for(bot)))
+    one = Run(
+        bot=bot,
+        guild=guild,
+        actor=actor,
+        via=via,
+        total=len(checks_for(bot)),
+        channel=channel,
+        keep_minutes=keep_minutes,
+    )
     _mark(bot, guild.id, one)
     try:
         one.run_id = await open_run(bot.db, one)
@@ -563,7 +616,12 @@ async def begin(bot: Any, guild: Any, *, actor: Any = None, via: str = VIA_DISCO
             guild,
             kind_via(SELFTEST_STARTED, via),
             actor=actor,
-            details={"run_id": one.run_id, "checks": one.total, "via": via},
+            details={
+                "run_id": one.run_id,
+                "checks": one.total,
+                "via": via,
+                **asked_for(one),
+            },
         )
     except Exception:
         _mark(bot, guild.id, None)
@@ -590,6 +648,7 @@ async def finish(one: Run) -> Run:
                 "failed": one.failed,
                 "posted": one.posted,
                 "via": one.via,
+                **asked_for(one),
             },
         )
     finally:
@@ -618,6 +677,7 @@ async def close_after_crash(one: Run, detail: str) -> Run:
                 "posted": one.posted,
                 "detail": result.detail,
                 "via": one.via,
+                **asked_for(one),
             },
         )
     except Exception:
@@ -636,9 +696,21 @@ async def finish_quietly(one: Run) -> Run:
         return await close_after_crash(one, f"{type(exc).__name__}: {exc}")
 
 
-async def run(bot: Any, guild: Any, *, actor: Any = None, via: str = VIA_DISCORD) -> Run:
+async def run(
+    bot: Any,
+    guild: Any,
+    *,
+    actor: Any = None,
+    via: str = VIA_DISCORD,
+    channel: Any = None,
+    keep_minutes: int | None = None,
+) -> Run:
     """The body the boot and Discord doors call and wait for; the website starts it and lets go."""
-    return await finish_quietly(await begin(bot, guild, actor=actor, via=via))
+    return await finish_quietly(
+        await begin(
+            bot, guild, actor=actor, via=via, channel=channel, keep_minutes=keep_minutes
+        )
+    )
 
 
 async def on_boot(bot: Any) -> None:
@@ -665,7 +737,7 @@ def boot_lines(bot: Any, one: Run) -> list[str]:
             ok=one.ok,
             failed=one.failed,
             posted=one.posted,
-            minutes=purge_minutes(bot, one.guild.id),
+            minutes=minutes_of(bot, one),
         )
     ]
     lines += [
@@ -739,9 +811,11 @@ async def purge(
     rows = await waiting_messages(bot.db, guild.id, run_id)
     if not rows:
         return 0
-    cutoff = datetime.now(UTC) - timedelta(minutes=purge_minutes(bot, guild.id))
+    now = datetime.now(UTC)
+    fallback = purge_minutes(bot, guild.id)
     by_run: dict[int, dict[int, list[Any]]] = {}
     for row in rows:
+        cutoff = now - timedelta(minutes=_kept_for(row, fallback))
         if due_only and not _older_than(row["posted_at"], cutoff):
             continue
         by_run.setdefault(int(row["run_id"]), {}).setdefault(int(row["channel_id"]), []).append(row)
@@ -756,6 +830,15 @@ async def purge(
         gone += went
         await _stamp_purged(bot, guild, one_run_id, went, via)
     return gone
+
+
+def _kept_for(row: Any, fallback: int) -> int:
+    """A run asked to keep its cards longer keeps them across a restart, so the row decides."""
+    try:
+        asked = row["keep_minutes"]
+    except (KeyError, IndexError, TypeError):
+        asked = None
+    return int(asked or fallback)
 
 
 def _older_than(posted_at: Any, cutoff: datetime) -> bool:
@@ -774,6 +857,7 @@ __all__ = [
     "CHECKS",
     "NO_CHANNEL",
     "NO_RUN",
+    "TEST_DONE",
     "POOL_BEHIND",
     "POOL_CHECK",
     "POOL_COUNT",
@@ -789,18 +873,22 @@ __all__ = [
     "Result",
     "Run",
     "SelfTestBusy",
+    "asked_for",
     "begin",
     "boot_lines",
     "busy_sentence",
     "checks_for",
     "check_pool",
+    "channel_words",
     "checks_of",
     "close_after_crash",
     "config_checks",
     "failures_of",
+    "keep_asked",
     "fetch_peer",
     "finish",
     "finish_quietly",
+    "minutes_of",
     "on_boot",
     "one_run",
     "pool_checks",

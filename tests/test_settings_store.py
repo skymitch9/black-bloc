@@ -2113,6 +2113,36 @@ async def test_the_self_test_runs_at_boot_posts_to_the_test_channel_and_purges_i
     assert parse_value(SELFTEST_PURGE_MINUTES, "15") == 15
 
 
+async def test_the_boot_run_is_on_by_default_only_while_test_mode_is_on(tmp_path, monkeypatch):
+    """Owner 2026-09-20: 'now that we're no longer in test mode, we don't need to have black
+    bloc post every panel in logs. Let's leave that as a default when in test mode'."""
+    from black_bloc.settings_store import SELFTEST_ON_BOOT
+
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    db = Database(tmp_path / "boot.sqlite3")
+    await db.connect()
+    try:
+        rehearsing = SettingsStore(
+            db, load_settings(_env_file=None, test_mode=True, test_channel_id=TEST_CH)
+        )
+        live = SettingsStore(db, load_settings(_env_file=None, test_mode=False))
+        await rehearsing.load()
+        await live.load()
+
+        assert rehearsing.default(SELFTEST_ON_BOOT) is True
+        assert live.default(SELFTEST_ON_BOOT) is False
+        assert rehearsing.get(7, SELFTEST_ON_BOOT) is True
+        assert live.get(7, SELFTEST_ON_BOOT) is False
+
+        # Either way it is one bool in group core, so staff can say otherwise from both doors.
+        await live.set(7, SELFTEST_ON_BOOT, True)
+        assert live.get(7, SELFTEST_ON_BOOT) is True
+        await live.clear(7, SELFTEST_ON_BOOT)
+        assert live.get(7, SELFTEST_ON_BOOT) is False
+    finally:
+        await db.close()
+
+
 # `site/public/assets/labels.js` is what the Settings page prints under a key's name. The
 # thirteen keys that had no line there were given one on 2026-09-05, so the list is EMPTY and
 # the guard below is total: a registry key added without a sentence now fails by name.

@@ -10,7 +10,7 @@ from black_bloc.logkinds import FEATURES
 
 TOP_LEVEL_MAX = 100
 CHILDREN_MAX = 25
-TOP_LEVEL_NOW = 32
+TOP_LEVEL_NOW = 33
 RETIRED_GROUPS = (
     "chat",
     "mod",
@@ -36,6 +36,7 @@ STAFF_COMMANDS = {
     "reply",
     "rolemenu",
     "settings",
+    "test",
     "timeout",
     "unban",
     "untimeout",

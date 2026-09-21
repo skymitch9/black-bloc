@@ -1,6 +1,14 @@
 # Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-20** — rows **`ST-a` … `ST-d`** added at the foot for THE BOOT RUN FOLLOWING TEST MODE AND `/test`
+> (branch `selftest-boot`, off `main` `74c25bf`; design [`../info/selftest-design.md`](../info/selftest-design.md) ▸ §K;
+> ⚠️ **not merged, not deployed, and NOTHING IN IT HAS MET DISCORD** — no `/test` has been typed and no boot has
+> happened with the new default). Owner: *"we don't need to have black bloc post every panel in logs … then a /test
+> command that spews out all the panels for staff only. PRIORITY TASK"*. ⚠️ **`ST-a` needs the stored
+> `selftest_on_boot` row cleared first** — the change is to the DEFAULT, and a stored `true` still wins. Rows are
+> lettered; the conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked then.**
+> Before that,
 > **2026-09-20** — rows **`CS-a` … `CS-f`** added at the foot for CO-STREAMING (branch `costream`, off
 > `main` `64ccfbc`; design [`../info/costream-design.md`](../info/costream-design.md); ⚠️ **not merged,
 > not deployed, and NOTHING IN IT HAS MET DISCORD** — no announcement has ever been edited to name two
@@ -2156,3 +2164,26 @@ so an announcement this page causes goes to the rehearsal channel, not to member
 | **624** (was `GP-d`) | In the strip, move **Twitch announcements** from shadow to off and back, and do the same with **YouTube announcements** and **Ping roles** | Each says *"… is now off"* / *"… is now shadow"* under the strip the moment it saves, and the value is still there after **Refresh** — these are the same `modeSwitch` saves as before, in a new place. ⚠️ Put all three back where you found them (`golive_mode` **shadow**, and whatever the other two were) and check on https://blackbloc.heygabi.ai/settings.html that they read the same |
 | **625** (was `GP-e`) | Open **Everything else** and every drawer inside it. With a list of the old page's settings beside you (Settings page ▸ go-live, pings, youtube — **36** keys), tick each one off | ⚠️ **Every one of the 36 is reachable** — five in *Who gets announced*, three in *Where it goes*, eleven in *Ping roles*, three in *How streams are spotted*, five in *Everything else*, three as the strip's switches and six in *The announcement*. The *Ping roles* drawer's summary line names **the shared roles** and **Discord onboarding** before you open it, and both cards are inside with their buttons. Change one number, press **Save Changes** in the bar at the foot, and it sticks after a refresh. ⚠️ If the Events role is not set up, the strip carries a **Set-up** warning — press it and this drawer opens by itself |
 | **626** (was `GP-f`) | Open the **Log** drawer at the foot and press **All**, **Go-live**, **YouTube**, **Ping roles** in turn | **All** shows all three log blocks stacked; each other chip shows that one alone. Every block keeps its own search box, its **Important / All** switch, its kind chips and its pager, and paging one does not reload the page above it. ⚠️ The chip is **Go-live**, not *Twitch* — that feature's log carries both platforms, which is the whole point of the rebuild |
+
+## THE BOOT RUN FOLLOWS TEST MODE, AND `/test` (`ST-a` … `ST-d`, branch `selftest-boot`, design [`../info/selftest-design.md`](../info/selftest-design.md) ▸ §K)
+
+Owner, 2026-09-20 17:3x: *"i think now that we're no longer in test mode, we don't need to have
+black bloc post every panel in logs. Let's leave that as a default when in test mode and then a
+/test command that spews out all the panels for staff only. PRIORITY TASK"*.
+
+⚠️ **NOTHING IN THIS SECTION HAS MET DISCORD.** No `/test` has been typed, no card has been posted
+by it, no purge has deleted a real message, and no boot has happened with the new default. Rows are
+lettered; the conductor numbers them at the merge.
+
+⚠️ **`ST-a` needs the stored row cleared first.** The change is to the DEFAULT, and a `true` stored
+by hand still wins — the conductor's post-deploy step is `DELETE /api/settings/selftest_on_boot`,
+or **Settings** ▸ **core** ▸ `selftest_on_boot` ▸ **Put the default back**. Without that, `ST-a`
+will look like a failure when it is only a stored value. Schema is **47** on this branch, so the
+migration runs before the deploy as usual.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`ST-a`** | With `TEST_MODE` off (it is), clear any stored `selftest_on_boot` as above, then deploy — or restart the app — and read `flyctl logs` for the boot | ⚠️ **NO `selftest:` line at all**, and **no cards in `#blackbloc-logs`**. That is the whole ask: the eighteen panel cards stop arriving at every deploy. The boot's other lines (`database ready`, `synced N`) are unchanged, and the purge of any LEFTOVERS still runs — a run that died mid-way is still cleaned up. Then open **Settings** ▸ **core** and read `selftest_on_boot`: it says **false**, with the help sentence *"the default is on while test mode is on and off otherwise"*. Set it to **true**, restart, and the boot line comes back — staff keep the switch both ways |
+| **`ST-b`** | As a Lead, run **`/test`** with nothing filled in | An ephemeral answer in words within a minute or so: *"The self-test ran: **107 ok, 0 failed**, 24 card(s) posted in #blackbloc-logs. They are deleted again in 1 minute(s)."* — then the failures by name, or *"Nothing failed."* ⚠️ The **24 cards really appear in `#blackbloc-logs`** and are **gone within 60–120 seconds** (the purge loop ticks every 60 s). On the dashboard's **Logs** page ▸ **Test**, the run's rows are there with `via` reading **discord** and the actor being you — and `where`/`keep` are **absent** from the details, because nothing was typed |
+| **`ST-c`** | Run **`/test where:#welcome-test keep:10`** | The cards land in **`#welcome-test`**, ⚠️ **not** in `#blackbloc-logs`, and the answer names `#welcome-test` and *"10 minute(s)"*. Nothing is saved: open **Settings** ▸ **core** and `selftest_channel_id` still points at `#blackbloc-logs`, `selftest_purge_minutes` still says **1**. ⚠️ **The cards are still there after two minutes** (the proof the keep is honoured) and **are gone by the eleventh**. If a deploy happens in between, they are STILL deleted on time — the keep is on the run's database row, not in memory. The Logs page's rows for this run carry `where` and `keep` in their details |
+| **`ST-d`** | Ask somebody who is NOT staff to run `/test` — or take your own staff role off for a moment and run it | ⚠️ **The command should not even be visible to them** (it is locked to Manage Messages like `/settings`), so the honest version of this row is: type it anyway, from an account that has the permission but not the staff role. The answer is the staff refusal **in words**, ephemeral, naming what is needed — never a bare status and never a silent nothing — and **no cards are posted anywhere**, with no run on the dashboard's Health page |

@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 46
+SCHEMA_VERSION = 47
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -683,7 +683,8 @@ CREATE TABLE IF NOT EXISTS selftest_runs (
     posted      INTEGER NOT NULL DEFAULT 0,
     purged_at   TEXT,
     via         TEXT    NOT NULL,
-    actor_id    INTEGER
+    actor_id    INTEGER,
+    keep_minutes INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS selftest_runs_by_guild
@@ -899,6 +900,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("golive_sessions", "also_url", "TEXT"),
     ("golive_sessions", "also_platform", "TEXT"),
     ("golive_sessions", "also_started_at", "TEXT"),
+    ("selftest_runs", "keep_minutes", "INTEGER"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")

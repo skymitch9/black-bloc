@@ -1576,3 +1576,162 @@ async def test_eighteen_guide_links_keep_every_help_page_under_discords_limit(se
     assert longest <= PAGE_LIMIT, longest
     assert len(pages) >= 1
     assert sum("[guide](" in page for page in pages) >= 1
+
+
+# --- `/test`, the fourth door (§K.2) --------------------------------------------------------------
+
+
+OTHER_CHANNEL = 333
+
+
+def posts_a_card(name="panel.one"):
+    from black_bloc import selftest
+
+    async def body(one):
+        await one.post(content="a card")
+        return "posted"
+
+    return selftest.Check(name, "core", body)
+
+
+async def test_slash_test_is_locked_and_gated_the_way_settings_is(bot, cog, member):
+    """Owner 2026-09-20: 'a /test command that spews out all the panels for staff only'."""
+    from black_bloc.command_visibility import STAFF_ONLY
+    from black_bloc.settings_store import is_staff_command
+
+    assert cog.test.default_permissions == STAFF_ONLY == cog.settings.default_permissions
+    assert is_staff_command(cog.test)
+
+    interaction = FakeInteraction(bot, member)
+    await cog.test.callback(cog, interaction)
+
+    assert "staff only" in interaction.sent
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+
+
+async def test_slash_test_says_so_in_a_dm_rather_than_running(bot, cog, lead):
+    from black_bloc.settings_store import GUILD_ONLY
+
+    interaction = FakeInteraction(bot, lead, guild=False)
+
+    await cog.test.callback(cog, interaction)
+
+    assert interaction.sent == GUILD_ONLY
+
+
+async def test_slash_test_answers_the_counts_the_channel_and_the_minutes(
+    bot, cog, lead, db, monkeypatch
+):
+    give_staff(bot, lead)
+    stub_checks(
+        monkeypatch,
+        one_check("config.log_channel_id"),
+        one_check("read./api/status", "TypeError: no", fails=True),
+    )
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.test.callback(cog, interaction)
+
+    assert interaction.response.deferred
+    assert "**1 ok, 1 failed**" in interaction.sent
+    assert "#channel-111" in interaction.sent
+    assert "1 minute(s)" in interaction.sent
+    assert "**read./api/status** — " in interaction.sent and "TypeError: no" in interaction.sent
+    assert [kind for kind in await kinds(db) if kind.startswith("selftest")] == [
+        "selftest.started",
+        "selftest.check",
+        "selftest.check",
+        "selftest.finished",
+    ]
+
+
+async def test_slash_test_with_nothing_wrong_says_so(bot, cog, lead, monkeypatch):
+    give_staff(bot, lead)
+    stub_checks(monkeypatch, one_check("config.log_channel_id"))
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.test.callback(cog, interaction)
+
+    assert "**1 ok, 0 failed**" in interaction.sent
+    assert sp.SELFTEST_ALL_WELL in interaction.sent
+
+
+async def test_slash_test_posts_where_it_was_told_and_keeps_them_as_long_as_it_was_told(
+    bot, cog, lead, db, monkeypatch
+):
+    give_staff(bot, lead)
+    elsewhere = bot.guild.add(FakeChannel(OTHER_CHANNEL))
+    stub_checks(monkeypatch, posts_a_card())
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.test.callback(cog, interaction, where=elsewhere, keep=10)
+
+    assert len(elsewhere.messages) == 1
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+    assert "#channel-333" in interaction.sent
+    assert "10 minute(s)" in interaction.sent
+    started = [
+        one for one, kind in zip(await details(db), await kinds(db), strict=True)
+        if kind == "selftest.started"
+    ][0]
+    assert started["where"] == OTHER_CHANNEL and started["keep"] == 10
+    assert started["via"] == "discord"
+    cur = await db.conn.execute("SELECT actor_id, keep_minutes FROM selftest_runs")
+    row = await cur.fetchone()
+    assert row["actor_id"] == lead.id and row["keep_minutes"] == 10
+
+
+async def test_slash_test_refuses_a_keep_outside_the_bound_in_words_and_runs_nothing(
+    bot, cog, lead, db, monkeypatch
+):
+    give_staff(bot, lead)
+    stub_checks(monkeypatch, posts_a_card())
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.test.callback(cog, interaction, keep=0)
+
+    assert "shortest Black Bloc will keep them is 1 minute" in interaction.sent
+    assert not interaction.response.deferred
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+    cur = await db.conn.execute("SELECT COUNT(*) AS found FROM selftest_runs")
+    assert (await cur.fetchone())["found"] == 0
+
+
+async def test_slash_test_says_where_to_point_it_when_nothing_points_anywhere(
+    bot, cog, lead, db, monkeypatch
+):
+    from black_bloc import selftest
+
+    give_staff(bot, lead)
+    stub_checks(monkeypatch, posts_a_card())
+    bot.guild.channels.pop(TEST_CHANNEL)
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.test.callback(cog, interaction)
+
+    assert interaction.sent == selftest.NO_CHANNEL
+    cur = await db.conn.execute("SELECT COUNT(*) AS found FROM selftest_runs")
+    assert (await cur.fetchone())["found"] == 0
+
+
+async def test_a_second_slash_test_while_one_is_going_is_refused_in_words(
+    bot, cog, lead, monkeypatch
+):
+    from black_bloc import selftest
+
+    give_staff(bot, lead)
+    seen = []
+
+    async def while_running(_one):
+        second = FakeInteraction(bot, lead)
+        await cog.test.callback(cog, second)
+        seen.append(second)
+        return "fine"
+
+    stub_checks(monkeypatch, selftest.Check("panel.one", "core", while_running))
+    interaction = FakeInteraction(bot, lead)
+
+    await cog.test.callback(cog, interaction)
+
+    assert "already running" in seen[0].sent
+    assert "**1 ok, 0 failed**" in interaction.sent

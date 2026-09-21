@@ -371,6 +371,29 @@ class Core(commands.Cog):
         )
         view.message = await interaction.original_response()
 
+    @app_commands.command(
+        name="test", description="Run the self-test: a card for every panel, deleted again after"
+    )
+    @app_commands.default_permissions(STAFF_ONLY)
+    @app_commands.describe(
+        where="Where this run's cards go; the self-test channel unless you say otherwise",
+        keep="How many minutes the cards stay before Black Bloc deletes them (1 to 1440)",
+    )
+    async def test(
+        self,
+        interaction: discord.Interaction,
+        where: discord.TextChannel | None = None,
+        keep: int | None = None,
+    ) -> None:
+        if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
+            return
+        if not await require_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        await selftest_on_demand(interaction, where, keep)
+
 
 # --- the panel ------------------------------------------------------------------------------------
 
@@ -961,6 +984,53 @@ async def run_find(interaction: discord.Interaction, view: Any, group: str, need
     await render_group(interaction, view, group=group, needle=needle)
 
 
+def selftest_body(bot: Any, one: Any, said: str) -> str:
+    return clamped(
+        [said]
+        + (
+            [sp.SELFTEST_FAILURE.format(name=row.name, detail=row.detail) for row in one.failures]
+            or [sp.SELFTEST_ALL_WELL]
+        )
+    )
+
+
+async def selftest_on_demand(
+    interaction: discord.Interaction, where: Any = None, keep: Any = None
+) -> None:
+    """`/test` — the fourth door, on the same `selftest.run` the other three call."""
+    bot, guild = interaction.client, interaction.guild
+    try:
+        minutes = selftest.keep_asked(keep)
+    except SettingError as exc:
+        await answer(interaction, str(exc))
+        return
+    channel = where or selftest.selftest_channel(bot, guild)
+    if channel is None:
+        await answer(interaction, selftest.NO_CHANNEL)
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        one = await selftest.run(
+            bot,
+            guild,
+            actor=interaction.user,
+            via=VIA_DISCORD,
+            channel=where,
+            keep_minutes=minutes,
+        )
+    except selftest.SelfTestBusy as exc:
+        await answer(interaction, str(exc))
+        return
+    said = selftest.TEST_DONE.format(
+        ok=one.ok,
+        failed=one.failed,
+        posted=one.posted,
+        channel=selftest.channel_words(channel),
+        minutes=selftest.minutes_of(bot, one),
+    )
+    await answer(interaction, selftest_body(bot, one, said))
+
+
 async def run_selftest(interaction: discord.Interaction, view: Any) -> None:
     if not await opened(interaction):
         return
@@ -974,14 +1044,10 @@ async def run_selftest(interaction: discord.Interaction, view: Any) -> None:
         ok=one.ok,
         failed=one.failed,
         posted=one.posted,
-        minutes=selftest.purge_minutes(bot, guild.id),
-    )
-    body = [said] + (
-        [sp.SELFTEST_FAILURE.format(name=row.name, detail=row.detail) for row in one.failures]
-        or [sp.SELFTEST_ALL_WELL]
+        minutes=selftest.minutes_of(bot, one),
     )
     await render_selftest(interaction, view)
-    await answer(interaction, clamped(body))
+    await answer(interaction, selftest_body(bot, one, said))
 
 
 async def run_selftest_purge(interaction: discord.Interaction, view: Any) -> None:

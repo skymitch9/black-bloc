@@ -9,7 +9,7 @@ import pytest
 from black_bloc import selftest
 from black_bloc.config import load_settings
 from black_bloc.logkinds import VIA_BOOT, VIA_WEBSITE
-from black_bloc.settings_store import KEY_TYPES, SettingsStore
+from black_bloc.settings_store import KEY_TYPES, SettingError, SettingsStore
 from black_bloc.storage.db import Database
 
 GUILD = 7
@@ -632,6 +632,11 @@ async def older(db, minutes):
     await db.conn.commit()
 
 
+async def posts_one(one):
+    await one.post(content="a card")
+    return "posted"
+
+
 async def a_run_that_posted(bot, monkeypatch, count=2):
     async def posts(one):
         for _ in range(count):
@@ -758,3 +763,138 @@ async def test_a_boot_run_that_throws_does_not_stop_the_bot_from_starting(bot, m
     await selftest.on_boot(bot)
 
     assert await selftest.recent_runs(bot.db, GUILD) == []
+
+
+# --- §K: the boot default follows test mode, and `/test` says where and how long -----------------
+
+
+async def test_a_boot_with_test_mode_off_runs_nothing_and_posts_nothing(bot, monkeypatch):
+    """Owner 2026-09-20: 'now that we're no longer in test mode, we don't need to have black
+    bloc post every panel in logs.' Nothing is stored — the DEFAULT is what moved."""
+    monkeypatch.setattr(
+        selftest, "checks_for", only(selftest.Check("panel.one", "core", posts_one))
+    )
+    assert selftest.runs_on_boot(bot, GUILD) is True
+
+    live = SettingsStore(bot.db, load_settings(_env_file=None, test_mode=False))
+    await live.load()
+    bot.store = live
+
+    assert selftest.runs_on_boot(bot, GUILD) is False
+
+    await selftest.on_boot(bot)
+
+    assert await selftest.recent_runs(bot.db, GUILD) == []
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+
+
+async def test_a_run_told_where_posts_there_and_leaves_the_self_test_channel_alone(
+    bot, monkeypatch
+):
+    monkeypatch.setattr(
+        selftest, "checks_for", only(selftest.Check("panel.one", "core", posts_one))
+    )
+    elsewhere = bot.guild.get_channel(OTHER_CHANNEL)
+
+    one = await selftest.run(bot, bot.guild, channel=elsewhere)
+
+    assert one.posted == 1
+    assert len(elsewhere.messages) == 1
+    assert bot.guild.get_channel(TEST_CHANNEL).messages == []
+    rows = await selftest.waiting_messages(bot.db, GUILD)
+    assert [row["channel_id"] for row in rows] == [OTHER_CHANNEL]
+
+
+async def test_the_purge_finds_an_overridden_runs_messages_by_the_ids_it_wrote_down(
+    bot, monkeypatch
+):
+    """The purge works off `selftest_messages`, never off where the setting points today."""
+    monkeypatch.setattr(
+        selftest, "checks_for", only(selftest.Check("panel.one", "core", posts_one))
+    )
+    elsewhere = bot.guild.get_channel(OTHER_CHANNEL)
+    one = await selftest.run(bot, bot.guild, channel=elsewhere)
+    posted = [message.id for message in elsewhere.messages]
+    await older(bot.db, 6)
+
+    gone = await selftest.purge(bot, bot.guild)
+
+    assert gone == 1
+    assert elsewhere.bulk == [posted]
+    assert bot.guild.get_channel(TEST_CHANNEL).bulk == []
+    assert await selftest.waiting_messages(bot.db, GUILD) == []
+    assert (await selftest.one_run(bot.db, GUILD, one.run_id))["purged_at"]
+
+
+async def test_a_run_told_to_keep_its_cards_keeps_them_past_the_settings_minute(bot, monkeypatch):
+    monkeypatch.setattr(
+        selftest, "checks_for", only(selftest.Check("panel.one", "core", posts_one))
+    )
+    one = await selftest.run(bot, bot.guild, keep_minutes=10)
+    await older(bot.db, 6)
+
+    assert selftest.purge_minutes(bot, GUILD) == 1
+    assert await selftest.purge(bot, bot.guild) == 0
+    assert len(await selftest.waiting_messages(bot.db, GUILD)) == 1
+
+    await older(bot.db, 11)
+
+    assert await selftest.purge(bot, bot.guild) == 1
+    assert (await selftest.one_run(bot.db, GUILD, one.run_id))["purged_at"]
+
+
+async def test_the_keep_is_on_the_row_so_a_restart_still_deletes_it_on_time(bot, monkeypatch):
+    """The run object is gone after a restart; only the row can answer 'how long'."""
+    monkeypatch.setattr(
+        selftest, "checks_for", only(selftest.Check("panel.one", "core", posts_one))
+    )
+    one = await selftest.run(bot, bot.guild, keep_minutes=10)
+
+    cur = await bot.db.conn.execute(
+        "SELECT keep_minutes FROM selftest_runs WHERE id = ?", (one.run_id,)
+    )
+    assert (await cur.fetchone())["keep_minutes"] == 10
+    assert [row["keep_minutes"] for row in await selftest.waiting_messages(bot.db, GUILD)] == [10]
+    assert selftest.minutes_of(bot, one) == 10
+    assert selftest.minutes_of(bot, selftest.Run(bot=bot, guild=bot.guild)) == 1
+
+
+async def test_a_boot_line_names_this_runs_own_minutes(bot):
+    one = selftest.Run(bot=bot, guild=bot.guild, posted=3, keep_minutes=10)
+
+    assert selftest.boot_lines(bot, one)[0].endswith("(purge in 10 min)")
+
+
+async def test_where_and_keep_are_on_the_log_rows_only_when_somebody_asked(bot, monkeypatch):
+    monkeypatch.setattr(
+        selftest, "checks_for", only(selftest.Check("panel.one", "core", posts_one))
+    )
+    elsewhere = bot.guild.get_channel(OTHER_CHANNEL)
+
+    await selftest.run(bot, bot.guild, channel=elsewhere, keep_minutes=10)
+    asked = {kind: details for kind, details in await kinds_in(bot.db)}
+
+    assert asked["selftest.started"]["where"] == OTHER_CHANNEL
+    assert asked["selftest.started"]["keep"] == 10
+    assert asked["selftest.finished"]["where"] == OTHER_CHANNEL
+    assert asked["selftest.finished"]["keep"] == 10
+
+    await bot.db.conn.execute("DELETE FROM action_log")
+    await bot.db.conn.commit()
+
+    await selftest.run(bot, bot.guild)
+    plain = {kind: details for kind, details in await kinds_in(bot.db)}
+
+    assert "where" not in plain["selftest.started"]
+    assert "keep" not in plain["selftest.finished"]
+
+
+def test_keep_asked_goes_through_the_registrys_own_bounds():
+    """One set of bounds for `selftest_purge_minutes` and for `/test keep:`, not two."""
+    assert selftest.keep_asked(None) is None
+    assert selftest.keep_asked(10) == 10
+    assert selftest.keep_asked(1440) == 1440
+    with pytest.raises(SettingError):
+        selftest.keep_asked(0)
+    with pytest.raises(SettingError):
+        selftest.keep_asked(1441)

@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 46
+        assert SCHEMA_VERSION == 47
         cur = await db.conn.execute("PRAGMA table_info(requests)")
         assert {
             "built",
@@ -527,6 +527,7 @@ async def test_the_self_test_tables_arrive_on_a_database_that_never_had_them(tmp
             "purged_at",
             "via",
             "actor_id",
+            "keep_minutes",
         }
         cur = await db.conn.execute("PRAGMA table_info(selftest_messages)")
         assert {row["name"] for row in await cur.fetchall()} == {
@@ -851,6 +852,30 @@ async def test_an_open_poll_gains_a_vote_scheme_column_and_keeps_its_old_scheme(
         assert "vote_scheme" in {row["name"] for row in await cur.fetchall()}
         cur = await again.conn.execute("SELECT vote_scheme FROM polls WHERE id = 1")
         assert (await cur.fetchone())["vote_scheme"] is None
+    finally:
+        await again.close()
+
+
+async def test_a_self_test_run_gains_its_keep_minutes_column_on_an_older_file(tmp_path):
+    """46 → 47: `/test keep:` is on the ROW, so a run outlives the restart that forgets it."""
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE selftest_runs DROP COLUMN keep_minutes")
+    await db.conn.execute(
+        "INSERT INTO selftest_runs(id, guild_id, started_at, via) "
+        "VALUES (1, 7, '2026-09-20T00:00:00+00:00', 'discord')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(selftest_runs)")
+        assert "keep_minutes" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT keep_minutes FROM selftest_runs WHERE id = 1")
+        assert (await cur.fetchone())["keep_minutes"] is None
     finally:
         await again.close()
 

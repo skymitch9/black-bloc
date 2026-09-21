@@ -37,20 +37,27 @@ channel and role the settings point at still exists with the permissions that fe
 check writes one line to the log. **A minute later the bot deletes every message the test posted**
 (`selftest_purge_minutes`, default **1** since v103 — it was five until 2026-09-10),
 so Discord stays clean; **the log lines stay on the website under a "Test" view**, out of the way of the
-real logs. It runs at every boot (so every deploy proves itself in the Fly log without anyone opening
-Discord), and staff can run it on demand from `/settings` or the website's Health page.
+real logs. ~~It runs at every boot (so every deploy proves itself in the Fly log without anyone opening
+Discord)~~ — **REVERSED 2026-09-20 (§K, branch `selftest-boot`): it runs at every boot only while
+`TEST_MODE` is on.** With test mode off, a live server was being given eighteen panel cards at every
+deploy, which is what the owner asked to stop; `selftest_on_boot` still says otherwise either way.
+Staff can run it on demand from **`/test`**, from `/settings` ▸ **Self-test…**, or from the website's
+Health page.
 
 What it cannot do — said once, honestly: **no API can click a Discord button.** Discord originates
 interactions; the bot can only answer them. Button, select and modal handlers stay proven by the
 pytest fakes (5002 tests). The self-test proves everything up to and including the card being posted;
 only the *look* of a card in the Discord client still needs eyes.
 
-## B. Doors (all three call ONE function — `selftest.run(bot, guild, *, actor, via)`)
+## B. Doors (all of them call ONE function — `selftest.run(bot, guild, *, actor, via, channel, keep_minutes)`)
+
+⚠️ **FOUR doors since 2026-09-20 (§K)** — `/test` was added as a fourth, on the same function.
 
 | Door | Who | Where |
 |---|---|---|
 | Boot | the bot itself | `bot.py` lifecycle: after `database ready` + `synced N`, when `selftest_on_boot` is on. Logs ONE line: `selftest: <ok> ok, <failed> failed, <n> messages posted (purge in <m> min)` and one `selftest: FAILED <check> — <sentence>` line per failure. This line is what the conductor reads with `flyctl logs` to verify a deploy. |
-| Discord | staff | `/settings` ▸ **Run the self-test** — a button on the settings panel's root card (Build 2's `MoveButton` pattern, `black_bloc/cogs/core.py`). Ephemeral answer in words: the counts, and the failures by name. **No new command** — the tree stays at 29, zero Groups (`tests/test_bot.py` pins it). |
+| Discord | staff | `/settings` ▸ **Run the self-test** — a button on the settings panel's root card (Build 2's `MoveButton` pattern, `black_bloc/cogs/core.py`). Ephemeral answer in words: the counts, and the failures by name. ~~**No new command** — the tree stays at 29, zero Groups~~ — **REVERSED 2026-09-20 (§K): the owner asked for `/test` by name**, so there IS a new command and the tree is **33**, still zero Groups (`tests/test_bot.py:TOP_LEVEL_NOW` pins it). The button stays; both press the same function. |
+| Discord (`/test`) | staff | `/test` in `cogs/core.py`, added 2026-09-20 (§K). Optional `where` (a channel, for this run only) and `keep` (1–1440 minutes, for this run only); staff-gated exactly as `/settings` is. |
 | Website | staff | `POST /api/selftest` starts a run and returns `{run_id, started_at}`; `GET /api/selftest` lists the last 20 runs (`run_id, started_at, finished_at, ok, failed, posted, purged_at, via, actor`); `GET /api/selftest/{run_id}` returns the run with its checks (`name, feature, ok, detail, at`). Operator token allowed (it is a staff read/write like the rest of `status.py`). |
 
 A run that is already going refuses a second start **in words**: "A self-test is already running (started
@@ -135,7 +142,7 @@ The runner does not stop on failure; every check runs; the run's `ok`/`failed` c
 
 | key | type | default | words |
 |---|---|---|---|
-| `selftest_on_boot` | bool | true | Whether the bot runs the self-test at every boot |
+| `selftest_on_boot` | bool | ~~true~~ **`TEST_MODE`** (changed 2026-09-20, §K) | Whether the bot runs the self-test at every boot |
 | `selftest_channel_id` | channel | `TEST_CHANNEL_ID` | Where the self-test posts its cards |
 | `selftest_purge_minutes` | int 1–1440 | 1 (was 5 until 2026-09-10) | How long the self-test's messages stay before the bot deletes them |
 | `log_level_selftest` (via `log_level_key`) | level | off | as the other features |
@@ -261,3 +268,37 @@ options through, answers in words), the command-tree count guard (+1, the `zero 
 (the default branch). Docs: `code-notes.md`; this section's foot gets a dated `### K deviations`; `access/testing.md`'s live-in-Discord
 line names `/test`; `architecture.md` command count. NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_ISSUES.md`.
 
+
+### K deviations — 2026-09-20, branch `selftest-boot` off `main` `74c25bf`
+
+Built as §K says, with four decisions the section left to the builder and one it did not foresee.
+Measured, not predicted: **6818** tests pass (`pytest -n 8 -q`, and again with `BB_REVERSE=1`),
+`ruff check .` is clean, `node site/mock/check.mjs` reports **20 pages / 186 routes / 24 core
+settings**, and the tree is **33 top-level commands with ZERO Groups**.
+
+| § | The design said | The build did, and why |
+|---|---|---|
+| K.1 | "`SELFTEST_ON_BOOT_DEFAULT` goes" | Gone, not flipped to `False`. `Store.default` reads `self.settings.test_mode` through `getattr(..., "test_mode", False)`, so a settings stand-in without the flag reads OFF — the safe side. The key is still a bool in group `core`, so an explicit stored `true` still wins on a live server, which is the conductor's `DELETE /api/settings/selftest_on_boot` step. |
+| K.1 | "the mock server's `SETTING_SPECS` row and `labels.js` follow" | Both, and the mock row's VALUE moved from `true` to `false` as well as its default — the mock stands for a live server, and test mode is off. |
+| K.2 | "the run's `purge_at` is computed from it (`Run` gains the field or the row does — the builder picks, and says which)" | ⚠️ **BOTH, and the row is the one that matters.** `Run.keep_minutes` alone would have been a bug: the purge is a 60-second loop in `cogs/core.py` that re-reads `selftest_messages` with no `Run` in hand, and the run object is gone the moment the run finishes. A `/test keep:60` would have been swept at the next tick by the global 1 minute. So **`selftest_runs.keep_minutes`** (schema **46 → 47**, added through `ADDED_COLUMNS`, NULL = use the setting) and `purge` computes its cutoff per row instead of once per sweep. Migrate-before-deploy already covers it. |
+| K.2 | "the purge must still find the run's messages (it works from stored message ids — verify, do not assume)" | ⚠️ **Verified, and it does.** `selftest_messages` stores `channel_id` per message, and `purge` groups by the STORED channel, never by `selftest_channel()`. `test_the_purge_finds_an_overridden_runs_messages_by_the_ids_it_wrote_down` posts into the other channel and asserts the bulk delete lands there and not in the self-test channel. `waiting_messages` is now a LEFT JOIN onto `selftest_runs` so each row carries its run's `keep_minutes`; its `ORDER BY` had to become `m.id` because `id` was ambiguous after the join. |
+| K.2 | "`keep` (optional int, minutes, 1–1440)" | NOT `app_commands.Range`. The bound is validated by `coerce_value(SELFTEST_PURGE_MINUTES, …)`, so the numbers live in the registry only and the refusal a person reads is the registry's own `KEY_MIN_REASON` sentence. `Range` would have refused it in Discord's words and put the bounds in a second place. |
+| K.2 | "no channel answers `NO_CHANNEL`" | Answered **before** the run starts rather than as 24 failed checks. `/test` resolves `where or selftest_channel(...)` up front; `None` is one ephemeral sentence and no run row. The other three doors are untouched — `Run.post` still raises `CheckFailed(NO_CHANNEL)` per check as it always did. |
+| K.2 | "the answer … 'Self-test done — 18 ok, 0 failed, 18 cards in #channel, gone in 10 minutes'" | Same facts, in the house wording of the existing `sp.SELFTEST_DONE`: `selftest.TEST_DONE` reads *"The self-test ran: **18 ok, 0 failed**, 18 card(s) posted in #blackbloc-logs. They are deleted again in 10 minute(s)."* The failure list under it is shared with the settings card (`cogs/core.selftest_body`), so the two doors cannot drift. |
+| — | not in the design | The `/settings` ▸ **Run the self-test** button now reads its minutes through `selftest.minutes_of(bot, one)` rather than `purge_minutes(bot, guild.id)`. No behaviour change today (that door passes no `keep`), but it means one function answers "how long do THIS run's cards stay" for every door and for the boot line. |
+
+### K — what was NOT verified
+
+- ⚠️ **Nothing here has met Discord.** No `/test` has been typed, no card has been posted, no
+  purge has deleted a real message, and no boot has happened with `TEST_MODE` off. Every claim
+  above is the hermetic suite's, against fakes.
+- ⚠️ **The migration has not run against the live database.** `selftest_runs.keep_minutes` is
+  proven by `tests/storage/test_db.py` on a file whose column is dropped and re-added; the real
+  `blackbloc.sqlite3` on Fly has not been touched.
+- The 107-check figure was NOT re-derived — every new test stubs `checks_for` down to one or two
+  checks, which is the house pattern. The real cost of a `/test` run is still the boot line's.
+- No browser rendered the Settings page, so the changed `labels.js` sentence and the mock's new
+  `selftest_on_boot` value were read, never seen.
+- `/test` was not exercised through a real `app_commands` invocation — the tests call the
+  callback directly, as every other command test in this repo does — so Discord's own option
+  parsing of `where` (a `TextChannel`) and `keep` (an int) is unproven.
