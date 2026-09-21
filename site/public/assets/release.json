@@ -1,6 +1,6 @@
 {
   "release": "v148",
-  "commit": "e7f54c9",
+  "commit": "2c2d38c",
   "changed_features": [
     "events",
     "golive"
