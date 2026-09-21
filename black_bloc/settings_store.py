@@ -2707,6 +2707,21 @@ KEY_HELP.update(
 )
 
 
+# Auto-link: a presence go-live is the member saying which channel is theirs, out loud.
+GOLIVE_AUTOLINK_PRESENCE_KEY = "golive_autolink_presence"
+GOLIVE_AUTOLINK_PRESENCE_DEFAULT = True
+KEY_TYPES.update({GOLIVE_AUTOLINK_PRESENCE_KEY: "bool"})
+KEY_HELP.update(
+    {
+        GOLIVE_AUTOLINK_PRESENCE_KEY: (
+            "true links a member to the Twitch or YouTube channel their Discord status names "
+            "the first time they are announced from it; false leaves linking to the person or "
+            "to staff"
+        ),
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -3355,6 +3370,8 @@ class SettingsStore:
             return True
         if key == "golive_boot_sweep":
             return True
+        if key == GOLIVE_AUTOLINK_PRESENCE_KEY:
+            return GOLIVE_AUTOLINK_PRESENCE_DEFAULT
         if key == "pings_mode":
             return "off"
         if key == "pings_events_role_name":

@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from black_bloc.cogs.content.golive import get_link, is_opted_out, set_link, set_optout
+from black_bloc.cogs.content.golive import (
+    end_session,
+    get_link,
+    is_opted_out,
+    set_link,
+    set_optout,
+)
+from black_bloc.cogs.content.golive import (
+    start_session as start_golive_session,
+)
 from black_bloc.cogs.content.spotlight import (
     add_channel,
     channel_by_id,
@@ -11,11 +20,12 @@ from black_bloc.cogs.content.spotlight import (
     set_announced,
     start_session,
 )
-from black_bloc.golive import StreamInfo
+from black_bloc.golive import HISTORY_NOTHING, StreamInfo
 
 ROUTES = [
     ("GET", "/api/golive/links"),
     ("POST", "/api/golive/links"),
+    ("POST", "/api/golive/links/sweep"),
     ("DELETE", "/api/golive/links/7"),
     ("GET", "/api/golive/optouts"),
     ("POST", "/api/golive/optouts"),
@@ -441,3 +451,85 @@ async def test_a_spotlight_row_carries_the_ping_role_the_page_draws(client, sign
 
     assert after["role"] == "GamesDoneQuick pings" and after["role_wearers"] == 0
     assert after["role_id"]
+
+
+# --- Link from history: the Streamers toolbar's one bulk door ---------------------------------
+
+
+async def past_session(db, guild_id, user_id, url, platform="Twitch"):
+    session_id = await start_golive_session(
+        db, guild_id, user_id, "presence", StreamInfo(url=url, platform=platform), "shadow"
+    )
+    await end_session(db, session_id, "2026-09-01T00:00:00+00:00")
+
+
+async def test_the_history_sweep_links_the_newest_channel_and_answers_in_words(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    await past_session(web.db, wf.GUILD_ID, 21, "https://twitch.tv/oldname")
+    await past_session(web.db, wf.GUILD_ID, 21, "https://twitch.tv/adastreams")
+    sign_in(client)
+
+    response = client.post("/api/golive/links/sweep", json={})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "linked": 1,
+        "opted_out": 0,
+        "taken": 0,
+        "unreadable": 0,
+        "left": 0,
+        "message": "Linked 1 person (Ada → twitch.tv/adastreams).",
+    }
+    assert (await get_link(web.db, 21))["twitch_login"] == "adastreams"
+    assert await wf.kinds_in(web.db) == ["web.golive.link", "web.golive.history_swept"]
+
+
+async def test_the_history_sweep_counts_the_opted_out_and_links_nobody(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    await set_optout(web.db, 21)
+    await past_session(web.db, wf.GUILD_ID, 21, "https://twitch.tv/adastreams")
+    sign_in(client)
+
+    body = client.post("/api/golive/links/sweep", json={}).json()
+
+    assert body["linked"] == 0 and body["opted_out"] == 1
+    assert "asked not to be announced" in body["message"]
+    assert await get_link(web.db, 21) is None
+
+
+async def test_the_history_sweep_refuses_a_channel_another_member_holds(
+    client, sign_in, web, guild, wf
+):
+    wf.member(guild, 21, name="ada")
+    wf.member(guild, 22, name="namu")
+    await set_link(web.db, 22, "adastreams", "t-1")
+    await past_session(web.db, wf.GUILD_ID, 21, "https://twitch.tv/adastreams")
+    sign_in(client)
+
+    body = client.post("/api/golive/links/sweep", json={}).json()
+
+    assert body["taken"] == 1 and body["linked"] == 0
+    assert "already belongs to somebody else" in body["message"]
+    assert await get_link(web.db, 21) is None
+
+
+async def test_a_history_sweep_with_nothing_to_do_says_so_rather_than_answering_empty(
+    client, sign_in, web
+):
+    sign_in(client)
+
+    body = client.post("/api/golive/links/sweep", json={}).json()
+
+    assert body == {
+        "linked": 0,
+        "opted_out": 0,
+        "taken": 0,
+        "unreadable": 0,
+        "left": 0,
+        "message": HISTORY_NOTHING,
+    }

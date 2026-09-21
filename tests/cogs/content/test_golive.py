@@ -19,6 +19,7 @@ from black_bloc.cogs.content.golive import (
     get_link,
     is_opted_out,
     latest_session,
+    link_owner,
     open_session_for,
     open_sessions,
     remove_link,
@@ -27,9 +28,11 @@ from black_bloc.cogs.content.golive import (
     set_optout,
     start_session,
 )
+from black_bloc.cogs.content.youtube import get_link as youtube_get_link
 from black_bloc.config import load_settings
 from black_bloc.golive import (
     CHANGE_CHANNEL,
+    HISTORY_NOTHING,
     LINK_CHANNEL,
     SITE_BUTTON,
     StreamInfo,
@@ -39,8 +42,10 @@ from black_bloc.golive import (
 )
 from black_bloc.settings_store import SettingsStore
 from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream, TwitchUser
+from black_bloc.youtube import YouTubeError, channel_id_in
 
 GUILD = 7
+YT_CHANNEL = "UCsXVk37bltHxD1rDPwtNM8Q"
 CHANNEL = 111
 LOG_CHANNEL = 222
 LIVE_ROLE = 4242
@@ -158,12 +163,13 @@ class FakeBot:
         self.guilds = [guild]
         self.guild = guild
         self.cog = None
+        self.cogs = {}
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
 
     def get_cog(self, name):
-        return self.cog
+        return self.cogs.get(name, self.cog)
 
     async def wait_until_ready(self):
         return None
@@ -2723,3 +2729,252 @@ async def test_a_cog_load_with_no_guilds_yet_leaves_the_boot_to_on_ready(cog, bo
 
     assert len(await open_sessions(db, GUILD)) == 1
     assert (await action_kinds(db)).count("golive.boot_swept") == 1
+
+
+# --- The auto-link: one history sweep, and a presence go-live that links from then on --------
+
+OTHER = USER + 11
+LEAD = USER + 99
+
+
+class FakeYouTubeClient:
+    """`resolve` without YouTube: a /channel/ address answers, anything else refuses."""
+
+    keyed = False
+
+    def __init__(self, raises=None):
+        self.raises = raises
+        self.asked = []
+
+    async def resolve(self, text):
+        self.asked.append(str(text))
+        if self.raises is not None:
+            raise self.raises
+        found = channel_id_in(str(text))
+        if not found:
+            raise YouTubeError(f"no channel in {text}")
+        return (found, "Moth Light")
+
+
+class FakeYouTubeCog:
+    def __init__(self, client=None):
+        self.client = client or FakeYouTubeClient()
+
+
+async def past_session(db, user_id, url, platform="Twitch", also_url=None):
+    """One ended session, which is all the sweep reads — the newest row wins."""
+    session_id = await start_session(
+        db, GUILD, user_id, "presence", StreamInfo(url=url, platform=platform), "shadow"
+    )
+    if also_url is not None:
+        await db.conn.execute(
+            "UPDATE golive_sessions SET also_source = 'youtube', also_url = ?, "
+            "also_platform = 'YouTube' WHERE id = ?",
+            (also_url, session_id),
+        )
+        await db.conn.commit()
+    await end_session(db, session_id, now_iso())
+    return session_id
+
+
+async def swept_row(db):
+    return json.loads(await action_details(db, "golive.history_swept"))
+
+
+async def test_the_history_sweep_links_the_newest_channel_and_names_who(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await past_session(db, member.id, "https://twitch.tv/oldname")
+    await past_session(db, member.id, "https://www.twitch.tv/mothlight?x=1")
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert (await get_link(db, member.id))["twitch_login"] == "mothlight"
+    assert found["linked"] == ["Moth → twitch.tv/mothlight"]
+    assert found["message"] == "Linked 1 person (Moth → twitch.tv/mothlight)."
+    assert json.loads(await action_details(db, "golive.link"))["because"] == "history_sweep"
+    assert (await action_kinds(db)).count("golive.history_swept") == 1
+    assert await swept_row(db) == {
+        "linked": 1,
+        "opted_out": 0,
+        "taken": 0,
+        "unreadable": 0,
+        "left": 0,
+        "via": "discord",
+        "message": found["message"],
+        "who": ["Moth → twitch.tv/mothlight"],
+    }
+
+
+async def test_a_second_history_sweep_links_nobody(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await past_session(db, member.id, "https://twitch.tv/mothlight")
+
+    await cog_module.link_from_history(bot, bot.guild, staff)
+    again = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert again["linked"] == []
+    assert again["message"] == HISTORY_NOTHING
+    assert (await get_link(db, member.id))["twitch_login"] == "mothlight"
+    assert (await action_kinds(db)).count("golive.link") == 1
+
+
+async def test_the_history_sweep_leaves_a_member_who_already_has_a_channel_alone(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await set_link(db, member.id, "chosenbyhand")
+    await past_session(db, member.id, "https://twitch.tv/mothlight")
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert (await get_link(db, member.id))["twitch_login"] == "chosenbyhand"
+    assert found["linked"] == [] and found["unreadable"] == []
+    assert found["message"] == HISTORY_NOTHING
+
+
+async def test_the_history_sweep_skips_an_opted_out_member_and_says_so(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await set_optout(db, member.id)
+    await past_session(db, member.id, "https://twitch.tv/mothlight")
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert await get_link(db, member.id) is None
+    assert found["opted_out"] == ["Moth"]
+    assert found["message"] == "Linked nobody new, skipped 1 who asked not to be announced."
+
+
+async def test_the_history_sweep_refuses_a_channel_another_member_holds_and_lists_it(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await set_link(db, OTHER, "mothlight")
+    await past_session(db, member.id, "https://twitch.tv/mothlight")
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert await get_link(db, member.id) is None
+    assert await link_owner(db, "mothlight") == OTHER
+    assert found["taken"] == ["Moth → twitch.tv/mothlight"]
+    assert "already belongs to somebody else (Moth → twitch.tv/mothlight)" in found["message"]
+
+
+async def test_the_history_sweep_skips_somebody_who_has_left(bot, db):
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await past_session(db, OTHER, "https://twitch.tv/gonenow")
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert await get_link(db, OTHER) is None
+    assert found["left"] == [str(OTHER)]
+    assert found["message"] == "Linked nobody new, skipped 1 who have left."
+
+
+async def test_the_history_sweep_links_a_youtube_channel_it_can_tell(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    bot.cogs["YouTube"] = FakeYouTubeCog()
+    await past_session(
+        db, member.id, f"https://www.youtube.com/channel/{YT_CHANNEL}", platform="YouTube"
+    )
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert (await youtube_get_link(db, member.id))["channel_id"] == YT_CHANNEL
+    assert found["linked"] == ["Moth → Moth Light"]
+
+
+async def test_a_watch_address_carries_no_channel_so_the_sweep_says_it_could_not_be_read(
+    bot, db
+):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    client = FakeYouTubeClient()
+    bot.cogs["YouTube"] = FakeYouTubeCog(client)
+    await past_session(
+        db, member.id, "https://www.youtube.com/watch?v=abc123", platform="YouTube"
+    )
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert await youtube_get_link(db, member.id) is None
+    assert client.asked == []
+    assert found["unreadable"] == ["Moth → https://www.youtube.com/watch?v=abc123"]
+    assert "1 could not be read" in found["message"]
+    assert "youtube.resolve_failed" not in await action_kinds(db)
+
+
+async def test_a_costream_row_offers_both_sides_to_the_sweep(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    bot.cogs["YouTube"] = FakeYouTubeCog()
+    await past_session(
+        db,
+        member.id,
+        "https://twitch.tv/mothlight",
+        also_url=f"https://www.youtube.com/channel/{YT_CHANNEL}",
+    )
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert (await get_link(db, member.id))["twitch_login"] == "mothlight"
+    assert (await youtube_get_link(db, member.id))["channel_id"] == YT_CHANNEL
+    assert len(found["linked"]) == 2
+
+
+async def test_a_presence_go_live_links_the_member_to_the_channel_it_named(cog, bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+
+    await cog._go_live(member, StreamInfo(url="https://twitch.tv/mothlight"), "presence")
+
+    assert (await get_link(db, member.id))["twitch_login"] == "mothlight"
+    assert json.loads(await action_details(db, "golive.link"))["because"] == "presence"
+    assert "golive.would_announce" in await action_kinds(db)
+
+
+async def test_the_presence_link_never_happens_when_the_key_is_off(cog, bot, db):
+    await bot.store.set(GUILD, "golive_autolink_presence", False)
+    member = FakeMember(bot.guild, display_name="Moth")
+
+    await cog._go_live(member, StreamInfo(url="https://twitch.tv/mothlight"), "presence")
+
+    assert await get_link(db, member.id) is None
+    assert "golive.would_announce" in await action_kinds(db)
+
+
+async def test_an_opted_out_member_is_never_announced_so_never_auto_linked(cog, bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    await set_optout(db, member.id)
+
+    await cog._go_live(member, StreamInfo(url="https://twitch.tv/mothlight"), "presence")
+
+    assert await get_link(db, member.id) is None
+    assert "golive.link" not in await action_kinds(db)
+    assert await open_session_for(db, GUILD, member.id) is None
+
+
+async def test_a_presence_channel_somebody_else_holds_is_refused_and_the_post_still_goes(
+    cog, bot, db
+):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    member = FakeMember(bot.guild, display_name="Moth")
+    await set_link(db, OTHER, "mothlight")
+
+    await cog._go_live(member, StreamInfo(url="https://twitch.tv/mothlight"), "presence")
+
+    assert await get_link(db, member.id) is None
+    assert await link_owner(db, "mothlight") == OTHER
+    assert len(bot.guild.channel.messages) == 1
+    kinds = await action_kinds(db)
+    assert "golive.announce" in kinds and "golive.autolink_refused" in kinds
+    refused = json.loads(await action_details(db, "golive.autolink_refused"))
+    assert refused["channel"] == "twitch.tv/mothlight"
+
+
+async def test_a_twitch_poll_go_live_is_not_a_presence_so_nothing_is_auto_linked(cog, bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+
+    await cog._go_live(member, StreamInfo(url="https://twitch.tv/mothlight"), "twitch")
+
+    assert await get_link(db, member.id) is None
