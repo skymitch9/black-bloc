@@ -223,7 +223,7 @@
 > [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
 > kinds: twelve `minutes.*`, four of them with a `web.` spelling.
 >
-> | What | v141 (`main`, 2026-09-18) | Where it is measured |
+> | What | v142 (`main`, 2026-09-20) | Where it is measured |
 > |---|---|---|
 > | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
 > | Top-level slash commands | **32** — 16 staff-locked, 16 member-visible (`/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114) | `tree.get_commands()` |
@@ -233,8 +233,8 @@
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **20 pages / 186 routes / 24 core settings** — measured on branch `youtube-uploads-removal`, which is **v139** and merged (187 on `main` at v138, minus `GET /api/youtube/videos`) (21 core at v133) (17/150 at v108; was 149 routes at v92). ⚠️ **Not re-run 2026-09-19** — `check.mjs` needs `server.mjs` listening; `ls site/public/*.html` was re-counted off disk and is **20** | `node site/mock/check.mjs` — last RUN 2026-09-18 against a mock on a spare port |
-> | Tests | **6757** (+3 skipped where the receive extension is absent — **KI-31**) | the v141 deploy gate, read off `../deploys.log`. ⚠️ Not re-run 2026-09-19 |
-> | Deploys | **140** lines, last `2e48d7c` (v141) at 2026-09-18 16:55 — ⚠️ **this row said 138 until 2026-09-19**. The count is LINES, and a line is not always a version bump — the 2026-08-27 02:20 line records a secrets import against the commit already deployed — so **line count and Fly version number are two different numbers and must not be read as one** | `../deploys.log`, counted with `grep -c '^20'` |
+> | Tests | **6757** (+3 skipped where the receive extension is absent — **KI-31**) | the v142 deploy gate |
+> | Deploys | **141** lines, last `6a6f8e4` (v142) at 2026-09-20 17:02 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -254,6 +254,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v142 `6a6f8e4`, 2026-09-20** | **22** | **32** | **45** | **186** | **6757** |
 > | **v141 `2e48d7c`, 2026-09-18** | **22** | **32** | **45** | **186** | **6757** |
 > | **v140 `413f939`, 2026-09-18** | **22** | **32** | **45** | **186** | **6720** |
 > | **v139 `fad4e50`, 2026-09-18** | **22** | **32** | **45** | **186** | **6720** |

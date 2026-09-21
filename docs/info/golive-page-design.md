@@ -1,8 +1,10 @@
 # The Go-live page, rebuilt — one list of people, whichever platform they stream on
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-20 on branch `golive-page`**
-> (off `main` `948ff05`), the body plus rulings 2 and 3. ⚠️ **NOT merged, NOT deployed, and NO BROWSER HAS RENDERED
-> IT ONCE** — read `## What was NOT verified` before believing anything about how it looks. Gate green: `ruff` clean,
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v142** — merge `e88573d`, release `6a6f8e4`,
+> deployed **2026-09-20 17:02** Phoenix, **and RENDERED in a browser by the conductor** (the strip, the live cards, the row drawer with its
+> four groups; one gap found and fixed on `main` `4b1731d`: the Streamers list arrived shut). The seventeen `## Deviations` are
+> the truth where they depart from the body; sweeps **621–626** are the owner's; verified: boot clean (17:0x), /health ready, /assets/golive-join.js served; the page RENDERED in the browser at 17:0x — the seven-cell strip (Live right now 4, Twitch announcements shadow, YouTube announcements on, Ping roles off, Set up, Watching every 5 min, the Set-up warning cell), four Live-now cards, Recent streams, no console errors on a tracked reload; clicking a Streamers row opened the side drawer with the four groups (Twitch / YouTube / Ping role / Announcements) and the real moves (Unlink · Link their channel · Give them a ping role · Hide · Opt them out). ONE defect seen: the Streamers list arrived SHUT between two open sections (the layout opens only the first) — fixed on main at 4b1731d (open: true), rides v143. Not pressed: any move in the drawer, the search, the chips (rows 621–626 are the owner's). Was: BUILT on branch
+> `golive-page` (off `main` `948ff05`), the body plus rulings 2 and 3. Gate green: `ruff` clean,
 > `pytest -n 8` 6757 passed / 3 skipped forward **and** under `BB_REVERSE=1`, 35 asset modules parse, `check.mjs`
 > 20 pages / 186 routes unchanged, `discordmd` + `labels` + `clipmd` + the new `golive-join` fixtures green.
 > Before that: 📐 **REVIEWED by Fable 2026-09-20 16:1x — all five
