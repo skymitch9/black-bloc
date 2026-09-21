@@ -470,3 +470,62 @@ entirely, the same one-rule pattern `site.css:369`'s rail slide-in already uses.
    Discord. The owner's own device/DPI was not checked. `ask()`'s stacking was verified by hit-testing
    (`elementFromPoint`), not by a human eye. The go-live and moderation drawers were opened and read
    for "does it still work", not audited row-by-row the way the posts drawer was.
+
+### 2026-09-20 — the posts editor's `postgrid` goes two columns inside the modal (branch `posts-two-col`, off `main` `65e225b`)
+
+The `centre-modal` deviation above (deviation 3) named the gap it left: the modal is wide enough for
+the message box and the Discord mock to sit side by side, but `page-posts.js:558`'s inline
+`style="grid-template-columns: minmax(0, 1fr)"` forced one column regardless, and `site.css`'s own
+`.postgrid` breakpoint (`@media (max-width: 900px)`) keyed off the outer PAGE viewport, not the
+dialog — a `900px`-wide browser window and a `900px`-wide dialog on a much wider window both trip
+the same rule, even though the dialog in the second case has plenty of room. Files touched: only
+`site/public/assets/site.css` and `site/public/assets/page-posts.js` (one line each change to the
+latter — the inline `style` attribute removed).
+
+**The fix: a container query, not a media query.** `.drawer-body` (`ui.js:openDrawer`'s wrapper,
+shared by every page that opens a drawer) gets `container-type: inline-size`, so `@container`
+queries inside it read the DIALOG's own rendered width. `.postgrid` is now mobile-first — one
+column by default, two above `@container (min-width: 56rem)` — and the inline JS override is gone,
+so CSS alone decides. Chosen over JS measurement (`ResizeObserver` + a `data-span`-style attribute)
+because the fact being asked — "is the box holding this grid wide enough for two columns?" — is
+exactly what a container query answers natively; JS measurement would have meant a listener, a
+resize handler and a value to keep in sync with a rule CSS can already express.
+
+**Measured**, `chrome-headless-shell` 149.0.7827.22 over raw CDP (no `puppeteer` package in this
+tree), against the worktree's own mock (`MOCK_PORT=8783`):
+
+- **1512×802, `posts.html?as=staff#welcome`, a post opened:** dialog `1024px` wide (`min(64rem,
+  96vw)`'s 64rem cap, as `centre-modal` measured). `.postgrid`'s computed `grid-template-columns`:
+  `479.5px 479.5px` — each column ≈ 30rem, well past the 26rem floor. The message box
+  (`#post-body`)'s column and the `.dcmock` mount sit side by side with a 16px gap and no overlap
+  (`left`/`right` edges: message column `261–740.5`, mock column `756.5–1236`).
+- **Typing a character in the message box repaints the mock live:** appended text to `#post-body`,
+  dispatched `input`, and the mock's rendered content included the new text ~250ms later (the
+  existing debounced `discordMock`/`paintPreview` path — untouched by this build).
+- **390px phone width:** `.postgrid`'s computed columns collapse to one (`358px`, no second value);
+  `document.documentElement.scrollWidth === window.innerWidth === 390` — no horizontal overflow.
+- **Zero console errors** at both widths on `posts.html`.
+- **Smoke-checked `golive.html` and `settings.html`** (both also open a `dialog.drawer`) at
+  1512×802 after the `.drawer-body` change: both rendered with zero console errors. Neither page
+  queries a container, so `container-type: inline-size` (which only constrains the inline axis) had
+  nothing to affect there.
+
+**Deviations.**
+
+1. **Container query (`@container (min-width: 56rem)` on `.postgrid`, `container-type: inline-size`
+   on `.drawer-body`) over `ResizeObserver`/JS measurement** — see above. This is the "which" the
+   brief asked to name.
+2. **`.postgrid`'s breakpoint moved from a max-width media query to a min-width container query**,
+   and the default flipped from two-column-collapsing-to-one to one-column-expanding-to-two
+   (mobile-first). Same visual result at the widths tested; written down because a future reader
+   diffing the rule against the old one will otherwise wonder why the comparison operator flipped.
+3. **`container-type: inline-size` was added to `.drawer-body`, not to a `.postgrid`-specific
+   wrapper** — every `dialog.drawer` user (go-live, moderation, modmail, post versions) now shares
+   one query container. No other page currently uses `@container`, so nothing else changed, but the
+   next build wanting a container query inside a drawer gets one for free instead of needing to add
+   its own.
+4. **What was NOT verified:** headless only, same as every other entry in this file — no real
+   browser window, no real Discord, no human eye on the two-column layout. The owner's own
+   device/DPI was not checked. Only `posts.html` was measured at both widths; `golive.html` and
+   `settings.html` were smoke-checked for console errors only, not measured pixel-by-pixel. The
+   `discordMock` repaint was confirmed by reading the DOM's text content, not by a screenshot.

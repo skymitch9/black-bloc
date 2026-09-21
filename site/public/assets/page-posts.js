@@ -555,7 +555,7 @@ async function postDrawer(payload, known, history) {
       field('Pin it', pin, 'Black Bloc pins the message once it is posted, and re-pins it if '
         + 'somebody unpins it.'),
     ]),
-    el('div', { class: 'postgrid', style: 'grid-template-columns: minmax(0, 1fr)' }, [
+    el('div', { class: 'postgrid' }, [
       el('div', { class: 'postcol' }, [
         el('div', { class: 'postboxhead' }, [
           el('span', { class: 'postboxlabel' }, [
