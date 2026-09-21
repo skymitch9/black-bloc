@@ -2168,7 +2168,6 @@ SELFTEST_ON_BOOT = "selftest_on_boot"
 SELFTEST_CHANNEL_ID = "selftest_channel_id"
 SELFTEST_PURGE_MINUTES = "selftest_purge_minutes"
 SELFTEST_LOG_LEVEL = log_level_key("selftest")
-SELFTEST_ON_BOOT_DEFAULT = True
 SELFTEST_PURGE_MINUTES_DEFAULT = 1
 SELFTEST_PURGE_MIN_MINUTES = 1
 SELFTEST_PURGE_MAX_MINUTES = 24 * 60
@@ -2203,9 +2202,10 @@ KEY_HELP.update(
     {
         SELFTEST_ON_BOOT: (
             "true to run the self-test at every boot, so a deploy proves itself in the hosting "
-            "log without anybody opening Discord; false to run it only when staff ask. It posts "
-            "a card per panel into the self-test channel and deletes them again a few minutes "
-            "later"
+            "log without anybody opening Discord; false to run it only when staff ask with "
+            "`/test`. The default is on while test mode is on and off otherwise, so a live "
+            "server is not given a card per panel at every deploy. It posts a card per panel "
+            "into the self-test channel and deletes them again a few minutes later"
         ),
         SELFTEST_CHANNEL_ID: (
             "where the self-test posts the cards it is proving; every one of them is deleted "
@@ -3432,7 +3432,7 @@ class SettingsStore:
         if key == LOGS_IMPORTANT_ONLY:
             return False
         if key == SELFTEST_ON_BOOT:
-            return SELFTEST_ON_BOOT_DEFAULT
+            return bool(getattr(self.settings, "test_mode", False))
         if key == SELFTEST_CHANNEL_ID:
             return self.settings.test_channel_id
         if key == SELFTEST_PURGE_MINUTES:
