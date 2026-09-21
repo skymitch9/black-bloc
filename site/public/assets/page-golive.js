@@ -859,6 +859,7 @@ function streamersSection(rows, say) {
         },
       }),
       chips,
+      streamerDoors(),
     ]),
     el('div', { class: 'table-scroll' }, [
       el('div', { class: 'grid-table streamers' }, [head, ...lines, foot]),
@@ -1358,7 +1359,14 @@ function pageHead() {
   const subtitle = document.getElementById('subtitle');
   if (subtitle) subtitle.textContent = SUBTITLE;
   const aside = document.getElementById('page-aside');
-  if (aside) aside.replaceChildren(addStreamerButton(), addSpotlightButton());
+  if (aside) aside.replaceChildren();
+}
+
+/** The two ways a row gets onto the list, beside the list (the owner: the page head was too far away). */
+function streamerDoors() {
+  const doors = el('div', { class: 'bar' }, [addStreamerButton(), addSpotlightButton()]);
+  doors.style.marginLeft = 'auto';
+  return doors;
 }
 
 async function load() {
