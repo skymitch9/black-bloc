@@ -65,6 +65,33 @@ naming `{live}` first (*"`{live}` is the sentence as it was posted; the rest of 
 then the mock). The Settings page shows the one key. `KEY_HELP` for the template rewritten to say the rule in one
 sentence. Every word posted is still a key; one fewer key: **293 → 292**.
 
+## C2. Follow-up (owner 20:1x) — the live card's top line becomes a key, and the card is ONE editor with a Starting / Ending toggle
+
+Owner, verbatim: *"we have the option to change the card for ending stream: "What the card's top line says once the
+stream is over" but not for starting stream, the ending stream and the starting stream should basically look the same,
+maybe instead of a stack have a toggle for starting and ending since theyre duplicates and we can save space"*.
+**Dispatched as the follow-up of THIS build once its first half lands** (same branch or a fresh brief to the same
+agent — the conductor decides at landing), so three agents stop editing one function.
+
+1. **`golive_live_author`** (text, group golive, default **`{name} is now live on {platform}!`** — the words
+   `author_line` `:203` builds today, with `LIVE_VERB` folded in so no server's card changes): `announcement_embed` /
+   `render` read it through a `live_author(template, name, platform)` that mirrors `ended_author` `:343` (blank keeps
+   the default; unrenderable → the default; `{name} {platform}` are the fields — `{duration}` is meaningless while live
+   and is refused by the validator). `TEXT_CHECKS`, `KEY_HELP` (*"the card's top line while they are live; {name}
+   {platform}"*), mock row, label, `placeSettings` in the same drawer as `golive_end_author`, the join fixture (+1: after
+   §A/§A2's −2 the page has **292 → 292 keys?** — count it; the fixture asserts the number), `api/status.py` if it lists
+   author keys, the preview route (v149's `/api/golive/preview` and/or the Discord mock's renderer) answers it. Keys:
+   291 after §A2, **292** after this.
+2. **The Wording card is ONE editor with a segmented toggle `Starting` / `Ending`** (the `segment` construct `ui.js`
+   already has — the go-live strip and the polls preview use it): the same three things for whichever is picked — the
+   wording box (`golive_template` / `golive_end_template`), the top-line box (`golive_live_author` / `golive_end_author`),
+   the preview (the v149 box, or the Discord mock when it lands — pass the picked side as `sample.ended`). The
+   *Preview as Twitch / YouTube* chips stay above both. The two stacked cards (`WHILE_LIVE_TITLE` / the ended card) and
+   the `msglist` with both lines go; `golive_end_keep_mention` stays with the Ending side. Nothing else on the page moves.
+3. Tests: `live_author` (default, custom, blank, unrenderable, `{duration}` refused), the key guards, the fixture; a
+   headless render of the card in both toggle states with the console read. Sweep rows `EW-e` (the Starting side's top
+   line edits and the live card shows it) and `EW-f` (the toggle swaps the three boxes; nothing else on the page moves).
+
 ## D. Tests, docs, gate
 
 `tests/test_golive.py` (`ended_render`: default = live sentence + " — stream ended"; `{live}` inside a longer template;
