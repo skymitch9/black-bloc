@@ -772,7 +772,7 @@ function drawCard(node, text, head, roles) {
 }
 
 const COLUMNS = ['Member', 'Twitch', 'YouTube', 'Ping role', 'Announced', 'Expires', 'Opted out'];
-const STREAMER_GRID = 'grid-template-columns: minmax(200px, 1.4fr) 150px 150px 170px 120px 130px 100px 24px';
+const STREAMER_GRID = 'grid-template-columns: minmax(180px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 24px';
 
 function roleCell(row) {
   if (row.role) {
