@@ -615,3 +615,68 @@ def test_the_bounds_are_one_home_now_rather_than_a_copy_in_the_cog():
     assert "not a whole number" in rt.read_numbers("ten", "4")
     assert "15 to 720 minutes" in rt.read_numbers("5", "4")
     assert "1 to 24 slots" in rt.read_numbers("60", "99")
+
+
+# --- the event a train can carry ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("status", [OPEN, LOCKED])
+def test_staff_are_offered_the_event_on_a_train_that_has_none(status):
+    assert rt.may_event(status, staff=True, has_event=False) is True
+    assert "Make an event" in [
+        move.label
+        for move in rt.card_buttons(status, organizer=True, staff=True, slot_count=3)
+    ]
+
+
+def test_nobody_is_offered_a_second_event_for_one_train():
+    assert rt.may_event(OPEN, staff=True, has_event=True) is False
+    assert "Make an event" not in [
+        move.label
+        for move in rt.card_buttons(
+            OPEN, organizer=True, staff=True, has_event=True, slot_count=3
+        )
+    ]
+
+
+@pytest.mark.parametrize("status", [LIVE, DONE, CANCELLED])
+def test_a_settled_train_is_never_offered_one(status):
+    assert rt.may_event(status, staff=True, has_event=False) is False
+
+
+def test_a_member_is_never_offered_one_however_open_the_train_is():
+    assert rt.may_event(OPEN, staff=False, has_event=False) is False
+    assert "Make an event" not in [
+        move.label for move in rt.card_buttons(OPEN, organizer=False, slot_count=3)
+    ]
+
+
+def test_the_cards_busiest_row_still_fits_inside_discords_five():
+    found = rt.card_buttons(OPEN, organizer=True, staff=True, held=[1], slot_count=4)
+    for row in {move.row for move in found}:
+        assert len([move for move in found if move.row == row]) <= 5
+
+
+def test_the_toggle_says_which_way_it_is_facing():
+    assert rt.event_toggle_label(True).endswith(rt.EVENT_TOGGLE_ON)
+    assert rt.event_toggle_label(False).endswith(rt.EVENT_TOGGLE_OFF)
+
+
+def test_the_default_is_read_from_the_key_rather_than_decided_in_the_code():
+    store = SimpleNamespace(get=lambda guild_id, key: key == rt.EVENT_DEFAULT_KEY)
+    assert rt.event_default(store, 7) is True
+    assert rt.EVENT_DEFAULT_KEY == "raidtrain_event_default"
+
+
+def test_a_draft_says_whether_it_is_also_making_an_event():
+    off = "\n".join(rt.draft_lines(train_draft(), DRAFT_NOW, chosen=True))
+    draft = train_draft()
+    draft.make_event = True
+    on = "\n".join(rt.draft_lines(draft, DRAFT_NOW, chosen=True))
+
+    assert rt.EVENT_DRAFT_NO in off and rt.EVENT_DRAFT_YES not in off
+    assert rt.EVENT_DRAFT_YES in on
+
+
+def test_the_linked_event_line_names_the_event_and_where_it_has_got_to():
+    assert rt.linked_event_line(12, "pending") == "**Event #12** — pending"

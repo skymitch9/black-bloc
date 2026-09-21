@@ -12,6 +12,7 @@ from black_bloc.logkinds import (
     ERROR_KINDS,
     ERROR_MODAL,
     ERROR_PANEL,
+    FEATURE_PAGES,
     FEATURES,
     IMPORTANT,
     IMPORTANT_ONLY,
@@ -1070,3 +1071,16 @@ def test_the_logs_page_offers_the_error_family_as_a_filter_of_its_own():
     assert f"kind: '{logkinds.ERROR_HEAD}'" in logs
     assert "label: 'Errors'" in logs
     assert "entry.kind" in audit
+
+
+def test_the_two_kinds_a_trains_event_writes_are_classified_the_way_they_were_decided():
+    """`event_made` is a member-visible decision; the cascade behind a cancel is routine."""
+    assert is_important("raidtrain.event_made") is True
+    assert is_important("web.raidtrain.event_made") is True
+    assert is_important("raidtrain.event_cancelled") is False
+    assert feature_of("raidtrain.event_made") == "raidtrain"
+    assert feature_of("web.raidtrain.event_cancelled") == "raidtrain"
+
+
+def test_raid_trains_own_page_is_the_one_the_footer_and_the_panel_link_to():
+    assert FEATURE_PAGES["raidtrain"] == "raidtrain.html"

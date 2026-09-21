@@ -74,9 +74,17 @@ class FakeMessage:
 class FakeChannel:
     def __init__(self, channel_id):
         self.id = channel_id
+        self.name = f"channel-{channel_id}"
+        self.type = SimpleNamespace(name="text")
         self.mention = f"<#{channel_id}>"
         self.posts = []
         self.messages = {}
+        self.edits = []
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
+        if "name" in kwargs:
+            self.name = kwargs["name"]
 
     async def send(self, content=None, **kwargs):
         message = FakeMessage(9000 + len(self.posts), self)
@@ -109,6 +117,17 @@ class FakeMember:
         self.dms.append(content)
 
 
+class FakeCategory:
+    """`events.events_category` tells a category by its `channels`, so this one has it."""
+
+    def __init__(self, channel_id):
+        self.id = channel_id
+        self.name = "Events"
+        self.type = SimpleNamespace(name="category")
+        self.channels = []
+        self.mention = f"<#{channel_id}>"
+
+
 class FakeGuild:
     def __init__(self):
         self.id = GUILD
@@ -118,6 +137,17 @@ class FakeGuild:
         self.roles = []
         self.unavailable = False
         self.scheduled = []
+        self.default_role = FakeRole(GUILD)
+        self.me = None
+        self.made = []
+
+    async def create_text_channel(self, name, **kwargs):
+        room = FakeChannel(6000 + len(self.made))
+        room.name = name
+        room.kwargs = kwargs
+        self.add(room)
+        self.made.append(room)
+        return room
 
     async def create_scheduled_event(self, **kwargs):
         made = SimpleNamespace(id=7700 + len(self.scheduled), **kwargs)
@@ -1634,3 +1664,201 @@ async def test_the_sweep_gap_is_re_read_rather_than_frozen_at_boot(bot, cog):
 
 def test_the_test_channel_constants_are_still_what_the_fakes_expect():
     assert CARL not in (ALICE, BOB, ORGANIZER)
+
+
+# --- a train that is also an event ----------------------------------------------------------------
+
+
+EVENTS_CATEGORY = 444
+
+
+async def review_ready(bot):
+    """What the events review needs before a train can raise anything: somewhere to put it."""
+    category = FakeCategory(EVENTS_CATEGORY)
+    bot.guild.add(category)
+    await bot.store.set(GUILD, "events_category_id", EVENTS_CATEGORY)
+    return category
+
+
+async def events_in(db):
+    cur = await db.conn.execute("SELECT * FROM events ORDER BY id")
+    return [dict(row) for row in await cur.fetchall()]
+
+
+async def test_starting_a_train_with_the_toggle_on_puts_an_event_into_review(bot, cog, organizer):
+    await review_ready(bot)
+    made = await cog_module.create_and_publish(
+        bot,
+        bot.guild,
+        organizer,
+        title="Saturday train",
+        description="Everyone welcome.",
+        starts_at=datetime.now(UTC) + timedelta(days=2),
+        slot_minutes=60,
+        slot_count=3,
+        make_event=True,
+    )
+    rows = await events_in(bot.db)
+    assert len(rows) == 1
+    assert rows[0]["title"] == "Saturday train"
+    assert rows[0]["status"] == "pending"
+    assert rows[0]["requester_id"] == ORGANIZER
+    assert rows[0]["review_channel_id"] is not None
+    train = await get_train(bot.db, GUILD, made.value)
+    assert train["event_id"] == rows[0]["id"]
+    assert f"#{rows[0]['id']}" in made.message
+    assert "raidtrain.event_made" in await kinds_logged(bot.db)
+
+
+async def test_starting_a_train_with_the_toggle_off_makes_no_event_at_all(bot, cog, organizer):
+    await review_ready(bot)
+    made = await cog_module.create_and_publish(
+        bot,
+        bot.guild,
+        organizer,
+        title="Saturday train",
+        description="Everyone welcome.",
+        starts_at=datetime.now(UTC) + timedelta(days=2),
+        slot_minutes=60,
+        slot_count=3,
+    )
+    assert await events_in(bot.db) == []
+    train = await get_train(bot.db, GUILD, made.value)
+    assert train["event_id"] is None
+    assert "raidtrain.event_made" not in await kinds_logged(bot.db)
+
+
+async def test_a_train_that_already_has_one_is_refused_in_words(bot, cog, organizer):
+    await review_ready(bot)
+    train_id = await a_train(bot.db)
+    first = await cog_module.make_event_for(
+        bot, bot.guild, organizer, await get_train(bot.db, GUILD, train_id)
+    )
+    assert first.ok
+    again = await cog_module.make_event_for(
+        bot, bot.guild, organizer, await get_train(bot.db, GUILD, train_id)
+    )
+    assert not again.ok and again.status == 409
+    assert f"#{first.value}" in again.message and "already has event" in again.message
+    assert len(await events_in(bot.db)) == 1
+
+
+async def test_a_settled_train_raises_no_event_and_says_why(bot, cog, organizer):
+    await review_ready(bot)
+    train_id = await a_train(bot.db)
+    await cog_module.set_status(bot.db, train_id, CANCELLED)
+    outcome = await cog_module.make_event_for(
+        bot, bot.guild, organizer, await get_train(bot.db, GUILD, train_id)
+    )
+    assert not outcome.ok and "cancelled" in outcome.message
+    assert await events_in(bot.db) == []
+
+
+async def test_the_event_takes_its_where_from_the_first_streamer_on_the_lineup(
+    bot, cog, organizer, alice
+):
+    await review_ready(bot)
+    train_id = await a_train(bot.db)
+    await link(bot.db, ALICE, "caseyfast")
+    await seat(bot, train_id, alice, 2, by=organizer)
+    await cog_module.make_event_for(
+        bot, bot.guild, organizer, await get_train(bot.db, GUILD, train_id)
+    )
+    row = (await events_in(bot.db))[0]
+    assert row["location"] == "https://twitch.tv/caseyfast"
+    assert row["where_kind"] == "other"
+
+
+async def test_with_nobody_on_it_the_event_points_at_the_room_the_lineup_lives_in(
+    bot, cog, organizer
+):
+    await review_ready(bot)
+    train_id = await a_train(bot.db)
+    await cog_module.make_event_for(
+        bot, bot.guild, organizer, await get_train(bot.db, GUILD, train_id)
+    )
+    row = (await events_in(bot.db))[0]
+    assert row["where_channel_id"] == TEST_CHANNEL
+    assert row["where_kind"] == "text"
+
+
+async def test_a_train_with_no_words_of_its_own_carries_the_lineup_as_the_events_description(
+    bot, cog, organizer
+):
+    await review_ready(bot)
+    train_id = await create_train(
+        bot.db,
+        GUILD,
+        ORGANIZER,
+        title="Saturday train",
+        description="",
+        starts_at=START,
+        slot_minutes=60,
+        slot_count=2,
+    )
+    await cog_module.make_event_for(
+        bot, bot.guild, organizer, await get_train(bot.db, GUILD, train_id)
+    )
+    row = (await events_in(bot.db))[0]
+    assert "raid train" in row["description"]
+
+
+async def test_the_events_finish_is_the_last_slots_end(bot, cog, organizer):
+    await review_ready(bot)
+    train_id = await a_train(bot.db, count=3, minutes=60)
+    await cog_module.make_event_for(
+        bot, bot.guild, organizer, await get_train(bot.db, GUILD, train_id)
+    )
+    row = (await events_in(bot.db))[0]
+    assert datetime.fromisoformat(row["starts_at"]) == START
+    assert datetime.fromisoformat(row["ends_at"]) == START + timedelta(hours=3)
+
+
+async def test_calling_the_train_off_calls_its_event_off_too(bot, cog, organizer):
+    await review_ready(bot)
+    train_id = await a_train(bot.db)
+    await cog_module.make_event_for(
+        bot, bot.guild, organizer, await get_train(bot.db, GUILD, train_id)
+    )
+    await cog.cancel_train(
+        bot.guild, await get_train(bot.db, GUILD, train_id), "the venue fell through", organizer
+    )
+    row = (await events_in(bot.db))[0]
+    assert row["status"] == "cancelled"
+    assert "raidtrain.event_cancelled" in await kinds_logged(bot.db)
+
+
+async def test_calling_off_a_train_with_no_event_leaves_no_event_row_behind(bot, cog, organizer):
+    train_id = await a_train(bot.db)
+    await cog.cancel_train(
+        bot.guild, await get_train(bot.db, GUILD, train_id), "no reason", organizer
+    )
+    assert await events_in(bot.db) == []
+    assert "raidtrain.event_cancelled" not in await kinds_logged(bot.db)
+
+
+async def test_the_draft_toggle_starts_where_the_key_says_and_flips_from_the_button(
+    bot, cog, organizer
+):
+    await bot.store.set(GUILD, rt.EVENT_DEFAULT_KEY, True)
+    panel = await open_the_panel(cog, bot, organizer)
+    await press(panel, "Start a raid train")
+    assert rt.event_toggle_label(True) in labels(panel.view)
+    await press(panel, rt.event_toggle_label(True))
+    assert rt.event_toggle_label(False) in labels(panel.view)
+
+
+async def test_the_card_offers_make_an_event_to_staff_and_never_twice(bot, cog, organizer):
+    await review_ready(bot)
+    train_id = await a_train(bot.db)
+    card = await open_the_card(cog, bot, organizer, train_id)
+    assert "Make an event" in labels(card.view)
+    await press(card, "Make an event")
+    assert "Make an event" not in labels(card.view)
+    assert len(await events_in(bot.db)) == 1
+
+
+async def test_a_member_never_sees_make_an_event(bot, cog, alice):
+    train_id = await a_train(bot.db)
+    card = await open_the_card(cog, bot, alice, train_id)
+    assert "Make an event" not in labels(card.view)

@@ -460,3 +460,183 @@ async def test_a_start_may_also_arrive_as_an_iso_timestamp(client, sign_in, web,
 
     assert response.status_code == 200
     assert response.json()["slots_total"] == 2
+
+
+# --- the event a train can carry ------------------------------------------------------------------
+
+
+async def review_ready(web, wf):
+    """A review room needs a category to go in; without one `submit_event` refuses."""
+    await web.store.set(GUILD, "events_category_id", wf.CATEGORY_ID, by=7)
+    await web.store.set(GUILD, "events_create_scheduled", False, by=7)
+
+
+async def events_in(db):
+    cur = await db.conn.execute("SELECT * FROM events ORDER BY id")
+    return [dict(row) for row in await cur.fetchall()]
+
+
+def test_the_event_route_needs_a_session(client):
+    assert client.post("/api/raidtrains/1/event", json={}).status_code == 401
+
+
+def test_the_event_route_refuses_a_non_staff_visitor(client, sign_in):
+    sign_in(client, uid=1234, staff=False)
+    assert client.post("/api/raidtrains/1/event", json={}).status_code == 403
+
+
+async def test_making_a_train_with_make_event_leaves_an_event_in_review(
+    client, sign_in, web, wf, cogged
+):
+    await review_ready(web, wf)
+    sign_in(client)
+
+    body = client.post("/api/raidtrains", json={
+        "title": "Saturday train",
+        "start": "2099-09-14 19:30",
+        "tz": "UTC",
+        "slot_minutes": 60,
+        "slot_count": 3,
+        "make_event": True,
+    }).json()
+
+    rows = await events_in(web.db)
+    assert len(rows) == 1 and rows[0]["status"] == "pending"
+    assert body["event_id"] == rows[0]["id"]
+    assert body["event_status"] == "pending"
+    assert f"#{rows[0]['id']}" in body["message"]
+
+
+async def test_making_a_train_without_it_leaves_none(client, sign_in, web, wf, cogged):
+    await review_ready(web, wf)
+    sign_in(client)
+
+    body = client.post("/api/raidtrains", json={
+        "title": "Saturday train",
+        "start": "2099-09-14 19:30",
+        "tz": "UTC",
+        "slot_minutes": 60,
+        "slot_count": 3,
+    }).json()
+
+    assert await events_in(web.db) == []
+    assert body["event_id"] is None and body["event_status"] is None
+
+
+async def test_the_key_decides_when_the_body_says_nothing(client, sign_in, web, wf, cogged):
+    await review_ready(web, wf)
+    await web.store.set(GUILD, "raidtrain_event_default", True, by=7)
+    sign_in(client)
+
+    body = client.post("/api/raidtrains", json={
+        "title": "Saturday train",
+        "start": "2099-09-14 19:30",
+        "tz": "UTC",
+        "slot_minutes": 60,
+        "slot_count": 3,
+    }).json()
+
+    assert body["event_id"] is not None
+    assert len(await events_in(web.db)) == 1
+
+
+async def test_an_explicit_no_beats_the_key(client, sign_in, web, wf, cogged):
+    await review_ready(web, wf)
+    await web.store.set(GUILD, "raidtrain_event_default", True, by=7)
+    sign_in(client)
+
+    body = client.post("/api/raidtrains", json={
+        "title": "Saturday train",
+        "start": "2099-09-14 19:30",
+        "tz": "UTC",
+        "slot_minutes": 60,
+        "slot_count": 3,
+        "make_event": False,
+    }).json()
+
+    assert body["event_id"] is None
+    assert await events_in(web.db) == []
+
+
+async def test_an_existing_train_can_have_its_event_made_later(
+    client, sign_in, web, wf, cogged
+):
+    await review_ready(web, wf)
+    train_id = await a_train(web.db)
+    sign_in(client)
+
+    body = client.post(f"/api/raidtrains/{train_id}/event", json={}).json()
+
+    rows = await events_in(web.db)
+    assert len(rows) == 1
+    assert body["event_id"] == rows[0]["id"] and body["event_status"] == "pending"
+    row = await get_train(web.db, GUILD, train_id)
+    assert row["event_id"] == rows[0]["id"]
+
+
+async def test_a_second_event_for_one_train_is_refused_in_words(
+    client, sign_in, web, wf, cogged
+):
+    await review_ready(web, wf)
+    train_id = await a_train(web.db)
+    sign_in(client)
+    client.post(f"/api/raidtrains/{train_id}/event", json={})
+
+    response = client.post(f"/api/raidtrains/{train_id}/event", json={})
+
+    assert response.status_code == 409
+    assert "already has event" in response.json()["message"]
+    assert len(await events_in(web.db)) == 1
+
+
+async def test_a_settled_train_raises_nothing_and_says_why(client, sign_in, web, wf, cogged):
+    await review_ready(web, wf)
+    train_id = await a_train(web.db)
+    await web.db.conn.execute(
+        "UPDATE raid_trains SET status = ? WHERE id = ?", (DONE, train_id)
+    )
+    await web.db.conn.commit()
+    sign_in(client)
+
+    response = client.post(f"/api/raidtrains/{train_id}/event", json={})
+
+    assert response.status_code == 409
+    assert "done" in response.json()["message"]
+    assert await events_in(web.db) == []
+
+
+async def test_the_event_route_says_where_to_look_when_the_train_is_gone(client, sign_in, cogged):
+    sign_in(client)
+
+    response = client.post("/api/raidtrains/404/event", json={})
+
+    assert response.status_code == 404
+    assert "no raid train" in response.json()["message"]
+
+
+async def test_the_list_and_the_row_both_carry_the_event_the_train_holds(
+    client, sign_in, web, wf, cogged
+):
+    await review_ready(web, wf)
+    train_id = await a_train(web.db)
+    sign_in(client)
+    client.post(f"/api/raidtrains/{train_id}/event", json={})
+
+    listed = client.get("/api/raidtrains").json()
+    one = client.get(f"/api/raidtrains/{train_id}").json()
+
+    assert listed[0]["event_id"] == one["event_id"]
+    assert listed[0]["event_status"] == "pending" and one["event_status"] == "pending"
+
+
+async def test_a_website_event_is_logged_as_the_website(client, sign_in, web, wf, cogged):
+    await review_ready(web, wf)
+    train_id = await a_train(web.db)
+    sign_in(client)
+
+    client.post(f"/api/raidtrains/{train_id}/event", json={})
+
+    cur = await web.db.conn.execute("SELECT kind FROM action_log ORDER BY id")
+    kinds = [row["kind"] for row in await cur.fetchall()]
+    assert kinds.count("web.raidtrain.event_made") == 1
+    assert "raidtrain.event_made" not in kinds

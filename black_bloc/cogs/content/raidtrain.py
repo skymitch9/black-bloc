@@ -13,6 +13,7 @@ from ... import pings
 from ... import raidtrain as rt
 from ...actionlog import log_action, send_logs, stamp
 from ...command_errors import NETWORK_ERRORS, AnswersErrors
+from ...events import CANCELLED as EVENT_CANCELLED
 from ...events import DESCRIPTION_LIMIT as EVENT_DESCRIPTION_LIMIT
 from ...events import (
     LOCATION_LIMIT,
@@ -721,28 +722,29 @@ async def cancel_linked_event(
     event_id = _row(train, "event_id")
     if not event_id:
         return
+    row = await get_event(bot.db, int(event_id))
+    if row is None:
+        return
     try:
-        row = await get_event(bot.db, int(event_id))
-        if row is None:
-            return
-        _, fresh = await cancel_for(bot, guild, row, actor, reason=reason, via=via)
-        if fresh is None:
-            return
-        await log_action(
-            bot,
-            guild,
-            kind_via("raidtrain.event_cancelled", via),
-            actor=actor,
-            details={"train_id": train["id"], "event_id": int(event_id), "via": via},
-        )
+        await cancel_for(bot, guild, row, actor, reason=reason, via=via)
     except Exception as exc:
         log.warning(
-            "raidtrain: event #%s stays open after train %s was called off — %s: %s",
+            "raidtrain: calling off event #%s for train %s did not finish — %s: %s",
             event_id,
             _row(train, "id"),
             type(exc).__name__,
             exc,
         )
+    fresh = await get_event(bot.db, int(event_id))
+    if _row(fresh, "status") != EVENT_CANCELLED:
+        return
+    await log_action(
+        bot,
+        guild,
+        kind_via("raidtrain.event_cancelled", via),
+        actor=actor,
+        details={"train_id": train["id"], "event_id": int(event_id), "via": via},
+    )
 
 
 async def create_and_publish(
