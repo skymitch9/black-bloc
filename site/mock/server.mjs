@@ -312,6 +312,7 @@ const SETTING_SPECS = [
   ['golive_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post go-live announcements)', ['off', 'shadow', 'on']],
   ['golive_channel_id', 'channel', '800000000000000006', null, 'where go-live announcements are posted'],
   ['golive_template', 'text', '{name} is live playing {game} — {title} {url}', '{name} is live: {url}', 'the announcement wording; {name} {game} {title} {url} {platform}'],
+  ['golive_live_author', 'text', '{name} is now live on {platform}!', '{name} is now live on {platform}!', "the card's top line while they are live; {name} {platform}; blank keeps 'is now live on'"],
   ['golive_end_template', 'text', '{live} — stream ended', '**{name}** was streaming **{game}** — the stream has ended. {url}', 'the announcement once the stream is over, and the only place that wording lives. {live} is the sentence exactly as it was posted, so {live} — stream ended appends and a wording without {live} rewrites the whole post; the other fields are {name} {game} {title} {url} {platform} {duration}. Blank keeps the posted sentence and adds nothing; wording that cannot be rendered falls back to the default'],
   ['golive_end_author', 'text', '{name} was live on {platform}', '{name} was live on {platform}', "the card's top line once the stream is over; {name} {platform} {duration}; blank keeps 'was live on'"],
   ['golive_end_keep_mention', 'bool', false, false, 'on keeps the role mention at the front of the edited announcement; off drops it — nobody is pinged by an edit either way'],
@@ -4090,35 +4091,11 @@ route('POST', '/api/golive/spotlight/:spotlight_id/bump', (context) => {
   };
 });
 
-route('GET', '/api/golive/preview', (context) => {
-  requireStaff(context.session);
-  const value = (key) => state.settings.get(key) ?? (specOf(key) || [])[3] ?? null;
-  const fields = { ...PREVIEW_SAMPLE, name: STAFF.display_name || PREVIEW_SAMPLE.name };
-  const pingRole = value('golive_ping_role_id');
-  const prefix = pingRole ? `<@&${pingRole}> ` : '';
-  const live = prefix + fillWording(value('golive_template'), fields);
-  const template = String(value('golive_end_template') || '').trim();
-  const author = String(value('golive_end_author') || '').trim();
-  const keep = Boolean(value('golive_end_keep_mention'));
-  const plain = live.replace(/^(?:<@&\d+>[ \t]*)+/, '');
-  const head = keep ? prefix : '';
-  const ended = template ? head + fillWording(template, { ...fields, live: plain }) : head + plain;
-  const mark = endMark(template);
-  return {
-    live: { text: live, author: `${fields.name} is now live on ${fields.platform}!` },
-    ended: {
-      text: ended,
-      author: author ? fillWording(author, fields) : `${fields.name} was live on ${fields.platform}`,
-      footer: mark ? `Black Bloc · via Twitch · ${mark}` : 'Black Bloc · via Twitch',
-    },
-  };
-});
-
 // The Discord mock (2026-09-20). The BOT is the source of truth for every word — see
 // black_bloc/preview.py — so this side only has to answer the same SHAPE from the same keys,
 // which is what lets a page be developed against the mock and still be honest against the bot.
 const PREVIEW_FEATURES = [
-  ['golive_live', 'The announcement while they are live', 'golive.html', ['golive_template']],
+  ['golive_live', 'The announcement while they are live', 'golive.html', ['golive_template', 'golive_live_author']],
   ['golive_ended', 'The announcement once the stream has ended', 'golive.html', ['golive_end_template', 'golive_end_author']],
   ['golive_costream', 'The announcement while both platforms are live', 'golive.html', ['golive_costream_template', 'golive_costream_author']],
   ['spotlight_bump', 'The spotlight reminder', 'golive.html', ['spotlight_bump_template']],
@@ -4215,22 +4192,30 @@ function previewStreamEmbed(fields, author, footer) {
   };
 }
 
+function liveAuthor(read, fields) {
+  const wanted = String(read('golive_live_author') || '').trim();
+  const line = wanted ? fillWording(wanted, fields) : '';
+  return line || `${fields.name} is now live on ${fields.platform}!`;
+}
+
 const PREVIEW_DRAW = {
   golive_live(read, sample) {
     const fields = previewStreamFacts(sample);
     const ping = read('golive_ping_role_id');
     const content = (ping ? `<@&${ping}> ` : '') + fillWording(read('golive_template'), fields);
-    return previewMade(content, [previewStreamEmbed(fields, `${fields.name} is now live on ${fields.platform}!`, `Black Bloc · via ${fields.platform}`)]);
+    return previewMade(content, [previewStreamEmbed(fields, liveAuthor(read, fields), `Black Bloc · via ${fields.platform}`)]);
   },
   golive_ended(read, sample) {
     const fields = previewStreamFacts(sample);
     const live = fillWording(read('golive_template'), fields);
     const author = String(read('golive_end_author') || '').trim();
-    const content = fillWording(String(read('golive_end_template') || '').trim() || '{live}', { ...fields, live });
+    const template = String(read('golive_end_template') || '').trim();
+    const content = fillWording(template || '{live}', { ...fields, live });
+    const mark = endMark(template);
     return previewMade(content, [previewStreamEmbed(
       fields,
       author ? fillWording(author, fields) : `${fields.name} was live on ${fields.platform}`,
-      `Black Bloc · via ${fields.platform} · stream ended`,
+      `Black Bloc · via ${fields.platform}${mark ? ` · ${mark}` : ''}`,
     )]);
   },
   golive_costream(read, sample) {

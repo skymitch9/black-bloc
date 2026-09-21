@@ -293,6 +293,7 @@ export const STRIP_KEYS = ['golive_mode', 'youtube_live_mode', 'pings_mode', 'sp
 
 export const WORDING_KEYS = [
   'golive_template',
+  'golive_live_author',
   'golive_end_template',
   'golive_end_author',
   'golive_end_keep_mention',

@@ -32,7 +32,7 @@
 > 2026-09-16, and **`SP-c`/`SP-d` need GamesDoneQuick to actually be live**; `SP-a` and `SP-e` can be run from a laptop
 > any time. Rows are lettered; the conductor numbers them at the merge. ⚠️ **Nothing else in this file was re-checked
 > then.** Before that,
-> **2026-09-20 21:0x** — rows **`EW-a` … `EW-d`** added at the foot for ONE BOX FOR THE END-OF-STREAM WORDING
+> **2026-09-20 21:4x** — rows **`EW-e`** and **`EW-f`** added at the foot for §C2 of the same design (branch `golive-toggle`, off `main` `417827a`): `golive_live_author` and the ONE Wording card with a Starting / Ending toggle. ⚠️ **Not merged, not deployed, and nothing in them has met Discord.** ⚠️ **`EW-e`'s FIRST half is the row that proves nothing moved** — the new key's default is the string the card already drew, so an untouched server's top line must be byte-identical. Before that: **2026-09-20 21:0x** — rows **`EW-a` … `EW-d`** added at the foot for ONE BOX FOR THE END-OF-STREAM WORDING
 > (branch `end-wording`, off `main` `be78bff`; design [`../info/end-wording-design.md`](../info/end-wording-design.md);
 > ⚠️ **not merged, not deployed, NOTHING IN IT HAS MET DISCORD, and the boot migration has never run on the live
 > database**). Owner: *"we have a text box to edit the ending annoucement and to edit was is appended at the end of a
@@ -2460,3 +2460,22 @@ tree).
 |---|---|---|
 | `CM-a` | On a wide window (about 1500px or wider), open the **Posts** page and click a post row | The editor opens in a box **floating in the middle of the screen**, not docked to the right edge — equal gaps left and right, a dark scrim behind it, rounded corners and a drop shadow. It is wide enough that the message box and the *What Discord will show* pane underneath it are both easy to read without squinting. **Escape** closes it, clicking the dark area outside it closes it, and the header still shows the post's title with a **Close** button |
 | `CM-b` | With a post open, press **Delete this post** | The confirmation ("Delete "…"?") appears **on top of** the post editor, which stays visible (dimmed) behind it — not hidden, not replaced. Cancel it and the editor is exactly as it was. Then shrink the window to a phone width (or open the page on a phone): the same post editor now **fills the whole screen**, edge to edge, with no side-to-side scrolling anywhere on the page |
+
+## `EW-e` · `EW-f` — the live card's top line, and one Wording card with a toggle (branch `golive-toggle`, 2026-09-20)
+
+⚠️ **Not merged, not deployed, and NOTHING here has met Discord.** Design:
+[`../info/end-wording-design.md`](../info/end-wording-design.md) ▸ §C2, from the owner: *"the
+ending stream and the starting stream should basically look the same, maybe instead of a stack
+have a toggle for starting and ending since theyre duplicates and we can save space"*. One new key
+(`golive_live_author`) whose default is the words the card already draws, so **nobody's card
+changes until somebody edits it** — that is what `EW-e`'s first half checks.
+
+What must be on first: `golive_mode` **on** (in **shadow** everything below is a `would_announce`
+row and no message), `golive_channel_id` set, `golive_embed` **on** (with it off there is no card
+and therefore no top line). Staff door: **Runs the cookout** ▸ **Go-live**
+(https://blackbloc.heygabi.ai/golive.html) ▸ **The announcement**.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`EW-e`** | ⚠️ **First, leave the new box alone** and have somebody stream: read the card's top line. **Then** open **Go-live** ▸ **The announcement**, keep the toggle on **Starting**, put **`{name} just went live on {platform}`** in the *What the card's top line says while they are live* box, save, and have them stream again | Before the edit the line reads **exactly what it always did** — *"Ada is now live on Twitch!"*, exclamation mark and all. After it, the card's top line reads *"Ada just went live on Twitch"* and **nothing else on the card moves** — same colour bar, same title, same **Game** field, same footer, same sentence above it. ⚠️ **Try typing `{duration}` into that box:** it is **refused in a sentence** naming `{name}` and `{platform}` and nothing is saved — a stream that is still running has no length. ⚠️ **Blank the box** and the line goes back to *"Ada is now live on Twitch!"*: blank means *keep the bot's own line*, never an empty top line. The same line is used by a **spotlight** announcement, by the card left behind when a co-stream drops to one platform, and by the `/selftest` go-live card |
+| **`EW-f`** | On the **Go-live** page open **The announcement** and press **Ending**, then **Starting**, then reload | ⚠️ **There is ONE card now, headed *The wording*,** with a two-button **Starting / Ending** toggle in its header where two stacked cards (*While they are live*, *Once the stream has ended*) used to be. **Starting** shows the announcement wording, the live top line and one Discord mock of the going-live message; **Ending** shows the end wording, the ended top line, *Whether the role mention stays…* and one Discord mock of the ended message. Exactly **one** mock is on screen at a time. The *Preview as Twitch / YouTube* chips sit **above** the card and move whichever mock is showing. ⚠️ **Type into a box, switch sides and switch back: your typing is still there** (unsaved) — the toggle hides, it does not rebuild. Reloading throws it away, as it always did. ⚠️ **Nothing else on the page may have moved** — the streamers table, the drawers and *Everything else* are exactly where they were |

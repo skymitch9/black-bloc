@@ -69,6 +69,7 @@ from ...settings_store import (
     GOLIVE_COSTREAM_AUTHOR_KEY,
     GOLIVE_COSTREAM_MODE_KEY,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
+    GOLIVE_LIVE_AUTHOR_KEY,
     GOLIVE_MODES,
     GUILD_ONLY,
     carry_end_wording,
@@ -637,7 +638,9 @@ def preview(bot: Any, guild: Any, actor: Any, platform: Any) -> tuple[str, Any, 
     text = render(bot.store.get(guild.id, "golive_template"), info, actor)
     source = "twitch" if (info.platform or "").casefold() == TWITCH.casefold() else "presence"
     embed = (
-        announcement_embed(info, actor, source)
+        announcement_embed(
+            info, actor, source, author=bot.store.get(guild.id, GOLIVE_LIVE_AUTHOR_KEY)
+        )
         if bot.store.get(guild.id, "golive_embed")
         else None
     )
@@ -1019,7 +1022,15 @@ class GoLive(commands.Cog):
                 ),
                 allowed_mentions=self._mentions(guild.id, fan_role_id),
                 **(
-                    {"embed": single_embed(existing[0], info, name, _row_value(row, "source"))}
+                    {
+                        "embed": single_embed(
+                            existing[0],
+                            info,
+                            name,
+                            _row_value(row, "source"),
+                            self.bot.store.get(guild.id, GOLIVE_LIVE_AUTHOR_KEY),
+                        )
+                    }
                     if existing
                     else {}
                 ),
@@ -1213,7 +1224,9 @@ class GoLive(commands.Cog):
     def _embed(self, guild: Any, info: StreamInfo, member: Any, source: str) -> Any:
         if not self.bot.store.get(guild.id, "golive_embed"):
             return None
-        return announcement_embed(info, member, source)
+        return announcement_embed(
+            info, member, source, author=self.bot.store.get(guild.id, GOLIVE_LIVE_AUTHOR_KEY)
+        )
 
     def _ended_embed(
         self, guild: Any, row: Any, message: Any, template: Any, name: str, duration: str

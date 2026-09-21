@@ -36,6 +36,7 @@ from black_bloc.golive import (
     humanise_duration,
     is_streaming,
     joins_session,
+    live_author,
     panel_buttons,
     panel_minutes,
     parse_ts,
@@ -57,6 +58,7 @@ from black_bloc.settings_store import (
     GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_END_AUTHOR,
     GOLIVE_END_TEMPLATE,
+    GOLIVE_LIVE_AUTHOR,
     GOLIVE_LIVE_FIELD,
     GOLIVE_TEMPLATE,
 )
@@ -495,6 +497,48 @@ def test_a_missing_or_unreadable_stamp_renders_as_nothing():
     assert humanise_duration("not a date", NOW.isoformat()) == ""
 
 
+def test_the_shipped_live_author_line_is_the_registrys_and_not_a_second_copy():
+    assert live_author(GOLIVE_LIVE_AUTHOR, "Sky", "Twitch") == "Sky is now live on Twitch!"
+
+
+def test_a_blank_live_author_keeps_todays_line():
+    assert live_author("", "Sky", "Twitch") == "Sky is now live on Twitch!"
+    assert live_author(None, "Sky", None) == "Sky is now live!"
+
+
+def test_the_shipped_live_author_without_a_platform_reads_as_it_always_did():
+    assert live_author(GOLIVE_LIVE_AUTHOR, "Sky", None) == "Sky is now live!"
+
+
+def test_a_guild_can_write_its_own_live_author_line():
+    assert live_author("{name} went live ({platform})", "Sky", "Twitch") == (
+        "Sky went live (Twitch)"
+    )
+
+
+def test_an_unreadable_live_author_keeps_todays_line(caplog):
+    assert live_author("{name} is {live on", "Sky", "Twitch") == "Sky is now live on Twitch!"
+    assert "could not be rendered" in caplog.text
+
+
+def test_a_live_author_that_renders_to_nothing_keeps_todays_line():
+    assert live_author("{platform}", "Sky", None) == "Sky is now live!"
+
+
+def test_the_live_card_takes_the_author_line_the_guild_wrote():
+    embed = announcement_embed(
+        twitch_info(), FakeMember("Alice"), "twitch", author="{name} just went live on {platform}"
+    )
+
+    assert embed.author.name == "Alice just went live on Twitch"
+
+
+def test_the_live_card_with_no_author_key_reads_exactly_as_it_always_did():
+    assert announcement_embed(twitch_info(), FakeMember("Alice"), "twitch").author.name == (
+        "Alice is now live on Twitch!"
+    )
+
+
 def test_the_shipped_end_author_line_is_the_registrys_and_not_a_second_copy():
     assert ended_author(GOLIVE_END_AUTHOR, "Sky", "Twitch") == "Sky was live on Twitch"
 
@@ -912,6 +956,20 @@ def test_the_card_goes_back_to_one_platform_when_the_other_stops():
     assert alone.url == "https://www.youtube.com/watch?v=xyz"
     assert alone.colour.value == EMBED_COLOURS["youtube"]
     assert alone.footer.text == "Black Bloc · via YouTube"
+
+
+def test_the_card_left_on_one_platform_keeps_the_top_line_the_guild_wrote():
+    card = costream_embed(
+        announcement_embed(TWITCH_LIVE, None, "twitch"),
+        TWITCH_LIVE,
+        YOUTUBE_LIVE,
+        "Alice",
+        GOLIVE_COSTREAM_AUTHOR,
+    )
+
+    alone = single_embed(card, YOUTUBE_LIVE, "Alice", "youtube", "{name} is on {platform}")
+
+    assert alone.author.name == "Alice is on YouTube"
 
 
 def test_the_live_sentence_re_rendered_for_an_edit_never_adds_a_mention_of_its_own():
