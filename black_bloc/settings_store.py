@@ -853,8 +853,9 @@ KEY_HELP: dict[str, str] = {
         "be filled in. The room is removed straight after, so this is the last thing said in it"
     ),
     REQUEST_FILED_KEY: (
-        f"what a member is told the moment their request is filed; `{REQUEST_ID_PLACEHOLDER}` stands for "
-        "the request's number and is the only thing that may be filled in"
+        "what a member is told the moment their request is filed; "
+        f"`{REQUEST_ID_PLACEHOLDER}` stands for the request's number and is the only thing "
+        "that may be filled in"
     ),
     "events_max_late_minutes": (
         "minutes an event may start late and still be announced; later than that it goes live "
