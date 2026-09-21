@@ -1,9 +1,11 @@
 # Auto-link — the go-live history links people to the channel they streamed from, and a presence go-live links them from then on
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **Follow-up 2026-09-21 BUILT, not merged, not
-> deployed** — [**a video link can name the channel (off by default)**](#follow-up-2026-09-21-a-video-link-can-name-the-channel-off-by-default),
-> branch `youtube-video-link` off `main` `bfbd53f` (v152 live). It closes **Deviation 3**, which stays true wherever the
-> new key `golive_autolink_youtube_video` is **off**, and off is the shipped default. ⚠️ Read that section's own
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **Follow-up 2026-09-21 LIVE v153 (12:13)**
+> — [**a video link can name the channel (off by default)**](#follow-up-2026-09-21-a-video-link-can-name-the-channel-off-by-default),
+> release commit `3d75254`, merge `0b3653d` of branch `youtube-video-link` (built off `main` `bfbd53f`, v152 live),
+> 3 commits, 8 deviations, 24 tests, sweeps **734–735**. It closes **Deviation 3**, which stays true wherever the
+> new key `golive_autolink_youtube_video` is **off** — and ✅ **off is what is on live, measured**: the deployed
+> `/api/settings` answers type `bool`, value `false`, default `false`. ⚠️ Read that section's own
 > `### Follow-up deviations` and `### Follow-up — what was NOT verified`; the body below is the v151 build. · ✅ **LIVE v151 (2026-09-21)** — release `c1b83f0`,
 > deployed commit `c7ef8f1`, **2026-09-21 09:51** Phoenix; merge `731519e`, 4 commits; sweeps **726–729** (were
 > `AL-a` … `AL-d`) are the owner's and **none has been walked**. ✅ **Link from history was run ONCE on live 09:5x** —
@@ -80,9 +82,17 @@ off → announced, not linked; d: an opted-out member is skipped by both). NOT `
 
 ## Follow-up 2026-09-21: a video link can name the channel (off by default)
 
-> 🔨 **BUILT on branch `youtube-video-link`, 2026-09-21, off `main` `bfbd53f` (v152 live).** Not merged, not
-> deployed, and ⚠️ **nothing in it has met Discord or YouTube in production.** Closes **Deviation 3** above —
-> which is still true wherever the new key is **off**, and that is the shipped default.
+> ✅ **LIVE v153 (2026-09-21 12:13)** — release commit `3d75254`; `release.json` says `v153` at `0b3653d`. Merge
+> `0b3653d` of branch `youtube-video-link` (built off `main` `bfbd53f`, v152 live), **3 commits**, 8 deviations,
+> **24 new tests**; the gate shipped on its THIRD run (**7237 passed, 3 skipped**). Sweeps are numbered
+> **734–735** (were `YV-a` / `YV-b`) and **neither has been walked** — they need a YouTube presence this server
+> has produced **zero** of in **166** live sessions. ⚠️ **Nothing in it has met Discord or YouTube in production,
+> and it cannot have: the key is OFF on live** — measured on the deployed `/api/settings`, type `bool`, value
+> `false`, default `false`. 🔴 The parser rests on the watch page's **player JSON `channelId`**; the
+> `<meta itemprop="channelId">` tag was **ABSENT on both** real watch pages measured, and the measurement was
+> taken from THIS machine, never from Fly's datacenter address — where **KI-30** records that YouTube answers a
+> bot check. Closes **Deviation 3** above — which is still true wherever the new key is **off**, and that is the
+> shipped default.
 
 ### The ask
 

@@ -2,7 +2,17 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-21 10:38** — the v152 docs ritual. **KI-35 ADDED**, `WATCHING`: an unexplained
+> Last verified: **2026-09-21 12:2x** — the v153 docs ritual. **KI-36 and KI-37 ADDED**, both `WATCHING`:
+> the every-key-lands-once JOIN FIXTURE is a hand-typed number that every concurrent build bumps, so a merge
+> taking one side passes the count and drops a key — **twice now** (`autolink`'s Deviation 16, then both v153
+> branches bumping 52 → 53 with **54** the merged truth, measured); and **a deploy gate can be killed by the
+> OS** when another job on this machine holds more than 12 GB (the v153 gate's run 2 died at 99 % of pytest
+> beside a whisper transcription job). **KI-26 rises from TWENTY-TWO to AT LEAST TWENTY-EIGHT** — twenty-two
+> plus at least six today — and gains two findings: *a stalled gate is usually a SECOND gate*, and a new
+> `exit 255` xdist worker-DEATH variant. **KI-32 reaches TWO sightings**, its own first trigger, and this one
+> REFUSED a release. ⚠️ **Nothing else in this file was re-tested at v153:** no symptom was reproduced,
+> nothing met live Discord or YouTube, and no browser rendered a page. Before that,
+> **2026-09-21 10:38** — the v152 docs ritual. **KI-35 ADDED**, `WATCHING`: an unexplained
 > random-order flake in the v152 deploy gate — **2 tests failed on ONE of six runs and the two names were LOST**;
 > five later runs were clean. It is NOT KI-32 and NOT KI-26 on the evidence available, because nothing records
 > which tests they were. ⚠️ **Nothing else in this file was re-tested at v152:** no symptom was reproduced, nothing
@@ -136,6 +146,47 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
+## KI-37 — A deploy gate can be KILLED BY THE OS when another job on this machine holds more than 12 GB — `WATCHING`
+
+**Symptom.** The v153 deploy gate's **second run** (2026-09-21 12:0x) was killed at **99 % of pytest**. It was not a
+failing test and not a stall: the operating system reclaimed the process for low memory, and the only trace in the log
+was `[gw6] node down: Not properly terminated`. The cause was outside this project entirely — a **whisper
+transcription job holding ~12 GB** on the same machine. Nothing reached Fly; a third run shipped **7237 passed, 3
+skipped**. **Status: WATCHING** (one sighting).
+**Why tolerated.** The gate is what protects the deploy, and it did its job — nothing shipped, and the cost was one
+wasted run of a three-minute gate. The trigger is a neighbouring workload nobody in this repo controls, and lowering
+`-n` or capping worker memory would slow every run to defend against a condition seen once.
+⚠️ **The reason this is its own entry and not a note under KI-26: it is easy to MISDIAGNOSE as KI-26.** An 8-worker
+run that stops near the end with a `node down` line looks exactly like the stall family. The distinguishing facts are
+worth more than a fix: a **KI-26** stall makes NO progress and its workers sit flat at ~0.0156 s CPU, while this one
+was **killed while running**, and the machine was short of RAM.
+**What would change it.** ⚠️ **Check free RAM before starting a deploy gate whenever a whisper / ingest /
+transcription job may be running** — that is the whole of the present remedy and it costs one command. A second
+sighting → `scripts/deploy.ps1` reads available memory before the gate and refuses **in words**, naming the hog,
+rather than burning a run; a third, or one that kills a gate with a deploy half-applied → the gate drops its worker
+count when free memory is under a measured threshold. ⚠️ **The number this entry is missing: the machine's free RAM
+at the moment of the kill, which was NOT captured** — only the ~12 GB figure for the other job was.
+
+## KI-36 — The every-key-lands-once JOIN FIXTURE is a hand-typed number, so a merge that takes one side passes the count and DROPS A KEY — `WATCHING`
+
+**Symptom.** `site/mock/golive-join.test.mjs` proves every settings key in the `golive` + `pings` + `youtube`
+namespaces lands in exactly one drawer or named surface. It does it against `NAMESPACE_KEYS`, a **hand-typed array**,
+and a **hand-typed count** beside it (`is(... NAMESPACE_KEYS.length, 54)`). Every concurrent build that adds a key
+bumps both, so two branches off the same base write the same next number — and a merge that resolves the conflict by
+**taking one side** leaves the fixture one key short while the test still PASSES on the side it took. **Twice now:**
+the `autolink` build's **Deviation 16** was the first, and at v153 both `member-optout` and `youtube-video-link`
+bumped **52 → 53** independently; merged, the honest number is **54** (measured by import at this ritual). Caught by
+hand both times. **Status: WATCHING** (two sightings, zero escapes to `main`).
+**Why tolerated.** Nothing has shipped wrong. The collision is loud at merge time because the number sits in the diff,
+and both times the conductor saw it. The fixture is otherwise doing exactly what it exists for — it is the test that
+makes an orphaned settings key impossible — and replacing it is a small change nobody has had a spare build for.
+**What would change it.** ⚠️ **The fixture DERIVING the list from the registry instead of asserting a hand-typed
+number** — `Object.keys(...)` over the mock's generated settings block, filtered to the three namespaces, so two
+branches each adding a key produce no conflict and the merged tree measures **54** on its own. That is the whole fix,
+it is roughly one line, and the next build that touches `site/mock/golive-join.test.mjs` takes it as a ride-along. A
+**third** collision, or the first one that reaches `main` with a key silently dropped, promotes this to a build of its
+own and stops it being a ride-along.
+
 ## KI-35 — The v152 deploy gate went red on TWO tests in one run of six and the names were LOST — `WATCHING`
 
 **Symptom.** Running the v152 gate (`pytest`, random order) the suite reported **2 failed** on **one of six runs**;
@@ -206,6 +257,17 @@ replace's next sweep or the next replace removes it — so this is a test that m
 replace path retries the unlink; a third → the media store is given a `remove()` that retries on `PermissionError` the way
 `shutil.rmtree`'s Windows handler does. Either way it stays a **read the log** item: the gate names the test, and a
 one-test red on THIS test with a green re-run is this issue, not the build.
+
+🔴 **2026-09-21 12:0x — SECOND sighting, and this one REFUSED a release.** The v153 deploy gate's **first run**
+went red on `tests/api/tools/test_guides.py::test_a_picture_is_uploaded_against_a_step_and_served_back_to_a_member`,
+with **7236 passed** beside it. ⚠️ **It is a DIFFERENT test from the one this entry is titled for, in the SAME
+file** — which widens the symptom from one assertion about a replaced picture to the guides media-file family as
+a whole, and is itself the new information. Nothing reached Fly; the release shipped on the third run (**7237
+passed, 3 skipped**; run 2 died of something else entirely — **KI-37**). ⚠️ **This MEETS the entry's own first
+trigger.** *A second sighting → the test waits up to one second for the unlink (poll `exists()`), or the replace
+path retries the unlink.* That work is now **owed, not conditional** — queued on [`TODO.md`](TODO.md) beside
+KI-26's debugging session. Status stays `WATCHING` only because nothing has been spent on it yet; ⚠️ do not read
+that word as *still undecided*. Before that —
 
 **2026-09-20 23:3x — still ONE sighting, so nothing changes.** The v150 gate (**7118 passed, 3 skipped**) did not reproduce it and no build report between v148 and v150 names this test; the only test-run trouble across thirteen builds was KI-26. Status unchanged: `WATCHING`.
 
@@ -355,6 +417,7 @@ panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
 
+> 🔴 **2026-09-21 12:2x — TWENTY-TWO PLUS AT LEAST SIX TODAY, so the count is AT LEAST TWENTY-EIGHT — and the debugging session this entry has asked for since 2026-09-19 is STILL not run.** The two v153 builds hit it **six times between them**: three on `member-optout` (stalls at 89 / 98 / 93 % of pytest) and three on `youtube-video-link` (stalls and one crash). ⚠️ **The `member-optout` builder's finding is the most useful thing this entry has gained in a dozen sightings, and it says the diagnosis has often been WRONG: a stalled gate is usually a SECOND GATE.** The PowerShell tool BACKGROUNDS a run it has timed out on, so the retry starts a second 8-worker suite beside the first, the two fight for the cores, and the newer one looks deadlocked — it is not. ⚠️ **Count the `.venv` python workers before killing anything** (`Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*.venv*python*' }`), and kill by process tree, never by image name. ⚠️ **New variant, from the `youtube-video-link` builder: `exit 255` — an xdist worker DEATH**, not the silent idle-worker stall this entry was filed for; same remedy (read the log, retry), different signature, so a gate reporting `exit 255` is this entry too. None of the six reached Fly and none produced a bad deploy — the cost is still only lost time. ⚠️ **The count is now approximate on purpose** (*at least* twenty-eight): sightings are still recorded where each build reports them, which is the same gap that once let this entry say thirteen while the real figure was twenty-two. Before that —
 > 🔴 **2026-09-20 23:3x — the count stands at TWENTY-TWO, and the debugging session this entry's own triggers called for has STILL not been run.** Nine sightings (fourteen to twenty-two) piled up between the note below and the v150 landing; each was recorded where its build reported it (`TODO.md` / `DONE.md`) and not here, which is how this entry came to say THIRTEEN while the real figure was twenty-two — that gap is the finding. Tonight's, in order: the **sixteenth** killed a v150 deploy attempt outright (stalled at 99 % for 14 minutes with three suites on the box, killed by its own process tree; nothing shipped and its stray `Release v150` commit was dropped unpushed); **seventeen** and **eighteen** on the `end-wording` build and **twenty-one** on its wording-default fix; **nineteen** and **twenty** on the `discord-mock` build; **twenty-two** on the `raidtrain-page` build. Every one was green on a retry, and the v150 gate that finally shipped passed **7118 passed, 3 skipped**. ⚠️ So the cost is still lost time and never a bad deploy — but it is now lost time on nine runs and one killed deploy. Before that —
 > **2026-09-20 17:2x — THIRTEEN sightings: the `costream` build hit it TWICE, both on `> file` runs** (spawn-shape, 8 workers flat at 0.0156 s CPU, no output for 10+ minutes against an 82 s baseline; both green on one retry). Its trick for killing the right tree with two suites on the box: `-o cache_dir=<its worktree>/.pytest_cache` so its own root is identifiable on the command line. Before that —
 > **2026-09-20 16:5x — ELEVEN sightings, the SECOND on a `> file` run, and ⚠️ this entry's own trigger is now met on both counts** (the `golive-page` build's `BB_REVERSE=1 pytest -n 8` stalled at 87 % with the log untouched for seven minutes; killed by its own process tree — picked out by the `PYTHONPATH` in its `env -i` line, because a sibling suite was running beside it; green in 83 s on the retry). ⚠️ New measured fact: **the killed xdist run's exit code read 0** while the log said `[gw0] node down: Not properly terminated` — a wrapper that trusts the code will call a killed run green; read the log. The debugging session this entry asks for is on the TODO's queue. Before that —

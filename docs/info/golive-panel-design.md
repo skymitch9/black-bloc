@@ -1,6 +1,9 @@
 # Go-live / Twitch — `/golive` is ONE command that opens a panel (wave 2)
 
-> **Audience:** the build agent, the reviewer and the owner. **Status:** TRACKED · ✅ **SHIPPED v70
+> **Audience:** the build agent, the reviewer and the owner. **Status:** TRACKED · ✅ **Follow-up 2026-09-21
+> LIVE v153 12:13** — [a member's opt-out ends the announcement that is already out](#follow-up-2026-09-21-a-members-opt-out-ends-the-announcement-that-is-already-out),
+> merge `1deb296` of branch `member-optout`, release commit `3d75254`; read that section's own banner and its
+> `### Follow-up deviations` — the body below is the v70 build. · ✅ **SHIPPED v70
 > `0aeed72` 2026-09-03 17:25** (merged from the branch below after Fable review; boot measured `commands synced`
 > **41**; 3796 tests; nothing run against Discord by eye — sweeps 109–117 are the owner's). Written as BUILT
 > 2026-09-03 on branch `worktree-agent-a87a00d41b8dc47d1` (off `main` `8cbe453`, v67 live), in
@@ -541,9 +544,14 @@ The design already lists five. These are the ones this build met:
 
 ## Follow-up 2026-09-21: a member's opt-out ends the announcement that is already out
 
-> 🔨 **BUILT 2026-09-21 on branch `member-optout`, off `main` `20b615d`** (v152 live + one TODO
-> commit). ⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET DISCORD.** Sweeps `MO-a` and
-> `MO-b` — the conductor numbers them. Review link:
+> ✅ **FOLLOW-UP LIVE v153 (2026-09-21 12:13)** — release commit `3d75254`; `release.json` says `v153` at
+> `0b3653d`. Merge `1deb296` of branch `member-optout`, **3 commits**, eight deviations, **15 new tests**;
+> the gate shipped on its THIRD run (**7237 passed, 3 skipped** — run 1 was refused on KI-32's guides test,
+> run 2 was killed by the OS for memory, KI-37; neither reached Fly). Sweeps are numbered **732–733** (were
+> `MO-a` / `MO-b`) and **neither has been walked**. Was 🔨 BUILT 2026-09-21 on branch `member-optout`, off
+> `main` `20b615d` (v152 live + one TODO commit). ⚠️ **NOTHING IN IT HAS MET DISCORD** — no opt-out has
+> ended a real announcement, nothing has been deleted and no pin has come off; only the boot was verified at
+> the deploy. Review link:
 > <https://blackbloc.heygabi.ai/golive.html> ▸ a live member's row ▸ **Opt out**.
 
 **The ask, owner verbatim (2026-09-21 10:4x):** *"opt out should end their annoucement"* — said of a
