@@ -248,6 +248,11 @@ const SPOTLIGHT = [
     until: 'kept',
     bump_hours: null,
     pin: true,
+    spotlight: true,
+    announce: true,
+    youtube_channel_id: 'UCI3DTtB-a3fJPjKtQ5kYHfA',
+    youtube_handle: '@GamesDoneQuick',
+    youtube_url: 'https://www.youtube.com/channel/UCI3DTtB-a3fJPjKtQ5kYHfA',
     event_id: null,
     url: 'https://www.twitch.tv/gamesdonequick',
     live: true,
@@ -281,6 +286,11 @@ const SPOTLIGHT = [
     until: 'until 30 Sep',
     bump_hours: 6,
     pin: true,
+    spotlight: true,
+    announce: false,
+    youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ',
+    youtube_handle: '@esamarathon',
+    youtube_url: 'https://www.youtube.com/channel/UC3Oe-jfrIqEGygxYBYyN6jQ',
     event_id: 2,
     url: 'https://www.twitch.tv/esamarathon',
     live: false,
@@ -301,10 +311,50 @@ const SPOTLIGHT = [
     until: 'kept',
     bump_hours: null,
     pin: false,
+    spotlight: false,
+    announce: true,
+    youtube_channel_id: null,
+    youtube_handle: null,
+    youtube_url: null,
     event_id: null,
     url: 'https://www.twitch.tv/supernamu',
     live: false,
     session: null,
+    sessions: [],
+  },
+  {
+    id: 4,
+    twitch_login: 'rpglimitbreak',
+    display_name: 'RPG Limit Break',
+    note: null,
+    role_id: null,
+    role: null,
+    role_wearers: null,
+    added_at: '2026-09-12T00:00:00+00:00',
+    expires_at: null,
+    kept: true,
+    until: 'kept',
+    bump_hours: null,
+    pin: false,
+    spotlight: false,
+    announce: false,
+    youtube_channel_id: null,
+    youtube_handle: null,
+    youtube_url: null,
+    event_id: null,
+    url: 'https://www.twitch.tv/rpglimitbreak',
+    live: true,
+    session: {
+      id: 9,
+      started_at: '2026-09-20T05:00:00+00:00',
+      ended_at: null,
+      title: 'RPGLB 2027',
+      game: 'Chrono Trigger',
+      url: 'https://www.youtube.com/watch?v=rpglb27',
+      mode: 'on',
+      bump_count: 0,
+      announced_message_id: '830000000000000021',
+    },
     sessions: [],
   },
 ];
@@ -323,9 +373,22 @@ const SPOTLIGHT = [
   is(`${where} — with the count that wears it`, gdq.role_wearers, 3);
   is(`${where} — and its id as a string`, gdq.role_id, '900000000000000010');
 
+  is(`${where} — a linked YouTube channel lands on the channel's own row`, gdq.youtube, '@GamesDoneQuick');
+  is(`${where} — with its id`, gdq.youtube_id, 'UCI3DTtB-a3fJPjKtQ5kYHfA');
+  is(`${where} — and an announcing channel is not opted out`, gdq.opted_out, false);
+
   const esa = rows.find((one) => one.twitch === 'esamarathon');
   is(`${where} — a dated row says the day it runs out`, esa.spotlight.until, 'until 30 Sep');
   is(`${where} — and it is not live`, esa.live, null);
+  is(`${where} — a channel opted out of announcements says so on its row`, esa.opted_out, true);
+  is(`${where} — and it keeps its YouTube link while opted out`, esa.youtube_id, 'UC3Oe-jfrIqEGygxYBYyN6jQ');
+
+  // ⚠️ Nothing on a channel's session says which side opened it, so the row reads its address:
+  // an rpglimitbreak session on a youtube.com url is a YouTube card, not a Twitch one.
+  const rpglb = rows.find((one) => one.twitch === 'rpglimitbreak');
+  is(`${where} — a channel whose session is a YouTube address is live on YouTube`, rpglb.live, 'youtube');
+  is(`${where} — a channel with the spotlight off keeps its row`, rpglb.spotlight.spotlight, false);
+  is(`${where} — and is opted out as well`, rpglb.opted_out, true);
 
   const shared = rows.filter((one) => one.twitch === 'supernamu');
   is(`${where} — a channel that is ALSO a member's login is ONE row`, shared.length, 1);
@@ -342,11 +405,13 @@ const SPOTLIGHT = [
     plain.every((one) => one.spotlight === null), 'a row has a spotlight with no payload');
 
   const cards = spotlightCards(SPOTLIGHT);
-  is(`${where} — only a live spotlight is a Live-now card`, cards.length, 1);
+  is(`${where} — only a live channel is a Live-now card`, cards.length, 2);
   is(`${where} — the card names the channel`, cards[0].name, 'GamesDoneQuick');
   is(`${where} — the card says it was announced`, cards[0].announced, true);
   is(`${where} — the card says it is pinned`, cards[0].pinned, true);
-  same(`${where} — a spotlight is a Twitch card`, cards[0].platforms, ['twitch']);
+  same(`${where} — a spotlight on a Twitch address is a Twitch card`, cards[0].platforms, ['twitch']);
+  same(`${where} — and one on a YouTube address is a YouTube card`, cards[1].platforms, ['youtube']);
+  is(`${where} — a channel with the spotlight off is never pinned`, cards[1].pinned, false);
 
   const past = spotlightSessions(SPOTLIGHT);
   is(`${where} — every spotlight session joins Recent streams`, past.length, 2);
@@ -377,11 +442,12 @@ const NAMESPACE_KEYS = [
   'spotlight_mode', 'spotlight_poll_minutes', 'spotlight_end_misses', 'spotlight_bump_hours',
   'spotlight_bump_template', 'spotlight_bump_cleanup', 'spotlight_bump_pings', 'spotlight_pin',
   'spotlight_default_days', 'spotlight_event_slack_hours',
+  'golive_channel_spotlight_default',
 ];
 
 {
   const where = 'every key lands once';
-  is(`${where} — the namespaces held 49 keys when this was measured`, NAMESPACE_KEYS.length, 49);
+  is(`${where} — the namespaces held 50 keys when this was measured`, NAMESPACE_KEYS.length, 50);
 
   const specs = NAMESPACE_KEYS.map((key) => ({ key, type: 'text', value: null }));
   const placed = placeSettings(specs);
@@ -429,5 +495,6 @@ process.stdout.write(
   'golive-join: ok - one row per person across five payloads; a ping role with no link still '
     + 'has a row; two open sessions are one row; a co-stream says both platforms; an ambiguous '
     + 'address is refused in words; a spotlighted channel with no member is its own row and one '
-    + 'that IS a linked login is not a second; all 49 settings keys land in exactly one place\n',
+    + 'that IS a linked login is not a second; a channel row carries its YouTube link, its '
+    + 'opt-out and the side its session opened on; all 50 settings keys land in exactly one place\n',
 );

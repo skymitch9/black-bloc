@@ -37,6 +37,14 @@ wording; this document wins on behaviour, data and the guards below.
 > strip, eight in *How streams are spotted*), so §A's *"nothing under `black_bloc/` changes"* is
 > true of THIS build and not of that one. Design:
 > [`spotlight-design.md`](spotlight-design.md).
+>
+> ➕ **2026-09-21, branch `channel-streamers`:** one of those rows is now the CHANNEL RECORD, not a
+> spotlight — `spotlight` is a toggle in its drawer beside its own `announce` opt-out and a YouTube
+> link, and only **Remove this channel** takes it off the list. Its *Expires* cell reads **—** while
+> the spotlight is off (such a row never expires), its *Opted out* cell reads a channel's own opt-out
+> the way it reads a member's, **Add a streamer** with the member left blank makes one, and a session
+> on a `youtu…` address draws a YouTube card rather than a Twitch one. Design:
+> [`channel-streamers-design.md`](channel-streamers-design.md).
 
 ## A. The single most important fact about this build
 

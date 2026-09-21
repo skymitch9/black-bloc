@@ -514,6 +514,7 @@ const SETTING_SPECS = [
   ['spotlight_pin', 'bool', true, true, "true if a channel added to the spotlight list has its announcement pinned while it streams; each row can say otherwise"],
   ['spotlight_default_days', 'int', 7, 7, "how long a newly spotlighted channel lasts before it is purged, unless it is kept for ever", null, 365, 1],
   ['spotlight_event_slack_hours', 'int', 2, 2, "hours past an approved event's end that its spotlight row survives, so a marathon that overruns is still announced", null, 24, 0],
+  ['golive_channel_spotlight_default', 'bool', false, false, "true if a channel added through **Add a streamer** with nobody behind it is spotlighted from the start — pinned while it streams and reminded every few hours; false — the default — announces it like any other stream, and its own row's **Spotlight on** adds the pin and the reminders whenever staff want them"],
   ['automod_panel_minutes', 'int', 10, 10, "minutes the /automod panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['automod_arm_needs_confirm', 'bool', true, true, 'true to ask a second time before automod is turned on from the panel, naming what will start happening; turning it off or back to shadow is always one press'],
   ['raidtrain_panel_minutes', 'int', 10, 10, "minutes the /raidtrain panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -1144,9 +1145,10 @@ function seedState() {
     // kept for ever and live right now; ESA runs out with its marathon; the expired one is
     // absent, exactly as the sweep leaves it.
     spotlights: [
-      { id: 1, twitch_login: 'gamesdonequick', display_name: 'GamesDoneQuick', note: "the owner's marathon channel", added_by: STAFF.id, added_at: minutesAgo(40000), expires_at: null, bump_hours: null, pin: true, event_id: null },
-      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2 },
-      { id: 3, twitch_login: 'frostfatales', display_name: 'Frost Fatales', note: null, added_by: STAFF.id, added_at: minutesAgo(20000), expires_at: daysAhead(30), bump_hours: null, pin: false, event_id: null },
+      { id: 1, twitch_login: 'gamesdonequick', display_name: 'GamesDoneQuick', note: "the owner's marathon channel", added_by: STAFF.id, added_at: minutesAgo(40000), expires_at: null, bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: 'UCI3DTtB-a3fJPjKtQ5kYHfA', youtube_handle: '@GamesDoneQuick' },
+      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2, spotlight: true, announce: false, youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ', youtube_handle: '@esamarathon' },
+      { id: 3, twitch_login: 'frostfatales', display_name: 'Frost Fatales', note: null, added_by: STAFF.id, added_at: minutesAgo(20000), expires_at: daysAhead(30), bump_hours: null, pin: false, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null },
+      { id: 4, twitch_login: 'rpglimitbreak', display_name: 'RPG Limit Break', note: null, added_by: STAFF.id, added_at: minutesAgo(1200), expires_at: null, bump_hours: null, pin: false, event_id: null, spotlight: false, announce: false, youtube_channel_id: null, youtube_handle: null },
     ],
     spotlightSessions: [
       { id: 5, spotlight_id: 1, started_at: minutesAgo(560), ended_at: null, title: 'AGDQ 2027 — Day 4', game: 'Celeste', url: 'https://www.twitch.tv/gamesdonequick', mode: 'shadow', announced_message_id: '830000000000000020', last_bump_at: minutesAgo(80), bump_count: 2 },
@@ -3990,6 +3992,12 @@ function spotlightRow(row) {
     until: spotlightUntil(row),
     bump_hours: row.bump_hours,
     pin: Boolean(row.pin),
+    spotlight: row.spotlight !== false,
+    announce: row.announce !== false,
+    opted_out: row.announce === false,
+    youtube_channel_id: row.youtube_channel_id || null,
+    youtube_handle: row.youtube_handle || null,
+    youtube_url: row.youtube_channel_id ? `https://www.youtube.com/channel/${row.youtube_channel_id}` : null,
     event_id: row.event_id,
     url: `https://www.twitch.tv/${row.twitch_login}`,
     live: live !== null,
@@ -4006,6 +4014,53 @@ function wantedSpotlight(params) {
     throw new Refused(404, 'no_spotlight', 'That spotlight row is not there any more, so nothing was changed. It may have run out, or somebody else may have removed it \u2014 the Go-live page\u2019s Streamers list shows what is left.');
   }
   return row;
+}
+
+const CHANNEL_HANDLE = /^@?([A-Za-z0-9._-]{3,30})$/;
+const CHANNEL_UC = /(UC[A-Za-z0-9_-]{22})(?![A-Za-z0-9_-])/;
+// The bot resolves a handle off the channel page's canonical link; the mock cannot reach
+// YouTube, so it knows the two the owner asked for by name and invents nothing else.
+const KNOWN_CHANNELS = {
+  gamesdonequick: ['UCI3DTtB-a3fJPjKtQ5kYHfA', 'Games Done Quick'],
+  esamarathon: ['UC3Oe-jfrIqEGygxYBYyN6jQ', 'ESA Speedrunning'],
+};
+
+function spotlightAdded(row) {
+  if (row.spotlight === false) {
+    return `**${row.twitch_login}** is on the list, ${spotlightUntil(row)}. Black Bloc announces it in the go-live channel whenever it goes live, exactly as it announces anybody else's stream, and edits the post to past tense when it ends. **Spotlight on** adds the pin and the reminders.`;
+  }
+  const hours = row.bump_hours || state.settings.get('spotlight_bump_hours') || 4;
+  const pinWords = row.pin ? 'pins the announcement for the duration' : 'leaves the announcement unpinned';
+  return `**${row.twitch_login}** is on the spotlight list, ${spotlightUntil(row)}. Black Bloc announces it in the go-live channel whenever it goes live, reminds people every ${hours} hours while it runs, and ${pinWords}.`;
+}
+
+function channelSpotlightSaid(row) {
+  if (row.spotlight === false) {
+    return `**${row.twitch_login}** is announced like anybody else's stream now — one post when it goes live, edited to past tense when it ends, no pin and no reminders. It stays on the list.`;
+  }
+  return `**${row.twitch_login}** is spotlighted: its announcement is pinned while it streams and a reminder goes out every so often. Everything else about the channel stays as it is.`;
+}
+
+function channelAnnounceSaid(row) {
+  if (row.announce === false) {
+    return `**${row.twitch_login}** is opted out, so nothing of its is announced from now on — no post, no pin and no reminders, whatever its spotlight says. It stays on the list, it keeps its ping role and it keeps its YouTube link, and **Opt back in** starts it announcing again.`;
+  }
+  return `**${row.twitch_login}** is opted back in, so the next stream it starts is announced again. Nothing that happened while it was opted out is posted after the fact.`;
+}
+
+function linkChannelYoutube(row, given) {
+  const wanted = String(given || '').trim();
+  const found = CHANNEL_UC.exec(wanted);
+  const handle = found ? null : (CHANNEL_HANDLE.exec(wanted) || [])[1] || null;
+  const known = handle ? KNOWN_CHANNELS[handle.toLowerCase()] : null;
+  const channelId = found ? found[1] : (known ? known[0] : null);
+  if (!channelId) {
+    throw new Refused(400, 'bad_channel', `Black Bloc could not work out which YouTube channel **${wanted.slice(0, 60) || 'nothing'}** is, so nothing was linked. Paste the address that starts with youtube.com/channel/UC…, or the @handle.`);
+  }
+  row.youtube_channel_id = channelId;
+  row.youtube_handle = handle ? `@${handle}` : null;
+  logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login, youtube_channel_id: channelId } });
+  return `**${row.twitch_login}** is linked to ${known ? known[1] : channelId}. Black Bloc watches that YouTube channel for live streams as well as its Twitch one.`;
 }
 
 function spotlightDays(given) {
@@ -4025,6 +4080,10 @@ route('POST', '/api/golive/spotlight', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
   const given = String(body.twitch_login || '');
+  const wantedYoutube = String(body.youtube || '').trim();
+  if (!given.trim() && wantedYoutube) {
+    throw new Refused(400, 'needs_twitch', `**${wantedYoutube.slice(0, 60)}** is a YouTube channel, and a channel row still needs a Twitch name to hang on, so nothing was added. Add the channel by its Twitch name first, then **Link a YouTube channel** on its own row puts the YouTube side on it.`);
+  }
   const login = given.trim().toLowerCase().replace(/^.*twitch\.tv\//, '').split(/[?/]/)[0].replace(/^@/, '');
   if (!login || login.length > 25 || !/^[a-z0-9_]+$/.test(login)) {
     throw new Refused(400, 'bad_login', `**${given || 'nothing'}** is not a Twitch channel name, so nothing was spotlighted. Use the name from the channel address \u2014 the part after twitch.tv/ \u2014 for example \`gamesdonequick\`.`);
@@ -4033,7 +4092,10 @@ route('POST', '/api/golive/spotlight', async (context) => {
     throw new Refused(409, 'already_spotlit', `**${login}** is already on the spotlight list, so nothing was added. **Extend** on its own row moves the date it runs out instead \u2014 that is the move you want if this is a new marathon on the same channel.`);
   }
   const days = spotlightDays(body.days);
-  const keep = body.keep === true || days === null;
+  const spotlit = body.spotlight === undefined || body.spotlight === null
+    ? Boolean(state.settings.get('golive_channel_spotlight_default'))
+    : Boolean(body.spotlight);
+  const keep = body.keep === true || days === null || !spotlit;
   const row = {
     id: state.golive.spotlights.reduce((top, one) => Math.max(top, one.id), 0) + 1,
     twitch_login: login,
@@ -4045,14 +4107,18 @@ route('POST', '/api/golive/spotlight', async (context) => {
     bump_hours: body.bump_hours ?? null,
     pin: body.pin === undefined || body.pin === null ? true : Boolean(body.pin),
     event_id: null,
+    spotlight: spotlit,
+    announce: body.announce === undefined || body.announce === null ? true : Boolean(body.announce),
+    youtube_channel_id: null,
+    youtube_handle: null,
   };
   state.golive.spotlights.push(row);
-  logAction('web.golive.spotlight_added', { details: { login, expires_at: row.expires_at } });
-  const hours = row.bump_hours || state.settings.get('spotlight_bump_hours') || 4;
-  const pinWords = row.pin ? 'pins the announcement for the duration' : 'leaves the announcement unpinned';
+  logAction('web.golive.spotlight_added', { details: { login, expires_at: row.expires_at, spotlight: spotlit } });
+  let said = '';
+  if (wantedYoutube) said = linkChannelYoutube(row, wantedYoutube);
   return {
     ...spotlightRow(row),
-    message: `**${login}** is on the spotlight list, ${spotlightUntil(row)}. Black Bloc announces it in the go-live channel whenever it goes live, reminds people every ${hours} hours while it runs, and ${pinWords}.`,
+    message: `${spotlightAdded(row)} ${said}`.trim(),
   };
 });
 
@@ -4066,8 +4132,27 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   if ('bump_hours' in body) row.bump_hours = body.bump_hours || null;
   if ('pin' in body) row.pin = Boolean(body.pin);
   if ('note' in body) row.note = body.note || null;
-  logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login } });
-  return { ...spotlightRow(row), message: `**${row.twitch_login}** now runs ${spotlightUntil(row)}.` };
+  if ('spotlight' in body) row.spotlight = Boolean(body.spotlight);
+  if ('announce' in body) row.announce = Boolean(body.announce);
+  let said = null;
+  if ('youtube' in body) {
+    const given = String(body.youtube || '').trim();
+    if (given) {
+      said = linkChannelYoutube(row, given);
+    } else {
+      if (!row.youtube_channel_id) {
+        throw new Refused(404, 'not_linked', `**${row.twitch_login}** has no YouTube channel linked, so there was nothing to unlink. Its row on the Go-live page has the move that links one.`);
+      }
+      row.youtube_channel_id = null;
+      row.youtube_handle = null;
+      said = `**${row.twitch_login}**'s YouTube channel is unlinked, so only its Twitch side is watched now. Nothing else about the channel changed.`;
+      logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login, youtube_channel_id: null } });
+    }
+  }
+  if (said === null) logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login } });
+  if (said === null && 'announce' in body) said = channelAnnounceSaid(row);
+  else if (said === null && 'spotlight' in body) said = channelSpotlightSaid(row);
+  return { ...spotlightRow(row), message: said || `**${row.twitch_login}** now runs ${spotlightUntil(row)}.` };
 });
 
 route('DELETE', '/api/golive/spotlight/:spotlight_id', (context) => {

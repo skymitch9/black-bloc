@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 51
+SCHEMA_VERSION = 52
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -886,6 +886,10 @@ CREATE TABLE IF NOT EXISTS spotlight_channels (
     bump_hours     INTEGER,
     pin            INTEGER NOT NULL DEFAULT 1,
     event_id       INTEGER,
+    spotlight          INTEGER NOT NULL DEFAULT 1,
+    announce           INTEGER NOT NULL DEFAULT 1,
+    youtube_channel_id TEXT,
+    youtube_handle     TEXT,
     UNIQUE (guild_id, twitch_login)
 );
 
@@ -974,6 +978,10 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("selftest_runs", "keep_minutes", "INTEGER"),
     ("golive_fan_roles", "spotlight_id", "INTEGER"),
     ("raid_trains", "event_id", "INTEGER"),
+    ("spotlight_channels", "spotlight", "INTEGER NOT NULL DEFAULT 1"),
+    ("spotlight_channels", "announce", "INTEGER NOT NULL DEFAULT 1"),
+    ("spotlight_channels", "youtube_channel_id", "TEXT"),
+    ("spotlight_channels", "youtube_handle", "TEXT"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")

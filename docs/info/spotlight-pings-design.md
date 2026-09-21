@@ -1,5 +1,13 @@
 # A ping role for a spotlight channel — GamesDoneQuick pings, the way a member's fan role pings
 
+> 🔴 **SUPERSEDED IN PART, 2026-09-21 (branch `channel-streamers`): the spotlight row IS NOW THE CHANNEL RECORD.**
+> A `spotlight_channels` row is a channel Black Bloc watches whether or not it is spotlighted — `spotlight` is a
+> toggle ON the row (schema 52), beside `announce` (its own opt-out) and `youtube_channel_id` / `youtube_handle`.
+> Spotlight OFF announces the channel exactly as a member's go-live is announced and only drops the pin, the
+> reminders and the expiry; the row, its sessions and its ping role survive the toggle, and **only Remove this
+> channel takes them**. Everything below still describes the spotlight-ON behaviour correctly. Read
+> [`channel-streamers-design.md`](channel-streamers-design.md) first.
+
 > **Audience:** the build agent and reviewers. **2026-09-20 22:xx — the modal §C gave a channel row
 > now NAMES the role and can RENAME it.** `page-golive.js:addPingRole` is a form dialog that stays
 > open on a refusal, with a **Make a new role** / **Use an existing role** segment and a pre-filled

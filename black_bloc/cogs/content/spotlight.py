@@ -29,6 +29,7 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
 from ...panels import Panel, answer, opened, retire, still_staff
 from ...settings_store import (
+    CHANNEL_SPOTLIGHT_DEFAULT_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
     SPOTLIGHT_BUMP_HOURS_KEY,
     SPOTLIGHT_BUMP_PINGS_KEY,
@@ -86,12 +87,17 @@ async def add_channel(
     note: str | None = None,
     event_id: int | None = None,
     twitch_user_id: str | None = None,
+    spotlight: bool = True,
+    announce: bool = True,
+    youtube_channel_id: str | None = None,
+    youtube_handle: str | None = None,
 ) -> int | None:
     try:
         cur = await db.conn.execute(
             "INSERT INTO spotlight_channels(guild_id, twitch_login, twitch_user_id, "
-            "display_name, note, added_by, added_at, expires_at, bump_hours, pin, event_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "display_name, note, added_by, added_at, expires_at, bump_hours, pin, event_id, "
+            "spotlight, announce, youtube_channel_id, youtube_handle) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 guild_id,
                 login,
@@ -104,6 +110,10 @@ async def add_channel(
                 bump_hours,
                 1 if pin else 0,
                 event_id,
+                1 if spotlight else 0,
+                1 if announce else 0,
+                youtube_channel_id,
+                youtube_handle,
             ),
         )
     except sqlite3.IntegrityError:
@@ -143,8 +153,27 @@ async def channel_for_event(db: Any, guild_id: int, event_id: int) -> Any:
     return await cur.fetchone()
 
 
+async def channels_with_youtube(db: Any) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_channels WHERE youtube_channel_id IS NOT NULL "
+        "AND youtube_channel_id <> '' ORDER BY guild_id, id"
+    )
+    return list(await cur.fetchall())
+
+
 async def update_channel(db: Any, spotlight_id: int, **fields: Any) -> None:
-    allowed = ("expires_at", "bump_hours", "pin", "note", "display_name", "twitch_user_id")
+    allowed = (
+        "expires_at",
+        "bump_hours",
+        "pin",
+        "note",
+        "display_name",
+        "twitch_user_id",
+        "spotlight",
+        "announce",
+        "youtube_channel_id",
+        "youtube_handle",
+    )
     wanted = [(name, fields[name]) for name in allowed if name in fields]
     if not wanted:
         return
@@ -380,7 +409,7 @@ class Spotlight(commands.Cog):
     async def sweep_expiries(self, guild: Any) -> None:
         """A row whose date has passed ends its open session first, then leaves the list."""
         for row in await channels_for(self.bot.db, guild.id):
-            if not words.is_expired(row):
+            if not words.is_spotlit(row) or not words.is_expired(row):
                 continue
             async with self._lock(row["id"]):
                 fresh = await channel_by_id(self.bot.db, row["id"])
@@ -421,7 +450,7 @@ class Spotlight(commands.Cog):
                 else:
                     await self._maybe_bump(guild, fresh, session, from_twitch(stream))
                 return
-            if session is None:
+            if session is None or words.platform_of(_cell(session, "url")) != words.PLATFORM:
                 return
             seen = self.misses.get(int(fresh["id"]), 0) + 1
             self.misses[int(fresh["id"])] = seen
@@ -432,11 +461,18 @@ class Spotlight(commands.Cog):
     # --- the three posts -------------------------------------------------------------------
 
     async def _announce(self, guild: Any, row: Any, stream: Any) -> None:
-        mode = self._mode(guild.id)
         info = await self._box_art(guild, from_twitch(stream))
         name = str(getattr(stream, "user_name", "") or "").strip() or words.display_for(row)
         if name != words.display_for(row):
             await update_channel(self.bot.db, row["id"], display_name=name)
+        await self.announce_info(guild, row, info, name)
+
+    async def announce_info(self, guild: Any, row: Any, info: Any, name: str) -> None:
+        """The one announcement, whichever sweep saw it: spotlight only decides the pin.
+        An opted-out channel stops here — no session, so no end and no reminders either."""
+        if not words.announces(row):
+            return
+        mode = self._mode(guild.id)
         session_id = await start_session(self.bot.db, guild.id, row["id"], info, mode)
         if session_id is None:
             return
@@ -469,7 +505,9 @@ class Spotlight(commands.Cog):
             "game": info.game,
             "title": info.title,
             "text": text,
-            "pin": bool(row["pin"]),
+            "pin": bool(row["pin"]) and words.is_spotlit(row),
+            "spotlight": words.is_spotlit(row),
+            "platform": info.platform,
             "fan_role_id": fan_role_id,
         }
         if embed is not None:
@@ -494,10 +532,12 @@ class Spotlight(commands.Cog):
             else "golive.would_spotlight_announce",
             details=details,
         )
-        if row["pin"]:
+        if row["pin"] and words.is_spotlit(row):
             await self._pin(guild, row, message)
 
     async def _maybe_bump(self, guild: Any, row: Any, session: Any, info: Any) -> None:
+        if not words.is_spotlit(row) or not words.announces(row):
+            return
         hours = words.bump_hours_for(row, self.bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
         if not words.bump_due(session, hours).due:
             return
@@ -919,6 +959,10 @@ async def spotlight_channel(
     note: str | None = None,
     event_id: int | None = None,
     expires_at: Any = False,
+    spotlight: Any = None,
+    announce: bool = True,
+    youtube_channel_id: str | None = None,
+    youtube_handle: str | None = None,
     via: str = VIA_DISCORD,
 ) -> tuple[str, Any]:
     """One door for the panel, the route and the event card: `(outcome, row)`."""
@@ -928,12 +972,15 @@ async def spotlight_channel(
     if await channel_by_login(bot.db, guild.id, clean) is not None:
         return ("already", None)
     store = bot.store
+    spotlit = bool(
+        store.get(guild.id, CHANNEL_SPOTLIGHT_DEFAULT_KEY) if spotlight is None else spotlight
+    )
     when = (
         expires_at
         if expires_at is not False
         else (
             None
-            if keep
+            if keep or not spotlit
             else words.expiry_in_days(
                 days if days is not None else store.get(guild.id, SPOTLIGHT_DEFAULT_DAYS_KEY)
             )
@@ -951,6 +998,10 @@ async def spotlight_channel(
         display_name=clean,
         note=note,
         event_id=event_id,
+        spotlight=spotlit,
+        announce=bool(announce),
+        youtube_channel_id=youtube_channel_id,
+        youtube_handle=youtube_handle,
     )
     if spotlight_id is None:
         return ("already", None)
@@ -965,12 +1016,100 @@ async def spotlight_channel(
             "login": clean,
             "expires_at": when,
             "pin": wanted_pin,
+            "spotlight": spotlit,
+            "announce": bool(announce),
+            "youtube_channel_id": youtube_channel_id,
             "bump_hours": bump_hours,
             "event_id": event_id,
             "via": via,
         },
     )
     return ("added", row)
+
+
+async def set_announce(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, on: bool, *, via: str = VIA_DISCORD
+) -> Any:
+    """A channel's own opt-out, the member opt-out's twin: the row, its role, its YouTube
+    link and its spotlight all stay, and nothing of its is posted while it is off."""
+    return await change_spotlight(
+        bot, guild, actor, spotlight_id, via=via, announce=1 if on else 0
+    )
+
+
+async def set_spotlight(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, on: bool, *, via: str = VIA_DISCORD
+) -> Any:
+    """The toggle: the row, its role and its sessions all stay; only the pin and the
+    reminders come and go. Staff final say, both ways, at any time."""
+    return await change_spotlight(
+        bot, guild, actor, spotlight_id, via=via, spotlight=1 if on else 0
+    )
+
+
+async def link_youtube(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, given: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any, str]:
+    """`(outcome, row, said)` — the resolver the member links go through, no key needed."""
+    from .youtube import cog_of as youtube_cog_of
+
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return ("no_row", None, words.NO_SUCH_ROW)
+    wanted = str(given or "").strip()
+    if not wanted:
+        return ("no_channel", row, words.NO_YOUTUBE_GIVEN)
+    cog = youtube_cog_of(bot)
+    client = getattr(cog, "client", None)
+    if client is None:
+        return ("no_cog", row, words.NO_YOUTUBE_COG.format(login=row["twitch_login"]))
+    try:
+        channel_id, title = await client.resolve(wanted)
+    except Exception as exc:
+        return ("bad_channel", row, str(exc))
+    handle = _youtube_handle_of(wanted)
+    fresh = await change_spotlight(
+        bot,
+        guild,
+        actor,
+        spotlight_id,
+        via=via,
+        youtube_channel_id=channel_id,
+        youtube_handle=handle,
+    )
+    said = words.YOUTUBE_LINKED.format(
+        login=row["twitch_login"], title=title or handle or channel_id
+    )
+    return ("linked", fresh, said)
+
+
+async def unlink_youtube(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, *, via: str = VIA_DISCORD
+) -> tuple[str, Any, str]:
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return ("no_row", None, words.NO_SUCH_ROW)
+    if not words.youtube_of(row):
+        return ("not_linked", row, words.NO_YOUTUBE_LINKED.format(login=row["twitch_login"]))
+    fresh = await change_spotlight(
+        bot,
+        guild,
+        actor,
+        spotlight_id,
+        via=via,
+        youtube_channel_id=None,
+        youtube_handle=None,
+    )
+    return ("unlinked", fresh, words.YOUTUBE_UNLINKED.format(login=row["twitch_login"]))
+
+
+def _youtube_handle_of(given: str) -> str | None:
+    from ...youtube import channel_id_in, handle_in
+
+    if channel_id_in(given):
+        return None
+    found = handle_in(given)
+    return f"@{found}" if found else None
 
 
 async def change_spotlight(
@@ -1109,7 +1248,7 @@ async def build_spotlight(
         pings.spotlight_of(one): one["role_id"]
         for one in await pings.spotlight_fan_roles(bot.db, guild.id)
     }
-    lines = [words.PANEL_INTRO] + mode_lines(bot, guild)
+    lines = [words.CHANNELS_INTRO] + mode_lines(bot, guild)
     lines += (
         [
             words.panel_line(row, int(row["id"]) in open_by_id, held.get(int(row["id"])))
@@ -1124,19 +1263,35 @@ async def build_spotlight(
     if chosen is not None:
         live = int(chosen["id"]) in open_by_id
         held = await pings.get_spotlight_fan_role(bot.db, guild.id, chosen["id"])
-        if words.keeps_forever(chosen):
-            view.add_item(SpotlightMoveButton("expire", chosen["id"]))
-        else:
-            view.add_item(SpotlightMoveButton("extend", chosen["id"]))
-            view.add_item(SpotlightMoveButton("keep", chosen["id"]))
-        if live:
-            view.add_item(SpotlightMoveButton("bump", chosen["id"]))
+        spotlit = words.is_spotlit(chosen)
+        view.add_item(
+            SpotlightMoveButton("spotlight_off" if spotlit else "spotlight_on", chosen["id"])
+        )
+        # Panels over slash: the kept / expires / bump moves belong to the spotlight, so they
+        # render only while it is on, and Bump only while something is live to bump.
+        if spotlit:
+            if words.keeps_forever(chosen):
+                view.add_item(SpotlightMoveButton("expire", chosen["id"]))
+            else:
+                view.add_item(SpotlightMoveButton("extend", chosen["id"]))
+                view.add_item(SpotlightMoveButton("keep", chosen["id"]))
+            if live and words.announces(chosen):
+                view.add_item(SpotlightMoveButton("bump", chosen["id"]))
+        view.add_item(
+            SpotlightMoveButton(
+                "opt_in" if not words.announces(chosen) else "opt_out", chosen["id"]
+            )
+        )
         view.add_item(SpotlightMoveButton("take_role" if held is not None else "give_role",
                                          chosen["id"]))
+        if words.youtube_of(chosen):
+            view.add_item(SpotlightMoveButton("unlink_youtube", chosen["id"]))
+        else:
+            view.add_item(LinkYouTubeButton(chosen["id"]))
         view.add_item(SpotlightMoveButton("remove", chosen["id"]))
     view.add_item(AddChannelButton())
     view.add_item(SpotlightBackButton())
-    embed = discord.Embed(title=words.PANEL_TITLE, description="\n".join(lines))
+    embed = discord.Embed(title=words.CHANNELS_TITLE, description="\n".join(lines))
     return embed, view
 
 
@@ -1181,6 +1336,11 @@ class SpotlightMoveButton(discord.ui.Button):
         "keep": words.KEEP_FOREVER,
         "expire": "Let it expire",
         "bump": words.BUMP_NOW,
+        "spotlight_on": words.SPOTLIGHT_ON,
+        "spotlight_off": words.SPOTLIGHT_OFF,
+        "opt_out": words.OPT_OUT,
+        "opt_in": words.OPT_IN,
+        "unlink_youtube": words.UNLINK_YOUTUBE,
         "give_role": words.GIVE_PING_ROLE,
         "take_role": words.TAKE_PING_ROLE,
         "remove": words.REMOVE,
@@ -1190,13 +1350,30 @@ class SpotlightMoveButton(discord.ui.Button):
         "keep": discord.ButtonStyle.success,
         "expire": discord.ButtonStyle.secondary,
         "bump": discord.ButtonStyle.primary,
+        "spotlight_on": discord.ButtonStyle.success,
+        "spotlight_off": discord.ButtonStyle.secondary,
+        "opt_out": discord.ButtonStyle.secondary,
+        "opt_in": discord.ButtonStyle.success,
+        "unlink_youtube": discord.ButtonStyle.secondary,
         "give_role": discord.ButtonStyle.success,
         "take_role": discord.ButtonStyle.secondary,
         "remove": discord.ButtonStyle.danger,
     }
+    ROWS = {
+        "opt_out": 2,
+        "opt_in": 2,
+        "give_role": 2,
+        "take_role": 2,
+        "unlink_youtube": 2,
+        "remove": 2,
+    }
 
     def __init__(self, action: str, spotlight_id: Any) -> None:
-        super().__init__(label=self.LABELS[action], style=self.STYLES[action], row=1)
+        super().__init__(
+            label=self.LABELS[action],
+            style=self.STYLES[action],
+            row=self.ROWS.get(action, 1),
+        )
         self.action = action
         self.spotlight_id = int(spotlight_id)
 
@@ -1235,6 +1412,17 @@ async def run_spotlight_move(
         when = words.expiry_in_days(bot.store.get(guild.id, SPOTLIGHT_DEFAULT_DAYS_KEY))
         await change_spotlight(bot, guild, actor, spotlight_id, expires_at=when)
         return (words.EXPIRES_SAID.format(login=login, when=words.when_words(when)), True)
+    if action in ("spotlight_on", "spotlight_off"):
+        fresh = await set_spotlight(
+            bot, guild, actor, spotlight_id, action == "spotlight_on"
+        )
+        return (words.spotlight_said(fresh), True)
+    if action in ("opt_out", "opt_in"):
+        fresh = await set_announce(bot, guild, actor, spotlight_id, action == "opt_in")
+        return (words.announce_said(fresh), True)
+    if action == "unlink_youtube":
+        _, _, said = await unlink_youtube(bot, guild, actor, spotlight_id)
+        return (said, True)
     if action in ("give_role", "take_role"):
         move = give_fan_role if action == "give_role" else take_fan_role
         outcome, _ = await move(bot, guild, actor, spotlight_id)
@@ -1263,7 +1451,7 @@ async def run_spotlight_move(
 class AddChannelButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(
-            label=words.ADD_BUTTON, style=discord.ButtonStyle.primary, row=2
+            label=words.ADD_BUTTON, style=discord.ButtonStyle.primary, row=3
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -1272,11 +1460,64 @@ class AddChannelButton(discord.ui.Button):
         await interaction.response.send_modal(AddChannelModal(self.view))
 
 
-class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_MODAL_TITLE):
+class LinkYouTubeButton(discord.ui.Button):
+    def __init__(self, spotlight_id: Any) -> None:
+        super().__init__(
+            label=words.LINK_YOUTUBE, style=discord.ButtonStyle.primary, row=2
+        )
+        self.spotlight_id = int(spotlight_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await interaction.response.send_modal(
+            LinkYouTubeModal(self.spotlight_id, self.view)
+        )
+
+
+class LinkYouTubeModal(AnswersErrors, discord.ui.Modal, title=words.LINK_YOUTUBE):
+    channel = discord.ui.TextInput(
+        label=words.ADD_YOUTUBE_LABEL,
+        placeholder=words.ADD_YOUTUBE_PLACEHOLDER,
+        max_length=120,
+    )
+
+    def __init__(self, spotlight_id: int, previous: Any = None) -> None:
+        super().__init__()
+        self.spotlight_id = int(spotlight_id)
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        _, _, said = await link_youtube(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.spotlight_id,
+            str(self.channel),
+        )
+        await render_spotlight(interaction, self.spotlight_id, self.previous)
+        await answer(interaction, said)
+
+
+class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_CHANNEL_MODAL_TITLE):
     channel = discord.ui.TextInput(
         label=words.ADD_LOGIN_LABEL,
         placeholder=words.ADD_LOGIN_PLACEHOLDER,
         max_length=words.LOGIN_MAX,
+    )
+    spotlight = discord.ui.TextInput(
+        label=words.ADD_SPOTLIGHT_LABEL,
+        placeholder=words.ADD_SPOTLIGHT_PLACEHOLDER,
+        required=False,
+        max_length=5,
+    )
+    youtube = discord.ui.TextInput(
+        label=words.ADD_YOUTUBE_LABEL,
+        placeholder=words.ADD_YOUTUBE_PLACEHOLDER,
+        required=False,
+        max_length=120,
     )
     days = discord.ui.TextInput(
         label=words.ADD_DAYS_LABEL,
@@ -1292,24 +1533,43 @@ class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_MODAL_TIT
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction, staff=False):
             return
+        bot = interaction.client
         given = str(self.channel)
         typed = str(self.days).strip()
         if typed and not typed.isdigit():
             await render_spotlight(interaction, None, self.previous)
             await answer(interaction, words.BAD_DAYS.format(given=typed[:40]))
             return
+        asked = str(self.spotlight).strip()
+        wanted = words.wanted_spotlight(
+            asked, bool(bot.store.get(interaction.guild.id, CHANNEL_SPOTLIGHT_DEFAULT_KEY))
+        )
+        if wanted is None:
+            await render_spotlight(interaction, None, self.previous)
+            await answer(
+                interaction, words.BAD_SPOTLIGHT_ANSWER.format(given=asked[:40])
+            )
+            return
         outcome, row = await spotlight_channel(
-            interaction.client,
+            bot,
             interaction.guild,
             interaction.user,
             given,
             days=int(typed) if typed else None,
             keep=not typed,
+            spotlight=wanted,
         )
+        said = add_said(bot, interaction.guild, outcome, row, given)
+        wanted_youtube = str(self.youtube).strip()
+        if row is not None and wanted_youtube:
+            _, fresh, linked = await link_youtube(
+                bot, interaction.guild, interaction.user, row["id"], wanted_youtube
+            )
+            row = fresh if fresh is not None else row
+            said = f"{said} {linked}"
         await render_spotlight(
             interaction, row["id"] if row is not None else None, self.previous
         )
-        said = add_said(interaction.client, interaction.guild, outcome, row, given)
         await answer(interaction, said)
 
 
@@ -1327,7 +1587,7 @@ def add_said(bot: Any, guild: Any, outcome: str, row: Any, given: Any) -> str:
 
 class SpotlightBackButton(discord.ui.Button):
     def __init__(self) -> None:
-        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=2)
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=3)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction, staff=False):
