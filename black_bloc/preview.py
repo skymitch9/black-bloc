@@ -31,7 +31,7 @@ GOLIVE_END_KEEP_MENTION_KEY = "golive_end_keep_mention"
 BIRTHDAY_TEMPLATE_KEY = "birthday_template"
 BIRTHDAY_COLOR_KEY = "birthday_color"
 
-SAMPLE_LIMIT = 400
+SAMPLE_LIMIT = 4000
 OVERRIDE_LIMIT = 4000
 ROW_CAP = 5
 

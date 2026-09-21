@@ -1,14 +1,17 @@
 import {
   Outage,
+  api,
   clearSetting,
   nameRecord,
   refChannels,
   refMembers,
   refRoles,
   saveSetting,
+  send,
   settings,
   settingsNamespace,
 } from './api.js';
+import { messageTree, mountTree } from './discordmock.js';
 import { ICONS } from './icons.js';
 import { channelLabel, humanLabel } from './labels.js';
 
@@ -1016,8 +1019,9 @@ function blank(value) {
  * One settings row: human label, mono raw key, control. It carries its own
  * dirty mark and left border; saving is the panel's job, not the row's.
  */
-export async function settingRow(spec, { onDirty = null } = {}) {
+export async function settingRow(spec, { onDirty = null, mock = true } = {}) {
   const say = notice();
+  const drawnBy = mock && WORDING_TYPES.has(spec.type) ? await previewFeatureFor(spec.key) : null;
   const mark = el('span', { class: 'setrow-mark', text: 'CHANGED', hidden: true });
   const node = el('div', {
     class: 'setrow',
@@ -1053,12 +1057,24 @@ export async function settingRow(spec, { onDirty = null } = {}) {
     say,
   };
 
+  const shown = drawnBy
+    ? discordMock({
+      feature: drawnBy,
+      lazy: true,
+      draft: () => {
+        const found = readNow();
+        return { [spec.key]: found.ok && !blank(found.value) ? String(found.value) : '' };
+      },
+    })
+    : null;
+
   const paint = () => {
     const found = readNow();
     row.dirty = found.ok ? !(same(found.value, state.loaded) || (blank(found.value) && blank(state.loaded))) : true;
     node.setAttribute('data-dirty', row.dirty ? 'true' : 'false');
     mark.hidden = !row.dirty;
     wipe.hidden = !(clearable() && found.ok && !blank(found.value));
+    if (shown) shown.repaint();
     if (onDirty) onDirty();
   };
   row.paint = paint;
@@ -1108,11 +1124,15 @@ export async function settingRow(spec, { onDirty = null } = {}) {
     el('div', { class: 'setrow-control' }, [made.node]),
     wipe,
     say,
+    shown ? el('div', { class: 'setrow-mock' }, [shown.node, shown.say]) : null,
   );
   say.classList.add('setrow-say');
   paint();
   return row;
 }
+
+/** The two types whose value is words the bot posts, and so the two a mock is drawn under. */
+const WORDING_TYPES = new Set(['text', 'longtext']);
 
 const SHOW_KEYS = 'bb_show_keys';
 
@@ -1215,13 +1235,13 @@ export function saveBar(onSave, onDiscard, { where = null } = {}) {
  * dirty rows; a row emptied back to nothing is CLEARED rather than stored as
  * null, which is how "put this back to its default" survives the docked bar.
  */
-export async function settingsEditor(specs, { onSaved = null, where = null } = {}) {
+export async function settingsEditor(specs, { onSaved = null, where = null, mock = true } = {}) {
   const rows = [];
   const dock = saveBar(() => write(), () => discard(), { where });
   const count = () => rows.filter((row) => row.dirty).length;
   const refresh = () => dock.say(count());
 
-  for (const spec of specs) rows.push(await settingRow(spec, { onDirty: refresh }));
+  for (const spec of specs) rows.push(await settingRow(spec, { onDirty: refresh, mock }));
 
   const discard = () => {
     for (const row of rows) row.reset();
@@ -1299,6 +1319,100 @@ export async function namespaceSettings(namespace, {
   return group.node;
 }
 
+
+/* ---- the Discord mock: what the bot would actually post, live as they type ---- */
+
+const PREVIEW_EVERY_MS = 250;
+const MOCK_WORKING = 'Drawing what Discord would show…';
+let previewFeatures = null;
+
+/** The map of which settings key has a mock and which has none, asked for once per page.
+    The PROMISE is cached, not the answer: ninety rows are built in one pass and would
+    otherwise fire ninety requests before the first one came back. */
+export function previewMap() {
+  if (previewFeatures === null) {
+    previewFeatures = api('/api/preview/features').catch(() => ({ features: [], keys: {} }));
+  }
+  return previewFeatures;
+}
+
+/** The feature whose message a settings key writes a word of, or null when it writes none. */
+export async function previewFeatureFor(key) {
+  const found = await previewMap();
+  return (found.keys || {})[key] || null;
+}
+
+/** One message, drawn as Discord draws it. `rendered` is /api/preview/message's own answer. */
+export function discordMessage(rendered, options = {}) {
+  return mountTree(messageTree(rendered, options), el);
+}
+
+/**
+ * A live mock: it asks the BOT what it would post for `feature` with the draft laid over
+ * the stored wording, and repaints on every keystroke (debounced). `draft()` answers the
+ * overrides, `sample()` the made-up facts; both are read at paint time so a caller only
+ * has to call `repaint()`. Nothing is ever saved by this — the route only ever reads.
+ */
+export function discordMock({
+  feature,
+  draft = () => ({}),
+  sample = () => ({}),
+  say = null,
+  lazy = false,
+} = {}) {
+  const voice = say || notice();
+  const holder = el('div', { class: 'dcmock-holder' });
+  let timer = null;
+  let run = 0;
+  let drawn = false;
+
+  const paint = async () => {
+    const mine = (run += 1);
+    drawn = true;
+    try {
+      const found = await send('/api/preview/message', 'POST', {
+        feature,
+        overrides: draft() || {},
+        sample: sample() || {},
+      });
+      if (mine !== run) return;
+      holder.replaceChildren(discordMessage(found));
+      voice.say('');
+    } catch (error) {
+      if (mine !== run) return;
+      const said = sentenceFor(error);
+      voice.say(said.text, said.tone);
+    }
+  };
+
+  /** Nothing is asked for until the mock has been drawn once — see `watch` below. */
+  const repaint = () => {
+    if (!drawn) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(paint, PREVIEW_EVERY_MS);
+  };
+
+  /** A lazy mock draws itself the first time it is scrolled to, and not before: a
+      settings page holds ninety rows and must not ask the bot ninety times on load. */
+  const watch = () => {
+    if (typeof IntersectionObserver !== 'function') {
+      paint();
+      return;
+    }
+    const seen = new IntersectionObserver((entries) => {
+      if (!entries.some((one) => one.isIntersecting)) return;
+      seen.disconnect();
+      paint();
+    });
+    seen.observe(holder);
+  };
+
+  holder.replaceChildren(el('p', { class: 'field-help', text: MOCK_WORKING }));
+  if (lazy) watch();
+  else paint();
+  return { node: holder, paint, repaint, say: voice };
+}
+
 const TEMPLATE_TOKEN = /\{\{|\}\}|\{([^{}]*)\}/g;
 
 const UNREADABLE = 'Black Bloc cannot read this wording, so it would use its own default instead. ' +
@@ -1326,6 +1440,8 @@ export function fillTemplate(template, values) {
  * Settings page uses, and `paint(filled, key)` called with the filled-in sample
  * every time the text or one of `controls` changes. `onSaved` is the Settings
  * page's own hook, passed through so a card below can refresh itself.
+ * `preview: {feature, sample}` mounts the Discord mock under the rows and asks
+ * the bot to re-render the whole message from the draft on every keystroke.
  */
 export async function templateEditor(spec, {
   sample = () => ({}),
@@ -1333,6 +1449,7 @@ export async function templateEditor(spec, {
   controls = [],
   where = null,
   onSaved = null,
+  preview = null,
 } = {}) {
   const wanted = (Array.isArray(spec) ? spec : [spec]).map(
     (one) => ({ ...one, type: one.editorType || 'longtext' }),
@@ -1340,8 +1457,16 @@ export async function templateEditor(spec, {
   const editor = await settingsEditor(wanted, {
     where: where || humanLabel(wanted[0].key),
     onSaved,
+    mock: !preview,
   });
   const say = notice();
+  const draft = () => Object.fromEntries(editor.rows.map((row) => {
+    const found = row.read();
+    return [row.key, found.ok && found.value !== null && found.value !== undefined ? String(found.value) : ''];
+  }));
+  const mock = preview
+    ? discordMock({ feature: preview.feature, draft, sample: preview.sample || (() => ({})) })
+    : null;
   const repaintOne = (row) => {
     const found = row.read();
     const filled = found.ok ? fillTemplate(found.value, sample()) : null;
@@ -1349,7 +1474,10 @@ export async function templateEditor(spec, {
     else say.say('');
     if (paint) paint(filled, row.key);
   };
-  const repaint = () => editor.rows.forEach(repaintOne);
+  const repaint = () => {
+    editor.rows.forEach(repaintOne);
+    if (mock) mock.repaint();
+  };
   for (const row of editor.rows) {
     const control = row.node.querySelector('.setrow-control');
     if (control) {
@@ -1359,7 +1487,7 @@ export async function templateEditor(spec, {
   }
   for (const one of controls) one.addEventListener('change', repaint);
   repaint();
-  return { row: editor.rows[0], rows: editor.rows, editor, say, repaint };
+  return { row: editor.rows[0], rows: editor.rows, editor, say, repaint, mock };
 }
 
 /**

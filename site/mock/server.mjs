@@ -4314,7 +4314,7 @@ route('POST', '/api/preview/message', async (context) => {
   );
   const sample = { ...(PREVIEW_SAMPLES[feature] || {}) };
   for (const [key, value] of Object.entries(body.sample || {})) {
-    if (key in sample) sample[key] = String(value === null || value === undefined ? '' : value).slice(0, 400);
+    if (key in sample) sample[key] = String(value === null || value === undefined ? '' : value).slice(0, 4000);
   }
   if (!sample.name) sample.name = PREVIEW_SAMPLE.name;
   return PREVIEW_DRAW[feature](read, sample);

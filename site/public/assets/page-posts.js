@@ -1,7 +1,6 @@
 import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { htmlToDiscordMarkdown } from './clipmd.js';
-import { renderPreview } from './discordmd.js';
 import { logsSection } from './logs.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
 import {
@@ -12,6 +11,7 @@ import {
   button,
   card,
   channelSelect,
+  discordMock,
   el,
   field,
   keepSaying,
@@ -39,7 +39,7 @@ const NOTHING_YET = 'There are no posts yet.';
 const NO_BODY = 'Nothing is written in this one yet.';
 const NO_CHANNEL = 'no channel yet';
 const AMBER_AT = 0.9;
-const PREVIEW_EVERY_MS = 60;
+const POST_FEATURE = 'post';
 const NEED_A_TITLE = 'A post needs a title. Type one and press Make it again.';
 const POSTED_HERE = 'Posted in {where}.';
 const POSTED_IN_SHADOW = 'The shadow copy is in {where}.';
@@ -342,27 +342,24 @@ async function editor(payload, known, history) {
   box.value = draft.body;
   const pasteNote = pasteNoteNode();
   const counter = counterNode();
-  const preview = el('div', { class: 'preview', id: 'post-preview' });
   const howLine = el('p', { class: 'field-help', id: 'post-how' });
+
+  // The BOT decides what a post becomes — plain or embed, and where the title is clamped —
+  // so the pane asks it rather than rendering a second opinion here. See code-notes.
+  const shown = discordMock({
+    feature: POST_FEATURE,
+    sample: () => ({ style: draft.style, title: draft.title, body: draft.body }),
+  });
+  const preview = el('div', { class: 'preview', id: 'post-preview' }, [shown.node, shown.say]);
 
   const capOf = () => (payload.styles.find((one) => one.style === draft.style) || { cap: 2000 }).cap;
 
-  let timer = null;
   const paintPreview = () => {
-    preview.innerHTML = renderPreview(draft.body, {
-      style: draft.style,
-      title: draft.title,
-      channels: known.channels,
-      roles: known.roles,
-      members: known.members,
-    });
+    shown.repaint();
     counter.paint(draft.body.length, capOf());
     howLine.textContent = willPost(draft, post, payload, Boolean(changeCount(draft, was)));
   };
-  const schedule = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(paintPreview, PREVIEW_EVERY_MS);
-  };
+  const schedule = paintPreview;
 
   title.addEventListener('input', () => {
     draft.title = title.value;
@@ -473,14 +470,9 @@ async function editor(payload, known, history) {
       () => '',
     );
     if (!found.ok) return;
-    const drawn = el('div', { class: 'preview' });
-    drawn.innerHTML = renderPreview(found.found.preview.body, {
-      style: found.found.preview.style,
-      title: found.found.preview.title,
-      channels: known.channels,
-      roles: known.roles,
-      members: known.members,
-    });
+    const old = found.found.preview;
+    const seen = discordMock({ feature: POST_FEATURE, sample: () => ({ ...old }) });
+    const drawn = el('div', { class: 'preview' }, [seen.node, seen.say]);
     openDrawer(VIEWING.replace('{n}', String(version.n)).replace('{title}', post.title), [drawn]);
   };
 

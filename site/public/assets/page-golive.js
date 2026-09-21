@@ -1,6 +1,5 @@
-import { api, listOf, names, refRoles, send, settings, settingsNamespace } from './api.js';
+import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
-import { renderPreview } from './discordmd.js';
 import {
   joinStreamers,
   liveStreams,
@@ -62,7 +61,6 @@ const SPOTLIGHT_MODE_KEY = 'spotlight_mode';
 const CHANNEL_KEY = 'golive_channel_id';
 const END_EDIT = 'edit';
 const GAME_FALLBACK = 'something';
-const DEFAULT_TEMPLATE = 'the default wording';
 
 const SUBTITLE = 'Who is streaming, who is set up to be announced, and what the announcement '
   + 'says. One list of people, whichever platform they use.';
@@ -96,31 +94,20 @@ const ADD_PICK_FIRST = 'Pick the member this is about first.';
 const ANNOUNCEMENT_NOTE = 'One wording for both platforms. {platform} fills itself in.';
 const WHILE_LIVE_TITLE = 'While they are live';
 const ENDED_TITLE = 'Once the stream has ended';
-const WORDING_TITLE = 'Wording';
-const WORDING_NOTE = 'Both messages as the bot itself renders them — the same functions Discord '
-  + 'gets, not a copy living on this page. The sample is a two-hour stream of Celeste.';
-const WORDING_LEFT = 'golive_end_mode is off, so an announcement is left exactly as posted. This '
-  + 'is what edit would write instead.';
-const WORDING_STALE = 'This card repaints itself whenever either wording above is saved. Refresh '
-  + 'is for a change somebody else made, on the Settings page or from Discord.';
-const WHILE_LIVE = 'while live';
-const AFTER_THE_STREAM = 'after the stream';
 const END_HELP = 'edit rewrites the announcement once the stream is over; off leaves it as '
   + 'posted. The Wording card below shows both.';
 const END_UNKNOWN = 'The bot did not report a golive_end_mode key, so what happens once a stream '
   + 'ends is not shown rather than guessed at.';
 const END_NO_KEYS = 'The bot did not report a golive_end_template key, so the ending is edited '
   + 'from Everything else rather than guessed at here.';
-const END_BLANK_TEMPLATE = 'Empty — the live sentence is kept and golive_end_suffix is added to '
-  + 'the end of it instead.';
-const END_BLANK_AUTHOR = 'Empty — the card’s top line keeps saying “was live on”.';
 const END_WORDING_WHERE = 'Once the stream is over';
 const NO_TEMPLATE = 'The bot did not report a golive_template key, so this editor is not shown '
   + 'rather than guessed at.';
 const PLAYING_HELP = `Off shows what an empty game reads as: “${GAME_FALLBACK}”.`;
-
-  + 'forgotten, so write it again to go back.';
-  + 'it in the Once the stream is over box above.';
+const MOCK_NOTE = 'Every box below is drawn by the bot itself — the same functions Discord gets, '
+  + 'not a copy living on this page. The mock under each one repaints as you type.';
+const LIVE_FEATURE = 'golive_live';
+const ENDED_FEATURE = 'golive_ended';
 
 const SAMPLES = {
   twitch: {
@@ -760,15 +747,6 @@ function spotlightWords(rows) {
   return `${spots.length} channel(s) with no member · ${kept} kept for ever · ${spots.length - kept} expiring`;
 }
 
-/** The card as Discord would draw it: the top line, then the wording with its markdown. */
-function drawCard(node, text, head, roles) {
-  node.innerHTML = renderPreview(String(text || ''), {
-    style: 'embed',
-    title: head || '',
-    roles: (roles || []).map((one) => ({ id: String(one.id), name: one.name })),
-  });
-}
-
 const COLUMNS = ['Member', 'Twitch', 'YouTube', 'Ping role', 'Announced', 'Expires', 'Opted out'];
 const STREAMER_GRID = 'grid-template-columns: minmax(180px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 24px';
 
@@ -952,83 +930,6 @@ function addStreamerButton() {
   });
 }
 
-async function pingPrefix(specs) {
-  const spec = specs.find((one) => one.key === PING_KEY);
-  if (!spec || !spec.value) return '';
-  try {
-    const role = (await refRoles()).find((one) => String(one.id) === String(spec.value));
-    return role ? `@${role.name} ` : `@${spec.value} `;
-  } catch (e) {
-    return `@${spec.value} `;
-  }
-}
-
-function botLine(mark, line, text, footer) {
-  return el('li', { class: 'msg', 'data-direction': 'out' }, [
-    el('div', { class: 'msg-head' }, [
-      badge(mark, mark === WHILE_LIVE ? 'ok' : null),
-      el('span', { text: line }),
-    ]),
-    el('p', { class: 'msg-body', text }),
-    footer ? el('p', { class: 'msg-head', text: footer }) : null,
-  ].filter(Boolean));
-}
-
-function withRoleNames(text, roles) {
-  return String(text || '').replace(/<@&(\d+)>/g, (whole, id) => {
-    const role = roles.find((one) => String(one.id) === id);
-    return role ? `@${role.name}` : whole;
-  });
-}
-
-async function wordingPreview(say, endMode, endTemplate) {
-  const list = el('ul', { class: 'msglist' });
-  const left = el('p', { class: 'field-help', text: WORDING_LEFT });
-  let roles = [];
-  const heads = { live: '', ended: '', roles };
-  const paint = async () => {
-    try {
-      const found = await api('/api/golive/preview');
-      heads.live = found.live.author || '';
-      heads.ended = found.ended.author || '';
-      heads.roles = roles;
-      list.replaceChildren(
-        botLine(WHILE_LIVE, found.live.author, withRoleNames(found.live.text, roles)),
-        botLine(
-          AFTER_THE_STREAM,
-          found.ended.author,
-          withRoleNames(found.ended.text, roles),
-          found.ended.footer,
-        ),
-      );
-      say.say('');
-    } catch (error) {
-      const said = sentenceFor(error);
-      say.say(said.text, said.tone);
-    }
-  };
-  try {
-    roles = await refRoles();
-  } catch (error) {
-    roles = [];
-  }
-  await paint();
-  const node = card(WORDING_TITLE, [
-    el('p', { class: 'field-help', text: WORDING_NOTE }),
-    list,
-    left,
-    el('p', { class: 'field-help', text: WORDING_STALE }),
-    say,
-  ], {
-    actions: [
-      button('Refresh', () => paint(), { tone: 'quiet' }),
-    ],
-  });
-  const showEnd = (mode) => { left.hidden = String(mode) === END_EDIT; };
-  showEnd(endMode);
-  return { node, paint, showEnd, heads };
-}
-
 async function announcementSection(specs, wordingSpecs) {
   const group = section('The announcement', ANNOUNCEMENT_NOTE);
   const spec = specs.find((one) => one.key === TEMPLATE_KEY);
@@ -1038,69 +939,40 @@ async function announcementSection(specs, wordingSpecs) {
   }
   const shape = { which: TWITCH };
   const playing = el('input', { class: 'input switch', type: 'checkbox', checked: true });
-  const prefix = await pingPrefix(specs);
   const endSpec = specs.find((one) => one.key === END_MODE_KEY) || null;
   const endTemplate = specs.find((one) => one.key === END_TEMPLATE_KEY) || null;
   const endAuthor = specs.find((one) => one.key === END_AUTHOR_KEY) || null;
-  const preview = await wordingPreview(
-    notice(),
-    endSpec ? endSpec.value : null,
-    endTemplate ? (endTemplate.value ?? endTemplate.default) : '',
-  );
 
-  const liveShown = el('div', { class: 'preview discord-preview' });
+  /** The facts the BOT makes the sample announcement out of; the chips move the platform. */
+  const facts = () => ({
+    platform: shape.which,
+    game: playing.checked ? SAMPLES[shape.which].game : '',
+  });
+
   const liveMade = await templateEditor(spec, {
     controls: [playing],
-    onSaved: () => preview.paint(),
     sample: () => ({
       ...SAMPLES[shape.which],
       game: playing.checked ? SAMPLES[shape.which].game : GAME_FALLBACK,
     }),
-    paint: (filled) => {
-      drawCard(liveShown, filled === null ? DEFAULT_TEMPLATE : `${prefix}${filled}`, preview.heads.live, preview.heads.roles);
-    },
+    preview: { feature: LIVE_FEATURE, sample: facts },
   });
 
-  const endShown = {
-    [END_TEMPLATE_KEY]: el('div', { class: 'preview discord-preview' }),
-    [END_AUTHOR_KEY]: el('p', { class: 'preview' }),
-  };
-  const endHead = { text: '' };
-  const blank = { [END_TEMPLATE_KEY]: END_BLANK_TEMPLATE, [END_AUTHOR_KEY]: END_BLANK_AUTHOR };
   let endMade = null;
   if (endTemplate) {
     const wanted = [{ ...endTemplate, editorType: 'longtext' }];
     if (endAuthor) wanted.push({ ...endAuthor, editorType: 'longtext' });
     endMade = await templateEditor(wanted, {
       where: END_WORDING_WHERE,
-      onSaved: () => preview.paint(),
       sample: () => ({ ...SAMPLES[shape.which], ...ENDED_EXTRA }),
-      paint: (filled, key) => {
-        const node = endShown[key];
-        if (!node) return;
-        const empty = filled !== null && String(filled).trim() === '';
-        if (key === END_AUTHOR_KEY) {
-          endHead.text = empty || filled === null ? '' : String(filled);
-          node.textContent = empty ? blank[key] : (filled === null ? '' : filled);
-          node.classList.toggle('field-help', empty);
-          return;
-        }
-        if (empty) {
-          node.textContent = blank[key];
-          node.classList.add('field-help');
-          return;
-        }
-        node.classList.remove('field-help');
-        drawCard(node, filled === null ? '' : filled, endHead.text || preview.heads.ended, preview.heads.roles);
-      },
+      preview: { feature: ENDED_FEATURE, sample: facts },
     });
   }
 
   const endMode = endSpec ? modeSwitch(endSpec, {
     label: 'The stream-end wording',
-    onSaved: (key, value) => {
-      preview.showEnd(String(value));
-      preview.paint();
+    onSaved: () => {
+      if (endMade) endMade.repaint();
     },
   }) : null;
 
@@ -1124,6 +996,7 @@ async function announcementSection(specs, wordingSpecs) {
   );
 
   group.body.append(
+    el('p', { class: 'field-help', text: MOCK_NOTE }),
     chips,
     card(WHILE_LIVE_TITLE, [
       liveMade.row.node,
@@ -1132,7 +1005,8 @@ async function announcementSection(specs, wordingSpecs) {
         endMode ? field('When a stream ends', endMode.node, END_HELP) : null,
       ].filter(Boolean)),
       endMode ? null : el('p', { class: 'field-help', text: END_UNKNOWN }),
-      liveShown,
+      liveMade.mock.node,
+      liveMade.mock.say,
       endMode ? endMode.say : null,
       liveMade.say,
     ].filter(Boolean)),
@@ -1140,14 +1014,16 @@ async function announcementSection(specs, wordingSpecs) {
       ...(endMade
         ? endMade.rows.map((row) => row.node)
         : [el('p', { class: 'say-nothing', text: END_NO_KEYS })]),
-      endShown[END_AUTHOR_KEY],
-      endShown[END_TEMPLATE_KEY],
+      endMade ? endMade.mock.node : null,
+      endMade ? endMade.mock.say : null,
       endRows.length
-        ? await settingsPanel(endRows, { onSaved: () => preview.paint(), where: ENDED_TITLE })
+        ? await settingsPanel(endRows, {
+          onSaved: () => { if (endMade) endMade.repaint(); },
+          where: ENDED_TITLE,
+        })
         : null,
       endMade ? endMade.say : null,
     ].filter(Boolean)),
-    preview.node,
   );
   return group.node;
 }

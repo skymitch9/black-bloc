@@ -2597,3 +2597,5 @@ body[data-show-was="1"] .preview-was { display: block; }
   .dcmock-embed-inner { grid-template-columns: minmax(0, 1fr); }
   .dcmock-media[data-kind="thumbnail"] { flex-direction: row; width: auto; text-align: left; }
 }
+.setrow-mock { flex-basis: 100%; min-width: 0; }
+.dcmock-holder { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
