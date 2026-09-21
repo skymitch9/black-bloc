@@ -2759,6 +2759,22 @@ KEY_HELP.update(
 )
 
 
+# A video address names a channel only if YouTube's own page is read, so this ships off.
+GOLIVE_AUTOLINK_VIDEO_KEY = "golive_autolink_youtube_video"
+GOLIVE_AUTOLINK_VIDEO_DEFAULT = False
+KEY_TYPES.update({GOLIVE_AUTOLINK_VIDEO_KEY: "bool"})
+KEY_HELP.update(
+    {
+        GOLIVE_AUTOLINK_VIDEO_KEY: (
+            "true lets a go-live whose Discord status carries a YouTube video link find the "
+            "video's channel and link the person to it; false leaves such a link unread. Off "
+            "by default: it reads YouTube's page, which can change, and a video is not always "
+            "the streamer's own"
+        ),
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -3415,6 +3431,8 @@ class SettingsStore:
             return True
         if key == GOLIVE_AUTOLINK_PRESENCE_KEY:
             return GOLIVE_AUTOLINK_PRESENCE_DEFAULT
+        if key == GOLIVE_AUTOLINK_VIDEO_KEY:
+            return GOLIVE_AUTOLINK_VIDEO_DEFAULT
         if key == "pings_mode":
             return "off"
         if key == "pings_events_role_name":

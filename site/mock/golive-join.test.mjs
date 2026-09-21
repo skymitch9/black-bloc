@@ -420,7 +420,7 @@ const SPOTLIGHT = [
 }
 
 // --- ⚠️ every settings key lands in exactly one drawer or one named surface -------------------
-// The 53 keys the three namespaces held on 2026-09-21, measured with
+// The 54 keys the three namespaces held on 2026-09-21, measured with
 //   python -c "from black_bloc import settings_store as s; print([k for k in s.KEY_TYPES if
 //              s.namespace_of(k) in ('golive','pings','youtube')])"
 // The catch-all is what keeps this satisfiable: a key added tomorrow appears in Everything
@@ -430,7 +430,7 @@ const NAMESPACE_KEYS = [
   'golive_end_template', 'golive_end_author', 'golive_end_keep_mention', 'golive_live_role_id',
   'golive_require_role_id', 'golive_ignore_role_id', 'golive_cooldown_minutes',
   'golive_ping_role_id', 'golive_max_session_hours', 'golive_embed', 'golive_boot_sweep',
-  'golive_autolink_presence', 'golive_log_level',
+  'golive_autolink_presence', 'golive_autolink_youtube_video', 'golive_log_level',
   'golive_panel_minutes', 'golive_costream_mode', 'golive_costream_template',
   'golive_costream_author',
   'pings_mode', 'pings_events_role_name', 'pings_fan_role_creation', 'pings_fan_role_template',
@@ -448,7 +448,7 @@ const NAMESPACE_KEYS = [
 
 {
   const where = 'every key lands once';
-  is(`${where} — the namespaces held 53 keys when this was measured`, NAMESPACE_KEYS.length, 53);
+  is(`${where} — the namespaces held 54 keys when this was measured`, NAMESPACE_KEYS.length, 54);
 
   const specs = NAMESPACE_KEYS.map((key) => ({ key, type: 'text', value: null }));
   const placed = placeSettings(specs);
@@ -497,5 +497,5 @@ process.stdout.write(
     + 'has a row; two open sessions are one row; a co-stream says both platforms; an ambiguous '
     + 'address is refused in words; a spotlighted channel with no member is its own row and one '
     + 'that IS a linked login is not a second; a channel row carries its YouTube link, its '
-    + 'opt-out and the side its session opened on; all 53 settings keys land in exactly one place\n',
+    + 'opt-out and the side its session opened on; all 54 settings keys land in exactly one place\n',
 );

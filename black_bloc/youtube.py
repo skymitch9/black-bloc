@@ -8,8 +8,10 @@ from typing import Any, NamedTuple
 from .panels import KEEP_IT as KEEP_IT
 from .panels import panel_minutes as _panel_minutes
 from .youtube_live import (
+    BOT_CHECK,
     LIVE_URL,
     PROBE_REFUSED,
+    WATCH_URL,
     Confirm,
     Probe,
     read_confirm,
@@ -33,10 +35,34 @@ CANONICAL = re.compile(
 HANDLE = re.compile(r"^@?([A-Za-z0-9._-]{3,30})$")
 HANDLE_IN_URL = re.compile(r"youtube\.com/(?:@|c/|user/)([A-Za-z0-9._-]{1,60})")
 
+VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+VIDEO_IN_URL = re.compile(
+    r"(?:youtube\.com/(?:watch\?(?:\S*?&(?:amp;)?)?v=|live/|shorts/|embed/)|youtu\.be/)"
+    r"([A-Za-z0-9_-]{11})"
+)
+VIDEO_CHANNEL_META = re.compile(
+    r'<meta\s+itemprop="channelId"\s+content="(UC[A-Za-z0-9_-]{22})"'
+)
+VIDEO_CHANNEL_JSON = re.compile(
+    r'"(?:channelId|externalChannelId)"\s*:\s*"(UC[A-Za-z0-9_-]{22})"'
+)
+VIDEO_OWNER_NAME = re.compile(r'"ownerChannelName"\s*:\s*"([^"]{1,120})"')
+
 CANNOT_RESOLVE = (
     "I could not turn **{given}** into a YouTube channel id, so nothing was linked. Paste the "
     "channel address that starts with youtube.com/channel/UC…, or ask a Lead to set a YouTube "
     "API key so handles like @yourname can be looked up."
+)
+CANNOT_READ_VIDEO = (
+    "I could not tell which channel the video **{given}** belongs to, so nothing was linked. "
+    "Paste the channel address that starts with youtube.com/channel/UC… instead."
+)
+VIDEO_PAGE_REFUSED = (
+    "YouTube answered {status} for the video {video}, so the channel behind it is unknown."
+)
+VIDEO_CHALLENGED = (
+    "YouTube asked Black Bloc to sign in and prove it is not a robot instead of showing the "
+    "video {video}, so the channel behind it could not be read."
 )
 
 
@@ -66,6 +92,29 @@ def handle_in(text: Any) -> str | None:
         return None
     named = HANDLE.match(given)
     return named.group(1) if named else None
+
+
+def video_id_in(text: Any) -> str | None:
+    """A video id out of the four address shapes YouTube uses; never out of a bare word."""
+    found = VIDEO_IN_URL.search(str(text or "").strip())
+    return found.group(1) if found else None
+
+
+def _json_text(raw: str) -> str:
+    try:
+        return str(json.loads(f'"{raw.rstrip(chr(92))}"'))
+    except ValueError:
+        return raw
+
+
+def read_video_channel(html: Any) -> tuple[str, str] | None:
+    """The owner's channel off a watch page; a challenge page names nobody and answers None."""
+    body = html if isinstance(html, str) else str(html or "")
+    found = VIDEO_CHANNEL_META.search(body) or VIDEO_CHANNEL_JSON.search(body)
+    if found is None:
+        return None
+    named = VIDEO_OWNER_NAME.search(body)
+    return (found.group(1), _json_text(named.group(1)) if named else "")
 
 
 def title_of(payload: Any) -> str:
@@ -169,6 +218,43 @@ class YouTubeClient:
             raise YouTubeError(CANNOT_RESOLVE.format(given=(given or handle)[:60]))
         channel_id = found.group(1)
         return (channel_id, await self._title_of(channel_id))
+
+    async def resolve_video_channel(self, video_id: Any) -> tuple[str, str]:
+        """Which channel a video belongs to: one API unit with a key, else the watch page."""
+        wanted = str(video_id or "").strip()
+        if not VIDEO_ID.match(wanted):
+            raise YouTubeError(CANNOT_READ_VIDEO.format(given=wanted[:60] or "nothing"))
+        if self.keyed:
+            found = await self._video_channel_with_key(wanted)
+            if found is not None:
+                return found
+        status, _headers, body = await self._request(
+            "GET",
+            WATCH_URL.format(video_id=wanted),
+            headers={"User-Agent": BROWSER_AGENT},
+        )
+        if status != 200:
+            raise YouTubeError(
+                VIDEO_PAGE_REFUSED.format(status=status, video=wanted), network=True
+            )
+        found = read_video_channel(body)
+        if found is None:
+            raise YouTubeError(
+                VIDEO_CHALLENGED.format(video=wanted)
+                if BOT_CHECK.search(body or "")
+                else CANNOT_READ_VIDEO.format(given=wanted)
+            )
+        return found
+
+    async def _video_channel_with_key(self, video_id: str) -> tuple[str, str] | None:
+        """One unit; an empty answer falls through to the page rather than refusing."""
+        payload = await self._api("videos", {"part": "snippet", "id": video_id})
+        for row in payload.get("items") or ():
+            snippet = (row.get("snippet") if isinstance(row, dict) else None) or {}
+            channel_id = str(snippet.get("channelId") or "")
+            if CHANNEL_ID.match(channel_id):
+                return (channel_id, str(snippet.get("channelTitle") or ""))
+        return None
 
     async def _title_of(self, channel_id: str) -> str:
         """One unit, and only where a key exists; without one a channel goes by its id."""

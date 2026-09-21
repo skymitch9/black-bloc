@@ -29,6 +29,7 @@ from black_bloc.cogs.content.golive import (
     start_session,
 )
 from black_bloc.cogs.content.youtube import get_link as youtube_get_link
+from black_bloc.cogs.content.youtube import set_link as set_youtube_link
 from black_bloc.config import load_settings
 from black_bloc.golive import (
     CHANGE_CHANNEL,
@@ -2884,9 +2885,12 @@ class FakeYouTubeClient:
 
     keyed = False
 
-    def __init__(self, raises=None):
+    def __init__(self, raises=None, video=None, video_raises=None):
         self.raises = raises
+        self.video = video
+        self.video_raises = video_raises
         self.asked = []
+        self.videos_asked = []
 
     async def resolve(self, text):
         self.asked.append(str(text))
@@ -2896,6 +2900,12 @@ class FakeYouTubeClient:
         if not found:
             raise YouTubeError(f"no channel in {text}")
         return (found, "Moth Light")
+
+    async def resolve_video_channel(self, video_id):
+        self.videos_asked.append(str(video_id))
+        if self.video_raises is not None:
+            raise self.video_raises
+        return self.video or (YT_CHANNEL, "Moth Light")
 
 
 class FakeYouTubeCog:
@@ -3120,3 +3130,133 @@ async def test_a_twitch_poll_go_live_is_not_a_presence_so_nothing_is_auto_linked
     await cog._go_live(member, StreamInfo(url="https://twitch.tv/mothlight"), "twitch")
 
     assert await get_link(db, member.id) is None
+
+
+# --- a watch address names its channel, once the key is on -------------------------------------
+
+
+VIDEO_URL = "https://www.youtube.com/watch?v=abc12345678"
+VIDEO_KEY = "golive_autolink_youtube_video"
+
+
+async def a_youtube_presence(db, cog, bot, member, client, *, key=True, mode="shadow"):
+    """The one arrangement every test below shares: a watch address in somebody's status."""
+    await bot.store.set(GUILD, VIDEO_KEY, key)
+    await bot.store.set(GUILD, "golive_mode", mode)
+    bot.cogs["YouTube"] = FakeYouTubeCog(client)
+    await cog._go_live(member, StreamInfo(url=VIDEO_URL, platform="YouTube"), "presence")
+
+
+async def test_the_video_lookup_asks_youtube_nothing_while_the_key_is_off(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    client = FakeYouTubeClient()
+    bot.cogs["YouTube"] = FakeYouTubeCog(client)
+    await past_session(db, member.id, VIDEO_URL, platform="YouTube")
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert await youtube_get_link(db, member.id) is None
+    assert client.videos_asked == [] and client.asked == []
+    assert found["unreadable"] == [f"Moth → {VIDEO_URL}"]
+    assert "1 could not be read" in found["message"]
+
+
+async def test_the_key_on_links_the_member_to_the_channel_behind_the_video(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await bot.store.set(GUILD, VIDEO_KEY, True)
+    client = FakeYouTubeClient()
+    bot.cogs["YouTube"] = FakeYouTubeCog(client)
+    await past_session(db, member.id, VIDEO_URL, platform="YouTube")
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert (await youtube_get_link(db, member.id))["channel_id"] == YT_CHANNEL
+    assert client.videos_asked == ["abc12345678"]
+    assert found["linked"] == ["Moth → Moth Light"] and found["unreadable"] == []
+
+
+async def test_a_link_made_from_a_video_says_so_on_its_own_row(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await bot.store.set(GUILD, VIDEO_KEY, True)
+    bot.cogs["YouTube"] = FakeYouTubeCog()
+    await past_session(db, member.id, VIDEO_URL, platform="YouTube")
+
+    await cog_module.link_from_history(bot, bot.guild, staff)
+
+    row = json.loads(await action_details(db, "youtube.link"))
+    assert row["via_video"] is True
+    assert row["because"] == "history_sweep"
+
+
+async def test_a_channel_address_is_still_linked_without_anybody_asking_about_a_video(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await bot.store.set(GUILD, VIDEO_KEY, True)
+    client = FakeYouTubeClient()
+    bot.cogs["YouTube"] = FakeYouTubeCog(client)
+    await past_session(
+        db, member.id, f"https://www.youtube.com/channel/{YT_CHANNEL}", platform="YouTube"
+    )
+
+    await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert client.videos_asked == []
+    assert "via_video" not in json.loads(await action_details(db, "youtube.link"))
+
+
+async def test_a_presence_go_live_links_the_member_to_the_channel_behind_their_video(
+    cog, bot, db
+):
+    member = FakeMember(bot.guild, display_name="Moth")
+    client = FakeYouTubeClient()
+
+    await a_youtube_presence(db, cog, bot, member, client)
+
+    assert (await youtube_get_link(db, member.id))["channel_id"] == YT_CHANNEL
+    row = json.loads(await action_details(db, "youtube.link"))
+    assert row["via_video"] is True and row["because"] == "presence"
+    assert "golive.would_announce" in await action_kinds(db)
+
+
+async def test_a_youtube_that_will_not_say_leaves_the_link_unmade_and_the_post_still_goes(
+    cog, bot, db
+):
+    member = FakeMember(bot.guild, display_name="Moth")
+    client = FakeYouTubeClient(video_raises=YouTubeError("YouTube asked me to sign in."))
+
+    await a_youtube_presence(db, cog, bot, member, client, mode="on")
+
+    assert await youtube_get_link(db, member.id) is None
+    assert client.videos_asked == ["abc12345678"]
+    kinds = await action_kinds(db)
+    assert "golive.announce" in kinds
+    assert "youtube.link" not in kinds and "youtube.resolve_failed" not in kinds
+    assert len(bot.guild.channel.messages) == 1
+
+
+async def test_a_video_whose_channel_somebody_else_holds_is_refused_by_name(cog, bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    await set_youtube_link(db, OTHER, YT_CHANNEL, None, "Moth Light")
+
+    await a_youtube_presence(db, cog, bot, member, FakeYouTubeClient(), mode="on")
+
+    assert await youtube_get_link(db, member.id) is None
+    kinds = await action_kinds(db)
+    assert "golive.announce" in kinds and "golive.autolink_refused" in kinds
+    refused = json.loads(await action_details(db, "golive.autolink_refused"))
+    assert refused["channel"] == "Moth Light"
+
+
+async def test_a_go_live_with_no_youtube_cog_at_all_is_simply_unread(bot, db):
+    member = FakeMember(bot.guild, display_name="Moth")
+    staff = FakeMember(bot.guild, user_id=LEAD, display_name="Lead")
+    await bot.store.set(GUILD, VIDEO_KEY, True)
+    bot.cogs.pop("YouTube", None)
+    await past_session(db, member.id, VIDEO_URL, platform="YouTube")
+
+    found = await cog_module.link_from_history(bot, bot.guild, staff)
+
+    assert found["unreadable"] == [f"Moth → {VIDEO_URL}"]
