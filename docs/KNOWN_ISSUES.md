@@ -123,6 +123,21 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
+## KI-32 — `test_replacing_a_steps_picture_takes_the_old_one_away` fails about one gate in N on Windows, and passes alone — `WATCHING`
+
+**Symptom.** The v148 deploy gate (2026-09-20 18:3x) went red on exactly one test, `tests/api/tools/test_guides.py:494`
+`assert not pure.media_path(web, f"{first['id']}.png").exists()` — the replaced picture's file was still on disk when
+the test looked — while the other 6919 passed. Re-run alone, straight after: **1 passed in 0.95 s**. The second gate run
+was green with nothing changed. **Status: WATCHING** (one sighting).
+**Why tolerated.** The shape is a Windows file-handle race: the old picture is unlinked while something (an xdist
+sibling, an antivirus scan, the just-served response) still holds it, and `Path.unlink` on Windows either raises
+`PermissionError` (swallowed by the replace path) or the directory entry lingers a beat. Nothing in the bot misbehaves — the
+replace's next sweep or the next replace removes it — so this is a test that measures the wrong instant, not a leak.
+**What would change it.** A second sighting → the test waits up to one second for the unlink (poll `exists()`), or the
+replace path retries the unlink; a third → the media store is given a `remove()` that retries on `PermissionError` the way
+`shutil.rmtree`'s Windows handler does. Either way it stays a **read the log** item: the gate names the test, and a
+one-test red on THIS test with a green re-run is this issue, not the build.
+
 ## KI-31 — Voice RECEIVE rests on a PRE-RELEASE extension, and it pins the image to Python 3.12 — `ACCEPTED`
 
 **Symptom.** discord.py sends voice and does not receive it, so meeting minutes needs

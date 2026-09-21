@@ -243,18 +243,18 @@
 > [`minutes-design.md`](minutes-design.md) § Deviations for why ffmpeg was NOT added. Log
 > kinds: twelve `minutes.*`, four of them with a `web.` spelling.
 >
-> | What | v147 (`main`, 2026-09-20) | Where it is measured |
+> | What | v148 (`main`, 2026-09-20) | Where it is measured |
 > |---|---|---|
-> | Cogs | **22** (`cogs/community/minutes.py` at v132; 21 at v125; 20 at v113) | `bot.py:COGS` |
+> | Cogs | **23** (`cogs/content/spotlight.py` at v148; 22 at v132 `minutes`; 21 at v125) | `bot.py:COGS` |
 > | Top-level slash commands | **33** — 17 staff-locked, 16 member-visible (`/test` at v146; `/minutes` at v132; `/ask` at v125; `/modmail` became member-visible at v114). ⚠️ **33 on branch `selftest-boot`** — 17 staff-locked once `/test` lands (`info/selftest-design.md` §K, 2026-09-20); NOT merged, so `main` still reads 32 | `tree.get_commands()`, pinned by `tests/test_bot.py:TOP_LEVEL_NOW` |
 > | `app_commands.Group`s | **0** | ⚠️ every group retired by the panel waves |
-> | Schema version | **47** (v146, `selftest_runs.keep_minutes`; 46 at v143 `also_*` on `golive_sessions`, 45 at v136). ⚠️ **48 on branch `spotlight`** | `storage/db.py:SCHEMA_VERSION` |
-> | Registry keys | **281** on `main` at v143 (three `golive_costream_*` + `request_filed_line`; 277 at v141) — **25 namespaces** | `len(settings_store.KEY_TYPES)` |
+> | Schema version | **48** (v148, the three `spotlight_*` tables; 47 at v146 `selftest_runs.keep_minutes`, 46 at v143). ⚠️ **49 on branch `posts-versions`** | `storage/db.py:SCHEMA_VERSION` |
+> | Registry keys | **290** on `main` at v148 (nine `spotlight_*`, all in the golive group, which passed the 25-cap and gained the Find box; 281 at v143) — **25 namespaces** | `len(settings_store.KEY_TYPES)` |
 > | Setting groups | **25** — the `/settings` group select's cap; the next namespace needs a `Find…` path | `settings_store.namespace_of` over `KEY_TYPES` |
 > | Features (log-level keys) | **21** (minutes v132, guides v111, posts v113) | `settings_store.FEATURES` == `logkinds.FEATURES` |
 > | Mock contract | **20 pages / 186 routes / 24 core settings** — measured on branch `youtube-uploads-removal`, which is **v139** and merged (187 on `main` at v138, minus `GET /api/youtube/videos`) (21 core at v133) (17/150 at v108; was 149 routes at v92). ⚠️ **Not re-run 2026-09-19** — `check.mjs` needs `server.mjs` listening; `ls site/public/*.html` was re-counted off disk and is **20** | `node site/mock/check.mjs` — last RUN 2026-09-18 against a mock on a spare port |
-> | Tests | **6818** (+3 skipped where the receive extension is absent — **KI-31**) | the v147 deploy gate |
-> | Deploys | **146** lines, last `32ec6a4` (v147) at 2026-09-20 18:12 | `../deploys.log` |
+> | Tests | **6920** (+3 skipped where the receive extension is absent — **KI-31**) | the v148 deploy gate |
+> | Deploys | **147** lines, last `f73d3a7` (v148) at 2026-09-20 18:23 | `../deploys.log` |
 >
 > ⚠️ **The command count is the figure that has been wrong most often, and the reason is that
 > it FELL.** The panel waves (owner rule, 2026-09-03: one command per feature opens a panel)
@@ -274,6 +274,7 @@
 > | 17→18→19 on `main`, 2026-09-03 | 19 | 44 | 25 | 136 | 3238 |
 > | Phase 15 (F14) branch, 2026-09-02 | 15 | 37 | 21 | 111 | 2714 |
 > | v92 `6af0ba0`, 2026-09-05 | 19 | 29 | 32 | 149 | 5186 |
+> | **v148 `f73d3a7`, 2026-09-20** | **23** | **33** | **48** | **190** | **6920** |
 > | **v147 `32ec6a4`, 2026-09-20** | **22** | **33** | **47** | **186** | **6818** |
 > | **v146 `6652b25`, 2026-09-20** | **22** | **33** | **47** | **186** | **6818** |
 > | **v145 `ac7b1a1`, 2026-09-20** | **22** | **32** | **46** | **186** | **6800** |
