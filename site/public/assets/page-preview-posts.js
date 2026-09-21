@@ -263,7 +263,7 @@ const LIST_NOTE = 'One message per post. Black Bloc sends it once and edits that
   + 'every time after — it never posts a second copy.';
 const NOTHING_YET = 'There are no posts yet.';
 const NO_CHANNEL = 'no channel yet';
-const NEED_A_TITLE = 'A post needs a title. Type one and press Make it again.';
+const NEED_A_TITLE = 'A post needs a title. Type one and press Create the post again.';
 const POSTED_HERE = 'Posted in {where}.';
 const POSTED_IN_SHADOW = 'The shadow copy is in {where}.';
 const NOT_POSTED_ANYWHERE = 'Not posted anywhere yet.';
@@ -500,7 +500,7 @@ function headRow() {
 function newPostDrawer() {
   const say = notice();
   const title = el('input', { class: 'input', type: 'text', placeholder: 'Welcome and rules' });
-  const make = button('Make it', () => {
+  const make = button('Create the post', () => {
     if (!title.value.trim()) {
       say.say(NEED_A_TITLE, 'warn');
       return;
@@ -637,7 +637,7 @@ function machinerySection() {
 async function load() {
   const aside = document.getElementById('page-aside');
   if (aside) {
-    aside.replaceChildren(button('Make it', () => openDrawer('A new post', newPostDrawer()), {
+    aside.replaceChildren(button('New post', () => openDrawer('A new post', newPostDrawer()), {
       tone: 'warn',
       small: false,
     }));

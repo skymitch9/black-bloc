@@ -32,6 +32,11 @@ export function el(tag, props = {}, children = []) {
       for (const [type, fn] of Object.entries(value)) node.addEventListener(type, fn);
     } else if (key === 'set') {
       Object.assign(node, value);
+    } else if (key === 'style') {
+      for (const rule of String(value).split(';')) {
+        const at = rule.indexOf(':');
+        if (at > 0) node.style.setProperty(rule.slice(0, at).trim(), rule.slice(at + 1).trim());
+      }
     } else {
       node.setAttribute(key, value === true ? '' : String(value));
     }

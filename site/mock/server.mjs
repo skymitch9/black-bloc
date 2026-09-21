@@ -6841,6 +6841,9 @@ function send(response, status, body, headers = {}) {
   response.end(payload);
 }
 
+const CSP = "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net; "
+  + "style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+
 async function serveStatic(request, response, path, asked) {
   const wanted = path === '/' ? '/index.html' : path;
   const cookie = asked ? { 'set-cookie': `mock_as=${asked}; Path=/; SameSite=Lax` } : {};
@@ -6867,6 +6870,7 @@ async function serveStatic(request, response, path, asked) {
     response.writeHead(200, {
       'content-type': TYPES[extname(file)] || 'application/octet-stream',
       'cache-control': html ? NO_STORE : REVALIDATE,
+      ...(html ? { 'content-security-policy': CSP } : {}),
       ...cookie,
     });
     response.end(body);
