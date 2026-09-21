@@ -126,6 +126,16 @@ approved event with a twitch link → **Spotlight this stream** on its post → 
 
 ## Deviations
 
+0. **2026-09-20, branch `spotlight-pings` — a spotlight channel can now hold a ping role of its
+   own** (`golive_fan_roles.spotlight_id`, schema 50). §A's *"No fan-role ping (there is no
+   member)"* in the three-posts table is ~~true~~ **reversed**: the announcement mentions the
+   channel's fan role beside `golive_ping_role_id` when one exists, a reminder does too but only
+   while `spotlight_bump_pings` is on (default false), and an expiring or removed row takes its
+   role away through `pings.remove_fan_role`. Design:
+   [`spotlight-pings-design.md`](spotlight-pings-design.md). ⚠️ `_announce` also writes Twitch's
+   spelling of the name onto the row the first time it sees the channel live, so a hand-added
+   `gamesdonequick` becomes `GamesDoneQuick` and names its role properly.
+
 *(written by the build agent, branch `spotlight`, **2026-09-20**, off `main` `f0e7ef3` — the commit
 that carries `costream`. Every item is a departure from the body above; where the body is silent and
 a choice had to be made, it says so.)*

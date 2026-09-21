@@ -23,6 +23,7 @@ from .settings_store import SPOTLIGHT_BUMP_TEMPLATE
 log = logging.getLogger(__name__)
 
 LOGIN_MAX = 25
+PLATFORM = TWITCH
 CHANNEL_URL = "https://www.twitch.tv/{login}"
 PIN_REASON = "Black Bloc keeps this spotlight pinned while it streams"
 UNPIN_REASON = "Black Bloc unpinned this spotlight — the stream is over"
@@ -143,10 +144,17 @@ EVENT_SPOTLIT = (
 EVENT_CANCELLED_BECAUSE = "event_cancelled"
 SPOTLIT_UNTIL = "Spotlighted until {when}."
 
+GIVE_PING_ROLE = "Give it a ping role"
+TAKE_PING_ROLE = "Remove its ping role"
+PING_ROLE_LINE = " · <@&{role_id}>"
+
 RECONCILED = "reconciled_on_start"
 ENDED = "ended"
 EXPIRED = "expired"
 REMOVED_BECAUSE = "removed"
+FAN_ROLE_EXPIRED = "spotlight_expired"
+FAN_ROLE_REMOVED = "spotlight_removed"
+FAN_ROLE_TAKEN = "staff_removed"
 
 
 @dataclass(frozen=True)
@@ -328,14 +336,15 @@ def bump_render(template: Any, info: StreamInfo, name: str, duration: str) -> st
         return tidy(SPOTLIGHT_BUMP_TEMPLATE.format_map(fields))
 
 
-def panel_line(row: Any, live: bool) -> str:
+def panel_line(row: Any, live: bool, role_id: Any = None) -> str:
     note = _cell(row, "note")
-    return PANEL_ROW.format(
+    said = PANEL_ROW.format(
         login=_cell(row, "twitch_login"),
         when=until_words(row),
         live=PANEL_LIVE if live else "",
         note=PANEL_NOTE.format(note=note) if note else "",
     )
+    return said + (PING_ROLE_LINE.format(role_id=int(role_id)) if role_id else "")
 
 
 def added_said(row: Any, hours: int) -> str:

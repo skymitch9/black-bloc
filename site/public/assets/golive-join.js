@@ -120,6 +120,13 @@ function blankRow(id) {
   };
 }
 
+function wearRole(row, one) {
+  if (!one.role_id) return;
+  row.role_id = idOf(one.role_id);
+  row.role = one.role || null;
+  row.role_wearers = one.role_wearers === undefined ? null : one.role_wearers;
+}
+
 function byName(a, b) {
   const one = String(a.name || a.user_id).toLowerCase();
   const two = String(b.name || b.user_id).toLowerCase();
@@ -201,6 +208,9 @@ export function joinStreamers({
     if (mine) {
       mine.spotlight = one;
       if (one.live && !mine.live) mine.live = TWITCH;
+      // The member's OWN role wins the Ping-role cell on a row that is both; the channel's
+      // fills it only when there is nothing else to show.
+      if (!mine.role_id) wearRole(mine, one);
       continue;
     }
     const made = blankRow(`spotlight:${one.id}`);
@@ -209,6 +219,7 @@ export function joinStreamers({
     made.twitch_at = one.added_at || null;
     made.spotlight = one;
     made.live = one.live ? TWITCH : null;
+    wearRole(made, one);
     found.push(made);
   }
   return found.sort(byName);
@@ -324,6 +335,7 @@ export const DRAWERS = [
       'spotlight_bump_hours',
       'spotlight_bump_template',
       'spotlight_bump_cleanup',
+      'spotlight_bump_pings',
       'spotlight_pin',
       'spotlight_default_days',
       'spotlight_event_slack_hours',

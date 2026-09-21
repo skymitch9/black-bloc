@@ -1616,6 +1616,7 @@ SPOTLIGHT_END_MISSES_KEY = "spotlight_end_misses"
 SPOTLIGHT_BUMP_HOURS_KEY = "spotlight_bump_hours"
 SPOTLIGHT_BUMP_TEMPLATE_KEY = "spotlight_bump_template"
 SPOTLIGHT_BUMP_CLEANUP_KEY = "spotlight_bump_cleanup"
+SPOTLIGHT_BUMP_PINGS_KEY = "spotlight_bump_pings"
 SPOTLIGHT_PIN_KEY = "spotlight_pin"
 SPOTLIGHT_DEFAULT_DAYS_KEY = "spotlight_default_days"
 SPOTLIGHT_EVENT_SLACK_KEY = "spotlight_event_slack_hours"
@@ -1646,6 +1647,7 @@ KEY_TYPES.update(
         SPOTLIGHT_BUMP_HOURS_KEY: "int",
         SPOTLIGHT_BUMP_TEMPLATE_KEY: "text",
         SPOTLIGHT_BUMP_CLEANUP_KEY: "bool",
+        SPOTLIGHT_BUMP_PINGS_KEY: "bool",
         SPOTLIGHT_PIN_KEY: "bool",
         SPOTLIGHT_DEFAULT_DAYS_KEY: "int",
         SPOTLIGHT_EVENT_SLACK_KEY: "int",
@@ -1722,6 +1724,11 @@ KEY_HELP.update(
         SPOTLIGHT_BUMP_CLEANUP_KEY: (
             "true to delete a spotlighted stream's reminders when it ends, so the channel is "
             "left with the one announcement"
+        ),
+        SPOTLIGHT_BUMP_PINGS_KEY: (
+            "true if a reminder mentions the go-live role and the channel's own ping role as "
+            "the first announcement did; false — the default — because a ping every four "
+            "hours through a 24-hour marathon is what makes people mute the channel"
         ),
         SPOTLIGHT_PIN_KEY: (
             "true if a channel added to the spotlight list has its announcement pinned while "
@@ -2754,6 +2761,7 @@ NAMESPACE_OVERRIDE = {
     SPOTLIGHT_BUMP_HOURS_KEY: "golive",
     SPOTLIGHT_BUMP_TEMPLATE_KEY: "golive",
     SPOTLIGHT_BUMP_CLEANUP_KEY: "golive",
+    SPOTLIGHT_BUMP_PINGS_KEY: "golive",
     SPOTLIGHT_PIN_KEY: "golive",
     SPOTLIGHT_DEFAULT_DAYS_KEY: "golive",
     SPOTLIGHT_EVENT_SLACK_KEY: "golive",
@@ -3290,6 +3298,8 @@ class SettingsStore:
             return SPOTLIGHT_BUMP_TEMPLATE
         if key == SPOTLIGHT_BUMP_CLEANUP_KEY:
             return True
+        if key == SPOTLIGHT_BUMP_PINGS_KEY:
+            return False
         if key == SPOTLIGHT_PIN_KEY:
             return True
         if key == SPOTLIGHT_DEFAULT_DAYS_KEY:

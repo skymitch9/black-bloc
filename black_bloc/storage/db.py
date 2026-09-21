@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 49
+SCHEMA_VERSION = 50
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -151,13 +151,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS golive_open_session
 
 CREATE TABLE IF NOT EXISTS golive_fan_roles (
     guild_id     INTEGER NOT NULL,
-    user_id      INTEGER NOT NULL,
+    user_id      INTEGER,
     role_id      INTEGER NOT NULL,
     created_at   TEXT    NOT NULL,
     created_by   INTEGER,
     unworn_since TEXT,
-    PRIMARY KEY (guild_id, user_id)
+    spotlight_id INTEGER
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS golive_fan_roles_one_member
+    ON golive_fan_roles(guild_id, user_id) WHERE user_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS golive_fan_roles_one_spotlight
+    ON golive_fan_roles(guild_id, spotlight_id) WHERE spotlight_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS streamers (
     guild_id      INTEGER NOT NULL,
@@ -965,6 +971,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("golive_sessions", "also_platform", "TEXT"),
     ("golive_sessions", "also_started_at", "TEXT"),
     ("selftest_runs", "keep_minutes", "INTEGER"),
+    ("golive_fan_roles", "spotlight_id", "INTEGER"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")
@@ -986,6 +993,9 @@ MOD_CASES_CARRIED_OVER = (
     "log_message_id"
 )
 MOD_CASES_OLD = "mod_cases_before_null_user"
+
+FAN_ROLES_OLD = "golive_fan_roles_before_spotlights"
+FAN_ROLES_INDEXES = ("golive_fan_roles_one_member", "golive_fan_roles_one_spotlight")
 
 CLOSE_DUPLICATE_OPEN_SESSIONS = """
 UPDATE golive_sessions SET ended_at = ?
@@ -1019,9 +1029,11 @@ class Database:
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._close_duplicate_open_sessions()
         await self._set_aside_mod_cases_with_a_required_user()
+        await self._set_aside_fan_roles_that_require_a_member()
         await self._conn.executescript(SCHEMA)
         await self._add_missing_columns()
         await self._restore_set_aside_mod_cases()
+        await self._restore_set_aside_fan_roles()
         await self._open_the_retired_request_statuses()
         await self._backfill_post_versions()
         await self._conn.execute(
@@ -1084,6 +1096,27 @@ class Database:
             f"SELECT {MOD_CASES_CARRIED_OVER} FROM {MOD_CASES_OLD}"
         )
         await self.conn.execute(f"DROP TABLE {MOD_CASES_OLD}")
+
+    async def _set_aside_fan_roles_that_require_a_member(self) -> None:
+        """Schema 50: a ping role may belong to a spotlight channel, which has no member."""
+        cur = await self.conn.execute("PRAGMA table_info(golive_fan_roles)")
+        rows = await cur.fetchall()
+        if not any(row["name"] == "user_id" and row["notnull"] for row in rows):
+            return
+        for name in FAN_ROLES_INDEXES:
+            await self.conn.execute(f"DROP INDEX IF EXISTS {name}")
+        await self.conn.execute(f"ALTER TABLE golive_fan_roles RENAME TO {FAN_ROLES_OLD}")
+        log.warning("database: rebuilding golive_fan_roles so a role may belong to a channel")
+
+    async def _restore_set_aside_fan_roles(self) -> None:
+        carried = await self._table_columns(FAN_ROLES_OLD)
+        if not carried:
+            return
+        names = ", ".join(sorted(carried & await self._table_columns("golive_fan_roles")))
+        await self.conn.execute(
+            f"INSERT INTO golive_fan_roles({names}) SELECT {names} FROM {FAN_ROLES_OLD}"
+        )
+        await self.conn.execute(f"DROP TABLE {FAN_ROLES_OLD}")
 
     async def _open_the_retired_request_statuses(self) -> None:
         """Schema 23: pending, approved and planned all became `open`; nothing else moves."""

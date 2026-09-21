@@ -153,7 +153,7 @@ async def streamer_options(
     listed = {int(row["user_id"]) for row in await pings.listed_streamers(bot.db, guild.id)}
     rows = [
         row
-        for row in await pings.all_fan_roles(bot.db, guild.id)
+        for row in await pings.member_fan_roles(bot.db, guild.id)
         if int(row["user_id"]) in listed and pings.role_of(guild, row["role_id"]) is not None
     ]
     rows.sort(key=lambda row: (-counts.get(int(row["user_id"]), 0), int(row["user_id"])))

@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from ... import pings
 from ... import spotlight as spot
 from ...cogs.content.golive import (
     LINK_TAKEN,
@@ -143,9 +144,15 @@ def spotlight_session_row(row: Any) -> dict[str, Any]:
     }
 
 
-def spotlight_row(guild: Any, row: Any, live: Any, sessions: list[Any]) -> dict[str, Any]:
+def spotlight_row(
+    guild: Any, row: Any, live: Any, sessions: list[Any], held: Any = None
+) -> dict[str, Any]:
     """A spotlight as the Go-live page reads it: a streamer row with no member behind it."""
+    role = guild.get_role(int(held["role_id"])) if held is not None else None
     return {
+        "role_id": str(held["role_id"]) if held is not None else None,
+        "role": role.name if role is not None else None,
+        "role_wearers": len(getattr(role, "members", ()) or ()) if role is not None else None,
         "id": row["id"],
         "twitch_login": row["twitch_login"],
         "display_name": row["display_name"] or row["twitch_login"],
@@ -170,6 +177,7 @@ def spotlight_row(guild: Any, row: Any, live: Any, sessions: list[Any]) -> dict[
 
 async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
     recent = await recent_spotlight_sessions(bot.db, guild.id, 200)
+    held = await pings.spotlight_fan_roles(bot.db, guild.id)
     found = []
     for row in await channels_for(bot.db, guild.id):
         mine = [one for one in recent if int(one["spotlight_id"]) == int(row["id"])]
@@ -179,6 +187,7 @@ async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
                 row,
                 await open_session(bot.db, row["id"]),
                 mine[:SPOTLIGHT_SESSIONS],
+                pings.spotlight_row_for(held, row["id"]),
             )
         )
     return found
@@ -188,7 +197,13 @@ async def one_spotlight(bot: Any, guild: Any, spotlight_id: int) -> dict[str, An
     row = await channel_by_id(bot.db, spotlight_id)
     if row is None or int(row["guild_id"]) != int(guild.id):
         raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
-    return spotlight_row(guild, row, await open_session(bot.db, spotlight_id), [])
+    return spotlight_row(
+        guild,
+        row,
+        await open_session(bot.db, spotlight_id),
+        [],
+        await pings.get_spotlight_fan_role(bot.db, guild.id, spotlight_id),
+    )
 
 
 def wanted_days(payload: dict[str, Any]) -> Any:

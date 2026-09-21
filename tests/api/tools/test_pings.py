@@ -3,11 +3,13 @@ from __future__ import annotations
 import pytest
 
 from black_bloc import pings
+from black_bloc.cogs.content.spotlight import add_channel
 
 ROUTES = [
     ("GET", "/api/pings/streamers"),
     ("POST", "/api/pings/streamers"),
     ("DELETE", "/api/pings/streamers/21"),
+    ("DELETE", "/api/pings/streamers/spotlight/1"),
     ("POST", "/api/pings/setup"),
     ("POST", "/api/pings/raidtrain-role"),
     ("GET", "/api/pings/list"),
@@ -326,3 +328,111 @@ async def test_sync_now_refuses_once_the_managed_switch_is_off(client, sign_in, 
     assert refused.status_code == 409
     assert refused.json()["error"] == "not_managed"
     assert client.get("/api/pings/onboarding").json()["managed"] is False
+
+
+# --- a channel's ping role through the routes (info/spotlight-pings-design.md §C) -------------
+
+
+async def a_spotlight(web, wf, login="gamesdonequick", name="GamesDoneQuick"):
+    return await add_channel(
+        web.db,
+        wf.GUILD_ID,
+        login,
+        added_by=7,
+        expires_at=None,
+        pin=True,
+        display_name=name,
+    )
+
+
+async def test_staff_give_a_channel_a_ping_role_from_the_site(client, sign_in, on, guild, wf):
+    spotlight_id = await a_spotlight(on, wf)
+    sign_in(client)
+
+    response = client.post("/api/pings/streamers", json={"spotlight_id": str(spotlight_id)})
+
+    assert response.status_code == 200
+    row = response.json()
+    assert row["kind"] == "spotlight" and row["member_id"] is None
+    assert row["spotlight_id"] == spotlight_id and row["spotlight_login"] == "gamesdonequick"
+    assert row["member"] == "GamesDoneQuick" and row["role"] == "GamesDoneQuick pings"
+    assert row["followers"] == 0 and "GamesDoneQuick pings" in row["message"]
+    held = await pings.get_spotlight_fan_role(on.db, wf.GUILD_ID, spotlight_id)
+    assert held is not None and held["user_id"] is None
+    assert "web.pings.fan_role_created" in await wf.kinds_in(on.db)
+
+
+async def test_the_table_carries_both_kinds_and_tells_them_apart(client, sign_in, on, guild, wf):
+    wf.member(guild, 21, name="namu")
+    spotlight_id = await a_spotlight(on, wf)
+    sign_in(client)
+    client.post("/api/pings/streamers", json={"member_id": "21"})
+    client.post("/api/pings/streamers", json={"spotlight_id": str(spotlight_id)})
+
+    rows = client.get("/api/pings/streamers").json()
+
+    assert [row["kind"] for row in rows] == ["member", "spotlight"]
+    assert [row["member_id"] for row in rows] == ["21", None]
+    assert [row["spotlight_id"] for row in rows] == [None, spotlight_id]
+
+
+async def test_a_channel_that_is_not_spotlighted_is_refused_in_words(client, sign_in, on, wf):
+    sign_in(client)
+
+    response = client.post("/api/pings/streamers", json={"spotlight_id": "404"})
+
+    assert response.status_code == 404
+    said = response.json()
+    assert said["error"] == "no_such_spotlight"
+    assert "is not a spotlighted channel" in said["message"]
+
+
+async def test_a_second_role_for_one_channel_is_refused_in_words(client, sign_in, on, wf):
+    spotlight_id = await a_spotlight(on, wf)
+    sign_in(client)
+    client.post("/api/pings/streamers", json={"spotlight_id": str(spotlight_id)})
+
+    response = client.post("/api/pings/streamers", json={"spotlight_id": str(spotlight_id)})
+
+    assert response.status_code == 409
+    assert "already has a ping role" in response.json()["message"]
+
+
+async def test_staff_take_a_channels_role_away_again(client, sign_in, on, guild, wf):
+    spotlight_id = await a_spotlight(on, wf)
+    sign_in(client)
+    client.post("/api/pings/streamers", json={"spotlight_id": str(spotlight_id)})
+
+    response = client.delete(f"/api/pings/streamers/spotlight/{spotlight_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["removed"] is True and body["spotlight_id"] == spotlight_id
+    assert body["member_id"] is None and body["role_id"]
+    assert await pings.get_spotlight_fan_role(on.db, wf.GUILD_ID, spotlight_id) is None
+    assert "web.pings.fan_role_removed" in await wf.kinds_in(on.db)
+
+
+async def test_taking_a_role_from_a_channel_that_has_none_says_so(client, sign_in, on, wf):
+    spotlight_id = await a_spotlight(on, wf)
+    sign_in(client)
+
+    response = client.delete(f"/api/pings/streamers/spotlight/{spotlight_id}")
+
+    assert response.status_code == 404
+    assert "has no ping role" in response.json()["message"]
+
+
+async def test_the_streamer_list_names_the_channels_beside_the_people(
+    client, sign_in, on, guild, wf
+):
+    spotlight_id = await a_spotlight(on, wf)
+    sign_in(client)
+    client.post("/api/pings/streamers", json={"spotlight_id": str(spotlight_id)})
+
+    rows = client.get("/api/pings/list").json()
+
+    channel = next(row for row in rows if row["kind"] == "spotlight")
+    assert channel["member_id"] is None and channel["member"] == "GamesDoneQuick"
+    assert channel["login"] == "gamesdonequick" and channel["listed"] is True
+    assert channel["role"] == "GamesDoneQuick pings"

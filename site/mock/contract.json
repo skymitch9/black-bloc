@@ -927,6 +927,9 @@
         "bump_hours",
         "pin",
         "event_id",
+        "role_id",
+        "role",
+        "role_wearers",
         "url",
         "live",
         "sessions"
@@ -957,6 +960,9 @@
         "bump_hours",
         "pin",
         "event_id",
+        "role_id",
+        "role",
+        "role_wearers",
         "url",
         "live",
         "sessions",
@@ -987,6 +993,9 @@
         "bump_hours",
         "pin",
         "event_id",
+        "role_id",
+        "role",
+        "role_wearers",
         "url",
         "live",
         "sessions",
@@ -1124,6 +1133,9 @@
       "keys": [
         "member_id",
         "member",
+        "kind",
+        "spotlight_id",
+        "spotlight_login",
         "role_id",
         "role",
         "followers",
@@ -1145,6 +1157,9 @@
       "keys": [
         "member_id",
         "member",
+        "kind",
+        "spotlight_id",
+        "spotlight_login",
         "role_id",
         "role",
         "followers",
@@ -1164,6 +1179,22 @@
       "keys": [
         "removed",
         "member_id",
+        "spotlight_id",
+        "role_id",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/pings/streamers/spotlight/{spotlight_id}",
+      "read_by": [
+        "page-golive.js roleMoves"
+      ],
+      "shape": "object",
+      "keys": [
+        "removed",
+        "member_id",
+        "spotlight_id",
         "role_id",
         "message"
       ]
@@ -1191,6 +1222,8 @@
       ],
       "shape": "list",
       "keys": [
+        "spotlight_id",
+        "kind",
         "member_id",
         "member",
         "listed",
@@ -1218,6 +1251,8 @@
       ],
       "shape": "object",
       "keys": [
+        "spotlight_id",
+        "kind",
         "member_id",
         "member",
         "listed",

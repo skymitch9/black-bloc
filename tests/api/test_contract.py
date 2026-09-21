@@ -644,6 +644,9 @@ async def seed_world(client, web, guild, wf) -> dict:
         display_name="GamesDoneQuick",
         note="the owner's marathon channel",
     )
+    # A ping role of the channel's own (schema 50). Its Discord role is deliberately one the
+    # fake guild does NOT have, so the DELETE entry cannot take a role another entry reads.
+    await pings.set_fan_role(db, guild_id, None, 999_999, 7, spotlight_id=spotlight_id)
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
     arm_minutes(web)
     return {

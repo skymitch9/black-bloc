@@ -211,6 +211,14 @@ roles. The onboarding limits go into `## Deviations` as measured numbers. Sweep 
 
 ## Deviations
 
+0. **2026-09-20, branch `spotlight-pings` — `golive_fan_roles` holds a second kind of owner.**
+   §C2's *"`golive_fan_roles` stays the role table"* still holds, but a row's owner is now a
+   member **or** a spotlight channel (`spotlight_id`, schema 50): `user_id` is nullable, the
+   primary key is two partial unique indexes, and `all_fan_roles` returns both kinds.
+   ⚠️ **§C2's 30-day unworn prune and §C5's onboarding prompt are members-only on purpose** —
+   `pings.member_fan_roles` is what they read. Design:
+   [`spotlight-pings-design.md`](spotlight-pings-design.md).
+
 Written by the build agent, branch `pings-remake`, 2026-09-17. Everything §C asks for that is
 not listed here was built exactly as the design says. ⚠️ **Nothing below has met Discord**: the
 whole verification is `pytest` (5986), `ruff`, `node --check`, `site/mock/check.mjs` and one

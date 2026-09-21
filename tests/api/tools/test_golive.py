@@ -502,3 +502,19 @@ async def test_a_live_row_carries_its_session_and_its_past_ones(client, sign_in,
     assert found["session"]["title"] == "AGDQ"
     assert found["session"]["announced_message_id"] == "4242"
     assert [one["id"] for one in found["sessions"]] == [session_id]
+
+
+async def test_a_spotlight_row_carries_the_ping_role_the_page_draws(client, sign_in, web, wf):
+    """§C: the Ping-role cell on a channel row reads from the same payload the drawer does."""
+    spotlight_id = await a_spotlight(web, wf, display_name="GamesDoneQuick")
+    sign_in(client)
+
+    before = client.get("/api/golive/spotlight").json()[0]
+    assert before["role_id"] is None and before["role"] is None
+    assert before["role_wearers"] is None
+
+    client.post("/api/pings/streamers", json={"spotlight_id": str(spotlight_id)})
+    after = client.get("/api/golive/spotlight").json()[0]
+
+    assert after["role"] == "GamesDoneQuick pings" and after["role_wearers"] == 0
+    assert after["role_id"]
