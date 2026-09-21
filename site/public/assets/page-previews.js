@@ -1,11 +1,13 @@
 import { start } from './app.js';
 import { badge, card, el, section } from './ui.js';
 
-const NOTE = 'Each card opens a preview. Every preview is static data inside the real shell — nothing on '
-  + 'it reaches the bot — and its rail still points at today’s page, so the two are one click apart. '
-  + 'Ranked as the UX audit ranked them, worst first; go-live is missing because it was rebuilt first.';
+const NOTE = 'Each card has two doors: the preview (static data inside the real shell — nothing on it reaches the bot) and '
+  + 'today’s page, so the two can be compared side by side. Ranked as the UX audit ranked them, worst first. Go-live was '
+  + 'rebuilt first, so its card opens the real page: that IS the redesign.';
 
 const PAGES = [
+  { slug: 'golive', title: 'Go-live', rank: 1, severity: 'danger', fails: 5, from: 12, to: 5, live: true,
+    what: 'Rebuilt and live since v142: twelve sections became five, one Streamers list across Twitch and YouTube with a row drawer, and since v148 the spotlight rows for channels with no member.' },
   { slug: 'posts', title: 'Posts', rank: 2, severity: 'danger', fails: 4, from: 3, to: 2,
     what: 'One section of posts and one of machinery, instead of two sections, a loose card and a separate detail page. A row opens the post in a drawer.' },
   { slug: 'rolemenus', title: 'Role menus', rank: 3, severity: 'danger', fails: 4, from: 9, to: 4,
@@ -35,22 +37,30 @@ const PAGES = [
 const SEVERITY = { danger: 'audit red', warn: 'audit orange' };
 
 function previewCard(page) {
-  return el('a', { class: 'guidecard', href: `/preview/${page.slug}.html`, 'data-slug': page.slug }, [
+  const doors = page.live
+    ? [el('a', { class: 'btn small', href: `/${page.slug}.html`, text: 'Open the page (live redesign)' })]
+    : [
+      el('a', { class: 'btn small', href: `/preview/${page.slug}.html`, text: 'Open the preview' }),
+      el('a', { class: 'btn small quiet', href: `/${page.slug}.html`, text: 'Today’s page' }),
+    ];
+  return el('div', { class: 'guidecard', 'data-slug': page.slug }, [
     el('div', { class: 'guidecard-head' }, [
       el('h3', { class: 'guidecard-title', text: page.title }),
       el('div', { class: 'guidecard-marks' }, [
         badge(`#${page.rank}`, null),
         badge(SEVERITY[page.severity], page.severity),
         badge(`${page.fails} of 6 tests failed`, null),
+        page.live ? badge('live', 'ok') : null,
       ]),
     ]),
     el('p', { class: 'guidecard-goal', text: page.what }),
-    el('p', { class: 'guidecard-meta', text: `${page.from} sections today → ${page.to} in the preview · today’s page: /${page.slug}.html` }),
+    el('p', { class: 'guidecard-meta', text: `${page.from} sections today → ${page.to} in the redesign` }),
+    el('div', { class: 'bar' }, doors),
   ]);
 }
 
 async function load() {
-  const one = section('Every preview', NOTE, { count: PAGES.length, open: true });
+  const one = section('Every page in the audit', NOTE, { count: PAGES.length, open: true });
   one.body.append(card(null, [el('div', { class: 'guidegrid' }, PAGES.map(previewCard))], { flush: true }));
   const node = one.node;
   node.setAttribute('data-span', 'full');
