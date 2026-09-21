@@ -195,25 +195,27 @@ GOLIVE_SAMPLE = {
     "name": "Casey",
     "game": "Lethal Company",
     "title": "late night runs",
-    "url": "https://twitch.tv/caseyfast",
-    "platform": "Twitch",
+    "platform": gl.TWITCH,
     "duration": "2 h 10 min",
-    "source": "twitch",
 }
-YOUTUBE_SAMPLE = {
-    "url": "https://youtube.com/watch?v=caseyfast",
-    "platform": "YouTube",
-    "source": "youtube",
+PLATFORM_FACTS = {
+    "twitch": {"platform": gl.TWITCH, "url": "https://twitch.tv/caseyfast", "source": "twitch"},
+    "youtube": {
+        "platform": gl.YOUTUBE,
+        "url": "https://youtube.com/watch?v=caseyfast",
+        "source": "youtube",
+    },
 }
-PLATFORM_SAMPLES = {"twitch": GOLIVE_SAMPLE, "youtube": GOLIVE_SAMPLE | YOUTUBE_SAMPLE}
+OTHER_PLATFORM = {"twitch": "youtube", "youtube": "twitch"}
+
+
+def platform_facts(platform: Any) -> dict[str, str]:
+    """The address and the watcher a platform implies; nobody types a sample URL."""
+    return PLATFORM_FACTS.get(str(platform or "").strip().casefold(), PLATFORM_FACTS["twitch"])
 
 
 def golive_sample(sample: dict[str, Any]) -> dict[str, Any]:
-    wanted = str(sample.get("platform") or "").strip().casefold()
-    base = PLATFORM_SAMPLES.get(wanted, GOLIVE_SAMPLE)
-    return base | {key: value for key, value in sample.items() if key != "platform"} | (
-        {"platform": base["platform"]}
-    )
+    return GOLIVE_SAMPLE | sample | platform_facts(sample.get("platform"))
 
 
 def stream_of(sample: dict[str, Any]) -> gl.StreamInfo:
@@ -227,8 +229,8 @@ def stream_of(sample: dict[str, Any]) -> gl.StreamInfo:
 
 def other_stream(sample: dict[str, Any]) -> gl.StreamInfo:
     """The second platform in a co-stream: whichever of the two the sample is not."""
-    lead = str(sample.get("platform") or "").casefold()
-    other = YOUTUBE_SAMPLE if lead == gl.TWITCH.casefold() else GOLIVE_SAMPLE
+    lead = platform_facts(sample.get("platform"))["source"]
+    other = PLATFORM_FACTS[OTHER_PLATFORM[lead]]
     return gl.StreamInfo(
         url=other["url"],
         game=sample.get("game"),
@@ -538,7 +540,11 @@ RENDERERS: dict[str, Renderer] = {
             "A post",
             "posts.html",
             post_message,
-            sample={"style": posts.PLAIN, "title": "", "body": ""},
+            sample={
+                "style": posts.PLAIN,
+                "title": "Welcome",
+                "body": "**Welcome!** Start with the pinned guide, then say hello.",
+            },
         ),
         Renderer(
             "birthday",

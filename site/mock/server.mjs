@@ -4071,6 +4071,255 @@ route('GET', '/api/golive/preview', (context) => {
   };
 });
 
+// The Discord mock (2026-09-20). The BOT is the source of truth for every word — see
+// black_bloc/preview.py — so this side only has to answer the same SHAPE from the same keys,
+// which is what lets a page be developed against the mock and still be honest against the bot.
+const PREVIEW_FEATURES = [
+  ['golive_live', 'The announcement while they are live', 'golive.html', ['golive_template']],
+  ['golive_ended', 'The announcement once the stream has ended', 'golive.html', ['golive_end_template', 'golive_end_author']],
+  ['golive_costream', 'The announcement while both platforms are live', 'golive.html', ['golive_costream_template', 'golive_costream_author']],
+  ['spotlight_bump', 'The spotlight reminder', 'golive.html', ['spotlight_bump_template']],
+  ['frontdoor', 'The front door', 'modmail.html', ['frontdoor_title', 'frontdoor_text', 'frontdoor_ticket_label', 'frontdoor_request_label', 'frontdoor_event_label']],
+  ['ticket_button', 'The Open a ticket message', 'modmail.html', ['modmail_panel_title', 'modmail_panel_text']],
+  ['rehearsal', 'The line a rehearsal copy carries', 'settings.html', ['rehearsal_note']],
+  ['request_filed', 'What a member is told when they file a request', 'requests.html', ['request_filed_line']],
+  ['request_card', "A request's card", 'requests.html', []],
+  ['event_card', "An event's card", 'events.html', []],
+  ['modmail_relay', 'A relayed modmail message', 'modmail.html', []],
+  ['post', 'A post', 'posts.html', []],
+  ['birthday', 'A birthday announcement', 'birthdays.html', ['birthday_template']],
+  ['poll_card', 'A poll, and the line its rehearsal copy carries', 'polls.html', ['poll_shadow_note']],
+  ['minutes_notes', 'What minutes post when a meeting starts and ends', 'minutes.html', ['minutes_start_text', 'minutes_notes_title']],
+];
+
+const PREVIEW_SAMPLES = {
+  golive_live: { ...PREVIEW_SAMPLE, source: 'twitch' },
+  golive_ended: { ...PREVIEW_SAMPLE, source: 'twitch' },
+  golive_costream: { ...PREVIEW_SAMPLE, source: 'twitch' },
+  spotlight_bump: { ...PREVIEW_SAMPLE, source: 'twitch' },
+  rehearsal: { channel: '#live-now' },
+  request_filed: { request_id: 14 },
+  request_card: { what: '', why: '' },
+  event_card: { title: '', description: '' },
+  modmail_relay: { name: '', text: '' },
+  post: { style: 'plain', title: '', body: '' },
+  birthday: { name: 'Casey', age: '' },
+  poll_card: { question: '', channel: '#announcements' },
+  minutes_notes: { notes: '' },
+  frontdoor: {},
+  ticket_button: {},
+};
+
+const PREVIEW_NO_FEATURE = 'Black Bloc draws no preview for **{feature}**, so nothing was shown. That is a fault in the page rather than a problem with your access — reload the dashboard, and tell a Lead if it keeps happening.';
+const PREVIEW_NOT_ITS_KEY = '**{key}** is not one of the words {feature} posts, so nothing was drawn. A preview only ever shows a setting inside the message it really belongs to — edit {key} where its own feature lives, or on the Settings page.';
+
+const PREVIEW_BLURPLE = 0x5865f2;
+
+function previewFeature(name) {
+  return PREVIEW_FEATURES.find((one) => one[0] === name) || null;
+}
+
+function previewPills(...texts) {
+  const joined = texts.filter(Boolean).join('\n');
+  const roles = [...new Set([...joined.matchAll(/<@&(\d+)>/g)].map((one) => one[1]))]
+    .map((id) => ({ id, name: (ROLES.find((r) => String(r.id) === id) || {}).name || 'unknown' }));
+  const channels = [...new Set([...joined.matchAll(/<#(\d+)>/g)].map((one) => one[1]))]
+    .map((id) => ({ id, name: (CHANNELS.find((c) => String(c.id) === id) || {}).name || 'deleted-channel' }));
+  return { roles, channels };
+}
+
+function previewEmbedWords(embed) {
+  return [embed.title, embed.description, ...(embed.fields || []).flatMap((one) => [one.name, one.value])]
+    .filter(Boolean).join('\n');
+}
+
+function previewMade(content, embeds = [], components = []) {
+  const cards = embeds.filter(Boolean);
+  return {
+    content: String(content || ''),
+    embeds: cards,
+    components: components.filter((row) => row && row.length),
+    mentions: previewPills(String(content || ''), ...cards.map(previewEmbedWords)),
+  };
+}
+
+function previewButton(label, style = 'secondary', url = null) {
+  return { label: String(label || ''), style: url ? 'link' : style, url, disabled: false, emoji: null };
+}
+
+function previewStreamEmbed(fields, author, footer) {
+  return {
+    title: fields.title || 'Live now',
+    url: fields.url || null,
+    color: String(fields.platform).toLowerCase() === 'youtube' ? 0xff0000 : 0x9146ff,
+    author: { name: author },
+    fields: [{ name: 'Game', value: fields.game || 'something', inline: false }],
+    footer: { text: footer },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+const PREVIEW_DRAW = {
+  golive_live(read, sample) {
+    const fields = { ...sample };
+    const ping = read('golive_ping_role_id');
+    const content = (ping ? `<@&${ping}> ` : '') + fillWording(read('golive_template'), fields);
+    return previewMade(content, [previewStreamEmbed(fields, `${fields.name} is now live on ${fields.platform}!`, `Black Bloc · via ${fields.platform}`)]);
+  },
+  golive_ended(read, sample) {
+    const fields = { ...sample };
+    const live = fillWording(read('golive_template'), fields);
+    const author = String(read('golive_end_author') || '').trim();
+    const content = fillWording(String(read('golive_end_template') || '').trim() || '{live}', { ...fields, live });
+    return previewMade(content, [previewStreamEmbed(
+      fields,
+      author ? fillWording(author, fields) : `${fields.name} was live on ${fields.platform}`,
+      `Black Bloc · via ${fields.platform} · stream ended`,
+    )]);
+  },
+  golive_costream(read, sample) {
+    const fields = { ...sample, also_platform: 'YouTube', also_url: '<https://youtube.com/watch?v=caseyfast>' };
+    const author = String(read('golive_costream_author') || '').trim();
+    return previewMade(fillWording(read('golive_costream_template'), fields), [previewStreamEmbed(
+      fields,
+      author ? fillWording(author, fields) : `${fields.name} is now live on ${fields.platform}!`,
+      `Black Bloc · via ${fields.platform} + YouTube`,
+    )]);
+  },
+  spotlight_bump(read, sample) {
+    return previewMade(fillWording(read('spotlight_bump_template'), sample));
+  },
+  frontdoor(read) {
+    return previewMade('', [{
+      title: String(read('frontdoor_title') || ''),
+      description: String(read('frontdoor_text') || ''),
+      color: PREVIEW_BLURPLE,
+      fields: [],
+    }], [[
+      previewButton(read('frontdoor_ticket_label'), 'primary'),
+      previewButton(read('frontdoor_request_label')),
+      previewButton(read('frontdoor_event_label')),
+    ]]);
+  },
+  ticket_button(read) {
+    return previewMade('', [{
+      title: String(read('modmail_panel_title') || ''),
+      description: String(read('modmail_panel_text') || ''),
+      color: PREVIEW_BLURPLE,
+      fields: [],
+    }], [[previewButton('Open a ticket', 'primary')]]);
+  },
+  rehearsal(read, sample) {
+    return previewMade(fillWording(read('rehearsal_note'), { channel: sample.channel || '#live-now' }));
+  },
+  request_filed(read, sample) {
+    return previewMade(String(read('request_filed_line') || '').replace('{request_id}', String(sample.request_id || 14)));
+  },
+  request_card(read, sample) {
+    return previewMade('', [{
+      title: 'Request #14',
+      color: PREVIEW_BLURPLE,
+      author: { name: 'Black in a Flash!' },
+      fields: [
+        { name: 'Asked for', value: sample.what || 'A pinned index of every guide', inline: false },
+        { name: 'Why', value: sample.why || 'people keep asking the same three questions in #general', inline: false },
+      ],
+      footer: { text: 'Black Bloc · requests' },
+    }], [[
+      previewButton('Pick up', 'primary'),
+      previewButton('Hold'),
+      previewButton('Decline', 'danger'),
+    ]]);
+  },
+  event_card(read, sample) {
+    return previewMade('', [{
+      title: sample.title || 'Movie night — Paprika',
+      description: sample.description || 'Subtitles on, chat in the voice room.',
+      color: 0xfaa81a,
+      fields: [
+        { name: 'Who', value: `<@${STAFF.id}>`, inline: true },
+        { name: 'Status', value: 'pending', inline: true },
+        { name: 'How long', value: '2 hours', inline: true },
+      ],
+      footer: { text: 'Event #9' },
+    }], [[previewButton('Approve', 'success'), previewButton('Not this one', 'danger')]]);
+  },
+  modmail_relay(read, sample) {
+    return previewMade('', [{
+      title: 'From the member',
+      description: sample.text || 'Someone is posting links in #general again.',
+      color: PREVIEW_BLURPLE,
+      author: { name: sample.name || 'Casey' },
+      fields: [],
+      footer: { text: `${sample.name || 'Casey'} · ${STAFF.id}` },
+    }]);
+  },
+  post(read, sample) {
+    if (String(sample.style) === 'embed') {
+      return previewMade('', [{ title: sample.title || '', description: sample.body || '', fields: [] }]);
+    }
+    return previewMade(sample.body || '');
+  },
+  birthday(read, sample) {
+    const text = String(read('birthday_template') || '')
+      .replace('{name}', sample.name || 'Casey')
+      .replace('{age}', String(sample.age || ''));
+    return previewMade('', [{ description: text, color: 0x4eefff, fields: [] }]);
+  },
+  poll_card(read, sample) {
+    return previewMade(fillWording(read('poll_shadow_note'), { channel: sample.channel || '#announcements' }), [{
+      title: sample.question || 'Which day for the next movie night?',
+      description: '```\nSaturday   #######  7  ( 70%)\nSunday     ###      3  ( 30%)\n```',
+      color: 0x3ba55d,
+      fields: [
+        { name: 'Status', value: 'open', inline: true },
+        { name: 'Voters', value: '10', inline: true },
+      ],
+      footer: { text: 'Poll #3' },
+    }]);
+  },
+  minutes_notes(read, sample) {
+    return previewMade(String(read('minutes_start_text') || ''), [{
+      title: String(read('minutes_notes_title') || ''),
+      description: sample.notes || 'Agreed to ship the guide index on Friday.',
+      fields: [{ name: 'Where', value: 'nowhere yet', inline: true }],
+    }]);
+  },
+};
+
+route('GET', '/api/preview/features', (context) => {
+  requireStaff(context.session);
+  return {
+    features: PREVIEW_FEATURES.map(([feature, title, where, keys]) => ({
+      feature, title, where, keys, sample: { ...(PREVIEW_SAMPLES[feature] || {}) },
+    })),
+    keys: Object.fromEntries(PREVIEW_FEATURES.flatMap(([feature, , , keys]) => keys.map((key) => [key, feature]))),
+  };
+});
+
+route('POST', '/api/preview/message', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const found = previewFeature(String(body.feature || ''));
+  if (!found) throw new Refused(400, 'no_such_preview', PREVIEW_NO_FEATURE.replace('{feature}', String(body.feature || 'nothing').slice(0, 60)));
+  const [feature, title, , keys] = found;
+  const overrides = body.overrides || {};
+  for (const key of Object.keys(overrides)) {
+    if (!keys.includes(key)) {
+      throw new Refused(400, 'not_this_features_key', PREVIEW_NOT_ITS_KEY.replace(/\{key\}/g, key.slice(0, 60)).replace('{feature}', title));
+    }
+  }
+  const read = (key) => (
+    key in overrides ? overrides[key] : (state.settings.get(key) ?? (specOf(key) || [])[3] ?? null)
+  );
+  const sample = { ...(PREVIEW_SAMPLES[feature] || {}) };
+  for (const [key, value] of Object.entries(body.sample || {})) {
+    if (key in sample) sample[key] = String(value === null || value === undefined ? '' : value).slice(0, 400);
+  }
+  if (!sample.name) sample.name = PREVIEW_SAMPLE.name;
+  return PREVIEW_DRAW[feature](read, sample);
+});
+
 // F3. The linked YouTube channels. The mock keeps them beside the go-live state for the same
 // reason the bot does: a linked channel going live is announced through go-live, and one page
 // shows both.
