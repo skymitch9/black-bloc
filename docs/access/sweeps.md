@@ -1,6 +1,13 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-21** — rows `YV-a` and `YV-b` added at the foot for A YOUTUBE VIDEO LINK THAT CAN NAME THE
+> CHANNEL, **off by default** (branch `youtube-video-link`, off `main` `bfbd53f`; design
+> [`../info/autolink-design.md`](../info/autolink-design.md) ▸ **Follow-up 2026-09-21**). Owner, 10:5x:
+> *"Let's build it but keep it off for now"*. ⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET
+> DISCORD OR YOUTUBE** — and 🔴 **both rows need a YouTube presence, of which this server has produced
+> ZERO in 166 go-live sessions**, so they may simply not be walkable. Rows are lettered; the conductor
+> numbers them at the merge. ⚠️ **Nothing else in this file was re-checked then.** Before that,
 > **2026-09-21** — rows `CO-a` and `CO-b` added at the foot for THE CHANNEL OPT-OUT THAT NOW ENDS THE
 > ANNOUNCEMENT ALREADY OUT (branch `channel-optout`, off `main` `1a35d75`; design
 > [`../info/channel-streamers-design.md`](../info/channel-streamers-design.md) ▸ **Follow-up 2026-09-21**).
@@ -2715,3 +2722,25 @@ it bit. ESA is live most of the time, which is why it is the row to use. The new
 |---|---|---|
 | **730** (was `CO-a`) | While **ESA Marathon** is LIVE and its announcement is pinned in `#go-live`, open **Go-live** ▸ its row ▸ **Announcements** and press **Opt out of announcements**. Watch `#go-live` | ⚠️ **The row the whole defect is about.** Within a second: the pinned post is **unpinned** and its words are **edited to the one end wording** (past tense — `golive_end_template`, whatever it says today), exactly as if the stream had ended. The drawer's answer says *"… is opted out …"* **and** names what became of the post — *"The announcement that was out has been unpinned and edited to say the stream has ended … (per `golive_channel_optout_post`)."* The Streamers list's **Opted out** cell reads *opted out* and the row is no longer *live now*. **No reminder follows, however long ESA keeps streaming**, and the channel is NOT announced again while it stays opted out. The Logs page's **golive** chip holds `golive.spotlight_ended` with `reason: opted_out` and `post: end`, plus `golive.spotlight_unpinned`. ⚠️ Press **Opt out** a second time and NOTHING more happens — no second end row. Then set `golive_channel_optout_post` to `delete` and repeat on another live channel: the post **disappears** instead (`golive.spotlight_post_deleted`); set it to `leave` and the post stays word-for-word as posted with only the pin off. The same move from Discord — `/golive` ▸ **Channels…** ▸ pick the channel ▸ **Opt out of announcements** — says the same sentence and does the same thing |
 | **731** (was `CO-b`) | While a channel is LIVE and PINNED, press **Spotlight off** on its row instead (not Opt out). Then leave it and wait for the stream to really end | The announcement is **unpinned and nothing else** — the words stay exactly as posted, saying the channel is live, because it still is. The answer says *"… is announced like anybody else's stream now … The announcement that is out now has been unpinned; it stays posted, no reminder follows it, and it is edited to past tense when the stream ends."* The row is STILL *live now* and its session is still open; `golive.spotlight_unpinned` carries `because: spotlight_off`. **No reminder goes out** for the rest of the stream. When Twitch finally reads offline the post is edited to past tense the normal way. ⚠️ Pressing **Spotlight on** again mid-stream does NOT re-pin the post that is already out — the pin is taken at announce time (sweep row **721** says the same) |
+
+## Rows `YV-a`, `YV-b` — a YouTube video link can name the channel (branch `youtube-video-link`, 2026-09-21)
+
+⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET DISCORD OR YOUTUBE.** Owner, 2026-09-21 10:5x,
+verbatim: *"Let's build it but keep it off for now"* — so the new key **`golive_autolink_youtube_video`**
+ships **false** and row `YV-a` is the *nothing changed* row, which is the one that matters today. Design:
+[`../info/autolink-design.md`](../info/autolink-design.md) ▸ **Follow-up 2026-09-21**. The key sits in
+**Settings** ▸ **Go-live** ▸ *How streams are spotted*, directly beside `golive_autolink_presence`, and
+`/settings` reaches it too. Review link: <https://blackbloc.heygabi.ai/settings.html> ▸ **Go-live** ▸
+`golive_autolink_youtube_video`.
+
+🔴 **Both rows need a YouTube presence, and nobody on this server has ever produced one** — measured on live
+09:5x, **zero YouTube addresses in 166 go-live sessions**. Discord sets the Streaming status itself only for
+Twitch, so a YouTube presence comes only from a third-party rich-presence app. ⚠️ **If you cannot make one,
+say so and leave both rows unwalked — do not mark them passed from the suite.** The cheap substitute for
+`YV-b` is **Go-live** ▸ **Streamers** ▸ **Link from history** after putting a `watch?v=…` address into a
+session by hand; it walks the same `link_from_url`.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`YV-a`** (key **off** — today's behaviour, unchanged) | With `golive_autolink_youtube_video` left at its default **false**, get a go-live whose Discord status carries a YouTube video address (`youtube.com/watch?v=…` or `youtu.be/…`). Watch `#go-live`, then **Go-live** ▸ **Streamers**, then run **Link from history** | The announcement posts exactly as it always did. **Nothing is linked** — the YouTube column for that person stays empty, and the Logs page's **youtube** chip gains **no** `youtube.link` row and **no** `youtube.resolve_failed` row. YouTube is never asked anything at all. The history sweep counts that person under *could not be read*: its report sentence ends *"… 1 could not be read."* ⚠️ **This is the row that proves the owner's "keep it off for now" actually holds** — a silent extra page fetch would be the defect |
+| **`YV-b`** (key **on**) | **Settings** ▸ **Go-live** ▸ *How streams are spotted* ▸ turn `golive_autolink_youtube_video` **on**. Repeat `YV-a` | The announcement posts as before, **and** that person's YouTube column now reads the channel behind the video without anybody pasting an address. The Logs page's **youtube** chip holds one `youtube.link` row whose details carry **`via_video: true`** and `because: presence` (or `because: history_sweep` from the sweep). The sweep's report names them under *Linked* — *"Moth → \<the channel's title\>"* — and the *could not be read* count drops by one. ⚠️ **Three things to write down, because none is verified:** (1) whether the channel it found is actually **theirs** — a rich-presence app reports what is *playing*, which may be somebody else's video, and that is downside 2 in the design; (2) whether YouTube served the page at all or answered the *Sign in to confirm you're not a bot* challenge from Fly's IP, in which case the person is simply not linked and the announcement still goes — never an error anyone sees; (3) whether the channel title appears or only `youtube.com/channel/UC…`, which is what a missing `YOUTUBE_API_KEY` looks like. If the channel is the **wrong person's**, turn the key back off — that is the decision it exists for |

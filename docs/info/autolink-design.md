@@ -1,6 +1,10 @@
 # Auto-link — the go-live history links people to the channel they streamed from, and a presence go-live links them from then on
 
-> **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE v151 (2026-09-21)** — release `c1b83f0`,
+> **Audience:** the build agent and reviewers. **Status:** TRACKED · 🔨 **Follow-up 2026-09-21 BUILT, not merged, not
+> deployed** — [**a video link can name the channel (off by default)**](#follow-up-2026-09-21-a-video-link-can-name-the-channel-off-by-default),
+> branch `youtube-video-link` off `main` `bfbd53f` (v152 live). It closes **Deviation 3**, which stays true wherever the
+> new key `golive_autolink_youtube_video` is **off**, and off is the shipped default. ⚠️ Read that section's own
+> `### Follow-up deviations` and `### Follow-up — what was NOT verified`; the body below is the v151 build. · ✅ **LIVE v151 (2026-09-21)** — release `c1b83f0`,
 > deployed commit `c7ef8f1`, **2026-09-21 09:51** Phoenix; merge `731519e`, 4 commits; sweeps **726–729** (were
 > `AL-a` … `AL-d`) are the owner's and **none has been walked**. ✅ **Link from history was run ONCE on live 09:5x** —
 > the links count read **29** afterwards; ⚠️ **the report sentence itself was NOT captured**, so what it said about
@@ -73,6 +77,139 @@ Docs: `code-notes.md`; this doc's `## Deviations` + `## What was NOT verified`; 
 names who got linked; b: a presence-only streamer goes live → announced AND linked, the row shows the login; c: the key
 off → announced, not linked; d: an opted-out member is skipped by both). NOT `TODO.md` / `DONE.md` / `deploys.log` /
 `KNOWN_ISSUES.md`.
+
+## Follow-up 2026-09-21: a video link can name the channel (off by default)
+
+> 🔨 **BUILT on branch `youtube-video-link`, 2026-09-21, off `main` `bfbd53f` (v152 live).** Not merged, not
+> deployed, and ⚠️ **nothing in it has met Discord or YouTube in production.** Closes **Deviation 3** above —
+> which is still true wherever the new key is **off**, and that is the shipped default.
+
+### The ask
+
+Owner question, 2026-09-21 09:5x, verbatim: *"what can we do about youtube presence? can we just wait for a
+go live and then get the channel from it or whats the best way? people have go live messages for youtube?"*
+
+The answer given was a list of downsides, and the owner then said, verbatim (10:5x):
+***"Let's build it but keep it off for now"*.** The four downsides are why it ships off:
+
+1. **It is scraping.** The channel id is read out of YouTube's own HTML, which YouTube changes whenever it
+   likes and owes nobody notice. `resolve_without_key` already carries that risk for handles; this doubles it.
+2. **A presence can carry somebody else's video.** A rich-presence app reports *what is playing*, not *who is
+   streaming*. Linking off a watch address can hand somebody a channel that is not theirs.
+3. **YouTube may block it.** The same *Sign in to confirm you're not a bot* page the live prober already
+   meets (`BOT_CHECKED` in `youtube.py`) can be served here, and repeated page reads invite it.
+4. **It is speculative.** MEASURED on live 2026-09-21 09:5x: **166 go-live sessions in history, 159
+   presence/Twitch, 5 Twitch poller, 2 presence with no platform, ZERO YouTube addresses ever.** Discord sets
+   the Streaming status itself only for Twitch. Nothing in the server's whole history would have used this.
+
+### The fix
+
+`YouTubeClient.resolve_video_channel(video_id) -> (channel_id, title)`, beside `resolve`:
+
+- **With a key** — one unit: `videos?part=snippet&id=<id>`, `snippet.channelId` + `snippet.channelTitle`. An
+  empty answer falls through to the page rather than refusing, mirroring `_resolve_with_key`.
+- **Keyless** — GET `https://www.youtube.com/watch?v=<id>` with `BROWSER_AGENT`, read by the module function
+  `read_video_channel(html)`: `<meta itemprop="channelId" content="UC…">` first, else the player JSON's
+  `"channelId"` / `"externalChannelId"`, with `"ownerChannelName"` as the title.
+- A page that names nobody raises `YouTubeError` with a sentence, and a `Sign in to confirm` body gets its own
+  sentence saying YouTube asked the bot to prove it is not a robot. A non-200 is a `network=True` error.
+
+`video_id_in(text)` sits beside `channel_id_in` / `handle_in` and reads `watch?v=`, `youtu.be/<id>`,
+`/live/<id>`, `/shorts/<id>` and `/embed/<id>`.
+
+🔴 **Which page pattern this relies on, and the real pages it was measured against.** Two real public watch
+pages were fetched with the bot's own `BROWSER_AGENT` on **2026-09-21** —
+`youtube.com/watch?v=jNQXAC9IVRw` (*Me at the zoo*) and `watch?v=dQw4w9WgXcQ`:
+
+| Pattern | On a real WATCH page | On a real CHANNEL page (`@jawed`) |
+|---|---|---|
+| `<meta itemprop="channelId">` | ⚠️ **absent on both** — YouTube serves no such tag today | absent |
+| `"channelId":"UC…"` | **3 hits on one page, 4 on the other, ONE distinct id each — always the owner's** | **10 different ids, NONE the channel's own**; the first is `UCPszuZ…`, the channel is `UC4QobU…` |
+| `"externalChannelId":"UC…"` | 1 hit, the owner's | — |
+| `<link rel="canonical">` | points at the **watch** URL, so `CANONICAL` is useless here | the channel's own id — which is why `resolve_without_key` uses it |
+
+So **the pattern actually relied on is the player JSON's `"channelId"`**; the meta tag is tried first and has
+never yet been seen. The table is also the measurement behind `resolve_without_key`'s docstring warning — the
+channel page really does name ten other channels, and the watch page really does not. `read_video_channel`
+is therefore a **watch-page reader only**, and `resolve_video_channel` only ever fetches `watch?v=`.
+
+### The key — one, and it ships OFF
+
+**`golive_autolink_youtube_video`** (bool, **default `False`**, group golive). Help, verbatim: *"true lets a
+go-live whose Discord status carries a YouTube video link find the video's channel and link the person to it;
+false leaves such a link unread. Off by default: it reads YouTube's page, which can change, and a video is not
+always the streamer's own"*. Registry (`settings_store.py`), the mock's `SETTING_SPECS` row, `labels.js`,
+`golive-join.js:placeSettings` beside `golive_autolink_presence` in *How streams are spotted*, and the
+every-key-lands-once fixture. Checklist **33**.
+
+In `link_from_url`, the YouTube branch that used to answer *unreadable* for an address with no channel id and
+no handle now asks `channel_behind_video`, which is **the whole brake**: key off → `None`, with the client
+never touched and no request made. Key on → the video's channel, and the link continues down the **existing**
+YouTube path (`cogs/content/youtube.py:link_channel` with a `/channel/UC…` address), so the same resolve, the
+same refusal when the channel belongs to another member, the same one row. Both callers — the presence hook
+`_autolink_presence` and the history sweep `link_from_history` — inherit it with no change of their own.
+
+### Follow-up deviations
+
+1. **The row that says `via_video` is `youtube.link`, not `golive.link`.** The brief asked for *"the same
+   `golive.link` row with `because` and a `via_video: true` detail"*. There is no such row: the YouTube half
+   of `link_from_url` has never written `golive.link` — it writes `youtube.link`, from the YouTube cog's own
+   `link_channel`. So that function gained keyword-only `because: str | None = None` and `via_video: bool =
+   False`, each written into the details **only when set**, exactly the shape Deviation 11 above chose for
+   `golive.link`. Every existing caller's details dict is byte-identical, which is what the exact-dict
+   assertions wanted. This also reverses Deviation 11's *"`youtube.link` gains nothing"* — it now carries
+   `because` on both autolink paths, which is the fact `golive.link` already carried for Twitch.
+2. **`video_id_in` refuses a bare word, and reads `/embed/` as a fifth shape.** An 11-character handle is
+   indistinguishable from a video id, and `handle_in` accepts 3–30 characters — so a bare-id form would make
+   `@somebodyxyz` a video. Only the address shapes are read. `/embed/` was added because it is the same id in
+   the same position and costs one alternation.
+3. **The channel the video names is passed to the existing link path as a `/channel/UC…` ADDRESS, not as a
+   bare id.** A bare channel id matches `HANDLE`, so `_handle_of` would have stored `UCsXVk…` as somebody's
+   handle. The address form makes `handle_in` answer `None`, which is correct.
+4. **A `YouTubeError` from the lookup is swallowed and answered *could not be read*, and writes NO
+   `youtube.resolve_failed` row.** Same reasoning as Deviation 12: nothing in `_autolink_presence` may disturb
+   an announcement that is already posted, and a speculative lookup that fails is not a staff-facing event. It
+   is logged at INFO with the sentence YouTube's error carried.
+5. **The keyless title is used as the fallback wording.** `link_channel` re-resolves the `/channel/` address
+   and, with no API key, gets no title at all — so a link made this way would have read
+   `youtube.com/channel/UC…` in the report. The `ownerChannelName` already read off the watch page is used
+   instead, so the sweep says *"Moth → Moth Light"*. It is not written to the link row; that stays the
+   existing path's business.
+6. **A missing YouTube cog answers *unread*, not a crash.** `channel_behind_video` checks `cog_of(bot)` and
+   its `client` before asking anything.
+7. ⚠️ **`site/mock/golive-join.test.mjs`'s every-key-lands-once fixture went 52 → 53 here, and branch
+   `member-optout` bumped the SAME fixture 52 → 53 independently in the same session.** The merged list holds
+   **54**, and the assertion, the comment and the printed sentence all have to move together — a merge that
+   takes either side alone passes the count and silently loses a key. Deviation 16 above records the identical
+   trap one release earlier; it is now the second time.
+8. **NOT done, deliberately:** nothing merged, pushed to `main` or deployed; `TODO.md`, `DONE.md`,
+   `deploys.log` and `KNOWN_ISSUES.md` untouched; `architecture.md` untouched — its registry-key count is the
+   conductor's docs ritual to move (**297** on `main` at v152, **298** with this branch, measured by
+   `len(KEY_TYPES)`). No schema change, so no migration. No new route, no new button, no new Discord surface:
+   the key is reached through the Settings page and `/settings`, which every registry key gets for free.
+
+### Follow-up — what was NOT verified
+
+⚠️ **No bot was started and no link was written to the live database.** Every claim about behaviour is the
+suite's, against `FakeYouTubeClient` / `FakeMember`.
+
+- **That any of this ever fires.** Zero YouTube presences exist in 166 sessions (the measurement above). The
+  key is off, so on the live server this build is currently **unreachable code**.
+- **A real `resolve_video_channel` network call.** The parser was measured against two real watch pages saved
+  to disk; the client's own request path was exercised only against the fake. Nothing has called YouTube from
+  inside the bot on this branch.
+- **Whether YouTube serves the same HTML to Fly's IP.** Both real pages were fetched from the owner's machine.
+  A datacentre address is exactly where the *Sign in to confirm* page is most likely, and that case is handled
+  in words but has never been seen here.
+- **Whether the meta tag ever exists.** It is tried first and was absent from both real pages; the branch is
+  covered by a synthetic fixture only.
+- **A keyed lookup.** `YOUTUBE_API_KEY` is not set on this server, so the `videos?part=snippet` path has run
+  against the fake `_Request` and nothing else. Its quota cost (**1 unit**) is YouTube's documented figure,
+  not a measured one.
+- **The Settings page.** The key was not rendered in a browser; `check.mjs` proves the mock serves it and the
+  fixture proves it lands in *How streams are spotted*, which is not the same as somebody having seen it.
+- **Sweeps `YV-a` and `YV-b`** in [`../access/sweeps.md`](../access/sweeps.md) are the proof that does not
+  exist yet — and ⚠️ **both need a YouTube presence, which nobody on this server has ever produced.**
 
 ## Deviations
 
