@@ -463,17 +463,17 @@ function postRow(post) {
   return el('button', {
     class: 'grid-row',
     type: 'button',
-    style: 'grid-template-columns: 12px minmax(0, 1.4fr) 190px 280px 140px 24px',
+    style: 'grid-template-columns: 12px minmax(0, 1.5fr) minmax(220px, 1.2fr) minmax(0, 1fr) minmax(0, 0.9fr) 24px',
     'data-search': `${post.title} ${post.channel_name || ''} ${(post.status || []).join(' ')} ${post.body || ''}`.toLowerCase(),
     on: { click: () => openDrawer(post.title, postDrawer(post)) },
   }, [
     el('span', { class: 'dot-sm', 'data-tone': leadState(post) }),
     el('span', { class: 'cell-name', text: post.title }),
-    el('span', { class: 'cell-quiet', text: postedLine(post, DATA.shadow) }),
     el('span', { class: 'cell-kind cell-center' }, [
       ...statusPills(post),
       post.seeded ? badge('ships with the bot') : null,
     ]),
+    el('span', { class: 'cell-quiet', text: postedLine(post, DATA.shadow) }),
     el('span', {
       class: 'cell-quiet',
       title: ago(post.updated_at).title,
@@ -486,12 +486,12 @@ function postRow(post) {
 function headRow() {
   return el('div', {
     class: 'grid-row head',
-    style: 'grid-template-columns: 12px minmax(0, 1.4fr) 190px 280px 140px 24px',
+    style: 'grid-template-columns: 12px minmax(0, 1.5fr) minmax(220px, 1.2fr) minmax(0, 1fr) minmax(0, 0.9fr) 24px',
   }, [
     el('span'),
     el('span', { text: 'Post' }),
-    el('span', { text: 'Channel' }),
     el('span', { class: 'cell-center', text: 'Status' }),
+    el('span', { text: 'Channel' }),
     el('span', { text: 'Last saved' }),
     el('span'),
   ]);
