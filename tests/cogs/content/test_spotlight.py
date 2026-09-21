@@ -3,11 +3,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from black_bloc import pings
 from black_bloc import spotlight as words
 from black_bloc.cogs.content.golive import GoLive
 from black_bloc.cogs.content.spotlight import (
     Spotlight,
     add_channel,
+    build_spotlight,
     bump_now,
     bumps_of,
     channel_by_id,
@@ -114,9 +116,25 @@ class FakeChannel:
         return [one.content for one in self.messages]
 
 
+class FakeRole:
+    def __init__(self, role_id, name):
+        self.id = role_id
+        self.name = name
+        self.members = []
+        self.deleted = False
+
+    def is_assignable(self):
+        return True
+
+    async def delete(self, reason=None):
+        self.deleted = True
+
+
 class FakeGuild:
     def __init__(self):
         self.id = GUILD
+        self.roles = []
+        self.made = []
         self.channels = {
             CHANNEL: FakeChannel(CHANNEL),
             SHADOW_CHANNEL: FakeChannel(SHADOW_CHANNEL),
@@ -138,7 +156,13 @@ class FakeGuild:
         return None
 
     def get_role(self, role_id):
-        return None
+        return next((one for one in self.roles if one.id == int(role_id)), None)
+
+    async def create_role(self, name=None, mentionable=False, reason=None):
+        role = FakeRole(7000 + len(self.roles), name)
+        self.roles.append(role)
+        self.made.append(name)
+        return role
 
 
 class FakeHelix:
@@ -818,3 +842,181 @@ async def test_the_channel_and_session_tables_round_trip(db):
 
 def test_the_cog_and_the_golive_cog_are_two_different_things():
     assert Spotlight.__name__ != GoLive.__name__
+
+
+# --- the channel's own ping role (info/spotlight-pings-design.md §B) ---------------------------
+
+
+PING_ROLE = 4242
+
+
+async def a_fan_role(bot, row):
+    made = await pings.ensure_fan_role(
+        bot, bot.guild, None, by=STAFF, staff=True, spotlight=row
+    )
+    assert made.ok
+    return made.role_id
+
+
+async def test_the_announcement_pings_the_channels_role_beside_the_go_live_role(bot, cog):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await bot.store.set(GUILD, "golive_ping_role_id", PING_ROLE)
+    bot.guild.roles.append(FakeRole(PING_ROLE, "Events"))
+    row = await a_row(bot)
+    role_id = await a_fan_role(bot, row)
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.startswith(f"<@&{PING_ROLE}> <@&{role_id}> ")
+    mentions = posted.kwargs["allowed_mentions"]
+    assert [one.id for one in mentions.roles] == [PING_ROLE, role_id]
+    assert (await details_of(bot.db, "golive.spotlight_announced"))["fan_role_id"] == role_id
+
+
+async def test_an_announcement_for_a_channel_with_no_role_pings_only_the_go_live_role(bot, cog):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await bot.store.set(GUILD, "golive_ping_role_id", PING_ROLE)
+    bot.guild.roles.append(FakeRole(PING_ROLE, "Events"))
+    await a_row(bot)
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.startswith(f"<@&{PING_ROLE}> ")
+    assert (await details_of(bot.db, "golive.spotlight_announced"))["fan_role_id"] is None
+
+
+async def test_a_bump_says_nothing_to_anybody_until_the_key_is_turned_on(bot, cog):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await bot.store.set(GUILD, "golive_ping_role_id", PING_ROLE)
+    bot.guild.roles.append(FakeRole(PING_ROLE, "Events"))
+    row = await a_row(bot)
+    role_id = await a_fan_role(bot, row)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    session = await open_session(bot.db, row["id"])
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET started_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=9)).isoformat(), session["id"]),
+    )
+    await bot.db.conn.commit()
+
+    await cog.poll_once()
+
+    quiet = bot.guild.channel.messages[1]
+    assert not quiet.content.startswith("<@&")
+    assert quiet.kwargs["allowed_mentions"].roles is False
+    assert (await details_of(bot.db, "golive.spotlight_bumped"))["pinged"] is False
+
+    await bot.store.set(GUILD, "spotlight_bump_pings", True)
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET last_bump_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=9)).isoformat(), session["id"]),
+    )
+    await bot.db.conn.commit()
+    await cog.poll_once()
+
+    loud = bot.guild.channel.messages[2]
+    assert loud.content.startswith(f"<@&{PING_ROLE}> <@&{role_id}> ")
+    assert [one.id for one in loud.kwargs["allowed_mentions"].roles] == [PING_ROLE, role_id]
+    said = await details_of(bot.db, "golive.spotlight_bumped")
+    assert said["pinged"] is True and said["fan_role_id"] == role_id
+
+
+async def test_an_expiring_channel_takes_its_ping_role_with_it(bot, cog):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await bot.store.set(GUILD, "pings_fan_role_delete", True)
+    outcome, row = await spotlight_channel(bot, bot.guild, FakeActor(), GDQ, days=1)
+    assert outcome == "added"
+    role_id = await a_fan_role(bot, row)
+    await update_channel(
+        bot.db, row["id"], expires_at=(datetime.now(UTC) - timedelta(days=1)).isoformat()
+    )
+
+    await cog.sweep_expiries(bot.guild)
+
+    assert await channels_for(bot.db, GUILD) == []
+    assert await pings.get_spotlight_fan_role(bot.db, GUILD, row["id"]) is None
+    assert bot.guild.get_role(role_id).deleted is True
+    said = await details_of(bot.db, "pings.fan_role_removed")
+    assert said["because"] == words.FAN_ROLE_EXPIRED and said["spotlight_id"] == row["id"]
+
+
+async def test_an_expiry_keeps_the_discord_role_when_the_setting_says_keep(bot, cog):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await bot.store.set(GUILD, "pings_fan_role_delete", False)
+    outcome, row = await spotlight_channel(bot, bot.guild, FakeActor(), GDQ, days=1)
+    assert outcome == "added"
+    role_id = await a_fan_role(bot, row)
+    await update_channel(
+        bot.db, row["id"], expires_at=(datetime.now(UTC) - timedelta(days=1)).isoformat()
+    )
+
+    await cog.sweep_expiries(bot.guild)
+
+    assert bot.guild.get_role(role_id).deleted is False
+    assert (await details_of(bot.db, "pings.fan_role_removed"))["deleted"] is False
+
+
+async def test_removing_a_channel_takes_its_ping_role_too(bot, cog):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    row = await a_row(bot)
+    await a_fan_role(bot, row)
+
+    await forget_spotlight(bot, bot.guild, FakeActor(), row["id"])
+
+    assert await pings.get_spotlight_fan_role(bot.db, GUILD, row["id"]) is None
+    said = await details_of(bot.db, "pings.fan_role_removed")
+    assert said["because"] == words.FAN_ROLE_REMOVED
+
+
+async def test_staff_give_and_take_a_channels_role_from_the_sub_panel(bot, cog):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    row = await a_row(bot)
+
+    said, picked = await run_spotlight_move(
+        bot, bot.guild, FakeActor(), row["id"], "give_role"
+    )
+
+    assert picked is True and "gamesdonequick pings" in said
+    held = await pings.get_spotlight_fan_role(bot.db, GUILD, row["id"])
+    assert held is not None
+
+    embed, view = await build_spotlight(bot, bot.guild, row["id"])
+    assert words.TAKE_PING_ROLE in [getattr(one, "label", None) for one in view.children]
+    assert f"<@&{held['role_id']}>" in str(embed.description)
+
+    said, picked = await run_spotlight_move(
+        bot, bot.guild, FakeActor(), row["id"], "take_role"
+    )
+
+    assert picked is True and "no longer has a ping role" in said
+    assert await pings.get_spotlight_fan_role(bot.db, GUILD, row["id"]) is None
+    _embed, view = await build_spotlight(bot, bot.guild, row["id"])
+    assert words.GIVE_PING_ROLE in [getattr(one, "label", None) for one in view.children]
+
+
+async def test_a_move_on_a_row_that_has_gone_says_so_rather_than_a_bare_status(bot, cog):
+    said, picked = await run_spotlight_move(bot, bot.guild, FakeActor(), 9999, "give_role")
+
+    assert said == words.NO_SUCH_ROW and picked is False
+
+
+async def test_the_first_announcement_writes_twitchs_own_spelling_onto_the_row(bot, cog):
+    """A row added by hand only knows the login, so its ping role would be called
+    *gamesdonequick pings*; the announcement is where Twitch's `GamesDoneQuick` arrives."""
+    row = await a_row(bot)
+    assert words.display_for(row) == GDQ
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert words.display_for(fresh) == "GamesDoneQuick"
+    made = await pings.ensure_fan_role(
+        bot, bot.guild, None, by=STAFF, staff=True, spotlight=fresh
+    )
+    assert bot.guild.get_role(made.role_id).name == "GamesDoneQuick pings"

@@ -8,6 +8,7 @@ from typing import Any
 import discord
 from discord.ext import commands, tasks
 
+from ... import pings
 from ... import shadow as shadow_home
 from ... import spotlight as words
 from ...actionlog import log_action
@@ -22,6 +23,7 @@ from ...golive import (
     from_twitch,
     humanise_duration,
     now_iso,
+    ping_prefix,
     render,
     with_box_art,
 )
@@ -31,6 +33,7 @@ from ...panels import Panel, answer, opened, retire, still_staff
 from ...settings_store import (
     SPOTLIGHT_BUMP_CLEANUP_KEY,
     SPOTLIGHT_BUMP_HOURS_KEY,
+    SPOTLIGHT_BUMP_PINGS_KEY,
     SPOTLIGHT_BUMP_TEMPLATE_KEY,
     SPOTLIGHT_DEFAULT_DAYS_KEY,
     SPOTLIGHT_END_MISSES_KEY,
@@ -392,6 +395,7 @@ class Spotlight(commands.Cog):
         session = await open_session(self.bot.db, row["id"])
         if session is not None:
             await self._end(guild, row, session, words.EXPIRED)
+        await drop_fan_role(self.bot, guild, row, because=words.FAN_ROLE_EXPIRED)
         await delete_channel(self.bot.db, row["id"])
         self.misses.pop(int(row["id"]), None)
         await log_action(
@@ -434,14 +438,18 @@ class Spotlight(commands.Cog):
         mode = self._mode(guild.id)
         info = await self._box_art(guild, from_twitch(stream))
         name = str(getattr(stream, "user_name", "") or "").strip() or words.display_for(row)
+        if name != words.display_for(row):
+            await update_channel(self.bot.db, row["id"], display_name=name)
         session_id = await start_session(self.bot.db, guild.id, row["id"], info, mode)
         if session_id is None:
             return
         store = self.bot.store
+        fan_role_id = await pings.announced_spotlight_fan_role(self.bot, guild, row["id"])
         text = render(
             store.get(guild.id, TEMPLATE_KEY),
             info,
             ping_role_id=store.get(guild.id, PING_KEY),
+            fan_role_id=fan_role_id,
             name=name,
         )
         embed = (
@@ -449,7 +457,7 @@ class Spotlight(commands.Cog):
             if store.get(guild.id, EMBED_KEY)
             else None
         )
-        message, reason = await self._post(guild, text, embed, mode)
+        message, reason = await self._post(guild, text, embed, mode, fan_role_id=fan_role_id)
         details = {
             "spotlight_id": row["id"],
             "session_id": session_id,
@@ -460,6 +468,7 @@ class Spotlight(commands.Cog):
             "title": info.title,
             "text": text,
             "pin": bool(row["pin"]),
+            "fan_role_id": fan_role_id,
         }
         if embed is not None:
             details["embed"] = embed_summary(embed)
@@ -502,16 +511,32 @@ class Spotlight(commands.Cog):
         via: str = VIA_DISCORD,
         actor: Any = None,
     ) -> Any:
-        """One short reminder, never pinned and never a ping; its id is kept for the cleanup."""
+        """One short reminder, never pinned; it pings only while `spotlight_bump_pings` is on."""
         stream = info if info is not None else words.info_of(session, row["twitch_login"])
         at = now_iso()
-        text = words.bump_render(
+        pinging = bool(self.bot.store.get(guild.id, SPOTLIGHT_BUMP_PINGS_KEY))
+        fan_role_id = (
+            await pings.announced_spotlight_fan_role(self.bot, guild, row["id"], notice=False)
+            if pinging
+            else None
+        )
+        prefix = (
+            ping_prefix(self.bot.store.get(guild.id, PING_KEY), fan_role_id) if pinging else ""
+        )
+        text = prefix + words.bump_render(
             self.bot.store.get(guild.id, SPOTLIGHT_BUMP_TEMPLATE_KEY),
             stream,
             words.display_for(row),
             words.bump_duration(session, at),
         )
-        message, reason = await self._post(guild, text, None, self._mode(guild.id))
+        message, reason = await self._post(
+            guild,
+            text,
+            None,
+            self._mode(guild.id),
+            fan_role_id=fan_role_id,
+            pinging=pinging,
+        )
         if message is None:
             await log_action(
                 self.bot,
@@ -541,6 +566,8 @@ class Spotlight(commands.Cog):
                 "text": text,
                 "message_id": str(message.id),
                 "bump": int(_cell(session, "bump_count") or 0) + 1,
+                "pinged": pinging,
+                "fan_role_id": fan_role_id,
                 "via": via,
             },
         )
@@ -709,7 +736,14 @@ class Spotlight(commands.Cog):
     # --- where the posts go ------------------------------------------------------------------
 
     async def _post(
-        self, guild: Any, text: str, embed: Any, mode: str
+        self,
+        guild: Any,
+        text: str,
+        embed: Any,
+        mode: str,
+        *,
+        fan_role_id: int | None = None,
+        pinging: bool = True,
     ) -> tuple[Any, str | None]:
         """`on` posts in the go-live channel; `shadow` rehearses where shadow_channel_id says."""
         channel_id = self.bot.store.get(guild.id, CHANNEL_KEY)
@@ -734,7 +768,9 @@ class Spotlight(commands.Cog):
         try:
             message = await channel.send(
                 f"{said}\n{text}" if said else text,
-                allowed_mentions=self._mentions(guild.id),
+                allowed_mentions=self._mentions(
+                    guild.id, fan_role_id, pinging=pinging
+                ),
                 **({"embed": embed} if embed is not None else {}),
             )
         except Exception as exc:
@@ -801,16 +837,75 @@ class Spotlight(commands.Cog):
     def _end_misses(self, guild_id: int) -> int:
         return max(1, int(self.bot.store.get(guild_id, SPOTLIGHT_END_MISSES_KEY)))
 
-    def _mentions(self, guild_id: int) -> discord.AllowedMentions:
-        role_id = self.bot.store.get(guild_id, PING_KEY)
+    def _mentions(
+        self, guild_id: int, fan_role_id: int | None = None, *, pinging: bool = True
+    ) -> discord.AllowedMentions:
+        wanted = [
+            int(role_id)
+            for role_id in (self.bot.store.get(guild_id, PING_KEY), fan_role_id)
+            if role_id and pinging
+        ]
         return discord.AllowedMentions(
             everyone=False,
             users=False,
-            roles=[discord.Object(int(role_id))] if role_id else False,
+            roles=[discord.Object(role_id) for role_id in dict.fromkeys(wanted)] or False,
         )
 
 
 # --- the shared moves, which the routes and the panel both come in by -------------------------
+
+
+async def drop_fan_role(
+    bot: Any,
+    guild: Any,
+    row: Any,
+    *,
+    because: str,
+    actor: Any = None,
+    via: str = VIA_DISCORD,
+) -> Any:
+    """A channel that leaves the list takes its ping role with it, the one `pings` way."""
+    return await pings.remove_fan_role(
+        bot,
+        guild,
+        by=getattr(actor, "id", actor),
+        via=via,
+        spotlight=row,
+        because=because,
+    )
+
+
+async def give_fan_role(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, *, role: Any = None, via: str = VIA_DISCORD
+) -> tuple[Any, Any]:
+    """Staff's door to a channel's own ping role: `(outcome, row)`, the row None when it is gone."""
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return (None, None)
+    outcome = await pings.ensure_fan_role(
+        bot,
+        guild,
+        None,
+        by=getattr(actor, "id", actor),
+        existing_role=role,
+        staff=True,
+        via=via,
+        spotlight=row,
+    )
+    return (outcome, row)
+
+
+async def take_fan_role(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, *, via: str = VIA_DISCORD
+) -> tuple[Any, Any]:
+    """Staff always get the final say: the move that reverses `give_fan_role`."""
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return (None, None)
+    outcome = await drop_fan_role(
+        bot, guild, row, because=words.FAN_ROLE_TAKEN, actor=actor, via=via
+    )
+    return (outcome, row)
 
 
 async def spotlight_channel(
@@ -911,6 +1006,7 @@ async def forget_spotlight(
     if session is not None and cog is not None:
         async with cog._lock(spotlight_id):
             await cog._end(guild, row, session, words.REMOVED_BECAUSE)
+    await drop_fan_role(bot, guild, row, because=words.FAN_ROLE_REMOVED, actor=actor, via=via)
     await delete_channel(bot.db, spotlight_id)
     if cog is not None:
         cog.misses.pop(int(spotlight_id), None)
@@ -1011,9 +1107,16 @@ async def build_spotlight(
         if picked is not None
         else None
     )
+    held = {
+        pings.spotlight_of(one): one["role_id"]
+        for one in await pings.spotlight_fan_roles(bot.db, guild.id)
+    }
     lines = [words.PANEL_INTRO] + mode_lines(bot, guild)
     lines += (
-        [words.panel_line(row, int(row["id"]) in open_by_id) for row in rows[:SELECT_CAP]]
+        [
+            words.panel_line(row, int(row["id"]) in open_by_id, held.get(int(row["id"])))
+            for row in rows[:SELECT_CAP]
+        ]
         if rows
         else [words.PANEL_EMPTY]
     )
@@ -1022,6 +1125,7 @@ async def build_spotlight(
         view.add_item(ChannelPick(rows[:SELECT_CAP], chosen))
     if chosen is not None:
         live = int(chosen["id"]) in open_by_id
+        held = await pings.get_spotlight_fan_role(bot.db, guild.id, chosen["id"])
         if words.keeps_forever(chosen):
             view.add_item(SpotlightMoveButton("expire", chosen["id"]))
         else:
@@ -1029,6 +1133,8 @@ async def build_spotlight(
             view.add_item(SpotlightMoveButton("keep", chosen["id"]))
         if live:
             view.add_item(SpotlightMoveButton("bump", chosen["id"]))
+        view.add_item(SpotlightMoveButton("take_role" if held is not None else "give_role",
+                                         chosen["id"]))
         view.add_item(SpotlightMoveButton("remove", chosen["id"]))
     view.add_item(AddChannelButton())
     view.add_item(SpotlightBackButton())
@@ -1077,6 +1183,8 @@ class SpotlightMoveButton(discord.ui.Button):
         "keep": words.KEEP_FOREVER,
         "expire": "Let it expire",
         "bump": words.BUMP_NOW,
+        "give_role": words.GIVE_PING_ROLE,
+        "take_role": words.TAKE_PING_ROLE,
         "remove": words.REMOVE,
     }
     STYLES = {
@@ -1084,6 +1192,8 @@ class SpotlightMoveButton(discord.ui.Button):
         "keep": discord.ButtonStyle.success,
         "expire": discord.ButtonStyle.secondary,
         "bump": discord.ButtonStyle.primary,
+        "give_role": discord.ButtonStyle.success,
+        "take_role": discord.ButtonStyle.secondary,
         "remove": discord.ButtonStyle.danger,
     }
 
@@ -1127,6 +1237,12 @@ async def run_spotlight_move(
         when = words.expiry_in_days(bot.store.get(guild.id, SPOTLIGHT_DEFAULT_DAYS_KEY))
         await change_spotlight(bot, guild, actor, spotlight_id, expires_at=when)
         return (words.EXPIRES_SAID.format(login=login, when=words.when_words(when)), True)
+    if action in ("give_role", "take_role"):
+        move = give_fan_role if action == "give_role" else take_fan_role
+        outcome, _ = await move(bot, guild, actor, spotlight_id)
+        if outcome is None:
+            return (words.NO_SUCH_ROW, False)
+        return (outcome.message, True)
     if action == "bump":
         outcome, _ = await bump_now(bot, guild, actor, spotlight_id)
         if outcome == "bumped":
