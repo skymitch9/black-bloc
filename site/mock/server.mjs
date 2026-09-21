@@ -452,6 +452,7 @@ const SETTING_SPECS = [
   ['chat_memory_threads_max', 'int', 5, 5, 'how many open topics (“was asking about the Thursday event”) one profile holds, up to 20', null, 20],
   ['chat_memory_model', 'text', '', '', 'which Groq model writes the profile up after a conversation ends; blank uses chat_simple_model, the same quick tier that answers'],
   ['request_mode', 'enum', 'on', 'on', 'off, or on (members can ask for things with /request and staff decide on the site)', ['off', 'on']],
+  ['request_filed_line', 'text', 'Filed as **#{request_id}** — Request has been received. You will get a DM every time the status is updated.', 'Filed as **#{request_id}** — Request has been received. You will get a DM every time the status is updated.', "what a member is told the moment their request is filed; {request_id} stands for the request's number and is the only thing that may be filled in"],
   ['request_who_can_file', 'enum', 'everyone', 'everyone', 'who may file a request: everyone, or staff only', ['everyone', 'staff']],
   ['request_notify_channel_id', 'channel', '800000000000000003', null, 'where one line goes when a request is filed; blank tells nobody and the site is the only place they show up'],
   ['request_status_channel_id', 'channel', null, null, 'where a line goes each time staff move a request — picked up, on hold, done, declined; blank uses request_notify_channel_id, so one channel carries both'],

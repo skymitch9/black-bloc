@@ -43,7 +43,6 @@ from ...requests import (
     DM_LOOKS,
     DONE,
     EMBED_COLOURS,
-    FILED,
     FILED_LOOK,
     FORUM_AUTO_ARCHIVE_MINUTES,
     FORUM_CHANNEL_KEY,
@@ -103,6 +102,7 @@ from ...requests import (
     create_request,
     dms_on_decision,
     everyone_may_file,
+    filed_line,
     forum_adopts_posts,
     forum_channel_id,
     forum_tags,
@@ -1696,7 +1696,7 @@ class Requests(commands.Cog):
         )
         row = await get_request(self.bot.db, request_id)
         await notify(self.bot, guild, row, interaction.user)
-        await answer(interaction, FILED.format(request_id=request_id))
+        await answer(interaction, filed_line(self.bot.store, guild.id, request_id))
 
     async def ready_submit(
         self,

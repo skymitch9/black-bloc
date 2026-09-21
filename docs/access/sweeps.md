@@ -448,6 +448,7 @@
 > **38–42** were added by the Phase 15 (F14) build. Before that, 2026-08-31 — rows 18–20 and the phase-script appendix moved in
 > whole from `TODO.md`; this file is the ONE home for un-exercised items. "Verified" below means a human did it in the real server;
 > everything else is test-suite evidence only. Tick a row by moving it to the verified table with the date.
+> ⚠️ **Updated 17:0x:** v142 SHIPPED and the conductor opened it — the strip, the live cards and the row drawer render; the Streamers list arriving shut was fixed on `main` (`4b1731d`, rides v143). Rows 621–626 are still the owner's: no move was pressed, no chip used, no ambiguous address tried.
 
 All of this happens in **`#blackbloc-logs`** (test mode) or on **https://blackbloc.heygabi.ai**.
 

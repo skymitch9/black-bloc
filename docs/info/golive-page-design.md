@@ -289,6 +289,8 @@ build did not touch `KNOWN_ISSUES.md`; the count is reported to the conductor.
 
 ## What was NOT verified
 
+> **Superseded 2026-09-20 17:0x by the conductor, after v142 shipped and was opened in a real browser:** the strip (seven cells), the four Live-now cards, Recent streams and the Streamers row drawer with its four groups all RENDERED, with no console errors on a tracked reload; one gap was found and fixed on `main` `4b1731d` (the Streamers list arrived shut because `layout.js` opens only the first section — six other pages already pass `open: true` to their main list; this page was the odd one out). **Still not verified:** no move in a row's drawer was pressed, *Add a streamer*'s ambiguous-value refusal was never seen, the search and the five chips were never used, the co-stream fields are fixture-only until `costream` lands — rows 621–626. The paragraph below was true when written.
+
 ⚠️ **NO BROWSER HAS RENDERED THIS PAGE. Not once, at any width, in any theme.** Every claim above
 about how it looks is a reading of `site.css`, not a screenshot — the strip, the live cards, the
 six-column streamers grid, the drawer, the chips and the whole small-screen story are unproven.

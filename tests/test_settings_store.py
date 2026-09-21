@@ -58,6 +58,8 @@ from black_bloc.settings_store import (
     RAIDTRAIN_SCHEDULED_NAME_KEY,
     RAIDTRAIN_SCHEDULED_NAME_TEMPLATE,
     REQUEST_CARD_MOVES,
+    REQUEST_FILED,
+    REQUEST_FILED_KEY,
     TEMPVOICE_MODES,
     TEMPVOICE_NAME_TEMPLATE,
     TEXT_MAY_BE_BLANK,
@@ -2389,3 +2391,22 @@ def test_the_moved_line_takes_post_and_refuses_any_other_placeholder():
         coerce_value(EVENTS_MOVED_LINE_KEY, "Off to {nowhere} we go.")
 
     assert "{nowhere}" in str(caught.value) and "{post}" in str(caught.value)
+
+
+def test_the_filed_line_is_a_text_key_in_the_request_namespace_with_the_owners_sentence():
+    """Owner, 2026-09-20: no cryptic site — received, and a DM on every status change."""
+    assert KEY_TYPES[REQUEST_FILED_KEY] == "text"
+    assert namespace_of(REQUEST_FILED_KEY) == "request"
+    assert "Request has been received" in REQUEST_FILED
+    assert "the site" not in REQUEST_FILED
+    assert "{request_id}" in REQUEST_FILED and "{request_id}" in KEY_HELP[REQUEST_FILED_KEY]
+
+
+def test_the_filed_line_takes_request_id_and_refuses_any_other_placeholder():
+    assert coerce_value(REQUEST_FILED_KEY, "  Got it, #{request_id}.  ") == "Got it, #{request_id}."
+    assert coerce_value(REQUEST_FILED_KEY, "Got it.") == "Got it."
+
+    with pytest.raises(SettingError) as caught:
+        coerce_value(REQUEST_FILED_KEY, "Got it, {who}.")
+
+    assert "{who}" in str(caught.value) and "{request_id}" in str(caught.value)
