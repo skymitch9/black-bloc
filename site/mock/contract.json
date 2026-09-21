@@ -3059,7 +3059,7 @@
       "method": "GET",
       "path": "/api/requests",
       "read_by": [
-        "13b page-requests.js the Open, In progress, On hold, Done and Declined lists"
+        "13b page-requests.js the one list, and the count on each status chip"
       ],
       "shape": "object",
       "keys": [
@@ -3125,7 +3125,7 @@
       "method": "POST",
       "path": "/api/requests/forum",
       "read_by": [
-        "page-requests.js requestForumCard"
+        "page-requests.js Settings and logs ▸ Settings ▸ Request forum"
       ],
       "shape": "object",
       "keys": [
@@ -3138,7 +3138,7 @@
       "method": "GET",
       "path": "/api/requests/mine",
       "read_by": [
-        "13b page-requests.js the member's own list"
+        "13b page-requests.js the member's own list, and the deep link a member follows"
       ],
       "shape": "object",
       "keys": [
@@ -3196,7 +3196,7 @@
       "method": "GET",
       "path": "/api/requests/{feature_request_id}",
       "read_by": [
-        "13b page-requests.js one request and its comment thread"
+        "13b page-requests.js the row modal — the card and its comment thread"
       ],
       "shape": "object",
       "keys": [
@@ -3461,7 +3461,7 @@
         "notes": "after the hosting bill"
       },
       "read_by": [
-        "13b page-requests.js priority, assignee and notes"
+        "13b page-requests.js the row modal — priority, assignee, notes and every move"
       ],
       "shape": "object",
       "keys": [
@@ -3488,7 +3488,7 @@
         "text": "A contract check comment."
       },
       "read_by": [
-        "13b page-requests.js comment thread"
+        "13b page-requests.js the row modal ▸ Notes"
       ],
       "shape": "object",
       "keys": [
