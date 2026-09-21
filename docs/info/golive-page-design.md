@@ -28,6 +28,16 @@ that mock, make it happen"***.
 **The mock is the specification.** Where this document and the mock disagree, the mock wins on layout and
 wording; this document wins on behaviour, data and the guards below.
 
+> ➕ **2026-09-20, branch `spotlight`:** the Streamers list gained rows with **no member behind
+> them** — a Twitch channel watched by name (GamesDoneQuick). Its *Member* cell reads *channel
+> only*, its *Announced* cell *spotlight · kept* or *spotlight · until 30 Sep*, there is a
+> **Spotlight** filter chip beside the others, and the row drawer gains a **Spotlight** group. A
+> channel that is ALSO a linked member's login is ONE row — the member's — carrying the spotlight
+> facts. `joinStreamers` takes a sixth payload and `placeSettings` gained nine keys (one in the
+> strip, eight in *How streams are spotted*), so §A's *"nothing under `black_bloc/` changes"* is
+> true of THIS build and not of that one. Design:
+> [`spotlight-design.md`](spotlight-design.md).
+
 ## A. The single most important fact about this build
 
 ⚠️ **It is a front-end rearrangement. Nothing under `black_bloc/` changes.** Every field the new page
