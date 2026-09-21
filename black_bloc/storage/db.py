@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 50
+SCHEMA_VERSION = 51
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -618,6 +618,7 @@ CREATE TABLE IF NOT EXISTS raid_trains (
     thread_id          INTEGER,
     scheduled_event_id INTEGER,
     cancel_reason      TEXT,
+    event_id           INTEGER,
     created_at         TEXT    NOT NULL,
     updated_at         TEXT    NOT NULL
 );
@@ -972,6 +973,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("golive_sessions", "also_started_at", "TEXT"),
     ("selftest_runs", "keep_minutes", "INTEGER"),
     ("golive_fan_roles", "spotlight_id", "INTEGER"),
+    ("raid_trains", "event_id", "INTEGER"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")

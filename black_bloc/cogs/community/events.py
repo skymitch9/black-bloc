@@ -346,6 +346,28 @@ def moving_notice_view(bot: Any, guild: Any) -> Any:
     )
 
 
+async def propose_from(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    fields: Any,
+    *,
+    requester: Any = None,
+    via: str = VIA_DISCORD,
+) -> tuple[str, Any]:
+    """Every door that raises an event lands here, so each one gets the same card and buttons."""
+    return await submit_event(
+        bot,
+        guild,
+        actor,
+        fields,
+        review_view=handoff_review_view(bot, guild),
+        room_view=moving_notice_view(bot, guild),
+        requester=requester,
+        via=via,
+    )
+
+
 async def decide(
     interaction: discord.Interaction, event_id: int, status: str, reason: str | None = None
 ) -> None:
@@ -997,13 +1019,11 @@ async def submit_draft(interaction: discord.Interaction, previous: Any) -> None:
         await render_draft(interaction, fields, previous)
         await answer(interaction, why)
         return
-    said, row = await submit_event(
+    said, row = await propose_from(
         bot,
         interaction.guild,
         interaction.user,
         checked,
-        review_view=handoff_review_view(bot, interaction.guild),
-        room_view=moving_notice_view(bot, interaction.guild),
         requester=proposer(interaction.guild, fields),
     )
     if row is None:

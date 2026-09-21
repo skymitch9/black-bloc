@@ -76,6 +76,7 @@ export const LABELS = {
   automod_arm_needs_confirm: 'Whether arming automod asks twice',
   chat_panel_minutes: 'How long the /chat panel stays live',
   raidtrain_panel_minutes: 'How long the /raidtrain panel stays live',
+  raidtrain_event_default: 'Whether a new raid train also makes an event by default',
   rolemenu_panel_minutes: 'How long the /rolemenu panel stays live',
   honeypot_panel_minutes: 'How long the /honeypot panel stays live',
   modmail_panel_minutes: 'How long the /modmail panel stays live',

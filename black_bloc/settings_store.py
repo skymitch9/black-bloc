@@ -284,6 +284,7 @@ RAIDTRAIN_MAX_SLOTS_PER_MEMBER = 1
 RAIDTRAIN_SLOTS_PER_MEMBER_MAX = 24
 RAIDTRAIN_SCHEDULED_NAME_KEY = "raidtrain_scheduled_name_template"
 RAIDTRAIN_SCHEDULED_NAME_TEMPLATE = "{title}"
+RAIDTRAIN_EVENT_DEFAULT_KEY = "raidtrain_event_default"
 
 BOT_BIO_TEMPLATE = (
     "Black Bloc — moderation & content bot for Black in a Flash!. Staff dashboard: {site}"
@@ -1810,6 +1811,21 @@ KEY_HELP.update(
             "by default. The 'this panel has gone quiet' footer can only be written while "
             "Discord's 15-minute interaction window is still open, so 15 or more means the "
             "buttons simply stop working with no footer to explain it"
+        ),
+    }
+)
+
+
+# The raid-train page's one decision, in its own appended block.
+KEY_TYPES.update({RAIDTRAIN_EVENT_DEFAULT_KEY: "bool"})
+KEY_HELP.update(
+    {
+        RAIDTRAIN_EVENT_DEFAULT_KEY: (
+            "whether **Also make an event** starts ticked when somebody begins a raid train, on "
+            "the Raid trains page and on the /raidtrain draft panel alike; off by default. "
+            "Ticking it sends the train through the same events review a proposal goes through, "
+            "so a Lead still approves or denies it. This is only the starting position of a "
+            "tick box — whoever starts the train can always set it the other way"
         ),
     }
 )
@@ -3602,6 +3618,8 @@ class SettingsStore:
             return 10
         if key == "raidtrain_panel_minutes":
             return 10
+        if key == RAIDTRAIN_EVENT_DEFAULT_KEY:
+            return False
         if key == "rolemenu_panel_minutes":
             return 10
         if key == "honeypot_panel_minutes":
