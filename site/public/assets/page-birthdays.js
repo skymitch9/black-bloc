@@ -31,18 +31,14 @@ let lastImport = null;
 const TEMPLATE_KEY = 'birthday_template';
 const COLOR_KEY = 'birthday_color';
 const SAMPLE = { name: 'Casey', age: '30' };
+const BIRTHDAY_FEATURE = 'birthday';
 
-/** A6: the wording, filled in as you type, in the colour the embed uses. */
+/** A6: the card the bot itself would post, redrawn as you type. */
 async function wordingCard(spec, color) {
-  const shown = el('p', { class: 'preview' });
   const swatch = el('span', { class: 'swatch', style: color ? `--swatch: ${color}` : undefined });
   const made = await templateEditor(spec, {
     sample: () => SAMPLE,
-    paint: (filled) => {
-      shown.textContent = filled === null
-        ? 'Black Bloc would post its own default wish instead.'
-        : filled;
-    },
+    preview: { feature: BIRTHDAY_FEATURE, sample: () => SAMPLE },
   });
   const preview = card('What a birthday wish looks like', [
     el('p', { class: 'field-help' }, [
@@ -51,7 +47,8 @@ async function wordingCard(spec, color) {
       color ? ` ${color}` : ' not set',
       ', from birthday_color.',
     ]),
-    shown,
+    made.mock.node,
+    made.mock.say,
     made.say,
   ]);
   return [made.row.node, preview];

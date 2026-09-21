@@ -50,3 +50,5 @@ jobs:
 
       - name: Dashboard columns
         run: node site/mock/layout.test.mjs
+      - name: Discord mock
+        run: node site/mock/discordmock.test.mjs

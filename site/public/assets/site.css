@@ -2415,3 +2415,187 @@ button.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; 
 .preview-banner-toggle { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; cursor: pointer; }
 .preview-was { display: none; margin: 0 0 10px; padding: 6px 10px; border-radius: 6px; font-size: var(--et-ui-sm, 13px); color: var(--et-accent, inherit); background: color-mix(in srgb, var(--et-accent, currentColor) 12%, transparent); }
 body[data-show-was="1"] .preview-was { display: block; }
+
+/* ---- the Discord mock: Discord's own chrome, in Discord's own colours ----- */
+/* Discord is dark whatever this site's theme is, so the block carries its own
+   `--dc-*` token set rather than borrowing `--et-*`. The `.md-*` rules above are
+   NOT duplicated: `.dcmock` re-points the handful of `--et-*` tokens they read at
+   the `--dc-*` ones, so one markdown renderer draws in both palettes. See
+   docs/info/code-notes.md § site/public/assets/discordmock.js. */
+
+.dcmock {
+  --dc-bg: #313338;
+  --dc-embed: #2b2d31;
+  --dc-deep: #1e1f22;
+  --dc-line: #3f4147;
+  --dc-text: #dbdee1;
+  --dc-strong: #f2f3f5;
+  --dc-muted: #949ba4;
+  --dc-link: #00a8fc;
+  --dc-blurple: #5865f2;
+  --dc-mention: #c9cdfb;
+  --dc-green: #248046;
+  --dc-red: #da373c;
+  --dc-grey: #4e5058;
+
+  --et-fg: var(--dc-text);
+  --et-muted: var(--dc-muted);
+  --et-accent: var(--dc-link);
+  --et-surface: var(--dc-deep);
+  --et-bg-2: var(--dc-embed);
+  --et-panel-border: var(--dc-line);
+  --et-hairline: var(--dc-line);
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dcmock-cap {
+  color: var(--et-muted, #949ba4);
+  font-size: var(--et-ui-2xs);
+  letter-spacing: var(--et-label-spacing, normal);
+  text-transform: var(--et-label-transform, none);
+}
+.dcmock-msg {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 12px 14px;
+  border: var(--et-border-w) solid var(--dc-line);
+  border-radius: var(--et-radius-lg);
+  background: var(--dc-bg);
+  color: var(--dc-text);
+  font-family: "gg sans", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.375;
+}
+.dcmock-avatar {
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+.dcmock-body { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.dcmock-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.dcmock-name { color: var(--dc-blurple); font-size: 15px; font-weight: 600; }
+.dcmock-tag {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--dc-blurple);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.dcmock-when { color: var(--dc-muted); font-size: 12px; }
+.dcmock-content { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dcmock-content p, .dcmock-embed-desc p, .dcmock-field-value p { margin: 0; }
+.dcmock-nothing { margin: 0; color: var(--dc-muted); font-size: 13px; font-style: italic; }
+
+.dcmock-embed {
+  display: flex;
+  max-width: 520px;
+  min-width: 0;
+  border-radius: 4px;
+  background: var(--dc-embed);
+}
+.dcmock-embed-bar { flex: 0 0 4px; border-radius: 4px 0 0 4px; background: var(--dc-grey); }
+.dcmock-embed-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 14px 12px 12px;
+}
+.dcmock-embed-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dcmock-embed-footer {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  grid-column: 1 / -1;
+  color: var(--dc-muted);
+  font-size: 12px;
+}
+.dcmock-embed-author { display: flex; gap: 6px; align-items: center; font-size: 14px; font-weight: 600; }
+.dcmock-embed-icon {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--dc-grey);
+}
+.dcmock-embed-title { color: var(--dc-strong); font-size: 15px; font-weight: 600; }
+.dcmock-embed-title[data-link="true"] { color: var(--dc-link); }
+.dcmock-embed-desc { font-size: 14px; }
+.dcmock-embed-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.dcmock-field { min-width: 0; }
+.dcmock-field[data-inline="false"] { grid-column: 1 / -1; }
+.dcmock-field-name { color: var(--dc-strong); font-size: 13px; font-weight: 600; }
+.dcmock-field-value { font-size: 14px; }
+.dcmock-media {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--dc-line);
+  border-radius: 4px;
+  background: var(--dc-deep);
+  color: var(--dc-muted);
+  font-size: 12px;
+}
+.dcmock-media[data-kind="thumbnail"] { flex-direction: column; width: 80px; text-align: center; }
+.dcmock-media-mark { text-transform: uppercase; letter-spacing: 0.04em; }
+.dcmock-media-name { color: var(--dc-text); overflow-wrap: anywhere; }
+
+.dcmock-actions { display: flex; flex-direction: column; gap: 8px; }
+.dcmock-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.dcmock-btn {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 3px;
+  background: var(--dc-grey);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.dcmock-btn[data-style="primary"] { background: var(--dc-blurple); }
+.dcmock-btn[data-style="success"] { background: var(--dc-green); }
+.dcmock-btn[data-style="danger"] { background: var(--dc-red); }
+.dcmock-btn[data-style="link"] { background: var(--dc-grey); }
+.dcmock-btn[data-disabled="true"] { opacity: 0.5; }
+.dcmock-btn-mark { color: var(--dc-muted); }
+
+.dcmock .md-mention, .dcmock .md-emoji, .dcmock .md-time {
+  background: color-mix(in srgb, var(--dc-blurple) 30%, transparent);
+  color: var(--dc-mention);
+}
+.dcmock .md-link { color: var(--dc-link); }
+.dcmock .md-code, .dcmock .md-inline { border-color: var(--dc-deep); background: var(--dc-deep); }
+.dcmock .md-quote { border-left-color: var(--dc-grey); }
+
+@media (max-width: 560px) {
+  .dcmock-msg { gap: 8px; padding: 10px; }
+  .dcmock-avatar { flex-basis: 32px; width: 32px; height: 32px; font-size: 14px; }
+  .dcmock-embed-inner { grid-template-columns: minmax(0, 1fr); }
+  .dcmock-media[data-kind="thumbnail"] { flex-direction: row; width: auto; text-align: left; }
+}
+.setrow-mock { flex-basis: 100%; min-width: 0; }
+.dcmock-holder { display: flex; flex-direction: column; gap: 6px; min-width: 0; }

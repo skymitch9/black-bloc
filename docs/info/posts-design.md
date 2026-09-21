@@ -227,6 +227,8 @@ attachments; a per-member welcome DM; Carl's autorole on `#landing` (unconfirmed
 
 ## Deviations
 
+**2026-09-20, branch `discord-mock`:** the editor's preview pane and the Versions **View** drawer are now the **Discord mock** — `POST /api/preview/message` with feature `post`, so `posts.render_message` decides plain vs embed and clamps the title rather than the page deciding it a second time with `discordmd.renderPreview`. Side effect worth knowing: `<#id>` / `<@&id>` in a body now come back named by the BOT's guild rather than by the page's `/api/ref/*` lists. ⚠️ Built at `main` `be78bff`, so if the `posts-page` rebuild lands first these four small edits must be re-applied — see [`discord-mock-design.md`](discord-mock-design.md) ▸ What was NOT verified.
+
 > Written by the Opus build, 2026-09-16, branch `posts` off `main` at `193dac9`. Each one is a
 > place the build did NOT do what the section above says, with the reason. Nothing here has met
 > Discord: every figure below is from the test suite, `check.mjs`, the Node renderer fixtures or

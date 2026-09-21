@@ -1020,7 +1020,7 @@
       "method": "GET",
       "path": "/api/golive/preview",
       "read_by": [
-        "page-golive.js wordingCard"
+        "nothing since the Discord mock landed — the Go-live page asks /api/preview/message instead; kept for one release, see docs/info/discord-mock-design.md Deviations"
       ],
       "shape": "object",
       "keys": [
@@ -5112,6 +5112,54 @@
         "deleted",
         "message"
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/preview/features",
+      "read_by": [
+        "ui.js discordMock",
+        "page-settings.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "features",
+        "keys"
+      ],
+      "rows": {
+        "features": [
+          "feature",
+          "title",
+          "where",
+          "keys",
+          "sample"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/preview/message",
+      "body": {
+        "feature": "golive_live"
+      },
+      "read_by": [
+        "ui.js discordMock",
+        "page-golive.js announcementSection",
+        "page-posts.js",
+        "page-settings.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "content",
+        "embeds",
+        "components",
+        "mentions"
+      ],
+      "nested": {
+        "mentions": [
+          "roles",
+          "channels"
+        ]
+      }
     },
     {
       "_": "Meeting minutes (prototype). {meeting_id} is a FINISHED meeting with notes and a short transcript, so every notes move reaches it; {recording_meeting_id} is still being recorded, which is the state /write and /post refuse from in words. Staff only: there is no member view of a meeting.",

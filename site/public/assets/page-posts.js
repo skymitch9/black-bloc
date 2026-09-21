@@ -1,7 +1,6 @@
 import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { htmlToDiscordMarkdown } from './clipmd.js';
-import { renderPreview } from './discordmd.js';
 import { logsSection } from './logs.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
 import {
@@ -14,6 +13,7 @@ import {
   card,
   channelSelect,
   closeDrawer,
+  discordMock,
   el,
   field,
   foldout,
@@ -43,7 +43,7 @@ const LIST_NOTE = 'One message per post. Black Bloc sends it once and edits that
 const NOTHING_YET = 'There are no posts yet.';
 const NO_CHANNEL = 'no channel yet';
 const AMBER_AT = 0.9;
-const PREVIEW_EVERY_MS = 60;
+const POST_FEATURE = 'post';
 const NEED_A_TITLE = 'A post needs a title. Type one and press Create the post again.';
 const POSTED_HERE = 'Posted in {where}.';
 const POSTED_IN_SHADOW = 'The shadow copy is in {where}.';
@@ -323,30 +323,27 @@ async function postDrawer(payload, known, history) {
   box.value = draft.body;
   const pasteNote = pasteNoteNode();
   const counter = counterNode();
-  const preview = el('div', { class: 'preview', id: 'post-preview' });
   const howLine = el('p', { class: 'field-help', id: 'post-how' });
   const pending = el('p', { class: 'field-help' });
   const versionsBox = el('div');
   const versionView = el('div', { class: 'postcol' });
 
+  // The BOT decides what a post becomes — plain or embed, and where the title is clamped —
+  // so the pane asks it rather than rendering a second opinion here. See code-notes.
+  const mock = discordMock({
+    feature: POST_FEATURE,
+    sample: () => ({ style: draft.style, title: draft.title, body: draft.body }),
+  });
+  const preview = el('div', { class: 'preview', id: 'post-preview' }, [mock.node, mock.say]);
+
   const capOf = () => (payload.styles.find((one) => one.style === draft.style) || { cap: 2000 }).cap;
 
-  let timer = null;
   const paintPreview = () => {
-    preview.innerHTML = renderPreview(draft.body, {
-      style: draft.style,
-      title: draft.title,
-      channels: known.channels,
-      roles: known.roles,
-      members: known.members,
-    });
+    mock.repaint();
     counter.paint(draft.body.length, capOf());
     howLine.textContent = willPost(draft, post, payload, Boolean(changeCount(draft, was)));
   };
-  const schedule = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(paintPreview, PREVIEW_EVERY_MS);
-  };
+  const schedule = paintPreview;
 
   const discard = button(DISCARD_IT, () => discardDraft(), { tone: 'quiet', small: false });
 
@@ -436,14 +433,9 @@ async function postDrawer(payload, known, history) {
   const viewVersion = async (version) => {
     const found = await run(say, () => api(where(post.slug, `/versions/${version.n}`)), () => '');
     if (!found.ok) return;
-    const drawn = el('div', { class: 'preview' });
-    drawn.innerHTML = renderPreview(found.found.preview.body, {
-      style: found.found.preview.style,
-      title: found.found.preview.title,
-      channels: known.channels,
-      roles: known.roles,
-      members: known.members,
-    });
+    const older = found.found.preview;
+    const back = discordMock({ feature: POST_FEATURE, sample: () => ({ ...older }) });
+    const drawn = el('div', { class: 'preview' }, [back.node, back.say]);
     versionView.replaceChildren(
       el('div', { class: 'postboxhead' }, [
         el('span', {
