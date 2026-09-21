@@ -392,3 +392,81 @@ extension's own execution context rather than the page). No CSS changed and the 
 is a button + a `.setrow-say`-classed notice appended inside the existing flex-wrap `.setrow`, so
 overflow risk is low, but that is reasoning, not a measurement — say so rather than claim the
 number. Nothing here reached Discord.
+
+### 2026-09-20 — the drawer becomes a floating centred modal (branch `centre-modal`, off `main` `e177b27`)
+
+Owner, looking at the posts drawer with the Discord mock under the editor: *"for post the side
+modal is cool but its hard to see the how this will render in discord section, lets swap the left
+hand modals for floating center modals."* `ui.js:openDrawer`/`closeDrawer` (`:677`–`:697`) is the
+shared construct every caller uses (`page-posts.js`, `page-golive.js`, `page-moderation.js`,
+`page-modmail.js`, `postversions.js`); only `site/public/assets/site.css` changed — `dialog.drawer`
+(was `:1477`, now `:1480`) and its inner classes. **No page file was touched.**
+
+**The fix is CSS-only.** The old rule pinned the `<dialog>` to the right edge and full height
+(`margin: 0 0 0 auto; height: 100dvh`). Removing that pin and giving the box its own size
+(`width: min(64rem, 96vw); height: auto; max-height: min(90vh, 100dvh); margin: auto`) lets the
+browser's own default `<dialog>` centring — `position: fixed; inset: 0` from the UA stylesheet,
+never overridden by this file — do the centring; nothing in `ui.js` reasons about position. The
+backdrop-click-closes test (`event.target === drawerNode`) and `showModal()`/`close()` are both
+agnostic to where the box sits on screen, so `openDrawer`/`closeDrawer` needed **zero changes** —
+every caller is untouched and no signature moved.
+
+**Measured**, `chrome-headless-shell` 149.0.7827.22 over raw CDP (no `puppeteer` package in this
+tree; driven with Node's native `WebSocket`/`fetch` against `--remote-debugging-port`), against the
+worktree's own mock (`MOCK_PORT=8785`):
+
+- **1512×802, `posts.html?as=staff`, a post opened:** dialog rect `left: 244px, right: 244px`
+  (equal — centred), `width: 1024px` (`min(64rem, 96vw)` resolves to the 64rem cap at this width),
+  `height: 721.8px` = exactly `90vh` (802 × .9) — the modal hit its height cap on a real post's
+  content, so `.drawer-body`'s existing `overflow-y: auto` is doing real work, not just standing by.
+- **The Discord mock inside is 945px = 59.06rem wide** — well past the 40rem floor — but it still
+  draws BELOW the editor, not beside it: `page-posts.js:558` hard-codes
+  `style="grid-template-columns: minmax(0, 1fr)"` on `.postgrid` (dated from when the drawer was
+  30rem and two columns would have been 224px each — `code-notes.md:7508`, corrected in the same
+  session), and that inline declaration outranks `site.css`'s 900px breakpoint at any width. **Left
+  as-is on purpose** — `page-posts.js` is out of this branch's scope (no page file). A stacked
+  64rem-wide column is already far more legible than a 30rem-wide one; making it two columns is a
+  `page-posts.js` change for whichever branch owns that file next.
+- **Escape closes it**: measured via `Input.dispatchKeyEvent` (a real key event through CDP, not a
+  JS-dispatched `KeyboardEvent`, which a native `<dialog>`'s `cancel` handling ignores) — `dialog.open`
+  is `false` after.
+- **`ask()` stacks above the drawer, verified not assumed:** opened a post, pressed *Delete this
+  post*, then read both dialogs' `.open` (both `true`) and called
+  `document.elementFromPoint()` at the centre of the `ask` dialog's own rect — it returned a node
+  the `ask` dialog contains, i.e. the drawer is not painting over it. Neither dialog sets
+  `z-index`; the browser's top-layer stacking (most-recently-`showModal()`-ed wins) is what both
+  the old and new CSS relied on.
+- **Go-live's row drawer and a moderation case drawer** both opened at the same centred `1024px`
+  width with real content (`.drawer-body` non-empty) and zero console errors.
+- **390px phone width, `posts.html`, a post opened:** dialog rect `left: 0, width: 390` (edge to
+  edge) and `document.documentElement.scrollWidth === window.innerWidth === 390` — no sideways
+  scroll. This is `@media (max-width: 600px)` reverting the modal to the old drawer's full-bleed
+  shape (`100vw`/`100dvh`, no margin, no radius) rather than shrinking a centred box onto a phone
+  screen.
+- **Zero console errors** on every page and width checked above (`posts`, `golive`, `moderation`).
+
+**Motion.** The only animation added is an entrance fade + `scale(.97 → 1)` via `@starting-style`
+on open; close stays instant (native `close()`, unchanged — matches "same Escape / backdrop / close
+behaviour" from the brief). `@media (prefers-reduced-motion: reduce)` kills the `transition`
+entirely, the same one-rule pattern `site.css:369`'s rail slide-in already uses.
+
+**Deviations.**
+
+1. **`ui.js` was not touched at all**, despite the brief scoping it as an editable file. The
+   centring, sizing, motion and phone behaviour are all reachable from CSS alone because
+   `openDrawer`/`closeDrawer` never reasoned about the dialog's screen position — verified by
+   reading both functions in full before starting. Zero JS risk, and every caller's `openDrawer(title,
+   body)` / `openDrawer(title, placeholder)` → `openDrawer(title, real)` "opened twice" pattern is
+   unchanged because it was never touched.
+2. **The `drawer` / `drawer-inner` / `drawer-head` / `drawer-title` / `drawer-body` class names are
+   unchanged** — no alias needed, since nothing renamed them. Every page's CSS keeps applying with
+   no changes on their side.
+3. **`page-posts.js`'s inline single-column override on `.postgrid` was left in place** — see the
+   measured section above. Named as a deviation because the brief asked to "measure the posts
+   drawer's contents and pick" a width that fits "an editor column and the Discord mock beside or
+   under it" — the mock ends up under, not beside, and that is a `page-posts.js` fact this branch
+   cannot change.
+4. **What was NOT verified:** headless only — nothing here has met a real browser window or actual
+   Discord. The owner's own device/DPI was not checked. `ask()`'s stacking was verified by hit-testing
+   (`elementFromPoint`), not by a human eye. The go-live and moderation drawers were opened and read
+   for "does it still work", not audited row-by-row the way the posts drawer was.
