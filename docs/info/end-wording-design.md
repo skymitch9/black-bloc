@@ -3,7 +3,7 @@
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **BUILT 2026-09-20 21:0x on branch
 > `end-wording`, off `main` `be78bff`** — ⚠️ **not merged, not deployed, nothing has met Discord and the boot migration
 > has never run on the live database**; the `## Deviations` foot is the truth where it departs from the body, and
-> **Deviation 1 is a decision the conductor owes before the merge**. Sweeps `EW-a … EW-d`.
+> **Deviation 1 was decided by the conductor 2026-09-20 21:2x — the default does NOT move**. Sweeps `EW-a … EW-d`.
 > Was: 📐 DESIGN (Fable, 2026-09-20 20:0x).
 > **Last verified: 2026-09-20 20:0x** against `main` `3c803db` (v149 live): `black_bloc/golive.py:ended_render` `:318` —
 > a blank `golive_end_template` keeps the live sentence and appends `golive_end_suffix` (`GOLIVE_END_SUFFIX = " — stream
@@ -25,8 +25,13 @@ blanks the template to "turn the rewrite off" loses their suffix edit's visibili
 ## A. The rule after
 
 **`golive_end_template` is the only end wording**, and it gains one placeholder: **`{live}`** — the announcement's
-sentence exactly as it was posted (today's `without_mention(content)`). Its **default becomes `{live} — stream ended`**, so
-every server on defaults reads exactly as today. A template WITHOUT `{live}` is a full rewrite (today's behaviour with a
+sentence exactly as it was posted (today's `without_mention(content)`). ~~Its **default becomes `{live} — stream ended`**, so
+every server on defaults reads exactly as today.~~ 🔴 **REVERSED by the conductor, 2026-09-20 21:2x, during the build
+(Deviation 1): the default STAYS v149's `**{name}** was streaming **{game}** — the stream has ended. {url}`**, because
+the struck sentence was measured wrong — that rewrite was ALREADY the default, so moving it would have changed the
+ended post on every server with no stored wording. `{live}` is still a real placeholder anyone can type into the one
+box, and the help still explains it first; nothing changes for anybody until somebody edits it.
+A template WITHOUT `{live}` is a full rewrite (today's behaviour with a
 set template); one WITH it appends or wraps. Blank is no longer special: a blank template renders `{live}` alone (the
 sentence stays, nothing appended — the honest reading of "blank"), and an unrenderable template falls back to the DEFAULT
 template, never to a second key. `golive_end_keep_mention` is untouched (it is about the ping, not the words).
@@ -88,21 +93,28 @@ d: a template without `{live}` rewrites the whole thing). NOT `TODO.md` / `DONE.
 
 **2026-09-20, branch `end-wording`, off `main` `be78bff` (v149 live).** Eight, worst first.
 
-1. 🔴 **§A's "so every server on defaults reads exactly as today" IS NOT TRUE, and the build shipped
-   the design's value anyway.** The design's own header measured `ended_render` and the suffix but
-   never read `settings_store.py:69`, where **`golive_end_template` already had a non-blank default**:
-   `**{name}** was streaming **{game}** — the stream has ended. {url}`. A guild on defaults therefore
-   got a **full rewrite** today, not the live sentence plus a suffix — the suffix path was reached
-   only by a guild that had deliberately BLANKED the template. Changing the default to
-   `{live} — stream ended` (stated twice: §A and §D's first test) is what the spec says, so that is
-   what was built, but it **changes what an ended announcement says on every server that has not
-   stored its own end wording**: from *"**Ada** was streaming **Celeste** — the stream has ended.
-   https://…"* to *"REGULATORS! Mount up! **Ada** is currently streaming **Celeste**! Check it out:
-   https://… — stream ended"*. ⚠️ **This is a decision for the conductor before the merge, not a
-   detail.** To keep today's wording instead, set `GOLIVE_END_TEMPLATE` back to the old sentence (it
-   has no `{live}`, so the new code renders it as a rewrite exactly as before) and the only other
-   edits are `END_MARK_DEFAULT`'s derivation (give it the literal `"stream ended"`) and the handful
-   of tests that assert the new default. Sweep row **EW-b** is written to what the code now does.
+1. ✅ **§A's `{live} — stream ended` DEFAULT WAS NOT SHIPPED — the conductor ruled against it,
+   2026-09-20 21:2x: *"keep today's wording — nobody's ended announcement may change at the
+   deploy"*.** The finding that produced the ruling: the design's header measured `ended_render`
+   and the suffix but never read `settings_store.py:69`, where **`golive_end_template` already had
+   a non-blank default** — `**{name}** was streaming **{game}** — the stream has ended. {url}`. A
+   guild on defaults therefore got a **full rewrite** today, and the suffix path was reached only
+   by a guild that had deliberately BLANKED the template. §A's *"so every server on defaults reads
+   exactly as today"* was false about its own value: shipping `{live} — stream ended` as the
+   default would have changed what **every** server without a stored end wording posts.
+   **So `GOLIVE_END_TEMPLATE` stays exactly v149's sentence.** It contains no `{live}`, so the new
+   code renders it as a rewrite, byte for byte as v149 does; `END_MARK_DEFAULT` is the literal
+   `"stream ended"` rather than derived from the template, and the tests that asserted the new
+   default were changed back (`test_the_shipped_end_wording_reads_in_the_past_tense` asserts the
+   rewrite AND that `{live}` is not in the default; a separate
+   `test_the_live_field_appends_to_the_sentence_that_was_posted` pins the append with an explicit
+   `{live} — stream ended`). **Everything else in §A stands:** `{live}` is a real placeholder any
+   staff member can put in the one box, the registry help explains it FIRST, a blank box keeps the
+   posted sentence and adds nothing, and an unrenderable box falls back to the DEFAULT template
+   (which is the rewrite). The migration is unchanged — a stored custom suffix still becomes
+   `"{live}" + suffix`, which is the one place `{live}` lands in a real guild's settings.
+   ⚠️ **Consequence worth stating plainly: after this branch, nothing changes for anyone until
+   somebody edits the box.** That was the point.
 2. **The embed footer's mark needed a home the design never gave it.** `ended_embed` /
    `ended_footer` took the SUFFIX, not the template, and the design's §A lists neither. Hard-coding
    *stream ended* would have broken the owner's standing *every word the bot posts is editable on
@@ -155,8 +167,10 @@ suite's, against fakes.
 tests and three boot-pass tests against a fresh SQLite file. **Nobody has looked at what the live
 `settings` table actually holds** — whether any guild has a stored `golive_end_suffix`, a stored
 `golive_end_mode`, or a stored `golive_end_template` — so which of the three branches will fire on
-the first boot after the deploy is UNKNOWN, and Deviation 1's blast radius depends on exactly that.
-Reading it is one `flyctl ssh sftp get` away and was not done.
+the first boot after the deploy is UNKNOWN, Reading it is one `flyctl ssh sftp get` away and was not
+done. ⚠️ **This no longer carries Deviation 1's risk** — the default did not move, so a guild with
+nothing stored is untouched either way; it decides only how many
+`golive.end_wording_migrated` rows the first boot writes.
 
 - **Not merged, not deployed, no key flipped.** `v149` is still live.
 - **The browser check was the MOCK, not the live site**, at one width, in one theme, signed in as the

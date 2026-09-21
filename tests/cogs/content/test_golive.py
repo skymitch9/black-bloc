@@ -563,12 +563,12 @@ async def test_the_cooldown_blocks_a_quick_second_stream(cog, bot, member, db):
 async def test_ending_a_session_edits_the_announcement(cog, bot, member, db):
     await bot.store.set(GUILD, "golive_mode", "on")
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
-    posted = bot.guild.channel.messages[0]
-    said = posted.content
 
     await cog._end_live(bot.guild, member, "presence")
 
-    assert posted.content == said + " — stream ended"
+    assert bot.guild.channel.messages[0].content == (
+        "**Alice** was streaming **Celeste** — the stream has ended. u"
+    )
     assert len(bot.guild.channel.messages) == 1
     assert await open_session_for(db, GUILD, USER) is None
     assert "golive.end" in await action_kinds(db)
@@ -585,7 +585,8 @@ async def test_the_announcement_is_edited_with_no_mode_left_to_turn_it_off(cog, 
     await cog._end_live(bot.guild, member, "presence")
 
     assert posted.edits != []
-    assert posted.content == said + " — stream ended"
+    assert posted.content != said
+    assert posted.content == "**Alice** was streaming **Celeste** — the stream has ended. u"
     assert await open_session_for(db, GUILD, USER) is None
     assert "announcement" not in json.loads(await action_details(db, "golive.end"))
 
@@ -1109,6 +1110,7 @@ async def test_the_end_edit_carries_the_fan_role_without_adding_a_mention(
 ):
     fan_role_spy(monkeypatch, 4242)
     await bot.store.set(GUILD, "golive_mode", "on")
+    await bot.store.set(GUILD, "golive_end_template", "{live} — stream ended")
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
     posted = bot.guild.channel.messages[0].content
 
@@ -1127,12 +1129,12 @@ async def test_the_end_edit_keeps_the_mention_when_the_guild_asks_for_it(
     await bot.store.set(GUILD, "golive_mode", "on")
     await bot.store.set(GUILD, "golive_end_keep_mention", True)
     await cog._go_live(member, StreamInfo(url="u", game="Celeste"), "presence")
-    posted = bot.guild.channel.messages[0].content
 
     await cog._end_live(bot.guild, member, "presence")
 
-    assert posted.startswith("<@&4242> ")
-    assert bot.guild.channel.messages[0].content == posted + " — stream ended"
+    assert bot.guild.channel.messages[0].content == (
+        "<@&4242> **Alice** was streaming **Celeste** — the stream has ended. u"
+    )
 
 
 async def test_the_end_edit_also_carries_allowed_mentions(cog, bot, member):
@@ -1365,8 +1367,10 @@ async def test_ending_a_stream_rewrites_the_card_and_keeps_the_art(cog, bot, mem
     await cog._end_live(bot.guild, member, "twitch")
 
     posted = bot.guild.channel.messages[0]
-    assert posted.content.endswith(" — stream ended")
-    assert "**Hades**" in posted.content
+    assert posted.content == (
+        "**Alice** was streaming **Hades** — the stream has ended. "
+        "https://www.twitch.tv/alice"
+    )
     assert posted.embed.author.name == "Alice was live on Twitch"
     assert posted.embed.footer.text == "Black Bloc · via Twitch · stream ended"
     assert posted.embed.image.url == "https://boxart/1-285x380.jpg"
@@ -1423,7 +1427,7 @@ async def test_ending_a_stream_posted_without_a_card_still_marks_the_sentence(
     await cog._end_live(bot.guild, member, "presence")
 
     posted = bot.guild.channel.messages[0]
-    assert posted.content.endswith(" — stream ended") and posted.embeds == []
+    assert posted.content.endswith("the stream has ended. u") and posted.embeds == []
     assert "embed" not in posted.edits[0]
 
 
@@ -1538,7 +1542,10 @@ async def test_the_staff_panel_is_the_member_panel_plus_the_status_lines(
     assert "twitch.tv/alice" in interaction.words
     assert "**mode** — shadow" in interaction.words
     assert f"**channel** — <#{CHANNEL}>" in interaction.words
-    assert '**stream end** — edited (appended: "{live} — stream ended")' in interaction.words
+    assert (
+        '**stream end** — edited (rewritten: "**{name}** was streaming **{game}** — t…")'
+        in interaction.words
+    )
     assert "no Twitch credentials" in interaction.words
     assert "ages sessions out" in interaction.words
     assert "**links** — 1" in interaction.words
@@ -2319,8 +2326,10 @@ async def test_the_last_platform_ending_is_todays_ended_path(cog, bot, member, d
     await cog._end_live(bot.guild, member, "youtube")
 
     assert await open_session_for(db, GUILD, USER) is None
-    ended = bot.guild.channel.messages[0].content
-    assert ended.endswith(" — stream ended") and "youtube.com/watch?v=xyz" in ended
+    assert bot.guild.channel.messages[0].content == (
+        "**Alice** was streaming **Celeste** — the stream has ended. "
+        "https://www.youtube.com/watch?v=xyz"
+    )
     assert "golive.end" in await action_kinds(db)
 
 
@@ -2532,7 +2541,7 @@ async def test_a_boot_closes_a_session_whose_streamer_went_offline_and_marks_it_
     await cog.boot_pass()
 
     assert await open_session_for(db, GUILD, member.id) is None
-    assert posted.content.endswith(" — stream ended")
+    assert "the stream has ended" in posted.content
     assert member.removed == [LIVE_ROLE]
     assert json.loads(await action_details(db, "golive.end"))["reason"] == "reconciled_on_start"
     details = await boot_row(db)

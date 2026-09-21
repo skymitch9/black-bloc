@@ -35,7 +35,9 @@ a role when a stream goes live. We'll end up tagging the related fan group but n
 
 > 🔴 **SUPERSEDED IN PART, 2026-09-20 (branch `end-wording`, design [`end-wording-design.md`](end-wording-design.md)):**
 > the owner retired **both** of the last two rows in §A. `golive_end_suffix` is **gone** — its job is now the `{live}`
-> placeholder inside `golive_end_template`, whose default became `{live} — stream ended`; `golive_end_mode` is **gone**
+> placeholder inside `golive_end_template`. ⚠️ **This row's DEFAULT is unchanged** — the conductor ruled 2026-09-20
+> that nobody's ended announcement may move at the deploy, so it is still `**{name}** was streaming **{game}** — the
+> stream has ended. {url}`, which holds no `{live}` and therefore still rewrites. `golive_end_mode` is **gone**
 > — the announcement is **always** edited when a stream ends, there is no off. So §B's *"falls back to
 > `ended_text(live_content, suffix)`"* is now *falls back to the DEFAULT template*, and a blank template keeps the
 > posted sentence and adds nothing. Registry keys 293 → **291**.

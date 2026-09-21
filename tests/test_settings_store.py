@@ -300,9 +300,18 @@ async def test_golive_defaults(store):
     assert store.get(1, "golive_ping_role_id") is None
 
 
-async def test_the_end_wording_is_one_key_whose_default_appends_to_the_sentence(store):
-    """The two boxes became one, 2026-09-20: no mode, no suffix, {live} in the template."""
-    assert store.get(1, "golive_end_template") == GOLIVE_END_TEMPLATE == "{live} — stream ended"
+async def test_the_end_wording_is_one_key_and_v149s_default_is_untouched(store):
+    """The two boxes became one, 2026-09-20: no mode, no suffix, {live} in the template.
+
+    ⚠️ The DEFAULT deliberately did not move (conductor, 2026-09-20 — Deviation 1): nobody's
+    ended announcement may change at the deploy, so it stays v149's rewrite, which has no
+    {live} in it and therefore still rewrites the whole post.
+    """
+    assert store.get(1, "golive_end_template") == GOLIVE_END_TEMPLATE
+    assert GOLIVE_END_TEMPLATE == (
+        "**{name}** was streaming **{game}** — the stream has ended. {url}"
+    )
+    assert GOLIVE_LIVE_FIELD not in GOLIVE_END_TEMPLATE
     assert KEY_TYPES["golive_end_template"] == "text"
     assert GOLIVE_LIVE_FIELD in KEY_HELP["golive_end_template"]
     assert await store.set(1, "golive_end_template", "{live} (over)") == "{live} (over)"

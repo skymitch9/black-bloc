@@ -63,7 +63,7 @@ GOLIVE_TEMPLATE = (
 )
 GOLIVE_MODES = ("off", "shadow", "on")
 GOLIVE_LIVE_FIELD = "{live}"
-GOLIVE_END_TEMPLATE = f"{GOLIVE_LIVE_FIELD} — stream ended"
+GOLIVE_END_TEMPLATE = "**{name}** was streaming **{game}** — the stream has ended. {url}"
 GOLIVE_END_SUFFIX_RETIRED = "golive_end_suffix"
 GOLIVE_END_MODE_RETIRED = "golive_end_mode"
 GOLIVE_END_AUTHOR = "{name} was live on {platform}"

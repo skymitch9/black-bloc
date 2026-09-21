@@ -567,7 +567,7 @@ async def test_the_end_unpins_rewrites_in_the_past_tense_and_takes_the_bumps_awa
     assert await open_session(bot.db, row["id"]) is None
     announcement = bot.guild.channel.messages[0]
     assert announcement.pinned is False and announcement.unpins == [words.UNPIN_REASON]
-    assert announcement.content.endswith(" — stream ended")
+    assert "has ended" in announcement.content
     assert len(bot.guild.channel.messages) == 1
     assert await bumps_of(bot.db, session["id"]) == []
     assert "golive.spotlight_ended" in await kinds(bot.db)

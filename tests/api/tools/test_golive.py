@@ -275,7 +275,10 @@ async def test_the_preview_renders_both_wordings_through_the_bots_own_functions(
 
     assert found["live"]["author"] == "Ada is now live on Twitch!"
     assert "Ada" in found["live"]["text"] and "Celeste" in found["live"]["text"]
-    assert found["ended"]["text"] == found["live"]["text"] + " — stream ended"
+    assert found["ended"]["text"] == (
+        "**Ada** was streaming **Celeste** — the stream has ended. "
+        "https://www.twitch.tv/blackbloc"
+    )
     assert found["ended"]["author"] == "Ada was live on Twitch"
     assert found["ended"]["footer"] == "Black Bloc · via Twitch · stream ended"
 
