@@ -195,6 +195,7 @@ const SPOTLIGHT_MODE_HELP = 'off, shadow (rehearse where shadow_channel_id point
   + 'Twitch channels with nobody here behind them are announced, reminded and pinned in the '
   + 'go-live channel.';
 const SPOTLIGHT_NOTE = 'Watched by name. No member here is behind them.';
+const SPOTLIGHT_MEMBER_NOTE = 'Not spotlighted. Spotlighting their channel bumps it every few hours and pins it while they stream — for a marathon, say.';
 const SPOTLIGHT_KEPT = 'Kept for ever \u2014 no purge takes it off the list.';
 const SPOTLIGHT_ADD_TITLE = 'Spotlight a channel';
 const SPOTLIGHT_ADD_HELP = 'For an org channel like GamesDoneQuick, or a marathon nobody here '
@@ -699,7 +700,11 @@ async function rowPanel(row, say) {
   return [
     ...(row.spotlight
       ? [panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say))]
-      : []),
+      : (row.twitch
+        ? [panelGroup('Spotlight', el('span', { class: 'cell-quiet', text: SPOTLIGHT_MEMBER_NOTE }), [
+          button('Spotlight this channel…', () => openSpotlightForm(row.twitch), { tone: 'quiet' }),
+        ])]
+        : [])),
     panelGroup('Twitch', twitchSaid, twitchMoves(row, say)),
     panelGroup('YouTube', youtubeSaid, youtubeMoves(row, say)),
     panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
@@ -872,11 +877,17 @@ function streamersSection(rows, say) {
 }
 
 function addSpotlightButton() {
-  return button(SPOTLIGHT_ADD_TITLE, () => {
+  return button(SPOTLIGHT_ADD_TITLE, () => openSpotlightForm(), { tone: 'quiet' });
+}
+
+/** One form for both doors: the toolbar (empty) and a member's drawer (their login filled in). */
+function openSpotlightForm(preset = '') {
+  {
     const box = el('input', {
       class: 'input',
       type: 'text',
       placeholder: 'gamesdonequick',
+      value: preset || undefined,
     });
     const days = el('input', { class: 'input', type: 'number', min: '1', placeholder: '7' });
     const voice = notice();
@@ -903,7 +914,7 @@ function addSpotlightButton() {
       bar([go]),
       voice,
     ]);
-  }, { tone: 'quiet' });
+  }
 }
 
 function addStreamerButton() {
