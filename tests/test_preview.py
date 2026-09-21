@@ -11,6 +11,10 @@ from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
 
 
+def without_stamp(embed: dict) -> dict:
+    return {key: value for key, value in embed.items() if key != "timestamp"}
+
+
 @pytest.fixture
 def guild():
     return SimpleNamespace(
@@ -53,9 +57,11 @@ def test_the_live_announcement_is_the_bot_s_own_render_and_not_a_copy(bot, guild
         name=facts["name"],
         ping_role_id=store.get(guild.id, "golive_ping_role_id"),
     )
-    assert found.embeds[0] == gl.announcement_embed(
-        info, source=facts["source"], name=facts["name"]
-    ).to_dict()
+    # `announcement_embed` stamps `now`, so the two calls differ by microseconds and by
+    # nothing else — which is the whole assertion.
+    wanted = gl.announcement_embed(info, source=facts["source"], name=facts["name"]).to_dict()
+    assert found.embeds[0]["timestamp"]
+    assert without_stamp(found.embeds[0]) == without_stamp(wanted)
 
 
 def test_the_front_door_card_is_door_embed_and_its_buttons_are_the_stored_labels(bot, guild, store):
