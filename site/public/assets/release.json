@@ -1,8 +1,16 @@
 {
-  "release": "v149",
-  "commit": "60eecff",
+  "release": "v150",
+  "commit": "3d65025",
   "changed_features": [
+    "birthday",
+    "events",
     "golive",
-    "posts"
+    "guides",
+    "pings",
+    "poll",
+    "posts",
+    "raidtrain",
+    "request",
+    "selftest"
   ]
 }
