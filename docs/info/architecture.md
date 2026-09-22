@@ -2,7 +2,19 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — was
 > local-only until then).
-> Last verified: **2026-09-21 — the `site/mock/server.mjs` line of the Shape tree only**: the
+> Last verified: **2026-09-21 17:3x — the `logkinds.py` line of the Shape tree only**:
+> linking a channel, spotlighting one and announcing one are **ROUTINE** from this date, so
+> `#blackbloc-logs` gets no embed for any of them. Owner, 2026-09-21 17:2x, verbatim: *"okay that works, i dont want log messages appearing in black bloc logs for channel linking or channel spotlight or channel annouce"*.
+> The kinds moved out of `IMPORTANT`: `golive.channel_announced`, `golive.history_swept`,
+> `golive.spotlight_added`, `golive.spotlight_announced`, `golive.spotlight_expired`,
+> `golive.spotlight_removed` (`golive.link`, `youtube.link` and the other five
+> `golive.spotlight_*` success kinds were routine already). ⚠️ **Nothing left the Logs page** —
+> every row is still written to `action_log` and still drawn under the **golive** chip — and
+> **`golive_log_level = all` turns the Discord mirror back up with no deploy**. Branch
+> `quiet-channel-kinds`; design [`channel-streamers-design.md`](channel-streamers-design.md) ▸
+> **Follow-up 2026-09-21 (17:2x)**. ⚠️ **Nothing else here was re-measured at that pass**, and no
+> figure in the fact table was re-read.
+> Before that, **2026-09-21 12:2x — the `site/mock/server.mjs` line of the Shape tree only**: the
 > `/preview/` door and its `LIVE_ROOT` live mirror of the deployed release are RETIRED (owner,
 > 12:2x, verbatim: *"We don't need the preview pages anymore"*) and **deleted** on branch
 > `no-previews` — the mock serves the WORKING TREE at the normal URLs. ⚠️ **Nothing else here was
@@ -432,7 +444,10 @@ black_bloc/
 ├── rolemenu_panels.py ← posting and un-posting role-menu panels when rolemenu_mode flips
 ├── command_visibility.py ← hides a feature's slash commands while the feature is off (re-syncs)
 ├── logkinds.py       ← ⚠️ THE ONE HOME for log-kind classification: important vs routine, and
-│                       `via_of()` (Discord vs website) which stamps every action-log row
+│                       `via_of()` (Discord vs website) which stamps every action-log row.
+│                       ⚠️ 2026-09-21: channel linking / spotlight / announce are ROUTINE at the
+│                       owner's word — no embed in #blackbloc-logs, every row still on the Logs
+│                       page, `golive_log_level = all` turns the mirror back up
 ├── emoji.py          ← skin-tone application for the bot's own emoji (emoji_skin_tone)
 ├── prefix.py         ← no_prefix_commands: the bot answers no text prefix (slash only)
 ├── panels.py         ← ⚠️ THE PANEL LIBRARY every feature's one command opens (wave 0 of the

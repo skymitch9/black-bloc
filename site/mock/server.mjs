@@ -219,11 +219,14 @@ const IMPORTANT_SUFFIXES = [
 const IMPORTANT_KINDS = [
   'automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out',
   'event.where_channel_gone',
-  'golive.spotlight_announced', 'golive.channel_announced',
   'request.declined', 'request.done', 'request.hold',
   'chat.memory_forgot', 'chat.memory_optout',
 ];
+// Owner, 2026-09-21: channel linking, channel spotlight and channel announce leave no embed in
+// #blackbloc-logs, so the whole family is routine. The two golive rows below are listed because
+// `.expired` / `.removed` are IMPORTANT_SUFFIXES entries; the rest match no suffix.
 const ROUTINE_KINDS = [
+  'golive.spotlight_expired', 'golive.spotlight_removed',
   'poll.closed', 'tempvoice.ban', 'tempvoice.kick', 'honeypot.ban',
   'request.filed', 'request.withdrawn', 'request.resumed',
   'request.notify_skipped_test_mode',

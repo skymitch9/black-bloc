@@ -1,5 +1,19 @@
 # Channel streamers — an org channel is a persistent row like any linked member; spotlight and the ping role are toggles on it
 
+> 🔇 **FOLLOW-UP 2026-09-21 17:3x, branch `quiet-channel-kinds` off `main` `0612da0` — NOT merged, NOT
+> deployed: this whole family stops posting an embed to `#blackbloc-logs`.** Owner, 2026-09-21 17:2x, verbatim: *"okay that works, i dont want log messages appearing in black bloc logs for channel linking or channel spotlight or channel annouce"*.
+> `golive.channel_announced`, `golive.history_swept`, `golive.spotlight_added`,
+> `golive.spotlight_announced`, `golive.spotlight_expired` and `golive.spotlight_removed` move from
+> `IMPORTANT` to `ROUTINE` in `black_bloc/logkinds.py`, joining the seven that were routine already
+> (`golive.link`, `youtube.link`, `golive.spotlight_bumped` / `_pinned` / `_unpinned` / `_updated`,
+> `golive.channel_ended`), so at the default `golive_log_level = important` Discord sees none of them.
+> ⚠️ **Nothing was taken off the Logs page** — every row is still written to `action_log` and still
+> drawn under the **golive** chip — and **`golive_log_level = all` turns the Discord mirror back up
+> with no deploy**. Every `*_failed` twin, `golive.role_stuck`, `youtube.probe_unreadable` and
+> `golive.costream_added` stay IMPORTANT. ⚠️ **This STRIKES Deviation F2 of the 16:5x follow-up** and
+> the *both spellings are added* sentence in its mock paragraph. Sweep row `QK-a`, unwalked.
+> ⚠️ **Nothing in it has met Discord and no browser rendered the Logs page.**
+>
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE v151 (2026-09-21)** — release `c1b83f0`,
 > deployed commit `c7ef8f1`, **2026-09-21 09:51** Phoenix; merge `e3f873a`, 7 commits; sweeps **719–725** (were
 > `CS-a` … `CS-g`) are the owner's and **none has been walked**. ✅ **The migration RAN at this boot** — `database: added
@@ -279,6 +293,10 @@ it did not hold `golive.spotlight_announced` — so the mock's Logs page has bee
 announce row as *routine* while live draws it *important*. Both spellings are added, which fixes
 the old one as well as classifying the new one. `golive.channel_ended` needs no entry either side:
 `.ended` is in both copies of `IMPORTANT_SUFFIXES`.
+~~Both spellings are added.~~ 🔇 **STRUCK 2026-09-21 17:3x (`quiet-channel-kinds`)** — the mock's
+`IMPORTANT_KINDS` no longer holds `golive.spotlight_announced` or `golive.channel_announced` either,
+and `golive.spotlight_expired` / `golive.spotlight_removed` are listed in its `ROUTINE_KINDS` because
+`.expired` and `.removed` ARE `IMPORTANT_SUFFIXES` entries and would otherwise classify by suffix.
 
 ### Follow-up (16:5x) — Deviations
 
@@ -292,8 +310,13 @@ alone will not match them. The `spotlight` detail on both rows is how they pair;
 `session_id`/`spotlight_id` details are how they pair exactly.
 `test_a_spotlight_taken_off_mid_stream_ends_under_the_kind_the_row_says_now` pins it.
 
-**F2. `golive.channel_ended` is IMPORTANT while `golive.spotlight_ended` is ROUTINE — a real
-divergence, flagged rather than smoothed over.** The brief said "the two new IMPORTANT kinds", and
+**~~F2. `golive.channel_ended` is IMPORTANT while `golive.spotlight_ended` is ROUTINE — a real
+divergence, flagged rather than smoothed over.~~** 🔇 **STRUCK TWICE.** The conductor took the call
+at the merge (`6017db0`, *"channel_ended is ROUTINE like every other end"*), and on 2026-09-21 17:3x
+the owner quietened the whole family (branch `quiet-channel-kinds`, the follow-up in this doc's
+header): announce, end, link, sweep and every spotlight success kind are ROUTINE together, so the
+divergence below no longer exists in either direction. The reasoning is kept because it is the
+reason `.ended` needs an EXPLICIT `ROUTINE` entry rather than none: The brief said "the two new IMPORTANT kinds", and
 `.ended` is in `IMPORTANT_SUFFIXES` besides, so IMPORTANT is also what the kind gets with no entry
 at all. The consequence: with `golive_log_level = important` a spotlight-off channel's END reaches
 `#blackbloc-logs` and a spotlit one's does not. 🔁 **Reversing it is one line** — move

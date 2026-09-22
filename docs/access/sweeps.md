@@ -1,6 +1,15 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-21 17:3x** — row `QK-a` added at the foot for NO LOG EMBEDS FOR CHANNEL LINKING, SPOTLIGHT OR
+> ANNOUNCE (branch `quiet-channel-kinds`, off `main` `0612da0`; design
+> [`../info/channel-streamers-design.md`](../info/channel-streamers-design.md) ▸ **Follow-up 2026-09-21
+> (17:2x)**). Owner, 17:2x: *"okay that works, i dont want log messages appearing in black bloc logs for
+> channel linking or channel spotlight or channel annouce"*. ⚠️ **Not merged, not deployed, and NOTHING IN
+> IT HAS MET DISCORD** — no embed has been withheld from a real `#blackbloc-logs` and no browser has
+> rendered the Logs page. ⚠️ **Row 736 below is AMENDED by it** and now expects silence where it expected
+> an embed. Rows are lettered; the conductor numbers them at the merge. ⚠️ **Nothing else in this file was
+> re-checked then.** Before that,
 > **2026-09-21** — rows `MO-a` and `MO-b` added at the foot for THE MEMBER OPT-OUT THAT NOW ENDS THE
 > ANNOUNCEMENT ALREADY OUT (branch `member-optout`, off `main` `20b615d`; design
 > [`../info/golive-panel-design.md`](../info/golive-panel-design.md) ▸ **Follow-up 2026-09-21**).
@@ -2790,4 +2799,27 @@ conductor numbers it.
 
 | Row | Do | Expect |
 |---|---|---|
-| **736** (was `CK-a`) | With **GamesDoneQuick**'s spotlight **OFF** and announce **ON**, wait for it to go live. Read `#live-now`, then `#blackbloc-logs`, then <https://blackbloc.heygabi.ai/logs.html> ▸ **golive**. Then wait out the end of the stream and read all three again | ⚠️ **The row the whole defect is about.** `#live-now` gets ONE announcement in the ordinary member wording, **not pinned**, and **no reminder** follows — unchanged. `#blackbloc-logs` now gets an embed titled **`golive.channel_announced`**; the word *spotlight* appears nowhere in the title. Its Details block carries `spotlight: false`, `announce: true`, `platform: "Twitch"` and `pin: false`. On the Logs page the **golive** chip still holds it (the chip matches `golive.%`, so nothing had to be added to the filter) and the kind pill reads `golive.channel_announced`, marked **important**. When the stream ends the same post is edited to past tense and the log row is **`golive.channel_ended`** with `reason: ended` and `spotlight: false` — again no *spotlight* in the title. ⚠️ **Then do the control:** on a channel whose spotlight IS on, the old words must be exactly as they were — `golive.spotlight_announced`, pinned, reminders, `golive.spotlight_ended`. ⚠️ **And the split case:** press **Spotlight off** on a channel that is live and was announced as a spotlight — its announce row stays `golive.spotlight_announced` and its END row reads `golive.channel_ended`, because the kind is read off the row at each moment. That is deliberate (Deviation F1); write down whether it reads as honest or as confusing, because that is the one judgement call in this build |
+| **736** (was `CK-a`) | With **GamesDoneQuick**'s spotlight **OFF** and announce **ON**, wait for it to go live. Read `#live-now`, then `#blackbloc-logs`, then <https://blackbloc.heygabi.ai/logs.html> ▸ **golive**. Then wait out the end of the stream and read all three again | ⚠️ **The row the whole defect is about.** `#live-now` gets ONE announcement in the ordinary member wording, **not pinned**, and **no reminder** follows — unchanged. `#blackbloc-logs` now gets an embed titled **`golive.channel_announced`**; the word *spotlight* appears nowhere in the title. Its Details block carries `spotlight: false`, `announce: true`, `platform: "Twitch"` and `pin: false`. On the Logs page the **golive** chip still holds it (the chip matches `golive.%`, so nothing had to be added to the filter) and the kind pill reads `golive.channel_announced`, ~~marked **important**~~ — ⚠️ **AMENDED 2026-09-21 17:3x by branch `quiet-channel-kinds` (row `QK-a` below): there is NO embed in `#blackbloc-logs` at all any more, for the announce OR the end, and the pill is marked ROUTINE. Walk this row against the Logs page only; if an embed appears in `#blackbloc-logs` the quietening did not ship.** When the stream ends the same post is edited to past tense and the log row is **`golive.channel_ended`** with `reason: ended` and `spotlight: false` — again no *spotlight* in the title. ⚠️ **Then do the control:** on a channel whose spotlight IS on, the old words must be exactly as they were — `golive.spotlight_announced`, pinned, reminders, `golive.spotlight_ended`. ⚠️ **And the split case:** press **Spotlight off** on a channel that is live and was announced as a spotlight — its announce row stays `golive.spotlight_announced` and its END row reads `golive.channel_ended`, because the kind is read off the row at each moment. That is deliberate (Deviation F1); write down whether it reads as honest or as confusing, because that is the one judgement call in this build |
+## Row `QK-a` — no log embeds at all for channel linking, spotlight or announce (branch `quiet-channel-kinds`, 2026-09-21)
+
+⚠️ **Not merged, not deployed, and NOTHING IN IT HAS MET DISCORD.** Owner, 2026-09-21 17:2x, verbatim:
+*"okay that works, i dont want log messages appearing in black bloc logs for channel linking or channel
+spotlight or channel annouce"* — said while watching GamesDoneQuick's go-live, whose spotlight and channel
+rows were filling `#blackbloc-logs`. **Twelve kinds are ROUTINE from this branch** — six moved
+(`golive.channel_announced`, `golive.history_swept`, `golive.spotlight_added`,
+`golive.spotlight_announced`, `golive.spotlight_expired`, `golive.spotlight_removed`) and six were routine
+already (`golive.link`, `youtube.link`, `golive.spotlight_bumped` / `_pinned` / `_unpinned` / `_updated`,
+plus `golive.channel_ended`). ⚠️ **Nothing left the Logs page** — every row is still written to
+`action_log`. 🔁 **The mirror is a setting, not a deploy:** Settings ▸ **Go-live** ▸ `golive_log_level` =
+**all** brings every one of them back into `#blackbloc-logs`; **important** (the default) is the quiet one;
+**off** silences even the failures. Design:
+[`../info/channel-streamers-design.md`](../info/channel-streamers-design.md) ▸ **Follow-up 2026-09-21
+(17:2x)**. Review link: <https://blackbloc.heygabi.ai/logs.html> ▸ **golive**.
+
+⚠️ **This row needs a channel row to actually go live**, which nobody can force — GamesDoneQuick is the one
+the owner was watching. ⚠️ **Rows already in `action_log` are NOT rewritten and their embeds are already
+posted**; the page shows the old and the new alike. Row lettered; the conductor numbers it.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`QK-a`** | With **GamesDoneQuick** (or any linked channel row) set up as it is today, wait for it to go live, and while waiting use the Go-live page to **link a channel**, **spotlight one**, **bump** it and **take the spotlight off** again. After each, read `#blackbloc-logs`, then <https://blackbloc.heygabi.ai/logs.html> ▸ **golive** | ⚠️ **`#blackbloc-logs` gets NOTHING** for any of it — no `golive.link`, no `golive.spotlight_added` / `_announced` / `_bumped` / `_updated` / `_removed` / `_expired`, no `golive.history_swept` from **Link from history**, and no `golive.channel_announced` or `golive.channel_ended` when the stream starts and stops. The channel's own announcement in `#live-now` is UNCHANGED — this changes the log mirror only. On the Logs page every one of those rows is present under the **golive** chip, in order, with the same details, each pill marked **routine** rather than important. ⚠️ **Then do the control, because a silence that is too wide is the failure mode here:** make something FAIL (unlink a channel Discord has lost, or let a pin be refused) and confirm the `_failed` row still posts its embed to `#blackbloc-logs`; `golive.role_stuck`, `youtube.probe_unreadable` and `golive.costream_added` are also untouched and still loud. ⚠️ **Then turn it back up:** set **Go-live** ▸ `golive_log_level` to **all** on the Settings page, repeat any one of the moves above, and confirm the embed comes back with no deploy — then put it back to **important** |
