@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from black_bloc.cogs.content.golive import (
@@ -333,6 +335,7 @@ async def a_spotlight(web, wf, login="gamesdonequick", **fields):
         login,
         added_by=7,
         expires_at=fields.pop("expires_at", None),
+        starts_at=fields.pop("starts_at", None),
         pin=fields.pop("pin", True),
         **fields,
     )
@@ -735,3 +738,168 @@ async def test_a_history_sweep_with_nothing_to_do_says_so_rather_than_answering_
         "left": 0,
         "message": HISTORY_NOTHING,
     }
+
+
+# --- the owner's date range (2026-09-22) ------------------------------------------------------
+
+
+def days_ahead(days):
+    return (datetime.now(UTC) + timedelta(days=days)).isoformat()
+
+
+async def test_the_list_carries_the_start_the_range_and_whether_it_is_scheduled(
+    client, sign_in, web, wf
+):
+    await a_spotlight(web, wf)
+    await a_spotlight(
+        web, wf, "esamarathon", starts_at=days_ahead(3), expires_at=days_ahead(10)
+    )
+    sign_in(client)
+
+    rows = {one["twitch_login"]: one for one in client.get("/api/golive/spotlight").json()}
+
+    assert rows["gamesdonequick"]["starts_at"] is None
+    assert rows["gamesdonequick"]["scheduled"] is False
+    assert rows["gamesdonequick"]["range"] == "kept"
+    assert rows["gamesdonequick"]["announced"] == "spotlight · kept"
+    assert rows["esamarathon"]["starts_at"] is not None
+    assert rows["esamarathon"]["scheduled"] is True
+    assert rows["esamarathon"]["range"].startswith("from ")
+    assert rows["esamarathon"]["announced"].endswith("· scheduled")
+
+
+async def test_adding_a_channel_takes_a_start_and_an_end_as_dates(client, sign_in, web, wf):
+    sign_in(client)
+
+    found = client.post(
+        "/api/golive/spotlight",
+        json={
+            "twitch_login": "esamarathon",
+            "starts_at": "2026-11-01 09:00",
+            "expires_at": "2026-11-08 09:00",
+            "tz": "UTC",
+            "spotlight": True,
+        },
+    ).json()
+
+    assert found["starts_at"] == "2026-11-01T09:00:00+00:00"
+    assert found["expires_at"] == "2026-11-08T09:00:00+00:00"
+    assert found["kept"] is False
+    assert "from 1 Nov to 8 Nov" in found["message"]
+
+
+async def test_adding_a_channel_with_a_start_and_no_end_keeps_it_for_ever(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+
+    found = client.post(
+        "/api/golive/spotlight",
+        json={"twitch_login": "esamarathon", "starts_at": "2026-11-01 09:00", "tz": "UTC",
+              "expires_at": None, "spotlight": True},
+    ).json()
+
+    assert found["starts_at"] == "2026-11-01T09:00:00+00:00"
+    assert found["kept"] is True and found["range"] == "from 1 Nov · kept"
+
+
+async def test_adding_a_backwards_range_is_refused_with_words_and_never_a_bare_status(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+
+    response = client.post(
+        "/api/golive/spotlight",
+        json={
+            "twitch_login": "esamarathon",
+            "starts_at": "2026-11-08 09:00",
+            "expires_at": "2026-11-01 09:00",
+            "tz": "UTC",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "ends before it starts" in response.json()["message"]
+    assert await channels_for(web.db, wf.GUILD_ID) == []
+
+
+async def test_a_start_nobody_can_read_is_refused_by_name(client, sign_in, web, wf):
+    sign_in(client)
+
+    response = client.post(
+        "/api/golive/spotlight",
+        json={"twitch_login": "esamarathon", "starts_at": "next tuesday"},
+    )
+
+    assert response.status_code == 422
+    assert "next tuesday" in response.json()["message"]
+    assert await channels_for(web.db, wf.GUILD_ID) == []
+
+
+async def test_a_patch_sets_both_dates_and_says_the_row_is_scheduled(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    sign_in(client)
+
+    found = client.patch(
+        f"/api/golive/spotlight/{spotlight_id}",
+        json={"starts_at": days_ahead(3), "expires_at": days_ahead(10)},
+    ).json()
+
+    assert found["scheduled"] is True and found["starts_at"] is not None
+    assert "before that start" in found["message"]
+    row = await channel_by_id(web.db, spotlight_id)
+    assert row["starts_at"] is not None and row["expires_at"] is not None
+
+
+async def test_a_patch_with_a_null_start_clears_it(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf, starts_at=days_ahead(3))
+    sign_in(client)
+
+    found = client.patch(
+        f"/api/golive/spotlight/{spotlight_id}", json={"starts_at": None}
+    ).json()
+
+    assert found["starts_at"] is None and found["scheduled"] is False
+    assert (await channel_by_id(web.db, spotlight_id))["starts_at"] is None
+
+
+async def test_a_patch_that_would_end_before_the_start_is_refused_and_stores_nothing(
+    client, sign_in, web, wf
+):
+    spotlight_id = await a_spotlight(
+        web, wf, starts_at=days_ahead(10), expires_at=days_ahead(20)
+    )
+    sign_in(client)
+
+    response = client.patch(
+        f"/api/golive/spotlight/{spotlight_id}", json={"expires_at": days_ahead(3)}
+    )
+
+    assert response.status_code == 422
+    assert "ends before it starts" in response.json()["message"]
+    row = await channel_by_id(web.db, spotlight_id)
+    assert row["expires_at"] > row["starts_at"]
+
+
+async def test_a_patch_date_nobody_can_read_is_refused_by_name(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    sign_in(client)
+
+    response = client.patch(
+        f"/api/golive/spotlight/{spotlight_id}", json={"expires_at": "soonish"}
+    )
+
+    assert response.status_code == 422
+    assert "soonish" in response.json()["message"]
+
+
+async def test_the_dates_routes_stay_staff_only(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    sign_in(client, staff=False)
+
+    response = client.patch(
+        f"/api/golive/spotlight/{spotlight_id}", json={"starts_at": days_ahead(2)}
+    )
+
+    assert response.status_code == 403
+    assert (await channel_by_id(web.db, spotlight_id))["starts_at"] is None

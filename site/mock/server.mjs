@@ -520,6 +520,14 @@ const SETTING_SPECS = [
   ['spotlight_pin', 'bool', true, true, "whether a channel newly added to the spotlight list has its announcement pinned while it streams. on by default; each channel's own row can say otherwise"],
   ['spotlight_default_days', 'int', 7, 7, "how many days a newly spotlighted channel stays on the list before it is purged. 7 by default, and a row can be kept for ever instead", null, 365, 1],
   ['spotlight_event_slack_hours', 'int', 2, 2, "how many hours past an approved event's end its spotlight row survives, so a marathon that overruns is still announced. 2 by default; 0 drops the row the moment the event's end time passes", null, 24, 0],
+  ["spotlight_range_template", 'text', "from {start} to {end}", "from {start} to {end}", "how a spotlight's date range reads wherever it is shown \u2014 the panel line, the Go-live page's Announced cell and the row's drawer. It takes {start} and {end}, each a short day like 30 Sep; the row's own dates fill them"],
+  ["spotlight_range_kept_template", 'text', "from {start} \u00b7 kept", "from {start} \u00b7 kept", "how a spotlight that has a start but no end reads. It takes {start} only, because a row with no end is kept for ever and there is no second date to name"],
+  ["spotlight_scheduled_word", 'text', "scheduled", "scheduled", "the one word shown beside a spotlight whose start has not arrived yet. Such a row is on the list and watched, but nothing of its is announced, pinned or reminded until its start has passed"],
+  ["spotlight_dates_button", 'text', "Set dates\u2026", "Set dates\u2026", "what the button that opens a spotlight's start and end boxes is called, on the /golive Channels panel and on the Go-live page's row drawer"],
+  ["spotlight_starts_label", 'text', "Starts \u2014 blank means now", "Starts \u2014 blank means now", "what the start box is called on the Add a channel form and the Set dates form. Keep it short \u2014 Discord shows at most 45 characters on a modal label"],
+  ["spotlight_ends_label", 'text', "Ends \u2014 blank means for ever", "Ends \u2014 blank means for ever", "what the end box is called on the Add a channel form and the Set dates form. Keep it short \u2014 Discord shows at most 45 characters on a modal label"],
+  ["spotlight_end_before_start", 'text', "That range ends before it starts \u2014 {end} comes before {start} \u2014 so nothing was changed. Put the end after the start, or leave the end blank to keep the channel on the list for ever.", "That range ends before it starts \u2014 {end} comes before {start} \u2014 so nothing was changed. Put the end after the start, or leave the end blank to keep the channel on the list for ever.", "what somebody is told when the end they gave a spotlight falls before its start. It takes {start} and {end}; nothing is stored when this is said"],
+  ["spotlight_bad_date", 'text', "**{given}** is not a date Black Bloc can read, so nothing was changed. Write it as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` \u2014 for example `2026-09-30 19:00` \u2014 or leave the box blank.", "**{given}** is not a date Black Bloc can read, so nothing was changed. Write it as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` \u2014 for example `2026-09-30 19:00` \u2014 or leave the box blank.", "what somebody is told when a start or end box holds something that is not a date. It takes {given}, which is what they typed; nothing is stored when this is said"],
   ['golive_channel_spotlight_default', 'bool', false, false, "whether a channel added through **Add a streamer** with nobody here behind it is spotlighted from the start — its announcement pinned while it streams and a reminder every few hours. off by default: it is announced like any other stream, and its own row's **Spotlight on** adds the pin and the reminders whenever staff want them"],
   ['golive_channel_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a CHANNEL is opted out of announcements mid-stream. end — the default — unpins it and rewrites it to the ended wording, exactly as a real stream end does; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so no reminder follows and nothing waits on Twitch", ['end', 'delete', 'leave']],
   ['golive_member_optout_post', 'enum', 'end', 'end', "what becomes of an announcement already posted when a MEMBER opts out of announcements mid-stream — the same three treatments the channel key has. end — the default — unpins it and rewrites it to the ended wording; delete removes the post outright; leave takes the pin off and leaves the words as they were posted. The session is closed either way, so their live role comes off and nothing waits on Twitch or on their presence", ['end', 'delete', 'leave']],
@@ -1155,10 +1163,13 @@ function seedState() {
     // kept for ever and live right now; ESA runs out with its marathon; the expired one is
     // absent, exactly as the sweep leaves it.
     spotlights: [
-      { id: 1, twitch_login: 'gamesdonequick', display_name: 'GamesDoneQuick', note: "the owner's marathon channel", added_by: STAFF.id, added_at: minutesAgo(40000), expires_at: null, bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: 'UCI3DTtB-a3fJPjKtQ5kYHfA', youtube_handle: '@GamesDoneQuick' },
-      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2, spotlight: true, announce: false, youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ', youtube_handle: '@esamarathon' },
-      { id: 3, twitch_login: 'frostfatales', display_name: 'Frost Fatales', note: null, added_by: STAFF.id, added_at: minutesAgo(20000), expires_at: daysAhead(30), bump_hours: null, pin: false, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null },
-      { id: 4, twitch_login: 'rpglimitbreak', display_name: 'RPG Limit Break', note: null, added_by: STAFF.id, added_at: minutesAgo(1200), expires_at: null, bump_hours: null, pin: false, event_id: null, spotlight: false, announce: false, youtube_channel_id: null, youtube_handle: null },
+      { id: 1, twitch_login: 'gamesdonequick', display_name: 'GamesDoneQuick', note: "the owner's marathon channel", added_by: STAFF.id, added_at: minutesAgo(40000), starts_at: null, expires_at: null, bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: 'UCI3DTtB-a3fJPjKtQ5kYHfA', youtube_handle: '@GamesDoneQuick' },
+      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), starts_at: minutesAgo(2000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2, spotlight: true, announce: false, youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ', youtube_handle: '@esamarathon' },
+      { id: 3, twitch_login: 'frostfatales', display_name: 'Frost Fatales', note: null, added_by: STAFF.id, added_at: minutesAgo(20000), starts_at: null, expires_at: daysAhead(30), bump_hours: null, pin: false, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null },
+      { id: 4, twitch_login: 'rpglimitbreak', display_name: 'RPG Limit Break', note: null, added_by: STAFF.id, added_at: minutesAgo(1200), starts_at: null, expires_at: null, bump_hours: null, pin: false, event_id: null, spotlight: false, announce: false, youtube_channel_id: null, youtube_handle: null },
+      // The owner's ask, 2026-09-22: a marathon set up days in advance. Its start has NOT
+      // arrived, so it is SCHEDULED — on the list, watched, announced by nobody until then.
+      { id: 5, twitch_login: 'gdqhotfix', display_name: 'GDQ Hotfix', note: 'winter marathon, set up early', added_by: STAFF.id, added_at: minutesAgo(60), starts_at: daysAhead(3), expires_at: daysAhead(10), bump_hours: 4, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null },
     ],
     spotlightSessions: [
       { id: 5, spotlight_id: 1, started_at: minutesAgo(560), ended_at: null, title: 'AGDQ 2027 — Day 4', game: 'Celeste', url: 'https://www.twitch.tv/gamesdonequick', mode: 'shadow', announced_message_id: '830000000000000020', last_bump_at: minutesAgo(80), bump_count: 2 },
@@ -1474,6 +1485,14 @@ const NAMESPACE_OVERRIDE = {
   spotlight_pin: 'golive',
   spotlight_default_days: 'golive',
   spotlight_event_slack_hours: 'golive',
+  spotlight_range_template: 'golive',
+  spotlight_range_kept_template: 'golive',
+  spotlight_scheduled_word: 'golive',
+  spotlight_dates_button: 'golive',
+  spotlight_starts_label: 'golive',
+  spotlight_ends_label: 'golive',
+  spotlight_end_before_start: 'golive',
+  spotlight_bad_date: 'golive',
 };
 
 function namespaceOf(key) {
@@ -4095,8 +4114,33 @@ function spotlightOpen(id) {
 
 function spotlightUntil(row) {
   if (!row.expires_at) return 'kept';
-  const when = new Date(row.expires_at);
-  return `until ${when.getUTCDate()} ${when.toLocaleString('en', { month: 'short', timeZone: 'UTC' })}`;
+  return `until ${shortDay(row.expires_at)}`;
+}
+
+function shortDay(at) {
+  const when = new Date(at);
+  return `${when.getUTCDate()} ${when.toLocaleString('en', { month: 'short', timeZone: 'UTC' })}`;
+}
+
+// The bot's spotlight.range_words / is_scheduled / announced_words. A row with no start reads
+// exactly as it always did; a start makes it a RANGE, and a start still ahead makes it scheduled.
+function spotlightScheduled(row) {
+  return Boolean(row.starts_at) && new Date(row.starts_at).getTime() > Date.now();
+}
+
+function spotlightRange(row) {
+  if (!row.starts_at) return spotlightUntil(row);
+  const template = String(state.settings.get('spotlight_range_kept_template') || 'from {start} · kept');
+  if (!row.expires_at) return template.replace('{start}', shortDay(row.starts_at));
+  return String(state.settings.get('spotlight_range_template') || 'from {start} to {end}')
+    .replace('{start}', shortDay(row.starts_at))
+    .replace('{end}', shortDay(row.expires_at));
+}
+
+function spotlightAnnounced(row) {
+  const said = `spotlight · ${spotlightRange(row)}`;
+  if (!spotlightScheduled(row)) return said;
+  return `${said} · ${state.settings.get('spotlight_scheduled_word') || 'scheduled'}`;
 }
 
 function spotlightRow(row) {
@@ -4114,9 +4158,13 @@ function spotlightRow(row) {
     added_by: row.added_by === null ? null : String(row.added_by),
     added_by_name: row.added_by === null ? null : memberName(row.added_by),
     added_at: row.added_at,
+    starts_at: row.starts_at || null,
     expires_at: row.expires_at,
     kept: !row.expires_at,
+    scheduled: spotlightScheduled(row),
     until: spotlightUntil(row),
+    range: spotlightRange(row),
+    announced: spotlightAnnounced(row),
     bump_hours: row.bump_hours,
     pin: Boolean(row.pin),
     spotlight: row.spotlight !== false,
@@ -4154,11 +4202,11 @@ const KNOWN_CHANNELS = {
 
 function spotlightAdded(row) {
   if (row.spotlight === false) {
-    return `**${row.twitch_login}** is on the list, ${spotlightUntil(row)}. Black Bloc announces it in the go-live channel whenever it goes live, exactly as it announces anybody else's stream, and edits the post to past tense when it ends. **Spotlight on** adds the pin and the reminders.`;
+    return `**${row.twitch_login}** is on the list, ${spotlightRange(row)}. Black Bloc announces it in the go-live channel whenever it goes live, exactly as it announces anybody else's stream, and edits the post to past tense when it ends. **Spotlight on** adds the pin and the reminders.`;
   }
   const hours = row.bump_hours || state.settings.get('spotlight_bump_hours') || 4;
   const pinWords = row.pin ? 'pins the announcement for the duration' : 'leaves the announcement unpinned';
-  return `**${row.twitch_login}** is on the spotlight list, ${spotlightUntil(row)}. Black Bloc announces it in the go-live channel whenever it goes live, reminds people every ${hours} hours while it runs, and ${pinWords}.`;
+  return `**${row.twitch_login}** is on the spotlight list, ${spotlightRange(row)}. Black Bloc announces it in the go-live channel whenever it goes live, reminds people every ${hours} hours while it runs, and ${pinWords}.`;
 }
 
 function channelSpotlightSaid(row, settled) {
@@ -4229,6 +4277,72 @@ function linkChannelYoutube(row, given) {
   return `**${row.twitch_login}** is linked to ${known ? known[1] : channelId}. Black Bloc watches that YouTube channel for live streams as well as its Twitch one.`;
 }
 
+// The bot's spotlight.read_moment / read_end: a blank clears, a bare number of days is that
+// many days, and anything else must be a date. `tz` is the zone the whenField was read in.
+const DATE_AND_TIME = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?$/;
+
+function spotlightBadDate(given) {
+  return new Refused(422, 'bad_date', String(state.settings.get('spotlight_bad_date')
+    || '**{given}** is not a date Black Bloc can read, so nothing was changed.')
+    .replace('{given}', String(given || '').slice(0, 40)));
+}
+
+function readMoment(given, tz) {
+  const text = String(given === null || given === undefined ? '' : given).trim();
+  if (!text) return null;
+  const found = DATE_AND_TIME.exec(text);
+  if (found) {
+    const said = `${found[1]}-${found[2]}-${found[3]}T${found[4] || '00'}:${found[5] || '00'}:00`;
+    const at = zonedInstant(said, tz);
+    if (at) return at;
+  }
+  const whole = new Date(text);
+  if (!Number.isNaN(whole.getTime()) && /[T+Z]/.test(text)) return whole.toISOString();
+  throw spotlightBadDate(text);
+}
+
+// The mock has no tz database beyond the browser's, and Intl is what it does have: read the
+// naive stamp in `tz` by asking what that zone's clock says at a guessed instant, twice.
+function zonedInstant(said, tz) {
+  const naive = Date.parse(`${said}Z`);
+  if (Number.isNaN(naive)) return null;
+  const wanted = String(tz || '').trim();
+  if (!wanted) return new Date(naive).toISOString();
+  let guess = naive;
+  for (let turn = 0; turn < 2; turn += 1) {
+    let shown;
+    try {
+      shown = new Date(guess).toLocaleString('sv-SE', { timeZone: wanted, hour12: false });
+    } catch {
+      return new Date(naive).toISOString();
+    }
+    const drift = Date.parse(`${shown.replace(' ', 'T')}Z`) - naive;
+    guess -= drift;
+  }
+  return new Date(guess).toISOString();
+}
+
+function readEnd(given, tz) {
+  const text = String(given === null || given === undefined ? '' : given).trim();
+  if (/^\d+$/.test(text)) return daysAhead(Number(text));
+  return readMoment(text, tz);
+}
+
+function refuseBackwards(startsAt, expiresAt) {
+  if (!startsAt || !expiresAt) return;
+  if (new Date(expiresAt).getTime() > new Date(startsAt).getTime()) return;
+  throw new Refused(422, 'end_before_start', String(state.settings.get('spotlight_end_before_start')
+    || 'That range ends before it starts — {end} comes before {start} — so nothing was changed.')
+    .replace('{start}', shortDay(startsAt))
+    .replace('{end}', shortDay(expiresAt)));
+}
+
+function spotlightDated(row) {
+  const said = `**${row.twitch_login}** runs ${spotlightRange(row)}.`;
+  if (!spotlightScheduled(row)) return said;
+  return `${said} Nothing of its is announced, pinned or reminded before that start — the row sits on the list until then.`;
+}
+
 function spotlightDays(given) {
   if (given === null || given === undefined || String(given).trim() === '') return null;
   if (!/^\d+$/.test(String(given).trim())) {
@@ -4261,6 +4375,11 @@ route('POST', '/api/golive/spotlight', async (context) => {
   const spotlit = body.spotlight === undefined || body.spotlight === null
     ? Boolean(state.settings.get('golive_channel_spotlight_default'))
     : Boolean(body.spotlight);
+  const startsAt = readMoment(body.starts_at, body.tz);
+  let expiresAt;
+  if ('expires_at' in body) expiresAt = readEnd(body.expires_at, body.tz);
+  else if (startsAt && days !== null) expiresAt = daysAhead(days);
+  if (expiresAt !== undefined) refuseBackwards(startsAt, expiresAt);
   const keep = body.keep === true || days === null || !spotlit;
   const row = {
     id: state.golive.spotlights.reduce((top, one) => Math.max(top, one.id), 0) + 1,
@@ -4269,7 +4388,8 @@ route('POST', '/api/golive/spotlight', async (context) => {
     note: body.note ?? null,
     added_by: context.session.id,
     added_at: now(),
-    expires_at: keep ? null : daysAhead(days),
+    starts_at: startsAt,
+    expires_at: expiresAt === undefined ? (keep ? null : daysAhead(days)) : expiresAt,
     bump_hours: body.bump_hours ?? null,
     pin: body.pin === undefined || body.pin === null ? true : Boolean(body.pin),
     event_id: null,
@@ -4279,7 +4399,7 @@ route('POST', '/api/golive/spotlight', async (context) => {
     youtube_handle: null,
   };
   state.golive.spotlights.push(row);
-  logAction('web.golive.spotlight_added', { details: { login, expires_at: row.expires_at, spotlight: spotlit } });
+  logAction('web.golive.spotlight_added', { details: { login, starts_at: row.starts_at, expires_at: row.expires_at, spotlight: spotlit } });
   let said = '';
   if (wantedYoutube) said = linkChannelYoutube(row, wantedYoutube);
   return {
@@ -4292,9 +4412,15 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   requireStaff(context.session);
   const row = wantedSpotlight(context.params);
   const body = await context.body();
-  if (body.keep === true) row.expires_at = null;
-  else if ('expires_at' in body) row.expires_at = body.expires_at || null;
-  else if (body.days !== undefined && body.days !== null) row.expires_at = daysAhead(spotlightDays(body.days));
+  let dated = false;
+  if ('starts_at' in body) {
+    row.starts_at = readMoment(body.starts_at, body.tz);
+    dated = true;
+  }
+  if (body.keep === true) { row.expires_at = null; dated = true; }
+  else if ('expires_at' in body) { row.expires_at = readEnd(body.expires_at, body.tz); dated = true; }
+  else if (body.days !== undefined && body.days !== null) { row.expires_at = daysAhead(spotlightDays(body.days)); dated = true; }
+  if (dated) refuseBackwards(row.starts_at, row.expires_at);
   if ('bump_hours' in body) row.bump_hours = body.bump_hours || null;
   if ('pin' in body) row.pin = Boolean(body.pin);
   if ('note' in body) row.note = body.note || null;
@@ -4321,7 +4447,8 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   if (said === null) logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login } });
   if (said === null && 'announce' in body) said = channelAnnounceSaid(row, settled);
   else if (said === null && 'spotlight' in body) said = channelSpotlightSaid(row, settled);
-  return { ...spotlightRow(row), message: said || `**${row.twitch_login}** now runs ${spotlightUntil(row)}.` };
+  else if (said === null && dated) said = spotlightDated(row);
+  return { ...spotlightRow(row), message: said || `**${row.twitch_login}** now runs ${spotlightRange(row)}.` };
 });
 
 route('DELETE', '/api/golive/spotlight/:spotlight_id', (context) => {

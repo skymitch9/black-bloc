@@ -364,6 +364,23 @@ export const DRAWERS = [
     ],
   },
   {
+    id: 'dates',
+    title: 'What a spotlight’s dates say',
+    note: 'Every word the start-and-end range is written in — the range itself, the word for a '
+      + 'row whose start has not arrived, the button and boxes that set the dates, and the two '
+      + 'refusals a bad date earns.',
+    keys: [
+      'spotlight_range_template',
+      'spotlight_range_kept_template',
+      'spotlight_scheduled_word',
+      'spotlight_dates_button',
+      'spotlight_starts_label',
+      'spotlight_ends_label',
+      'spotlight_end_before_start',
+      'spotlight_bad_date',
+    ],
+  },
+  {
     id: 'costream',
     title: 'Two platforms at once',
     note: 'What ONE announcement says when somebody is live on Twitch and YouTube at the same '
