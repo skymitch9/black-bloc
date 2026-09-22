@@ -7,6 +7,9 @@ from black_bloc import pings
 from black_bloc import spotlight as words
 from black_bloc.cogs.content.golive import GoLive
 from black_bloc.cogs.content.spotlight import (
+    AddChannelModal,
+    DatesButton,
+    DatesModal,
     Spotlight,
     add_channel,
     build_spotlight,
@@ -23,11 +26,13 @@ from black_bloc.cogs.content.spotlight import (
     mode_lines,
     open_session,
     open_sessions,
+    read_dates,
     recent_sessions,
     render_spotlight,
     run_spotlight_move,
     set_announce,
     set_announced,
+    set_dates,
     set_spotlight,
     spotlight_channel,
     start_session,
@@ -38,9 +43,11 @@ from black_bloc.config import load_settings
 from black_bloc.golive import StreamInfo, now_iso
 from black_bloc.settings_store import (
     CHANNEL_OPTOUT_POST_KEY,
+    DEFAULT_TIMEZONE_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
     SPOTLIGHT_END_MISSES_KEY,
     SPOTLIGHT_MODE_KEY,
+    SPOTLIGHT_SCHEDULED_WORD_KEY,
     SettingsStore,
 )
 from black_bloc.twitch import TwitchError, TwitchGame, TwitchStream
@@ -1492,3 +1499,245 @@ async def test_the_twitch_sweep_never_ends_a_session_the_youtube_side_opened(bot
     await cog.poll_once()
 
     assert await open_session(bot.db, row["id"]) is not None
+
+
+# --- the owner's date range (2026-09-22) ------------------------------------------------------
+
+
+def ahead(days):
+    return (datetime.now(UTC) + timedelta(days=days)).isoformat()
+
+
+def behind(days):
+    return (datetime.now(UTC) - timedelta(days=days)).isoformat()
+
+
+async def test_a_scheduled_row_is_not_announced_before_its_start(bot, cog):
+    row = await a_row(bot, starts_at=ahead(3))
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    assert await open_session(bot.db, row["id"]) is None
+    assert bot.guild.channels[CHANNEL].messages == []
+    assert "golive.spotlight_announced" not in await kinds(bot.db)
+
+
+async def test_the_same_row_is_announced_on_the_first_tick_after_its_start(bot, cog):
+    row = await a_row(bot, starts_at=ahead(3))
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    assert await open_session(bot.db, row["id"]) is None
+
+    await update_channel(bot.db, row["id"], starts_at=behind(1))
+    await cog.poll_once()
+    assert await open_session(bot.db, row["id"]) is not None
+    assert "golive.spotlight_announced" in await kinds(bot.db)
+
+
+async def test_a_start_that_passes_leaves_one_routine_started_row(bot, cog):
+    row = await a_row(bot, starts_at=ahead(3))
+    helix_of(bot)
+    await cog.poll_once()
+    assert "golive.spotlight_started" not in await kinds(bot.db)
+
+    await update_channel(bot.db, row["id"], starts_at=behind(1))
+    await cog.poll_once()
+    await cog.poll_once()
+    assert (await kinds(bot.db)).count("golive.spotlight_started") == 1
+    assert (await details_of(bot.db, "golive.spotlight_started"))["login"] == GDQ
+
+
+async def test_a_boot_that_meets_an_already_started_row_says_nothing(bot, cog):
+    await a_row(bot, starts_at=behind(1))
+    helix_of(bot)
+    await cog.poll_once()
+    assert "golive.spotlight_started" not in await kinds(bot.db)
+
+
+async def test_a_start_set_mid_stream_never_strands_the_announcement_that_is_out(bot, cog):
+    row = await a_row(bot)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    assert await open_session(bot.db, row["id"]) is not None
+
+    await update_channel(bot.db, row["id"], starts_at=ahead(5))
+    await bot.store.set(GUILD, SPOTLIGHT_END_MISSES_KEY, 1)
+    helix_of(bot)
+    await cog.poll_once()
+    assert (await open_session(bot.db, row["id"])) is None
+
+
+async def test_the_added_row_carries_its_start_into_the_log(bot):
+    outcome, row = await spotlight_channel(
+        bot, bot.guild, FakeActor(), "esamarathon", starts_at=ahead(2), expires_at=ahead(9)
+    )
+    assert outcome == "added" and row["starts_at"] is not None
+    said = await details_of(bot.db, "golive.spotlight_added")
+    assert said["starts_at"] == row["starts_at"]
+
+
+async def test_set_dates_stores_both_and_says_the_row_is_scheduled(bot, cog):
+    row = await a_row(bot)
+    outcome, fresh, said = await set_dates(
+        bot, bot.guild, FakeActor(), row["id"], ahead(3), ahead(10)
+    )
+    assert outcome == "dated"
+    assert fresh["starts_at"] is not None and fresh["expires_at"] is not None
+    assert "before that start" in said
+
+
+async def test_a_blank_start_and_a_blank_end_mean_now_and_for_ever(bot, cog):
+    row = await a_row(bot, starts_at=ahead(3), expires_at=ahead(10))
+    outcome, fresh, _ = await set_dates(bot, bot.guild, FakeActor(), row["id"], None, None)
+    assert outcome == "dated"
+    assert fresh["starts_at"] is None and fresh["expires_at"] is None
+    assert words.is_scheduled(fresh) is False
+
+
+async def test_an_end_before_the_start_is_refused_in_words_and_stores_nothing(bot, cog):
+    row = await a_row(bot, starts_at=ahead(3), expires_at=ahead(10))
+    outcome, _, said = await set_dates(
+        bot, bot.guild, FakeActor(), row["id"], ahead(8), ahead(4)
+    )
+    assert outcome == words.END_BEFORE_START
+    assert "ends before it starts" in said
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert fresh["starts_at"] == row["starts_at"] and fresh["expires_at"] == row["expires_at"]
+
+
+async def test_the_two_boxes_are_read_in_the_guilds_own_zone(bot):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "America/Phoenix")
+    start, end, refusal = await read_dates(
+        bot, bot.guild, FakeActor(), "2026-09-30 19:00", "2026-10-01 19:00"
+    )
+    assert refusal is None
+    assert start == "2026-10-01T02:00:00+00:00" and end == "2026-10-02T02:00:00+00:00"
+
+
+async def test_a_date_nobody_can_read_is_a_sentence_not_a_stored_row(bot):
+    start, end, refusal = await read_dates(bot, bot.guild, FakeActor(), "next tuesday", "")
+    assert start is None and end is None
+    assert refusal is not None and "next tuesday" in refusal
+
+
+async def test_the_end_box_still_takes_a_number_of_days(bot):
+    _, end, refusal = await read_dates(bot, bot.guild, FakeActor(), "", "7")
+    assert refusal is None and end is not None
+
+
+async def test_extending_a_scheduled_row_is_refused_when_it_would_land_before_the_start(bot, cog):
+    _, row = await spotlight_channel(
+        bot, bot.guild, FakeActor(), "esamarathon", starts_at=ahead(40), expires_at=ahead(60)
+    )
+    await update_channel(bot.db, row["id"], expires_at=ahead(1))
+    said, kept = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "extend")
+    assert "ends before it starts" in said and kept is True
+
+
+async def test_letting_a_scheduled_row_expire_is_refused_rather_than_going_backwards(bot, cog):
+    row = await a_row(bot, starts_at=ahead(40))
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "expire")
+    assert "ends before it starts" in said
+    assert (await channel_by_id(bot.db, row["id"]))["expires_at"] is None
+
+
+# --- the panel, the button and the two modals -------------------------------------------------
+
+
+async def test_every_row_offers_set_dates(bot, cog):
+    row = await a_row(bot)
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await render_spotlight(interaction, row["id"])
+    assert words.SPOTLIGHT_DATES_BUTTON in interaction.labels()
+
+
+async def test_the_set_dates_button_opens_a_modal_filled_with_what_is_stored(bot, cog):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "UTC")
+    row = await a_row(
+        bot, starts_at="2026-09-30T19:00:00+00:00", expires_at="2026-10-05T19:00:00+00:00"
+    )
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await DatesButton(row["id"]).callback(interaction)
+    modal = interaction.response.modals[-1]
+    assert modal.starts.default == "2026-09-30 19:00"
+    assert modal.ends.default == "2026-10-05 19:00"
+
+
+async def test_the_dates_modal_round_trips_what_was_typed(bot, cog):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "UTC")
+    row = await a_row(bot)
+    modal = DatesModal(row["id"], "Starts", "Ends", "", "")
+    modal.starts._value = "2026-11-01 09:00"
+    modal.ends._value = "2026-11-08 09:00"
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(interaction)
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert fresh["starts_at"] == "2026-11-01T09:00:00+00:00"
+    assert fresh["expires_at"] == "2026-11-08T09:00:00+00:00"
+    assert GDQ in (interaction.sent or "")
+
+
+async def test_the_dates_modal_refuses_a_backwards_range_and_changes_nothing(bot, cog):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "UTC")
+    row = await a_row(bot)
+    modal = DatesModal(row["id"], "Starts", "Ends", "", "")
+    modal.starts._value = "2026-11-08 09:00"
+    modal.ends._value = "2026-11-01 09:00"
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(interaction)
+    assert "ends before it starts" in (interaction.sent or "")
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert fresh["starts_at"] is None and fresh["expires_at"] is None
+
+
+async def test_the_add_modal_takes_a_start_and_an_end_instead_of_days(bot, cog):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "UTC")
+    modal = AddChannelModal(None, bot, bot.guild)
+    modal.channel._value = "esamarathon"
+    modal.spotlight._value = "yes"
+    modal.youtube._value = ""
+    modal.starts._value = "2026-11-01 09:00"
+    modal.ends._value = "2026-11-08 09:00"
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(interaction)
+    row = await channel_by_login(bot.db, GUILD, "esamarathon")
+    assert row["starts_at"] == "2026-11-01T09:00:00+00:00"
+    assert row["expires_at"] == "2026-11-08T09:00:00+00:00"
+
+
+async def test_the_add_modal_refuses_a_backwards_range_and_adds_nothing(bot, cog):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "UTC")
+    modal = AddChannelModal(None, bot, bot.guild)
+    modal.channel._value = "esamarathon"
+    modal.spotlight._value = "yes"
+    modal.youtube._value = ""
+    modal.starts._value = "2026-11-08 09:00"
+    modal.ends._value = "2026-11-01 09:00"
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(interaction)
+    assert "ends before it starts" in (interaction.sent or "")
+    assert await channel_by_login(bot.db, GUILD, "esamarathon") is None
+
+
+async def test_the_add_modal_refuses_an_unreadable_date_by_name(bot, cog):
+    modal = AddChannelModal(None, bot, bot.guild)
+    modal.channel._value = "esamarathon"
+    modal.spotlight._value = ""
+    modal.youtube._value = ""
+    modal.starts._value = "next tuesday"
+    modal.ends._value = ""
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(interaction)
+    assert "next tuesday" in (interaction.sent or "")
+    assert await channel_by_login(bot.db, GUILD, "esamarathon") is None
+
+
+async def test_the_panel_marks_a_scheduled_row_with_the_key_the_owner_can_change(bot, cog):
+    await a_row(bot, starts_at=ahead(3))
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await render_spotlight(interaction)
+    assert "scheduled" in interaction.words
+
+    await bot.store.set(GUILD, SPOTLIGHT_SCHEDULED_WORD_KEY, "not yet")
+    again = FakeInteraction(bot, FakeActor(), bot.guild)
+    await render_spotlight(again)
+    assert "not yet" in again.words

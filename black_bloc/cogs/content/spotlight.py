@@ -33,17 +33,27 @@ from ...settings_store import (
     CHANNEL_OPTOUT_END,
     CHANNEL_OPTOUT_POST_KEY,
     CHANNEL_SPOTLIGHT_DEFAULT_KEY,
+    DEFAULT_TIMEZONE_KEY,
+    SPOTLIGHT_BAD_DATE_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
     SPOTLIGHT_BUMP_HOURS_KEY,
     SPOTLIGHT_BUMP_PINGS_KEY,
     SPOTLIGHT_BUMP_TEMPLATE_KEY,
+    SPOTLIGHT_DATES_BUTTON_KEY,
     SPOTLIGHT_DEFAULT_DAYS_KEY,
+    SPOTLIGHT_END_BEFORE_START_KEY,
     SPOTLIGHT_END_MISSES_KEY,
+    SPOTLIGHT_ENDS_LABEL_KEY,
     SPOTLIGHT_MODE_KEY,
     SPOTLIGHT_PIN_KEY,
     SPOTLIGHT_POLL_MINUTES,
     SPOTLIGHT_POLL_MINUTES_KEY,
+    SPOTLIGHT_RANGE_KEPT_KEY,
+    SPOTLIGHT_RANGE_KEY,
+    SPOTLIGHT_SCHEDULED_WORD_KEY,
+    SPOTLIGHT_STARTS_LABEL_KEY,
 )
+from ...timezones import get_timezone
 from ...twitch import TwitchError
 
 log = logging.getLogger(__name__)
@@ -77,6 +87,25 @@ def _cell(row: Any, key: str) -> Any:
         return getattr(row, key, None)
 
 
+def wording_for(bot: Any, guild_id: int) -> dict[str, Any]:
+    """The three range words, read once so one panel render asks the store three times."""
+    return {
+        "template": bot.store.get(guild_id, SPOTLIGHT_RANGE_KEY),
+        "kept_template": bot.store.get(guild_id, SPOTLIGHT_RANGE_KEPT_KEY),
+        "word": bot.store.get(guild_id, SPOTLIGHT_SCHEDULED_WORD_KEY),
+    }
+
+
+async def zone_for(bot: Any, guild: Any, actor: Any) -> str:
+    """A typed date is read in the person's own zone, falling back to the guild's."""
+    fallback = bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)
+    wanted = getattr(actor, "id", actor)
+    try:
+        return await get_timezone(bot.db, int(wanted), fallback)
+    except (TypeError, ValueError):
+        return str(fallback or "")
+
+
 async def add_channel(
     db: Any,
     guild_id: int,
@@ -85,6 +114,7 @@ async def add_channel(
     added_by: int | None,
     expires_at: str | None,
     pin: bool,
+    starts_at: str | None = None,
     bump_hours: int | None = None,
     display_name: str | None = None,
     note: str | None = None,
@@ -98,9 +128,9 @@ async def add_channel(
     try:
         cur = await db.conn.execute(
             "INSERT INTO spotlight_channels(guild_id, twitch_login, twitch_user_id, "
-            "display_name, note, added_by, added_at, expires_at, bump_hours, pin, event_id, "
-            "spotlight, announce, youtube_channel_id, youtube_handle) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "display_name, note, added_by, added_at, starts_at, expires_at, bump_hours, pin, "
+            "event_id, spotlight, announce, youtube_channel_id, youtube_handle) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 guild_id,
                 login,
@@ -109,6 +139,7 @@ async def add_channel(
                 note,
                 added_by,
                 now_iso(),
+                starts_at,
                 expires_at,
                 bump_hours,
                 1 if pin else 0,
@@ -166,6 +197,7 @@ async def channels_with_youtube(db: Any) -> list[Any]:
 
 async def update_channel(db: Any, spotlight_id: int, **fields: Any) -> None:
     allowed = (
+        "starts_at",
         "expires_at",
         "bump_hours",
         "pin",
@@ -298,6 +330,7 @@ class Spotlight(commands.Cog):
         self._locks: dict[int, asyncio.Lock] = {}
         self._reconciler = Reconciler()
         self.misses: dict[int, int] = {}
+        self.scheduled: set[int] = set()
         self.last_poll_ok_at: str | None = None
         self.last_poll_error: str | None = None
 
@@ -391,6 +424,7 @@ class Spotlight(commands.Cog):
                 continue
             await self.sweep_expiries(guild)
             rows = await channels_for(self.bot.db, guild.id)
+            await self.sweep_starts(guild, rows)
             if not rows:
                 continue
             helix = self._helix()
@@ -408,6 +442,28 @@ class Spotlight(commands.Cog):
             live = {stream.user_login: stream for stream in streams}
             for row in rows:
                 await self._seen(guild, row, live.get(row["twitch_login"]))
+
+    async def sweep_starts(self, guild: Any, rows: list[Any]) -> None:
+        """One row per start that PASSES while this process is up; a boot notes nothing."""
+        for row in rows:
+            spotlight_id = int(row["id"])
+            if words.is_scheduled(row):
+                self.scheduled.add(spotlight_id)
+                continue
+            if spotlight_id not in self.scheduled:
+                continue
+            self.scheduled.discard(spotlight_id)
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_started",
+                details={
+                    "spotlight_id": spotlight_id,
+                    "login": row["twitch_login"],
+                    "starts_at": _cell(row, "starts_at"),
+                    "expires_at": row["expires_at"],
+                },
+            )
 
     async def sweep_expiries(self, guild: Any) -> None:
         """A row whose date has passed ends its open session first, then leaves the list."""
@@ -427,6 +483,7 @@ class Spotlight(commands.Cog):
         await drop_fan_role(self.bot, guild, row, because=words.FAN_ROLE_EXPIRED)
         await delete_channel(self.bot.db, row["id"])
         self.misses.pop(int(row["id"]), None)
+        self.scheduled.discard(int(row["id"]))
         await log_action(
             self.bot,
             guild,
@@ -446,6 +503,10 @@ class Spotlight(commands.Cog):
             if fresh is None:
                 return
             session = await open_session(self.bot.db, fresh["id"])
+            # A start still ahead gates the ANNOUNCEMENT only: a session already open runs
+            # to its own end, so a date set mid-stream never strands a live post.
+            if session is None and words.is_scheduled(fresh):
+                return
             if stream is not None:
                 self.misses[int(fresh["id"])] = 0
                 if session is None:
@@ -1022,6 +1083,7 @@ async def spotlight_channel(
     note: str | None = None,
     event_id: int | None = None,
     expires_at: Any = False,
+    starts_at: Any = None,
     spotlight: Any = None,
     announce: bool = True,
     youtube_channel_id: str | None = None,
@@ -1056,6 +1118,7 @@ async def spotlight_channel(
         clean,
         added_by=getattr(actor, "id", actor),
         expires_at=when,
+        starts_at=starts_at or None,
         pin=wanted_pin,
         bump_hours=bump_hours,
         display_name=clean,
@@ -1077,6 +1140,7 @@ async def spotlight_channel(
         details={
             "spotlight_id": spotlight_id,
             "login": clean,
+            "starts_at": starts_at or None,
             "expires_at": when,
             "pin": wanted_pin,
             "spotlight": spotlit,
@@ -1088,6 +1152,60 @@ async def spotlight_channel(
         },
     )
     return ("added", row)
+
+
+async def set_dates(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    spotlight_id: int,
+    starts_at: Any,
+    expires_at: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> tuple[str, Any, str]:
+    """One door for the modal, the drawer and the route: `(outcome, row, said)`.
+
+    A blank start means now and a blank end means for ever, so both are stored as NULL.
+    A start already gone by is stored as given — never silently rewritten, never refused.
+    """
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return ("no_row", None, words.NO_SUCH_ROW)
+    problem = words.range_problem(starts_at, expires_at)
+    if problem is not None:
+        said = words.end_before_start_said(
+            starts_at, expires_at, bot.store.get(guild.id, SPOTLIGHT_END_BEFORE_START_KEY)
+        )
+        return (problem, row, said)
+    fresh = await change_spotlight(
+        bot,
+        guild,
+        actor,
+        spotlight_id,
+        via=via,
+        starts_at=starts_at or None,
+        expires_at=expires_at or None,
+    )
+    return ("dated", fresh, words.dates_said(fresh, **wording_for(bot, guild.id)))
+
+
+async def read_dates(
+    bot: Any, guild: Any, actor: Any, given_start: Any, given_end: Any
+) -> tuple[Any, Any, str | None]:
+    """`(starts_at, expires_at, refusal)` — the two boxes both doors type into."""
+    tz_name = await zone_for(bot, guild, actor)
+    start, trouble = words.read_moment(given_start, tz_name)
+    if trouble is not None:
+        return (None, None, _bad_date(bot, guild, given_start))
+    end, trouble = words.read_end(given_end, tz_name)
+    if trouble is not None:
+        return (None, None, _bad_date(bot, guild, given_end))
+    return (start, end, None)
+
+
+def _bad_date(bot: Any, guild: Any, given: Any) -> str:
+    return words.bad_date_said(given, bot.store.get(guild.id, SPOTLIGHT_BAD_DATE_KEY))
 
 
 async def set_announce(
@@ -1246,6 +1364,7 @@ async def forget_spotlight(
     await delete_channel(bot.db, spotlight_id)
     if cog is not None:
         cog.misses.pop(int(spotlight_id), None)
+        cog.scheduled.discard(int(spotlight_id))
     await log_action(
         bot,
         guild,
@@ -1347,10 +1466,13 @@ async def build_spotlight(
         pings.spotlight_of(one): one["role_id"]
         for one in await pings.spotlight_fan_roles(bot.db, guild.id)
     }
+    said = wording_for(bot, guild.id)
     lines = [words.CHANNELS_INTRO] + mode_lines(bot, guild)
     lines += (
         [
-            words.panel_line(row, int(row["id"]) in open_by_id, held.get(int(row["id"])))
+            words.panel_line(
+                row, int(row["id"]) in open_by_id, held.get(int(row["id"])), **said
+            )
             for row in rows[:SELECT_CAP]
         ]
         if rows
@@ -1365,6 +1487,9 @@ async def build_spotlight(
         spotlit = words.is_spotlit(chosen)
         view.add_item(
             SpotlightMoveButton("spotlight_off" if spotlit else "spotlight_on", chosen["id"])
+        )
+        view.add_item(
+            DatesButton(chosen["id"], bot.store.get(guild.id, SPOTLIGHT_DATES_BUTTON_KEY))
         )
         # Panels over slash: the kept / expires / bump moves belong to the spotlight, so they
         # render only while it is on, and Bump only while something is live to bump.
@@ -1410,7 +1535,7 @@ class ChannelPick(discord.ui.Select):
             placeholder=words.PICK_A_CHANNEL,
             options=[
                 discord.SelectOption(
-                    label=f"{row['twitch_login']} — {words.until_words(row)}"[:100],
+                    label=f"{row['twitch_login']} — {words.range_words(row)}"[:100],
                     value=str(row["id"]),
                     default=chosen is not None and int(row["id"]) == int(chosen["id"]),
                 )
@@ -1509,7 +1634,11 @@ async def run_spotlight_move(
         return (words.KEPT_SAID.format(login=login), True)
     if action == "expire":
         when = words.expiry_in_days(bot.store.get(guild.id, SPOTLIGHT_DEFAULT_DAYS_KEY))
-        await change_spotlight(bot, guild, actor, spotlight_id, expires_at=when)
+        outcome, fresh, said = await set_dates(
+            bot, guild, actor, spotlight_id, _cell(row, "starts_at"), when
+        )
+        if outcome != "dated":
+            return (said, True)
         return (words.EXPIRES_SAID.format(login=login, when=words.when_words(when)), True)
     if action in ("spotlight_on", "spotlight_off"):
         fresh, settled = await set_spotlight(
@@ -1539,14 +1668,17 @@ async def run_spotlight_move(
         if outcome == "no_cog":
             return (words.NO_COG.format(login=login), True)
         return (words.BUMP_FAILED.format(login=login, reason=words.NO_CHANNEL), True)
-    fresh = await change_spotlight(
+    outcome, fresh, said = await set_dates(
         bot,
         guild,
         actor,
         spotlight_id,
-        expires_at=words.extended_by_days(row, EXTEND_DAYS),
+        _cell(row, "starts_at"),
+        words.extended_by_days(row, EXTEND_DAYS),
     )
-    return (words.EXTENDED.format(login=login, when=words.until_words(fresh)), True)
+    if outcome != "dated":
+        return (said, True)
+    return (words.EXTENDED.format(login=login, when=words.range_words(fresh)), True)
 
 
 class AddChannelButton(discord.ui.Button):
@@ -1558,7 +1690,87 @@ class AddChannelButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await interaction.response.send_modal(AddChannelModal(self.view))
+        await interaction.response.send_modal(
+            AddChannelModal(self.view, interaction.client, interaction.guild)
+        )
+
+
+class DatesButton(discord.ui.Button):
+    def __init__(self, spotlight_id: Any, label: Any = None) -> None:
+        super().__init__(
+            label=words.dates_button(label), style=discord.ButtonStyle.secondary, row=1
+        )
+        self.spotlight_id = int(spotlight_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        bot = interaction.client
+        row = await channel_by_id(bot.db, self.spotlight_id)
+        if row is None:
+            await answer(interaction, words.NO_SUCH_ROW)
+            return
+        tz_name = await zone_for(bot, interaction.guild, interaction.user)
+        await interaction.response.send_modal(
+            DatesModal(
+                self.spotlight_id,
+                words.starts_label(bot.store.get(interaction.guild.id, SPOTLIGHT_STARTS_LABEL_KEY)),
+                words.ends_label(bot.store.get(interaction.guild.id, SPOTLIGHT_ENDS_LABEL_KEY)),
+                words.typed_moment(_cell(row, "starts_at"), tz_name),
+                words.typed_moment(row["expires_at"], tz_name),
+                self.view,
+            )
+        )
+
+
+class DatesModal(AnswersErrors, discord.ui.Modal, title=words.DATES_MODAL_TITLE):
+    def __init__(
+        self,
+        spotlight_id: int,
+        starts_label: str,
+        ends_label: str,
+        starts: str,
+        ends: str,
+        previous: Any = None,
+    ) -> None:
+        super().__init__()
+        self.spotlight_id = int(spotlight_id)
+        self.previous = previous
+        self.starts = discord.ui.TextInput(
+            label=starts_label,
+            placeholder=words.STARTS_PLACEHOLDER,
+            default=starts or None,
+            required=False,
+            max_length=20,
+        )
+        self.ends = discord.ui.TextInput(
+            label=ends_label,
+            placeholder=words.ENDS_PLACEHOLDER,
+            default=ends or None,
+            required=False,
+            max_length=20,
+        )
+        self.add_item(self.starts)
+        self.add_item(self.ends)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        bot = interaction.client
+        start, end, refusal = await read_dates(
+            bot, interaction.guild, interaction.user, str(self.starts), str(self.ends)
+        )
+        if refusal is None:
+            _, _, refusal = await set_dates(
+                bot,
+                interaction.guild,
+                interaction.user,
+                self.spotlight_id,
+                start,
+                end,
+            )
+        await render_spotlight(interaction, self.spotlight_id, self.previous)
+        await answer(interaction, refusal)
 
 
 class LinkYouTubeButton(discord.ui.Button):
@@ -1620,26 +1832,43 @@ class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_CHANNEL_M
         required=False,
         max_length=120,
     )
-    days = discord.ui.TextInput(
-        label=words.ADD_DAYS_LABEL,
-        placeholder=words.ADD_DAYS_PLACEHOLDER,
-        required=False,
-        max_length=4,
-    )
-
-    def __init__(self, previous: Any = None) -> None:
+    def __init__(self, previous: Any = None, bot: Any = None, guild: Any = None) -> None:
         super().__init__()
         self.previous = previous
+        store = getattr(bot, "store", None)
+        guild_id = getattr(guild, "id", None)
+        start_label = store.get(guild_id, SPOTLIGHT_STARTS_LABEL_KEY) if store else None
+        end_label = store.get(guild_id, SPOTLIGHT_ENDS_LABEL_KEY) if store else None
+        self.starts = discord.ui.TextInput(
+            label=words.starts_label(start_label),
+            placeholder=words.STARTS_PLACEHOLDER,
+            required=False,
+            max_length=20,
+        )
+        self.ends = discord.ui.TextInput(
+            label=words.ends_label(end_label),
+            placeholder=words.ENDS_PLACEHOLDER,
+            required=False,
+            max_length=20,
+        )
+        self.add_item(self.starts)
+        self.add_item(self.ends)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction, staff=False):
             return
         bot = interaction.client
         given = str(self.channel)
-        typed = str(self.days).strip()
-        if typed and not typed.isdigit():
+        start, end, refusal = await read_dates(
+            bot, interaction.guild, interaction.user, str(self.starts), str(self.ends)
+        )
+        if refusal is None and words.range_problem(start, end) is not None:
+            refusal = words.end_before_start_said(
+                start, end, bot.store.get(interaction.guild.id, SPOTLIGHT_END_BEFORE_START_KEY)
+            )
+        if refusal is not None:
             await render_spotlight(interaction, None, self.previous)
-            await answer(interaction, words.BAD_DAYS.format(given=typed[:40]))
+            await answer(interaction, refusal)
             return
         asked = str(self.spotlight).strip()
         wanted = words.wanted_spotlight(
@@ -1656,8 +1885,8 @@ class AddChannelModal(AnswersErrors, discord.ui.Modal, title=words.ADD_CHANNEL_M
             interaction.guild,
             interaction.user,
             given,
-            days=int(typed) if typed else None,
-            keep=not typed,
+            expires_at=end,
+            starts_at=start,
             spotlight=wanted,
         )
         said = add_said(bot, interaction.guild, outcome, row, given)
@@ -1682,7 +1911,9 @@ def add_said(bot: Any, guild: Any, outcome: str, row: Any, given: Any) -> str:
             login=words.clean_login(given) or str(given or "")[: words.LOGIN_MAX]
         )
     return words.added_said(
-        row, words.bump_hours_for(row, bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
+        row,
+        words.bump_hours_for(row, bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY)),
+        **wording_for(bot, guild.id),
     )
 
 
