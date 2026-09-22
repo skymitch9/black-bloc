@@ -2844,4 +2844,4 @@ build over CDP against the mock; the row below is for the owner's own eyes on th
 
 | Row | Do | Expect |
 |---|---|---|
-| **MC-a** | Open the Go-live page and scroll to **Recent streams** | The columns read Member, Started, Ended, Game, Title, How, Link — no **Mode then** column. On any row from before 2026-09-18 (test mode), the **Ended** cell (next to the timestamp, or next to the **live now** badge if the stream is still going) carries a small `rehearsal` badge. Hovering it reads *"posted into the shadow channel, not the go-live channel"*. A row from after the cutover carries no badge there |
+| **738** (was `MC-a`) | Open the Go-live page and scroll to **Recent streams** | The columns read Member, Started, Ended, Game, Title, How, Link — no **Mode then** column. On any row from before 2026-09-18 (test mode), the **Ended** cell (next to the timestamp, or next to the **live now** badge if the stream is still going) carries a small `rehearsal` badge. Hovering it reads *"posted into the shadow channel, not the go-live channel"*. A row from after the cutover carries no badge there |
