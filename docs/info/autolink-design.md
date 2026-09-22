@@ -68,7 +68,8 @@ Unlink stays theirs). Opted-out members are never announced, so never auto-linke
 
 ## D. Logging — `golive.history_swept` (~~IMPORTANT~~ **ROUTINE**), `golive.autolink_refused` (routine); `golive.link` gains `because`.
 
-🔇 **Reversed 2026-09-21 17:3x, branch `quiet-channel-kinds`.** Owner, 2026-09-21 17:2x, verbatim: *"okay that works, i dont want log messages appearing in black bloc logs for channel linking or channel spotlight or channel annouce"* — so
+🔇 **Reversed 2026-09-21 17:3x, branch `quiet-channel-kinds`, ✅ LIVE v154 (2026-09-21 20:08, merge
+`78aed68a`, 1 commit, sweep 737).** Owner, 2026-09-21 17:2x, verbatim: *"okay that works, i dont want log messages appearing in black bloc logs for channel linking or channel spotlight or channel annouce"* — so
 `golive.history_swept` is ROUTINE in `black_bloc/logkinds.py` and the sweep posts no embed to
 `#blackbloc-logs` at the default `golive_log_level = important`. ⚠️ **The row is unchanged and still on
 the Logs page** under the **golive** chip, with the same counts and the same `who` list;

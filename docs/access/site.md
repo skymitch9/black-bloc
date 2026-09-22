@@ -5,7 +5,8 @@
 > until then; secret NAMES only). **Last verified:
 > 2026-09-21 — the mock section only**: the `/preview/` door and its `LIVE_ROOT` live mirror of the
 > deployed release are RETIRED (owner, 12:2x, verbatim: *"We don't need the preview pages anymore"*)
-> and **deleted** from `site/mock/server.mjs` on branch `no-previews`; the mock serves the WORKING
+> and **deleted** from `site/mock/server.mjs` on branch `no-previews` (merge `4dd9f649`), ✅
+> **shipped as part of v154 (2026-09-21 20:08)**; the mock serves the WORKING
 > TREE at the normal URLs, always. ⚠️ **Nothing else on this page was re-checked at that pass** —
 > not the page count, not the route count, not DNS, the certificate, the OAuth redirect string or
 > the CSP/HSTS/cookie claims, and nothing in it touched the live app or a browser.

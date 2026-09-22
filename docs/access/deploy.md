@@ -5,7 +5,8 @@
 > Last verified: **2026-09-21 — the *move the live mirror* step only, which is RETIRED**
 > (owner, 12:2x, verbatim: *"We don't need the preview pages anymore"*). The mock's `LIVE_ROOT`
 > live mirror and its `/preview/` door are **deleted from `site/mock/server.mjs`** (branch
-> `no-previews`), so there is nothing to move after a deploy and the mock's start line is
+> `no-previews`, merge `4dd9f649`), ✅ **shipped as part of v154 (2026-09-21 20:08)** — so there is
+> nothing to move after a deploy and the mock's start line is
 > `MOCK_PORT=8797 node site/mock/server.mjs`. ⚠️ **Nothing else on this page was re-checked at
 > that pass** — no deploy was run, no command body below was re-run, and nothing touched Fly,
 > Discord or a browser. Before that, **2026-09-20 (evening), the ORDER of `scripts/deploy.ps1` only** — the

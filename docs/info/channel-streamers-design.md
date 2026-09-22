@@ -238,9 +238,10 @@ what the route answers. The clause lands only when a session was actually open, 
 
 ## Follow-up 2026-09-21 (16:5x): the log kind says CHANNEL, not spotlight
 
-> 🔨 **BUILT on branch `channel-kinds`, off `main` `d4e3535` (v153 live), 2026-09-21.** ⚠️ **NOT
-> merged, NOT deployed, and nothing in it has met Discord or Helix.** Sweep row `CK-a` in
-> [`../access/sweeps.md`](../access/sweeps.md) is the proof that is missing — the conductor numbers it.
+> ✅ **LIVE v154 (2026-09-21 20:08)** — built on branch `channel-kinds` off `main` `d4e3535` (v153
+> live), merged `6017db05`, release commit `52c48235`, 3 commits + one conductor line, 7 new
+> tests, sweep **736**. ⚠️ **Nothing in it has met Discord or Helix** — sweep row `736` in
+> [`../access/sweeps.md`](../access/sweeps.md) is the proof that is missing.
 > ⚠️ **This section reverses [Deviation 2](#deviations) of the v151 build**, which is struck below.
 
 **The defect, owner verbatim (2026-09-21 16:5x):** *"why is gdq being spotlighted in the logs

@@ -2,7 +2,16 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-21 12:2x** — the v153 docs ritual. **KI-36 and KI-37 ADDED**, both `WATCHING`:
+> Last verified: **2026-09-21 20:1x** — the v154 docs ritual. **KI-38 ADDED**, `WATCHING`: an Opus
+> build agent can be dropped repeatedly by Anthropic-side `529`/`500` errors during a provider
+> outage (measured 2026-09-21 17:5x–18:3x on the `golive-settings-help` build, five drops, zero
+> work lost — checkpoint-committing after every step and handing the remainder to a Sonnet agent
+> from the same worktree was the recovery). **KI-26 gains a finding**: an agent killing every
+> `chrome-headless-shell` process BY NAME can hit another build's render mid-flight
+> (2026-09-21 17:5x) — kill by process tree, never by image name, same as the existing `python.exe`
+> warning. ⚠️ **Nothing else in this file was re-tested at v154:** no symptom was reproduced,
+> nothing met live Discord, no browser rendered a page against production. Before that,
+> **2026-09-21 12:2x** — the v153 docs ritual. **KI-36 and KI-37 ADDED**, both `WATCHING`:
 > the every-key-lands-once JOIN FIXTURE is a hand-typed number that every concurrent build bumps, so a merge
 > taking one side passes the count and drops a key — **twice now** (`autolink`'s Deviation 16, then both v153
 > branches bumping 52 → 53 with **54** the merged truth, measured); and **a deploy gate can be killed by the
@@ -145,6 +154,27 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-38 — An Opus build agent can be DROPPED REPEATEDLY by Anthropic-side `529`/`500` errors during a provider outage — `WATCHING`
+
+**Symptom.** During a minor Anthropic-side outage (2026-09-21 17:5x–18:3x), the Opus agent building
+`golive-settings-help` was dropped **FIVE times** by `529 Overloaded` and `500` server errors —
+errors on Anthropic's side, not this repo's. Each drop lost the in-flight turn but **zero committed
+work**, because the agent had been checkpoint-committing after every step (`cf4c74b` was the last
+checkpoint before the fifth drop, with three more files edited on top and not yet committed). The
+build was finished by a **second, Sonnet, agent** resumed from the same worktree, which picked up
+the checkpoint and made the remaining three commits (`71a3a37`, `dfda995`). **Status: WATCHING**
+(one sighting, zero work lost).
+**Why tolerated.** The mitigation already worked the one time it was needed: nothing was lost, and
+the only cost was wall-clock time waiting out the outage and one hand-off between agents. The cause
+is entirely outside this repo's control.
+**What would change it.** ⚠️ **The number this entry is missing:** how often a provider outage of
+this shape recurs — one sighting is not enough to say whether checkpoint-and-handoff should become
+a standing instruction in every build brief, or stays an improvisation the next builder reaches for
+on their own. A second sighting where the SAME recovery (checkpoint-commit + hand off to a
+different model) is used again promotes this from a note to a documented standing move in the build
+brief template; a sighting where work WAS lost changes the fix entirely (shorter checkpoint
+intervals, or a pre-flight outage check before dispatching a long build).
 
 ## KI-37 — A deploy gate can be KILLED BY THE OS when another job on this machine holds more than 12 GB — `WATCHING`
 
@@ -417,6 +447,7 @@ panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
 
+> 🔴 **2026-09-21 17:5x — a new finding, not a new sighting of the stall itself: an agent that kills every `chrome-headless-shell` process BY NAME can hit ANOTHER BUILD'S render mid-flight.** During the `golive-settings-help` build's headless CDP render (deviation 2 of that follow-up), a process-name kill aimed at cleaning up its own scratch profile risked taking out a sibling agent's `chrome-headless-shell` too — the same class of mistake this entry already warns about for `python.exe` and `.venv` workers, now confirmed for the browser side as well. ⚠️ **Count and target by PID or process tree, never by image name**, for any process family a concurrent agent might also be running. This is a finding filed under KI-26 because it is the same root cause (killing a shared-name process on a machine with concurrent agents), not a new count. Before that —
 > 🔴 **2026-09-21 12:2x — TWENTY-TWO PLUS AT LEAST SIX TODAY, so the count is AT LEAST TWENTY-EIGHT — and the debugging session this entry has asked for since 2026-09-19 is STILL not run.** The two v153 builds hit it **six times between them**: three on `member-optout` (stalls at 89 / 98 / 93 % of pytest) and three on `youtube-video-link` (stalls and one crash). ⚠️ **The `member-optout` builder's finding is the most useful thing this entry has gained in a dozen sightings, and it says the diagnosis has often been WRONG: a stalled gate is usually a SECOND GATE.** The PowerShell tool BACKGROUNDS a run it has timed out on, so the retry starts a second 8-worker suite beside the first, the two fight for the cores, and the newer one looks deadlocked — it is not. ⚠️ **Count the `.venv` python workers before killing anything** (`Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*.venv*python*' }`), and kill by process tree, never by image name. ⚠️ **New variant, from the `youtube-video-link` builder: `exit 255` — an xdist worker DEATH**, not the silent idle-worker stall this entry was filed for; same remedy (read the log, retry), different signature, so a gate reporting `exit 255` is this entry too. None of the six reached Fly and none produced a bad deploy — the cost is still only lost time. ⚠️ **The count is now approximate on purpose** (*at least* twenty-eight): sightings are still recorded where each build reports them, which is the same gap that once let this entry say thirteen while the real figure was twenty-two. Before that —
 > 🔴 **2026-09-20 23:3x — the count stands at TWENTY-TWO, and the debugging session this entry's own triggers called for has STILL not been run.** Nine sightings (fourteen to twenty-two) piled up between the note below and the v150 landing; each was recorded where its build reported it (`TODO.md` / `DONE.md`) and not here, which is how this entry came to say THIRTEEN while the real figure was twenty-two — that gap is the finding. Tonight's, in order: the **sixteenth** killed a v150 deploy attempt outright (stalled at 99 % for 14 minutes with three suites on the box, killed by its own process tree; nothing shipped and its stray `Release v150` commit was dropped unpushed); **seventeen** and **eighteen** on the `end-wording` build and **twenty-one** on its wording-default fix; **nineteen** and **twenty** on the `discord-mock` build; **twenty-two** on the `raidtrain-page` build. Every one was green on a retry, and the v150 gate that finally shipped passed **7118 passed, 3 skipped**. ⚠️ So the cost is still lost time and never a bad deploy — but it is now lost time on nine runs and one killed deploy. Before that —
 > **2026-09-20 17:2x — THIRTEEN sightings: the `costream` build hit it TWICE, both on `> file` runs** (spawn-shape, 8 workers flat at 0.0156 s CPU, no output for 10+ minutes against an 82 s baseline; both green on one retry). Its trick for killing the right tree with two suites on the box: `-o cache_dir=<its worktree>/.pytest_cache` so its own root is identifiable on the command line. Before that —

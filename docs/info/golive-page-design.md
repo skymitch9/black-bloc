@@ -303,11 +303,13 @@ surprise a reader of the body.
 12. **Recent streams is unchanged except one cell:** *How* reads `source + also_source` when the
     co-stream fields are present. The mock's five-column Recent table was NOT adopted — the
     design's own table says "unchanged", and today's seven columns carry strictly more (Title,
-    Mode then). ⚠️ **AMENDED 2026-09-21 by branch `mode-column`:** the **Mode then** column is
+    Mode then). ⚠️ **AMENDED 2026-09-21 by branch `mode-column`, ✅ LIVE v154 (2026-09-21 20:08,
+    merge `f3f16dd0`, 1 commit, sweep 738, rendered headless):** the **Mode then** column is
     gone (owner, after asking what it meant: *"yes drop the mode column too"* — every row read
     `on` since test mode lifted 2026-09-18, so the column was noise). The table is back to six
     columns; the **Ended** cell carries `badge('rehearsal', 'warn')` when `row.mode !== 'on'`, so a
-    shadow-era row is still told apart without a column that repeated on every line.
+    shadow-era row is still told apart without a column that repeated on every line. ⚠️ Nothing
+    has met Discord or been opened in a browser against production since the deploy.
 13. **`joinStreamers`'s `live` can be `'both'`,** which §B1's row shape
     (`'twitch' | 'youtube' | null`) does not list. Required by the co-stream brief. Rows also
     carry three fields §B1 does not name — `listed`, `last_live_at`, `live_count` — because the
@@ -369,11 +371,17 @@ fixture in `golive-join.test.mjs` went **48 → 49**. Design: [`golive-boot-swee
 
 ## Follow-up 2026-09-21: the settings read right
 
+> ✅ **LIVE v154 (2026-09-21 20:08)** — merge `ef7c5fd5`, release commit `52c48235`, 4 commits,
+> sweep **739**. ⚠️ Nothing in it has met Discord — no page render since the deploy has been
+> checked against production, and the render below is against the local mock only.
+
 Owner, 17:3x, verbatim: *"in the everything else section of golive there are duplicate settings it
 seems, also what each of the settings does isnt clear"*. Branch `golive-settings-help`, worktree
 `C:/lcw/bb-golive-settings-help`. Built by an Opus agent that hit five `529 Overloaded` errors and
 left a checkpoint commit (`cf4c74b`) plus three files edited on top; finished by a second agent
-(commits `71a3a37`, `dfda995`).
+(commits `71a3a37`, `dfda995`). ⚠️ **The Opus agent's five `529`/`500` drops (17:5x–18:3x) and its
+checkpoint-and-handoff recovery are now [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) **KI-38**,
+`WATCHING`.**
 
 **What "duplicate" measured as.** `placeSettings` (§ above) has always deduped by key — `placed.has(key)`
 skips a key already placed, so no key was ever literally drawn TWICE in one page. What the owner saw was
@@ -467,4 +475,5 @@ registry's exact wording (commit `dfda995`).
   visual regression, but it was not looked at.
 - **The other 59 non-golive/pings/youtube registry keys' help text is unaudited** — `contract.json`'s
   own comment already flags this as known and out of scope.
-- **Not merged, not deployed.** This branch only; the conductor restarts the mock after merge.
+- ✅ **Merged and deployed** — merge `ef7c5fd5`, LIVE as v154 (2026-09-21 20:08). No browser has
+  rendered the live page against production since; the render above is against the local mock.
