@@ -2824,8 +2824,8 @@ KEY_HELP.update(
     {
         GOLIVE_AUTOLINK_VIDEO_KEY: (
             "whether a Discord status carrying a YouTube VIDEO address is read to find whose "
-            "channel the video is on. off by default, because the page it has to read can "
-            "change and the video playing is not always the streamer's own; on links the "
+            "channel the video is on. Off by default, because it reads YouTube's page, which "
+            "can change, and the video playing is not always the streamer's own; on links the "
             "person to the channel behind the video"
         ),
     }

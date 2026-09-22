@@ -424,7 +424,9 @@ const SPOTLIGHT = [
 //   python -c "from black_bloc import settings_store as s; print([k for k in s.KEY_TYPES if
 //              s.namespace_of(k) in ('golive','pings','youtube')])"
 // The catch-all is what keeps this satisfiable: a key added tomorrow appears in Everything
-// else rather than vanishing from the page, and the last assertion below pins that.
+// else rather than vanishing from the page, and the last assertion below pins that. Since
+// 2026-09-21 every one of the 54 has a NAMED home, so the catch-all is empty and the page
+// does not draw it — it exists for the key nobody has added yet.
 const NAMESPACE_KEYS = [
   'golive_mode', 'golive_channel_id', 'golive_template', 'golive_live_author',
   'golive_end_template', 'golive_end_author', 'golive_end_keep_mention', 'golive_live_role_id',
@@ -516,5 +518,7 @@ process.stdout.write(
     + 'has a row; two open sessions are one row; a co-stream says both platforms; an ambiguous '
     + 'address is refused in words; a spotlighted channel with no member is its own row and one '
     + 'that IS a linked login is not a second; a channel row carries its YouTube link, its '
-    + 'opt-out and the side its session opened on; all 54 settings keys land in exactly one place\n',
+    + 'opt-out and the side its session opened on; all 54 settings keys land in exactly one '
+    + 'NAMED place, no two drawers share a name, every drawer says what is inside it, and the '
+    + 'Everything else catch-all is empty\n',
 );
