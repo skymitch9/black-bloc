@@ -468,22 +468,41 @@ const NAMESPACE_KEYS = [
   same(`${where} — the strip holds the three modes`, sorted(placed.strip.map((one) => one.key)), sorted(STRIP_KEYS));
   same(`${where} — the announcement holds the wording`, sorted(placed.wording.map((one) => one.key)), sorted(WORDING_KEYS));
 
+  const drawerOf = (id) => DRAWERS.find((one) => one.id === id);
   const home = (id) => sorted(placed.drawers.find((one) => one.id === id).specs.map((one) => one.key));
-  same(`${where} — who gets announced`, home('who'), sorted(DRAWERS[0].keys));
-  same(`${where} — where it goes`, home('where'), sorted(DRAWERS[1].keys));
-  same(`${where} — how streams are spotted`, home('spotted'), sorted(DRAWERS[3].keys));
-  is(`${where} — ping roles holds every pings_* but the mode and the log level`, home('pings').length, 11);
-  ok(`${where} — and pings_log_level is not one of them`, !home('pings').includes('pings_log_level'), 'pings_log_level is in the Ping roles drawer');
-  same(`${where} — the catch-all holds what nobody claimed`, home('rest'), sorted([
-    'golive_log_level', 'golive_panel_minutes', 'pings_log_level',
-    'youtube_log_level', 'youtube_panel_minutes',
-    'golive_costream_mode', 'golive_costream_template', 'golive_costream_author',
-  ]));
+  same(`${where} — who gets announced`, home('who'), sorted(drawerOf('who').keys));
+  same(`${where} — where the announcement goes`, home('where'), sorted(drawerOf('where').keys));
+  same(`${where} — how a stream is spotted`, home('spotted'), sorted(drawerOf('spotted').keys));
+  same(`${where} — spotlighted channels`, home('spotlight'), sorted(drawerOf('spotlight').keys));
+  same(`${where} — two platforms at once`, home('costream'), sorted(drawerOf('costream').keys));
+  same(`${where} — slash panels and log lines`, home('panels'), sorted(drawerOf('panels').keys));
+  is(`${where} — ping roles holds every pings_* but the mode, the log level and the panel`, home('pings').length, 10);
+  for (const key of ['pings_mode', 'pings_log_level', 'pings_panel_minutes']) {
+    ok(`${where} — ${key} is not in the Ping roles drawer`, !home('pings').includes(key), `${key} is in the Ping roles drawer`);
+  }
+
+  // ⚠️ The owner, 2026-09-21: *"in the everything else section of golive there are duplicate
+  // settings it seems"*. It was NOT a key drawn twice — the loop above has always forbidden
+  // that — it was a SECTION called Everything else whose fifth drawer was ALSO called
+  // Everything else, and eight stragglers inside it whose labels read as near-copies of each
+  // other. Every key now has a named home, so the catch-all is empty and the page does not draw
+  // it; it stays in DRAWERS because the assertion below is the whole reason the test is
+  // satisfiable at all.
+  same(`${where} — nothing is left over, so Everything else is empty`, home('rest'), []);
+  for (const one of DRAWERS) {
+    ok(`${where} — the ${one.title} drawer says what is inside it`,
+      typeof one.note === 'string' && one.note.split(' ').length >= 8,
+      `the ${one.id} drawer has no note worth reading`);
+  }
+  const titles = DRAWERS.map((one) => one.title);
+  is(`${where} — no two drawers share a name`, new Set(titles).size, titles.length);
 
   const tomorrow = placeSettings([{ key: 'golive_brand_new_thing', type: 'text', value: null }]);
   same(`${where} — a key added tomorrow lands in the catch-all, never nowhere`,
     tomorrow.drawers.find((one) => one.id === 'rest').specs.map((one) => one.key),
     ['golive_brand_new_thing']);
+  is(`${where} — and the catch-all carries its note through placeSettings`,
+    tomorrow.drawers.find((one) => one.id === 'rest').note, drawerOf('rest').note);
 }
 
 process.stdout.write('golive-join: the streamers join against its fixtures\n');

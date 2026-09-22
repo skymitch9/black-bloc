@@ -493,6 +493,16 @@ async function checkSettings() {
       fail(`GET /api/settings[${key}]`, `claims min ${row.min}; the registry bounds no such thing`);
     }
   }
+  // The WORDS, the same way. The owner read the Go-live page on 2026-09-21 and could not tell
+  // what the settings did; the plain sentences went into KEY_HELP, and the mock's own copy had
+  // already drifted on ten of these keys, so one text is pinned here rather than two.
+  for (const [key, said] of Object.entries(wanted.help)) {
+    const row = rows.get(key);
+    if (!row) fail('GET /api/settings', `has no ${key} row at all`);
+    else if (row.help !== said) {
+      fail(`GET /api/settings[${key}]`, `help is ${JSON.stringify(row.help)}, not the registry's ${JSON.stringify(said)}`);
+    }
+  }
 }
 
 // The roster foldout's walk, without a DOM: the list a no-role form keeps, one member taken

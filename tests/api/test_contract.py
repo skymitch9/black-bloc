@@ -898,6 +898,45 @@ def test_the_contracts_settings_block_is_the_registry_and_not_a_second_copy():
     assert block["max"] == {key: KEY_MAX[key] for key in sorted(KEY_MAX)}
 
 
+GOLIVE_PAGE_NAMESPACES = ("golive", "pings", "youtube")
+
+
+def golive_page_keys() -> list[str]:
+    """The keys the Go-live page's settings drawers draw, which is what `help` is scoped to."""
+    from black_bloc.settings_store import KEY_TYPES, namespace_of
+
+    return sorted(key for key in KEY_TYPES if namespace_of(key) in GOLIVE_PAGE_NAMESPACES)
+
+
+def test_the_contracts_help_block_is_the_registrys_own_words():
+    """Owner, 2026-09-21: *"what each of the settings does isnt clear"*. The fix put plain
+    sentences in KEY_HELP, which the Settings page, `/settings` and the Go-live page all read —
+    and the mock kept a SECOND copy that had already drifted on ten of these keys. This block is
+    the table both halves read, so one text cannot silently become two again."""
+    from black_bloc.settings_store import KEY_HELP
+
+    block = contract()["settings"]["help"]
+
+    assert sorted(block) == golive_page_keys()
+    assert block == {key: KEY_HELP[key] for key in golive_page_keys()}
+
+
+def test_every_golive_page_help_line_says_what_the_setting_does():
+    """A help line that is the key name back again, or four words long, is what the owner was
+    looking at. Ten words is the floor, not the target."""
+    from black_bloc.settings_store import KEY_HELP
+
+    thin = {
+        key: KEY_HELP.get(key, "")
+        for key in golive_page_keys()
+        if len(KEY_HELP.get(key, "").split()) < 10
+    }
+    assert thin == {}
+
+    named = [key for key in golive_page_keys() if KEY_HELP[key].strip() == key.replace("_", " ")]
+    assert named == []
+
+
 def test_the_real_settings_index_bounds_exactly_what_the_contract_says(client, sign_in, web, wf):
     """The other half of the same guard, against the real router rather than the mock."""
     sign_in(client)
@@ -912,6 +951,19 @@ def test_the_real_settings_index_bounds_exactly_what_the_contract_says(client, s
     assert core == sorted([*block["core_keys"], "core_log_level"])
     assert {key: row["max"] for key, row in rows.items() if "max" in row} == block["max"]
     assert {key: row["min"] for key, row in rows.items() if "min" in row} == block["min"]
+
+
+def test_the_real_settings_index_carries_the_help_the_contract_says(client, sign_in, web, wf):
+    """The other half again: the route the dashboard actually reads, not just the dict."""
+    sign_in(client)
+    wanted = contract()["settings"]["help"]
+    rows = {
+        row["key"]: row
+        for found in client.get("/api/settings").json().values()
+        for row in found
+    }
+
+    assert {key: rows[key]["help"] for key in wanted} == wanted
 
 
 def test_the_mock_groups_a_key_the_way_the_registry_does():

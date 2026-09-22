@@ -124,8 +124,8 @@ const END_LIVE_HELP = '{live} is the sentence exactly as it was posted, so “{l
   + 'ended” adds to the end of it and a wording without {live} replaces the whole post. The '
   + 'rest of the fields are {name} {game} {title} {url} {platform} {duration}. The announcement '
   + 'is always edited once the stream is over.';
-const END_NO_KEYS = 'The bot did not report a golive_end_template key, so the ending is edited '
-  + 'from Everything else rather than guessed at here.';
+const END_NO_KEYS = 'The bot did not report a golive_end_template key, so the ending cannot be '
+  + 'edited here rather than guessed at.';
 const END_WORDING_WHERE = 'Once the stream is over';
 const NO_TEMPLATE = 'The bot did not report a golive_template key, so this editor is not shown '
   + 'rather than guessed at.';
@@ -153,7 +153,13 @@ const SAMPLES = {
 };
 const ENDED_EXTRA = { duration: '2 h 10 min' };
 
-const REST_NOTE = 'The settings nobody touches weekly, and the log. Closed by default.';
+const SETTINGS_TITLE = 'Settings and logs';
+const SETTINGS_NOTE = 'Every go-live, YouTube and ping-role setting, in a drawer named for the '
+  + 'question it answers, plus the log. Each drawer says what is inside before you open it, and '
+  + 'each setting says what it does. All closed by default.';
+const LOG_DRAWER_TITLE = 'Log · both platforms and ping roles';
+const LOG_DRAWER_NOTE = 'What the bot actually did: announcements, links, ping roles and every '
+  + 'refusal, filtered by feature with the chips inside.';
 const NO_SETTINGS_HERE = 'The bot registers no settings under this heading.';
 const SETUP_HELP = 'Makes (or reuses) the Events role, points both feeds at it and puts it on '
   + 'the Notifications panel. Post that panel from the Role menus tab.';
@@ -253,11 +259,14 @@ function chipButton(label, pressed, onPick) {
   });
 }
 
-function drawer(title, children, { open = false } = {}) {
+function drawer(title, children, { open = false, note = null } = {}) {
   return el('details', { class: 'gldrawer', open: open || undefined }, [
     el('summary', { class: 'gldrawer-head' }, [
       icon('chevronDown', 14, 'sect-mark'),
-      el('span', { text: title }),
+      el('span', { class: 'gldrawer-heads' }, [
+        el('span', { class: 'gldrawer-title', text: title }),
+        note ? el('span', { class: 'gldrawer-note', text: note }) : null,
+      ].filter(Boolean)),
     ]),
     el('div', { class: 'gldrawer-body' }, [].concat(children).filter(Boolean)),
   ]);
@@ -679,7 +688,8 @@ async function roleMoves(row, say) {
         title: `Take ${row.name || row.user_id}'s ping role away?`,
         body: [
           'Everybody who followed them stops being pinged.',
-          'Whether the Discord role itself is deleted is pings_fan_role_delete, in Everything else.',
+          'Whether the Discord role itself is deleted is pings_fan_role_delete, in Settings and '
+            + 'logs ▸ Ping roles.',
         ],
         confirmLabel: 'Remove',
       });
@@ -1508,38 +1518,36 @@ async function logDrawer() {
     }
   };
   paint();
-  return drawer('Log · both platforms and ping roles', [chips, ...holders.map((one) => one.node)]);
+  return drawer(LOG_DRAWER_TITLE, [chips, ...holders.map((one) => one.node)], {
+    note: LOG_DRAWER_NOTE,
+  });
 }
 
 async function restSection({ placed, onboarding, status, pingHolder }) {
-  const group = section('Everything else', REST_NOTE, { count: placed.drawers.length + 1 });
+  const shown = placed.drawers.filter((one) => one.id !== 'rest' || one.specs.length > 0);
+  const group = section(SETTINGS_TITLE, SETTINGS_NOTE, { count: shown.length + 1 });
   const pingSay = notice();
   const drawers = [];
-  for (const one of placed.drawers) {
+  for (const one of shown) {
     const panel = await settingsPanel(one.specs, {
       onSaved: () => refresh(),
       where: one.title,
       empty: NO_SETTINGS_HERE,
     });
+    const head = `${one.title} · ${settingWord(one.specs.length)}`;
     if (one.id === 'pings') {
-      const node = drawer(
-        `${one.title} · ${settingWord(one.specs.length)} · the shared roles · Discord onboarding`,
-        [
-          panel,
-          setupCard(pingSay),
-          onboardingCard(pingSay, onboarding),
-          sayAgain('pings.setup', sayAgain('pings.raidtrain_setup', sayAgain('pings.onboarding', pingSay))),
-        ],
-      );
+      const node = drawer(`${head} · the shared roles · Discord onboarding`, [
+        panel,
+        setupCard(pingSay),
+        onboardingCard(pingSay, onboarding),
+        sayAgain('pings.setup', sayAgain('pings.raidtrain_setup', sayAgain('pings.onboarding', pingSay))),
+      ], { note: one.note });
       pingHolder.node = node;
       drawers.push(node);
     } else if (one.id === 'spotted') {
-      drawers.push(drawer(
-        `${one.title} · ${settingWord(one.specs.length)} and the probe`,
-        [panel, probeCard(status)],
-      ));
+      drawers.push(drawer(`${head} and the probe`, [panel, probeCard(status)], { note: one.note }));
     } else {
-      drawers.push(drawer(`${one.title} · ${settingWord(one.specs.length)}`, [panel]));
+      drawers.push(drawer(head, [panel], { note: one.note }));
     }
   }
   group.body.append(...drawers, await logDrawer());

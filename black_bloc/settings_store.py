@@ -696,11 +696,25 @@ KEY_HELP: dict[str, str] = {
     "log_channel_id": "where Black Bloc posts what it did",
     "staff_channel_id": "the channel whose viewers count as staff",
     "role_menu_channel_id": "the channel /rolemenu offers first when a menu is posted",
-    "golive_mode": "off, shadow (log only) or on (post go-live announcements)",
-    "golive_channel_id": "where go-live announcements are posted",
-    "golive_template": "the announcement wording; {name} {game} {title} {url} {platform}",
+    "golive_mode": (
+        "whether a stream is announced at all. off watches nobody; shadow watches and logs what "
+        "it would have posted without posting it; on posts the announcement. Off by default, so "
+        "nothing reaches the server until somebody turns it on"
+    ),
+    "golive_channel_id": (
+        "the channel every go-live announcement is posted in. Blank — the default — means "
+        "nothing is posted anywhere however golive_mode is set, so this is the one setting "
+        "go-live cannot work without"
+    ),
+    "golive_template": (
+        "the sentence a go-live announcement is made of. It takes {name} {game} {title} {url} "
+        "{platform}, and {platform} fills itself in as Twitch or YouTube so one wording serves "
+        "both platforms"
+    ),
     GOLIVE_LIVE_AUTHOR_KEY: (
-        "the card's top line while they are live; {name} {platform}; blank keeps 'is now live on'"
+        "the small top line of the announcement card while the stream is still running. It "
+        "takes {name} and {platform} only, because a stream that has not finished has no length "
+        "yet; blank keeps 'is now live on'"
     ),
     "golive_end_template": (
         "the announcement once the stream is over, and the only place that wording lives. "
@@ -710,88 +724,117 @@ KEY_HELP: dict[str, str] = {
         "nothing; wording that cannot be rendered falls back to the default"
     ),
     "golive_end_author": (
-        "the card's top line once the stream is over; {name} {platform} {duration}; blank "
-        "keeps 'was live on'"
+        "the small top line of the announcement card once the stream is over. It takes {name} "
+        "{platform} {duration}; blank keeps 'was live on'"
     ),
     "golive_end_keep_mention": (
-        "on keeps the role mention at the front of the edited announcement; off drops it — "
-        "nobody is pinged by an edit either way"
+        "whether the role mention stays at the front of the announcement after it is rewritten "
+        "to say the stream ended. off — the default — drops it. Nobody is pinged by an edit "
+        "either way, so this is only about how the finished post reads"
     ),
     GOLIVE_COSTREAM_MODE_KEY: (
-        "on names both platforms in one announcement when somebody streaming on Twitch also "
-        "goes live on YouTube (or the other way round) and edits the post that is already "
-        "there; off holds the second platform back, as it did before"
+        "what happens when somebody already live on one platform goes live on the other as "
+        "well. on — the default — edits the announcement that is already out so ONE post names "
+        "both platforms; off leaves the first post alone and the second platform is not "
+        "announced at all"
     ),
     GOLIVE_COSTREAM_TEMPLATE_KEY: (
-        "the announcement wording while two platforms are live; {name} {game} {title} {url} "
-        "{platform} {also_url} {also_platform}. Twitch is always written first and is the only "
-        "link Discord previews — {also_url} is always posted with its preview suppressed"
+        "the sentence used while somebody is live on two platforms at once. It takes {name} "
+        "{game} {title} {url} {platform} {also_url} {also_platform}. Twitch is always written "
+        "first and is the only link Discord shows a preview for — the second link is always "
+        "posted with its preview suppressed"
     ),
     GOLIVE_COSTREAM_AUTHOR_KEY: (
-        "the card's top line while two platforms are live; {name} {game} {title} {url} "
-        "{platform} {also_url} {also_platform}"
+        "the small top line of the announcement card while two platforms are live. It takes "
+        "{name} {game} {title} {url} {platform} {also_url} {also_platform}"
     ),
-    "golive_live_role_id": "role given while someone is streaming",
-    "golive_require_role_id": "only announce people who have this role",
-    "golive_ignore_role_id": "never announce people who have this role",
-    "golive_cooldown_minutes": "minutes before the same person is announced again",
-    "golive_ping_role_id": "role mentioned in front of every go-live announcement",
-    "golive_max_session_hours": "hours before a stream still marked live is closed anyway",
+    "golive_live_role_id": (
+        "a role Black Bloc puts on somebody while they are streaming and takes off again when "
+        "the stream ends. Blank — the default — means no role is handed out at all"
+    ),
+    "golive_require_role_id": (
+        "when this is set, only people wearing that role are ever announced. Blank — the "
+        "default — announces anybody the bot sees streaming"
+    ),
+    "golive_ignore_role_id": (
+        "anybody wearing this role is never announced, whatever else would have allowed it. "
+        "Blank — the default — means nobody is held back this way"
+    ),
+    "golive_cooldown_minutes": (
+        "how many minutes must pass before the same person is announced a second time, so a "
+        "stream that drops and comes back does not get two posts. 60 by default"
+    ),
+    "golive_ping_role_id": (
+        "the role mentioned in front of every go-live announcement, so the people who asked for "
+        "streaming pings get one. Blank — the default — posts the announcement with no mention "
+        "at all"
+    ),
+    "golive_max_session_hours": (
+        "a safety net: a stream still marked live after this many hours is closed anyway, in "
+        "case the bot never saw it end. 12 by default"
+    ),
     "golive_embed": (
-        "post the announcement as an embed with the game's art; off = the sentence only"
+        "how the announcement is drawn. on — the default — posts an embed carrying the game's "
+        "art and the stream's title; off posts the sentence on its own"
     ),
     "golive_boot_sweep": (
-        "true walks every member's Discord presence at boot and announces anyone already "
-        "streaming with no session; false trusts presence updates alone, as before v149"
+        "whether a restart looks for people who are ALREADY streaming. on — the default — walks "
+        "every member's Discord status the moment the bot starts and announces anyone live with "
+        "no session open, so a restart mid-stream does not lose the announcement; off waits for "
+        "the next status change"
     ),
     "pings_mode": (
-        "off, or on (members can opt in to go-live and event pings, and a streamer can have a "
-        "role of their own that only their followers wear)"
+        "whether members can opt in to pings at all. off — the default — stops every opt-in and "
+        "every ping, though nobody loses a role they already wear; on lets members take the "
+        "shared Events role and follow individual streamers"
     ),
     "pings_events_role_name": (
-        "what **Set up the Events role** on `/pings` calls the one opt-in role for go-live and "
-        "event pings when it has to make it; an existing role of that name is reused rather than "
-        "duplicated"
+        "what **Set up the Events role** on `/pings` calls the one shared opt-in role for "
+        "go-live and event pings when it has to make it. *Events* by default; a role of that "
+        "name that already exists is reused rather than duplicated"
     ),
     "pings_fan_role_creation": (
-        "when a streamer's ping role is made: follow (the first person to follow them on "
-        "`/pings` makes it, which is the default so a role exists only where somebody wants "
-        "it), self (the streamer, with **Start my own ping role** on `/pings`), staff (only an "
-        "Auntie/Uncle, from `/pings` ▸ **Streamers…**), or auto (one is made the moment a Twitch "
-        "channel is linked). Staff can always do it for anybody, whichever this says"
+        "who can bring a streamer's own follower role into being. follow — the default — makes "
+        "it the first time somebody follows them on `/pings`, so a role exists only where "
+        "somebody wants one; self lets the streamer make their own with **Start my own ping "
+        "role**; staff means only an Auntie or Uncle can, from `/pings` ▸ **Streamers…**; auto "
+        "makes one the moment a Twitch channel is linked. Staff can always do it for anybody, "
+        "whichever this says"
     ),
     "pings_fan_role_template": (
-        "what a streamer's own ping role is called; {name} is their display name at the moment "
-        "the role is made and is the only field there is"
+        "what a streamer's own follower role is called. {name} is their display name at the "
+        "moment the role is made and is the only field there is; *{name} pings* by default"
     ),
     "pings_fan_role_on_unlink": (
-        "what happens to a streamer's ping role when they unlink Twitch or opt out of "
-        "announcements: keep leaves it alone (nothing is announced, so nobody is pinged), delete "
-        "takes the role off the server"
+        "what happens to a streamer's follower role when they unlink Twitch or opt out of "
+        "announcements. keep — the default — leaves it alone, and since nothing is announced "
+        "nobody is pinged by it; delete takes the role off the server"
     ),
     "pings_fan_role_delete": (
-        "true to delete the Discord role itself when a streamer's ping role is removed; false "
-        "forgets the role here and leaves it on the server for somebody to tidy by hand"
+        "whether the Discord role itself goes when a streamer's follower role is removed here. "
+        "on — the default — deletes it from the server; off forgets it here and leaves the role "
+        "for somebody to tidy by hand"
     ),
     "pings_streamer_stale_days": (
-        "days without a go-live before somebody leaves the streamer list `/pings` ▸ **Follow a "
-        "streamer…** offers; their ping role is kept while anybody still wears it, and one more "
-        "go-live puts them back on"
+        "how many days without a go-live before somebody drops off the streamer list `/pings` ▸ "
+        "**Follow a streamer…** offers. 90 by default. Their role is kept while anybody still "
+        "wears it, and one more go-live puts them back on the list"
     ),
     "pings_empty_role_days": (
-        "days a streamer's ping role that nobody wears survives before Black Bloc deletes it, so "
-        "the server's role count tracks who is actually followed; a role somebody wears is never "
-        "deleted by this"
+        "how many days a streamer's follower role that NOBODY wears survives before Black Bloc "
+        "deletes it, so the server's role count tracks who is actually followed. 30 by default; "
+        "a role somebody wears is never deleted by this"
     ),
     "pings_onboarding_managed": (
-        "true to let Black Bloc keep its two Discord onboarding prompts in step with the Events, "
-        "raid-train and streamer roles; false leaves the prompts exactly as they are and Black "
-        "Bloc never writes to onboarding again. Only does anything on a Community server"
+        "whether Black Bloc keeps its two Discord onboarding prompts in step with the Events, "
+        "raid-train and streamer roles. on — the default — rewrites them as those roles change; "
+        "off leaves the prompts exactly as somebody left them and Black Bloc never writes to "
+        "onboarding again. Only does anything on a Community server"
     ),
     "pings_onboarding_prompt_title": (
-        "what Black Bloc's first onboarding prompt is called; it is also how Black Bloc knows "
-        "which prompts are its own, so changing it makes a fresh pair and leaves the old ones "
-        "for somebody to delete by hand"
+        "what Black Bloc's first onboarding prompt is called — *What should ping you?* by "
+        "default. It is also how Black Bloc recognises which prompts are its own, so changing "
+        "it makes a fresh pair and leaves the old ones for somebody to delete by hand"
     ),
     "pings_onboarding_option_cap": (
         "how many streamers the **Which streamers?** onboarding prompt lists before it says how "
@@ -1544,8 +1587,9 @@ KEY_HELP.update(
             "buttons simply stop working with no footer to explain it"
         ),
         "youtube_unlink_dms_them": (
-            "true to DM a member the reason when STAFF forget their YouTube channel for them; a "
-            "member unlinking their own channel is never DMed"
+            "whether a member is told why their YouTube channel was forgotten. on — the "
+            "default — DMs them the reason when STAFF do it; somebody unlinking their own "
+            "channel is never DMed"
         ),
     }
 )
@@ -1591,14 +1635,20 @@ KEY_MAX_REASON["youtube_live_end_misses"] = (
 KEY_HELP.update(
     {
         "youtube_live_mode": (
-            "off, shadow (log what would be announced), or on — a linked YouTube channel going "
-            "live is announced through the go-live feature, exactly like a Twitch stream"
+            "whether a linked YouTube channel going live is announced. off probes nothing at "
+            "all; shadow probes and logs what it would have posted; on announces it through the "
+            "go-live feature exactly like a Twitch stream — so golive_mode and "
+            "golive_channel_id still decide whether anybody sees it. Off by default"
         ),
         "youtube_live_poll_minutes": (
-            "how often linked YouTube channels are probed for a live stream"
+            "how many minutes between asking YouTube whether the linked channels are live. 5 by "
+            "default; a shorter gap notices a stream sooner and spends more of the daily API "
+            "quota when a YOUTUBE_API_KEY is set"
         ),
         "youtube_live_end_misses": (
-            "how many probes in a row must read offline before a stream is treated as ended"
+            "how many probes in a row must read offline before a YouTube stream is treated as "
+            "ended and its announcement rewritten. 2 by default, so one bad answer from YouTube "
+            "does not end a stream that is still running"
         ),
     }
 )
@@ -1715,67 +1765,73 @@ KEY_MAX_REASON[SPOTLIGHT_EVENT_SLACK_KEY] = (
 KEY_HELP.update(
     {
         SPOTLIGHT_MODE_KEY: (
-            "off, shadow (post the rehearsal copy where shadow_channel_id points), or on — "
-            "spotlighted Twitch channels are announced, bumped and pinned in the go-live "
-            "channel even though nobody behind them is in this server"
+            "whether Twitch channels with nobody here behind them are announced at all. off "
+            "ignores them; shadow posts the rehearsal copy where shadow_channel_id points; on "
+            "announces, pins and reminds in the go-live channel like any other stream"
         ),
         SPOTLIGHT_POLL_MINUTES_KEY: (
-            "how often Twitch is asked whether the spotlighted channels are live; one batched "
-            "call covers the whole list"
+            "how many minutes between asking Twitch whether the spotlighted channels are live. "
+            "One batched call covers the whole list, so a shorter gap costs little; 5 by default"
         ),
         SPOTLIGHT_END_MISSES_KEY: (
-            "how many looks in a row must read offline before a spotlighted stream is treated "
-            "as over"
+            "how many looks in a row must come back offline before a spotlighted stream is "
+            "treated as over and its announcement rewritten. 2 by default, so one hiccup on "
+            "Twitch's side does not end a stream that is still running"
         ),
         SPOTLIGHT_BUMP_HOURS_KEY: (
-            "hours between reminders that a spotlighted stream is still going; a row can set "
-            "its own instead. 4 by default, which is the owner's number for a GDQ marathon"
+            "how many hours between reminders that a long spotlighted stream is still going. 4 "
+            "by default, the owner's number for a GDQ marathon; any one channel's row can set "
+            "its own instead"
         ),
         SPOTLIGHT_BUMP_TEMPLATE_KEY: (
-            "what a reminder says while a spotlighted stream runs on; {name} {game} {title} "
-            "{url} {duration}. It is a new short message, never pinned and never a ping"
+            "what a reminder says while a spotlighted stream runs on. It takes {name} {game} "
+            "{title} {url} {duration}. Each one is a new short message, never pinned, and never "
+            "a ping unless spotlight_bump_pings says otherwise"
         ),
         SPOTLIGHT_BUMP_CLEANUP_KEY: (
-            "true to delete a spotlighted stream's reminders when it ends, so the channel is "
-            "left with the one announcement"
+            "whether a spotlighted stream's reminders are deleted when it ends. on — the "
+            "default — leaves the channel with the one announcement; off leaves every reminder "
+            "where it was posted"
         ),
         SPOTLIGHT_BUMP_PINGS_KEY: (
-            "true if a reminder mentions the go-live role and the channel's own ping role as "
-            "the first announcement did; false — the default — because a ping every four "
-            "hours through a 24-hour marathon is what makes people mute the channel"
+            "whether a reminder mentions the go-live role and the channel's own ping role, the "
+            "way the first announcement did. off by default: a ping every few hours through a "
+            "24-hour marathon is what makes people mute the channel"
         ),
         SPOTLIGHT_PIN_KEY: (
-            "true if a channel added to the spotlight list has its announcement pinned while "
-            "it streams; each row can say otherwise"
+            "whether a channel newly added to the spotlight list has its announcement pinned "
+            "while it streams. on by default; each channel's own row can say otherwise"
         ),
         SPOTLIGHT_DEFAULT_DAYS_KEY: (
-            "how long a newly spotlighted channel lasts before it is purged, unless it is kept "
-            "for ever"
+            "how many days a newly spotlighted channel stays on the list before it is purged. 7 "
+            "by default, and a row can be kept for ever instead"
         ),
         SPOTLIGHT_EVENT_SLACK_KEY: (
-            "hours past an approved event's end that its spotlight row survives, so a marathon "
-            "that overruns is still announced"
+            "how many hours past an approved event's end its spotlight row survives, so a "
+            "marathon that overruns is still announced. 2 by default; 0 drops the row the "
+            "moment the event's end time passes"
         ),
         CHANNEL_SPOTLIGHT_DEFAULT_KEY: (
-            "true if a channel added through **Add a streamer** with nobody behind it is "
-            "spotlighted from the start — pinned while it streams and reminded every few "
-            "hours; false — the default — announces it like any other stream, and its own "
-            "row's **Spotlight on** adds the pin and the reminders whenever staff want them"
+            "whether a channel added through **Add a streamer** with nobody here behind it is "
+            "spotlighted from the start — its announcement pinned while it streams and a "
+            "reminder every few hours. off by default: it is announced like any other stream, "
+            "and its own row's **Spotlight on** adds the pin and the reminders whenever staff "
+            "want them"
         ),
         CHANNEL_OPTOUT_POST_KEY: (
-            "what happens to an announcement that is already out when a channel is opted out "
-            "of announcements mid-stream: end — the default — unpins it and edits it to the "
-            "ended wording exactly as any stream end does; delete removes the post outright; "
-            "leave takes the pin off and leaves the words as they were posted. The session is "
-            "closed either way, so no reminder follows and nothing waits on Twitch"
+            "what becomes of an announcement already posted when a CHANNEL is opted out of "
+            "announcements mid-stream. end — the default — unpins it and rewrites it to the "
+            "ended wording, exactly as a real stream end does; delete removes the post "
+            "outright; leave takes the pin off and leaves the words as they were posted. The "
+            "session is closed either way, so no reminder follows and nothing waits on Twitch"
         ),
         MEMBER_OPTOUT_POST_KEY: (
-            "what happens to an announcement that is already out when a MEMBER opts out of "
-            "announcements mid-stream — the same three treatments the channel key has: end — "
-            "the default — unpins it and edits it to the ended wording exactly as any stream "
-            "end does; delete removes the post outright; leave takes the pin off and leaves the "
-            "words as they were posted. The session is closed either way, so the live role comes "
-            "off and nothing waits on Twitch or on their presence"
+            "what becomes of an announcement already posted when a MEMBER opts out of "
+            "announcements mid-stream — the same three treatments the channel key has. end — "
+            "the default — unpins it and rewrites it to the ended wording; delete removes the "
+            "post outright; leave takes the pin off and leaves the words as they were posted. "
+            "The session is closed either way, so their live role comes off and nothing waits "
+            "on Twitch or on their presence"
         ),
     }
 )
@@ -2751,9 +2807,10 @@ KEY_TYPES.update({GOLIVE_AUTOLINK_PRESENCE_KEY: "bool"})
 KEY_HELP.update(
     {
         GOLIVE_AUTOLINK_PRESENCE_KEY: (
-            "true links a member to the Twitch or YouTube channel their Discord status names "
-            "the first time they are announced from it; false leaves linking to the person or "
-            "to staff"
+            "whether being announced also remembers somebody's channel. on — the default — "
+            "links a member to the Twitch or YouTube channel their Discord status names the "
+            "first time they are announced from it, so nobody has to type it in; off leaves "
+            "linking to the person or to staff"
         ),
     }
 )
@@ -2766,10 +2823,10 @@ KEY_TYPES.update({GOLIVE_AUTOLINK_VIDEO_KEY: "bool"})
 KEY_HELP.update(
     {
         GOLIVE_AUTOLINK_VIDEO_KEY: (
-            "true lets a go-live whose Discord status carries a YouTube video link find the "
-            "video's channel and link the person to it; false leaves such a link unread. Off "
-            "by default: it reads YouTube's page, which can change, and a video is not always "
-            "the streamer's own"
+            "whether a Discord status carrying a YouTube VIDEO address is read to find whose "
+            "channel the video is on. off by default, because the page it has to read can "
+            "change and the video playing is not always the streamer's own; on links the "
+            "person to the channel behind the video"
         ),
     }
 )

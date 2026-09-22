@@ -61,8 +61,8 @@ export const LABELS = {
   youtube_panel_minutes: 'How long the /youtube panel stays live',
   youtube_unlink_dms_them: 'Whether staff forgetting somebody’s channel DMs them why',
   youtube_live_mode: 'Whether the bot announces a linked channel going live',
-  youtube_live_poll_minutes: 'How often the bot checks for a live stream',
-  youtube_live_end_misses: 'How many quiet checks end a live stream',
+  youtube_live_poll_minutes: 'How often a linked YouTube channel is checked for a live stream',
+  youtube_live_end_misses: 'How many quiet checks end a YouTube stream',
 
   pings_mode: 'Whether people can opt in to pings',
   pings_events_role_name: 'What the shared Events role is called',
