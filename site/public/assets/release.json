@@ -1,8 +1,7 @@
 {
-  "release": "v153",
-  "commit": "0b3653d",
+  "release": "v154",
+  "commit": "ef7c5fd5",
   "changed_features": [
-    "golive",
-    "youtube"
+    "golive"
   ]
 }
