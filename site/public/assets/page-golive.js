@@ -23,6 +23,7 @@ import {
   icon,
   idsIn,
   keepSaying,
+  localWhen,
   memberPicker,
   modeSwitch,
   nameNode,
@@ -41,6 +42,7 @@ import {
   table,
   templateEditor,
   when,
+  whenField,
 } from './ui.js';
 
 let refresh = () => {};
@@ -215,6 +217,18 @@ const SPOTLIGHT_ADD_HELP = 'For an org channel like GamesDoneQuick, or a maratho
   + 'while it runs, and pins the announcement for the duration.';
 const SPOTLIGHT_DAYS_HELP = 'Days before it is purged. Leave it blank to keep it for ever, the '
   + 'way GamesDoneQuick is kept.';
+// The owner's ask, 2026-09-22: "let me set a date range for start and end time".
+const SPOTLIGHT_DATES = 'Dates';
+const SPOTLIGHT_SAVE_DATES = 'Save dates';
+const SPOTLIGHT_STARTS = 'Starts';
+const SPOTLIGHT_ENDS = 'Ends';
+const SPOTLIGHT_STARTS_HELP = 'When Black Bloc starts watching it. Leave it blank to start now '
+  + '— nothing of its is announced, pinned or reminded before this.';
+const SPOTLIGHT_ENDS_HELP = 'When the row is purged. Leave it blank to keep it for ever, the '
+  + 'way GamesDoneQuick is kept.';
+const SPOTLIGHT_SCHEDULED = 'scheduled';
+const SPOTLIGHT_SCHEDULED_STATE = 'Scheduled — its start has not arrived, so nothing of its '
+  + 'is announced, pinned or reminded yet.';
 const NO_MEMBER = 'Nobody here \u2014 this is a channel Black Bloc watches by name.';
 
 const SPOTLIGHT_ON = 'Spotlight on';
@@ -509,6 +523,7 @@ function youtubeMoves(row, say) {
 }
 
 let pingsTemplate = '{name} pings';
+let spotlightDefaultDays = 7;
 
 const MAKE_ROLE = 'make';
 const PICK_ROLE = 'pick';
@@ -807,6 +822,41 @@ function spotlightMoves(row, say) {
   return moves;
 }
 
+/** The owner's date range: two pickers and one Save, on every channel row's drawer. */
+function datesCard(row, say) {
+  const one = row.spotlight;
+  const starts = whenField({
+    label: SPOTLIGHT_STARTS,
+    value: one.starts_at ? localWhen(one.starts_at) : '',
+    help: SPOTLIGHT_STARTS_HELP,
+  });
+  const ends = whenField({
+    label: SPOTLIGHT_ENDS,
+    value: one.expires_at ? localWhen(one.expires_at) : '',
+    help: SPOTLIGHT_ENDS_HELP,
+  });
+  const go = button(SPOTLIGHT_SAVE_DATES, async () => {
+    const done = await run(
+      say,
+      () => send(`/api/golive/spotlight/${one.id}`, 'PATCH', {
+        starts_at: starts.value() || null,
+        expires_at: ends.value() || null,
+        tz: starts.tz() || ends.tz() || null,
+      }),
+      (found) => found?.message || 'Dates saved.',
+    );
+    if (!done.ok) return;
+    keepSaying('golive.spotlight', say);
+    closeDrawer();
+    refresh();
+  }, { tone: 'quiet' });
+  return card(SPOTLIGHT_DATES, [
+    el('span', { class: 'cell-quiet', text: one.scheduled ? SPOTLIGHT_SCHEDULED_STATE : (one.range || one.until) }),
+    el('div', { class: 'formrow' }, [starts.node, ends.node]),
+    el('div', { class: 'bar' }, [go]),
+  ]);
+}
+
 function channelAnnounceMoves(row, say) {
   const one = row.spotlight;
   const out = one.announce === false;
@@ -899,7 +949,9 @@ function spotlightSaid(row) {
   else if (one.spotlight === false) bits.push(NOT_SPOTLIT_STATE);
   else bits.push(SPOTLIT_STATE.replace('{hours}', String(one.bump_hours || 4)));
   if (one.spotlight !== false) {
+    if (one.scheduled) bits.push(SPOTLIGHT_SCHEDULED_STATE);
     bits.push(one.kept ? SPOTLIGHT_KEPT : `Runs out ${when(one.expires_at)}.`);
+    if (one.starts_at) bits.push(`Starts ${when(one.starts_at)}.`);
     bits.push(CHANNEL_KEEP_MOVES);
   }
   if (one.event_id) bits.push(`Set up for event #${one.event_id}.`);
@@ -959,6 +1011,7 @@ async function rowPanel(row, say) {
       : muted(NOT_LINKED);
     return [
       panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)),
+      datesCard(row, say),
       panelGroup('Twitch', twitchSaid, twitchMoves(row, say).slice(0, 1)),
       panelGroup('YouTube', channelYoutube, channelYoutubeMoves(row, say)),
       panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
@@ -969,7 +1022,7 @@ async function rowPanel(row, say) {
   }
   return [
     ...(row.spotlight
-      ? [panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say))]
+      ? [panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)), datesCard(row, say)]
       // Owner, 2026-09-21: a link is PREFERRED but never required to spotlight, so the move
       // renders whether or not they have one; with no link the form's box starts empty.
       : [panelGroup('Spotlight', el('span', { class: 'cell-quiet', text: SPOTLIGHT_MEMBER_NOTE }), [
@@ -994,6 +1047,12 @@ async function showStreamer(row) {
 
 function announcedCell(row) {
   if (row.live) return el('span', { class: 'cell-kind' }, [badge(LIVE_NOW, 'ok')]);
+  if (row.spotlight && row.spotlight.spotlight !== false) {
+    return el('span', { class: 'cell-quiet' }, [
+      el('span', { text: row.spotlight.announced || row.spotlight.range || row.spotlight.until }),
+      row.spotlight.scheduled ? badge(SPOTLIGHT_SCHEDULED, 'warn') : null,
+    ].filter(Boolean));
+  }
   return muted(READY);
 }
 
@@ -1001,8 +1060,10 @@ function expiresCell(row) {
   // A row whose spotlight is off never expires, so the cell says nothing rather than a date
   // the sweep would ignore.
   if (!row.spotlight || row.spotlight.spotlight === false) return muted('—');
-  if (row.spotlight.kept) return el('span', { class: 'cell-kind' }, [badge('kept for ever', 'ok')]);
-  return el('span', { class: 'cell-quiet', text: row.spotlight.until });
+  if (row.spotlight.kept && !row.spotlight.starts_at) {
+    return el('span', { class: 'cell-kind' }, [badge('kept for ever', 'ok')]);
+  }
+  return el('span', { class: 'cell-quiet', text: row.spotlight.range || row.spotlight.until });
 }
 
 function optedOutCell(row) {
@@ -1028,8 +1089,14 @@ function memberCell(row) {
   ].filter(Boolean));
 }
 
+// A scheduled row is a spotlight that has not started; the chip keeps it, because a staffer
+// looking for "what is spotlighted" means the list they curate, not only the ones running now.
 function spotlightChip(row) {
   return Boolean(row.spotlight) && row.spotlight.spotlight !== false;
+}
+
+function scheduledChip(row) {
+  return Boolean(row.spotlight && row.spotlight.scheduled);
 }
 
 const FILTERS = [
@@ -1041,13 +1108,16 @@ const FILTERS = [
   { id: 'spot', label: 'Spotlight', keep: spotlightChip },
   { id: 'chan', label: 'Channels', keep: (row) => Boolean(row.spotlight) },
   { id: 'kept', label: 'Kept forever', keep: (row) => Boolean(row.spotlight && row.spotlight.kept) },
+  { id: 'sched', label: 'Scheduled', keep: scheduledChip },
 ];
 
 function spotlightWords(rows) {
   const channels = rows.filter((row) => row.spotlight);
   const spots = channels.filter(spotlightChip).length;
   const out = channels.filter((row) => row.spotlight.announce === false).length;
-  return `${channels.length} channel(s) with no member · ${spots} spotlighted · ${out} opted out`;
+  const soon = channels.filter(scheduledChip).length;
+  const said = `${channels.length} channel(s) with no member · ${spots} spotlighted · ${out} opted out`;
+  return soon ? `${said} · ${soon} ${SPOTLIGHT_SCHEDULED}` : said;
 }
 
 const COLUMNS = ['Member', 'Twitch', 'YouTube', 'Ping role', 'Announced', 'Expires', 'Opted out'];
@@ -1150,6 +1220,12 @@ function streamersSection(rows, say) {
   return group.node;
 }
 
+/** The form opens on spotlight_default_days out, which is what the key is for. */
+function defaultEnd() {
+  const days = Number(spotlightDefaultDays) || 7;
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+}
+
 function addSpotlightButton() {
   return button(SPOTLIGHT_ADD_TITLE, () => openSpotlightForm(), { tone: 'quiet' });
 }
@@ -1163,15 +1239,21 @@ function openSpotlightForm(preset = '') {
       placeholder: 'gamesdonequick',
       value: preset || undefined,
     });
-    const days = el('input', { class: 'input', type: 'number', min: '1', placeholder: '7' });
+    const starts = whenField({ label: SPOTLIGHT_STARTS, help: SPOTLIGHT_STARTS_HELP });
+    const ends = whenField({
+      label: SPOTLIGHT_ENDS,
+      value: localWhen(defaultEnd()),
+      help: SPOTLIGHT_ENDS_HELP,
+    });
     const voice = notice();
     const go = button('Spotlight it', async () => {
       const done = await run(
         voice,
         () => send('/api/golive/spotlight', 'POST', {
           twitch_login: box.value,
-          days: days.value.trim() === '' ? null : days.value.trim(),
-          keep: days.value.trim() === '',
+          starts_at: starts.value() || null,
+          expires_at: ends.value() || null,
+          tz: starts.tz() || ends.tz() || null,
           spotlight: true,
         }),
         (found) => found?.message || 'On the list.',
@@ -1185,7 +1267,7 @@ function openSpotlightForm(preset = '') {
     openDrawer(SPOTLIGHT_ADD_TITLE, [
       el('p', { class: 'field-help', text: SPOTLIGHT_ADD_HELP }),
       el('div', { class: 'formrow' }, [field('The name after twitch.tv/', box, SPOTLIGHT_NOTE)]),
-      el('div', { class: 'formrow' }, [field('Days to keep it', days, SPOTLIGHT_DAYS_HELP)]),
+      el('div', { class: 'formrow' }, [starts.node, ends.node]),
       bar([go]),
       voice,
     ]);
@@ -1665,6 +1747,8 @@ async function load() {
   const pings = settingsNamespace(allSettings, 'pings');
   const nameSpec = pings.find((one) => one.key === 'pings_fan_role_template');
   if (nameSpec) pingsTemplate = String(nameSpec.value ?? nameSpec.default ?? pingsTemplate);
+  const daysSpec = golive.find((one) => one.key === 'spotlight_default_days');
+  if (daysSpec) spotlightDefaultDays = Number(daysSpec.value ?? daysSpec.default ?? spotlightDefaultDays);
   const youtube = settingsNamespace(allSettings, 'youtube');
   const placed = placeSettings([...golive, ...pings, ...youtube]);
 

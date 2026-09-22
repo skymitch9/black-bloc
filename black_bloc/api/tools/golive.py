@@ -30,11 +30,16 @@ from ...cogs.content.spotlight import (
     open_session,
     spotlight_channel,
     unlink_youtube,
+    wording_for,
 )
 from ...cogs.content.spotlight import recent_sessions as recent_spotlight_sessions
 from ...golive import optout_said
 from ...logkinds import VIA_WEBSITE
-from ...settings_store import SPOTLIGHT_BUMP_HOURS_KEY
+from ...settings_store import (
+    SPOTLIGHT_BAD_DATE_KEY,
+    SPOTLIGHT_BUMP_HOURS_KEY,
+    SPOTLIGHT_END_BEFORE_START_KEY,
+)
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
 from ..writes import (
@@ -131,10 +136,20 @@ def spotlight_session_row(row: Any) -> dict[str, Any]:
     }
 
 
+def _ranged(said: dict[str, Any]) -> dict[str, Any]:
+    return {name: said[name] for name in ("template", "kept_template") if name in said}
+
+
 def spotlight_row(
-    guild: Any, row: Any, live: Any, sessions: list[Any], held: Any = None
+    guild: Any,
+    row: Any,
+    live: Any,
+    sessions: list[Any],
+    held: Any = None,
+    said: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """A spotlight as the Go-live page reads it: a streamer row with no member behind it."""
+    said = dict(said or {})
     role = guild.get_role(int(held["role_id"])) if held is not None else None
     return {
         "role_id": str(held["role_id"]) if held is not None else None,
@@ -149,9 +164,13 @@ def spotlight_row(
             resolve_one(guild, row["added_by"])["display_name"] if row["added_by"] else None
         ),
         "added_at": row["added_at"],
+        "starts_at": spot.starts_at_of(row),
         "expires_at": row["expires_at"],
         "kept": spot.keeps_forever(row),
+        "scheduled": spot.is_scheduled(row),
         "until": spot.until_words(row),
+        "range": spot.range_words(row, **_ranged(said)),
+        "announced": spot.announced_words(row, **said),
         "bump_hours": row["bump_hours"],
         "pin": bool(row["pin"]),
         "spotlight": spot.is_spotlit(row),
@@ -171,6 +190,7 @@ def spotlight_row(
 async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
     recent = await recent_spotlight_sessions(bot.db, guild.id, 200)
     held = await pings.spotlight_fan_roles(bot.db, guild.id)
+    said = wording_for(bot, guild.id)
     found = []
     for row in await channels_for(bot.db, guild.id):
         mine = [one for one in recent if int(one["spotlight_id"]) == int(row["id"])]
@@ -181,6 +201,7 @@ async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
                 await open_session(bot.db, row["id"]),
                 mine[:SPOTLIGHT_SESSIONS],
                 pings.spotlight_row_for(held, row["id"]),
+                said,
             )
         )
     return found
@@ -196,6 +217,37 @@ async def one_spotlight(bot: Any, guild: Any, spotlight_id: int) -> dict[str, An
         await open_session(bot.db, spotlight_id),
         [],
         await pings.get_spotlight_fan_role(bot.db, guild.id, spotlight_id),
+        wording_for(bot, guild.id),
+    )
+
+
+def bad_date(bot: Any, guild: Any, given: Any) -> Refused:
+    return Refused(
+        422,
+        "bad_date",
+        spot.bad_date_said(given, bot.store.get(guild.id, SPOTLIGHT_BAD_DATE_KEY)),
+    )
+
+
+def read_or_refuse(bot: Any, guild: Any, payload: dict[str, Any], name: str, end: bool) -> Any:
+    """A blank or a null CLEARS the date; anything unreadable is 422 in words, never bare."""
+    given = payload.get(name)
+    read = spot.read_end if end else spot.read_moment
+    found, trouble = read(given, payload.get("tz"))
+    if trouble is not None:
+        raise bad_date(bot, guild, given)
+    return found
+
+
+def refuse_backwards(bot: Any, guild: Any, starts_at: Any, expires_at: Any) -> None:
+    if spot.range_problem(starts_at, expires_at) is None:
+        return
+    raise Refused(
+        422,
+        "end_before_start",
+        spot.end_before_start_said(
+            starts_at, expires_at, bot.store.get(guild.id, SPOTLIGHT_END_BEFORE_START_KEY)
+        ),
     )
 
 
@@ -335,6 +387,15 @@ def build_router(bot: Any) -> APIRouter:
         wanted_youtube = str(payload.get("youtube") or "").strip()
         days = wanted_days(payload)
         keep = bool(payload.get("keep")) or days is None
+        starts_at = read_or_refuse(bot, guild, payload, "starts_at", end=False)
+        wanted_end: Any = False
+        if "expires_at" in payload:
+            wanted_end = read_or_refuse(bot, guild, payload, "expires_at", end=True)
+            keep = wanted_end is None
+        elif starts_at is not None and days is not None:
+            wanted_end = spot.expiry_in_days(days)
+        if wanted_end is not False:
+            refuse_backwards(bot, guild, starts_at, wanted_end)
         if not str(given).strip() and wanted_youtube:
             raise Refused(
                 400,
@@ -348,6 +409,8 @@ def build_router(bot: Any) -> APIRouter:
             given,
             days=days,
             keep=keep,
+            expires_at=wanted_end,
+            starts_at=starts_at,
             pin=payload.get("pin"),
             bump_hours=payload.get("bump_hours"),
             note=payload.get("note"),
@@ -378,8 +441,9 @@ def build_router(bot: Any) -> APIRouter:
             if linked == "linked" and fresh is not None:
                 row = fresh
         hours = spot.bump_hours_for(row, bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
+        worded = spot.added_said(row, hours, **wording_for(bot, guild.id))
         return await one_spotlight(bot, guild, row["id"]) | {
-            "message": f"{spot.added_said(row, hours)} {said}".strip()
+            "message": f"{worded} {said}".strip()
         }
 
     @router.patch("/spotlight/{spotlight_id}")
@@ -389,14 +453,24 @@ def build_router(bot: Any) -> APIRouter:
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
-        await one_spotlight(bot, guild, spotlight_id)
+        seen = await one_spotlight(bot, guild, spotlight_id)
         fields: dict[str, Any] = {}
+        starts_at = seen["starts_at"]
+        expires_at = seen["expires_at"]
+        if "starts_at" in payload:
+            starts_at = read_or_refuse(bot, guild, payload, "starts_at", end=False)
+            fields["starts_at"] = starts_at
         if payload.get("keep") is True:
+            expires_at = None
             fields["expires_at"] = None
         elif "expires_at" in payload:
-            fields["expires_at"] = payload["expires_at"] or None
+            expires_at = read_or_refuse(bot, guild, payload, "expires_at", end=True)
+            fields["expires_at"] = expires_at
         elif payload.get("days") is not None:
-            fields["expires_at"] = spot.expiry_in_days(wanted_days(payload))
+            expires_at = spot.expiry_in_days(wanted_days(payload))
+            fields["expires_at"] = expires_at
+        if "starts_at" in fields or "expires_at" in fields:
+            refuse_backwards(bot, guild, starts_at, expires_at)
         if "bump_hours" in payload:
             fields["bump_hours"] = payload["bump_hours"] or None
         if "pin" in payload:
@@ -437,6 +511,8 @@ def build_router(bot: Any) -> APIRouter:
             said = spot.announce_said(fresh, settled)
         elif said is None and "spotlight" in payload:
             said = spot.spotlight_said(fresh, settled)
+        elif said is None and ("starts_at" in fields or "expires_at" in fields):
+            said = spot.dates_said(fresh, **wording_for(bot, guild.id))
         return await one_spotlight(bot, guild, spotlight_id) | {
             "message": said
             or SPOTLIGHT_CHANGED.format(

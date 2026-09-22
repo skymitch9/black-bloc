@@ -1668,6 +1668,14 @@ SPOTLIGHT_BUMP_PINGS_KEY = "spotlight_bump_pings"
 SPOTLIGHT_PIN_KEY = "spotlight_pin"
 SPOTLIGHT_DEFAULT_DAYS_KEY = "spotlight_default_days"
 SPOTLIGHT_EVENT_SLACK_KEY = "spotlight_event_slack_hours"
+SPOTLIGHT_RANGE_KEY = "spotlight_range_template"
+SPOTLIGHT_RANGE_KEPT_KEY = "spotlight_range_kept_template"
+SPOTLIGHT_SCHEDULED_WORD_KEY = "spotlight_scheduled_word"
+SPOTLIGHT_DATES_BUTTON_KEY = "spotlight_dates_button"
+SPOTLIGHT_STARTS_LABEL_KEY = "spotlight_starts_label"
+SPOTLIGHT_ENDS_LABEL_KEY = "spotlight_ends_label"
+SPOTLIGHT_END_BEFORE_START_KEY = "spotlight_end_before_start"
+SPOTLIGHT_BAD_DATE_KEY = "spotlight_bad_date"
 CHANNEL_SPOTLIGHT_DEFAULT_KEY = "golive_channel_spotlight_default"
 CHANNEL_OPTOUT_POST_KEY = "golive_channel_optout_post"
 CHANNEL_OPTOUT_END = "end"
@@ -1698,6 +1706,24 @@ SPOTLIGHT_BUMP_TEMPLATE = (
     "**{name}** is still live — **{game}**, {duration} so far. {url}"
 )
 SPOTLIGHT_BUMP_FIELDS = ("name", "game", "title", "url", "duration")
+SPOTLIGHT_RANGE_FIELDS = ("start", "end")
+SPOTLIGHT_GIVEN_FIELDS = ("given",)
+SPOTLIGHT_RANGE = "from {start} to {end}"
+SPOTLIGHT_RANGE_KEPT = "from {start} · kept"
+SPOTLIGHT_SCHEDULED_WORD = "scheduled"
+SPOTLIGHT_DATES_BUTTON = "Set dates…"
+SPOTLIGHT_STARTS_LABEL = "Starts — blank means now"
+SPOTLIGHT_ENDS_LABEL = "Ends — blank means for ever"
+SPOTLIGHT_END_BEFORE_START = (
+    "That range ends before it starts — {end} comes before {start} — so nothing was "
+    "changed. Put the end after the start, or leave the end blank to keep the channel on "
+    "the list for ever."
+)
+SPOTLIGHT_BAD_DATE = (
+    "**{given}** is not a date Black Bloc can read, so nothing was changed. Write it as "
+    "`YYYY-MM-DD` or `YYYY-MM-DD HH:MM` — for example `2026-09-30 19:00` — or leave the "
+    "box blank."
+)
 KEY_TYPES.update(
     {
         SPOTLIGHT_MODE_KEY: "enum",
@@ -1710,6 +1736,14 @@ KEY_TYPES.update(
         SPOTLIGHT_PIN_KEY: "bool",
         SPOTLIGHT_DEFAULT_DAYS_KEY: "int",
         SPOTLIGHT_EVENT_SLACK_KEY: "int",
+        SPOTLIGHT_RANGE_KEY: "text",
+        SPOTLIGHT_RANGE_KEPT_KEY: "text",
+        SPOTLIGHT_SCHEDULED_WORD_KEY: "text",
+        SPOTLIGHT_DATES_BUTTON_KEY: "text",
+        SPOTLIGHT_STARTS_LABEL_KEY: "text",
+        SPOTLIGHT_ENDS_LABEL_KEY: "text",
+        SPOTLIGHT_END_BEFORE_START_KEY: "text",
+        SPOTLIGHT_BAD_DATE_KEY: "text",
         CHANNEL_SPOTLIGHT_DEFAULT_KEY: "bool",
         CHANNEL_OPTOUT_POST_KEY: "enum",
         MEMBER_OPTOUT_POST_KEY: "enum",
@@ -1810,6 +1844,40 @@ KEY_HELP.update(
             "how many hours past an approved event's end its spotlight row survives, so a "
             "marathon that overruns is still announced. 2 by default; 0 drops the row the "
             "moment the event's end time passes"
+        ),
+        SPOTLIGHT_RANGE_KEY: (
+            "how a spotlight's date range reads wherever it is shown — the panel line, the "
+            "Go-live page's Announced cell and the row's drawer. It takes {start} and {end}, "
+            "each a short day like 30 Sep; the row's own dates fill them"
+        ),
+        SPOTLIGHT_RANGE_KEPT_KEY: (
+            "how a spotlight that has a start but no end reads. It takes {start} only, because "
+            "a row with no end is kept for ever and there is no second date to name"
+        ),
+        SPOTLIGHT_SCHEDULED_WORD_KEY: (
+            "the one word shown beside a spotlight whose start has not arrived yet. Such a row "
+            "is on the list and watched, but nothing of its is announced, pinned or reminded "
+            "until its start has passed"
+        ),
+        SPOTLIGHT_DATES_BUTTON_KEY: (
+            "what the button that opens a spotlight's start and end boxes is called, on the "
+            "/golive Channels panel and on the Go-live page's row drawer"
+        ),
+        SPOTLIGHT_STARTS_LABEL_KEY: (
+            "what the start box is called on the Add a channel form and the Set dates form. "
+            "Keep it short — Discord shows at most 45 characters on a modal label"
+        ),
+        SPOTLIGHT_ENDS_LABEL_KEY: (
+            "what the end box is called on the Add a channel form and the Set dates form. Keep "
+            "it short — Discord shows at most 45 characters on a modal label"
+        ),
+        SPOTLIGHT_END_BEFORE_START_KEY: (
+            "what somebody is told when the end they gave a spotlight falls before its start. "
+            "It takes {start} and {end}; nothing is stored when this is said"
+        ),
+        SPOTLIGHT_BAD_DATE_KEY: (
+            "what somebody is told when a start or end box holds something that is not a date. "
+            "It takes {given}, which is what they typed; nothing is stored when this is said"
         ),
         CHANNEL_SPOTLIGHT_DEFAULT_KEY: (
             "whether a channel added through **Add a streamer** with nobody here behind it is "
@@ -2905,6 +2973,14 @@ NAMESPACE_OVERRIDE = {
     SPOTLIGHT_PIN_KEY: "golive",
     SPOTLIGHT_DEFAULT_DAYS_KEY: "golive",
     SPOTLIGHT_EVENT_SLACK_KEY: "golive",
+    SPOTLIGHT_RANGE_KEY: "golive",
+    SPOTLIGHT_RANGE_KEPT_KEY: "golive",
+    SPOTLIGHT_SCHEDULED_WORD_KEY: "golive",
+    SPOTLIGHT_DATES_BUTTON_KEY: "golive",
+    SPOTLIGHT_STARTS_LABEL_KEY: "golive",
+    SPOTLIGHT_ENDS_LABEL_KEY: "golive",
+    SPOTLIGHT_END_BEFORE_START_KEY: "golive",
+    SPOTLIGHT_BAD_DATE_KEY: "golive",
 }
 
 
@@ -3112,6 +3188,37 @@ def checked_bump(given: Any) -> str:
     return text
 
 
+def _checked_words(given: Any, allowed: tuple[str, ...]) -> str:
+    text = str(given or "").strip()
+    stray = next(
+        (one.strip() for one in PLACEHOLDERS.findall(text) if one.strip() not in allowed),
+        None,
+    )
+    if stray is not None:
+        raise SettingError(
+            BUMP_UNKNOWN.format(
+                found=stray[:40],
+                allowed=", ".join(f"`{{{one}}}`" for one in allowed) or "nothing",
+            )
+        )
+    return text
+
+
+def checked_range(given: Any) -> str:
+    """`{start}` and `{end}` only — a range line has no third date to name."""
+    return _checked_words(given, SPOTLIGHT_RANGE_FIELDS)
+
+
+def checked_given(given: Any) -> str:
+    """`{given}` only — a refusal names what was typed and nothing else."""
+    return _checked_words(given, SPOTLIGHT_GIVEN_FIELDS)
+
+
+def checked_plain(given: Any) -> str:
+    """A label or a state word stands in for nothing, so a brace in it would post raw."""
+    return _checked_words(given, ())
+
+
 def checked_live_author(given: Any) -> str:
     """`{name}` and `{platform}` only — a stream that has not ended has no `{duration}`."""
     text = str(given or "").strip()
@@ -3158,6 +3265,14 @@ TEXT_CHECKS: dict[str, Any] = {
     REQUEST_FILED_KEY: checked_filed_line,
     RAIDTRAIN_SCHEDULED_NAME_KEY: checked_name_template,
     SPOTLIGHT_BUMP_TEMPLATE_KEY: checked_bump,
+    SPOTLIGHT_RANGE_KEY: checked_range,
+    SPOTLIGHT_RANGE_KEPT_KEY: checked_range,
+    SPOTLIGHT_END_BEFORE_START_KEY: checked_range,
+    SPOTLIGHT_BAD_DATE_KEY: checked_given,
+    SPOTLIGHT_SCHEDULED_WORD_KEY: checked_plain,
+    SPOTLIGHT_DATES_BUTTON_KEY: checked_plain,
+    SPOTLIGHT_STARTS_LABEL_KEY: checked_plain,
+    SPOTLIGHT_ENDS_LABEL_KEY: checked_plain,
 }
 
 TEXT_MAY_BE_BLANK = (
@@ -3472,6 +3587,22 @@ class SettingsStore:
             return SPOTLIGHT_DEFAULT_DAYS
         if key == SPOTLIGHT_EVENT_SLACK_KEY:
             return SPOTLIGHT_EVENT_SLACK_HOURS
+        if key == SPOTLIGHT_RANGE_KEY:
+            return SPOTLIGHT_RANGE
+        if key == SPOTLIGHT_RANGE_KEPT_KEY:
+            return SPOTLIGHT_RANGE_KEPT
+        if key == SPOTLIGHT_SCHEDULED_WORD_KEY:
+            return SPOTLIGHT_SCHEDULED_WORD
+        if key == SPOTLIGHT_DATES_BUTTON_KEY:
+            return SPOTLIGHT_DATES_BUTTON
+        if key == SPOTLIGHT_STARTS_LABEL_KEY:
+            return SPOTLIGHT_STARTS_LABEL
+        if key == SPOTLIGHT_ENDS_LABEL_KEY:
+            return SPOTLIGHT_ENDS_LABEL
+        if key == SPOTLIGHT_END_BEFORE_START_KEY:
+            return SPOTLIGHT_END_BEFORE_START
+        if key == SPOTLIGHT_BAD_DATE_KEY:
+            return SPOTLIGHT_BAD_DATE
         if key == CHANNEL_SPOTLIGHT_DEFAULT_KEY:
             return False
         if key == CHANNEL_OPTOUT_POST_KEY:

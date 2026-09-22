@@ -357,6 +357,37 @@ const SPOTLIGHT = [
     },
     sessions: [],
   },
+  // The owner's ask, 2026-09-22: a marathon set up days in advance. Its start has NOT arrived,
+  // so it is SCHEDULED — a row on the list that nothing announces, pins or reminds yet.
+  {
+    id: 5,
+    twitch_login: 'gdqhotfix',
+    display_name: 'GDQ Hotfix',
+    note: 'winter marathon, set up early',
+    role_id: null,
+    role: null,
+    role_wearers: null,
+    added_at: '2026-09-22T00:00:00+00:00',
+    starts_at: '2099-01-01T17:00:00+00:00',
+    expires_at: '2099-01-08T17:00:00+00:00',
+    kept: false,
+    scheduled: true,
+    until: 'until 8 Jan',
+    range: 'from 1 Jan to 8 Jan',
+    announced: 'spotlight · from 1 Jan to 8 Jan · scheduled',
+    bump_hours: 4,
+    pin: true,
+    spotlight: true,
+    announce: true,
+    youtube_channel_id: null,
+    youtube_handle: null,
+    youtube_url: null,
+    event_id: null,
+    url: 'https://www.twitch.tv/gdqhotfix',
+    live: false,
+    session: null,
+    sessions: [],
+  },
 ];
 
 {
@@ -413,6 +444,19 @@ const SPOTLIGHT = [
   same(`${where} — and one on a YouTube address is a YouTube card`, cards[1].platforms, ['youtube']);
   is(`${where} — a channel with the spotlight off is never pinned`, cards[1].pinned, false);
 
+  // A scheduled row is a row like any other on the list; what it is NOT is a card or a session.
+  const soon = rows.find((one) => one.twitch === 'gdqhotfix');
+  ok(`${where} — a scheduled channel is still a row`, Boolean(soon), 'the scheduled row is missing');
+  is(`${where} — with no member behind it`, soon.user_id, 'spotlight:5');
+  is(`${where} — carrying its start`, soon.spotlight.starts_at, '2099-01-01T17:00:00+00:00');
+  is(`${where} — and saying so`, soon.spotlight.scheduled, true);
+  is(`${where} — its Announced cell reads the range and the state word`,
+    soon.spotlight.announced, 'spotlight · from 1 Jan to 8 Jan · scheduled');
+  is(`${where} — and it is not live`, soon.live, null);
+  ok(`${where} — a scheduled channel is never a Live-now card`,
+    !spotlightCards(SPOTLIGHT).some((one) => one.spotlight_id === 5),
+    'a scheduled channel became a card');
+
   const past = spotlightSessions(SPOTLIGHT);
   is(`${where} — every spotlight session joins Recent streams`, past.length, 2);
   is(`${where} — with its own source`, past[0].source, 'spotlight');
@@ -446,11 +490,15 @@ const NAMESPACE_KEYS = [
   'spotlight_default_days', 'spotlight_event_slack_hours',
   'golive_channel_spotlight_default', 'golive_channel_optout_post',
   'golive_member_optout_post',
+  // The owner's date-range ask, 2026-09-22: every word the range is written in is a key.
+  'spotlight_range_template', 'spotlight_range_kept_template', 'spotlight_scheduled_word',
+  'spotlight_dates_button', 'spotlight_starts_label', 'spotlight_ends_label',
+  'spotlight_end_before_start', 'spotlight_bad_date',
 ];
 
 {
   const where = 'every key lands once';
-  is(`${where} — the namespaces held 54 keys when this was measured`, NAMESPACE_KEYS.length, 54);
+  is(`${where} — the namespaces held 62 keys when this was measured`, NAMESPACE_KEYS.length, 62);
 
   const specs = NAMESPACE_KEYS.map((key) => ({ key, type: 'text', value: null }));
   const placed = placeSettings(specs);
@@ -477,6 +525,7 @@ const NAMESPACE_KEYS = [
   same(`${where} — how a stream is spotted`, home('spotted'), sorted(drawerOf('spotted').keys));
   same(`${where} — spotlighted channels`, home('spotlight'), sorted(drawerOf('spotlight').keys));
   same(`${where} — two platforms at once`, home('costream'), sorted(drawerOf('costream').keys));
+  same(`${where} — what a spotlight's dates say`, home('dates'), sorted(drawerOf('dates').keys));
   same(`${where} — slash panels and log lines`, home('panels'), sorted(drawerOf('panels').keys));
   is(`${where} — ping roles holds every pings_* but the mode, the log level and the panel`, home('pings').length, 10);
   for (const key of ['pings_mode', 'pings_log_level', 'pings_panel_minutes']) {
@@ -518,7 +567,7 @@ process.stdout.write(
     + 'has a row; two open sessions are one row; a co-stream says both platforms; an ambiguous '
     + 'address is refused in words; a spotlighted channel with no member is its own row and one '
     + 'that IS a linked login is not a second; a channel row carries its YouTube link, its '
-    + 'opt-out and the side its session opened on; all 54 settings keys land in exactly one '
+    + 'opt-out and the side its session opened on; all 62 settings keys land in exactly one '
     + 'NAMED place, no two drawers share a name, every drawer says what is inside it, and the '
     + 'Everything else catch-all is empty\n',
 );

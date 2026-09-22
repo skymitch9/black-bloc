@@ -2668,11 +2668,11 @@ def golive_page_keys() -> list[str]:
     )
 
 
-def test_the_golive_page_still_draws_fifty_four_keys():
+def test_the_golive_page_still_draws_sixty_two_keys():
     """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
     A key added to one of these namespaces has to be added there too, or it lands in the
     Everything else catch-all with nobody noticing."""
-    assert len(golive_page_keys()) == 54
+    assert len(golive_page_keys()) == 62
 
 
 def test_every_golive_page_key_says_in_words_what_it_does():
@@ -2706,3 +2706,50 @@ def test_every_golive_page_choice_is_named_in_its_own_help():
         if missing:
             unsaid[key] = missing
     assert unsaid == {}
+
+
+# The owner's date-range ask, 2026-09-22. Standing rule: every word the bot posts or the site
+# shows is a key, and every decision is configurable both ways (checklist 33).
+SPOTLIGHT_DATE_KEYS = (
+    "spotlight_range_template",
+    "spotlight_range_kept_template",
+    "spotlight_scheduled_word",
+    "spotlight_dates_button",
+    "spotlight_starts_label",
+    "spotlight_ends_label",
+    "spotlight_end_before_start",
+    "spotlight_bad_date",
+)
+
+
+def test_every_word_the_date_range_shows_is_a_key_both_doors_reach():
+    for key in SPOTLIGHT_DATE_KEYS:
+        assert KEY_TYPES[key] == "text"
+        assert len(KEY_HELP[key].split()) >= GOLIVE_PAGE_HELP_MIN_WORDS
+        assert settings_store.namespace_of(key) == "golive"
+
+
+async def test_the_range_templates_refuse_a_placeholder_nobody_can_fill(store):
+    for key in ("spotlight_range_template", "spotlight_range_kept_template"):
+        with pytest.raises(SettingError) as trouble:
+            await store.set(1, key, "from {start} to {nonsense}")
+        assert "nonsense" in str(trouble.value)
+        await store.set(1, key, "{start} — {end}")
+
+
+async def test_a_label_or_a_state_word_may_not_carry_a_placeholder_at_all(store):
+    for key in (
+        "spotlight_scheduled_word",
+        "spotlight_dates_button",
+        "spotlight_starts_label",
+        "spotlight_ends_label",
+    ):
+        with pytest.raises(SettingError):
+            await store.set(1, key, "{start}")
+        await store.set(1, key, "Dates")
+
+
+async def test_the_bad_date_refusal_may_only_name_what_was_typed(store):
+    with pytest.raises(SettingError):
+        await store.set(1, "spotlight_bad_date", "{start} is no good")
+    await store.set(1, "spotlight_bad_date", "{given} is no good")
