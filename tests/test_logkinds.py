@@ -931,8 +931,8 @@ def test_adding_a_platform_is_loud_because_it_rewrote_a_post_and_dropping_one_is
 def test_a_channel_with_no_spotlight_has_its_own_kinds_so_the_title_cannot_lie():
     """Owner, 2026-09-21: "why is gdq being spotlighted in the logs channel? its spot light
     isnt on". The kind IS the log embed's title, so the word has to match the behaviour."""
-    assert "golive.channel_announced" in IMPORTANT
-    assert is_important("golive.channel_announced") is True
+    assert "golive.channel_announced" in ROUTINE
+    assert is_important("golive.channel_announced") is False
     assert "golive.channel_ended" in ROUTINE
     assert is_important("golive.channel_ended") is False
     for kind in ("golive.channel_announced", "golive.channel_ended"):
@@ -942,6 +942,60 @@ def test_a_channel_with_no_spotlight_has_its_own_kinds_so_the_title_cannot_lie()
     assert is_important("golive.would_channel_announce") is False
     assert "golive.would_channel_announce" not in ROUTINE
     assert {"golive.channel_announced", "golive.channel_ended"} <= emitted_kinds()
+
+
+# Owner, 2026-09-21 17:2x, verbatim: "okay that works, i dont want log messages appearing in
+# black bloc logs for channel linking or channel spotlight or channel annouce". The rows are
+# still written to `action_log` and still shown on the Logs page — only the Discord mirror goes
+# quiet, and `golive_log_level = all` turns it back up with no deploy.
+QUIET_CHANNEL_KINDS: tuple[str, ...] = (
+    "golive.link",
+    "youtube.link",
+    "golive.history_swept",
+    "golive.spotlight_added",
+    "golive.spotlight_announced",
+    "golive.spotlight_bumped",
+    "golive.spotlight_expired",
+    "golive.spotlight_pinned",
+    "golive.spotlight_removed",
+    "golive.spotlight_unpinned",
+    "golive.spotlight_updated",
+    "golive.channel_announced",
+)
+
+
+def test_linking_spotlighting_and_announcing_a_channel_leave_no_embed_in_the_log_channel():
+    """The owner's words above: a whole family goes quiet in `#blackbloc-logs`, and nowhere else."""
+    for kind in QUIET_CHANNEL_KINDS:
+        assert kind in ROUTINE, kind
+        assert is_important(kind) is False, kind
+        assert is_important(f"web.{kind}") is False, kind
+        assert should_post(kind, IMPORTANT_ONLY) is False, kind
+        assert feature_of(kind) in ("golive", "youtube"), kind
+    # Turning the mirror back up is the level, not a deploy — and nothing was taken off the page.
+    for kind in QUIET_CHANNEL_KINDS:
+        assert should_post(kind, ALL) is True, kind
+        assert should_post(kind, OFF) is False, kind
+
+
+def test_the_failed_twin_of_every_quiet_channel_kind_is_still_loud():
+    """Checklist 2: a refusal must never go quiet with the success it is not."""
+    for kind in (
+        "golive.post_failed",
+        "golive.post_delete_failed",
+        "golive.spotlight_pin_failed",
+        "golive.spotlight_post_failed",
+        "golive.spotlight_unpin_failed",
+        "golive.unpin_failed",
+        "youtube.resolve_failed",
+        "youtube.live_announce_failed",
+    ):
+        assert is_important(kind) is True, kind
+        assert should_post(kind, IMPORTANT_ONLY) is True, kind
+    # The alarms and the member's own choices the owner did NOT ask to quieten.
+    assert is_important("golive.role_stuck") is True
+    assert is_important("youtube.probe_unreadable") is True
+    assert is_important("golive.costream_added") is True
 
 
 def test_taking_somebody_off_an_application_list_is_routine_because_the_dm_is_the_loud_part():

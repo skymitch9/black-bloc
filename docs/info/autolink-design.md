@@ -45,7 +45,8 @@ refusals (a login already linked to another member is refused in words and liste
 link path (a `youtube.com/watch?v=…` URL from a presence carries no channel id — resolve the video's channel through the
 existing probe if it can, else list it as *could not tell the channel*). **Opted-out members are skipped** and listed.
 Members no longer in the guild are skipped. The answer is a report in words: *"Linked 4 people (Casey → caseyfast, …),
-skipped 2 opted out, 1 login already belongs to somebody else (…), 0 could not be read."* — one IMPORTANT
+skipped 2 opted out, 1 login already belongs to somebody else (…), 0 could not be read."* — one ~~IMPORTANT~~
+**ROUTINE (2026-09-21 17:3x, branch `quiet-channel-kinds`)**
 `golive.history_swept` row with the counts and the names. Idempotent: a second sweep links nobody.
 
 **Doors:** the Go-live page ▸ Streamers toolbar gains **Link from history** (staff, `ask()` confirm naming what it does,
@@ -65,7 +66,15 @@ Unlink stays theirs). Opted-out members are never announced, so never auto-linke
 
 ## C. Keys — one (`golive_autolink_presence`); registry + mock + label + `placeSettings` + the join fixture.
 
-## D. Logging — `golive.history_swept` (IMPORTANT), `golive.autolink_refused` (routine); `golive.link` gains `because`.
+## D. Logging — `golive.history_swept` (~~IMPORTANT~~ **ROUTINE**), `golive.autolink_refused` (routine); `golive.link` gains `because`.
+
+🔇 **Reversed 2026-09-21 17:3x, branch `quiet-channel-kinds`.** Owner, 2026-09-21 17:2x, verbatim: *"okay that works, i dont want log messages appearing in black bloc logs for channel linking or channel spotlight or channel annouce"* — so
+`golive.history_swept` is ROUTINE in `black_bloc/logkinds.py` and the sweep posts no embed to
+`#blackbloc-logs` at the default `golive_log_level = important`. ⚠️ **The row is unchanged and still on
+the Logs page** under the **golive** chip, with the same counts and the same `who` list;
+`golive_log_level = all` turns the Discord mirror back up with no deploy. `golive.autolink_refused` was
+routine already and is untouched. Design: [`channel-streamers-design.md`](channel-streamers-design.md) ▸
+**Follow-up 2026-09-21 (17:2x)**; sweep row `QK-a`.
 
 ## E. Tests, docs, gate
 
