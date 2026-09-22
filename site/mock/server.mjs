@@ -219,6 +219,7 @@ const IMPORTANT_SUFFIXES = [
 const IMPORTANT_KINDS = [
   'automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out',
   'event.where_channel_gone',
+  'golive.spotlight_announced', 'golive.channel_announced',
   'request.declined', 'request.done', 'request.hold',
   'chat.memory_forgot', 'chat.memory_optout',
 ];
@@ -4191,7 +4192,10 @@ function settleOpenSession(row, wasAnnouncing, wasSpotlit) {
     logAction('golive.spotlight_post_deleted', { details: { login: row.twitch_login, message_id: session.announced_message_id } });
     session.announced_message_id = null;
   }
-  logAction('golive.spotlight_ended', { details: { login: row.twitch_login, reason: 'opted_out', post } });
+  const spotlit = row.spotlight !== false;
+  logAction(spotlit ? 'golive.spotlight_ended' : 'golive.channel_ended', {
+    details: { login: row.twitch_login, reason: 'opted_out', post, spotlight: spotlit, announce: false },
+  });
   return post;
 }
 

@@ -1082,9 +1082,85 @@ async def test_a_channel_with_the_spotlight_off_is_announced_like_a_member_and_n
     assert bot.guild.channel.texts, "nothing was announced at all"
     message = bot.guild.channel.messages[-1]
     assert message.pinned is False and message.pins == []
-    said = await details_of(bot.db, "golive.spotlight_announced")
+    said = await details_of(bot.db, "golive.channel_announced")
     assert said["spotlight"] is False and said["pin"] is False
+    assert "golive.spotlight_announced" not in await kinds(bot.db)
     assert await open_session(bot.db, row["id"]) is not None
+
+
+async def test_a_spotlight_off_announcement_is_logged_as_a_channel_announcement(bot, cog):
+    """Owner, 2026-09-21: "why is gdq being spotlighted in the logs channel? its spot light
+    isnt on" — the kind is the log embed's title, so the spotlight word there was a lie."""
+    await a_row(bot, spotlight=False)
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    said = await kinds(bot.db)
+    assert "golive.channel_announced" in said
+    assert not [kind for kind in said if "spotlight_announced" in kind]
+    detail = await details_of(bot.db, "golive.channel_announced")
+    assert detail["spotlight"] is False and detail["announce"] is True
+    assert detail["platform"] == "Twitch"
+
+
+async def test_a_spotlight_off_end_is_a_channel_end_and_never_a_spotlight_one(bot, cog):
+    await bot.store.set(GUILD, SPOTLIGHT_END_MISSES_KEY, 1)
+    await a_row(bot, spotlight=False)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    helix_of(bot)
+
+    await cog.poll_once()
+
+    said = await kinds(bot.db)
+    assert "golive.channel_ended" in said and "golive.spotlight_ended" not in said
+    ended = await details_of(bot.db, "golive.channel_ended")
+    assert ended["reason"] == words.ENDED and ended["spotlight"] is False
+
+
+async def test_the_spotlight_words_stay_while_the_spotlight_is_on(bot, cog):
+    await bot.store.set(GUILD, SPOTLIGHT_END_MISSES_KEY, 1)
+    await a_row(bot)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    helix_of(bot)
+
+    await cog.poll_once()
+
+    said = await kinds(bot.db)
+    assert "golive.spotlight_announced" in said and "golive.spotlight_ended" in said
+    assert not [kind for kind in said if "channel_announced" in kind]
+    assert "golive.channel_ended" not in said
+
+
+async def test_shadow_on_a_spotlight_off_channel_says_would_channel_announce(bot, cog):
+    await bot.store.set(GUILD, SPOTLIGHT_MODE_KEY, "shadow")
+    await a_row(bot, spotlight=False)
+    helix_of(bot, twitch_stream())
+
+    await cog.poll_once()
+
+    said = await kinds(bot.db)
+    assert "golive.would_channel_announce" in said
+    assert "golive.would_spotlight_announce" not in said
+    assert "golive.channel_announced" not in said
+
+
+async def test_a_spotlight_taken_off_mid_stream_ends_under_the_kind_the_row_says_now(bot, cog):
+    """The kind is read off the row at each moment, so a mid-stream toggle splits the pair."""
+    await bot.store.set(GUILD, SPOTLIGHT_END_MISSES_KEY, 1)
+    row = await a_row(bot)
+    helix = helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "spotlight_off")
+
+    helix.streams = []
+    await cog.poll_once()
+
+    said = await kinds(bot.db)
+    assert "golive.spotlight_announced" in said
+    assert "golive.channel_ended" in said and "golive.spotlight_ended" not in said
 
 
 async def test_the_spotlight_off_announcement_is_the_same_wording_a_member_gets(bot, cog):

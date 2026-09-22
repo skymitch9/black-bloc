@@ -237,6 +237,16 @@ def test_embed_fields_are_only_what_was_given():
     assert '"a": 1' in embed.fields[3].value
 
 
+def test_the_embed_title_is_the_kind_so_a_channel_row_never_says_spotlight():
+    """Owner, 2026-09-21: "why is gdq being spotlighted in the logs channel? its spot light
+    isnt on" — there is no title table, so the kind is the sentence he read."""
+    for kind in ("golive.channel_announced", "golive.channel_ended"):
+        embed = build_embed(kind, details={"spotlight": False})
+        assert embed.title == kind
+        assert "channel" in embed.title and "spotlight" not in embed.title
+    assert build_embed("golive.spotlight_announced").title == "golive.spotlight_announced"
+
+
 def test_entity_helpers_accept_ids_and_objects():
     class _Thing:
         id = 9

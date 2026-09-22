@@ -928,6 +928,20 @@ def test_adding_a_platform_is_loud_because_it_rewrote_a_post_and_dropping_one_is
     assert feature_of("golive.costream_dropped") == "golive"
 
 
+def test_a_channel_with_no_spotlight_has_its_own_kinds_so_the_title_cannot_lie():
+    """Owner, 2026-09-21: "why is gdq being spotlighted in the logs channel? its spot light
+    isnt on". The kind IS the log embed's title, so the word has to match the behaviour."""
+    for kind in ("golive.channel_announced", "golive.channel_ended"):
+        assert kind in IMPORTANT
+        assert is_important(kind) is True, kind
+        assert feature_of(kind) == "golive"
+        assert "golive.%" in like_patterns("golive")
+    assert is_shadow("golive.would_channel_announce") is True
+    assert is_important("golive.would_channel_announce") is False
+    assert "golive.would_channel_announce" not in ROUTINE
+    assert {"golive.channel_announced", "golive.channel_ended"} <= emitted_kinds()
+
+
 def test_taking_somebody_off_an_application_list_is_routine_because_the_dm_is_the_loud_part():
     """`.removed` is a loud suffix; this one is listed as routine on purpose."""
     assert "application.removed" in ROUTINE

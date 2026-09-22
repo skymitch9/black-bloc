@@ -510,6 +510,7 @@ class Spotlight(commands.Cog):
             "text": text,
             "pin": bool(row["pin"]) and words.is_spotlit(row),
             "spotlight": words.is_spotlit(row),
+            "announce": words.announces(row),
             "platform": info.platform,
             "fan_role_id": fan_role_id,
         }
@@ -530,9 +531,19 @@ class Spotlight(commands.Cog):
         await log_action(
             self.bot,
             guild,
-            "golive.spotlight_announced"
-            if mode == MODE_ON
-            else "golive.would_spotlight_announce",
+            (
+                (
+                    "golive.spotlight_announced"
+                    if mode == MODE_ON
+                    else "golive.would_spotlight_announce"
+                )
+                if words.is_spotlit(row)
+                else (
+                    "golive.channel_announced"
+                    if mode == MODE_ON
+                    else "golive.would_channel_announce"
+                )
+            ),
             details=details,
         )
         if row["pin"] and words.is_spotlit(row):
@@ -628,7 +639,7 @@ class Spotlight(commands.Cog):
         await log_action(
             self.bot,
             guild,
-            "golive.spotlight_ended",
+            "golive.spotlight_ended" if words.is_spotlit(row) else "golive.channel_ended",
             details={
                 "spotlight_id": row["id"],
                 "session_id": session["id"],
@@ -636,6 +647,8 @@ class Spotlight(commands.Cog):
                 "reason": reason,
                 "post": post,
                 "bumps": int(_cell(session, "bump_count") or 0),
+                "spotlight": words.is_spotlit(row),
+                "announce": words.announces(row),
             },
         )
         message = await self._message(guild, session)

@@ -12,6 +12,7 @@
 > session* item on [`../TODO.md`](../TODO.md), branch `channel-optout`. Was 🔨 BUILT on branch `channel-streamers`
 > 2026-09-21 (design: Fable, 08:2x, dispatched to Opus the
 > same turn). The `## Deviations` foot is the truth where this body departs from
+> 🔨 **FOLLOW-UP BUILT 2026-09-21 16:5x, branch `channel-kinds` off `main` `d4e3535` (v153 live) — NOT merged, NOT deployed**: *a channel announcement is not a spotlight*. A row whose spotlight is OFF now logs **`golive.channel_announced`** / **`golive.channel_ended`** (shadow: `golive.would_channel_announce`), because `actionlog.build_embed` makes the KIND the embed title and `#blackbloc-logs` was therefore telling the owner GamesDoneQuick was spotlighted when it was not. ⚠️ **This STRIKES Deviation 2 below** — read [**§ Follow-up 2026-09-21 (16:5x)**](#follow-up-2026-09-21-16-5x-the-log-kind-says-channel-not-spotlight) before trusting it. Sweep row `CK-a`, unwalked. ⚠️ **Nothing in it has met Discord or Helix and no browser rendered the Logs page.**
 > ✅ **FOLLOW-UP LIVE v152 (2026-09-21 10:35)** — release commit `32d3c0b` (which is also the deployed commit),
 > `release.json` says `v152` at `8dcb52f`; merge `8dcb52f` of branch `channel-optout`, 2 commits, key
 > **`golive_channel_optout_post`**, registry keys **297**, sweeps **730–731** (were `CO-a` / `CO-b`) and **neither has been
@@ -221,6 +222,124 @@ what the route answers. The clause lands only when a session was actually open, 
 - **`delete` was never exercised against a message Discord refused to delete**; the failure branch
   is proved by the unit path alone.
 
+## Follow-up 2026-09-21 (16:5x): the log kind says CHANNEL, not spotlight
+
+> 🔨 **BUILT on branch `channel-kinds`, off `main` `d4e3535` (v153 live), 2026-09-21.** ⚠️ **NOT
+> merged, NOT deployed, and nothing in it has met Discord or Helix.** Sweep row `CK-a` in
+> [`../access/sweeps.md`](../access/sweeps.md) is the proof that is missing — the conductor numbers it.
+> ⚠️ **This section reverses [Deviation 2](#deviations) of the v151 build**, which is struck below.
+
+**The defect, owner verbatim (2026-09-21 16:5x):** *"why is gdq being spotlighted in the logs
+channel? its spot light isnt on"*.
+
+**Measured on live, 2026-09-21.** The GamesDoneQuick channel row has **spotlight OFF and announce
+ON**. At **22:53Z** its stream was announced in `#live-now` (`golive_channel_id`) and was **not
+pinned** — which is exactly what a spotlight-off row is supposed to do. The row written to
+`action_log`, and posted to `#blackbloc-logs` because it is IMPORTANT, was
+**`golive.spotlight_announced`**, with `spotlight: false` buried in the details JSON. ⚠️ **The
+behaviour was right and the wording lied**: `actionlog.build_embed` has no title table — it sets
+`discord.Embed(title=kind)` — so the KIND IS THE SENTENCE the owner read, and he concluded from the
+logs channel that the spotlight was on.
+
+**The rule after.** The kind is read off the row at the moment of the event:
+
+| The row at that moment | Announce, mode `on` | Announce, mode `shadow` | End |
+|---|---|---|---|
+| `is_spotlit(row)` **true** | `golive.spotlight_announced` | `golive.would_spotlight_announce` | `golive.spotlight_ended` |
+| `is_spotlit(row)` **false** | **`golive.channel_announced`** | **`golive.would_channel_announce`** | **`golive.channel_ended`** |
+
+- **Both new kinds are IMPORTANT** (`logkinds.IMPORTANT`), so a channel announcement reaches
+  `#blackbloc-logs` exactly as a spotlight announcement does — the owner is not being asked to look
+  in a quieter place for the same event. ⚠️ **`golive.channel_ended` therefore DIVERGES from its
+  two siblings**: `golive.spotlight_ended` and `golive.end` are both ROUTINE. See Deviation F2 below.
+- **The shadow twin is classified by RULE, not by a list.** `logkinds.is_important` returns False for
+  anything containing `.would_`, and `test_every_shadow_kind_is_routine_by_rule_not_by_being_listed`
+  *forbids* listing a `would_` kind in `ROUTINE` — so `golive.would_channel_announce` appears in no
+  set at all, which is correct and deliberate.
+- **The details carry `spotlight`, `announce` and `platform` on BOTH halves**, so a reader filtering
+  on either detail still finds both families. The end row gained `spotlight` and `announce`; the
+  announce row gained `announce` (it already carried `spotlight`, `pin` and `platform`).
+
+**The Logs page needed nothing, and that is a measurement, not an assumption.** Grepped
+2026-09-21 across `site/public/assets/*.js`, `site/mock/server.mjs` and `docs/info/`: **no surface
+labels a log kind by name**. `logs.js:kindPill` prints `row.kind` verbatim into the pill and its
+`title` attribute; the family chips in `logs.js:LOG_FEATURES` are keyed by FEATURE (`golive`), which
+`actionlog.py` turns into SQL through `logkinds.like_patterns('golive')` → `golive.%` +
+`web.golive.%` — so `golive.channel_announced` is inside the **golive** filter by construction and
+`labels.js` holds settings labels, never kinds.
+
+**The mock's mirror.** `site/mock/server.mjs:settleOpenSession` restates the opt-out close by hand
+(there is no bot behind it), so it now picks `golive.channel_ended` when `row.spotlight === false`
+and carries the same two details. ⚠️ **Nothing checks the Python and the JavaScript copies against
+each other** — the same warning the v152 follow-up already carries.
+
+⚠️ **The mock keeps its OWN classification list, and it was already wrong about this family.**
+`site/mock/server.mjs:IMPORTANT_KINDS` is a short hand-written subset of `logkinds.IMPORTANT`, and
+it did not hold `golive.spotlight_announced` — so the mock's Logs page has been drawing the
+announce row as *routine* while live draws it *important*. Both spellings are added, which fixes
+the old one as well as classifying the new one. `golive.channel_ended` needs no entry either side:
+`.ended` is in both copies of `IMPORTANT_SUFFIXES`.
+
+### Follow-up (16:5x) — Deviations
+
+**F1. A mid-stream toggle SPLITS the pair, on purpose.** §1 of the brief allowed either the
+session's spotlight at announce time or the row's at end time. The row at END time wins, because
+`spotlight_sessions` has no `spotlight` column and adding one would be a migration for a log label.
+So a channel that is spotlit when it goes live and has its spotlight taken off mid-stream logs
+`golive.spotlight_announced` … `golive.channel_ended`. ⚠️ **That is the honest reading** — each row
+says what the channel was when the row was written — but a reader pairing announce-to-end by kind
+alone will not match them. The `spotlight` detail on both rows is how they pair; the
+`session_id`/`spotlight_id` details are how they pair exactly.
+`test_a_spotlight_taken_off_mid_stream_ends_under_the_kind_the_row_says_now` pins it.
+
+**F2. `golive.channel_ended` is IMPORTANT while `golive.spotlight_ended` is ROUTINE — a real
+divergence, flagged rather than smoothed over.** The brief said "the two new IMPORTANT kinds", and
+`.ended` is in `IMPORTANT_SUFFIXES` besides, so IMPORTANT is also what the kind gets with no entry
+at all. The consequence: with `golive_log_level = important` a spotlight-off channel's END reaches
+`#blackbloc-logs` and a spotlit one's does not. 🔁 **Reversing it is one line** — move
+`"golive.channel_ended"` from `IMPORTANT` to `ROUTINE` in `black_bloc/logkinds.py` and flip the
+assertion in `test_a_channel_with_no_spotlight_has_its_own_kinds_so_the_title_cannot_lie`. The
+conductor's call; nothing else depends on it.
+
+**F3. `actionlog.build_embed` was NOT touched.** The brief allowed for a kind→title table. There
+is none: `build_embed` is `discord.Embed(title=kind)`, which is precisely why renaming the kind is
+the whole fix. `test_the_embed_title_is_the_kind_so_a_channel_row_never_says_spotlight` in
+`tests/test_actionlog.py` now pins that the title is the kind, so a future title table cannot
+quietly reintroduce the word.
+
+**F4. The announce details gained `announce`.** Deviation 2 below claimed the details "now carry
+`spotlight`, `announce`, `platform`" — **they carried `spotlight`, `pin` and `platform` and never
+`announce`**, measured on the v151 code. The claim is now true rather than the sentence corrected,
+because the brief asks a filter to find both families by detail.
+
+**F5. `sweep_expiries` still skips a spotlight-off row, so `_expire` never writes a channel end.**
+Pre-existing (`cogs/content/spotlight.py:sweep_expiries` returns early on `not is_spotlit(row)`, and
+`test_a_channel_with_the_spotlight_off_is_never_purged` asserts it). Untouched here — it is a
+purge-policy question, not a wording one — but it means `golive.channel_ended` is reachable from
+three paths only: the stream going quiet, an opt-out settling an open session, and
+**Remove this channel**.
+
+### Follow-up (16:5x) — what was NOT verified
+
+- ⚠️ **NOTHING HERE HAS MET DISCORD.** No embed was posted to `#blackbloc-logs`, and the claim that
+  the title now reads *golive.channel\_announced* is the suite's against a `discord.Embed` object,
+  not a screenshot. **A Discord run is impossible from a build worktree** — it needs the token and a
+  live gateway.
+- ⚠️ **Nothing has met Helix**, so no real GDQ stream has been announced under the new kind. The
+  22:53Z measurement in the body is the conductor's reading of the live logs, made BEFORE this build.
+- ⚠️ **No browser rendered the Logs page.** That `golive.channel_announced` falls inside the
+  **golive** chip is derived from `like_patterns('golive')` and asserted in `tests/test_logkinds.py`;
+  nobody has filtered a real page on it. The review link is
+  [`https://blackbloc.heygabi.ai/logs.html`](https://blackbloc.heygabi.ai/logs.html) ▸ **golive**.
+  ⚠️ **That path is `audit.html` in the repo** (`site/public/audit.html`, `<title>Black Bloc —
+  logs</title>`, `data-tab="audit"`); `site/public/logs.html` does not exist, so the public URL is a
+  rewrite this build did not verify.
+- ⚠️ **No existing `golive.spotlight_announced` row is rewritten.** There is no migration: every row
+  already in `action_log` keeps the kind it was written with, including the 22:53Z one the owner
+  read. The Logs page will show both spellings on either side of the deploy.
+- **The mock half was not opened in a browser** — `settleOpenSession` is exercised by
+  `node site/mock/check.mjs` and by eye, and no page was pressed.
+
 ## Deviations
 
 **Built 2026-09-21 on branch `channel-streamers` off `main` `9b865b8` (v150 live).** Where this
@@ -238,8 +357,17 @@ body and the code disagree, the code is what shipped and this section is why.
    goes out. Relaxing the column later is a one-commit rebuild on the `golive_fan_roles`
    precedent; nothing built here assumes the column is `NOT NULL` except the two refusals.
 
-2. ⚠️ **The log kind is the EXISTING `golive.spotlight_announced` with `spotlight: false` in
-   details — no new kind.** §A offered `golive.channel_announced` as the alternative. Reusing it
+2. ~~⚠️ **The log kind is the EXISTING `golive.spotlight_announced` with `spotlight: false` in
+   details — no new kind.**~~ 🔴 **STRUCK 2026-09-21 16:5x, branch `channel-kinds`** — the owner
+   read `#blackbloc-logs` and concluded GamesDoneQuick's spotlight was on when it was off
+   (*"why is gdq being spotlighted in the logs channel? its spot light isnt on"*). The reasoning
+   below missed that `actionlog.build_embed` has NO title table: the kind IS the embed's title, so
+   "the same event with one field different" was a sentence in a Discord channel saying the
+   opposite of the truth, and `spotlight: false` was inside a JSON blob nobody reads. `golive.
+   channel_announced` / `golive.channel_ended` / `golive.would_channel_announce` are what ship —
+   see [**§ Follow-up 2026-09-21 (16:5x)**](#follow-up-2026-09-21-16-5x-the-log-kind-says-channel-not-spotlight)
+   above, which also records that the end pair is NOT symmetric with the announce pair. The
+   original reasoning, left as written: §A offered `golive.channel_announced` as the alternative. Reusing it
    keeps the Logs chip honest in the way that actually matters: the rest of the family
    (`golive.spotlight_ended`, `…_post_failed`, `…_pin_failed`, `…_bumped`) is unchanged, so a
    reader who filters on the announce kind still finds the matching end. A new head would have
