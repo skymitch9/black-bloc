@@ -8,6 +8,13 @@
 > channel takes them**. Everything below still describes the spotlight-ON behaviour correctly. Read
 > [`channel-streamers-design.md`](channel-streamers-design.md) first.
 
+> ➕ **EXTENDED 2026-09-22 (branch `spotlight-dates`): a spotlight row now has a START as well as an end.**
+> `spotlight_channels.starts_at` (schema 53, nullable — NULL means *started already*, which is every row
+> this document describes). A row whose start is still ahead is **scheduled**: on the list, watched, and
+> announced by nobody until the start passes. §A's *Expiry* paragraph and the three-posts table are both
+> unchanged — only the moment the FIRST announcement may happen moved. Design:
+> [`spotlight-dates-design.md`](spotlight-dates-design.md). Do not restate it here.
+>
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v148** — merge `e7f54c9`, release `f73d3a7`, deployed **2026-09-20 18:23** Phoenix; `spotlight_mode` ships **shadow**; sweeps **637–643** are the owner's; verified: boot log: the spotlight cog loaded, logged in, no Traceback; /health ready=true; the Go-live page rendered on the local mock after the merge (a Spotlight strip cell in shadow, a GamesDoneQuick Live-now card with spotlight badges, three channel-only Streamers rows, the Spotlight chip and the Spotlight a channel button; zero console errors); the first gate run's one red test was KI-32, green alone and on the re-run. Was: 🔨 BUILT on branch `spotlight` 2026-09-20 — nothing in it had met Discord or Helix. The `## Deviations` foot is the truth where this body departs from what shipped, and `## What was NOT verified` is the honest half; sweeps `SL-a` … `SL-g` in `../access/sweeps.md` are the proof that is missing. ⚠️ **Schema is 48, not the 47 this body says** — `selftest-boot` took 47 on `main` while this was being built. Was: 📐 **DESIGN (Fable, 2026-09-20 17:0x) — dispatches
 > AFTER `costream` lands**, because both touch the go-live cog, its keys and its sessions. **Last verified: 2026-09-20 17:0x**
 > against `main` `e88573d` (v142 deploying): `black_bloc/twitch.py` — `TwitchClient.get_streams(logins)` `:177` (Helix

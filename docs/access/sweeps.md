@@ -2875,3 +2875,40 @@ errors/exceptions. `node site/mock/golive-join.test.mjs` and `node site/mock/che
 were exercised), and no button/toggle/field inside a row was pressed. Review link:
 <http://127.0.0.1:8797/golive.html> ▸ **Settings and logs** (the conductor restarts the mock after
 merge).
+
+
+## Rows `SD-a` … `SD-d` — a spotlight is a DATE RANGE, start and end (branch `spotlight-dates`, 2026-09-22)
+
+⚠️ **Merged to `main`, NOT deployed.** Owner, 2026-09-22 10:29 Phoenix, verbatim: *"in golive
+when i set a spotlight i can extend a week or keep forever. let me set a date range for start and
+end time"*. `spotlight_channels.starts_at` (schema **53**, nullable — NULL means *started
+already*, which every existing row is) makes a spotlight a range; a row whose start is still ahead
+is **scheduled** and the poller announces, pins and reminds nothing of its until the start passes.
+Eight new word keys, all in their own Settings drawer. Design:
+[`../info/spotlight-dates-design.md`](../info/spotlight-dates-design.md). Rows lettered; the
+conductor numbers them.
+
+⚠️ **`spotlight_mode` still ships `shadow`**, so rows `SD-b` and `SD-c` land in
+`shadow_channel_id` (`#welcome-test`) rather than the go-live channel unless the owner turns it on
+first. That is the point of the mode, not a defect.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`SD-a`** | <https://blackbloc.heygabi.ai/golive.html> ▸ **Spotlight a channel**. Type a channel name; leave **Starts** blank and set **Ends** to a week out; press **Spotlight it**. Then click the new row to open its drawer, find the **Dates** card, set **Starts** to three days out and press **Save dates** | The form shows two date-time pickers, each with a zone select and a help line ending *Read in America/Phoenix* (or whatever zone the select is on); **Ends** opens pre-filled on today + `spotlight_default_days`. After the save, the row's **Announced** cell reads `spotlight · from <day> to <day>` with a **scheduled** badge, the **Expires** cell reads the range rather than only the end, and the new **Scheduled** filter chip keeps it while **All** shows it beside the rest |
+| **`SD-b`** | Leave that row scheduled and wait for the channel to go live BEFORE its start (or set a start a few days out on a channel that streams today) | ⚠️ **Nothing happens** — no post in the go-live channel (or the shadow home), no pin, no reminder, and no session on the row. This is the whole ask: a marathon set up early stays quiet until its day. The Logs page shows no `golive.spotlight_announced` for it |
+| **`SD-c`** | Now set that row's **Starts** to a time that has already passed and wait one poll (`spotlight_poll_minutes`, 5 by default) while the channel is live | The announcement lands on the first tick after the start, exactly as any spotlight does — pinned if the row's pin is on, reminded every `spotlight_bump_hours` after that. The Logs page (with `golive_log_level = all`, since the whole family is ROUTINE and quiet by default) carries one `golive.spotlight_started` row for it, and only one |
+| **`SD-d`** | On the same drawer set **Starts** AFTER **Ends** and press **Save dates**. Then in Discord run `/golive` ▸ **Channels…**, pick a row, press **Set dates…** and do the same in the modal — and in **Add a channel**, type `next tuesday` into **Starts** | Both surfaces refuse **in words** and change nothing: *"That range ends before it starts — 1 Dec comes before 20 Dec — so nothing was changed. Put the end after the start, or leave the end blank to keep the channel on the list for ever."* The typed nonsense earns *"**next tuesday** is not a date Black Bloc can read … Write it as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`"*. ⚠️ **Never a bare 422** — if a status number reaches the screen, that is the defect. The Discord modal's boxes open PRE-FILLED with what is stored, and leaving both blank means *now* and *for ever* |
+
+**Measured this session (the local mock and the suite, NOT live):** the Go-live page and the
+Settings page were rendered headless (`chrome-headless-shell` 149.0.7827.22 over raw CDP) against
+`site/mock/server.mjs` on `MOCK_PORT=8791`. Seen: the seeded scheduled channel **GDQ Hotfix** in
+the Streamers list, the **Scheduled** chip, the **Spotlight a channel** form's two `datetime-local`
+boxes (Starts blank, Ends on today + 7) each with a 24-name zone select, the row drawer's **Dates**
+card with both pickers pre-filled and a **Save dates** button, and the end-to-end refusal above
+printed in the drawer followed by a good save answering *"gdqhotfix runs from 20 Dec to 28 Dec."*
+Zero console errors. All eight new keys are `[data-key]` rows on the Settings page.
+**Not verified:** anything in Discord (no modal opened, no button pressed), anything on the live
+site, Helix, a real clock (no start has actually arrived while the bot was running) and the
+migration against the Fly volume. Review link while the mock is up:
+<http://127.0.0.1:8788/golive.html> ▸ a channel row ▸ **Dates**, and
+<http://127.0.0.1:8788/settings.html> ▸ the go-live group.
