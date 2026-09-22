@@ -838,6 +838,7 @@ th[title] { cursor: help; }
 .log-table .kind[data-tone="would"] { color: var(--et-warn); }
 .log-table .kind[data-tone="failed"] { color: var(--et-danger); }
 .log-table td .bar { margin: 0; gap: .4rem; flex-wrap: nowrap; }
+.log-table .cell-ended { display: inline-flex; align-items: center; gap: 6px; }
 @media (max-width: 900px) {
   .log-table,
   .log-table tbody,

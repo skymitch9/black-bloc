@@ -1377,13 +1377,22 @@ function recentSection(sessions, linked = new Set(), say = notice()) {
     { label: 'Started', cell: (row) => when(row.started_at), className: 'mono' },
     {
       label: 'Ended',
-      cell: (row) => (row.ended_at ? when(row.ended_at) : badge(LIVE_NOW, 'ok')),
+      cell: (row) => {
+        let rehearsal = null;
+        if (row.mode && row.mode !== 'on') {
+          rehearsal = badge('rehearsal', 'warn');
+          rehearsal.title = 'posted into the shadow channel, not the go-live channel';
+        }
+        return el('span', { class: 'cell-ended' }, [
+          row.ended_at ? when(row.ended_at) : badge(LIVE_NOW, 'ok'),
+          rehearsal,
+        ]);
+      },
       className: 'mono',
     },
     { label: 'Game', cell: (row) => row.game },
     { label: 'Title', cell: (row) => row.title, className: 'wrap' },
     { label: 'How', cell: (row) => (row.also_source ? `${row.source} + ${row.also_source}` : row.source) },
-    { label: 'Mode then', cell: (row) => badge(row.mode, row.mode === 'on' ? 'ok' : 'warn') },
     { label: 'Link', cell: (row) => linkFromHistory(row, linked, say) },
   ], sessions, { empty: 'No streams have been seen yet.' }), say);
   return group.node;

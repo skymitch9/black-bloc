@@ -1,6 +1,15 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-21 (branch `mode-column`)** — row `MC-a` added at the foot for RECENT STREAMS LOSING THE MODE
+> COLUMN (branch `mode-column`, off `main` `e9841f6`; design
+> [`../info/golive-page-design.md`](../info/golive-page-design.md) ▸ top blockquote, 2026-09-21). Owner, after
+> asking what *Mode then* meant: *"yes drop the mode column too"*. ✅ **This row IS walkable now, site-only —
+> no Discord needed**: the change is a table column removed and a badge added, both on the Go-live page.
+> Rendered once already by the build, over CDP (`chrome-headless-shell` 149.0.7827.22) against this worktree's
+> mock on `MOCK_PORT=8786`: six headers (Member, Started, Ended, Game, Title, How, Link), no `Mode then`, and
+> a `rehearsal` badge beside the Ended time/`live now` badge on every shadow-mode row (5 of 5 seeded rows,
+> since the seed has no `on`-mode row). Row lettered; the conductor numbers it. Before that,
 > **2026-09-21 17:3x** — row `QK-a` added at the foot for NO LOG EMBEDS FOR CHANNEL LINKING, SPOTLIGHT OR
 > ANNOUNCE (branch `quiet-channel-kinds`, off `main` `0612da0`; design
 > [`../info/channel-streamers-design.md`](../info/channel-streamers-design.md) ▸ **Follow-up 2026-09-21
@@ -2823,3 +2832,16 @@ posted**; the page shows the old and the new alike. Row lettered; the conductor 
 | Row | Do | Expect |
 |---|---|---|
 | **737** (was `QK-a`) | With **GamesDoneQuick** (or any linked channel row) set up as it is today, wait for it to go live, and while waiting use the Go-live page to **link a channel**, **spotlight one**, **bump** it and **take the spotlight off** again. After each, read `#blackbloc-logs`, then <https://blackbloc.heygabi.ai/logs.html> ▸ **golive** | ⚠️ **`#blackbloc-logs` gets NOTHING** for any of it — no `golive.link`, no `golive.spotlight_added` / `_announced` / `_bumped` / `_updated` / `_removed` / `_expired`, no `golive.history_swept` from **Link from history**, and no `golive.channel_announced` or `golive.channel_ended` when the stream starts and stops. The channel's own announcement in `#live-now` is UNCHANGED — this changes the log mirror only. On the Logs page every one of those rows is present under the **golive** chip, in order, with the same details, each pill marked **routine** rather than important. ⚠️ **Then do the control, because a silence that is too wide is the failure mode here:** make something FAIL (unlink a channel Discord has lost, or let a pin be refused) and confirm the `_failed` row still posts its embed to `#blackbloc-logs`; `golive.role_stuck`, `youtube.probe_unreadable` and `golive.costream_added` are also untouched and still loud. ⚠️ **Then turn it back up:** set **Go-live** ▸ `golive_log_level` to **all** on the Settings page, repeat any one of the moves above, and confirm the embed comes back with no deploy — then put it back to **important** |
+
+## Row `MC-a` — Recent streams loses the Mode column (branch `mode-column`, 2026-09-21)
+
+Owner, after asking what *Mode then* meant (answer: the go-live mode at announce time — `on` posted for real,
+`shadow` rehearsed into the shadow channel, `off` nothing posted; every row reads `on` since test mode lifted
+2026-09-18, so the column was noise), verbatim: *"yes drop the mode column too"*. Design:
+[`../info/golive-page-design.md`](../info/golive-page-design.md) ▸ top blockquote, 2026-09-21, and item **12**
+under `## Deviations`. ✅ **Site-only — no Discord needed to walk this one.** Already rendered once by the
+build over CDP against the mock; the row below is for the owner's own eyes on the live site.
+
+| Row | Do | Expect |
+|---|---|---|
+| **MC-a** | Open the Go-live page and scroll to **Recent streams** | The columns read Member, Started, Ended, Game, Title, How, Link — no **Mode then** column. On any row from before 2026-09-18 (test mode), the **Ended** cell (next to the timestamp, or next to the **live now** badge if the stream is still going) carries a small `rehearsal` badge. Hovering it reads *"posted into the shadow channel, not the go-live channel"*. A row from after the cutover carries no badge there |
