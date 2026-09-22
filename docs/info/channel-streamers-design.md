@@ -273,6 +273,13 @@ labels a log kind by name**. `logs.js:kindPill` prints `row.kind` verbatim into 
 and carries the same two details. ⚠️ **Nothing checks the Python and the JavaScript copies against
 each other** — the same warning the v152 follow-up already carries.
 
+⚠️ **The mock keeps its OWN classification list, and it was already wrong about this family.**
+`site/mock/server.mjs:IMPORTANT_KINDS` is a short hand-written subset of `logkinds.IMPORTANT`, and
+it did not hold `golive.spotlight_announced` — so the mock's Logs page has been drawing the
+announce row as *routine* while live draws it *important*. Both spellings are added, which fixes
+the old one as well as classifying the new one. `golive.channel_ended` needs no entry either side:
+`.ended` is in both copies of `IMPORTANT_SUFFIXES`.
+
 ### Follow-up (16:5x) — Deviations
 
 **F1. A mid-stream toggle SPLITS the pair, on purpose.** §1 of the brief allowed either the

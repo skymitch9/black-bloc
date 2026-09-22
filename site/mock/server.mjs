@@ -219,6 +219,7 @@ const IMPORTANT_SUFFIXES = [
 const IMPORTANT_KINDS = [
   'automod.deleted', 'mod.warn', 'mod.unbanned', 'mod.untimed_out',
   'event.where_channel_gone',
+  'golive.spotlight_announced', 'golive.channel_announced',
   'request.declined', 'request.done', 'request.hold',
   'chat.memory_forgot', 'chat.memory_optout',
 ];
