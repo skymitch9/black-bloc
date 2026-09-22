@@ -2845,3 +2845,33 @@ build over CDP against the mock; the row below is for the owner's own eyes on th
 | Row | Do | Expect |
 |---|---|---|
 | **738** (was `MC-a`) | Open the Go-live page and scroll to **Recent streams** | The columns read Member, Started, Ended, Game, Title, How, Link — no **Mode then** column. On any row from before 2026-09-18 (test mode), the **Ended** cell (next to the timestamp, or next to the **live now** badge if the stream is still going) carries a small `rehearsal` badge. Hovering it reads *"posted into the shadow channel, not the go-live channel"*. A row from after the cutover carries no badge there |
+| **736** (was `CK-a`) | With **GamesDoneQuick**'s spotlight **OFF** and announce **ON**, wait for it to go live. Read `#live-now`, then `#blackbloc-logs`, then <https://blackbloc.heygabi.ai/logs.html> ▸ **golive**. Then wait out the end of the stream and read all three again | ⚠️ **The row the whole defect is about.** `#live-now` gets ONE announcement in the ordinary member wording, **not pinned**, and **no reminder** follows — unchanged. `#blackbloc-logs` now gets an embed titled **`golive.channel_announced`**; the word *spotlight* appears nowhere in the title. Its Details block carries `spotlight: false`, `announce: true`, `platform: "Twitch"` and `pin: false`. On the Logs page the **golive** chip still holds it (the chip matches `golive.%`, so nothing had to be added to the filter) and the kind pill reads `golive.channel_announced`, marked **important**. When the stream ends the same post is edited to past tense and the log row is **`golive.channel_ended`** with `reason: ended` and `spotlight: false` — again no *spotlight* in the title. ⚠️ **Then do the control:** on a channel whose spotlight IS on, the old words must be exactly as they were — `golive.spotlight_announced`, pinned, reminders, `golive.spotlight_ended`. ⚠️ **And the split case:** press **Spotlight off** on a channel that is live and was announced as a spotlight — its announce row stays `golive.spotlight_announced` and its END row reads `golive.channel_ended`, because the kind is read off the row at each moment. That is deliberate (Deviation F1); write down whether it reads as honest or as confusing, because that is the one judgement call in this build |
+
+## Row `GH-a` — every Go-live settings drawer is named, no key lands twice, and its help says what it does (branch `golive-settings-help`, 2026-09-21)
+
+⚠️ **Not merged, not deployed.** Owner, 2026-09-21 17:3x, verbatim: *"in the everything else section
+of golive there are duplicate settings it seems, also what each of the settings does isnt clear"*.
+Measured before this build (off `main` `fb89c3b`): the *Everything else* catch-all held **8** of the
+54 `golive`/`pings`/`youtube` keys with no note and no sub-grouping — six of the eight differing only
+by feature prefix (`golive_panel_minutes` / `youtube_panel_minutes` / `pings_panel_minutes`,
+`golive_log_level` / `youtube_log_level` / `pings_log_level`), which is what read as duplicates.
+`placeSettings` already deduped by key — no key was ever drawn twice in one page — so the fix is a
+regroup, not a de-dup: all 54 keys now sit in seven named, described drawers (or the strip / the
+wording card), and *Everything else* renders nothing because it holds nothing. Every key's help line
+is 10+ words, is not the key name again, and names its own enum choices where it has any; the mock's
+copy is pinned equal to the registry through `site/mock/contract.json`. Design:
+[`../info/golive-page-design.md`](../info/golive-page-design.md) ▸ **Follow-up 2026-09-21: the
+settings read right**. Row lettered; the conductor numbers it.
+
+| Row | Do | Expect |
+|---|---|---|
+| **739** (was `GH-a`) | Open <https://blackbloc.heygabi.ai/golive.html> ▸ **Settings and logs**, and open every drawer in turn: **Who gets announced**, **Where the announcement goes**, **How a stream is spotted**, **Spotlighted channels**, **Two platforms at once**, **Ping roles**, **Slash panels and log lines** | Seven drawers, each with a one-line note under its title saying what it groups. No **Everything else** drawer appears at all. Hover (or focus) any setting's label and read the tooltip: a full plain-English sentence, never the bare key name, and for a choice-style setting (`golive_channel_optout_post`, `golive_mode`, `golive_log_level`, etc.) every option word it shows (`end`/`delete`/`leave`, `off`/`shadow`/`on`, …) is also named in that sentence. Count the settings across the seven drawers plus the header strip (`golive_mode`, `youtube_live_mode`, `pings_mode`, `spotlight_mode`) plus the two Wording-card fields (`golive_template` / `golive_live_author` / `golive_end_template` / `golive_end_author` / `golive_end_keep_mention`, five keys): **54**, with no key seen twice |
+
+**Measured this session (mock, not live):** the drawer/key layout above was rendered headless
+against `site/mock/server.mjs` and read from the live DOM (`.gldrawer` / `[data-key]`) — 45 keys
+across the seven named drawers, no *Everything else* heading in the DOM, zero console
+errors/exceptions. `node site/mock/golive-join.test.mjs` and `node site/mock/check.mjs` both green.
+**Not verified:** the real bot's `/api/settings` route (only the mock and the pytest-side registry
+were exercised), and no button/toggle/field inside a row was pressed. Review link:
+<http://127.0.0.1:8797/golive.html> ▸ **Settings and logs** (the conductor restarts the mock after
+merge).

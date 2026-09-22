@@ -2650,3 +2650,59 @@ def test_the_video_lookup_key_says_in_words_why_it_is_off():
     assert "Off by default" in said
     assert "reads YouTube's page" in said
     assert "not always the streamer's own" in said
+
+
+# ⚠️ Owner, 2026-09-21 17:3x: "in the everything else section of golive there are duplicate
+# settings it seems, also what each of the settings does isnt clear". The second half is this:
+# every key the Go-live page draws must say in plain words what it does. The Settings page,
+# `/settings` and the Go-live drawers all read KEY_HELP, so this one guard covers three doors.
+GOLIVE_PAGE_NAMESPACES = ("golive", "pings", "youtube")
+GOLIVE_PAGE_HELP_MIN_WORDS = 10
+
+
+def golive_page_keys() -> list[str]:
+    return sorted(
+        key
+        for key in KEY_TYPES
+        if settings_store.namespace_of(key) in GOLIVE_PAGE_NAMESPACES
+    )
+
+
+def test_the_golive_page_still_draws_fifty_four_keys():
+    """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
+    A key added to one of these namespaces has to be added there too, or it lands in the
+    Everything else catch-all with nobody noticing."""
+    assert len(golive_page_keys()) == 54
+
+
+def test_every_golive_page_key_says_in_words_what_it_does():
+    thin = {
+        key: KEY_HELP.get(key, "")
+        for key in golive_page_keys()
+        if len(KEY_HELP.get(key, "").split()) < GOLIVE_PAGE_HELP_MIN_WORDS
+    }
+    assert thin == {}
+
+
+def test_no_golive_page_help_line_is_just_the_key_name_again():
+    lazy = [
+        key
+        for key in golive_page_keys()
+        if KEY_HELP[key].strip().lower().rstrip(".") in {key, key.replace("_", " ")}
+    ]
+    assert lazy == []
+
+
+def test_every_golive_page_choice_is_named_in_its_own_help():
+    """An enum whose help does not name its own options is the row the owner could not read:
+    the select shows `end / delete / leave` and nothing says what any of them do."""
+    unsaid = {}
+    for key in golive_page_keys():
+        choices = KEY_CHOICES.get(key)
+        if not choices:
+            continue
+        said = KEY_HELP[key].lower()
+        missing = [one for one in choices if one.lower() not in said]
+        if missing:
+            unsaid[key] = missing
+    assert unsaid == {}

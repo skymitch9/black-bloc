@@ -312,27 +312,30 @@ export const DRAWERS = [
   {
     id: 'who',
     title: 'Who gets announced',
+    note: 'Which roles let a stream be announced, how often the same person may be, the role they '
+      + 'wear while live, and what becomes of an announcement when somebody opts out mid-stream.',
     keys: [
       'golive_require_role_id',
       'golive_ignore_role_id',
       'golive_cooldown_minutes',
       'golive_live_role_id',
       'golive_max_session_hours',
+      'golive_channel_optout_post',
+      'golive_member_optout_post',
     ],
   },
   {
     id: 'where',
-    title: 'Where it goes',
+    title: 'Where the announcement goes',
+    note: 'The channel it is posted in, the role mentioned in front of it, and whether it is an '
+      + 'embed with the game’s art or a plain sentence.',
     keys: ['golive_channel_id', 'golive_ping_role_id', 'golive_embed'],
   },
   {
-    id: 'pings',
-    title: 'Ping roles',
-    holds: (key) => key.startsWith('pings_') && key !== 'pings_log_level',
-  },
-  {
     id: 'spotted',
-    title: 'How streams are spotted',
+    title: 'How a stream is spotted',
+    note: 'Discord presence, the YouTube probe and how often it runs, and how a person’s own '
+      + 'channel gets linked to them and unlinked again.',
     keys: [
       'golive_boot_sweep',
       'golive_autolink_presence',
@@ -340,6 +343,14 @@ export const DRAWERS = [
       'youtube_live_poll_minutes',
       'youtube_live_end_misses',
       'youtube_unlink_dms_them',
+    ],
+  },
+  {
+    id: 'spotlight',
+    title: 'Spotlighted channels',
+    note: 'Channels with nobody here behind them: how often Twitch is asked, the pin, the '
+      + 'reminders while a long stream runs, and how long a row lasts before it is purged.',
+    keys: [
       'spotlight_poll_minutes',
       'spotlight_end_misses',
       'spotlight_bump_hours',
@@ -350,18 +361,55 @@ export const DRAWERS = [
       'spotlight_default_days',
       'spotlight_event_slack_hours',
       'golive_channel_spotlight_default',
-      'golive_channel_optout_post',
-      'golive_member_optout_post',
     ],
   },
-  { id: 'rest', title: 'Everything else' },
+  {
+    id: 'costream',
+    title: 'Two platforms at once',
+    note: 'What ONE announcement says when somebody is live on Twitch and YouTube at the same '
+      + 'time, instead of two posts about one stream.',
+    keys: ['golive_costream_mode', 'golive_costream_template', 'golive_costream_author'],
+  },
+  {
+    id: 'pings',
+    title: 'Ping roles',
+    note: 'The shared Events role, a streamer’s own role that only their followers wear, and '
+      + 'the two Discord onboarding prompts Black Bloc keeps in step with them.',
+    holds: (key) => key.startsWith('pings_')
+      && key !== 'pings_log_level'
+      && key !== 'pings_panel_minutes',
+  },
+  {
+    id: 'panels',
+    title: 'Slash panels and log lines',
+    note: 'How long /golive, /youtube and /pings stay clickable after somebody opens one, and how '
+      + 'much of each feature is repeated into the Discord log channel.',
+    keys: [
+      'golive_panel_minutes',
+      'youtube_panel_minutes',
+      'pings_panel_minutes',
+      'golive_log_level',
+      'youtube_log_level',
+      'pings_log_level',
+    ],
+  },
+  {
+    id: 'rest',
+    title: 'Everything else',
+    note: 'Settings this page has no drawer for yet. It is drawn only when something lands here.',
+  },
 ];
 
 export const STRIP_WHERE = 'the header strip';
 export const WORDING_WHERE = 'the announcement';
 
 export function placeSettings(specs) {
-  const drawers = DRAWERS.map((one) => ({ id: one.id, title: one.title, specs: [] }));
+  const drawers = DRAWERS.map((one) => ({
+    id: one.id,
+    title: one.title,
+    note: one.note || null,
+    specs: [],
+  }));
   const catchAll = drawers[drawers.length - 1];
   const strip = [];
   const wording = [];

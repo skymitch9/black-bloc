@@ -366,3 +366,105 @@ Sweeps `GP-a` … `GP-f` are the only proof that will ever exist.
 and announces anyone already streaming with no session. Nothing else on the page moved — the key
 goes through `placeSettings` and `settingsPanel` like the nine beside it, and the every-key-lands-once
 fixture in `golive-join.test.mjs` went **48 → 49**. Design: [`golive-boot-sweep-design.md`](golive-boot-sweep-design.md).
+
+## Follow-up 2026-09-21: the settings read right
+
+Owner, 17:3x, verbatim: *"in the everything else section of golive there are duplicate settings it
+seems, also what each of the settings does isnt clear"*. Branch `golive-settings-help`, worktree
+`C:/lcw/bb-golive-settings-help`. Built by an Opus agent that hit five `529 Overloaded` errors and
+left a checkpoint commit (`cf4c74b`) plus three files edited on top; finished by a second agent
+(commits `71a3a37`, `dfda995`).
+
+**What "duplicate" measured as.** `placeSettings` (§ above) has always deduped by key — `placed.has(key)`
+skips a key already placed, so no key was ever literally drawn TWICE in one page. What the owner saw was
+the *Everything else* catch-all itself: eight keys with no note and no sub-grouping, three of which
+differ only by feature prefix (`golive_panel_minutes` / `youtube_panel_minutes` / `pings_panel_minutes`)
+and three more the same way (`golive_log_level` / `youtube_log_level` / `pings_log_level`) — six of the
+eight reading, at a glance, like the same setting repeated. The fix is a REGROUP, not a de-dup: give
+every key a NAMED, described home so nothing lands in an unlabeled dumping ground.
+
+**Drawer list, measured 2026-09-21 off `fb89c3b` (the commit before this branch), by reading
+`DRAWERS`/`placeSettings` in `site/public/assets/golive-join.js`:**
+
+| Drawer | Keys | Note |
+|---|---|---|
+| Who gets announced | 5 | none |
+| Where it goes | 3 | none |
+| Ping roles | 11 (dynamic: `pings_*` minus `pings_log_level`) | none |
+| How streams are spotted | 18 | none |
+| **Everything else** | **8**: `golive_costream_author`, `golive_costream_mode`, `golive_costream_template`, `golive_log_level`, `golive_panel_minutes`, `pings_log_level`, `youtube_log_level`, `youtube_panel_minutes` | none — no note field existed on the catch-all at all |
+
+Strip: 4 (`golive_mode`, `youtube_live_mode`, `pings_mode`, `spotlight_mode`). Wording: 5
+(`golive_template`, `golive_live_author`, `golive_end_template`, `golive_end_author`,
+`golive_end_keep_mention`). 5+3+11+18+8+4+5 = 54, the full `golive`/`pings`/`youtube` key count.
+
+**Drawer list, measured 2026-09-21 against `dfda995` by rendering `golive.html` in
+chrome-headless-shell over CDP against the mock (`site/mock/server.mjs`) and reading the live DOM
+(`.gldrawer` / `[data-key]`):**
+
+| Drawer | Keys | Note shown |
+|---|---|---|
+| Who gets announced | 7 (gained `golive_channel_optout_post`, `golive_member_optout_post` from the old *How streams are spotted*) | yes |
+| Where the announcement goes | 3 | yes |
+| How a stream is spotted | 6 (the probe/link half of the old 18) | yes |
+| Spotlighted channels | 10 (the spotlight half of the old 18, plus `golive_channel_spotlight_default`) | yes |
+| Two platforms at once | 3 (`golive_costream_*`, out of the old catch-all) | yes |
+| Ping roles | 10 (`pings_*` minus `pings_log_level` **and** `pings_panel_minutes`, which now lives in Slash panels) | yes |
+| Slash panels and log lines | 6 (`golive_panel_minutes`, `youtube_panel_minutes`, `pings_panel_minutes`, `golive_log_level`, `youtube_log_level`, `pings_log_level` — five of six out of the old catch-all, one moved out of Ping roles) | yes |
+| Everything else | **not rendered** — `placeSettings` still returns it (defensive: a key added tomorrow with no home lands there), but it carries zero specs so the template never draws it | n/a |
+
+7+3+6+10+3+10+6 = 45, +4 strip +5 wording = 54. Confirmed live: `node site/mock/golive-join.test.mjs`
+asserts "all 54 settings keys land in exactly one NAMED place, no two drawers share a name, every
+drawer says what is inside it, and the Everything else catch-all is empty", and the CDP render found
+no `Everything else` heading in the DOM at all.
+
+**Help text.** Every one of the 54 keys now has a `KEY_HELP` entry of 10+ words that is not the key
+name again (`black_bloc/settings_store.py`), enum keys name every one of their own choices in their
+help line, and the same table is mirrored into `site/mock/server.mjs`'s `SETTING_SPECS` and pinned
+equal both ways through `site/mock/contract.json`'s `settings.help` block
+(`tests/api/test_contract.py::test_the_contracts_help_block_is_the_registrys_own_words` and its
+real-router twin; `site/mock/check.mjs` checks the mock's own `/api/settings` against the same
+block). Live-rendered: a setting row's `.setrow-label` carries the full sentence as its `title`
+attribute (hover tooltip), read directly off the DOM for `golive_autolink_youtube_video` and
+matching `KEY_HELP` character for character.
+
+**How many help lines changed this session:** one. The inherited checkpoint (`cf4c74b`) already
+carried plain-English help for all 54 keys (its own commit message undercounted this at "46 of the
+54" — measured wrong, or written before the last few were finished; the pytest guards in
+`tests/test_settings_store.py` all passed against the inherited `KEY_HELP` with no further edits
+needed there). The one live fix this session made was **wording sync, not new help**:
+`golive_autolink_youtube_video`'s help had been tightened in `KEY_HELP` ("Off by default, because
+it reads YouTube's page, which can change...") on top of the checkpoint, but the edit never reached
+`contract.json`'s `settings.help` block or `server.mjs`'s `SETTING_SPECS` mirror, so
+`test_the_contracts_help_block_is_the_registrys_own_words` and
+`test_the_real_settings_index_carries_the_help_the_contract_says` were red. Both were updated to the
+registry's exact wording (commit `dfda995`).
+
+## Deviations
+
+1. **Used port 8788 for the mock, not 8785 as briefed.** 8785 was already bound by another agent's
+   `node site/mock/server.mjs` (PID 22940, confirmed by `Get-NetTCPConnection`) — starting on it
+   crashed with `EADDRINUSE`. Stopped only the PID this session started (8788, PID 22536); never
+   touched 22940/54768.
+2. **CDP port 9333 with a scratch `user-data-dir`** (`/c/lcw/.chrome-udd-golive-help`), driven by a
+   throwaway node script (`cdp-render.mjs`, in the session scratchpad) talking raw CDP over
+   `WebSocket`/`fetch` — no `puppeteer`/`chrome-remote-interface` package is installed in this repo.
+   The profile directory left a few Windows file locks behind after the process exit (`rm -rf`
+   partially failed with "Device or resource busy"); it is outside the worktree and outside git, so
+   it does not touch anything this build is answerable for.
+3. **Did not widen the `contract.json` help scope beyond `golive`/`pings`/`youtube`.** The comment
+   the inherited checkpoint left in `contract.json` already says the other 59 registry keys disagree
+   with the mock and calls widening "a follow-up, not a licence to keep two copies" — left as is,
+   out of scope for this ask.
+
+## What was NOT verified
+
+- **No button, toggle or field inside a settings row was pressed.** The render confirmed the drawers,
+  keys, notes and hover-help text are correct and that the page loads with zero console
+  errors/exceptions; it did not exercise a single write (`On`/`Off`, a text box, a channel picker).
+- **Not opened at any width other than the CDP default viewport**, and not opened in a themed
+  (dark/light) check — this follow-up did not touch `site.css` and there is no reason to expect a
+  visual regression, but it was not looked at.
+- **The other 59 non-golive/pings/youtube registry keys' help text is unaudited** — `contract.json`'s
+  own comment already flags this as known and out of scope.
+- **Not merged, not deployed.** This branch only; the conductor restarts the mock after merge.

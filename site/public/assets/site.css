@@ -2434,7 +2434,7 @@ button.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; 
 .gldrawer:first-child { border-top: 0; }
 .gldrawer-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 10px 0;
   color: var(--et-fg);
@@ -2446,8 +2446,17 @@ button.stat:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; 
 .gldrawer-head::-webkit-details-marker { display: none; }
 .gldrawer-head:hover { color: var(--et-accent); }
 .gldrawer-head:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
-.gldrawer-head .sect-mark { transform: rotate(-90deg); flex: none; }
+.gldrawer-head .sect-mark { transform: rotate(-90deg); flex: none; margin-top: 4px; }
 .gldrawer[open] > .gldrawer-head .sect-mark { transform: none; }
+/* A drawer says what is inside BEFORE it is opened (owner, 2026-09-21: the settings were
+   "duplicate… and what each of the settings does isnt clear"), so the summary is two lines. */
+.gldrawer-heads { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gldrawer-note {
+  color: var(--et-muted);
+  font-size: var(--et-ui-xs);
+  font-weight: var(--et-weight-regular, 400);
+  text-wrap: pretty;
+}
 .gldrawer-body { display: flex; flex-direction: column; gap: 12px; padding: 0 0 14px; }
 /* Preview pages (site/public/preview/*) — static-data previews of a redesign, staff-only, deleted when the real page ships. */
 .preview-banner { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 12px 0 4px; padding: 8px 12px; border-radius: 8px; font-size: var(--et-ui-sm, 13px); color: var(--et-warn, #b8860b); background: color-mix(in srgb, var(--et-warn, #b8860b) 14%, transparent); border: 1px solid color-mix(in srgb, var(--et-warn, #b8860b) 40%, transparent); }
