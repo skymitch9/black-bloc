@@ -1,7 +1,12 @@
 # access/ — how to OPERATE Black Bloc
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not
-> temporarily) — secret NAMES only. Last verified: **2026-09-19** — the index was re-checked BOTH ways by
+> temporarily) — secret NAMES only. Last verified: **2026-09-22 — the `deploy.md` ROW only**, at the v155
+> ritual: [`../deploys.log`](../deploys.log) is **154** lines (`grep -c .`), the last being **v155**
+> `a285afc7` at 2026-09-22 13:35; the row had said *150 / v151*. Counted while here: `ls
+> docs/access/*.md` still returns **12** files (this index plus **11** rows), unchanged. ⚠️ **NOT checked
+> at that pass:** every other row's number, the facts inside any file, and nothing in it met live Discord
+> or a browser. Before that, **2026-09-19** — the index was re-checked BOTH ways by
 > script: `ls docs/access/*.md` returns **12** files (this index plus **11** rows), every row points at a
 > file that exists, and every file has exactly one row — **no duplicates, nothing unlisted**. Two rows
 > carried a stale NUMBER and are fixed: `deploy.md` said *107 lines, last v108* (**140** lines, last
@@ -23,7 +28,7 @@
 |---|---|
 | [`OWNER_GUIDE.md`](OWNER_GUIDE.md) | **Start here, owner:** before the trip (encrypt `.env`, leave the session open), the laptop once, what to look at on the road, if something looks wrong, when you're back |
 | [`setup.md`](setup.md) | Local run: venv, `.env`, Developer Portal, invite, first start |
-| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **150** lines in [`../deploys.log`](../deploys.log), the last being **v151** on 2026-09-21 09:51 (counted 2026-09-21 at the v151 ritual; it said 140 / v141) |
+| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **154** lines in [`../deploys.log`](../deploys.log), the last being **v155** on 2026-09-22 13:35 (counted 2026-09-22 at the v155 ritual; it said 150 / v151) |
 | [`RECOVERY.md`](RECOVERY.md) | Rebuild from nothing: inventory, secret custody, named gaps |
 | [`runbook.md`](runbook.md) | **Day to day:** where everything is, the flyctl path, deploy/restart/rollback/logs, secret names, common failures and what they mean, local run, docs bookkeeping |
 | [`sweeps.md`](sweeps.md) | **What the owner has not yet exercised by hand**, in priority order, with what to expect — the verification checklist. Rows **1–620** as of 2026-09-18 (counted 2026-09-19; it said 1–350) |

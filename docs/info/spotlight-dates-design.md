@@ -1,10 +1,23 @@
 # A spotlight is a DATE RANGE — a start as well as an end
 
 > **Audience:** whoever touches a spotlight's dates next, and the reviewer.
-> **Status:** TRACKED · 🔨 **BUILT + MERGED, NOT DEPLOYED** — branch `spotlight-dates`,
-> worktree `C:/lcw/bb-spotlight-dates`, off `main` `f560ffa0` (v154 LIVE). `spotlight_mode`
-> is untouched and still ships **shadow**; no key was flipped and nothing was pushed to Fly.
-> **Last verified: 2026-09-22** — measured on this branch: `pytest -n auto` **7,316 passed +
+> **Status:** TRACKED · ✅ **LIVE as v155** — merge `fad98c9e` (branch `spotlight-dates`, off
+> `main` `f560ffa0`), release commit **`a285afc7`**, deployed **2026-09-22 13:35** Phoenix
+> (**20:35:31Z**); `release.json` answers `v155` at `6d5f5841`. `spotlight_mode`
+> is untouched and still ships **shadow**; no key was flipped.
+> **Last verified: 2026-09-22 (the deploy)** — the migration ran itself on boot: the log line
+> `database: added spotlight_channels.starts_at` at **20:35:23Z**, then `database ready`
+> 20:35:23Z, `synced 33 app commands`, `logged in as Black_Bloc` **20:35:26Z**, no Traceback;
+> `/health` ready 20:35:58Z; `release.json` **v155** at `6d5f5841`; and the operator read of
+> `GET /api/golive/spotlight` (20:36:11Z) answers **`starts_at` on all four live rows** — all
+> `null`, i.e. *started already* — beside the new derived `scheduled` (false on all four) and
+> `range` fields, which is the live proof that both the column and the route change shipped.
+> The v155 deploy gate was green on the FIRST run: **7,316 passed + 3 skipped**, ruff clean,
+> `check.mjs` ok 21 pages / 198 routes, six node tests green.
+> ⚠️ **NOT checked at the deploy:** nothing met Discord (below is still true in full), no
+> browser rendered the live Go-live page or the new Settings drawer, `check.mjs` was not
+> re-run after the deploy, and no `starts_at` has ever been WRITTEN live — the operator read
+> is read-only. Before that, **2026-09-22 (the branch)** — measured on the branch: `pytest -n auto` **7,316 passed +
 > 3 skipped** (7,253 + 3 on `main` at the v154 gate; collected **7,256 → 7,319**, so **+63**
 > tests), `ruff check black_bloc tests site`
 > clean, `node site/mock/check.mjs` **ok — 21 pages, 198 routes, 24 core settings, all keys
@@ -13,9 +26,14 @@
 > mock (what was seen is under [What was verified](#what-was-verified)).
 > `SCHEMA_VERSION` **52 → 53**, registry **299 → 307** keys, `/api/golive/spotlight` routes
 > unchanged in COUNT (the three that existed gained fields).
-> ⚠️ **NOT verified:** nothing here has met Discord, Helix, the live site or a real database —
-> see [What was NOT verified](#what-was-not-verified). Sweep rows `SD-a` … `SD-d` in
-> [`../access/sweeps.md`](../access/sweeps.md) are the proof that does not exist yet.
+> ⚠️ **NOT verified:** **nothing here has met Discord or Helix.** The live site and a real
+> database HAVE now been met, but only as far as the deploy reached: the column exists on
+> `/data/black_bloc.sqlite3` and the live route serves `starts_at` + `scheduled` — no modal has
+> been opened, no **Set dates…** pressed, no date SAVED, no backwards range refused in
+> production, and no scheduled row has reached its start, so `golive.spotlight_started` has
+> never been logged for real. See [What was NOT verified](#what-was-not-verified). Sweep rows
+> `SD-a` … `SD-d` in [`../access/sweeps.md`](../access/sweeps.md) are the proof that does not
+> exist yet.
 >
 > Companions: [`spotlight-design.md`](spotlight-design.md) is the feature this extends (the
 > row, the poll, the three posts, the expiry); [`channel-streamers-design.md`](channel-streamers-design.md)
@@ -226,6 +244,12 @@ what `golive-join.test.mjs` asserts. The namespace count went **54 → 62**.
 
 ## What was NOT verified
 
+> 📌 **Amended 2026-09-22 at the v155 deploy (13:35 Phoenix / 20:35Z).** Two of the bullets
+> below were written on the branch and the deploy has since answered them — they are marked
+> ✅ in place rather than deleted, so the reading and its date stay visible. **The other three
+> stand unchanged**, and the first two are the ones that matter: nothing has met Discord or
+> Helix.
+
 - ⚠️ **Nothing here has met Discord.** No modal was opened, no **Set dates…** button was
   pressed, and no spotlight has been announced, skipped or started anywhere but in the suite
   against `FakeInteraction` / `FakeHelix`. `../access/testing.md` says it plainly: no API can
@@ -233,12 +257,17 @@ what `golive-join.test.mjs` asserts. The namespace count went **54 → 62**.
 - ⚠️ **Nothing has met Helix or a real clock.** Every scheduling test moves `starts_at` in the
   database and polls again. No start has actually arrived while the bot was running, and
   `golive.spotlight_started` has never been written by a real tick.
-- **The migration has not touched a real database.** Schema 53 was applied by
-  `Database.connect` in the suite's `tmp_path` files only; the Fly volume has never seen
-  `spotlight_channels.starts_at`. It is one additive nullable column through `ADDED_COLUMNS`,
-  so migrate-before-deploy is automatic — that is an argument, not a measurement.
-- **The live site was never opened**, and the real `/api/settings` was never read. Every
-  browser measurement above is this worktree's mock.
+- ✅ **ANSWERED at the v155 deploy — ~~The migration has not touched a real database~~.** It
+  has now: the boot log says `database: added spotlight_channels.starts_at` at **20:35:23Z**
+  and the Fly volume is at schema **53**. The argument held — one additive nullable column
+  through `ADDED_COLUMNS`, applied by `Database.connect` on boot, no backfill — but it is a
+  measurement now, not an argument. *Was, on the branch:* Schema 53 was applied in the suite's
+  `tmp_path` files only; the Fly volume had never seen the column.
+- ✅ **PARTLY ANSWERED at the v155 deploy — ~~The live site was never opened~~.** The live API
+  was **read**: `GET /api/golive/spotlight` through `scripts/read.ps1` (20:36:11Z) answers
+  `starts_at` on all four live rows — all `null`, i.e. *started already* — beside `scheduled`
+  (false) and `range`. ⚠️ **No BROWSER has rendered the live page**, the real `/api/settings`
+  was still never read, and every browser measurement above is still this branch's mock.
 - **Nothing was checked in a browser that is not Chromium**, no screenshot was taken, and no
   narrow-width layout check was made of the two-picker `formrow`.
 - **Decision 3's cost was not exercised**: no process was restarted between a row being

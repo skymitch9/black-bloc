@@ -6,7 +6,14 @@
 > This retires the 2026-08-26 local-only rule, under which the tree was
 > gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
 > so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
-> Last verified: **2026-09-19** — a docs-wide staleness pass after the TEST_MODE lift
+> Last verified: **2026-09-22 — ONE number only**, at the v155 docs ritual: `ls docs/info/*.md`
+> returns **107** (106 beside the index; the tree paragraph below said 105, counted 2026-09-21,
+> before `spotlight-dates-design.md` landed). `ls docs/access/*.md` still returns **12** (11 beside
+> its index), unchanged. ⚠️ **NOT re-checked at that pass:** the *Where the bot stands* block below,
+> whose live mode values are still the conductor's 2026-09-18 report and which states no figure that
+> v155 moved; nothing in the pass met live Discord or a browser. The bot itself is at **v155**
+> (deployed 2026-09-22 13:35 Phoenix; [`deploys.log`](deploys.log) is the authority).
+> Before that, **2026-09-19** — a docs-wide staleness pass after the TEST_MODE lift
 > (owner: *"update all docs using opus and then im gonna swap"*), measured off `main`
 > at `ffea17e`, which is **v141 LIVE**: `len(settings_store.KEY_TYPES)` (**277**),
 > `storage/db.py:SCHEMA_VERSION` (**45**), `len(bot.COGS)` (**22**),
@@ -75,8 +82,8 @@ for why).
 
 ⚠️ **Everything under `docs/` is reachable from this table.** The eight rows above
 are the *whole* top level (nothing else may live there — `DOCS_STANDARD.md` §1).
-The individual files in `access/` (**11** beside its index) and `info/` (**105**
-beside its index — re-counted **2026-09-21** at the v151 ritual, `ls docs/info/*.md`; this page said 89, counted 2026-09-19, before sixteen design docs landed across v150 and v151. `access/` is unchanged at 11. The `mock-direction-a/` folder is beside them)
+The individual files in `access/` (**11** beside its index) and `info/` (**106**
+beside its index — re-counted **2026-09-22** at the v155 ritual, `ls docs/info/*.md` returns 107 including the index; it was 105 on 2026-09-21 at the v151 ritual, before `spotlight-dates-design.md` landed, and 89 on 2026-09-19. `access/` is unchanged at 11. The `mock-direction-a/` folder is beside them)
 are listed by their own indexes, [`access/README.md`](access/README.md) and
 [`info/README.md`](info/README.md), not here — this page does not duplicate an
 index (§7). `archive/` holds the retired docs and the one-off `current-bots/`

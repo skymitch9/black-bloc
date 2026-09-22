@@ -8,7 +8,7 @@
 > channel takes them**. Everything below still describes the spotlight-ON behaviour correctly. Read
 > [`channel-streamers-design.md`](channel-streamers-design.md) first.
 
-> ➕ **EXTENDED 2026-09-22 (branch `spotlight-dates`): a spotlight row now has a START as well as an end.**
+> ➕ **EXTENDED 2026-09-22 — ✅ LIVE as v155 (13:35 Phoenix, release commit `a285afc7`, merge `fad98c9e`): a spotlight row now has a START as well as an end.**
 > `spotlight_channels.starts_at` (schema 53, nullable — NULL means *started already*, which is every row
 > this document describes). A row whose start is still ahead is **scheduled**: on the list, watched, and
 > announced by nobody until the start passes. §A's *Expiry* paragraph and the three-posts table are both

@@ -2879,7 +2879,9 @@ merge).
 
 ## Rows `SD-a` … `SD-d` — a spotlight is a DATE RANGE, start and end (branch `spotlight-dates`, 2026-09-22)
 
-⚠️ **Merged to `main`, NOT deployed.** Owner, 2026-09-22 10:29 Phoenix, verbatim: *"in golive
+✅ **LIVE as v155** — deployed 2026-09-22 **13:35** Phoenix (release commit `a285afc7`, merge
+`fad98c9e`); the column was added on boot at 20:35:23Z and the live route answers `starts_at`.
+⚠️ **Nothing below has been walked yet, and nothing has met Discord.** Owner, 2026-09-22 10:29 Phoenix, verbatim: *"in golive
 when i set a spotlight i can extend a week or keep forever. let me set a date range for start and
 end time"*. `spotlight_channels.starts_at` (schema **53**, nullable — NULL means *started
 already*, which every existing row is) makes a spotlight a range; a row whose start is still ahead

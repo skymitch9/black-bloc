@@ -2,7 +2,19 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-21 — the *move the live mirror* step only, which is RETIRED**
+> Last verified: **2026-09-22 — the deploys.log COUNT row and the node-fixture COUNT only, at the
+> v155 ritual.** [`../deploys.log`](../deploys.log) now records **154 deploys** (counted
+> 2026-09-22 with `grep -c .`), the last **v155** `a285afc7` at **2026-09-22 13:35** — this page had
+> said *107 / v108*, forty-six releases ago. The gate's node half is **six** fixture files, not the
+> "five" this page said in one place and "three" in another: `discordmd`, `labels`, `clipmd`,
+> `golive-join`, `layout` and **`discordmock`** (read off `scripts/deploy.ps1` and confirmed by the
+> v155 run's own output). ⚠️ **NOTHING else on this page was re-checked at that pass** — no command
+> body below was re-run by hand, the `fly.toml` block was not re-read, and the *5,546 tests in 40 s*
+> figure below is still the 2026-09-11 reading (the v155 gate ran **7,316 passed + 3 skipped in
+> 45 s**). The v155 deploy itself ran through `.\scripts\deploy.ps1` DETACHED exactly as described
+> below and behaved as described: gate green on the FIRST run, `release.json` written and committed
+> after the gate, push, `flyctl deploy`, skeleton line appended.
+> Before that, **2026-09-21 — the *move the live mirror* step only, which is RETIRED**
 > (owner, 12:2x, verbatim: *"We don't need the preview pages anymore"*). The mock's `LIVE_ROOT`
 > live mirror and its `/preview/` door are **deleted from `site/mock/server.mjs`** (branch
 > `no-previews`, merge `4dd9f649`), ✅ **shipped as part of v154 (2026-09-21 20:08)** — so there is
@@ -21,8 +33,8 @@
 > `min_machines_running = 1`) are what keep Fly from stopping the machine that holds the
 > gateway websocket. The old sentence would have led someone to *delete* the block. The
 > **redeploy** path is now heavily exercised: [`../deploys.log`](../deploys.log) records
-> **107 deploys** (counted 2026-09-11; was 37 on 2026-08-31), the last **v108** `73e2e44`
-> at **2026-09-11 00:37**. The gate in `scripts/deploy.ps1` was re-read line by line and
+> **154 deploys** (counted 2026-09-22; 107 on 2026-09-11, 37 on 2026-08-31), the last **v155**
+> `a285afc7` at **2026-09-22 13:35**. The gate in `scripts/deploy.ps1` was re-read line by line and
 > matches what is described below (`ruff check .` → `pytest -q -n auto` → an ES-module
 > `node --check` of every `site/public/assets/*.js` → `site/mock/server.mjs` +
 > `check.mjs` → `git push` through `cmd /c` → `flyctl deploy --ha=false --remote-only
