@@ -1,5 +1,12 @@
 # The Go-live page, rebuilt — one list of people, whichever platform they stream on
 
+> **2026-09-21 (branch `mode-column`, not merged):** owner, after asking what *Mode then* meant and being told
+> it is the go-live mode at announce time (`on` posted for real, `shadow` rehearsed into the shadow channel,
+> `off` nothing posted) and that every row reads `on` since test mode lifted 2026-09-18: *"yes drop the mode
+> column too"*. **Recent streams** loses the **Mode then** column; its **Ended** cell now also carries
+> `badge('rehearsal', 'warn')` when `row.mode !== 'on'`, title *"posted into the shadow channel, not the
+> go-live channel"* — see item **12** below, amended.
+>
 > **2026-09-21 (branch `autolink`, not merged):** the Streamers toolbar gains a third door, **Link from history** —
 > one `ask()` confirm, `POST /api/golive/links/sweep`, and the report sentence under the button. It keeps its OWN
 > notice (`sayAgain('golive.sweep', …)`) because this page hands one `say` node to both `streamersSection` and
@@ -296,7 +303,11 @@ surprise a reader of the body.
 12. **Recent streams is unchanged except one cell:** *How* reads `source + also_source` when the
     co-stream fields are present. The mock's five-column Recent table was NOT adopted — the
     design's own table says "unchanged", and today's seven columns carry strictly more (Title,
-    Mode then).
+    Mode then). ⚠️ **AMENDED 2026-09-21 by branch `mode-column`:** the **Mode then** column is
+    gone (owner, after asking what it meant: *"yes drop the mode column too"* — every row read
+    `on` since test mode lifted 2026-09-18, so the column was noise). The table is back to six
+    columns; the **Ended** cell carries `badge('rehearsal', 'warn')` when `row.mode !== 'on'`, so a
+    shadow-era row is still told apart without a column that repeated on every line.
 13. **`joinStreamers`'s `live` can be `'both'`,** which §B1's row shape
     (`'twitch' | 'youtube' | null`) does not list. Required by the co-stream brief. Rows also
     carry three fields §B1 does not name — `listed`, `last_live_at`, `live_count` — because the
