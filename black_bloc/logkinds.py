@@ -172,6 +172,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "event.missed",
         "event.announce_skipped_late",
         "event.where_channel_gone",
+        "golive.channel_announced",
+        "golive.channel_ended",
         "golive.costream_added",
         "golive.history_swept",
         "golive.role_stuck",
