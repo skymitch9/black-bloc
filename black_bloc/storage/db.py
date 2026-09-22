@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 52
+SCHEMA_VERSION = 53
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -882,6 +882,7 @@ CREATE TABLE IF NOT EXISTS spotlight_channels (
     note           TEXT,
     added_by       INTEGER,
     added_at       TEXT    NOT NULL,
+    starts_at      TEXT,
     expires_at     TEXT,
     bump_hours     INTEGER,
     pin            INTEGER NOT NULL DEFAULT 1,
@@ -982,6 +983,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("spotlight_channels", "announce", "INTEGER NOT NULL DEFAULT 1"),
     ("spotlight_channels", "youtube_channel_id", "TEXT"),
     ("spotlight_channels", "youtube_handle", "TEXT"),
+    ("spotlight_channels", "starts_at", "TEXT"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")

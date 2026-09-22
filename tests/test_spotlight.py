@@ -208,3 +208,144 @@ def test_the_spotlight_off_sentence_says_the_pin_came_off_when_one_did():
     assert "unpinned" not in spotlight.spotlight_said(off)
     assert "has been unpinned" in spotlight.spotlight_said(off, spotlight.UNPINNED)
     assert "unpinned" not in spotlight.spotlight_said(row(spotlight=1), spotlight.UNPINNED)
+
+
+# --- the owner's date range (2026-09-22): a spotlight has a START as well as an end ----------
+
+
+def test_a_row_with_no_start_reads_exactly_as_it_always_did():
+    assert spotlight.is_scheduled(row(), NOW) is False
+    assert spotlight.range_words(row(expires_at=None)) == "kept"
+    assert spotlight.range_words(row(expires_at=(NOW + timedelta(days=10)).isoformat())) == (
+        "until 30 Sep"
+    )
+
+
+def test_a_start_still_ahead_is_scheduled_and_one_already_gone_is_not():
+    ahead = row(starts_at=(NOW + timedelta(days=3)).isoformat())
+    assert spotlight.is_scheduled(ahead, NOW) is True
+    assert spotlight.is_scheduled(ahead, NOW + timedelta(days=4)) is False
+    assert spotlight.is_scheduled(row(starts_at=(NOW - timedelta(days=1)).isoformat()), NOW) is (
+        False
+    )
+
+
+def test_an_unreadable_start_is_treated_as_started_rather_than_stranding_the_row():
+    assert spotlight.is_scheduled(row(starts_at="whenever"), NOW) is False
+    assert spotlight.range_words(row(starts_at="whenever")) == "kept"
+
+
+def test_a_range_reads_from_one_day_to_the_other_and_says_kept_when_there_is_no_end():
+    both = row(
+        starts_at=(NOW + timedelta(days=3)).isoformat(),
+        expires_at=(NOW + timedelta(days=10)).isoformat(),
+    )
+    assert spotlight.range_words(both) == "from 23 Sep to 30 Sep"
+    assert spotlight.range_words(row(starts_at=both["starts_at"])) == "from 23 Sep · kept"
+
+
+def test_the_announced_cell_names_a_scheduled_row_and_a_started_one_differently():
+    ahead = row(starts_at=(NOW + timedelta(days=3)).isoformat())
+    assert spotlight.announced_words(ahead, NOW) == "spotlight · from 23 Sep · kept · scheduled"
+    assert spotlight.announced_words(ahead, NOW + timedelta(days=4)) == (
+        "spotlight · from 23 Sep · kept"
+    )
+
+
+def test_the_three_range_words_are_settings_keys_and_a_broken_one_falls_back():
+    both = row(
+        starts_at=(NOW + timedelta(days=3)).isoformat(),
+        expires_at=(NOW + timedelta(days=10)).isoformat(),
+    )
+    assert spotlight.range_words(both, "{start} → {end}") == "23 Sep → 30 Sep"
+    assert spotlight.range_words(both, "{nonsense}") == "from 23 Sep to 30 Sep"
+    assert spotlight.scheduled_word("not yet") == "not yet"
+    assert spotlight.announced_words(both, NOW, word="not yet").endswith("· not yet")
+
+
+def test_a_typed_date_is_read_in_the_zone_it_was_typed_in():
+    read, trouble = spotlight.read_moment("2026-09-30 19:00", "America/Phoenix")
+    assert trouble is None and read == "2026-10-01T02:00:00+00:00"
+    read, trouble = spotlight.read_moment("2026-09-30", "UTC")
+    assert trouble is None and read == "2026-09-30T00:00:00+00:00"
+
+
+def test_a_blank_box_is_not_a_refusal_it_is_now_or_for_ever():
+    assert spotlight.read_moment("") == (None, None)
+    assert spotlight.read_moment(None) == (None, None)
+    assert spotlight.read_end("") == (None, None)
+
+
+def test_a_date_nobody_can_read_is_refused_in_words_naming_what_was_typed():
+    read, trouble = spotlight.read_moment("next tuesday", "UTC")
+    assert read is None and trouble == spotlight.BAD_DATE
+    said = spotlight.bad_date_said("next tuesday")
+    assert "next tuesday" in said and "YYYY-MM-DD" in said
+
+
+def test_the_end_box_still_takes_a_bare_number_of_days_so_the_old_box_keeps_working():
+    read, trouble = spotlight.read_end("7", "UTC", NOW)
+    assert trouble is None and read == (NOW + timedelta(days=7)).isoformat()
+
+
+def test_a_whole_stored_timestamp_comes_back_out_of_the_box_it_went_into():
+    assert spotlight.typed_moment("2026-10-01T02:00:00+00:00", "America/Phoenix") == (
+        "2026-09-30 19:00"
+    )
+    assert spotlight.typed_moment(None) == ""
+    read, trouble = spotlight.read_moment("2026-10-01T02:00:00+00:00")
+    assert trouble is None and read == "2026-10-01T02:00:00+00:00"
+
+
+def test_an_end_before_its_start_is_a_problem_and_a_kept_row_can_never_be_one():
+    start = (NOW + timedelta(days=3)).isoformat()
+    assert spotlight.range_problem(start, (NOW + timedelta(days=10)).isoformat()) is None
+    assert spotlight.range_problem(start, (NOW + timedelta(days=1)).isoformat()) == (
+        spotlight.END_BEFORE_START
+    )
+    assert spotlight.range_problem(start, start) == spotlight.END_BEFORE_START
+    assert spotlight.range_problem(start, None) is None
+    assert spotlight.range_problem(None, (NOW + timedelta(days=1)).isoformat()) is None
+
+
+def test_a_start_already_gone_by_is_accepted_and_stored_as_given_never_rewritten():
+    read, trouble = spotlight.read_moment("2020-01-02 10:00", "UTC")
+    assert trouble is None and read == "2020-01-02T10:00:00+00:00"
+    assert spotlight.range_problem(read, (NOW + timedelta(days=1)).isoformat()) is None
+
+
+def test_the_backwards_refusal_names_both_days_and_is_a_settings_key():
+    said = spotlight.end_before_start_said(
+        (NOW + timedelta(days=3)).isoformat(), (NOW + timedelta(days=1)).isoformat()
+    )
+    assert "23 Sep" in said and "21 Sep" in said
+    assert spotlight.end_before_start_said("x", "y", "{start}/{end}") == "x/y"
+
+
+def test_the_panel_line_marks_a_scheduled_row_and_leaves_a_started_one_alone():
+    ahead = row(starts_at=(NOW + timedelta(days=3)).isoformat())
+    assert spotlight.panel_line(ahead, False, now=NOW).endswith("**scheduled**")
+    assert "scheduled" not in spotlight.panel_line(ahead, False, now=NOW + timedelta(days=4))
+
+
+def test_the_two_modal_labels_are_keys_and_are_clamped_to_what_discord_shows():
+    assert spotlight.starts_label(None) == "Starts — blank means now"
+    assert spotlight.ends_label("Ends") == "Ends"
+    assert len(spotlight.starts_label("x" * 80)) == spotlight.LABEL_MAX
+    assert spotlight.dates_button(None) == "Set dates…"
+    assert spotlight.dates_button("Dates") == "Dates"
+
+
+def test_the_dates_sentence_says_a_scheduled_row_will_stay_quiet_until_its_start():
+    ahead = row(starts_at=(NOW + timedelta(days=3)).isoformat())
+    said = spotlight.dates_said(ahead, NOW)
+    assert "from 23 Sep · kept" in said and "before that start" in said
+    assert "before that start" not in spotlight.dates_said(ahead, NOW + timedelta(days=4))
+
+
+def test_what_a_row_says_it_was_added_as_reads_the_range_not_only_the_end():
+    both = row(
+        starts_at=(NOW + timedelta(days=3)).isoformat(),
+        expires_at=(NOW + timedelta(days=10)).isoformat(),
+    )
+    assert "from 23 Sep to 30 Sep" in spotlight.added_said(both, 4)

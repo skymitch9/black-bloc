@@ -23,8 +23,17 @@ from .settings_store import (
     CHANNEL_OPTOUT_DELETE,
     CHANNEL_OPTOUT_END,
     CHANNEL_OPTOUT_LEAVE,
+    SPOTLIGHT_BAD_DATE,
     SPOTLIGHT_BUMP_TEMPLATE,
+    SPOTLIGHT_DATES_BUTTON,
+    SPOTLIGHT_END_BEFORE_START,
+    SPOTLIGHT_ENDS_LABEL,
+    SPOTLIGHT_RANGE,
+    SPOTLIGHT_RANGE_KEPT,
+    SPOTLIGHT_SCHEDULED_WORD,
+    SPOTLIGHT_STARTS_LABEL,
 )
+from .timezones import DEFAULT_TZ, zone
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +45,21 @@ PIN_REASON = "Black Bloc keeps this spotlight pinned while it streams"
 UNPIN_REASON = "Black Bloc unpinned this spotlight — the stream is over"
 KEPT = "kept"
 UNTIL = "until {when}"
+LABEL_MAX = 45
+BAD_DATE = "bad_date"
+END_BEFORE_START = "end_before_start"
+DATE_ONLY = "%Y-%m-%d"
+DATE_AND_TIME = "%Y-%m-%d %H:%M"
+STARTS_PLACEHOLDER = "2026-09-30 19:00"
+ENDS_PLACEHOLDER = "2026-10-07 23:00, or 7"
+SCHEDULED_CELL = "spotlight · {when} · {word}"
+PANEL_SCHEDULED = " · **{word}**"
+DATES_MODAL_TITLE = "A spotlight’s dates"
+DATES_SAID = "**{login}** runs {when}."
+SCHEDULED_SAID = (
+    "**{login}** runs {when}. Nothing of its is announced, pinned or reminded before "
+    "that start — the row sits on the list until then."
+)
 ANNOUNCED_CELL = "spotlight · {when}"
 CHANNEL_ONLY = "channel only"
 
@@ -416,8 +440,142 @@ def until_words(row: Any) -> str:
     return UNTIL.format(when=said) if said else KEPT
 
 
-def announced_words(row: Any) -> str:
-    return ANNOUNCED_CELL.format(when=until_words(row))
+def starts_at_of(row: Any) -> Any:
+    return _cell(row, "starts_at")
+
+
+def is_scheduled(row: Any, now: datetime | None = None) -> bool:
+    """An unreadable start is treated as no start: the row is watched, never stranded."""
+    raw = starts_at_of(row)
+    if not str(raw or "").strip():
+        return False
+    when = parse_ts(raw)
+    if when is None:
+        log.warning("spotlight: starts_at %r is unreadable; the row is treated as started", raw)
+        return False
+    return (now or datetime.now(UTC)) < when
+
+
+def range_words(row: Any, template: Any = None, kept_template: Any = None) -> str:
+    """`from 25 Sep to 30 Sep`, `from 25 Sep · kept`, `until 30 Sep`, or `kept`."""
+    started = when_words(starts_at_of(row))
+    if not started:
+        return until_words(row)
+    if keeps_forever(row):
+        wanted = str(kept_template or "").strip() or SPOTLIGHT_RANGE_KEPT
+        return _filled(wanted, SPOTLIGHT_RANGE_KEPT, start=started, end="")
+    wanted = str(template or "").strip() or SPOTLIGHT_RANGE
+    return _filled(
+        wanted, SPOTLIGHT_RANGE, start=started, end=when_words(_cell(row, "expires_at"))
+    )
+
+
+def _filled(wanted: str, fallback: str, **fields: Any) -> str:
+    """Unreadable wording falls back to the shipped default rather than showing nothing."""
+    try:
+        return wanted.format(**fields)
+    except Exception as exc:
+        log.warning("spotlight: wording %r could not be rendered (%s); using the default",
+                    wanted, exc)
+        return fallback.format(**fields)
+
+
+def scheduled_word(word: Any = None) -> str:
+    return str(word or "").strip() or SPOTLIGHT_SCHEDULED_WORD
+
+
+def announced_words(
+    row: Any,
+    now: datetime | None = None,
+    template: Any = None,
+    kept_template: Any = None,
+    word: Any = None,
+) -> str:
+    said = range_words(row, template, kept_template)
+    if not is_scheduled(row, now):
+        return ANNOUNCED_CELL.format(when=said)
+    return SCHEDULED_CELL.format(when=said, word=scheduled_word(word))
+
+
+def typed_moment(value: Any, tz_name: Any = None) -> str:
+    """What a stored instant looks like back in the box it was typed into."""
+    when = parse_ts(value)
+    if when is None:
+        return ""
+    zi = zone(tz_name) or zone(DEFAULT_TZ)
+    return when.astimezone(zi).strftime(DATE_AND_TIME)
+
+
+def read_moment(given: Any, tz_name: Any = None, now: datetime | None = None) -> tuple[Any, Any]:
+    """`(iso, problem)` — a blank is `(None, None)`, which everywhere means now / for ever.
+
+    A whole timestamp is taken as given; `YYYY-MM-DD HH:MM` and `YYYY-MM-DD` are read in the
+    zone asked for. A start already gone by is ACCEPTED and stored as typed, never rewritten.
+    """
+    text = str(given or "").strip()
+    if not text:
+        return (None, None)
+    zi = zone(tz_name) or zone(DEFAULT_TZ)
+    for shape in (DATE_AND_TIME, DATE_ONLY):
+        try:
+            naive = datetime.strptime(text, shape)
+        except ValueError:
+            continue
+        return (naive.replace(tzinfo=zi).astimezone(UTC).isoformat(), None)
+    whole = parse_ts(text.replace(" ", "T")) if "T" in text or "+" in text else None
+    if whole is not None:
+        return (whole.astimezone(UTC).isoformat(), None)
+    return (None, BAD_DATE)
+
+
+def read_end(given: Any, tz_name: Any = None, now: datetime | None = None) -> tuple[Any, Any]:
+    """The end box keeps the old `days` box working: a bare whole number is that many days."""
+    text = str(given or "").strip()
+    if text.isdigit():
+        return (expiry_in_days(int(text), now), None)
+    return read_moment(text, tz_name, now)
+
+
+def range_problem(starts_at: Any, expires_at: Any) -> Any:
+    """`END_BEFORE_START` or None. A kept row, or one with no start, can never be wrong."""
+    start = parse_ts(starts_at)
+    end = parse_ts(expires_at)
+    if start is None or end is None:
+        return None
+    return END_BEFORE_START if end <= start else None
+
+
+def bad_date_said(given: Any, template: Any = None) -> str:
+    wanted = str(template or "").strip() or SPOTLIGHT_BAD_DATE
+    return _filled(wanted, SPOTLIGHT_BAD_DATE, given=str(given or "")[:40])
+
+
+def end_before_start_said(starts_at: Any, expires_at: Any, template: Any = None) -> str:
+    wanted = str(template or "").strip() or SPOTLIGHT_END_BEFORE_START
+    return _filled(
+        wanted,
+        SPOTLIGHT_END_BEFORE_START,
+        start=when_words(starts_at) or str(starts_at or ""),
+        end=when_words(expires_at) or str(expires_at or ""),
+    )
+
+
+def dates_said(row: Any, now: datetime | None = None, **wording: Any) -> str:
+    said = range_words(row, wording.get("template"), wording.get("kept_template"))
+    shape = SCHEDULED_SAID if is_scheduled(row, now) else DATES_SAID
+    return shape.format(login=_cell(row, "twitch_login"), when=said)
+
+
+def dates_button(label: Any = None) -> str:
+    return str(label or "").strip() or SPOTLIGHT_DATES_BUTTON
+
+
+def starts_label(label: Any = None) -> str:
+    return (str(label or "").strip() or SPOTLIGHT_STARTS_LABEL)[:LABEL_MAX]
+
+
+def ends_label(label: Any = None) -> str:
+    return (str(label or "").strip() or SPOTLIGHT_ENDS_LABEL)[:LABEL_MAX]
 
 
 def bump_hours_for(row: Any, default_hours: Any) -> int:
@@ -529,26 +687,32 @@ def bump_render(template: Any, info: StreamInfo, name: str, duration: str) -> st
         return tidy(SPOTLIGHT_BUMP_TEMPLATE.format_map(fields))
 
 
-def panel_line(row: Any, live: bool, role_id: Any = None) -> str:
+def panel_line(
+    row: Any, live: bool, role_id: Any = None, now: datetime | None = None, **wording: Any
+) -> str:
     note = _cell(row, "note")
     said_youtube = youtube_said(row)
+    ranged = range_words(row, wording.get("template"), wording.get("kept_template"))
     said = PANEL_ROW.format(
         login=_cell(row, "twitch_login"),
-        when=until_words(row) if is_spotlit(row) else "on the list",
+        when=ranged if is_spotlit(row) else "on the list",
         spot=PANEL_SPOTLIT if is_spotlit(row) else "",
         youtube=PANEL_YOUTUBE.format(said=said_youtube) if said_youtube else "",
         live=PANEL_LIVE if live else "",
         note=PANEL_NOTE.format(note=note) if note else "",
     )
+    if is_scheduled(row, now):
+        said += PANEL_SCHEDULED.format(word=scheduled_word(wording.get("word")))
     return said + (PING_ROLE_LINE.format(role_id=int(role_id)) if role_id else "")
 
 
-def added_said(row: Any, hours: int) -> str:
+def added_said(row: Any, hours: int, **wording: Any) -> str:
+    ranged = range_words(row, wording.get("template"), wording.get("kept_template"))
     if not is_spotlit(row):
-        return ADDED_PLAIN.format(login=_cell(row, "twitch_login"), when=until_words(row))
+        return ADDED_PLAIN.format(login=_cell(row, "twitch_login"), when=ranged)
     return ADDED.format(
         login=_cell(row, "twitch_login"),
-        when=until_words(row),
+        when=ranged,
         hours=hours,
         pin=ADDED_PIN if _cell(row, "pin") else ADDED_NO_PIN,
     )

@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 52
+        assert SCHEMA_VERSION == 53
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2009,3 +2009,30 @@ async def test_a_schema_50_file_gains_the_trains_event_column_and_keeps_its_rows
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await db.close()
+
+
+async def test_a_spotlight_row_gains_its_starts_at_column_on_an_older_file(tmp_path):
+    """52 → 53: the owner's date range. A row written before it keeps a NULL start, which
+    everywhere means *started already*, so nothing on an existing list goes quiet."""
+    path = tmp_path / "old.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE spotlight_channels DROP COLUMN starts_at")
+    await db.conn.execute(
+        "INSERT INTO spotlight_channels(id, guild_id, twitch_login, added_at, pin) "
+        "VALUES (1, 7, 'gamesdonequick', '2026-09-20T00:00:00+00:00', 1)"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(spotlight_channels)")
+        assert "starts_at" in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT starts_at FROM spotlight_channels WHERE id = 1")
+        assert (await cur.fetchone())["starts_at"] is None
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "53"
+    finally:
+        await again.close()

@@ -2668,11 +2668,11 @@ def golive_page_keys() -> list[str]:
     )
 
 
-def test_the_golive_page_still_draws_fifty_four_keys():
+def test_the_golive_page_still_draws_sixty_two_keys():
     """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
     A key added to one of these namespaces has to be added there too, or it lands in the
     Everything else catch-all with nobody noticing."""
-    assert len(golive_page_keys()) == 54
+    assert len(golive_page_keys()) == 62
 
 
 def test_every_golive_page_key_says_in_words_what_it_does():
