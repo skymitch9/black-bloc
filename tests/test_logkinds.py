@@ -931,9 +931,11 @@ def test_adding_a_platform_is_loud_because_it_rewrote_a_post_and_dropping_one_is
 def test_a_channel_with_no_spotlight_has_its_own_kinds_so_the_title_cannot_lie():
     """Owner, 2026-09-21: "why is gdq being spotlighted in the logs channel? its spot light
     isnt on". The kind IS the log embed's title, so the word has to match the behaviour."""
+    assert "golive.channel_announced" in IMPORTANT
+    assert is_important("golive.channel_announced") is True
+    assert "golive.channel_ended" in ROUTINE
+    assert is_important("golive.channel_ended") is False
     for kind in ("golive.channel_announced", "golive.channel_ended"):
-        assert kind in IMPORTANT
-        assert is_important(kind) is True, kind
         assert feature_of(kind) == "golive"
         assert "golive.%" in like_patterns("golive")
     assert is_shadow("golive.would_channel_announce") is True
