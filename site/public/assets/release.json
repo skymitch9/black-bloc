@@ -1,7 +1,8 @@
 {
-  "release": "v158",
-  "commit": "203274c6",
+  "release": "v159",
+  "commit": "105e5b59",
   "changed_features": [
-    "birthday"
+    "birthday",
+    "chat"
   ]
 }
