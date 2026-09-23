@@ -238,11 +238,16 @@ Chat group 75 → 77 keys, registry 366 → 368; both keys are edited in the Cha
 | *What up* | 3 hits on `up`, quoted back | 0 tokens, 0 hits, SIMPLE, no notes |
 | *where do I post my PBs* | substring hits | `#speed-and-pbs` top, strong (`pbs` names it), IMPORTANT, grounded silently |
 | *who has the tech support role* | role section | role section top, strong (3 words) |
-| *when is the cookout?* | SIMPLE, note attached | SIMPLE, note attached under the silent-use header |
+| *when is the cookout* / *when is the cookout?* | `?` form only: SIMPLE, note attached | both: SIMPLE, note attached under the silent-use header |
 | *sup fam, cookout vibes* | SIMPLE, weak *Cookout hours* hit attached | SIMPLE, weak hit, no notes |
 
-⚠️ **The question test is the `?`** (`is_a_question`): *when is the cookout* typed WITHOUT a
-question mark is not a question, and on a weak hit it carries no notes.
+⚠️ **The question test is a `?` OR a question opener as the FIRST word** (`is_a_question`,
+second conductor narrowing: Discord folk rarely type the `?`). The openers are one frozenset,
+`chat_llm.QUESTION_OPENERS` (who what when where why how which can could would should does do did
+is are am was were any anyone anybody). So *when is the cookout* keeps its note with no `?`;
+*What up* now counts as a question but still carries nothing, because it has no hits; a mid-sentence
+*how* (*I wonder how the cookout went*) does not count. `a_real_question` reads the same test, so a
+13+ word message that opens with an opener now reaches the careful tier too.
 
 Not verified: no live model was called — every test fakes both clients; nobody has said *what up*
 to the deployed bot (sweep `CB-a`).

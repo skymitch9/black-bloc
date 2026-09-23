@@ -61,6 +61,13 @@ log = logging.getLogger(__name__)
 QUESTION_WORDS = 12
 CONVERSATION_TURNS = 2
 QUESTION_MARK = "?"
+QUESTION_OPENERS: frozenset[str] = frozenset(
+    """
+    who what when where why how which can could would should does do did is are am was were any
+    anyone anybody
+    """.split()
+)
+FIRST_WORD = re.compile(r"[a-z]+")
 
 MEMBER = "member"
 BOT = "bot"
@@ -144,8 +151,14 @@ def word_count(text: Any) -> int:
     return len(said.split()) if said else 0
 
 
+def first_word(text: Any) -> str:
+    found = FIRST_WORD.search(spoken(text).lower())
+    return found.group(0) if found else ""
+
+
 def is_a_question(text: Any) -> bool:
-    return QUESTION_MARK in spoken(text)
+    """A `?` anywhere, or a question opener as the first word — Discord rarely types the `?`."""
+    return QUESTION_MARK in spoken(text) or first_word(text) in QUESTION_OPENERS
 
 
 def a_real_question(text: Any) -> bool:

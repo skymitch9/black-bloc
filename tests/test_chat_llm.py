@@ -26,6 +26,7 @@ from black_bloc.chat_llm import (
     clip,
     conversational_reply,
     grounded,
+    is_a_question,
     ladder,
     llm_turns,
     money,
@@ -179,6 +180,7 @@ def test_banter_gets_no_notes_and_questions_or_sure_hits_keep_them():
     assert grounded(SIMPLE, "sup fam", weak) == ()
     assert grounded(SIMPLE, "cookout parliament", weak) == ()
     assert grounded(SIMPLE, "cookout parliament?", weak) is weak
+    assert grounded(SIMPLE, "when is the cookout parliament", weak) is weak
     assert grounded(SIMPLE, "cookout hours", strong) is strong
     assert grounded(IMPORTANT, "cookout parliament", weak) is weak
 
@@ -776,6 +778,52 @@ async def test_a_short_question_stays_on_the_cheap_tier_and_keeps_its_note(wired
     assert tier == SIMPLE
     asked = quick.seen[0]["messages"][-1]["content"]
     assert "Friday evenings" in asked and GROUNDING_NOTE in asked
+
+
+def test_a_question_is_a_question_mark_or_an_opener_as_the_first_word():
+    assert is_a_question("<@1> when is the cookout") is True
+    assert is_a_question("What's good") is True
+    assert is_a_question("What up") is True
+    assert is_a_question("sup fam, cookout vibes") is False
+    assert is_a_question("I wonder how the cookout went") is False
+    assert is_a_question("I wonder how the cookout went?") is True
+
+
+async def test_what_up_counts_as_a_question_and_still_carries_nothing(wired, monkeypatch):
+    await server_notes(wired.db)
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    said, tier, _tone = await ask(wired, "<@1> What up")
+
+    assert tier == SIMPLE
+    assert quick.seen[0]["messages"][-1]["content"] == "What up"
+
+
+async def test_a_question_with_no_question_mark_keeps_its_note(wired, monkeypatch):
+    """Discord rarely types the `?` (conductor, 2026-09-23)."""
+    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    said, tier, _tone = await ask(wired, "<@1> when is the cookout")
+
+    assert tier == SIMPLE
+    asked = quick.seen[0]["messages"][-1]["content"]
+    assert "Friday evenings" in asked and GROUNDING_NOTE in asked
+
+
+async def test_a_mid_sentence_how_is_not_a_question_and_a_weak_hit_stays_out(
+    wired, monkeypatch
+):
+    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    said, tier, _tone = await ask(wired, "<@1> I wonder how the cookout went")
+
+    assert tier == SIMPLE
+    assert quick.seen[0]["messages"][-1]["content"] == "I wonder how the cookout went"
 
 
 async def test_small_talk_with_a_weak_accidental_hit_carries_no_notes(wired, monkeypatch):
