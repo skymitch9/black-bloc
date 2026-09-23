@@ -66,6 +66,10 @@ everything up to and including the card being posted with its live view.
 `-m 'not live'` is in `pyproject.toml`'s `addopts`, so `tests/live/` is **deselected** from every
 default run — it never reaches the network by accident.
 
+The suite is **environment-proof** (2026-09-22): an autouse session fixture in `tests/conftest.py` clears every `config.py`
+setting name, `DEV_GUILD_ID`/`TEST_MODE`/`TEST_CHANNEL_ID` and `BLACK_BLOC_*` from the shell and stops `Settings` reading `.env`,
+so no one has to unset keys before a run (`docs/info/code-notes.md` ▸ `tests/conftest.py`).
+
 ⚠️ **Tests mirror the package** (`black_bloc/x.py` → `tests/test_x.py`). `tests/live/` is the one
 deliberate exception and says so in its own `__init__.py`.
 
