@@ -2958,3 +2958,13 @@ machine is served the real page, so none of these can be run against the mock.
 | **`YW-b`** | Logs page ▸ YouTube chip, after a few probes while the wall is up | `youtube.probe_walled` rows — ONE per channel when the wall goes up, and one more only when what it lets through changes (`live` true ↔ null), never one per 5-minute probe. `live: null` means the wall hid the marker. Nothing about it posts to `#blackbloc-logs` (routine) |
 | **`YW-c`** | Wait for a spotlight/channel row that is NOT opted out and has a YouTube channel (GamesDoneQuick) to go live on YouTube while the wall is up | ONE `youtube.live_id_searched` row (`units: 100`, `video_id` set) for that channel per broadcast, `quota_today` up by **101**, and the announcement links `youtube.com/watch?v=<id>`, not the `/live` page. ⚠️ A quota climbing by 100 per probe is the bug (`YL-m`'s rule) |
 | **`YW-d`** | Look at ESA Marathon's `youtube.live_seen` rows after the deploy | Each reads `announced: false, because: opted_out` — never `announced: true` while its announce cell is off — and there is NO `youtube.live_id_searched` row for `UC3Oe-jfrIqEGygxYBYyN6jQ`. One such row per boot is expected (the memory is per process) |
+
+## Row `PX-a` — a button on a panel the restart dropped answers in words (branch `panels-survive-restart`, 2026-09-22)
+
+Design: [`../info/panels-orphaned-click-design.md`](../info/panels-orphaned-click-design.md); the
+defect is [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) ▸ KI-20. Lettered; the conductor numbers it.
+⚠️ Needs a restart while a panel is open, so run it across a deploy.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PX-a`** | Open `/request` (any panel will do) and leave it on screen. Restart the bot (a deploy, or `flyctl machine restart`), wait for it to read green, then press any button on that old panel | NOT Discord's red *"This interaction failed"*. You get one message only you can see: *"This panel has gone quiet — it timed out, or Black Bloc restarted since it was opened, so its buttons no longer reach anything. Run /request again for a fresh one."* The old panel itself is unchanged. Dashboard ▸ **Logs** ▸ **All** ▸ Core shows one `panel.expired_click` row naming you, `command: /request`, `feature: request`. Change the words on the Settings page ▸ **core** ▸ *What a button on a panel that has gone quiet says*, restart again with a panel open, press: the new words arrive. ⚠️ Then press a button on a FRESH panel: it must work exactly as before, with no second message |

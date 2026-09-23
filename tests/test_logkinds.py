@@ -395,6 +395,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "modmail.log_channel_forgotten",
     ),
     "black_bloc/command_visibility.py::LOG_KIND": ("commands.visibility",),
+    "black_bloc/orphaned.py::PANEL_EXPIRED_CLICK": ("panel.expired_click",),
     "black_bloc/api/auth.py::OPERATOR_READ_KIND": ("web.operator.read",),
     # B7: one helper serves the staff picker and the dashboard, so the head and the word are
     # both built at call time rather than being two literals in two places.
@@ -858,6 +859,7 @@ def test_web_kinds_collapse_onto_the_kind_they_mirror():
         ("settings.set", "core"),
         ("presence.bio_set", "core"),
         ("commands.visibility", "core"),
+        ("panel.expired_click", "core"),
         ("nonsense.happened", "core"),
         ("", "core"),
     ],
@@ -1107,6 +1109,8 @@ def test_like_patterns_cover_every_head_of_a_feature():
     assert like_patterns("core") == (
         "error.%",
         "web.error.%",
+        "panel.%",
+        "web.panel.%",
         "settings.%",
         "web.settings.%",
         "commands.%",

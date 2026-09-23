@@ -217,9 +217,9 @@ def test_the_settings_groups_fit_the_select():
 def test_three_groups_are_over_the_cap_and_find_is_what_reaches_the_rest():
     """`events` joined them when meeting minutes filed its eleven keys there, and `golive` when
     spotlight filed its nine — the group select is at its 25-cap, so a `spotlight` namespace
-    would have been dropped silently instead."""
+    would have been dropped silently instead. `core` joined at `panel_expired_text`."""
     over = [group for group in groups() if needs_find(group)]
-    assert over == ["chat", "events", "golive", "modmail"]
+    assert over == ["chat", "core", "events", "golive", "modmail"]
 
     every = editable_options("chat")
     assert len(every.keys) == SELECT_LIMIT
@@ -489,7 +489,8 @@ def test_the_operator_log_toggle_is_absent_without_manage_server():
 
 def test_find_a_setting_is_offered_only_where_a_group_outgrew_the_picker():
     assert actions(group_buttons("chat")) == [KEY_PICK, "find", BACK]
-    assert actions(group_buttons("core")) == [KEY_PICK, BACK]
+    assert actions(group_buttons("core")) == [KEY_PICK, "find", BACK]
+    assert actions(group_buttons("birthday")) == [KEY_PICK, BACK]
 
 
 async def test_the_panel_reads_its_own_minutes_and_its_own_site_page(store):

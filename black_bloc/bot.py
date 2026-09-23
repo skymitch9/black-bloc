@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 from datetime import UTC, datetime
+from typing import Any
 
 import discord
 from discord.ext import commands
@@ -15,6 +16,8 @@ from .config import Settings
 from .guard import TestModeGuard
 from .intents import build_intents
 from .invite import invite_url
+from .orphaned import install as install_orphaned
+from .orphaned import mark as mark_orphaned
 from .prefix import no_prefix_commands
 from .presence import boot_presence, shutdown_presence
 from .rolemenu_panels import install as install_panels
@@ -74,8 +77,14 @@ class BlackBlocBot(commands.Bot):
             self.guard = TestModeGuard(self, settings.test_channel_id)
             self.guard.install()
 
+    def dispatch(self, event_name: str, /, *args: Any, **kwargs: Any) -> None:
+        if event_name == "interaction" and args:
+            mark_orphaned(self, args[0])
+        super().dispatch(event_name, *args, **kwargs)
+
     async def setup_hook(self) -> None:
         install_error_handler(self)
+        install_orphaned(self)
         await self.db.connect()
         await self.store.load()
         install_rehearsal_home(self)

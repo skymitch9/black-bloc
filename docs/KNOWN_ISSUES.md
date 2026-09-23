@@ -730,6 +730,21 @@ Number: **0 reports** so far; nothing planned.
 > answering), but it is now a number a member can generate. Still `WATCHING`, still **0
 > reports**, and ⚠️ **not re-measured** — the eighteen `*_panel_minutes` keys were last counted
 > 2026-09-11 and were not re-imported today.
+>
+> 🔨 **2026-09-22 — the red "This interaction failed" is answered in words (branch
+> `panels-survive-restart`, NOT merged, NOT deployed).** A press, pick or modal submit whose
+> `custom_id` no live view, modal or dynamic item owns — a panel the restart dropped, or one whose
+> timeout fired but whose footer edit failed — now gets ONE ephemeral sentence, the new core key
+> `panel_expired_text` (*"This panel has gone quiet — … Run /request again for a fresh one."*, the
+> command read from Discord's record on the message, "the command" when absent), and one ROUTINE
+> row `panel.expired_click`. The decision is taken inside `BlackBlocBot.dispatch`, before any
+> handler runs, so a live view is never answered twice — design and the discord.py 2.7.1 internals
+> it leans on: [`info/panels-orphaned-click-design.md`](info/panels-orphaned-click-design.md).
+> ⚠️ **The defect itself is unchanged:** the panel still dies on a restart and its buttons still do
+> nothing but explain; the fix that would CLOSE this entry is still the per-feature persistent
+> panel above. Status stays `WATCHING`, the number stays **reports** (still **0**). ⚠️ Proved
+> against discord.py's own parser in the suite only; never exercised against live Discord (sweep
+> row `PX-a`).
 
 ## KI-18 — Editing a question changes the form, never the answers already sent — `ACCEPTED`
 

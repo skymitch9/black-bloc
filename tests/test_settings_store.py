@@ -2488,7 +2488,7 @@ async def test_the_boot_status_ships_on_with_both_sentences_written(store):
         store.get(7, settings_store.SHUTDOWN_STATUS_TEXT_KEY)
         == settings_store.SHUTDOWN_STATUS_TEXT
     )
-    assert len(settings_store.CORE_KEYS) == 24
+    assert len(settings_store.CORE_KEYS) == 25
 
 
 async def test_stored_values_finds_every_guild_that_set_a_key(store):

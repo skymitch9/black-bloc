@@ -8007,3 +8007,21 @@ Design: `youtube-live-design.md` ▸ *The walled channel rows* (deviations 27–
 | `black_bloc/cogs/content/youtube.py:1042` `id_unknown` | Counts `LIVE_ID_UNKNOWN` sentinels in `live_video` — channels reading live whose post (if any) links the `/live` page. |
 | `black_bloc/youtube.py:320` `WALL_LINKS_KEYED` / `WALL_LINKS_KEYLESS` | Status readouts in the staff half, the same family as `BOT_CHECKED` and `LIVE_NO_KEY` — not posted announcements, so not settings keys. |
 | `site/public/assets/page-golive.js:1609` `probeIds` | Three states in words: nobody live, every id found, or a warn badge naming how many ids are unknown and what the post links instead. Typographic apostrophes, as the rest of the module — a straight one inside a single-quoted string broke the module once on this branch. |
+
+## A click on a panel nobody holds any more (2026-09-22)
+
+*(branch `panels-survive-restart`, off `main` `269338c3`; design
+[`panels-orphaned-click-design.md`](panels-orphaned-click-design.md). Keyed against `67ad0d3e`; the
+anchor text wins over the number.)*
+
+| Key | Note |
+|---|---|
+| `black_bloc/bot.py:80` `BlackBlocBot.dispatch` | ⚠️ **The mark MUST be taken here, not in the listener.** `ConnectionState.parse_interaction_create` runs `dispatch_view` (which creates the owning view's task) and only then this `dispatch` (which creates the listeners' tasks); a view that `stop()`s before its first await has left the store by the time a listener runs, and a listener-side lookup answers it a second time. Measured: the naive version fails `test_a_click_a_live_view_owns_is_answered_by_the_view_alone` with two responses. discord.py binds `dispatch=self.dispatch` into the state at `Client.__init__`, so only a class override is seen. |
+| `black_bloc/bot.py:87` `install_orphaned(self)` | Registered right after the tree error handler, before anything that can fail — the sentence is part of the error surface. |
+| `black_bloc/orphaned.py:24` `view_store` | The ONE place the private `bot._connection._view_store` is reached (discord.py 2.7.1 has no public "is this custom_id owned?"). Re-read on any discord.py upgrade. |
+| `black_bloc/orphaned.py:47` `is_owned` | Repeats `ViewStore.dispatch_view` / `dispatch_modal`'s lookups in their order: dynamic templates (`fullmatch`), then `_views[message.id]`, then `_views[None]` (persistent views added without a message), and `_modals` for a submit. A finished view still in the store counts as an orphan because `_dispatch_item` drops it. |
+| `black_bloc/orphaned.py:57` `mark` | Swallows every exception: if the store's shape changes, the failure is today's red "interaction failed", never a double answer. |
+| `black_bloc/orphaned.py:68` `command_named` | Reads `Message._interaction` (Discord's record of the slash command that made the message). The public `Message.interaction` is `@deprecated` since 2.4 and warns on every read. `panels.py` items carry random ids, so this is the only source of `{command}`. |
+| `black_bloc/orphaned.py:106` `on_interaction` | Answers first, logs second (3-second window). Never edits the panel: one response per interaction, and rebuilding a message's components to disable them could kill live `DynamicItem`s sharing it. |
+| `black_bloc/logkinds.py:30` `PANEL_EXPIRED_CLICK` | Head `panel` → `core`; ROUTINE, so the Logs page has it and `#blackbloc-logs` does not at the default level. |
+| `black_bloc/settings_store.py:2369` `PANEL_EXPIRED_TEXT_KEY` | Core key 25 of `CORE_KEYS`; it takes the `core` settings group to 26 keys, one past the select cap, so `/settings` ▸ core now draws **Find a setting**. |
