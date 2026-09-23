@@ -1011,6 +1011,15 @@ def test_taking_somebody_off_an_application_list_is_routine_because_the_dm_is_th
     assert feature_of("web.application.removed") == "applications"
 
 
+def test_a_channel_note_is_routine_from_either_door_and_files_under_chat():
+    """Staff describing a channel is housekeeping; the row is for the Logs page, not Discord."""
+    for kind in ("chat.channel_note_set", "chat.channel_note_cleared"):
+        assert kind in ROUTINE
+        assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
+        assert is_important(kind) is False
+        assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
+
+
 def test_memory_is_loud_when_something_is_forgotten_and_quiet_the_rest_of_the_time():
     """Writing a profile is housekeeping; losing one, and somebody opting out, are not."""
     for kind in ("chat.memory_distilled", "chat.memory_expired", "chat.memory_optin"):

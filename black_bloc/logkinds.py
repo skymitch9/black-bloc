@@ -237,6 +237,8 @@ ROUTINE: frozenset[str] = frozenset(
         "birthday.set",
         "case.noted",
         "case.reason_edited",
+        "chat.channel_note_cleared",
+        "chat.channel_note_set",
         "chat.insult",
         "chat.intent_created",
         "chat.intent_deleted",

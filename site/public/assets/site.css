@@ -1887,6 +1887,23 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
   background: var(--et-accent);
 }
 .spend-meter[data-capped="true"] .spend-meter-fill { background: var(--et-danger); }
+
+/* The channel catalog: the block the model reads, verbatim, and one row per channel. */
+.directory-block {
+  max-height: 22rem;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: var(--et-radius);
+  background: var(--et-shell-inset);
+  color: var(--et-fg);
+  font-family: var(--et-font-mono);
+  font-size: var(--et-ui-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.channel-row[data-shown="false"] .chat-fixed { color: var(--et-muted); }
+.channel-topic { margin: 6px 0 0; color: var(--et-muted); }
 .tier-word { flex: 1 1 20rem; min-width: 0; color: var(--et-muted); font-size: var(--et-ui-sm); }
 
 /* The options on a review card: a plain numbered list, indented in tokens. */

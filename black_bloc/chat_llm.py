@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .actionlog import log_action
+from .channel_notes import notes_or_nothing
 from .chat import MENTION, has_phrase, normalise
 from .chat_check import FIXED_KIND, check_reply
 from .directory import DIRECTORY_NONE, directory_block
@@ -564,12 +565,12 @@ async def made_real(bot: Any, guild: Any, text: Any, people: Any = ()) -> str:
     return found.text
 
 
-def channels_block(bot: Any, guild: Any) -> str:
+def channels_block(bot: Any, guild: Any, notes: Any = None) -> str:
     """Built fresh for every call: a channel made this morning is in this afternoon's answer."""
     if guild is None:
         return DIRECTORY_NONE
     try:
-        return directory_block(bot, guild)
+        return directory_block(bot, guild, notes)
     except Exception as exc:
         log.warning("chat: the channel list was not built — %s: %s", type(exc).__name__, exc)
         return DIRECTORY_NONE
@@ -618,7 +619,7 @@ async def conversational_reply(
     remembered = await memory_for(bot, db, guild_id, user_id, in_dm=guild_id is None)
     asked = user_turn(text, hits, [note for _, note in named], remembered)
     messages = [*as_messages(window), {"role": "user", "content": asked}]
-    directory = channels_block(bot, guild)
+    directory = channels_block(bot, guild, await notes_or_nothing(db, guild_id))
     turn = uuid.uuid4().hex
     errors = tier_errors(bot)
 

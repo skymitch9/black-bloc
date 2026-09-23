@@ -4,6 +4,7 @@ import logging
 from typing import Any, NamedTuple
 
 from .actionlog import log_action
+from .channel_notes import NOTE_CHARS, clean_note, clear_note, get_note, set_note
 from .chat_llm import LLM_MODE_KEY, money
 from .knowledge import (
     SERVER,
@@ -25,7 +26,18 @@ from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
 from .personas import COOKOUT, PERSONALITY_KEY, POOL, forget_tropes, get_trope, list_tropes
 from .personas import set_enabled as set_trope_enabled
-from .settings_store import SettingError, coerce_value, parse_value
+from .settings_store import (
+    CHANNEL_NOTE_CLEARED_KEY,
+    CHANNEL_NOTE_NO_CHANNEL_KEY,
+    CHANNEL_NOTE_NOTHING_KEY,
+    CHANNEL_NOTE_SAVED_KEY,
+    CHANNEL_NOTE_TOO_LONG_KEY,
+    CHANNEL_NOTE_WORDS,
+    CHANNEL_NOTES_BUTTON_KEY,
+    SettingError,
+    coerce_value,
+    parse_value,
+)
 
 log = logging.getLogger(__name__)
 
@@ -58,6 +70,8 @@ LAST_VOICE_CODE = "last_voice"
 TITLE_TAKEN_CODE = "title_taken"
 NO_SUCH_SECTION_CODE = "no_such_section"
 SERVER_ROW_CODE = "server_row"
+NO_SUCH_CHANNEL_CODE = "no_such_channel"
+NOTE_TOO_LONG_CODE = "note_too_long"
 
 STATUS_MODE = "Answering @-mentions: **{mode}**. Conversation model: **{llm}**."
 STATUS_OFF_TAIL = " Every answer comes from Black Bloc's own written lines."
@@ -135,6 +149,7 @@ FIND = "find"
 REMOVE = "remove"
 EDIT = "edit"
 LIMITS = "limits"
+CHANNELS = "channels"
 
 ANSWER_ON = "Answer @-mentions"
 ANSWER_OFF = "Stop answering @-mentions"
@@ -168,6 +183,7 @@ REMOVE_MOVE = PanelMove(REMOVE, "Remove", "danger", row=0)
 EDIT_MOVE = PanelMove(EDIT, "Edit…", "primary", row=0)
 NOTE_BACK_MOVE = PanelMove(BACK, "Back", row=0)
 LIMITS_MOVE = PanelMove(LIMITS, "Limits…", "primary", row=0)
+CHANNELS_MOVE = PanelMove(CHANNELS, CHANNEL_NOTE_WORDS[CHANNEL_NOTES_BUTTON_KEY][0], row=0)
 
 PANEL_MOVES: tuple[PanelMove, ...] = (
     PERSONALITY_MOVE,
@@ -183,6 +199,7 @@ PANEL_MOVES: tuple[PanelMove, ...] = (
     REMOVE_MOVE,
     EDIT_MOVE,
     LIMITS_MOVE,
+    CHANNELS_MOVE,
 )
 
 
@@ -200,7 +217,9 @@ def panel_state(store: Any, guild_id: int) -> PanelState:
     )
 
 
-def panel_buttons(state: PanelState, *, staff: bool = True) -> tuple[PanelMove, ...]:
+def panel_buttons(
+    state: PanelState, *, staff: bool = True, channels_label: str = ""
+) -> tuple[PanelMove, ...]:
     """The §C root table as data; there is no member half of chat to render."""
     if not staff:
         return ()
@@ -208,6 +227,7 @@ def panel_buttons(state: PanelState, *, staff: bool = True) -> tuple[PanelMove, 
         PERSONALITY_MOVE,
         KNOWLEDGE_MOVE,
         SETTINGS_MOVE,
+        CHANNELS_MOVE._replace(label=channels_label or CHANNELS_MOVE.label),
         toggle_move(state, MODE_KEY),
         toggle_move(state, LLM_MODE_KEY),
         LOGS_MOVE,
@@ -227,6 +247,10 @@ def note_buttons(source: Any) -> tuple[PanelMove, ...]:
     if str(source) == STAFF:
         return (REMOVE_MOVE, EDIT_MOVE, NOTE_BACK_MOVE)
     return (NOTE_BACK_MOVE,)
+
+
+def channel_notes_buttons() -> tuple[PanelMove, ...]:
+    return (BACK_MOVE._replace(row=1), REFRESH_MOVE._replace(row=1))
 
 
 def settings_buttons() -> tuple[PanelMove, ...]:
@@ -539,6 +563,97 @@ async def save_settings(
     return Outcome(True, settings_saved(wanted), value=wanted)
 
 
+def words(store: Any, guild_id: int, key: str, **values: Any) -> str:
+    """Staff's wording, or the registry's when theirs will not format — never a crash."""
+    try:
+        return str(store.get(guild_id, key)).format(**values)
+    except Exception as exc:
+        log.warning("chat: %s would not format, so the default was said — %s", key, exc)
+        return CHANNEL_NOTE_WORDS[key][0].format(**values)
+
+
+def text_channel(guild: Any, channel_id: Any) -> Any:
+    """Only a text channel of THIS guild takes a note; the directory reads nothing else."""
+    try:
+        wanted = int(getattr(channel_id, "id", channel_id))
+    except (TypeError, ValueError):
+        return None
+    return next(
+        (one for one in getattr(guild, "text_channels", ()) or () if one.id == wanted), None
+    )
+
+
+def no_such_channel(bot: Any, guild: Any, channel_id: Any) -> Outcome:
+    return refusal(
+        words(bot.store, guild.id, CHANNEL_NOTE_NO_CHANNEL_KEY, channel=str(channel_id)[:40]),
+        NO_SUCH_CHANNEL_CODE,
+        404,
+    )
+
+
+async def save_channel_note(
+    bot: Any, guild: Any, actor: Any, channel_id: Any, text: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The one write both doors use; a blank note is a clear, never an empty row."""
+    channel = text_channel(guild, channel_id)
+    if channel is None:
+        return no_such_channel(bot, guild, channel_id)
+    note = clean_note(text)
+    if not note:
+        return await clear_channel_note(bot, guild, actor, channel.id, via=via)
+    if len(note) > NOTE_CHARS:
+        return refusal(
+            words(
+                bot.store,
+                guild.id,
+                CHANNEL_NOTE_TOO_LONG_KEY,
+                length=len(note),
+                limit=NOTE_CHARS,
+                over=len(note) - NOTE_CHARS,
+            ),
+            NOTE_TOO_LONG_CODE,
+            422,
+        )
+    await set_note(bot.db, guild.id, channel.id, note, by=actor_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("chat.channel_note_set", via),
+        actor=actor,
+        details={"channel_id": str(channel.id), "channel": channel.name, "note": note, "via": via},
+    )
+    return Outcome(
+        True,
+        words(bot.store, guild.id, CHANNEL_NOTE_SAVED_KEY, channel=channel.name),
+        value=note,
+    )
+
+
+async def clear_channel_note(
+    bot: Any, guild: Any, actor: Any, channel_id: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    channel = text_channel(guild, channel_id)
+    if channel is None:
+        return no_such_channel(bot, guild, channel_id)
+    if not await clear_note(bot.db, guild.id, channel.id):
+        return Outcome(
+            True, words(bot.store, guild.id, CHANNEL_NOTE_NOTHING_KEY, channel=channel.name)
+        )
+    await log_action(
+        bot,
+        guild,
+        kind_via("chat.channel_note_cleared", via),
+        actor=actor,
+        details={"channel_id": str(channel.id), "channel": channel.name, "via": via},
+    )
+    return Outcome(True, words(bot.store, guild.id, CHANNEL_NOTE_CLEARED_KEY, channel=channel.name))
+
+
+async def channel_note(bot: Any, guild: Any, channel_id: Any) -> str:
+    row = await get_note(bot.db, guild.id, channel_id)
+    return str(row["note"]) if row is not None else ""
+
+
 def settings_saved(changed: dict[str, Any]) -> str:
     return SETTINGS_SAVED + ", ".join(
         SETTINGS_ONE.format(key=key, value=value) for key, value in changed.items()
@@ -577,6 +692,9 @@ __all__ = [
     "PanelMove",
     "PanelState",
     "add_note",
+    "channel_note",
+    "channel_notes_buttons",
+    "clear_channel_note",
     "edit_note",
     "guarded_moods",
     "knowledge_buttons",
@@ -589,6 +707,7 @@ __all__ = [
     "personality_buttons",
     "read_limits",
     "remove_note",
+    "save_channel_note",
     "save_settings",
     "set_mode",
     "set_mood",
@@ -597,6 +716,8 @@ __all__ = [
     "settings_saved",
     "site_page_url",
     "status_lines",
+    "text_channel",
     "toggle_move",
     "wanted_note",
+    "words",
 ]

@@ -2989,3 +2989,15 @@ Owner: *"yes add a change button next to the remove button"*. Not deployed. Lett
 | Row | Do | Expect |
 |---|---|---|
 | **`BC-a`** | Birthdays page ▸ **By month** ▸ press **Change** on any row (it sits just before **Remove**), alter the day, press **Save birthday** | The page scrolls to **Add or change one**: the member is chosen (the picker reads *name · id …*), month, day and year are that row's, and the cursor is in **Day**. Saving overwrites the stored date — the row moves to the new day, no second row appears — and *Saved. {name} is down for {Month} {day}.* stays under the form after the page reloads. |
+
+## Rows `CC-a` … `CC-d` — the channel catalog: a note per channel beats its topic (branch `channel-catalog`, 2026-09-23)
+
+⏸️ **BUILT, NOT MERGED, NOT DEPLOYED.** Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md);
+the drafts: [`../info/channel-catalog.md`](../info/channel-catalog.md). Lettered; the conductor numbers it.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`CC-a`** | <https://blackbloc.heygabi.ai/chat.html> ▸ **Channel directory** (also in the *On this page* rail) | A **What the bot sees** card with the channel list the models read, word for word, and *N of 4096 bytes used*; below it one row per text channel reading `# name · Category`, a badge saying either *the bot is told about it* or why it is left out, the Discord topic (or *no topic in Discord*), and a note box with **Save** |
+| **`CC-b`** | On the `#speed-and-pbs` row type *Speedrunning records and personal bests — talking about runs, times and PBs, not general chat.* and press **Save**; do the same for `#general-chat` with *The server's general chat — anything goes, not speedrun-specific.* | Each answers *"The note for #… is saved…"* in words; the card's block now shows `#speed-and-pbs — Speedrunning records…`; the Logs page has one `chat.channel_note_set` row per save, Via Website. Then @-mention the bot with *where do I talk about random stuff?* — it should point at **#general-chat**, not #speed-and-pbs |
+| **`CC-c`** | In Discord run `/chat` ▸ **Channel notes…**, pick `#speed-and-pbs`, clear the box and submit; then pick it again, type a note and submit | The form opens PRE-FILLED with the saved note; the blank submit answers *"The note for #speed-and-pbs is gone…"*; the second one saves; the card lists the note. Only staff can open the form |
+| **`CC-d`** | On the page, paste 250 characters into any note and press **Save** | Refused **in words** — *"That note is 250 characters and a channel note holds 240, so nothing was saved. Take 10 out and save it again."* ⚠️ Never a bare 422 |

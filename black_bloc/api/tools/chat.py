@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import chat_llm, chat_panel, knowledge, personas
+from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
     BUILTIN_NAMES,
     CANNED,
@@ -33,6 +34,7 @@ from ...chat import (
     update_intent,
     update_line,
 )
+from ...directory import directory_preview, hidden_category_ids, visibility_role, why_hidden
 from ...logkinds import VIA_WEBSITE
 from ...settings_store import KEY_TYPES
 from ..auth import Refused, staff_dependency
@@ -152,6 +154,9 @@ TODAY_WORD = "{turns} answers came from a model today, out of the {limit} a day 
 TODAY_WORD_NO_LIMIT = "{turns} answers came from a model today."
 
 
+UNCATEGORISED = -1
+
+
 def _id(value: Any) -> str | None:
     return str(value) if value is not None else None
 
@@ -229,6 +234,28 @@ def trope_row(guild: Any, row: Any, mode: str) -> dict[str, Any]:
         "in_use": mode == name,
         "updated_at": row["updated_at"],
         "updated_by": person(guild, row["updated_by"]),
+    }
+
+
+def channel_order(channel: Any) -> tuple[int, int]:
+    """Discord's own order: loose channels first, then category by category."""
+    category = getattr(channel, "category", None)
+    at = UNCATEGORISED if category is None else int(getattr(category, "position", 0) or 0)
+    return (at, int(getattr(channel, "position", 0) or 0))
+
+
+def channel_row(channel: Any, notes: dict[int, str], why: str | None) -> dict[str, Any]:
+    category = getattr(channel, "category", None)
+    return {
+        "id": str(channel.id),
+        "name": str(channel.name),
+        "category": str(category.name) if category is not None else None,
+        "category_id": _id(getattr(category, "id", None)),
+        "topic": str(getattr(channel, "topic", "") or "") or None,
+        "note": notes.get(int(channel.id)) or None,
+        "shown": why is None,
+        "hidden_because": why,
+        "position": int(getattr(channel, "position", 0) or 0),
     }
 
 
@@ -707,6 +734,76 @@ def build_router(bot: Any) -> APIRouter:
             said, live = TIER_CAPPED.format(cap=cap_said), False
         return {"name": name, "label": label, "live": live, "word": said}
 
+    async def _channels(guild: Any) -> dict[str, Any]:
+        """Every text channel, the ones the model is not told about included, with the why."""
+        notes = await notes_for(bot.db, guild.id)
+        hidden = hidden_category_ids(bot, guild)
+        viewer = visibility_role(bot, guild)
+        found = sorted(getattr(guild, "text_channels", ()) or (), key=channel_order)
+        rows = [
+            channel_row(one, notes, why_hidden(guild, one, hidden, viewer)) for one in found
+        ]
+        shown = directory_preview(bot, guild, notes)
+        return {
+            "channels": rows,
+            "directory": shown.block,
+            "budget": {"used": shown.used, "cap": shown.cap, "trimmed": list(shown.trimmed)},
+            "note_chars": NOTE_CHARS,
+            "counts": {
+                "total": len(rows),
+                "shown": sum(1 for row in rows if row["shown"]),
+                "noted": sum(1 for row in rows if row["note"]),
+            },
+            "notes": [],
+        }
+
+    async def _channel_answer(guild: Any, channel_id: int, outcome: Any) -> dict[str, Any]:
+        found = await _channels(guild)
+        row = next((one for one in found["channels"] if one["id"] == str(channel_id)), None)
+        return {
+            "channel": row,
+            "directory": found["directory"],
+            "budget": found["budget"],
+            "message": outcome.message,
+        }
+
+    @router.get("/channels")
+    async def chat_channels() -> dict[str, Any]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return await _channels(guild)
+
+    @router.put("/channels/{channel_id}")
+    async def chat_channel_note(
+        request: Request, channel_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = answered(
+            await chat_panel.save_channel_note(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                channel_id,
+                payload.get("note"),
+                via=VIA_WEBSITE,
+            )
+        )
+        return await _channel_answer(guild, channel_id, outcome)
+
+    @router.delete("/channels/{channel_id}")
+    async def chat_channel_note_clear(request: Request, channel_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = answered(
+            await chat_panel.clear_channel_note(
+                bot, guild, actor_for(bot, who, guild), channel_id, via=VIA_WEBSITE
+            )
+        )
+        return await _channel_answer(guild, channel_id, outcome)
+
     @router.get("/spend")
     async def chat_spend() -> dict[str, Any]:
         """What the month has cost, what today has asked for, and which tiers are answering."""
@@ -760,4 +857,4 @@ def build_router(bot: Any) -> APIRouter:
     return router
 
 
-__all__ = ["build_router", "intent_row", "line_row"]
+__all__ = ["build_router", "channel_order", "channel_row", "intent_row", "line_row"]

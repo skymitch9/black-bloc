@@ -112,7 +112,26 @@ const CHANNELS = [
   { id: '800000000000000010', name: "casey's room", type: 'voice', category_id: null, position: 9 },
   { id: '800000000000000011', name: 'modmail', type: 'category', category_id: null, position: 10 },
   { id: '800000000000000012', name: 'modmail-log', type: 'text', category_id: '800000000000000011', position: 11 },
+  { id: '800000000000000013', name: 'The Hole in the Wall', type: 'category', category_id: null, position: 12 },
+  { id: '800000000000000014', name: 'general-chat', type: 'text', category_id: '800000000000000013', position: 13 },
+  { id: '800000000000000015', name: 'Gaming', type: 'category', category_id: null, position: 14 },
+  { id: '800000000000000016', name: 'speed-and-pbs', type: 'text', category_id: '800000000000000015', position: 15 },
 ];
+
+// The channel catalog (docs/info/channel-catalog-design.md). The mock has no permissions to
+// work out, so who can see what is written down here instead; #speed-and-pbs has no topic on
+// purpose, because a missing topic is how the owner's 2026-09-23 report happened.
+const CHANNEL_TOPICS = {
+  '800000000000000001': 'Read the rules, then say hi.',
+  '800000000000000002': 'The old front room.',
+  '800000000000000014': 'Talk about whatever.',
+};
+const CHANNELS_NOBODY_SEES = ['800000000000000003', '800000000000000004', '800000000000000005'];
+const NOTE_CHARS = 240;
+const DIRECTORY_BYTES = 4096;
+const TOPIC_CHARS = 160;
+const DIRECTORY_HEADING = '## The channels of this server\nThis is the whole list, and it is the only list. Point somebody at a channel from it or at nothing at all.';
+const DIRECTORY_NONE = '## The channels of this server\nYou have not been given the channel list, so name no channel at all in this answer.';
 
 const MEMBERS = [
   { id: '700000000000000001', name: 'nbaslamking', display_name: 'Nick', avatar_url: null },
@@ -466,6 +485,17 @@ const SETTING_SPECS = [
   ['chat_memory_notes_max', 'int', 6, 6, 'how many preferences one profile holds, up to 20; the oldest drops off when a newer one arrives', null, 20],
   ['chat_memory_threads_max', 'int', 5, 5, 'how many open topics (“was asking about the Thursday event”) one profile holds, up to 20', null, 20],
   ['chat_memory_model', 'text', '', '', 'which Groq model writes the profile up after a conversation ends; blank uses chat_simple_model, the same quick tier that answers'],
+  ["chat_channel_note_saved", 'text', "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's topic from its next answer on.", "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's topic from its next answer on.", "what staff are told when a channel note is saved, on /chat and on the Chat page. It takes {channel}, the channel's name"],
+  ["chat_channel_note_cleared", 'text', "The note for **#{channel}** is gone. Black Bloc goes back to the channel's own topic, or just its name when it has none.", "The note for **#{channel}** is gone. Black Bloc goes back to the channel's own topic, or just its name when it has none.", "what staff are told when a channel note is cleared. It takes {channel}"],
+  ["chat_channel_note_nothing", 'text', "**#{channel}** had no note, so nothing changed.", "**#{channel}** had no note, so nothing changed.", "what staff are told when they clear a channel note that was never written. It takes {channel}"],
+  ["chat_channel_note_too_long", 'text', "That note is {length} characters and a channel note holds {limit}, so nothing was saved. Take {over} out and save it again.", "That note is {length} characters and a channel note holds {limit}, so nothing was saved. Take {over} out and save it again.", "what staff are told when a channel note is longer than the list the model reads can hold. It takes {length}, {limit} and {over}; nothing is stored when this is said"],
+  ["chat_channel_note_no_channel", 'text', "**{channel}** is not a text channel in this server any more, so nothing was saved. Pick one from the list again.", "**{channel}** is not a text channel in this server any more, so nothing was saved. Pick one from the list again.", "what staff are told when the channel a note was meant for has gone. It takes {channel}, the id or name that was given"],
+  ["chat_channel_notes_button", 'text', "Channel notes\u2026", "Channel notes\u2026", "the /chat panel button that opens the channel notes. Discord shows at most 80 characters on a button"],
+  ["chat_channel_notes_title", 'text', "What each channel is for", "What each channel is for", "the heading of the channel notes card on /chat"],
+  ["chat_channel_notes_intro", 'text', "Pick a channel and say what it is for in one sentence. Black Bloc reads that note in place of the channel's Discord topic whenever it points somebody somewhere. **{count}** channel(s) have a note so far.", "Pick a channel and say what it is for in one sentence. Black Bloc reads that note in place of the channel's Discord topic whenever it points somebody somewhere. **{count}** channel(s) have a note so far.", "the first lines of the channel notes card on /chat. It takes {count}, how many channels have a note"],
+  ["chat_channel_notes_placeholder", 'text', "A channel to describe\u2026", "A channel to describe\u2026", "the channel picker's placeholder on the channel notes card. Discord shows at most 150 characters"],
+  ["chat_channel_note_modal", 'text', "What #{channel} is for", "What #{channel} is for", "the title of the form a channel note is written in. It takes {channel}; Discord cuts a form title at 45 characters"],
+  ["chat_channel_note_label", 'text', "One sentence \u2014 blank clears the note", "One sentence \u2014 blank clears the note", "the label over the note box on that form. Discord shows at most 45 characters on a form label"],
   ['request_mode', 'enum', 'on', 'on', 'off, or on (members can ask for things with /request and staff decide on the site)', ['off', 'on']],
   ['request_filed_line', 'text', 'Filed as **#{request_id}** — Request has been received. You will get a DM every time the status is updated.', 'Filed as **#{request_id}** — Request has been received. You will get a DM every time the status is updated.', "what a member is told the moment their request is filed; {request_id} stands for the request's number and is the only thing that may be filled in"],
   ['request_who_can_file', 'enum', 'everyone', 'everyone', 'who may file a request: everyone, or staff only', ['everyone', 'staff']],
@@ -1339,6 +1369,12 @@ function seedState() {
   ],
   memoryOptOut: [{ user_id: MEMBERS[5].id, at: minutesAgo(3000) }],
   nextKnowledge: 4,
+  channelNotes: new Map([
+    ['800000000000000014', "The server's general chat — anything goes, not speedrun-specific."],
+    ['800000000000000016', 'Speedrunning records and personal bests — talking about runs, times and PBs, not general chat.'],
+    ['800000000000000001', '⚠️ DRAFT — where new members land: the rules and a first hello.'],
+    ['800000000000000006', '⚠️ DRAFT — server news from staff; read-only for most members.'],
+  ]),
   nextAction: 47,
   nextCase: 10,
   nextMessage: 40,
@@ -7446,6 +7482,135 @@ route('DELETE', '/api/chat/knowledge/:id', (context) => {
   state.knowledge = state.knowledge.filter((one) => one.id !== row.id);
   logAction('web.chat.knowledge_removed', { details: { title: row.title, via: 'website' } });
   return { removed: true, section_id: String(row.id), message: `**${row.title}** is gone. Black Bloc will not quote it again.` };
+});
+
+function channelCategory(channel) {
+  return CHANNELS.find((one) => one.id === channel.category_id) || null;
+}
+
+function channelHiddenBecause(channel) {
+  const category = channelCategory(channel);
+  const ignored = new Set([...(state.settings.get('chat_ignore_categories') || []), state.settings.get('modmail_category_id')]
+    .filter(Boolean).map(String));
+  if (category && ignored.has(category.id)) return 'ignored_category';
+  if (category && category.name.toLowerCase().includes('archive')) return 'archive';
+  if (CHANNELS_NOBODY_SEES.includes(channel.id)) return 'not_visible';
+  return null;
+}
+
+function shortened(text, limit) {
+  const said = String(text || '').replace(/\s+/g, ' ').trim();
+  return said.length <= limit ? said : `${said.slice(0, limit - 1)}…`;
+}
+
+function channelTextRows() {
+  const order = (one) => {
+    const category = channelCategory(one);
+    return [category ? category.position : -1, one.position];
+  };
+  return CHANNELS.filter((one) => one.type === 'text')
+    .sort((a, b) => order(a)[0] - order(b)[0] || order(a)[1] - order(b)[1]);
+}
+
+function directoryLine([name, said]) {
+  return said ? `#${name} — ${said}` : `#${name}`;
+}
+
+function directoryBlock() {
+  const bytes = (rows) => rows.reduce((sum, row) => sum + Buffer.byteLength(directoryLine(row)) + 1, 0);
+  const wanted = channelTextRows().filter((one) => channelHiddenBecause(one) === null).map((one) => [
+    one.name,
+    shortened(state.channelNotes.get(one.id), NOTE_CHARS) || shortened(CHANNEL_TOPICS[one.id], TOPIC_CHARS),
+  ]);
+  const kept = wanted.map((row) => [...row]);
+  while (bytes(kept) > DIRECTORY_BYTES && kept.some((row) => row[1])) {
+    let at = 0;
+    kept.forEach((row, i) => { if (row[1].length > kept[at][1].length) at = i; });
+    kept[at][1] = '';
+  }
+  while (kept.length && bytes(kept) > DIRECTORY_BYTES) kept.pop();
+  const trimmed = wanted.filter((row, i) => row[1] && !(kept[i] && kept[i][1])).map((row) => row[0]);
+  if (!kept.length) return { block: DIRECTORY_NONE, used: 0, trimmed };
+  return { block: [DIRECTORY_HEADING, ...kept.map(directoryLine)].join('\n'), used: bytes(kept), trimmed };
+}
+
+function channelNoteRow(channel) {
+  const category = channelCategory(channel);
+  const why = channelHiddenBecause(channel);
+  return {
+    id: channel.id,
+    name: channel.name,
+    category: category ? category.name : null,
+    category_id: category ? category.id : null,
+    topic: CHANNEL_TOPICS[channel.id] || null,
+    note: state.channelNotes.get(channel.id) || null,
+    shown: why === null,
+    hidden_because: why,
+    position: channel.position,
+  };
+}
+
+function channelsPayload() {
+  const rows = channelTextRows().map(channelNoteRow);
+  const shown = directoryBlock();
+  return {
+    channels: rows,
+    directory: shown.block,
+    budget: { used: shown.used, cap: DIRECTORY_BYTES, trimmed: shown.trimmed },
+    note_chars: NOTE_CHARS,
+    counts: {
+      total: rows.length,
+      shown: rows.filter((row) => row.shown).length,
+      noted: rows.filter((row) => row.note).length,
+    },
+    notes: [],
+  };
+}
+
+function noteWords(key, values) {
+  return String(state.settings.get(key) || '').replace(/\{(\w+)\}/g, (all, name) => (name in values ? String(values[name]) : all));
+}
+
+function wantedTextChannel(id) {
+  const channel = CHANNELS.find((one) => one.id === String(id) && one.type === 'text');
+  if (!channel) throw new Refused(404, 'no_such_channel', noteWords('chat_channel_note_no_channel', { channel: String(id).slice(0, 40) }));
+  return channel;
+}
+
+function channelAnswer(channel, message) {
+  const found = channelsPayload();
+  return { channel: channelNoteRow(channel), directory: found.directory, budget: found.budget, message };
+}
+
+function clearChannelNote(channel) {
+  if (!state.channelNotes.has(channel.id)) return channelAnswer(channel, noteWords('chat_channel_note_nothing', { channel: channel.name }));
+  state.channelNotes.delete(channel.id);
+  logAction('web.chat.channel_note_cleared', { details: { channel_id: channel.id, channel: channel.name, via: 'website' } });
+  return channelAnswer(channel, noteWords('chat_channel_note_cleared', { channel: channel.name }));
+}
+
+route('GET', '/api/chat/channels', (context) => {
+  requireStaff(context.session);
+  return channelsPayload();
+});
+
+route('PUT', '/api/chat/channels/:id', async (context) => {
+  requireStaff(context.session);
+  const channel = wantedTextChannel(context.params.id);
+  const body = await context.body();
+  const note = String(body.note || '').replace(/\s+/g, ' ').trim();
+  if (!note) return clearChannelNote(channel);
+  if (note.length > NOTE_CHARS) {
+    throw new Refused(422, 'note_too_long', noteWords('chat_channel_note_too_long', { length: note.length, limit: NOTE_CHARS, over: note.length - NOTE_CHARS }));
+  }
+  state.channelNotes.set(channel.id, note);
+  logAction('web.chat.channel_note_set', { details: { channel_id: channel.id, channel: channel.name, note, via: 'website' } });
+  return channelAnswer(channel, noteWords('chat_channel_note_saved', { channel: channel.name }));
+});
+
+route('DELETE', '/api/chat/channels/:id', (context) => {
+  requireStaff(context.session);
+  return clearChannelNote(wantedTextChannel(context.params.id));
 });
 
 function personaMode() {

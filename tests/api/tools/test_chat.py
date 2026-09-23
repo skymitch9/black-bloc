@@ -3,6 +3,7 @@ import pytest
 from black_bloc import knowledge
 from black_bloc.chat import BUILTIN_ORDER, UNKNOWN, loaded_intents, seed_defaults
 from black_bloc.llm import ANTHROPIC, IMPORTANT, MODEL, Usage, record
+from black_bloc.settings_store import CHANNEL_NOTE_WORDS
 
 
 @pytest.fixture
@@ -89,7 +90,7 @@ async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded
         "chat_memory_notes_max",
         "chat_memory_threads_max",
         "chat_memory_model",
-    }
+    } | set(CHANNEL_NOTE_WORDS)
     for row in rows:
         assert {"key", "type", "value", "default", "help"} <= set(row)
     mode = next(row for row in rows if row["key"] == "chat_mode")
@@ -616,3 +617,101 @@ async def test_the_new_routes_are_staff_only_too(client, sign_in, guild, wf):
         response = client.request(method, path, json=body)
         assert response.status_code == 403, path
         assert response.json()["message"]
+
+
+# --- the channel directory (the channel catalog, 2026-09-23) ---------------------------------
+
+
+def open_general(guild, wf):
+    guild.get_channel(wf.OTHER_CHANNEL_ID).viewers.add(wf.GUILD_ID)
+
+
+async def test_every_text_channel_is_listed_with_why_the_model_is_not_told_of_it(
+    seeded, client, web, wf, guild
+):
+    open_general(guild, wf)
+    await web.store.set(wf.GUILD_ID, "chat_ignore_categories", [wf.CATEGORY_ID])
+
+    payload = client.get("/api/chat/channels").json()
+
+    rows = {row["name"]: row for row in payload["channels"]}
+    assert [row["name"] for row in payload["channels"]] == ["general", "blackbloc-logs"]
+    assert rows["general"]["shown"] is True and rows["general"]["hidden_because"] is None
+    assert rows["general"]["category"] is None
+    assert rows["blackbloc-logs"]["shown"] is False
+    assert rows["blackbloc-logs"]["hidden_because"] == "ignored_category"
+    assert rows["blackbloc-logs"]["category"] == "staff"
+    assert "voice" not in rows
+    assert payload["directory"].splitlines()[-1] == "#general"
+    assert payload["budget"]["cap"] == 4096 and payload["budget"]["used"] > 0
+    assert payload["note_chars"] == 240
+    assert payload["counts"] == {"total": 2, "shown": 1, "noted": 0}
+
+
+async def test_a_channel_nobody_can_see_says_so(seeded, client):
+    rows = client.get("/api/chat/channels").json()["channels"]
+
+    assert {row["hidden_because"] for row in rows} == {"not_visible"}
+
+
+async def test_a_note_is_set_shown_in_the_block_and_cleared(seeded, client, web, wf, guild):
+    open_general(guild, wf)
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}"
+
+    saved = client.put(path, json={"note": "The server's general chat — anything goes."})
+
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["channel"]["note"] == "The server's general chat — anything goes."
+    assert "#general — The server's general chat — anything goes." in body["directory"]
+    assert "is saved" in body["message"]
+
+    blank = client.put(path, json={"note": "  "}).json()
+    assert blank["channel"]["note"] is None and "is gone" in blank["message"]
+    assert client.get("/api/chat/channels").json()["directory"].splitlines()[-1] == "#general"
+
+    client.put(path, json={"note": "Back again."})
+    gone = client.delete(path)
+    assert gone.status_code == 200 and gone.json()["channel"]["note"] is None
+    again = client.delete(path).json()
+    assert "had no note" in again["message"]
+
+    assert [k for k in await wf.kinds_in(web.db) if k.startswith("web.chat.channel")] == [
+        "web.chat.channel_note_set",
+        "web.chat.channel_note_cleared",
+        "web.chat.channel_note_set",
+        "web.chat.channel_note_cleared",
+    ]
+
+
+async def test_a_note_over_the_cap_is_refused_in_words(seeded, client, web, wf):
+    response = client.put(f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}", json={"note": "x" * 241})
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "note_too_long"
+    assert "241 characters" in response.json()["message"]
+    assert [k for k in await wf.kinds_in(web.db) if k.startswith("web.chat")] == []
+
+
+async def test_a_channel_that_is_not_a_text_channel_here_is_not_found(seeded, client, wf):
+    for path in (f"/api/chat/channels/{wf.VOICE_CHANNEL_ID}", "/api/chat/channels/12345"):
+        response = client.put(path, json={"note": "x"})
+        assert response.status_code == 404, path
+        assert "not a text channel" in response.json()["message"]
+        assert client.delete(path).status_code == 404
+
+
+async def test_the_channel_routes_are_staff_only(client, sign_in, guild, wf, web):
+    wf.member(guild, 8, name="ada")
+    sign_in(client, uid=8, staff=False)
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}"
+
+    for method, where, body in (
+        ("GET", "/api/chat/channels", None),
+        ("PUT", path, {"note": "x"}),
+        ("DELETE", path, None),
+    ):
+        response = client.request(method, where, json=body)
+        assert response.status_code == 403, where
+        assert response.json()["message"]
+    assert await wf.kinds_in(web.db) == []

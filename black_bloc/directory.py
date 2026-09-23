@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, NamedTuple
+
+from .channel_notes import NOTE_CHARS
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +27,17 @@ DIRECTORY_NONE = (
 )
 
 SPACES = re.compile(r"\s+")
+
+IGNORED_CATEGORY = "ignored_category"
+ARCHIVE = "archive"
+NOT_VISIBLE = "not_visible"
+
+
+class Preview(NamedTuple):
+    block: str
+    used: int
+    cap: int
+    trimmed: tuple[str, ...]
 
 
 def as_id(value: Any) -> int | None:
@@ -99,26 +112,34 @@ def everyone_sees(guild: Any, channel: Any, viewer: Any = None) -> bool:
     return bool(getattr(perms, "view_channel", False))
 
 
-def in_a_hidden_category(channel: Any, hidden: set[int]) -> bool:
+def in_an_ignored_category(channel: Any, hidden: set[int]) -> bool:
     category = getattr(channel, "category", None)
     for number in (as_id(getattr(channel, "category_id", None)), as_id(category)):
         if number is not None and number in hidden:
             return True
-    return is_archive(category)
+    return False
+
+
+def why_hidden(guild: Any, channel: Any, hidden: set[int], viewer: Any) -> str | None:
+    """The one test `open_channels` applies, spelled as the reason the page prints."""
+    if in_an_ignored_category(channel, hidden):
+        return IGNORED_CATEGORY
+    if is_archive(getattr(channel, "category", None)):
+        return ARCHIVE
+    if not everyone_sees(guild, channel, viewer):
+        return NOT_VISIBLE
+    return None
 
 
 def open_channels(bot: Any, guild: Any) -> list[Any]:
     """The text channels a plain verified member can read, and only those."""
     hidden = hidden_category_ids(bot, guild)
     viewer = visibility_role(bot, guild)
-    found = []
-    for channel in getattr(guild, "text_channels", ()) or ():
-        if in_a_hidden_category(channel, hidden):
-            continue
-        if not everyone_sees(guild, channel, viewer):
-            continue
-        found.append(channel)
-    return found
+    return [
+        channel
+        for channel in getattr(guild, "text_channels", ()) or ()
+        if why_hidden(guild, channel, hidden, viewer) is None
+    ]
 
 
 def channel_names(bot: Any, guild: Any) -> set[str]:
@@ -136,12 +157,18 @@ def shorten(value: Any, limit: int) -> str:
     return said if len(said) <= limit else f"{said[: limit - 1]}…"
 
 
-def rows_for(channels: Any) -> list[tuple[str, str]]:
+def description_of(channel: Any, notes: Any = None) -> str:
+    """Staff's note beats the Discord topic; a channel with neither is just its name."""
+    note = shorten((notes or {}).get(as_id(channel)), NOTE_CHARS)
+    return note or shorten(getattr(channel, "topic", ""), TOPIC_CHARS)
+
+
+def rows_for(channels: Any, notes: Any = None) -> list[tuple[str, str]]:
     found = []
     for channel in channels or ():
         name = str(getattr(channel, "name", "") or "").strip()
         if name:
-            found.append((name, shorten(getattr(channel, "topic", ""), TOPIC_CHARS)))
+            found.append((name, description_of(channel, notes)))
     return found
 
 
@@ -164,10 +191,22 @@ def within(rows: Any, budget: int = DIRECTORY_BYTES) -> list[tuple[str, str]]:
     return kept
 
 
-def directory_block(bot: Any, guild: Any, budget: int = DIRECTORY_BYTES) -> str:
-    """The same visibility rules the ingest uses, rendered for the system stack."""
-    rows = within(rows_for(open_channels(bot, guild)), budget)
+def directory_preview(
+    bot: Any, guild: Any, notes: Any = None, budget: int = DIRECTORY_BYTES
+) -> Preview:
+    """The exact block the model is handed, with what it cost and whose words fell off."""
+    wanted = rows_for(open_channels(bot, guild), notes)
+    rows = within(wanted, budget)
+    kept = set(rows)
+    trimmed = tuple(name for name, said in wanted if said and (name, said) not in kept)
     if not rows:
-        return DIRECTORY_NONE
+        return Preview(DIRECTORY_NONE, 0, budget, trimmed)
     lines = [line_for(name, topic) for name, topic in rows]
-    return "\n".join([DIRECTORY_HEADING, *lines])
+    return Preview("\n".join([DIRECTORY_HEADING, *lines]), spent(rows), budget, trimmed)
+
+
+def directory_block(
+    bot: Any, guild: Any, notes: Any = None, budget: int = DIRECTORY_BYTES
+) -> str:
+    """The same visibility rules the ingest uses, rendered for the system stack."""
+    return directory_preview(bot, guild, notes, budget).block

@@ -96,6 +96,7 @@ def test_the_root_renders_its_row_and_nothing_else():
         chat_panel.PERSONALITY,
         chat_panel.KNOWLEDGE,
         chat_panel.SETTINGS,
+        chat_panel.CHANNELS,
         chat_panel.CHAT_TOGGLE,
         chat_panel.LLM_TOGGLE,
         chat_panel.LOGS,
@@ -475,3 +476,98 @@ def test_the_state_is_read_from_the_registry_not_from_a_flag(bot):
 def test_no_origin_means_no_link_at_all():
     assert site_page_url(ORIGIN) == f"{ORIGIN}/chat.html"
     assert site_page_url("") is None
+
+
+# --- channel notes: the one write both doors use --------------------------------------------
+
+
+def text(channel_id, name):
+    return SimpleNamespace(id=channel_id, name=name)
+
+
+class NotedGuild(FakeGuild):
+    def __init__(self):
+        super().__init__()
+        self.text_channels = [text(1076003845232148580, "speed-and-pbs"), text(55, "general-chat")]
+
+
+@pytest.fixture
+async def noted(bot):
+    bot.guild = NotedGuild()
+    return bot
+
+
+async def test_a_channel_note_is_saved_logged_once_and_read_back(noted, actor, db):
+    outcome = await chat_panel.save_channel_note(
+        noted, noted.guild, actor, "1076003845232148580", "  Speedrunning records\nand PBs. "
+    )
+
+    assert outcome.ok and outcome.value == "Speedrunning records and PBs."
+    assert "#speed-and-pbs" in outcome.message
+    assert await chat_panel.channel_note(noted, noted.guild, 1076003845232148580) == (
+        "Speedrunning records and PBs."
+    )
+    rows = await kinds(db)
+    assert [kind for kind, _ in rows] == ["chat.channel_note_set"]
+    assert '"via": "discord"' in rows[0][1]
+
+
+async def test_the_website_door_heads_its_row_web(noted, actor, db):
+    await chat_panel.save_channel_note(
+        noted, noted.guild, actor, 55, "Anything goes.", via=VIA_WEBSITE
+    )
+    await chat_panel.clear_channel_note(noted, noted.guild, actor, 55, via=VIA_WEBSITE)
+
+    assert [kind for kind, _ in await kinds(db)] == [
+        "web.chat.channel_note_set",
+        "web.chat.channel_note_cleared",
+    ]
+
+
+async def test_a_blank_note_clears_and_a_second_clear_says_there_was_nothing(noted, actor, db):
+    await chat_panel.save_channel_note(noted, noted.guild, actor, 55, "Anything goes.")
+
+    cleared = await chat_panel.save_channel_note(noted, noted.guild, actor, 55, "   ")
+    again = await chat_panel.clear_channel_note(noted, noted.guild, actor, 55)
+
+    assert cleared.ok and "gone" in cleared.message
+    assert again.ok and "had no note" in again.message
+    assert await chat_panel.channel_note(noted, noted.guild, 55) == ""
+    assert [kind for kind, _ in await kinds(db)] == [
+        "chat.channel_note_set",
+        "chat.channel_note_cleared",
+    ]
+
+
+async def test_a_note_over_the_cap_is_refused_in_words_and_nothing_is_stored(noted, actor, db):
+    outcome = await chat_panel.save_channel_note(noted, noted.guild, actor, 55, "x" * 250)
+
+    assert not outcome.ok
+    assert (outcome.status, outcome.code) == (422, "note_too_long")
+    assert "250 characters" in outcome.message and "240" in outcome.message
+    assert await chat_panel.channel_note(noted, noted.guild, 55) == ""
+    assert await kinds(db) == []
+
+
+async def test_a_channel_that_is_not_a_text_channel_here_is_refused(noted, actor, db):
+    for wanted in (999, "not-a-number"):
+        outcome = await chat_panel.save_channel_note(noted, noted.guild, actor, wanted, "x")
+        assert (outcome.ok, outcome.status, outcome.code) == (False, 404, "no_such_channel")
+    assert await kinds(db) == []
+
+
+async def test_staff_wording_is_used_and_a_broken_template_falls_back(noted, actor):
+    await noted.store.set(GUILD, "chat_channel_note_saved", "Got it: #{channel}")
+    said = await chat_panel.save_channel_note(noted, noted.guild, actor, 55, "a")
+    assert said.message == "Got it: #general-chat"
+
+    noted.store._cache[(GUILD, "chat_channel_note_saved")] = "{nope}"
+    said = await chat_panel.save_channel_note(noted, noted.guild, actor, 55, "b")
+    assert said.message.startswith("The note for **#general-chat** is saved.")
+
+
+def test_the_channel_notes_card_offers_back_and_refresh_only():
+    assert [move.action for move in chat_panel.channel_notes_buttons()] == [
+        chat_panel.BACK,
+        chat_panel.REFRESH,
+    ]
