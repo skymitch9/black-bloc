@@ -611,6 +611,89 @@ async def test_bump_now_posts_one_reminder_while_it_is_live(bot, cog):
     assert outcome == "bumped" and len(bot.guild.channel.messages) == 2
 
 
+async def a_live_session(bot, cog, **helix):
+    row = await a_row(bot)
+    made = helix_of(bot, twitch_stream(), **helix)
+    await cog.poll_once()
+    return row, made
+
+
+async def test_bump_now_names_the_game_being_played_now_and_refreshes_the_session(bot, cog):
+    row, helix = await a_live_session(bot, cog)
+    helix.streams = [twitch_stream(game="Hollow Knight", title="AGDQ 2027 — HK any%")]
+
+    outcome, _ = await bump_now(bot, bot.guild, FakeActor(), row["id"])
+
+    assert outcome == "bumped"
+    assert "Hollow Knight" in bot.guild.channel.messages[1].content
+    session = await open_session(bot.db, row["id"])
+    assert session["game"] == "Hollow Knight" and session["title"] == "AGDQ 2027 — HK any%"
+    said = await details_of(bot.db, "golive.spotlight_bumped")
+    assert said["game"] == "Hollow Knight" and said["refreshed"] is True
+
+
+async def test_bump_now_falls_back_to_the_stored_game_when_helix_cannot_answer(bot, cog):
+    row, _helix = await a_live_session(bot, cog)
+    helix_of(bot, raises=TwitchError("twitch unreachable"))
+
+    outcome, _ = await bump_now(bot, bot.guild, FakeActor(), row["id"])
+
+    assert outcome == "bumped" and "Celeste" in bot.guild.channel.messages[1].content
+    assert (await open_session(bot.db, row["id"]))["game"] == "Celeste"
+    assert (await details_of(bot.db, "golive.spotlight_bumped"))["refreshed"] is False
+
+
+async def test_bump_now_falls_back_to_the_stored_game_with_no_helix_at_all(bot, cog):
+    row, _helix = await a_live_session(bot, cog)
+    bot.cogs["GoLive"] = FakeGoLive(None)
+
+    outcome, _ = await bump_now(bot, bot.guild, FakeActor(), row["id"])
+
+    assert outcome == "bumped" and "Celeste" in bot.guild.channel.messages[1].content
+
+
+async def test_a_bump_carries_the_go_live_card_with_the_games_art(bot, cog):
+    row, helix = await a_live_session(bot, cog)
+    helix.streams = [twitch_stream(game="Hollow Knight", game_id="2")]
+    helix.games = [TwitchGame("2", "Hollow Knight", "hk-art")]
+
+    await bump_now(bot, bot.guild, FakeActor(), row["id"])
+
+    card = bot.guild.channel.messages[1].embed
+    assert card is not None and card.image.url == "hk-art"
+    assert "GamesDoneQuick" in card.author.name
+    said = await details_of(bot.db, "golive.spotlight_bumped")
+    assert said["embed"]["game"] == "Hollow Knight" and said["embed"]["image"] == "hk-art"
+
+
+async def test_a_bump_posts_the_sentence_alone_while_the_card_is_off(bot, cog):
+    row, _helix = await a_live_session(bot, cog)
+    await bot.store.set(GUILD, "golive_embed", False)
+
+    await bump_now(bot, bot.guild, FakeActor(), row["id"])
+
+    assert bot.guild.channel.messages[1].embed is None
+    assert "embed" not in await details_of(bot.db, "golive.spotlight_bumped")
+
+
+async def test_the_poller_bump_uses_the_stream_it_just_saw_and_asks_helix_once(bot, cog):
+    row, helix = await a_live_session(bot, cog)
+    helix.streams = [twitch_stream(game="Hollow Knight")]
+    session = await open_session(bot.db, row["id"])
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET started_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=4, minutes=1)).isoformat(), session["id"]),
+    )
+    await bot.db.conn.commit()
+    calls = len(helix.stream_calls)
+
+    await cog.poll_once()
+
+    assert len(helix.stream_calls) == calls + 1
+    assert "Hollow Knight" in bot.guild.channel.messages[1].content
+    assert (await open_session(bot.db, row["id"]))["game"] == "Hollow Knight"
+
+
 # --- the end ----------------------------------------------------------------------------------
 
 

@@ -249,6 +249,15 @@ async def start_session(
     return cur.lastrowid
 
 
+async def refresh_session_info(db: Any, session_id: int, game: Any, title: Any) -> None:
+    await db.conn.execute(
+        "UPDATE spotlight_sessions SET game = COALESCE(?, game), title = COALESCE(?, title) "
+        "WHERE id = ?",
+        (game or None, title or None, int(session_id)),
+    )
+    await db.conn.commit()
+
+
 async def open_session(db: Any, spotlight_id: int) -> Any:
     cur = await db.conn.execute(
         "SELECT * FROM spotlight_sessions WHERE spotlight_id = ? AND ended_at IS NULL "
@@ -629,7 +638,9 @@ class Spotlight(commands.Cog):
         actor: Any = None,
     ) -> Any:
         """One short reminder, never pinned; it pings only while `spotlight_bump_pings` is on."""
-        stream = info if info is not None else words.info_of(session, row["twitch_login"])
+        stream = info if info is not None else await self._current(row, session)
+        refreshed = await self._refresh(session, stream)
+        stream = await self._box_art(guild, stream)
         at = now_iso()
         pinging = bool(self.bot.store.get(guild.id, SPOTLIGHT_BUMP_PINGS_KEY))
         fan_role_id = (
@@ -646,14 +657,28 @@ class Spotlight(commands.Cog):
             words.display_for(row),
             words.bump_duration(session, at),
         )
+        store = self.bot.store
+        embed = (
+            announcement_embed(
+                stream,
+                source=SOURCE,
+                name=words.display_for(row),
+                author=store.get(guild.id, LIVE_AUTHOR_KEY),
+            )
+            if store.get(guild.id, EMBED_KEY)
+            else None
+        )
         message, reason = await self._post(
             guild,
             text,
-            None,
+            embed,
             self._mode(guild.id),
             fan_role_id=fan_role_id,
             pinging=pinging,
         )
+        said = {"game": stream.game, "title": stream.title, "refreshed": refreshed}
+        if embed is not None:
+            said["embed"] = embed_summary(embed)
         if message is None:
             await log_action(
                 self.bot,
@@ -666,7 +691,8 @@ class Spotlight(commands.Cog):
                     "what": "bump",
                     "text": text,
                     "reason": reason,
-                },
+                }
+                | said,
             )
             return None
         await note_bump(self.bot.db, session["id"], message.id, at)
@@ -686,9 +712,33 @@ class Spotlight(commands.Cog):
                 "pinged": pinging,
                 "fan_role_id": fan_role_id,
                 "via": via,
-            },
+            }
+            | said,
         )
         return message
+
+    async def _current(self, row: Any, session: Any) -> Any:
+        """What the channel streams NOW; the announce-time words when Helix cannot say."""
+        stored = words.info_of(session, row["twitch_login"])
+        helix = self._helix()
+        if helix is None or stored.platform != words.PLATFORM:
+            return stored
+        try:
+            streams = await helix.get_streams([row["twitch_login"]])
+        except TwitchError as exc:
+            log.warning(
+                "spotlight: bump for %s used the stored game (%s)", row["twitch_login"], exc
+            )
+            return stored
+        return from_twitch(streams[0]) if streams else stored
+
+    async def _refresh(self, session: Any, info: Any) -> bool:
+        changed = (info.game and info.game != _cell(session, "game")) or (
+            info.title and info.title != _cell(session, "title")
+        )
+        if changed:
+            await refresh_session_info(self.bot.db, session["id"], info.game, info.title)
+        return bool(changed)
 
     async def _end(
         self, guild: Any, row: Any, session: Any, reason: str, *, post: str = CHANNEL_OPTOUT_END
