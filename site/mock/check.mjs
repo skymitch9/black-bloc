@@ -44,6 +44,9 @@ const IDS = {
   // The channel review: #welcome is one of the 94 channels the bot's seed drafted, so use,
   // none and reset all reach it; the fixture test channel has no draft and is refused.
   drafted_channel_id: '1285369365071527997',
+  // Staff's per-channel reach word: #general, outside every ignored category, so both moves land
+  // (the fixture test channel sits in the ticket category on the real router and is refused 409).
+  reach_channel_id: '800000000000000002',
   // request_id above is a ROLE request; a feature request is a different table and gets its
   // own pair: 25 is the staff session's own pending row, 30 is somebody else's.
   feature_request_id: '25',
