@@ -185,14 +185,14 @@ const PROBE_NOTE = 'A linked channel going live is announced through the go-live
   + 'source youtube. golive_mode still decides whether anything is posted.';
 const PROBE_KEY_UNSET = 'With no YOUTUBE_API_KEY the stream is announced from the page alone, so '
   + 'its title reads Live now and no quota is spent.';
-const PROBE_WALL_NOTE = 'From the bot's datacenter address YouTube sometimes answers with its '
-  + '"Sign in to confirm you're not a bot" page. That page still says whether a channel is live, '
+const PROBE_WALL_NOTE = 'From the bot’s datacenter address YouTube sometimes answers with its '
+  + '"Sign in to confirm you’re not a bot" page. That page still says whether a channel is live, '
   + 'but not which video, and when it drops the live marker too the channel reads as offline.';
-const PROBE_LINKS_KEYED = 'the stream's own watch page — behind the bot check the id is searched '
-  + 'for once per broadcast (100 units), and if the search finds nothing the channel's /live page, '
+const PROBE_LINKS_KEYED = 'the stream’s own watch page — behind the bot check the id is searched '
+  + 'for once per broadcast (100 units), and if the search finds nothing the channel’s /live page, '
   + 'titled Live now';
-const PROBE_LINKS_KEYLESS = 'the stream's watch page when YouTube shows it; behind the bot check '
-  + 'the channel's own /live page, titled Live now, with no thumbnail';
+const PROBE_LINKS_KEYLESS = 'the stream’s watch page when YouTube shows it; behind the bot check '
+  + 'the channel’s own /live page, titled Live now, with no thumbnail';
 const PROBE_WALLED_YES = 'yes — the last page was the bot check';
 const PROBE_IDS_NONE_LIVE = 'nobody reads as live';
 const PROBE_IDS_ALL = 'found for every channel reading live';
@@ -1610,7 +1610,7 @@ function probeIds(status) {
   if (!status.reading_live) return PROBE_IDS_NONE_LIVE;
   if (!status.id_unknown) return PROBE_IDS_ALL;
   return badge(`unknown for ${status.id_unknown} of ${status.reading_live} — the post links the `
-    + 'channel's /live page', 'warn');
+    + 'channel’s /live page', 'warn');
 }
 
 async function logDrawer() {
