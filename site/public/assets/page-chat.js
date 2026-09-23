@@ -13,6 +13,7 @@ import {
   field,
   foldout,
   keepSaying,
+  memberPicker,
   notice,
   pager,
   run,
@@ -22,6 +23,7 @@ import {
   section,
   segment,
   settingsPanel,
+  table,
   textAction,
   when,
 } from './ui.js';
@@ -79,6 +81,57 @@ const CHANNEL_WORD_KEYS = [
   'chat_channel_note_modal',
   'chat_channel_note_label',
 ];
+// Personality tones (docs/info/personality-tones-design.md): the cookout sheet and the tone
+// sentence are prompt text, edited in the Personality section; the words /chat says about who
+// hears what are edited in the Who hears what section's fold.
+const TONE_KEYS = ['chat_cookout_voice', 'chat_tone_clause'];
+const VOICE_WORD_KEYS = [
+  'chat_voice_pinned',
+  'chat_voice_cleared',
+  'chat_voice_nothing',
+  'chat_voice_no_member',
+  'chat_voice_no_tone',
+  'chat_voice_tone_off',
+  'chat_voice_button',
+  'chat_voice_title',
+  'chat_voice_intro',
+  'chat_voice_empty',
+  'chat_voice_off_note',
+  'chat_voice_line_pinned',
+  'chat_voice_line_rolled',
+  'chat_voice_line_waiting',
+  'chat_voice_active',
+  'chat_voice_set_placeholder',
+  'chat_voice_tone_placeholder',
+  'chat_voice_clear_button',
+  'chat_voice_previous_button',
+  'chat_voice_next_button',
+  'chat_voice_page',
+  'chat_voice_member_title',
+  'chat_tone_edited',
+  'chat_tone_reset',
+  'chat_tone_too_long',
+];
+const SHEET_TITLE = 'The cookout voice — the base every tone sits on';
+const SHEET_NOTE = 'Every answer a model writes is in this voice: the words it reaches for, how it ' +
+  'greets, teases and signs off, and what it never says. A mood below is only a tone on top of ' +
+  'it — the sentence under the sheet is what tells the model so.';
+const TONE_HINT = 'Your wording is kept when Black Bloc starts up. Blank and Save puts the ' +
+  'shipped wording back. Up to 1200 characters.';
+const VOICES_NOTE = 'Which tone each member hears on top of the cookout voice. A pin beats the ' +
+  'server\'s setting until staff clear it; everybody else is rolled once per conversation and ' +
+  'keeps that tone in every channel.';
+const VOICES_EMPTY = 'Nobody has been answered by a conversation model yet, so nobody is listed. ' +
+  'Pin somebody below and they hear that tone from their next answer.';
+const VOICES_OFF = 'The voice is the cookout one, so nobody hears a tone right now — pins ' +
+  'included. Pick the pool or a mood under Personality and the pins come back into play.';
+const VOICES_WAITING = 'pinned tone is switched off';
+const VOICES_TALKING = 'talking now';
+const VOICES_PICK_FIRST = 'Pick a member first, then a tone.';
+const VOICE_WORDS_TITLE = 'The words /chat says about who hears what';
+const NO_TONES = 'Every tone is switched off, so there is nothing to pin. Turn one back on under ' +
+  'Personality.';
+
 const CHANNELS_NOTE = 'What each channel is for, in one sentence. When Black Bloc points somebody ' +
   'at a channel it reads this list, and a note here beats the channel\'s Discord topic — so a ' +
   'channel with no topic, or a misleading one, stops being guessed at from its name.';
@@ -813,6 +866,35 @@ function knowledgeSection(payload, say) {
  * One voice in the pool: its wording, whether Black Bloc may pick it, and the
  * one button that points the whole bot at it.
  */
+function toneEditor(row, say) {
+  const area = el('textarea', {
+    class: 'input area tone-area',
+    rows: '5',
+    maxlength: '1200',
+    'aria-label': `How ${row.label} sounds`,
+  });
+  area.value = row.voice || '';
+  const path = `/api/chat/personality/${encodeURIComponent(row.name)}`;
+  const saveTone = async (voice) => {
+    const done = await run(
+      say,
+      () => send(path, 'PUT', { voice }),
+      (found) => found?.message || 'Saved.',
+    );
+    if (done.ok) {
+      keepSaying('chat-personality', say);
+      refresh();
+    }
+  };
+  const save = button('Save the wording', () => saveTone(area.value.trim()), { tone: 'quiet' });
+  const back = row.edited ? button('Put the shipped wording back', () => saveTone(''), { tone: 'quiet' }) : null;
+  return el('div', {}, [
+    area,
+    bar([save, back]),
+    el('p', { class: 'section-note', text: TONE_HINT }),
+  ]);
+}
+
 function tropeCard(row, mode, say) {
   const flip = button(row.enabled ? 'Take it out' : 'Put it back', async () => {
     const done = await run(
@@ -844,8 +926,9 @@ function tropeCard(row, mode, say) {
         el('span', { class: 'chat-fixed', text: row.label }),
         row.in_use ? badge('the one in use', 'ok') : null,
         row.enabled ? null : badge('out of the pool', 'warn'),
+        row.edited ? badge('your wording', 'info') : null,
       ]),
-      el('p', { class: 'chat-answer-line', text: row.voice }),
+      toneEditor(row, say),
       el('p', {
         class: 'section-note',
         text: row.updated_by
@@ -857,7 +940,7 @@ function tropeCard(row, mode, say) {
   ]);
 }
 
-function personalitySection(payload, say) {
+async function personalitySection(payload, say, sheetSpecs) {
   const rows = Array.isArray(payload?.tropes) ? payload.tropes : [];
   const mode = String(payload?.mode || MODE_COOKOUT);
   const kind = String(payload?.mode_kind || MODE_COOKOUT);
@@ -891,7 +974,17 @@ function personalitySection(payload, say) {
   const list = el('div', { class: 'section-body' });
   for (const row of rows) list.append(tropeCard(row, mode, say));
 
+  const sheet = card(SHEET_TITLE, [
+    el('p', { class: 'section-note', text: SHEET_NOTE }),
+    await settingsPanel(
+      sheetSpecs.map((spec) => ({ ...spec, type: 'longtext' })),
+      { where: 'Personality', empty: NO_SETTINGS },
+    ),
+  ]);
+  sheet.classList.add('cookout-sheet');
+
   one.body.append(
+    sheet,
     card(null, [
       el('div', { class: 'formrow' }, [
         field('The voice', pick, 'A voice is tone and never truth — the same facts either way.'),
@@ -915,6 +1008,110 @@ function personalitySection(payload, say) {
       class: 'section-note',
       text: payload?.ported_from ? `Ported from ${payload.ported_from}.` : '',
     }),
+  );
+  return one.node;
+}
+
+function toneSelect(tropes, current) {
+  const select = el('select', { class: 'input', 'aria-label': 'Tone' });
+  for (const one of tropes) {
+    const option = el('option', { value: one.name, text: one.label });
+    if (one.name === current) option.selected = true;
+    select.append(option);
+  }
+  return select;
+}
+
+async function pinTo(say, id, trope) {
+  const done = await run(
+    say,
+    () => send(`/api/chat/voices/${encodeURIComponent(id)}`, 'PUT', { trope }),
+    (found) => found?.message || 'Pinned.',
+  );
+  if (done.ok) {
+    keepSaying('chat-voices', say);
+    refresh();
+  }
+}
+
+function voiceHow(row) {
+  if (row.pinned) {
+    const by = row.pinned_by ? row.pinned_by.name : 'staff';
+    return `pinned to ${row.pinned_label || row.pinned} by ${by}${row.pinned_at ? `, ${when(row.pinned_at)}` : ''}`;
+  }
+  return `rolled${row.since ? ` ${when(row.since)}` : ''}`;
+}
+
+function voiceChange(row, tropes, say) {
+  if (tropes.length === 0) return null;
+  const select = toneSelect(tropes, row.pinned || row.trope);
+  const pinIt = button('Pin', () => pinTo(say, row.user_id, select.value), { tone: 'quiet' });
+  const clear = row.pinned ? button('Clear', async () => {
+    const done = await run(
+      say,
+      () => api(`/api/chat/voices/${encodeURIComponent(row.user_id)}`, { method: 'DELETE' }),
+      (found) => found?.message || 'Cleared.',
+    );
+    if (done.ok) {
+      keepSaying('chat-voices', say);
+      refresh();
+    }
+  }, { tone: 'quiet' }) : null;
+  return el('div', { class: 'chatline' }, [select, pinIt, clear]);
+}
+
+function pinNew(tropes, say) {
+  const picker = memberPicker({ label: 'Pin somebody who is not listed yet' });
+  if (tropes.length === 0) return card(null, [sayNothing(NO_TONES)]);
+  const select = toneSelect(tropes, tropes[0].name);
+  const pinIt = button('Pin', () => {
+    if (!picker.id) {
+      say.say(VOICES_PICK_FIRST, 'warn');
+      return;
+    }
+    pinTo(say, picker.id, select.value);
+  }, { tone: 'quiet' });
+  return card(null, [picker.node, el('div', { class: 'chatline' }, [select, pinIt])]);
+}
+
+async function voicesSection(payload, wordSpecs, say) {
+  const rows = Array.isArray(payload?.voices) ? payload.voices : [];
+  const tropes = Array.isArray(payload?.tropes) ? payload.tropes : [];
+  const one = section('Who hears what', VOICES_NOTE, { count: rows.length || null });
+  const counts = payload?.counts || {};
+  one.body.append(card(null, [
+    el('div', { class: 'chipbar' }, [
+      badge(`the setting is ${payload?.setting || MODE_COOKOUT}`, payload?.setting_kind === MODE_COOKOUT ? null : 'ok'),
+      badge(`${counts.pinned ?? 0} pinned`, null),
+      badge(`${counts.active ?? 0} talking now`, counts.active ? 'ok' : null),
+    ]),
+    payload?.setting_kind === MODE_COOKOUT ? el('p', { class: 'section-note', text: VOICES_OFF }) : null,
+    say,
+  ]));
+  one.body.append(table([
+    {
+      label: 'Member',
+      cell: (row) => el('span', {}, [
+        el('span', { text: row.name }),
+        row.active ? badge(VOICES_TALKING, 'ok') : null,
+      ]),
+    },
+    {
+      label: 'Hears',
+      cell: (row) => el('span', {}, [
+        el('span', { class: 'chat-fixed', text: row.label || row.trope }),
+        row.waiting ? badge(VOICES_WAITING, 'warn') : null,
+      ]),
+    },
+    { label: 'How', cell: (row) => voiceHow(row) },
+    { label: 'Turns', cell: (row) => String(row.turns ?? 0) },
+    { label: 'Change', cell: (row) => voiceChange(row, tropes, say) },
+  ], rows, { empty: VOICES_EMPTY, searchLabel: 'Search the members' }));
+  one.body.append(
+    pinNew(tropes, say),
+    foldout(VOICE_WORDS_TITLE, [
+      await settingsPanel(wordSpecs, { where: 'Who hears what', empty: NO_SETTINGS }),
+    ], { count: wordSpecs.length || null }),
   );
   return one.node;
 }
@@ -1178,7 +1375,7 @@ async function memorySection(payload, specs, say) {
 }
 
 async function load() {
-  const [payload, allSettings, knowledge, personality, spend, memory, channels] = await Promise.all([
+  const [payload, allSettings, knowledge, personality, spend, memory, channels, voices] = await Promise.all([
     api('/api/chat/intents'),
     settings(true),
     api('/api/chat/knowledge'),
@@ -1186,6 +1383,7 @@ async function load() {
     api('/api/chat/spend'),
     api('/api/chat/memory'),
     api('/api/chat/channels'),
+    api('/api/chat/voices'),
   ]);
 
   const intents = Array.isArray(payload?.intents) ? payload.intents : [];
@@ -1200,6 +1398,8 @@ async function load() {
   const specs = SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
   const memorySpecs = MEMORY_SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
   const channelWordSpecs = CHANNEL_WORD_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
+  const toneSpecs = TONE_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
+  const voiceWordSpecs = VOICE_WORD_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
 
   const memorySay = sayAgain('chat-memory', notice());
   const intentsSay = sayAgain('chat-intents', notice());
@@ -1207,6 +1407,7 @@ async function load() {
   const knowledgeSay = sayAgain('chat-knowledge', notice());
   const personalitySay = sayAgain('chat-personality', notice());
   const channelsSay = sayAgain('chat-channels', notice());
+  const voicesSay = sayAgain('chat-voices', notice());
 
   document.getElementById('dash').replaceChildren(
     trySection(),
@@ -1214,7 +1415,8 @@ async function load() {
     newIntentSection(createSay),
     knowledgeSection(knowledge, knowledgeSay),
     await channelsSection(channels, channelWordSpecs, channelsSay),
-    personalitySection(personality, personalitySay),
+    await personalitySection(personality, personalitySay, toneSpecs),
+    await voicesSection(voices, voiceWordSpecs, voicesSay),
     await memorySection(memory, memorySpecs, memorySay),
     spendSection(spend),
     await settingsSection(specs),
