@@ -32,6 +32,11 @@ const WORD_KEYS = [
   'chat_channel_notes_placeholder',
   'chat_channel_note_modal',
   'chat_channel_note_label',
+  'chat_channel_reach_shown',
+  'chat_channel_reach_hidden',
+  'chat_channel_reach_cleared',
+  'chat_channel_reach_nothing',
+  'chat_channel_reach_ignored',
 ];
 
 const REVIEW_NOTE = 'Each channel came with a one-sentence description drafted from its name. ' +
@@ -54,11 +59,21 @@ const UNDRAFTED = 'made after the catalog — no draft';
 const WORDS_TITLE = 'The words Black Bloc says about channel notes';
 const NO_WORDS = 'The bot registers no channel-note words, so there is nothing to change here.';
 const HIDDEN_WORDS = {
-  ignored_category: 'left out — its category is on chat_ignore_categories, or it is the ticket category',
-  archive: 'left out — it sits in an archive category',
-  not_visible: 'left out — the member view cannot see it',
+  ignored_category: 'left out — in an ignored category',
+  archive: 'left out — archive',
+  not_visible: 'left out — members cannot see it',
+  hidden_by_staff: 'left out by staff',
 };
-const SEEN_WORD = 'the bot is told about it';
+const SEEN_WORD = 'told about it';
+const ROLE_WORD = 'told about it — members reach it through the {role} role';
+const STAFF_SHOWN_WORD = 'shown by staff';
+const ROLE_VIA = 'role:';
+const TELL_ANYWAY = 'Tell the bot anyway';
+const HIDE_IT = 'Hide from the bot';
+const BACK_TO_RULE = 'Back to the rule';
+const IGNORED_HINT = 'Its category is on chat_ignore_categories, or it is the ticket category — ' +
+  'change that list on the Settings page to bring it in.';
+const TOLD = 'Told about {shown} of {total} channel(s)';
 const STATUS_WORDS = { draft: 'Draft', used: 'Used', rewritten: 'Rewritten', none: 'No note' };
 const STATUS_TONES = { draft: 'warn', used: 'ok', rewritten: 'ok', none: null };
 const FILTERS = [
@@ -70,7 +85,7 @@ const ANY_CATEGORY = '';
 const NO_CATEGORY = '(no category)';
 
 const view = {
-  rows: [], limit: 240, filter: 'left', category: ANY_CATEGORY, query: '', kept: null, apply: null, choice: null,
+  rows: [], review: null, limit: 240, filter: 'left', category: ANY_CATEGORY, query: '', kept: null, apply: null, choice: null,
 };
 
 const clean = (text) => String(text || '').replace(/\s+/g, ' ').trim();
@@ -158,6 +173,47 @@ function reviewCard(row, answer) {
   ]);
 }
 
+function reachOf(row) {
+  const reach = row.reach || {};
+  return {
+    visible: reach.visible ?? Boolean(row.shown),
+    via: reach.via ?? null,
+    override: reach.override ?? null,
+  };
+}
+
+function reachChip(row) {
+  const reach = reachOf(row);
+  if (!reach.visible) return badge(HIDDEN_WORDS[row.hidden_because] || 'left out', 'warn');
+  if (reach.via === 'override') return badge(STAFF_SHOWN_WORD, 'ok');
+  if (String(reach.via || '').startsWith(ROLE_VIA)) {
+    return badge(ROLE_WORD.replace('{role}', String(reach.via).slice(ROLE_VIA.length)), 'ok');
+  }
+  return badge(SEEN_WORD, 'ok');
+}
+
+function reachBar(row, answer) {
+  if (row.hidden_because === 'ignored_category') {
+    return el('p', { class: 'section-note channel-reach-note', text: IGNORED_HINT });
+  }
+  const reach = reachOf(row);
+  const say = notice();
+  say.setAttribute('data-slot', 'reach');
+  const path = `/api/chat/channels/${encodeURIComponent(row.id)}/reach`;
+  const move = (label, work) => button(label, async () => {
+    const done = await run(say, work, (found) => found?.message || 'Done.');
+    if (done.ok && done.found?.channel) answer(done.found, say);
+  }, { tone: 'quiet' });
+  let control;
+  if (reach.override !== null) control = move(BACK_TO_RULE, () => api(path, { method: 'DELETE' }));
+  else if (reach.visible) control = move(HIDE_IT, () => send(path, 'PUT', { shown: false }));
+  else control = move(TELL_ANYWAY, () => send(path, 'PUT', { shown: true }));
+  return el('div', { class: 'channel-reach' }, [
+    el('div', { class: 'review-bar' }, [control]),
+    say,
+  ]);
+}
+
 function channelRow(row, answer) {
   const label = channelLabel({ name: row.name, type: 'text', category_id: row.category_id }, categoriesOf(view.rows));
   return el('div', {
@@ -171,8 +227,9 @@ function channelRow(row, answer) {
       el('div', { class: 'chipbar' }, [
         el('span', { class: 'chat-fixed channel-name', text: label }),
         statusChip(row),
-        row.shown ? badge(SEEN_WORD, 'ok') : badge(HIDDEN_WORDS[row.hidden_because] || 'left out', 'warn'),
+        reachChip(row),
       ]),
+      reachBar(row, answer),
       el('p', {
         class: 'section-note channel-topic',
         text: row.topic ? `${TOPIC_LABEL}${row.topic}` : NO_TOPIC,
@@ -215,6 +272,11 @@ function progressText(review) {
     .replace('{left}', String(review.drafts_left));
 }
 
+function toldText() {
+  const shown = view.rows.filter((row) => reachOf(row).visible).length;
+  return TOLD.replace('{shown}', String(shown)).replace('{total}', String(view.rows.length));
+}
+
 function paintProgress(review) {
   const aside = document.getElementById('page-aside');
   if (!aside) return;
@@ -236,6 +298,7 @@ function paintProgress(review) {
     : null;
   aside.replaceChildren(el('div', { class: 'review-progress' }, [
     el('span', { class: 'review-progress-text', id: 'review-progress', text: progressText(review) }),
+    el('span', { class: 'review-progress-text', id: 'review-told', text: toldText() }),
     next,
   ]));
 }
@@ -297,6 +360,7 @@ async function load() {
   view.limit = Number(payload?.note_chars) || 240;
   view.kept = null;
   if (payload?.review && payload.review.drafts_left === 0 && view.filter === 'left') view.filter = 'all';
+  view.review = payload?.review || null;
   paintProgress(payload?.review);
 
   const review = section('Review', REVIEW_NOTE, { id: 'review', open: true, count: view.rows.length || null });
@@ -327,13 +391,15 @@ async function load() {
     view.kept = fresh.id;
     const old = document.getElementById(`channel-${fresh.id}`);
     const made = channelRow(fresh, answer);
-    const kept = made.querySelector('.notice');
+    const slot = say && say.getAttribute('data-slot');
+    const kept = made.querySelector(slot ? `.notice[data-slot="${slot}"]` : '.review-card .notice');
     if (kept && kept.say && say) kept.say(say.said, say.getAttribute('data-tone') || 'ok');
     if (old) old.replaceWith(made);
     const next = seesCard({ ...found, directory: found.directory, budget: found.budget });
     seesNode.replaceWith(next);
     seesNode = next;
-    if (found.review) paintProgress(found.review);
+    if (found.review) view.review = found.review;
+    paintProgress(view.review);
     apply();
   };
 

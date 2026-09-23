@@ -3052,3 +3052,18 @@ Lettered; the conductor numbers it. ⚠️ `chat_llm_mode` must be **on** for an
 | **`PT-c`** | Set the voice to **pool**, pick yourself in the member picker, choose **scholarly**, **Pin**; then @-mention the bot in two different channels | *"**You** hear **scholarly** on top of the cookout voice…"*; both replies read like the cookout uncle being precise — cookout words (*fam*, *cousin*), scholarly pace. The Logs page has one `chat.voice_pinned` (Via Website) and two `chat.llm_reply` rows whose details say `"trope": "scholar"` |
 | **`PT-d`** | In Discord, `/chat` ▸ **Personality…** ▸ **Who hears what…**, pick a member in *Set a member's tone…*, choose a tone, then **Clear the pin** | The card lists members in the words on the site; the member card pins and answers in words; **Clear the pin** only shows on a pin and answers *"… is back on the server's setting…"*. Only staff can open it |
 | **`PT-e`** | Un-pin, keep the voice on **pool**, and talk to the bot for a few turns in one channel then another; wait 30+ minutes and talk again | The roster shows *rolled* with the same tone across both channels and a turn count that climbs; after the gap the tone may change (a fresh roll). Read three replies under **noir**, **scholarly** and **deadpan** and check each still sounds like the cookout |
+
+## Rows `CV-a` … `CV-e` — channel reach: opt-in roles count, and staff have the final word (branch `channel-visibility`, 2026-09-23)
+
+⚠️ **BUILT, NOT MERGED, NOT DEPLOYED** — branch `channel-visibility`, commits `16b69f1a` + `3f700cd6` (schema **57**). Nothing below has run against the live bot.
+
+Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md) ▸ *Follow-up — channel reach*.
+Lettered; the conductor numbers it. ⚠️ Run `CV-a` FIRST: it is the check on the hypothesis the build rests on.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`CV-a`** | <https://blackbloc.heygabi.ai/channels.html>, filter **All**, category **The Hole in the Wall**, then **Gaming** | `#qotw`, `#shows-and-movies`, `#sports-ball`, `#music-recommendations`, `#recipes-and-food-pics` and `#rpg` read *told about it — members reach it through the QOTW / Shows / Sports / Musichead / Foodie / RPGer role*. ⚠️ `#landing` and `#knuck-up` may still read *left out — members cannot see it* — no menu role explains them; `CV-c` is the answer if so. The head reads *Told about N of 94* with N at least 30 (24 before + the six) |
+| **`CV-b`** | Same page, category **The Basement** | All 9 channels read *left out — in an ignored category* with a sentence about `chat_ignore_categories` and **no** Reach button (the conductor added the category to the list); none of them is in *What the bot sees* |
+| **`CV-c`** | On `#landing` (or any *members cannot see it* card) press **Tell the bot anyway**; then **Back to the rule** | *"Black Bloc is told about #landing now, because staff said so…"*; badge *shown by staff*; `#landing` appears in *What the bot sees*; *Told about* +1. Back: *"#landing is back to the rule…"*, badge back, count back. Logs has one `chat.channel_reach_set` and one `chat.channel_reach_cleared` row, Via Website |
+| **`CV-d`** | On `#general-chat` press **Hide from the bot**, @-mention the bot asking where to chat, then **Back to the rule** | Badge *left out by staff*; `#general-chat` leaves the block; the reply does not name `#general-chat` (the guard strips it). After Back, it is told about it again |
+| **`CV-e`** | Settings page ▸ `chat_visibility_role_id` help; `/settings` ▸ chat ▸ **Find a setting…** `reach` | The help says roles members pick for themselves count and staff can override on the Channels page; Find lists the five `chat_channel_reach_*` sentences (the chat picker reads *25 of 75*) |

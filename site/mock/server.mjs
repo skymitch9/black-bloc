@@ -140,6 +140,13 @@ const CHANNEL_TOPICS = {
   '1411816390414962700': 'Talk about whatever.',
 };
 const CHANNELS_NOBODY_SEES = ['800000000000000003', '800000000000000004', '800000000000000005'];
+// Seed channels only an opt-in role reads (docs/info/channel-catalog-design.md, reach follow-up):
+// the mock's stand-in for Discord's overwrites, which the real router reads through permissions_for.
+const CHANNELS_ROLE_READS = new Map([
+  ['1413643742308728983', 'Sports'],
+  ['1413701019711442964', 'RPGer'],
+  ['1285371141476581509', null],
+]);
 const NOTE_CHARS = 240;
 const DIRECTORY_BYTES = 4096;
 const TOPIC_CHARS = 160;
@@ -480,7 +487,7 @@ const SETTING_SPECS = [
   ['chat_ignore_channels', 'channels', [], [], 'channels Black Bloc never answers an @-mention in'],
   ['chat_ignore_categories', 'channels', [], [], 'categories Black Bloc leaves out of everything it reads and tells people about — the channel names and topics it learns each day, and the channel list every conversational answer is written against. The modmail category and any category with `archive` in its name are left out already, and so is every channel @everyone cannot see'],
   ['chat_home_channel_id', 'channel', null, null, 'where somebody is sent when a conversational answer points at a channel that does not exist. Blank is safe: the sentence is written again without the channel in it rather than pointing anywhere. Either way the invention is logged, so `/chat` ▸ **Logs** and the Logs page count how often it happens'],
-  ['chat_visibility_role_id', 'role', '1073741054563602532', '1073741054563602532', "the role whose view of the server IS the bot's map: channels this role can read are the ones the bot may learn about, list and point people at. This server hides everything from @everyone until the rules screen grants Member, so the default is the Member role - clearing it falls back to @everyone, which on this server means almost no channels at all"],
+  ['chat_visibility_role_id', 'role', '1073741054563602532', '1073741054563602532', "the role whose view of the server IS the bot's map: channels this role can read are the ones the bot may learn about, list and point people at. This server hides everything from @everyone until the rules screen grants Member, so the default is the Member role - clearing it falls back to @everyone, which on this server means almost no channels at all. A channel this role cannot read still counts when a role members pick for themselves on a role menu can (Sports, Shows, RPGer …), and staff can tell the bot about any one channel, or keep it quiet, on the Channels page"],
   ['chat_staff_can_ping_roles', 'bool', true, true, "on lets Black Bloc's conversational answers mention a role when the person who @-mentioned it is staff — an Auntie or Uncle and up. Nobody else can make it ping anything, and `@everyone` and `@here` never go through for anyone. Off means a conversational answer pings nobody at all, whoever asked"],
   ['chat_escalation_names', 'int', 2, 2, 'how many online staff Black Bloc names when somebody asks for a mod, 0 to name nobody and up to 10. They are named in plain words, never pinged — the person does that themselves. Nobody online says so instead', null, 10],
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
@@ -551,6 +558,11 @@ const SETTING_SPECS = [
   ["chat_channel_draft_none", 'text', "**#{channel}** has no note now, and the draft is set aside. Black Bloc goes by the channel's own topic, or just its name when it has none.", "**#{channel}** has no note now, and the draft is set aside. Black Bloc goes by the channel's own topic, or just its name when it has none.", "what staff are told when they decide a channel needs no note, on the Channels page. It takes {channel}"],
   ["chat_channel_draft_reset", 'text', "**#{channel}** is back to its draft and waiting for review. Black Bloc reads no note for it until somebody uses or rewrites the draft.", "**#{channel}** is back to its draft and waiting for review. Black Bloc reads no note for it until somebody uses or rewrites the draft.", "what staff are told when they put a channel back to its draft, on the Channels page. It takes {channel}"],
   ["chat_channel_draft_missing", 'text', "**#{channel}** has no drafted description to review, so nothing was done. Write a note for it instead.", "**#{channel}** has no drafted description to review, so nothing was done. Write a note for it instead.", "what staff are told when they use, set aside or reset a draft on a channel that was never drafted (made after the catalog). It takes {channel}"],
+  ["chat_channel_reach_shown", 'text', "Black Bloc is told about **#{channel}** now, because staff said so, whoever can read it. **Back to the rule** undoes that.", "Black Bloc is told about **#{channel}** now, because staff said so, whoever can read it. **Back to the rule** undoes that.", "what staff are told when they press Tell the bot anyway on a channel, on the Channels page. It takes {channel}, the channel's name"],
+  ["chat_channel_reach_hidden", 'text', "Black Bloc is not told about **#{channel}** now, because staff said so, even though members can read it. **Back to the rule** undoes that.", "Black Bloc is not told about **#{channel}** now, because staff said so, even though members can read it. **Back to the rule** undoes that.", "what staff are told when they press Hide from the bot on a channel, on the Channels page. It takes {channel}"],
+  ["chat_channel_reach_cleared", 'text', "**#{channel}** is back to the rule: Black Bloc is told about it while members can read it, through the Member role or a role they pick for themselves.", "**#{channel}** is back to the rule: Black Bloc is told about it while members can read it, through the Member role or a role they pick for themselves.", "what staff are told when they put a channel back to the rule, on the Channels page. It takes {channel}"],
+  ["chat_channel_reach_nothing", 'text', "**#{channel}** already follows the rule, so nothing changed.", "**#{channel}** already follows the rule, so nothing changed.", "what staff are told when they put back to the rule a channel staff never decided. It takes {channel}"],
+  ["chat_channel_reach_ignored", 'text', "**#{channel}** sits in a category Black Bloc leaves out on purpose (one on `chat_ignore_categories`, or the ticket category), so nothing was changed. Take the category off that list on the Settings page first.", "**#{channel}** sits in a category Black Bloc leaves out on purpose (one on `chat_ignore_categories`, or the ticket category), so nothing was changed. Take the category off that list on the Settings page first.", "what staff are told when they try to tell the bot about, or hide, a channel in an ignored category or the ticket category. It takes {channel}"],
   ['request_mode', 'enum', 'on', 'on', 'off, or on (members can ask for things with /request and staff decide on the site)', ['off', 'on']],
   ['request_filed_line', 'text', 'Filed as **#{request_id}** — Request has been received. You will get a DM every time the status is updated.', 'Filed as **#{request_id}** — Request has been received. You will get a DM every time the status is updated.', "what a member is told the moment their request is filed; {request_id} stands for the request's number and is the only thing that may be filled in"],
   ['request_who_can_file', 'enum', 'everyone', 'everyone', 'who may file a request: everyone, or staff only', ['everyone', 'staff']],
@@ -1425,6 +1437,10 @@ function seedState() {
   ],
   memoryOptOut: [{ user_id: MEMBERS[5].id, at: minutesAgo(3000) }],
   nextKnowledge: 4,
+  channelReach: new Map([
+    ['1285371141476581509', true],
+    ['800000000000000007', false],
+  ]),
   channelNotes: new Map([
     ...Object.entries(CHANNEL_DRAFTS_SEED).filter(([, entry]) => entry.final).map(([id, entry]) => [id, entry.draft]),
     ['1474844966021890362', 'The question of the week lives here — answer it, then argue about everyone else’s answers.'],
@@ -7611,14 +7627,34 @@ function channelCategory(channel) {
   return CHANNELS.find((one) => one.id === channel.category_id) || null;
 }
 
-function channelHiddenBecause(channel) {
+function channelIgnored(channel) {
   const category = channelCategory(channel);
   const ignored = new Set([...(state.settings.get('chat_ignore_categories') || []), state.settings.get('modmail_category_id')]
     .filter(Boolean).map(String));
-  if (category && ignored.has(category.id)) return 'ignored_category';
-  if (category && category.name.toLowerCase().includes('archive')) return 'archive';
-  if (CHANNELS_NOBODY_SEES.includes(channel.id)) return 'not_visible';
-  return null;
+  return Boolean(category && ignored.has(category.id));
+}
+
+function channelReach(channel) {
+  const category = channelCategory(channel);
+  if (channelIgnored(channel)) return { visible: false, via: null, why: 'ignored_category', override: null };
+  if (state.channelReach.has(channel.id)) {
+    const shown = state.channelReach.get(channel.id);
+    return shown
+      ? { visible: true, via: 'override', why: null, override: true }
+      : { visible: false, via: null, why: 'hidden_by_staff', override: false };
+  }
+  if (category && category.name.toLowerCase().includes('archive')) return { visible: false, via: null, why: 'archive', override: null };
+  if (CHANNELS_NOBODY_SEES.includes(channel.id)) return { visible: false, via: null, why: 'not_visible', override: null };
+  if (CHANNELS_ROLE_READS.has(channel.id)) {
+    const role = CHANNELS_ROLE_READS.get(channel.id);
+    if (!role) return { visible: false, via: null, why: 'not_visible', override: null };
+    return { visible: true, via: `role:${role}`, why: null, override: null };
+  }
+  return { visible: true, via: 'member', why: null, override: null };
+}
+
+function channelHiddenBecause(channel) {
+  return channelReach(channel).why;
 }
 
 function shortened(text, limit) {
@@ -7683,7 +7719,8 @@ function reviewCounts(rows) {
 
 function channelNoteRow(channel) {
   const category = channelCategory(channel);
-  const why = channelHiddenBecause(channel);
+  const reach = channelReach(channel);
+  const why = reach.why;
   return {
     id: channel.id,
     name: channel.name,
@@ -7693,6 +7730,7 @@ function channelNoteRow(channel) {
     note: state.channelNotes.get(channel.id) || null,
     shown: why === null,
     hidden_because: why,
+    reach: { visible: reach.visible, via: reach.via, override: reach.override },
     position: channel.position,
     ...draftFields(channel),
   };
@@ -7728,7 +7766,7 @@ function wantedTextChannel(id) {
 
 function channelAnswer(channel, message) {
   const found = channelsPayload();
-  return { channel: channelNoteRow(channel), directory: found.directory, budget: found.budget, review: found.review, message };
+  return { channel: channelNoteRow(channel), directory: found.directory, budget: found.budget, review: found.review, counts: found.counts, message };
 }
 
 function decideDraft(channel, status, kind, extra = {}) {
@@ -7813,6 +7851,36 @@ route('POST', '/api/chat/channels/:id/reset', (context) => {
   const had = state.channelNotes.delete(channel.id);
   if (had || drafted.status !== 'draft') decideDraft(channel, 'draft', 'web.chat.channel_draft_reset');
   return channelAnswer(channel, noteWords('chat_channel_draft_reset', { channel: channel.name }));
+});
+
+function reachChannel(id) {
+  const channel = wantedTextChannel(id);
+  if (channelIgnored(channel)) {
+    throw new Refused(409, 'ignored_category', noteWords('chat_channel_reach_ignored', { channel: channel.name }));
+  }
+  return channel;
+}
+
+route('PUT', '/api/chat/channels/:id/reach', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  if (typeof body.shown !== 'boolean') {
+    throw new Refused(422, 'reach_unclear', 'Say whether Black Bloc should be told about this channel — shown true or shown false — and send it again. Nothing was changed.');
+  }
+  const channel = reachChannel(context.params.id);
+  if (state.channelReach.get(channel.id) !== body.shown) {
+    state.channelReach.set(channel.id, body.shown);
+    logAction('web.chat.channel_reach_set', { details: { channel_id: channel.id, channel: channel.name, via: 'website', shown: body.shown } });
+  }
+  return channelAnswer(channel, noteWords(body.shown ? 'chat_channel_reach_shown' : 'chat_channel_reach_hidden', { channel: channel.name }));
+});
+
+route('DELETE', '/api/chat/channels/:id/reach', (context) => {
+  requireStaff(context.session);
+  const channel = reachChannel(context.params.id);
+  if (!state.channelReach.delete(channel.id)) return channelAnswer(channel, noteWords('chat_channel_reach_nothing', { channel: channel.name }));
+  logAction('web.chat.channel_reach_cleared', { details: { channel_id: channel.id, channel: channel.name, via: 'website' } });
+  return channelAnswer(channel, noteWords('chat_channel_reach_cleared', { channel: channel.name }));
 });
 
 function personaMode() {

@@ -684,6 +684,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "hit_id": str(hit_id),
         "test_channel_id": str(wf.TEST_CHANNEL_ID),
         "drafted_channel_id": str(wf.TEST_CHANNEL_ID),
+        "reach_channel_id": str(wf.OTHER_CHANNEL_ID),
         "lobby_channel_id": str(wf.VOICE_CHANNEL_ID),
         "room_channel_id": str(wf.VOICE_CHANNEL_ID),
         "plain_role_id": str(wf.PLAIN_ROLE_ID),

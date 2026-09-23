@@ -717,6 +717,104 @@ async def test_the_channel_routes_are_staff_only(client, sign_in, guild, wf, web
     assert await wf.kinds_in(web.db) == []
 
 
+async def test_each_row_says_how_members_reach_it_and_an_opt_in_role_counts(
+    seeded, client, web, wf, guild
+):
+    from black_bloc.cogs.community.role_menus import add_option, create_menu
+
+    open_general(guild, wf)
+    guild.get_channel(wf.TEST_CHANNEL_ID).viewers.add(wf.PLAIN_ROLE_ID)
+    menu = await create_menu(web.db, wf.GUILD_ID, "interests", "Interests", None, "multiple")
+    await add_option(web.db, menu, wf.PLAIN_ROLE_ID, "Member", None)
+
+    rows = {row["name"]: row for row in client.get("/api/chat/channels").json()["channels"]}
+
+    assert rows["general"]["reach"] == {"visible": True, "via": "member", "override": None}
+    assert rows["blackbloc-logs"]["reach"] == {
+        "visible": True,
+        "via": "role:Member",
+        "override": None,
+    }
+    assert rows["blackbloc-logs"]["shown"] is True
+    assert rows["blackbloc-logs"]["hidden_because"] is None
+
+
+async def test_staff_tell_the_bot_about_a_channel_hide_one_and_put_both_back(
+    seeded, client, web, wf, guild
+):
+    open_general(guild, wf)
+    logs = f"/api/chat/channels/{wf.TEST_CHANNEL_ID}/reach"
+    general = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}/reach"
+
+    shown = client.put(logs, json={"shown": True})
+    assert shown.status_code == 200, shown.text
+    body = shown.json()
+    assert body["channel"]["reach"] == {"visible": True, "via": "override", "override": True}
+    assert body["channel"]["shown"] is True
+    assert "#blackbloc-logs" in body["directory"]
+    assert body["counts"]["shown"] == 2
+    assert "told about **#blackbloc-logs**" in body["message"]
+
+    hidden = client.put(general, json={"shown": False}).json()
+    assert hidden["channel"]["reach"] == {"visible": False, "via": None, "override": False}
+    assert hidden["channel"]["hidden_because"] == "hidden_by_staff"
+    assert "#general" not in hidden["directory"]
+
+    back = client.delete(general).json()
+    assert back["channel"]["reach"]["override"] is None and back["channel"]["shown"] is True
+    assert "back to the rule" in back["message"]
+    assert "already follows the rule" in client.delete(general).json()["message"]
+    client.delete(logs)
+    rows = client.get("/api/chat/channels").json()["channels"]
+    assert [row["reach"]["override"] for row in rows] == [None, None]
+
+    assert [k for k in await wf.kinds_in(web.db) if k.startswith("web.chat.channel_reach")] == [
+        "web.chat.channel_reach_set",
+        "web.chat.channel_reach_set",
+        "web.chat.channel_reach_cleared",
+        "web.chat.channel_reach_cleared",
+    ]
+
+
+async def test_an_ignored_category_cannot_be_overridden_and_says_so(seeded, client, web, wf):
+    await web.store.set(wf.GUILD_ID, "chat_ignore_categories", [wf.CATEGORY_ID])
+    path = f"/api/chat/channels/{wf.TEST_CHANNEL_ID}/reach"
+
+    for response in (client.put(path, json={"shown": True}), client.delete(path)):
+        assert response.status_code == 409
+        assert response.json()["error"] == "ignored_category"
+        assert "leaves out on purpose" in response.json()["message"]
+    row = client.get("/api/chat/channels").json()["channels"][1]
+    assert row["reach"] == {"visible": False, "via": None, "override": None}
+    assert row["hidden_because"] == "ignored_category"
+    assert [k for k in await wf.kinds_in(web.db) if k.startswith("web.chat")] == []
+
+
+async def test_a_reach_move_that_does_not_say_true_or_false_is_refused_in_words(
+    seeded, client, web, wf
+):
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}/reach"
+    for body in ({}, {"shown": "yes"}, {"shown": 1}):
+        response = client.put(path, json=body)
+        assert response.status_code == 422, body
+        assert "shown true or shown false" in response.json()["message"]
+    missing = client.put("/api/chat/channels/12345/reach", json={"shown": True})
+    assert missing.status_code == 404 and "not a text channel" in missing.json()["message"]
+    assert [k for k in await wf.kinds_in(web.db) if k.startswith("web.chat")] == []
+
+
+async def test_the_reach_moves_are_staff_only(client, sign_in, guild, wf, web):
+    wf.member(guild, 8, name="ada")
+    sign_in(client, uid=8, staff=False)
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}/reach"
+
+    for method, body in (("PUT", {"shown": False}), ("DELETE", None)):
+        response = client.request(method, path, json=body)
+        assert response.status_code == 403
+        assert response.json()["message"]
+    assert await wf.kinds_in(web.db) == []
+
+
 async def drafted(web, wf, draft="Where anything goes."):
     await web.db.conn.execute(
         "INSERT INTO channel_drafts(guild_id, channel_id, draft) VALUES (?, ?, ?)",

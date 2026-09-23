@@ -13,6 +13,7 @@
 > worktree `C:/lcw/bb-channel-catalog`. Nothing deployed; schema 54 has never run against the
 > live database. The draft descriptions for the live channels are in
 > [`channel-catalog.md`](channel-catalog.md) and are **not** in the bot.
+> **Follow-up 2026-09-23 (branch `channel-visibility`, NOT merged, NOT deployed):** *channel reach* at the foot of this page — opt-in roles count, a staff override per channel, schema 57.
 > **Last verified: 2026-09-23 14:1x** — the status lines above only, at the v159 docs ritual; the body was not re-read.
 > Before that, **2026-09-23** — against the branch tip by `pytest -n 16` (7427 passed),
 > `ruff check black_bloc tests site` and `node site/mock/check.mjs` (21 pages, 201 routes), and
@@ -66,9 +67,13 @@ spot: a channel with no topic got no section of its own.
 | Chat page ▸ **Channel directory** | *What the bot sees* card (the block verbatim, bytes used of 4096, a meter, which descriptions were left off), then one row per channel — `# name · Category` (the `channelLabel` helper), the reason badge, the Discord topic dim or *no topic in Discord*, the note inline with Save / Clear — and a fold with the eleven words below |
 | `/chat` ▸ **Channel notes…** | A card listing the notes, Discord's own searchable channel picker, a form prefilled with the current note; a blank box clears |
 
-`hidden_because` is `ignored_category` (on `chat_ignore_categories`, or the modmail category),
+~~`hidden_because` is `ignored_category` (on `chat_ignore_categories`, or the modmail category),
 `archive`, or `not_visible` (the `chat_visibility_role_id` view cannot read it) — the one test
-`open_channels` applies, as `directory.why_hidden`.
+`open_channels` applies, as `directory.why_hidden`.~~ **Superseded 2026-09-23 (branch
+`channel-visibility`, commit `16b69f1a`):** the one test is now `directory.reach_in`, a
+self-assignable role's view counts as well as the Member role's, staff can override one channel
+either way, and `hidden_because` gains `hidden_by_staff` — see *Follow-up — channel reach* below.
+`why_hidden` no longer exists.
 
 ## 5. Eleven words, all keys (checklist: every posted word is editable)
 
@@ -129,6 +134,8 @@ them (the two tests that counted 28 now count 39).
   unknown until the page is opened after a deploy.
 - Which live channels the Member view can read, so the catalog cannot say which drafts would
   actually reach the model.
+  *(Measured at v159: 24 reach the directory. The channel-reach follow-up below found 8 of the 65
+  `not_visible` are channels the owner says members DO see.)*
 - The drafts in [`channel-catalog.md`](channel-catalog.md) are the builder's guesses from names
   and categories; the owner approves or rewrites them.
 
@@ -233,3 +240,145 @@ staff do it"* → *"make it editable too so they can adjust the text"* — said 
   channels, not the finals landing as notes, not the `/chat` modal's decision row.
 - Real staff names in the chip (the mock's member is *Nick*).
 - The live topics — still unknown until the page is opened after a deploy.
+
+## Follow-up, 2026-09-23 — channel reach: opt-in roles count, and staff have the final word
+
+> **Status:** BUILT, NOT MERGED, NOT DEPLOYED — branch `channel-visibility`, worktree
+> `C:/lcw/bb-channel-visibility`, off `main` `645ac862` (v160 live, schema 56). Commits
+> `16b69f1a` (the rule, the table, the API, tests) and `3f700cd6` (the page, the mock, the
+> contract). **Last verified: 2026-09-23** against the branch by `pytest -n 16`, `ruff`,
+> `node site/mock/check.mjs` and the page in headless Chrome against the mock. ⚠️ Nothing met
+> live Discord.
+
+### The asks, verbatim (owner, 2026-09-23)
+
+> "The channels page seems to think the Chat Category #Hole-in-the-wall isn't visible my
+> members, it is fix that"
+
+> "Same with gaming section"
+
+> "Make sure the basement is still not referenced" *(relayed by the conductor mid-build)*
+
+### Measured before the build (operator token, 2026-09-23 14:3x, v160)
+
+`chat_visibility_role_id` IS the Member role (`1073741054563602532`), yet `GET /api/chat/channels`
+marked `not_visible`: in *The Hole in the Wall* — `#landing`, `#qotw`, `#shows-and-movies`,
+`#sports-ball`, `#music-recommendations`, `#recipes-and-food-pics` (6 of 13); in *Gaming* —
+`#knuck-up`, `#rpg` (2 of 6); **65 of 94** overall. Whole categories hidden: The Basement 9/9,
+Back to Black 2025 / 2026 / 2027 (11 / 17 / 12), ModMail 7/7, archive 4/4.
+
+### Why (the hypothesis — unproven until the deployed page shows it)
+
+`directory.everyone_sees` called `channel.permissions_for(<Member role>)`. For a `Role`,
+discord.py 2.7 (`abc.py` `permissions_for`, the Role branch) applies the guild base, then
+`@everyone`'s overwrite, then **that role's** overwrite only. A channel members reach through a
+second role reads as private. Six of the eight line up with the interest roles the seeded
+`interests` menu hands out — `#qotw` ↔ QOTW, `#shows-and-movies` ↔ Shows, `#sports-ball` ↔
+Sports, `#music-recommendations` ↔ Musichead, `#recipes-and-food-pics` ↔ Foodie, `#rpg` ↔ RPGer.
+⚠️ **Two do not:** `#landing` ("the first stop after the rules") and `#knuck-up` match no menu
+role. The operator API cannot read overwrites, so what hides them is unknown — `#landing` may
+deny the Member role on purpose (members graduate out of it). If the deployed page still reads
+them *left out — members cannot see it*, **Tell the bot anyway** is staff's answer, not a further
+code change.
+
+### The rule (`directory.reach_in` — one helper, every reader)
+
+In order, first match wins:
+
+| # | Test | Answer |
+|---|---|---|
+| 1 | In a category on `chat_ignore_categories`, or the `modmail_category_id` category | hidden, `ignored_category` |
+| 2 | A staff override is stored for the channel | shown → visible via `override`; hidden → `hidden_by_staff` |
+| 3 | In a category whose name contains *archive* | hidden, `archive` |
+| 4 | The `chat_visibility_role_id` role can read it | visible via `member` |
+| 5 | Any **self-assignable** role can read it — `role_menu_options` of every non-`staff`-mode menu of this guild, resolved through `guild.get_role` | visible via `role:<name>` |
+| 6 | otherwise | hidden, `not_visible` |
+
+Readers: `open_channels` → the directory block and `channel_names` (the reply guard's
+vocabulary); `knowledge.server_sections` (the daily ingest); the Channels page rows. No second
+implementation. The self-assignable set and the overrides are read by `channel_reach.refresh` at
+each ingest tick, each LLM reply, each page read and after each staff move, and kept per guild
+for the sync readers; nothing read yet is the plain member rule (the pre-branch behaviour, never
+wider).
+
+`rolegrants` hands out no role of its own: every grant comes from a menu (`menu` / `approval`) or
+from staff (`staff` / `manual`), so the menu options are the whole self-assignable set.
+
+### Staff final say — a per-channel override
+
+Table `channel_reach(guild_id, channel_id, shown, set_by, set_at)`, schema **56 → 57**,
+additive. `PUT /api/chat/channels/{id}/reach {shown: true|false}` and
+`DELETE /api/chat/channels/{id}/reach` (back to the rule), staff `writer` gate, refusals in words
+(404 not a text channel, 409 `ignored_category`, 422 `reach_unclear`). GET rows gain
+`reach {visible, via, override}` and keep `shown` / `hidden_because`; the move answers also carry
+`counts`. Kinds `chat.channel_reach_set` / `chat.channel_reach_cleared` (ROUTINE, feature `chat`).
+
+The page: the badge reads *told about it*, *told about it — members reach it through the Sports
+role*, *shown by staff*, *left out by staff*, *left out — members cannot see it*, *left out — in
+an ignored category*, *left out — archive*; one Reach button per card — **Tell the bot anyway**
+(hidden by the rule), **Hide from the bot** (visible by the rule), **Back to the rule**
+(overridden) — and none on an ignored-category card, which says to change the list instead. The
+head gains *Told about N of M channel(s)*; it, the card and *What the bot sees* repaint in place.
+
+### Decisions
+
+1. ✅ **DECIDED — the ignored-category list and the ticket category beat BOTH the opt-in-role
+   rule and a staff override.** Staff chose those on purpose, and the list is where they change
+   it (the Settings page). An override on such a channel is **refused in words** (409), never
+   stored silently. **The ignore list is the guard for The Basement** — the category named
+   *The Basement* (9 text channels, all hidden at v160) must never reach the directory, the
+   knowledge ingest or a chat answer. The conductor is adding its category id to
+   `chat_ignore_categories` on the live site (2026-09-23); without that entry, The Basement's
+   safety would rest only on no Member or self-assignable role reading it. Guarded by
+   `tests/test_directory.py::test_the_basement_is_never_referenced_even_when_only_an_opt_in_role_reads_it`
+   and `tests/test_channel_reach.py::test_the_basement_cannot_be_shown_by_staff_and_the_refusal_says_why`.
+2. ✅ **DECIDED — an override DOES beat the archive rule.** An archive is recognised by a word in
+   the category name; without the override staff could only bring one archived channel back by
+   renaming the whole category.
+3. ✅ **DECIDED — a `staff`-mode menu's roles do not count** (Runner, Live Runner, Commentator):
+   nobody gives those to themselves. Approval menus DO count — a member can ask.
+4. **Each opt-in role is tested alone** with the same `permissions_for(role)` call, not combined
+   with the Member role: the question is *could somebody who picked this role read it*.
+5. **Five sentences, all keys** — `chat_channel_reach_shown`, `_hidden`, `_cleared`, `_nothing`,
+   `_ignored` in `settings_store.CHANNEL_NOTE_WORDS`, a label each in `labels.js`, a mock row
+   each, in the Channels page's words fold. The `chat` group goes **70 → 75** keys; it was already
+   past the `/settings` key picker's 25 and reached through **Find a setting**, which is
+   unchanged; no new namespace, so the 25-group select gains nothing. Registry **361 → 366**.
+6. **The page's badge and button words are page constants**, like every other word on the
+   Channels page — site text, not words the bot posts.
+7. **`chat_visibility_role_id`'s help** now says opt-in roles count and staff can override on the
+   Channels page (mock row mirrored).
+8. ⚠️ **No Discord door for the override** (`/chat` ▸ Channel notes… is unchanged). Checklist
+   item 33 asks for both doors on a per-item choice; the brief scoped this build to the site. A
+   follow-up if the owner wants it.
+
+### Verified (2026-09-23, branch `channel-visibility`)
+
+- `tests/test_directory.py` (33): Member reads it → via member; only an opt-in role reads it →
+  via that role; a role nobody can pick opens nothing; a vanished role is skipped; no role →
+  hidden; an override wins both ways and beats archive; The Basement and the ticket category beat
+  an opt-in role and an override; the sync readers see the last refresh.
+- `tests/test_channel_reach.py` (8): store / replace / clear; the self-assignable set is this
+  guild's non-staff menu roles; refresh and its fallback; both moves, idempotence, log rows; the
+  Basement refusal; the missing channel.
+- `tests/storage/test_db.py` (56 → 57 additive), `tests/api/tools/test_chat.py` (row shape, the
+  role via, both moves over HTTP, 409 / 422 / 404, the staff gate), `tests/test_knowledge.py`
+  (the ingest reads by the same rule), `tests/test_logkinds.py`, the key-count mirrors,
+  `tests/api/test_contract.py` (the two moves).
+- The page against the mock in headless Chrome (CDP, 390 px wide, no horizontal scroll): 102
+  rows, *Told about 93 of 102*; `#landing` *shown by staff* with **Back to the rule**;
+  `#free-nitro-here` *left out by staff*; `#sports-ball` / `#rpg` *told about it — members reach
+  it through the Sports / RPGer role*; **Hide from the bot** on `#general` → *left out by staff*,
+  the sentence on its card, *Told about 92*, `#general` gone from *What the bot sees*; **Back to
+  the rule** → 93 again and back in the block. No console errors.
+
+### NOT verified
+
+- ⚠️ **The opt-in-role hypothesis is unproven** until the deployed Channels page shows
+  `#qotw`, `#shows-and-movies`, `#sports-ball`, `#music-recommendations`,
+  `#recipes-and-food-pics` and `#rpg` as *told about it — members reach it through the … role*.
+  Nothing here read a live overwrite.
+- `#landing` and `#knuck-up` — no explanation; see *Why*.
+- That the live role menus still carry those role ids (the ids were read from the seed in the
+  code, not from the live table).
+- No live Discord, no live database, no real staff move, no Discord-side door.

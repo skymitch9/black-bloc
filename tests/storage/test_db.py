@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 56
+        assert SCHEMA_VERSION == 57
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2124,6 +2124,54 @@ async def test_a_schema_54_file_gains_the_channel_drafts_table_and_keeps_its_not
         with pytest.raises(sqlite3.IntegrityError):
             await again.conn.execute(
                 "INSERT INTO channel_drafts(guild_id, channel_id, draft) VALUES (7, 1, 'e')"
+            )
+    finally:
+        await again.close()
+
+
+async def test_a_schema_56_file_gains_the_channel_reach_table_and_keeps_its_drafts(tmp_path):
+    """56 → 57 is additive: an older file keeps its drafts and gains an empty reach table."""
+    path = tmp_path / "old56.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE channel_reach")
+    await db.conn.execute(
+        "INSERT INTO channel_drafts(guild_id, channel_id, draft) VALUES (7, 1, 'kept')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '56')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(channel_reach)")
+        assert {r["name"] for r in await cur.fetchall()} == {
+            "guild_id",
+            "channel_id",
+            "shown",
+            "set_by",
+            "set_at",
+        }
+        cur = await again.conn.execute("SELECT COUNT(*) AS n FROM channel_reach")
+        assert (await cur.fetchone())["n"] == 0
+        cur = await again.conn.execute("SELECT draft FROM channel_drafts WHERE channel_id = 1")
+        assert (await cur.fetchone())["draft"] == "kept"
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "57"
+        await again.conn.execute(
+            "INSERT INTO channel_reach(guild_id, channel_id, shown, set_at) VALUES (7, 1, 1, 'x')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(
+                "INSERT INTO channel_reach(guild_id, channel_id, shown, set_at) "
+                "VALUES (7, 1, 0, 'y')"
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(
+                "INSERT INTO channel_reach(guild_id, channel_id, set_at) VALUES (7, 2, 'z')"
             )
     finally:
         await again.close()

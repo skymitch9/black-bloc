@@ -2983,7 +2983,7 @@
       ]
     },
     {
-      "_": "The channel catalog (2026-09-23, docs/info/channel-catalog-design.md). {test_channel_id} is a TEXT channel of the guild, the only kind a note may be written on; the directory block is the exact text the conversation models are handed. 2026-09-23 follow-up: the Channels page (channels.html) reads it now; each row carries its drafted description and review status, and `review` counts the drafted channels (docs/info/channel-catalog-design.md, follow-up).",
+      "_": "The channel catalog (2026-09-23, docs/info/channel-catalog-design.md). {test_channel_id} is a TEXT channel of the guild, the only kind a note may be written on; the directory block is the exact text the conversation models are handed. 2026-09-23 follow-up: the Channels page (channels.html) reads it now; each row carries its drafted description and review status, and `review` counts the drafted channels (docs/info/channel-catalog-design.md, follow-up). 2026-09-23 reach follow-up: each row carries `reach` {visible, via, override} — via is member, role:<name> or override; hidden_because gains hidden_by_staff (docs/info/channel-catalog-design.md, reach follow-up).",
       "method": "GET",
       "path": "/api/chat/channels",
       "read_by": [
@@ -3007,6 +3007,7 @@
           "note",
           "shown",
           "hidden_because",
+          "reach",
           "position",
           "draft",
           "status",
@@ -3047,6 +3048,7 @@
         "directory",
         "budget",
         "review",
+        "counts",
         "message"
       ],
       "nested": {
@@ -3058,6 +3060,7 @@
           "note",
           "shown",
           "hidden_because",
+          "reach",
           "position",
           "draft",
           "status",
@@ -3073,6 +3076,11 @@
           "total",
           "reviewed",
           "drafts_left"
+        ],
+        "counts": [
+          "total",
+          "shown",
+          "noted"
         ]
       }
     },
@@ -3088,6 +3096,7 @@
         "directory",
         "budget",
         "review",
+        "counts",
         "message"
       ],
       "nested": {
@@ -3099,6 +3108,7 @@
           "note",
           "shown",
           "hidden_because",
+          "reach",
           "position",
           "draft",
           "status",
@@ -3114,6 +3124,112 @@
           "total",
           "reviewed",
           "drafts_left"
+        ],
+        "counts": [
+          "total",
+          "shown",
+          "noted"
+        ]
+      }
+    },
+    {
+      "_": "Staff's per-channel word (docs/info/channel-catalog-design.md, reach follow-up): shown true tells the bot about it whoever reads it, shown false keeps it out; a channel in an ignored category or the ticket category is refused 409 ignored_category in words; a body without a boolean shown is refused 422 reach_unclear.",
+      "method": "PUT",
+      "path": "/api/chat/channels/{reach_channel_id}/reach",
+      "body": {
+        "shown": true
+      },
+      "read_by": [
+        "page-channels.js reach control Tell the bot anyway / Hide from the bot"
+      ],
+      "shape": "object",
+      "keys": [
+        "channel",
+        "directory",
+        "budget",
+        "review",
+        "counts",
+        "message"
+      ],
+      "nested": {
+        "channel": [
+          "id",
+          "name",
+          "category",
+          "topic",
+          "note",
+          "shown",
+          "hidden_because",
+          "reach",
+          "position",
+          "draft",
+          "status",
+          "decided_by",
+          "decided_at"
+        ],
+        "budget": [
+          "used",
+          "cap",
+          "trimmed"
+        ],
+        "review": [
+          "total",
+          "reviewed",
+          "drafts_left"
+        ],
+        "counts": [
+          "total",
+          "shown",
+          "noted"
+        ]
+      }
+    },
+    {
+      "_": "Back to the rule: the override row goes; a channel staff never decided answers 200 with the already-follows-the-rule sentence.",
+      "method": "DELETE",
+      "path": "/api/chat/channels/{reach_channel_id}/reach",
+      "read_by": [
+        "page-channels.js reach control Back to the rule"
+      ],
+      "shape": "object",
+      "keys": [
+        "channel",
+        "directory",
+        "budget",
+        "review",
+        "counts",
+        "message"
+      ],
+      "nested": {
+        "channel": [
+          "id",
+          "name",
+          "category",
+          "topic",
+          "note",
+          "shown",
+          "hidden_because",
+          "reach",
+          "position",
+          "draft",
+          "status",
+          "decided_by",
+          "decided_at"
+        ],
+        "budget": [
+          "used",
+          "cap",
+          "trimmed"
+        ],
+        "review": [
+          "total",
+          "reviewed",
+          "drafts_left"
+        ],
+        "counts": [
+          "total",
+          "shown",
+          "noted"
         ]
       }
     },
@@ -3130,6 +3246,7 @@
         "directory",
         "budget",
         "review",
+        "counts",
         "message"
       ],
       "nested": {
@@ -3141,6 +3258,7 @@
           "note",
           "shown",
           "hidden_because",
+          "reach",
           "position",
           "draft",
           "status",
@@ -3156,6 +3274,11 @@
           "total",
           "reviewed",
           "drafts_left"
+        ],
+        "counts": [
+          "total",
+          "shown",
+          "noted"
         ]
       }
     },
@@ -3171,6 +3294,7 @@
         "directory",
         "budget",
         "review",
+        "counts",
         "message"
       ],
       "nested": {
@@ -3182,6 +3306,7 @@
           "note",
           "shown",
           "hidden_because",
+          "reach",
           "position",
           "draft",
           "status",
@@ -3197,6 +3322,11 @@
           "total",
           "reviewed",
           "drafts_left"
+        ],
+        "counts": [
+          "total",
+          "shown",
+          "noted"
         ]
       }
     },
@@ -3212,6 +3342,7 @@
         "directory",
         "budget",
         "review",
+        "counts",
         "message"
       ],
       "nested": {
@@ -3223,6 +3354,7 @@
           "note",
           "shown",
           "hidden_because",
+          "reach",
           "position",
           "draft",
           "status",
@@ -3238,6 +3370,11 @@
           "total",
           "reviewed",
           "drafts_left"
+        ],
+        "counts": [
+          "total",
+          "shown",
+          "noted"
         ]
       }
     },
@@ -6152,6 +6289,8 @@
     "web.minutes.post_failed",
     "web.minutes.deleted",
     "web.post.restored",
-    "web.post.versions_trimmed"
+    "web.post.versions_trimmed",
+    "web.chat.channel_reach_set",
+    "web.chat.channel_reach_cleared"
   ]
 }

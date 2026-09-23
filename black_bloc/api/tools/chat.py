@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ... import channel_drafts, chat_llm, chat_panel, knowledge, personas
+from ... import channel_drafts, channel_reach, chat_llm, chat_panel, knowledge, personas
 from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
     BUILTIN_NAMES,
@@ -34,7 +34,7 @@ from ...chat import (
     update_intent,
     update_line,
 )
-from ...directory import directory_preview, hidden_category_ids, visibility_role, why_hidden
+from ...directory import directory_preview, lens_for, reach_in
 from ...logkinds import VIA_WEBSITE
 from ...settings_store import KEY_TYPES
 from ..auth import Refused, staff_dependency
@@ -78,6 +78,10 @@ TRY_NEEDS_TEXT = (
     "and send it again."
 )
 INTENT_MADE = "**{name}** is in. It will answer as soon as it has a line to say."
+REACH_UNCLEAR = (
+    "Say whether Black Bloc should be told about this channel — shown true or shown false — "
+    "and send it again. Nothing was changed."
+)
 INTENT_SAVED = "**{name}** is saved."
 INTENT_GONE = "**{name}** is gone. Nothing answers to those phrases any more."
 LINE_ADDED = "That line is in — **{name}** may say it from now on."
@@ -272,12 +276,13 @@ def channel_order(channel: Any) -> tuple[int, int]:
 def channel_row(
     channel: Any,
     notes: dict[int, str],
-    why: str | None,
+    reach: Any,
     drafted: Any = None,
     guild: Any = None,
 ) -> dict[str, Any]:
     category = getattr(channel, "category", None)
     note = notes.get(int(channel.id)) or None
+    why = reach.why_hidden
     return {
         "id": str(channel.id),
         "name": str(channel.name),
@@ -287,6 +292,7 @@ def channel_row(
         "note": note,
         "shown": why is None,
         "hidden_because": why,
+        "reach": {"visible": reach.visible, "via": reach.via, "override": reach.override},
         "position": int(getattr(channel, "position", 0) or 0),
         **draft_fields(drafted, note, guild),
     }
@@ -854,20 +860,14 @@ def build_router(bot: Any) -> APIRouter:
         """Every text channel, the ones the model is not told about included, with the why."""
         notes = await notes_for(bot.db, guild.id)
         drafts = await channel_drafts.drafts_for(bot.db, guild.id)
-        hidden = hidden_category_ids(bot, guild)
-        viewer = visibility_role(bot, guild)
+        known = await channel_reach.refresh(bot, guild)
+        lens = lens_for(bot, guild, known)
         found = sorted(getattr(guild, "text_channels", ()) or (), key=channel_order)
         rows = [
-            channel_row(
-                one,
-                notes,
-                why_hidden(guild, one, hidden, viewer),
-                drafts.get(int(one.id)),
-                guild,
-            )
+            channel_row(one, notes, reach_in(lens, guild, one), drafts.get(int(one.id)), guild)
             for one in found
         ]
-        shown = directory_preview(bot, guild, notes)
+        shown = directory_preview(bot, guild, notes, known=known)
         return {
             "channels": rows,
             "directory": shown.block,
@@ -890,8 +890,38 @@ def build_router(bot: Any) -> APIRouter:
             "directory": found["directory"],
             "budget": found["budget"],
             "review": found["review"],
+            "counts": found["counts"],
             "message": outcome.message,
         }
+
+    @router.put("/channels/{channel_id}/reach")
+    async def chat_channel_reach(
+        request: Request, channel_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        shown = payload.get("shown") if isinstance(payload, dict) else None
+        if not isinstance(shown, bool):
+            raise Refused(422, "reach_unclear", REACH_UNCLEAR)
+        outcome = answered(
+            await channel_reach.set_shown(
+                bot, guild, actor_for(bot, who, guild), channel_id, shown, via=VIA_WEBSITE
+            )
+        )
+        return await _channel_answer(guild, channel_id, outcome)
+
+    @router.delete("/channels/{channel_id}/reach")
+    async def chat_channel_reach_clear(request: Request, channel_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = answered(
+            await channel_reach.back_to_rule(
+                bot, guild, actor_for(bot, who, guild), channel_id, via=VIA_WEBSITE
+            )
+        )
+        return await _channel_answer(guild, channel_id, outcome)
 
     @router.get("/channels")
     async def chat_channels() -> dict[str, Any]:
