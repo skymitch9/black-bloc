@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 54
+SCHEMA_VERSION = 56
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -928,6 +928,16 @@ CREATE TABLE IF NOT EXISTS channel_notes (
     note       TEXT    NOT NULL,
     set_by     INTEGER,
     set_at     TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, channel_id)
+);
+
+CREATE TABLE IF NOT EXISTS channel_drafts (
+    guild_id   INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    draft      TEXT    NOT NULL,
+    status     TEXT    NOT NULL DEFAULT 'draft',
+    decided_by INTEGER,
+    decided_at TEXT,
     PRIMARY KEY (guild_id, channel_id)
 );
 """
