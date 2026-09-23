@@ -2,7 +2,11 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-22 23:2x** — the `gate-names` build (branch, not merged or deployed): dated notes on **KI-26** (cause
+> Last verified: **2026-09-23 04:3x** — the v157 docs ritual. **KI-32 CLOSED** (its landing gate was green) and **KI-35 CLOSED**
+> (cannot recur: the first real gate on the new script wrote its junit file — `tests=7382 failures=0`, read at the ritual);
+> **KI-20, KI-26, KI-30, KI-37** each gained a one-line *shipped as v157* note and stay `WATCHING`. Measured: the junit file, and
+> `/api/actions` through the operator token (`panel.expired_click` **0** rows; `youtube.probe_walled` 10028 `live=True`). ⚠️ Nothing
+> else in this file was re-tested; no red gate has run the new script. Before that, **2026-09-22 23:2x** — the `gate-names` build (branch, not merged or deployed): dated notes on **KI-26** (cause
 > found — loopback port exhaustion — and fixed on the branch), **KI-32** (cause found and fixed: a shared media folder in the
 > test harness), **KI-35** (names can no longer be lost) and **KI-37** (`-n 16`). All four stay `WATCHING` until the merge
 > and the gates named in each note. ⚠️ Nothing else in this file was re-tested. Before that, **2026-09-22 21:2x** — the v156 docs ritual. **KI-39 ADDED**, `ACCEPTED`: a spotlighted marathon's pinned
@@ -198,6 +202,9 @@ intervals, or a pre-flight outage check before dispatching a long build).
 
 ## KI-37 — A deploy gate can be KILLED BY THE OS when another job on this machine holds more than 12 GB — `WATCHING`
 
+> **2026-09-23 04:21 — shipped as v157** (release commit `e9ecd0d0`, merge `01309d43`): the v157 gate ran `-n 16` and was green on the first run in 44.8 s (its junit file); no
+> worker was killed. ⚠️ Free RAM at the gate was not read. Still `WATCHING`. Before that —
+
 > **2026-09-22 23:2x (branch `gate-names`) — the gate now runs `-n 16`, not `-n auto` (32 workers here).** Measured on
 > the fixed tree: `-n auto` 42–46 s, `-n 16` 45–61 s (5 of 5 green), `-n 8` 72–177 s — the measured table is in [`access/deploy.md`](access/deploy.md) (*"The gate's pytest step"*). 16 halves the worker processes the OS
 > has to hold, for ~13 % more wall time (mean 51 s against 45 s). ⚠️ **How much RAM that saves was NOT measured.** ⚠️ **New misdiagnosis risk:**
@@ -247,7 +254,17 @@ it is roughly one line, and the next build that touches `site/mock/golive-join.t
 **third** collision, or the first one that reaches `main` with a key silently dropped, promotes this to a build of its
 own and stops it being a ride-along.
 
-## KI-35 — The v152 deploy gate went red on TWO tests in one run of six and the names were LOST — `WATCHING`
+## KI-35 — (RESOLVED 2026-09-23, LIVE v157) The v152 deploy gate went red on TWO tests in one run of six and the names were LOST — `CLOSED`
+
+✅ **Closed as "cannot recur" at the v157 landing, by its own closing condition** (*the first real deploy gate on this script*).
+The v157 gate (2026-09-23 04:19–04:21, merge `01309d43` shipped as v157, release commit `e9ecd0d0`) was the first real gate to
+run `pytest -n 16 -rfE --junitxml=…`, and its junit file was read at the ritual: `%TEMP%\black-bloc-gate\gate-junit.xml`,
+stamped 04:19:41, **7382** cases, `failures=0 errors=0 skipped=3`. That is the part that makes the loss impossible: the names of
+a red run now land in two places pytest writes itself (the `-rfE` short summary and that file), neither of which depends on
+anyone reading a console before it scrolls. ⚠️ **What is still NOT exercised:** the gate was GREEN, so the script's own
+`FAILED TESTS:` printing has only ever run against synthetic junit files — if it misbehaves on the first real red, the file it
+reads is still on disk with the names in it. The two v152 names themselves stay unrecoverable. A red gate whose names are lost
+anyway reopens this entry. The text below is kept for the record, as this file's other closed entries are.
 
 > **2026-09-22 23:2x (branch `gate-names`) — a red gate can no longer lose its names.** `scripts/deploy.ps1` now runs
 > pytest with `-rfE` (every failure and error in the short summary) and `--junitxml=%TEMP%\black-bloc-gate\gate-junit.xml`,
@@ -313,7 +330,12 @@ blocks a deploy gate at an awkward hour → the node tests get a pinned fake clo
 ⚠️ Until then this stays a **read the log** item: a one-test red on a date-shaped assertion, green on a re-run the same
 day, is this issue and not the build — check the fixture's date before debugging the code.
 
-## KI-32 — `test_replacing_a_steps_picture_takes_the_old_one_away` fails about one gate in N on Windows, and passes alone — `WATCHING`
+## KI-32 — (RESOLVED 2026-09-23, LIVE v157) `test_replacing_a_steps_picture_takes_the_old_one_away` fails about one gate in N on Windows, and passes alone — `CLOSED`
+
+✅ **Closed at the v157 landing, by its own closing condition** (*→ `CLOSED` at the landing if that gate is green*). The fix
+(`fdfa6de4`, `web_settings_at(path)` in `tests/api/conftest.py`) merged with `gate-names` as `01309d43` and shipped as v157
+(release commit `e9ecd0d0`, 2026-09-23 04:21); the v157 gate was green on the FIRST run, 7379 passed / 3 skipped, junit
+`failures=0`. A sighting from now on means a second cause and gets a new entry. The text below is kept for the record.
 
 > 🟢 **2026-09-22 23:2x (branch `gate-names`) — CAUSE FOUND AND FIXED; it was a TEST-HARNESS defect, not the bot.**
 > The api tests' `web_settings_now()` never set `database_path`, so every api test bot's guide media folder
@@ -387,6 +409,8 @@ not import, at which point the version gets pinned to `==0.5.2a179` in the same 
 **1** failed build, or **1** `Dockerfile` bump past Python 3.12.
 
 ## KI-30 — YouTube live detection reads the `/live` PAGE, and from a DATACENTER address that page is a bot check — `WATCHING`
+
+> **2026-09-23 04:21 — shipped as v157** (release commit `e9ecd0d0`, merge `d2b4b9b7`): one second after boot (11:21:48Z) ESAMarathon's row wrote `youtube.live_seen … announced=False, because=opted_out` (action 10027) and `youtube.probe_walled … live=True, video_id=None, keyed=True` (10028) — the wall seen live with the live signal surviving it, not the `live: null` row this entry waits on. Still `WATCHING`. Before that —
 
 > **2026-09-22 — branch `youtube-walled` (NOT merged, NOT deployed): (a) now rings a bell, and the channel-row path searches.** The live ESA rows (`youtube.live_seen … botcheck=True, video_id=None, announced=True`, 2026-09-21/22) came from the CHANNEL-ROW path, which never ran the 100-unit id search and wrote `announced: true` before `announce_info`'s opt-out gate silently dropped it (ESA's announce cell is off); five of the six rows sit on a deploy's boot minute because `live_video` is in memory. Now: the channel-row path searches + confirms once per broadcast like the member path, an opted-out channel's row reads `announced: false, because: opted_out` and spends nothing, and a walled page (bot check, no canonical link) writes ONE routine `youtube.probe_walled` row per state change with `live` True/False/**None** (None = the wall hid the marker; routing still counts it a miss). `/api/youtube/status` gains `walled` + `id_unknown`, and the Go-live card and `/youtube` staff lines say walled / id found or not / what a post links. Design ▸ *The walled channel rows*; sweeps `YW-a`…`YW-d`. **Still `WATCHING` — the page is still a scrape.** New number for *what would change it*: a `youtube.probe_walled` row with `live: null` for a channel whose stream was demonstrably still running (its Twitch/co-stream session open, or the streamer's own report); **one such row** is the proof that (a) has happened for real, and that a walled `None` must stop counting as a miss.
 
@@ -502,6 +526,10 @@ Settings page's). The rule is about DECISIONS; guide copy is CONTENT.
 panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
+
+> **2026-09-23 04:21 — shipped as v157** (release commit `e9ecd0d0`, merge `01309d43`): the fix is now on `main` and in every tree cut from it. The v157 gate — the first on the fix —
+> was green on the first run at `-n 16`, 44.8 s, no `crashed while running` line (junit `failures=0`). That is **1 of the 10**
+> consecutive clean gates the closing condition below asks for. Still `WATCHING`. Before that —
 
 > 🟢 **2026-09-22 23:2x (branch `gate-names`, not yet merged or deployed) — THE CAUSE IS FOUND, WITH STACKS, AND A FIX IS MEASURED.**
 > A hang-watch plugin (scratch, not committed) dumped every thread of every worker that sat on one test for 30 s. On a
@@ -821,6 +849,9 @@ Number: **0 reports** so far; nothing planned.
 > panel above. Status stays `WATCHING`, the number stays **reports** (still **0**). ⚠️ Proved
 > against discord.py's own parser in the suite only; never exercised against live Discord (sweep
 > row `PX-a`).
+>
+> **2026-09-23 04:21 — shipped as v157** (release commit `e9ecd0d0`, merge `5f0e94ab`; `panel_expired_text` is key 308, `core`): `/api/actions?kind=panel.expired_click`
+> answered **0** rows at the ritual (04:3x) — no member has clicked a pre-deploy panel yet. Still `WATCHING`, **0 reports**.
 
 ## KI-18 — Editing a question changes the form, never the answers already sent — `ACCEPTED`
 
