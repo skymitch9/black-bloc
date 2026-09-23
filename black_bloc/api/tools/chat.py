@@ -226,14 +226,39 @@ def section_row(guild: Any, row: Any) -> dict[str, Any]:
 
 def trope_row(guild: Any, row: Any, mode: str) -> dict[str, Any]:
     name = str(row["name"])
+    edited = personas.own_voice(row)
     return {
         "name": name,
         "label": str(row["label"]),
         "voice": str(row["voice"]),
+        "shipped": personas.VOICES.get(name),
+        "edited": edited,
+        "edited_at": row["voice_edited_at"] if edited else None,
+        "edited_by": person(guild, row["voice_edited_by"]) if edited else None,
         "enabled": bool(row["enabled"]),
         "in_use": mode == name,
         "updated_at": row["updated_at"],
         "updated_by": person(guild, row["updated_by"]),
+    }
+
+
+def voice_entry(guild: Any, entry: dict[str, Any], labels: dict[str, str]) -> dict[str, Any]:
+    """One member of Who hears what, with names from the guild cache only."""
+    tone = str(entry["trope"])
+    pinned = entry["pinned"]
+    return {
+        "user_id": str(entry["user_id"]),
+        "name": resolve_one(guild, entry["user_id"])["display_name"] or str(entry["user_id"]),
+        "trope": tone,
+        "label": labels.get(tone, tone),
+        "pinned": pinned,
+        "pinned_label": labels.get(pinned, pinned) if pinned else None,
+        "pinned_by": person(guild, entry["pinned_by"]),
+        "pinned_at": entry["pinned_at"],
+        "waiting": bool(entry["waiting"]),
+        "since": entry["since"],
+        "turns": int(entry["turns"]),
+        "active": bool(entry["active"]),
     }
 
 
@@ -704,23 +729,93 @@ def build_router(bot: Any) -> APIRouter:
     async def chat_trope_switch(
         request: Request, name: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
+        """`enabled` moves it in or out of the pool; `voice` rewrites it (blank puts it back)."""
         who = await writer(request)
         guild = require_guild(bot)
         require_db(bot)
         await personas.sync_tropes(bot.db, full=False)
         said = str(name).strip().lower()
-        wanted = payload.get("enabled") is not False
+        actor = actor_for(bot, who, guild)
         mode = persona_mode(bot, guild.id)
-        answered(
-            await chat_panel.set_mood(
-                bot, guild, actor_for(bot, who, guild), said, wanted, via=VIA_WEBSITE
+        messages = []
+        if "voice" in payload:
+            edited = answered(
+                await chat_panel.edit_tone(
+                    bot, guild, actor, said, payload.get("voice"), via=VIA_WEBSITE
+                )
+            )
+            messages.append(edited.message)
+        if "enabled" in payload or "voice" not in payload:
+            wanted = payload.get("enabled") is not False
+            answered(await chat_panel.set_mood(bot, guild, actor, said, wanted, via=VIA_WEBSITE))
+            fresh = await personas.get_trope(bot.db, said)
+            messages.append(
+                (TROPE_ON if wanted else TROPE_OFF).format(label=str(fresh["label"]))
+            )
+        fresh = await personas.get_trope(bot.db, said)
+        return {"trope": trope_row(guild, fresh, mode), "message": " ".join(messages)}
+
+    async def _voices(guild: Any) -> dict[str, Any]:
+        await personas.sync_tropes(bot.db, full=False)
+        found = await chat_panel.voice_roster(bot, guild)
+        labels = found["labels"]
+        rows = [voice_entry(guild, one, labels) for one in found["voices"]]
+        return {
+            "setting": found["setting"],
+            "setting_kind": mode_kind(found["setting"]),
+            "tropes": [{"name": name, "label": labels[name]} for name in found["enabled"]],
+            "voices": rows,
+            "counts": {
+                "total": len(rows),
+                "pinned": sum(1 for row in rows if row["pinned"]),
+                "active": sum(1 for row in rows if row["active"]),
+            },
+            "notes": [],
+        }
+
+    async def _voice_answer(guild: Any, user_id: int, outcome: Any) -> dict[str, Any]:
+        found = await _voices(guild)
+        row = next((one for one in found["voices"] if one["user_id"] == str(user_id)), None)
+        return {"voice": row, "setting": found["setting"], "message": outcome.message}
+
+    @router.get("/voices")
+    async def chat_voices() -> dict[str, Any]:
+        """Who hears what: every member with a tone row, and the server's setting above them."""
+        guild = require_guild(bot)
+        require_db(bot)
+        return await _voices(guild)
+
+    @router.put("/voices/{user_id}")
+    async def chat_voice_pin(
+        request: Request, user_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await personas.sync_tropes(bot.db, full=False)
+        outcome = answered(
+            await chat_panel.pin_voice(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                user_id,
+                payload.get("trope"),
+                via=VIA_WEBSITE,
             )
         )
-        fresh = await personas.get_trope(bot.db, said)
-        return {
-            "trope": trope_row(guild, fresh, mode),
-            "message": (TROPE_ON if wanted else TROPE_OFF).format(label=str(fresh["label"])),
-        }
+        return await _voice_answer(guild, user_id, outcome)
+
+    @router.delete("/voices/{user_id}")
+    async def chat_voice_clear(request: Request, user_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = answered(
+            await chat_panel.clear_voice(
+                bot, guild, actor_for(bot, who, guild), user_id, via=VIA_WEBSITE
+            )
+        )
+        return await _voice_answer(guild, user_id, outcome)
 
     def _tier(name: str, label: str, key: str, *, mode_on: bool, cap_said: str | None):
         """Liveness is measured — the mode, the key and the cap — never assumed."""

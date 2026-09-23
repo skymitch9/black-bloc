@@ -3,7 +3,7 @@ import pytest
 from black_bloc import knowledge
 from black_bloc.chat import BUILTIN_ORDER, UNKNOWN, loaded_intents, seed_defaults
 from black_bloc.llm import ANTHROPIC, IMPORTANT, MODEL, Usage, record
-from black_bloc.settings_store import CHANNEL_NOTE_WORDS
+from black_bloc.settings_store import CHANNEL_NOTE_WORDS, PROMPT_WORDS, VOICE_WORDS
 
 
 @pytest.fixture
@@ -90,7 +90,7 @@ async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded
         "chat_memory_notes_max",
         "chat_memory_threads_max",
         "chat_memory_model",
-    } | set(CHANNEL_NOTE_WORDS)
+    } | set(CHANNEL_NOTE_WORDS) | set(PROMPT_WORDS) | set(VOICE_WORDS)
     for row in rows:
         assert {"key", "type", "value", "default", "help"} <= set(row)
     mode = next(row for row in rows if row["key"] == "chat_mode")
@@ -710,6 +710,125 @@ async def test_the_channel_routes_are_staff_only(client, sign_in, guild, wf, web
         ("GET", "/api/chat/channels", None),
         ("PUT", path, {"note": "x"}),
         ("DELETE", path, None),
+    ):
+        response = client.request(method, where, json=body)
+        assert response.status_code == 403, where
+        assert response.json()["message"]
+    assert await wf.kinds_in(web.db) == []
+
+
+# --- who hears what (personality tones, 2026-09-23) ------------------------------------------
+
+
+async def test_who_hears_what_lists_nobody_until_somebody_has_a_tone(seeded, client):
+    payload = client.get("/api/chat/voices").json()
+
+    assert payload["voices"] == [] and payload["setting"] == "cookout"
+    assert {"name", "label"} <= set(payload["tropes"][0])
+    assert payload["counts"] == {"total": 0, "pinned": 0, "active": 0}
+
+
+async def test_a_member_can_be_pinned_listed_and_cleared(seeded, client, guild, wf, web):
+    wf.member(guild, 21, name="nia")
+
+    pinned = client.put("/api/chat/voices/21", json={"trope": "noir"})
+
+    assert pinned.status_code == 200, pinned.text
+    body = pinned.json()
+    assert body["voice"]["pinned"] == "noir" and body["voice"]["name"] == "Nia"
+    assert body["voice"]["pinned_by"]["id"] == "7"
+    assert "**Nia** hears **" in body["message"]
+    listed = client.get("/api/chat/voices").json()
+    assert [row["user_id"] for row in listed["voices"]] == ["21"]
+    assert listed["voices"][0]["trope"] == "cookout"
+
+    cleared = client.delete("/api/chat/voices/21")
+    assert cleared.status_code == 200 and cleared.json()["voice"]["pinned"] is None
+    again = client.delete("/api/chat/voices/21")
+    assert "had no tone pinned" in again.json()["message"]
+    kinds = [kind for kind in await wf.kinds_in(web.db) if kind.startswith("web.chat.voice")]
+    assert kinds == ["web.chat.voice_pinned", "web.chat.voice_cleared"]
+
+
+async def test_a_pin_shows_as_the_tone_once_the_setting_is_not_cookout(seeded, client, guild, wf):
+    wf.member(guild, 21, name="nia")
+    client.put("/api/chat/personality", json={"mode": "pool"})
+    client.put("/api/chat/voices/21", json={"trope": "scholar"})
+
+    row = client.get("/api/chat/voices").json()["voices"][0]
+
+    assert row["trope"] == "scholar" and row["waiting"] is False
+
+
+async def test_a_pin_to_an_unknown_or_switched_off_tone_is_refused_in_words(
+    seeded, client, guild, wf, web
+):
+    wf.member(guild, 21, name="nia")
+    client.put("/api/chat/personality/noir", json={"enabled": False})
+
+    unknown = client.put("/api/chat/voices/21", json={"trope": "swashbuckling"})
+    off = client.put("/api/chat/voices/21", json={"trope": "noir"})
+    blank = client.put("/api/chat/voices/21", json={})
+
+    assert unknown.status_code == off.status_code == blank.status_code == 422
+    assert "not one of the tones" in unknown.json()["message"]
+    assert "switched off" in off.json()["message"]
+    assert client.get("/api/chat/voices").json()["voices"] == []
+
+
+async def test_a_pin_for_somebody_not_in_the_server_is_refused_in_words(seeded, client):
+    refused = client.put("/api/chat/voices/4242", json={"trope": "noir"})
+
+    assert refused.status_code == 404
+    assert "not in this server" in refused.json()["message"]
+
+
+async def test_a_pin_answers_in_the_words_staff_wrote(seeded, client, guild, wf, web):
+    wf.member(guild, 21, name="nia")
+    await web.store.set(wf.GUILD_ID, "chat_voice_pinned", "Done: {member} gets {tone}.")
+
+    said = client.put("/api/chat/voices/21", json={"trope": "warm"}).json()["message"]
+
+    assert said.startswith("Done: Nia gets ")
+
+
+async def test_a_tone_body_can_be_rewritten_and_put_back(seeded, client, wf, web):
+    client.get("/api/chat/personality")
+
+    edited = client.put("/api/chat/personality/noir", json={"voice": "NOIR, our way."})
+
+    assert edited.status_code == 200, edited.text
+    row = edited.json()["trope"]
+    assert row["voice"] == "NOIR, our way." and row["edited"] is True
+    assert row["edited_by"]["id"] == "7" and row["enabled"] is True
+    assert "reads the way you wrote it" in edited.json()["message"]
+    back = client.put("/api/chat/personality/noir", json={"voice": ""}).json()
+    assert back["trope"]["edited"] is False and back["trope"]["voice"] == back["trope"]["shipped"]
+    kinds = [kind for kind in await wf.kinds_in(web.db) if kind == "web.chat.tone_edited"]
+    assert len(kinds) == 2
+
+
+async def test_a_tone_body_that_is_too_long_saves_nothing(seeded, client):
+    client.get("/api/chat/personality")
+
+    refused = client.put("/api/chat/personality/noir", json={"voice": "x" * 1300})
+
+    assert refused.status_code == 422
+    assert "1300 characters" in refused.json()["message"]
+    rows = client.get("/api/chat/personality").json()["tropes"]
+    row = next(one for one in rows if one["name"] == "noir")
+    assert row["edited"] is False
+
+
+async def test_the_voice_routes_are_staff_only(client, sign_in, guild, wf, web):
+    wf.member(guild, 8, name="ada")
+    sign_in(client, uid=8, staff=False)
+
+    for method, where, body in (
+        ("GET", "/api/chat/voices", None),
+        ("PUT", "/api/chat/voices/8", {"trope": "noir"}),
+        ("DELETE", "/api/chat/voices/8", None),
+        ("PUT", "/api/chat/personality/noir", {"voice": "mine"}),
     ):
         response = client.request(method, where, json=body)
         assert response.status_code == 403, where

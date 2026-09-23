@@ -486,7 +486,7 @@ async def test_find_a_setting_is_offered_only_on_the_group_that_outgrew_the_pick
 
     assert has_button(chat.view, "Find a setting…")
     assert not has_button(birthday.view, "Find a setting…")
-    assert "25 of 39 — the rest are on the site" in placeholders(chat.view)
+    assert "25 of 66 — the rest are on the site" in placeholders(chat.view)
     assert "A setting…" in placeholders(birthday.view)
 
 
@@ -503,7 +503,7 @@ async def test_find_a_setting_filters_and_says_so_when_nothing_matches(bot, cog,
 
     assert all("memory" in option.value for option in picker(found.view, "A setting…").options)
     assert "Nothing in **chat** has **quidditch**" in empty.sent
-    assert picker(empty.view, "25 of 39 — the rest are on the site") is not None
+    assert picker(empty.view, "25 of 66 — the rest are on the site") is not None
 
 
 async def test_the_rule_book_card_carries_no_editor_at_all(bot, cog, lead):

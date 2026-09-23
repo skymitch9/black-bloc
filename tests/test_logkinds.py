@@ -1020,6 +1020,15 @@ def test_a_channel_note_is_routine_from_either_door_and_files_under_chat():
         assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
 
 
+def test_a_tone_pin_and_a_tone_edit_are_routine_from_either_door_and_file_under_chat():
+    """Staff choosing a member's tone or rewording one is housekeeping for the Logs page."""
+    for kind in ("chat.voice_pinned", "chat.voice_cleared", "chat.tone_edited"):
+        assert kind in ROUTINE
+        assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
+        assert is_important(kind) is False
+        assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
+
+
 def test_memory_is_loud_when_something_is_forgotten_and_quiet_the_rest_of_the_time():
     """Writing a profile is housekeeping; losing one, and somebody opting out, are not."""
     for kind in ("chat.memory_distilled", "chat.memory_expired", "chat.memory_optin"):

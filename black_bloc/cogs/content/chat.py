@@ -80,6 +80,8 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     GUILD_ONLY,
     KEY_TYPES,
+    PROMPT_WORDS,
+    VOICE_WORDS,
     display_value,
     require_staff,
 )
@@ -103,6 +105,7 @@ STAFF_NOTE = "{who} asked for a mod in {where}. {link}"
 ADMIN_ONLY_KEY = "chat_status_admin_only"
 CHAT_KEYS = tuple(key for key in KEY_TYPES if key.startswith("chat_"))
 MEMORY_PREFIX = "chat_memory_"
+WORDING_KEYS = frozenset({*CHANNEL_NOTE_WORDS, *PROMPT_WORDS, *VOICE_WORDS})
 SETTINGS_FOOTER = (
     "`/settings` ▸ **A setting group…** ▸ chat changes any of these, and the Chat page on "
     "the dashboard edits the words themselves."
@@ -452,7 +455,7 @@ def settings_lines(bot: Any, guild: Any) -> list[str]:
     mine = [
         key
         for key in CHAT_KEYS
-        if not key.startswith(MEMORY_PREFIX) and key not in CHANNEL_NOTE_WORDS
+        if not key.startswith(MEMORY_PREFIX) and key not in WORDING_KEYS
     ]
     theirs = [key for key in CHAT_KEYS if key.startswith(MEMORY_PREFIX)]
     said = [f"`{key}` — **{display_value(key, store.get(guild.id, key))}**" for key in mine]

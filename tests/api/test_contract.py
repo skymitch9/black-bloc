@@ -20,6 +20,7 @@ from black_bloc.chat import seed_defaults as seed_chat
 from black_bloc.chat_memory import Note as MemoryNote
 from black_bloc.chat_memory import Profile as MemoryProfile
 from black_bloc.chat_memory import save_profile
+from black_bloc.chat_voice import pin as pin_voice
 from black_bloc.cogs.community.birthdays import save_birthday
 from black_bloc.cogs.community.polls import add_options as add_poll_options
 from black_bloc.cogs.community.polls import (
@@ -464,6 +465,8 @@ async def seed_world(client, web, guild, wf) -> dict:
             updated_at="2026-09-02T00:00:00+00:00",
         ),
     )
+    # Personality tones: one pinned member, so GET /api/chat/voices has a row shape to read.
+    await pin_voice(db, guild_id, MEMBER_ID, "noir", by=7)
     raid_trains = FakeRaidTrains()
     raid_trains.db = db
     web.cogs["RaidTrains"] = raid_trains
