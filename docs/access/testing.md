@@ -1,7 +1,9 @@
 # Testing — the hermetic suite, the mock, and the live api
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — ⚠️ secret NAMES only.
-> Last verified: **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**
+> Last verified: **2026-09-22 23:2x — the hermetic suite's junit file, timeout and loopback plugin only** (branch
+> `gate-names`): full suite **7,339 passed + 3 skipped in 43 s wall at `-n 16`**, twice, on that branch. Before that,
+> **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**
 > (2026-09-18 16:08). What changed here: the fourth layer's *Needs* column said **"staff, in the
 > test channel"** and there is no test channel any more — a self-test run now posts its cards
 > into `selftest_channel_id`, which is `#blackbloc-logs` because that is where the key points,
@@ -59,12 +61,38 @@ everything up to and including the card being posted with its live view.
 ## The hermetic suite
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q -n auto
+.\.venv\Scripts\python.exe -m pytest -q -n 16     # the gate's count since 2026-09-22; -n auto works too
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
 `-m 'not live'` is in `pyproject.toml`'s `addopts`, so `tests/live/` is **deselected** from every
 default run — it never reaches the network by accident.
+
+### A red or hung run — the junit file and the 120 s timeout (2026-09-22)
+
+- **The gate's run writes `%TEMP%\black-bloc-gate\gate-junit.xml`** (`scripts/deploy.ps1`; any run can do the same
+  with `--junitxml=<path>`). Every failed test is a `<testcase>` with a `<failure>` child, every error or crashed
+  worker one with an `<error>` child; the nodeid is `classname` with dots turned into folders up to the `.py` file,
+  then `::name`. The gate prints exactly that as `FAILED TESTS:`. By hand:
+
+  ```powershell
+  ([xml](Get-Content "$env:TEMP\black-bloc-gate\gate-junit.xml" -Raw)).SelectNodes("//testcase[failure or error]") |
+    ForEach-Object { "$($_.classname)::$($_.name)  $($_.failure.message)$($_.error.message)" }
+  ```
+
+  No file = pytest itself was killed (KI-37), not a red suite.
+- **Every test has 120 s** (`timeout = 120`, `timeout_method = "thread"` in `pyproject.toml`, `pytest-timeout` in the
+  dev extras). A test that hangs past it kills its worker: the run goes on and reports
+  `worker 'gwN' crashed while running '<nodeid>'` (serially the run itself ends, with a `+++ Timeout +++` stack dump).
+  That line after 120+ s is a HANG with its name — read KI-26 for what the known shapes look like. A test that
+  genuinely needs longer takes `@pytest.mark.timeout(<s>)`.
+- **`tests/loopback.py`** is loaded into every run by `-p tests.loopback` in `addopts`. On Windows it makes every
+  `socket.socketpair` (the self-pipe of every asyncio loop) close with a reset, so a run leaves no loopback
+  `TIME_WAIT`. Without it a full run leaves thousands, and with a few suites on the machine the 16,384-port dynamic
+  range runs dry and every worker blocks in `accept()` — the KI-26 stall. Do not remove it from `addopts`.
+- **The api tests keep guide pictures in their own tmp folder** (`web_settings_at` in `tests/api/conftest.py`). A
+  test bot built from `web_settings_now()` alone points at the DEFAULT database folder, which every xdist worker
+  shares — that was KI-32.
 
 ⚠️ **Tests mirror the package** (`black_bloc/x.py` → `tests/test_x.py`). `tests/live/` is the one
 deliberate exception and says so in its own `__init__.py`.

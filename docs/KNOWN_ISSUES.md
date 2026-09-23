@@ -2,7 +2,10 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-22 21:2x** — the v156 docs ritual. **KI-39 ADDED**, `ACCEPTED`: a spotlighted marathon's pinned
+> Last verified: **2026-09-22 23:2x** — the `gate-names` build (branch, not merged or deployed): dated notes on **KI-26** (cause
+> found — loopback port exhaustion — and fixed on the branch), **KI-32** (cause found and fixed: a shared media folder in the
+> test harness), **KI-35** (names can no longer be lost) and **KI-37** (`-n 16`). All four stay `WATCHING` until the merge
+> and the gates named in each note. ⚠️ Nothing else in this file was re-tested. Before that, **2026-09-22 21:2x** — the v156 docs ritual. **KI-39 ADDED**, `ACCEPTED`: a spotlighted marathon's pinned
 > announcement is edited and logged on every title change (owner decision 21:2x). ⚠️ Its rate is unmeasured; nothing else in
 > this file was re-tested. Before that, **2026-09-21 20:1x** — the v154 docs ritual. **KI-38 ADDED**, `WATCHING`: an Opus
 > build agent can be dropped repeatedly by Anthropic-side `529`/`500` errors during a provider
@@ -195,6 +198,16 @@ intervals, or a pre-flight outage check before dispatching a long build).
 
 ## KI-37 — A deploy gate can be KILLED BY THE OS when another job on this machine holds more than 12 GB — `WATCHING`
 
+> **2026-09-22 23:2x (branch `gate-names`) — the gate now runs `-n 16`, not `-n auto` (32 workers here).** Measured on
+> the fixed tree: `-n auto` 42–46 s, `-n 16` 45–61 s (5 of 5 green), `-n 8` 72–177 s — the measured table is in [`access/deploy.md`](access/deploy.md) (*"The gate's pytest step"*). 16 halves the worker processes the OS
+> has to hold, for ~13 % more wall time (mean 51 s against 45 s). ⚠️ **How much RAM that saves was NOT measured.** ⚠️ **New misdiagnosis risk:**
+> `node down: Not properly terminated` is now ALSO what `pytest-timeout` prints when it kills a hung worker after
+> 120 s, so the line alone no longer says "the OS". Tell them apart by the clock: a timeout kill lands 120 s after the
+> test began and the run's wall time grows by ≥120 s; an OS kill does not wait. Run A5 of the measurement (**3.9 GB
+> free** at its start) had 38 worker deaths, and they were the KI-26 port stall timing out, not memory. **What would
+> change it:** unchanged — a second OS-kill sighting → `deploy.ps1` reads free memory before the gate and refuses in
+> words. Before that —
+
 **Symptom.** The v153 deploy gate's **second run** (2026-09-21 12:0x) was killed at **99 % of pytest**. It was not a
 failing test and not a stall: the operating system reclaimed the process for low memory, and the only trace in the log
 was `[gw6] node down: Not properly terminated`. The cause was outside this project entirely — a **whisper
@@ -235,6 +248,16 @@ it is roughly one line, and the next build that touches `site/mock/golive-join.t
 own and stops it being a ride-along.
 
 ## KI-35 — The v152 deploy gate went red on TWO tests in one run of six and the names were LOST — `WATCHING`
+
+> **2026-09-22 23:2x (branch `gate-names`) — a red gate can no longer lose its names.** `scripts/deploy.ps1` now runs
+> pytest with `-rfE` (every failure and error in the short summary) and `--junitxml=%TEMP%\black-bloc-gate\gate-junit.xml`,
+> and on a non-zero exit prints `FAILED TESTS:` with one nodeid per line read from that file BEFORE it refuses; if no
+> junit file was written it says the run itself was killed. Exercised against a synthetic junit file (plain, class and
+> unknown-path cases) and a missing one — ⚠️ **not yet exercised by a real deploy gate**. A hang now also names its
+> test (KI-26's timeout). Guess, labelled: v152's two nameless failures were most likely the guides-media pair
+> **KI-32** fixed today — both are "two tests, one run, green on re-run", and that pair failed together in the
+> reproduction. **What would change it:** the first real deploy gate on this script → `CLOSED` as "cannot recur";
+> the lost names themselves are unrecoverable. Before that —
 
 **Symptom.** Running the v152 gate (`pytest`, random order) the suite reported **2 failed** on **one of six runs**;
 **five later runs were clean** and the release shipped on a green pair (**7189 passed, 3 skipped**, both orders). ⚠️
@@ -291,6 +314,20 @@ blocks a deploy gate at an awkward hour → the node tests get a pinned fake clo
 day, is this issue and not the build — check the fixture's date before debugging the code.
 
 ## KI-32 — `test_replacing_a_steps_picture_takes_the_old_one_away` fails about one gate in N on Windows, and passes alone — `WATCHING`
+
+> 🟢 **2026-09-22 23:2x (branch `gate-names`) — CAUSE FOUND AND FIXED; it was a TEST-HARNESS defect, not the bot.**
+> The api tests' `web_settings_now()` never set `database_path`, so every api test bot's guide media folder
+> (`guides.media_root` = the database's folder + `guides/`) was ONE folder shared by every xdist worker — the default
+> `data/guides`, or, when the shell exported `DATABASE_PATH`, the operator's own `C:\Users\nbasl\black-bloc-data\guides`
+> (it did in this session; the test PNGs found there, 88 bytes each, were written by test runs and were left alone).
+> Every worker's per-module database hands out media id **1**, so one worker's replace deleted or overwrote another
+> worker's `1.png`: the upload test then served a 404 and the replace test found the "removed" file back on disk —
+> both of this entry's sightings. **Reproduced deterministically:** `pytest -n 8 -p no:randomly
+> tests/api/tools/test_guides.py -k picture` red **3 of 3**, the whole file red **3 of 5**; after the fix (commit
+> `fdfa6de4`: `web_settings_at(path)` gives every api test bot the database path of its own tmp database, in
+> `tests/api/conftest.py`) **0 of 8**, and every full-suite run since has been green on these tests. The bot's own
+> replace path (`guides.drop_media`) was correct and is unchanged. **Status stays `WATCHING` only until the merge:**
+> → `CLOSED` at the landing if that gate is green; a sighting after the merge means a second cause. Before that —
 
 **Symptom.** The v148 deploy gate (2026-09-20 18:3x) went red on exactly one test, `tests/api/tools/test_guides.py:494`
 `assert not pure.media_path(web, f"{first['id']}.png").exists()` — the replaced picture's file was still on disk when
@@ -463,6 +500,38 @@ Settings page's). The rule is about DECISIONS; guide copy is CONTENT.
 panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
+
+> 🟢 **2026-09-22 23:2x (branch `gate-names`, not yet merged or deployed) — THE CAUSE IS FOUND, WITH STACKS, AND A FIX IS MEASURED.**
+> A hang-watch plugin (scratch, not committed) dumped every thread of every worker that sat on one test for 30 s. On a
+> hung `-n auto` run **32 of 32 workers** were blocked in the same frame: `asyncio.new_event_loop` →
+> `ProactorEventLoop._make_self_pipe` → `socket._fallback_socketpair` → `lsock.accept()`. On Windows every new asyncio
+> loop builds its self-pipe as a **TCP connection over 127.0.0.1**, and each close leaves **one loopback `TIME_WAIT`**
+> (measured: 300 loops → 300 `TIME_WAIT`). A run makes thousands (pytest-asyncio's per-test loops plus every
+> `TestClient` portal); the machine's dynamic range is **16,384 ports** (`netsh int ipv4 show dynamicport tcp`) and
+> **13,565** loopback `TIME_WAIT` were counted mid-run with other suites on the box. When the range runs dry the
+> fallback's non-blocking `connect` fails silently and `accept()` waits for ever — every worker at once, CPU flat,
+> exactly this entry's symptom. It also explains the old clues: worse with a *second* suite on the box, worse at
+> `-n auto` (faster churn), late in the run (ports accumulate), and even a serial run can hit it on a crowded machine.
+> **Fix:** `tests/loopback.py` (loaded for every run by `-p tests.loopback` in `pyproject.toml`) sets `SO_LINGER 0` on
+> both ends of every `socket.socketpair`, so a close is a reset and leaves no `TIME_WAIT` (300 loops → **0**). Across
+> a whole suite the loopback `TIME_WAIT` count now stays at **~50** from start to end (it read 6,306 before the first
+> fixed run). **Measured:** before the fix `-n auto` was green **2 of 6** (four runs hung all their workers);
+> after it **3 of 3** at `-n auto`, **5 of 5** at `-n 16`, and 2 of 3 at `-n 8` — the measured table is in [`access/deploy.md`](access/deploy.md) (*"The gate's pytest step"*).
+> Also new: **`pytest-timeout` (120 s, thread method)** turns any hang into a NAMED failure — `worker 'gwN' crashed
+> while running '<nodeid>'`, exit 1, in the junit file and the gate's `FAILED TESTS:` block — so a stall can no
+> longer sit idle; and the gate now runs **`-n 16`**.
+> ⚠️ **One hang of a DIFFERENT shape remained** (run D8, `-n 8`, after the fix): ONE worker, loopback `TIME_WAIT` at
+> 49, stuck in an async FIXTURE setup for `tests/cogs/moderation/test_modmail.py::test_two_reconciles_at_boot_post_exactly_one_ticket_button`,
+> the proactor loop idle and **no aiosqlite thread alive** in `threading.enumerate()`. One sighting; the timeout
+> named it after 120 s. Hypothesis only (unmeasured): a module-scoped `aiosqlite` connection whose worker thread is
+> gone while `is_connected` still reads true.
+> ⚠️ **Other worktrees and the main tree do not have the fix until this merges**, and TIME_WAIT is machine-wide: their
+> suites still drain the same range. Four stray `pytest` controllers from other sessions (started 20:31, 22:27,
+> 22:33, 22:58) were running at 23:14 and were NOT touched.
+> **Status stays `WATCHING`** — a named failure is not no failure. **What would change it now:** **ten consecutive
+> deploy gates on the merged fix with zero `crashed while running` lines** → `CLOSED`. Any gate that prints one →
+> read its test name: a fixture-setup hang on a module database is the D8 shape and gets its own entry; a
+> `_fallback_socketpair` stack means the fix is not loaded. Before that —
 
 > 🔴 **2026-09-21 17:5x — a new finding, not a new sighting of the stall itself: an agent that kills every `chrome-headless-shell` process BY NAME can hit ANOTHER BUILD'S render mid-flight.** During the `golive-settings-help` build's headless CDP render (deviation 2 of that follow-up), a process-name kill aimed at cleaning up its own scratch profile risked taking out a sibling agent's `chrome-headless-shell` too — the same class of mistake this entry already warns about for `python.exe` and `.venv` workers, now confirmed for the browser side as well. ⚠️ **Count and target by PID or process tree, never by image name**, for any process family a concurrent agent might also be running. This is a finding filed under KI-26 because it is the same root cause (killing a shared-name process on a machine with concurrent agents), not a new count. Before that —
 > 🔴 **2026-09-21 12:2x — TWENTY-TWO PLUS AT LEAST SIX TODAY, so the count is AT LEAST TWENTY-EIGHT — and the debugging session this entry has asked for since 2026-09-19 is STILL not run.** The two v153 builds hit it **six times between them**: three on `member-optout` (stalls at 89 / 98 / 93 % of pytest) and three on `youtube-video-link` (stalls and one crash). ⚠️ **The `member-optout` builder's finding is the most useful thing this entry has gained in a dozen sightings, and it says the diagnosis has often been WRONG: a stalled gate is usually a SECOND GATE.** The PowerShell tool BACKGROUNDS a run it has timed out on, so the retry starts a second 8-worker suite beside the first, the two fight for the cores, and the newer one looks deadlocked — it is not. ⚠️ **Count the `.venv` python workers before killing anything** (`Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*.venv*python*' }`), and kill by process tree, never by image name. ⚠️ **New variant, from the `youtube-video-link` builder: `exit 255` — an xdist worker DEATH**, not the silent idle-worker stall this entry was filed for; same remedy (read the log, retry), different signature, so a gate reporting `exit 255` is this entry too. None of the six reached Fly and none produced a bad deploy — the cost is still only lost time. ⚠️ **The count is now approximate on purpose** (*at least* twenty-eight): sightings are still recorded where each build reports them, which is the same gap that once let this entry say thirteen while the real figure was twenty-two. Before that —
