@@ -1795,3 +1795,110 @@ async def test_the_youtube_side_ends_the_session_it_opened(bot, cog, db):
     rows = await channel_sessions(db)
     assert rows[0]["ended_at"] is not None
     assert row is not None
+
+
+# --- the channel-row path behind the wall (2026-09-22, youtube-walled) ---------------------------
+
+
+async def test_an_opted_out_channel_row_says_so_on_its_row_and_spends_nothing(bot, cog, db):
+    """The live ESA rows read announced=True while its announce cell was off; now they say why."""
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await a_channel_row(bot, announce=False)
+    cog.client = _Live(
+        BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE, keyed=True, searches=[SEARCHED_VIDEO]
+    )
+
+    await cog.probe_all()
+    await cog.probe_all()
+
+    seen = await details_logged(db, "youtube.live_seen")
+    assert len(seen) == 1
+    assert seen[0]["announced"] is False and seen[0]["because"] == "opted_out"
+    assert cog.client.searched == [] and cog.confirms == 0
+    assert await channel_sessions(db) == []
+
+
+async def test_a_walled_channel_row_is_searched_once_and_announced_with_the_found_id(bot, cog, db):
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await a_channel_row(bot)
+    cog.client = _Live(
+        BOTCHECK_LIVE_PAGE,
+        BOTCHECK_LIVE_PAGE,
+        keyed=True,
+        searches=[SEARCHED_VIDEO],
+        confirms=[Confirm(started=True, title="the marathon")],
+    )
+
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert cog.client.searched == [CHANNEL] and cog.client.confirmed == [SEARCHED_VIDEO]
+    assert cog.confirms == 101
+    rows = await channel_sessions(db)
+    assert len(rows) == 1 and rows[0]["url"] == f"https://www.youtube.com/watch?v={SEARCHED_VIDEO}"
+    seen = await details_logged(db, "youtube.live_seen")
+    assert len(seen) == 1 and seen[0]["video_id"] == SEARCHED_VIDEO
+    assert seen[0]["announced"] is True and seen[0]["botcheck"] is True
+    assert (await details_logged(db, "youtube.live_id_searched"))[0]["video_id"] == SEARCHED_VIDEO
+
+
+async def test_a_walled_channel_row_whose_search_finds_nothing_links_the_live_page(bot, cog, db):
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await a_channel_row(bot)
+    cog.client = _Live(BOTCHECK_LIVE_PAGE, keyed=True, searches=[None])
+
+    await cog.probe_all()
+
+    assert cog.client.searched == [CHANNEL] and cog.client.confirmed == []
+    assert (await channel_sessions(db))[0]["url"] == CHANNEL_LIVE_URL
+    assert (await details_logged(db, "youtube.live_id_searched"))[0]["video_id"] is None
+
+
+async def test_a_walled_channel_row_with_no_key_links_the_live_page_and_searches_nothing(
+    bot, cog, db
+):
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await a_channel_row(bot)
+    cog.client = _Live(BOTCHECK_LIVE_PAGE, keyed=False)
+
+    await cog.probe_all()
+
+    assert cog.client.searched == [] and cog.confirms == 0
+    assert (await channel_sessions(db))[0]["url"] == CHANNEL_LIVE_URL
+
+
+async def test_a_channel_row_with_no_spotlight_cog_is_a_failure_row_not_a_claim(bot, cog, db):
+    await live_on(bot)
+    await a_channel_row(bot)
+    bot.cogs.pop("Spotlight", None)
+    cog.client = _Live(LIVE_PAGE)
+
+    await cog.probe_all()
+
+    assert "youtube.live_seen" not in await kinds_logged(db)
+    failed = await details_logged(db, "youtube.live_announce_failed")
+    assert failed and failed[0]["reason"] == "spotlight_cog_missing"
+
+
+async def test_a_reboot_forgets_the_broadcast_so_the_next_probe_writes_its_row_again(bot, cog, db):
+    """Five of the six live ESA rows landed on a deploy's boot minute: the memory is per process."""
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await a_channel_row(bot, announce=False)
+    cog.client = _Live(BOTCHECK_LIVE_PAGE)
+    await cog.probe_all()
+    rebooted = YouTube(bot)
+    rebooted.client = _Live(BOTCHECK_LIVE_PAGE)
+
+    await rebooted.probe_all()
+
+    assert len(await details_logged(db, "youtube.live_seen")) == 2

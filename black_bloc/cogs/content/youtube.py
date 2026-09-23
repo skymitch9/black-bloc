@@ -78,6 +78,7 @@ GOLIVE_COG = "GoLive"
 YOUTUBE_SOURCE = "youtube"
 OPEN_SESSION_BECAUSE = "open_session:{source}"
 JOINED_BECAUSE = "joined_session"
+OPTED_OUT_BECAUSE = "opted_out"
 UNKNOWN_SOURCE = "unknown"
 GO_LIVE_DOOR = "go_live"
 ADD_PLATFORM_DOOR = "add_platform"
@@ -552,25 +553,51 @@ class YouTube(commands.Cog):
             return
         cog = spot_cog.cog_of(self.bot)
         open_row = await spot_cog.open_session(self.bot.db, row["id"])
-        self.live_video[channel_id] = probe.video_id or LIVE_ID_UNKNOWN
         if open_row is not None:
-            await self._channel_seen(guild, row, channel_id, probe, mode, joined=True)
+            self.live_video[channel_id] = probe.video_id or LIVE_ID_UNKNOWN
+            await self._channel_seen(guild, row, channel_id, probe, mode, because=JOINED_BECAUSE)
+            return
+        if not spot.announces(row):
+            self.live_video[channel_id] = probe.video_id or LIVE_ID_UNKNOWN
+            await self._channel_seen(guild, row, channel_id, probe, mode, because=OPTED_OUT_BECAUSE)
+            return
+        video_id = probe.video_id or await self._searched(guild, None, channel_id)
+        confirmed = await self._confirm(guild, None, video_id) if video_id else None
+        self.live_video[channel_id] = video_id or LIVE_ID_UNKNOWN
+        if confirmed is not None and not confirmed.live:
             return
         info = (
-            stream_info(probe.video_id, "", "")
-            if probe.video_id
+            stream_info(
+                video_id,
+                getattr(confirmed, "title", ""),
+                getattr(confirmed, "thumbnail", ""),
+            )
+            if video_id
             else channel_info(channel_id)
         )
-        await self._channel_seen(guild, row, channel_id, probe, mode, url=info.url)
         if cog is None:
             log.warning(
                 "youtube: the spotlight cog is not loaded; %s is not announced", channel_id
             )
+            await log_action(
+                self.bot,
+                guild,
+                "youtube.live_announce_failed",
+                details={"url": info.url, "reason": "spotlight_cog_missing"},
+            )
             return
         async with cog._lock(row["id"]):
             fresh = await spot_cog.channel_by_id(self.bot.db, row["id"])
-            if fresh is None or await spot_cog.open_session(self.bot.db, row["id"]):
+            if fresh is None:
                 return
+            if await spot_cog.open_session(self.bot.db, row["id"]):
+                await self._channel_seen(
+                    guild, row, channel_id, probe, mode, because=JOINED_BECAUSE
+                )
+                return
+            await self._channel_seen(
+                guild, row, channel_id, probe, mode, url=info.url, video_id=video_id
+            )
             await cog.announce_info(guild, fresh, info, spot.display_for(fresh))
 
     async def _channel_seen(
@@ -581,16 +608,17 @@ class YouTube(commands.Cog):
         probe: Any,
         mode: str,
         *,
-        joined: bool = False,
+        because: str | None = None,
         url: str | None = None,
+        video_id: Any = None,
     ) -> None:
-        details = live_seen_details(channel_id, probe.video_id, probe, mode) | {
+        details = live_seen_details(channel_id, video_id or probe.video_id, probe, mode) | {
             "spotlight_id": row["id"],
             "login": row["twitch_login"],
-            "announced": not joined,
+            "announced": because is None,
         }
-        if joined:
-            details["because"] = JOINED_BECAUSE
+        if because:
+            details["because"] = because
         if url:
             details["url"] = url
         await log_action(
