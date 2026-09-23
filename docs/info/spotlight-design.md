@@ -324,3 +324,40 @@ Specifically NOT verified:
 - **`spotlight_event_slack_hours` against a real event that overran.** The maths is unit-tested; no
   event has ever run long.
 
+## Follow-up 2026-09-22 — the reminder names the game being played NOW, with the go-live card
+
+**The ask, verbatim (owner, 2026-09-22):** *"also when we post a spotlight channel is still live
+make sure we still include the game they're playing"* and then *"and do a game preview like a
+normal go live post"*. Branch `spotlight-bump-preview`, off `main` `95cb8954`.
+
+**What a reminder now carries:**
+
+| Part | Where it comes from |
+|---|---|
+| The sentence (`spotlight_bump_template`, unchanged) | `{game}` / `{title}` are the channel's CURRENT stream. The poller's bump already passed the Helix stream it had just seen; **Bump now** (the `/golive` ▸ Spotlight… button and the Go-live page's row action) used to fall back to the session row, i.e. the game **at announce time** — stale for a marathon that changes game hourly. It now asks Helix (`get_streams([login])`) first. |
+| The card | The SAME embed the announcement posts — `golive.announcement_embed(..., source="spotlight")`, the game field and the game's box art (fetched through `_box_art`) — while `golive_embed` is on; the sentence alone while it is off. |
+| The session row | `game` / `title` are written back (`refresh_session_info`, `COALESCE` so an empty Helix field never blanks a stored one) whenever the current stream differs, on BOTH paths. Recent streams on the Go-live page reads the row, so it shows the latest game with no API change. |
+| The log row | `golive.spotlight_bumped` (and `golive.spotlight_post_failed` for a bump) now carries `game`, `title`, `refreshed` (bool) and — when the card went out — `embed` (`embed_summary`), the same shape `announce_info` logs. |
+
+**Fallbacks, in order:** no Helix client (no Twitch credentials) → the stored game; Helix raises
+`TwitchError` → the stored game plus a `log.warning`; Helix answers but the channel is not in the
+answer (offline between polls) → the stored game; a session opened by the YouTube sweep (its url
+is not a twitch.tv one) → the stored game, Helix never asked.
+
+**Deviations from the brief:**
+
+1. **No `still live` wording on the card.** `announcement_embed` has no reminder hook — its author
+   line is `golive_live_author` (default *"{name} is live on {platform}!"*), shared with the
+   announcement. Used as is; the sentence above the card already says *still live*. No new key.
+2. **The session refresh runs on the poller path too**, not only on Bump now: the poller's bump
+   carries a current stream as well, and writing it back is what keeps Recent streams current.
+   The poller's CALL path is otherwise unchanged — it still passes the stream it saw and makes no
+   extra `get_streams` call (guarded by
+   `test_the_poller_bump_uses_the_stream_it_just_saw_and_asks_helix_once`). It does now make one
+   `get_games` call per bump for the box art while the card is on, as the announcement does.
+3. **No `spotlight_bump_embed` key.** The announcement and the reminder share `golive_embed`; nothing
+   in the ask separates them.
+
+⚠️ **NOT verified:** nothing here has met Discord or Helix — the suite drives `FakeHelix` /
+`FakeChannel` only. Sweep row `BP-a` in `../access/sweeps.md` is the proof that does not exist yet.
+

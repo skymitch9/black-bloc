@@ -2914,3 +2914,14 @@ site, Helix, a real clock (no start has actually arrived while the bot was runni
 migration against the Fly volume. Review link while the mock is up:
 <http://127.0.0.1:8788/golive.html> ▸ a channel row ▸ **Dates**, and
 <http://127.0.0.1:8788/settings.html> ▸ the go-live group.
+
+## Row `BP-a` — a reminder names the game being played NOW and shows the go-live card (branch `spotlight-bump-preview`, 2026-09-22)
+
+Design: [`../info/spotlight-design.md`](../info/spotlight-design.md) ▸ *Follow-up 2026-09-22*.
+Lettered; the conductor numbers it. ⚠️ `spotlight_mode` decides where it lands — in `shadow` the
+reminder goes to `shadow_channel_id` (`#welcome-test`), not the go-live channel.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`BP-a`** | Wait for a spotlighted channel to be live and to have CHANGED game since its announcement (a marathon such as GamesDoneQuick does this hourly). Then press **Bump now** — <https://blackbloc.heygabi.ai/golive.html> ▸ the channel's row ▸ **Bump now**, or `/golive` ▸ **Spotlight…** ▸ the channel ▸ **Bump now** | The reminder's sentence names the game being played NOW, not the one in the announcement, and under it sits the same card the announcement carries: the stream title, a **Game** field with that current game, and the game's box art. The row's **Recent streams** entry now shows the new game. The Logs page's `golive.spotlight_bumped` row carries `game`, `refreshed: true` and an `embed` block. With `golive_embed` off, the sentence posts alone. |
+
