@@ -3002,6 +3002,19 @@ the drafts: [`../info/channel-catalog.md`](../info/channel-catalog.md). Lettered
 | **`CC-c`** | In Discord run `/chat` ▸ **Channel notes…**, pick `#speed-and-pbs`, clear the box and submit; then pick it again, type a note and submit | The form opens PRE-FILLED with the saved note; the blank submit answers *"The note for #speed-and-pbs is gone…"*; the second one saves; the card lists the note. Only staff can open the form |
 | **`CC-d`** | On the page, paste 250 characters into any note and press **Save** | Refused **in words** — *"That note is 250 characters and a channel note holds 240, so nothing was saved. Take 10 out and save it again."* ⚠️ Never a bare 422 |
 
+## Rows `BT-a`…`BT-d` — post today's birthday wishes by hand (branch `birthday-post-today`, 2026-09-23)
+
+Owner: *"can we add a birthday command to post the days birthdays? that way they can be manually
+triggered"*. Not deployed. Lettered; the conductor numbers them. Design:
+[`../info/birthdays-panel-design.md`](../info/birthdays-panel-design.md) ▸ *Follow-up 2026-09-23*.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`BT-a`** | As staff, `/birthday` ▸ **Post today's wishes** (bottom row) ▸ **Post the ones not sent yet**, on a day somebody opted in has a birthday that has already been wished | The card goes back to the panel and one message only you see says *"1 already wished today were left alone — **Post them all again** posts those too."* Nothing new in the birthday channel. Logs ▸ Birthdays shows one `birthday.posted_now` row naming you, `again: false`, `skipped: 1` |
+| **`BT-b`** | Same card ▸ **Post them all again** (with `birthday_mode` **on**) | The wish is posted a second time in the birthday channel; the answer reads *"Posted 1 birthday wish(es) in #…"*; Logs shows a `birthday.announce` and a `birthday.posted_now` with `again: true`. A non-staff member's `/birthday` has no **Post today's wishes** button |
+| **`BT-c`** | Switch **Wishes are…** to **shadow**, then **Post today's wishes** ▸ **Post them all again** | Nothing in the real birthday channel. The wish lands in the rehearsal home (`shadow_channel_id`, `#welcome-test`) under the rehearsal note naming the real channel; the answer says wishes are in **shadow** and names the rehearsal home. Switch back afterwards |
+| **`BT-d`** | Dashboard ▸ Birthdays ▸ **Post today's wishes** (top right of the page) ▸ **Post the ones not sent yet**; then set `birthday_mode` to **off** and press it again | The door's sentence appears under the button (same words as Discord). With **off** the answer is the red *"Birthday wishes are **off**, so nothing was posted…"* and nothing posts. Logs shows `web.birthday.posted_now` rows with Via **Website**. Change *What the staff button that posts today's wishes is called* in the page's Settings section: both the page button and the `/birthday` button wear the new words |
+
 ## Rows `PT-a` … `PT-e` — personality tones: the cookout is the voice, and who hears what (branch `personality-tones`, 2026-09-23)
 
 ⏸️ **BUILT, NOT MERGED, NOT DEPLOYED.** Design: [`../info/personality-tones-design.md`](../info/personality-tones-design.md).

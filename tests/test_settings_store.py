@@ -2753,3 +2753,17 @@ async def test_the_bad_date_refusal_may_only_name_what_was_typed(store):
     with pytest.raises(SettingError):
         await store.set(1, "spotlight_bad_date", "{start} is no good")
     await store.set(1, "spotlight_bad_date", "{given} is no good")
+
+
+async def test_the_birthday_post_words_only_take_the_fields_they_can_fill(store):
+    with pytest.raises(SettingError):
+        await store.set(1, "birthday_post_posted", "{n} to {where}")
+    await store.set(1, "birthday_post_posted", "{n} to {channel}")
+    with pytest.raises(SettingError):
+        await store.set(1, "birthday_post_skipped", "{n} in {channel}")
+    await store.set(1, "birthday_post_skipped", "{n} left alone")
+    with pytest.raises(SettingError):
+        await store.set(1, "birthday_post_button", "Post {n}")
+    with pytest.raises(SettingError):
+        await store.set(1, "birthday_post_off", "   ")
+    assert store.get(1, "birthday_post_off").startswith("Birthday wishes are **off**")

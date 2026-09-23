@@ -1491,6 +1491,105 @@ KEY_HELP.update(
 )
 
 
+# Birthdays, post today's wishes by hand (2026-09-23). Its own block so parallel branches merge
+# textually; every word the door says is one of these keys. Design: info/birthdays-panel-design.md.
+BIRTHDAY_POST_BUTTON_KEY = "birthday_post_button"
+BIRTHDAY_POST_CONFIRM_KEY = "birthday_post_confirm"
+BIRTHDAY_POST_UNSENT_KEY = "birthday_post_unsent_label"
+BIRTHDAY_POST_AGAIN_KEY = "birthday_post_again_label"
+BIRTHDAY_POST_NOBODY_KEY = "birthday_post_nobody"
+BIRTHDAY_POST_OFF_KEY = "birthday_post_off"
+BIRTHDAY_POST_POSTED_KEY = "birthday_post_posted"
+BIRTHDAY_POST_REHEARSED_KEY = "birthday_post_rehearsed"
+BIRTHDAY_POST_SKIPPED_KEY = "birthday_post_skipped"
+BIRTHDAY_POST_MISSING_KEY = "birthday_post_missing"
+BIRTHDAY_POST_FAILED_KEY = "birthday_post_failed"
+BIRTHDAY_POST_COUNT_FIELDS = ("n",)
+BIRTHDAY_POST_WHERE_FIELDS = ("n", "channel")
+BIRTHDAY_POST_WORDS: dict[str, str] = {
+    BIRTHDAY_POST_BUTTON_KEY: "Post today's wishes",
+    BIRTHDAY_POST_CONFIRM_KEY: (
+        "Post today's birthday wishes now? A birthday is today in the member's own time zone. "
+        "**Post the ones not sent yet** does straight away what the five-minute sweep would. "
+        "**Post them all again** also wishes anyone already wished today, so they get a second "
+        "post."
+    ),
+    BIRTHDAY_POST_UNSENT_KEY: "Post the ones not sent yet",
+    BIRTHDAY_POST_AGAIN_KEY: "Post them all again",
+    BIRTHDAY_POST_NOBODY_KEY: (
+        "Nobody who is opted in has a birthday today, so nothing was posted."
+    ),
+    BIRTHDAY_POST_OFF_KEY: (
+        "Birthday wishes are **off**, so nothing was posted. Staff can switch them to "
+        "**shadow** or **on** with **Wishes are…** on `/birthday`, or birthday_mode on the "
+        "Birthdays page, and then post again."
+    ),
+    BIRTHDAY_POST_POSTED_KEY: "Posted {n} birthday wish(es) in {channel}.",
+    BIRTHDAY_POST_REHEARSED_KEY: (
+        "Birthday wishes are in **shadow**, so {n} wish(es) went to the rehearsal home, "
+        "{channel}, and nothing to the real channel."
+    ),
+    BIRTHDAY_POST_SKIPPED_KEY: (
+        "{n} already wished today were left alone — **Post them all again** posts those too."
+    ),
+    BIRTHDAY_POST_MISSING_KEY: (
+        "{n} could not be found in the member list, so nothing was posted for them."
+    ),
+    BIRTHDAY_POST_FAILED_KEY: (
+        "{n} could not be posted — **Logs** on `/birthday` or the Birthdays page says why."
+    ),
+}
+KEY_TYPES.update({key: "text" for key in BIRTHDAY_POST_WORDS})
+KEY_HELP.update(
+    {
+        BIRTHDAY_POST_BUTTON_KEY: (
+            "what the staff button that posts today's birthday wishes by hand is called, on the "
+            "/birthday panel and the Birthdays page"
+        ),
+        BIRTHDAY_POST_CONFIRM_KEY: (
+            "the question staff are asked before today's wishes are posted by hand, above the "
+            "two moves"
+        ),
+        BIRTHDAY_POST_UNSENT_KEY: (
+            "what the move that posts only the wishes not sent yet today is called — the "
+            "five-minute sweep, run now"
+        ),
+        BIRTHDAY_POST_AGAIN_KEY: (
+            "what the move that posts every birthday today again, including anyone already "
+            "wished, is called"
+        ),
+        BIRTHDAY_POST_NOBODY_KEY: (
+            "what staff are told when they post today's wishes and nobody opted in has a "
+            "birthday today"
+        ),
+        BIRTHDAY_POST_OFF_KEY: (
+            "what staff are told when they post today's wishes while birthday_mode is off; "
+            "nothing is posted when this is said"
+        ),
+        BIRTHDAY_POST_POSTED_KEY: (
+            "the line that says how many wishes were posted by hand. It takes {n}, the count, "
+            "and {channel}, the channel they went to"
+        ),
+        BIRTHDAY_POST_REHEARSED_KEY: (
+            "the line that says how many wishes went to the rehearsal home because "
+            "birthday_mode is shadow. It takes {n} and {channel}"
+        ),
+        BIRTHDAY_POST_SKIPPED_KEY: (
+            "the line that says how many birthdays today were already wished and left alone. "
+            "It takes {n}"
+        ),
+        BIRTHDAY_POST_MISSING_KEY: (
+            "the line that says how many birthdays today belong to somebody Black Bloc cannot "
+            "find in the member list. It takes {n}"
+        ),
+        BIRTHDAY_POST_FAILED_KEY: (
+            "the line that says how many wishes Discord refused or had nowhere to go. It takes "
+            "{n}; the log row for each says why"
+        ),
+    }
+)
+
+
 # Events panel (wave 1) — the two decisions `/event`'s panel makes, in their own block so the
 # parallel wave-1 branches merge textually.
 KEY_TYPES.update({"event_panel_minutes": "int", "event_panel_own_list": "bool"})
@@ -3242,6 +3341,16 @@ def checked_plain(given: Any) -> str:
     return _checked_words(given, ())
 
 
+def checked_count(given: Any) -> str:
+    """`{n}` only — a count line names how many and nothing else."""
+    return _checked_words(given, BIRTHDAY_POST_COUNT_FIELDS)
+
+
+def checked_count_where(given: Any) -> str:
+    """`{n}` and `{channel}` — how many, and where they went."""
+    return _checked_words(given, BIRTHDAY_POST_WHERE_FIELDS)
+
+
 def checked_live_author(given: Any) -> str:
     """`{name}` and `{platform}` only — a stream that has not ended has no `{duration}`."""
     text = str(given or "").strip()
@@ -3296,6 +3405,17 @@ TEXT_CHECKS: dict[str, Any] = {
     SPOTLIGHT_DATES_BUTTON_KEY: checked_plain,
     SPOTLIGHT_STARTS_LABEL_KEY: checked_plain,
     SPOTLIGHT_ENDS_LABEL_KEY: checked_plain,
+    BIRTHDAY_POST_BUTTON_KEY: checked_plain,
+    BIRTHDAY_POST_CONFIRM_KEY: checked_plain,
+    BIRTHDAY_POST_UNSENT_KEY: checked_plain,
+    BIRTHDAY_POST_AGAIN_KEY: checked_plain,
+    BIRTHDAY_POST_NOBODY_KEY: checked_plain,
+    BIRTHDAY_POST_OFF_KEY: checked_plain,
+    BIRTHDAY_POST_POSTED_KEY: checked_count_where,
+    BIRTHDAY_POST_REHEARSED_KEY: checked_count_where,
+    BIRTHDAY_POST_SKIPPED_KEY: checked_count,
+    BIRTHDAY_POST_MISSING_KEY: checked_count,
+    BIRTHDAY_POST_FAILED_KEY: checked_count,
 }
 
 TEXT_MAY_BE_BLANK = (
@@ -4100,6 +4220,8 @@ class SettingsStore:
             return True
         if key == "birthday_panel_lookup":
             return True
+        if key in BIRTHDAY_POST_WORDS:
+            return BIRTHDAY_POST_WORDS[key]
         if key == "event_panel_minutes":
             return 10
         if key == "event_panel_own_list":

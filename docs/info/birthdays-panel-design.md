@@ -416,3 +416,62 @@ was built as this document specifies.
     repaired in a birthdays branch.
     ✅ **Repaired at v92** (`4b327cf`, *"`allowed_mentions` on 27 re-renders + 3 confirm cards"*):
     `cogs/community/requests.py` passes it at `:176`, `:257`, `:625`, `:653` and `:657`.
+
+## Follow-up 2026-09-23 — post today's wishes by hand (branch `birthday-post-today`)
+
+Owner, verbatim: *"can we add a birthday command to post the days birthdays? that way they can
+be manually triggered"*. Not deployed. Measured the same day: a birthday set mid-day already
+posts on the next five-minute tick by itself (Anarchy, set 12:29, posted 12:31), so the manual
+trigger is for reposting after a deploy or restart swallowed one, posting again on purpose, or
+posting NOW instead of waiting for the tick.
+
+**The door.** `post_today(bot, guild, actor, *, again, via)` (`cogs/community/birthdays.py`) is
+the one path both surfaces call. For every stored birthday it takes the member's lock, re-reads
+the row, and — when the member is opted in and it is their birthday today in THEIR zone — runs
+the same `_celebrate` the sweep runs. It answers a `PostedToday` (`black_bloc/birthdays.py`)
+whose `said` is the sentence both surfaces show, and writes one `birthday.posted_now` row
+(ROUTINE; `web.birthday.posted_now` from the site) with `{via, again, posted, skipped, missing,
+failed, mode}`. The per-member `birthday.announce` / `would_announce` / `announce_failed` /
+`member_missing` rows land exactly as the sweep's do.
+
+**The two moves.**
+
+| Move | What it does |
+|---|---|
+| **Post the ones not sent yet** (`again=False`) | the sweep, now: a birthday already stamped `last_announced_on` today is counted *skipped* and left alone |
+| **Post them all again** (`again=True`) | everybody with a birthday today is wished, the already-wished included; the log row says `again: true` |
+
+**Decisions.**
+
+1. **No new slash command.** The owner said "command"; the standing rule (2026-09-03, minimise
+   slash commands) puts it on the `/birthday` panel as a staff button, row 4 beside Status /
+   Clear the birthday role / Logs, opening the panel's `open_confirm` card with the two moves and
+   **Cancel**. The site puts it in the Birthdays page's page-head aside, which was empty
+   (`ux-audit.md` finding 1); the button unfolds the question and the two moves inline.
+2. **The button shows even when nobody has a birthday today** — staff must be able to check —
+   and the answer then says so in words (`birthday_post_nobody`).
+3. **`off` refuses in words** and says how to switch it (`birthday_post_off`); the site answers
+   409 `birthdays_off` carrying that sentence. The `posted_now` row is still written with
+   `mode: off`, so a refused press is visible in Logs.
+4. ⚠️ **`shadow` posts a rehearsal copy by hand, but the sweep's shadow stays log-only.** The
+   door passes `rehearse=True` to `_celebrate`, which in `shadow` posts the wish, with the
+   `rehearsal_note` line above it naming the real channel, to the rehearsal home
+   `shadow.channel_id` resolves (`shadow_channel_id`, else the guard's channel, else
+   `log_channel_id`) and logs `birthday.would_announce` with `rehearsed: true`. The five-minute
+   sweep was NOT changed: in `shadow` it still posts nothing anywhere —
+   changing it would start a daily rehearsal post nobody asked for. Because the sweep's shadow
+   stamps the row announced, **Post the ones not sent yet** in shadow usually reports them
+   *skipped*; **Post them all again** is what rehearses them.
+5. **Every word is a key** (11 `birthday_post_*` text keys, `settings_store.py`
+   `BIRTHDAY_POST_WORDS`), each with help, a placeholder check (`{n}`, `{n}`+`{channel}`, or
+   none) and a `labels.js` line. The `birthday` group went 10 → 21 keys, under Discord's 25-option
+   select cap for one group on `/settings`. The confirm card's **Cancel** is the same unkeyed
+   library word the role-clear confirm already uses — not a new string.
+6. **The channel is named as `#name`** on both surfaces (`channel_words`), because the site
+   would print a raw `<#id>`.
+
+**Not verified.** Nothing here met live Discord or the live site: the panel path is proved by
+fakes in `tests/cogs/community/test_birthdays.py`, the route by the TestClient, and the page
+was clicked through in headless Chrome against the mock (open, **Post them all again**, the
+off refusal) — never against the real API or a real guild. Whether Discord renders the
+rehearsal note plus embed as intended in `#welcome-test` is unseen.

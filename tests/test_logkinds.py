@@ -142,6 +142,11 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     # the two words so the five moves have one home rather than five literals.
     # The question and the member's no are constants so the cog and the tests name them once.
     "black_bloc/handoff.py::ASKED_KIND": ("handoff.asked",),
+    # The birthday post-today door is pressed from the panel and the site, so both spellings.
+    "black_bloc/cogs/community/birthdays.py::POSTED_NOW": (
+        "birthday.posted_now",
+        "web.birthday.posted_now",
+    ),
     "black_bloc/handoff.py::REFUSED_KIND": ("handoff.refused",),
     "black_bloc/handoff.py::handoff_kind(source, target)": (
         "handoff.event_to_request",

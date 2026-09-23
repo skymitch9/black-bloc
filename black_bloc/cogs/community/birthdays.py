@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -9,6 +10,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import shadow as shadow_home
 from ...actionlog import log_action, send_logs
 from ...birthdays import (
     DATE_INPUT_LIMIT,
@@ -16,7 +18,9 @@ from ...birthdays import (
     DATE_PLACEHOLDER,
     DATE_UNREADABLE,
     EVERY_MONTH,
+    FAILED,
     LOOKUP_PLACEHOLDER,
+    MISSING,
     MODE_PLACEHOLDER,
     MODE_WARNINGS,
     MONTH_NAMES,
@@ -27,9 +31,13 @@ from ...birthdays import (
     PANEL_NEXT_IS_STAFF_ONLY,
     PANEL_TIMEOUT_FOOTER,
     PANEL_TITLE,
+    POSTED,
+    SKIPPED,
+    PostedToday,
     age,
     card_lines,
     celebrates_today,
+    channel_words,
     chunked,
     clamp_month_day,
     date_modal_title,
@@ -45,6 +53,8 @@ from ...birthdays import (
     panel_shows_next,
     parse_birthday_input,
     parse_color,
+    post_today_said,
+    post_word,
     render_description,
     status_lines,
     stored_line,
@@ -55,9 +65,11 @@ from ...birthdays import (
     year_problem,
 )
 from ...command_errors import AnswersErrors
+from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
 from ...panels import (
     KEEP_IT,
+    ConfirmButton,
     Panel,
     answer,
     confirm,
@@ -68,6 +80,10 @@ from ...panels import (
 )
 from ...settings_store import (
     BIRTHDAY_MODES,
+    BIRTHDAY_POST_AGAIN_KEY,
+    BIRTHDAY_POST_BUTTON_KEY,
+    BIRTHDAY_POST_CONFIRM_KEY,
+    BIRTHDAY_POST_UNSENT_KEY,
     DB_UNAVAILABLE,
     GUILD_ONLY,
     staff_roles_sentence,
@@ -79,6 +95,8 @@ log = logging.getLogger(__name__)
 LOOP_MINUTES = 5
 ROLE_REASON = "Black Bloc birthday"
 COG_NAME = "Birthdays"
+POSTED_NOW = "birthday.posted_now"
+CANCEL = "Cancel"
 
 NOT_STORED = (
     "Black Bloc has no birthday for you, so there is nothing to change. Add one with the "
@@ -359,6 +377,59 @@ async def clear_role(bot: Any, guild: Any, actor: Any) -> str:
     return ROLE_CLEARED if outcome.ok else ROLE_NOT_SET
 
 
+async def post_today(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    *,
+    again: bool,
+    via: str = VIA_DISCORD,
+    now: datetime | None = None,
+) -> PostedToday:
+    """The one door both the panel and the site press: today's wishes, now, in words."""
+    cog = bot.get_cog(COG_NAME)
+    mode = str(bot.store.get(guild.id, "birthday_mode"))
+    counts = {POSTED: 0, SKIPPED: 0, MISSING: 0, FAILED: 0}
+    if mode != "off":
+        moment = now or datetime.now(UTC)
+        for row in await rows_for_guild(bot.db, guild.id):
+            async with cog._lock(row["user_id"]):
+                result = await cog._post_one(guild, row["user_id"], mode, moment, again=again)
+            if result is not None:
+                counts[result] += 1
+    where = (
+        bot.store.get(guild.id, "birthday_channel_id")
+        if mode == "on"
+        else shadow_home.channel_id(bot, guild)
+    )
+    found = PostedToday(
+        mode=mode,
+        again=again,
+        posted=counts[POSTED],
+        skipped=counts[SKIPPED],
+        missing=counts[MISSING],
+        failed=counts[FAILED],
+        channel=channel_words(guild, where),
+    )
+    found = replace(found, said=post_today_said(bot.store, guild.id, found))
+    await log_action(
+        bot,
+        guild,
+        kind_via(POSTED_NOW, via),
+        actor=actor,
+        details={
+            "via": via,
+            "again": again,
+            "posted": found.posted,
+            "skipped": found.skipped,
+            "missing": found.missing,
+            "failed": found.failed,
+            "mode": mode,
+        },
+    )
+    return found
+
+
 async def person_lines(bot: Any, guild: Any, member: Any, row: Any, *, mine: bool) -> list[str]:
     zone = await member_zone_name(bot.db, member.id)
     when = next_occurrence(row["month"], row["day"], zone)
@@ -441,6 +512,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         view.add_item(StatusButton())
         view.add_item(ClearRoleButton())
         view.add_item(LogsButton())
+        view.add_item(PostTodayButton(post_word(store, guild.id, BIRTHDAY_POST_BUTTON_KEY)))
     return embed, view
 
 
@@ -588,6 +660,45 @@ async def open_role_clear_confirm(
         ),
         previous,
     )
+
+
+async def open_post_confirm(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction, staff=False):
+        return
+    store = interaction.client.store
+    guild_id = interaction.guild.id
+    await open_confirm(
+        interaction,
+        post_word(store, guild_id, BIRTHDAY_POST_CONFIRM_KEY),
+        [
+            ConfirmButton(
+                post_word(store, guild_id, BIRTHDAY_POST_UNSENT_KEY)[:80],
+                discord.ButtonStyle.primary,
+                lambda one, card: run_post_today(one, again=False, previous=card),
+            ),
+            ConfirmButton(
+                post_word(store, guild_id, BIRTHDAY_POST_AGAIN_KEY)[:80],
+                discord.ButtonStyle.danger,
+                lambda one, card: run_post_today(one, again=True, previous=card),
+            ),
+            ConfirmButton(CANCEL, discord.ButtonStyle.secondary, back_to_panel),
+        ],
+        previous,
+    )
+
+
+async def run_post_today(
+    interaction: discord.Interaction, *, again: bool, previous: Any = None
+) -> None:
+    if not await still_staff(interaction):
+        return
+    if not await opened(interaction, staff=False):
+        return
+    found = await post_today(interaction.client, interaction.guild, interaction.user, again=again)
+    await render_panel(interaction, previous)
+    await said_after(interaction, found.said)
 
 
 async def run_opt(
@@ -777,6 +888,14 @@ class LogsButton(discord.ui.Button):
         await send_logs(interaction, "birthday")
 
 
+class PostTodayButton(discord.ui.Button):
+    def __init__(self, label: str) -> None:
+        super().__init__(label=label[:80], style=discord.ButtonStyle.primary, row=4)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_post_confirm(interaction, self.view)
+
+
 class BackButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=1)
@@ -931,9 +1050,31 @@ class Birthdays(commands.Cog):
             return
         await self._celebrate(guild, row, mode, today, today_text)
 
+    async def _post_one(
+        self, guild: Any, user_id: int, mode: str, moment: datetime, *, again: bool
+    ) -> str | None:
+        """Re-read under the lock, so a sweep tick that just wished them is seen."""
+        row = await get_birthday(self.bot.db, user_id)
+        if row is None or not row["opted_in"]:
+            return None
+        today = local_today(await self._zone_of(user_id), moment)
+        if not celebrates_today(row["month"], row["day"], today):
+            return None
+        today_text = today.isoformat()
+        if row["last_announced_on"] == today_text and not again:
+            return SKIPPED
+        return await self._celebrate(guild, row, mode, today, today_text, rehearse=True)
+
     async def _celebrate(
-        self, guild: Any, row: Any, mode: str, today: date, today_text: str
-    ) -> None:
+        self,
+        guild: Any,
+        row: Any,
+        mode: str,
+        today: date,
+        today_text: str,
+        *,
+        rehearse: bool = False,
+    ) -> str:
         store = self.bot.store
         member = guild.get_member(row["user_id"])
         details: dict[str, Any] = {
@@ -950,7 +1091,7 @@ class Birthdays(commands.Cog):
                     target=row["user_id"],
                     details=details | {"reason": "not_in_the_member_cache"},
                 )
-            return
+            return MISSING
         years = age(row["year"], today) if store.get(guild.id, "birthday_show_age") else None
         text = render_description(
             store.get(guild.id, "birthday_template"), member.display_name, years
@@ -958,7 +1099,15 @@ class Birthdays(commands.Cog):
         colour = discord.Colour(parse_color(store.get(guild.id, "birthday_color")))
         embed = discord.Embed(description=text, colour=colour)
         details = details | {"text": text}
-        failure = await self._post(guild, embed) if mode == "on" else "shadow"
+        rehearsed = False
+        if mode == "on":
+            failure = await self._post(guild, embed)
+        elif rehearse:
+            failure = await self._post(guild, embed, rehearse=True)
+            rehearsed = failure is None
+            failure = "shadow" if rehearsed else failure
+        else:
+            failure = "shadow"
         if failure is not None and failure not in ("shadow", "test_mode"):
             if self._say_once(row["user_id"], "announce_failed", today_text):
                 await log_action(
@@ -968,23 +1117,36 @@ class Birthdays(commands.Cog):
                     target=member,
                     details=details | {"reason": failure},
                 )
-            return
+            return FAILED
         await mark_announced(self.bot.db, row["user_id"], today_text)
         await log_action(
             self.bot,
             guild,
             "birthday.announce" if failure is None else "birthday.would_announce",
             target=member,
-            details=details | ({"reason": failure} if failure else {}),
+            details=details
+            | ({"reason": failure} if failure else {})
+            | ({"rehearsed": True} if rehearsed else {}),
         )
         await self._give_role(guild, member, mode, today_text)
+        return POSTED if failure is None or rehearsed else FAILED
 
-    async def _post(self, guild: Any, embed: discord.Embed) -> str | None:
+    async def _post(
+        self, guild: Any, embed: discord.Embed, *, rehearse: bool = False
+    ) -> str | None:
         """None when the wish was posted; otherwise why it was not."""
         channel_id = self.bot.store.get(guild.id, "birthday_channel_id")
         if not channel_id:
             log.warning("birthdays: not posted — birthday_channel_id is not set")
             return "no_channel_configured"
+        note = ""
+        if rehearse:
+            home = shadow_home.channel_id(self.bot, guild)
+            if not home:
+                log.warning("birthdays: not rehearsed — there is no rehearsal home")
+                return "no_rehearsal_home"
+            note = shadow_home.note_line(self.bot, guild, f"<#{int(channel_id)}>")
+            channel_id = home
         guard = getattr(self.bot, "guard", None)
         if guard is not None and not guard.allows_channel(channel_id):
             log.warning("birthdays: TEST MODE — refused to post to channel %s", channel_id)
@@ -994,7 +1156,9 @@ class Birthdays(commands.Cog):
             log.warning("birthdays: not posted — channel %s is not visible", channel_id)
             return "channel_not_visible"
         try:
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+            await channel.send(
+                note or None, embed=embed, allowed_mentions=discord.AllowedMentions.none()
+            )
         except Exception as exc:
             log.warning("birthdays: not posted — %s: %s", type(exc).__name__, exc)
             return f"{type(exc).__name__}: {exc}"
