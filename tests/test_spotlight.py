@@ -210,6 +210,16 @@ def test_the_spotlight_off_sentence_says_the_pin_came_off_when_one_did():
     assert "unpinned" not in spotlight.spotlight_said(row(spotlight=1), spotlight.UNPINNED)
 
 
+def test_the_spotlight_on_sentence_says_what_became_of_the_pin():
+    on = row(spotlight=1)
+    assert spotlight.spotlight_said(on) == spotlight.SPOTLIT_SAID.format(login="gamesdonequick")
+    assert spotlight.PINNED_NOW in spotlight.spotlight_said(on, spotlight.PINNED)
+    assert spotlight.UNPINNED_ENDED_NOW in spotlight.spotlight_said(on, spotlight.UNPINNED_ENDED)
+    refused = spotlight.PIN_REFUSED.format(login="gamesdonequick", reason="Forbidden")
+    assert refused in spotlight.spotlight_said(on, refused)
+    assert "end" not in spotlight.spotlight_said(on, "end").split("stays as it is.")[1]
+
+
 # --- the owner's date range (2026-09-22): a spotlight has a START as well as an end ----------
 
 

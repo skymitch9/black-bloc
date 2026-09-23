@@ -268,6 +268,17 @@ UNPINNED_NOW = (
     "The announcement that is out now has been unpinned; it stays posted, no reminder follows "
     "it, and it is edited to past tense when the stream ends."
 )
+PINNED = "pinned"
+PINNED_NOW = (
+    "The announcement that is out now has been pinned for the rest of the stream, and the "
+    "reminders pick up from here."
+)
+UNPINNED_ENDED = "unpinned_ended"
+UNPINNED_ENDED_NOW = (
+    "Its last announcement, from a stream that has already ended, was still pinned and has "
+    "been unpinned; the next one is pinned when it goes live."
+)
+SPOTLIT_SETTLED = {PINNED: PINNED_NOW, UNPINNED_ENDED: UNPINNED_ENDED_NOW}
 
 LINK_YOUTUBE = "Link a YouTube channel"
 UNLINK_YOUTUBE = "Unlink it"
@@ -297,6 +308,7 @@ EXPIRED = "expired"
 REMOVED_BECAUSE = "removed"
 OPTED_OUT_ENDED = "opted_out"
 SPOTLIGHT_OFF_BECAUSE = "spotlight_off"
+SPOTLIGHT_ON_BECAUSE = "spotlight_on"
 FAN_ROLE_EXPIRED = "spotlight_expired"
 FAN_ROLE_REMOVED = "spotlight_removed"
 FAN_ROLE_TAKEN = "staff_removed"
@@ -394,9 +406,16 @@ def spotlight_said(row: Any, settled: Any = None) -> str:
     """One sentence for both doors; `settled` is what the open announcement had done to it."""
     login = _cell(row, "twitch_login")
     if is_spotlit(row):
-        return SPOTLIT_SAID.format(login=login)
+        said = SPOTLIT_SAID.format(login=login)
+        clause = SPOTLIT_SETTLED.get(str(settled or ""), _refusal(settled))
+        return f"{said} {clause}" if clause else said
     said = NOT_SPOTLIT_SAID.format(login=login)
     return f"{said} {UNPINNED_NOW}" if settled == UNPINNED else said
+
+
+def _refusal(settled: Any) -> str:
+    known = {UNPINNED, *OPTED_OUT_POST_SAID}
+    return "" if not settled or settled in known else str(settled)
 
 
 def announce_said(row: Any, settled: Any = None) -> str:
