@@ -74,6 +74,8 @@ class FakeMessage:
         self.embeds = [kwargs["embed"]] if kwargs.get("embed") is not None else []
 
     async def edit(self, content=None, **kwargs):
+        if self.channel.edit_raises is not None:
+            raise self.channel.edit_raises
         self.content = content
         self.edits.append(kwargs)
         if kwargs.get("embed") is not None:
@@ -108,6 +110,7 @@ class FakeChannel:
         self.send_raises = None
         self.pin_raises = None
         self.unpin_raises = None
+        self.edit_raises = None
 
     async def send(self, content=None, **kwargs):
         if self.send_raises is not None:
@@ -692,6 +695,164 @@ async def test_the_poller_bump_uses_the_stream_it_just_saw_and_asks_helix_once(b
     assert len(helix.stream_calls) == calls + 1
     assert "Hollow Knight" in bot.guild.channel.messages[1].content
     assert (await open_session(bot.db, row["id"]))["game"] == "Hollow Knight"
+
+
+# --- the pinned announcement follows the game (owner, 2026-09-22) ------------------------------
+
+
+async def age_session(bot, session_id, hours):
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET started_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=hours)).isoformat(), session_id),
+    )
+    await bot.db.conn.commit()
+
+
+async def test_a_poll_with_a_new_game_re_words_the_pinned_announcement_at_once(bot, cog):
+    row, helix = await a_live_session(bot, cog)
+    announcement = bot.guild.channel.messages[0]
+    assert announcement.pinned is True and "Celeste" in announcement.content
+    helix.streams = [twitch_stream(game="Hollow Knight", title="HK any%", game_id="2")]
+    helix.games = [TwitchGame("2", "Hollow Knight", "hk-art")]
+
+    await cog.poll_once()
+
+    assert len(bot.guild.channel.messages) == 1
+    assert "Hollow Knight" in announcement.content and "Celeste" not in announcement.content
+    assert announcement.embed.image.url == "hk-art"
+    assert announcement.embed.fields[0].value == "Hollow Knight"
+    assert announcement.pinned is True
+    said = await details_of(bot.db, "golive.spotlight_announcement_refreshed")
+    assert said["game"] == "Hollow Knight" and said["title"] == "HK any%"
+    assert said["message_id"] == str(announcement.id)
+    assert said["embed"]["image"] == "hk-art"
+    assert (await open_session(bot.db, row["id"]))["game"] == "Hollow Knight"
+
+
+async def test_a_poll_with_the_same_game_edits_nothing_and_logs_nothing(bot, cog):
+    await a_live_session(bot, cog)
+    announcement = bot.guild.channel.messages[0]
+
+    await cog.poll_once()
+    await cog.poll_once()
+
+    assert announcement.edits == []
+    assert "golive.spotlight_announcement_refreshed" not in await kinds(bot.db)
+
+
+async def test_a_due_bump_with_a_new_game_re_words_the_post_and_sends_the_reminder(bot, cog):
+    row, helix = await a_live_session(bot, cog)
+    session = await open_session(bot.db, row["id"])
+    await age_session(bot, session["id"], 4.1)
+    helix.streams = [twitch_stream(game="Hollow Knight")]
+
+    await cog.poll_once()
+
+    announcement, reminder = bot.guild.channel.messages
+    assert "Hollow Knight" in announcement.content and len(announcement.edits) == 1
+    assert "Hollow Knight" in reminder.content
+    assert (await details_of(bot.db, "golive.spotlight_bumped"))["refreshed"] is True
+    assert (await kinds(bot.db)).count("golive.spotlight_announcement_refreshed") == 1
+
+
+async def test_bump_now_with_a_new_game_also_re_words_the_announcement(bot, cog):
+    row, helix = await a_live_session(bot, cog)
+    helix.streams = [twitch_stream(game="Hollow Knight")]
+
+    await bump_now(bot, bot.guild, FakeActor(), row["id"])
+
+    assert "Hollow Knight" in bot.guild.channel.messages[0].content
+    assert "Hollow Knight" in bot.guild.channel.messages[1].content
+    assert "golive.spotlight_announcement_refreshed" in await kinds(bot.db)
+
+
+async def test_with_the_card_off_the_re_worded_post_carries_no_new_embed(bot, cog):
+    await bot.store.set(GUILD, "golive_embed", False)
+    _row, helix = await a_live_session(bot, cog)
+    announcement = bot.guild.channel.messages[0]
+    helix.streams = [twitch_stream(game="Hollow Knight")]
+
+    await cog.poll_once()
+
+    assert "Hollow Knight" in announcement.content
+    assert "embed" not in announcement.edits[0] and announcement.embed is None
+    assert "embed" not in await details_of(bot.db, "golive.spotlight_announcement_refreshed")
+
+
+async def test_a_refused_edit_is_logged_loud_and_the_reminder_still_goes_out(bot, cog):
+    row, helix = await a_live_session(bot, cog)
+    announcement = bot.guild.channel.messages[0]
+    bot.guild.channel.edit_raises = RuntimeError("Missing Access")
+    helix.streams = [twitch_stream(game="Hollow Knight")]
+
+    outcome, _ = await bump_now(bot, bot.guild, FakeActor(), row["id"])
+
+    assert outcome == "bumped" and len(bot.guild.channel.messages) == 2
+    assert "Celeste" in announcement.content and announcement.pinned is True
+    failed = await details_of(bot.db, "golive.spotlight_announcement_refresh_failed")
+    assert failed["game"] == "Hollow Knight" and "Missing Access" in failed["reason"]
+    assert "golive.spotlight_announcement_refreshed" not in await kinds(bot.db)
+
+
+async def test_following_the_game_never_pins_or_unpins_anything(bot, cog):
+    row, helix = await a_live_session(bot, cog)
+    announcement = bot.guild.channel.messages[0]
+    pins, before = list(announcement.pins), await kinds(bot.db)
+    helix.streams = [twitch_stream(game="Hollow Knight")]
+    await cog.poll_once()
+    helix.streams = [twitch_stream(game="Hades")]
+    await bump_now(bot, bot.guild, FakeActor(), row["id"])
+
+    assert announcement.pins == pins and announcement.unpins == []
+    assert announcement.pinned is True and len(announcement.edits) == 2
+    after = (await kinds(bot.db))[len(before) :]
+    assert not {"golive.spotlight_pinned", "golive.spotlight_unpinned"} & set(after)
+
+
+async def test_a_spotlight_off_announcement_follows_the_game_too(bot, cog):
+    row = await a_row(bot, spotlight=False)
+    helix = helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    announcement = bot.guild.channel.messages[0]
+    assert announcement.pinned is False
+    helix.streams = [twitch_stream(game="Hollow Knight")]
+
+    await cog.poll_once()
+
+    assert "Hollow Knight" in announcement.content and announcement.pinned is False
+    assert announcement.pins == []
+    assert (await open_session(bot.db, row["id"]))["game"] == "Hollow Knight"
+
+
+async def test_a_shadow_announcement_keeps_its_rehearsal_line_when_re_worded(bot, cog):
+    await bot.store.set(GUILD, SPOTLIGHT_MODE_KEY, "shadow")
+    _row, helix = await a_live_session(bot, cog)
+    announcement = bot.guild.shadow.messages[0]
+    first_line = announcement.content.split("\n", 1)[0]
+    helix.streams = [twitch_stream(game="Hollow Knight")]
+
+    await cog.poll_once()
+
+    assert "Hollow Knight" in announcement.content
+    assert announcement.content.startswith(first_line + "\n")
+    assert announcement.content.count(first_line) == 1
+
+
+async def test_the_twitch_poller_leaves_a_youtube_sessions_announcement_alone(bot, cog):
+    row = await a_row(bot)
+    await cog.announce_info(
+        bot.guild,
+        row,
+        StreamInfo(url="https://www.youtube.com/watch?v=abc", platform="YouTube", game="Celeste"),
+        "GamesDoneQuick",
+    )
+    announcement = bot.guild.channel.messages[0]
+    helix_of(bot, twitch_stream(game="Hollow Knight"))
+
+    await cog.poll_once()
+
+    assert announcement.edits == []
+    assert "golive.spotlight_announcement_refreshed" not in await kinds(bot.db)
 
 
 # --- the end ----------------------------------------------------------------------------------

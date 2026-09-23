@@ -14,6 +14,7 @@ from ... import spotlight as words
 from ...actionlog import log_action
 from ...command_errors import AnswersErrors
 from ...golive import (
+    again_render,
     announcement_embed,
     embed_summary,
     ended_embed,
@@ -529,7 +530,10 @@ class Spotlight(commands.Cog):
                 if session is None:
                     await self._announce(guild, fresh, stream)
                 else:
-                    await self._maybe_bump(guild, fresh, session, from_twitch(stream))
+                    info, refreshed = await self._follow(
+                        guild, fresh, session, from_twitch(stream)
+                    )
+                    await self._maybe_bump(guild, fresh, session, info, refreshed=refreshed)
                 return
             if session is None or words.platform_of(_cell(session, "url")) != words.PLATFORM:
                 return
@@ -627,13 +631,27 @@ class Spotlight(commands.Cog):
         if row["pin"] and words.is_spotlit(row):
             await self._pin(guild, row, message)
 
-    async def _maybe_bump(self, guild: Any, row: Any, session: Any, info: Any) -> None:
+    async def _follow(
+        self, guild: Any, row: Any, session: Any, info: Any
+    ) -> tuple[Any, bool | None]:
+        """Every poll: a new game or title re-words the announcement at once, pin untouched."""
+        if words.platform_of(_cell(session, "url")) != words.PLATFORM:
+            return info, None
+        if not await self._refresh(session, info):
+            return info, False
+        info = await self._box_art(guild, info)
+        await self._refresh_announcement(guild, row, session, info)
+        return info, True
+
+    async def _maybe_bump(
+        self, guild: Any, row: Any, session: Any, info: Any, *, refreshed: bool | None = None
+    ) -> None:
         if not words.is_spotlit(row) or not words.announces(row):
             return
         hours = words.bump_hours_for(row, self.bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
         if not words.bump_due(session, hours).due:
             return
-        await self.bump(guild, row, session, info)
+        await self.bump(guild, row, session, info, refreshed=refreshed)
 
     async def bump(
         self,
@@ -644,11 +662,16 @@ class Spotlight(commands.Cog):
         *,
         via: str = VIA_DISCORD,
         actor: Any = None,
+        refreshed: bool | None = None,
     ) -> Any:
         """One short reminder, never pinned; it pings only while `spotlight_bump_pings` is on."""
         stream = info if info is not None else await self._current(row, session)
-        refreshed = await self._refresh(session, stream)
+        looked = refreshed is None
+        if looked:
+            refreshed = await self._refresh(session, stream)
         stream = await self._box_art(guild, stream)
+        if looked and refreshed:
+            await self._refresh_announcement(guild, row, session, stream)
         at = now_iso()
         pinging = bool(self.bot.store.get(guild.id, SPOTLIGHT_BUMP_PINGS_KEY))
         fan_role_id = (
@@ -747,6 +770,70 @@ class Spotlight(commands.Cog):
         if changed:
             await refresh_session_info(self.bot.db, session["id"], info.game, info.title)
         return bool(changed)
+
+    async def _refresh_announcement(self, guild: Any, row: Any, session: Any, info: Any) -> None:
+        """The posted announcement re-worded for the game now; never a pin, never an unpin."""
+        if words.platform_of(_cell(session, "url")) != words.PLATFORM:
+            return
+        message = await self._message(guild, session)
+        if message is None:
+            return
+        store = self.bot.store
+        name = words.display_for(row)
+        head, body = self._shadow_head(guild, session, message.content)
+        text = head + again_render(store.get(guild.id, TEMPLATE_KEY), info, name, content=body)
+        embed = self._card_again(guild, info, name, message)
+        details = {
+            "spotlight_id": row["id"],
+            "session_id": session["id"],
+            "login": row["twitch_login"],
+            "message_id": str(getattr(message, "id", "")),
+            "game": info.game,
+            "title": info.title,
+        }
+        if embed is not None:
+            details["embed"] = embed_summary(embed)
+        try:
+            await message.edit(
+                content=text,
+                allowed_mentions=self._mentions(guild.id, pinging=False),
+                **({"embed": embed} if embed is not None else {}),
+            )
+        except Exception as exc:
+            reason = words.reason_of(exc)
+            log.warning("spotlight: could not re-word %s — %s", row["twitch_login"], reason)
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_announcement_refresh_failed",
+                details=details | {"reason": reason},
+            )
+            return
+        await log_action(
+            self.bot, guild, "golive.spotlight_announcement_refreshed", details=details
+        )
+
+    def _shadow_head(self, guild: Any, session: Any, content: Any) -> tuple[str, str]:
+        text = str(content or "")
+        if str(_cell(session, "mode") or MODE_ON) == MODE_ON:
+            return "", text
+        channel_id = self.bot.store.get(guild.id, CHANNEL_KEY)
+        note = shadow_home.note_line(self.bot, guild, f"<#{int(channel_id or 0)}>")
+        head = f"{note}\n" if note else ""
+        return (head, text[len(head) :]) if head and text.startswith(head) else ("", text)
+
+    def _card_again(self, guild: Any, info: Any, name: str, message: Any) -> Any:
+        store = self.bot.store
+        if not store.get(guild.id, EMBED_KEY):
+            return None
+        embed = announcement_embed(
+            info, source=SOURCE, name=name, author=store.get(guild.id, LIVE_AUTHOR_KEY)
+        )
+        existing = list(getattr(message, "embeds", None) or ())
+        stamp = getattr(existing[0], "timestamp", None) if existing else None
+        if stamp is not None:
+            embed.timestamp = stamp
+        return embed
 
     async def _end(
         self, guild: Any, row: Any, session: Any, reason: str, *, post: str = CHANNEL_OPTOUT_END
