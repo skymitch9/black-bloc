@@ -380,6 +380,17 @@ async def seed_world(client, web, guild, wf) -> dict:
     await knowledge.add_section(
         db, guild_id, "Channels", "general, cookout-planning", source=knowledge.SERVER
     )
+    # The review loop: three open items with a suggestion each and one already dismissed, so
+    # approve, change, dismiss and reopen each reach a row of their own.
+    review_ids = [
+        await seed_review(db, guild_id, reply_id, kind, status)
+        for reply_id, kind, status in (
+            (9001, "phrase", "open"),
+            (9002, "knowledge", "open"),
+            (9003, "none", "open"),
+            (9004, "phrase", "dismissed"),
+        )
+    ]
     # One paid turn and one free one, so /api/costs' model rows are never an empty list —
     # an empty one there would mean the ledger query broke, not that nothing was spent.
     await llm_record(
@@ -696,6 +707,10 @@ async def seed_world(client, web, guild, wf) -> dict:
         "chat_intent_id": str(chat_intent_id),
         "chat_line_id": str(chat_line_id),
         "chat_section_id": str(chat_section_id),
+        "chat_review_id": str(review_ids[0]),
+        "chat_review_change_id": str(review_ids[1]),
+        "chat_review_dismiss_id": str(review_ids[2]),
+        "chat_review_dismissed_id": str(review_ids[3]),
         "feature_request_id": str(feature_request_id),
         "member_request_id": str(member_request_id),
         "held_request_id": str(held_request_id),
@@ -788,6 +803,20 @@ async def snapshot(db) -> dict[str, str]:
         rows = sorted(repr(tuple(row)) for row in await cur.fetchall())
         found[table] = hashlib.sha256("\n".join(rows).encode()).hexdigest()
     return found
+
+
+async def seed_review(db, guild_id: int, reply_id: int, kind: str, status: str) -> int:
+    cur = await db.conn.execute(
+        "INSERT INTO chat_review(guild_id, channel_id, user_id, asked, answered, tier, reason, "
+        "reply_id, at, suggested_kind, suggested_intent, suggested_phrase, suggested_line, "
+        "suggested_why, tagged_at, status) VALUES (?, 5, ?, 'when does the grill go on', "
+        "'Ask a Lead!', 'important', 'ungrounded', ?, '2026-09-23T15:00:00+00:00', ?, "
+        "'cookout_hours', 'when does the grill go on', 'The grill goes on at six.', "
+        "'they meant the cookout hours', '2026-09-23T15:00:05+00:00', ?)",
+        (guild_id, MEMBER_ID, reply_id, kind, status),
+    )
+    await db.conn.commit()
+    return int(cur.lastrowid)
 
 
 async def seed_selftest_run(db, guild_id: int, channel_id: int) -> int:

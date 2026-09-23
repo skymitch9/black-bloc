@@ -41,6 +41,12 @@ const IDS = {
   // A STAFF-written knowledge note. The mock's third section is the one Black Bloc writes for
   // itself, and every write on that one refuses in words — see the contract's own note.
   chat_section_id: '1',
+  // The review queue: 1, 2 and 3 are open with a phrase, a fact and a new intent suggested; 4 is
+  // the dismissed one, the only kind Reopen takes.
+  chat_review_id: '1',
+  chat_review_change_id: '2',
+  chat_review_dismiss_id: '3',
+  chat_review_dismissed_id: '4',
   // The channel review: #welcome is one of the 94 channels the bot's seed drafted, so use,
   // none and reset all reach it; the fixture test channel has no draft and is refused.
   drafted_channel_id: '1285369365071527997',

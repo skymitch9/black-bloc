@@ -1995,3 +1995,224 @@ async def test_the_card_speaks_in_the_words_staff_chose(cog, bot, member, monkey
     await button(interaction.view, "Tones…").callback(interaction)
 
     assert interaction.embed.title == "Tones at the cookout"
+
+
+# --- the review loop (docs/info/chat-review-loop-design.md) ----------------------------------
+
+
+class NumberedMessage(FakeMessage):
+    """A message with an id, whose reply is a message with an id, the way Discord hands them."""
+
+    def __init__(self, *args, message_id=1, reply_id=500, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.id = message_id
+        self.reply_id = reply_id
+
+    async def reply(self, content=None, **kwargs):
+        await super().reply(content, **kwargs)
+        return SimpleNamespace(id=self.reply_id)
+
+
+def numbered(bot, member, content, **kwargs):
+    kwargs.setdefault("mentions", [bot.user])
+    return NumberedMessage(
+        member, content, guild=member.guild, channel=bot.guild.get_channel(CHANNEL), **kwargs
+    )
+
+
+@pytest.fixture
+def no_tagging(monkeypatch):
+    from black_bloc import chat_review
+
+    monkeypatch.setattr(chat_review, "schedule_tag", lambda bot, item_id: None)
+
+
+async def review_rows(db):
+    cur = await db.conn.execute("SELECT * FROM chat_review ORDER BY id")
+    return list(await cur.fetchall())
+
+
+async def test_asking_again_right_after_an_answer_queues_it(cog, bot, member, db, no_tagging):
+    await cog.on_message(numbered(bot, member, "<@55> hi there"))
+    await cog.on_message(
+        numbered(bot, member, "no but where is the food", message_id=2, mentions=[])
+    )
+
+    found = await review_rows(db)
+    assert [(row["reason"], row["reply_id"]) for row in found] == [("reask", 500)]
+    assert found[0]["asked"] == "<@55> hi there"
+
+
+async def test_a_thanks_after_an_answer_queues_nothing(cog, bot, member, db, no_tagging):
+    await cog.on_message(numbered(bot, member, "<@55> hi there"))
+    await cog.on_message(numbered(bot, member, "thanks!", message_id=2, mentions=[]))
+
+    assert await review_rows(db) == []
+
+
+async def test_an_ungrounded_careful_answer_is_queued_from_the_message_flow(
+    cog, bot, member, db, monkeypatch, no_tagging
+):
+    from black_bloc import chat_review
+
+    async def reply(bot, *, guild, member, channel, text):
+        chat_review.note_grounding(bot, channel.id, member.id, ())
+        return ("Ask a Lead!", "important", "cookout")
+
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+
+    await cog.on_message(numbered(bot, member, "<@55> what time does the thing start tonight?"))
+
+    assert [row["reason"] for row in await review_rows(db)] == ["ungrounded"]
+
+
+async def test_a_thumbs_down_on_the_answer_queues_it_and_the_bots_own_does_not(
+    cog, bot, member, db, no_tagging
+):
+    await cog.on_message(numbered(bot, member, "<@55> hi there"))
+    down = "\U0001f44e"
+    await cog.on_raw_reaction_add(
+        SimpleNamespace(guild_id=GUILD, user_id=BOT_ID, message_id=500, emoji=down)
+    )
+    assert await review_rows(db) == []
+
+    await cog.on_raw_reaction_add(
+        SimpleNamespace(guild_id=GUILD, user_id=902, message_id=500, emoji=down)
+    )
+    assert [row["reason"] for row in await review_rows(db)] == ["downvote"]
+
+
+async def queued(db, *, kind="phrase", intent="greeting", phrase="yo fam", line=None):
+    cur = await db.conn.execute(
+        "INSERT INTO chat_review(guild_id, channel_id, user_id, asked, answered, reason, at, "
+        "suggested_kind, suggested_intent, suggested_phrase, suggested_line, suggested_why, "
+        "tagged_at) VALUES (?, ?, ?, 'yo fam', 'Hey!', 'reask', 'x', ?, ?, ?, ?, 'a hello', 't')",
+        (GUILD, CHANNEL, USER, kind, intent, phrase, line),
+    )
+    await db.conn.commit()
+    return int(cur.lastrowid)
+
+
+async def open_the_queue(cog, bot, member, monkeypatch):
+    from black_bloc.chat import seed_defaults
+
+    await seed_defaults(bot.db, GUILD)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Review queue…").callback(interaction)
+    return interaction
+
+
+async def test_the_queue_pages_five_at_a_time_and_an_item_opens_its_card(
+    cog, bot, member, db, monkeypatch
+):
+    made = [await queued(db) for _ in range(6)]
+    interaction = await open_the_queue(cog, bot, member, monkeypatch)
+
+    assert interaction.embed.title == "Answers to review"
+    assert "**6** answer(s) may have missed" in interaction.embed.description
+    assert "Page 1 of 2" in interaction.embed.description
+    assert len(options(interaction.view, "An answer to review…")) == 5
+    assert "Next ›" in labels(interaction.view) and "‹ Previous" not in labels(interaction.view)
+
+    await pick_one(interaction, "An answer to review…", str(made[0]))
+
+    assert interaction.embed.title == f"Review item {made[0]}"
+    assert "add **yo fam** to **greeting**" in interaction.embed.description
+    assert {"Approve", "Write a fact…", "Dismiss", "Back"} <= set(labels(interaction.view))
+
+
+async def test_approve_on_the_panel_writes_the_phrase_and_goes_back_to_the_queue(
+    cog, bot, member, db, monkeypatch
+):
+    from black_bloc.chat import named_intent
+
+    made = await queued(db)
+    interaction = await open_the_queue(cog, bot, member, monkeypatch)
+    await pick_one(interaction, "An answer to review…", str(made))
+
+    await button(interaction.view, "Approve").callback(interaction)
+
+    assert "**yo fam** now reaches **greeting**" in interaction.sent
+    assert interaction.embed.title == "Answers to review"
+    row = await named_intent(db, GUILD, "greeting")
+    assert "yo fam" in row["triggers"]
+    assert "chat.review_approved" in await kinds_of(db)
+
+
+async def test_an_item_with_nothing_to_teach_has_no_approve(cog, bot, member, db, monkeypatch):
+    made = await queued(db, kind="none", intent=None, phrase=None)
+    interaction = await open_the_queue(cog, bot, member, monkeypatch)
+    await pick_one(interaction, "An answer to review…", str(made))
+
+    assert "Approve" not in labels(interaction.view)
+    await button(interaction.view, "Dismiss").callback(interaction)
+    assert f"Item **{made}** is dismissed" in interaction.sent
+
+
+async def test_change_picks_an_intent_then_asks_for_the_phrase(cog, bot, member, db, monkeypatch):
+    made = await queued(db)
+    interaction = await open_the_queue(cog, bot, member, monkeypatch)
+    await pick_one(interaction, "An answer to review…", str(made))
+
+    await pick_one(interaction, "Change it: this should reach…", "who_is_live")
+    modal = interaction.response.modals[-1]
+    assert str(modal.phrase.default) == "yo fam"
+    fill(modal, phrase="who is streaming")
+    await modal.on_submit(interaction)
+
+    assert "**who is streaming** now reaches **who_is_live**" in interaction.sent
+    row = (await review_rows(db))[0]
+    assert (row["status"], row["suggested_intent"]) == ("changed", "who_is_live")
+
+
+async def test_write_a_fact_goes_to_the_named_note(cog, bot, member, db, monkeypatch):
+    made = await queued(db, kind="knowledge", intent=None, phrase=None, line="Doors at six.")
+    interaction = await open_the_queue(cog, bot, member, monkeypatch)
+    await pick_one(interaction, "An answer to review…", str(made))
+
+    await button(interaction.view, "Write a fact…").callback(interaction)
+    modal = interaction.response.modals[-1]
+    assert str(modal.line.default) == "Doors at six."
+    fill(modal, line="Doors at six, food at seven.", section="Cookout")
+    await modal.on_submit(interaction)
+
+    assert "That fact is in the **Cookout** note now" in interaction.sent
+    bodies = {row["title"]: row["body"] for row in await knowledge.list_sections(db, GUILD)}
+    assert bodies["Cookout"] == "Doors at six, food at seven."
+
+
+async def test_an_item_decided_meanwhile_sends_staff_back_with_the_reason(
+    cog, bot, member, db, monkeypatch
+):
+    made = await queued(db)
+    interaction = await open_the_queue(cog, bot, member, monkeypatch)
+    await db.conn.execute("UPDATE chat_review SET status = 'dismissed' WHERE id = ?", (made,))
+    await db.conn.commit()
+
+    await pick_one(interaction, "An answer to review…", str(made))
+
+    assert interaction.embed.title == "Answers to review"
+    assert f"Item **{made}** was already dismissed" in interaction.sent
+
+
+async def test_the_review_tick_tags_and_posts_the_digest(cog, bot, monkeypatch):
+    from black_bloc import chat_review
+
+    tagged, digests = [], []
+
+    async def tag_waiting(bot):
+        tagged.append(True)
+        return 0
+
+    async def digest(bot, guild):
+        digests.append(guild.id)
+        return True
+
+    monkeypatch.setattr(chat_review, "tag_waiting", tag_waiting)
+    monkeypatch.setattr(chat_review, "digest", digest)
+    bot.guild.unavailable = False
+    await cog._review()
+
+    assert tagged == [True] and digests == [GUILD]
+    assert cog.loop_health("_review")[1] is None and cog.loop_health("_review")[0]

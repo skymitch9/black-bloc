@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
+from . import chat_review
 from .actionlog import log_action
 from .channel_notes import NOTE_CHARS, clean_note, clear_note, get_note, set_note
 from .chat_llm import LLM_MODE_KEY, money
@@ -45,6 +46,17 @@ from .settings_store import (
     CHANNEL_NOTE_TOO_LONG_KEY,
     CHANNEL_NOTE_WORDS,
     CHANNEL_NOTES_BUTTON_KEY,
+    REVIEW_ADDED_LINE_KEY,
+    REVIEW_ADDED_PHRASE_KEY,
+    REVIEW_DECIDED_KEY,
+    REVIEW_DISMISSED_KEY,
+    REVIEW_ITEM_KEY,
+    REVIEW_LINE_KEY,
+    REVIEW_MADE_INTENT_KEY,
+    REVIEW_NO_SUCH_KEY,
+    REVIEW_NOT_DISMISSED_KEY,
+    REVIEW_NOTHING_KEY,
+    REVIEW_REOPENED_KEY,
     TONE_EDITED_KEY,
     TONE_RESET_KEY,
     TONE_TOO_LONG_KEY,
@@ -184,6 +196,12 @@ REMOVE = "remove"
 EDIT = "edit"
 LIMITS = "limits"
 CHANNELS = "channels"
+REVIEW = "review"
+REVIEW_PREVIOUS = "review_previous"
+REVIEW_NEXT = "review_next"
+APPROVE = "approve"
+DISMISS = "dismiss"
+FACT = "fact"
 
 ANSWER_ON = "Answer @-mentions"
 ANSWER_OFF = "Stop answering @-mentions"
@@ -243,6 +261,12 @@ PANEL_MOVES: tuple[PanelMove, ...] = (
     CLEAR_PIN_MOVE,
     PREVIOUS_MOVE,
     NEXT_MOVE,
+    PanelMove(REVIEW, "Review queue…", row=1),
+    PanelMove(REVIEW_PREVIOUS, "‹ Previous", row=1),
+    PanelMove(REVIEW_NEXT, "Next ›", row=1),
+    PanelMove(APPROVE, "Approve", "success", row=1),
+    PanelMove(FACT, "Write a fact…", "primary", row=1),
+    PanelMove(DISMISS, "Dismiss", "danger", row=1),
 )
 
 
@@ -261,7 +285,7 @@ def panel_state(store: Any, guild_id: int) -> PanelState:
 
 
 def panel_buttons(
-    state: PanelState, *, staff: bool = True, channels_label: str = ""
+    state: PanelState, *, staff: bool = True, channels_label: str = "", review_label: str = ""
 ) -> tuple[PanelMove, ...]:
     """The §C root table as data; there is no member half of chat to render."""
     if not staff:
@@ -273,6 +297,7 @@ def panel_buttons(
         CHANNELS_MOVE._replace(label=channels_label or CHANNELS_MOVE.label),
         toggle_move(state, MODE_KEY),
         toggle_move(state, LLM_MODE_KEY),
+        PanelMove(REVIEW, review_label or "Review queue…", row=1),
         LOGS_MOVE,
         REFRESH_MOVE,
     )
@@ -930,6 +955,234 @@ def site_page_url(origin: Any) -> str | None:
     return library_site_page_url(origin, SITE_FEATURE)
 
 
+REVIEW_NO_SUCH_CODE = "no_such_review"
+REVIEW_DECIDED_CODE = "already_decided"
+REVIEW_NOTHING_CODE = "nothing_to_approve"
+REVIEW_NOT_DISMISSED_CODE = "not_dismissed"
+REVIEW_REFUSED_CODE = "review_refused"
+REVIEW_PAGE_SIZE = 5
+REVIEW_MOVE = PanelMove(REVIEW, "Review queue…", row=1)
+REVIEW_PREVIOUS_MOVE = PanelMove(REVIEW_PREVIOUS, "‹ Previous", row=1)
+REVIEW_NEXT_MOVE = PanelMove(REVIEW_NEXT, "Next ›", row=1)
+APPROVE_MOVE = PanelMove(APPROVE, "Approve", "success", row=1)
+FACT_MOVE = PanelMove(FACT, "Write a fact…", "primary", row=1)
+DISMISS_MOVE = PanelMove(DISMISS, "Dismiss", "danger", row=1)
+
+
+def review_words(bot: Any, guild: Any, key: str, **values: Any) -> str:
+    return chat_review.words(bot.store, guild.id, key, **values)
+
+
+def review_pages(total: int) -> int:
+    return max(1, -(-int(total or 0) // REVIEW_PAGE_SIZE))
+
+
+def review_buttons(
+    page: int, pages: int, labels: tuple[str, str] = ("", "")
+) -> tuple[PanelMove, ...]:
+    """Previous and Next render only when there is somewhere to go."""
+    found = []
+    if page > 1:
+        found.append(REVIEW_PREVIOUS_MOVE._replace(label=labels[0] or REVIEW_PREVIOUS_MOVE.label))
+    if page < pages:
+        found.append(REVIEW_NEXT_MOVE._replace(label=labels[1] or REVIEW_NEXT_MOVE.label))
+    return (*found, BACK_MOVE, REFRESH_MOVE)
+
+
+def review_item_buttons(
+    *, can_approve: bool, labels: tuple[str, str, str] = ("", "", "")
+) -> tuple[PanelMove, ...]:
+    """Approve renders only on an item whose suggestion teaches something."""
+    found = [APPROVE_MOVE._replace(label=labels[0] or APPROVE_MOVE.label)] if can_approve else []
+    found.append(FACT_MOVE._replace(label=labels[1] or FACT_MOVE.label))
+    found.append(DISMISS_MOVE._replace(label=labels[2] or DISMISS_MOVE.label))
+    return (*found, BACK_MOVE, REFRESH_MOVE)
+
+
+def teaches(row: Any) -> bool:
+    found = chat_review.suggestion_of(row)
+    return found is not None and found.kind in chat_review.TEACHES
+
+
+async def wanted_review(bot: Any, guild: Any, item_id: Any) -> tuple[Any, Outcome | None]:
+    """One review item of THIS server, or the refusal both doors say."""
+    row = await chat_review.get_item(bot.db, item_id)
+    if row is None or int(row["guild_id"]) != guild.id:
+        said = review_words(bot, guild, REVIEW_NO_SUCH_KEY, id=str(item_id)[:20])
+        return (None, refusal(said, REVIEW_NO_SUCH_CODE, 404))
+    return (row, None)
+
+
+def decided_already(bot: Any, guild: Any, row: Any) -> Outcome:
+    said = review_words(bot, guild, REVIEW_DECIDED_KEY, id=int(row["id"]), status=row["status"])
+    return refusal(said, REVIEW_DECIDED_CODE, 409)
+
+
+def taught_word(bot: Any, guild: Any, taught: Any) -> str:
+    if taught.kind == chat_review.KNOWLEDGE:
+        return review_words(bot, guild, REVIEW_ADDED_LINE_KEY, section=taught.section)
+    if taught.made:
+        return review_words(
+            bot, guild, REVIEW_MADE_INTENT_KEY, intent=taught.intent, phrase=taught.phrase
+        )
+    return review_words(
+        bot, guild, REVIEW_ADDED_PHRASE_KEY, phrase=taught.phrase, intent=taught.intent
+    )
+
+
+def review_refusal(bot: Any, guild: Any, exc: Any) -> Outcome:
+    said = review_words(bot, guild, exc.key, **exc.values) if exc.key else exc.said
+    return refusal(said, REVIEW_REFUSED_CODE, 400)
+
+
+async def settle_review(
+    bot: Any, guild: Any, actor: Any, row: Any, found: Any, status: str, via: str
+) -> Outcome:
+    """Claim the item, then write; a write that is refused hands the item back open."""
+    by = actor_id(actor)
+    changed = status == chat_review.CHANGED
+    if not await chat_review.decide(bot.db, int(row["id"]), status, by):
+        fresh = await chat_review.get_item(bot.db, int(row["id"]))
+        return decided_already(bot, guild, fresh or row)
+    try:
+        taught = await chat_review.teach(bot, guild.id, found, by)
+    except chat_review.ReviewError as exc:
+        await chat_review.undecide(bot.db, int(row["id"]), status)
+        return review_refusal(bot, guild, exc)
+    if changed:
+        await chat_review.record_change(bot.db, int(row["id"]), found)
+    kind = chat_review.CHANGED_KIND if changed else chat_review.APPROVED_KIND
+    await log_action(
+        bot,
+        guild,
+        kind_via(kind, via),
+        actor=actor,
+        target=int(row["user_id"]),
+        details={
+            "id": int(row["id"]),
+            "kind": taught.kind,
+            "intent": taught.intent,
+            "phrase": taught.phrase,
+            "section": taught.section,
+            "reason": row["reason"],
+            "via": via,
+        },
+    )
+    return Outcome(True, taught_word(bot, guild, taught), value=int(row["id"]))
+
+
+async def approve_review(
+    bot: Any, guild: Any, actor: Any, item_id: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    row, held = await wanted_review(bot, guild, item_id)
+    if held is not None:
+        return held
+    if row["status"] != chat_review.OPEN:
+        return decided_already(bot, guild, row)
+    if not teaches(row):
+        said = review_words(bot, guild, REVIEW_NOTHING_KEY, id=int(row["id"]))
+        return refusal(said, REVIEW_NOTHING_CODE, 409)
+    found = chat_review.suggestion_of(row)
+    return await settle_review(bot, guild, actor, row, found, chat_review.APPROVED, via)
+
+
+async def change_review(
+    bot: Any, guild: Any, actor: Any, item_id: Any, fields: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Staff's own phrase, intent or fact in place of the suggestion, written the same way."""
+    row, held = await wanted_review(bot, guild, item_id)
+    if held is not None:
+        return held
+    if row["status"] != chat_review.OPEN:
+        return decided_already(bot, guild, row)
+    given = dict(fields or {})
+    found = chat_review.Suggestion(
+        kind=str(given.get("kind") or "").strip().lower(),
+        intent=str(given.get("intent") or "").strip() or None,
+        phrase=" ".join(str(given.get("phrase") or "").split()) or None,
+        line=" ".join(str(given.get("line") or "").split()) or None,
+        section=str(given.get("section") or "").strip() or None,
+    )
+    return await settle_review(bot, guild, actor, row, found, chat_review.CHANGED, via)
+
+
+async def dismiss_review(
+    bot: Any, guild: Any, actor: Any, item_id: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    row, held = await wanted_review(bot, guild, item_id)
+    if held is not None:
+        return held
+    if not await chat_review.decide(
+        bot.db, int(row["id"]), chat_review.DISMISSED, actor_id(actor)
+    ):
+        fresh = await chat_review.get_item(bot.db, int(row["id"]))
+        return decided_already(bot, guild, fresh or row)
+    await log_action(
+        bot,
+        guild,
+        kind_via(chat_review.DISMISSED_KIND, via),
+        actor=actor,
+        target=int(row["user_id"]),
+        details={"id": int(row["id"]), "reason": row["reason"], "via": via},
+    )
+    said = review_words(bot, guild, REVIEW_DISMISSED_KEY, id=int(row["id"]))
+    return Outcome(True, said, value=int(row["id"]))
+
+
+async def reopen_review(
+    bot: Any, guild: Any, actor: Any, item_id: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Staff's way back from a dismissal; an approved item is undone where it was written."""
+    row, held = await wanted_review(bot, guild, item_id)
+    if held is not None:
+        return held
+    if not await chat_review.reopen(bot.db, int(row["id"])):
+        said = review_words(
+            bot, guild, REVIEW_NOT_DISMISSED_KEY, id=int(row["id"]), status=row["status"]
+        )
+        return refusal(said, REVIEW_NOT_DISMISSED_CODE, 409)
+    await log_action(
+        bot,
+        guild,
+        kind_via(chat_review.REOPENED_KIND, via),
+        actor=actor,
+        target=int(row["user_id"]),
+        details={"id": int(row["id"]), "via": via},
+    )
+    said = review_words(bot, guild, REVIEW_REOPENED_KEY, id=int(row["id"]))
+    return Outcome(True, said, value=int(row["id"]))
+
+
+def review_line(bot: Any, guild: Any, row: Any) -> str:
+    return review_words(
+        bot,
+        guild,
+        REVIEW_LINE_KEY,
+        id=int(row["id"]),
+        reason=chat_review.reason_word(bot.store, guild.id, row["reason"]),
+        when=str(row["at"])[:16].replace("T", " "),
+        asked=chat_review.clipped(row["asked"], 160),
+        suggestion=chat_review.suggestion_word(
+            bot.store, guild.id, chat_review.suggestion_of(row)
+        ),
+    )
+
+
+def review_item_text(bot: Any, guild: Any, row: Any) -> str:
+    found = chat_review.suggestion_of(row)
+    return review_words(
+        bot,
+        guild,
+        REVIEW_ITEM_KEY,
+        reason=chat_review.reason_word(bot.store, guild.id, row["reason"]),
+        when=str(row["at"])[:16].replace("T", " "),
+        asked=chat_review.clipped(row["asked"], 700),
+        answered=chat_review.clipped(row["answered"], 700),
+        suggestion=chat_review.suggestion_word(bot.store, guild.id, found),
+        why=f"_{found.why}_" if found is not None and found.why else "",
+    )
+
+
 __all__ = [
     "CAP_KEY",
     "COOLDOWN_KEY",
@@ -954,6 +1207,16 @@ __all__ = [
     "PanelMove",
     "PanelState",
     "add_note",
+    "approve_review",
+    "change_review",
+    "dismiss_review",
+    "reopen_review",
+    "review_buttons",
+    "review_item_buttons",
+    "review_item_text",
+    "review_line",
+    "review_pages",
+    "wanted_review",
     "channel_note",
     "channel_notes_buttons",
     "clear_channel_note",

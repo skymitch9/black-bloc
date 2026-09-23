@@ -99,6 +99,7 @@ def test_the_root_renders_its_row_and_nothing_else():
         chat_panel.CHANNELS,
         chat_panel.CHAT_TOGGLE,
         chat_panel.LLM_TOGGLE,
+        chat_panel.REVIEW,
         chat_panel.LOGS,
         chat_panel.REFRESH,
     ]
@@ -172,6 +173,8 @@ def test_every_move_the_panel_can_render_is_in_the_one_table():
     rendered |= {move.action for move in personality_buttons()}
     rendered |= {move.action for move in chat_panel.voices_buttons(2, 3)}
     rendered |= {move.action for move in chat_panel.member_buttons(True)}
+    rendered |= {move.action for move in chat_panel.review_buttons(2, 3)}
+    rendered |= {move.action for move in chat_panel.review_item_buttons(can_approve=True)}
 
     assert rendered == known
     assert all(0 <= move.row <= 4 for move in PANEL_MOVES)
@@ -670,3 +673,116 @@ async def test_the_paging_buttons_render_only_where_there_is_somewhere_to_go():
     assert acts(chat_panel.voices_buttons(2, 2))[0] == chat_panel.PREVIOUS
     assert chat_panel.CLEAR_PIN not in acts(chat_panel.member_buttons(False))
     assert chat_panel.page_count(26) == 2 and chat_panel.wanted_page(9, 2) == 2
+
+
+# --- the review queue's one write path (docs/info/chat-review-loop-design.md) ----------------
+
+
+async def a_review(
+    db, *, guild_id=GUILD, kind="phrase", intent="cookout_hours", phrase="grill", tagged=True
+):
+    cur = await db.conn.execute(
+        "INSERT INTO chat_review(guild_id, channel_id, user_id, asked, answered, reason, at, "
+        "suggested_kind, suggested_intent, suggested_phrase, suggested_line, tagged_at) "
+        "VALUES (?, 1, 900, 'when is the grill on', 'no idea', 'reask', 'x', ?, ?, ?, ?, ?)",
+        (guild_id, kind if tagged else None, intent, phrase, None, "t" if tagged else None),
+    )
+    await db.conn.commit()
+    return int(cur.lastrowid)
+
+
+async def review_status(db, item_id):
+    cur = await db.conn.execute("SELECT * FROM chat_review WHERE id = ?", (item_id,))
+    return await cur.fetchone()
+
+
+@pytest.fixture
+async def queue(bot, db):
+    from black_bloc.chat import create_intent
+
+    await create_intent(db, GUILD, "cookout_hours", ["cookout time"])
+    return bot
+
+
+async def test_approve_writes_the_phrase_and_logs_once(queue, actor, db):
+    from black_bloc.chat import named_intent, read_triggers
+
+    made = await a_review(db)
+    outcome = await chat_panel.approve_review(queue, queue.guild, actor, made, via=VIA_WEBSITE)
+    assert outcome.ok and "**grill** now reaches **cookout_hours**" in outcome.message
+    row = await named_intent(db, GUILD, "cookout_hours")
+    assert read_triggers(row["triggers"]) == ("cookout time", "grill")
+    assert (await review_status(db, made))["status"] == "approved"
+    assert [kind for kind, _ in await kinds(db)] == ["web.chat.review_approved"]
+    again = await chat_panel.approve_review(queue, queue.guild, actor, made)
+    assert (again.ok, again.status, again.code) == (False, 409, "already_decided")
+
+
+async def test_approve_refuses_an_item_with_nothing_to_teach(queue, actor, db):
+    for made in (await a_review(db, kind="none"), await a_review(db, tagged=False)):
+        outcome = await chat_panel.approve_review(queue, queue.guild, actor, made)
+        assert (outcome.ok, outcome.status, outcome.code) == (False, 409, "nothing_to_approve")
+        assert (await review_status(db, made))["status"] == "open"
+    assert await kinds(db) == []
+
+
+async def test_change_writes_staffs_fact_and_records_what_was_learned(queue, actor, db):
+    made = await a_review(db)
+    outcome = await chat_panel.change_review(
+        queue, queue.guild, actor, made, {"kind": "knowledge", "line": "Grill on at six."}
+    )
+    assert outcome.ok and "**From review**" in outcome.message
+    row = await review_status(db, made)
+    assert (row["status"], row["suggested_kind"], row["suggested_line"]) == (
+        "changed",
+        "knowledge",
+        "Grill on at six.",
+    )
+    sections = await knowledge.list_sections(db, GUILD)
+    found = [(one["title"], one["body"]) for one in sections]
+    assert found == [("From review", "Grill on at six.")]
+    assert [kind for kind, _ in await kinds(db)] == ["chat.review_changed"]
+
+
+async def test_a_refused_change_hands_the_item_back_open(queue, actor, db):
+    made = await a_review(db)
+    outcome = await chat_panel.change_review(
+        queue, queue.guild, actor, made, {"kind": "phrase", "intent": "nope", "phrase": "hi"}
+    )
+    assert (outcome.ok, outcome.status) == (False, 400)
+    assert "no intent called **nope**" in outcome.message
+    row = await review_status(db, made)
+    assert (row["status"], row["suggested_intent"]) == ("open", "cookout_hours")
+    assert await kinds(db) == []
+
+
+async def test_dismiss_then_reopen_and_an_approved_item_does_not_reopen(queue, actor, db):
+    made = await a_review(db)
+    assert (await chat_panel.dismiss_review(queue, queue.guild, actor, made)).ok
+    assert (await review_status(db, made))["status"] == "dismissed"
+    back = await chat_panel.reopen_review(queue, queue.guild, actor, made)
+    assert back.ok and (await review_status(db, made))["status"] == "open"
+    await chat_panel.approve_review(queue, queue.guild, actor, made)
+    held = await chat_panel.reopen_review(queue, queue.guild, actor, made)
+    assert (held.ok, held.code) == (False, "not_dismissed")
+    assert [kind for kind, _ in await kinds(db)] == [
+        "chat.review_dismissed",
+        "chat.review_reopened",
+        "chat.review_approved",
+    ]
+
+
+async def test_another_servers_item_is_not_there(queue, actor, db):
+    made = await a_review(db, guild_id=GUILD + 1)
+    outcome = await chat_panel.dismiss_review(queue, queue.guild, actor, made)
+    assert (outcome.ok, outcome.status, outcome.code) == (False, 404, "no_such_review")
+
+
+def test_approve_renders_only_on_an_item_that_teaches_something():
+    with_it = [move.action for move in chat_panel.review_item_buttons(can_approve=True)]
+    without = [move.action for move in chat_panel.review_item_buttons(can_approve=False)]
+    assert with_it[0] == chat_panel.APPROVE and chat_panel.APPROVE not in without
+    assert [move.action for move in chat_panel.review_buttons(1, 1)] == [
+        chat_panel.BACK,
+        chat_panel.REFRESH,
+    ]

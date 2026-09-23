@@ -715,6 +715,58 @@ const SETTING_SPECS = [
   ['minutes_keep_days', 'int', 90, 90, 'how long a meeting\u2019s TRANSCRIPT is kept before it is deleted; 90 days by default. The notes and the meeting itself are kept until somebody deletes them', null, 365, 1],
   ['minutes_panel_minutes', 'int', 10, 10, "minutes the /minutes panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440, 1],
   ["time_step_minutes", "int", 15, 15, "how far apart the Minute dropdown's choices are on the /event and /raidtrain draft panels, 5 to 60 minutes; 15 gives :00, :15, :30 and :45", null, 60, 5],
+  // The chat review loop (docs/info/chat-review-loop-design.md) — black_bloc/settings_store.py owns
+  // them; these are the mock's copy.
+  ["chat_review_mode", "enum", "on", "on", "on (a chat answer that may have missed lands in the Chat page's review queue, the cheap model suggests what Black Bloc should learn from it, and staff approve, change or dismiss it) or off (nothing new is queued, tagged or posted; items already waiting stay reviewable)", ["off", "on"]],
+  ["chat_review_reask_seconds", "int", 90, 90, "seconds after an answer in which the same person writing again in the same channel counts as asking again, so the answer is queued for review; a thanks or an ok never counts. 0 turns this reason off, up to 3600", null, 3600, 0],
+  ["chat_review_downvote_emoji", "text", "\ud83d\udc4e", "\ud83d\udc4e", "the reaction that queues one of Black Bloc's chat answers for review when anybody but the bot puts it on the answer; blank turns this reason off"],
+  ["chat_review_not_it_phrases", "text", "not what i meant, thats not what i meant, thats not it, not what i asked, you didnt answer, that doesnt answer, wrong answer, no i meant", "not what i meant, thats not what i meant, thats not it, not what i asked, you didnt answer, that doesnt answer, wrong answer, no i meant", "phrases, separated by commas, that mean the answer missed when somebody says one straight after it (not what i meant, thats not it); the answer is queued for review. Blank turns this reason off"],
+  ["chat_review_ack_phrases", "text", "thanks, thank you, thx, ty, tysm, ok, okay, k, kk, cool, nice, got it, gotcha, perfect, great, awesome, bet, lol, lmao, haha, yes, yep, yeah, no worries, appreciate it, love it", "thanks, thank you, thx, ty, tysm, ok, okay, k, kk, cool, nice, got it, gotcha, perfect, great, awesome, bet, lol, lmao, haha, yes, yep, yeah, no worries, appreciate it, love it", "phrases, separated by commas, that are a thanks or an ok rather than asking again \u2014 a follow-up that is only one of these never queues the answer for review"],
+  ["chat_review_digest_hour", "int", 9, 9, "the hour of the day, in default_timezone, when one line goes to the log channel saying how many chat answers wait for review; nothing is posted when none wait. 0 to 23", null, 23, 0],
+  ["chat_review_digest", "text", "**{count}** chat answer(s) are waiting for review \u2014 approve, change or dismiss them on the Chat page: {link}", "**{count}** chat answer(s) are waiting for review \u2014 approve, change or dismiss them on the Chat page: {link}", "the one line posted to the log channel once a day while chat answers wait for review. It takes {count}, how many wait, and {link}, the Chat page's review queue"],
+  ["chat_review_added_phrase", "text", "**{phrase}** now reaches **{intent}**. The next person who says it gets that intent's lines.", "**{phrase}** now reaches **{intent}**. The next person who says it gets that intent's lines.", "what staff are told when a review adds a phrase to an intent, on /chat and on the Chat page. It takes {phrase} and {intent}"],
+  ["chat_review_made_intent", "text", "**{intent}** is in, with **{phrase}** as its first phrase. Its one line is a switched-off placeholder, so it stays quiet until somebody writes the real line on the Chat page's Intents section and switches it on.", "**{intent}** is in, with **{phrase}** as its first phrase. Its one line is a switched-off placeholder, so it stays quiet until somebody writes the real line on the Chat page's Intents section and switches it on.", "what staff are told when a review makes a new intent. It takes {intent} and {phrase}"],
+  ["chat_review_placeholder_line", "text", "Write what Black Bloc should say here, then switch this line on.", "Write what Black Bloc should say here, then switch this line on.", "the placeholder line a review puts on an intent it makes; it is stored switched off, so nobody is ever answered with it"],
+  ["chat_review_added_line", "text", "That fact is in the **{section}** note now. Black Bloc quotes it the next time a question matches.", "That fact is in the **{section}** note now. Black Bloc quotes it the next time a question matches.", "what staff are told when a review adds a fact to a knowledge note. It takes {section}, the note's heading"],
+  ["chat_review_dismissed", "text", "Item **{id}** is dismissed and nothing was learned from it. **Reopen** on the Chat page puts it back in the queue.", "Item **{id}** is dismissed and nothing was learned from it. **Reopen** on the Chat page puts it back in the queue.", "what staff are told when a review item is dismissed. It takes {id}"],
+  ["chat_review_reopened", "text", "Item **{id}** is back in the review queue.", "Item **{id}** is back in the review queue.", "what staff are told when a dismissed review item is reopened. It takes {id}"],
+  ["chat_review_no_such", "text", "There is no review item **{id}** in this server any more, so nothing was done. Refresh the queue and pick again.", "There is no review item **{id}** in this server any more, so nothing was done. Refresh the queue and pick again.", "what staff are told when the review item they acted on has gone. It takes {id}"],
+  ["chat_review_decided", "text", "Item **{id}** was already {status}, so nothing was done \u2014 somebody else got there first. Refresh the queue.", "Item **{id}** was already {status}, so nothing was done \u2014 somebody else got there first. Refresh the queue.", "what staff are told when a review item was decided while they were looking at it. It takes {id} and {status}"],
+  ["chat_review_not_dismissed", "text", "Only a dismissed item goes back in the queue. Item **{id}** was {status}, and what it taught Black Bloc stays on the Intents or Knowledge section, where it can be edited or removed.", "Only a dismissed item goes back in the queue. Item **{id}** was {status}, and what it taught Black Bloc stays on the Intents or Knowledge section, where it can be edited or removed.", "what staff are told when they reopen an item that was approved or changed. It takes {id} and {status}"],
+  ["chat_review_nothing_suggested", "text", "Item **{id}** has nothing to approve \u2014 the cheap model found nothing that fits, or has not looked at it yet. Change it to a phrase or a fact yourself, or dismiss it.", "Item **{id}** has nothing to approve \u2014 the cheap model found nothing that fits, or has not looked at it yet. Change it to a phrase or a fact yourself, or dismiss it.", "what staff are told when they approve an item with no suggestion. It takes {id}"],
+  ["chat_review_no_intent", "text", "This server has no intent called **{intent}**, so nothing was saved. Pick one from the list.", "This server has no intent called **{intent}**, so nothing was saved. Pick one from the list.", "what staff are told when a review names an intent that does not exist. It takes {intent}"],
+  ["chat_review_needs_phrase", "text", "A phrase needs some words in it, so nothing was saved.", "A phrase needs some words in it, so nothing was saved.", "what staff are told when a review's phrase is blank"],
+  ["chat_review_needs_line", "text", "A fact needs some words in it, so nothing was saved.", "A fact needs some words in it, so nothing was saved.", "what staff are told when a review's knowledge fact is blank"],
+  ["chat_review_bad_kind", "text", "**{kind}** is not something a review can teach, so nothing was saved. It is a phrase for an intent, a new intent, or a knowledge fact.", "**{kind}** is not something a review can teach, so nothing was saved. It is a phrase for an intent, a new intent, or a knowledge fact.", "what staff are told when a review change names no known kind. It takes {kind}"],
+  ["chat_review_section_default", "text", "From review", "From review", "the heading of the knowledge note a reviewed fact goes into when the cheap model named no note of its own"],
+  ["chat_review_button", "text", "Review queue\u2026", "Review queue\u2026", "the /chat panel button that opens the review queue. Discord shows at most 80 characters on a button"],
+  ["chat_review_title", "text", "Answers to review", "Answers to review", "the heading of the review queue card on /chat"],
+  ["chat_review_intro", "text", "**{count}** answer(s) may have missed. Pick one to approve what the cheap model suggests, change it, or dismiss it.", "**{count}** answer(s) may have missed. Pick one to approve what the cheap model suggests, change it, or dismiss it.", "the first line of the review queue card on /chat. It takes {count}, how many wait"],
+  ["chat_review_empty", "text", "Nothing is waiting. An answer lands here when a real question found no note, somebody asks again straight away, says it was not what they meant, or gives it a thumbs down.", "Nothing is waiting. An answer lands here when a real question found no note, somebody asks again straight away, says it was not what they meant, or gives it a thumbs down.", "what the review queue card says when nothing waits"],
+  ["chat_review_capped", "text", "This month's model money is spent, so new items wait untagged until the 1st. Change and Dismiss still work.", "This month's model money is spent, so new items wait untagged until the 1st. Change and Dismiss still work.", "the line the review queue adds while the monthly cap stops the cheap model tagging"],
+  ["chat_review_untagged", "text", "not looked at yet", "not looked at yet", "the words in place of a suggestion on an item the cheap model has not tagged"],
+  ["chat_review_line", "text", "`{id}` \u00b7 {reason} \u00b7 {when}\n> {asked}\nSuggested: {suggestion}", "`{id}` \u00b7 {reason} \u00b7 {when}\n> {asked}\nSuggested: {suggestion}", "one item's lines on the review queue card. It takes {id}, {reason}, {when}, {asked} \u2014 what the person said \u2014 and {suggestion}"],
+  ["chat_review_item_title", "text", "Review item {id}", "Review item {id}", "the heading of one review item's card on /chat. It takes {id}"],
+  ["chat_review_item", "text", "**Why it is here:** {reason} \u00b7 {when}\n**They said:**\n> {asked}\n**Black Bloc answered:**\n> {answered}\n**Suggested:** {suggestion}\n{why}", "**Why it is here:** {reason} \u00b7 {when}\n**They said:**\n> {asked}\n**Black Bloc answered:**\n> {answered}\n**Suggested:** {suggestion}\n{why}", "the body of one review item's card on /chat. It takes {reason}, {when}, {asked}, {answered}, {suggestion} and {why}, the cheap model's reason"],
+  ["chat_review_pick_placeholder", "text", "An answer to review\u2026", "An answer to review\u2026", "the item picker's placeholder on the review queue card. Discord shows at most 150 characters"],
+  ["chat_review_change_placeholder", "text", "Change it: this should reach\u2026", "Change it: this should reach\u2026", "the intent picker's placeholder on a review item's card; picking one asks for the phrase. Discord shows at most 150 characters"],
+  ["chat_review_approve_button", "text", "Approve", "Approve", "the button that writes a review item's suggestion. Discord shows at most 80 characters"],
+  ["chat_review_dismiss_button", "text", "Dismiss", "Dismiss", "the button that dismisses a review item. Discord shows at most 80 characters"],
+  ["chat_review_fact_button", "text", "Write a fact\u2026", "Write a fact\u2026", "the button that turns a review item into a knowledge fact instead. Discord shows at most 80 characters"],
+  ["chat_review_phrase_modal", "text", "A phrase for {intent}", "A phrase for {intent}", "the title of the form a review's phrase is written in. It takes {intent}; Discord cuts a form title at 45 characters"],
+  ["chat_review_phrase_label", "text", "The words somebody would say", "The words somebody would say", "the label over the phrase box. Discord shows at most 45 characters on a form label"],
+  ["chat_review_fact_modal", "text", "A fact Black Bloc should know", "A fact Black Bloc should know", "the title of the form a review's knowledge fact is written in. Discord cuts a form title at 45 characters"],
+  ["chat_review_fact_label", "text", "One line, in plain words", "One line, in plain words", "the label over the fact box. Discord shows at most 45 characters on a form label"],
+  ["chat_review_section_label", "text", "The note it goes in", "The note it goes in", "the label over the note-heading box on the fact form. Discord shows at most 45 characters on a form label"],
+  ["chat_review_page", "text", "Page {page} of {pages}", "Page {page} of {pages}", "the page line on the review queue card when more than five wait. It takes {page} and {pages}"],
+  ["chat_review_reason_ungrounded", "text", "a real question found no note", "a real question found no note", "the reason shown on an item queued because the careful tier answered with nothing written down to ground it"],
+  ["chat_review_reason_reask", "text", "they asked again straight away", "they asked again straight away", "the reason shown on an item queued because the same person wrote again within chat_review_reask_seconds"],
+  ["chat_review_reason_downvote", "text", "somebody gave it a thumbs down", "somebody gave it a thumbs down", "the reason shown on an item queued because of the chat_review_downvote_emoji reaction"],
+  ["chat_review_reason_not_it", "text", "they said it was not what they meant", "they said it was not what they meant", "the reason shown on an item queued because the follow-up said one of the chat_review_not_it_phrases"],
+  ["chat_review_suggest_phrase", "text", "add **{phrase}** to **{intent}**", "add **{phrase}** to **{intent}**", "how a suggested phrase reads on a review item. It takes {phrase} and {intent}"],
+  ["chat_review_suggest_intent", "text", "a new intent **{intent}** for **{phrase}**", "a new intent **{intent}** for **{phrase}**", "how a suggested new intent reads on a review item. It takes {intent} and {phrase}"],
+  ["chat_review_suggest_knowledge", "text", "a fact for **{section}**: {line}", "a fact for **{section}**: {line}", "how a suggested knowledge fact reads on a review item. It takes {section} and {line}"],
+  ["chat_review_suggest_none", "text", "nothing to learn", "nothing to learn", "how a review item reads when the cheap model found nothing that fits"],
 ];
 
 const RULES = {
@@ -1393,6 +1445,9 @@ function seedState() {
     { id: 2, title: 'How to get a role', body: 'Pick one from the role menus in #roles. A few of them are asked for rather than taken, and staff answer those on the site.', source: 'staff', tag: 'roles', updated_at: minutesAgo(4000), updated_by: MEMBERS[1].id },
     { id: 3, title: 'Channels', body: 'general — the front room. cookout-planning — who is bringing what. free-nitro-here — a trap, do not post in it.', source: 'server', tag: null, updated_at: minutesAgo(120), updated_by: null },
   ],
+  // The chat review loop: three open items, each with a suggestion of a different kind, and one
+  // already dismissed so Reopen has somewhere to start.
+  review: seedReview(),
   tropes: seedTropes(),
   voices: seedVoices(),
   ledger: seedLedger(),
@@ -7623,6 +7678,277 @@ route('DELETE', '/api/chat/knowledge/:id', (context) => {
   state.knowledge = state.knowledge.filter((one) => one.id !== row.id);
   logAction('web.chat.knowledge_removed', { details: { title: row.title, via: 'website' } });
   return { removed: true, section_id: String(row.id), message: `**${row.title}** is gone. Black Bloc will not quote it again.` };
+});
+
+// The chat review loop (docs/info/chat-review-loop-design.md). Mirrors black_bloc/chat_review.py,
+// black_bloc/chat_panel.py's four moves and black_bloc/api/tools/chat.py's /review routes.
+const REVIEW_GUILD_ID = '900000000000000000';
+const REVIEW_REASONS = ['ungrounded', 'reask', 'downvote', 'not_it'];
+const REVIEW_STATUSES = ['open', 'approved', 'changed', 'dismissed'];
+const REVIEW_TEACHES = ['intent', 'phrase', 'knowledge'];
+const REVIEW_READY = 'The cheap model suggests something for each new item as it arrives.';
+const REVIEW_NO_KEY = 'Black Bloc has not been given a GROQ_API_KEY, so new items wait untagged. Change and Dismiss still work; a Lead sets the key on the host.';
+const REVIEW_OFF = 'chat_review_mode is off, so nothing new is queued or tagged. The items already here can still be decided.';
+const REVIEW_REASON_KEYS = {
+  ungrounded: 'chat_review_reason_ungrounded',
+  reask: 'chat_review_reason_reask',
+  downvote: 'chat_review_reason_downvote',
+  not_it: 'chat_review_reason_not_it',
+};
+
+function seedReview() {
+  const at = (minutes) => minutesAgo(minutes);
+  return [
+    {
+      id: 1, user_id: MEMBERS[1].id, channel_id: '800000000000000002', reply_id: '810000000000000001',
+      asked: 'when does the grill actually go on this saturday?', answered: 'Good question! Ask a Lead in #general and they will sort you out.',
+      tier: 'important', trope: 'cookout', intent: 'unknown', reason: 'ungrounded', at: at(95),
+      suggestion: { kind: 'phrase', intent: 'cookout_hours', intent_id: '1', phrase: 'when does the grill go on', line: null, section: null, why: 'they were asking the cookout hours in other words', tagged_at: at(94) },
+      status: 'open', decided_by: null, decided_at: null,
+    },
+    {
+      id: 2, user_id: MEMBERS[3].id, channel_id: '800000000000000002', reply_id: '810000000000000002',
+      asked: 'is there parking by the park or do we street park', answered: 'Parking is usually easy — just look around when you get there!',
+      tier: 'important', trope: 'cookout', intent: 'unknown', reason: 'not_it', at: at(300),
+      suggestion: { kind: 'knowledge', intent: null, intent_id: null, phrase: null, line: 'There is a free lot beside the park; street parking fills up by six.', section: 'Cookout hours', why: 'a real question about the venue that no note answers', tagged_at: at(299) },
+      status: 'open', decided_by: null, decided_at: null,
+    },
+    {
+      id: 3, user_id: MEMBERS[6].id, channel_id: '800000000000000002', reply_id: '810000000000000003',
+      asked: 'yo who is doing the playlist tonight', answered: 'Not sure I follow, Dax — try `/help` for what I can do.',
+      tier: null, trope: null, intent: 'unknown', reason: 'downvote', at: at(1500),
+      suggestion: { kind: 'intent', intent: 'playlist', intent_id: null, phrase: 'who is doing the playlist', line: null, section: null, why: 'asked more than once and nothing covers it', tagged_at: at(1499) },
+      status: 'open', decided_by: null, decided_at: null,
+    },
+    {
+      id: 4, user_id: MEMBERS[2].id, channel_id: '800000000000000002', reply_id: '810000000000000004',
+      asked: 'lol ok', answered: 'Hey Rivet!',
+      tier: 'simple', trope: 'cookout', intent: 'greeting', reason: 'reask', at: at(4000),
+      suggestion: { kind: 'none', intent: null, intent_id: null, phrase: null, line: null, section: null, why: 'small talk, nothing to learn', tagged_at: at(3999) },
+      status: 'dismissed', decided_by: STAFF.id, decided_at: at(3900),
+    },
+  ];
+}
+
+function reviewWord(key, values = {}) {
+  return noteWords(key, values);
+}
+
+function reviewSuggestionWord(found) {
+  if (!found) return reviewWord('chat_review_untagged');
+  if (found.kind === 'phrase') return reviewWord('chat_review_suggest_phrase', { phrase: found.phrase, intent: found.intent });
+  if (found.kind === 'intent') return reviewWord('chat_review_suggest_intent', { intent: found.intent, phrase: found.phrase });
+  if (found.kind === 'knowledge') {
+    return reviewWord('chat_review_suggest_knowledge', { section: found.section || reviewWord('chat_review_section_default'), line: found.line });
+  }
+  return reviewWord('chat_review_suggest_none');
+}
+
+function reviewRow(row) {
+  const found = row.suggestion;
+  const channel = CHANNELS.find((one) => one.id === row.channel_id);
+  return {
+    id: String(row.id),
+    member: { id: String(row.user_id), name: memberName(row.user_id) || String(row.user_id) },
+    channel: { id: String(row.channel_id), name: channel ? channel.name : String(row.channel_id) },
+    asked: row.asked,
+    answered: row.answered,
+    tier: row.tier,
+    trope: row.trope,
+    intent: row.intent,
+    reason: row.reason,
+    reason_word: reviewWord(REVIEW_REASON_KEYS[row.reason]),
+    at: row.at,
+    link: `https://discord.com/channels/${REVIEW_GUILD_ID}/${row.channel_id}/${row.reply_id}`,
+    suggestion: found ? {
+      kind: found.kind,
+      intent: found.intent,
+      intent_id: found.intent_id,
+      phrase: found.phrase,
+      line: found.line,
+      section: found.section,
+      why: found.why,
+      word: reviewSuggestionWord(found),
+      teaches: REVIEW_TEACHES.includes(found.kind),
+    } : null,
+    status: row.status,
+    decided_by: row.decided_by ? { id: String(row.decided_by), name: memberName(row.decided_by) || String(row.decided_by) } : null,
+    decided_at: row.decided_at,
+  };
+}
+
+function reviewCountsOf() {
+  const counts = Object.fromEntries(REVIEW_STATUSES.map((one) => [one, 0]));
+  for (const row of state.review) counts[row.status] += 1;
+  counts.untagged = state.review.filter((row) => row.status === 'open' && !row.suggestion).length;
+  return counts;
+}
+
+function reviewTagging() {
+  if (state.settings.get('chat_review_mode') !== 'on') return { ok: false, why: 'off', word: REVIEW_OFF };
+  if (!state.llmKeys.GROQ_API_KEY) return { ok: false, why: 'no_key', word: REVIEW_NO_KEY };
+  return { ok: true, why: null, word: REVIEW_READY };
+}
+
+function wantedReview(id) {
+  const found = state.review.find((row) => String(row.id) === String(id));
+  if (!found) throw new Refused(404, 'no_such_review', reviewWord('chat_review_no_such', { id: String(id).slice(0, 20) }));
+  return found;
+}
+
+function stillOpen(row) {
+  if (row.status !== 'open') {
+    throw new Refused(409, 'already_decided', reviewWord('chat_review_decided', { id: row.id, status: row.status }));
+  }
+}
+
+function reviewTeach(found) {
+  if (!REVIEW_TEACHES.includes(found.kind)) {
+    throw new Refused(400, 'review_refused', reviewWord('chat_review_bad_kind', { kind: String(found.kind || '').slice(0, 40) }));
+  }
+  if (found.kind === 'knowledge') {
+    const line = String(found.line || '').split(/\s+/).filter(Boolean).join(' ');
+    if (!line) throw new Refused(400, 'review_refused', reviewWord('chat_review_needs_line'));
+    const fallback = reviewWord('chat_review_section_default');
+    let title = String(found.section || '').trim() || fallback;
+    let note = state.knowledge.find((row) => row.source === 'staff' && row.title.toLowerCase() === title.toLowerCase());
+    if (!note && state.knowledge.some((row) => row.source === 'server' && row.title.toLowerCase() === title.toLowerCase())) {
+      title = fallback;
+      note = state.knowledge.find((row) => row.source === 'staff' && row.title === title);
+    }
+    if (note) {
+      note.body = `${note.body.trimEnd()}\n${line}`;
+      note.updated_at = now();
+      note.updated_by = STAFF.id;
+      return reviewWord('chat_review_added_line', { section: note.title });
+    }
+    state.knowledge.push({ id: state.nextKnowledge++, title, body: line, source: 'staff', tag: null, updated_at: now(), updated_by: STAFF.id });
+    return reviewWord('chat_review_added_line', { section: title });
+  }
+  const phrase = String(found.phrase || '').split(/\s+/).filter(Boolean).join(' ');
+  if (!phrase) throw new Refused(400, 'review_refused', reviewWord('chat_review_needs_phrase'));
+  const name = String(found.intent || '').trim();
+  const existing = state.chatIntents.find((row) => row.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    if (!existing.triggers.includes(phrase)) existing.triggers.push(phrase);
+    existing.updated_at = now();
+    return reviewWord('chat_review_added_phrase', { phrase, intent: existing.name });
+  }
+  if (found.kind === 'phrase') throw new Refused(400, 'review_refused', reviewWord('chat_review_no_intent', { intent: name }));
+  const made = { id: state.nextChatIntent++, name: name || 'asked', kind: 'canned', triggers: [phrase], enabled: true, sort: 0, created_by: STAFF.id, updated_at: now(), builtin: false };
+  state.chatIntents.push(made);
+  state.chatLines.push({ id: state.nextChatLine++, intent_id: made.id, text: reviewWord('chat_review_placeholder_line'), slot: 'filled', enabled: false, created_by: STAFF.id, updated_at: now() });
+  return reviewWord('chat_review_made_intent', { intent: made.name, phrase });
+}
+
+function reviewSettle(row, found, status) {
+  stillOpen(row);
+  const message = reviewTeach(found);
+  row.status = status;
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  if (status === 'changed') row.suggestion = { ...(row.suggestion || {}), ...found, why: row.suggestion ? row.suggestion.why : '', tagged_at: row.suggestion ? row.suggestion.tagged_at : null };
+  logAction(`web.chat.review_${status}`, { target_id: row.user_id, details: { id: row.id, kind: found.kind, reason: row.reason, via: 'website' } });
+  return { item: reviewRow(row), message };
+}
+
+function reviewMarkdown(rows) {
+  const lines = [`# Chat review queue — ${rows.length} open`, '', `Exported ${now().slice(0, 16)} UTC.`, ''];
+  for (const row of rows) {
+    const shown = reviewRow(row);
+    lines.push(`## Item ${row.id} — ${shown.reason_word}`, '', `- when: ${row.at}`,
+      `- tier: ${row.tier || 'written line'} · intent matched: ${row.intent || '-'}`,
+      `- asked: ${JSON.stringify(row.asked)}`, `- answered: ${JSON.stringify(row.answered)}`,
+      `- suggestion: ${(shown.suggestion ? shown.suggestion.word : reviewWord('chat_review_untagged')).replaceAll('**', '')}`);
+    if (row.suggestion && row.suggestion.why) lines.push(`- why: ${row.suggestion.why}`);
+    lines.push('');
+  }
+  return `${lines.join('\n').trimEnd()}\n`;
+}
+
+route('GET', '/api/chat/review', (context) => {
+  requireStaff(context.session);
+  const params = context.url.searchParams;
+  const status = String(params.get('status') || 'open').toLowerCase();
+  const reason = String(params.get('reason') || '').toLowerCase() || null;
+  if (status !== 'all' && !REVIEW_STATUSES.includes(status)) {
+    throw new Refused(400, 'bad_status', `**${status.slice(0, 40)}** is not a state a review item can be in, so the queue was not filtered. They are open, approved, changed, dismissed, or all.`);
+  }
+  if (reason && !REVIEW_REASONS.includes(reason)) {
+    throw new Refused(400, 'bad_reason', `**${reason.slice(0, 40)}** is not a reason an answer is queued for, so the queue was not filtered. They are ungrounded, reask, downvote and not_it.`);
+  }
+  const rows = state.review
+    .filter((row) => (status === 'all' || row.status === status) && (!reason || row.reason === reason))
+    .sort((a, b) => b.id - a.id);
+  return {
+    items: rows.map(reviewRow),
+    counts: reviewCountsOf(),
+    tagging: reviewTagging(),
+    reasons: REVIEW_REASONS.map((key) => ({ key, word: reviewWord(REVIEW_REASON_KEYS[key]) })),
+    statuses: [...REVIEW_STATUSES],
+    intents: state.chatIntents.map((row) => row.name),
+    filter: { status, reason },
+    notes: [],
+  };
+});
+
+route('GET', '/api/chat/review.md', (context) => {
+  // NOT in contract.json: check.mjs reads JSON shapes, and this one answers text/markdown.
+  requireStaff(context.session);
+  const rows = state.review.filter((row) => row.status === 'open').sort((a, b) => b.id - a.id);
+  return {
+    status: 200,
+    headers: { 'content-type': 'text/markdown; charset=utf-8', 'content-disposition': 'attachment; filename="chat-review-queue.md"' },
+    body: reviewMarkdown(rows),
+  };
+});
+
+route('POST', '/api/chat/review/:id/approve', (context) => {
+  requireStaff(context.session);
+  const row = wantedReview(context.params.id);
+  stillOpen(row);
+  if (!row.suggestion || !REVIEW_TEACHES.includes(row.suggestion.kind)) {
+    throw new Refused(409, 'nothing_to_approve', reviewWord('chat_review_nothing_suggested', { id: row.id }));
+  }
+  return reviewSettle(row, row.suggestion, 'approved');
+});
+
+route('PUT', '/api/chat/review/:id', async (context) => {
+  requireStaff(context.session);
+  const row = wantedReview(context.params.id);
+  const body = await context.body();
+  const found = {
+    kind: String(body.kind || '').trim().toLowerCase(),
+    intent: String(body.intent || '').trim() || null,
+    phrase: String(body.phrase || '').split(/\s+/).filter(Boolean).join(' ') || null,
+    line: String(body.line || '').split(/\s+/).filter(Boolean).join(' ') || null,
+    section: String(body.section || '').trim() || null,
+  };
+  return reviewSettle(row, found, 'changed');
+});
+
+route('POST', '/api/chat/review/:id/dismiss', (context) => {
+  requireStaff(context.session);
+  const row = wantedReview(context.params.id);
+  stillOpen(row);
+  row.status = 'dismissed';
+  row.decided_by = STAFF.id;
+  row.decided_at = now();
+  logAction('web.chat.review_dismissed', { target_id: row.user_id, details: { id: row.id, reason: row.reason, via: 'website' } });
+  return { item: reviewRow(row), message: reviewWord('chat_review_dismissed', { id: row.id }) };
+});
+
+route('POST', '/api/chat/review/:id/reopen', (context) => {
+  requireStaff(context.session);
+  const row = wantedReview(context.params.id);
+  if (row.status !== 'dismissed') {
+    throw new Refused(409, 'not_dismissed', reviewWord('chat_review_not_dismissed', { id: row.id, status: row.status }));
+  }
+  row.status = 'open';
+  row.decided_by = null;
+  row.decided_at = null;
+  logAction('web.chat.review_reopened', { target_id: row.user_id, details: { id: row.id, via: 'website' } });
+  return { item: reviewRow(row), message: reviewWord('chat_review_reopened', { id: row.id }) };
 });
 
 function channelCategory(channel) {

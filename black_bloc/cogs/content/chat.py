@@ -9,17 +9,19 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ... import channel_drafts, chat_panel
+from ... import channel_drafts, chat_panel, chat_review
 from ...actionlog import log_action, send_logs, stamp
 from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
     GREETING,
     INSULT,
     ROUTE,
+    TRIGGER_LIMIT,
     answer_for,
     bare_greeting,
     guild_intents,
     invalidate,
+    list_intents,
     seed_defaults,
 )
 from ...chat_distil import run as distil_run
@@ -82,6 +84,24 @@ from ...settings_store import (
     GUILD_ONLY,
     KEY_TYPES,
     PROMPT_WORDS,
+    REVIEW_APPROVE_BUTTON_KEY,
+    REVIEW_BUTTON_KEY,
+    REVIEW_CAPPED_KEY,
+    REVIEW_CHANGE_KEY,
+    REVIEW_DISMISS_BUTTON_KEY,
+    REVIEW_EMPTY_KEY,
+    REVIEW_FACT_BUTTON_KEY,
+    REVIEW_FACT_LABEL_KEY,
+    REVIEW_FACT_MODAL_KEY,
+    REVIEW_INTRO_KEY,
+    REVIEW_ITEM_TITLE_KEY,
+    REVIEW_PAGE_KEY,
+    REVIEW_PHRASE_LABEL_KEY,
+    REVIEW_PHRASE_MODAL_KEY,
+    REVIEW_PICK_KEY,
+    REVIEW_SECTION_LABEL_KEY,
+    REVIEW_TITLE_KEY,
+    REVIEW_WORDS,
     VOICE_BUTTON_KEY,
     VOICE_CLEAR_BUTTON_KEY,
     VOICE_EMPTY_KEY,
@@ -119,7 +139,7 @@ STAFF_NOTE = "{who} asked for a mod in {where}. {link}"
 ADMIN_ONLY_KEY = "chat_status_admin_only"
 CHAT_KEYS = tuple(key for key in KEY_TYPES if key.startswith("chat_"))
 MEMORY_PREFIX = "chat_memory_"
-WORDING_KEYS = frozenset({*CHANNEL_NOTE_WORDS, *PROMPT_WORDS, *VOICE_WORDS})
+WORDING_KEYS = frozenset({*CHANNEL_NOTE_WORDS, *PROMPT_WORDS, *VOICE_WORDS, *REVIEW_WORDS})
 SETTINGS_FOOTER = (
     "`/settings` ▸ **A setting group…** ▸ chat changes any of these, and the Chat page on "
     "the dashboard edits the words themselves."
@@ -172,6 +192,10 @@ SETTINGS_VIEW = "settings"
 CHANNELS_VIEW = "channels"
 VOICES_VIEW = "voices"
 MEMBER_VIEW = "member"
+REVIEW_VIEW = "review"
+REVIEW_ITEM_VIEW = "review_item"
+REVIEW_TICK_MINUTES = 10
+PHRASE_CHARS = TRIGGER_LIMIT
 CHANNEL_NOTES_LISTED = 20
 BUTTON_CHARS = 80
 MODAL_CHARS = 45
@@ -303,6 +327,7 @@ class ChatPanel(Panel):
         self.query = ""
         self.page = 1
         self.member_id: int | None = None
+        self.review_id: int | None = None
 
 
 async def panel_lines(bot: Any, guild: Any, actor: Any) -> list[str]:
@@ -336,7 +361,8 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     view = ChatPanel(minutes_for(bot, guild.id))
     state = chat_panel.panel_state(bot.store, guild.id)
     label = str(bot.store.get(guild.id, CHANNEL_NOTES_BUTTON_KEY) or "")[:BUTTON_CHARS]
-    for move in chat_panel.panel_buttons(state, channels_label=label):
+    review = chat_panel.review_words(bot, guild, REVIEW_BUTTON_KEY)[:BUTTON_CHARS]
+    for move in chat_panel.panel_buttons(state, channels_label=label, review_label=review):
         view.add_item(MoveButton(move))
     add_site_button(view, bot, row=2)
     return (embed, view)
@@ -588,6 +614,144 @@ def build_settings(bot: Any, guild: Any) -> tuple[discord.Embed, ChatPanel]:
     return (embed, view)
 
 
+def worded(bot: Any, guild: Any, key: str, **values: Any) -> str:
+    return chat_panel.review_words(bot, guild, key, **values)
+
+
+async def review_lines(
+    bot: Any, guild: Any, rows: Any, shown: Any, at: int, pages: int
+) -> list[str]:
+    if not rows:
+        return [worded(bot, guild, REVIEW_EMPTY_KEY)]
+    lines = [worded(bot, guild, REVIEW_INTRO_KEY, count=len(rows))]
+    if await chat_review.why_untagged(bot, guild.id) == chat_review.UNTAGGED_CAPPED:
+        lines.append(worded(bot, guild, REVIEW_CAPPED_KEY))
+    lines.append("")
+    lines += [chat_panel.review_line(bot, guild, row) for row in shown]
+    if pages > 1:
+        lines.append("")
+        lines.append(worded(bot, guild, REVIEW_PAGE_KEY, page=at, pages=pages))
+    return lines
+
+
+async def build_review(bot: Any, guild: Any, page: Any = 1) -> tuple[discord.Embed, ChatPanel]:
+    """The open queue five at a time; an item picked below opens its own card."""
+    rows = await chat_review.list_items(bot.db, guild.id)
+    pages = chat_panel.review_pages(len(rows))
+    at = chat_panel.wanted_page(page, pages)
+    size = chat_panel.REVIEW_PAGE_SIZE
+    shown = rows[(at - 1) * size : at * size]
+    embed = discord.Embed(
+        title=worded(bot, guild, REVIEW_TITLE_KEY)[:EMBED_TITLE_CHARS],
+        description=clamped(await review_lines(bot, guild, rows, shown, at, pages)),
+    )
+    view = ChatPanel(
+        minutes_for(bot, guild.id), again=lambda one, prev: open_review(one, at, prev)
+    )
+    view.where = REVIEW_VIEW
+    view.page = at
+    if shown:
+        view.add_item(ReviewPick(shown, worded(bot, guild, REVIEW_PICK_KEY)[:PLACEHOLDER_CHARS]))
+    labels = (
+        say(bot, guild, VOICE_PREVIOUS_KEY)[:BUTTON_CHARS],
+        say(bot, guild, VOICE_NEXT_KEY)[:BUTTON_CHARS],
+    )
+    for move in chat_panel.review_buttons(at, pages, labels):
+        view.add_item(MoveButton(move))
+    add_site_button(view, bot, row=2)
+    return (embed, view)
+
+
+async def build_review_item(
+    bot: Any, guild: Any, item_id: Any, page: int = 1
+) -> tuple[discord.Embed | None, ChatPanel | None]:
+    """One answer to review: Approve when there is something to write, Change, Dismiss."""
+    row, held = await chat_panel.wanted_review(bot, guild, item_id)
+    if held is not None or row["status"] != chat_review.OPEN:
+        return (None, None)
+    embed = discord.Embed(
+        title=worded(bot, guild, REVIEW_ITEM_TITLE_KEY, id=int(row["id"]))[:EMBED_TITLE_CHARS],
+        description=clamped([chat_panel.review_item_text(bot, guild, row)]),
+    )
+    wanted = int(row["id"])
+    view = ChatPanel(
+        minutes_for(bot, guild.id), again=lambda one, prev: open_review_item(one, wanted, prev)
+    )
+    view.where = REVIEW_ITEM_VIEW
+    view.page = page
+    view.review_id = wanted
+    intents = [str(one["name"]) for one in await list_intents(bot.db, guild.id)]
+    if intents:
+        placeholder = worded(bot, guild, REVIEW_CHANGE_KEY)[:PLACEHOLDER_CHARS]
+        view.add_item(ReviewIntentPick(intents, placeholder))
+    labels = (
+        worded(bot, guild, REVIEW_APPROVE_BUTTON_KEY)[:BUTTON_CHARS],
+        worded(bot, guild, REVIEW_FACT_BUTTON_KEY)[:BUTTON_CHARS],
+        worded(bot, guild, REVIEW_DISMISS_BUTTON_KEY)[:BUTTON_CHARS],
+    )
+    for move in chat_panel.review_item_buttons(can_approve=chat_panel.teaches(row), labels=labels):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+async def render_review(
+    interaction: discord.Interaction, page: Any = 1, previous: Any = None
+) -> None:
+    embed, view = await build_review(interaction.client, interaction.guild, page)
+    await render(interaction, embed, view, previous)
+
+
+async def render_review_item(
+    interaction: discord.Interaction, item_id: Any, previous: Any = None
+) -> None:
+    """An item decided or gone meanwhile sends staff back to the queue, with the reason."""
+    page = int(getattr(previous, "page", 1) or 1)
+    bot = interaction.client
+    embed, view = await build_review_item(bot, interaction.guild, item_id, page)
+    if view is None:
+        await render_review(interaction, page, previous)
+        row, held = await chat_panel.wanted_review(bot, interaction.guild, item_id)
+        said = held if held is not None else chat_panel.decided_already(bot, interaction.guild, row)
+        await answer(interaction, said.message)
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def open_review(
+    interaction: discord.Interaction, page: Any = 1, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    await render_review(interaction, page, previous)
+
+
+async def open_review_item(
+    interaction: discord.Interaction, item_id: Any, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    await render_review_item(interaction, item_id, previous)
+
+
+async def run_review(interaction: discord.Interaction, move: Any, previous: Any) -> None:
+    """Every review move lands back on the queue with the one sentence the write path said."""
+    if not await opened(interaction):
+        return
+    outcome = await move(interaction.client, interaction.guild, interaction.user)
+    await render_review(interaction, getattr(previous, "page", 1), previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_review_change(
+    interaction: discord.Interaction, item_id: int, fields: dict[str, Any], previous: Any
+) -> None:
+    await run_review(
+        interaction,
+        lambda bot, guild, actor: chat_panel.change_review(bot, guild, actor, item_id, fields),
+        previous,
+    )
+
+
 # --- rendering ---------------------------------------------------------------------------------
 
 
@@ -773,6 +937,12 @@ async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
     if view.where == MEMBER_VIEW:
         await open_member(interaction, view.member_id, view)
         return
+    if view.where == REVIEW_VIEW:
+        await open_review(interaction, view.page, view)
+        return
+    if view.where == REVIEW_ITEM_VIEW:
+        await open_review_item(interaction, view.review_id, view)
+        return
     await open_root(interaction, view)
 
 
@@ -785,6 +955,9 @@ async def back_from(interaction: discord.Interaction, view: Any) -> None:
         return
     if view.where == VOICES_VIEW:
         await open_personality(interaction, view)
+        return
+    if view.where == REVIEW_ITEM_VIEW:
+        await open_review(interaction, view.page, view)
         return
     await open_root(interaction, view)
 
@@ -977,7 +1150,47 @@ class MoveButton(discord.ui.Button):
         if action == chat_panel.REMOVE:
             await open_remove_confirm(interaction, view)
             return
+        if await self.review_move(interaction, view, action):
+            return
         await self.open_modal(interaction, view, action)
+
+    async def review_move(self, interaction: discord.Interaction, view: Any, action: str) -> bool:
+        wanted = view.review_id
+        if action == chat_panel.REVIEW:
+            await open_review(interaction, 1, view)
+        elif action == chat_panel.REVIEW_PREVIOUS:
+            await open_review(interaction, view.page - 1, view)
+        elif action == chat_panel.REVIEW_NEXT:
+            await open_review(interaction, view.page + 1, view)
+        elif action == chat_panel.APPROVE:
+            await run_review(
+                interaction,
+                lambda bot, guild, actor: chat_panel.approve_review(bot, guild, actor, wanted),
+                view,
+            )
+        elif action == chat_panel.DISMISS:
+            await run_review(
+                interaction,
+                lambda bot, guild, actor: chat_panel.dismiss_review(bot, guild, actor, wanted),
+                view,
+            )
+        elif action == chat_panel.FACT:
+            await self.open_fact(interaction, view)
+        else:
+            return False
+        return True
+
+    async def open_fact(self, interaction: discord.Interaction, view: Any) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        bot = interaction.client
+        row, held = await chat_panel.wanted_review(bot, interaction.guild, view.review_id)
+        if held is not None:
+            await answer(interaction, held.message)
+            return
+        await interaction.response.send_modal(ReviewFactModal(bot, interaction.guild, row, view))
 
     async def open_modal(self, interaction: discord.Interaction, view: Any, action: str) -> None:
         if not await still_staff(interaction):
@@ -1218,6 +1431,107 @@ class LimitsModal(AnswersErrors, discord.ui.Modal):
         )
 
 
+class ReviewPick(discord.ui.Select):
+    def __init__(self, rows: Any, placeholder: str) -> None:
+        super().__init__(
+            placeholder=placeholder,
+            options=[
+                discord.SelectOption(
+                    label=f"{int(one['id'])} · {' '.join(str(one['asked']).split())}"[
+                        :SELECT_OPTION_LIMIT
+                    ],
+                    value=str(one["id"]),
+                )
+                for one in list(rows)[:SELECT_CAP]
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_review_item(interaction, int(self.values[0]), self.view)
+
+
+class ReviewIntentPick(discord.ui.Select):
+    """Picking the intent it should have reached asks for the phrase, prefilled."""
+
+    def __init__(self, intents: Any, placeholder: str) -> None:
+        super().__init__(
+            placeholder=placeholder,
+            options=[
+                discord.SelectOption(label=name[:SELECT_OPTION_LIMIT], value=name)
+                for name in list(intents)[:SELECT_CAP]
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        view = self.view
+        row = await chat_review.get_item(interaction.client.db, view.review_id)
+        found = chat_review.suggestion_of(row) if row is not None else None
+        given = (found.phrase if found is not None else None) or (
+            " ".join(str(row["asked"] if row is not None else "").split())[:PHRASE_CHARS]
+        )
+        await interaction.response.send_modal(
+            ReviewPhraseModal(interaction.client, interaction.guild, self.values[0], given, view)
+        )
+
+
+class ReviewPhraseModal(AnswersErrors, discord.ui.Modal):
+    phrase = discord.ui.TextInput(label="Phrase", max_length=PHRASE_CHARS)
+
+    def __init__(self, bot: Any, guild: Any, intent: str, given: str, previous: Any) -> None:
+        super().__init__(
+            title=chat_panel.review_words(bot, guild, REVIEW_PHRASE_MODAL_KEY, intent=intent)[
+                :MODAL_CHARS
+            ]
+        )
+        self.phrase.label = chat_panel.review_words(bot, guild, REVIEW_PHRASE_LABEL_KEY)[
+            :MODAL_CHARS
+        ]
+        self.phrase.default = given[:PHRASE_CHARS] or None
+        self.intent = intent
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        fields = {"kind": chat_review.PHRASE, "intent": self.intent, "phrase": str(self.phrase)}
+        await run_review_change(interaction, self.previous.review_id, fields, self.previous)
+
+
+class ReviewFactModal(AnswersErrors, discord.ui.Modal):
+    line = discord.ui.TextInput(
+        label="Fact", style=discord.TextStyle.paragraph, max_length=chat_review.LINE_CHARS
+    )
+    section = discord.ui.TextInput(label="Note", max_length=TITLE_LIMIT, required=False)
+
+    def __init__(self, bot: Any, guild: Any, row: Any, previous: Any) -> None:
+        title = chat_panel.review_words(bot, guild, REVIEW_FACT_MODAL_KEY)
+        super().__init__(title=title[:MODAL_CHARS])
+        self.line.label = chat_panel.review_words(bot, guild, REVIEW_FACT_LABEL_KEY)[:MODAL_CHARS]
+        self.section.label = chat_panel.review_words(bot, guild, REVIEW_SECTION_LABEL_KEY)[
+            :MODAL_CHARS
+        ]
+        found = chat_review.suggestion_of(row)
+        self.line.default = (found.line if found is not None else None) or None
+        self.section.default = (found.section if found is not None else None) or None
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        fields = {
+            "kind": chat_review.KNOWLEDGE,
+            "line": str(self.line),
+            "section": str(self.section),
+        }
+        await run_review_change(interaction, self.previous.review_id, fields, self.previous)
+
+
 class Chat(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -1226,10 +1540,14 @@ class Chat(commands.Cog):
         self.last_ingest_at: str | None = None
         self.last_ingest_error: str | None = None
         self.last_distil: dict[str, int] | None = None
+        self.last_review_at: str | None = None
+        self.last_review_error: str | None = None
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
         if name == "_ingest":
             return (self.last_ingest_at, self.last_ingest_error)
+        if name == "_review":
+            return (self.last_review_at, self.last_review_error)
         return (None, None)
 
     def usable_db(self) -> Any:
@@ -1263,9 +1581,46 @@ class Chat(commands.Cog):
         await self.seed_guilds()
         if self.usable_db() is not None:
             self._ingest.start()
+            self._review.start()
 
     async def cog_unload(self) -> None:
         self._ingest.cancel()
+        self._review.cancel()
+
+    @tasks.loop(minutes=REVIEW_TICK_MINUTES)
+    async def _review(self) -> None:
+        if self.usable_db() is None:
+            return
+        try:
+            await self.review_once()
+        except Exception as exc:
+            self.last_review_error = f"{type(exc).__name__}: {exc}"
+            log.exception("chat: the review tick failed")
+            return
+        self.last_review_error = None
+        self.last_review_at = datetime.now(UTC).isoformat()
+
+    @_review.before_loop
+    async def _before_review(self) -> None:
+        await wait_ready(self.bot, self._review_stopped)
+
+    @_review.error
+    async def _review_stopped(self, exc: BaseException) -> None:
+        self.last_review_error = f"{type(exc).__name__}: {exc}"
+        log.error("chat: the review tick stopped; restarting it", exc_info=exc)
+        self._review.restart()
+
+    async def review_once(self) -> int:
+        """Untagged items in a small capped batch, then each server's digest when it is due."""
+        tagged = await chat_review.tag_waiting(self.bot)
+        for guild in list(getattr(self.bot, "guilds", ()) or ()):
+            if getattr(guild, "unavailable", False):
+                continue
+            try:
+                await chat_review.digest(self.bot, guild)
+            except Exception as exc:
+                log.warning("chat: the review digest failed in %s — %s", guild.id, exc)
+        return tagged
 
     @tasks.loop(hours=INGEST_HOURS)
     async def _ingest(self) -> None:
@@ -1398,6 +1753,7 @@ class Chat(commands.Cog):
             return
         if getattr(message, "type", None) not in MESSAGE_TYPES:
             return
+        await self.follow_up(message)
         if not mentions_bot(message, me):
             return
         guild = getattr(message, "guild", None)
@@ -1428,7 +1784,7 @@ class Chat(commands.Cog):
             self._answered[user_id] = now
             return
         try:
-            await message.reply(
+            reply = await message.reply(
                 said.text,
                 mention_author=False,
                 allowed_mentions=self.mentions_for(guild, author),
@@ -1439,6 +1795,7 @@ class Chat(commands.Cog):
             )
             return
         self._answered[user_id] = now
+        await self.remember_answer(message, reply, said)
         log.info("chat: answered %s (%s)", user_id, said.intent)
         if guild is None:
             return
@@ -1459,6 +1816,26 @@ class Chat(commands.Cog):
             await log_action(
                 self.bot, guild, ROUTE_KIND, actor=author, details={"intent": said.intent}
             )
+
+    async def follow_up(self, message: Any) -> None:
+        """Every next message is weighed against the last answer; it never blocks one."""
+        try:
+            await chat_review.heard(self.bot, message)
+        except Exception as exc:
+            log.warning("chat: a follow-up was not weighed — %s: %s", type(exc).__name__, exc)
+
+    async def remember_answer(self, message: Any, reply: Any, said: Any) -> None:
+        try:
+            await chat_review.answered(self.bot, message, reply, said)
+        except Exception as exc:
+            log.warning("chat: an answer was not kept for review — %s: %s", type(exc).__name__, exc)
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
+        try:
+            await chat_review.reacted(self.bot, payload)
+        except Exception as exc:
+            log.warning("chat: a reaction was not weighed — %s: %s", type(exc).__name__, exc)
 
     def mentions_for(self, guild: Any, author: Any) -> discord.AllowedMentions:
         """Nobody, ever — unless staff started it and the server left the exception on."""

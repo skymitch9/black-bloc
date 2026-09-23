@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 57
+SCHEMA_VERSION = 58
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -964,6 +964,38 @@ CREATE TABLE IF NOT EXISTS channel_reach (
     set_at     TEXT    NOT NULL,
     PRIMARY KEY (guild_id, channel_id)
 );
+
+CREATE TABLE IF NOT EXISTS chat_review (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id            INTEGER NOT NULL,
+    channel_id          INTEGER NOT NULL,
+    user_id             INTEGER NOT NULL,
+    asked               TEXT    NOT NULL,
+    answered            TEXT    NOT NULL,
+    tier                TEXT,
+    trope               TEXT,
+    intent              TEXT,
+    reason              TEXT    NOT NULL,
+    message_id          INTEGER,
+    reply_id            INTEGER,
+    at                  TEXT    NOT NULL,
+    suggested_intent_id INTEGER,
+    suggested_intent    TEXT,
+    suggested_phrase    TEXT,
+    suggested_kind      TEXT
+                        CHECK (suggested_kind IN ('intent', 'phrase', 'knowledge', 'none')),
+    suggested_line      TEXT,
+    suggested_section   TEXT,
+    suggested_why       TEXT,
+    tagged_at           TEXT,
+    status              TEXT    NOT NULL DEFAULT 'open'
+                        CHECK (status IN ('open', 'approved', 'changed', 'dismissed')),
+    decided_by          INTEGER,
+    decided_at          TEXT
+);
+
+CREATE INDEX IF NOT EXISTS chat_review_by_status ON chat_review(guild_id, status, id);
+CREATE UNIQUE INDEX IF NOT EXISTS chat_review_one_per_reply ON chat_review(reply_id);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
