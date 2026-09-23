@@ -1,6 +1,9 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-23** — ONLY the five sections written 2026-09-22 were touched: a ✅ LIVE line added under the
+> headings of `RP-a`, `BP-a`, `PR-a` (v156, 2026-09-22 21:18) and `YW-a`…`YW-d`, `PX-a` (v157, 2026-09-23 04:21),
+> taken from `deploys.log` and `DONE.md`. Nothing renumbered, no row walked, no other section re-read. Before that,
 > **2026-09-21 (branch `mode-column`)** — row `MC-a` added at the foot for RECENT STREAMS LOSING THE MODE
 > COLUMN (branch `mode-column`, off `main` `e9841f6`; design
 > [`../info/golive-page-design.md`](../info/golive-page-design.md) ▸ top blockquote, 2026-09-21). Owner, after
@@ -2917,6 +2920,8 @@ migration against the Fly volume. Review link while the mock is up:
 
 ## Spotlight ON pins a live post (branch `spotlight-retro-pin`, 2026-09-22)
 
+✅ **LIVE as v156** — deployed 2026-09-22 **21:18** Phoenix (release commit `4fb69e00`, merge `0ef4534c`); boot log `database ready` 04:17:54Z, `logged in as Black_Bloc` 04:17:58Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-22 v156). ⚠️ Nothing below has been walked by a person yet.
+
 Owner ask 2026-09-22: turning a spotlight on checks the pin — live and unpinned is pinned, not live
 and still pinned is unpinned. Design:
 [`../info/channel-streamers-design.md`](../info/channel-streamers-design.md) ▸ **Follow-up
@@ -2928,6 +2933,8 @@ and still pinned is unpinned. Design:
 
 ## Row `BP-a` — a reminder names the game being played NOW and shows the go-live card (branch `spotlight-bump-preview`, 2026-09-22)
 
+✅ **LIVE as v156** — deployed 2026-09-22 **21:18** Phoenix (release commit `4fb69e00`, merge `bde90469`); boot log `database ready` 04:17:54Z, `logged in as Black_Bloc` 04:17:58Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-22 v156). ⚠️ Nothing below has been walked by a person yet.
+
 Design: [`../info/spotlight-design.md`](../info/spotlight-design.md) ▸ *Follow-up 2026-09-22*.
 Lettered; the conductor numbers it. ⚠️ `spotlight_mode` decides where it lands — in `shadow` the
 reminder goes to `shadow_channel_id` (`#welcome-test`), not the go-live channel.
@@ -2938,6 +2945,8 @@ reminder goes to `shadow_channel_id` (`#welcome-test`), not the go-live channel.
 
 ## Row `PR-a` — the PINNED announcement follows the game (branch `spotlight-pinned-refresh`, 2026-09-22)
 
+✅ **LIVE as v156** — deployed 2026-09-22 **21:18** Phoenix (release commit `4fb69e00`, merge `cc5a6de1`); boot log `database ready` 04:17:54Z, `logged in as Black_Bloc` 04:17:58Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-22 v156). ⚠️ Nothing below has been walked by a person yet.
+
 Design: [`../info/spotlight-design.md`](../info/spotlight-design.md) ▸ *Follow-up 2026-09-22 (2)*.
 Lettered; the conductor numbers it. ⚠️ `spotlight_mode` decides where it lands — in `shadow` the
 announcement is in `shadow_channel_id` (`#welcome-test`), not the go-live channel.
@@ -2947,6 +2956,8 @@ announcement is in `shadow_channel_id` (`#welcome-test`), not the go-live channe
 | **`PR-a`** | Watch a live spotlighted marathon (GamesDoneQuick) change game. Look at the pinned announcement in the go-live channel (the pin icon in the channel header) | Within one poll (5 min) the PINNED announcement reads the new game and shows its art on the card; it is still the same message, still pinned. The Logs page (`golive_log_level = all`) shows `golive.spotlight_announcement_refreshed` with the new `game`, and **no** `golive.spotlight_pinned` / `golive.spotlight_unpinned` rows around it — no new pin, no unpin. A `golive.spotlight_announcement_refresh_failed` row instead means Discord refused the edit; its `reason` says why. |
 
 ## Rows `YW-a` … `YW-d` — the bot-check wall says so, and a walled channel row is searched (branch `youtube-walled`, 2026-09-22)
+
+✅ **LIVE as v157** — deployed 2026-09-23 **04:21** Phoenix (release commit `e9ecd0d0`, merge `d2b4b9b7`); boot log `database ready` 11:21:44Z, `logged in as Black_Bloc` 11:21:47Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v157). ⚠️ Nothing below has been walked by a person yet.
 
 Design: [`../info/youtube-live-design.md`](../info/youtube-live-design.md) ▸ *The walled channel rows*;
 KI-30. Lettered; the conductor numbers them. ⚠️ Only the live bot on Fly meets the wall — a home
@@ -2960,6 +2971,8 @@ machine is served the real page, so none of these can be run against the mock.
 | **`YW-d`** | Look at ESA Marathon's `youtube.live_seen` rows after the deploy | Each reads `announced: false, because: opted_out` — never `announced: true` while its announce cell is off — and there is NO `youtube.live_id_searched` row for `UC3Oe-jfrIqEGygxYBYyN6jQ`. One such row per boot is expected (the memory is per process) |
 
 ## Row `PX-a` — a button on a panel the restart dropped answers in words (branch `panels-survive-restart`, 2026-09-22)
+
+✅ **LIVE as v157** — deployed 2026-09-23 **04:21** Phoenix (release commit `e9ecd0d0`, merge `5f0e94ab`); boot log `database ready` 11:21:44Z, `logged in as Black_Bloc` 11:21:47Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v157). ⚠️ Nothing below has been walked by a person yet.
 
 Design: [`../info/panels-orphaned-click-design.md`](../info/panels-orphaned-click-design.md); the
 defect is [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) ▸ KI-20. Lettered; the conductor numbers it.
