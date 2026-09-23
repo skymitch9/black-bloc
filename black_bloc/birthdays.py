@@ -9,7 +9,20 @@ from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 from .panels import panel_minutes as library_panel_minutes
-from .settings_store import BIRTHDAY_COLOR, BIRTHDAY_TEMPLATE, BIRTHDAY_TZ, HEX_COLOR
+from .settings_store import (
+    BIRTHDAY_COLOR,
+    BIRTHDAY_POST_FAILED_KEY,
+    BIRTHDAY_POST_MISSING_KEY,
+    BIRTHDAY_POST_NOBODY_KEY,
+    BIRTHDAY_POST_OFF_KEY,
+    BIRTHDAY_POST_POSTED_KEY,
+    BIRTHDAY_POST_REHEARSED_KEY,
+    BIRTHDAY_POST_SKIPPED_KEY,
+    BIRTHDAY_POST_WORDS,
+    BIRTHDAY_TEMPLATE,
+    BIRTHDAY_TZ,
+    HEX_COLOR,
+)
 
 log = logging.getLogger(__name__)
 
@@ -388,6 +401,79 @@ def status_lines(values: dict[str, Any]) -> list[str]:
         f"(every {values['loop_minutes']} minutes)",
         f"**last error** — {values['last_error'] or 'none'}",
     ]
+
+
+
+POSTED = "posted"
+MISSING = "missing"
+FAILED = "failed"
+SKIPPED = "skipped"
+
+
+@dataclass(frozen=True)
+class PostedToday:
+    mode: str
+    again: bool = False
+    posted: int = 0
+    skipped: int = 0
+    missing: int = 0
+    failed: int = 0
+    channel: str = ""
+    said: str = ""
+
+    @property
+    def celebrants(self) -> int:
+        return self.posted + self.skipped + self.missing + self.failed
+
+    def answer(self) -> dict[str, Any]:
+        return {
+            "posted": self.posted,
+            "skipped": self.skipped,
+            "missing": self.missing,
+            "failed": self.failed,
+            "mode": self.mode,
+            "again": self.again,
+            "said": self.said,
+        }
+
+
+def post_word(store: Any, guild_id: int, key: str) -> str:
+    return str(store.get(guild_id, key) or "").strip() or BIRTHDAY_POST_WORDS[key]
+
+
+def post_line(store: Any, guild_id: int, key: str, **values: Any) -> str:
+    try:
+        return post_word(store, guild_id, key).format(**values)
+    except (IndexError, KeyError, ValueError) as exc:
+        log.warning("birthdays: %s would not fill (%s); the shipped wording was used", key, exc)
+        return BIRTHDAY_POST_WORDS[key].format(**values)
+
+
+def channel_words(guild: Any, channel_id: Any) -> str:
+    if not channel_id:
+        return ""
+    channel = guild.get_channel(int(channel_id)) if guild is not None else None
+    name = getattr(channel, "name", None)
+    return f"#{name}" if name else f"<#{int(channel_id)}>"
+
+
+def post_today_said(store: Any, guild_id: int, found: PostedToday) -> str:
+    if found.mode == "off":
+        return post_word(store, guild_id, BIRTHDAY_POST_OFF_KEY)
+    if not found.celebrants:
+        return post_word(store, guild_id, BIRTHDAY_POST_NOBODY_KEY)
+    lines = []
+    if found.posted:
+        key = BIRTHDAY_POST_POSTED_KEY if found.mode == "on" else BIRTHDAY_POST_REHEARSED_KEY
+        lines.append(post_line(store, guild_id, key, n=found.posted, channel=found.channel))
+    for key, count in (
+        (BIRTHDAY_POST_SKIPPED_KEY, found.skipped),
+        (BIRTHDAY_POST_MISSING_KEY, found.missing),
+        (BIRTHDAY_POST_FAILED_KEY, found.failed),
+    ):
+        if count:
+            lines.append(post_line(store, guild_id, key, n=count))
+    return "\n".join(lines)
 
 
 async def member_zone_name(db: Any, user_id: int) -> str:

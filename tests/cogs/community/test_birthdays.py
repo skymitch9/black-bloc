@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import UTC, datetime
 
 import discord
@@ -18,12 +19,21 @@ from black_bloc.cogs.community.birthdays import (
     change_opt,
     forget_birthday,
     get_birthday,
+    mark_announced,
     members_of,
+    post_today,
     save_birthday,
     stored_counts,
 )
 from black_bloc.config import load_settings
-from black_bloc.settings_store import BIRTHDAY_MODES, BIRTHDAY_TZ, SettingsStore
+from black_bloc.settings_store import (
+    BIRTHDAY_MODES,
+    BIRTHDAY_POST_NOBODY_KEY,
+    BIRTHDAY_POST_OFF_KEY,
+    BIRTHDAY_POST_WORDS,
+    BIRTHDAY_TZ,
+    SettingsStore,
+)
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -34,6 +44,7 @@ CAKE_ROLE = 777
 USER = 900
 
 MORNING = datetime(2026, 8, 10, 8, 0, tzinfo=UTC)
+UNSENT = "Post the ones not sent yet"
 EVENING_BEFORE = datetime(2026, 8, 10, 4, 30, tzinfo=UTC)
 NEXT_DAY = datetime(2026, 8, 11, 8, 0, tzinfo=UTC)
 
@@ -785,6 +796,7 @@ async def test_a_staff_panel_fills_all_five_of_discords_rows(cog, bot, birthday_
         "Status",
         "Clear the birthday role",
         "Logs",
+        "Post today's wishes",
     ]
     assert placeholders(view) == ["Look someone up…", "List a month…", "Wishes are…"]
     assert sorted({item.row for item in view.children}) == [0, 1, 2, 3, 4]
@@ -1382,3 +1394,240 @@ async def test_a_sweep_that_throws_is_recorded_not_swallowed_silently(bot, cog, 
 
     assert cog.last_error == "RuntimeError: nope"
     assert cog.last_run_at is None
+
+
+async def posted_now_rows(db):
+    return [json.loads(one) for one in await details_for(db, "birthday.posted_now")]
+
+
+async def test_posting_today_by_hand_wishes_the_unsent_and_leaves_the_sent(
+    bot, cog, birthday_person
+):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    other = FakeMember(bot.guild, user_id=901, display_name="Nadia")
+    await stored(bot)
+    await stored(bot, user_id=other.id)
+    await mark_announced(bot.db, other.id, "2026-08-10")
+
+    found = await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)
+
+    assert (found.posted, found.skipped, found.missing, found.failed) == (1, 1, 0, 0)
+    assert [p["embed"].description for p in party_posts(bot)] == ["Happy Birthday **PT**!"]
+    assert "Posted 1 birthday wish(es) in #test." in found.said
+    assert "1 already wished today were left alone" in found.said
+    assert (await get_birthday(bot.db, USER))["last_announced_on"] == "2026-08-10"
+    assert await action_kinds(bot.db) == ["birthday.announce", "birthday.posted_now"]
+
+
+async def test_posting_them_all_again_wishes_the_already_wished_too(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot)
+    await cog.run_once(MORNING)
+
+    found = await post_today(bot, bot.guild, birthday_person, again=True, now=MORNING)
+
+    assert (found.posted, found.skipped) == (1, 0)
+    assert len(party_posts(bot)) == 2
+    assert (await posted_now_rows(bot.db))[-1]["again"] is True
+
+
+async def test_the_sweep_and_the_door_never_wish_twice_without_again(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot)
+
+    await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)
+    await cog.run_once(MORNING)
+    found = await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)
+
+    assert len(party_posts(bot)) == 1
+    assert (found.posted, found.skipped) == (0, 1)
+
+
+async def test_off_refuses_in_words_and_touches_nothing(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "off")
+    await stored(bot)
+
+    found = await post_today(bot, bot.guild, birthday_person, again=True, now=MORNING)
+
+    assert found.said == BIRTHDAY_POST_WORDS[BIRTHDAY_POST_OFF_KEY]
+    assert "Wishes are…" in found.said
+    assert party_posts(bot) == []
+    assert (await get_birthday(bot.db, USER))["last_announced_on"] is None
+    assert await action_kinds(bot.db) == ["birthday.posted_now"]
+    assert (await posted_now_rows(bot.db))[0]["mode"] == "off"
+
+
+async def test_shadow_posts_a_rehearsal_to_the_rehearsal_home_and_not_the_real_channel(
+    bot, cog, birthday_person
+):
+    await bot.store.set(GUILD, "shadow_channel_id", PARTY_CHANNEL)
+    await stored(bot)
+
+    found = await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)
+
+    assert party_posts(bot) == []
+    rehearsal = party_posts(bot, PARTY_CHANNEL)
+    assert len(rehearsal) == 1
+    assert f"<#{TEST_CHANNEL}>" in rehearsal[0]["content"]
+    assert rehearsal[0]["allowed_mentions"].everyone is False
+    assert found.posted == 1
+    assert "**shadow**" in found.said and "#return-of-the-gen" in found.said
+    assert await action_kinds(bot.db) == ["birthday.would_announce", "birthday.posted_now"]
+    assert json.loads((await details_for(bot.db, "birthday.would_announce"))[0])["rehearsed"]
+
+
+async def test_the_shadow_sweep_itself_still_posts_nothing_anywhere(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "shadow_channel_id", PARTY_CHANNEL)
+    await stored(bot)
+
+    await cog.run_once(MORNING)
+
+    assert party_posts(bot) == [] and party_posts(bot, PARTY_CHANNEL) == []
+
+
+async def test_somebody_the_member_list_cannot_see_is_counted_not_wished(bot, cog):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    staffer = FakeMember(bot.guild, user_id=1001, display_name="Staff")
+    await stored(bot, user_id=950)
+
+    found = await post_today(bot, bot.guild, staffer, again=False, now=MORNING)
+
+    assert (found.posted, found.missing) == (0, 1)
+    assert "1 could not be found in the member list" in found.said
+    assert (await get_birthday(bot.db, 950))["last_announced_on"] is None
+
+
+async def test_a_post_discord_refuses_is_counted_as_failed_and_named(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    bot.guild.get_channel(TEST_CHANNEL).send_raises = refused()
+    await stored(bot)
+
+    found = await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)
+
+    assert (found.posted, found.failed) == (0, 1)
+    assert "could not be posted" in found.said
+    assert "birthday.announce_failed" in await action_kinds(bot.db)
+
+
+async def test_nobody_today_is_said_in_words_and_the_words_are_a_key(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot, month=1, day=2)
+
+    found = await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)
+    assert found.said == BIRTHDAY_POST_WORDS[BIRTHDAY_POST_NOBODY_KEY]
+
+    await bot.store.set(GUILD, BIRTHDAY_POST_NOBODY_KEY, "No cake today.")
+    found = await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)
+    assert found.said == "No cake today."
+
+
+async def test_an_opted_out_birthday_is_never_posted_by_hand(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot)
+    await change_opt(cog, bot.guild, birthday_person, opted_in=False)
+
+    found = await post_today(bot, bot.guild, birthday_person, again=True, now=MORNING)
+
+    assert found.celebrants == 0 and party_posts(bot) == []
+
+
+async def test_the_posted_now_row_carries_who_how_and_what(bot, cog, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot)
+
+    await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)
+
+    cur = await bot.db.conn.execute(
+        "SELECT actor_id, details FROM action_log WHERE kind = 'birthday.posted_now'"
+    )
+    row = await cur.fetchone()
+    assert row["actor_id"] == USER
+    assert json.loads(row["details"]) == {
+        "via": "discord",
+        "again": False,
+        "posted": 1,
+        "skipped": 0,
+        "missing": 0,
+        "failed": 0,
+        "mode": "on",
+    }
+
+
+async def test_the_post_today_button_is_staff_only_and_asks_which_move(
+    cog, bot, birthday_person
+):
+    member_view = panel_view(await open_panel(cog, bot, birthday_person))
+    assert "Post today's wishes" not in labels(member_view)
+
+    give_staff(bot, birthday_person)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    ask = await click(bot, birthday_person, find_item(view, "Post today's wishes"))
+
+    assert labels(card_view(ask)) == [
+        "Post the ones not sent yet",
+        "Post them all again",
+        "Cancel",
+    ]
+    assert "Post today's birthday wishes now?" in card_embed(ask).description
+    assert party_posts(bot) == []
+
+
+async def test_each_confirm_move_calls_the_door_and_answers_its_sentence(
+    cog, bot, birthday_person, monkeypatch
+):
+    give_staff(bot, birthday_person)
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot)
+    real = birthdays_cog.post_today
+
+    async def at_morning(*args, **kwargs):
+        return await real(*args, **kwargs, now=MORNING)
+
+    monkeypatch.setattr(birthdays_cog, "post_today", at_morning)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    ask = await click(bot, birthday_person, find_item(view, "Post today's wishes"))
+
+    first = await click(bot, birthday_person, find_item(card_view(ask), UNSENT))
+    assert "Posted 1 birthday wish(es)" in first.sent
+    assert first.response.messages[-1]["ephemeral"] is True
+    assert "Post today's wishes" in labels(card_view(first))
+
+    ask = await click(bot, birthday_person, find_item(card_view(first), "Post today's wishes"))
+    unsent = await click(bot, birthday_person, find_item(card_view(ask), UNSENT))
+    assert "already wished today" in unsent.sent
+
+    ask = await click(bot, birthday_person, find_item(card_view(unsent), "Post today's wishes"))
+    again = await click(bot, birthday_person, find_item(card_view(ask), "Post them all again"))
+    assert "Posted 1 birthday wish(es)" in again.sent
+    assert len(party_posts(bot)) == 2
+
+    ask = await click(bot, birthday_person, find_item(card_view(again), "Post today's wishes"))
+    back = await click(bot, birthday_person, find_item(card_view(ask), "Cancel"))
+    assert "Post today's wishes" in labels(card_view(back))
+    assert len(party_posts(bot)) == 2
+
+
+async def test_the_button_wears_the_word_staff_gave_it(cog, bot, birthday_person):
+    give_staff(bot, birthday_person)
+    await bot.store.set(GUILD, "birthday_post_button", "Cake now")
+
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+
+    assert "Cake now" in labels(view)
+
+
+async def test_a_demoted_staffer_cannot_post_todays_wishes(cog, bot, birthday_person):
+    role = give_staff(bot, birthday_person)
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    button = find_item(view, "Post today's wishes")
+    ask = await click(bot, birthday_person, button)
+    move = find_item(card_view(ask), "Post them all again")
+
+    birthday_person.roles.remove(role)
+
+    assert "staff only" in (await click(bot, birthday_person, button)).sent
+    assert "staff only" in (await click(bot, birthday_person, move)).sent
+    assert party_posts(bot) == []
+    assert "birthday.posted_now" not in await action_kinds(bot.db)

@@ -7,9 +7,11 @@ from black_bloc.birthdays import (
     DESCRIPTION_LIMIT,
     FALLBACK_ZONE,
     PANEL_BUTTONS,
+    PostedToday,
     age,
     card_lines,
     celebrates_today,
+    channel_words,
     chunked,
     clamp_month_day,
     date_modal_title,
@@ -23,6 +25,7 @@ from black_bloc.birthdays import (
     panel_buttons,
     parse_birthday_input,
     parse_color,
+    post_today_said,
     render_description,
     stamp,
     status_lines,
@@ -32,7 +35,14 @@ from black_bloc.birthdays import (
     upcoming_lines,
     year_problem,
 )
-from black_bloc.settings_store import BIRTHDAY_TEMPLATE, BIRTHDAY_TZ
+from black_bloc.settings_store import (
+    BIRTHDAY_POST_NOBODY_KEY,
+    BIRTHDAY_POST_OFF_KEY,
+    BIRTHDAY_POST_POSTED_KEY,
+    BIRTHDAY_POST_WORDS,
+    BIRTHDAY_TEMPLATE,
+    BIRTHDAY_TZ,
+)
 
 PHOENIX = ZoneInfo(BIRTHDAY_TZ)
 NEW_YORK = ZoneInfo("America/New_York")
@@ -342,3 +352,79 @@ def test_long_reports_are_split_into_messages_discord_will_take():
     assert len(pages) > 1
     assert all(len(page) <= 1900 for page in pages)
     assert chunked([]) == []
+
+
+class WordStore:
+    def __init__(self, **words):
+        self.words = words
+
+    def get(self, guild_id, key):
+        return self.words.get(key)
+
+
+class NamedChannel:
+    def __init__(self, name):
+        self.name = name
+
+
+class ChannelGuild:
+    def get_channel(self, channel_id):
+        return NamedChannel("birthdays") if channel_id == 5 else None
+
+
+def test_off_and_nobody_are_their_own_sentences():
+    store = WordStore()
+    assert post_today_said(store, 1, PostedToday(mode="off", posted=3)) == (
+        BIRTHDAY_POST_WORDS[BIRTHDAY_POST_OFF_KEY]
+    )
+    assert post_today_said(store, 1, PostedToday(mode="on")) == (
+        BIRTHDAY_POST_WORDS[BIRTHDAY_POST_NOBODY_KEY]
+    )
+
+
+def test_each_count_is_a_line_and_a_zero_count_says_nothing():
+    said = post_today_said(
+        WordStore(),
+        1,
+        PostedToday(mode="on", posted=2, skipped=1, failed=1, channel="#birthdays"),
+    )
+    assert said.splitlines() == [
+        "Posted 2 birthday wish(es) in #birthdays.",
+        "1 already wished today were left alone — **Post them all again** posts those too.",
+        "1 could not be posted — **Logs** on `/birthday` or the Birthdays page says why.",
+    ]
+
+
+def test_shadow_names_the_rehearsal_home_not_the_real_channel():
+    said = post_today_said(WordStore(), 1, PostedToday(mode="shadow", posted=1, channel="#t"))
+    assert "**shadow**" in said and "#t" in said and "Posted" not in said
+
+
+def test_a_blank_or_broken_staff_wording_falls_back_to_the_shipped_one():
+    found = PostedToday(mode="on", posted=1, channel="#b")
+    shipped = BIRTHDAY_POST_WORDS[BIRTHDAY_POST_POSTED_KEY].format(n=1, channel="#b")
+    assert post_today_said(WordStore(**{BIRTHDAY_POST_POSTED_KEY: "  "}), 1, found) == shipped
+    broken = WordStore(**{BIRTHDAY_POST_POSTED_KEY: "{nope} wishes"})
+    assert post_today_said(broken, 1, found) == shipped
+    mine = WordStore(**{BIRTHDAY_POST_POSTED_KEY: "{n} cakes to {channel}"})
+    assert post_today_said(mine, 1, found) == "1 cakes to #b"
+
+
+def test_the_answer_carries_every_count_and_the_sentence():
+    found = PostedToday(mode="on", again=True, posted=1, missing=2, said="x")
+    assert found.answer() == {
+        "posted": 1,
+        "skipped": 0,
+        "missing": 2,
+        "failed": 0,
+        "mode": "on",
+        "again": True,
+        "said": "x",
+    }
+    assert found.celebrants == 3
+
+
+def test_a_channel_reads_as_its_name_or_its_mention():
+    assert channel_words(ChannelGuild(), 5) == "#birthdays"
+    assert channel_words(ChannelGuild(), 6) == "<#6>"
+    assert channel_words(ChannelGuild(), None) == ""

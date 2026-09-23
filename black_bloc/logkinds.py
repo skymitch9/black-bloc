@@ -232,6 +232,7 @@ ROUTINE: frozenset[str] = frozenset(
         "birthday.mode",
         "birthday.optin",
         "birthday.optout",
+        "birthday.posted_now",
         "birthday.remove",
         "birthday.remove_role",
         "birthday.set",
