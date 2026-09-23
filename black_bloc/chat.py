@@ -714,18 +714,25 @@ class Answer:
     """One reply and the labels the cog logs it under."""
 
     def __init__(
-        self, intent: str, kind: str, slot: str, text: str, tier: str | None = None
+        self,
+        intent: str,
+        kind: str,
+        slot: str,
+        text: str,
+        tier: str | None = None,
+        trope: str | None = None,
     ) -> None:
         self.intent = intent
         self.kind = kind
         self.slot = slot
         self.text = text
         self.tier = tier
+        self.trope = trope
 
 
 async def a_model_answer(
     bot: Any, home: Any, member: Any, channel: Any, text: Any
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, str | None]:
     """Imported here rather than at the top: `chat_llm` reads this module's own words."""
     from .chat_llm import conversational_reply
 
@@ -735,7 +742,7 @@ async def a_model_answer(
         )
     except Exception as exc:
         log.warning("chat: the conversation step failed — %s: %s", type(exc).__name__, exc)
-        return (None, None)
+        return (None, None, None)
 
 
 async def answer_for(
@@ -756,10 +763,15 @@ async def answer_for(
     kind = kind_of(intent, intents)
     tokens, filled = await chat_data.tokens_for(bot, home, member, intent, text)
     if llm and (intent == UNKNOWN or tokens.get(chat_data.PASS_TO_MODEL)):
-        said, tier = await a_model_answer(bot, home, member, channel, text)
+        said, tier, trope = await a_model_answer(bot, home, member, channel, text)
         if said:
             return Answer(
-                intent, kind, FILLED, toned_text(said, tone_for(bot, guild_id)), tier=tier
+                intent,
+                kind,
+                FILLED,
+                toned_text(said, tone_for(bot, guild_id)),
+                tier=tier,
+                trope=trope,
             )
     slot = FILLED if kind == CANNED or filled else EMPTY
     line = respond(

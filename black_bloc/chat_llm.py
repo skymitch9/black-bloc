@@ -11,6 +11,7 @@ from .actionlog import log_action
 from .channel_notes import notes_or_nothing
 from .chat import MENTION, has_phrase, normalise
 from .chat_check import FIXED_KIND, check_reply
+from .chat_voice import heard_for
 from .directory import DIRECTORY_NONE, directory_block
 from .groq import GroqClient
 from .knowledge import grounding, is_strong, list_sections, search
@@ -28,7 +29,12 @@ from .llm import (
 )
 from .personas import (
     COOKOUT,
+    COOKOUT_VOICE,
+    COOKOUT_VOICE_KEY,
     PERSONALITY_KEY,
+    TONE_CLAUSE,
+    TONE_CLAUSE_KEY,
+    Trope,
     pick_trope,
     pooled,
     system_blocks,
@@ -72,6 +78,7 @@ ON = "on"
 LLM_MODE_KEY = "chat_llm_mode"
 SIMPLE_MODEL_KEY = "chat_simple_model"
 REPLY_LIMIT = 1900
+NOTHING: tuple[None, None, None] = (None, None, None)
 CLIENTS_ATTR = "_chat_clients"
 ERRORS_ATTR = "_chat_tier_errors"
 
@@ -527,13 +534,32 @@ async def try_tier(
     system: Any,
     messages: Any,
     directory: str = "",
+    sheet: Any = None,
+    clause_text: Any = None,
 ) -> Any:
     client = haiku(bot) if name == IMPORTANT else groq(bot, model_setting)
     if client is None:
         return None
+    words = {"sheet": sheet, "clause_text": clause_text}
     if name == IMPORTANT:
-        return await client.reply(system=system_blocks(system, directory), messages=messages)
-    return await client.reply(system=system_text(system, directory), messages=messages)
+        return await client.reply(
+            system=system_blocks(system, directory, **words), messages=messages
+        )
+    return await client.reply(system=system_text(system, directory, **words), messages=messages)
+
+
+async def mood_for(
+    bot: Any, db: Any, guild_id: Any, channel_id: Any, user_id: int, window: Any, at: datetime
+) -> Trope | None:
+    """A DM keeps the per-conversation roll; in a server the tone follows the member."""
+    setting = read_setting(bot.store, guild_id, PERSONALITY_KEY, COOKOUT)
+    rows = await pooled(bot)
+    if guild_id is None:
+        return pick_trope(
+            setting, rows, key=window_key(channel_id, user_id), turns=llm_turns(window)
+        )
+    heard = await heard_for(db, setting, rows, guild_id=guild_id, user_id=user_id, now=at)
+    return heard.trope
 
 
 async def made_real(bot: Any, guild: Any, text: Any, people: Any = ()) -> str:
@@ -578,18 +604,18 @@ def channels_block(bot: Any, guild: Any, notes: Any = None) -> str:
 
 async def conversational_reply(
     bot: Any, *, guild: Any, member: Any, channel: Any, text: Any
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, str | None]:
     """The whole second rung: knowledge, tier, one or two calls, and the ledger for each."""
     guild_id = getattr(guild, "id", None)
     if not llm_is_on(bot, guild_id):
-        return (None, None)
+        return NOTHING
     db = usable_db(bot)
     if db is None:
-        return (None, None)
+        return NOTHING
     settings = bot.settings
     important, simple = settings.important_tier_configured, settings.simple_tier_configured
     if not (important or simple):
-        return (None, None)
+        return NOTHING
 
     at = datetime.now(UTC)
     user_id = int(getattr(member, "id", 0) or 0)
@@ -599,21 +625,19 @@ async def conversational_reply(
         if spent.why == CAPPED:
             await say_capped(bot, guild, at)
         log.info("chat: the models are closed for now (%s)", spent.why)
-        return (None, None)
+        return NOTHING
 
     window = await window_for(db, channel_id, user_id, now=at)
     hits = await hits_for(db, guild_id, text)
     tier = tier_for(text, hits, window)
     order = ladder(tier, important=important, simple=simple)
     if not order:
-        return (None, None)
+        return NOTHING
 
-    voice = pick_trope(
-        read_setting(bot.store, guild_id, PERSONALITY_KEY, COOKOUT),
-        await pooled(bot),
-        key=window_key(channel_id, user_id),
-        turns=llm_turns(window),
-    )
+    voice = await mood_for(bot, db, guild_id, channel_id, user_id, window, at)
+    tone = voice.name if voice is not None else COOKOUT
+    sheet = read_setting(bot.store, guild_id, COOKOUT_VOICE_KEY, COOKOUT_VOICE)
+    clause_text = read_setting(bot.store, guild_id, TONE_CLAUSE_KEY, TONE_CLAUSE)
     model_setting = str(read_setting(bot.store, guild_id, SIMPLE_MODEL_KEY, "") or "")
     named = who_they_named(bot, guild, text)
     remembered = await memory_for(bot, db, guild_id, user_id, in_dm=guild_id is None)
@@ -632,6 +656,8 @@ async def conversational_reply(
                 system=voice,
                 messages=messages,
                 directory=directory,
+                sheet=sheet,
+                clause_text=clause_text,
             )
         except LLMError as exc:
             errors[name] = exc.reason
@@ -645,6 +671,7 @@ async def conversational_reply(
                 tier=name,
                 outcome=ERROR,
                 at=at,
+                trope=tone,
             )
             log.warning("chat: the %s tier did not answer — %s", name, exc.reason)
             if guild is not None:
@@ -666,6 +693,7 @@ async def conversational_reply(
             outcome=OK,
             usage=answer.usage,
             at=at,
+            trope=tone,
         )
         people = [who for who, _ in named]
         said = clip(await made_real(bot, guild, answer.text, people), REPLY_LIMIT)
@@ -690,8 +718,8 @@ async def conversational_reply(
             tier=name,
             at=at,
         )
-        return (said, name)
-    return (None, None)
+        return (said, name, tone)
+    return NOTHING
 
 
 async def capped_already_logged(db: Any, guild_id: int, since: str) -> bool:

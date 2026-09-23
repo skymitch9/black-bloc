@@ -2127,3 +2127,70 @@ async def test_a_schema_54_file_gains_the_channel_drafts_table_and_keeps_its_not
             )
     finally:
         await again.close()
+
+
+async def test_a_schema_54_file_gains_chat_voice_and_three_columns_and_keeps_its_rows(tmp_path):
+    """54 → 55 (56 once channels-page merged) is additive: the tone table, the ledger's trope,
+    a staff-written body."""
+    path = tmp_path / "old54.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE chat_voice")
+    await db.conn.execute("DROP TABLE llm_ledger")
+    await db.conn.execute(
+        "CREATE TABLE llm_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, "
+        "guild_id INTEGER, user_id INTEGER, turn TEXT NOT NULL, provider TEXT NOT NULL, "
+        "model TEXT NOT NULL, tier TEXT NOT NULL, outcome TEXT NOT NULL DEFAULT 'ok', "
+        "input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, "
+        "cache_read_tokens INTEGER NOT NULL DEFAULT 0, cache_write_tokens INTEGER NOT NULL "
+        "DEFAULT 0, cost_microdollars INTEGER NOT NULL DEFAULT 0)"
+    )
+    await db.conn.execute(
+        "INSERT INTO llm_ledger(at, turn, provider, model, tier) VALUES ('x', 't', 'p', 'm', 's')"
+    )
+    await db.conn.execute("DROP TABLE personality_tropes")
+    await db.conn.execute(
+        "CREATE TABLE personality_tropes (name TEXT PRIMARY KEY, label TEXT NOT NULL, voice TEXT "
+        "NOT NULL, neighbours TEXT NOT NULL DEFAULT '[]', enabled INTEGER NOT NULL DEFAULT 1, "
+        "sort INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'gabi', updated_at TEXT "
+        "NOT NULL, updated_by INTEGER)"
+    )
+    await db.conn.execute(
+        "INSERT INTO personality_tropes(name, label, voice, updated_at) "
+        "VALUES ('noir', 'noir', 'old', 'x')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '54')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(chat_voice)")
+        assert {r["name"] for r in await cur.fetchall()} == {
+            "guild_id",
+            "user_id",
+            "trope",
+            "turns",
+            "since",
+            "pinned",
+            "pinned_by",
+            "pinned_at",
+        }
+        cur = await again.conn.execute("SELECT trope, turn FROM llm_ledger")
+        row = await cur.fetchone()
+        assert row["turn"] == "t" and row["trope"] is None
+        cur = await again.conn.execute(
+            "SELECT voice, voice_edited_by, voice_edited_at FROM personality_tropes"
+        )
+        row = await cur.fetchone()
+        assert row["voice"] == "old" and row["voice_edited_at"] is None
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+        await again.conn.execute("INSERT INTO chat_voice(guild_id, user_id) VALUES (7, 1)")
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute("INSERT INTO chat_voice(guild_id, user_id) VALUES (7, 1)")
+    finally:
+        await again.close()

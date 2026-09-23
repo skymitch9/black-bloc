@@ -146,6 +146,7 @@ async def record(
     outcome: str = OK,
     usage: Usage | None = None,
     at: datetime | None = None,
+    trope: str | None = None,
 ) -> int | None:
     """One ledger row per model call, answered or not. Never raises into a reply."""
     spent = usage or Usage()
@@ -153,7 +154,7 @@ async def record(
         cur = await db.conn.execute(
             "INSERT INTO llm_ledger(at, guild_id, user_id, turn, provider, model, tier, outcome, "
             "input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, "
-            "cost_microdollars) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "cost_microdollars, trope) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 (at or datetime.now(UTC)).isoformat(),
                 None if guild_id is None else int(guild_id),
@@ -168,6 +169,7 @@ async def record(
                 spent.cache_read_tokens,
                 spent.cache_write_tokens,
                 cost_microdollars(provider, model, spent),
+                trope,
             ),
         )
         await db.conn.commit()

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
 from .actionlog import log_action
 from .channel_notes import NOTE_CHARS, clean_note, clear_note, get_note, set_note
 from .chat_llm import LLM_MODE_KEY, money
+from .chat_voice import pin, roster, talking_now, unpin, voice_rows
 from .knowledge import (
     SERVER,
     SERVER_ROW_IS_NOT_YOURS,
@@ -24,7 +26,16 @@ from .panels import KEEP_IT as KEEP_IT
 from .panels import Outcome, refusal
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
-from .personas import COOKOUT, PERSONALITY_KEY, POOL, forget_tropes, get_trope, list_tropes
+from .personas import (
+    COOKOUT,
+    PERSONALITY_KEY,
+    POOL,
+    forget_tropes,
+    get_trope,
+    list_tropes,
+    reset_voice,
+    write_voice,
+)
 from .personas import set_enabled as set_trope_enabled
 from .settings_store import (
     CHANNEL_NOTE_CLEARED_KEY,
@@ -34,6 +45,20 @@ from .settings_store import (
     CHANNEL_NOTE_TOO_LONG_KEY,
     CHANNEL_NOTE_WORDS,
     CHANNEL_NOTES_BUTTON_KEY,
+    TONE_EDITED_KEY,
+    TONE_RESET_KEY,
+    TONE_TOO_LONG_KEY,
+    VOICE_ACTIVE_KEY,
+    VOICE_CLEARED_KEY,
+    VOICE_LINE_PINNED_KEY,
+    VOICE_LINE_ROLLED_KEY,
+    VOICE_LINE_WAITING_KEY,
+    VOICE_NO_MEMBER_KEY,
+    VOICE_NO_TONE_KEY,
+    VOICE_NOTHING_KEY,
+    VOICE_PINNED_KEY,
+    VOICE_TONE_OFF_KEY,
+    VOICE_WORDS,
     SettingError,
     coerce_value,
     parse_value,
@@ -72,6 +97,11 @@ NO_SUCH_SECTION_CODE = "no_such_section"
 SERVER_ROW_CODE = "server_row"
 NO_SUCH_CHANNEL_CODE = "no_such_channel"
 NOTE_TOO_LONG_CODE = "note_too_long"
+NO_SUCH_MEMBER_CODE = "no_such_member"
+TONE_UNUSABLE_CODE = "tone_unusable"
+TONE_TOO_LONG_CODE = "tone_too_long"
+TONE_CHARS = 1200
+WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {**CHANNEL_NOTE_WORDS, **VOICE_WORDS}
 
 STATUS_MODE = "Answering @-mentions: **{mode}**. Conversation model: **{llm}**."
 STATUS_OFF_TAIL = " Every answer comes from Black Bloc's own written lines."
@@ -137,6 +167,10 @@ SETTINGS_SAVED = "Saved — "
 SETTINGS_ONE = "**{key}** is now `{value}`"
 
 PERSONALITY = "personality"
+VOICES = "voices"
+CLEAR_PIN = "clear_pin"
+PREVIOUS = "previous"
+NEXT = "next"
 KNOWLEDGE = "knowledge"
 SETTINGS = "settings"
 CHAT_TOGGLE = "chat_toggle"
@@ -184,6 +218,11 @@ EDIT_MOVE = PanelMove(EDIT, "Edit…", "primary", row=0)
 NOTE_BACK_MOVE = PanelMove(BACK, "Back", row=0)
 LIMITS_MOVE = PanelMove(LIMITS, "Limits…", "primary", row=0)
 CHANNELS_MOVE = PanelMove(CHANNELS, CHANNEL_NOTE_WORDS[CHANNEL_NOTES_BUTTON_KEY][0], row=0)
+VOICES_MOVE = PanelMove(VOICES, "Who hears what…", "primary", row=3)
+CLEAR_PIN_MOVE = PanelMove(CLEAR_PIN, "Clear the pin", "danger", row=1)
+PREVIOUS_MOVE = PanelMove(PREVIOUS, "‹ Previous", row=2)
+NEXT_MOVE = PanelMove(NEXT, "Next ›", row=2)
+VOICES_PAGE = 25
 
 PANEL_MOVES: tuple[PanelMove, ...] = (
     PERSONALITY_MOVE,
@@ -200,6 +239,10 @@ PANEL_MOVES: tuple[PanelMove, ...] = (
     EDIT_MOVE,
     LIMITS_MOVE,
     CHANNELS_MOVE,
+    VOICES_MOVE,
+    CLEAR_PIN_MOVE,
+    PREVIOUS_MOVE,
+    NEXT_MOVE,
 )
 
 
@@ -257,8 +300,42 @@ def settings_buttons() -> tuple[PanelMove, ...]:
     return (LIMITS_MOVE, BACK_MOVE, REFRESH_MOVE)
 
 
-def personality_buttons() -> tuple[PanelMove, ...]:
-    return (BACK_MOVE, REFRESH_MOVE)
+def personality_buttons(voices_label: str = "") -> tuple[PanelMove, ...]:
+    return (
+        VOICES_MOVE._replace(label=voices_label or VOICES_MOVE.label),
+        BACK_MOVE._replace(row=3),
+        REFRESH_MOVE._replace(row=3),
+    )
+
+
+def voices_buttons(
+    page: int, pages: int, labels: tuple[str, str] = ("", "")
+) -> tuple[PanelMove, ...]:
+    """Previous and Next render only when there is somewhere to go."""
+    found = []
+    if page > 1:
+        found.append(PREVIOUS_MOVE._replace(label=labels[0] or PREVIOUS_MOVE.label))
+    if page < pages:
+        found.append(NEXT_MOVE._replace(label=labels[1] or NEXT_MOVE.label))
+    return (*found, BACK_MOVE._replace(row=3), REFRESH_MOVE._replace(row=3))
+
+
+def member_buttons(pinned: bool, clear_label: str = "") -> tuple[PanelMove, ...]:
+    """Clear renders only on a member who has a pin to clear."""
+    found = [CLEAR_PIN_MOVE._replace(label=clear_label or CLEAR_PIN_MOVE.label)] if pinned else []
+    return (*found, BACK_MOVE._replace(row=2), REFRESH_MOVE._replace(row=2))
+
+
+def page_count(total: int) -> int:
+    return max(1, -(-int(total or 0) // VOICES_PAGE))
+
+
+def wanted_page(page: Any, pages: int) -> int:
+    try:
+        asked = int(page or 1)
+    except (TypeError, ValueError):
+        asked = 1
+    return max(1, min(asked, pages))
 
 
 def status_lines(
@@ -569,7 +646,7 @@ def words(store: Any, guild_id: int, key: str, **values: Any) -> str:
         return str(store.get(guild_id, key)).format(**values)
     except Exception as exc:
         log.warning("chat: %s would not format, so the default was said — %s", key, exc)
-        return CHANNEL_NOTE_WORDS[key][0].format(**values)
+        return WORDS[key][0].format(**values)
 
 
 def text_channel(guild: Any, channel_id: Any) -> Any:
@@ -654,6 +731,191 @@ async def channel_note(bot: Any, guild: Any, channel_id: Any) -> str:
     return str(row["note"]) if row is not None else ""
 
 
+def member_of(guild: Any, user_id: Any) -> Any:
+    try:
+        wanted = int(getattr(user_id, "id", user_id))
+    except (TypeError, ValueError):
+        return None
+    getter = getattr(guild, "get_member", None)
+    found = getter(wanted) if getter is not None else None
+    return None if found is None or getattr(found, "bot", False) else found
+
+
+def member_name(member: Any) -> str:
+    return str(getattr(member, "display_name", None) or getattr(member, "name", "") or member.id)
+
+
+async def usable_tone(bot: Any, guild: Any, tone: Any) -> tuple[Any, Outcome | None]:
+    said = str(tone or "").strip().lower()
+    row = None if said in ("", COOKOUT, POOL) else await get_trope(bot.db, said)
+    if row is None:
+        return (None, refusal(
+            words(bot.store, guild.id, VOICE_NO_TONE_KEY, tone=said[:40] or "nothing"),
+            TONE_UNUSABLE_CODE,
+            422,
+        ))
+    if not row["enabled"]:
+        return (None, refusal(
+            words(bot.store, guild.id, VOICE_TONE_OFF_KEY, tone=str(row["label"])),
+            TONE_UNUSABLE_CODE,
+            422,
+        ))
+    return (row, None)
+
+
+async def pin_voice(
+    bot: Any, guild: Any, actor: Any, user_id: Any, tone: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The one write both doors use to fix a member's tone; staff's pin beats every roll."""
+    member = member_of(guild, user_id)
+    if member is None:
+        return refusal(
+            words(bot.store, guild.id, VOICE_NO_MEMBER_KEY, member=str(user_id)[:40]),
+            NO_SUCH_MEMBER_CODE,
+            404,
+        )
+    row, held = await usable_tone(bot, guild, tone)
+    if held is not None:
+        return held
+    name = str(row["name"])
+    await pin(bot.db, guild.id, member.id, name, by=actor_id(actor))
+    await log_action(
+        bot,
+        guild,
+        kind_via("chat.voice_pinned", via),
+        actor=actor,
+        target=member,
+        details={"member": str(member.id), "tone": name, "via": via},
+    )
+    return Outcome(
+        True,
+        words(
+            bot.store,
+            guild.id,
+            VOICE_PINNED_KEY,
+            member=member_name(member),
+            tone=str(row["label"]),
+        ),
+        value=name,
+    )
+
+
+async def clear_voice(
+    bot: Any, guild: Any, actor: Any, user_id: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """A cleared pin hands the member back to the server's setting; a missing one says so."""
+    try:
+        wanted = int(getattr(user_id, "id", user_id))
+    except (TypeError, ValueError):
+        return refusal(
+            words(bot.store, guild.id, VOICE_NO_MEMBER_KEY, member=str(user_id)[:40]),
+            NO_SUCH_MEMBER_CODE,
+            404,
+        )
+    member = member_of(guild, wanted)
+    name = member_name(member) if member is not None else str(wanted)
+    if not await unpin(bot.db, guild.id, wanted):
+        return Outcome(True, words(bot.store, guild.id, VOICE_NOTHING_KEY, member=name))
+    await log_action(
+        bot,
+        guild,
+        kind_via("chat.voice_cleared", via),
+        actor=actor,
+        target=member if member is not None else wanted,
+        details={"member": str(wanted), "via": via},
+    )
+    return Outcome(True, words(bot.store, guild.id, VOICE_CLEARED_KEY, member=name))
+
+
+async def voice_roster(bot: Any, guild: Any, *, now: Any = None) -> dict[str, Any]:
+    """Who hears what: the rows, the server's setting, and which tones are on."""
+    at = now or datetime.now(UTC)
+    setting = str(bot.store.get(guild.id, PERSONALITY_KEY) or COOKOUT)
+    tropes = await list_tropes(bot.db)
+    enabled = [str(row["name"]) for row in tropes if row["enabled"]]
+    rows = await voice_rows(bot.db, guild.id)
+    talking = await talking_now(bot.db, guild.id, now=at)
+    return {
+        "setting": setting,
+        "enabled": enabled,
+        "labels": {str(row["name"]): str(row["label"]) for row in tropes},
+        "voices": roster(rows, setting, enabled, talking),
+    }
+
+
+def voice_line(store: Any, guild_id: int, entry: dict[str, Any], labels: dict[str, str]) -> str:
+    """One member's line on the Who hears what card, in the words staff chose."""
+    member = f"<@{entry['user_id']}>"
+    pinned = entry["pinned"]
+    if entry["waiting"]:
+        said = words(
+            store, guild_id, VOICE_LINE_WAITING_KEY, member=member, tone=labels.get(pinned, pinned)
+        )
+    elif pinned:
+        by = f"<@{entry['pinned_by']}>" if entry["pinned_by"] else "staff"
+        said = words(
+            store,
+            guild_id,
+            VOICE_LINE_PINNED_KEY,
+            member=member,
+            tone=labels.get(pinned, pinned),
+            by=by,
+        )
+    else:
+        tone = str(entry["trope"])
+        said = words(
+            store,
+            guild_id,
+            VOICE_LINE_ROLLED_KEY,
+            member=member,
+            tone=labels.get(tone, tone),
+            turns=entry["turns"],
+        )
+    if entry["active"]:
+        said = f"{said} · {words(store, guild_id, VOICE_ACTIVE_KEY)}"
+    return said
+
+
+async def edit_tone(
+    bot: Any, guild: Any, actor: Any, name: Any, voice: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """A tone's wording, written by staff and kept across syncs; blank puts the shipped one back."""
+    said = str(name or "").strip().lower()
+    row = await get_trope(bot.db, said)
+    if row is None:
+        return refusal(NO_SUCH_TROPE.format(name=said[:40]), NO_SUCH_TROPE_CODE, 404)
+    text = str(voice or "").strip()
+    label = str(row["label"])
+    if len(text) > TONE_CHARS:
+        return refusal(
+            words(
+                bot.store,
+                guild.id,
+                TONE_TOO_LONG_KEY,
+                length=len(text),
+                limit=TONE_CHARS,
+                over=len(text) - TONE_CHARS,
+            ),
+            TONE_TOO_LONG_CODE,
+            422,
+        )
+    by = actor_id(actor)
+    if text:
+        await write_voice(bot.db, said, text, by=by)
+    else:
+        await reset_voice(bot.db, said, by=by)
+    forget_tropes(bot)
+    await log_action(
+        bot,
+        guild,
+        kind_via("chat.tone_edited", via),
+        actor=actor,
+        details={"mood": said, "reset": not text, "voice": text[:200], "via": via},
+    )
+    key = TONE_EDITED_KEY if text else TONE_RESET_KEY
+    return Outcome(True, words(bot.store, guild.id, key, tone=label), value=said)
+
+
 def settings_saved(changed: dict[str, Any]) -> str:
     return SETTINGS_SAVED + ", ".join(
         SETTINGS_ONE.format(key=key, value=value) for key, value in changed.items()
@@ -695,6 +957,16 @@ __all__ = [
     "channel_note",
     "channel_notes_buttons",
     "clear_channel_note",
+    "clear_voice",
+    "edit_tone",
+    "member_buttons",
+    "member_of",
+    "page_count",
+    "pin_voice",
+    "voice_line",
+    "voice_roster",
+    "voices_buttons",
+    "wanted_page",
     "edit_note",
     "guarded_moods",
     "knowledge_buttons",

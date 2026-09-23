@@ -2685,3 +2685,7 @@ body[data-show-was="1"] .preview-was { display: block; }
 }
 .setrow-mock { flex-basis: 100%; min-width: 0; }
 .dcmock-holder { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+/* Personality tones: the cookout sheet is twenty lines, so its box is tall enough to read. */
+.cookout-sheet .setrow[data-key="chat_cookout_voice"] textarea { min-height: 22em; }
+.tone-area { width: 100%; min-height: 6em; }

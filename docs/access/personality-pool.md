@@ -1,5 +1,7 @@
 # The global personality pool — runbook
 
+> ⚠️ **2026-09-23 (branch `personality-tones`, BUILT, NOT MERGED):** the eleven voice bodies in `personas.py:VOICES` are now **this server's cookout tones** (rewritten; no manifest change, no version bump), and staff can reword any one on the Chat page ▸ Personality. A staff-worded body is marked `voice_edited_at` and the boot sync below leaves its wording alone (it still takes a new label, wings and order); **Put the shipped wording back** hands it back to the sync. Design: [`../info/personality-tones-design.md`](../info/personality-tones-design.md).
+
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — secret NAMES only.
 > **Last verified: 2026-09-11 08:38** — 🔴 **the "not built yet" half of this file was wrong
 > and is corrected below.** GABI's half LANDED on 2026-09-05 19:45 (KI-23 closed and moved to

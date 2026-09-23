@@ -3262,6 +3262,10 @@
           "name",
           "label",
           "voice",
+          "shipped",
+          "edited",
+          "edited_at",
+          "edited_by",
           "enabled",
           "in_use",
           "updated_at",
@@ -3311,10 +3315,150 @@
           "name",
           "label",
           "voice",
+          "shipped",
+          "edited",
+          "edited_at",
+          "edited_by",
           "enabled",
           "in_use",
           "updated_at",
           "updated_by"
+        ]
+      }
+    },
+    {
+      "_": "Personality tones (2026-09-23, docs/info/personality-tones-design.md). A tone body staff rewrote is kept by the boot sync; a blank voice puts the shipped one back.",
+      "method": "PUT",
+      "path": "/api/chat/personality/warm",
+      "body": {
+        "voice": "WARM, written on the contract run."
+      },
+      "read_by": [
+        "page-chat.js Personality tone editor"
+      ],
+      "shape": "object",
+      "keys": [
+        "trope",
+        "message"
+      ],
+      "nested": {
+        "trope": [
+          "name",
+          "label",
+          "voice",
+          "shipped",
+          "edited",
+          "edited_at",
+          "edited_by",
+          "enabled",
+          "in_use",
+          "updated_at",
+          "updated_by"
+        ]
+      }
+    },
+    {
+      "_": "Who hears what: every member with a chat_voice row. {member_id} is a member of the guild; the seed pins one so the row shape is checked.",
+      "method": "GET",
+      "path": "/api/chat/voices",
+      "read_by": [
+        "page-chat.js Who hears what section"
+      ],
+      "shape": "object",
+      "keys": [
+        "setting",
+        "setting_kind",
+        "tropes",
+        "voices",
+        "counts",
+        "notes"
+      ],
+      "rows": {
+        "voices": [
+          "user_id",
+          "name",
+          "trope",
+          "label",
+          "pinned",
+          "pinned_label",
+          "pinned_by",
+          "pinned_at",
+          "waiting",
+          "since",
+          "turns",
+          "active"
+        ],
+        "tropes": [
+          "name",
+          "label"
+        ]
+      },
+      "nested": {
+        "counts": [
+          "total",
+          "pinned",
+          "active"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chat/voices/{member_id}",
+      "body": {
+        "trope": "scholar"
+      },
+      "read_by": [
+        "page-chat.js Who hears what Pin"
+      ],
+      "shape": "object",
+      "keys": [
+        "voice",
+        "setting",
+        "message"
+      ],
+      "nested": {
+        "voice": [
+          "user_id",
+          "name",
+          "trope",
+          "label",
+          "pinned",
+          "pinned_label",
+          "pinned_by",
+          "pinned_at",
+          "waiting",
+          "since",
+          "turns",
+          "active"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chat/voices/{member_id}",
+      "read_by": [
+        "page-chat.js Who hears what Clear"
+      ],
+      "shape": "object",
+      "keys": [
+        "voice",
+        "setting",
+        "message"
+      ],
+      "nested": {
+        "voice": [
+          "user_id",
+          "name",
+          "trope",
+          "label",
+          "pinned",
+          "pinned_label",
+          "pinned_by",
+          "pinned_at",
+          "waiting",
+          "since",
+          "turns",
+          "active"
         ]
       }
     },
@@ -5950,6 +6094,9 @@
     "web.request.withdrawn",
     "web.request.updated",
     "web.request.comment",
+    "web.chat.voice_pinned",
+    "web.chat.voice_cleared",
+    "web.chat.tone_edited",
     "web.chat.memory_forgot",
     "web.raidtrain.create",
     "web.raidtrain.assign",

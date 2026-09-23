@@ -151,7 +151,11 @@ def test_the_settings_and_personality_rows_are_what_they_say():
         chat_panel.BACK,
         chat_panel.REFRESH,
     ]
-    assert actions(personality_buttons()) == [chat_panel.BACK, chat_panel.REFRESH]
+    assert actions(personality_buttons()) == [
+        chat_panel.VOICES,
+        chat_panel.BACK,
+        chat_panel.REFRESH,
+    ]
 
 
 def test_every_move_the_panel_can_render_is_in_the_one_table():
@@ -166,6 +170,8 @@ def test_every_move_the_panel_can_render_is_in_the_one_table():
     rendered |= {move.action for move in note_buttons(knowledge.STAFF)}
     rendered |= {move.action for move in settings_buttons()}
     rendered |= {move.action for move in personality_buttons()}
+    rendered |= {move.action for move in chat_panel.voices_buttons(2, 3)}
+    rendered |= {move.action for move in chat_panel.member_buttons(True)}
 
     assert rendered == known
     assert all(0 <= move.row <= 4 for move in PANEL_MOVES)
@@ -571,3 +577,96 @@ def test_the_channel_notes_card_offers_back_and_refresh_only():
         chat_panel.BACK,
         chat_panel.REFRESH,
     ]
+
+
+# --- who hears what (personality tones, 2026-09-23) ------------------------------------------
+
+
+class PeopleGuild(FakeGuild):
+    def __init__(self):
+        super().__init__()
+        self.members = {
+            21: SimpleNamespace(id=21, display_name="Nia", bot=False),
+            99: SimpleNamespace(id=99, display_name="A bot", bot=True),
+        }
+
+    def get_member(self, user_id):
+        return self.members.get(int(user_id))
+
+
+@pytest.fixture
+async def people(bot, pool):
+    bot.guild = PeopleGuild()
+    return bot
+
+
+async def test_a_pin_from_discord_is_one_row_one_log_and_a_keyed_sentence(people, actor, db):
+    from black_bloc.chat_voice import voice_row
+
+    found = await chat_panel.pin_voice(people, people.guild, actor, 21, "noir")
+
+    assert found.ok and found.value == "noir"
+    assert found.message.startswith("**Nia** hears **")
+    assert (await voice_row(db, GUILD, 21))["pinned_by"] == ACTOR
+    assert [kind for kind, _ in await kinds(db)] == ["chat.voice_pinned"]
+
+
+async def test_the_website_door_writes_the_same_row_under_its_own_kind(people, actor, db):
+    await chat_panel.pin_voice(people, people.guild, actor, 21, "warm", via=VIA_WEBSITE)
+    await chat_panel.clear_voice(people, people.guild, actor, 21, via=VIA_WEBSITE)
+
+    assert [kind for kind, _ in await kinds(db)] == [
+        "web.chat.voice_pinned",
+        "web.chat.voice_cleared",
+    ]
+
+
+async def test_a_bot_or_a_stranger_cannot_be_pinned(people, actor, db):
+    for who in (99, 4242, "nobody"):
+        found = await chat_panel.pin_voice(people, people.guild, actor, who, "noir")
+        assert not found.ok and found.status == 404
+        assert "not in this server" in found.message
+    assert await kinds(db) == []
+
+
+async def test_the_cookout_and_the_pool_are_not_tones_a_member_can_be_pinned_to(people, actor):
+    for said in ("cookout", "pool", ""):
+        found = await chat_panel.pin_voice(people, people.guild, actor, 21, said)
+        assert not found.ok and found.status == 422
+
+
+async def test_clearing_nothing_says_so_and_logs_nothing(people, actor, db):
+    found = await chat_panel.clear_voice(people, people.guild, actor, 21)
+
+    assert found.ok and "had no tone pinned" in found.message
+    assert await kinds(db) == []
+
+
+async def test_the_roster_is_one_shape_for_both_doors(people, actor):
+    await chat_panel.pin_voice(people, people.guild, actor, 21, "noir")
+
+    found = await chat_panel.voice_roster(people, people.guild)
+
+    assert found["setting"] == "cookout" and "noir" in found["enabled"]
+    assert found["voices"][0]["pinned"] == "noir" and found["voices"][0]["trope"] == "cookout"
+    assert found["labels"]["noir"]
+
+
+async def test_a_tone_edit_is_kept_by_the_sync_and_logged_once(people, actor, db):
+    found = await chat_panel.edit_tone(people, people.guild, actor, "noir", "NOIR, ours.")
+
+    assert found.ok and "reads the way you wrote it" in found.message
+    await personas.sync_tropes(db)
+    assert (await personas.get_trope(db, "noir"))["voice"] == "NOIR, ours."
+    assert [kind for kind, _ in await kinds(db)] == ["chat.tone_edited"]
+
+
+async def test_the_paging_buttons_render_only_where_there_is_somewhere_to_go():
+    def acts(moves):
+        return [move.action for move in moves]
+
+    assert acts(chat_panel.voices_buttons(1, 1)) == [chat_panel.BACK, chat_panel.REFRESH]
+    assert acts(chat_panel.voices_buttons(1, 2))[0] == chat_panel.NEXT
+    assert acts(chat_panel.voices_buttons(2, 2))[0] == chat_panel.PREVIOUS
+    assert chat_panel.CLEAR_PIN not in acts(chat_panel.member_buttons(False))
+    assert chat_panel.page_count(26) == 2 and chat_panel.wanted_page(9, 2) == 2

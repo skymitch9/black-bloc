@@ -42,7 +42,14 @@ from .logkinds import (
 from .minutes_audio import CHUNK_SECONDS_DEFAULT as MINUTES_CHUNK_SECONDS_DEFAULT
 from .minutes_audio import CHUNK_SECONDS_MAX as MINUTES_CHUNK_SECONDS_MAX
 from .minutes_audio import CHUNK_SECONDS_MIN as MINUTES_CHUNK_SECONDS_MIN
-from .personas import COOKOUT, PERSONALITY_CHOICES
+from .personas import (
+    COOKOUT,
+    COOKOUT_VOICE,
+    COOKOUT_VOICE_KEY,
+    PERSONALITY_CHOICES,
+    TONE_CLAUSE,
+    TONE_CLAUSE_KEY,
+)
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
@@ -3546,6 +3553,231 @@ TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in CHANNEL_NOTE_WORDS.items()}
 )
 
+VOICE_SHEET_CHARS = 4000
+TONE_CLAUSE_CHARS = 600
+PROMPT_TOO_LONG = (
+    "That is {length} characters and {what} holds {limit}, so nothing was changed. Every "
+    "character is read on every answer; take {over} out and save it again."
+)
+PROMPT_WORDS: dict[str, tuple[str, int, str, str]] = {
+    COOKOUT_VOICE_KEY: (
+        COOKOUT_VOICE,
+        VOICE_SHEET_CHARS,
+        "the cookout voice",
+        "the cookout voice itself — the words Black Bloc reaches for, how it greets, teases and "
+        "signs off, and what it never says. Every conversational answer is written in it, "
+        "whatever tone is on top. It cannot be left blank",
+    ),
+    TONE_CLAUSE_KEY: (
+        TONE_CLAUSE,
+        TONE_CLAUSE_CHARS,
+        "the tone sentence",
+        "the sentence under every tone that tells the model a mood is a tone ON the cookout "
+        "voice — keep its words and mannerisms, change only energy, pace and attitude. It "
+        "cannot be left blank",
+    ),
+}
+KEY_TYPES.update({key: "text" for key in PROMPT_WORDS})
+KEY_HELP.update({key: said for key, (_, _, _, said) in PROMPT_WORDS.items()})
+
+
+def checked_prompt(key: str) -> Any:
+    _, limit, what, _ = PROMPT_WORDS[key]
+
+    def check(given: Any) -> str:
+        text = str(given or "").strip()
+        if len(text) > limit:
+            raise SettingError(
+                PROMPT_TOO_LONG.format(
+                    length=len(text), what=what, limit=limit, over=len(text) - limit
+                )
+            )
+        return text
+
+    return check
+
+
+TEXT_CHECKS.update({key: checked_prompt(key) for key in PROMPT_WORDS})
+
+VOICE_PINNED_KEY = "chat_voice_pinned"
+VOICE_CLEARED_KEY = "chat_voice_cleared"
+VOICE_NOTHING_KEY = "chat_voice_nothing"
+VOICE_NO_MEMBER_KEY = "chat_voice_no_member"
+VOICE_NO_TONE_KEY = "chat_voice_no_tone"
+VOICE_TONE_OFF_KEY = "chat_voice_tone_off"
+VOICE_BUTTON_KEY = "chat_voice_button"
+VOICE_TITLE_KEY = "chat_voice_title"
+VOICE_INTRO_KEY = "chat_voice_intro"
+VOICE_EMPTY_KEY = "chat_voice_empty"
+VOICE_OFF_NOTE_KEY = "chat_voice_off_note"
+VOICE_LINE_PINNED_KEY = "chat_voice_line_pinned"
+VOICE_LINE_ROLLED_KEY = "chat_voice_line_rolled"
+VOICE_LINE_WAITING_KEY = "chat_voice_line_waiting"
+VOICE_ACTIVE_KEY = "chat_voice_active"
+VOICE_SET_KEY = "chat_voice_set_placeholder"
+VOICE_TONE_PLACEHOLDER_KEY = "chat_voice_tone_placeholder"
+VOICE_CLEAR_BUTTON_KEY = "chat_voice_clear_button"
+VOICE_PREVIOUS_KEY = "chat_voice_previous_button"
+VOICE_NEXT_KEY = "chat_voice_next_button"
+VOICE_PAGE_KEY = "chat_voice_page"
+VOICE_MEMBER_TITLE_KEY = "chat_voice_member_title"
+TONE_EDITED_KEY = "chat_tone_edited"
+TONE_RESET_KEY = "chat_tone_reset"
+TONE_TOO_LONG_KEY = "chat_tone_too_long"
+VOICE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    VOICE_PINNED_KEY: (
+        "**{member}** hears **{tone}** on top of the cookout voice from their next answer on, "
+        "whatever the pool rolls. **Clear** hands them back to the server's setting.",
+        ("member", "tone"),
+        "what staff are told when a member's tone is pinned, on /chat and on the Chat page. It "
+        "takes {member} and {tone}",
+    ),
+    VOICE_CLEARED_KEY: (
+        "**{member}** is back on the server's setting: their tone is rolled again from their "
+        "next answer.",
+        ("member",),
+        "what staff are told when a member's pinned tone is cleared. It takes {member}",
+    ),
+    VOICE_NOTHING_KEY: (
+        "**{member}** had no tone pinned, so nothing changed.",
+        ("member",),
+        "what staff are told when they clear a pin that was never set. It takes {member}",
+    ),
+    VOICE_NO_MEMBER_KEY: (
+        "**{member}** is not in this server, so nothing was pinned. Pick somebody from the list "
+        "again.",
+        ("member",),
+        "what staff are told when the member a tone was meant for is not in the server. It "
+        "takes {member}, the id that was given",
+    ),
+    VOICE_NO_TONE_KEY: (
+        "**{tone}** is not one of the tones Black Bloc knows, so nothing was pinned. The list "
+        "beside it is all of them.",
+        ("tone",),
+        "what staff are told when a pin names a tone that does not exist. It takes {tone}",
+    ),
+    VOICE_TONE_OFF_KEY: (
+        "**{tone}** is switched off in the pool, so it cannot be pinned. Turn it back on under "
+        "Personality first, or pick another tone.",
+        ("tone",),
+        "what staff are told when a pin names a tone that is switched off. It takes {tone}",
+    ),
+    VOICE_BUTTON_KEY: (
+        "Who hears what…",
+        (),
+        "the button on /chat ▸ Personality that opens the list of which tone each member hears. "
+        "Discord shows at most 80 characters on a button",
+    ),
+    VOICE_TITLE_KEY: (
+        "Who hears what",
+        (),
+        "the heading of the card on /chat that lists which tone each member hears",
+    ),
+    VOICE_INTRO_KEY: (
+        "Every member hears the cookout voice; the tone is what sits on top of it. The server's "
+        "setting is **{setting}**, and a pin beats it until staff clear it. **{count}** "
+        "member(s) listed.",
+        ("setting", "count"),
+        "the first lines of that card. It takes {setting}, the chat_personality value, and "
+        "{count}, how many members are listed",
+    ),
+    VOICE_EMPTY_KEY: (
+        "Nobody has been answered by a conversation model yet, so nobody has a tone. Pick a "
+        "member below to pin one.",
+        (),
+        "what that card says when nobody is listed yet",
+    ),
+    VOICE_OFF_NOTE_KEY: (
+        "The setting is the cookout voice, so nobody hears a tone right now — pins included. "
+        "Pick the pool or a mood under Personality and the pins come back into play.",
+        (),
+        "the line that card adds while chat_personality is cookout",
+    ),
+    VOICE_LINE_PINNED_KEY: (
+        "{member} — **{tone}** · pinned by {by}",
+        ("member", "tone", "by"),
+        "one pinned member's line on that card. It takes {member}, {tone} and {by}, the staff "
+        "member who pinned it",
+    ),
+    VOICE_LINE_ROLLED_KEY: (
+        "{member} — **{tone}** · rolled · {turns} turn(s)",
+        ("member", "tone", "turns"),
+        "one unpinned member's line on that card. It takes {member}, {tone} and {turns}, the "
+        "answers in their current window",
+    ),
+    VOICE_LINE_WAITING_KEY: (
+        "{member} — pinned to **{tone}**, which is switched off, so the setting decides for now",
+        ("member", "tone"),
+        "the line for a member whose pinned tone is switched off. It takes {member} and {tone}",
+    ),
+    VOICE_ACTIVE_KEY: (
+        "talking now",
+        (),
+        "the word added after a member's line while their conversation window is open",
+    ),
+    VOICE_SET_KEY: (
+        "Set a member's tone…",
+        (),
+        "the member picker's placeholder on that card. Discord shows at most 150 characters",
+    ),
+    VOICE_TONE_PLACEHOLDER_KEY: (
+        "The tone for {member}…",
+        ("member",),
+        "the tone picker's placeholder once a member is picked. It takes {member}; Discord "
+        "shows at most 150 characters",
+    ),
+    VOICE_CLEAR_BUTTON_KEY: (
+        "Clear the pin",
+        (),
+        "the button that hands a pinned member back to the server's setting. Discord shows at "
+        "most 80 characters on a button",
+    ),
+    VOICE_PREVIOUS_KEY: (
+        "‹ Previous",
+        (),
+        "the button that shows the previous 25 members on that card",
+    ),
+    VOICE_NEXT_KEY: (
+        "Next ›",
+        (),
+        "the button that shows the next 25 members on that card",
+    ),
+    VOICE_PAGE_KEY: (
+        "Page {page} of {pages}",
+        ("page", "pages"),
+        "the page line on that card when there are more than 25 members. It takes {page} and "
+        "{pages}",
+    ),
+    VOICE_MEMBER_TITLE_KEY: (
+        "The tone for {member}",
+        ("member",),
+        "the heading of one member's card, where a tone is pinned or cleared. It takes {member}",
+    ),
+    TONE_EDITED_KEY: (
+        "**{tone}** now reads the way you wrote it, from the next answer on. The boot sync keeps "
+        "your wording.",
+        ("tone",),
+        "what staff are told when a tone's wording is saved on the Chat page. It takes {tone}",
+    ),
+    TONE_RESET_KEY: (
+        "**{tone}** is back to the wording Black Bloc ships with.",
+        ("tone",),
+        "what staff are told when a tone's wording is put back. It takes {tone}",
+    ),
+    TONE_TOO_LONG_KEY: (
+        "That tone is {length} characters and a tone holds {limit}, so nothing was saved. Take "
+        "{over} out and save it again.",
+        ("length", "limit", "over"),
+        "what staff are told when a tone's wording is too long. It takes {length}, {limit} and "
+        "{over}",
+    ),
+}
+KEY_TYPES.update({key: "text" for key in VOICE_WORDS})
+KEY_HELP.update({key: said for key, (_, _, said) in VOICE_WORDS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in VOICE_WORDS.items()}
+)
+
 
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
@@ -4086,6 +4318,10 @@ class SettingsStore:
             return True
         if key in CHANNEL_NOTE_WORDS:
             return CHANNEL_NOTE_WORDS[key][0]
+        if key in PROMPT_WORDS:
+            return PROMPT_WORDS[key][0]
+        if key in VOICE_WORDS:
+            return VOICE_WORDS[key][0]
         if key == "chat_mode":
             return "on"
         if key == "chat_cooldown_seconds":
