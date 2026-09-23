@@ -8080,7 +8080,7 @@ Branch `channel-catalog`, off `main` `8e4ca731`, keyed against `498019b4`. Desig
 
 # Personality tones — the cookout is the voice, and who hears what
 
-Branch `personality-tones`, off `main` `083ca538`, keyed against `85cb4053`; the anchor text wins over the number.
+Branch `personality-tones`, off `main` `083ca538`, keyed against `85cb4053` and re-checked after merging `main` `562e27c9` (only the two `settings_store.py` rows moved, +120); the anchor text wins over the number.
 Design: [`personality-tones-design.md`](personality-tones-design.md).
 
 | Key | Note |
@@ -8102,8 +8102,8 @@ Design: [`personality-tones-design.md`](personality-tones-design.md).
 | `black_bloc/chat_panel.py:311` `voices_buttons` | `page_count` / `wanted_page` below it mirror `modcases`' with a page of 25 — near-duplicates on purpose, NOT interchangeable (different page size). |
 | `black_bloc/chat_panel.py:766` `pin_voice` | THE write both doors use. A bot, a stranger, `cookout`, `pool` and a switched-off mood are all refused in keyed words (404 / 422). |
 | `black_bloc/chat_panel.py:879` `edit_tone` | A blank body is a reset, not an empty row; `forget_tropes` drops the reply path's cached rows so the next answer reads the new wording. |
-| `black_bloc/settings_store.py:3410` `PROMPT_WORDS` | The sheet and the sentence: default, character cap, the noun the refusal names, help. Capped because every character is read on every answer. |
-| `black_bloc/settings_store.py:3475` `VOICE_WORDS` | The 25 words: default, the only placeholders allowed, help — `KEY_TYPES`, `KEY_HELP`, `TEXT_CHECKS` and `default()` are built from it, as `CHANNEL_NOTE_WORDS` does. |
+| `black_bloc/settings_store.py:3530` `PROMPT_WORDS` | The sheet and the sentence: default, character cap, the noun the refusal names, help. Capped because every character is read on every answer. |
+| `black_bloc/settings_store.py:3595` `VOICE_WORDS` | The 25 words: default, the only placeholders allowed, help — `KEY_TYPES`, `KEY_HELP`, `TEXT_CHECKS` and `default()` are built from it, as `CHANNEL_NOTE_WORDS` does. |
 | `black_bloc/api/tools/chat.py:728` `chat_trope_switch` | `voice` and `enabled` are independent: a body edit alone never toggles the pool (the old route treated a missing `enabled` as "on"). |
 | `black_bloc/cogs/content/chat.py:122` `WORDING_KEYS` | The channel-note, prompt and voice words stay off the `/chat` Settings card — the 22-line sheet alone would swamp its 4096 characters. |
 | `black_bloc/cogs/content/chat.py:1054` `VoiceMemberPick` | Discord's member picker searches the whole server, so it is the way onto a member not yet listed; the roster itself pages 25 at a time. |
