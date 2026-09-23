@@ -1894,6 +1894,7 @@ async def test_personality_opens_who_hears_what_and_back_returns_to_personality(
     assert "Set a member's tone…" in placeholders(interaction.view)
     assert "Next ›" not in labels(interaction.view)
 
+    assert interaction.view.again is not None
     await button(interaction.view, "Back").callback(interaction)
     assert interaction.embed.title == "The voice Black Bloc answers in"
 
@@ -1908,6 +1909,7 @@ async def test_picking_a_member_and_a_tone_pins_it_and_clear_takes_it_off(
     await pick_one(interaction, "Set a member's tone…", SimpleNamespace(id=321))
     assert interaction.embed.title == "The tone for Ada"
     assert "Clear the pin" not in labels(interaction.view)
+    assert interaction.view.again is not None
 
     await pick_one(interaction, "The tone for Ada…", "noir")
     assert interaction.sent.startswith("**Ada** hears **")

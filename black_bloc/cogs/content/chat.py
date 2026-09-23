@@ -418,7 +418,9 @@ async def build_voices(bot: Any, guild: Any, page: Any = 1) -> tuple[discord.Emb
         title=say(bot, guild, VOICE_TITLE_KEY),
         description=clamped(voices_lines(bot, guild, found, shown, at, pages)),
     )
-    view = ChatPanel(minutes_for(bot, guild.id))
+    view = ChatPanel(
+        minutes_for(bot, guild.id), again=lambda one, prev: open_voices(one, at, prev)
+    )
     view.where = VOICES_VIEW
     view.page = at
     view.add_item(VoiceMemberPick(say(bot, guild, VOICE_SET_KEY)[:PLACEHOLDER_CHARS]))
@@ -451,7 +453,10 @@ async def build_member(
         title=say(bot, guild, VOICE_MEMBER_TITLE_KEY, member=name)[:EMBED_TITLE_CHARS],
         description=clamped(lines),
     )
-    view = ChatPanel(minutes_for(bot, guild.id))
+    wanted = int(member.id)
+    view = ChatPanel(
+        minutes_for(bot, guild.id), again=lambda one, prev: open_member(one, wanted, prev)
+    )
     view.where = MEMBER_VIEW
     view.page = page
     view.member_id = int(member.id)
