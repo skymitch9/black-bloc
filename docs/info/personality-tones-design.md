@@ -1,11 +1,13 @@
 # Personality tones — the cookout is the voice, every mood is a tone on it, and the tone follows the person
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — **BUILT, NOT MERGED, NOT DEPLOYED**
-> (branch `personality-tones`, worktree `C:/lcw/bb-personality-tones`, off `main` `083ca538`; built 2026-09-23
-> by an Opus build agent from the conductor's brief). Secret NAMES only.
-> **Last verified: 2026-09-23** — ruff clean, the full pytest suite green from the worktree, `node site/mock/check.mjs`
-> ok against a mock on a private port, and `page-chat.js` loads as an ES module. ⚠️ **Nothing here has met live
-> Discord, a live model or a browser** — see *Not verified* at the foot.
+> (branch `personality-tones`, worktree `C:/lcw/bb-personality-tones`, off `main` `083ca538`, with `main` `562e27c9`
+> (birthday-post-today) merged in — three append-only conflicts resolved; built 2026-09-23 by an Opus build agent from
+> the conductor's brief). Secret NAMES only.
+> **Last verified: 2026-09-23, on the merged tree** — `ruff check black_bloc tests site` clean; `pytest -q -n 16`
+> **7561 passed, 3 skipped**; `node site/mock/check.mjs` **ok — 21 pages, 206 routes, 25 core settings** against a mock
+> on a private port; `page-chat.js` and `page-settings.js` load as ES modules (fail only on `document is not defined`).
+> ⚠️ **Nothing here has met live Discord, a live model or a browser** — see *Not verified* at the foot.
 
 ## The owner's asks (verbatim, 2026-09-23)
 
