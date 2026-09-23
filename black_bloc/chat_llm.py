@@ -35,6 +35,7 @@ from .llm import (
     LLMError,
     record,
 )
+from .mentions import named
 from .personas import (
     BANTER_STYLE,
     BANTER_STYLE_KEY,
@@ -489,11 +490,11 @@ def usable_db(bot: Any) -> Any:
     return db if db is not None and getattr(db, "is_connected", False) else None
 
 
-async def hits_for(db: Any, guild_id: Any, text: Any) -> Any:
+async def hits_for(db: Any, guild_id: Any, text: Any, guild: Any = None) -> Any:
     if guild_id is None:
         return ()
     try:
-        return search(await list_sections(db, int(guild_id)), spoken(text))
+        return search(await list_sections(db, int(guild_id)), spoken(named(guild, text)))
     except Exception as exc:
         log.warning("chat: the notes were not searched — %s: %s", type(exc).__name__, exc)
         return ()
@@ -661,7 +662,7 @@ async def conversational_reply(
         return NOTHING
 
     window = await window_for(db, channel_id, user_id, now=at)
-    hits = await hits_for(db, guild_id, text)
+    hits = await hits_for(db, guild_id, text, guild)
     tier = tier_for(text, hits, window)
     order = ladder(tier, important=important, simple=simple)
     if not order:

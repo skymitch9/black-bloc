@@ -8168,3 +8168,12 @@ Design: [`personality-tones-design.md`](personality-tones-design.md).
 | `black_bloc/chat_llm.py:661` `banter` / `note` | Both keys are read per reply like the sheet and the clause, so a Settings edit is in the next answer. |
 | `black_bloc/personas.py:223` `BANTER_STYLE` | Default of `chat_banter_style`. `stable_core` puts it after the cookout sheet INSIDE the cached block, so it costs nothing per turn once cached and both tiers read it (`system_text` is the same stack). |
 | `black_bloc/settings_store.py:3626` `PROMPT_WORDS` | The two new keys ride the prompt-words table (600-character cap each, blank falls back to the default in the reader), so `KEY_TYPES`, help, the length check and `default()` come for free. |
+
+## A picked mention matches like a typed name (branch `mention-names`, 2026-09-23)
+
+*(off `main` `f606e79d`, keyed against the branch tip. Design: [`phase14-design.md`](phase14-design.md) ▸ *Follow-up 2026-09-23 — banter gets banter*, the mention-id line.)*
+
+| Where | Why |
+|---|---|
+| ⚠️ `black_bloc/mentions.py:31` `named` | **Matching text only.** `hits_for` (`chat_llm.py:497`) searches `spoken(named(guild, text))`; `user_turn` and the logs keep the raw text, which already carries Discord's rendering. `who_they_named` is untouched on purpose: `member_notes` finds people BY their `<@id>`, so rewriting first would blind it. The bot's own mention (`guild.me`) is left as sent so `spoken` still strips it — otherwise `black`/`bloc` would become search words. A lookup that is missing (no cache, unknown id, a fake guild with no `get_*`) leaves the mention exactly as it was, so the old behaviour is the floor. |
+| `black_bloc/mentions.py:20` `resolved` | Channels get `#`, roles `@`, members their `display_name` (the nickname) then `name`. A resolved `#knuck-up` tokenises as the single token `knuck-up` — the same as the typed form (`-` is kept inside a token, stripped only at the edges) — so `is_strong`'s name rule fires with no change to `knowledge.py`. |
