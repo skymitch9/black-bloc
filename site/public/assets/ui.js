@@ -1005,7 +1005,13 @@ export function memberPicker({ label = 'Member', onPick = null } = {}) {
     picked,
     status,
   ]);
-  return { node, get id() { return chosen.id; }, get name() { return chosen.name; }, clear: () => choose(null) };
+  return {
+    node,
+    get id() { return chosen.id; },
+    get name() { return chosen.name; },
+    clear: () => choose(null),
+    set: ({ id, name }) => choose(id ? { id, name: name || String(id) } : null),
+  };
 }
 
 function jsonText(value) {

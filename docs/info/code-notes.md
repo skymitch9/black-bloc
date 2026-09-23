@@ -8030,3 +8030,11 @@ anchor text wins over the number.)*
 | `black_bloc/orphaned.py:106` `on_interaction` | Answers first, logs second (3-second window). Never edits the panel: one response per interaction, and rebuilding a message's components to disable them could kill live `DynamicItem`s sharing it. |
 | `black_bloc/logkinds.py:30` `PANEL_EXPIRED_CLICK` | Head `panel` → `core`; ROUTINE, so the Logs page has it and `#blackbloc-logs` does not at the default level. |
 | `black_bloc/settings_store.py:2369` `PANEL_EXPIRED_TEXT_KEY` | Core key 25 of `CORE_KEYS`; it takes the `core` settings group to 26 keys, one past the select cap, so `/settings` ▸ core now draws **Find a setting**. |
+
+## A Change button on each birthday row (2026-09-23)
+
+*(branch `birthday-change-button`, off `main` `de2e5eab`. Keyed against `0c8b6a93`; the anchor text wins over the number.)*
+
+| Key | Note |
+|---|---|
+| `site/public/assets/page-birthdays.js:95` `fill` | **Change** fills the one **Add or change one** form rather than opening an inline editor, so saving is the same `PUT /api/birthdays/{user_id}` that overwrites. The picker is set through `ui.js:1013` `set({id, name})` (added for this; it calls the picker's own `choose`, so `onPick` fires as if typed). `keepSaying('birthdays.set')` / `sayAgain` exist because the form's *Saved.* sentence was being thrown away by its own `refresh()` before this build — measured in headless Chrome against the mock. |

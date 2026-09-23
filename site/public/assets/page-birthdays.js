@@ -23,6 +23,9 @@ import {
   templateEditor,
 } from './ui.js';
 
+const CHANGE = 'Change';
+const REMOVE = 'Remove';
+
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 let refresh = () => {};
@@ -75,16 +78,31 @@ function setCard() {
       }),
       `Saved. ${picker.name} is down for ${MONTHS[Number(month.value) - 1]} ${day.value}.`,
     );
-    if (done.ok) refresh();
+    if (done.ok) {
+      keepSaying('birthdays.set', say);
+      refresh();
+    }
   });
 
-  return card('Set a birthday', [
+  const node = card('Set a birthday', [
     picker.node,
     el('div', { class: 'formrow dateline' }, [field('Month', month), field('Day', day), field('Year', year)]),
     el('p', { class: 'field-help', text: 'The year is optional, and only used when birthday_show_age is on.' }),
     bar([save]),
-    say,
+    sayAgain('birthdays.set', say),
   ]);
+
+  const fill = (row) => {
+    picker.set({ id: row.user_id, name: row.user_name });
+    month.value = String(Number(row.month) || 1);
+    day.value = String(row.day ?? 1);
+    year.value = row.year ? String(row.year) : '';
+    say.say('');
+    node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    day.focus({ preventScroll: true });
+  };
+
+  return { node, fill };
 }
 
 async function load() {
@@ -96,6 +114,7 @@ async function load() {
   await names(idsIn(rows, ['user_id']));
 
   const say = notice();
+  const setter = setCard();
   const byMonth = new Map();
   for (const row of rows) {
     const key = Number(row.month) || 0;
@@ -125,7 +144,7 @@ async function load() {
     { label: 'From', cell: (row) => row.source },
     {
       label: '',
-      cell: (row) => button('Remove', async () => {
+      cell: (row) => bar([button(CHANGE, () => setter.fill(row), { tone: 'quiet' }), button(REMOVE, async () => {
         const sure = await ask({
           title: `Remove ${row.user_name || row.user_id}’s birthday?`,
           body: ['Black Bloc forgets the date. They can set it again themselves.'],
@@ -137,7 +156,7 @@ async function load() {
           keepSaying('birthdays.months', say);
           refresh();
         }
-      }, { tone: 'danger' }),
+      }, { tone: 'danger' })]),
     },
     // One filter over all twelve months, not a box on each — a month with two
     // people in it does not need its own search.
@@ -166,7 +185,7 @@ async function load() {
   months.body.append(sayAgain('birthdays.months', say));
 
   const add = section('Add or change one');
-  add.body.append(setCard());
+  add.body.append(setter.node);
 
   const wording = section('Birthday wording');
   if (template) {
