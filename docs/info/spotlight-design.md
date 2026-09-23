@@ -361,3 +361,44 @@ is not a twitch.tv one) → the stored game, Helix never asked.
 ⚠️ **NOT verified:** nothing here has met Discord or Helix — the suite drives `FakeHelix` /
 `FakeChannel` only. Sweep row `BP-a` in `../access/sweeps.md` is the proof that does not exist yet.
 
+## Follow-up 2026-09-22 (2) — the PINNED announcement is edited to the game being played now
+
+**The ask, verbatim (owner, 2026-09-22):** *"also when it repost lets make sure to edit the pinned
+post to be the most current game, i would say pin the new post but i dont want to spam with pins
+and un pins"*. Branch `spotlight-pinned-refresh`, off `main` `4eb27e3a`.
+
+**What is edited:** the ORIGINAL announcement, in place — its sentence re-rendered from
+`golive_template` with the current game/title (`again_render`, keeping the mention prefix the
+post already carries), and, while `golive_embed` is on, its card rebuilt with the same
+`announcement_embed(...)` call the announcement makes (current game field, the game's box art,
+the original timestamp kept). The pin is never touched — no new pin, no unpin, no re-pin.
+Logged as `golive.spotlight_announcement_refreshed` (routine; `spotlight_id`, `session_id`,
+`login`, `message_id`, `game`, `title`, `embed`) or `golive.spotlight_announcement_refresh_failed`
+(important, with `reason`); a refusal changes nothing else and the reminder still posts.
+
+**When:**
+
+| Trigger | What happens |
+|---|---|
+| Every poller tick (`spotlight_poll_minutes`, 5) on an open Twitch session | The stream the poll just saw is compared with the session row; on a changed game or title the row is written back and the post re-worded at once — no wait for `spotlight_bump_hours`. No extra Helix call; one `get_games` for the box art only when it changed and the card is on. |
+| A due reminder on the same tick | Reuses that result — one edit, one reminder, `refreshed: true` on `golive.spotlight_bumped`. |
+| **Bump now** | Asks Helix for the current stream (as before); on a change it edits the post, then posts the reminder. |
+
+**Decisions:**
+
+- ✅ **DECIDED — a spotlight-OFF (plain channel) announcement follows the game too.** The owner's
+  rule is that the post shows the game being played; spotlight decides only the pin (and the
+  reminders). An unpinned channel announcement is re-worded exactly the same way.
+- ✅ **DECIDED — a YouTube-sweep session is left alone** by the Twitch poller (its url is not
+  twitch.tv); Bump now on such a session does not edit it either.
+- ✅ **DECIDED — the original mentions are kept, not re-computed** (`again_render` over `render`):
+  an edit never adds, drops or changes a role ping, and needs no fan-role lookup.
+- No new key: the edit re-uses `golive_template`, `golive_embed` and `golive_live_author`, so
+  every word stays editable where it already is.
+
+⚠️ **NOT verified:** nothing here has met Discord or Helix — the suite drives `FakeHelix` /
+`FakeChannel` only. Not seen: Discord accepting an edit of a pinned message by the bot (it
+should — the bot authored it), how the pinned-messages list renders an edited card, the shadow
+rehearsal line on a real shadow post, and how often a real marathon's title changes (every title
+change is an edit — a stream that retitles every few minutes edits the post every poll). Sweep row
+`PR-a` in `../access/sweeps.md` is the proof that does not exist yet.

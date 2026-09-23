@@ -2936,3 +2936,12 @@ reminder goes to `shadow_channel_id` (`#welcome-test`), not the go-live channel.
 |---|---|---|
 | **`BP-a`** | Wait for a spotlighted channel to be live and to have CHANGED game since its announcement (a marathon such as GamesDoneQuick does this hourly). Then press **Bump now** — <https://blackbloc.heygabi.ai/golive.html> ▸ the channel's row ▸ **Bump now**, or `/golive` ▸ **Spotlight…** ▸ the channel ▸ **Bump now** | The reminder's sentence names the game being played NOW, not the one in the announcement, and under it sits the same card the announcement carries: the stream title, a **Game** field with that current game, and the game's box art. The row's **Recent streams** entry now shows the new game. The Logs page's `golive.spotlight_bumped` row carries `game`, `refreshed: true` and an `embed` block. With `golive_embed` off, the sentence posts alone. |
 
+## Row `PR-a` — the PINNED announcement follows the game (branch `spotlight-pinned-refresh`, 2026-09-22)
+
+Design: [`../info/spotlight-design.md`](../info/spotlight-design.md) ▸ *Follow-up 2026-09-22 (2)*.
+Lettered; the conductor numbers it. ⚠️ `spotlight_mode` decides where it lands — in `shadow` the
+announcement is in `shadow_channel_id` (`#welcome-test`), not the go-live channel.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PR-a`** | Watch a live spotlighted marathon (GamesDoneQuick) change game. Look at the pinned announcement in the go-live channel (the pin icon in the channel header) | Within one poll (5 min) the PINNED announcement reads the new game and shows its art on the card; it is still the same message, still pinned. The Logs page (`golive_log_level = all`) shows `golive.spotlight_announcement_refreshed` with the new `game`, and **no** `golive.spotlight_pinned` / `golive.spotlight_unpinned` rows around it — no new pin, no unpin. A `golive.spotlight_announcement_refresh_failed` row instead means Discord refused the edit; its `reason` says why. |
