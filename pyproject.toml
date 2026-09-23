@@ -41,7 +41,7 @@ black_bloc = ["personality_pool.json", "guides_seed.json"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--import-mode=importlib -m 'not live'"
+addopts = "--import-mode=importlib -p tests.loopback -m 'not live'"
 timeout = 120
 timeout_method = "thread"
 markers = [
