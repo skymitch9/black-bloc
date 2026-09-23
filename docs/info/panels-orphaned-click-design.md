@@ -1,8 +1,10 @@
 # A click on a panel nobody holds any more — answered in words
 
 > **Audience:** the build agent, reviewers, and whoever builds persistent panels next.
-> **Status:** TRACKED · 🔨 BUILT on branch `panels-survive-restart` (off `main` `269338c3`), **not
-> merged, not deployed**. **Last verified: 2026-09-22** against the installed **discord.py 2.7.1**
+> **Status:** TRACKED · ✅ **LIVE as v157** (2026-09-23 04:21 Phoenix, merge `5f0e94ab`, release commit `e9ecd0d0`; ⚠️ never yet
+> exercised live — `/api/actions?kind=panel.expired_click` had **0** rows at 2026-09-23 04:3x, sweep `PX-a` unwalked). Built on
+> branch `panels-survive-restart` (off `main` `269338c3`). **Last verified: 2026-09-23 04:3x — the status line only** (v157
+> ritual: the merge, the release and the empty log kind). Before that, **2026-09-22** against the installed **discord.py 2.7.1**
 > source (`.venv/Lib/site-packages/discord/state.py`, `client.py`, `ui/view.py`, `message.py`,
 > `interactions.py`) and the suite in the worktree. ⚠️ **Nothing here has met live Discord** — every
 > claim about what Discord sends is read from the library, and every claim about ordering is proved

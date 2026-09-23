@@ -1,7 +1,10 @@
 # Testing — the hermetic suite, the mock, and the live api
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — ⚠️ secret NAMES only.
-> Last verified: **2026-09-22 23:2x — the hermetic suite's junit file, timeout and loopback plugin only** (branch
+> Last verified: **2026-09-23 04:3x — one fact only**, at the v157 docs ritual: the junit file, timeout, loopback plugin and
+> environment fixture are on `main` and LIVE in the gate since v157 (merges `01309d43`, `4d5bd916`); the v157 gate's junit file
+> reads `tests=7382 failures=0 errors=0 skipped=3`. ⚠️ Nothing here was re-run. Before that,
+> **2026-09-22 23:2x — the hermetic suite's junit file, timeout and loopback plugin only** (branch
 > `gate-names`): full suite **7,339 passed + 3 skipped in 43 s wall at `-n 16`**, twice; merged with `main`, **7,358 passed + 3
 > skipped**, 9 of 10 runs green (the tenth: one named hang, KI-26). Before that,
 > **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**

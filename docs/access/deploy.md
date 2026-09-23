@@ -2,7 +2,10 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-22 23:2x — the gate's pytest step only** (branch `gate-names`, not merged or deployed):
+> Last verified: **2026-09-23 04:3x — the gate's pytest step only**, at the v157 docs ritual: the step shipped with `gate-names`
+> (merge `01309d43`) and **v157 was the first real deploy gate to run it** — green on the first run, `deploys.log` line 156; its junit
+> file, read at the ritual, says `tests=7382 failures=0 errors=0 skipped=3`, 44.8 s. ⚠️ No RED gate has run it yet, so the
+> `FAILED TESTS:` block has printed only against synthetic files. Before that, **2026-09-22 23:2x — the gate's pytest step only** (branch `gate-names`, not merged or deployed):
 > `-n 16`, `-rfE`, the junit file, `FAILED TESTS:` and the 120 s timeout, measured in
 > [*The gate's pytest step*](#the-gates-pytest-step----n-16--rfe-a-junit-file-and-a-120-s-timeout-2026-09-22). ⚠️ No real deploy
 > gate has run the new script yet. Before that, **2026-09-22 — the deploys.log COUNT row and the node-fixture COUNT only, at the
@@ -202,7 +205,8 @@ values in the shell and green with them unset. The hand-clearing block above is 
 
 ### The gate's pytest step — `-n 16`, `-rfE`, a junit file and a 120 s timeout (2026-09-22)
 
-Changed on branch `gate-names` (KI-26 / KI-32 / KI-35 / KI-37). The step is now:
+Changed on branch `gate-names` (KI-26 / KI-32 / KI-35 / KI-37); ✅ **LIVE from v157** (merge `01309d43`, 2026-09-23 04:21), whose gate
+was the first real run: green first time, 7379 passed / 3 skipped, junit 44.8 s. The step is now:
 
 ```powershell
 & .venv/Scripts/python -m pytest -q -n 16 -rfE "--junitxml=$env:TEMP\black-bloc-gate\gate-junit.xml"

@@ -6,7 +6,11 @@
 > This retires the 2026-08-26 local-only rule, under which the tree was
 > gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
 > so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
-> Last verified: **2026-09-22 21:2x — the bot's version only**, at the v156 docs ritual: the bot is at **v156**
+> Last verified: **2026-09-23 04:3x — the bot's version and two counts only**, at the v157 docs ritual: the bot is at **v157**
+> (deployed 2026-09-23 04:21 Phoenix, release commit `e9ecd0d0`; [`deploys.log`](deploys.log) is the authority, 156 lines).
+> `ls docs/info/*.md` now **108** (`panels-orphaned-click-design.md` landed with v157), `ls docs/access/*.md` still **12**.
+> ⚠️ **NOT re-checked:** the *Where the bot stands* block and every other figure; nothing met a browser.
+> Before that, **2026-09-22 21:2x — the bot's version only**, at the v156 docs ritual: the bot is at **v156**
 > (deployed 2026-09-22 21:18 Phoenix, release commit `4fb69e00`; [`deploys.log`](deploys.log) is the authority).
 > `ls docs/info/*.md` still **107**, `ls docs/access/*.md` still **12**. ⚠️ **NOT re-checked:** the *Where the bot
 > stands* block and every other figure; nothing met live Discord or a browser.
