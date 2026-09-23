@@ -2945,3 +2945,13 @@ announcement is in `shadow_channel_id` (`#welcome-test`), not the go-live channe
 | Row | Do | Expect |
 |---|---|---|
 | **`PR-a`** | Watch a live spotlighted marathon (GamesDoneQuick) change game. Look at the pinned announcement in the go-live channel (the pin icon in the channel header) | Within one poll (5 min) the PINNED announcement reads the new game and shows its art on the card; it is still the same message, still pinned. The Logs page (`golive_log_level = all`) shows `golive.spotlight_announcement_refreshed` with the new `game`, and **no** `golive.spotlight_pinned` / `golive.spotlight_unpinned` rows around it — no new pin, no unpin. A `golive.spotlight_announcement_refresh_failed` row instead means Discord refused the edit; its `reason` says why. |
+
+## Row `PX-a` — a button on a panel the restart dropped answers in words (branch `panels-survive-restart`, 2026-09-22)
+
+Design: [`../info/panels-orphaned-click-design.md`](../info/panels-orphaned-click-design.md); the
+defect is [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) ▸ KI-20. Lettered; the conductor numbers it.
+⚠️ Needs a restart while a panel is open, so run it across a deploy.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PX-a`** | Open `/request` (any panel will do) and leave it on screen. Restart the bot (a deploy, or `flyctl machine restart`), wait for it to read green, then press any button on that old panel | NOT Discord's red *"This interaction failed"*. You get one message only you can see: *"This panel has gone quiet — it timed out, or Black Bloc restarted since it was opened, so its buttons no longer reach anything. Run /request again for a fresh one."* The old panel itself is unchanged. Dashboard ▸ **Logs** ▸ **All** ▸ Core shows one `panel.expired_click` row naming you, `command: /request`, `feature: request`. Change the words on the Settings page ▸ **core** ▸ *What a button on a panel that has gone quiet says*, restart again with a panel open, press: the new words arrive. ⚠️ Then press a button on a FRESH panel: it must work exactly as before, with no second message |
