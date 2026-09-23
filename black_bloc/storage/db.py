@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 53
+SCHEMA_VERSION = 54
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -920,6 +920,15 @@ CREATE TABLE IF NOT EXISTS spotlight_bumps (
     message_id INTEGER NOT NULL,
     at         TEXT    NOT NULL,
     PRIMARY KEY (session_id, message_id)
+);
+
+CREATE TABLE IF NOT EXISTS channel_notes (
+    guild_id   INTEGER NOT NULL,
+    channel_id INTEGER NOT NULL,
+    note       TEXT    NOT NULL,
+    set_by     INTEGER,
+    set_at     TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, channel_id)
 );
 """
 

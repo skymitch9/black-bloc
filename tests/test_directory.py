@@ -1,14 +1,19 @@
 from types import SimpleNamespace
 
+from black_bloc.channel_notes import NOTE_CHARS
 from black_bloc.directory import (
     DIRECTORY_HEADING,
     DIRECTORY_NONE,
+    NOT_VISIBLE,
     channel_names,
+    description_of,
     directory_block,
+    directory_preview,
     everyone_sees,
     hidden_category_ids,
     is_archive,
     open_channels,
+    why_hidden,
     within,
 )
 
@@ -203,3 +208,63 @@ def test_a_visibility_role_the_guild_does_not_hold_falls_back_to_everyone():
     home = member_gated_guild(member_channel("speed-and-pbs"))
 
     assert open_channels(bot(chat_visibility_role_id=999), home) == []
+
+
+def test_a_staff_note_beats_the_discord_topic():
+    speed = channel("speed-and-pbs", topic="general chat")
+    said = directory_block(
+        bot(), guild(speed), notes={speed.id: "Speedrunning records and personal bests."}
+    )
+    assert "#speed-and-pbs — Speedrunning records and personal bests." in said
+    assert "general chat" not in said
+
+
+def test_an_empty_note_falls_back_to_the_topic_and_then_to_the_bare_name():
+    topical = channel("gaming", topic="Games in general.")
+    bare = channel("quiet")
+    notes = {topical.id: "   ", bare.id: ""}
+    assert description_of(topical, notes) == "Games in general."
+    assert description_of(bare, notes) == ""
+    said = directory_block(bot(), guild(topical, bare), notes=notes)
+    assert "#gaming — Games in general." in said
+    assert said.endswith("#quiet")
+
+
+def test_a_note_is_cut_at_its_own_cap_not_the_topic_one():
+    long = channel("general-chat", topic="t" * 400)
+    said = description_of(long, {long.id: "n" * 400})
+    assert len(said) == NOTE_CHARS
+    assert said.endswith("…")
+    assert len(description_of(long, {})) < NOTE_CHARS
+
+
+def test_over_budget_the_longest_description_goes_first_whether_note_or_topic():
+    noted = channel("noted", topic="short")
+    topical = channel("topical", topic="y" * 150)
+    quiet = channel("quiet", topic="z" * 20)
+    notes = {noted.id: "x" * 200}
+    shown = directory_preview(bot(), guild(noted, topical, quiet), notes=notes, budget=220)
+    assert "#noted" in shown.block.splitlines()
+    assert "#topical — " + "y" * 150 in shown.block
+    assert shown.trimmed == ("noted",)
+    assert shown.used <= shown.cap == 220
+
+
+def test_the_preview_is_the_exact_block_the_model_gets():
+    general = channel("general-chat")
+    notes = {general.id: "The server's general chat."}
+    home = guild(general, channel("staff", seen=False))
+    shown = directory_preview(bot(), home, notes=notes)
+    assert shown.block == directory_block(bot(), home, notes=notes)
+    assert shown.used == len("#general-chat — The server's general chat.".encode()) + 1
+    assert shown.trimmed == ()
+
+
+def test_the_hidden_reason_names_which_rule_left_a_channel_out():
+    archive = category(50, "Archive")
+    listed = category(99, "Committee")
+    hidden = {99}
+    assert why_hidden(guild(), channel("a", cat=listed), hidden, EVERYONE) == "ignored_category"
+    assert why_hidden(guild(), channel("b", cat=archive), hidden, EVERYONE) == "archive"
+    assert why_hidden(guild(), channel("c", seen=False), hidden, EVERYONE) == NOT_VISIBLE
+    assert why_hidden(guild(), channel("d"), hidden, EVERYONE) is None

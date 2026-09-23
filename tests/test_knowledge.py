@@ -260,6 +260,15 @@ def test_a_server_with_no_channels_writes_no_channel_notes():
     assert channel_sections([]) == []
 
 
+def test_a_staff_channel_note_is_what_the_daily_read_writes_for_that_channel():
+    speed = SimpleNamespace(id=5, name="speed-and-pbs", topic="general chat")
+    quiet = SimpleNamespace(id=6, name="quiet", topic=None)
+    found = channel_sections([speed, quiet], {5: "Speedrunning records.", 6: "Nothing much."})
+    assert ("#speed-and-pbs", "Speedrunning records.", "channel") in found
+    assert ("#quiet", "Nothing much.", "channel") in found
+    assert all("general chat" not in body for _, body, _ in found)
+
+
 def test_the_role_ingest_leaves_out_everyone():
     found = role_sections(
         SimpleNamespace(roles=[SimpleNamespace(name="@everyone"), SimpleNamespace(name="Member")])

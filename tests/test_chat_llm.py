@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from black_bloc import chat_llm
+from black_bloc.channel_notes import set_note as set_channel_note
 from black_bloc.chat_llm import (
     BOT,
     BUDGET_WORDS,
@@ -846,6 +847,21 @@ async def test_the_quick_tier_gets_the_same_list_as_one_string(wired, monkeypatc
     assert "#general — Chat here." in quick.seen[0]["system"]
 
 
+async def test_a_stored_channel_note_reaches_the_model_in_place_of_the_topic(wired, monkeypatch):
+    """The owner's report: #speed-and-pbs was taken for the general chat."""
+    speed = seen_channel("speed-and-pbs", "general chat")
+    speed.id = 1076003845232148580
+    wired.guild = FakeGuild(channels=[speed])
+    await set_channel_note(wired.db, 7, speed.id, "Speedrunning records and PBs.")
+    quick = Answering(GROQ, "llama")
+    wire(wired, monkeypatch, groq=quick)
+
+    await ask(wired)
+
+    assert "#speed-and-pbs — Speedrunning records and PBs." in quick.seen[0]["system"]
+    assert "general chat" not in quick.seen[0]["system"]
+
+
 async def test_a_channel_the_server_does_not_have_never_reaches_the_member(wired, monkeypatch):
     """The owner's live failure: the bot sent somebody to an invented #black-support-hub."""
     wired.guild = FakeGuild(channels=[seen_channel("general", "Chat.")])
@@ -909,3 +925,24 @@ async def test_a_guild_with_nothing_public_is_told_to_name_no_channel(wired, mon
     await ask(wired)
 
     assert "name no channel at all" in quick.seen[0]["system"]
+
+
+def test_the_channel_list_the_model_gets_carries_the_staff_note():
+    def permissions_for(role):
+        return SimpleNamespace(view_channel=True)
+
+    everyone = SimpleNamespace(id=7, name="@everyone")
+    speed = SimpleNamespace(
+        id=55,
+        name="speed-and-pbs",
+        topic="general chat",
+        category=None,
+        category_id=None,
+        permissions_for=permissions_for,
+    )
+    guild = SimpleNamespace(id=7, default_role=everyone, text_channels=[speed])
+    bot = SimpleNamespace(store=SimpleNamespace(get=lambda guild_id, key: None))
+    said = chat_llm.channels_block(bot, guild, {55: "Speedrunning records and PBs."})
+    assert "#speed-and-pbs — Speedrunning records and PBs." in said
+    assert "general chat" not in said
+    assert "#speed-and-pbs — general chat" in chat_llm.channels_block(bot, guild)
