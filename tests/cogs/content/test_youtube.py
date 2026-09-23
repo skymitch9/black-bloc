@@ -1989,3 +1989,15 @@ async def test_the_wall_writes_one_row_in_shadow_as_well(bot, cog, golive, db, m
     await cog.probe_all()
 
     assert len(await details_logged(db, "youtube.probe_walled")) == 1
+
+
+async def test_the_health_reading_counts_walled_channels_and_unknown_ids(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(db, cog, BOTCHECK_LIVE_PAGE, keyed=False)
+
+    await cog.probe_all()
+
+    health = await live_health(bot, bot.guild)
+    assert health["walled"] == 1 and health["id_unknown"] == 1 and health["reading_live"] == 1

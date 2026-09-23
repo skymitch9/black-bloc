@@ -185,6 +185,17 @@ const PROBE_NOTE = 'A linked channel going live is announced through the go-live
   + 'source youtube. golive_mode still decides whether anything is posted.';
 const PROBE_KEY_UNSET = 'With no YOUTUBE_API_KEY the stream is announced from the page alone, so '
   + 'its title reads Live now and no quota is spent.';
+const PROBE_WALL_NOTE = 'From the bot's datacenter address YouTube sometimes answers with its '
+  + '"Sign in to confirm you're not a bot" page. That page still says whether a channel is live, '
+  + 'but not which video, and when it drops the live marker too the channel reads as offline.';
+const PROBE_LINKS_KEYED = 'the stream's own watch page — behind the bot check the id is searched '
+  + 'for once per broadcast (100 units), and if the search finds nothing the channel's /live page, '
+  + 'titled Live now';
+const PROBE_LINKS_KEYLESS = 'the stream's watch page when YouTube shows it; behind the bot check '
+  + 'the channel's own /live page, titled Live now, with no thumbnail';
+const PROBE_WALLED_YES = 'yes — the last page was the bot check';
+const PROBE_IDS_NONE_LIVE = 'nobody reads as live';
+const PROBE_IDS_ALL = 'found for every channel reading live';
 
 const NO_EVENTS_ROLE = 'No Events role yet';
 const ONBOARDING_DRIFTED = 'Onboarding has never been written';
@@ -1579,15 +1590,27 @@ function probeCard(status) {
     ['Live now', `${status.live_now || 0}, ended after ${status.live_end_misses} quiet probe(s)`],
     ['Reading live now', `${status.reading_live || 0} channel(s)`],
     ['Quota used today', `${status.quota_today || 0} unit(s)`],
-    ['Bot check', status.botcheck ? badge('yes — that page had no video id', 'warn') : 'no'],
+    ['Bot check', status.botcheck ? badge(PROBE_WALLED_YES, 'warn') : 'no'],
+    ['Behind the bot check now', status.walled
+      ? badge(`${status.walled} channel(s)`, 'warn') : 'none'],
+    ['Video id', probeIds(status)],
+    ['What a post links', status.api_key_set ? PROBE_LINKS_KEYED : PROBE_LINKS_KEYLESS],
   ];
   return card('How live streams are spotted', [
     el('p', { class: 'field-help', text: PROBE_NOTE }),
     el('div', { class: 'formrow' }, rows.map(([label, value]) => field(label, (
       typeof value === 'string' ? el('p', { class: 'preview', text: value }) : value
     )))),
+    status.walled || status.botcheck ? el('p', { class: 'field-help', text: PROBE_WALL_NOTE }) : null,
     status.api_key_set ? null : el('p', { class: 'field-help', text: PROBE_KEY_UNSET }),
   ].filter(Boolean));
+}
+
+function probeIds(status) {
+  if (!status.reading_live) return PROBE_IDS_NONE_LIVE;
+  if (!status.id_unknown) return PROBE_IDS_ALL;
+  return badge(`unknown for ${status.id_unknown} of ${status.reading_live} — the post links the `
+    + 'channel's /live page', 'warn');
 }
 
 async function logDrawer() {

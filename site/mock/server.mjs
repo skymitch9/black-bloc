@@ -4838,6 +4838,8 @@ route('GET', '/api/youtube/status', (context) => {
     botcheck: false,
     live_now: 0,
     reading_live: 0,
+    walled: 0,
+    id_unknown: 0,
   };
 });
 

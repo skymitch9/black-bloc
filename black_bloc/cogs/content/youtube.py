@@ -1014,7 +1014,8 @@ async def live_health(bot: Any, guild: Any) -> dict[str, Any]:
 
     cog = cog_of(bot)
     store = bot.store
-    reading = sorted(str(one) for one in (getattr(cog, "live_video", None) or {}))
+    live_video = getattr(cog, "live_video", None) or {}
+    reading = sorted(str(one) for one in live_video)
     open_now = 0
     if getattr(bot.db, "is_connected", False):
         open_now = len(
@@ -1037,6 +1038,8 @@ async def live_health(bot: Any, guild: Any) -> dict[str, Any]:
         "open": open_now,
         "reading_live": len(reading),
         "reading_live_channels": reading,
+        "walled": len(getattr(cog, "walled", None) or {}),
+        "id_unknown": len([one for one in live_video.values() if one == LIVE_ID_UNKNOWN]),
     }
 
 

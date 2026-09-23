@@ -212,6 +212,7 @@ async def test_status_says_whether_the_key_is_set_and_what_the_probe_is_doing(
     assert body["probed"] == 3 and body["quota_today"] == 0 and body["live_now"] == 0
     assert body["botcheck"] is False
     assert body["reading_live"] == 0
+    assert body["walled"] == 0 and body["id_unknown"] == 0
 
 
 async def test_status_says_when_the_last_probe_was_served_youtubes_bot_check(
@@ -263,3 +264,18 @@ def test_status_with_no_cog_loaded_reports_it_rather_than_pretending(client, sig
     assert body["live_mode"] == "off"
     assert body["last_probe_at"] is None
     assert body["last_probe_error"]
+
+
+async def test_status_says_how_many_channels_are_behind_the_wall_and_how_many_ids_are_unknown(
+    client, sign_in, web, guild, wf
+):
+    """KI-30 (a): the wall is its own outcome, so the page can say it in words."""
+    cog = FakeCog(web.db, keyed=True)
+    cog.walled = {CHANNEL: None, "UC3Oe-jfrIqEGygxYBYyN6jQ": True}
+    cog.live_video = {"UC3Oe-jfrIqEGygxYBYyN6jQ": "?", "UCother": "FAMWR-HDS8U"}
+    web.cogs["YouTube"] = cog
+    sign_in(client)
+
+    body = client.get("/api/youtube/status").json()
+
+    assert body["walled"] == 2 and body["id_unknown"] == 1 and body["reading_live"] == 2
