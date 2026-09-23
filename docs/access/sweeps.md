@@ -2925,3 +2925,14 @@ and still pinned is unpinned. Design:
 | Row | Do | Expect |
 |---|---|---|
 | **`RP-a`** | Pick a channel row whose spotlight is OFF and whose pin is on, and wait for it to go live — its announcement lands unpinned. Then press **Spotlight on** (<https://blackbloc.heygabi.ai/golive.html> ▸ the row's drawer, or `/golive` ▸ **Channels…** ▸ the row) while it is still live | The announcement that is out is **pinned now**. The answer reads *"… is spotlighted … The announcement that is out now has been pinned for the rest of the stream, and the reminders pick up from here."* With `golive_log_level = all` the Logs page shows `golive.spotlight_pinned` carrying `because: spotlight_on`. If Black Bloc lacks **Manage Messages** the answer says *"could not be pinned"* instead and the row is still spotlighted. ⚠️ Unpin it by hand afterwards and wait a poll: it stays unpinned — the bot checks only when the button is pressed |
+
+## Row `BP-a` — a reminder names the game being played NOW and shows the go-live card (branch `spotlight-bump-preview`, 2026-09-22)
+
+Design: [`../info/spotlight-design.md`](../info/spotlight-design.md) ▸ *Follow-up 2026-09-22*.
+Lettered; the conductor numbers it. ⚠️ `spotlight_mode` decides where it lands — in `shadow` the
+reminder goes to `shadow_channel_id` (`#welcome-test`), not the go-live channel.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`BP-a`** | Wait for a spotlighted channel to be live and to have CHANGED game since its announcement (a marathon such as GamesDoneQuick does this hourly). Then press **Bump now** — <https://blackbloc.heygabi.ai/golive.html> ▸ the channel's row ▸ **Bump now**, or `/golive` ▸ **Spotlight…** ▸ the channel ▸ **Bump now** | The reminder's sentence names the game being played NOW, not the one in the announcement, and under it sits the same card the announcement carries: the stream title, a **Game** field with that current game, and the game's box art. The row's **Recent streams** entry now shows the new game. The Logs page's `golive.spotlight_bumped` row carries `game`, `refreshed: true` and an `embed` block. With `golive_embed` off, the sentence posts alone. |
+
