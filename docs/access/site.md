@@ -277,6 +277,20 @@ later without the `<link rel="icon">` brings the 404 back;
 `tests/api/test_server.py` asserts every page carries it and that the app
 serves the file.
 
+## The chat review queue export — for a scheduled Claude routine (2026-09-23, branch `chat-review-loop`)
+
+⏸️ **BUILT, NOT MERGED, NOT DEPLOYED.** `GET /api/chat/review.md` answers the open review queue as
+one markdown document (`text/markdown`, downloaded as `chat-review-queue.md`); the Chat page's
+**Review queue ▸ Download as markdown** is the same file. A scheduled routine (claude.ai
+routines / `/schedule`) can read it with the operator token — `Authorization: Bearer
+$BLACK_BLOC_OPERATOR_TOKEN`, set up per [`operator-read.md`](operator-read.md) — and write its
+second-pass review into a doc for the owner. ⚠️ **It can only read and recommend:** the operator
+token is read-only by design, so approve / change / dismiss answer 403 `operator_read_only`, and
+deciding stays with staff on the Chat page or `/chat ▸ Review queue…`. Each read writes one
+`web.operator.read` row while `operator_read_log` is on. Design:
+[`../info/chat-review-loop-design.md`](../info/chat-review-loop-design.md) §7. ⚠️ Not verified
+against the live site (not deployed); no routine has been set up.
+
 ## The routes, after Phase 8b (2026-08-27)
 
 ⚠️ **This table is the Phase 8b snapshot and is BADLY INCOMPLETE — it covers roughly a

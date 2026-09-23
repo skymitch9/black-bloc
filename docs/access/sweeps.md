@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-23 (branch `chat-review-loop`)** — ONE section APPENDED (`RL-a`…`RL-g`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-23 15:1x** — ONLY the `CV-a`…`CV-e` section was touched, at the v160 + v161 docs ritual: its *BUILT, NOT MERGED* line became a ✅ LIVE v161 line with `CV-a`'s live API proof, from `deploys.log`, `DONE.md` and the conductor's operator-token read. Nothing renumbered, no row walked, no other section re-read. Before that,
 > **2026-09-23 14:1x** — ONLY the five sections written 2026-09-23 were touched, at the v158 + v159 docs ritual: a ✅ LIVE
 > line added under the headings of `BC-a` (v158, 12:51) and `CC-a`…`CC-d`, `BT-a`…`BT-d`, `CP-a`…`CP-e`, `PT-a`…`PT-e`
@@ -3068,3 +3069,19 @@ Lettered; the conductor numbers it. ⚠️ Run `CV-a` FIRST: it is the check on 
 | **`CV-c`** | On `#landing` (or any *members cannot see it* card) press **Tell the bot anyway**; then **Back to the rule** | *"Black Bloc is told about #landing now, because staff said so…"*; badge *shown by staff*; `#landing` appears in *What the bot sees*; *Told about* +1. Back: *"#landing is back to the rule…"*, badge back, count back. Logs has one `chat.channel_reach_set` and one `chat.channel_reach_cleared` row, Via Website |
 | **`CV-d`** | On `#general-chat` press **Hide from the bot**, @-mention the bot asking where to chat, then **Back to the rule** | Badge *left out by staff*; `#general-chat` leaves the block; the reply does not name `#general-chat` (the guard strips it). After Back, it is told about it again |
 | **`CV-e`** | Settings page ▸ `chat_visibility_role_id` help; `/settings` ▸ chat ▸ **Find a setting…** `reach` | The help says roles members pick for themselves count and staff can override on the Channels page; Find lists the five `chat_channel_reach_*` sentences (the chat picker reads *25 of 75*) |
+
+## Rows `RL-a` … `RL-g` — the chat review loop: answers that may have missed, tagged and reviewed (branch `chat-review-loop`, 2026-09-23)
+
+⏸️ **BUILT, NOT MERGED, NOT DEPLOYED** — branch `chat-review-loop` (schema **58**). Nothing below has met live Discord or a live model.
+
+Design: [`../info/chat-review-loop-design.md`](../info/chat-review-loop-design.md). Lettered; the conductor numbers it. Needs `chat_llm_mode` on and a Groq key for `RL-a`/`RL-e`.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`RL-a`** | @-mention Black Bloc with a real question nothing written down covers (more than twelve words, a question mark) | A row on the Chat page's **Review queue** (<https://blackbloc.heygabi.ai/chat.html#sect-review>) reading *a real question found no note*, and within a minute a **Suggested:** line with its why. Logs: one `chat.review_opened`, one `chat.review_tagged` |
+| **`RL-b`** | @-mention it, then within 90 s write *"no but where"* in the same channel; then another @-mention followed by *"thanks!"* | The first is queued as *they asked again straight away*; the thanks queues nothing |
+| **`RL-c`** | Have somebody else put 👎 on one of its answers; then say *"thats not what i meant"* after another | *somebody gave it a thumbs down* and *they said it was not what they meant* items |
+| **`RL-d`** | As somebody who turned memory off on `/memory`, repeat `RL-b` | Nothing is queued for them |
+| **`RL-e`** | On the page, **Approve** a phrase suggestion; **Change…** another to *A knowledge fact*; **Dismiss** a third, then filter **Dismissed** and **Reopen** it | The phrase appears on that intent under **Intents**; the fact in the named note or *From review* under **Knowledge**; Reopen puts the item back under **Waiting**. Logs show `web.chat.review_*`, Via Website |
+| **`RL-f`** | `/chat` ▸ **Review queue…** ▸ pick an item ▸ the *Change it: this should reach…* picker ▸ an intent ▸ edit the phrase ▸ submit | The phrase lands on that intent and the panel returns to the queue with the sentence |
+| **`RL-g`** | **Download as markdown**; and read `/api/chat/review.md` with the operator token, then try a `POST …/approve` with it | A `chat-review-queue.md` listing the open items; the operator POST answers 403 `operator_read_only`. The next morning after 9 (server time zone) one digest line sits in the log channel while items wait |
