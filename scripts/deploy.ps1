@@ -34,7 +34,7 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
     New-Item -ItemType Directory -Force -Path $junitDir | Out-Null
     $junit = Join-Path $junitDir "gate-junit.xml"
     Remove-Item -LiteralPath $junit -Force -ErrorAction SilentlyContinue
-    & .venv/Scripts/python -m pytest -q -n auto -rfE "--junitxml=$junit"
+    & .venv/Scripts/python -m pytest -q -n 16 -rfE "--junitxml=$junit"
     $suite = $LASTEXITCODE
     if ($suite -ne 0) {
         Write-Host "FAILED TESTS:"
