@@ -623,7 +623,8 @@ front of a person.
 
 | Key | Note |
 |---|---|
-| `tests/conftest.py:167` | ⚠️ `Settings` reads `.env` from the CWD by default. Every test that builds `Settings` must pass `_env_file=None` **and** clear `DISCORD_TOKEN`, or it silently tests against the developer's real token. This fixture does both; a new test that constructs `Settings` directly must repeat them. |
+| `tests/conftest.py:31` (`the_shell_environment_never_reaches_a_test`) · `settings_names_in` · `SHELL_NAMES` | **2026-09-22.** The suite clears its own environment. Session-scoped and autouse: before the first test it pops from `os.environ` every name `Settings.model_fields` declares (upper-cased — derived from `config.py`, never a hand-typed list, so a new setting is covered the day it is added), plus `DEV_GUILD_ID`, `TEST_MODE`, `TEST_CHANNEL_ID` and any `BLACK_BLOC_*` shell name; it also sets `Settings.model_config["env_file"] = None`, so even a bare `Settings()` cannot read a `.env`. Both are put back at session end. Session scope because `monkeypatch` is function-scoped; a test's own `monkeypatch.setenv` still works and is undone back to the cleared state. Under xdist each worker is its own process and runs it once. Why: with the operator's `.env` names in the shell, nine "when the key is absent, say so" tests failed (`docs/access/deploy.md` ▸ "Nine *no key* tests"). It replaced three hand-typed `delenv` lists (`settings`, `api_settings`, `tests/api/conftest.py:web_settings_now`); the per-file `delenv("DISCORD_TOKEN")` lines in individual test files are now redundant and harmless. |
+| `tests/conftest.py:74` (`settings`) | ⚠️ `Settings` reads `.env` from the CWD by default. Tests still pass `_env_file=None` explicitly; since 2026-09-22 the session fixture above is what actually guarantees neither `.env` nor the shell reaches a test, so this fixture no longer clears `DISCORD_TOKEN` itself. |
 
 ## `tests/test_bot.py`
 

@@ -13,11 +13,31 @@ import pytest_asyncio
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.server import SAME_ORIGIN, SAME_SITE_HEADER
 from black_bloc.bot import COGS
-from black_bloc.config import load_settings
+from black_bloc.config import Settings, load_settings
 from black_bloc.settings_store import member_is_staff
 from black_bloc.storage.db import Database
 
 REVERSE = "BB_REVERSE"
+SHELL_NAMES = {"DEV_GUILD_ID", "TEST_MODE", "TEST_CHANNEL_ID"}
+
+
+def settings_names_in(environ) -> list[str]:
+    """Every name Settings would read, plus the operator shell's own BLACK_BLOC_* names."""
+    declared = {name.upper() for name in Settings.model_fields} | SHELL_NAMES
+    return [n for n in environ if n.upper() in declared or n.upper().startswith("BLACK_BLOC_")]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def the_shell_environment_never_reaches_a_test():
+    """The suite answers the same with or without the operator's keys in the shell or a `.env`."""
+    kept = {name: os.environ.pop(name) for name in settings_names_in(os.environ)}
+    env_file = Settings.model_config.get("env_file")
+    Settings.model_config["env_file"] = None
+    try:
+        yield
+    finally:
+        Settings.model_config["env_file"] = env_file
+        os.environ.update(kept)
 
 
 def pytest_collection_modifyitems(items):
@@ -51,8 +71,7 @@ def no_test_ever_opens_a_link(monkeypatch):
 
 
 @pytest.fixture
-def settings(tmp_path, monkeypatch):
-    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+def settings(tmp_path):
     return load_settings(_env_file=None, database_path=tmp_path / "test.sqlite3")
 
 
@@ -233,9 +252,7 @@ class FakeBot:
 
 
 @pytest.fixture
-def api_settings(monkeypatch):
-    for name in ("DISCORD_TOKEN", "DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "SESSION_SECRET"):
-        monkeypatch.delenv(name, raising=False)
+def api_settings():
     return load_settings(
         _env_file=None,
         dev_guild_id=API_GUILD_ID,
