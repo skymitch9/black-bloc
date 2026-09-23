@@ -6,8 +6,17 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import PlainTextResponse
 
-from ... import channel_drafts, channel_reach, chat_llm, chat_panel, knowledge, personas
+from ... import (
+    channel_drafts,
+    channel_reach,
+    chat_llm,
+    chat_panel,
+    chat_review,
+    knowledge,
+    personas,
+)
 from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
     BUILTIN_NAMES,
@@ -36,7 +45,7 @@ from ...chat import (
 )
 from ...directory import directory_preview, lens_for, reach_in
 from ...logkinds import VIA_WEBSITE
-from ...settings_store import KEY_TYPES
+from ...settings_store import KEY_TYPES, REVIEW_CAPPED_KEY
 from ..auth import Refused, staff_dependency
 from ..names import as_id, resolve_one
 from ..settings_api import key_row, namespace_of
@@ -349,6 +358,94 @@ def refused(exc: ChatError) -> Refused:
 def wanted_enabled(payload: dict[str, Any], key: str = "enabled") -> Any:
     given = payload.get(key)
     return None if given is None else bool(given)
+
+
+REVIEW_ALL = "all"
+REVIEW_FILENAME = "chat-review-queue.md"
+MARKDOWN_MEDIA_TYPE = "text/markdown"
+REVIEW_BAD_STATUS = (
+    "**{given}** is not a state a review item can be in, so the queue was not filtered. They are "
+    "open, approved, changed, dismissed, or all."
+)
+REVIEW_BAD_REASON = (
+    "**{given}** is not a reason an answer is queued for, so the queue was not filtered. They are "
+    "ungrounded, reask, downvote and not_it."
+)
+TAGGING_READY = "The cheap model suggests something for each new item as it arrives."
+TAGGING_WORDS = {
+    chat_review.UNTAGGED_OFF: (
+        "chat_review_mode is off, so nothing new is queued or tagged. The items already here can "
+        "still be decided."
+    ),
+    chat_review.UNTAGGED_NO_KEY: (
+        "Black Bloc has not been given a GROQ_API_KEY, so new items wait untagged. Change and "
+        "Dismiss still work; a Lead sets the key on the host."
+    ),
+    chat_review.UNTAGGED_FULL: (
+        "Today's model answers are used up (chat_daily_turns), so new items wait untagged until "
+        "tomorrow. Change and Dismiss still work."
+    ),
+}
+
+
+def discord_link(guild_id: Any, channel_id: Any, message_id: Any) -> str | None:
+    if not (guild_id and channel_id and message_id):
+        return None
+    return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
+
+
+def channel_named(guild: Any, channel_id: Any) -> dict[str, Any]:
+    getter = getattr(guild, "get_channel", None)
+    found = getter(int(channel_id)) if getter is not None and channel_id else None
+    return {"id": str(channel_id), "name": getattr(found, "name", None) or str(channel_id)}
+
+
+def suggestion_row(bot: Any, guild: Any, row: Any) -> dict[str, Any] | None:
+    found = chat_review.suggestion_of(row)
+    if found is None:
+        return None
+    return {
+        "kind": found.kind,
+        "intent": found.intent,
+        "intent_id": _id(row["suggested_intent_id"]),
+        "phrase": found.phrase,
+        "line": found.line,
+        "section": found.section,
+        "why": found.why,
+        "word": chat_review.suggestion_word(bot.store, guild.id, found),
+        "teaches": found.kind in chat_review.TEACHES,
+    }
+
+
+def review_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "member": person(guild, row["user_id"]),
+        "channel": channel_named(guild, row["channel_id"]),
+        "asked": str(row["asked"]),
+        "answered": str(row["answered"]),
+        "tier": row["tier"],
+        "trope": row["trope"],
+        "intent": row["intent"],
+        "reason": str(row["reason"]),
+        "reason_word": chat_review.reason_word(bot.store, guild.id, row["reason"]),
+        "at": row["at"],
+        "link": discord_link(row["guild_id"], row["channel_id"], row["reply_id"]),
+        "suggestion": suggestion_row(bot, guild, row),
+        "status": str(row["status"]),
+        "decided_by": person(guild, row["decided_by"]),
+        "decided_at": row["decided_at"],
+    }
+
+
+def tagging_row(bot: Any, guild: Any, held: str | None) -> dict[str, Any]:
+    if held is None:
+        return {"ok": True, "why": None, "word": TAGGING_READY}
+    if held == chat_review.UNTAGGED_CAPPED:
+        word = chat_review.words(bot.store, guild.id, REVIEW_CAPPED_KEY)
+    else:
+        word = TAGGING_WORDS.get(held, held)
+    return {"ok": False, "why": held, "word": word}
 
 
 def build_router(bot: Any) -> APIRouter:
@@ -980,6 +1077,102 @@ def build_router(bot: Any) -> APIRouter:
     @router.post("/channels/{channel_id}/reset")
     async def chat_channel_draft_reset(request: Request, channel_id: int) -> dict[str, Any]:
         return await _draft_move(request, channel_id, channel_drafts.reset_draft)
+
+    async def _review(guild: Any, status: str | None, reason: str | None) -> dict[str, Any]:
+        rows = await chat_review.list_items(bot.db, guild.id, status=status, reason=reason)
+        held = await chat_review.why_untagged(bot, guild.id)
+        intents = await list_intents(bot.db, guild.id)
+        return {
+            "items": [review_row(bot, guild, row) for row in rows],
+            "counts": await chat_review.counts(bot.db, guild.id),
+            "tagging": tagging_row(bot, guild, held),
+            "reasons": [
+                {"key": one, "word": chat_review.reason_word(bot.store, guild.id, one)}
+                for one in chat_review.REASONS
+            ],
+            "statuses": list(chat_review.STATUSES),
+            "intents": [str(row["name"]) for row in intents],
+            "filter": {"status": status or REVIEW_ALL, "reason": reason},
+            "notes": [],
+        }
+
+    def _review_filter(status: Any, reason: Any) -> tuple[str | None, str | None]:
+        wanted = str(status or chat_review.OPEN).strip().lower()
+        if wanted != REVIEW_ALL and wanted not in chat_review.STATUSES:
+            raise Refused(400, "bad_status", REVIEW_BAD_STATUS.format(given=wanted[:40]))
+        why = str(reason or "").strip().lower() or None
+        if why is not None and why not in chat_review.REASONS:
+            raise Refused(400, "bad_reason", REVIEW_BAD_REASON.format(given=why[:40]))
+        return (None if wanted == REVIEW_ALL else wanted, why)
+
+    async def _review_answer(guild: Any, outcome: Any) -> dict[str, Any]:
+        answered(outcome)
+        row = await chat_review.get_item(bot.db, outcome.value)
+        return {"item": review_row(bot, guild, row), "message": outcome.message}
+
+    @router.get("/review")
+    async def chat_review_queue(
+        status: str | None = None, reason: str | None = None
+    ) -> dict[str, Any]:
+        guild = require_guild(bot)
+        require_db(bot)
+        wanted, why = _review_filter(status, reason)
+        return await _review(guild, wanted, why)
+
+    @router.get("/review.md")
+    async def chat_review_markdown(request: Request) -> PlainTextResponse:
+        """The open queue as a document; the operator token may read it and never decide."""
+        await reader(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        rows = await chat_review.list_items(bot.db, guild.id)
+        return PlainTextResponse(
+            chat_review.markdown(bot, guild.id, rows),
+            media_type=MARKDOWN_MEDIA_TYPE,
+            headers={"Content-Disposition": f'attachment; filename="{REVIEW_FILENAME}"'},
+        )
+
+    @router.post("/review/{item_id}/approve")
+    async def chat_review_approve(request: Request, item_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await chat_panel.approve_review(
+            bot, guild, actor_for(bot, who, guild), item_id, via=VIA_WEBSITE
+        )
+        return await _review_answer(guild, outcome)
+
+    @router.post("/review/{item_id}/dismiss")
+    async def chat_review_dismiss(request: Request, item_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await chat_panel.dismiss_review(
+            bot, guild, actor_for(bot, who, guild), item_id, via=VIA_WEBSITE
+        )
+        return await _review_answer(guild, outcome)
+
+    @router.post("/review/{item_id}/reopen")
+    async def chat_review_reopen(request: Request, item_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await chat_panel.reopen_review(
+            bot, guild, actor_for(bot, who, guild), item_id, via=VIA_WEBSITE
+        )
+        return await _review_answer(guild, outcome)
+
+    @router.put("/review/{item_id}")
+    async def chat_review_change(
+        request: Request, item_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = await chat_panel.change_review(
+            bot, guild, actor_for(bot, who, guild), item_id, payload, via=VIA_WEBSITE
+        )
+        return await _review_answer(guild, outcome)
 
     @router.get("/spend")
     async def chat_spend() -> dict[str, Any]:

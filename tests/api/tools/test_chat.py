@@ -3,7 +3,13 @@ import pytest
 from black_bloc import knowledge
 from black_bloc.chat import BUILTIN_ORDER, UNKNOWN, loaded_intents, seed_defaults
 from black_bloc.llm import ANTHROPIC, IMPORTANT, MODEL, Usage, record
-from black_bloc.settings_store import CHANNEL_NOTE_WORDS, PROMPT_WORDS, VOICE_WORDS
+from black_bloc.settings_store import (
+    CHANNEL_NOTE_WORDS,
+    PROMPT_WORDS,
+    REVIEW_SETTINGS,
+    REVIEW_WORDS,
+    VOICE_WORDS,
+)
 
 
 @pytest.fixture
@@ -90,7 +96,9 @@ async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded
         "chat_memory_notes_max",
         "chat_memory_threads_max",
         "chat_memory_model",
-    } | set(CHANNEL_NOTE_WORDS) | set(PROMPT_WORDS) | set(VOICE_WORDS)
+    } | set(CHANNEL_NOTE_WORDS) | set(PROMPT_WORDS) | set(VOICE_WORDS) | set(REVIEW_SETTINGS) | set(
+        REVIEW_WORDS
+    )
     for row in rows:
         assert {"key", "type", "value", "default", "help"} <= set(row)
     mode = next(row for row in rows if row["key"] == "chat_mode")
@@ -1044,3 +1052,117 @@ async def test_the_voice_routes_are_staff_only(client, sign_in, guild, wf, web):
         assert response.status_code == 403, where
         assert response.json()["message"]
     assert await wf.kinds_in(web.db) == []
+
+
+# --- the review queue (docs/info/chat-review-loop-design.md) ----------------------------------
+
+OPERATOR_TOKEN = "operator-read-token-long-enough-to-be-taken"
+
+
+async def a_review(web, wf, *, kind="phrase", intent="greeting", phrase="yo fam", reason="reask"):
+    cur = await web.db.conn.execute("SELECT COALESCE(MAX(reply_id), 98) + 1 AS n FROM chat_review")
+    reply = (await cur.fetchone())["n"]
+    cur = await web.db.conn.execute(
+        "INSERT INTO chat_review(guild_id, channel_id, user_id, asked, answered, tier, reason, "
+        "reply_id, at, suggested_kind, suggested_intent, suggested_phrase, suggested_why, "
+        "tagged_at) VALUES (?, 5, 7, 'yo fam', 'Hello!', 'simple', ?, ?, 'x', ?, ?, ?, "
+        "'a greeting', 't')",
+        (wf.GUILD_ID, reason, reply, kind, intent, phrase),
+    )
+    await web.db.conn.commit()
+    return str(cur.lastrowid)
+
+
+async def test_the_queue_lists_open_items_with_their_suggestion_and_counts(seeded, client, web, wf):
+    made = await a_review(web, wf)
+    await a_review(web, wf, kind="none", reason="downvote")
+
+    payload = client.get("/api/chat/review").json()
+
+    assert [row["id"] for row in payload["items"]][-1] == made
+    first = next(row for row in payload["items"] if row["id"] == made)
+    assert first["asked"] == "yo fam" and first["reason"] == "reask"
+    assert first["reason_word"] == "they asked again straight away"
+    assert first["suggestion"]["word"] == "add **yo fam** to **greeting**"
+    assert first["suggestion"]["teaches"] is True
+    assert first["link"].endswith("/5/99")
+    assert payload["counts"]["open"] == 2
+    assert "greeting" in payload["intents"]
+    reasons = {row["key"] for row in payload["reasons"]}
+    assert reasons == {"ungrounded", "reask", "downvote", "not_it"}
+    downvoted = client.get("/api/chat/review?reason=downvote").json()["items"]
+    assert [row["reason"] for row in downvoted] == ["downvote"]
+    assert client.get("/api/chat/review?status=approved").json()["items"] == []
+
+
+async def test_a_filter_that_is_not_one_is_refused_in_words(seeded, client):
+    for path in ("/api/chat/review?status=maybe", "/api/chat/review?reason=vibes"):
+        refused = client.get(path)
+        assert refused.status_code == 400 and "was not filtered" in refused.json()["message"]
+
+
+async def test_approve_change_dismiss_and_reopen_through_the_site(seeded, client, web, wf):
+    first = await a_review(web, wf)
+    second = await a_review(web, wf)
+    third = await a_review(web, wf)
+
+    approved = client.post(f"/api/chat/review/{first}/approve")
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["item"]["status"] == "approved"
+    assert "yo fam" in named(client, "greeting")["triggers"]
+
+    changed = client.put(
+        f"/api/chat/review/{second}", json={"kind": "knowledge", "line": "The grill is at six."}
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["item"]["suggestion"]["line"] == "The grill is at six."
+    sections = client.get("/api/chat/knowledge").json()["sections"]
+    assert any(one["title"] == "From review" for one in sections)
+
+    assert client.post(f"/api/chat/review/{third}/dismiss").json()["item"]["status"] == "dismissed"
+    assert client.post(f"/api/chat/review/{third}/reopen").json()["item"]["status"] == "open"
+
+    again = client.post(f"/api/chat/review/{first}/approve")
+    assert again.status_code == 409 and again.json()["error"] == "already_decided"
+    missing = client.post("/api/chat/review/999999/dismiss")
+    assert missing.status_code == 404 and "no review item" in missing.json()["message"]
+
+    kinds = [kind for kind in await wf.kinds_in(web.db) if kind.startswith("web.chat.review")]
+    assert kinds == [
+        "web.chat.review_approved",
+        "web.chat.review_changed",
+        "web.chat.review_dismissed",
+        "web.chat.review_reopened",
+    ]
+
+
+async def test_the_queue_is_staff_only(client, sign_in, guild, wf):
+    wf.member(guild, 8, name="ada")
+    sign_in(client, uid=8, staff=False)
+
+    for method, path in (
+        ("GET", "/api/chat/review"),
+        ("GET", "/api/chat/review.md"),
+        ("POST", "/api/chat/review/1/approve"),
+        ("PUT", "/api/chat/review/1"),
+    ):
+        response = client.request(method, path, json={} if method == "PUT" else None)
+        assert response.status_code == 403, path
+        assert response.json()["message"]
+
+
+async def test_the_markdown_export_reads_through_the_operator_token_and_cannot_decide(
+    client, web, wf
+):
+    web.settings.operator_read_token = OPERATOR_TOKEN
+    bearer = {"Authorization": f"Bearer {OPERATOR_TOKEN}"}
+    made = await a_review(web, wf)
+
+    read = client.get("/api/chat/review.md", headers=bearer)
+
+    assert read.status_code == 200
+    assert read.headers["content-type"].startswith("text/markdown")
+    assert read.text.startswith("# Chat review queue — 1 open")
+    assert f"## Item {made} — they asked again straight away" in read.text
+    refused = client.post(f"/api/chat/review/{made}/approve", headers=bearer)
+    assert refused.status_code == 403 and refused.json()["error"] == "operator_read_only"

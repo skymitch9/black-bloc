@@ -31,6 +31,8 @@
     ],
     "min": {
       "chat_cooldown_seconds": 5,
+      "chat_review_digest_hour": 0,
+      "chat_review_reask_seconds": 0,
       "error_retry_minutes": 1,
       "events_channel_retention_days": 1,
       "events_default_minutes": 5,
@@ -74,6 +76,8 @@
       "chat_memory_threads_max": 20,
       "chat_monthly_cap_usd": 1000,
       "chat_person_hourly_turns": 10000,
+      "chat_review_digest_hour": 23,
+      "chat_review_reask_seconds": 3600,
       "cost_hosting_usd": 10000,
       "error_retry_minutes": 30,
       "events_channel_retention_days": 365,
@@ -2981,6 +2985,184 @@
         "section_id",
         "message"
       ]
+    },
+    {
+      "_": "The chat review loop (2026-09-23, docs/info/chat-review-loop-design.md). The seed holds three open items with a suggestion each and one already dismissed, so approve, change, dismiss and reopen each reach a row of their own. GET /api/chat/review.md is the same queue as a markdown document, text rather than JSON, so it is checked in tests/api/tools/test_chat.py instead of here.",
+      "method": "GET",
+      "path": "/api/chat/review",
+      "read_by": [
+        "page-chat.js Review queue section"
+      ],
+      "shape": "object",
+      "keys": [
+        "items",
+        "counts",
+        "tagging",
+        "reasons",
+        "statuses",
+        "intents",
+        "filter",
+        "notes"
+      ],
+      "rows": {
+        "items": [
+          "id",
+          "member",
+          "channel",
+          "asked",
+          "answered",
+          "reason",
+          "reason_word",
+          "at",
+          "link",
+          "suggestion",
+          "status",
+          "decided_by",
+          "decided_at"
+        ],
+        "reasons": [
+          "key",
+          "word"
+        ]
+      },
+      "nested": {
+        "counts": [
+          "open",
+          "approved",
+          "changed",
+          "dismissed",
+          "untagged"
+        ],
+        "tagging": [
+          "ok",
+          "why",
+          "word"
+        ],
+        "filter": [
+          "status",
+          "reason"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/review/{chat_review_id}/approve",
+      "read_by": [
+        "page-chat.js Review queue Approve"
+      ],
+      "shape": "object",
+      "keys": [
+        "item",
+        "message"
+      ],
+      "nested": {
+        "item": [
+          "id",
+          "member",
+          "channel",
+          "asked",
+          "answered",
+          "reason",
+          "reason_word",
+          "at",
+          "link",
+          "suggestion",
+          "status",
+          "decided_by",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chat/review/{chat_review_change_id}",
+      "body": {
+        "kind": "knowledge",
+        "line": "The grill goes on at six on a Saturday."
+      },
+      "read_by": [
+        "page-chat.js Review queue Change"
+      ],
+      "shape": "object",
+      "keys": [
+        "item",
+        "message"
+      ],
+      "nested": {
+        "item": [
+          "id",
+          "member",
+          "channel",
+          "asked",
+          "answered",
+          "reason",
+          "reason_word",
+          "at",
+          "link",
+          "suggestion",
+          "status",
+          "decided_by",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/review/{chat_review_dismiss_id}/dismiss",
+      "read_by": [
+        "page-chat.js Review queue Dismiss"
+      ],
+      "shape": "object",
+      "keys": [
+        "item",
+        "message"
+      ],
+      "nested": {
+        "item": [
+          "id",
+          "member",
+          "channel",
+          "asked",
+          "answered",
+          "reason",
+          "reason_word",
+          "at",
+          "link",
+          "suggestion",
+          "status",
+          "decided_by",
+          "decided_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/review/{chat_review_dismissed_id}/reopen",
+      "read_by": [
+        "page-chat.js Review queue Reopen"
+      ],
+      "shape": "object",
+      "keys": [
+        "item",
+        "message"
+      ],
+      "nested": {
+        "item": [
+          "id",
+          "member",
+          "channel",
+          "asked",
+          "answered",
+          "reason",
+          "reason_word",
+          "at",
+          "link",
+          "suggestion",
+          "status",
+          "decided_by",
+          "decided_at"
+        ]
+      }
     },
     {
       "_": "The channel catalog (2026-09-23, docs/info/channel-catalog-design.md). {test_channel_id} is a TEXT channel of the guild, the only kind a note may be written on; the directory block is the exact text the conversation models are handed. 2026-09-23 follow-up: the Channels page (channels.html) reads it now; each row carries its drafted description and review status, and `review` counts the drafted channels (docs/info/channel-catalog-design.md, follow-up). 2026-09-23 reach follow-up: each row carries `reach` {visible, via, override} — via is member, role:<name> or override; hidden_because gains hidden_by_staff (docs/info/channel-catalog-design.md, reach follow-up).",
@@ -6291,6 +6473,10 @@
     "web.post.restored",
     "web.post.versions_trimmed",
     "web.chat.channel_reach_set",
-    "web.chat.channel_reach_cleared"
+    "web.chat.channel_reach_cleared",
+    "web.chat.review_approved",
+    "web.chat.review_changed",
+    "web.chat.review_dismissed",
+    "web.chat.review_reopened"
   ]
 }
