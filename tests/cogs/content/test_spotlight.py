@@ -1405,6 +1405,94 @@ async def test_taking_the_spotlight_off_a_live_channel_unpins_it_and_leaves_it_r
     assert "has ended" in announcement.content
 
 
+async def a_plain_live_row(bot, cog, **fields):
+    """GDQ on 2026-09-22: spotlight off, announced like a member's, so nothing pinned."""
+    row = await a_row(bot, spotlight=False, **fields)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    announcement = bot.guild.channel.messages[0]
+    assert announcement.pinned is False
+    return row, announcement
+
+
+async def test_turning_the_spotlight_on_mid_stream_pins_the_live_announcement(bot, cog):
+    row, announcement = await a_plain_live_row(bot, cog)
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "spotlight_on")
+
+    assert announcement.pinned is True and announcement.pins == [words.PIN_REASON]
+    assert words.PINNED_NOW in said and "is spotlighted" in said
+    assert (await details_of(bot.db, "golive.spotlight_pinned"))["because"] == (
+        words.SPOTLIGHT_ON_BECAUSE
+    )
+    assert await open_session(bot.db, row["id"]) is not None
+
+
+async def test_turning_the_spotlight_on_leaves_a_row_whose_pin_is_off_unpinned(bot, cog):
+    row, announcement = await a_plain_live_row(bot, cog)
+    await update_channel(bot.db, row["id"], pin=0)
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "spotlight_on")
+
+    assert announcement.pinned is False and announcement.pins == []
+    assert words.PINNED_NOW not in said
+    assert "golive.spotlight_pinned" not in await kinds(bot.db)
+
+
+async def test_turning_the_spotlight_on_over_an_already_pinned_post_changes_nothing(bot, cog):
+    row, announcement = await a_plain_live_row(bot, cog)
+    announcement.pinned = True
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "spotlight_on")
+
+    assert announcement.pins == [] and announcement.pinned is True
+    assert words.PINNED_NOW not in said
+    assert "golive.spotlight_pinned" not in await kinds(bot.db)
+
+
+async def test_turning_the_spotlight_on_after_the_stream_unpins_a_stale_pin(bot, cog):
+    row, _helix, announcement = await a_live_row(bot, cog)
+    await set_spotlight(bot, bot.guild, FakeActor(), row["id"], False)
+    announcement.pinned = True
+    session = await open_session(bot.db, row["id"])
+    await end_session(bot.db, session["id"], now_iso())
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "spotlight_on")
+
+    assert announcement.pinned is False
+    assert words.UNPINNED_ENDED_NOW in said
+    assert (await details_of(bot.db, "golive.spotlight_unpinned"))["because"] == (
+        words.SPOTLIGHT_ON_BECAUSE
+    )
+
+
+async def test_turning_the_spotlight_on_with_nothing_out_there_settles_nothing(bot, cog):
+    row = await a_row(bot, spotlight=False)
+
+    fresh, settled = await set_spotlight(bot, bot.guild, FakeActor(), row["id"], True)
+
+    assert settled is None and words.is_spotlit(fresh)
+    assert words.spotlight_said(fresh, settled) == words.SPOTLIT_SAID.format(login=GDQ)
+    assert "golive.spotlight_pinned" not in await kinds(bot.db)
+    assert "golive.spotlight_unpinned" not in await kinds(bot.db)
+
+
+async def test_a_pin_discord_refuses_on_the_flip_is_said_in_words_and_the_row_still_moves(
+    bot, cog
+):
+    row, announcement = await a_plain_live_row(bot, cog)
+    bot.guild.channel.pin_raises = RuntimeError("Forbidden")
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "spotlight_on")
+
+    assert "could not be pinned" in said and "Manage Messages" in said
+    assert words.is_spotlit(await channel_by_id(bot.db, row["id"]))
+    assert announcement.pinned is False
+    assert (await details_of(bot.db, "golive.spotlight_pin_failed"))["because"] == (
+        words.SPOTLIGHT_ON_BECAUSE
+    )
+
+
 async def test_the_panel_only_offers_the_spotlight_moves_while_the_spotlight_is_on(bot, cog):
     row = await a_row(bot, spotlight=False)
 

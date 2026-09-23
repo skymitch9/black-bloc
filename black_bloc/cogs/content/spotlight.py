@@ -266,6 +266,14 @@ async def open_sessions(db: Any, guild_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
+async def last_session(db: Any, spotlight_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_sessions WHERE spotlight_id = ? ORDER BY id DESC LIMIT 1",
+        (int(spotlight_id),),
+    )
+    return await cur.fetchone()
+
+
 async def recent_sessions(db: Any, guild_id: int, limit: int = 50) -> list[Any]:
     cur = await db.conn.execute(
         "SELECT * FROM spotlight_sessions WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
@@ -823,10 +831,13 @@ class Spotlight(commands.Cog):
 
     # --- pinning ---------------------------------------------------------------------------
 
-    async def _pin(self, guild: Any, row: Any, message: Any) -> str | None:
+    async def _pin(
+        self, guild: Any, row: Any, message: Any, *, because: str | None = None
+    ) -> str | None:
         """Checklist 12: the session is already recorded; a pin that fails changes nothing."""
         if message is None or bool(getattr(message, "pinned", False)):
             return None
+        said = {"because": because} if because else {}
         try:
             await message.pin(reason=words.PIN_REASON)
         except Exception as exc:
@@ -841,7 +852,8 @@ class Spotlight(commands.Cog):
                     "login": row["twitch_login"],
                     "message_id": str(getattr(message, "id", "")),
                     "reason": reason,
-                },
+                }
+                | said,
             )
             return words.PIN_REFUSED.format(login=row["twitch_login"], reason=reason)
         await log_action(
@@ -852,7 +864,8 @@ class Spotlight(commands.Cog):
                 "spotlight_id": row["id"],
                 "login": row["twitch_login"],
                 "message_id": str(message.id),
-            },
+            }
+            | said,
         )
         return None
 
@@ -1325,18 +1338,21 @@ async def changed_spotlight(
 async def settle_open_session(
     bot: Any, guild: Any, was: Any, now: Any, fields: dict[str, Any]
 ) -> str | None:
-    """Opting a live channel out ENDS the stream that is out there; taking its spotlight off
-    only unpins it. Nothing here waits on Twitch, which never reports a 24/7 rerun offline."""
+    """Opting a live channel out ENDS the stream that is out there; the spotlight flag moves
+    only the pin. Nothing here waits on Twitch, which never reports a 24/7 rerun offline."""
     cog = cog_of(bot)
     if cog is None or now is None:
         return None
     opted_out = "announce" in fields and words.announces(was) and not words.announces(now)
     dimmed = "spotlight" in fields and words.is_spotlit(was) and not words.is_spotlit(now)
-    if not (opted_out or dimmed):
+    brightened = "spotlight" in fields and not words.is_spotlit(was) and words.is_spotlit(now)
+    if not (opted_out or dimmed or brightened):
         return None
     spotlight_id = int(now["id"])
     async with cog._lock(spotlight_id):
         session = await open_session(bot.db, spotlight_id)
+        if brightened and not opted_out:
+            return await _brighten(cog, bot, guild, now, session)
         if session is None:
             return None
         if opted_out:
@@ -1346,6 +1362,27 @@ async def settle_open_session(
         message = await cog._message(guild, session)
         await cog._unpin(guild, now, message, because=words.SPOTLIGHT_OFF_BECAUSE)
         return words.UNPINNED
+
+
+async def _brighten(cog: Any, bot: Any, guild: Any, row: Any, session: Any) -> str | None:
+    """Toggle time only: the poller never re-pins what staff unpinned by hand mid-stream."""
+    because = words.SPOTLIGHT_ON_BECAUSE
+    if session is not None:
+        if not row["pin"] or not words.announces(row):
+            return None
+        message = await cog._message(guild, session)
+        if message is None or bool(getattr(message, "pinned", False)):
+            return None
+        refused = await cog._pin(guild, row, message, because=because)
+        return refused or words.PINNED
+    last = await last_session(bot.db, int(row["id"]))
+    if last is None:
+        return None
+    message = await cog._message(guild, last)
+    if message is None or not bool(getattr(message, "pinned", False)):
+        return None
+    refused = await cog._unpin(guild, row, message, because=because)
+    return refused or words.UNPINNED_ENDED
 
 
 async def forget_spotlight(

@@ -155,10 +155,14 @@ settled)` and, after the row has moved, settles an OPEN session **under the row'
 - **`spotlight` 1 → 0 with a session open** only **unpins** the announcement
   (`golive.spotlight_unpinned` with `because: spotlight_off`). The session stays open and the post
   stays live-worded — the channel is announced like a member's from now on, and the post is edited
-  to past tense when the stream really ends. Turning the spotlight back ON mid-stream still does
-  NOT retro-pin (sweep row 721 already says so).
-- Turning either back ON settles nothing: nothing that happened while it was off is posted after
-  the fact.
+  to past tense when the stream really ends. ~~Turning the spotlight back ON mid-stream still does
+  NOT retro-pin (sweep row 721 already says so).~~ ⚠️ **REVERSED 2026-09-22** (owner ask, branch
+  `spotlight-retro-pin`): turning it back ON mid-stream now pins the live post — see **Follow-up
+  2026-09-22** below.
+- ~~Turning either back ON settles nothing: nothing that happened while it was off is posted after
+  the fact.~~ ⚠️ **Amended 2026-09-22:** opting back IN still settles nothing and posts nothing
+  after the fact; turning the SPOTLIGHT back on now settles the pin (and only the pin) — see
+  **Follow-up 2026-09-22** below.
 
 **The key — `golive_channel_optout_post`** (enum, group `golive`, default **`end`**), registry +
 mock `SETTING_SPECS` + `labels.js` + `golive-join.js:placeSettings` (the *How streams are spotted*
@@ -235,6 +239,46 @@ what the route answers. The clause lands only when a session was actually open, 
   copies are only checked by eye.
 - **`delete` was never exercised against a message Discord refused to delete**; the failure branch
   is proved by the unit path alone.
+
+## Follow-up 2026-09-22: Spotlight ON settles the pin (the retro-pin)
+
+> **Status:** built on branch `spotlight-retro-pin` off `main` `95cb8954` — NOT merged, NOT deployed.
+> ⚠️ **Nothing in it has met Discord.** Sweep row `RP-a` in `../access/sweeps.md`, unwalked.
+
+**The ask, owner verbatim (2026-09-22):** *quick fix, when something gets tagged for a spotlight do a check to see if the channel is pinned, if its live and not pinned, pin it. if its not live and pinned un pin it, when its live again its pinned again*
+
+**Measured on live (conductor's reading).** GamesDoneQuick (spotlight row 3) had its spotlight OFF,
+went live and was announced unpinned (`golive.channel_announced`), and the owner pressed
+**Spotlight on** mid-stream. Nothing pinned it: `settle_open_session` settled only `announce` 1→0
+and `spotlight` 1→0, and the pin was taken only at announce time — while the bot's own sentence
+(`SPOTLIT_SAID`, *"its announcement is pinned while it streams"*) promised otherwise.
+
+**The rule after.** `spotlight` 0→1 is a third settle case ("brightened"), under the row's lock:
+
+- **A session is OPEN and the row's `pin` is on:** the live announcement is fetched and, if it is
+  not already pinned, pinned now — `golive.spotlight_pinned` with `because: spotlight_on`. The
+  answer adds *"The announcement that is out now has been pinned for the rest of the stream, and
+  the reminders pick up from here."* A refusal from Discord (`golive.spotlight_pin_failed`, same
+  `because`) is returned in words — the `PIN_REFUSED` sentence — and the row stays flipped.
+- **The row's `pin` is off, or the row is opted out:** nothing is pinned.
+- **No session is open:** the LAST session's announcement is read; if it is still pinned (an end
+  whose unpin failed), it is unpinned now (`golive.spotlight_unpinned`, `because: spotlight_on`)
+  and the answer says so. Nothing pinned → nothing settled. The next stream is pinned at announce
+  time as before — *"when its live again its pinned again"* is the existing announce-time rule.
+- ⚠️ **Toggle time ONLY.** The poller does NOT re-check pins: staff who take the pin off a live post
+  by hand mid-stream are not fought every poll (staff final say).
+- **Announce 1→0 in the same write wins** — the session ends, and nothing is pinned first.
+
+**Deviations from the brief.** (1) The stale-pin case returns a new word `UNPINNED_ENDED`, not
+`UNPINNED`: the sentence differs (the stream has ended) and an existing test pins that a spotlit
+row's answer never carries the mid-stream unpinned sentence. (2) The mock (`site/mock/server.mjs`)
+mirrors the brighten; it tracks no pin state, so it pins whenever a live session is open and the
+row's pin is on. (3) The sweep row is lettered `RP-a`, not numbered: the `SD-*` rows above it are
+still waiting on the conductor's numbers, and taking `740` could collide with them.
+
+**Not verified.** Nothing has met Discord or Helix; the live GDQ post was not touched. Every claim
+about pins is the suite's, against fakes. No browser rendered the drawer; the mock's sentence was
+read off `PATCH /api/golive/spotlight/1` with curl.
 
 ## Follow-up 2026-09-21 (16:5x): the log kind says CHANNEL, not spotlight
 

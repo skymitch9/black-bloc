@@ -4214,7 +4214,8 @@ function channelSpotlightSaid(row, settled) {
     const said = `**${row.twitch_login}** is announced like anybody else's stream now — one post when it goes live, edited to past tense when it ends, no pin and no reminders. It stays on the list.`;
     return settled === 'unpinned' ? `${said} ${UNPINNED_NOW}` : said;
   }
-  return `**${row.twitch_login}** is spotlighted: its announcement is pinned while it streams and a reminder goes out every so often. Everything else about the channel stays as it is.`;
+  const said = `**${row.twitch_login}** is spotlighted: its announcement is pinned while it streams and a reminder goes out every so often. Everything else about the channel stays as it is.`;
+  return settled === 'pinned' ? `${said} ${PINNED_NOW}` : said;
 }
 
 // The bot's spotlight.OPTED_OUT_POST_SAID / UNPINNED_NOW, and the settle the cog does under
@@ -4225,6 +4226,7 @@ const OPTED_OUT_POST_SAID = {
   leave: 'The announcement that was out is left exactly as it was posted — only the pin came off — and the session is closed (per `golive_channel_optout_post`).',
 };
 const UNPINNED_NOW = 'The announcement that is out now has been unpinned; it stays posted, no reminder follows it, and it is edited to past tense when the stream ends.';
+const PINNED_NOW = 'The announcement that is out now has been pinned for the rest of the stream, and the reminders pick up from here.';
 
 function openSpotlightSession(row) {
   return state.golive.spotlightSessions.find((one) => one.spotlight_id === row.id && !one.ended_at) || null;
@@ -4233,8 +4235,14 @@ function openSpotlightSession(row) {
 function settleOpenSession(row, wasAnnouncing, wasSpotlit) {
   const optedOut = wasAnnouncing && row.announce === false;
   const dimmed = wasSpotlit && row.spotlight === false;
-  if (!optedOut && !dimmed) return null;
+  const brightened = wasSpotlit === false && row.spotlight !== false;
+  if (!optedOut && !dimmed && !brightened) return null;
   const session = openSpotlightSession(row);
+  if (brightened && !optedOut) {
+    if (!session || !row.pin || row.announce === false) return null;
+    logAction('golive.spotlight_pinned', { details: { login: row.twitch_login, because: 'spotlight_on' } });
+    return 'pinned';
+  }
   if (!session) return null;
   if (!optedOut) {
     logAction('golive.spotlight_unpinned', { details: { login: row.twitch_login, because: 'spotlight_off' } });
@@ -4424,7 +4432,7 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   if ('bump_hours' in body) row.bump_hours = body.bump_hours || null;
   if ('pin' in body) row.pin = Boolean(body.pin);
   if ('note' in body) row.note = body.note || null;
-  const wasSpotlit = 'spotlight' in body && row.spotlight !== false;
+  const wasSpotlit = 'spotlight' in body ? row.spotlight !== false : null;
   const wasAnnouncing = 'announce' in body && row.announce !== false;
   if ('spotlight' in body) row.spotlight = Boolean(body.spotlight);
   if ('announce' in body) row.announce = Boolean(body.announce);
