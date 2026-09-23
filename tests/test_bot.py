@@ -376,3 +376,21 @@ async def test_on_ready_reconciles_the_role_menu_panels_and_runs_the_self_test(m
     await BlackBlocBot.on_ready(stand_in)
 
     assert seen == [("panels", stand_in), ("selftest", stand_in)]
+
+
+async def test_dispatch_marks_an_orphaned_click_before_any_handler_is_scheduled(settings):
+    """`docs/info/panels-orphaned-click-design.md`: the mark rides the synchronous dispatch."""
+    from black_bloc import orphaned
+
+    bot = BlackBlocBot(settings)
+    await bot._async_setup_hook()
+    click = SimpleNamespace(
+        type=discord.InteractionType.component,
+        data={"custom_id": "gone", "component_type": 2},
+        message=SimpleNamespace(id=1),
+        extras={},
+    )
+
+    bot.dispatch("interaction", click)
+
+    assert click.extras == {orphaned.ORPHANED: True}

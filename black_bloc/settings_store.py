@@ -2365,6 +2365,21 @@ KEY_HELP.update(
 )
 
 
+# A click on a panel no live view owns (`docs/info/panels-orphaned-click-design.md`) — own block.
+PANEL_EXPIRED_TEXT_KEY = "panel_expired_text"
+PANEL_EXPIRED_TEXT = (
+    "This panel has gone quiet — it timed out, or Black Bloc restarted since it was opened, so "
+    "its buttons no longer reach anything. Run {command} again for a fresh one."
+)
+
+KEY_TYPES[PANEL_EXPIRED_TEXT_KEY] = "text"
+KEY_HELP[PANEL_EXPIRED_TEXT_KEY] = (
+    "what somebody is told when they press a button, pick from a menu or submit a form on a "
+    "panel Black Bloc no longer holds — it timed out, or the bot restarted (every deploy is a "
+    "restart) while it was open. `{command}` is filled in with the slash command that opened "
+    "the panel when Discord says which, and with 'the command' when it does not"
+)
+
 # Boot status (`docs/info/boot-status-design.md`) — red while it boots, green when it is ready.
 BOOT_STATUS_MODE = "boot_status_mode"
 BOOT_STATUS_TEXT_KEY = "boot_status_text"
@@ -2926,6 +2941,7 @@ CORE_KEYS = (
     BOOT_STATUS_MODE,
     BOOT_STATUS_TEXT_KEY,
     SHUTDOWN_STATUS_TEXT_KEY,
+    PANEL_EXPIRED_TEXT_KEY,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -3979,6 +3995,8 @@ class SettingsStore:
             return ERROR_RETRY_MINUTES
         if key == ERROR_RETRY_EXPIRED_KEY:
             return ERROR_RETRY_EXPIRED
+        if key == PANEL_EXPIRED_TEXT_KEY:
+            return PANEL_EXPIRED_TEXT
         if key == BOOT_STATUS_MODE:
             return BOOT_STATUS_MODE_DEFAULT
         if key == BOOT_STATUS_TEXT_KEY:

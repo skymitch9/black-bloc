@@ -12,6 +12,7 @@
       "error_sentence",
       "log_channel_id",
       "operator_read_log",
+      "panel_expired_text",
       "personality_pool_peer_url",
       "personality_pool_sync",
       "rehearsal_note",

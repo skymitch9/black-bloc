@@ -26,6 +26,9 @@ ERROR_MODAL = f"{ERROR_HEAD}.modal"
 ERROR_BUTTON = f"{ERROR_HEAD}.button"
 ERROR_KINDS: tuple[str, ...] = (ERROR_COMMAND, ERROR_PANEL, ERROR_MODAL, ERROR_BUTTON)
 
+PANEL_HEAD = "panel"
+PANEL_EXPIRED_CLICK = f"{PANEL_HEAD}.expired_click"
+
 OFF = "off"
 IMPORTANT_ONLY = "important"
 ALL = "all"
@@ -58,6 +61,7 @@ FEATURES = (
 
 HEADS: dict[str, str] = {
     ERROR_HEAD: CORE,
+    PANEL_HEAD: CORE,
     "settings": CORE,
     "commands": CORE,
     "presence": CORE,
@@ -256,6 +260,7 @@ ROUTINE: frozenset[str] = frozenset(
         "chat.trope_disabled",
         "chat.trope_enabled",
         "commands.visibility",
+        PANEL_EXPIRED_CLICK,
         "event.announce",
         "event.announce_channel_forgotten",
         "event.announce_room",
@@ -643,6 +648,8 @@ __all__ = [
     "LEVEL_DEFAULT",
     "LOG_LEVEL_KEYS",
     "OFF",
+    "PANEL_EXPIRED_CLICK",
+    "PANEL_HEAD",
     "ROUTINE",
     "SELFTEST",
     "SELFTEST_CHECK",
