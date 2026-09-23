@@ -1902,3 +1902,90 @@ async def test_a_reboot_forgets_the_broadcast_so_the_next_probe_writes_its_row_a
     await rebooted.probe_all()
 
     assert len(await details_logged(db, "youtube.live_seen")) == 2
+
+
+# --- the wall is its own outcome: one youtube.probe_walled row per state change ------------------
+
+
+async def test_a_walled_live_page_writes_one_row_naming_the_searched_id(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    client = await live_linked(
+        db,
+        cog,
+        BOTCHECK_LIVE_PAGE,
+        BOTCHECK_LIVE_PAGE,
+        BOTCHECK_LIVE_PAGE,
+        keyed=True,
+        searches=[SEARCHED_VIDEO],
+        confirms=[Confirm(started=True)],
+    )
+
+    for _ in range(3):
+        await cog.probe_all()
+
+    walled = await details_logged(db, "youtube.probe_walled")
+    assert len(walled) == 1
+    assert walled[0]["channel_id"] == CHANNEL and walled[0]["live"] is True
+    assert walled[0]["video_id"] == SEARCHED_VIDEO and walled[0]["keyed"] is True
+    assert client.searched == [CHANNEL]
+    assert not is_important("youtube.probe_walled")
+
+
+async def test_a_walled_page_with_no_live_marker_reads_unknown_and_each_change_is_one_row(
+    bot, cog, golive, db, member
+):
+    await live_on(bot)
+    await live_linked(
+        db,
+        cog,
+        BOTCHECK_OFFLINE_PAGE,
+        BOTCHECK_OFFLINE_PAGE,
+        BOTCHECK_LIVE_PAGE,
+        LIVE_PAGE,
+        BOTCHECK_LIVE_PAGE,
+        keyed=False,
+    )
+
+    for _ in range(5):
+        await cog.probe_all()
+
+    walled = await details_logged(db, "youtube.probe_walled")
+    assert [one["live"] for one in walled] == [None, True, True]
+    assert [one["video_id"] for one in walled] == [None, None, LIVE_VIDEO]
+    assert "youtube.probe_unreadable" not in await kinds_logged(db)
+
+
+async def test_a_page_that_is_not_walled_writes_no_wall_row(bot, cog, golive, db, member):
+    await live_on(bot)
+    await live_linked(db, cog, LIVE_PAGE, OFFLINE_PAGE)
+
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert "youtube.probe_walled" not in await kinds_logged(db)
+    assert cog.walled == {}
+
+
+async def test_a_walled_channel_row_writes_its_wall_row_too(bot, cog, db):
+    await live_on(bot)
+    a_spotlight_cog(bot)
+    await bot.store.set(GUILD, "spotlight_mode", "on")
+    await a_channel_row(bot)
+    cog.client = _Live(BOTCHECK_LIVE_PAGE, keyed=True, searches=[SEARCHED_VIDEO])
+
+    await cog.probe_all()
+
+    walled = await details_logged(db, "youtube.probe_walled")
+    assert len(walled) == 1 and walled[0]["video_id"] == SEARCHED_VIDEO
+
+
+async def test_the_wall_writes_one_row_in_shadow_as_well(bot, cog, golive, db, member):
+    await live_on(bot, mode="shadow")
+    await live_linked(db, cog, BOTCHECK_LIVE_PAGE, BOTCHECK_LIVE_PAGE)
+
+    await cog.probe_all()
+    await cog.probe_all()
+
+    assert len(await details_logged(db, "youtube.probe_walled")) == 1

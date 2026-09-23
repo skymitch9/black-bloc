@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from black_bloc.youtube_live import (
     read_page,
     read_search,
     stream_info,
+    wall_reading,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -263,3 +265,38 @@ def test_with_no_video_id_the_card_links_the_channels_own_live_page():
     assert info.title is None
     assert info.game is None
     assert info.thumbnail_url is None
+
+
+# --- the wall as its own outcome (2026-09-22, youtube-walled) -------------------------------------
+
+SEARCH_LIVE = json.loads((FIXTURES / "youtube_search_live.json").read_text(encoding="utf-8"))
+SEARCH_NONE = json.loads((FIXTURES / "youtube_search_none.json").read_text(encoding="utf-8"))
+
+
+def test_both_bot_check_pages_read_as_walled_and_no_real_page_does():
+    assert read_page(BOTCHECK_LIVE_PAGE).walled
+    assert read_page(BOTCHECK_OFFLINE_PAGE).walled
+    for page in (LIVE_PAGE, OFFLINE_PAGE, UPCOMING_PAGE, "<html>maintenance</html>"):
+        assert not read_page(page).walled
+
+
+def test_a_bot_check_page_that_still_carries_the_canonical_link_is_not_walled():
+    canonical = f'<link rel="canonical" href="https://www.youtube.com/watch?v={VIDEO}">'
+    found = read_page(BOTCHECK_LIVE_PAGE.replace("</head>", canonical + "</head>"))
+
+    assert found.botcheck and not found.walled and found.video_id == VIDEO
+
+
+def test_behind_the_wall_a_missing_live_marker_reads_as_unknown_not_offline():
+    assert wall_reading(read_page(BOTCHECK_LIVE_PAGE)) is True
+    assert wall_reading(read_page(BOTCHECK_OFFLINE_PAGE)) is None
+    assert wall_reading(Probe(upcoming=True, readable=True, botcheck=True, walled=True)) is False
+
+
+def test_the_real_search_list_shape_gives_its_video_id():
+    """Hand-written from the documented searchListResponse; the id is one the live bot logged."""
+    assert read_search(SEARCH_LIVE) == "FAMWR-HDS8U"
+
+
+def test_a_real_search_list_with_no_live_video_claims_nothing():
+    assert read_search(SEARCH_NONE) is None

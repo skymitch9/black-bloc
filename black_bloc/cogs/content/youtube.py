@@ -69,6 +69,7 @@ from ...youtube_live import (
     channel_info,
     is_over,
     stream_info,
+    wall_reading,
 )
 
 log = logging.getLogger(__name__)
@@ -422,6 +423,7 @@ class YouTube(commands.Cog):
         self.live_misses: dict[str, int] = {}
         self.live_video: dict[str, str] = {}
         self.unreadable_at: dict[str, datetime] = {}
+        self.walled: dict[str, bool | None] = {}
         self.last_botcheck = False
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
@@ -498,6 +500,7 @@ class YouTube(commands.Cog):
             self.probed += 1
             self.last_botcheck = bool(getattr(probe, "botcheck", False))
             await self._probed(member, channel_id, probe, mode)
+            await self._wall(member.guild, member, channel_id, probe)
         channels, channel_failed = await self._probe_channels()
         worked += channels
         if worked:
@@ -531,6 +534,7 @@ class YouTube(commands.Cog):
                 await self._channel_live(guild, row, channel_id, probe, mode)
             else:
                 await self._channel_not_live(guild, row, channel_id)
+            await self._wall(guild, None, channel_id, probe)
         return (worked, failed)
 
     def _guild_of(self, guild_id: int) -> Any:
@@ -658,6 +662,30 @@ class YouTube(commands.Cog):
             await self._live_now(member, channel_id, probe, mode)
             return
         await self._not_live(member, channel_id)
+
+    async def _wall(self, guild: Any, target: Any, channel_id: str, probe: Any) -> None:
+        """One row when the wall goes up or what it lets through changes, never one per probe."""
+        if not getattr(probe, "walled", False):
+            self.walled.pop(channel_id, None)
+            return
+        reading = wall_reading(probe)
+        if channel_id in self.walled and self.walled[channel_id] == reading:
+            return
+        self.walled[channel_id] = reading
+        known = self.live_video.get(channel_id)
+        await log_action(
+            self.bot,
+            guild,
+            "youtube.probe_walled",
+            target=target,
+            details={
+                "channel_id": channel_id,
+                "live": reading,
+                "video_id": None if known in (None, LIVE_ID_UNKNOWN) else known,
+                "keyed": bool(getattr(self.client, "keyed", False)),
+                "url": LIVE_URL.format(channel_id=channel_id),
+            },
+        )
 
     async def _unreadable(self, member: Any, channel_id: str) -> None:
         """A page that changed shape says so once an hour and reads as offline — never a raise."""

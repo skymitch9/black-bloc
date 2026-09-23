@@ -36,6 +36,7 @@ class Probe:
     video_id: str | None = None
     readable: bool = False
     botcheck: bool = False
+    walled: bool = False
 
     @property
     def announceable(self) -> bool:
@@ -76,7 +77,17 @@ def read_page(html: Any) -> Probe:
         video_id=found.group(1) if found else None,
         readable=True,
         botcheck=BOT_CHECK.search(body) is not None,
+        walled=BOT_CHECK.search(body) is not None and found is None,
     )
+
+
+def wall_reading(probe: Any) -> bool | None:
+    """Behind the wall a missing `isLive` is not proof of offline, so it reads None."""
+    if getattr(probe, "live", False):
+        return True
+    if getattr(probe, "upcoming", False):
+        return False
+    return None
 
 
 def _thumbnail(snippet: Any) -> str:
