@@ -954,6 +954,7 @@ QUIET_CHANNEL_KINDS: tuple[str, ...] = (
     "golive.history_swept",
     "golive.spotlight_added",
     "golive.spotlight_announced",
+    "golive.spotlight_announcement_refreshed",
     "golive.spotlight_bumped",
     "golive.spotlight_expired",
     "golive.spotlight_pinned",
@@ -983,6 +984,7 @@ def test_the_failed_twin_of_every_quiet_channel_kind_is_still_loud():
     for kind in (
         "golive.post_failed",
         "golive.post_delete_failed",
+        "golive.spotlight_announcement_refresh_failed",
         "golive.spotlight_pin_failed",
         "golive.spotlight_post_failed",
         "golive.spotlight_unpin_failed",

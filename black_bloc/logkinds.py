@@ -305,6 +305,7 @@ ROUTINE: frozenset[str] = frozenset(
         "golive.remove_role",
         "golive.spotlight_added",
         "golive.spotlight_announced",
+        "golive.spotlight_announcement_refreshed",
         "golive.spotlight_bumped",
         "golive.spotlight_ended",
         "golive.spotlight_expired",
