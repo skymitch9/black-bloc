@@ -69,6 +69,7 @@ from ...youtube_live import (
     channel_info,
     is_over,
     stream_info,
+    wall_reading,
 )
 
 log = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ GOLIVE_COG = "GoLive"
 YOUTUBE_SOURCE = "youtube"
 OPEN_SESSION_BECAUSE = "open_session:{source}"
 JOINED_BECAUSE = "joined_session"
+OPTED_OUT_BECAUSE = "opted_out"
 UNKNOWN_SOURCE = "unknown"
 GO_LIVE_DOOR = "go_live"
 ADD_PLATFORM_DOOR = "add_platform"
@@ -421,6 +423,7 @@ class YouTube(commands.Cog):
         self.live_misses: dict[str, int] = {}
         self.live_video: dict[str, str] = {}
         self.unreadable_at: dict[str, datetime] = {}
+        self.walled: dict[str, bool | None] = {}
         self.last_botcheck = False
 
     def loop_health(self, name: str) -> tuple[str | None, str | None]:
@@ -497,6 +500,7 @@ class YouTube(commands.Cog):
             self.probed += 1
             self.last_botcheck = bool(getattr(probe, "botcheck", False))
             await self._probed(member, channel_id, probe, mode)
+            await self._wall(member.guild, member, channel_id, probe)
         channels, channel_failed = await self._probe_channels()
         worked += channels
         if worked:
@@ -530,6 +534,7 @@ class YouTube(commands.Cog):
                 await self._channel_live(guild, row, channel_id, probe, mode)
             else:
                 await self._channel_not_live(guild, row, channel_id)
+            await self._wall(guild, None, channel_id, probe)
         return (worked, failed)
 
     def _guild_of(self, guild_id: int) -> Any:
@@ -552,25 +557,51 @@ class YouTube(commands.Cog):
             return
         cog = spot_cog.cog_of(self.bot)
         open_row = await spot_cog.open_session(self.bot.db, row["id"])
-        self.live_video[channel_id] = probe.video_id or LIVE_ID_UNKNOWN
         if open_row is not None:
-            await self._channel_seen(guild, row, channel_id, probe, mode, joined=True)
+            self.live_video[channel_id] = probe.video_id or LIVE_ID_UNKNOWN
+            await self._channel_seen(guild, row, channel_id, probe, mode, because=JOINED_BECAUSE)
+            return
+        if not spot.announces(row):
+            self.live_video[channel_id] = probe.video_id or LIVE_ID_UNKNOWN
+            await self._channel_seen(guild, row, channel_id, probe, mode, because=OPTED_OUT_BECAUSE)
+            return
+        video_id = probe.video_id or await self._searched(guild, None, channel_id)
+        confirmed = await self._confirm(guild, None, video_id) if video_id else None
+        self.live_video[channel_id] = video_id or LIVE_ID_UNKNOWN
+        if confirmed is not None and not confirmed.live:
             return
         info = (
-            stream_info(probe.video_id, "", "")
-            if probe.video_id
+            stream_info(
+                video_id,
+                getattr(confirmed, "title", ""),
+                getattr(confirmed, "thumbnail", ""),
+            )
+            if video_id
             else channel_info(channel_id)
         )
-        await self._channel_seen(guild, row, channel_id, probe, mode, url=info.url)
         if cog is None:
             log.warning(
                 "youtube: the spotlight cog is not loaded; %s is not announced", channel_id
             )
+            await log_action(
+                self.bot,
+                guild,
+                "youtube.live_announce_failed",
+                details={"url": info.url, "reason": "spotlight_cog_missing"},
+            )
             return
         async with cog._lock(row["id"]):
             fresh = await spot_cog.channel_by_id(self.bot.db, row["id"])
-            if fresh is None or await spot_cog.open_session(self.bot.db, row["id"]):
+            if fresh is None:
                 return
+            if await spot_cog.open_session(self.bot.db, row["id"]):
+                await self._channel_seen(
+                    guild, row, channel_id, probe, mode, because=JOINED_BECAUSE
+                )
+                return
+            await self._channel_seen(
+                guild, row, channel_id, probe, mode, url=info.url, video_id=video_id
+            )
             await cog.announce_info(guild, fresh, info, spot.display_for(fresh))
 
     async def _channel_seen(
@@ -581,16 +612,17 @@ class YouTube(commands.Cog):
         probe: Any,
         mode: str,
         *,
-        joined: bool = False,
+        because: str | None = None,
         url: str | None = None,
+        video_id: Any = None,
     ) -> None:
-        details = live_seen_details(channel_id, probe.video_id, probe, mode) | {
+        details = live_seen_details(channel_id, video_id or probe.video_id, probe, mode) | {
             "spotlight_id": row["id"],
             "login": row["twitch_login"],
-            "announced": not joined,
+            "announced": because is None,
         }
-        if joined:
-            details["because"] = JOINED_BECAUSE
+        if because:
+            details["because"] = because
         if url:
             details["url"] = url
         await log_action(
@@ -630,6 +662,30 @@ class YouTube(commands.Cog):
             await self._live_now(member, channel_id, probe, mode)
             return
         await self._not_live(member, channel_id)
+
+    async def _wall(self, guild: Any, target: Any, channel_id: str, probe: Any) -> None:
+        """One row when the wall goes up or what it lets through changes, never one per probe."""
+        if not getattr(probe, "walled", False):
+            self.walled.pop(channel_id, None)
+            return
+        reading = wall_reading(probe)
+        if channel_id in self.walled and self.walled[channel_id] == reading:
+            return
+        self.walled[channel_id] = reading
+        known = self.live_video.get(channel_id)
+        await log_action(
+            self.bot,
+            guild,
+            "youtube.probe_walled",
+            target=target,
+            details={
+                "channel_id": channel_id,
+                "live": reading,
+                "video_id": None if known in (None, LIVE_ID_UNKNOWN) else known,
+                "keyed": bool(getattr(self.client, "keyed", False)),
+                "url": LIVE_URL.format(channel_id=channel_id),
+            },
+        )
 
     async def _unreadable(self, member: Any, channel_id: str) -> None:
         """A page that changed shape says so once an hour and reads as offline — never a raise."""
@@ -958,7 +1014,8 @@ async def live_health(bot: Any, guild: Any) -> dict[str, Any]:
 
     cog = cog_of(bot)
     store = bot.store
-    reading = sorted(str(one) for one in (getattr(cog, "live_video", None) or {}))
+    live_video = getattr(cog, "live_video", None) or {}
+    reading = sorted(str(one) for one in live_video)
     open_now = 0
     if getattr(bot.db, "is_connected", False):
         open_now = len(
@@ -981,6 +1038,8 @@ async def live_health(bot: Any, guild: Any) -> dict[str, Any]:
         "open": open_now,
         "reading_live": len(reading),
         "reading_live_channels": reading,
+        "walled": len(getattr(cog, "walled", None) or {}),
+        "id_unknown": len([one for one in live_video.values() if one == LIVE_ID_UNKNOWN]),
     }
 
 

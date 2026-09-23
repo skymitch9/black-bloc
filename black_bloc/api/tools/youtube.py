@@ -132,6 +132,8 @@ def build_router(bot: Any) -> APIRouter:
             "botcheck": live["botcheck"],
             "live_now": live["open"],
             "reading_live": live["reading_live"],
+            "walled": live["walled"],
+            "id_unknown": live["id_unknown"],
         }
 
     return router

@@ -1197,7 +1197,9 @@
         "quota_today",
         "botcheck",
         "live_now",
-        "reading_live"
+        "reading_live",
+        "walled",
+        "id_unknown"
       ]
     },
     {
