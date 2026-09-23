@@ -3081,6 +3081,7 @@ gets banter*. ~~BUILT, NOT MERGED, NOT DEPLOYED.~~
 | Row | Do | Expect |
 |---|---|---|
 | **`CB-a`** | In a channel the bot answers in, say *@Black_Bloc what up*; then *@Black_Bloc where do I post my PBs*; then look at the Chat page ▸ Personality | The first reply is one or two lines in the voice — no `>` quoted notes, no list, no tour of channels, no "holler if you need anything". The second names **#speed-and-pbs** in a sentence without quoting its note. The Logs page shows `chat.llm_reply tier=simple` then `tier=important`. Personality shows **How short the bot keeps a greeting or small talk** and **How the bot is told to use the server notes it is handed**, both editable |
+| ✅ | **Owner, 2026-09-23 16:3x: "it worked"** — said "what up" to the bot on v162 and got the short banter reply, no quoted notes. `CB-a` VERIFIED LIVE. | |
 | **`CB-b`** | Branch `mention-names`, 2026-09-23. In a channel the bot answers in, type *@Black_Bloc what goes in #* and **pick #knuck-up from Discord's popup** (so it sends `<#id>`), then send | The reply says what #knuck-up is for (fighting games) in the voice, without quoting the note back; the Logs page shows `chat.llm_reply tier=important` (the resolved `#knuck-up` names the note, so it is strong) |
 
 ## Rows `RL-a` … `RL-g` — the chat review loop: answers that may have missed, tagged and reviewed (branch `chat-review-loop`, 2026-09-23)
