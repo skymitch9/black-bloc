@@ -2,7 +2,10 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-22 — the deploys.log COUNT row and the node-fixture COUNT only, at the
+> Last verified: **2026-09-22 23:2x — the gate's pytest step only** (branch `gate-names`, not merged or deployed):
+> `-n 16`, `-rfE`, the junit file, `FAILED TESTS:` and the 120 s timeout, measured in
+> [*The gate's pytest step*](#the-gates-pytest-step----n-16--rfe-a-junit-file-and-a-120-s-timeout-2026-09-22). ⚠️ No real deploy
+> gate has run the new script yet. Before that, **2026-09-22 — the deploys.log COUNT row and the node-fixture COUNT only, at the
 > v155 ritual.** [`../deploys.log`](../deploys.log) now records **154 deploys** (counted
 > 2026-09-22 with `grep -c .`), the last **v155** `a285afc7` at **2026-09-22 13:35** — this page had
 > said *107 / v108*, forty-six releases ago. The gate's node half is **six** fixture files, not the
@@ -119,7 +122,8 @@ never run `fly launch` — it rewrites the file.
 
 ```powershell
 # From the repo root, tree committed-clean (the script REFUSES a dirty tree, and a
-# Dockerfile build ships what is on disk). It runs ruff -> the full test suite (-n auto)
+# Dockerfile build ships what is on disk). It runs ruff -> the full test suite (-n 16, -rfE,
+# a junit file; a red run prints FAILED TESTS: one nodeid per line - 2026-09-22)
 # -> an ES-module parse of every site/public/assets/*.js (the labels.js incident: plain
 # `node --check` parses a .js file as CommonJS and PASSED the file that blanked every
 # dashboard page) -> node site/mock/check.mjs -> the five node fixture files, each its own
@@ -143,7 +147,7 @@ The order inside `scripts/deploy.ps1` is now:
 |---|---|---|
 | 1 | Read the last `docs/deploys.log` line, check its commit exists, diff `<that commit>..HEAD` | A refusal that costs nothing, so it comes before the 40-second suite. It only READS. |
 | 2 | **Refuse a dirty tree** | A Dockerfile build ships what is on disk. |
-| 3 | **The gate** — ruff, `pytest -n auto`, the ES-module parse, `check.mjs`, the five node fixture files | Nothing here reads `release.json`. |
+| 3 | **The gate** — ruff, `pytest -n 16` (was `-n auto` until 2026-09-22), the ES-module parse, `check.mjs`, the five node fixture files | Nothing here reads `release.json`. |
 | 4 | **Write `site/public/assets/release.json` and commit it** as `Release vN: release.json` | Every gate has passed, so this is the last thing that can add a commit. |
 | 5 | `git push origin main` → `flyctl deploy` → the `deploys.log` skeleton line | The push carries the release commit, so the file ships inside the image exactly as before. |
 
@@ -196,7 +200,46 @@ The gate refuses before `git push`, so a red run of this shape costs one re-run 
 (`docs/info/code-notes.md` ▸ `tests/conftest.py`). Measured that day: the full suite is green with all of those names SET to dummy
 values in the shell and green with them unset. The hand-clearing block above is now belt-and-braces, not required.
 
+### The gate's pytest step — `-n 16`, `-rfE`, a junit file and a 120 s timeout (2026-09-22)
+
+Changed on branch `gate-names` (KI-26 / KI-32 / KI-35 / KI-37). The step is now:
+
+```powershell
+& .venv/Scripts/python -m pytest -q -n 16 -rfE "--junitxml=$env:TEMP\black-bloc-gate\gate-junit.xml"
+```
+
+- **`-rfE`** puts every failed and errored nodeid in pytest's short summary.
+- **The junit file** is deleted before the run and rewritten by it. On a non-zero exit the script prints
+  `FAILED TESTS:` with one nodeid per line read from the file, then `(junit: <path>)`, and only THEN refuses —
+  the refusal itself is unchanged. No file at all means pytest itself was killed (KI-37); the block says so.
+  Reading it by hand is in [`testing.md`](testing.md).
+- **`pytest-timeout`** (`timeout = 120`, `timeout_method = "thread"` in `pyproject.toml`) kills any test that runs
+  120 s. Under xdist that ends as `worker 'gwN' crashed while running '<nodeid>'`, a named failure with exit 1,
+  instead of idle workers for ever. `thread` is the only method that works on Windows (`signal` needs `SIGALRM`);
+  measured with a sync `time.sleep` and an async `asyncio.sleep` hang, both named, run 7.6 s at `timeout=5`.
+- **`-n 16`**, not `-n auto` (32 workers on this 32-logical-core machine). Measured 2026-09-22 22:2x–23:2x from the
+  worktree, `-p no:cacheprovider`, the shell's `.env` names scrubbed, output to a file, 4–5 other agents' suites on
+  the machine throughout. "Hung" = every worker (or one) blocked until the 120 s timeout named it.
+
+| Tree | `-n auto` | `-n 16` | `-n 8` |
+|---|---|---|---|
+| Before the loopback fix (`920de1c8`) | **2 of 6 green**: 52 s, 41 s; hung 361 s (3.9 GB free at start), 173 s, 183 s, 168 s | **3 of 3 green**: 41, 62, 61 s | **11 of 14 green**: 91, 86 s + 9 hang-watch runs 68–102 s; hung 210, 206, 229 s |
+| After the loopback fix (`f10b1553`) | **3 of 3 green**: 46, 46, 42 s | **5 of 5 green**: 61, 45, 56, 45, 46 s (the last two are the final configuration, no hang-watch) | **2 of 3 green**: 76, 72 s; one worker hung 177 s (a different shape — KI-26 note) |
+| After merging `main` (`fa35b9f0`, 7,358 tests, real shell environment) | — | **9 of 10 green**: 42–65 s; one worker hung 150 s (the same single test as the `-n 8` hang) | — |
+
+  Why 16: with the port leak fixed, `-n 8` is ~60 % slower than auto (over the 25 % bar set for this change), `-n 16` is ~13 %
+  slower (mean 51 s against 45 s) and halves the processes the OS must hold (KI-37; ⚠️ the RAM saved was not
+  measured), and it does not change with the machine.
+- **The loopback fix** (`tests/loopback.py`, loaded by `-p tests.loopback` in `addopts`) is what the old hangs were:
+  see KI-26's 2026-09-22 note. It is why the "before" row hangs and the "after" row does not.
+
 ### ⚠️ "The deploy printed nothing after *Waiting for depot builder*" — run it DETACHED
+
+> **2026-09-22 (branch `gate-names`):** the pytest step is now `-n 16 -rfE --junitxml=…` with a 120 s per-test
+> timeout, **45–61 s** wall on the fixed tree (table above) — the whole script is still ~3–4 minutes and this
+> gotcha's detach rule is unchanged. A red gate now prints `FAILED TESTS:` in the detached log before `REFUSED`, so
+> `Get-Content $log -Tail 20` shows the names.
+
 
 The script USED to take **~10 minutes** end to end (measured 2026-09-03 morning: pytest
 alone 8:27 for 3345 tests, single process). Since the same afternoon it runs pytest under

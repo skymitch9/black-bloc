@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -429,8 +430,8 @@ def web_settings_now():
 
 
 @pytest.fixture
-def web_settings():
-    return web_settings_now()
+def web_settings(tmp_path):
+    return web_settings_at(tmp_path / "web.sqlite3")
 
 
 @pytest.fixture
@@ -463,8 +464,9 @@ def module_guild():
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def module_web(module_guild, tmp_path_factory):
-    settings = web_settings_now()
-    database = Database(tmp_path_factory.mktemp("web") / "web.sqlite3")
+    path = tmp_path_factory.mktemp("web") / "web.sqlite3"
+    settings = web_settings_at(path)
+    database = Database(path)
     await database.connect()
     store = SettingsStore(database, settings)
     await store.load()
@@ -487,6 +489,11 @@ async def module_blank(module_web):
     return await take(module_web.db)
 
 
+def web_settings_at(path: Any) -> Any:
+    """Web settings whose database, and so whose guide-media folder, is this test's own."""
+    return web_settings_now().model_copy(update={"database_path": Path(path)})
+
+
 def reset_bot(bot: Any, guild: Any) -> None:
     """The attributes a per-test bot was built with, back again. Everything a test hung on the
     shared one goes with them: a swapped `db`, an installed guard, a cog, and the four rate-limit
@@ -501,7 +508,7 @@ def reset_bot(bot: Any, guild: Any) -> None:
     bot.guilds = [guild] if guild is not None else []
     bot.cogs = {}
     bot.views = []
-    bot.settings = bot.store.settings = web_settings_now()
+    bot.settings = bot.store.settings = web_settings_at(bot.db.path)
 
 
 async def rewind(bot: Any, blank: Any, guild: Any) -> None:
