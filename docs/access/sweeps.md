@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-23 16:2x** — ONLY the `CB-a`/`CB-b` and `RL-a`…`RL-g` sections were touched, at the v162 docs ritual: each gained a ✅ LIVE v162 line from `deploys.log`, `DONE.md` and the conductor's boot-log / operator-token read. Nothing renumbered (still lettered), no row walked, no other section re-read. Before that,
 > **2026-09-23 (branch `chat-review-loop`)** — ONE section APPENDED (`RL-a`…`RL-g`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-23 15:1x** — ONLY the `CV-a`…`CV-e` section was touched, at the v160 + v161 docs ritual: its *BUILT, NOT MERGED* line became a ✅ LIVE v161 line with `CV-a`'s live API proof, from `deploys.log`, `DONE.md` and the conductor's operator-token read. Nothing renumbered, no row walked, no other section re-read. Before that,
 > **2026-09-23 14:1x** — ONLY the five sections written 2026-09-23 were touched, at the v158 + v159 docs ritual: a ✅ LIVE
@@ -3073,7 +3074,9 @@ Lettered; the conductor numbers it. ⚠️ Run `CV-a` FIRST: it is the check on 
 ## Row `CB-a` — banter gets banter (branch `chat-banter`, 2026-09-23)
 
 Design: [`../info/phase14-design.md`](../info/phase14-design.md) ▸ *Follow-up 2026-09-23 — banter
-gets banter*. BUILT, NOT MERGED, NOT DEPLOYED.
+gets banter*. ~~BUILT, NOT MERGED, NOT DEPLOYED.~~
+
+✅ **LIVE as v162** — deployed 2026-09-23 **16:20** Phoenix (release commit `4e6e4e4c`; `CB-a` merge `d8278877`, `CB-b` merge `654570e9`); boot log `database ready` 23:19:53Z, `logged in` 23:19:57Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v162). Neither row walked yet. ⚠️ A plain *whats good* is answered by the canned greeting intent before any model (owner, 16:17) — use *what up* as written.
 
 | Row | Do | Expect |
 |---|---|---|
@@ -3082,7 +3085,7 @@ gets banter*. BUILT, NOT MERGED, NOT DEPLOYED.
 
 ## Rows `RL-a` … `RL-g` — the chat review loop: answers that may have missed, tagged and reviewed (branch `chat-review-loop`, 2026-09-23)
 
-⏸️ **BUILT, NOT MERGED, NOT DEPLOYED** — branch `chat-review-loop` (schema **58**). Nothing below has met live Discord or a live model.
+✅ **LIVE as v162** — deployed 2026-09-23 **16:20** Phoenix (release commit `4e6e4e4c`, merge `737e660c`; schema **58**); boot log `database ready` 23:19:53Z, `logged in` 23:19:57Z; `GET /api/chat/review` at 16:2x answers every count 0, `items []` — the route is live, the queue empty ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v162). No row walked yet; nothing below has met a live model. ~~BUILT, NOT MERGED, NOT DEPLOYED — branch `chat-review-loop`.~~
 
 Design: [`../info/chat-review-loop-design.md`](../info/chat-review-loop-design.md). Lettered; the conductor numbers it. Needs `chat_llm_mode` on and a Groq key for `RL-a`/`RL-e`.
 

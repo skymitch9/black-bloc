@@ -1,9 +1,13 @@
 # The chat review loop — learning from conversations with the bot (loop 1)
 
 > **Audience:** the owner, the conductor, and any session touching chat. **Status:** TRACKED.
-> **Last verified: 2026-09-23** against branch `chat-review-loop` (off `main` `c69ac22e`): the
-> gate numbers in §10 were measured on the branch. ⚠️ **BUILT, NOT MERGED, NOT DEPLOYED.** Nothing
-> here has met live Discord or a live model; §11 lists exactly what was not verified.
+> **Last verified: 2026-09-23 16:2x — the status and §11 only**, at the v162 docs ritual. ✅ **LIVE as v162** — merged to `main` as
+> `737e660c` (8 commits, 16:14 by `git log`; registry count fix `ed42d7e3`), deployed 2026-09-23 **16:20** Phoenix (release commit
+> `4e6e4e4c`); schema **58** live; the v162 gate on merged main: **7790 passed / 3 skipped**, check.mjs 22 pages / 216 routes. Boot
+> `database ready` 23:19:53Z, `logged in` 23:19:57Z; `GET /api/chat/review` at 16:2x answers every count 0, `items []` — the route is
+> live, the queue empty. §11 lists what is still not verified.
+> Before that, **2026-09-23** against branch `chat-review-loop` (off `main` `c69ac22e`): the gate numbers in §10 were measured on the
+> branch, BUILT, NOT MERGED, NOT DEPLOYED.
 
 ## 1. The ask
 
@@ -171,3 +175,8 @@ rather than a constant.
 - Nothing met a **live model**: whether Groq's model answers in the shape, how often it says
   `none`, and what a tag costs (priced at $0 in `llm.PRICES` for the Groq models).
 - The digest's real post in the log channel, and how noisy `reask` is in practice (§3).
+- After v162 (16:2x): the route answers live with an empty queue, but no weak answer has been queued, no 👎 pressed, no follow-up
+  tried (`RL-*`), no digest posted, and the Chat page's **Review queue** section not opened in a browser.
+- A greeting never reaches this loop's model path: at 16:17 (under v161) the owner's *"whats good"* got the CANNED greeting-intent
+  reply (`chat: answered … (greeting)`), so it cannot carry the tone or be queued as ungrounded; whether greetings should go through
+  the model when the voice is not `cookout` is open (TODO ▸ 🔧 👋, owner undecided).

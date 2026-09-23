@@ -22,7 +22,8 @@
 > `black_bloc/personality_pool.json` is the shared manifest. See
 > [`personality-pool-design.md`](personality-pool-design.md) and `DONE.md`.
 >
-> **Last verified: 2026-09-11 10:28** — re-checked against the tree at `1d090e5`:
+> **Last verified: 2026-09-23 16:2x — the *Follow-up 2026-09-23* section's status only**, at the v162 docs ritual: the banter follow-up and its mention-id line are ✅ **LIVE as v162** (16:20, release commit `4e6e4e4c`; merges `d8278877` and `654570e9`), from `git log` and [`../deploys.log`](../deploys.log). ⚠️ Nothing else in this doc re-read; no live model reply under the new matching seen.
+> Before that, **2026-09-11 10:28** — re-checked against the tree at `1d090e5`:
 > `black_bloc/llm.py`, `groq.py`, `knowledge.py`, `personas.py`, `chat_llm.py` and
 > `personality_pool.json` all exist; `tier_for` is `chat_llm.py:156`; `llm.py:17` still pins
 > `MODEL = "claude-haiku-4-5"` and the price table still carries `llama-3.3-70b-versatile`;
@@ -189,6 +190,8 @@ keys are set. No deploy risk: everything degrades to today's behaviour.
 
 ## Follow-up 2026-09-23 — banter gets banter (branch `chat-banter`)
 
+✅ **LIVE as v162** — deployed 2026-09-23 **16:20** Phoenix (release commit `4e6e4e4c`; merge `d8278877`, 4 commits; the mention-id line below merge `654570e9`, 1 commit); boot log `database ready` 23:19:53Z, `logged in` 23:19:57Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v162).
+
 **The complaint** (owner, 2026-09-23 15:19 Phoenix, live Discord, verbatim paste). A member wrote
 `@Black_Bloc What up`; the bot answered:
 
@@ -250,6 +253,7 @@ is are am was were any anyone anybody). So *when is the cookout* keeps its note 
 13+ word message that opens with an opener now reaches the careful tier too.
 
 Not verified: no live model was called — every test fakes both clients; nobody has said *what up*
-to the deployed bot (sweep `CB-a`).
+to the deployed bot (sweep `CB-a`) — still true after v162 went live (16:2x). The canned greeting intent answers *whats good* before any model, so
+this follow-up never sees a greeting at all (owner, 16:17, under v161; TODO ▸ 🔧 👋).
 
-**2026-09-23 — the mention-id trade-off is closed** (owner: *"fix the mention ids too"*, branch `mention-names`): `hits_for` now matches on `mentions.named(guild, text)`, which turns a popup-picked `<#id>` into `#name`, `<@&id>` into `@role`, `<@id>`/`<@!id>` into the member's display name from the guild cache (unknown ids and the bot's own mention stay as sent), so a picked `#knuck-up` tokenises and is strong exactly like a typed one. Matching text only — the model still receives Discord's raw text, and nothing logged changes. Not verified live (sweep `CB-b`).
+**2026-09-23 — the mention-id trade-off is closed** (owner: *"fix the mention ids too"*, branch `mention-names`): `hits_for` now matches on `mentions.named(guild, text)`, which turns a popup-picked `<#id>` into `#name`, `<@&id>` into `@role`, `<@id>`/`<@!id>` into the member's display name from the guild cache (unknown ids and the bot's own mention stay as sent), so a picked `#knuck-up` tokenises and is strong exactly like a typed one. Matching text only — the model still receives Discord's raw text, and nothing logged changes. ✅ LIVE as v162 (16:20, merge `654570e9`). Not verified live: no popup-picked mention tried since (sweep `CB-b`).

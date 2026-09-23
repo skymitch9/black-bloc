@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-23 04:3x — the gate's pytest step only**, at the v157 docs ritual: the step shipped with `gate-names`
+> Last verified: **2026-09-23 16:2x — ONE gotcha added only**, at the v162 docs ritual: the dirty-tree refusal of the first v162 launch, under *Where `release.json` is written* (from `deploys.log`'s v162 line). ⚠️ Nothing else re-read.
+> Before that, **2026-09-23 04:3x — the gate's pytest step only**, at the v157 docs ritual: the step shipped with `gate-names`
 > (merge `01309d43`) and **v157 was the first real deploy gate to run it** — green on the first run, `deploys.log` line 156; its junit
 > file, read at the ritual, says `tests=7382 failures=0 errors=0 skipped=3`, 44.8 s. ⚠️ No RED gate has run it yet, so the
 > `FAILED TESTS:` block has printed only against synthetic files. Before that, **2026-09-22 23:2x — the gate's pytest step only** (branch `gate-names`, not merged or deployed):
@@ -159,6 +160,8 @@ refused gate left a `Release vN: release.json` commit sitting on `main`'s branch
 be dropped before the retry, and a second refusal left a second one. **Three of them were dropped
 by hand landing v111.** Now a refused gate leaves the tree exactly as it found it and the retry is
 just `.\scripts\deploy.ps1` again.
+
+⚠️ **Do not touch the tree between launching `deploy.ps1` and its check-clean (step 2) — the check-clean reads the tree LIVE.** 2026-09-23, v162: the first launch was REFUSED dirty-tree because the conductor edited `docs/TODO.md` seconds after starting the script; nothing reached Fly and the re-launch was green on the first run. Commit every edit BEFORE launching and leave the tree alone until the `deploys.log` line is written — an edit that lands AFTER the check-clean is worse than a refusal, since the image is built from disk (step 2's reason). In a shared tree another agent's edit trips it too.
 
 ⚠️ **What this does NOT change:** the file's contents, the commit message, the escape hatch, and
 the fact that the deploy pushes one more commit than you wrote. ⚠️ **What could still go wrong:**
