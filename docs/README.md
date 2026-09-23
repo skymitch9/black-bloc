@@ -6,7 +6,8 @@
 > This retires the 2026-08-26 local-only rule, under which the tree was
 > gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
 > so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
-> Last verified: **2026-09-23 04:3x — the bot's version and two counts only**, at the v157 docs ritual: the bot is at **v157**
+> Last verified: **2026-09-23 — one count only**, at the loose-ends docs pass: `ls docs/info/*.md` still **108**; one dated
+> line added under *Where the bot stands* (its mode table NOT re-read). Before that, **2026-09-23 04:3x — the bot's version and two counts only**, at the v157 docs ritual: the bot is at **v157**
 > (deployed 2026-09-23 04:21 Phoenix, release commit `e9ecd0d0`; [`deploys.log`](deploys.log) is the authority, 156 lines).
 > `ls docs/info/*.md` now **108** (`panels-orphaned-click-design.md` landed with v157), `ls docs/access/*.md` still **12**.
 > ⚠️ **NOT re-checked:** the *Where the bot stands* block and every other figure; nothing met a browser.
@@ -98,6 +99,8 @@ index (§7). `archive/` holds the retired docs and the one-off `current-bots/`
 dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
+
+**2026-09-23:** v157 live; spotlight + YouTube channel rows verified live at boot (see [`DONE.md`](DONE.md) 2026-09-23); the mode table below was NOT re-read.
 
 ✅ **`TEST_MODE` is OFF since 2026-09-18 16:08** — the owner ran
 `flyctl secrets set TEST_MODE=false` (cutover step **P5**,
