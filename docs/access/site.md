@@ -228,8 +228,11 @@ In order, because each step's failure looks different:
 
 ## The pages
 
-**Nineteen** HTML files in `site/public/`, served by the same app at `/`
-(re-counted 2026-09-16 — **18 → 19**, `posts.html` added by the Posts build on branch
+**Twenty-two** HTML files in `site/public/`, served by the same app at `/`
+(re-counted 2026-09-23 on branch `channels-page` — **21 → 22**, `channels.html` added; the 22
+names are `site/mock/contract.json`'s `pages` list, and `node site/mock/check.mjs` reported
+**22 pages** against the mock. `raidtrain.html` and `minutes.html` had joined since the count
+below without it being updated. Before that, re-counted 2026-09-16 — **18 → 19**, `posts.html` added by the Posts build on branch
 `posts`; `guides.html` was **17 → 18** on branch `guides-pages` before it. The nineteen
 names below match `site/mock/contract.json`'s `pages` list exactly. It said "Thirteen"
 until 2026-08-31, which predates Polls, Chat, Requests and Members):
@@ -237,7 +240,12 @@ until 2026-08-31, which predates Polls, Chat, Requests and Members):
 `events.html`, `golive.html`, `rolemenus.html`, `birthdays.html`,
 `tempvoice.html`, `honeypot.html`, `polls.html`, `chat.html`, `requests.html`,
 `members.html`, `settings.html`, `audit.html`,
-`health.html`, `guides.html`, `posts.html`. `site/README.md` says what each one does.
+`health.html`, `guides.html`, `posts.html`, `raidtrain.html`, `minutes.html`, `channels.html`.
+`site/README.md` says what each one does.
+
+| Page | What it is for |
+|---|---|
+| `channels.html` (2026-09-23, branch `channels-page`, NOT MERGED) | **Channels** — staff review each live channel's drafted description (Use this / Save my wording / No note / Reset to the draft), see *What the bot sees*, and edit the channel-note words. Reads `GET /api/chat/channels`; writes `PUT/DELETE /api/chat/channels/{id}` and `POST …/{id}/use\|none\|reset`. In the rail right after Chat. Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md) ▸ follow-up |
 
 ⚠️ **`guides.html` is the SECOND page a signed-in member who is not staff may open**
 (`requests.html` was the first). It is one page for two views — the hub, and a guide at

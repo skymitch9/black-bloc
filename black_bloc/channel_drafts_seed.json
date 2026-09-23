@@ -1,0 +1,566 @@
+{
+  "1285369365071527997": {
+    "name": "#welcome",
+    "category": "Information",
+    "draft": "Where new members land: the rules and how to get into the rest of the server.",
+    "final": false
+  },
+  "1285782324558172180": {
+    "name": "#roles",
+    "category": "Information",
+    "draft": "Where members pick their own roles from the role menus.",
+    "final": false
+  },
+  "1452150360293773365": {
+    "name": "#asset-library",
+    "category": "Information",
+    "draft": "Shared art, logos and other assets the community can use.",
+    "final": false
+  },
+  "1285381774876344340": {
+    "name": "#announcements",
+    "category": "Information",
+    "draft": "Server news and announcements from staff.",
+    "final": false
+  },
+  "1285371141476581509": {
+    "name": "#landing",
+    "category": "The Hole in the Wall",
+    "draft": "The first stop after the rules — say hi here to get into the rest of the server.",
+    "final": false
+  },
+  "1398449806438826025": {
+    "name": "#introductions",
+    "category": "The Hole in the Wall",
+    "draft": "Introduce yourself to the community.",
+    "final": false
+  },
+  "1411816390414962700": {
+    "name": "#general-chat",
+    "category": "The Hole in the Wall",
+    "draft": "The server's general chat — anything goes, not speedrun-specific.",
+    "final": true
+  },
+  "1474844966021890362": {
+    "name": "#qotw",
+    "category": "The Hole in the Wall",
+    "draft": "The question of the week — answer it and talk about everyone else's answers.",
+    "final": false
+  },
+  "1073710703518683141": {
+    "name": "#daily-wordle",
+    "category": "The Hole in the Wall",
+    "draft": "Share your daily Wordle results.",
+    "final": false
+  },
+  "1073710703518683142": {
+    "name": "#venting-and-advice",
+    "category": "The Hole in the Wall",
+    "draft": "Get something off your chest or ask for advice; be kind.",
+    "final": false
+  },
+  "1073710703518683143": {
+    "name": "#off-topic",
+    "category": "The Hole in the Wall",
+    "draft": "Conversation that fits nowhere else.",
+    "final": false
+  },
+  "1413648696670949376": {
+    "name": "#shows-and-movies",
+    "category": "The Hole in the Wall",
+    "draft": "TV shows and movies — what you are watching and what you think of it.",
+    "final": false
+  },
+  "1413643742308728983": {
+    "name": "#sports-ball",
+    "category": "The Hole in the Wall",
+    "draft": "Sports talk — games, teams and results.",
+    "final": false
+  },
+  "1413699977137623121": {
+    "name": "#music-recommendations",
+    "category": "The Hole in the Wall",
+    "draft": "Music recommendations — share what you are listening to.",
+    "final": false
+  },
+  "1413700333796069419": {
+    "name": "#recipes-and-food-pics",
+    "category": "The Hole in the Wall",
+    "draft": "Recipes and pictures of food you made or ate.",
+    "final": false
+  },
+  "1497233190383915008": {
+    "name": "#gif-spam",
+    "category": "The Hole in the Wall",
+    "draft": "Post GIFs freely here.",
+    "final": false
+  },
+  "1524047038562435193": {
+    "name": "#quotes",
+    "category": "The Hole in the Wall",
+    "draft": "Funny or memorable things people in the server have said.",
+    "final": false
+  },
+  "1147289379493118033": {
+    "name": "#upcoming-events",
+    "category": "House Parties",
+    "draft": "Upcoming community events and when they happen.",
+    "final": false
+  },
+  "1457505283067613287": {
+    "name": "#deals",
+    "category": "House Parties",
+    "draft": "Game deals, sales and freebies.",
+    "final": false
+  },
+  "1225457308230746202": {
+    "name": "#live-now",
+    "category": "House Parties",
+    "draft": "Announcements for members who are streaming live right now.",
+    "final": false
+  },
+  "1497362790732664893": {
+    "name": "#community-clips",
+    "category": "House Parties",
+    "draft": "Clips from community members' streams and videos.",
+    "final": false
+  },
+  "1419778694460866633": {
+    "name": "#opportunities",
+    "category": "House Parties",
+    "draft": "Opportunities for members — jobs, calls for runners, collabs and similar.",
+    "final": false
+  },
+  "1437995212122099752": {
+    "name": "#gaming",
+    "category": "Gaming",
+    "draft": "General gaming talk — what everyone is playing.",
+    "final": false
+  },
+  "1076011219351257108": {
+    "name": "#run-prep",
+    "category": "Gaming",
+    "draft": "Preparing speedruns — routes, practice and strategy before a run.",
+    "final": false
+  },
+  "1076003845232148580": {
+    "name": "#speed-and-pbs",
+    "category": "Gaming",
+    "draft": "Speedrunning records and personal bests — talking about runs, times and PBs, not general chat.",
+    "final": true
+  },
+  "1436166669008502945": {
+    "name": "#squads",
+    "category": "Gaming",
+    "draft": "Find people to play with and form squads.",
+    "final": false
+  },
+  "1076005097617760296": {
+    "name": "#knuck-up",
+    "category": "Gaming",
+    "draft": "Fighting games — matches, tech and trash talk.",
+    "final": false
+  },
+  "1413701019711442964": {
+    "name": "#rpg",
+    "category": "Gaming",
+    "draft": "RPGs — talking about role-playing games.",
+    "final": false
+  },
+  "1480974710404808837": {
+    "name": "#asian-speedrun-alliance",
+    "category": "Play Cousins",
+    "draft": "The shared channel with the Asian Speedrun Alliance community.",
+    "final": false
+  },
+  "1480297661180678386": {
+    "name": "#fatales",
+    "category": "Play Cousins",
+    "draft": "The shared channel with the Fatales community.",
+    "final": false
+  },
+  "1480974771981258753": {
+    "name": "#lhs",
+    "category": "Play Cousins",
+    "draft": "The shared channel with the LHS community.",
+    "final": false
+  },
+  "1480974833117298790": {
+    "name": "#gdqueer",
+    "category": "Play Cousins",
+    "draft": "The shared channel with the GDQueer community.",
+    "final": false
+  },
+  "1376272041573089402": {
+    "name": "#lab-chat",
+    "category": "Speedrunning Labs",
+    "draft": "Chat for the Speedrunning Labs program.",
+    "final": false
+  },
+  "1491507415932469328": {
+    "name": "#the-adult-table",
+    "category": "The Basement",
+    "draft": "A staff or grown-ups-only table for adult conversation.",
+    "final": false
+  },
+  "1094709109841989753": {
+    "name": "#the-main-table",
+    "category": "The Basement",
+    "draft": "The staff table — where staff talk things over.",
+    "final": false
+  },
+  "1094711719797985330": {
+    "name": "#event-heads-up",
+    "category": "The Basement",
+    "draft": "Staff heads-up about upcoming events.",
+    "final": false
+  },
+  "1411774767966453791": {
+    "name": "#bot-control",
+    "category": "The Basement",
+    "draft": "Where staff run bot commands.",
+    "final": false
+  },
+  "1285782812229763092": {
+    "name": "#carlbot-logs",
+    "category": "The Basement",
+    "draft": "Carl-bot's log output.",
+    "final": false
+  },
+  "1073710703518683138": {
+    "name": "#join-log",
+    "category": "The Basement",
+    "draft": "The log of members joining and leaving.",
+    "final": false
+  },
+  "1542316174472380517": {
+    "name": "#blackbloc-logs",
+    "category": "The Basement",
+    "draft": "Black Bloc's own log channel.",
+    "final": false
+  },
+  "1496980277841363046": {
+    "name": "#baf-power-quotes",
+    "category": "The Basement",
+    "draft": "Power quotes saved for BaF.",
+    "final": false
+  },
+  "1550284332365783091": {
+    "name": "#welcome-test",
+    "category": "The Basement",
+    "draft": "Where Black Bloc's rehearsal (shadow) copies are posted for staff to check.",
+    "final": false
+  },
+  "1534971515932643390": {
+    "name": "#welcome",
+    "category": "Back to Black 2027",
+    "draft": "Welcome for the Back to Black 2027 event team.",
+    "final": false
+  },
+  "1534775990704803930": {
+    "name": "#announcements",
+    "category": "Back to Black 2027",
+    "draft": "Announcements for the Back to Black 2027 event team.",
+    "final": false
+  },
+  "1534777301781184522": {
+    "name": "#leads",
+    "category": "Back to Black 2027",
+    "draft": "The Back to Black 2027 leads' channel.",
+    "final": false
+  },
+  "1534809142546399362": {
+    "name": "#socials",
+    "category": "Back to Black 2027",
+    "draft": "Back to Black 2027 social media planning.",
+    "final": false
+  },
+  "1534777453556273263": {
+    "name": "#live-production",
+    "category": "Back to Black 2027",
+    "draft": "Back to Black 2027 live production.",
+    "final": false
+  },
+  "1534778339569434684": {
+    "name": "#tech-check-chatter",
+    "category": "Back to Black 2027",
+    "draft": "Chatter among Back to Black 2027 tech checkers.",
+    "final": false
+  },
+  "1534778017929498654": {
+    "name": "#runners",
+    "category": "Back to Black 2027",
+    "draft": "Back to Black 2027 runners.",
+    "final": false
+  },
+  "1534778121138602084": {
+    "name": "#committee",
+    "category": "Back to Black 2027",
+    "draft": "The Back to Black 2027 committee.",
+    "final": false
+  },
+  "1534778880727060622": {
+    "name": "#donations",
+    "category": "Back to Black 2027",
+    "draft": "Back to Black 2027 donations and incentives.",
+    "final": false
+  },
+  "1534998323403034635": {
+    "name": "#interstitials",
+    "category": "Back to Black 2027",
+    "draft": "Back to Black 2027 interstitials — what plays between runs.",
+    "final": false
+  },
+  "1534778635473387610": {
+    "name": "#moderators",
+    "category": "Back to Black 2027",
+    "draft": "Back to Black 2027 moderators.",
+    "final": false
+  },
+  "1546697702790930473": {
+    "name": "#tech-checks",
+    "category": "Back to Black 2027",
+    "draft": "Back to Black 2027 tech checks with runners.",
+    "final": false
+  },
+  "1074781292731842590": {
+    "name": "#who-you-be",
+    "category": "archive",
+    "draft": "Archived: an old introductions channel.",
+    "final": false
+  },
+  "1073710703518683137": {
+    "name": "#welcome-and-rules",
+    "category": "archive",
+    "draft": "Archived: the old welcome and rules channel.",
+    "final": false
+  },
+  "1147968944490160261": {
+    "name": "#black-support-hub",
+    "category": "archive",
+    "draft": "Archived: the old Black support hub.",
+    "final": false
+  },
+  "1073710703518683139": {
+    "name": "#resources",
+    "category": "archive",
+    "draft": "Archived: an old resources channel.",
+    "final": false
+  },
+  "1285363980516200540": {
+    "name": "#hosts",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 hosts.",
+    "final": false
+  },
+  "1285364898750267515": {
+    "name": "#committee",
+    "category": "Back to Black 2025",
+    "draft": "The Back to Black 2025 committee.",
+    "final": false
+  },
+  "1329563943487803473": {
+    "name": "#tech-checkers",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 tech checkers.",
+    "final": false
+  },
+  "1335035325113831424": {
+    "name": "#donations",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 donations and incentives.",
+    "final": false
+  },
+  "1285363010692710485": {
+    "name": "#runners",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 runners.",
+    "final": false
+  },
+  "1285363724890280046": {
+    "name": "#tech-checks",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 tech checks with runners.",
+    "final": false
+  },
+  "1322311143104184360": {
+    "name": "#mainline-promo-planning",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 promotion planning for the mainline event.",
+    "final": false
+  },
+  "1285362943155765278": {
+    "name": "#production",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 production.",
+    "final": false
+  },
+  "1335035068099334164": {
+    "name": "#charity-plaza",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 charity plaza.",
+    "final": false
+  },
+  "1337090172394930238": {
+    "name": "#live-production",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 live production.",
+    "final": false
+  },
+  "1285363575556411392": {
+    "name": "#resources",
+    "category": "Back to Black 2025",
+    "draft": "Back to Black 2025 resources for the team.",
+    "final": false
+  },
+  "1445191241217216622": {
+    "name": "#socials-homies",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 socials and hanging out.",
+    "final": false
+  },
+  "1449940880742944788": {
+    "name": "#btb2026-general",
+    "category": "Back to Black 2026",
+    "draft": "General chat for the Back to Black 2026 team.",
+    "final": false
+  },
+  "1460453073959915732": {
+    "name": "#btbt2026-leads",
+    "category": "Back to Black 2026",
+    "draft": "The Back to Black 2026 leads' channel.",
+    "final": false
+  },
+  "1430627630821933107": {
+    "name": "#live-prod",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 live production.",
+    "final": false
+  },
+  "1472016561047863459": {
+    "name": "#btb2026-yearbook",
+    "category": "Back to Black 2026",
+    "draft": "The Back to Black 2026 yearbook — memories from the event.",
+    "final": false
+  },
+  "1467777240459772038": {
+    "name": "#live-vol-updates",
+    "category": "Back to Black 2026",
+    "draft": "Updates for Back to Black 2026 live volunteers.",
+    "final": false
+  },
+  "1430626512331083928": {
+    "name": "#runners",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 runners.",
+    "final": false
+  },
+  "1430625708186800169": {
+    "name": "#tech-checks",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 tech checks with runners.",
+    "final": false
+  },
+  "1430626931828854975": {
+    "name": "#production",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 production.",
+    "final": false
+  },
+  "1445157148492435617": {
+    "name": "#mod-central",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 moderators.",
+    "final": false
+  },
+  "1445191021305790494": {
+    "name": "#tech-checker-chatter",
+    "category": "Back to Black 2026",
+    "draft": "Chatter among Back to Black 2026 tech checkers.",
+    "final": false
+  },
+  "1430625650687086733": {
+    "name": "#committee",
+    "category": "Back to Black 2026",
+    "draft": "The Back to Black 2026 committee.",
+    "final": false
+  },
+  "1430625933785563198": {
+    "name": "#hosts",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 hosts.",
+    "final": false
+  },
+  "1430626278142382182": {
+    "name": "#donations",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 donations and incentives.",
+    "final": false
+  },
+  "1430628292922314803": {
+    "name": "#resources",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 resources for the team.",
+    "final": false
+  },
+  "1430626798571487272": {
+    "name": "#agdq-promo-planning",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 promotion planning for AGDQ.",
+    "final": false
+  },
+  "1430639977519382679": {
+    "name": "#interview-brain-dumps",
+    "category": "Back to Black 2026",
+    "draft": "Back to Black 2026 interview notes and ideas.",
+    "final": false
+  },
+  "1550167775694037075": {
+    "name": "#modmail-log",
+    "category": "BlackMail",
+    "draft": "BlackMail's log of tickets and requests.",
+    "final": false
+  },
+  "1442613059704066108": {
+    "name": "#modmail-log",
+    "category": "ModMail",
+    "draft": "The old ModMail log.",
+    "final": false
+  },
+  "1515388560021389463": {
+    "name": "#kurushiidrive",
+    "category": "ModMail",
+    "draft": "A private modmail ticket with one member — not a place to point anyone.",
+    "final": false
+  },
+  "1519898370179858632": {
+    "name": "#yatogaminl",
+    "category": "ModMail",
+    "draft": "A private modmail ticket with one member — not a place to point anyone.",
+    "final": false
+  },
+  "1526703242141237480": {
+    "name": "#riekelt",
+    "category": "ModMail",
+    "draft": "A private modmail ticket with one member — not a place to point anyone.",
+    "final": false
+  },
+  "1530706388215664690": {
+    "name": "#shindarkshadow",
+    "category": "ModMail",
+    "draft": "A private modmail ticket with one member — not a place to point anyone.",
+    "final": false
+  },
+  "1537729008626831410": {
+    "name": "#nadiahooligan",
+    "category": "ModMail",
+    "draft": "A private modmail ticket with one member — not a place to point anyone.",
+    "final": false
+  },
+  "1546281420035723444": {
+    "name": "#mathcat",
+    "category": "ModMail",
+    "draft": "A private modmail ticket with one member — not a place to point anyone.",
+    "final": false
+  }
+}

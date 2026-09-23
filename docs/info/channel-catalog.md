@@ -19,6 +19,12 @@
 > section shows each channel's real topic and whether the bot is told about it, and a note is
 > saved there or on `/chat` ▸ **Channel notes…**. Design:
 > [`channel-catalog-design.md`](channel-catalog-design.md).
+>
+> ⚠️ **2026-09-23 follow-up (branch `channels-page`, BUILT, NOT MERGED): this table is now the
+> SEED, not the review.** Its rows were copied once into `black_bloc/channel_drafts_seed.json`
+> (94 rows; the JSON is the source from here on — editing this table changes nothing in the bot),
+> and staff review them on the site's **Channels** page (`channels.html`): Use this / Save my
+> wording / No note / Reset to the draft. The two ✅ rows become real notes on the first boot.
 
 | id | channel | category | left out by rule | current topic | description |
 |---|---|---|---|---|---|

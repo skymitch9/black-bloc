@@ -73,6 +73,17 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     ),
     "black_bloc/minutes.py::DELETED": ("minutes.deleted", "web.minutes.deleted"),
     "black_bloc/minutes.py::MODE_SET": ("minutes.mode", "web.minutes.mode"),
+    # One helper records every draft decision, so the four moves pass their kind in.
+    "black_bloc/channel_drafts.py::kind": (
+        "chat.channel_draft_used",
+        "web.chat.channel_draft_used",
+        "chat.channel_draft_rewritten",
+        "web.chat.channel_draft_rewritten",
+        "chat.channel_draft_none",
+        "web.chat.channel_draft_none",
+        "chat.channel_draft_reset",
+        "web.chat.channel_draft_reset",
+    ),
     # `record()` writes one row per failure and the surface it failed on names the kind —
     # four, and only four (`errors-design.md` §A).
     "black_bloc/command_errors.py::surface": ERROR_KINDS,
@@ -1023,6 +1034,18 @@ def test_a_channel_note_is_routine_from_either_door_and_files_under_chat():
         assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
         assert is_important(kind) is False
         assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
+
+
+def test_a_channel_draft_decision_is_routine_from_either_door_and_files_under_chat():
+    """Reviewing the catalog's drafts is housekeeping, one row per decision, from either door."""
+    for move in ("used", "rewritten", "none", "reset"):
+        kind = f"chat.channel_draft_{move}"
+        assert kind in ROUTINE
+        assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
+        assert is_important(kind) is False
+        assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
+    assert "chat.channel_drafts_seeded" in ROUTINE
+    assert "chat.channel_drafts_seeded" in emitted_kinds()
 
 
 def test_memory_is_loud_when_something_is_forgotten_and_quiet_the_rest_of_the_time():

@@ -41,6 +41,9 @@ const IDS = {
   // A STAFF-written knowledge note. The mock's third section is the one Black Bloc writes for
   // itself, and every write on that one refuses in words — see the contract's own note.
   chat_section_id: '1',
+  // The channel review: #welcome is one of the 94 channels the bot's seed drafted, so use,
+  // none and reset all reach it; the fixture test channel has no draft and is refused.
+  drafted_channel_id: '1285369365071527997',
   // request_id above is a ROLE request; a feature request is a different table and gets its
   // own pair: 25 is the staff session's own pending row, 30 is somebody else's.
   feature_request_id: '25',

@@ -1,6 +1,5 @@
 import { api, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
-import { channelLabel } from './labels.js';
 import { logsSection } from './logs.js';
 import {
   ask,
@@ -11,7 +10,6 @@ import {
   card,
   el,
   field,
-  foldout,
   keepSaying,
   notice,
   pager,
@@ -64,40 +62,9 @@ const MEMORY_SETTING_KEYS = [
   'chat_memory_model',
 ];
 
-// The channel catalog (docs/info/channel-catalog-design.md). The words /chat answers with are
-// settings keys; they are edited in this section's fold, beside the notes they describe.
-const CHANNEL_WORD_KEYS = [
-  'chat_channel_note_saved',
-  'chat_channel_note_cleared',
-  'chat_channel_note_nothing',
-  'chat_channel_note_too_long',
-  'chat_channel_note_no_channel',
-  'chat_channel_notes_button',
-  'chat_channel_notes_title',
-  'chat_channel_notes_intro',
-  'chat_channel_notes_placeholder',
-  'chat_channel_note_modal',
-  'chat_channel_note_label',
-];
-const CHANNELS_NOTE = 'What each channel is for, in one sentence. When Black Bloc points somebody ' +
-  'at a channel it reads this list, and a note here beats the channel\'s Discord topic — so a ' +
-  'channel with no topic, or a misleading one, stops being guessed at from its name.';
-const SEES_NOTE = 'The exact channel list the conversation models are handed with every answer. ' +
-  'It is rebuilt each time, so a save here reaches the very next answer.';
-const SEES_TRIMMED = 'To stay inside the budget, the longest descriptions were left off these ' +
-  'channels: {names}. Shorten a note to bring them back.';
-const NO_CHANNELS = 'Black Bloc could not list the server\'s text channels, so there is nothing ' +
-  'to describe yet.';
-const NO_TOPIC = 'no topic in Discord';
-const TOPIC_LABEL = 'Discord topic: ';
-const NOTE_HINT = 'Blank and Save clears it. Up to {limit} characters.';
-const CHANNEL_WORDS_TITLE = 'The words /chat says about channel notes';
-const HIDDEN_WORDS = {
-  ignored_category: 'left out — its category is on chat_ignore_categories, or it is the ticket category',
-  archive: 'left out — it sits in an archive category',
-  not_visible: 'left out — the member view cannot see it',
-};
-const SEEN_WORD = 'the bot is told about it';
+const CHANNELS_NOTE = 'What each channel is for, in one sentence, and the review of the drafted ' +
+  'descriptions — Black Bloc reads these notes before it points anybody anywhere.';
+const CHANNELS_LINK = 'Channel directory → Channels page';
 
 const TRY_NOTE = 'Type what somebody would say after the @-mention and Black Bloc tells you ' +
   'which intent it lands on and the exact line it would answer with. This is a dry run — ' +
@@ -973,114 +940,11 @@ function spendSection(payload) {
   return one.node;
 }
 
-function channelRow(row, rows, limit, say) {
-  const box = el('input', {
-    class: 'input',
-    type: 'text',
-    value: row.note || '',
-    maxlength: String(limit),
-    placeholder: row.topic ? 'the topic is used until this says otherwise' : 'what people talk about here',
-    'aria-label': `What #${row.name} is for`,
-  });
-  const path = `/api/chat/channels/${encodeURIComponent(row.id)}`;
-  const save = button('Save', async () => {
-    const done = await run(
-      say,
-      () => send(path, 'PUT', { note: box.value.trim() }),
-      (found) => found?.message || 'Saved.',
-    );
-    if (done.ok) {
-      keepSaying('chat-channels', say);
-      refresh();
-    }
-  }, { tone: 'quiet' });
-  const clear = row.note ? button('Clear', async () => {
-    const done = await run(
-      say,
-      () => api(path, { method: 'DELETE' }),
-      (found) => found?.message || 'Cleared.',
-    );
-    if (done.ok) {
-      keepSaying('chat-channels', say);
-      refresh();
-    }
-  }, { tone: 'quiet' }) : null;
-  const categories = rows
-    .filter((one) => one.category_id)
-    .map((one) => ({ id: one.category_id, name: one.category, type: 'category' }));
-  const label = channelLabel({ name: row.name, type: 'text', category_id: row.category_id }, categories);
-
-  return el('div', {
-    class: 'card channel-row',
-    'data-shown': row.shown ? 'true' : 'false',
-    'data-search': `${row.name} ${row.category || ''} ${row.topic || ''} ${row.note || ''}`.toLowerCase(),
-  }, [
-    el('div', { class: 'card-body' }, [
-      el('div', { class: 'chipbar' }, [
-        el('span', { class: 'chat-fixed', text: label }),
-        row.shown ? badge(SEEN_WORD, 'ok') : badge(HIDDEN_WORDS[row.hidden_because] || 'left out', 'warn'),
-        row.note ? badge('has a note', null) : null,
-      ]),
-      el('p', {
-        class: 'section-note channel-topic',
-        text: row.topic ? `${TOPIC_LABEL}${row.topic}` : NO_TOPIC,
-      }),
-      el('div', { class: 'chatline' }, [box, save, clear]),
-      el('p', { class: 'section-note', text: NOTE_HINT.replace('{limit}', String(limit)) }),
-    ]),
-  ]);
-}
-
-function seesCard(payload) {
-  const budget = payload?.budget || {};
-  const used = Number(budget.used) || 0;
-  const cap = Number(budget.cap) || 0;
-  const share = cap > 0 ? Math.max(0, Math.min(1, used / cap)) : 0;
-  const trimmed = Array.isArray(budget.trimmed) ? budget.trimmed : [];
-  return card('What the bot sees', [
-    el('p', { class: 'section-note', text: SEES_NOTE }),
-    el('div', { class: 'chipbar' }, [
-      el('span', { class: 'chat-answer-label', text: `${used} of ${cap} bytes used` }),
-      trimmed.length ? badge(`${trimmed.length} description(s) left off`, 'warn') : null,
-    ]),
-    el('div', {
-      class: 'spend-meter',
-      'data-capped': trimmed.length ? 'true' : 'false',
-      role: 'img',
-      'aria-label': `${used} of ${cap} bytes`,
-    }, [el('div', { class: 'spend-meter-fill', style: `width: ${(share * 100).toFixed(1)}%` })]),
-    el('pre', { class: 'directory-block', text: payload?.directory || '' }),
-    trimmed.length
-      ? el('p', { class: 'section-note', text: SEES_TRIMMED.replace('{names}', trimmed.map((name) => `#${name}`).join(', ')) })
-      : null,
-  ]);
-}
-
-async function channelsSection(payload, wordSpecs, say) {
-  const rows = Array.isArray(payload?.channels) ? payload.channels : [];
-  const limit = Number(payload?.note_chars) || 240;
-  const one = section('Channel directory', CHANNELS_NOTE, { count: payload?.counts?.noted ?? null });
-  const list = el('div', { class: 'section-body' });
-  for (const row of rows) list.append(channelRow(row, rows, limit, say));
-
-  one.body.append(seesCard(payload), say);
-  if (rows.length === 0) {
-    one.body.append(sayNothing(NO_CHANNELS));
-  } else {
-    one.body.append(
-      searchOver(list, {
-        label: 'Search the channels',
-        placeholder: 'a channel, a category or a word from a note',
-        selector: '.channel-row',
-        noun: 'channel(s)',
-        empty: 'No channel matches that.',
-      }),
-      list,
-    );
-  }
-  one.body.append(foldout(CHANNEL_WORDS_TITLE, [
-    await settingsPanel(wordSpecs, { where: 'Channel directory', empty: NO_SETTINGS }),
-  ], { count: wordSpecs.length || null }));
+function channelsSection() {
+  const one = section('Channel directory', CHANNELS_NOTE);
+  one.body.append(el('p', { class: 'section-note' }, [
+    el('a', { href: '/channels.html', text: CHANNELS_LINK }),
+  ]));
   return one.node;
 }
 
@@ -1178,14 +1042,13 @@ async function memorySection(payload, specs, say) {
 }
 
 async function load() {
-  const [payload, allSettings, knowledge, personality, spend, memory, channels] = await Promise.all([
+  const [payload, allSettings, knowledge, personality, spend, memory] = await Promise.all([
     api('/api/chat/intents'),
     settings(true),
     api('/api/chat/knowledge'),
     api('/api/chat/personality'),
     api('/api/chat/spend'),
     api('/api/chat/memory'),
-    api('/api/chat/channels'),
   ]);
 
   const intents = Array.isArray(payload?.intents) ? payload.intents : [];
@@ -1199,21 +1062,19 @@ async function load() {
   if (skinTone) fromRoute.set('emoji_skin_tone', skinTone);
   const specs = SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
   const memorySpecs = MEMORY_SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
-  const channelWordSpecs = CHANNEL_WORD_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
 
   const memorySay = sayAgain('chat-memory', notice());
   const intentsSay = sayAgain('chat-intents', notice());
   const createSay = notice();
   const knowledgeSay = sayAgain('chat-knowledge', notice());
   const personalitySay = sayAgain('chat-personality', notice());
-  const channelsSay = sayAgain('chat-channels', notice());
 
   document.getElementById('dash').replaceChildren(
     trySection(),
     intentsSection(intents, intentsSay),
     newIntentSection(createSay),
     knowledgeSection(knowledge, knowledgeSay),
-    await channelsSection(channels, channelWordSpecs, channelsSay),
+    channelsSection(),
     personalitySection(personality, personalitySay),
     await memorySection(memory, memorySpecs, memorySay),
     spendSection(spend),
