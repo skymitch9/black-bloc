@@ -225,6 +225,7 @@ Changed on branch `gate-names` (KI-26 / KI-32 / KI-35 / KI-37). The step is now:
 |---|---|---|---|
 | Before the loopback fix (`920de1c8`) | **2 of 6 green**: 52 s, 41 s; hung 361 s (3.9 GB free at start), 173 s, 183 s, 168 s | **3 of 3 green**: 41, 62, 61 s | **11 of 14 green**: 91, 86 s + 9 hang-watch runs 68–102 s; hung 210, 206, 229 s |
 | After the loopback fix (`f10b1553`) | **3 of 3 green**: 46, 46, 42 s | **5 of 5 green**: 61, 45, 56, 45, 46 s (the last two are the final configuration, no hang-watch) | **2 of 3 green**: 76, 72 s; one worker hung 177 s (a different shape — KI-26 note) |
+| After merging `main` (`fa35b9f0`, 7,358 tests, real shell environment) | — | **9 of 10 green**: 42–65 s; one worker hung 150 s (the same single test as the `-n 8` hang) | — |
 
   Why 16: with the port leak fixed, `-n 8` is ~60 % slower than auto (over the 25 % bar set for this change), `-n 16` is ~13 %
   slower (mean 51 s against 45 s) and halves the processes the OS must hold (KI-37; ⚠️ the RAM saved was not

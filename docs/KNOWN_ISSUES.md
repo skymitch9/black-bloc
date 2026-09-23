@@ -525,14 +525,21 @@ panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 > ⚠️ **One hang of a DIFFERENT shape remained** (run D8, `-n 8`, after the fix): ONE worker, loopback `TIME_WAIT` at
 > 49, stuck in an async FIXTURE setup for `tests/cogs/moderation/test_modmail.py::test_two_reconciles_at_boot_post_exactly_one_ticket_button`,
 > the proactor loop idle and **no aiosqlite thread alive** in `threading.enumerate()`. One sighting; the timeout
-> named it after 120 s. Hypothesis only (unmeasured): a module-scoped `aiosqlite` connection whose worker thread is
-> gone while `is_connected` still reads true.
+> named it after 120 s. It came back ONCE more, same test, on the first gate-shaped run of the tree merged with `main`
+> (23:2x, `-n 16`, real shell environment: **1 failed, 7357 passed**; the re-run and eight more were green) — so
+> **2 sightings in 21 full runs after the loopback fix, 0 in ~27 before it**. ⚠️ That split is suggestive, not proof
+> (and the pre-fix runs were also dying of the port stall), but it means the reset-on-close change is a SUSPECT for
+> this shape — a lost self-pipe wake-up would look exactly like an idle proactor loop with its work already done.
+> Hypotheses only, neither measured: that, or a module-scoped `aiosqlite` connection whose worker thread is gone
+> while `is_connected` still reads true. A hang-watch plugin that also dumps each open loop's `_ready` queue was
+> armed for eight more runs and they were all green, so the queue was never seen.
 > ⚠️ **Other worktrees and the main tree do not have the fix until this merges**, and TIME_WAIT is machine-wide: their
 > suites still drain the same range. Four stray `pytest` controllers from other sessions (started 20:31, 22:27,
 > 22:33, 22:58) were running at 23:14 and were NOT touched.
 > **Status stays `WATCHING`** — a named failure is not no failure. **What would change it now:** **ten consecutive
 > deploy gates on the merged fix with zero `crashed while running` lines** → `CLOSED`. Any gate that prints one →
-> read its test name: a fixture-setup hang on a module database is the D8 shape and gets its own entry; a
+> read its test name: `test_two_reconciles_at_boot_post_exactly_one_ticket_button` (or any single-worker
+> fixture-setup hang) is the D8 shape — a THIRD sighting of it gets its own entry and a session with the loop dump; a
 > `_fallback_socketpair` stack means the fix is not loaded. Before that —
 
 > 🔴 **2026-09-21 17:5x — a new finding, not a new sighting of the stall itself: an agent that kills every `chrome-headless-shell` process BY NAME can hit ANOTHER BUILD'S render mid-flight.** During the `golive-settings-help` build's headless CDP render (deviation 2 of that follow-up), a process-name kill aimed at cleaning up its own scratch profile risked taking out a sibling agent's `chrome-headless-shell` too — the same class of mistake this entry already warns about for `python.exe` and `.venv` workers, now confirmed for the browser side as well. ⚠️ **Count and target by PID or process tree, never by image name**, for any process family a concurrent agent might also be running. This is a finding filed under KI-26 because it is the same root cause (killing a shared-name process on a machine with concurrent agents), not a new count. Before that —

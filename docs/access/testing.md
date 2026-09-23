@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — ⚠️ secret NAMES only.
 > Last verified: **2026-09-22 23:2x — the hermetic suite's junit file, timeout and loopback plugin only** (branch
-> `gate-names`): full suite **7,339 passed + 3 skipped in 43 s wall at `-n 16`**, twice, on that branch. Before that,
+> `gate-names`): full suite **7,339 passed + 3 skipped in 43 s wall at `-n 16`**, twice; merged with `main`, **7,358 passed + 3
+> skipped**, 9 of 10 runs green (the tenth: one named hang, KI-26). Before that,
 > **2026-09-19** — the docs staleness pass after the **TEST_MODE lift**
 > (2026-09-18 16:08). What changed here: the fourth layer's *Needs* column said **"staff, in the
 > test channel"** and there is no test channel any more — a self-test run now posts its cards
