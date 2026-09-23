@@ -12,15 +12,20 @@ from ...birthdays import (
     year_problem,
 )
 from ...cogs.community.birthdays import (
+    COG_NAME,
     delete_birthday,
+    post_today,
     rows_for_guild,
     save_birthday,
     set_opted_in,
 )
+from ...logkinds import VIA_WEBSITE
 from ..auth import Refused, staff_dependency
 from ..names import as_id, resolve_one
 from ..writes import (
+    actor_for,
     note,
+    require_cog,
     require_db,
     require_guild,
     wanted_id,
@@ -83,6 +88,22 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         return [birthday_row(guild, row) for row in await rows_for_guild(bot.db, guild.id)]
+
+    @router.post("/post-today")
+    async def birthdays_post_today(
+        request: Request, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG_NAME, "birthdays")
+        again = bool((payload or {}).get("again", False))
+        found = await post_today(
+            bot, guild, actor_for(bot, who, guild), again=again, via=VIA_WEBSITE
+        )
+        if found.mode == "off":
+            raise Refused(409, "birthdays_off", found.said)
+        return found.answer()
 
     @router.put("/{user_id}")
     async def birthday_set(

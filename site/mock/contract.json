@@ -1981,6 +1981,26 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/birthdays/post-today",
+      "body": {
+        "again": false
+      },
+      "read_by": [
+        "page-birthdays.js postTodayCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "posted",
+        "skipped",
+        "missing",
+        "failed",
+        "mode",
+        "again",
+        "said"
+      ]
+    },
+    {
       "method": "DELETE",
       "path": "/api/birthdays/{member_id}",
       "read_by": [
@@ -5599,6 +5619,7 @@
     "web.birthday.set",
     "web.birthday.optin",
     "web.birthday.clear",
+    "web.birthday.posted_now",
     "web.tempvoice.setup",
     "web.tempvoice.creator_removed",
     "web.tempvoice.rename",

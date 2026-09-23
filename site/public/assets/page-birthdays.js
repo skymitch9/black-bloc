@@ -34,6 +34,43 @@ const TEMPLATE_KEY = 'birthday_template';
 const COLOR_KEY = 'birthday_color';
 const SAMPLE = { name: 'Casey', age: '30' };
 const BIRTHDAY_FEATURE = 'birthday';
+const POST_KEYS = {
+  button: 'birthday_post_button',
+  confirm: 'birthday_post_confirm',
+  unsent: 'birthday_post_unsent_label',
+  again: 'birthday_post_again_label',
+};
+
+/** The staff door that posts today's wishes now; every word on it is a birthday_post_* key. */
+function postTodayCard(specs) {
+  const words = {};
+  for (const [name, key] of Object.entries(POST_KEYS)) {
+    const spec = specs.find((one) => one.key === key);
+    if (!spec) return null;
+    words[name] = String(spec.value ?? spec.default ?? '');
+  }
+  const say = notice();
+  const moves = el('div', { class: 'post-today-moves' });
+  moves.hidden = true;
+  const go = (again) => async () => {
+    moves.hidden = true;
+    await run(
+      say,
+      () => send('/api/birthdays/post-today', 'POST', { again }),
+      (found) => found?.said || 'Done.',
+    );
+  };
+  moves.append(
+    el('p', { class: 'field-help', text: words.confirm }),
+    bar([
+      button(words.unsent, go(false)),
+      button(words.again, go(true), { tone: 'warn' }),
+      button('Cancel', () => { moves.hidden = true; }, { tone: 'quiet' }),
+    ]),
+  );
+  const open = button(words.button, () => { moves.hidden = !moves.hidden; }, { small: false });
+  return el('div', { class: 'post-today' }, [open, moves, say]);
+}
 
 /** A6: the card the bot itself would post, redrawn as you type. */
 async function wordingCard(spec, color) {
@@ -112,6 +149,10 @@ async function load() {
   const template = birthday.find((spec) => spec.key === TEMPLATE_KEY);
   const color = birthday.find((spec) => spec.key === COLOR_KEY);
   await names(idsIn(rows, ['user_id']));
+
+  const aside = document.getElementById('page-aside');
+  const poster = postTodayCard(birthday);
+  if (aside) aside.replaceChildren(...(poster ? [poster] : []));
 
   const say = notice();
   const setter = setCard();

@@ -2,13 +2,24 @@ from __future__ import annotations
 
 import pytest
 
-from black_bloc.cogs.community.birthdays import get_birthday, save_birthday
+from black_bloc.birthdays import local_today
+from black_bloc.cogs.community.birthdays import (
+    COG_NAME,
+    Birthdays,
+    get_birthday,
+    mark_announced,
+    save_birthday,
+)
+from black_bloc.settings_store import BIRTHDAY_TZ
+
+PARTY_CHANNEL = 501
 
 ROUTES = [
     ("GET", "/api/birthdays", None),
     ("PUT", "/api/birthdays/21", {"month": 3, "day": 4}),
     ("POST", "/api/birthdays/21/optin", {"opted_in": False}),
     ("DELETE", "/api/birthdays/21", None),
+    ("POST", "/api/birthdays/post-today", {"again": False}),
 ]
 
 
@@ -128,3 +139,97 @@ def test_the_wished_toggle_says_in_words_that_nobody_has_that_birthday(client, s
 
     assert response.status_code == 404
     assert "nothing to remove" in response.json()["message"]
+
+
+async def birthday_today(web, wf, user_id):
+    today = local_today(BIRTHDAY_TZ)
+    await save_birthday(web.db, wf.GUILD_ID, user_id, today.month, today.day, None, "self")
+    return today.isoformat()
+
+
+@pytest.fixture
+def loaded(web, monkeypatch):
+    monkeypatch.setitem(web.cogs, COG_NAME, Birthdays(web))
+    return web
+
+
+async def test_posting_today_answers_every_count_and_logs_one_website_row(
+    client, sign_in, loaded, guild, wf
+):
+    web = loaded
+    wf.member(guild, 21, name="ada")
+    wf.member(guild, 22, name="grace")
+    await web.store.set(wf.GUILD_ID, "birthday_mode", "on")
+    await web.store.set(wf.GUILD_ID, "birthday_channel_id", PARTY_CHANNEL)
+    today = await birthday_today(web, wf, 21)
+    await birthday_today(web, wf, 22)
+    await mark_announced(web.db, 22, today)
+    sign_in(client)
+
+    response = client.post("/api/birthdays/post-today", json={"again": False})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert {key: body[key] for key in ("posted", "skipped", "missing", "failed", "mode")} == {
+        "posted": 1,
+        "skipped": 1,
+        "missing": 0,
+        "failed": 0,
+        "mode": "on",
+    }
+    assert body["again"] is False
+    assert "Posted 1 birthday wish(es) in #general." in body["said"]
+    assert len(guild.get_channel(PARTY_CHANNEL).messages) == 1
+    details = await wf.one_web_row(web.db, "web.birthday.posted_now")
+    assert (details["posted"], details["again"], details["mode"]) == (1, False, "on")
+    assert "birthday.announce" in await wf.kinds_in(web.db)
+
+
+async def test_posting_them_all_again_from_the_site_wishes_the_wished_too(
+    client, sign_in, loaded, guild, wf
+):
+    web = loaded
+    wf.member(guild, 21, name="ada")
+    await web.store.set(wf.GUILD_ID, "birthday_mode", "on")
+    await web.store.set(wf.GUILD_ID, "birthday_channel_id", PARTY_CHANNEL)
+    today = await birthday_today(web, wf, 21)
+    await mark_announced(web.db, 21, today)
+    sign_in(client)
+
+    body = client.post("/api/birthdays/post-today", json={"again": True}).json()
+
+    assert (body["posted"], body["skipped"], body["again"]) == (1, 0, True)
+
+
+async def test_nobody_today_is_a_sentence_not_an_error(client, sign_in, loaded, wf):
+    await loaded.store.set(wf.GUILD_ID, "birthday_mode", "on")
+    sign_in(client)
+
+    response = client.post("/api/birthdays/post-today", json={})
+
+    assert response.status_code == 200
+    assert "Nobody who is opted in has a birthday today" in response.json()["said"]
+
+
+async def test_off_is_refused_with_the_words_saying_how_to_turn_it_on(
+    client, sign_in, loaded, wf
+):
+    await loaded.store.set(wf.GUILD_ID, "birthday_mode", "off")
+    sign_in(client)
+
+    response = client.post("/api/birthdays/post-today", json={"again": False})
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "birthdays_off"
+    assert "birthday_mode" in response.json()["message"]
+
+
+def test_posting_today_says_so_in_words_when_the_birthdays_cog_is_not_loaded(
+    client, sign_in, web
+):
+    sign_in(client)
+
+    response = client.post("/api/birthdays/post-today", json={"again": False})
+
+    assert response.status_code == 503
+    assert "birthdays part of Black Bloc is not loaded" in response.json()["message"]
