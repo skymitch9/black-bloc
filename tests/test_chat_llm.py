@@ -1253,3 +1253,37 @@ async def test_a_dm_keeps_the_per_conversation_roll_and_writes_no_member_row(wir
     tone = await chat_llm.mood_for(wired, wired.db, None, 11, 900, [], datetime.now(UTC))
     assert tone is None
     assert await voice_row(wired.db, 7, 900) is None
+
+
+class CachedGuild(FakeGuild):
+    def get_channel(self, found_id):
+        return SimpleNamespace(name="knuck-up") if found_id == 1076003845232148580 else None
+
+
+async def test_a_channel_picked_from_the_popup_hits_its_note_like_the_typed_name(
+    wired, monkeypatch
+):
+    """Owner 2026-09-23: "fix the mention ids too" — `<#id>` matched nothing, `#knuck-up` did."""
+    await server_notes(wired.db)
+    wired.guild = CachedGuild()
+    careful = Answering(ANTHROPIC, MODEL)
+    wire(wired, monkeypatch, haiku=careful, groq=Answering(GROQ, "llama"))
+    picked = "<@1> what goes in <#1076003845232148580>"
+
+    found = await chat_llm.hits_for(wired.db, 7, picked, wired.guild)
+    typed = await chat_llm.hits_for(wired.db, 7, "<@1> what goes in #knuck-up")
+    await ask(wired, picked)
+
+    assert found.terms == typed.terms
+    assert found.hits[0].title == "#knuck-up" and found.strong is True
+    asked = careful.seen[0]["messages"][-1]["content"]
+    assert asked.startswith("what goes in <#1076003845232148580>")
+    assert "Fighting games" in asked
+
+
+async def test_without_the_guild_a_channel_mention_still_matches_nothing(wired):
+    await server_notes(wired.db)
+
+    found = await chat_llm.hits_for(wired.db, 7, "<@1> what goes in <#1076003845232148580>")
+
+    assert not any(hit.title == "#knuck-up" for hit in found.hits)

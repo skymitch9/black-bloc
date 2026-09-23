@@ -251,3 +251,5 @@ is are am was were any anyone anybody). So *when is the cookout* keeps its note 
 
 Not verified: no live model was called — every test fakes both clients; nobody has said *what up*
 to the deployed bot (sweep `CB-a`).
+
+**2026-09-23 — the mention-id trade-off is closed** (owner: *"fix the mention ids too"*, branch `mention-names`): `hits_for` now matches on `mentions.named(guild, text)`, which turns a popup-picked `<#id>` into `#name`, `<@&id>` into `@role`, `<@id>`/`<@!id>` into the member's display name from the guild cache (unknown ids and the bot's own mention stay as sent), so a picked `#knuck-up` tokenises and is strong exactly like a typed one. Matching text only — the model still receives Discord's raw text, and nothing logged changes. Not verified live (sweep `CB-b`).
