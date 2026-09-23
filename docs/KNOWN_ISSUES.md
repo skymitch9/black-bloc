@@ -2,7 +2,9 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-21 20:1x** — the v154 docs ritual. **KI-38 ADDED**, `WATCHING`: an Opus
+> Last verified: **2026-09-22 21:2x** — the v156 docs ritual. **KI-39 ADDED**, `ACCEPTED`: a spotlighted marathon's pinned
+> announcement is edited and logged on every title change (owner decision 21:2x). ⚠️ Its rate is unmeasured; nothing else in
+> this file was re-tested. Before that, **2026-09-21 20:1x** — the v154 docs ritual. **KI-38 ADDED**, `WATCHING`: an Opus
 > build agent can be dropped repeatedly by Anthropic-side `529`/`500` errors during a provider
 > outage (measured 2026-09-21 17:5x–18:3x on the `golive-settings-help` build, five drops, zero
 > work lost — checkpoint-committing after every step and handing the remainder to a Sonnet agent
@@ -154,6 +156,21 @@
 >
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
+
+## KI-39 — A spotlighted marathon's PINNED announcement is edited (and logged) on every title change — `ACCEPTED`
+
+**Symptom.** Since v156 (2026-09-22 21:18) every poller tick (`spotlight_poll_minutes`, 5) that sees a changed GAME **or TITLE** on an
+open Twitch session re-words the pinned announcement in place and writes `golive.spotlight_announcement_refreshed` (ROUTINE, so
+the Logs page shows it and `#blackbloc-logs` does not at the default `golive_log_level`). A marathon such as GamesDoneQuick
+retitles often, so its post is edited on many polls and the log fills with refresh rows. First live row: 04:18:00Z, GDQ,
+two seconds after the v156 boot.
+**Status.** `ACCEPTED` 2026-09-22 21:2x — owner, verbatim: *"i think gdq will always be log noisy during marathons, lets let it be
+and deal with it then"*. Design: [`info/spotlight-design.md`](info/spotlight-design.md) ▸ *Follow-up 2026-09-22 (2)*.
+**Why tolerated.** The owner's rule is that the pinned post names the game being played now; editing never re-pins, so members
+see no pin churn — the cost is log rows and Discord edit calls, not noise in a channel.
+**What would change it.** ⚠️ **The number is missing: edits per hour on a marathon has NOT been measured.** Count
+`golive.spotlight_announcement_refreshed` rows per hour for one GDQ marathon day; if it runs high enough to crowd the Logs page
+or draw a Discord rate limit (a `_refresh_failed` row), refresh on a GAME change only and leave title changes to the reminder.
 
 ## KI-38 — An Opus build agent can be DROPPED REPEATEDLY by Anthropic-side `529`/`500` errors during a provider outage — `WATCHING`
 

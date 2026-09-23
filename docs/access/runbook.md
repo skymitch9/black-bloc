@@ -2,7 +2,9 @@
 
 > **Audience:** the owner (also away from the machine) and Claude sessions. **Status:** TRACKED
 > (owner, 2026-08-31 — permanently; the purge-vs-keep question is settled, `docs/` stays in git).
-> Secret NAMES only. Last verified: **2026-09-19** — the docs staleness pass after the
+> Secret NAMES only. Last verified: **2026-09-22 21:2x — ONE row added** to *Common failures* (re-posting a live channel's
+> announcement through the opt-out door), from the conductor's account of the 2026-09-22 GDQ repost; ⚠️ the move was not
+> re-run by this pass and nothing else here was re-measured. Before that, **2026-09-19** — the docs staleness pass after the
 > **TEST_MODE lift**. Re-measured off `main` `ffea17e`, which **IS** the live shape (**v141**,
 > release `2e48d7c`, deployed 2026-09-18 16:55): `SCHEMA_VERSION` **45** (said 34),
 > `len(bot.COGS)` **22** (said 19), `tests/test_bot.py:TOP_LEVEL_NOW` **32** with zero groups
@@ -160,6 +162,7 @@ PowerShell pipe adds a BOM and the first key is rejected as `﻿KEY`.
 | `role.changed_by_hand` has no actor | the Bots role lacks View Audit Log | grant it |
 | Fly proxy `PU03 unreachable worker host` once | the 6-second restart gap | ignore unless it persists |
 | `429` on startup sync | too many restarts in a short time (KI-2) | wait a few minutes |
+| A live channel's announcement needs posting FRESH (wrong words from old code, lost pin) | the bot never re-announces an open session | the opt-out door: set `golive_channel_optout_post` to `delete`, **Opt out** the row (post deleted, session closed), opt it back in, and the next poll (≤5 min) announces and pins anew; then set the key back to `end`. Used live 2026-09-22 (GDQ, re-announced 04:00:27Z). ⚠️ Forgetting to set it back leaves every future opt-out deleting posts |
 
 ## Local run (for testing without Fly)
 ```
