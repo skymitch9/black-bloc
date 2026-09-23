@@ -1861,3 +1861,102 @@ async def test_the_settings_card_leaves_the_channel_note_words_to_their_own_edit
     await button(interaction.view, "Settings").callback(interaction)
 
     assert "chat_channel_note" not in interaction.embed.description
+
+
+# --- who hears what (personality tones, 2026-09-23) ------------------------------------------
+
+
+def with_people(bot, *people):
+    bot.guild.members = list(people)
+    bot.guild.get_member = lambda user_id: next(
+        (one for one in people if one.id == int(user_id)), None
+    )
+
+
+async def open_voices(cog, bot, member, monkeypatch):
+    from black_bloc.personas import sync_tropes
+
+    await sync_tropes(bot.db)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Personality…").callback(interaction)
+    await button(interaction.view, "Who hears what…").callback(interaction)
+    return interaction
+
+
+async def test_personality_opens_who_hears_what_and_back_returns_to_personality(
+    cog, bot, member, monkeypatch
+):
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+
+    assert interaction.embed.title == "Who hears what"
+    assert "The server's setting is **cookout**" in interaction.embed.description
+    assert "nobody hears a tone right now" in interaction.embed.description
+    assert "Set a member's tone…" in placeholders(interaction.view)
+    assert "Next ›" not in labels(interaction.view)
+
+    await button(interaction.view, "Back").callback(interaction)
+    assert interaction.embed.title == "The voice Black Bloc answers in"
+
+
+async def test_picking_a_member_and_a_tone_pins_it_and_clear_takes_it_off(
+    cog, bot, member, db, monkeypatch
+):
+    ada = FakeMember(bot.guild, user_id=321, display_name="Ada", admin=False)
+    with_people(bot, member, ada)
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+
+    await pick_one(interaction, "Set a member's tone…", SimpleNamespace(id=321))
+    assert interaction.embed.title == "The tone for Ada"
+    assert "Clear the pin" not in labels(interaction.view)
+
+    await pick_one(interaction, "The tone for Ada…", "noir")
+    assert interaction.sent.startswith("**Ada** hears **")
+    assert "pinned by <@" in interaction.embed.description
+    assert "Clear the pin" in labels(interaction.view)
+
+    await button(interaction.view, "Clear the pin").callback(interaction)
+    assert "is back on the server's setting" in interaction.sent
+    assert await kinds_of(db) == ["chat.voice_pinned", "chat.voice_cleared"]
+
+    await button(interaction.view, "Back").callback(interaction)
+    assert "<@321>" in interaction.embed.description
+
+
+async def test_a_member_who_is_not_in_the_server_is_answered_in_words(
+    cog, bot, member, monkeypatch
+):
+    with_people(bot, member)
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+
+    await pick_one(interaction, "Set a member's tone…", SimpleNamespace(id=4242))
+
+    assert "is not in this server" in interaction.sent
+    assert interaction.embed.title == "Who hears what"
+
+
+async def test_the_roster_pages_twenty_five_at_a_time(cog, bot, member, monkeypatch):
+    from black_bloc.chat_voice import pin
+
+    for user_id in range(1000, 1030):
+        await pin(bot.db, GUILD, user_id, "warm", by=1)
+    interaction = await open_voices(cog, bot, member, monkeypatch)
+
+    assert "Page 1 of 2" in interaction.embed.description
+    assert interaction.embed.description.count("pinned by") == 25
+    await button(interaction.view, "Next ›").callback(interaction)
+    assert "Page 2 of 2" in interaction.embed.description
+    assert interaction.embed.description.count("pinned by") == 5
+    assert "‹ Previous" in labels(interaction.view) and "Next ›" not in labels(interaction.view)
+
+
+async def test_the_card_speaks_in_the_words_staff_chose(cog, bot, member, monkeypatch):
+    await bot.store.set(GUILD, "chat_voice_title", "Tones at the cookout")
+    await bot.store.set(GUILD, "chat_voice_button", "Tones…")
+    from black_bloc.personas import sync_tropes
+
+    await sync_tropes(bot.db)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Personality…").callback(interaction)
+    await button(interaction.view, "Tones…").callback(interaction)
+
+    assert interaction.embed.title == "Tones at the cookout"

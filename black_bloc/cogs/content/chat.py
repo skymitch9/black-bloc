@@ -30,6 +30,7 @@ from ...chat_llm import (
     sweep_window,
     tier_errors,
 )
+from ...chat_voice import voice_row
 from ...command_errors import AnswersErrors
 from ...command_visibility import STAFF_ONLY
 from ...emoji import tone_for, toned
@@ -81,6 +82,19 @@ from ...settings_store import (
     GUILD_ONLY,
     KEY_TYPES,
     PROMPT_WORDS,
+    VOICE_BUTTON_KEY,
+    VOICE_CLEAR_BUTTON_KEY,
+    VOICE_EMPTY_KEY,
+    VOICE_INTRO_KEY,
+    VOICE_MEMBER_TITLE_KEY,
+    VOICE_NEXT_KEY,
+    VOICE_NO_MEMBER_KEY,
+    VOICE_OFF_NOTE_KEY,
+    VOICE_PAGE_KEY,
+    VOICE_PREVIOUS_KEY,
+    VOICE_SET_KEY,
+    VOICE_TITLE_KEY,
+    VOICE_TONE_PLACEHOLDER_KEY,
     VOICE_WORDS,
     display_value,
     require_staff,
@@ -156,10 +170,13 @@ KNOWLEDGE_VIEW = "knowledge"
 NOTE_VIEW = "note"
 SETTINGS_VIEW = "settings"
 CHANNELS_VIEW = "channels"
+VOICES_VIEW = "voices"
+MEMBER_VIEW = "member"
 CHANNEL_NOTES_LISTED = 20
 BUTTON_CHARS = 80
 MODAL_CHARS = 45
 PLACEHOLDER_CHARS = 150
+EMBED_TITLE_CHARS = 256
 
 STYLES = {
     "primary": discord.ButtonStyle.primary,
@@ -284,6 +301,8 @@ class ChatPanel(Panel):
         self.where = ROOT
         self.note_id: int | None = None
         self.query = ""
+        self.page = 1
+        self.member_id: int | None = None
 
 
 async def panel_lines(bot: Any, guild: Any, actor: Any) -> list[str]:
@@ -357,8 +376,94 @@ async def build_personality(bot: Any, guild: Any) -> tuple[discord.Embed, ChatPa
         view.add_item(MoodPick(may_go_off, enabling=False, row=1))
     if may_come_on:
         view.add_item(MoodPick(may_come_on, enabling=True, row=2))
-    for move in chat_panel.personality_buttons():
-        view.add_item(MoveButton(move._replace(row=3)))
+    label = chat_panel.words(bot.store, guild.id, VOICE_BUTTON_KEY)[:BUTTON_CHARS]
+    for move in chat_panel.personality_buttons(label):
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
+def say(bot: Any, guild: Any, key: str, **values: Any) -> str:
+    return chat_panel.words(bot.store, guild.id, key, **values)
+
+
+def voices_lines(
+    bot: Any, guild: Any, found: dict[str, Any], shown: Any, at: int, pages: int
+) -> list[str]:
+    entries = found["voices"]
+    lines = [say(bot, guild, VOICE_INTRO_KEY, setting=found["setting"], count=len(entries))]
+    if str(found["setting"]) == COOKOUT:
+        lines.append(say(bot, guild, VOICE_OFF_NOTE_KEY))
+    if not entries:
+        lines.append(say(bot, guild, VOICE_EMPTY_KEY))
+        return lines
+    lines.append("")
+    lines += [
+        chat_panel.voice_line(bot.store, guild.id, entry, found["labels"]) for entry in shown
+    ]
+    if pages > 1:
+        lines.append("")
+        lines.append(say(bot, guild, VOICE_PAGE_KEY, page=at, pages=pages))
+    return lines
+
+
+async def build_voices(bot: Any, guild: Any, page: Any = 1) -> tuple[discord.Embed, ChatPanel]:
+    """Who hears what, 25 at a time; a member picked below opens their own card."""
+    found = await chat_panel.voice_roster(bot, guild)
+    entries = found["voices"]
+    pages = chat_panel.page_count(len(entries))
+    at = chat_panel.wanted_page(page, pages)
+    size = chat_panel.VOICES_PAGE
+    shown = entries[(at - 1) * size : at * size]
+    embed = discord.Embed(
+        title=say(bot, guild, VOICE_TITLE_KEY),
+        description=clamped(voices_lines(bot, guild, found, shown, at, pages)),
+    )
+    view = ChatPanel(minutes_for(bot, guild.id))
+    view.where = VOICES_VIEW
+    view.page = at
+    view.add_item(VoiceMemberPick(say(bot, guild, VOICE_SET_KEY)[:PLACEHOLDER_CHARS]))
+    labels = (
+        say(bot, guild, VOICE_PREVIOUS_KEY)[:BUTTON_CHARS],
+        say(bot, guild, VOICE_NEXT_KEY)[:BUTTON_CHARS],
+    )
+    for move in chat_panel.voices_buttons(at, pages, labels):
+        view.add_item(MoveButton(move))
+    add_site_button(view, bot, row=3)
+    return (embed, view)
+
+
+async def build_member(
+    bot: Any, guild: Any, member_id: Any, page: int = 1
+) -> tuple[discord.Embed | None, ChatPanel | None]:
+    """One member's tone: the tones that are on to pin, and Clear when there is a pin."""
+    member = chat_panel.member_of(guild, member_id)
+    if member is None:
+        return (None, None)
+    name = chat_panel.member_name(member)
+    found = await chat_panel.voice_roster(bot, guild)
+    entry = next((one for one in found["voices"] if one["user_id"] == member.id), None)
+    lines = [
+        chat_panel.voice_line(bot.store, guild.id, entry, found["labels"])
+        if entry is not None
+        else say(bot, guild, VOICE_EMPTY_KEY)
+    ]
+    embed = discord.Embed(
+        title=say(bot, guild, VOICE_MEMBER_TITLE_KEY, member=name)[:EMBED_TITLE_CHARS],
+        description=clamped(lines),
+    )
+    view = ChatPanel(minutes_for(bot, guild.id))
+    view.where = MEMBER_VIEW
+    view.page = page
+    view.member_id = int(member.id)
+    tones = [(one, found["labels"][one]) for one in found["enabled"]]
+    if tones:
+        placeholder = say(bot, guild, VOICE_TONE_PLACEHOLDER_KEY, member=name)
+        view.add_item(TonePick(tones, placeholder[:PLACEHOLDER_CHARS]))
+    row = await voice_row(bot.db, guild.id, member.id)
+    pinned = row is not None and bool(row["pinned"])
+    clear = say(bot, guild, VOICE_CLEAR_BUTTON_KEY)[:BUTTON_CHARS]
+    for move in chat_panel.member_buttons(pinned, clear):
+        view.add_item(MoveButton(move))
     return (embed, view)
 
 
@@ -529,6 +634,45 @@ async def render_channel_notes(interaction: discord.Interaction, previous: Any =
     await render(interaction, embed, view, previous)
 
 
+async def render_voices(
+    interaction: discord.Interaction, page: Any = 1, previous: Any = None
+) -> None:
+    embed, view = await build_voices(interaction.client, interaction.guild, page)
+    await render(interaction, embed, view, previous)
+
+
+async def render_member(
+    interaction: discord.Interaction, member_id: Any, previous: Any = None
+) -> None:
+    """A member who has left goes back to the list with the reason, in the words staff chose."""
+    page = int(getattr(previous, "page", 1) or 1)
+    embed, view = await build_member(interaction.client, interaction.guild, member_id, page)
+    if view is None:
+        await render_voices(interaction, page, previous)
+        await answer(
+            interaction,
+            say(interaction.client, interaction.guild, VOICE_NO_MEMBER_KEY, member=member_id),
+        )
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def open_voices(
+    interaction: discord.Interaction, page: Any = 1, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    await render_voices(interaction, page, previous)
+
+
+async def open_member(
+    interaction: discord.Interaction, member_id: Any, previous: Any = None
+) -> None:
+    if not await opened(interaction):
+        return
+    await render_member(interaction, member_id, previous)
+
+
 async def open_channel_notes(interaction: discord.Interaction, previous: Any = None) -> None:
     if not await opened(interaction):
         return
@@ -618,12 +762,24 @@ async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
     if view.where == CHANNELS_VIEW:
         await open_channel_notes(interaction, view)
         return
+    if view.where == VOICES_VIEW:
+        await open_voices(interaction, view.page, view)
+        return
+    if view.where == MEMBER_VIEW:
+        await open_member(interaction, view.member_id, view)
+        return
     await open_root(interaction, view)
 
 
 async def back_from(interaction: discord.Interaction, view: Any) -> None:
     if view.where == NOTE_VIEW:
         await open_knowledge(interaction, view.query, view)
+        return
+    if view.where == MEMBER_VIEW:
+        await open_voices(interaction, view.page, view)
+        return
+    if view.where == VOICES_VIEW:
+        await open_personality(interaction, view)
         return
     await open_root(interaction, view)
 
@@ -650,6 +806,28 @@ async def run_mood(
         interaction.client, interaction.guild, interaction.user, name, enabled
     )
     await render_personality(interaction, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_pin(
+    interaction: discord.Interaction, member_id: Any, tone: str, previous: Any
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await chat_panel.pin_voice(
+        interaction.client, interaction.guild, interaction.user, member_id, tone
+    )
+    await render_member(interaction, member_id, previous)
+    await answer(interaction, outcome.message)
+
+
+async def run_clear_pin(interaction: discord.Interaction, member_id: Any, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await chat_panel.clear_voice(
+        interaction.client, interaction.guild, interaction.user, member_id
+    )
+    await render_member(interaction, member_id, previous)
     await answer(interaction, outcome.message)
 
 
@@ -773,6 +951,18 @@ class MoveButton(discord.ui.Button):
         if action == chat_panel.CHANNELS:
             await open_channel_notes(interaction, view)
             return
+        if action == chat_panel.VOICES:
+            await open_voices(interaction, 1, view)
+            return
+        if action == chat_panel.PREVIOUS:
+            await open_voices(interaction, view.page - 1, view)
+            return
+        if action == chat_panel.NEXT:
+            await open_voices(interaction, view.page + 1, view)
+            return
+        if action == chat_panel.CLEAR_PIN:
+            await run_clear_pin(interaction, view.member_id, view)
+            return
         if action == chat_panel.CHAT_TOGGLE:
             await run_mode(interaction, chat_panel.MODE_KEY, view)
             return
@@ -854,6 +1044,34 @@ class MoodPick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await run_mood(interaction, self.values[0], self.enabling, self.view)
+
+
+class VoiceMemberPick(discord.ui.UserSelect):
+    """Discord's own member picker searches the whole server, so no page of 25 is needed."""
+
+    def __init__(self, placeholder: str) -> None:
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, row=0)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_member(interaction, self.values[0].id, self.view)
+
+
+class TonePick(discord.ui.Select):
+    def __init__(self, tones: Any, placeholder: str) -> None:
+        found = list(tones)[:SELECT_CAP]
+        super().__init__(
+            placeholder=placeholder,
+            options=[
+                discord.SelectOption(label=str(label)[:SELECT_OPTION_LIMIT], value=str(name))
+                for name, label in found
+            ],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await run_pin(interaction, self.view.member_id, self.values[0], self.view)
 
 
 class NotePick(discord.ui.Select):

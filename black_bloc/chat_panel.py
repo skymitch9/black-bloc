@@ -48,7 +48,11 @@ from .settings_store import (
     TONE_EDITED_KEY,
     TONE_RESET_KEY,
     TONE_TOO_LONG_KEY,
+    VOICE_ACTIVE_KEY,
     VOICE_CLEARED_KEY,
+    VOICE_LINE_PINNED_KEY,
+    VOICE_LINE_ROLLED_KEY,
+    VOICE_LINE_WAITING_KEY,
     VOICE_NO_MEMBER_KEY,
     VOICE_NO_TONE_KEY,
     VOICE_NOTHING_KEY,
@@ -839,6 +843,39 @@ async def voice_roster(bot: Any, guild: Any, *, now: Any = None) -> dict[str, An
     }
 
 
+def voice_line(store: Any, guild_id: int, entry: dict[str, Any], labels: dict[str, str]) -> str:
+    """One member's line on the Who hears what card, in the words staff chose."""
+    member = f"<@{entry['user_id']}>"
+    pinned = entry["pinned"]
+    if entry["waiting"]:
+        said = words(
+            store, guild_id, VOICE_LINE_WAITING_KEY, member=member, tone=labels.get(pinned, pinned)
+        )
+    elif pinned:
+        by = f"<@{entry['pinned_by']}>" if entry["pinned_by"] else "staff"
+        said = words(
+            store,
+            guild_id,
+            VOICE_LINE_PINNED_KEY,
+            member=member,
+            tone=labels.get(pinned, pinned),
+            by=by,
+        )
+    else:
+        tone = str(entry["trope"])
+        said = words(
+            store,
+            guild_id,
+            VOICE_LINE_ROLLED_KEY,
+            member=member,
+            tone=labels.get(tone, tone),
+            turns=entry["turns"],
+        )
+    if entry["active"]:
+        said = f"{said} · {words(store, guild_id, VOICE_ACTIVE_KEY)}"
+    return said
+
+
 async def edit_tone(
     bot: Any, guild: Any, actor: Any, name: Any, voice: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
@@ -926,6 +963,7 @@ __all__ = [
     "member_of",
     "page_count",
     "pin_voice",
+    "voice_line",
     "voice_roster",
     "voices_buttons",
     "wanted_page",
