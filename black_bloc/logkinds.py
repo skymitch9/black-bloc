@@ -245,6 +245,8 @@ ROUTINE: frozenset[str] = frozenset(
         "chat.channel_drafts_seeded",
         "chat.channel_note_cleared",
         "chat.channel_note_set",
+        "chat.channel_reach_cleared",
+        "chat.channel_reach_set",
         "chat.insult",
         "chat.intent_created",
         "chat.intent_deleted",

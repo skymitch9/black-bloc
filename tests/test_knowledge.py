@@ -32,6 +32,7 @@ from black_bloc.knowledge import (
     role_sections,
     score,
     search,
+    server_sections,
     shorten,
     snippet_of,
     tokenize,
@@ -242,6 +243,62 @@ async def test_another_guilds_notes_are_not_swept_by_this_guilds_rewrite(tmp_pat
         assert [row["title"] for row in await list_sections(db, 8)] == ["#lounge"]
     finally:
         await db.close()
+
+
+class Values:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+
+def readable_by(channel_id, name, *roles):
+    def permissions_for(role):
+        return SimpleNamespace(view_channel=any(role is one for one in roles))
+
+    return SimpleNamespace(
+        id=channel_id,
+        name=name,
+        topic=None,
+        category=None,
+        category_id=None,
+        permissions_for=permissions_for,
+    )
+
+
+async def test_the_ingest_reads_channels_by_the_one_reach_rule_opt_in_roles_and_staff(tmp_path):
+    from black_bloc.channel_reach import set_override
+    from black_bloc.cogs.community.role_menus import add_option, create_menu
+
+    member = SimpleNamespace(id=444, name="Member", members=[])
+    sports = SimpleNamespace(id=555, name="Sports", members=[])
+    everyone = SimpleNamespace(id=7, name="@everyone", members=[])
+    roles = {one.id: one for one in (member, sports)}
+    home = SimpleNamespace(
+        id=7,
+        default_role=everyone,
+        roles=[everyone],
+        text_channels=[
+            readable_by(1, "general-chat", member),
+            readable_by(2, "sports-ball", sports),
+            readable_by(3, "staff-room"),
+            readable_by(4, "quiet-corner", member),
+        ],
+        get_role=roles.get,
+    )
+    db = await store(tmp_path)
+    try:
+        menu = await create_menu(db, 7, "interests", "Interests", None, "multiple")
+        await add_option(db, menu, sports.id, "Sports", None)
+        await set_override(db, 7, 4, False)
+        bot = SimpleNamespace(db=db, store=Values(chat_visibility_role_id=member.id))
+        found = await server_sections(bot, home, db)
+    finally:
+        await db.close()
+    listed = next(body for title, body, _ in found if title == "Channels in this server")
+    assert "#general-chat" in listed and "#sports-ball" in listed
+    assert "#staff-room" not in listed and "#quiet-corner" not in listed
 
 
 def channel(name, topic=None):

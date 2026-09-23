@@ -312,6 +312,11 @@ export const LABELS = {
   chat_channel_draft_none: "What staff are told when a channel is decided to need no note",
   chat_channel_draft_reset: "What staff are told when a channel goes back to its draft",
   chat_channel_draft_missing: "What is said when a channel has no draft to review",
+  chat_channel_reach_shown: "What staff are told when the bot is told about a channel anyway",
+  chat_channel_reach_hidden: "What staff are told when a channel is hidden from the bot",
+  chat_channel_reach_cleared: "What staff are told when a channel goes back to the rule",
+  chat_channel_reach_nothing: "What is said when a channel already follows the rule",
+  chat_channel_reach_ignored: "What is said when a channel sits in an ignored category",
 
   request_mode: 'Whether people can ask for things',
   request_filed_line: 'What a member is told the moment their request is filed',

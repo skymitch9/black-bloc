@@ -523,12 +523,14 @@ def menu_section(menu: Any, options: Any, guild: Any) -> tuple[str, str, str] | 
 async def server_sections(bot: Any, guild: Any, db: Any) -> list[tuple[str, str, str]]:
     """What the server itself says about itself, as sections the search can read."""
     from .channel_notes import notes_or_nothing
+    from .channel_reach import refresh
     from .cogs.community.role_menus import get_options, list_menus, picking_is_on
     from .directory import open_channels
     from .events import APPROVED, events_by_status
 
     notes = await notes_or_nothing(db, getattr(guild, "id", None))
-    found = [*channel_sections(open_channels(bot, guild), notes), *role_sections(guild)]
+    known = await refresh(bot, guild)
+    found = [*channel_sections(open_channels(bot, guild, known), notes), *role_sections(guild)]
     now = datetime.now(UTC).isoformat()
     for row in await events_by_status(db, guild.id, (APPROVED,)):
         if str(value_of(row, "starts_at")) < now:

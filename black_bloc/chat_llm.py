@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from . import channel_reach
 from .actionlog import log_action
 from .channel_notes import notes_or_nothing
 from .chat import MENTION, has_phrase, normalise
@@ -643,6 +644,8 @@ async def conversational_reply(
     remembered = await memory_for(bot, db, guild_id, user_id, in_dm=guild_id is None)
     asked = user_turn(text, hits, [note for _, note in named], remembered)
     messages = [*as_messages(window), {"role": "user", "content": asked}]
+    if guild is not None:
+        await channel_reach.refresh(bot, guild)
     directory = channels_block(bot, guild, await notes_or_nothing(db, guild_id))
     turn = uuid.uuid4().hex
     errors = tier_errors(bot)

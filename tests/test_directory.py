@@ -4,7 +4,10 @@ from black_bloc.channel_notes import NOTE_CHARS
 from black_bloc.directory import (
     DIRECTORY_HEADING,
     DIRECTORY_NONE,
+    HIDDEN_BY_STAFF,
     NOT_VISIBLE,
+    Known,
+    Reach,
     channel_names,
     description_of,
     directory_block,
@@ -12,8 +15,10 @@ from black_bloc.directory import (
     everyone_sees,
     hidden_category_ids,
     is_archive,
+    known_of,
     open_channels,
-    why_hidden,
+    reach_of,
+    remember,
     within,
 )
 
@@ -263,8 +268,125 @@ def test_the_preview_is_the_exact_block_the_model_gets():
 def test_the_hidden_reason_names_which_rule_left_a_channel_out():
     archive = category(50, "Archive")
     listed = category(99, "Committee")
-    hidden = {99}
-    assert why_hidden(guild(), channel("a", cat=listed), hidden, EVERYONE) == "ignored_category"
-    assert why_hidden(guild(), channel("b", cat=archive), hidden, EVERYONE) == "archive"
-    assert why_hidden(guild(), channel("c", seen=False), hidden, EVERYONE) == NOT_VISIBLE
-    assert why_hidden(guild(), channel("d"), hidden, EVERYONE) is None
+    home = bot(chat_ignore_categories=[99])
+    assert reach_of(home, guild(), channel("a", cat=listed)).why_hidden == "ignored_category"
+    assert reach_of(home, guild(), channel("b", cat=archive)).why_hidden == "archive"
+    assert reach_of(home, guild(), channel("c", seen=False)).why_hidden == NOT_VISIBLE
+    assert reach_of(home, guild(), channel("d")) == Reach(True, "member", None, None)
+
+
+SPORTS = SimpleNamespace(id=555, name="Sports")
+SHOWS = SimpleNamespace(id=556, name="Shows")
+ROLES = {MEMBER.id: MEMBER, SPORTS.id: SPORTS, SHOWS.id: SHOWS}
+
+
+def opt_in_guild(*channels):
+    found = SimpleNamespace(id=GUILD, default_role=EVERYONE, text_channels=list(channels))
+    found.get_role = ROLES.get
+    return found
+
+
+def read_by(name, *roles, cat=None):
+    def permissions_for(role):
+        return SimpleNamespace(view_channel=any(role is one for one in roles))
+
+    return SimpleNamespace(
+        id=abs(hash(name)) % 10_000,
+        name=name,
+        topic=None,
+        category=cat,
+        category_id=getattr(cat, "id", None),
+        permissions_for=permissions_for,
+    )
+
+
+def member_bot(**values):
+    return bot(chat_visibility_role_id=MEMBER.id, **values)
+
+
+def test_a_channel_the_member_role_reads_is_told_about_through_the_member_view():
+    general = read_by("general-chat", MEMBER)
+    found = reach_of(member_bot(), opt_in_guild(general), general, Known(frozenset({SPORTS.id})))
+    assert found == Reach(True, "member", None, None)
+
+
+def test_a_channel_only_an_opt_in_role_reads_is_told_about_through_that_role():
+    sports = read_by("sports-ball", SPORTS)
+    home = opt_in_guild(sports)
+    known = Known(frozenset({SPORTS.id, SHOWS.id}))
+    assert reach_of(member_bot(), home, sports, known) == Reach(True, "role:Sports", None, None)
+    assert [c.name for c in open_channels(member_bot(), home, known)] == ["sports-ball"]
+
+
+def test_a_role_nobody_can_pick_for_themselves_does_not_open_a_channel():
+    sports = read_by("sports-ball", SPORTS)
+    found = reach_of(member_bot(), opt_in_guild(sports), sports, Known(frozenset({SHOWS.id})))
+    assert found == Reach(False, None, NOT_VISIBLE, None)
+    assert reach_of(member_bot(), opt_in_guild(sports), sports).visible is False
+
+
+def test_an_opt_in_role_the_guild_no_longer_holds_is_skipped_not_raised():
+    sports = read_by("sports-ball", SPORTS)
+    found = reach_of(member_bot(), opt_in_guild(sports), sports, Known(frozenset({999, "x"})))
+    assert found.why_hidden == NOT_VISIBLE
+
+
+def test_no_role_reads_it_so_it_stays_hidden():
+    staff = read_by("staff-room")
+    known = Known(frozenset({SPORTS.id, SHOWS.id}))
+    assert reach_of(member_bot(), opt_in_guild(staff), staff, known).why_hidden == NOT_VISIBLE
+
+
+def test_staff_showing_a_channel_beats_the_member_view_and_an_archive():
+    staff = read_by("staff-room")
+    old = read_by("old-news", MEMBER, cat=category(50, "Archive"))
+    known = Known(overrides={staff.id: True, old.id: True})
+    home = opt_in_guild(staff, old)
+    assert reach_of(member_bot(), home, staff, known) == Reach(True, "override", None, True)
+    assert reach_of(member_bot(), home, old, known).visible is True
+    assert [c.name for c in open_channels(member_bot(), home, known)] == ["staff-room", "old-news"]
+
+
+def test_staff_hiding_a_channel_beats_the_member_view_and_an_opt_in_role():
+    general = read_by("general-chat", MEMBER)
+    sports = read_by("sports-ball", SPORTS)
+    known = Known(frozenset({SPORTS.id}), {general.id: False, sports.id: False})
+    home = opt_in_guild(general, sports)
+    assert reach_of(member_bot(), home, general, known) == Reach(
+        False, None, HIDDEN_BY_STAFF, False
+    )
+    assert reach_of(member_bot(), home, sports, known).why_hidden == HIDDEN_BY_STAFF
+    assert open_channels(member_bot(), home, known) == []
+
+
+def test_the_basement_is_never_referenced_even_when_only_an_opt_in_role_reads_it():
+    """Owner, 2026-09-23: "Make sure the basement is still not referenced"."""
+    basement = category(77, "The Basement")
+    cellar = read_by("cellar", SPORTS, cat=basement)
+    known = Known(frozenset({SPORTS.id}), {cellar.id: True})
+    home = opt_in_guild(cellar)
+    found = reach_of(member_bot(chat_ignore_categories=[77]), home, cellar, known)
+    assert found == Reach(False, None, "ignored_category", None)
+    assert open_channels(member_bot(chat_ignore_categories=[77]), home, known) == []
+    brain = member_bot(chat_ignore_categories=[77])
+    remember(brain, home, known)
+    assert "cellar" not in directory_block(brain, home)
+    assert channel_names(brain, home) == set()
+
+
+def test_the_ticket_category_beats_a_staff_override_too():
+    ticket = read_by("ticket-0001", MEMBER, cat=category(11, "ModMail"))
+    known = Known(overrides={ticket.id: True})
+    found = reach_of(member_bot(modmail_category_id=11), opt_in_guild(ticket), ticket, known)
+    assert found.why_hidden == "ignored_category"
+
+
+def test_the_last_refresh_is_what_the_sync_readers_see_and_nothing_read_is_the_member_rule():
+    sports = read_by("sports-ball", SPORTS)
+    home = opt_in_guild(sports)
+    brain = member_bot()
+    assert known_of(brain, home) == Known()
+    assert open_channels(brain, home) == []
+    remember(brain, home, Known(frozenset({SPORTS.id})))
+    assert [c.name for c in open_channels(brain, home)] == ["sports-ball"]
+    assert "#sports-ball" in directory_block(brain, home)

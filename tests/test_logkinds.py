@@ -1048,6 +1048,15 @@ def test_a_channel_draft_decision_is_routine_from_either_door_and_files_under_ch
     assert "chat.channel_drafts_seeded" in emitted_kinds()
 
 
+def test_a_staff_reach_decision_is_routine_from_either_door_and_files_under_chat():
+    """Staff telling the bot about a channel, or keeping it quiet, is housekeeping."""
+    for kind in ("chat.channel_reach_set", "chat.channel_reach_cleared"):
+        assert kind in ROUTINE
+        assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
+        assert is_important(kind) is False
+        assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
+
+
 def test_a_tone_pin_and_a_tone_edit_are_routine_from_either_door_and_file_under_chat():
     """Staff choosing a member's tone or rewording one is housekeeping for the Logs page."""
     for kind in ("chat.voice_pinned", "chat.voice_cleared", "chat.tone_edited"):

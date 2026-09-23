@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any, NamedTuple
 
 from .channel_notes import NOTE_CHARS
@@ -31,6 +32,31 @@ SPACES = re.compile(r"\s+")
 IGNORED_CATEGORY = "ignored_category"
 ARCHIVE = "archive"
 NOT_VISIBLE = "not_visible"
+HIDDEN_BY_STAFF = "hidden_by_staff"
+
+VIA_MEMBER = "member"
+VIA_OVERRIDE = "override"
+VIA_ROLE = "role:"
+KNOWN_ATTR = "_channel_reach_known"
+
+
+class Known(NamedTuple):
+    openers: frozenset[int] = frozenset()
+    overrides: Mapping[int, bool] = {}
+
+
+class Reach(NamedTuple):
+    visible: bool
+    via: str | None
+    why_hidden: str | None
+    override: bool | None
+
+
+class Lens(NamedTuple):
+    hidden: set[int]
+    viewer: Any
+    openers: tuple[Any, ...]
+    overrides: Mapping[int, bool]
 
 
 class Preview(NamedTuple):
@@ -120,25 +146,88 @@ def in_an_ignored_category(channel: Any, hidden: set[int]) -> bool:
     return False
 
 
-def why_hidden(guild: Any, channel: Any, hidden: set[int], viewer: Any) -> str | None:
-    """The one test `open_channels` applies, spelled as the reason the page prints."""
-    if in_an_ignored_category(channel, hidden):
-        return IGNORED_CATEGORY
-    if is_archive(getattr(channel, "category", None)):
-        return ARCHIVE
-    if not everyone_sees(guild, channel, viewer):
-        return NOT_VISIBLE
-    return None
+def known_of(bot: Any, guild: Any) -> Known:
+    """What the last refresh read for this guild; nothing read yet is the plain member rule."""
+    found = getattr(bot, KNOWN_ATTR, None) or {}
+    return found.get(as_id(guild), Known())
 
 
-def open_channels(bot: Any, guild: Any) -> list[Any]:
-    """The text channels a plain verified member can read, and only those."""
-    hidden = hidden_category_ids(bot, guild)
+def remember(bot: Any, guild: Any, known: Known) -> Known:
+    found = getattr(bot, KNOWN_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        try:
+            setattr(bot, KNOWN_ATTR, found)
+        except Exception as exc:
+            log.warning("directory: the channel reach could not be kept — %s", exc)
+            return known
+    found[as_id(guild)] = known
+    return known
+
+
+def opener_roles(guild: Any, openers: Any, viewer: Any) -> tuple[Any, ...]:
+    """The self-assignable roles this guild still holds, the viewer and @everyone left out."""
+    get_role = getattr(guild, "get_role", None)
+    if get_role is None:
+        return ()
+    skip = {as_id(viewer), as_id(getattr(guild, "default_role", None))}
+    found = []
+    for number in sorted({as_id(one) for one in openers or ()} - {None}):
+        if number in skip:
+            continue
+        try:
+            role = get_role(number)
+        except Exception as exc:
+            log.warning("directory: role %s could not be resolved — %s", number, exc)
+            continue
+        if role is not None:
+            found.append(role)
+    return tuple(sorted(found, key=lambda role: str(getattr(role, "name", "")).casefold()))
+
+
+def lens_for(bot: Any, guild: Any, known: Known | None = None) -> Lens:
+    """Everything the reach of one channel depends on, read once for the whole guild."""
+    known = known if known is not None else known_of(bot, guild)
     viewer = visibility_role(bot, guild)
+    return Lens(
+        hidden_category_ids(bot, guild),
+        viewer,
+        opener_roles(guild, known.openers, viewer),
+        dict(known.overrides or {}),
+    )
+
+
+def reach_in(lens: Lens, guild: Any, channel: Any) -> Reach:
+    """The one visibility rule: staff's category choices, then staff's per-channel word, then
+    the member view, then any role a member can give themselves."""
+    if in_an_ignored_category(channel, lens.hidden):
+        return Reach(False, None, IGNORED_CATEGORY, None)
+    override = lens.overrides.get(as_id(channel))
+    if override is not None:
+        if override:
+            return Reach(True, VIA_OVERRIDE, None, True)
+        return Reach(False, None, HIDDEN_BY_STAFF, False)
+    if is_archive(getattr(channel, "category", None)):
+        return Reach(False, None, ARCHIVE, None)
+    if everyone_sees(guild, channel, lens.viewer):
+        return Reach(True, VIA_MEMBER, None, None)
+    for role in lens.openers:
+        if everyone_sees(guild, channel, role):
+            return Reach(True, f"{VIA_ROLE}{getattr(role, 'name', role.id)}", None, None)
+    return Reach(False, None, NOT_VISIBLE, None)
+
+
+def reach_of(bot: Any, guild: Any, channel: Any, known: Known | None = None) -> Reach:
+    return reach_in(lens_for(bot, guild, known), guild, channel)
+
+
+def open_channels(bot: Any, guild: Any, known: Known | None = None) -> list[Any]:
+    """The text channels a member can read, by the one rule `reach_in` spells out."""
+    lens = lens_for(bot, guild, known)
     return [
         channel
         for channel in getattr(guild, "text_channels", ()) or ()
-        if why_hidden(guild, channel, hidden, viewer) is None
+        if reach_in(lens, guild, channel).visible
     ]
 
 
@@ -192,10 +281,14 @@ def within(rows: Any, budget: int = DIRECTORY_BYTES) -> list[tuple[str, str]]:
 
 
 def directory_preview(
-    bot: Any, guild: Any, notes: Any = None, budget: int = DIRECTORY_BYTES
+    bot: Any,
+    guild: Any,
+    notes: Any = None,
+    budget: int = DIRECTORY_BYTES,
+    known: Known | None = None,
 ) -> Preview:
     """The exact block the model is handed, with what it cost and whose words fell off."""
-    wanted = rows_for(open_channels(bot, guild), notes)
+    wanted = rows_for(open_channels(bot, guild, known), notes)
     rows = within(wanted, budget)
     kept = set(rows)
     trimmed = tuple(name for name, said in wanted if said and (name, said) not in kept)

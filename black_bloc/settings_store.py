@@ -1089,7 +1089,9 @@ KEY_HELP: dict[str, str] = {
         "the ones the bot may learn about, list and point people at. This server hides "
         "everything from @everyone until the rules screen grants Member, so the default is the "
         "Member role — clearing it falls back to @everyone, which on this server means almost "
-        "no channels at all"
+        "no channels at all. A channel this role cannot read still counts when a role members "
+        "pick for themselves on a role menu can (Sports, Shows, RPGer …), and staff can tell "
+        "the bot about any one channel, or keep it quiet, on the Channels page"
     ),
     "chat_staff_can_ping_roles": (
         "on lets Black Bloc's conversational answers mention a role when the person who "
@@ -3441,6 +3443,11 @@ CHANNEL_DRAFT_USED_KEY = "chat_channel_draft_used"
 CHANNEL_DRAFT_NONE_KEY = "chat_channel_draft_none"
 CHANNEL_DRAFT_RESET_KEY = "chat_channel_draft_reset"
 CHANNEL_DRAFT_MISSING_KEY = "chat_channel_draft_missing"
+CHANNEL_REACH_SHOWN_KEY = "chat_channel_reach_shown"
+CHANNEL_REACH_HIDDEN_KEY = "chat_channel_reach_hidden"
+CHANNEL_REACH_CLEARED_KEY = "chat_channel_reach_cleared"
+CHANNEL_REACH_NOTHING_KEY = "chat_channel_reach_nothing"
+CHANNEL_REACH_IGNORED_KEY = "chat_channel_reach_ignored"
 CHANNEL_NOTE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     CHANNEL_DRAFT_USED_KEY: (
         "The drafted description for **#{channel}** is now its note. Black Bloc reads it in "
@@ -3469,6 +3476,41 @@ CHANNEL_NOTE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("channel",),
         "what staff are told when they use, set aside or reset a draft on a channel that was "
         "never drafted (made after the catalog). It takes {channel}",
+    ),
+    CHANNEL_REACH_SHOWN_KEY: (
+        "Black Bloc is told about **#{channel}** now, because staff said so, whoever can read "
+        "it. **Back to the rule** undoes that.",
+        ("channel",),
+        "what staff are told when they press Tell the bot anyway on a channel, on the Channels "
+        "page. It takes {channel}, the channel's name",
+    ),
+    CHANNEL_REACH_HIDDEN_KEY: (
+        "Black Bloc is not told about **#{channel}** now, because staff said so, even though "
+        "members can read it. **Back to the rule** undoes that.",
+        ("channel",),
+        "what staff are told when they press Hide from the bot on a channel, on the Channels "
+        "page. It takes {channel}",
+    ),
+    CHANNEL_REACH_CLEARED_KEY: (
+        "**#{channel}** is back to the rule: Black Bloc is told about it while members can read "
+        "it, through the Member role or a role they pick for themselves.",
+        ("channel",),
+        "what staff are told when they put a channel back to the rule, on the Channels page. It "
+        "takes {channel}",
+    ),
+    CHANNEL_REACH_NOTHING_KEY: (
+        "**#{channel}** already follows the rule, so nothing changed.",
+        ("channel",),
+        "what staff are told when they put back to the rule a channel staff never decided. It "
+        "takes {channel}",
+    ),
+    CHANNEL_REACH_IGNORED_KEY: (
+        "**#{channel}** sits in a category Black Bloc leaves out on purpose (one on "
+        "`chat_ignore_categories`, or the ticket category), so nothing was changed. Take the "
+        "category off that list on the Settings page first.",
+        ("channel",),
+        "what staff are told when they try to tell the bot about, or hide, a channel in an "
+        "ignored category or the ticket category. It takes {channel}",
     ),
     CHANNEL_NOTE_SAVED_KEY: (
         "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's "
