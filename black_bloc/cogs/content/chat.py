@@ -11,6 +11,7 @@ from discord.ext import commands, tasks
 
 from ... import chat_panel
 from ...actionlog import log_action, send_logs, stamp
+from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
     GREETING,
     INSULT,
@@ -68,6 +69,13 @@ from ...personas import (
     sync_pool,
 )
 from ...settings_store import (
+    CHANNEL_NOTE_LABEL_KEY,
+    CHANNEL_NOTE_MODAL_KEY,
+    CHANNEL_NOTE_WORDS,
+    CHANNEL_NOTES_BUTTON_KEY,
+    CHANNEL_NOTES_INTRO_KEY,
+    CHANNEL_NOTES_PLACEHOLDER_KEY,
+    CHANNEL_NOTES_TITLE_KEY,
     CHAT_COOLDOWN_SECONDS,
     DB_UNAVAILABLE,
     GUILD_ONLY,
@@ -144,6 +152,11 @@ PERSONALITY_VIEW = "personality"
 KNOWLEDGE_VIEW = "knowledge"
 NOTE_VIEW = "note"
 SETTINGS_VIEW = "settings"
+CHANNELS_VIEW = "channels"
+CHANNEL_NOTES_LISTED = 20
+BUTTON_CHARS = 80
+MODAL_CHARS = 45
+PLACEHOLDER_CHARS = 150
 
 STYLES = {
     "primary": discord.ButtonStyle.primary,
@@ -263,8 +276,8 @@ def notes_words(rows: Any, when: Any) -> str:
 
 
 class ChatPanel(Panel):
-    def __init__(self, minutes: int) -> None:
-        super().__init__(minutes, footer=chat_panel.PANEL_TIMEOUT_FOOTER)
+    def __init__(self, minutes: int, again: Any = None) -> None:
+        super().__init__(minutes, footer=chat_panel.PANEL_TIMEOUT_FOOTER, again=again)
         self.where = ROOT
         self.note_id: int | None = None
         self.query = ""
@@ -300,7 +313,8 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     )
     view = ChatPanel(minutes_for(bot, guild.id))
     state = chat_panel.panel_state(bot.store, guild.id)
-    for move in chat_panel.panel_buttons(state):
+    label = str(bot.store.get(guild.id, CHANNEL_NOTES_BUTTON_KEY) or "")[:BUTTON_CHARS]
+    for move in chat_panel.panel_buttons(state, channels_label=label):
         view.add_item(MoveButton(move))
     add_site_button(view, bot, row=2)
     return (embed, view)
@@ -410,9 +424,36 @@ async def build_note(
     return (embed, view)
 
 
+def channel_note_lines(bot: Any, guild: Any, notes: dict[int, str]) -> list[str]:
+    lines = [chat_panel.words(bot.store, guild.id, CHANNEL_NOTES_INTRO_KEY, count=len(notes))]
+    named = {one.id: one.name for one in getattr(guild, "text_channels", ()) or ()}
+    listed = [(named[key], note) for key, note in notes.items() if key in named]
+    lines += [f"`#{name}` — {note}" for name, note in sorted(listed)[:CHANNEL_NOTES_LISTED]]
+    return lines
+
+
+async def build_channel_notes(bot: Any, guild: Any) -> tuple[discord.Embed, ChatPanel]:
+    notes = await notes_for(bot.db, guild.id)
+    embed = discord.Embed(
+        title=chat_panel.words(bot.store, guild.id, CHANNEL_NOTES_TITLE_KEY),
+        description=clamped(channel_note_lines(bot, guild, notes)),
+    )
+    view = ChatPanel(minutes_for(bot, guild.id), again=open_channel_notes)
+    view.where = CHANNELS_VIEW
+    placeholder = chat_panel.words(bot.store, guild.id, CHANNEL_NOTES_PLACEHOLDER_KEY)
+    view.add_item(ChannelNotePick(placeholder[:PLACEHOLDER_CHARS]))
+    for move in chat_panel.channel_notes_buttons():
+        view.add_item(MoveButton(move))
+    return (embed, view)
+
+
 def settings_lines(bot: Any, guild: Any) -> list[str]:
     store = bot.store
-    mine = [key for key in CHAT_KEYS if not key.startswith(MEMORY_PREFIX)]
+    mine = [
+        key
+        for key in CHAT_KEYS
+        if not key.startswith(MEMORY_PREFIX) and key not in CHANNEL_NOTE_WORDS
+    ]
     theirs = [key for key in CHAT_KEYS if key.startswith(MEMORY_PREFIX)]
     said = [f"`{key}` — **{display_value(key, store.get(guild.id, key))}**" for key in mine]
     said.append(MEMORY_SETTINGS_HEADER)
@@ -478,6 +519,17 @@ async def render_note(
 async def render_settings(interaction: discord.Interaction, previous: Any = None) -> None:
     embed, view = build_settings(interaction.client, interaction.guild)
     await render(interaction, embed, view, previous)
+
+
+async def render_channel_notes(interaction: discord.Interaction, previous: Any = None) -> None:
+    embed, view = await build_channel_notes(interaction.client, interaction.guild)
+    await render(interaction, embed, view, previous)
+
+
+async def open_channel_notes(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction):
+        return
+    await render_channel_notes(interaction, previous)
 
 
 async def open_root(interaction: discord.Interaction, previous: Any = None) -> None:
@@ -559,6 +611,9 @@ async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
         return
     if view.where == SETTINGS_VIEW:
         await open_settings(interaction, view)
+        return
+    if view.where == CHANNELS_VIEW:
+        await open_channel_notes(interaction, view)
         return
     await open_root(interaction, view)
 
@@ -664,6 +719,18 @@ async def run_limits(
     await answer(interaction, outcome.message)
 
 
+async def run_channel_note(
+    interaction: discord.Interaction, channel_id: int, text: str, previous: Any
+) -> None:
+    if not await opened(interaction):
+        return
+    outcome = await chat_panel.save_channel_note(
+        interaction.client, interaction.guild, interaction.user, channel_id, text
+    )
+    await render_channel_notes(interaction, previous)
+    await answer(interaction, outcome.message)
+
+
 async def run_find(interaction: discord.Interaction, query: str, previous: Any) -> None:
     """A pure read: it filters the list and leaves no row behind it."""
     if not await opened(interaction):
@@ -699,6 +766,9 @@ class MoveButton(discord.ui.Button):
             return
         if action == chat_panel.SETTINGS:
             await open_settings(interaction, view)
+            return
+        if action == chat_panel.CHANNELS:
+            await open_channel_notes(interaction, view)
             return
         if action == chat_panel.CHAT_TOGGLE:
             await run_mode(interaction, chat_panel.MODE_KEY, view)
@@ -805,6 +875,58 @@ class NotePick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_note(interaction, int(self.values[0]), self.view)
+
+
+class ChannelNotePick(discord.ui.ChannelSelect):
+    """Discord's own channel picker searches every text channel, so no page of 25 is needed."""
+
+    def __init__(self, placeholder: str) -> None:
+        super().__init__(
+            placeholder=placeholder,
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+            min_values=1,
+            max_values=1,
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await db_up(interaction):
+            return
+        bot = interaction.client
+        guild = interaction.guild
+        picked = self.values[0]
+        channel = chat_panel.text_channel(guild, picked)
+        if channel is None:
+            await answer(interaction, chat_panel.no_such_channel(bot, guild, picked.id).message)
+            return
+        note = await chat_panel.channel_note(bot, guild, channel.id)
+        modal = ChannelNoteModal(bot, guild, channel, note, self.view)
+        await interaction.response.send_modal(modal)
+
+
+class ChannelNoteModal(AnswersErrors, discord.ui.Modal):
+    """One box, prefilled; a blank box is a clear, through the same write the site uses."""
+
+    note = discord.ui.TextInput(
+        label="Note",
+        style=discord.TextStyle.paragraph,
+        max_length=NOTE_CHARS,
+        required=False,
+    )
+
+    def __init__(self, bot: Any, guild: Any, channel: Any, note: str, previous: Any) -> None:
+        store = bot.store
+        title = chat_panel.words(store, guild.id, CHANNEL_NOTE_MODAL_KEY, channel=channel.name)
+        super().__init__(title=title[:MODAL_CHARS])
+        self.note.label = chat_panel.words(store, guild.id, CHANNEL_NOTE_LABEL_KEY)[:MODAL_CHARS]
+        self.note.default = note or None
+        self.channel_id = int(channel.id)
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await run_channel_note(interaction, self.channel_id, str(self.note), self.previous)
 
 
 class NoteFieldsModal(AnswersErrors, discord.ui.Modal):

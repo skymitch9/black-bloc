@@ -1734,3 +1734,113 @@ def test_a_thread_is_told_apart_from_an_ordinary_channel():
     assert in_a_thread(FakeChannel(1, kind="private_thread")) is True
     assert in_a_thread(FakeChannel(1)) is False
     assert in_a_thread(None) is False
+
+
+# --- channel notes: the /chat door onto the channel catalog ---------------------------------
+
+SPEED = 1076003845232148580
+
+
+def with_text_channels(bot):
+    bot.guild.text_channels = [
+        SimpleNamespace(id=SPEED, name="speed-and-pbs"),
+        SimpleNamespace(id=1411816390414962700, name="general-chat"),
+    ]
+
+
+async def open_channel_notes(cog, bot, member, monkeypatch):
+    with_text_channels(bot)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+    await button(interaction.view, "Channel notes…").callback(interaction)
+    return interaction
+
+
+async def test_the_channel_notes_card_offers_a_picker_back_and_refresh(
+    cog, bot, member, monkeypatch
+):
+    interaction = await open_channel_notes(cog, bot, member, monkeypatch)
+
+    assert interaction.embed.title == "What each channel is for"
+    assert "**0** channel(s) have a note" in interaction.embed.description
+    assert "A channel to describe…" in placeholders(interaction.view)
+    assert labels(interaction.view) == ["Back", "Refresh"]
+    assert interaction.view.render_again is not None
+
+
+async def test_picking_a_channel_opens_its_note_prefilled_and_saving_lists_it(
+    cog, bot, member, db, monkeypatch
+):
+    interaction = await open_channel_notes(cog, bot, member, monkeypatch)
+    await chat_panel.save_channel_note(bot, bot.guild, member, SPEED, "Old words.")
+
+    await pick_one(interaction, "A channel to describe…", SimpleNamespace(id=SPEED))
+    modal = interaction.response.modals[-1]
+    assert modal.title == "What #speed-and-pbs is for"
+    assert modal.note.default == "Old words."
+    assert len(modal.note.label) <= 45
+
+    fill(modal, note="Speedrunning records and PBs, not general chat.")
+    await modal.on_submit(interaction)
+
+    assert "The note for **#speed-and-pbs** is saved." in interaction.sent
+    assert "`#speed-and-pbs` — Speedrunning records and PBs" in interaction.embed.description
+    assert await kinds_of(db) == ["chat.channel_note_set", "chat.channel_note_set"]
+
+
+async def test_a_blank_box_clears_the_note_through_the_same_write(
+    cog, bot, member, db, monkeypatch
+):
+    interaction = await open_channel_notes(cog, bot, member, monkeypatch)
+    await chat_panel.save_channel_note(bot, bot.guild, member, SPEED, "Old words.")
+
+    await pick_one(interaction, "A channel to describe…", SimpleNamespace(id=SPEED))
+    modal = interaction.response.modals[-1]
+    fill(modal, note="   ")
+    await modal.on_submit(interaction)
+
+    assert "is gone" in interaction.sent
+    assert await chat_panel.channel_note(bot, bot.guild, SPEED) == ""
+    assert await kinds_of(db) == ["chat.channel_note_set", "chat.channel_note_cleared"]
+
+
+async def test_a_channel_that_is_not_a_text_channel_here_is_refused_in_words(
+    cog, bot, member, monkeypatch
+):
+    interaction = await open_channel_notes(cog, bot, member, monkeypatch)
+
+    await pick_one(interaction, "A channel to describe…", SimpleNamespace(id=4242))
+
+    assert "is not a text channel in this server" in interaction.sent
+    assert interaction.response.modals == []
+
+
+async def test_somebody_who_lost_staff_cannot_open_the_note_form(cog, bot, member, monkeypatch):
+    interaction = await open_channel_notes(cog, bot, member, monkeypatch)
+    staff_is(bot, False)
+
+    await pick_one(interaction, "A channel to describe…", SimpleNamespace(id=SPEED))
+
+    assert interaction.response.modals == []
+
+
+async def test_the_words_on_the_card_and_the_button_are_staffs_to_change(
+    cog, bot, member, monkeypatch
+):
+    await bot.store.set(GUILD, "chat_channel_notes_button", "Describe channels…")
+    await bot.store.set(GUILD, "chat_channel_notes_title", "Channels, described")
+    with_text_channels(bot)
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    await button(interaction.view, "Describe channels…").callback(interaction)
+
+    assert interaction.embed.title == "Channels, described"
+
+
+async def test_the_settings_card_leaves_the_channel_note_words_to_their_own_editors(
+    cog, bot, member, monkeypatch
+):
+    interaction = await open_the_panel(cog, bot, member, monkeypatch)
+
+    await button(interaction.view, "Settings").callback(interaction)
+
+    assert "chat_channel_note" not in interaction.embed.description
