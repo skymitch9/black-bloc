@@ -1239,8 +1239,210 @@ async function memorySection(payload, specs, say) {
   return one.node;
 }
 
+// The review queue (docs/info/chat-review-loop-design.md): answers that may have missed, what the
+// cheap model suggests Black Bloc learns from each, and the moves staff make on them. Every move
+// goes through chat_panel.py's one write path, the same one /chat ▸ Review queue… uses.
+const REVIEW_NOTE = 'Answers that may have missed: a real question no note could ground, somebody ' +
+  'asking again straight away, saying it was not what they meant, or a thumbs down. The cheap ' +
+  'model suggests one thing Black Bloc should learn from each; Approve writes it, Change writes ' +
+  'yours instead, Dismiss learns nothing.';
+const REVIEW_EMPTY = 'Nothing is waiting in this view. An answer lands here when it may have missed.';
+const REVIEW_DOWNLOAD = 'Download as markdown';
+const REVIEW_DOWNLOAD_HELP = 'The open items as one document — the same file a scheduled Claude ' +
+  'routine reads through the read-only operator token.';
+const REVIEW_WORDS_TITLE = 'The words the review queue says';
+const REVIEW_SETTINGS_TITLE = 'How the review queue decides';
+const REVIEW_STATUS_WORDS = { open: 'Waiting', approved: 'Approved', changed: 'Changed', dismissed: 'Dismissed', all: 'Everything' };
+const REVIEW_KIND_WORDS = { phrase: 'A phrase for an intent', intent: 'A new intent', knowledge: 'A knowledge fact' };
+const REVIEW_NEED_PHRASE = 'Write the phrase first — the words somebody would say.';
+const REVIEW_NEED_LINE = 'Write the fact first, in one plain line.';
+const REVIEW_NEED_NAME = 'Give the new intent a name first, like wheres_the_food.';
+const REVIEW_DISMISS_ASK = 'Black Bloc learns nothing from it. Reopen puts it back in the queue.';
+const REVIEW_SETTING_KEYS = [
+  'chat_review_mode',
+  'chat_review_reask_seconds',
+  'chat_review_downvote_emoji',
+  'chat_review_not_it_phrases',
+  'chat_review_ack_phrases',
+  'chat_review_digest_hour',
+];
+const REVIEW_WORD_PREFIX = 'chat_review_';
+const reviewView = { status: 'open', reason: '' };
+
+function reviewPicker(label, choices, current) {
+  const select = el('select', { class: 'input', 'aria-label': label });
+  for (const [value, text] of choices) {
+    const option = el('option', { value, text });
+    if (value === current) option.selected = true;
+    select.append(option);
+  }
+  return select;
+}
+
+async function reviewMove(say, work, okText) {
+  const done = await run(say, work, (found) => found?.message || okText);
+  if (done.ok) {
+    keepSaying('chat-review', say);
+    refresh();
+  }
+}
+
+function reviewChange(row, intents, say) {
+  const kind = segment(
+    Object.entries(REVIEW_KIND_WORDS).map(([value, label]) => ({ value, label })),
+    row.suggestion?.kind in REVIEW_KIND_WORDS ? row.suggestion.kind : 'phrase',
+    { onChange: () => shape() },
+  );
+  const intent = reviewPicker('The intent it should reach', intents.map((name) => [name, name]),
+    row.suggestion?.intent || intents[0]);
+  const name = el('input', { class: 'input', type: 'text', maxlength: '60', placeholder: 'wheres_the_food',
+    value: row.suggestion?.kind === 'intent' ? row.suggestion.intent || '' : '' });
+  const phrase = el('input', { class: 'input', type: 'text', maxlength: '60',
+    value: row.suggestion?.phrase || '', placeholder: 'when does the grill go on' });
+  const line = el('input', { class: 'input', type: 'text', maxlength: '300',
+    value: row.suggestion?.line || '', placeholder: 'The grill goes on at six on a Saturday.' });
+  const note = el('input', { class: 'input', type: 'text', maxlength: '100',
+    value: row.suggestion?.section || '', placeholder: 'From review' });
+  const intentField = field('The intent it should reach', intent);
+  const nameField = field('The new intent’s name', name, 'Lowercase words joined by underscores.');
+  const phraseField = field('The phrase', phrase, 'The words somebody would say, up to 60 characters.');
+  const lineField = field('The fact', line, 'One plain line Black Bloc can quote.');
+  const noteField = field('The note it goes in', note, 'Blank uses the From review note.');
+  const shape = () => {
+    const now = kind.readValue();
+    intentField.hidden = now !== 'phrase';
+    nameField.hidden = now !== 'intent';
+    phraseField.hidden = now === 'knowledge';
+    lineField.hidden = now !== 'knowledge';
+    noteField.hidden = now !== 'knowledge';
+  };
+  shape();
+  const save = button('Write this instead', () => {
+    const now = kind.readValue();
+    const wanted = { kind: now };
+    if (now === 'knowledge') {
+      if (!line.value.trim()) return say.say(REVIEW_NEED_LINE, 'warn');
+      Object.assign(wanted, { line: line.value.trim(), section: note.value.trim() });
+    } else {
+      if (!phrase.value.trim()) return say.say(REVIEW_NEED_PHRASE, 'warn');
+      if (now === 'intent' && !name.value.trim()) return say.say(REVIEW_NEED_NAME, 'warn');
+      Object.assign(wanted, { phrase: phrase.value.trim(), intent: now === 'intent' ? name.value.trim() : intent.value });
+    }
+    return reviewMove(say, () => send(`/api/chat/review/${encodeURIComponent(row.id)}`, 'PUT', wanted), 'Changed.');
+  }, { tone: 'warn' });
+  return foldout('Change…', [kind, intentField, nameField, phraseField, lineField, noteField, bar([save])]);
+}
+
+function reviewMoves(row, intents, say) {
+  if (row.status === 'dismissed') {
+    return bar([button('Reopen', () => reviewMove(say,
+      () => send(`/api/chat/review/${encodeURIComponent(row.id)}/reopen`, 'POST'), 'Reopened.'), { tone: 'quiet' })]);
+  }
+  if (row.status !== 'open') {
+    const by = row.decided_by ? ` by ${row.decided_by.name}` : '';
+    return el('p', { class: 'section-note', text: `${REVIEW_STATUS_WORDS[row.status] || row.status}${by}, ${when(row.decided_at)}` });
+  }
+  const approve = row.suggestion?.teaches ? button('Approve', () => reviewMove(say,
+    () => send(`/api/chat/review/${encodeURIComponent(row.id)}/approve`, 'POST'), 'Approved.'), { tone: 'warn' }) : null;
+  const dismiss = button('Dismiss', async () => {
+    const sure = await ask({ title: `Dismiss item ${row.id}?`, body: [REVIEW_DISMISS_ASK], confirmLabel: 'Dismiss it' });
+    if (!sure) return;
+    await reviewMove(say, () => send(`/api/chat/review/${encodeURIComponent(row.id)}/dismiss`, 'POST'), 'Dismissed.');
+  }, { tone: 'danger' });
+  return el('div', {}, [bar([approve, dismiss]), reviewChange(row, intents, say)]);
+}
+
+function reviewCard(row, intents, say) {
+  const where = `${row.member?.name || 'somebody'} in #${row.channel?.name || '?'} · ${when(row.at)}`;
+  const suggestion = row.suggestion;
+  return el('div', { class: 'card review-item', 'data-status': row.status, 'data-reason': row.reason }, [
+    el('div', { class: 'card-body' }, [
+      el('div', { class: 'req-head' }, [
+        el('div', { class: 'req-headtext' }, [
+          el('p', { class: 'req-what', text: row.asked }),
+          el('p', { class: 'section-note' }, [
+            el('span', { text: `${where} · ` }),
+            row.link ? el('a', { href: row.link, text: 'open in Discord', target: '_blank', rel: 'noopener' }) : null,
+          ]),
+        ]),
+        el('div', { class: 'req-marks' }, [
+          badge(row.reason_word, 'warn'),
+          row.status === 'open' ? null : badge(REVIEW_STATUS_WORDS[row.status] || row.status, null),
+        ]),
+      ]),
+      el('p', { class: 'section-note review-answered', text: `Black Bloc answered: ${row.answered}` }),
+      el('p', { class: 'review-suggestion' }, [
+        el('span', { class: 'chat-answer-label', text: 'Suggested: ' }),
+        ...boldParts(suggestion ? suggestion.word : 'not looked at yet'),
+      ]),
+      suggestion?.why ? el('p', { class: 'section-note', text: suggestion.why }) : null,
+      reviewMoves(row, intents, say),
+    ]),
+  ]);
+}
+
+function reviewList(payload, say) {
+  const rows = Array.isArray(payload?.items) ? payload.items : [];
+  const intents = Array.isArray(payload?.intents) ? payload.intents : [];
+  if (rows.length === 0) return sayNothing(REVIEW_EMPTY);
+  return el('div', { class: 'chatblock' }, rows.map((row) => reviewCard(row, intents, say)));
+}
+
+function reviewPath() {
+  const query = new URLSearchParams({ status: reviewView.status });
+  if (reviewView.reason) query.set('reason', reviewView.reason);
+  return `/api/chat/review?${query}`;
+}
+
+async function reviewSection(payload, specs, wordSpecs, say) {
+  const counts = payload?.counts || {};
+  const tagging = payload?.tagging || {};
+  const one = section('Review queue', REVIEW_NOTE, { count: counts.open || null, id: 'review' });
+  const list = el('div', {}, [reviewList(payload, say)]);
+  const statusPick = reviewPicker('Which items', [...(payload?.statuses || ['open']), 'all']
+    .map((value) => [value, REVIEW_STATUS_WORDS[value] || value]), reviewView.status);
+  const reasonPick = reviewPicker('Why they are here', [['', 'Every reason'],
+    ...(payload?.reasons || []).map((row) => [row.key, row.word])], reviewView.reason);
+  const reload = async () => {
+    reviewView.status = statusPick.value;
+    reviewView.reason = reasonPick.value;
+    try {
+      list.replaceChildren(reviewList(await api(reviewPath()), say));
+    } catch (error) {
+      say.say(error?.message || 'The queue could not be read just now — try again in a moment.', 'warn');
+    }
+  };
+  statusPick.addEventListener('change', reload);
+  reasonPick.addEventListener('change', reload);
+  const download = el('a', { class: 'btn small quiet', href: '/api/chat/review.md', download: 'chat-review-queue.md', text: REVIEW_DOWNLOAD });
+  one.body.append(card(null, [
+    el('div', { class: 'chipbar' }, [
+      badge(`${counts.open ?? 0} waiting`, counts.open ? 'warn' : null),
+      badge(`${counts.untagged ?? 0} not tagged yet`, null),
+      badge(`${counts.approved ?? 0} approved`, null),
+      badge(`${counts.changed ?? 0} changed`, null),
+      badge(`${counts.dismissed ?? 0} dismissed`, null),
+    ]),
+    el('p', { class: 'section-note', text: tagging.word || '' }),
+    el('div', { class: 'formrow' }, [field('Which items', statusPick), field('Why they are here', reasonPick)]),
+    bar([download]),
+    el('p', { class: 'field-help', text: REVIEW_DOWNLOAD_HELP }),
+    say,
+  ]));
+  one.body.append(
+    list,
+    foldout(REVIEW_SETTINGS_TITLE, [
+      await settingsPanel(specs, { where: 'Review queue', empty: NO_SETTINGS }),
+    ], { count: specs.length || null }),
+    foldout(REVIEW_WORDS_TITLE, [
+      await settingsPanel(wordSpecs, { where: 'Review queue', empty: NO_SETTINGS }),
+    ], { count: wordSpecs.length || null }),
+  );
+  return one.node;
+}
+
 async function load() {
-  const [payload, allSettings, knowledge, personality, spend, memory, voices] = await Promise.all([
+  const [payload, allSettings, knowledge, personality, spend, memory, voices, review] = await Promise.all([
     api('/api/chat/intents'),
     settings(true),
     api('/api/chat/knowledge'),
@@ -1248,6 +1450,7 @@ async function load() {
     api('/api/chat/spend'),
     api('/api/chat/memory'),
     api('/api/chat/voices'),
+    api(reviewPath()),
   ]);
 
   const intents = Array.isArray(payload?.intents) ? payload.intents : [];
@@ -1263,6 +1466,9 @@ async function load() {
   const memorySpecs = MEMORY_SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
   const toneSpecs = TONE_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
   const voiceWordSpecs = VOICE_WORD_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
+  const reviewSpecs = REVIEW_SETTING_KEYS.map((key) => fromRoute.get(key)).filter(Boolean);
+  const reviewWordSpecs = [...fromRoute.values()]
+    .filter((spec) => spec.key.startsWith(REVIEW_WORD_PREFIX) && !REVIEW_SETTING_KEYS.includes(spec.key));
 
   const memorySay = sayAgain('chat-memory', notice());
   const intentsSay = sayAgain('chat-intents', notice());
@@ -1270,12 +1476,14 @@ async function load() {
   const knowledgeSay = sayAgain('chat-knowledge', notice());
   const personalitySay = sayAgain('chat-personality', notice());
   const voicesSay = sayAgain('chat-voices', notice());
+  const reviewSay = sayAgain('chat-review', notice());
 
   document.getElementById('dash').replaceChildren(
     trySection(),
     intentsSection(intents, intentsSay),
     newIntentSection(createSay),
     knowledgeSection(knowledge, knowledgeSay),
+    await reviewSection(review, reviewSpecs, reviewWordSpecs, reviewSay),
     channelsSection(),
     await personalitySection(personality, personalitySay, toneSpecs),
     await voicesSection(voices, voiceWordSpecs, voicesSay),
