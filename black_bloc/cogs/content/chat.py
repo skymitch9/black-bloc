@@ -1207,7 +1207,11 @@ class Chat(commands.Cog):
             return
         if said.tier:
             await log_action(
-                self.bot, guild, REPLY_KIND, actor=author, details={"tier": said.tier}
+                self.bot,
+                guild,
+                REPLY_KIND,
+                actor=author,
+                details={"tier": said.tier, "trope": said.trope or COOKOUT},
             )
         if said.intent == INSULT:
             await log_action(

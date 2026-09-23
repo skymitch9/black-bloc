@@ -789,7 +789,7 @@ def answering(said="Pull up a chair, Nia.", tier="simple"):
 
     async def reply(bot, *, guild, member, channel, text):
         seen.append({"text": text, "channel": getattr(channel, "id", None)})
-        return (said, tier)
+        return (said, tier, "cookout" if said else None)
 
     return reply, seen
 
@@ -819,6 +819,23 @@ async def test_a_message_no_intent_knows_is_answered_by_the_model_and_logged(
     assert message.replies[0]["content"] == "Pull up a chair, Nia."
     assert message.replies[0]["kwargs"]["allowed_mentions"].everyone is False
     assert [row["kind"] for row in await rows(db, "chat.llm_reply")] == ["chat.llm_reply"]
+
+
+async def test_the_reply_row_names_the_tone_that_wrote_it(cog, bot, member, db, monkeypatch):
+    """Owner 2026-09-23: see which personality each person got — the log row says it."""
+    import json
+
+    async def reply(bot_arg, *, guild, member, channel, text):
+        return ("Smoke was thick that night.", "simple", "noir")
+
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+
+    await cog.on_message(pinged(bot, member, "<@55> what do you make of all this then"))
+
+    found = await rows(db, "chat.llm_reply")
+    said = json.loads(found[0]["details"])
+    assert (said["tier"], said["trope"]) == ("simple", "noir")
 
 
 async def test_a_model_that_says_nothing_leaves_the_written_line_to_answer(
@@ -856,7 +873,7 @@ async def test_a_role_question_matching_no_role_at_all_goes_to_the_model(
     cog, bot, member, monkeypatch
 ):
     async def a_pick(bot_arg, home, member_arg, channel, text):
-        return ("Beerus, easily — destruction beats training arcs.", "simple")
+        return ("Beerus, easily — destruction beats training arcs.", "simple", "cookout")
 
     monkeypatch.setattr(chat_module, "a_model_answer", a_pick)
     await bot.store.set(GUILD, "chat_llm_mode", "on")

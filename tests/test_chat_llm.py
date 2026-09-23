@@ -648,7 +648,7 @@ async def test_a_simple_turn_goes_to_the_cheap_tier_and_lands_in_the_ledger(wire
     quick = Answering(GROQ, "llama-3.3-70b-versatile")
     wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
 
-    said, tier = await ask(wired)
+    said, tier, _tone = await ask(wired)
 
     assert (said, tier) == ("Pull up a chair.", SIMPLE)
     assert len(quick.seen) == 1
@@ -665,7 +665,7 @@ async def test_a_groq_failure_buys_exactly_one_haiku_attempt(wired, monkeypatch)
         groq=Answering(GROQ, "llama", raises=LLMError("unreachable", "groq unreachable")),
     )
 
-    said, tier = await ask(wired)
+    said, tier, _tone = await ask(wired)
 
     assert (said, tier) == ("I have got you.", IMPORTANT)
     assert len(careful.seen) == 1
@@ -684,7 +684,7 @@ async def test_both_tiers_failing_leaves_the_canned_line_to_answer(wired, monkey
         groq=Answering(GROQ, "llama", raises=LLMError("rate_limited", "groq is rate limiting")),
     )
 
-    assert await ask(wired) == (None, None)
+    assert await ask(wired) == (None, None, None)
     assert tier_errors(wired) == {SIMPLE: "rate_limited", IMPORTANT: "refused"}
 
 
@@ -702,7 +702,7 @@ async def test_the_models_are_never_called_while_the_mode_is_off(wired, monkeypa
     wire(wired, monkeypatch, groq=quick)
     wired.store.values["chat_llm_mode"] = "off"
 
-    assert await ask(wired) == (None, None)
+    assert await ask(wired) == (None, None, None)
     assert quick.seen == []
 
 
@@ -711,7 +711,7 @@ async def test_a_missing_key_means_that_tier_is_simply_not_tried(wired, monkeypa
     careful = Answering(ANTHROPIC, MODEL)
     wire(wired, monkeypatch, haiku=careful, groq=None)
 
-    said, tier = await ask(wired)
+    said, tier, _tone = await ask(wired)
 
     assert tier == IMPORTANT and len(careful.seen) == 1
 
@@ -721,7 +721,7 @@ async def test_with_no_keys_at_all_nothing_is_called_and_nothing_is_written(wire
     wired.settings.groq_api_key = None
     wire(wired, monkeypatch)
 
-    assert await ask(wired) == (None, None)
+    assert await ask(wired) == (None, None, None)
     cur = await wired.db.conn.execute("SELECT COUNT(*) AS n FROM llm_ledger")
     assert (await cur.fetchone())["n"] == 0
 
@@ -733,7 +733,7 @@ async def test_a_note_that_matches_grounds_the_turn_and_sends_it_to_the_careful_
     careful = Answering(ANTHROPIC, MODEL)
     wire(wired, monkeypatch, haiku=careful, groq=Answering(GROQ, "llama"))
 
-    said, tier = await ask(wired, "<@1> cookout hours")
+    said, tier, _tone = await ask(wired, "<@1> cookout hours")
 
     assert tier == IMPORTANT
     asked = careful.seen[0]["messages"][-1]["content"]
@@ -749,7 +749,7 @@ async def test_a_loose_match_grounds_the_cheap_tier_instead_of_paying_for_the_ca
     quick = Answering(GROQ, "llama-3.3-70b-versatile")
     wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
 
-    said, tier = await ask(wired, "<@1> when is the cookout")
+    said, tier, _tone = await ask(wired, "<@1> when is the cookout")
 
     assert tier == SIMPLE
     asked = quick.seen[0]["messages"][-1]["content"]
@@ -800,7 +800,7 @@ async def test_the_closure_is_announced_once_and_the_models_are_not_called(wired
     quick = Answering(GROQ, "llama")
     wire(wired, monkeypatch, groq=quick)
 
-    assert await ask(wired) == (None, None)
+    assert await ask(wired) == (None, None, None)
     await ask(wired)
 
     assert quick.seen == []
@@ -810,7 +810,7 @@ async def test_the_closure_is_announced_once_and_the_models_are_not_called(wired
 async def test_a_long_answer_is_clipped_to_something_discord_will_take(wired, monkeypatch):
     wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="z" * 5000))
 
-    said, _ = await ask(wired)
+    said, _, _ = await ask(wired)
 
     assert len(said) <= 1900
 
@@ -867,7 +867,7 @@ async def test_a_channel_the_server_does_not_have_never_reaches_the_member(wired
     wired.guild = FakeGuild(channels=[seen_channel("general", "Chat.")])
     wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="Head to #black-support-hub."))
 
-    said, _ = await ask(wired)
+    said, _, _ = await ask(wired)
 
     assert "black-support-hub" not in said
     assert said == "Head."
@@ -880,7 +880,7 @@ async def test_the_home_channel_is_where_an_invented_one_is_swapped_for(wired, m
     wired.store.values["chat_home_channel_id"] = 800
     wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="Ask in #nowhere about it."))
 
-    said, _ = await ask(wired)
+    said, _, _ = await ask(wired)
 
     assert said == "Ask in <#800> about it."
 
@@ -890,7 +890,7 @@ async def test_a_role_the_server_does_not_have_is_taken_out_and_counted(wired, m
     wired.guild.roles = [SimpleNamespace(name="Leads")]
     wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="Ping @Admin about it."))
 
-    said, _ = await ask(wired)
+    said, _, _ = await ask(wired)
 
     assert said == "Ping about it."
     assert wired.logged[0][1]["roles"] == ["Admin"]
@@ -900,7 +900,7 @@ async def test_a_reply_that_names_only_real_things_is_not_logged_as_fixed(wired,
     wired.guild = FakeGuild(channels=[seen_channel("general", "Chat.")])
     wire(wired, monkeypatch, groq=Answering(GROQ, "llama", text="Ask in #general."))
 
-    said, _ = await ask(wired)
+    said, _, _ = await ask(wired)
 
     assert said == "Ask in #general."
     assert wired.logged == []
@@ -946,3 +946,143 @@ def test_the_channel_list_the_model_gets_carries_the_staff_note():
     assert "#speed-and-pbs — Speedrunning records and PBs." in said
     assert "general chat" not in said
     assert "#speed-and-pbs — general chat" in chat_llm.channels_block(bot, guild)
+
+
+async def tones_ready(bot):
+    from black_bloc.personas import sync_tropes
+
+    await sync_tropes(bot.db)
+
+
+async def ask_in(bot, channel_id, text="just chatting here", user_id=900):
+    return await conversational_reply(
+        bot,
+        guild=bot.guild,
+        member=FakeMember(user_id),
+        channel=FakeChannel(channel_id),
+        text=text,
+    )
+
+
+async def ledger_tropes(db):
+    cur = await db.conn.execute("SELECT trope FROM llm_ledger ORDER BY id")
+    return [row["trope"] for row in await cur.fetchall()]
+
+
+async def test_the_cookout_setting_sends_no_tone_and_the_ledger_says_cookout(wired, monkeypatch):
+    from black_bloc.personas import COOKOUT_VOICE, TONE_HEADING
+
+    await tones_ready(wired)
+    quick = Answering(GROQ, "llama")
+    wire(wired, monkeypatch, groq=quick)
+
+    said, _, tone = await ask(wired)
+
+    assert said and tone == "cookout"
+    assert COOKOUT_VOICE in quick.seen[0]["system"]
+    assert TONE_HEADING not in quick.seen[0]["system"]
+    assert await ledger_tropes(wired.db) == ["cookout"]
+
+
+async def test_a_pinned_member_hears_their_pin_over_the_pool_and_a_named_mood(wired, monkeypatch):
+    from black_bloc.chat_voice import pin
+    from black_bloc.personas import BY_NAME
+
+    await tones_ready(wired)
+    await pin(wired.db, 7, 900, "scholar", by=1)
+    for mode in ("pool", "warm"):
+        wired.store.values["chat_personality"] = mode
+        quick = Answering(GROQ, "llama")
+        wire(wired, monkeypatch, groq=quick)
+        _, _, tone = await ask(wired)
+        assert tone == "scholar"
+        assert BY_NAME["scholar"].voice in quick.seen[0]["system"]
+
+
+async def test_a_named_mood_is_what_an_unpinned_member_hears(wired, monkeypatch):
+    await tones_ready(wired)
+    wired.store.values["chat_personality"] = "deadpan"
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama"))
+
+    _, _, tone = await ask(wired)
+
+    assert tone == "deadpan"
+    assert await ledger_tropes(wired.db) == ["deadpan"]
+
+
+async def test_the_pool_gives_one_member_the_same_tone_in_two_channels(wired, monkeypatch):
+    await tones_ready(wired)
+    wired.store.values["chat_personality"] = "pool"
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama"))
+
+    _, _, first = await ask_in(wired, 11)
+    _, _, second = await ask_in(wired, 12)
+
+    assert first == second and first != "cookout"
+    cur = await wired.db.conn.execute("SELECT trope, turns, since FROM chat_voice")
+    stored = [tuple(row) for row in await cur.fetchall()]
+    assert len(stored) == 1 and stored[0][0] == first and stored[0][1] == 1
+
+
+async def test_the_roll_starts_again_only_when_the_members_window_is_empty(wired, monkeypatch):
+    await tones_ready(wired)
+    wired.store.values["chat_personality"] = "pool"
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama"))
+
+    await ask_in(wired, 11)
+    cur = await wired.db.conn.execute("SELECT since FROM chat_voice")
+    opened = (await cur.fetchone())["since"]
+    await ask_in(wired, 12)
+    cur = await wired.db.conn.execute("SELECT since FROM chat_voice")
+    assert (await cur.fetchone())["since"] == opened
+
+    old = (datetime.now(UTC) - timedelta(minutes=WINDOW_MINUTES + 5)).isoformat()
+    await wired.db.conn.execute("UPDATE chat_window SET at = ?", (old,))
+    await wired.db.conn.commit()
+    await ask_in(wired, 11)
+    cur = await wired.db.conn.execute("SELECT since, turns FROM chat_voice")
+    row = await cur.fetchone()
+    assert row["since"] != opened and row["turns"] == 0
+
+
+async def test_the_ledger_carries_the_tone_on_an_error_row_too(wired, monkeypatch):
+    await tones_ready(wired)
+    wired.store.values["chat_personality"] = "noir"
+    wire(
+        wired,
+        monkeypatch,
+        haiku=Answering(ANTHROPIC, MODEL),
+        groq=Answering(GROQ, "llama", raises=LLMError("unreachable", "groq unreachable")),
+    )
+
+    await ask(wired)
+
+    assert await ledger_tropes(wired.db) == ["noir", "noir"]
+
+
+async def test_the_sheet_and_the_clause_staff_wrote_are_the_ones_the_model_reads(
+    wired, monkeypatch
+):
+    await tones_ready(wired)
+    wired.store.values["chat_personality"] = "noir"
+    wired.store.values["chat_cookout_voice"] = "## How you sound\nSay 'bet' a lot."
+    wired.store.values["chat_tone_clause"] = "Stay the cookout uncle."
+    careful = Answering(ANTHROPIC, MODEL)
+    wire(wired, monkeypatch, haiku=careful)
+    wired.settings.groq_api_key = None
+
+    await ask(wired)
+
+    blocks = careful.seen[0]["system"]
+    assert "Say 'bet' a lot." in blocks[0]["text"]
+    assert "Stay the cookout uncle." in blocks[-1]["text"]
+
+
+async def test_a_dm_keeps_the_per_conversation_roll_and_writes_no_member_row(wired, monkeypatch):
+    from black_bloc.chat_voice import voice_row
+
+    await tones_ready(wired)
+    wire(wired, monkeypatch, groq=Answering(GROQ, "llama"))
+    tone = await chat_llm.mood_for(wired, wired.db, None, 11, 900, [], datetime.now(UTC))
+    assert tone is None
+    assert await voice_row(wired.db, 7, 900) is None
