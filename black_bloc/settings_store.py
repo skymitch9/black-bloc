@@ -3299,6 +3299,101 @@ TEXT_MAY_BE_BLANK = (
     WHERE_HINT_KEY,
 )
 
+CHANNEL_NOTE_SAVED_KEY = "chat_channel_note_saved"
+CHANNEL_NOTE_CLEARED_KEY = "chat_channel_note_cleared"
+CHANNEL_NOTE_NOTHING_KEY = "chat_channel_note_nothing"
+CHANNEL_NOTE_TOO_LONG_KEY = "chat_channel_note_too_long"
+CHANNEL_NOTE_NO_CHANNEL_KEY = "chat_channel_note_no_channel"
+CHANNEL_NOTES_BUTTON_KEY = "chat_channel_notes_button"
+CHANNEL_NOTES_TITLE_KEY = "chat_channel_notes_title"
+CHANNEL_NOTES_INTRO_KEY = "chat_channel_notes_intro"
+CHANNEL_NOTES_PLACEHOLDER_KEY = "chat_channel_notes_placeholder"
+CHANNEL_NOTE_MODAL_KEY = "chat_channel_note_modal"
+CHANNEL_NOTE_LABEL_KEY = "chat_channel_note_label"
+CHANNEL_NOTE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    CHANNEL_NOTE_SAVED_KEY: (
+        "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's "
+        "topic from its next answer on.",
+        ("channel",),
+        "what staff are told when a channel note is saved, on /chat and on the Chat page. It "
+        "takes {channel}, the channel's name",
+    ),
+    CHANNEL_NOTE_CLEARED_KEY: (
+        "The note for **#{channel}** is gone. Black Bloc goes back to the channel's own topic, "
+        "or just its name when it has none.",
+        ("channel",),
+        "what staff are told when a channel note is cleared. It takes {channel}",
+    ),
+    CHANNEL_NOTE_NOTHING_KEY: (
+        "**#{channel}** had no note, so nothing changed.",
+        ("channel",),
+        "what staff are told when they clear a channel note that was never written. It takes "
+        "{channel}",
+    ),
+    CHANNEL_NOTE_TOO_LONG_KEY: (
+        "That note is {length} characters and a channel note holds {limit}, so nothing was "
+        "saved. Take {over} out and save it again.",
+        ("length", "limit", "over"),
+        "what staff are told when a channel note is longer than the list the model reads can "
+        "hold. It takes {length}, {limit} and {over}; nothing is stored when this is said",
+    ),
+    CHANNEL_NOTE_NO_CHANNEL_KEY: (
+        "**{channel}** is not a text channel in this server any more, so nothing was saved. "
+        "Pick one from the list again.",
+        ("channel",),
+        "what staff are told when the channel a note was meant for has gone. It takes "
+        "{channel}, the id or name that was given",
+    ),
+    CHANNEL_NOTES_BUTTON_KEY: (
+        "Channel notes…",
+        (),
+        "the /chat panel button that opens the channel notes. Discord shows at most 80 "
+        "characters on a button",
+    ),
+    CHANNEL_NOTES_TITLE_KEY: (
+        "What each channel is for",
+        (),
+        "the heading of the channel notes card on /chat",
+    ),
+    CHANNEL_NOTES_INTRO_KEY: (
+        "Pick a channel and say what it is for in one sentence. Black Bloc reads that note in "
+        "place of the channel's Discord topic whenever it points somebody somewhere. "
+        "**{count}** channel(s) have a note so far.",
+        ("count",),
+        "the first lines of the channel notes card on /chat. It takes {count}, how many "
+        "channels have a note",
+    ),
+    CHANNEL_NOTES_PLACEHOLDER_KEY: (
+        "A channel to describe…",
+        (),
+        "the channel picker's placeholder on the channel notes card. Discord shows at most "
+        "150 characters",
+    ),
+    CHANNEL_NOTE_MODAL_KEY: (
+        "What #{channel} is for",
+        ("channel",),
+        "the title of the form a channel note is written in. It takes {channel}; Discord cuts "
+        "a form title at 45 characters",
+    ),
+    CHANNEL_NOTE_LABEL_KEY: (
+        "One sentence — blank clears the note",
+        (),
+        "the label over the note box on that form. Discord shows at most 45 characters on a "
+        "form label",
+    ),
+}
+KEY_TYPES.update({key: "text" for key in CHANNEL_NOTE_WORDS})
+KEY_HELP.update({key: said for key, (_, _, said) in CHANNEL_NOTE_WORDS.items()})
+
+
+def checked_fields(fields: tuple[str, ...]) -> Any:
+    return lambda given: _checked_words(given, fields)
+
+
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in CHANNEL_NOTE_WORDS.items()}
+)
+
 
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
@@ -3835,6 +3930,8 @@ class SettingsStore:
             return HANDOFF_CONFIRM_HOURS_DEFAULT
         if key == "request_forum_adopts_posts":
             return True
+        if key in CHANNEL_NOTE_WORDS:
+            return CHANNEL_NOTE_WORDS[key][0]
         if key == "chat_mode":
             return "on"
         if key == "chat_cooldown_seconds":
