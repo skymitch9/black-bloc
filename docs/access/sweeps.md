@@ -2981,3 +2981,11 @@ defect is [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) ▸ KI-20. Lettered; the co
 | Row | Do | Expect |
 |---|---|---|
 | **`PX-a`** | Open `/request` (any panel will do) and leave it on screen. Restart the bot (a deploy, or `flyctl machine restart`), wait for it to read green, then press any button on that old panel | NOT Discord's red *"This interaction failed"*. You get one message only you can see: *"This panel has gone quiet — it timed out, or Black Bloc restarted since it was opened, so its buttons no longer reach anything. Run /request again for a fresh one."* The old panel itself is unchanged. Dashboard ▸ **Logs** ▸ **All** ▸ Core shows one `panel.expired_click` row naming you, `command: /request`, `feature: request`. Change the words on the Settings page ▸ **core** ▸ *What a button on a panel that has gone quiet says*, restart again with a panel open, press: the new words arrive. ⚠️ Then press a button on a FRESH panel: it must work exactly as before, with no second message |
+
+## Row `BC-a` — a Change button on each birthday row (branch `birthday-change-button`, 2026-09-23)
+
+Owner: *"yes add a change button next to the remove button"*. Not deployed. Lettered; the conductor numbers it. Walked against the mock in headless Chrome only.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`BC-a`** | Birthdays page ▸ **By month** ▸ press **Change** on any row (it sits just before **Remove**), alter the day, press **Save birthday** | The page scrolls to **Add or change one**: the member is chosen (the picker reads *name · id …*), month, day and year are that row's, and the cursor is in **Day**. Saving overwrites the stored date — the row moves to the new day, no second row appears — and *Saved. {name} is down for {Month} {day}.* stays under the form after the page reloads. |
