@@ -4,6 +4,7 @@ import { logsSection } from './logs.js';
 import {
   ask,
   bar,
+  boldParts,
   button,
   card,
   el,
@@ -61,7 +62,7 @@ function postTodayCard(specs) {
     );
   };
   moves.append(
-    el('p', { class: 'field-help', text: words.confirm }),
+    el('p', { class: 'field-help' }, boldParts(words.confirm)),
     bar([
       button(words.unsent, go(false)),
       button(words.again, go(true), { tone: 'warn' }),
