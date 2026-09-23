@@ -8150,3 +8150,21 @@ Design: [`personality-tones-design.md`](personality-tones-design.md).
 | `black_bloc/storage/db.py:959` `channel_reach` | Schema 57, additive. Absent row = the rule; `shown` 1/0 = staff's word. Its own table (not a column on `channel_notes`) so clearing a note never clears a reach decision. |
 | `site/public/assets/page-channels.js:195` `reachBar` | One button renders, only the valid one: Back to the rule when overridden, else Hide from the bot / Tell the bot anyway by the rule's answer. An ignored-category card gets a sentence instead of a button. Its notice carries `data-slot="reach"` so `answer` (`:395`) writes the move's sentence into the reach notice of the redrawn card, not the review card's. |
 | `site/mock/server.mjs:7637` `channelReach` | The mock's stand-in for Discord overwrites: `CHANNELS_ROLE_READS` names two seed channels only an opt-in role reads and `#landing` as nobody-reads; `state.channelReach` seeds `#landing` shown and `#free-nitro-here` (the honeypot) hidden, so every badge is on screen. |
+
+## Banter gets banter — whole words, no notes on small talk (branch `chat-banter`, 2026-09-23)
+
+*(off `main` `6a023247`, keyed against `1ee6e618`. Design: [`phase14-design.md`](phase14-design.md) ▸ *Follow-up 2026-09-23 — banter gets banter*.)*
+
+| Where | Why |
+|---|---|
+| ⚠️ `black_bloc/knowledge.py:50` `STOP_WORDS` | **The one home of the stop list.** A constant, not a settings key: it is how a message is tokenised, not an operator decision, and it keeps `search` pure (no store). The brief's list plus question words, function words and greetings — `who`/`has`/`where` had to go or *who has time* would land on every *Who has the X role* note. |
+| `black_bloc/knowledge.py:138` `tokenize` | 3+ characters after stripping `._/-` from the edges, so `PBs?` and `#knuck-up.` tokenise as `pbs` and `knuck-up`. |
+| `black_bloc/knowledge.py:151` `occurrences` | Whole words only, and `whole_word` is just `occurrences(..., 1) > 0` — one matching rule. The live bug was substring matching: `up` inside `upcoming` and `support`. |
+| `black_bloc/knowledge.py:245` `name_of` | What a server note is named for: the `#channel` of its title, or the role inside `ROLE_HOLDERS_TITLE` (matched by `ROLE_NAMED`, built from the template so the two cannot drift). A staff note is named for nothing. |
+| `black_bloc/knowledge.py:270` sort key | Distinct tokens landed beat points, so a note matching two words outranks one with a single loud title hit. |
+| ⚠️ `black_bloc/knowledge.py:292` `is_strong` | **Two distinct words on the top note, or one word that names its channel or role.** Typed `#knuck-up` / `@Tech Support` land through the name rule; `pbs` names `#speed-and-pbs`. Discord's own `<#id>` / `<@&id>` mention forms are NOT resolved to names here — they tokenise as digits and match nothing. |
+| `black_bloc/knowledge.py:313` `grounding` | The header is `note` (the `chat_grounding_note` value) or `GROUNDING_NOTE` when blank; it used to say *quote it rather than inventing*, which is what the model did. |
+| ⚠️ `black_bloc/chat_llm.py:506` `grounded` | **Banter gets banter.** SIMPLE and not `a_real_question` → no notes. Today SIMPLE already implies no real question (`tier_for` promotes one), so the second test is a belt for a future tier rule. The directory block is untouched. |
+| `black_bloc/chat_llm.py:661` `banter` / `note` | Both keys are read per reply like the sheet and the clause, so a Settings edit is in the next answer. |
+| `black_bloc/personas.py:223` `BANTER_STYLE` | Default of `chat_banter_style`. `stable_core` puts it after the cookout sheet INSIDE the cached block, so it costs nothing per turn once cached and both tiers read it (`system_text` is the same stack). |
+| `black_bloc/settings_store.py:3626` `PROMPT_WORDS` | The two new keys ride the prompt-words table (600-character cap each, blank falls back to the default in the reader), so `KEY_TYPES`, help, the length check and `default()` come for free. |

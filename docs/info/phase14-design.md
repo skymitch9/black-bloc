@@ -186,3 +186,61 @@ refuse-don't-trim). Port `searchBundle`'s scoring shape onto SQLite:
 
 Ships with `chat_llm_mode off` — flipping it on is the owner's move after the
 keys are set. No deploy risk: everything degrades to today's behaviour.
+
+## Follow-up 2026-09-23 — banter gets banter (branch `chat-banter`)
+
+**The complaint** (owner, 2026-09-23 15:19 Phoenix, live Discord, verbatim paste). A member wrote
+`@Black_Bloc What up`; the bot answered:
+
+> "Smoke was thick that night, cousin. > #upcoming-events: Upcoming community events and when they
+> happen. > Who has the Tech Support role: Tech Support — 1 member: Raelcun. > #knuck-up: Fighting
+> games — matches, tech and trash talk. Check #upcoming-events for the next cookout, ping Raelcun
+> if tech's acting up, and swing by #knuck-up for some fight‑game fire. Holler if you need
+> anything else."
+
+Owner: **"this response was too much."**
+
+**Measured** (action row 10199, `chat.llm_reply tier=simple, trope=noir`): the noir opener is the
+pool doing its job and NOT the problem. The three `> ` lines were knowledge hits echoed verbatim —
+`tokenize` kept the two-letter token `up`, `score` matched it as a SUBSTRING (`upcoming`,
+`knuck-up`, `support`), the loose any-token pass returned three notes, `user_turn` attached them
+under a header that literally said *"quote it rather than inventing"*, and the simple-tier model did
+exactly that. `tier_for` was right to choose SIMPLE.
+
+**What changed** — §1's *"the knowledge search returns hits"* rule and §3's scoring are amended:
+
+1. **Matching cannot fire on small talk** (`knowledge.py`, the one home). `tokenize` drops the
+   `STOP_WORDS` frozenset — a module CONSTANT, not a settings key: it is a tokenising rule, not an
+   operator decision, and `search` stays pure — and keeps tokens of 3+ characters, edges `._/-`
+   stripped. `score` and `occurrences` count WHOLE words only (`up` is never inside `upcoming`).
+   Hits rank by distinct tokens landed, then points. The staff note filter on `/chat` ▸ Knowledge
+   reads the same `search`, so it is whole-word too (typing `cook` no longer finds *Cookout*).
+2. **`is_strong` = two distinct tokens landing on the top note, OR one token naming the channel or
+   role that note is about** (`name_of`: a `#channel` title, or the role in *Who has the X role*).
+   So `#knuck-up` or `@Tech Support` typed as such is enough, and so is `pbs` for
+   `#speed-and-pbs`. The old all-tokens-pass + title-score (`STRONG_SCORE`) rule is gone.
+3. **Banter gets banter** (`chat_llm.grounded`): a SIMPLE turn with no real question carries NO
+   notes — the model answers from the voice alone. The directory block (the channel list in the
+   system prompt) is unchanged, so a banter turn can still point somewhere.
+4. **Grounding says use them silently**: the header is the key `chat_grounding_note` (group chat)
+   — *these are notes for you — use them silently: never quote, list or bullet them back; mention a
+   channel only when the person's question needs it*.
+5. **A banter length hint in the cached core**: `chat_banter_style` sits in `stable_core` right
+   after the cookout sheet, so both tiers read it and it rides the prompt cache.
+
+Chat group 75 → 77 keys, registry 366 → 368; both keys are edited in the Chat page's
+*Personality* section and on Settings (checklist 33, every word editable).
+
+| Message | Before | After |
+|---|---|---|
+| *What up* | 3 hits on `up`, quoted back | 0 tokens, 0 hits, SIMPLE, no notes |
+| *where do I post my PBs* | substring hits | `#speed-and-pbs` top, strong (`pbs` names it), IMPORTANT, grounded silently |
+| *who has the tech support role* | role section | role section top, strong (3 words) |
+
+⚠️ **Trade-off, deliberate per the brief:** a SHORT question about a staff note (*when is the
+cookout*, one token, not a channel or role name) is SIMPLE and now carries no notes, where it used
+to carry them. If that bites, the lever is `is_strong` (e.g. one token on a staff note's title),
+not putting notes back on banter.
+
+Not verified: no live model was called — every test fakes both clients; nobody has said *what up*
+to the deployed bot (sweep `CB-a`).
