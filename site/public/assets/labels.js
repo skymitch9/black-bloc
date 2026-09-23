@@ -270,6 +270,10 @@ export const LABELS = {
   chat_channel_notes_placeholder: "The channel picker's placeholder on /chat",
   chat_channel_note_modal: "The title of the form a channel note is written in",
   chat_channel_note_label: "The label over the note box on that form",
+  chat_channel_draft_used: "What staff are told when a channel's draft is used as it is",
+  chat_channel_draft_none: "What staff are told when a channel is decided to need no note",
+  chat_channel_draft_reset: "What staff are told when a channel goes back to its draft",
+  chat_channel_draft_missing: "What is said when a channel has no draft to review",
 
   request_mode: 'Whether people can ask for things',
   request_filed_line: 'What a member is told the moment their request is filed',
