@@ -2767,3 +2767,18 @@ async def test_the_birthday_post_words_only_take_the_fields_they_can_fill(store)
     with pytest.raises(SettingError):
         await store.set(1, "birthday_post_off", "   ")
     assert store.get(1, "birthday_post_off").startswith("Birthday wishes are **off**")
+
+
+def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shipped_defaults(store):
+    from black_bloc.knowledge import GROUNDING_NOTE, GROUNDING_NOTE_KEY
+    from black_bloc.personas import BANTER_STYLE, BANTER_STYLE_KEY
+
+    for key, shipped in ((BANTER_STYLE_KEY, BANTER_STYLE), (GROUNDING_NOTE_KEY, GROUNDING_NOTE)):
+        assert settings_store.KEY_TYPES[key] == "text"
+        assert settings_store.namespace_of(key) == "chat"
+        assert settings_store.PROMPT_WORDS[key][0] == shipped
+        assert store.default(key) == shipped
+        with pytest.raises(settings_store.SettingError):
+            settings_store.TEXT_CHECKS[key]("x" * 601)
+    assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
+    assert len(settings_store.KEY_TYPES) == 368

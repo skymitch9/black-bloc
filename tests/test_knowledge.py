@@ -8,11 +8,12 @@ from black_bloc.knowledge import (
     ANY_OF,
     BODY_LIMIT,
     GROUNDING_BYTES,
+    GROUNDING_NOTE,
     SERVER,
     STAFF,
-    STRONG_SCORE,
+    STOP_WORDS,
+    STRONG_WORDS,
     TITLE_LIMIT,
-    TITLE_WEIGHT,
     KnowledgeError,
     add_section,
     channel_sections,
@@ -26,6 +27,8 @@ from black_bloc.knowledge import (
     is_strong,
     list_sections,
     menu_section,
+    name_of,
+    occurrences,
     remove_section,
     replace_server_sections,
     role_holder_sections,
@@ -51,11 +54,32 @@ NOTES = [
 ]
 
 
-def test_tokens_are_deduped_short_words_dropped_and_the_list_is_bounded():
-    assert tokenize("Cookout the COOKOUT hours") == ("cookout", "the", "hours")
-    assert tokenize("a b cd") == ("cd",)
+def test_tokens_are_deduped_short_and_stop_words_dropped_and_the_list_is_bounded():
+    assert tokenize("Cookout the COOKOUT hours") == ("cookout", "hours")
+    assert tokenize("a b cd") == ()
     assert len(tokenize(" ".join(str(n) * 3 for n in range(20)))) == 8
     assert tokenize("") == ()
+    assert tokenize("PBs? #knuck-up.") == ("pbs", "knuck-up")
+
+
+def test_what_up_and_the_rest_of_the_small_talk_search_for_nothing():
+    """2026-09-23: "What up" matched #upcoming-events, #knuck-up and a role on `up`."""
+    for said in ("What up", "hey what up fam lol", "yo sup cousin", "Hi! How are you?"):
+        assert tokenize(said) == (), said
+    for word in ("what", "up", "hey", "yo", "sup", "lol", "fam", "cousin", "yall"):
+        assert word in STOP_WORDS
+    assert search(SERVER_NOTES, "What up").hits == ()
+
+
+def test_the_stop_list_is_one_frozen_home_of_lowercase_words():
+    assert isinstance(STOP_WORDS, frozenset)
+    assert all(word == word.lower() and " " not in word for word in STOP_WORDS)
+
+
+def test_a_word_is_only_counted_where_it_stands_alone():
+    assert occurrences("upcoming events", "up") == 0
+    assert occurrences("#knuck-up", "knuck") == 1
+    assert occurrences("pbs, pbs and pbsx", "pbs") == 2
 
 
 def test_a_title_hit_outscores_a_tag_hit_which_outscores_a_body_hit():
@@ -89,9 +113,10 @@ def test_the_search_says_which_pass_answered_so_a_loose_match_is_never_sold_as_e
     assert loose.hits
 
 
-def test_only_the_every_token_pass_landing_on_whole_words_counts_as_a_strong_hit():
+def test_two_distinct_words_on_the_top_note_count_as_a_strong_hit():
     """Measured 2026-09-01: the loose pass matched nearly everything, so `any hit`
     routed 8 of 8 live calls to the dear tier and Groq was never once chosen."""
+    assert STRONG_WORDS == 2
     assert is_strong(search(NOTES, "cookout hours")) is True
     assert is_strong(search(NOTES, "cookout parliament")) is False
     assert is_strong(search(NOTES, "parliament")) is False
@@ -101,9 +126,8 @@ def test_only_the_every_token_pass_landing_on_whole_words_counts_as_a_strong_hit
 
 def test_a_word_hiding_inside_another_word_is_not_a_hit_worth_paying_more_for():
     """`hi` is inside `this`, which is how a greeting scored a title hit."""
-    found = search(NOTES, "hi")
-    assert found.matched == ALL_OF and found.hits
-    assert found.strong is False
+    assert search(NOTES, "hi").hits == ()
+    assert search(NOTES, "cook").hits == ()
     assert whole_word("chat about anything", "hi") is False
     assert whole_word("say hi to them", "hi") is True
     assert whole_word("#off-topic is quiet", "off-topic") is True
@@ -111,9 +135,53 @@ def test_a_word_hiding_inside_another_word_is_not_a_hit_worth_paying_more_for():
 
 def test_a_body_only_coincidence_does_not_reach_the_score_a_note_about_it_would():
     note = [{"id": 1, "title": "Rules", "body": "Be kind.", "tag": "", "source": STAFF}]
-    assert search(note, "kind").hits[0].score < STRONG_SCORE
+    assert search(note, "kind").hits
     assert is_strong(search(note, "kind")) is False
-    assert STRONG_SCORE == TITLE_WEIGHT
+
+
+SERVER_NOTES = [
+    {"id": 1, "title": "#upcoming-events", "body": "Upcoming community events and when they "
+     "happen.", "tag": "channel", "source": SERVER},
+    {"id": 2, "title": "Who has the Tech Support role", "body": "Tech Support — 1 member: "
+     "Raelcun.", "tag": "role", "source": SERVER},
+    {"id": 3, "title": "#knuck-up", "body": "Fighting games — matches, tech and trash talk.",
+     "tag": "channel", "source": SERVER},
+    {"id": 4, "title": "#speed-and-pbs", "body": "Speedrunning records and personal bests — "
+     "talking about runs, times and PBs, not general chat.", "tag": "channel", "source": SERVER},
+    {"id": 5, "title": "Roles in this server", "body": "Tech Support, Squads, Member",
+     "tag": "role", "source": SERVER},
+]
+
+
+def test_one_word_naming_the_channel_is_enough_to_be_sure():
+    found = search(SERVER_NOTES, "where do I post my PBs")
+    assert found.terms == ("post", "pbs")
+    assert found.hits[0].title == "#speed-and-pbs"
+    assert found.strong is True
+    typed = search(SERVER_NOTES, "is #knuck-up any good")
+    assert typed.hits[0].title == "#knuck-up" and typed.strong is True
+
+
+def test_a_role_asked_about_by_name_is_the_top_hit_and_a_strong_one():
+    for said in ("who has the tech support role", "@Tech Support"):
+        found = search(SERVER_NOTES, said)
+        assert found.hits[0].title == "Who has the Tech Support role", said
+        assert found.strong is True, said
+
+
+def test_hits_rank_by_how_many_distinct_words_landed_before_points():
+    loud = {"id": 1, "title": "Speedruns", "body": "", "tag": ""}
+    wide = {"id": 2, "title": "Misc", "body": "speedruns and fighting", "tag": ""}
+    found = search([loud, wide], "speedruns fighting parliament")
+    assert [(hit.id, hit.landed) for hit in found.hits] == [(2, 2), (1, 1)]
+    assert found.hits[0].score < found.hits[1].score
+
+
+def test_a_note_is_named_for_its_channel_or_role_and_a_staff_note_for_nothing():
+    assert name_of(SERVER_NOTES[3]) == "speed-and-pbs"
+    assert name_of(SERVER_NOTES[1]) == "tech support"
+    assert name_of(SERVER_NOTES[4]) == ""
+    assert name_of(NOTES[0]) == ""
 
 
 def test_a_query_that_lands_nowhere_finds_nothing_rather_than_everything():
@@ -156,8 +224,12 @@ def test_a_short_note_is_its_own_snippet_with_no_ellipsis():
 
 def test_grounding_quotes_the_notes_and_names_them_as_the_servers_own():
     said = grounding(search(NOTES, "cookout"))
-    assert "quote it rather than inventing" in said
+    assert GROUNDING_NOTE in said
+    assert "never quote, list or bullet them back" in said
+    assert "quote it rather than inventing" not in said
     assert "Cookout hours: The cookout runs Friday evenings." in said
+    assert "Staff wording." in grounding(search(NOTES, "cookout"), note="Staff wording.")
+    assert GROUNDING_NOTE in grounding(search(NOTES, "cookout"), note="   ")
 
 
 def test_grounding_drops_a_note_that_will_not_fit_rather_than_cutting_it_in_half():

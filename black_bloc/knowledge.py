@@ -16,9 +16,9 @@ SOURCES: tuple[str, ...] = (STAFF, SERVER)
 TITLE_WEIGHT = 8
 TAG_WEIGHT = 4
 BODY_CAP = 5
-STRONG_SCORE = TITLE_WEIGHT
+STRONG_WORDS = 2
 SNIPPET_CHARS = 400
-TOKEN_MIN = 2
+TOKEN_MIN = 3
 TOKENS_MAX = 8
 HITS_DEFAULT = 3
 GROUNDING_BYTES = 6 * 1024
@@ -41,11 +41,32 @@ ANY_OF = "any"
 WORD = re.compile(r"[^a-z0-9_./-]+")
 SPACES = re.compile(r"\s+")
 EDGE = re.compile(r"[a-z0-9]")
-
-GROUNDING_OPENER = (
-    "(What the server's notes say, for your answer — quote it rather than inventing:"
+TOKEN_EDGES = "._/-"
+ROLE_NAMED = re.compile(
+    "^" + re.escape(ROLE_HOLDERS_TITLE).replace(re.escape("{role}"), "(.+)") + "$", re.IGNORECASE
 )
-GROUNDING_CLOSER = ")"
+CHANNEL_MARK = "#"
+
+STOP_WORDS: frozenset[str] = frozenset(
+    """
+    what up hey yo sup hi hello lol ok okay the a an and or is it its im i you u ya yall fam cousin
+    whats wassup whatsup wsg hows how who whos where wheres when why which
+    has have had does did doing done can could would should will wont cant dont didnt doesnt isnt
+    aint get got gonna wanna for with this that thats there theres here are was were been be not
+    just like about your yours our they them their she her him his we me my mine
+    bro bruh man dude sis lmao lmfao haha hahaha hehe yeah yea yes yep nah nope thanks thank thx ty
+    good morning afternoon evening night gm gn all any some one out into from then than too very
+    really much well know going also because cause cuz still even tho though
+    """.split()
+)
+
+GROUNDING_NOTE = (
+    "These are notes for you from the server — use them silently: never quote, list or bullet "
+    "them back, and mention a channel only when the person's question needs it. Do not invent "
+    "anything they do not say."
+)
+GROUNDING_NOTE_KEY = "chat_grounding_note"
+GROUNDING_FRAME = "({note} Notes: {notes})"
 
 TITLE_NEEDED = "A note needs a title, so nothing was saved. One short line naming what it is about."
 TITLE_TOO_LONG = (
@@ -85,6 +106,7 @@ class Hit:
     tag: str
     score: int
     snippet: str
+    landed: int = 0
 
 
 @dataclass(frozen=True)
@@ -114,11 +136,11 @@ def now_iso() -> str:
 
 
 def tokenize(query: Any) -> tuple[str, ...]:
-    """Lowercased, deduped, two characters or more, eight at most."""
+    """Lowercased whole words, stop words out, three characters or more, eight at most."""
     found: list[str] = []
     for raw in WORD.split(str(query or "").lower()):
-        word = raw.strip()
-        if len(word) < TOKEN_MIN or word in found:
+        word = raw.strip().strip(TOKEN_EDGES)
+        if len(word) < TOKEN_MIN or word in STOP_WORDS or word in found:
             continue
         found.append(word)
         if len(found) >= TOKENS_MAX:
@@ -127,11 +149,15 @@ def tokenize(query: Any) -> tuple[str, ...]:
 
 
 def occurrences(haystack: str, needle: str, cap: int = BODY_CAP) -> int:
+    """Whole-word landings only, so `up` never counts inside `upcoming`."""
     found = 0
-    at = haystack.find(needle)
+    at = haystack.find(needle) if needle else -1
     while at != -1 and found < cap:
-        found += 1
-        at = haystack.find(needle, at + len(needle))
+        before = haystack[at - 1] if at else ""
+        after = haystack[at + len(needle) : at + len(needle) + 1]
+        if not (EDGE.match(before) or EDGE.match(after)):
+            found += 1
+        at = haystack.find(needle, at + 1)
     return found
 
 
@@ -155,9 +181,9 @@ def score(row: Any, tokens: tuple[str, ...], require: str) -> int:
     landed = 0
     for token in tokens:
         points = 0
-        if token in title:
+        if whole_word(title, token):
             points += TITLE_WEIGHT
-        if token in tag:
+        if whole_word(tag, token):
             points += TAG_WEIGHT
         points += occurrences(body, token)
         if points:
@@ -202,7 +228,30 @@ def hit_from(row: Any, points: int, tokens: tuple[str, ...]) -> Hit:
         tag=str(value_of(row, "tag")),
         score=points,
         snippet=snippet_of(value_of(row, "body"), tokens),
+        landed=len(landed_in(row, tokens)),
     )
+
+
+def haystack_of(row: Any) -> str:
+    return " ".join(str(value_of(row, name)) for name in ("title", "tag", "body")).lower()
+
+
+def landed_in(row: Any, tokens: Any) -> tuple[str, ...]:
+    """The distinct tokens that land on a note as whole words — what a hit is ranked by."""
+    haystack = haystack_of(row)
+    return tuple(token for token in tokens or () if whole_word(haystack, token))
+
+
+def name_of(row: Any) -> str:
+    """The channel or role a server note is named for, or nothing for a staff note."""
+    title = str(value_of(row, "title")).strip()
+    if title.startswith(CHANNEL_MARK):
+        return title[len(CHANNEL_MARK) :].lower()
+    if str(value_of(row, "tag")).lower() == ROLE_TAG:
+        named = ROLE_NAMED.match(title)
+        if named:
+            return named.group(1).lower()
+    return ""
 
 
 def search(rows: Any, query: Any, limit: int = HITS_DEFAULT) -> Found:
@@ -218,7 +267,7 @@ def search(rows: Any, query: Any, limit: int = HITS_DEFAULT) -> Found:
             for row in everything
             if (points := score(row, tokens, require)) > 0
         ]
-        found.sort(key=lambda hit: (-hit.score, hit.title.lower(), hit.id))
+        found.sort(key=lambda hit: (-hit.landed, -hit.score, hit.title.lower(), hit.id))
         return found
 
     hits = run(ALL_OF)
@@ -237,31 +286,20 @@ def search(rows: Any, query: Any, limit: int = HITS_DEFAULT) -> Found:
 
 def whole_word(haystack: str, token: str) -> bool:
     """`hi` is not in `this`: a token counts only where a letter or digit does not touch it."""
-    if not token:
-        return False
-    at = haystack.find(token)
-    while at != -1:
-        before = haystack[at - 1] if at else ""
-        after = haystack[at + len(token) : at + len(token) + 1]
-        if not (EDGE.match(before) or EDGE.match(after)):
-            return True
-        at = haystack.find(token, at + 1)
-    return False
+    return occurrences(haystack, token, 1) > 0
 
 
 def is_strong(found: Any) -> bool:
-    """Every token, on whole words, scoring like a note that is ABOUT the question."""
+    """Two distinct words on the top note, or one word naming the channel or role it is about."""
     hits = tuple(getattr(found, "hits", ()) or ())
-    if not hits or getattr(found, "matched", ANY_OF) != ALL_OF:
-        return False
-    top = hits[0]
-    if int(getattr(top, "score", 0) or 0) < STRONG_SCORE:
-        return False
-    haystack = " ".join(
-        str(value_of(top, name)) for name in ("title", "tag", "body")
-    ).lower()
     terms = tuple(getattr(found, "terms", ()) or ())
-    return bool(terms) and all(whole_word(haystack, term) for term in terms)
+    if not hits or not terms:
+        return False
+    landed = landed_in(hits[0], terms)
+    if len(landed) >= STRONG_WORDS:
+        return True
+    name = name_of(hits[0])
+    return bool(name) and any(whole_word(name, term) for term in landed)
 
 
 def section_text(hit: Any) -> str:
@@ -272,7 +310,7 @@ def section_text(hit: Any) -> str:
     return f"{title}: {body}" if title else body
 
 
-def grounding(hits: Any, budget: int = GROUNDING_BYTES) -> str:
+def grounding(hits: Any, budget: int = GROUNDING_BYTES, note: Any = None) -> str:
     """The notes that fit, whole. A section too big for what is left is DROPPED, never trimmed."""
     kept: list[str] = []
     spent = 0
@@ -288,7 +326,8 @@ def grounding(hits: Any, budget: int = GROUNDING_BYTES) -> str:
         spent += cost
     if not kept:
         return ""
-    return f"{GROUNDING_OPENER} {' · '.join(kept)}{GROUNDING_CLOSER}"
+    header = str(note or "").strip() or GROUNDING_NOTE
+    return GROUNDING_FRAME.format(note=header, notes=" · ".join(kept))
 
 
 def clean_title(value: Any) -> str:

@@ -68,7 +68,7 @@ const MEMORY_SETTING_KEYS = [
 // Personality tones (docs/info/personality-tones-design.md): the cookout sheet and the tone
 // sentence are prompt text, edited in the Personality section; the words /chat says about who
 // hears what are edited in the Who hears what section's fold.
-const TONE_KEYS = ['chat_cookout_voice', 'chat_tone_clause'];
+const TONE_KEYS = ['chat_cookout_voice', 'chat_tone_clause', 'chat_banter_style', 'chat_grounding_note'];
 const VOICE_WORD_KEYS = [
   'chat_voice_pinned',
   'chat_voice_cleared',

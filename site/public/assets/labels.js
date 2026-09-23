@@ -283,6 +283,8 @@ export const LABELS = {
   chat_channel_note_label: "The label over the note box on that form",
   chat_cookout_voice: "The cookout voice — the words and habits every answer is written in",
   chat_tone_clause: "The sentence that makes every mood a tone on the cookout voice",
+  chat_banter_style: "How short the bot keeps a greeting or small talk",
+  chat_grounding_note: "How the bot is told to use the server notes it is handed",
   chat_voice_pinned: "What staff are told when a member's tone is pinned",
   chat_voice_cleared: "What staff are told when a member's pin is cleared",
   chat_voice_nothing: "What is said when there was no pin to clear",

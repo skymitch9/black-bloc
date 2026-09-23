@@ -4,6 +4,8 @@ import pytest
 
 from black_bloc.chat_llm import says_a_budget_word
 from black_bloc.personas import (
+    BANTER_STYLE,
+    BANTER_STYLE_KEY,
     BASE_HEADING,
     BY_NAME,
     COOKOUT,
@@ -687,6 +689,24 @@ def test_staff_wording_for_the_sheet_and_the_clause_replaces_the_default_in_the_
 def test_a_blank_sheet_or_clause_falls_back_to_the_shipped_wording():
     assert COOKOUT_VOICE in system_text(None, sheet="   ")
     assert TONE_CLAUSE in trope_block(BY_NAME["warm"], "")
+    assert BANTER_STYLE in system_text(None, banter="  ")
+
+
+def test_the_banter_hint_sits_in_the_cached_core_beside_the_cookout_sheet():
+    """2026-09-23: "What up" got a tour of three channels; every tier now reads the hint."""
+    assert BANTER_STYLE_KEY == "chat_banter_style"
+    assert "one or two lines" in BANTER_STYLE and "no tour of channels" in BANTER_STYLE
+    core = stable_core()
+    assert core.index(COOKOUT_VOICE) < core.index(BANTER_STYLE)
+    blocks = system_blocks(BY_NAME["noir"], "## The channels of this server\n#general")
+    assert BANTER_STYLE in blocks[0]["text"] and "cache_control" in blocks[0]
+    assert all(BANTER_STYLE not in block["text"] for block in blocks[1:])
+    assert BANTER_STYLE in system_text(BY_NAME["noir"])
+
+
+def test_staff_wording_for_the_banter_hint_replaces_the_default():
+    blocks = system_blocks(None, banter="One line, fam.")
+    assert "One line, fam." in blocks[0]["text"] and BANTER_STYLE not in blocks[0]["text"]
 
 
 async def test_a_body_staff_edited_survives_the_boot_sync(tmp_path):

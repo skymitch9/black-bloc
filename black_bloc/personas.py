@@ -220,6 +220,11 @@ TONE_CLAUSE = (
     "about it."
 )
 TONE_CLAUSE_KEY = "chat_tone_clause"
+BANTER_STYLE = (
+    "For a greeting or small talk, answer in one or two lines in your own voice — no lists, no "
+    "tour of channels, no offers of help nobody asked for."
+)
+BANTER_STYLE_KEY = "chat_banter_style"
 BASE_HEADING = "## How you sound"
 TONE_HEADING = "## Today's tone (on top of the cookout voice)"
 
@@ -363,8 +368,9 @@ def trope_block(trope: Trope | None, clause_text: Any = None) -> str:
     )
 
 
-def stable_core(sheet: Any = None) -> str:
-    return f"{CORE}\n\n{FEATURES}\n\n{said_or(sheet, COOKOUT_VOICE)}"
+def stable_core(sheet: Any = None, banter: Any = None) -> str:
+    voice = said_or(sheet, COOKOUT_VOICE)
+    return f"{CORE}\n\n{FEATURES}\n\n{voice}\n\n{said_or(banter, BANTER_STYLE)}"
 
 
 def system_blocks(
@@ -373,10 +379,15 @@ def system_blocks(
     *,
     sheet: Any = None,
     clause_text: Any = None,
+    banter: Any = None,
 ) -> list[dict[str, Any]]:
-    """Core and the cookout sheet first and cached, then the channels, then the tone on top."""
+    """Core, the cookout sheet and the banter hint first and cached, then channels, then tone."""
     blocks: list[dict[str, Any]] = [
-        {"type": "text", "text": stable_core(sheet), "cache_control": {"type": "ephemeral"}}
+        {
+            "type": "text",
+            "text": stable_core(sheet, banter),
+            "cache_control": {"type": "ephemeral"},
+        }
     ]
     channels = str(directory or "").strip()
     if channels:
@@ -393,11 +404,12 @@ def system_text(
     *,
     sheet: Any = None,
     clause_text: Any = None,
+    banter: Any = None,
 ) -> str:
     """The same stack as one string, for a provider that takes no blocks."""
+    words = {"sheet": sheet, "clause_text": clause_text, "banter": banter}
     return "\n\n".join(
-        str(block["text"])
-        for block in system_blocks(trope, directory, sheet=sheet, clause_text=clause_text)
+        str(block["text"]) for block in system_blocks(trope, directory, **words)
     )
 
 
