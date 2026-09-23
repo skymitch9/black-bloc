@@ -15,6 +15,11 @@
 > unchanged — only the moment the FIRST announcement may happen moved. Design:
 > [`spotlight-dates-design.md`](spotlight-dates-design.md). Do not restate it here.
 >
+> ✅ **FOLLOW-UPS LIVE as v156 (2026-09-22 21:18 Phoenix, release commit `4fb69e00`)** — the reminder names the game being
+> played now with the go-live card (merge `bde90469`) and the pinned announcement follows the game (merge `cc5a6de1`); see the
+> two *Follow-up 2026-09-22* sections at the foot. Last verified (this blockquote and those two status lines only):
+> **2026-09-22 21:2x**, off `deploys.log`'s v156 line and `git log`; ⚠️ the body was NOT re-read.
+>
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v148** — merge `e7f54c9`, release `f73d3a7`, deployed **2026-09-20 18:23** Phoenix; `spotlight_mode` ships **shadow**; sweeps **637–643** are the owner's; verified: boot log: the spotlight cog loaded, logged in, no Traceback; /health ready=true; the Go-live page rendered on the local mock after the merge (a Spotlight strip cell in shadow, a GamesDoneQuick Live-now card with spotlight badges, three channel-only Streamers rows, the Spotlight chip and the Spotlight a channel button; zero console errors); the first gate run's one red test was KI-32, green alone and on the re-run. Was: 🔨 BUILT on branch `spotlight` 2026-09-20 — nothing in it had met Discord or Helix. The `## Deviations` foot is the truth where this body departs from what shipped, and `## What was NOT verified` is the honest half; sweeps `SL-a` … `SL-g` in `../access/sweeps.md` are the proof that is missing. ⚠️ **Schema is 48, not the 47 this body says** — `selftest-boot` took 47 on `main` while this was being built. Was: 📐 **DESIGN (Fable, 2026-09-20 17:0x) — dispatches
 > AFTER `costream` lands**, because both touch the go-live cog, its keys and its sessions. **Last verified: 2026-09-20 17:0x**
 > against `main` `e88573d` (v142 deploying): `black_bloc/twitch.py` — `TwitchClient.get_streams(logins)` `:177` (Helix
@@ -326,6 +331,8 @@ Specifically NOT verified:
 
 ## Follow-up 2026-09-22 — the reminder names the game being played NOW, with the go-live card
 
+> ✅ **LIVE as v156 (2026-09-22 21:18 Phoenix, release commit `4fb69e00`)** — merge `bde90469`; `release.json` v156 at `beb75348`; boot: boot log `database ready` **04:17:54Z**, `loaded cog black_bloc.cogs.content.spotlight`, `synced 33 app commands`, `logged in as Black_Bloc` **04:17:58Z**. ⚠️ **NOT verified live:** no reminder has fired under v156 yet, so neither the Helix-fresh game on a bump nor the card under it has been seen; sweep `BP-a` unwalked; no browser or Discord client was opened by a session.
+
 **The ask, verbatim (owner, 2026-09-22):** *"also when we post a spotlight channel is still live
 make sure we still include the game they're playing"* and then *"and do a game preview like a
 normal go live post"*. Branch `spotlight-bump-preview`, off `main` `95cb8954`.
@@ -363,6 +370,8 @@ is not a twitch.tv one) → the stored game, Helix never asked.
 
 ## Follow-up 2026-09-22 (2) — the PINNED announcement is edited to the game being played now
 
+> ✅ **LIVE as v156 (2026-09-22 21:18 Phoenix, release commit `4fb69e00`)** — merge `cc5a6de1`; boot: boot log `database ready` **04:17:54Z**, `loaded cog black_bloc.cogs.content.spotlight`, `synced 33 app commands`, `logged in as Black_Bloc` **04:17:58Z**. ✅ **VERIFIED LIVE:** **two seconds after boot** the first poll re-worded GamesDoneQuick's PINNED announcement — action row `golive.spotlight_announcement_refreshed` at **04:18:00Z** (spotlight_id 3, session_id 5, message_id 1552167740410957925), game *Nicktoons: Attack of the Toybots*; that post had been announced at 04:00:27Z as *Viewfinder* and pinned at 04:00:28Z by the OLD v155 code's normal announce-time pin, after the owner's delete-and-repost through the opt-out door (`golive_channel_optout_post` set to `delete`, opted out and back in, then set back to `end`). ⚠️ **NOT verified:** a refusal (`_refresh_failed`) on live, a bump reusing the edit, how the pinned-messages list renders the edited card, and the edit RATE on a marathon; sweep `PR-a` not walked by the owner.
+
 **The ask, verbatim (owner, 2026-09-22):** *"also when it repost lets make sure to edit the pinned
 post to be the most current game, i would say pin the new post but i dont want to spam with pins
 and un pins"*. Branch `spotlight-pinned-refresh`, off `main` `4eb27e3a`.
@@ -393,6 +402,11 @@ Logged as `golive.spotlight_announcement_refreshed` (routine; `spotlight_id`, `s
   twitch.tv); Bump now on such a session does not edit it either.
 - ✅ **DECIDED — the original mentions are kept, not re-computed** (`again_render` over `render`):
   an edit never adds, drops or changes a role ping, and needs no fan-role lookup.
+- ✅ **ACCEPTED (owner, 2026-09-22 21:2x, verbatim): *"i think gdq will always be log noisy during marathons, lets let it be
+  and deal with it then"*.** Every TITLE change (not only a game change) edits the pinned post and writes a
+  `golive.spotlight_announcement_refreshed` row, so a marathon that retitles often is edited on many polls. This is
+  the behaviour, not a defect; revisit only if it becomes a problem. The rate (edits per hour on a marathon) has
+  NOT been measured. [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) KI-39.
 - No new key: the edit re-uses `golive_template`, `golive_embed` and `golive_live_author`, so
   every word stays editable where it already is.
 

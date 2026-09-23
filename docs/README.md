@@ -6,7 +6,11 @@
 > This retires the 2026-08-26 local-only rule, under which the tree was
 > gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
 > so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
-> Last verified: **2026-09-22 — ONE number only**, at the v155 docs ritual: `ls docs/info/*.md`
+> Last verified: **2026-09-22 21:2x — the bot's version only**, at the v156 docs ritual: the bot is at **v156**
+> (deployed 2026-09-22 21:18 Phoenix, release commit `4fb69e00`; [`deploys.log`](deploys.log) is the authority).
+> `ls docs/info/*.md` still **107**, `ls docs/access/*.md` still **12**. ⚠️ **NOT re-checked:** the *Where the bot
+> stands* block and every other figure; nothing met live Discord or a browser.
+> Before that, **2026-09-22 — ONE number only**, at the v155 docs ritual: `ls docs/info/*.md`
 > returns **107** (106 beside the index; the tree paragraph below said 105, counted 2026-09-21,
 > before `spotlight-dates-design.md` landed). `ls docs/access/*.md` still returns **12** (11 beside
 > its index), unchanged. ⚠️ **NOT re-checked at that pass:** the *Where the bot stands* block below,

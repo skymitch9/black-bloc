@@ -1,5 +1,10 @@
 # Channel streamers — an org channel is a persistent row like any linked member; spotlight and the ping role are toggles on it
 
+> 📌 **FOLLOW-UP LIVE as v156 (2026-09-22 21:18 Phoenix, release commit `4fb69e00`, merge `0ef4534c`): Spotlight ON settles the pin** —
+> live + unpinned → pinned, no session + stale pin → unpinned, toggle time only. Read
+> [**§ Follow-up 2026-09-22**](#follow-up-2026-09-22-spotlight-on-settles-the-pin-the-retro-pin); it rewords sweeps 721 and 731.
+> Last verified (this line and that section's status only): **2026-09-22 21:2x**, off `deploys.log` and `git log`; ⚠️ the body was NOT re-read.
+
 > 🔇 **FOLLOW-UP 2026-09-21 17:3x, branch `quiet-channel-kinds` off `main` `0612da0` — NOT merged, NOT
 > deployed: this whole family stops posting an embed to `#blackbloc-logs`.** Owner, 2026-09-21 17:2x, verbatim: *"okay that works, i dont want log messages appearing in black bloc logs for channel linking or channel spotlight or channel annouce"*.
 > `golive.channel_announced`, `golive.history_swept`, `golive.spotlight_added`,
@@ -242,8 +247,10 @@ what the route answers. The clause lands only when a session was actually open, 
 
 ## Follow-up 2026-09-22: Spotlight ON settles the pin (the retro-pin)
 
-> **Status:** built on branch `spotlight-retro-pin` off `main` `95cb8954` — NOT merged, NOT deployed.
-> ⚠️ **Nothing in it has met Discord.** Sweep row `RP-a` in `../access/sweeps.md`, unwalked.
+> **Status:** ✅ **LIVE as v156 (2026-09-22 21:18 Phoenix, release commit `4fb69e00`)** — merge `0ef4534c` (3 commits);
+> boot: boot log `database ready` **04:17:54Z**, `loaded cog black_bloc.cogs.content.spotlight`, `synced 33 app commands`, `logged in as Black_Bloc` **04:17:58Z**. ⚠️ **The retro-pin path is NOT verified live** — nobody has pressed **Spotlight on** against a live
+> unpinned post since v156; sweep row `RP-a` in `../access/sweeps.md` is unwalked; no browser or Discord client was opened by a session.
+> Was: built on branch `spotlight-retro-pin` off `main` `95cb8954` — NOT merged, NOT deployed.
 
 **The ask, owner verbatim (2026-09-22):** *quick fix, when something gets tagged for a spotlight do a check to see if the channel is pinned, if its live and not pinned, pin it. if its not live and pinned un pin it, when its live again its pinned again*
 

@@ -1,7 +1,10 @@
 # access/ — how to OPERATE Black Bloc
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not
-> temporarily) — secret NAMES only. Last verified: **2026-09-22 — the `deploy.md` ROW only**, at the v155
+> temporarily) — secret NAMES only. Last verified: **2026-09-22 21:2x — the `deploy.md` ROW only**, at the v156
+> ritual: [`../deploys.log`](../deploys.log) is **155** lines (`grep -c .`), the last being **v156** `4fb69e00`;
+> `ls docs/access/*.md` still **12**. ⚠️ **NOT checked:** every other row's number or the facts inside any file.
+> Before that, **2026-09-22 — the `deploy.md` ROW only**, at the v155
 > ritual: [`../deploys.log`](../deploys.log) is **154** lines (`grep -c .`), the last being **v155**
 > `a285afc7` at 2026-09-22 13:35; the row had said *150 / v151*. Counted while here: `ls
 > docs/access/*.md` still returns **12** files (this index plus **11** rows), unchanged. ⚠️ **NOT checked
@@ -28,7 +31,7 @@
 |---|---|
 | [`OWNER_GUIDE.md`](OWNER_GUIDE.md) | **Start here, owner:** before the trip (encrypt `.env`, leave the session open), the laptop once, what to look at on the road, if something looks wrong, when you're back |
 | [`setup.md`](setup.md) | Local run: venv, `.env`, Developer Portal, invite, first start |
-| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **154** lines in [`../deploys.log`](../deploys.log), the last being **v155** on 2026-09-22 13:35 (counted 2026-09-22 at the v155 ritual; it said 150 / v151) |
+| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **155** lines in [`../deploys.log`](../deploys.log), the last being **v156** on 2026-09-22 21:18 (counted 2026-09-22 21:2x at the v156 ritual; it said 154 / v155) |
 | [`RECOVERY.md`](RECOVERY.md) | Rebuild from nothing: inventory, secret custody, named gaps |
 | [`runbook.md`](runbook.md) | **Day to day:** where everything is, the flyctl path, deploy/restart/rollback/logs, secret names, common failures and what they mean, local run, docs bookkeeping |
 | [`sweeps.md`](sweeps.md) | **What the owner has not yet exercised by hand**, in priority order, with what to expect — the verification checklist. Rows **1–620** as of 2026-09-18 (counted 2026-09-19; it said 1–350) |
