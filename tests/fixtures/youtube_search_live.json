@@ -1,0 +1,20 @@
+{
+  "kind": "youtube#searchListResponse",
+  "etag": "hand-written-etag",
+  "nextPageToken": "CAEQAA",
+  "regionCode": "US",
+  "pageInfo": {
+    "totalResults": 1,
+    "resultsPerPage": 1
+  },
+  "items": [
+    {
+      "kind": "youtube#searchResult",
+      "etag": "hand-written-item-etag",
+      "id": {
+        "kind": "youtube#video",
+        "videoId": "FAMWR-HDS8U"
+      }
+    }
+  ]
+}

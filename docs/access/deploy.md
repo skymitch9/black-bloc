@@ -195,6 +195,11 @@ powershell -NoProfile -File scripts\deploy.ps1 *> deploy.log
 The gate refuses before `git push`, so a red run of this shape costs one re-run and nothing else. (Never print the values —
 `Get-ChildItem env:` alone would; select the names.)
 
+**2026-09-22: the suite now clears its own environment** — an autouse session fixture in `tests/conftest.py` pops every name
+`config.py` declares (plus `DEV_GUILD_ID`, `TEST_MODE`, `TEST_CHANNEL_ID`, `BLACK_BLOC_*`) and stops `Settings` reading `.env`
+(`docs/info/code-notes.md` ▸ `tests/conftest.py`). Measured that day: the full suite is green with all of those names SET to dummy
+values in the shell and green with them unset. The hand-clearing block above is now belt-and-braces, not required.
+
 ### The gate's pytest step — `-n 16`, `-rfE`, a junit file and a 120 s timeout (2026-09-22)
 
 Changed on branch `gate-names` (KI-26 / KI-32 / KI-35 / KI-37). The step is now:

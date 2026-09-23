@@ -417,24 +417,16 @@ class WebBot:
 
 
 def web_settings_now():
-    with pytest.MonkeyPatch.context() as patch:
-        for name in (
-            "DISCORD_TOKEN",
-            "DISCORD_CLIENT_ID",
-            "DISCORD_CLIENT_SECRET",
-            "SESSION_SECRET",
-        ):
-            patch.delenv(name, raising=False)
-        return load_settings(
-            _env_file=None,
-            dev_guild_id=GUILD_ID,
-            discord_client_id="client-id",
-            discord_client_secret="client-secret",
-            session_secret=SECRET,
-            site_origin=ORIGIN,
-            test_mode=False,
-            test_channel_id=TEST_CHANNEL_ID,
-        )
+    return load_settings(
+        _env_file=None,
+        dev_guild_id=GUILD_ID,
+        discord_client_id="client-id",
+        discord_client_secret="client-secret",
+        session_secret=SECRET,
+        site_origin=ORIGIN,
+        test_mode=False,
+        test_channel_id=TEST_CHANNEL_ID,
+    )
 
 
 @pytest.fixture

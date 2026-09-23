@@ -323,6 +323,7 @@ ROUTINE: frozenset[str] = frozenset(
         "youtube.live_id_searched",
         "youtube.live_mode",
         "youtube.live_seen",
+        "youtube.probe_walled",
         "youtube.unlink",
         "honeypot.exempt",
         "honeypot.exempt_set",

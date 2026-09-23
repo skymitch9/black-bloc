@@ -553,3 +553,16 @@ def test_the_feed_parser_and_the_upload_wording_are_gone_from_the_module():
         assert not hasattr(module, name), name
     assert not hasattr(YouTubeClient, "fetch_feed")
     assert not hasattr(YouTubeClient, "classify")
+
+
+def test_the_live_lines_say_what_a_walled_stream_links_with_and_without_a_key():
+    from black_bloc.youtube import WALL_LINKS_KEYED, WALL_LINKS_KEYLESS, live_lines
+
+    live = {"mode": "on", "minutes": 5, "walled": 1, "id_unknown": 1, "reading_live": 1}
+    keyed = live_lines(live, keyed=True)
+    keyless = live_lines(live, keyed=False)
+
+    assert "**behind the bot check now** — 1 channel(s)" in keyed
+    assert "**live, video id unknown** — 1 channel(s)" in keyed
+    assert f"**a walled stream** — {WALL_LINKS_KEYED}" in keyed
+    assert f"**a walled stream** — {WALL_LINKS_KEYLESS}" in keyless

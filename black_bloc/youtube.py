@@ -317,6 +317,14 @@ LIVE_NO_KEY = (
     "**quota used today** — none; with no YOUTUBE_API_KEY a live stream is announced from the "
     "page alone, so its title reads *Live now*"
 )
+WALL_LINKS_KEYED = (
+    "a walled stream's id is searched for once per broadcast (100 units); if the search finds "
+    "nothing the post links the channel's own /live page, titled *Live now*"
+)
+WALL_LINKS_KEYLESS = (
+    "with no YOUTUBE_API_KEY a walled stream's post links the channel's own /live page, titled "
+    "*Live now*, with no thumbnail"
+)
 BOT_CHECKED = (
     "yes — YouTube served the last probe its *Sign in to confirm you're not a bot* page, which "
     "carries no video id; the stream is still spotted, and with a key the id is searched for"
@@ -444,6 +452,9 @@ def live_lines(live: dict[str, Any] | None, *, keyed: bool = False) -> list[str]
         f"**live now** — {live.get('open') or 0}",
         f"**reading live now** — {live.get('reading_live') or 0}",
         f"**bot check** — {BOT_CHECKED if live.get('botcheck') else 'no'}",
+        f"**behind the bot check now** — {live.get('walled') or 0} channel(s)",
+        f"**live, video id unknown** — {live.get('id_unknown') or 0} channel(s)",
+        f"**a walled stream** — {WALL_LINKS_KEYED if keyed else WALL_LINKS_KEYLESS}",
     ]
     if keyed:
         lines.append(f"**quota used today** — {live.get('quota') or 0} unit(s)")
