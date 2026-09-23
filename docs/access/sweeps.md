@@ -3068,3 +3068,12 @@ Lettered; the conductor numbers it. ⚠️ Run `CV-a` FIRST: it is the check on 
 | **`CV-c`** | On `#landing` (or any *members cannot see it* card) press **Tell the bot anyway**; then **Back to the rule** | *"Black Bloc is told about #landing now, because staff said so…"*; badge *shown by staff*; `#landing` appears in *What the bot sees*; *Told about* +1. Back: *"#landing is back to the rule…"*, badge back, count back. Logs has one `chat.channel_reach_set` and one `chat.channel_reach_cleared` row, Via Website |
 | **`CV-d`** | On `#general-chat` press **Hide from the bot**, @-mention the bot asking where to chat, then **Back to the rule** | Badge *left out by staff*; `#general-chat` leaves the block; the reply does not name `#general-chat` (the guard strips it). After Back, it is told about it again |
 | **`CV-e`** | Settings page ▸ `chat_visibility_role_id` help; `/settings` ▸ chat ▸ **Find a setting…** `reach` | The help says roles members pick for themselves count and staff can override on the Channels page; Find lists the five `chat_channel_reach_*` sentences (the chat picker reads *25 of 75*) |
+
+## Row `CB-a` — banter gets banter (branch `chat-banter`, 2026-09-23)
+
+Design: [`../info/phase14-design.md`](../info/phase14-design.md) ▸ *Follow-up 2026-09-23 — banter
+gets banter*. BUILT, NOT MERGED, NOT DEPLOYED.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`CB-a`** | In a channel the bot answers in, say *@Black_Bloc what up*; then *@Black_Bloc where do I post my PBs*; then look at the Chat page ▸ Personality | The first reply is one or two lines in the voice — no `>` quoted notes, no list, no tour of channels, no "holler if you need anything". The second names **#speed-and-pbs** in a sentence without quoting its note. The Logs page shows `chat.llm_reply tier=simple` then `tier=important`. Personality shows **How short the bot keeps a greeting or small talk** and **How the bot is told to use the server notes it is handed**, both editable |

@@ -30,6 +30,7 @@ from .chat_memory import (
 from .config import Settings
 from .emoji import SKIN_TONE_DEFAULT, SKIN_TONE_NAMES
 from .groq import DEFAULT_MODEL as GROQ_DEFAULT_MODEL
+from .knowledge import GROUNDING_NOTE, GROUNDING_NOTE_KEY
 from .logkinds import (
     CORE,
     FEATURE_LABELS,
@@ -43,6 +44,8 @@ from .minutes_audio import CHUNK_SECONDS_DEFAULT as MINUTES_CHUNK_SECONDS_DEFAUL
 from .minutes_audio import CHUNK_SECONDS_MAX as MINUTES_CHUNK_SECONDS_MAX
 from .minutes_audio import CHUNK_SECONDS_MIN as MINUTES_CHUNK_SECONDS_MIN
 from .personas import (
+    BANTER_STYLE,
+    BANTER_STYLE_KEY,
     COOKOUT,
     COOKOUT_VOICE,
     COOKOUT_VOICE_KEY,
@@ -3597,6 +3600,8 @@ TEXT_CHECKS.update(
 
 VOICE_SHEET_CHARS = 4000
 TONE_CLAUSE_CHARS = 600
+BANTER_STYLE_CHARS = 600
+GROUNDING_NOTE_CHARS = 600
 PROMPT_TOO_LONG = (
     "That is {length} characters and {what} holds {limit}, so nothing was changed. Every "
     "character is read on every answer; take {over} out and save it again."
@@ -3617,6 +3622,20 @@ PROMPT_WORDS: dict[str, tuple[str, int, str, str]] = {
         "the sentence under every tone that tells the model a mood is a tone ON the cookout "
         "voice — keep its words and mannerisms, change only energy, pace and attitude. It "
         "cannot be left blank",
+    ),
+    BANTER_STYLE_KEY: (
+        BANTER_STYLE,
+        BANTER_STYLE_CHARS,
+        "the small-talk hint",
+        "the line every answer reads about greetings and small talk — how short to keep them and "
+        "what never to pile on. Blank goes back to the default",
+    ),
+    GROUNDING_NOTE_KEY: (
+        GROUNDING_NOTE,
+        GROUNDING_NOTE_CHARS,
+        "the notes header",
+        "the sentence in front of the server notes a careful answer is handed — how to use them "
+        "(silently, never quoted or listed back). Blank goes back to the default",
     ),
 }
 KEY_TYPES.update({key: "text" for key in PROMPT_WORDS})

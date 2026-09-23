@@ -15,7 +15,14 @@ from .chat_check import FIXED_KIND, check_reply
 from .chat_voice import heard_for
 from .directory import DIRECTORY_NONE, directory_block
 from .groq import GroqClient
-from .knowledge import grounding, is_strong, list_sections, search
+from .knowledge import (
+    GROUNDING_NOTE,
+    GROUNDING_NOTE_KEY,
+    grounding,
+    is_strong,
+    list_sections,
+    search,
+)
 from .llm import (
     ANTHROPIC,
     ERROR,
@@ -29,6 +36,8 @@ from .llm import (
     record,
 )
 from .personas import (
+    BANTER_STYLE,
+    BANTER_STYLE_KEY,
     COOKOUT,
     COOKOUT_VOICE,
     COOKOUT_VOICE_KEY,
@@ -52,6 +61,13 @@ log = logging.getLogger(__name__)
 QUESTION_WORDS = 12
 CONVERSATION_TURNS = 2
 QUESTION_MARK = "?"
+QUESTION_OPENERS: frozenset[str] = frozenset(
+    """
+    who what when where why how which can could would should does do did is are am was were any
+    anyone anybody
+    """.split()
+)
+FIRST_WORD = re.compile(r"[a-z]+")
 
 MEMBER = "member"
 BOT = "bot"
@@ -135,8 +151,14 @@ def word_count(text: Any) -> int:
     return len(said.split()) if said else 0
 
 
+def first_word(text: Any) -> str:
+    found = FIRST_WORD.search(spoken(text).lower())
+    return found.group(0) if found else ""
+
+
 def is_a_question(text: Any) -> bool:
-    return QUESTION_MARK in spoken(text)
+    """A `?` anywhere, or a question opener as the first word — Discord rarely types the `?`."""
+    return QUESTION_MARK in spoken(text) or first_word(text) in QUESTION_OPENERS
 
 
 def a_real_question(text: Any) -> bool:
@@ -494,9 +516,18 @@ def who_they_named(bot: Any, guild: Any, text: Any) -> list[tuple[str, str]]:
         return []
 
 
-def user_turn(text: Any, hits: Any, notes: Any = (), memory: Any = "") -> str:
+def grounded(tier: str, text: Any, hits: Any) -> Any:
+    """Banter gets banter: only a SIMPLE turn that is not a question, on weak hits, loses them."""
+    if is_a_question(text) or is_strong(hits) or tier != SIMPLE:
+        return hits
+    return ()
+
+
+def user_turn(
+    text: Any, hits: Any, notes: Any = (), memory: Any = "", note: Any = None
+) -> str:
     said = spoken(text)
-    parts = [said, grounding(hits), people_note(notes), str(memory or "")]
+    parts = [said, grounding(hits, note=note), people_note(notes), str(memory or "")]
     return "\n\n".join(one for one in parts if one)
 
 
@@ -537,11 +568,12 @@ async def try_tier(
     directory: str = "",
     sheet: Any = None,
     clause_text: Any = None,
+    banter: Any = None,
 ) -> Any:
     client = haiku(bot) if name == IMPORTANT else groq(bot, model_setting)
     if client is None:
         return None
-    words = {"sheet": sheet, "clause_text": clause_text}
+    words = {"sheet": sheet, "clause_text": clause_text, "banter": banter}
     if name == IMPORTANT:
         return await client.reply(
             system=system_blocks(system, directory, **words), messages=messages
@@ -639,10 +671,13 @@ async def conversational_reply(
     tone = voice.name if voice is not None else COOKOUT
     sheet = read_setting(bot.store, guild_id, COOKOUT_VOICE_KEY, COOKOUT_VOICE)
     clause_text = read_setting(bot.store, guild_id, TONE_CLAUSE_KEY, TONE_CLAUSE)
+    banter = read_setting(bot.store, guild_id, BANTER_STYLE_KEY, BANTER_STYLE)
+    note = read_setting(bot.store, guild_id, GROUNDING_NOTE_KEY, GROUNDING_NOTE)
     model_setting = str(read_setting(bot.store, guild_id, SIMPLE_MODEL_KEY, "") or "")
     named = who_they_named(bot, guild, text)
     remembered = await memory_for(bot, db, guild_id, user_id, in_dm=guild_id is None)
-    asked = user_turn(text, hits, [note for _, note in named], remembered)
+    said_of = [about for _, about in named]
+    asked = user_turn(text, grounded(tier, text, hits), said_of, remembered, note)
     messages = [*as_messages(window), {"role": "user", "content": asked}]
     if guild is not None:
         await channel_reach.refresh(bot, guild)
@@ -661,6 +696,7 @@ async def conversational_reply(
                 directory=directory,
                 sheet=sheet,
                 clause_text=clause_text,
+                banter=banter,
             )
         except LLMError as exc:
             errors[name] = exc.reason

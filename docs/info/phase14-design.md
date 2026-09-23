@@ -186,3 +186,68 @@ refuse-don't-trim). Port `searchBundle`'s scoring shape onto SQLite:
 
 Ships with `chat_llm_mode off` — flipping it on is the owner's move after the
 keys are set. No deploy risk: everything degrades to today's behaviour.
+
+## Follow-up 2026-09-23 — banter gets banter (branch `chat-banter`)
+
+**The complaint** (owner, 2026-09-23 15:19 Phoenix, live Discord, verbatim paste). A member wrote
+`@Black_Bloc What up`; the bot answered:
+
+> "Smoke was thick that night, cousin. > #upcoming-events: Upcoming community events and when they
+> happen. > Who has the Tech Support role: Tech Support — 1 member: Raelcun. > #knuck-up: Fighting
+> games — matches, tech and trash talk. Check #upcoming-events for the next cookout, ping Raelcun
+> if tech's acting up, and swing by #knuck-up for some fight‑game fire. Holler if you need
+> anything else."
+
+Owner: **"this response was too much."**
+
+**Measured** (action row 10199, `chat.llm_reply tier=simple, trope=noir`): the noir opener is the
+pool doing its job and NOT the problem. The three `> ` lines were knowledge hits echoed verbatim —
+`tokenize` kept the two-letter token `up`, `score` matched it as a SUBSTRING (`upcoming`,
+`knuck-up`, `support`), the loose any-token pass returned three notes, `user_turn` attached them
+under a header that literally said *"quote it rather than inventing"*, and the simple-tier model did
+exactly that. `tier_for` was right to choose SIMPLE.
+
+**What changed** — §1's *"the knowledge search returns hits"* rule and §3's scoring are amended:
+
+1. **Matching cannot fire on small talk** (`knowledge.py`, the one home). `tokenize` drops the
+   `STOP_WORDS` frozenset — a module CONSTANT, not a settings key: it is a tokenising rule, not an
+   operator decision, and `search` stays pure — and keeps tokens of 3+ characters, edges `._/-`
+   stripped. `score` and `occurrences` count WHOLE words only (`up` is never inside `upcoming`).
+   Hits rank by distinct tokens landed, then points. The staff note filter on `/chat` ▸ Knowledge
+   reads the same `search`, so it is whole-word too (typing `cook` no longer finds *Cookout*).
+2. **`is_strong` = two distinct tokens landing on the top note, OR one token naming the channel or
+   role that note is about** (`name_of`: a `#channel` title, or the role in *Who has the X role*).
+   So `#knuck-up` or `@Tech Support` typed as such is enough, and so is `pbs` for
+   `#speed-and-pbs`. The old all-tokens-pass + title-score (`STRONG_SCORE`) rule is gone.
+3. **Banter gets banter** (`chat_llm.grounded`): notes are dropped ONLY on a SIMPLE turn that is
+   not a question at all (no `?`) and whose hits are weak — a question of any length, a strong hit,
+   or an IMPORTANT turn keeps them (conductor narrowing, same day: a short factual question must not
+   lose its note). *What up* stays clean because the stop list leaves it no hits to drop. The directory block (the channel list in the
+   system prompt) is unchanged, so a banter turn can still point somewhere.
+4. **Grounding says use them silently**: the header is the key `chat_grounding_note` (group chat)
+   — *these are notes for you — use them silently: never quote, list or bullet them back; mention a
+   channel only when the person's question needs it*.
+5. **A banter length hint in the cached core**: `chat_banter_style` sits in `stable_core` right
+   after the cookout sheet, so both tiers read it and it rides the prompt cache.
+
+Chat group 75 → 77 keys, registry 366 → 368; both keys are edited in the Chat page's
+*Personality* section and on Settings (checklist 33, every word editable).
+
+| Message | Before | After |
+|---|---|---|
+| *What up* | 3 hits on `up`, quoted back | 0 tokens, 0 hits, SIMPLE, no notes |
+| *where do I post my PBs* | substring hits | `#speed-and-pbs` top, strong (`pbs` names it), IMPORTANT, grounded silently |
+| *who has the tech support role* | role section | role section top, strong (3 words) |
+| *when is the cookout* / *when is the cookout?* | `?` form only: SIMPLE, note attached | both: SIMPLE, note attached under the silent-use header |
+| *sup fam, cookout vibes* | SIMPLE, weak *Cookout hours* hit attached | SIMPLE, weak hit, no notes |
+
+⚠️ **The question test is a `?` OR a question opener as the FIRST word** (`is_a_question`,
+second conductor narrowing: Discord folk rarely type the `?`). The openers are one frozenset,
+`chat_llm.QUESTION_OPENERS` (who what when where why how which can could would should does do did
+is are am was were any anyone anybody). So *when is the cookout* keeps its note with no `?`;
+*What up* now counts as a question but still carries nothing, because it has no hits; a mid-sentence
+*how* (*I wonder how the cookout went*) does not count. `a_real_question` reads the same test, so a
+13+ word message that opens with an opener now reaches the careful tier too.
+
+Not verified: no live model was called — every test fakes both clients; nobody has said *what up*
+to the deployed bot (sweep `CB-a`).

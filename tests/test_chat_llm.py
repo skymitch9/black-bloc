@@ -25,6 +25,8 @@ from black_bloc.chat_llm import (
     capped_already_logged,
     clip,
     conversational_reply,
+    grounded,
+    is_a_question,
     ladder,
     llm_turns,
     money,
@@ -44,7 +46,12 @@ from black_bloc.chat_llm import (
     window_key,
     word_count,
 )
-from black_bloc.knowledge import ALL_OF, add_section, grounding, search
+from black_bloc.knowledge import (
+    ANY_OF,
+    GROUNDING_NOTE,
+    add_section,
+    search,
+)
 from black_bloc.llm import (
     ANTHROPIC,
     GROQ,
@@ -56,6 +63,7 @@ from black_bloc.llm import (
     Usage,
     record,
 )
+from black_bloc.personas import BANTER_STYLE
 from black_bloc.storage.db import Database
 
 NOW = datetime(2026, 9, 15, 12, 0, tzinfo=UTC)
@@ -157,11 +165,24 @@ def test_a_strong_hit_wins_over_everything_else_because_grounding_is_the_point()
 
 def test_a_casual_message_with_only_weak_hits_stays_on_the_cheap_tier():
     """Measured 2026-09-01: 8 of 8 live calls went IMPORTANT because ANY hit promoted."""
-    found = looked_up("hi")
-    assert found.hits and found.matched == ALL_OF
+    found = looked_up("cookout parliament")
+    assert found.hits and found.matched == ANY_OF
     assert found.strong is False
-    assert tier_for("hi", found, []) == SIMPLE
-    assert grounding(found), "the notes still ride along, they just do not cost more"
+    assert tier_for("cookout parliament", found, []) == SIMPLE
+    assert looked_up("hi").hits == ()
+
+
+def test_banter_gets_no_notes_and_questions_or_sure_hits_keep_them():
+    """2026-09-23: "What up" came back with three notes quoted at the member."""
+    weak = looked_up("cookout parliament")
+    strong = looked_up("cookout hours")
+    assert weak.strong is False and strong.strong is True
+    assert grounded(SIMPLE, "sup fam", weak) == ()
+    assert grounded(SIMPLE, "cookout parliament", weak) == ()
+    assert grounded(SIMPLE, "cookout parliament?", weak) is weak
+    assert grounded(SIMPLE, "when is the cookout parliament", weak) is weak
+    assert grounded(SIMPLE, "cookout hours", strong) is strong
+    assert grounded(IMPORTANT, "cookout parliament", weak) is weak
 
 
 def test_a_bare_list_of_hits_is_never_strong_because_it_says_which_pass_answered_nothing():
@@ -455,8 +476,12 @@ def test_the_grounding_rides_the_members_own_turn():
     hits = [{"title": "Rules", "body": "Be kind."}]
     said = user_turn("<@55> what are the rules?", hits)
     assert said.startswith("what are the rules?")
-    assert "quote it rather than inventing" in said
+    assert GROUNDING_NOTE in said
+    assert "never quote, list or bullet them back" in said
+    assert "Be kind." in said
     assert user_turn("<@55> hi", []) == "hi"
+    staff_wrote = user_turn("<@55> rules?", hits, note="Use these quietly.")
+    assert "Use these quietly." in staff_wrote and GROUNDING_NOTE not in staff_wrote
 
 
 def test_the_people_a_message_named_ride_the_turn_with_the_notes():
@@ -738,13 +763,45 @@ async def test_a_note_that_matches_grounds_the_turn_and_sends_it_to_the_careful_
     assert tier == IMPORTANT
     asked = careful.seen[0]["messages"][-1]["content"]
     assert "Friday evenings" in asked
-    assert "quote it rather than inventing" in asked
+    assert GROUNDING_NOTE in asked
 
 
-async def test_a_loose_match_grounds_the_cheap_tier_instead_of_paying_for_the_careful_one(
-    wired, monkeypatch
-):
-    """The measured bug: any hit promoted, so Groq was never once chosen."""
+async def test_a_short_question_stays_on_the_cheap_tier_and_keeps_its_note(wired, monkeypatch):
+    """The measured bug: any hit promoted, so Groq was never once chosen. A short factual
+    question is still SIMPLE, and still carries the note, under the silent-use header."""
+    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    said, tier, _tone = await ask(wired, "<@1> when is the cookout?")
+
+    assert tier == SIMPLE
+    asked = quick.seen[0]["messages"][-1]["content"]
+    assert "Friday evenings" in asked and GROUNDING_NOTE in asked
+
+
+def test_a_question_is_a_question_mark_or_an_opener_as_the_first_word():
+    assert is_a_question("<@1> when is the cookout") is True
+    assert is_a_question("What's good") is True
+    assert is_a_question("What up") is True
+    assert is_a_question("sup fam, cookout vibes") is False
+    assert is_a_question("I wonder how the cookout went") is False
+    assert is_a_question("I wonder how the cookout went?") is True
+
+
+async def test_what_up_counts_as_a_question_and_still_carries_nothing(wired, monkeypatch):
+    await server_notes(wired.db)
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    said, tier, _tone = await ask(wired, "<@1> What up")
+
+    assert tier == SIMPLE
+    assert quick.seen[0]["messages"][-1]["content"] == "What up"
+
+
+async def test_a_question_with_no_question_mark_keeps_its_note(wired, monkeypatch):
+    """Discord rarely types the `?` (conductor, 2026-09-23)."""
     await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
     quick = Answering(GROQ, "llama-3.3-70b-versatile")
     wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
@@ -753,7 +810,117 @@ async def test_a_loose_match_grounds_the_cheap_tier_instead_of_paying_for_the_ca
 
     assert tier == SIMPLE
     asked = quick.seen[0]["messages"][-1]["content"]
-    assert "Friday evenings" in asked
+    assert "Friday evenings" in asked and GROUNDING_NOTE in asked
+
+
+async def test_a_mid_sentence_how_is_not_a_question_and_a_weak_hit_stays_out(
+    wired, monkeypatch
+):
+    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    said, tier, _tone = await ask(wired, "<@1> I wonder how the cookout went")
+
+    assert tier == SIMPLE
+    assert quick.seen[0]["messages"][-1]["content"] == "I wonder how the cookout went"
+
+
+async def test_small_talk_with_a_weak_accidental_hit_carries_no_notes(wired, monkeypatch):
+    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    found = await chat_llm.hits_for(wired.db, 7, "<@1> sup fam, cookout vibes")
+    said, tier, _tone = await ask(wired, "<@1> sup fam, cookout vibes")
+
+    assert found.hits and found.strong is False
+    assert tier == SIMPLE
+    assert quick.seen[0]["messages"][-1]["content"] == "sup fam, cookout vibes"
+
+
+async def server_notes(db):
+    """The three notes "What up" matched live on 2026-09-23, plus the PBs channel."""
+    await add_section(
+        db, 7, "#upcoming-events", "Upcoming community events and when they happen.",
+        tag="channel", source="server",
+    )
+    await add_section(
+        db, 7, "#knuck-up", "Fighting games — matches, tech and trash talk.",
+        tag="channel", source="server",
+    )
+    await add_section(
+        db, 7, "Who has the Tech Support role", "Tech Support — 1 member: Raelcun.",
+        tag="role", source="server",
+    )
+    await add_section(
+        db, 7, "#speed-and-pbs",
+        "Speedrunning records and personal bests — talking about runs, times and PBs, not "
+        "general chat.",
+        tag="channel", source="server",
+    )
+
+
+async def test_what_up_is_banter_with_no_notes_and_the_short_answer_hint(wired, monkeypatch):
+    """Owner 2026-09-23 15:19, of a reply that quoted three notes back: "this response was
+    too much"."""
+    await server_notes(wired.db)
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    found = await chat_llm.hits_for(wired.db, 7, "<@1> What up")
+    said, tier, _tone = await ask(wired, "<@1> What up")
+
+    assert found.hits == () and found.terms == ()
+    assert tier == SIMPLE
+    assert quick.seen[0]["messages"][-1]["content"] == "What up"
+    system = quick.seen[0]["system"]
+    assert BANTER_STYLE in system
+    assert "Raelcun" not in system and "Upcoming community events" not in system
+
+
+async def test_where_to_post_pbs_finds_the_channel_and_pays_for_a_careful_grounded_answer(
+    wired, monkeypatch
+):
+    await server_notes(wired.db)
+    careful = Answering(ANTHROPIC, MODEL)
+    wire(wired, monkeypatch, haiku=careful, groq=Answering(GROQ, "llama"))
+
+    found = await chat_llm.hits_for(wired.db, 7, "<@1> where do I post my PBs")
+    said, tier, _tone = await ask(wired, "<@1> where do I post my PBs")
+
+    assert found.hits[0].title == "#speed-and-pbs" and found.strong is True
+    assert tier == IMPORTANT
+    asked = careful.seen[0]["messages"][-1]["content"]
+    assert GROUNDING_NOTE in asked and "Speedrunning records" in asked
+    assert BANTER_STYLE in careful.seen[0]["system"][0]["text"]
+
+
+async def test_who_has_the_tech_support_role_still_finds_the_role(wired):
+    await server_notes(wired.db)
+
+    found = await chat_llm.hits_for(wired.db, 7, "<@1> who has the tech support role")
+
+    assert found.hits[0].title == "Who has the Tech Support role"
+    assert found.strong is True
+
+
+async def test_the_banter_hint_and_notes_header_staff_wrote_are_the_ones_the_model_reads(
+    wired, monkeypatch
+):
+    await server_notes(wired.db)
+    wired.store.values["chat_banter_style"] = "Keep it to one line, fam."
+    wired.store.values["chat_grounding_note"] = "Read these, never recite them."
+    careful = Answering(ANTHROPIC, MODEL)
+    wire(wired, monkeypatch, haiku=careful)
+    wired.settings.groq_api_key = None
+
+    await ask(wired, "<@1> where do I post my PBs")
+
+    assert "Keep it to one line, fam." in careful.seen[0]["system"][0]["text"]
+    assert BANTER_STYLE not in careful.seen[0]["system"][0]["text"]
+    asked = careful.seen[0]["messages"][-1]["content"]
+    assert "Read these, never recite them." in asked and GROUNDING_NOTE not in asked
 
 
 async def test_black_blocs_own_mention_is_not_one_of_the_words_the_notes_are_searched_for(
