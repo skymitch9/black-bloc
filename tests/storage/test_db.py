@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 57
+        assert SCHEMA_VERSION == 58
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2160,7 +2160,7 @@ async def test_a_schema_56_file_gains_the_channel_reach_table_and_keeps_its_draf
         cur = await again.conn.execute("SELECT draft FROM channel_drafts WHERE channel_id = 1")
         assert (await cur.fetchone())["draft"] == "kept"
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "57"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
         await again.conn.execute(
             "INSERT INTO channel_reach(guild_id, channel_id, shown, set_at) VALUES (7, 1, 1, 'x')"
         )
@@ -2173,6 +2173,57 @@ async def test_a_schema_56_file_gains_the_channel_reach_table_and_keeps_its_draf
             await again.conn.execute(
                 "INSERT INTO channel_reach(guild_id, channel_id, set_at) VALUES (7, 2, 'z')"
             )
+    finally:
+        await again.close()
+
+
+async def test_a_schema_57_file_gains_the_chat_review_table_and_keeps_its_rows(tmp_path):
+    """57 → 58 is additive: an older file keeps its reach rows and gains an empty review queue."""
+    path = tmp_path / "old57.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE chat_review")
+    await db.conn.execute(
+        "INSERT INTO channel_reach(guild_id, channel_id, shown, set_at) VALUES (7, 1, 1, 'x')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '57')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(chat_review)")
+        assert {
+            "guild_id",
+            "asked",
+            "answered",
+            "reason",
+            "reply_id",
+            "suggested_intent_id",
+            "suggested_kind",
+            "suggested_line",
+            "status",
+            "decided_by",
+            "decided_at",
+        } <= {r["name"] for r in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT COUNT(*) AS n FROM chat_review")
+        assert (await cur.fetchone())["n"] == 0
+        cur = await again.conn.execute("SELECT shown FROM channel_reach WHERE channel_id = 1")
+        assert (await cur.fetchone())["shown"] == 1
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "58"
+        row = (
+            "INSERT INTO chat_review(guild_id, channel_id, user_id, asked, answered, reason, "
+            "reply_id, at, status) VALUES (7, 1, 2, 'q', 'a', 'reask', ?, 'x', ?)"
+        )
+        await again.conn.execute(row, (10, "open"))
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(row, (10, "open"))
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(row, (11, "maybe"))
     finally:
         await again.close()
 
