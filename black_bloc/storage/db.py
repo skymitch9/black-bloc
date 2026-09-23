@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 54
+SCHEMA_VERSION = 55
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -493,7 +493,9 @@ CREATE TABLE IF NOT EXISTS personality_tropes (
     sort       INTEGER NOT NULL DEFAULT 0,
     source     TEXT    NOT NULL DEFAULT 'gabi',
     updated_at TEXT    NOT NULL,
-    updated_by INTEGER
+    updated_by INTEGER,
+    voice_edited_by INTEGER,
+    voice_edited_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS chat_window (
@@ -546,7 +548,8 @@ CREATE TABLE IF NOT EXISTS llm_ledger (
     output_tokens      INTEGER NOT NULL DEFAULT 0,
     cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
     cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-    cost_microdollars  INTEGER NOT NULL DEFAULT 0
+    cost_microdollars  INTEGER NOT NULL DEFAULT 0,
+    trope              TEXT
 );
 
 CREATE INDEX IF NOT EXISTS llm_ledger_by_at ON llm_ledger(at);
@@ -930,6 +933,18 @@ CREATE TABLE IF NOT EXISTS channel_notes (
     set_at     TEXT    NOT NULL,
     PRIMARY KEY (guild_id, channel_id)
 );
+
+CREATE TABLE IF NOT EXISTS chat_voice (
+    guild_id   INTEGER NOT NULL,
+    user_id    INTEGER NOT NULL,
+    trope      TEXT,
+    turns      INTEGER NOT NULL DEFAULT 0,
+    since      TEXT,
+    pinned     TEXT,
+    pinned_by  INTEGER,
+    pinned_at  TEXT,
+    PRIMARY KEY (guild_id, user_id)
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
@@ -993,6 +1008,9 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("spotlight_channels", "youtube_channel_id", "TEXT"),
     ("spotlight_channels", "youtube_handle", "TEXT"),
     ("spotlight_channels", "starts_at", "TEXT"),
+    ("personality_tropes", "voice_edited_by", "INTEGER"),
+    ("personality_tropes", "voice_edited_at", "TEXT"),
+    ("llm_ledger", "trope", "TEXT"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")

@@ -4,9 +4,11 @@ import pytest
 
 from black_bloc.chat_llm import says_a_budget_word
 from black_bloc.personas import (
+    BASE_HEADING,
     BY_NAME,
     COOKOUT,
     COOKOUT_SLOTS,
+    COOKOUT_VOICE,
     CORE,
     DRIFT_CHANCE,
     DRIFT_EVERY_TURNS,
@@ -24,6 +26,8 @@ from black_bloc.personas import (
     POOL_VERSION,
     REGISTER,
     RETIRED,
+    TONE_CLAUSE,
+    TONE_HEADING,
     TROPE_NAMES,
     TROPES,
     VOICES,
@@ -37,6 +41,7 @@ from black_bloc.personas import (
     pick_trope,
     pooled,
     read_manifest,
+    reset_voice,
     set_enabled,
     stable_core,
     sync_pool,
@@ -44,6 +49,7 @@ from black_bloc.personas import (
     system_blocks,
     system_text,
     trope_block,
+    write_voice,
 )
 from black_bloc.storage.db import Database
 
@@ -194,13 +200,13 @@ def test_every_mood_block_carries_the_register_and_the_invariance_clause():
         said = trope_block(trope)
         assert REGISTER in said
         assert INVARIANT in said
-        assert "mood, not a different person" in said
+        assert TONE_CLAUSE in said
 
 
 def test_the_one_string_form_is_the_same_stack_a_provider_without_blocks_gets():
     said = system_text(BY_NAME["warm"])
     assert stable_core() in said
-    assert "You are WARM today" in said
+    assert "WARM: the uncle who saves you a plate" in said
 
 
 def test_the_setting_choices_are_the_house_voice_the_pool_and_every_mood():
@@ -612,5 +618,133 @@ async def test_a_server_holding_the_sync_off_gets_the_insert_only_behaviour(tmp_
         assert not (await sync_with_log(bot, monkeypatch)).changed
         assert (await get_trope(db, "gone"))["source"] == GABI
         assert bot.rows == []
+    finally:
+        await db.close()
+
+
+def test_the_whole_cookout_sheet_is_in_every_prompt_whatever_the_tone():
+    """Owner 2026-09-23: the cookout is the main personality and every other one is a tone."""
+    for trope in (None, *TROPES):
+        assert COOKOUT_VOICE in system_blocks(trope)[0]["text"]
+        assert COOKOUT_VOICE in system_text(trope)
+        assert COOKOUT_VOICE in system_text(trope, "## The channels of this server\n#general")
+
+
+def test_the_sheet_is_a_real_lingo_and_mannerisms_sheet():
+    said = COOKOUT_VOICE.lower()
+    assert COOKOUT_VOICE.startswith(BASE_HEADING)
+    for part in ("words you reach for", "how you greet", "how you tease", "how you close",
+                 "what you never do", "favourite uncle"):
+        assert part in said, part
+    assert 15 <= len(COOKOUT_VOICE.splitlines()) <= 25
+
+
+def test_every_tone_block_says_it_is_a_tone_on_the_cookout_voice():
+    for trope in TROPES:
+        said = trope_block(trope)
+        assert said.startswith(TONE_HEADING)
+        assert TONE_CLAUSE in said
+        assert said.index(trope.voice) < said.index(TONE_CLAUSE) < said.index(REGISTER)
+
+
+def test_a_tone_block_never_carries_a_second_how_you_sound_heading():
+    for trope in TROPES:
+        assert BASE_HEADING not in trope_block(trope)
+        whole = system_text(trope)
+        assert whole.count(BASE_HEADING) == 1
+        assert whole.index(BASE_HEADING) < whole.index(TONE_HEADING)
+
+
+def test_the_tone_clause_keeps_the_words_and_changes_only_energy_pace_and_attitude():
+    said = TONE_CLAUSE.lower()
+    assert "tone on the cookout voice" in said
+    assert "words, names and mannerisms" in said
+    assert "energy, pace and attitude" in said
+
+
+def test_every_mood_body_is_a_cookout_tone_with_an_example_line():
+    for trope in TROPES:
+        said = trope.voice
+        assert "uncle" in said.lower(), trope.name
+        assert "Sounds like:" in said, trope.name
+        assert 3 <= len(said.split(". ")) <= 12, trope.name
+
+
+def test_the_safety_lines_of_the_old_bodies_survived_the_rewrite():
+    assert "STILL GIVE THE WHOLE ANSWER" in BY_NAME["shy"].voice
+    assert "CHARM, NOT HEAT" in BY_NAME["flirty"].voice
+    assert "never actually rude" in BY_NAME["tsundere"].voice
+    assert "help is genuine and prompt" in BY_NAME["noir"].voice
+
+
+def test_staff_wording_for_the_sheet_and_the_clause_replaces_the_default_in_the_stack():
+    mine = "## How you sound\nSay 'bet' a lot."
+    blocks = system_blocks(BY_NAME["noir"], sheet=mine, clause_text="Keep it cookout.")
+    assert mine in blocks[0]["text"] and COOKOUT_VOICE not in blocks[0]["text"]
+    assert "Keep it cookout." in blocks[-1]["text"] and TONE_CLAUSE not in blocks[-1]["text"]
+
+
+def test_a_blank_sheet_or_clause_falls_back_to_the_shipped_wording():
+    assert COOKOUT_VOICE in system_text(None, sheet="   ")
+    assert TONE_CLAUSE in trope_block(BY_NAME["warm"], "")
+
+
+async def test_a_body_staff_edited_survives_the_boot_sync(tmp_path):
+    db = Database(tmp_path / "p.sqlite3")
+    await db.connect()
+    try:
+        await sync_tropes(db)
+        assert await write_voice(db, "noir", "NOIR, but ours.", by=7)
+        found = await sync_tropes(db)
+        assert "noir" not in found.updated
+        row = await get_trope(db, "noir")
+        assert row["voice"] == "NOIR, but ours."
+        assert row["voice_edited_by"] == 7 and row["voice_edited_at"]
+    finally:
+        await db.close()
+
+
+async def test_an_edited_body_still_takes_a_new_label_and_wings_from_the_manifest(tmp_path):
+    db = Database(tmp_path / "p.sqlite3")
+    await db.connect()
+    try:
+        await sync_tropes(db)
+        await write_voice(db, "noir", "NOIR, but ours.")
+        await db.conn.execute("UPDATE personality_tropes SET label = 'old' WHERE name = 'noir'")
+        await db.conn.commit()
+        assert (await sync_tropes(db)).updated == ("noir",)
+        row = await get_trope(db, "noir")
+        assert row["label"] == BY_NAME["noir"].label
+        assert row["voice"] == "NOIR, but ours."
+    finally:
+        await db.close()
+
+
+async def test_a_reset_body_goes_back_to_the_shipped_wording_and_under_the_sync(tmp_path):
+    db = Database(tmp_path / "p.sqlite3")
+    await db.connect()
+    try:
+        await sync_tropes(db)
+        await write_voice(db, "noir", "NOIR, but ours.")
+        assert await reset_voice(db, "noir", by=7)
+        row = await get_trope(db, "noir")
+        assert row["voice"] == VOICES["noir"] and row["voice_edited_at"] is None
+        assert not await reset_voice(db, "nobody")
+    finally:
+        await db.close()
+
+
+async def test_an_old_body_is_brought_up_to_the_cookout_tone_on_the_next_sync(tmp_path):
+    """The rewrite reaches a live table the way any wording change does: the boot sync."""
+    db = Database(tmp_path / "p.sqlite3")
+    await db.connect()
+    try:
+        await sync_tropes(db)
+        await db.conn.execute(
+            "UPDATE personality_tropes SET voice = 'You are HARD-BOILED today.' WHERE name = 'noir'"
+        )
+        await db.conn.commit()
+        assert (await sync_tropes(db)).updated == ("noir",)
+        assert (await get_trope(db, "noir"))["voice"] == VOICES["noir"]
     finally:
         await db.close()

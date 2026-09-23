@@ -42,7 +42,14 @@ from .logkinds import (
 from .minutes_audio import CHUNK_SECONDS_DEFAULT as MINUTES_CHUNK_SECONDS_DEFAULT
 from .minutes_audio import CHUNK_SECONDS_MAX as MINUTES_CHUNK_SECONDS_MAX
 from .minutes_audio import CHUNK_SECONDS_MIN as MINUTES_CHUNK_SECONDS_MIN
-from .personas import COOKOUT, PERSONALITY_CHOICES
+from .personas import (
+    COOKOUT,
+    COOKOUT_VOICE,
+    COOKOUT_VOICE_KEY,
+    PERSONALITY_CHOICES,
+    TONE_CLAUSE,
+    TONE_CLAUSE_KEY,
+)
 from .polls import DATE_LABEL_FORMS as POLL_DATE_LABEL_FORMS
 from .polls import MAX_HOURS as POLL_MAX_HOURS
 from .polls import MIN_HOURS as POLL_MIN_HOURS
@@ -3394,6 +3401,52 @@ TEXT_CHECKS.update(
     {key: checked_fields(fields) for key, (_, fields, _) in CHANNEL_NOTE_WORDS.items()}
 )
 
+VOICE_SHEET_CHARS = 4000
+TONE_CLAUSE_CHARS = 600
+PROMPT_TOO_LONG = (
+    "That is {length} characters and {what} holds {limit}, so nothing was changed. Every "
+    "character is read on every answer; take {over} out and save it again."
+)
+PROMPT_WORDS: dict[str, tuple[str, int, str, str]] = {
+    COOKOUT_VOICE_KEY: (
+        COOKOUT_VOICE,
+        VOICE_SHEET_CHARS,
+        "the cookout voice",
+        "the cookout voice itself — the words Black Bloc reaches for, how it greets, teases and "
+        "signs off, and what it never says. Every conversational answer is written in it, "
+        "whatever tone is on top. It cannot be left blank",
+    ),
+    TONE_CLAUSE_KEY: (
+        TONE_CLAUSE,
+        TONE_CLAUSE_CHARS,
+        "the tone sentence",
+        "the sentence under every tone that tells the model a mood is a tone ON the cookout "
+        "voice — keep its words and mannerisms, change only energy, pace and attitude. It "
+        "cannot be left blank",
+    ),
+}
+KEY_TYPES.update({key: "text" for key in PROMPT_WORDS})
+KEY_HELP.update({key: said for key, (_, _, _, said) in PROMPT_WORDS.items()})
+
+
+def checked_prompt(key: str) -> Any:
+    _, limit, what, _ = PROMPT_WORDS[key]
+
+    def check(given: Any) -> str:
+        text = str(given or "").strip()
+        if len(text) > limit:
+            raise SettingError(
+                PROMPT_TOO_LONG.format(
+                    length=len(text), what=what, limit=limit, over=len(text) - limit
+                )
+            )
+        return text
+
+    return check
+
+
+TEXT_CHECKS.update({key: checked_prompt(key) for key in PROMPT_WORDS})
+
 
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
@@ -3932,6 +3985,8 @@ class SettingsStore:
             return True
         if key in CHANNEL_NOTE_WORDS:
             return CHANNEL_NOTE_WORDS[key][0]
+        if key in PROMPT_WORDS:
+            return PROMPT_WORDS[key][0]
         if key == "chat_mode":
             return "on"
         if key == "chat_cooldown_seconds":
