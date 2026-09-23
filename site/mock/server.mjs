@@ -411,6 +411,17 @@ const SETTING_SPECS = [
   ['birthday_color', 'color', '#4eefff', '#4eefff', 'the birthday embed’s colour, as a hex code like #4eefff'],
   ['birthday_role_id', 'role', '900000000000000004', null, 'role given for the day and taken back the next'],
   ['birthday_show_age', 'bool', false, false, 'true to put {age} in reach for people who stored a birth year'],
+  ["birthday_post_button", "text", "Post today's wishes", "Post today's wishes", "what the staff button that posts today's birthday wishes by hand is called, on the /birthday panel and the Birthdays page"],
+  ["birthday_post_confirm", "text", "Post today's birthday wishes now? A birthday is today in the member's own time zone. **Post the ones not sent yet** does straight away what the five-minute sweep would. **Post them all again** also wishes anyone already wished today, so they get a second post.", "Post today's birthday wishes now? A birthday is today in the member's own time zone. **Post the ones not sent yet** does straight away what the five-minute sweep would. **Post them all again** also wishes anyone already wished today, so they get a second post.", "the question staff are asked before today's wishes are posted by hand, above the two moves"],
+  ["birthday_post_unsent_label", "text", "Post the ones not sent yet", "Post the ones not sent yet", "what the move that posts only the wishes not sent yet today is called \u2014 the five-minute sweep, run now"],
+  ["birthday_post_again_label", "text", "Post them all again", "Post them all again", "what the move that posts every birthday today again, including anyone already wished, is called"],
+  ["birthday_post_nobody", "text", "Nobody who is opted in has a birthday today, so nothing was posted.", "Nobody who is opted in has a birthday today, so nothing was posted.", "what staff are told when they post today's wishes and nobody opted in has a birthday today"],
+  ["birthday_post_off", "text", "Birthday wishes are **off**, so nothing was posted. Staff can switch them to **shadow** or **on** with **Wishes are\u2026** on `/birthday`, or birthday_mode on the Birthdays page, and then post again.", "Birthday wishes are **off**, so nothing was posted. Staff can switch them to **shadow** or **on** with **Wishes are\u2026** on `/birthday`, or birthday_mode on the Birthdays page, and then post again.", "what staff are told when they post today's wishes while birthday_mode is off; nothing is posted when this is said"],
+  ["birthday_post_posted", "text", "Posted {n} birthday wish(es) in {channel}.", "Posted {n} birthday wish(es) in {channel}.", "the line that says how many wishes were posted by hand. It takes {n}, the count, and {channel}, the channel they went to"],
+  ["birthday_post_rehearsed", "text", "Birthday wishes are in **shadow**, so {n} wish(es) went to the rehearsal home, {channel}, and nothing to the real channel.", "Birthday wishes are in **shadow**, so {n} wish(es) went to the rehearsal home, {channel}, and nothing to the real channel.", "the line that says how many wishes went to the rehearsal home because birthday_mode is shadow. It takes {n} and {channel}"],
+  ["birthday_post_skipped", "text", "{n} already wished today were left alone \u2014 **Post them all again** posts those too.", "{n} already wished today were left alone \u2014 **Post them all again** posts those too.", "the line that says how many birthdays today were already wished and left alone. It takes {n}"],
+  ["birthday_post_missing", "text", "{n} could not be found in the member list, so nothing was posted for them.", "{n} could not be found in the member list, so nothing was posted for them.", "the line that says how many birthdays today belong to somebody Black Bloc cannot find in the member list. It takes {n}"],
+  ["birthday_post_failed", "text", "{n} could not be posted \u2014 **Logs** on `/birthday` or the Birthdays page says why.", "{n} could not be posted \u2014 **Logs** on `/birthday` or the Birthdays page says why.", "the line that says how many wishes Discord refused or had nowhere to go. It takes {n}; the log row for each says why"],
   ['modmail_enabled', 'bool', true, false, 'true when Black Bloc answers DMs'],
   ['modmail_mode', 'enum', 'thread', 'channel', 'channel (one channel per ticket), thread (private threads in the staff channel) or forum (one post per ticket in the forum channel — the list never grows past the forum’s own archive)', ['channel', 'thread', 'forum']],
   ['modmail_category_id', 'channel', '800000000000000011', null, 'the category ticket channels are made in, in channel mode'],
@@ -6426,6 +6437,54 @@ route('POST', '/api/birthdays/:user_id/optin', async (context) => {
       ? `**${name}** gets a birthday wish again.`
       : `**${name}** is opted out, so Black Bloc says nothing on their birthday.`,
   };
+});
+
+function birthdayWord(key, values = {}) {
+  const wording = String(state.settings.get(key) || '');
+  return wording.replace(/\{(\w+)\}/g, (whole, name) => (name in values ? String(values[name]) : whole));
+}
+
+function phoenixToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const [year, month, day] = parts.split('-').map(Number);
+  return { month, day, text: parts };
+}
+
+route('POST', '/api/birthdays/post-today', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const again = body.again === true;
+  const mode = String(state.settings.get('birthday_mode') || 'shadow');
+  const counts = { posted: 0, skipped: 0, missing: 0, failed: 0 };
+  if (mode !== 'off') {
+    const today = phoenixToday();
+    for (const row of state.birthdays) {
+      if (!row.opted_in || Number(row.month) !== today.month || Number(row.day) !== today.day) continue;
+      if (row.last_announced_on === today.text && !again) {
+        counts.skipped += 1;
+      } else if (!memberName(row.user_id)) {
+        counts.missing += 1;
+      } else {
+        counts.posted += 1;
+        row.last_announced_on = today.text;
+      }
+    }
+  }
+  logAction('web.birthday.posted_now', { details: { via: 'website', again, mode, ...counts } });
+  if (mode === 'off') throw new Refused(409, 'birthdays_off', birthdayWord('birthday_post_off'));
+  const where = mode === 'on' ? state.settings.get('birthday_channel_id') : (state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id'));
+  const found = CHANNELS.find((one) => one.id === String(where));
+  const channel = found ? `#${found.name}` : (where ? `<#${where}>` : '');
+  const lines = [];
+  if (counts.posted + counts.skipped + counts.missing + counts.failed === 0) {
+    lines.push(birthdayWord('birthday_post_nobody'));
+  } else {
+    if (counts.posted) lines.push(birthdayWord(mode === 'on' ? 'birthday_post_posted' : 'birthday_post_rehearsed', { n: counts.posted, channel }));
+    if (counts.skipped) lines.push(birthdayWord('birthday_post_skipped', { n: counts.skipped }));
+    if (counts.missing) lines.push(birthdayWord('birthday_post_missing', { n: counts.missing }));
+    if (counts.failed) lines.push(birthdayWord('birthday_post_failed', { n: counts.failed }));
+  }
+  return { ...counts, mode, again, said: lines.join('\n') };
 });
 
 route('DELETE', '/api/birthdays/:user_id', (context) => {

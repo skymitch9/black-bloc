@@ -8060,3 +8060,19 @@ Branch `channel-catalog`, off `main` `8e4ca731`, keyed against `498019b4`. Desig
 | `black_bloc/api/tools/chat.py:240` `channel_order` | Discord's own order: loose channels first (category position -1), then category by category. |
 | `black_bloc/cogs/content/chat.py:880` `ChannelNotePick` | Discord's own channel select searches every channel, so the 25-per-page pattern the brief named is not needed. |
 | `black_bloc/cogs/content/chat.py:452` `settings_lines` | The eleven word keys are left off the `/chat` Settings card — full sentences would swamp it; they have three editors of their own. |
+
+## Post today's birthday wishes by hand (2026-09-23)
+
+*(branch `birthday-post-today`, off `main` `203274c6`. Keyed against `435a136a`; the anchor text wins over the number.)*
+
+| Key | Note |
+|---|---|
+| `black_bloc/cogs/community/birthdays.py:380` `post_today` | The ONE door (panel + route). Counts come back from `_post_one` per member; the `posted_now` row is written even for `off` so a refused press shows in Logs. `via` goes through `kind_via`, so the route never `note()`s (checklist 34). |
+| `black_bloc/cogs/community/birthdays.py:1053` `_post_one` | Re-reads the row under the member's lock: a sweep tick that just wished them is seen, so without `again` nobody is wished twice (checklist 6). |
+| `black_bloc/cogs/community/birthdays.py:1068` `_celebrate` | Now returns `posted` / `missing` / `failed` (the sweep ignores it). `rehearse=True` is passed only by the door: in `shadow` it posts to the rehearsal home and logs `would_announce` with `rehearsed: true`; the sweep's shadow is unchanged and posts nothing. `on` + a test-mode refusal counts as `failed`. |
+| `black_bloc/cogs/community/birthdays.py:1134` `_post` | `rehearse` swaps the channel for `shadow.channel_id` and puts `shadow.note_line` above the embed; a missing `birthday_channel_id` still refuses first, because the note names it. |
+| `black_bloc/cogs/community/birthdays.py:665` `open_post_confirm` | Three `ConfirmButton`s, not `confirm_items` (which makes two). `Cancel` is the unkeyed library word the role-clear confirm already uses. |
+| `black_bloc/birthdays.py:460` `post_today_said` | One line per non-zero count; `off` and nobody-today are whole sentences. `post_line` falls back to the shipped wording if a stored one will not fill (checklist 17), though `TEXT_CHECKS` already refuses a stray placeholder at save. |
+| `black_bloc/settings_store.py:1489` `BIRTHDAY_POST_*` | Eleven text keys, defaults in `BIRTHDAY_POST_WORDS` (the one home; `store.get` returns from it). Checks: `checked_plain`, `checked_count` (`{n}`), `checked_count_where` (`{n}`, `{channel}`). |
+| `black_bloc/api/tools/birthdays.py:92` `POST /post-today` | `require_cog` first (503 in words if the cog is not loaded); `off` is a 409 `birthdays_off` carrying the door's sentence. |
+| `site/public/assets/page-birthdays.js:46` `postTodayCard` | Lives in the page-head aside. Reads its four words from the `birthday` settings rows and draws nothing if the bot does not report them, rather than guessing. |

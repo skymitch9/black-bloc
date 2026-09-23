@@ -20,7 +20,7 @@ from black_bloc.chat import seed_defaults as seed_chat
 from black_bloc.chat_memory import Note as MemoryNote
 from black_bloc.chat_memory import Profile as MemoryProfile
 from black_bloc.chat_memory import save_profile
-from black_bloc.cogs.community.birthdays import save_birthday
+from black_bloc.cogs.community.birthdays import Birthdays, save_birthday
 from black_bloc.cogs.community.polls import add_options as add_poll_options
 from black_bloc.cogs.community.polls import (
     create_poll,
@@ -237,6 +237,7 @@ async def seed_world(client, web, guild, wf) -> dict:
     await sign_in_staff(client, db, wf)
 
     web.cogs["Contract"] = FakeCog()
+    web.cogs["Birthdays"] = Birthdays(web)
     # Both **Make the forum** routes need somewhere to make it; the forum keys stay blank so
     # each entry makes its own and neither is refused as already there.
     await web.store.set(guild_id, "modmail_category_id", wf.CATEGORY_ID, by=7)

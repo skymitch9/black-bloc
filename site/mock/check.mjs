@@ -437,6 +437,7 @@ async function checkActionKinds() {
   await send('DELETE', `/api/posts/${IDS.scratch_post_slug}`, undefined);
   // The four web.minutes.* kinds a staff move can leave. The meeting is deleted last, so the
   // other three act on a row that is still there.
+  await post('/api/birthdays/post-today', { again: false });
   await post(`/api/minutes/${IDS.meeting_id}/write`, {});
   await send('PUT', `/api/minutes/${IDS.meeting_id}`, { notes: 'Staff wrote this line.' });
   await post(`/api/minutes/${IDS.meeting_id}/post`, {});
