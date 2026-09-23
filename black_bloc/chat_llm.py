@@ -504,10 +504,10 @@ def who_they_named(bot: Any, guild: Any, text: Any) -> list[tuple[str, str]]:
 
 
 def grounded(tier: str, text: Any, hits: Any) -> Any:
-    """Banter gets banter: a SIMPLE turn with no real question carries no notes at all."""
-    if tier == SIMPLE and not a_real_question(text):
-        return ()
-    return hits
+    """Banter gets banter: only a SIMPLE turn that is not a question, on weak hits, loses them."""
+    if is_a_question(text) or is_strong(hits) or tier != SIMPLE:
+        return hits
+    return ()
 
 
 def user_turn(

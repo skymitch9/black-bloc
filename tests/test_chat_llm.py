@@ -171,12 +171,16 @@ def test_a_casual_message_with_only_weak_hits_stays_on_the_cheap_tier():
     assert looked_up("hi").hits == ()
 
 
-def test_banter_gets_no_notes_and_anything_careful_keeps_them():
+def test_banter_gets_no_notes_and_questions_or_sure_hits_keep_them():
     """2026-09-23: "What up" came back with three notes quoted at the member."""
-    found = looked_up("cookout hours")
-    assert grounded(SIMPLE, "cookout parliament", found) == ()
-    assert grounded(IMPORTANT, "cookout hours", found) is found
-    assert grounded(SIMPLE, LONG, found) is found
+    weak = looked_up("cookout parliament")
+    strong = looked_up("cookout hours")
+    assert weak.strong is False and strong.strong is True
+    assert grounded(SIMPLE, "sup fam", weak) == ()
+    assert grounded(SIMPLE, "cookout parliament", weak) == ()
+    assert grounded(SIMPLE, "cookout parliament?", weak) is weak
+    assert grounded(SIMPLE, "cookout hours", strong) is strong
+    assert grounded(IMPORTANT, "cookout parliament", weak) is weak
 
 
 def test_a_bare_list_of_hits_is_never_strong_because_it_says_which_pass_answered_nothing():
@@ -760,18 +764,31 @@ async def test_a_note_that_matches_grounds_the_turn_and_sends_it_to_the_careful_
     assert GROUNDING_NOTE in asked
 
 
-async def test_a_loose_match_stays_on_the_cheap_tier_and_carries_no_notes(wired, monkeypatch):
-    """The measured bug: any hit promoted, so Groq was never once chosen. Since 2026-09-23 the
-    cheap tier's banter carries no notes at all, so none can be quoted back."""
+async def test_a_short_question_stays_on_the_cheap_tier_and_keeps_its_note(wired, monkeypatch):
+    """The measured bug: any hit promoted, so Groq was never once chosen. A short factual
+    question is still SIMPLE, and still carries the note, under the silent-use header."""
     await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
     quick = Answering(GROQ, "llama-3.3-70b-versatile")
     wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
 
-    said, tier, _tone = await ask(wired, "<@1> when is the cookout")
+    said, tier, _tone = await ask(wired, "<@1> when is the cookout?")
 
     assert tier == SIMPLE
     asked = quick.seen[0]["messages"][-1]["content"]
-    assert asked == "when is the cookout"
+    assert "Friday evenings" in asked and GROUNDING_NOTE in asked
+
+
+async def test_small_talk_with_a_weak_accidental_hit_carries_no_notes(wired, monkeypatch):
+    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+
+    found = await chat_llm.hits_for(wired.db, 7, "<@1> sup fam, cookout vibes")
+    said, tier, _tone = await ask(wired, "<@1> sup fam, cookout vibes")
+
+    assert found.hits and found.strong is False
+    assert tier == SIMPLE
+    assert quick.seen[0]["messages"][-1]["content"] == "sup fam, cookout vibes"
 
 
 async def server_notes(db):

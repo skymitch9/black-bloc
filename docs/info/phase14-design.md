@@ -219,8 +219,10 @@ exactly that. `tier_for` was right to choose SIMPLE.
    role that note is about** (`name_of`: a `#channel` title, or the role in *Who has the X role*).
    So `#knuck-up` or `@Tech Support` typed as such is enough, and so is `pbs` for
    `#speed-and-pbs`. The old all-tokens-pass + title-score (`STRONG_SCORE`) rule is gone.
-3. **Banter gets banter** (`chat_llm.grounded`): a SIMPLE turn with no real question carries NO
-   notes — the model answers from the voice alone. The directory block (the channel list in the
+3. **Banter gets banter** (`chat_llm.grounded`): notes are dropped ONLY on a SIMPLE turn that is
+   not a question at all (no `?`) and whose hits are weak — a question of any length, a strong hit,
+   or an IMPORTANT turn keeps them (conductor narrowing, same day: a short factual question must not
+   lose its note). *What up* stays clean because the stop list leaves it no hits to drop. The directory block (the channel list in the
    system prompt) is unchanged, so a banter turn can still point somewhere.
 4. **Grounding says use them silently**: the header is the key `chat_grounding_note` (group chat)
    — *these are notes for you — use them silently: never quote, list or bullet them back; mention a
@@ -236,11 +238,11 @@ Chat group 75 → 77 keys, registry 366 → 368; both keys are edited in the Cha
 | *What up* | 3 hits on `up`, quoted back | 0 tokens, 0 hits, SIMPLE, no notes |
 | *where do I post my PBs* | substring hits | `#speed-and-pbs` top, strong (`pbs` names it), IMPORTANT, grounded silently |
 | *who has the tech support role* | role section | role section top, strong (3 words) |
+| *when is the cookout?* | SIMPLE, note attached | SIMPLE, note attached under the silent-use header |
+| *sup fam, cookout vibes* | SIMPLE, weak *Cookout hours* hit attached | SIMPLE, weak hit, no notes |
 
-⚠️ **Trade-off, deliberate per the brief:** a SHORT question about a staff note (*when is the
-cookout*, one token, not a channel or role name) is SIMPLE and now carries no notes, where it used
-to carry them. If that bites, the lever is `is_strong` (e.g. one token on a staff note's title),
-not putting notes back on banter.
+⚠️ **The question test is the `?`** (`is_a_question`): *when is the cookout* typed WITHOUT a
+question mark is not a question, and on a weak hit it carries no notes.
 
 Not verified: no live model was called — every test fakes both clients; nobody has said *what up*
 to the deployed bot (sweep `CB-a`).
