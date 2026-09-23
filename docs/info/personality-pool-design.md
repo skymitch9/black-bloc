@@ -1,5 +1,7 @@
 # The global personality pool — design (next-wave #4)
 
+> ⚠️ **Superseded in part, 2026-09-23** (branch `personality-tones`, BUILT, NOT MERGED): the mood block is now a **tone on the cookout voice** (`## Today's tone (on top of the cookout voice)` + the `chat_tone_clause` sentence), the eleven bodies are cookout tones and editable per mood, and in a server the roll is keyed by **(guild, member)** and stored in `chat_voice`, with a staff pin above it. Read [`personality-tones-design.md`](personality-tones-design.md) for how a reply picks its voice now; this doc still owns the manifest, the roster, the graph, the drift constants and the two shared clauses, none of which changed.
+
 > **Audience:** Claude sessions in BOTH repos (this one and `catalog-platform`).
 > **Status:** TRACKED — **Black Bloc half LIVE as v90 `7c59eb1`** (2026-09-05 19:00; built on `worktree-agent-a9f7e266cd87f5c2c`) **and v91 `604226f`** (19:38: roster compared by name, byte-for-byte sync).
 > **GABI half (§5.1) LIVE 2026-09-05 19:33** — catalog-platform `de4ef63` (main `cb4f779`), deployed by the owner (`755cfd54`); her `/api/health` answers
