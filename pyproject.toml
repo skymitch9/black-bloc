@@ -20,6 +20,7 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
     "pytest-xdist>=3.6",
+    "pytest-timeout>=2.3",
     "httpx>=0.27",
     "ruff>=0.6",
 ]
@@ -41,6 +42,8 @@ black_bloc = ["personality_pool.json", "guides_seed.json"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--import-mode=importlib -m 'not live'"
+timeout = 120
+timeout_method = "thread"
 markers = [
     "live: hits the DEPLOYED api rather than a fixture; excluded from the default run and skipped unless BLACK_BLOC_LIVE_URL and BLACK_BLOC_LIVE_TOKEN are both set. Run it with: pytest -m live tests/live",
 ]
