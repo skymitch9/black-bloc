@@ -2945,3 +2945,16 @@ announcement is in `shadow_channel_id` (`#welcome-test`), not the go-live channe
 | Row | Do | Expect |
 |---|---|---|
 | **`PR-a`** | Watch a live spotlighted marathon (GamesDoneQuick) change game. Look at the pinned announcement in the go-live channel (the pin icon in the channel header) | Within one poll (5 min) the PINNED announcement reads the new game and shows its art on the card; it is still the same message, still pinned. The Logs page (`golive_log_level = all`) shows `golive.spotlight_announcement_refreshed` with the new `game`, and **no** `golive.spotlight_pinned` / `golive.spotlight_unpinned` rows around it — no new pin, no unpin. A `golive.spotlight_announcement_refresh_failed` row instead means Discord refused the edit; its `reason` says why. |
+
+## Rows `YW-a` … `YW-d` — the bot-check wall says so, and a walled channel row is searched (branch `youtube-walled`, 2026-09-22)
+
+Design: [`../info/youtube-live-design.md`](../info/youtube-live-design.md) ▸ *The walled channel rows*;
+KI-30. Lettered; the conductor numbers them. ⚠️ Only the live bot on Fly meets the wall — a home
+machine is served the real page, so none of these can be run against the mock.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`YW-a`** | After the deploy, open **Go-live** ▸ *How live streams are spotted* | New rows: **Behind the bot check now** (*none* or a warn badge *N channel(s)*), **Video id** (*nobody reads as live* / *found for every channel reading live* / a warn badge *unknown for N of M — the post links the channel's /live page*), **What a post links** (with the key set: *the stream's own watch page — behind the bot check the id is searched for once per broadcast (100 units)…*). When the last probe met the wall, a paragraph under the rows names the *Sign in to confirm you're not a bot* page. `/youtube` ▸ staff half says the same three things |
+| **`YW-b`** | Logs page ▸ YouTube chip, after a few probes while the wall is up | `youtube.probe_walled` rows — ONE per channel when the wall goes up, and one more only when what it lets through changes (`live` true ↔ null), never one per 5-minute probe. `live: null` means the wall hid the marker. Nothing about it posts to `#blackbloc-logs` (routine) |
+| **`YW-c`** | Wait for a spotlight/channel row that is NOT opted out and has a YouTube channel (GamesDoneQuick) to go live on YouTube while the wall is up | ONE `youtube.live_id_searched` row (`units: 100`, `video_id` set) for that channel per broadcast, `quota_today` up by **101**, and the announcement links `youtube.com/watch?v=<id>`, not the `/live` page. ⚠️ A quota climbing by 100 per probe is the bug (`YL-m`'s rule) |
+| **`YW-d`** | Look at ESA Marathon's `youtube.live_seen` rows after the deploy | Each reads `announced: false, because: opted_out` — never `announced: true` while its announce cell is off — and there is NO `youtube.live_id_searched` row for `UC3Oe-jfrIqEGygxYBYyN6jQ`. One such row per boot is expected (the memory is per process) |

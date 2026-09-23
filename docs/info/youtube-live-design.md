@@ -286,3 +286,96 @@ ran.*
     itself is still unreachable from here (Deviation 23), and no browser rendered the Go-live card.
     Sweeps **594–595** (`YL-o`, `YL-p`) are the proof that is missing, and like 586-590 they can only
     be run on Fly.
+
+### The walled channel rows (follow-up) — 2026-09-22, branch `youtube-walled` off `main` `269338c3`
+
+*Brief: the live action log (read through the operator token by the conductor, 2026-09-22) carries
+`youtube.live_seen` rows for ESA Marathon's channel row (`spotlight_id=4`, YouTube channel
+`UC3Oe-jfrIqEGygxYBYyN6jQ`) reading `video_id=None, botcheck=True, mode=on, announced=True,
+url=…/channel/UC3Oe-jfrIqEGygxYBYyN6jQ/live` at 2026-09-21 17:35Z, 19:13Z, 2026-09-22 03:08Z,
+20:35Z and 2026-09-23 04:18Z, one at 2026-09-22 07:03Z with `video_id=FAMWR-HDS8U, botcheck=False`,
+and one at 2026-09-21 16:56Z reading `announced=False, because=joined_session` — while
+`YOUTUBE_API_KEY` IS set on Fly and ESA's `/api/golive/spotlight` row shows no YouTube session ever.*
+
+**What those rows were — the exact code path (read off `main` `269338c3`; the rows themselves were
+the conductor's reading, not this build's).**
+
+1. **They are CHANNEL-ROW rows, not member rows.** `spotlight_id` and `login` are written only by
+   `_channel_seen`, which only `_probe_channels` → `_channel_live` reaches (the sweep over
+   `spotlight_channels` rows with a `youtube_channel_id`, v151). The member path (`probe_all` →
+   `_probed` → `_live_now`) never writes those two keys.
+2. **On that path the 100-unit id search was NEVER attempted.** `_channel_live` built
+   `stream_info(probe.video_id)` when the page had an id and `channel_info(channel_id)` (the
+   `/live` URL) when it did not — it never called `_searched` or `_confirm`. So with the key set,
+   a walled page could only ever link the `/live` page, `quota_today` did not move for it, and no
+   `youtube.live_id_searched` / `youtube.live_search_failed` row could exist for ESA. Deviation 17's
+   search was wired into `_live_now` only; the channel-row path came later (v151) and did not
+   inherit it. ⚠️ Inferred from the code, not from a log query: this build did not read the live
+   action log for the absence of search rows.
+3. **`announced=True` meant only "no session was open when I looked".** `_channel_live` wrote the
+   row BEFORE handing off, then `Spotlight.announce_info` returned at its first line —
+   `if not words.announces(row): return` — because ESA's announce cell is OFF (set after the v151
+   boot, `deploys.log` 2026-09-21 09:51 Phoenix: *"ESA announce off"*; sweeps row **725** describes
+   ESA as opted out). No session row, no post, no log row from the spotlight side: the row's
+   `announced: true` was false every time.
+4. **Why the row repeats "every few hours": the process restarted.** `live_video` is in memory.
+   Five of the six `announced=True` rows land on a deploy's boot minute in `docs/deploys.log`:
+   v152 17:35Z, v153 19:13Z, v154 03:08Z, v155 20:35Z, v156 04:17–04:18Z. The first probe of a new
+   process sees no `live_video` entry and treats the broadcast as new. The 07:03Z row (not a boot)
+   needs `live_video` to have been cleared by `youtube_live_end_misses` consecutive not-live reads
+   first — the wall's offline shape, or the stream really pausing; ⚠️ which one is NOT known.
+   The 16:56Z `joined_session` row is the v151 boot (16:51Z) while ESA's Twitch session was still
+   open, before the opt-out.
+
+**What changed (branch `youtube-walled`).**
+
+27. **`_channel_live` searches, confirms and tells the truth.** Order now: open session → row
+    `announced: false, because: "joined_session"`; announce cell off → row `announced: false,
+    because: "opted_out"` and NO search (100 units are not spent on a channel that will not be
+    announced); otherwise `probe.video_id or _searched(...)` then `_confirm(...)`, exactly as
+    `_live_now` does, once per broadcast (the same `live_video` memory). The announcing row is
+    written INSIDE the spotlight lock, after the re-check, so `announced: true` is only written
+    where `announce_info` is about to run. A missing spotlight cog is now a
+    `youtube.live_announce_failed` row (`reason: spotlight_cog_missing`) instead of a
+    `live_seen` claim and a log line. ⚠️ **Not fixed: the in-memory `live_video` still resets at
+    every boot**, so an opted-out channel that is live across a deploy still writes one
+    `opted_out` row per boot (pinned by
+    `test_a_reboot_forgets_the_broadcast_so_the_next_probe_writes_its_row_again`). It now says
+    why, and it spends nothing.
+28. **The wall is its own outcome: `Probe.walled` and `youtube.probe_walled`.** `walled` is the
+    bot-check marker WITH no canonical link (a bot-check page that still names the video is not
+    walled — the id was read). `wall_reading(probe)` is `True` (`isLive`), `False`
+    (`isUpcoming`) or `None` (neither — behind the wall a missing marker is not proof of
+    offline). Both sweeps call `_wall(...)` after routing, and it writes ONE row per state change
+    per channel: when the wall goes up, or when its reading changes while it stays up; the wall
+    coming down clears the memory silently. Details: `channel_id`, `live`, `video_id` (the id the
+    cog now knows for the broadcast — searched or read — else `null`), `keyed`, `url`.
+    ⚠️ **Routing is unchanged: a walled `None` still counts as a miss**, so a stream behind a wall
+    that drops `isLive` still ends after `youtube_live_end_misses` reads. Treating it as
+    unknown would keep a session open forever behind a permanent wall; the row is the bell
+    KI-30 (a) asked for, not a routing change.
+29. ✅ **DECIDED — `youtube.probe_walled` is ROUTINE, not IMPORTANT** (unlike
+    `probe_unreadable`). The wall is intermittent (KI-30, 2026-09-18), so an IMPORTANT kind would
+    post to `#blackbloc-logs` on every flip; the row lands on the Logs page (YouTube chip) and the
+    count on the status card. `golive_log_level = all` makes it post.
+30. **`live_health` gains `walled` and `id_unknown`**, and `/api/youtube/status` carries both
+    (mock + `contract.json` mirrored). The `/youtube` staff lines gain *behind the bot check now*,
+    *live, video id unknown* and *a walled stream* (what the post links, keyed or not). The
+    Go-live page's *How live streams are spotted* card gains *Behind the bot check now*,
+    *Video id* (found for every live channel / unknown for N of M — the post links the
+    channel's /live page) and *What a post links*, plus a one-paragraph note on the wall. The
+    panel lines are code constants in `black_bloc/youtube.py` like the rest of that status block
+    (`BOT_CHECKED`, `LIVE_NO_KEY`) — status readouts, not posted announcements — so no settings
+    key was added.
+31. **The search parse was proved against the real response shape**, not a guess:
+    `tests/fixtures/youtube_search_live.json` / `youtube_search_none.json` are hand-written
+    `youtube#searchListResponse` bodies (`items[].id.videoId`, `pageInfo`, `regionCode`,
+    `nextPageToken`) — `read_search` reads them correctly. So item 4 of the brief did not apply:
+    **no search was running and finding nothing; the channel-row path never searched.** ⚠️ The
+    fixtures are hand-written from the documented shape, not a capture — no Data API call was
+    made by this build.
+32. ⚠️ **None of this met the live bot.** Proved by the suite against fixtures and fakes, and
+    the Go-live card rendered once on the local mock (headless Chrome dump-dom, 2026-09-22: the
+    card shows *Behind the bot check now*, *Video id — nobody reads as live*, *What a post links*);
+    the walled/warn branches of the card were not rendered. Sweeps `YW-a`…`YW-d` are the proof
+    that is missing, and like `YL-*` they can only be run on Fly.
