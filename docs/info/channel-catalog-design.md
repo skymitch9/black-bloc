@@ -13,8 +13,9 @@
 > worktree `C:/lcw/bb-channel-catalog`. Nothing deployed; schema 54 has never run against the
 > live database. The draft descriptions for the live channels are in
 > [`channel-catalog.md`](channel-catalog.md) and are **not** in the bot.
-> **Follow-up 2026-09-23 (branch `channel-visibility`, NOT merged, NOT deployed):** *channel reach* at the foot of this page — opt-in roles count, a staff override per channel, schema 57.
-> **Last verified: 2026-09-23 14:1x** — the status lines above only, at the v159 docs ritual; the body was not re-read.
+> **Follow-up 2026-09-23, ✅ LIVE as v161** (2026-09-23 **15:03** Phoenix, release commit `c8d2403d`, merge `cbdcb6a3`): *channel reach* at the foot of this page — opt-in roles count, a staff override per channel, schema 57. The opt-in-role theory is PROVEN live (see that section's status).
+> **Last verified: 2026-09-23 15:1x** — the status lines above and the *channel reach* follow-up's status block only, at the v160 + v161 docs ritual, from `deploys.log` and the conductor's operator-token read at 15:05; the body was not re-read and this pass made no live call of its own.
+> Before that, **2026-09-23 14:1x** — the status lines above only, at the v159 docs ritual; the body was not re-read.
 > Before that, **2026-09-23** — against the branch tip by `pytest -n 16` (7427 passed),
 > `ruff check black_bloc tests site` and `node site/mock/check.mjs` (21 pages, 201 routes), and
 > the Chat page drawn in headless Chrome against the mock. ⚠️ Nothing met live Discord.
@@ -243,7 +244,8 @@ staff do it"* → *"make it editable too so they can adjust the text"* — said 
 
 ## Follow-up, 2026-09-23 — channel reach: opt-in roles count, and staff have the final word
 
-> **Status:** BUILT, NOT MERGED, NOT DEPLOYED — branch `channel-visibility`, worktree
+> **Status:** ✅ **LIVE as v161** — deployed 2026-09-23 **15:03** Phoenix (release commit `c8d2403d`, `release.json` v161 at `034ab624`, merge `cbdcb6a3` at 14:55, schema **57**, registry **366**; gate 7637 passed / 3 skipped, check.mjs 22 pages / 211 routes). **VERIFIED LIVE after the boot** (operator token, 15:05; boot log `database ready` 22:03:50Z, `logged in` 22:03:53Z): **the hypothesis below is PROVEN** — `GET /api/chat/channels` reads #landing via *Ask my pronouns*, #qotw via *QOTW*, #shows-and-movies via *Shows*, #sports-ball via *Sports*, #music-recommendations via *Musichead*, #recipes-and-food-pics via *Foodie*, #knuck-up via *Squads*, #rpg via *RPGer*; all 13 *The Hole in the Wall* and all 6 *Gaming* channels told; told **31 of 94** (was 24); The Basement **0 of 9** (`ignored_category`, on `chat_ignore_categories` since 14:4x); review **48/94** before and after the deploy (decided rows not overwritten). ⚠️ *Why* guessed `#landing` and `#knuck-up` would stay hidden — WRONG: menu roles open both. ⚠️ **NOT verified:** the Channels page in a browser after v161; no Reach button pressed by a human; no Discord-side door for the override (open, TODO ▸ 🔧, checklist 33).
+> **Until the deploy the status read:** BUILT, NOT MERGED, NOT DEPLOYED — branch `channel-visibility`, worktree
 > `C:/lcw/bb-channel-visibility`, off `main` `645ac862` (v160 live, schema 56). Commits
 > `16b69f1a` (the rule, the table, the API, tests) and `3f700cd6` (the page, the mock, the
 > contract). **Last verified: 2026-09-23** against the branch by `pytest -n 16`, `ruff`,
@@ -267,7 +269,7 @@ marked `not_visible`: in *The Hole in the Wall* — `#landing`, `#qotw`, `#shows
 `#knuck-up`, `#rpg` (2 of 6); **65 of 94** overall. Whole categories hidden: The Basement 9/9,
 Back to Black 2025 / 2026 / 2027 (11 / 17 / 12), ModMail 7/7, archive 4/4.
 
-### Why (the hypothesis — unproven until the deployed page shows it)
+### Why (the hypothesis — ✅ PROVEN live at v161, see the status above)
 
 `directory.everyone_sees` called `channel.permissions_for(<Member role>)`. For a `Role`,
 discord.py 2.7 (`abc.py` `permissions_for`, the Role branch) applies the guild base, then

@@ -1,7 +1,7 @@
 # Testing — the hermetic suite, the mock, and the live api
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — ⚠️ secret NAMES only.
-> Last verified: **2026-09-23 04:3x — one fact only**, at the v157 docs ritual: the junit file, timeout, loopback plugin and
+> Last verified: **2026-09-23 15:1x — one gotcha added only**, at the v160 + v161 docs ritual: the stale-mock line under *Gotchas*; `site/mock/server.mjs:9` and `check.mjs:15` read the port from `MOCK_PORT`, default **8788**. ⚠️ Nothing here was re-run. Before that, **2026-09-23 04:3x — one fact only**, at the v157 docs ritual: the junit file, timeout, loopback plugin and
 > environment fixture are on `main` and LIVE in the gate since v157 (merges `01309d43`, `4d5bd916`); the v157 gate's junit file
 > reads `tests=7382 failures=0 errors=0 skipped=3`. ⚠️ Nothing here was re-run. Before that,
 > **2026-09-22 23:2x — the hermetic suite's junit file, timeout and loopback plugin only** (branch
@@ -150,6 +150,7 @@ $env:BLACK_BLOC_LIVE_TOKEN = "<the operator token>"     # never paste this into 
 
 ## Gotchas that cost real time
 
+- ⚠️ **A check.mjs mismatch that names fields the code plainly has → an OLD mock is still listening on the port** (2026-09-23 15:0x, after the `channel-visibility` merge: check.mjs said the draft-move answers lacked `counts` and `channel.reach`; a mock process started 13:38 from pre-merge code still held the port, the mock on main was already right, a "fix" was dispatched for nothing and was called off). `Get-NetTCPConnection -LocalPort <port>` names the pid (the port is `MOCK_PORT`, default **8788**; it was 8797 that day); kill it and start `server.mjs` fresh before believing the diff.
 - ⚠️ **A `TestClient` used without `with` gets a NEW event loop per request**, so anything a route
   started in the background is killed on the way out. `tests/api/test_selftest_api.py` overrides the
   shared `client` fixture with a context-managed one for exactly that reason.

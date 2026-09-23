@@ -6,7 +6,8 @@
 > This retires the 2026-08-26 local-only rule, under which the tree was
 > gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
 > so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
-> Last verified: **2026-09-23 14:1x — the bot's version and two counts only**, at the v158 + v159 docs ritual: the bot is at
+> Last verified: **2026-09-23 15:1x — the bot's version and two counts only**, at the v160 + v161 docs ritual: the bot is at **v161** (deployed 2026-09-23 15:03 Phoenix, release commit `c8d2403d`; v160 the `foldout` hotfix at 14:20, `d7cda292`; [`deploys.log`](deploys.log) is the authority, 160 lines). `ls docs/info/*.md` still **112**, `ls docs/access/*.md` still **12**, the site **22** pages. One dated line added under *Where the bot stands*. ⚠️ **NOT re-checked:** that block's mode table and every other figure; nothing met a browser.
+> Before that, **2026-09-23 14:1x — the bot's version and two counts only**, at the v158 + v159 docs ritual: the bot is at
 > **v159** (deployed 2026-09-23 14:07 Phoenix, release commit `c54f14a8`; v158 at 12:51, `3dec2518`; [`deploys.log`](deploys.log) is the
 > authority, 158 lines). `ls docs/info/*.md` now **112**, `ls docs/access/*.md` still **12**, the site **22** pages
 > (`ls site/public/*.html`, `channels.html` new). One dated line added under *Where the bot stands*. ⚠️ **NOT re-checked:**
@@ -104,6 +105,8 @@ index (§7). `archive/` holds the retired docs and the one-off `current-bots/`
 dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
+
+**2026-09-23 15:1x:** v161 live (one merge: channel reach — a channel members reach through a role they pick is told to the bot, staff override per channel, The Basement on the ignore list; told 31 of 94, was 24), after the v160 hotfix at 14:20 that made the Chat page render again (see [`DONE.md`](DONE.md) 2026-09-23 v161 / v160); the mode table below was NOT re-read.
 
 **2026-09-23 14:1x:** v159 live (four merges: channel catalog, post today's birthdays, the Channels page, personality tones; v158 at 12:51 was the Birthdays Change button) — the drafts seed and the tone bodies verified live at boot, and the chat voice is `cookout`, so no tone is heard yet (see [`DONE.md`](DONE.md) 2026-09-23 v159); the mode table below was NOT re-read.
 

@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-23 15:1x** — ONLY the `CV-a`…`CV-e` section was touched, at the v160 + v161 docs ritual: its *BUILT, NOT MERGED* line became a ✅ LIVE v161 line with `CV-a`'s live API proof, from `deploys.log`, `DONE.md` and the conductor's operator-token read. Nothing renumbered, no row walked, no other section re-read. Before that,
 > **2026-09-23 14:1x** — ONLY the five sections written 2026-09-23 were touched, at the v158 + v159 docs ritual: a ✅ LIVE
 > line added under the headings of `BC-a` (v158, 12:51) and `CC-a`…`CC-d`, `BT-a`…`BT-d`, `CP-a`…`CP-e`, `PT-a`…`PT-e`
 > (v159, 14:07), taken from `deploys.log`, `DONE.md` and the live API through the operator token; the three
@@ -3055,7 +3056,7 @@ Lettered; the conductor numbers it. ⚠️ `chat_llm_mode` must be **on** for an
 
 ## Rows `CV-a` … `CV-e` — channel reach: opt-in roles count, and staff have the final word (branch `channel-visibility`, 2026-09-23)
 
-⚠️ **BUILT, NOT MERGED, NOT DEPLOYED** — branch `channel-visibility`, commits `16b69f1a` + `3f700cd6` (schema **57**). Nothing below has run against the live bot.
+✅ **LIVE as v161** — deployed 2026-09-23 **15:03** Phoenix (release commit `c8d2403d`, merge `cbdcb6a3`); boot log `database ready` 22:03:50Z, `logged in` 22:03:53Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v161). **`CV-a`'s expectation is met by the API** (operator token, 15:05): #landing via *Ask my pronouns*, #qotw via *QOTW*, #shows-and-movies via *Shows*, #sports-ball via *Sports*, #music-recommendations via *Musichead*, #recipes-and-food-pics via *Foodie*, #knuck-up via *Squads*, #rpg via *RPGer*; told **31 of 94**; so `#landing` and `#knuck-up` do NOT need `CV-c` after all. **`CV-b`'s** API half too: The Basement told 0 of 9. ⚠️ Nothing below has been walked by a person in a browser yet. *Until the deploy this line read:* BUILT, NOT MERGED, NOT DEPLOYED — branch `channel-visibility`, commits `16b69f1a` + `3f700cd6` (schema **57**).
 
 Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md) ▸ *Follow-up — channel reach*.
 Lettered; the conductor numbers it. ⚠️ Run `CV-a` FIRST: it is the check on the hypothesis the build rests on.
