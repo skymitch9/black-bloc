@@ -30,8 +30,30 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
 } else {
     & .venv/Scripts/python -m ruff check .
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: ruff is not clean." }
-    & .venv/Scripts/python -m pytest -q -n auto
-    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the test suite is red." }
+    $junitDir = Join-Path $env:TEMP "black-bloc-gate"
+    New-Item -ItemType Directory -Force -Path $junitDir | Out-Null
+    $junit = Join-Path $junitDir "gate-junit.xml"
+    Remove-Item -LiteralPath $junit -Force -ErrorAction SilentlyContinue
+    & .venv/Scripts/python -m pytest -q -n auto -rfE "--junitxml=$junit"
+    $suite = $LASTEXITCODE
+    if ($suite -ne 0) {
+        Write-Host "FAILED TESTS:"
+        if (Test-Path -LiteralPath $junit) {
+            foreach ($case in ([xml](Get-Content -LiteralPath $junit -Raw -Encoding UTF8)).SelectNodes("//testcase[failure or error]")) {
+                $parts = $case.classname -split '\.'
+                $cut = $parts.Count
+                while ($cut -gt 0 -and -not (Test-Path ((($parts[0..($cut - 1)]) -join '/') + ".py"))) { $cut-- }
+                if ($cut -eq 0) { Write-Host ($case.classname + "::" + $case.name); continue }
+                $file = (($parts[0..($cut - 1)]) -join '/') + ".py"
+                $rest = @($parts | Select-Object -Skip $cut) + $case.name
+                Write-Host ($file + "::" + ($rest -join "::"))
+            }
+            Write-Host "(junit: $junit)"
+        } else {
+            Write-Host "none recorded: pytest wrote no $junit, so the run itself was killed - read the console above."
+        }
+    }
+    if ($suite -ne 0) { Write-Error "REFUSED: the test suite is red." }
     foreach ($js in Get-ChildItem site/public/assets/*.js) {
         cmd /c "node --input-type=module --check < `"$($js.FullName)`""
         if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: $($js.Name) does not parse as an ES module." }
