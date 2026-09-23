@@ -28,6 +28,7 @@ NOT_A_FEATURE = (
     "poll_review_mode",
     "chat_llm_mode",
     "chat_memory_mode",
+    "chat_review_mode",
 )
 ACTIONS_DEFAULT_LIMIT = 50
 ACTIONS_MAX_LIMIT = 200

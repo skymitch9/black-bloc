@@ -721,6 +721,9 @@ async def conversational_reply(
             tier=name,
             at=at,
         )
+        from .chat_review import note_grounding
+
+        note_grounding(bot, channel_id, user_id, hits)
         return (said, name, tone)
     return NOTHING
 

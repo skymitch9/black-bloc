@@ -3821,6 +3821,391 @@ TEXT_CHECKS.update(
 )
 
 
+# Chat review loop (2026-09-23): answers that may have missed, tagged, reviewed by staff. Its own
+# block so the parallel chat branches merge textually. Design: info/chat-review-loop-design.md.
+REVIEW_MODE_KEY = "chat_review_mode"
+REVIEW_MODES = ("off", "on")
+REVIEW_REASK_KEY = "chat_review_reask_seconds"
+REVIEW_REASK_SECONDS = 90
+REVIEW_REASK_MAX_SECONDS = 3600
+REVIEW_DOWNVOTE_KEY = "chat_review_downvote_emoji"
+REVIEW_DOWNVOTE_EMOJI = "\U0001f44e"
+REVIEW_NOT_IT_KEY = "chat_review_not_it_phrases"
+REVIEW_NOT_IT_PHRASES = (
+    "not what i meant, thats not what i meant, thats not it, not what i asked, "
+    "you didnt answer, that doesnt answer, wrong answer, no i meant"
+)
+REVIEW_ACK_KEY = "chat_review_ack_phrases"
+REVIEW_ACK_PHRASES = (
+    "thanks, thank you, thx, ty, tysm, ok, okay, k, kk, cool, nice, got it, gotcha, perfect, "
+    "great, awesome, bet, lol, lmao, haha, yes, yep, yeah, no worries, appreciate it, love it"
+)
+REVIEW_DIGEST_HOUR_KEY = "chat_review_digest_hour"
+REVIEW_DIGEST_HOUR = 9
+REVIEW_DIGEST_HOUR_MAX = 23
+REVIEW_SETTINGS: dict[str, tuple[str, Any, str]] = {
+    REVIEW_MODE_KEY: (
+        "enum",
+        "on",
+        "on (a chat answer that may have missed lands in the Chat page's review queue, the cheap "
+        "model suggests what Black Bloc should learn from it, and staff approve, change or "
+        "dismiss it) or off (nothing new is queued, tagged or posted; items already waiting stay "
+        "reviewable)",
+    ),
+    REVIEW_REASK_KEY: (
+        "int",
+        REVIEW_REASK_SECONDS,
+        f"seconds after an answer in which the same person writing again in the same channel "
+        f"counts as asking again, so the answer is queued for review; a thanks or an ok never "
+        f"counts. 0 turns this reason off, up to {REVIEW_REASK_MAX_SECONDS}",
+    ),
+    REVIEW_DOWNVOTE_KEY: (
+        "text",
+        REVIEW_DOWNVOTE_EMOJI,
+        "the reaction that queues one of Black Bloc's chat answers for review when anybody but "
+        "the bot puts it on the answer; blank turns this reason off",
+    ),
+    REVIEW_NOT_IT_KEY: (
+        "text",
+        REVIEW_NOT_IT_PHRASES,
+        "phrases, separated by commas, that mean the answer missed when somebody says one "
+        "straight after it (not what i meant, thats not it); the answer is queued for review. "
+        "Blank turns this reason off",
+    ),
+    REVIEW_ACK_KEY: (
+        "text",
+        REVIEW_ACK_PHRASES,
+        "phrases, separated by commas, that are a thanks or an ok rather than asking again — a "
+        "follow-up that is only one of these never queues the answer for review",
+    ),
+    REVIEW_DIGEST_HOUR_KEY: (
+        "int",
+        REVIEW_DIGEST_HOUR,
+        f"the hour of the day, in default_timezone, when one line goes to the log channel "
+        f"saying how many chat answers wait for review; nothing is posted when none wait. 0 to "
+        f"{REVIEW_DIGEST_HOUR_MAX}",
+    ),
+}
+KEY_TYPES.update({key: kind for key, (kind, _, _) in REVIEW_SETTINGS.items()})
+KEY_HELP.update({key: said for key, (_, _, said) in REVIEW_SETTINGS.items()})
+KEY_CHOICES[REVIEW_MODE_KEY] = REVIEW_MODES
+KEY_MIN[REVIEW_REASK_KEY] = 0
+KEY_MAX[REVIEW_REASK_KEY] = REVIEW_REASK_MAX_SECONDS
+KEY_MIN[REVIEW_DIGEST_HOUR_KEY] = 0
+KEY_MAX[REVIEW_DIGEST_HOUR_KEY] = REVIEW_DIGEST_HOUR_MAX
+TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, REVIEW_DOWNVOTE_KEY, REVIEW_NOT_IT_KEY, REVIEW_ACK_KEY)
+
+REVIEW_DIGEST_KEY = "chat_review_digest"
+REVIEW_ADDED_PHRASE_KEY = "chat_review_added_phrase"
+REVIEW_MADE_INTENT_KEY = "chat_review_made_intent"
+REVIEW_PLACEHOLDER_KEY = "chat_review_placeholder_line"
+REVIEW_ADDED_LINE_KEY = "chat_review_added_line"
+REVIEW_DISMISSED_KEY = "chat_review_dismissed"
+REVIEW_REOPENED_KEY = "chat_review_reopened"
+REVIEW_NO_SUCH_KEY = "chat_review_no_such"
+REVIEW_DECIDED_KEY = "chat_review_decided"
+REVIEW_NOT_DISMISSED_KEY = "chat_review_not_dismissed"
+REVIEW_NOTHING_KEY = "chat_review_nothing_suggested"
+REVIEW_NO_INTENT_KEY = "chat_review_no_intent"
+REVIEW_NEEDS_PHRASE_KEY = "chat_review_needs_phrase"
+REVIEW_NEEDS_LINE_KEY = "chat_review_needs_line"
+REVIEW_BAD_KIND_KEY = "chat_review_bad_kind"
+REVIEW_SECTION_KEY = "chat_review_section_default"
+REVIEW_BUTTON_KEY = "chat_review_button"
+REVIEW_TITLE_KEY = "chat_review_title"
+REVIEW_INTRO_KEY = "chat_review_intro"
+REVIEW_EMPTY_KEY = "chat_review_empty"
+REVIEW_CAPPED_KEY = "chat_review_capped"
+REVIEW_UNTAGGED_KEY = "chat_review_untagged"
+REVIEW_LINE_KEY = "chat_review_line"
+REVIEW_ITEM_TITLE_KEY = "chat_review_item_title"
+REVIEW_ITEM_KEY = "chat_review_item"
+REVIEW_PICK_KEY = "chat_review_pick_placeholder"
+REVIEW_CHANGE_KEY = "chat_review_change_placeholder"
+REVIEW_APPROVE_BUTTON_KEY = "chat_review_approve_button"
+REVIEW_DISMISS_BUTTON_KEY = "chat_review_dismiss_button"
+REVIEW_FACT_BUTTON_KEY = "chat_review_fact_button"
+REVIEW_PHRASE_MODAL_KEY = "chat_review_phrase_modal"
+REVIEW_PHRASE_LABEL_KEY = "chat_review_phrase_label"
+REVIEW_FACT_MODAL_KEY = "chat_review_fact_modal"
+REVIEW_FACT_LABEL_KEY = "chat_review_fact_label"
+REVIEW_SECTION_LABEL_KEY = "chat_review_section_label"
+REVIEW_PAGE_KEY = "chat_review_page"
+REVIEW_REASON_UNGROUNDED_KEY = "chat_review_reason_ungrounded"
+REVIEW_REASON_REASK_KEY = "chat_review_reason_reask"
+REVIEW_REASON_DOWNVOTE_KEY = "chat_review_reason_downvote"
+REVIEW_REASON_NOT_IT_KEY = "chat_review_reason_not_it"
+REVIEW_SUGGEST_PHRASE_KEY = "chat_review_suggest_phrase"
+REVIEW_SUGGEST_INTENT_KEY = "chat_review_suggest_intent"
+REVIEW_SUGGEST_KNOWLEDGE_KEY = "chat_review_suggest_knowledge"
+REVIEW_SUGGEST_NONE_KEY = "chat_review_suggest_none"
+REVIEW_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    REVIEW_DIGEST_KEY: (
+        "**{count}** chat answer(s) are waiting for review — approve, change or dismiss them on "
+        "the Chat page: {link}",
+        ("count", "link"),
+        "the one line posted to the log channel once a day while chat answers wait for review. "
+        "It takes {count}, how many wait, and {link}, the Chat page's review queue",
+    ),
+    REVIEW_ADDED_PHRASE_KEY: (
+        "**{phrase}** now reaches **{intent}**. The next person who says it gets that intent's "
+        "lines.",
+        ("phrase", "intent"),
+        "what staff are told when a review adds a phrase to an intent, on /chat and on the Chat "
+        "page. It takes {phrase} and {intent}",
+    ),
+    REVIEW_MADE_INTENT_KEY: (
+        "**{intent}** is in, with **{phrase}** as its first phrase. Its one line is a switched-"
+        "off placeholder, so it stays quiet until somebody writes the real line on the Chat "
+        "page's Intents section and switches it on.",
+        ("intent", "phrase"),
+        "what staff are told when a review makes a new intent. It takes {intent} and {phrase}",
+    ),
+    REVIEW_PLACEHOLDER_KEY: (
+        "Write what Black Bloc should say here, then switch this line on.",
+        (),
+        "the placeholder line a review puts on an intent it makes; it is stored switched off, "
+        "so nobody is ever answered with it",
+    ),
+    REVIEW_ADDED_LINE_KEY: (
+        "That fact is in the **{section}** note now. Black Bloc quotes it the next time a "
+        "question matches.",
+        ("section",),
+        "what staff are told when a review adds a fact to a knowledge note. It takes {section}, "
+        "the note's heading",
+    ),
+    REVIEW_DISMISSED_KEY: (
+        "Item **{id}** is dismissed and nothing was learned from it. **Reopen** on the Chat page "
+        "puts it back in the queue.",
+        ("id",),
+        "what staff are told when a review item is dismissed. It takes {id}",
+    ),
+    REVIEW_REOPENED_KEY: (
+        "Item **{id}** is back in the review queue.",
+        ("id",),
+        "what staff are told when a dismissed review item is reopened. It takes {id}",
+    ),
+    REVIEW_NO_SUCH_KEY: (
+        "There is no review item **{id}** in this server any more, so nothing was done. Refresh "
+        "the queue and pick again.",
+        ("id",),
+        "what staff are told when the review item they acted on has gone. It takes {id}",
+    ),
+    REVIEW_DECIDED_KEY: (
+        "Item **{id}** was already {status}, so nothing was done — somebody else got there "
+        "first. Refresh the queue.",
+        ("id", "status"),
+        "what staff are told when a review item was decided while they were looking at it. It "
+        "takes {id} and {status}",
+    ),
+    REVIEW_NOT_DISMISSED_KEY: (
+        "Only a dismissed item goes back in the queue. Item **{id}** was {status}, and what it "
+        "taught Black Bloc stays on the Intents or Knowledge section, where it can be edited or "
+        "removed.",
+        ("id", "status"),
+        "what staff are told when they reopen an item that was approved or changed. It takes "
+        "{id} and {status}",
+    ),
+    REVIEW_NOTHING_KEY: (
+        "Item **{id}** has nothing to approve — the cheap model found nothing that fits, or has "
+        "not looked at it yet. Change it to a phrase or a fact yourself, or dismiss it.",
+        ("id",),
+        "what staff are told when they approve an item with no suggestion. It takes {id}",
+    ),
+    REVIEW_NO_INTENT_KEY: (
+        "This server has no intent called **{intent}**, so nothing was saved. Pick one from the "
+        "list.",
+        ("intent",),
+        "what staff are told when a review names an intent that does not exist. It takes "
+        "{intent}",
+    ),
+    REVIEW_NEEDS_PHRASE_KEY: (
+        "A phrase needs some words in it, so nothing was saved.",
+        (),
+        "what staff are told when a review's phrase is blank",
+    ),
+    REVIEW_NEEDS_LINE_KEY: (
+        "A fact needs some words in it, so nothing was saved.",
+        (),
+        "what staff are told when a review's knowledge fact is blank",
+    ),
+    REVIEW_BAD_KIND_KEY: (
+        "**{kind}** is not something a review can teach, so nothing was saved. It is a phrase "
+        "for an intent, a new intent, or a knowledge fact.",
+        ("kind",),
+        "what staff are told when a review change names no known kind. It takes {kind}",
+    ),
+    REVIEW_SECTION_KEY: (
+        "From review",
+        (),
+        "the heading of the knowledge note a reviewed fact goes into when the cheap model named "
+        "no note of its own",
+    ),
+    REVIEW_BUTTON_KEY: (
+        "Review queue…",
+        (),
+        "the /chat panel button that opens the review queue. Discord shows at most 80 "
+        "characters on a button",
+    ),
+    REVIEW_TITLE_KEY: (
+        "Answers to review",
+        (),
+        "the heading of the review queue card on /chat",
+    ),
+    REVIEW_INTRO_KEY: (
+        "**{count}** answer(s) may have missed. Pick one to approve what the cheap model "
+        "suggests, change it, or dismiss it.",
+        ("count",),
+        "the first line of the review queue card on /chat. It takes {count}, how many wait",
+    ),
+    REVIEW_EMPTY_KEY: (
+        "Nothing is waiting. An answer lands here when a real question found no note, somebody "
+        "asks again straight away, says it was not what they meant, or gives it a thumbs down.",
+        (),
+        "what the review queue card says when nothing waits",
+    ),
+    REVIEW_CAPPED_KEY: (
+        "This month's model money is spent, so new items wait untagged until the 1st. Change "
+        "and Dismiss still work.",
+        (),
+        "the line the review queue adds while the monthly cap stops the cheap model tagging",
+    ),
+    REVIEW_UNTAGGED_KEY: (
+        "not looked at yet",
+        (),
+        "the words in place of a suggestion on an item the cheap model has not tagged",
+    ),
+    REVIEW_LINE_KEY: (
+        "`{id}` · {reason} · {when}\n> {asked}\nSuggested: {suggestion}",
+        ("id", "reason", "when", "asked", "suggestion"),
+        "one item's lines on the review queue card. It takes {id}, {reason}, {when}, {asked} — "
+        "what the person said — and {suggestion}",
+    ),
+    REVIEW_ITEM_TITLE_KEY: (
+        "Review item {id}",
+        ("id",),
+        "the heading of one review item's card on /chat. It takes {id}",
+    ),
+    REVIEW_ITEM_KEY: (
+        "**Why it is here:** {reason} · {when}\n**They said:**\n> {asked}\n**Black Bloc "
+        "answered:**\n> {answered}\n**Suggested:** {suggestion}\n{why}",
+        ("reason", "when", "asked", "answered", "suggestion", "why"),
+        "the body of one review item's card on /chat. It takes {reason}, {when}, {asked}, "
+        "{answered}, {suggestion} and {why}, the cheap model's reason",
+    ),
+    REVIEW_PICK_KEY: (
+        "An answer to review…",
+        (),
+        "the item picker's placeholder on the review queue card. Discord shows at most 150 "
+        "characters",
+    ),
+    REVIEW_CHANGE_KEY: (
+        "Change it: this should reach…",
+        (),
+        "the intent picker's placeholder on a review item's card; picking one asks for the "
+        "phrase. Discord shows at most 150 characters",
+    ),
+    REVIEW_APPROVE_BUTTON_KEY: (
+        "Approve",
+        (),
+        "the button that writes a review item's suggestion. Discord shows at most 80 characters",
+    ),
+    REVIEW_DISMISS_BUTTON_KEY: (
+        "Dismiss",
+        (),
+        "the button that dismisses a review item. Discord shows at most 80 characters",
+    ),
+    REVIEW_FACT_BUTTON_KEY: (
+        "Write a fact…",
+        (),
+        "the button that turns a review item into a knowledge fact instead. Discord shows at "
+        "most 80 characters",
+    ),
+    REVIEW_PHRASE_MODAL_KEY: (
+        "A phrase for {intent}",
+        ("intent",),
+        "the title of the form a review's phrase is written in. It takes {intent}; Discord cuts "
+        "a form title at 45 characters",
+    ),
+    REVIEW_PHRASE_LABEL_KEY: (
+        "The words somebody would say",
+        (),
+        "the label over the phrase box. Discord shows at most 45 characters on a form label",
+    ),
+    REVIEW_FACT_MODAL_KEY: (
+        "A fact Black Bloc should know",
+        (),
+        "the title of the form a review's knowledge fact is written in. Discord cuts a form "
+        "title at 45 characters",
+    ),
+    REVIEW_FACT_LABEL_KEY: (
+        "One line, in plain words",
+        (),
+        "the label over the fact box. Discord shows at most 45 characters on a form label",
+    ),
+    REVIEW_SECTION_LABEL_KEY: (
+        "The note it goes in",
+        (),
+        "the label over the note-heading box on the fact form. Discord shows at most 45 "
+        "characters on a form label",
+    ),
+    REVIEW_PAGE_KEY: (
+        "Page {page} of {pages}",
+        ("page", "pages"),
+        "the page line on the review queue card when more than five wait. It takes {page} and "
+        "{pages}",
+    ),
+    REVIEW_REASON_UNGROUNDED_KEY: (
+        "a real question found no note",
+        (),
+        "the reason shown on an item queued because the careful tier answered with nothing "
+        "written down to ground it",
+    ),
+    REVIEW_REASON_REASK_KEY: (
+        "they asked again straight away",
+        (),
+        "the reason shown on an item queued because the same person wrote again within "
+        "chat_review_reask_seconds",
+    ),
+    REVIEW_REASON_DOWNVOTE_KEY: (
+        "somebody gave it a thumbs down",
+        (),
+        "the reason shown on an item queued because of the chat_review_downvote_emoji reaction",
+    ),
+    REVIEW_REASON_NOT_IT_KEY: (
+        "they said it was not what they meant",
+        (),
+        "the reason shown on an item queued because the follow-up said one of the "
+        "chat_review_not_it_phrases",
+    ),
+    REVIEW_SUGGEST_PHRASE_KEY: (
+        "add **{phrase}** to **{intent}**",
+        ("phrase", "intent"),
+        "how a suggested phrase reads on a review item. It takes {phrase} and {intent}",
+    ),
+    REVIEW_SUGGEST_INTENT_KEY: (
+        "a new intent **{intent}** for **{phrase}**",
+        ("intent", "phrase"),
+        "how a suggested new intent reads on a review item. It takes {intent} and {phrase}",
+    ),
+    REVIEW_SUGGEST_KNOWLEDGE_KEY: (
+        "a fact for **{section}**: {line}",
+        ("section", "line"),
+        "how a suggested knowledge fact reads on a review item. It takes {section} and {line}",
+    ),
+    REVIEW_SUGGEST_NONE_KEY: (
+        "nothing to learn",
+        (),
+        "how a review item reads when the cheap model found nothing that fits",
+    ),
+}
+KEY_TYPES.update({key: "text" for key in REVIEW_WORDS})
+KEY_HELP.update({key: said for key, (_, _, said) in REVIEW_WORDS.items()})
+TEXT_CHECKS.update(
+    {key: checked_fields(fields) for key, (_, fields, _) in REVIEW_WORDS.items()}
+)
+
+
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
     kind = KEY_TYPES.get(key)
@@ -4364,6 +4749,10 @@ class SettingsStore:
             return PROMPT_WORDS[key][0]
         if key in VOICE_WORDS:
             return VOICE_WORDS[key][0]
+        if key in REVIEW_SETTINGS:
+            return REVIEW_SETTINGS[key][1]
+        if key in REVIEW_WORDS:
+            return REVIEW_WORDS[key][0]
         if key == "chat_mode":
             return "on"
         if key == "chat_cooldown_seconds":

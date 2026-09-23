@@ -374,6 +374,25 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
     "black_bloc/cogs/content/chat.py::KNOWLEDGE_INGESTED": ("chat.knowledge_ingested",),
     "black_bloc/cogs/content/chat.py::REPLY_KIND": ("chat.llm_reply",),
     "black_bloc/chat_llm.py::CAPPED_KIND": ("chat.llm_capped",),
+    # The review loop (docs/info/chat-review-loop-design.md): detection, tagging and the digest
+    # are the bot's own; the four staff moves come through both doors.
+    "black_bloc/chat_review.py::OPENED_KIND": ("chat.review_opened",),
+    "black_bloc/chat_review.py::TAGGED_KIND": ("chat.review_tagged",),
+    "black_bloc/chat_review.py::DIGEST_KIND": ("chat.review_digest",),
+    "black_bloc/chat_panel.py::kind": (
+        "chat.review_approved",
+        "chat.review_changed",
+        "web.chat.review_approved",
+        "web.chat.review_changed",
+    ),
+    "black_bloc/chat_panel.py::chat_review.DISMISSED_KIND": (
+        "chat.review_dismissed",
+        "web.chat.review_dismissed",
+    ),
+    "black_bloc/chat_panel.py::chat_review.REOPENED_KIND": (
+        "chat.review_reopened",
+        "web.chat.review_reopened",
+    ),
     "black_bloc/chat_llm.py::ERROR_KIND": ("chat.llm_error",),
     "black_bloc/chat_llm.py::FIXED_KIND": ("chat.reply_reference_fixed",),
     "black_bloc/cogs/moderation/automod.py::f'automod.would_{action}'": (
