@@ -1,8 +1,7 @@
 {
-  "release": "v157",
-  "commit": "8f1dfc6d",
+  "release": "v158",
+  "commit": "203274c6",
   "changed_features": [
-    "golive",
-    "youtube"
+    "birthday"
   ]
 }
