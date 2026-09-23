@@ -665,6 +665,11 @@ async def seed_world(client, web, guild, wf) -> dict:
         db, guild_id, None, wf.PLAIN_ROLE_ID, 7, spotlight_id=role_spotlight_id
     )
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
+    await db.conn.execute(
+        "INSERT OR IGNORE INTO channel_drafts(guild_id, channel_id, draft) VALUES (?, ?, ?)",
+        (guild_id, wf.TEST_CHANNEL_ID, "Where Black Bloc is tried out."),
+    )
+    await db.conn.commit()
     arm_minutes(web)
     return {
         "member_id": str(MEMBER_ID),
@@ -674,6 +679,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "ticket_id": str(ticket_id),
         "hit_id": str(hit_id),
         "test_channel_id": str(wf.TEST_CHANNEL_ID),
+        "drafted_channel_id": str(wf.TEST_CHANNEL_ID),
         "lobby_channel_id": str(wf.VOICE_CHANNEL_ID),
         "room_channel_id": str(wf.VOICE_CHANNEL_ID),
         "plain_role_id": str(wf.PLAIN_ROLE_ID),

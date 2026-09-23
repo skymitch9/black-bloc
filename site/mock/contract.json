@@ -2963,11 +2963,11 @@
       ]
     },
     {
-      "_": "The channel catalog (2026-09-23, docs/info/channel-catalog-design.md). {test_channel_id} is a TEXT channel of the guild, the only kind a note may be written on; the directory block is the exact text the conversation models are handed.",
+      "_": "The channel catalog (2026-09-23, docs/info/channel-catalog-design.md). {test_channel_id} is a TEXT channel of the guild, the only kind a note may be written on; the directory block is the exact text the conversation models are handed. 2026-09-23 follow-up: the Channels page (channels.html) reads it now; each row carries its drafted description and review status, and `review` counts the drafted channels (docs/info/channel-catalog-design.md, follow-up).",
       "method": "GET",
       "path": "/api/chat/channels",
       "read_by": [
-        "page-chat.js Channel directory section"
+        "page-channels.js Channels page"
       ],
       "shape": "object",
       "keys": [
@@ -2975,7 +2975,8 @@
         "directory",
         "budget",
         "note_chars",
-        "counts"
+        "counts",
+        "review"
       ],
       "rows": {
         "channels": [
@@ -2986,7 +2987,11 @@
           "note",
           "shown",
           "hidden_because",
-          "position"
+          "position",
+          "draft",
+          "status",
+          "decided_by",
+          "decided_at"
         ]
       },
       "nested": {
@@ -2999,6 +3004,11 @@
           "total",
           "shown",
           "noted"
+        ],
+        "review": [
+          "total",
+          "reviewed",
+          "drafts_left"
         ]
       }
     },
@@ -3009,13 +3019,14 @@
         "note": "Written on the contract run so the shape is checked."
       },
       "read_by": [
-        "page-chat.js Channel directory row Save"
+        "page-channels.js review card Save my wording"
       ],
       "shape": "object",
       "keys": [
         "channel",
         "directory",
         "budget",
+        "review",
         "message"
       ],
       "nested": {
@@ -3027,12 +3038,21 @@
           "note",
           "shown",
           "hidden_because",
-          "position"
+          "position",
+          "draft",
+          "status",
+          "decided_by",
+          "decided_at"
         ],
         "budget": [
           "used",
           "cap",
           "trimmed"
+        ],
+        "review": [
+          "total",
+          "reviewed",
+          "drafts_left"
         ]
       }
     },
@@ -3040,13 +3060,14 @@
       "method": "DELETE",
       "path": "/api/chat/channels/{test_channel_id}",
       "read_by": [
-        "page-chat.js Channel directory row Clear"
+        "page-channels.js review card Clear"
       ],
       "shape": "object",
       "keys": [
         "channel",
         "directory",
         "budget",
+        "review",
         "message"
       ],
       "nested": {
@@ -3058,12 +3079,145 @@
           "note",
           "shown",
           "hidden_because",
-          "position"
+          "position",
+          "draft",
+          "status",
+          "decided_by",
+          "decided_at"
         ],
         "budget": [
           "used",
           "cap",
           "trimmed"
+        ],
+        "review": [
+          "total",
+          "reviewed",
+          "drafts_left"
+        ]
+      }
+    },
+    {
+      "_": "{drafted_channel_id} is a text channel that HAS a drafted description (the seed's #welcome on the mock, a row the contract seed inserts on the real router); a channel with none is refused 404 no_draft.",
+      "method": "POST",
+      "path": "/api/chat/channels/{drafted_channel_id}/use",
+      "read_by": [
+        "page-channels.js review card Use this"
+      ],
+      "shape": "object",
+      "keys": [
+        "channel",
+        "directory",
+        "budget",
+        "review",
+        "message"
+      ],
+      "nested": {
+        "channel": [
+          "id",
+          "name",
+          "category",
+          "topic",
+          "note",
+          "shown",
+          "hidden_because",
+          "position",
+          "draft",
+          "status",
+          "decided_by",
+          "decided_at"
+        ],
+        "budget": [
+          "used",
+          "cap",
+          "trimmed"
+        ],
+        "review": [
+          "total",
+          "reviewed",
+          "drafts_left"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/channels/{drafted_channel_id}/none",
+      "read_by": [
+        "page-channels.js review card No note"
+      ],
+      "shape": "object",
+      "keys": [
+        "channel",
+        "directory",
+        "budget",
+        "review",
+        "message"
+      ],
+      "nested": {
+        "channel": [
+          "id",
+          "name",
+          "category",
+          "topic",
+          "note",
+          "shown",
+          "hidden_because",
+          "position",
+          "draft",
+          "status",
+          "decided_by",
+          "decided_at"
+        ],
+        "budget": [
+          "used",
+          "cap",
+          "trimmed"
+        ],
+        "review": [
+          "total",
+          "reviewed",
+          "drafts_left"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/channels/{drafted_channel_id}/reset",
+      "read_by": [
+        "page-channels.js review card Reset to the draft"
+      ],
+      "shape": "object",
+      "keys": [
+        "channel",
+        "directory",
+        "budget",
+        "review",
+        "message"
+      ],
+      "nested": {
+        "channel": [
+          "id",
+          "name",
+          "category",
+          "topic",
+          "note",
+          "shown",
+          "hidden_because",
+          "position",
+          "draft",
+          "status",
+          "decided_by",
+          "decided_at"
+        ],
+        "budget": [
+          "used",
+          "cap",
+          "trimmed"
+        ],
+        "review": [
+          "total",
+          "reviewed",
+          "drafts_left"
         ]
       }
     },
@@ -5660,6 +5814,7 @@
     "/health.html",
     "/polls.html",
     "/chat.html",
+    "/channels.html",
     "/requests.html",
     "/guides.html",
     "/posts.html",

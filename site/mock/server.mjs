@@ -112,11 +112,24 @@ const CHANNELS = [
   { id: '800000000000000010', name: "casey's room", type: 'voice', category_id: null, position: 9 },
   { id: '800000000000000011', name: 'modmail', type: 'category', category_id: null, position: 10 },
   { id: '800000000000000012', name: 'modmail-log', type: 'text', category_id: '800000000000000011', position: 11 },
-  { id: '800000000000000013', name: 'The Hole in the Wall', type: 'category', category_id: null, position: 12 },
-  { id: '800000000000000014', name: 'general-chat', type: 'text', category_id: '800000000000000013', position: 13 },
-  { id: '800000000000000015', name: 'Gaming', type: 'category', category_id: null, position: 14 },
-  { id: '800000000000000016', name: 'speed-and-pbs', type: 'text', category_id: '800000000000000015', position: 15 },
 ];
+
+// The live server's 94 text channels and their drafted descriptions come from the bot's own seed
+// (black_bloc/channel_drafts_seed.json), read here at start so the mock and the bot are one source.
+const CHANNEL_DRAFTS_SEED = JSON.parse(await readFile(resolve(HERE, '..', '..', 'black_bloc', 'channel_drafts_seed.json'), 'utf8'));
+const SEED_CATEGORY_IDS = new Map();
+const MOCK_DRAFT_DECISIONS = {
+  '1474844966021890362': { status: 'rewritten', decided_by: '700000000000000001', decided_at: minutesAgo(45) },
+  '1497233190383915008': { status: 'none', decided_by: '700000000000000001', decided_at: minutesAgo(30) },
+};
+Object.entries(CHANNEL_DRAFTS_SEED).forEach(([id, entry], at) => {
+  if (!SEED_CATEGORY_IDS.has(entry.category)) {
+    const categoryId = `81000000000000${String(SEED_CATEGORY_IDS.size).padStart(4, '0')}`;
+    SEED_CATEGORY_IDS.set(entry.category, categoryId);
+    CHANNELS.push({ id: categoryId, name: entry.category, type: 'category', category_id: null, position: 20 + SEED_CATEGORY_IDS.size });
+  }
+  CHANNELS.push({ id, name: entry.name.replace(/^#/, ''), type: 'text', category_id: SEED_CATEGORY_IDS.get(entry.category), position: 100 + at });
+});
 
 // The channel catalog (docs/info/channel-catalog-design.md). The mock has no permissions to
 // work out, so who can see what is written down here instead; #speed-and-pbs has no topic on
@@ -124,7 +137,7 @@ const CHANNELS = [
 const CHANNEL_TOPICS = {
   '800000000000000001': 'Read the rules, then say hi.',
   '800000000000000002': 'The old front room.',
-  '800000000000000014': 'Talk about whatever.',
+  '1411816390414962700': 'Talk about whatever.',
 };
 const CHANNELS_NOBODY_SEES = ['800000000000000003', '800000000000000004', '800000000000000005'];
 const NOTE_CHARS = 240;
@@ -1374,11 +1387,16 @@ function seedState() {
   memoryOptOut: [{ user_id: MEMBERS[5].id, at: minutesAgo(3000) }],
   nextKnowledge: 4,
   channelNotes: new Map([
-    ['800000000000000014', "The server's general chat — anything goes, not speedrun-specific."],
-    ['800000000000000016', 'Speedrunning records and personal bests — talking about runs, times and PBs, not general chat.'],
-    ['800000000000000001', '⚠️ DRAFT — where new members land: the rules and a first hello.'],
-    ['800000000000000006', '⚠️ DRAFT — server news from staff; read-only for most members.'],
+    ...Object.entries(CHANNEL_DRAFTS_SEED).filter(([, entry]) => entry.final).map(([id, entry]) => [id, entry.draft]),
+    ['1474844966021890362', 'The question of the week lives here — answer it, then argue about everyone else’s answers.'],
   ]),
+  channelDrafts: new Map(Object.entries(CHANNEL_DRAFTS_SEED).map(([id, entry]) => [id, {
+    draft: entry.draft,
+    status: entry.final ? 'used' : 'draft',
+    decided_by: null,
+    decided_at: entry.final ? minutesAgo(90) : null,
+    ...(MOCK_DRAFT_DECISIONS[id] || {}),
+  }])),
   nextAction: 47,
   nextCase: 10,
   nextMessage: 40,
@@ -7538,6 +7556,30 @@ function directoryBlock() {
   return { block: [DIRECTORY_HEADING, ...kept.map(directoryLine)].join('\n'), used: bytes(kept), trimmed };
 }
 
+function draftStatus(drafted, note) {
+  if (note) return note === drafted.draft ? 'used' : 'rewritten';
+  return drafted.status === 'draft' ? 'draft' : 'none';
+}
+
+function draftFields(channel) {
+  const drafted = state.channelDrafts.get(channel.id);
+  if (!drafted) return { draft: null, status: null, decided_by: null, decided_at: null };
+  const status = draftStatus(drafted, state.channelNotes.get(channel.id));
+  const decided = status !== 'draft';
+  return {
+    draft: drafted.draft,
+    status,
+    decided_by: decided && drafted.decided_by ? { id: String(drafted.decided_by), name: memberName(drafted.decided_by) || String(drafted.decided_by) } : null,
+    decided_at: decided ? drafted.decided_at : null,
+  };
+}
+
+function reviewCounts(rows) {
+  const drafted = rows.filter((row) => row.draft !== null);
+  const reviewed = drafted.filter((row) => row.status !== 'draft').length;
+  return { total: drafted.length, reviewed, drafts_left: drafted.length - reviewed };
+}
+
 function channelNoteRow(channel) {
   const category = channelCategory(channel);
   const why = channelHiddenBecause(channel);
@@ -7551,6 +7593,7 @@ function channelNoteRow(channel) {
     shown: why === null,
     hidden_because: why,
     position: channel.position,
+    ...draftFields(channel),
   };
 }
 
@@ -7567,6 +7610,7 @@ function channelsPayload() {
       shown: rows.filter((row) => row.shown).length,
       noted: rows.filter((row) => row.note).length,
     },
+    review: reviewCounts(rows),
     notes: [],
   };
 }
@@ -7583,7 +7627,31 @@ function wantedTextChannel(id) {
 
 function channelAnswer(channel, message) {
   const found = channelsPayload();
-  return { channel: channelNoteRow(channel), directory: found.directory, budget: found.budget, message };
+  return { channel: channelNoteRow(channel), directory: found.directory, budget: found.budget, review: found.review, message };
+}
+
+function decideDraft(channel, status, kind, extra = {}) {
+  Object.assign(state.channelDrafts.get(channel.id), {
+    status,
+    decided_by: status === 'draft' ? null : STAFF.id,
+    decided_at: status === 'draft' ? null : new Date().toISOString(),
+  });
+  logAction(kind, { details: { channel_id: channel.id, channel: channel.name, status, via: 'website', ...extra } });
+}
+
+function wantedDraft(channel) {
+  const drafted = state.channelDrafts.get(channel.id);
+  if (!drafted) throw new Refused(404, 'no_draft', noteWords('chat_channel_draft_missing', { channel: channel.name }));
+  return drafted;
+}
+
+function noNote(channel) {
+  const drafted = state.channelDrafts.get(channel.id);
+  if (!drafted) return clearChannelNote(channel);
+  const had = state.channelNotes.delete(channel.id);
+  if (!had && drafted.status === 'none') return channelAnswer(channel, noteWords('chat_channel_note_nothing', { channel: channel.name }));
+  decideDraft(channel, 'none', 'web.chat.channel_draft_none');
+  return channelAnswer(channel, noteWords('chat_channel_draft_none', { channel: channel.name }));
 }
 
 function clearChannelNote(channel) {
@@ -7603,18 +7671,47 @@ route('PUT', '/api/chat/channels/:id', async (context) => {
   const channel = wantedTextChannel(context.params.id);
   const body = await context.body();
   const note = String(body.note || '').replace(/\s+/g, ' ').trim();
-  if (!note) return clearChannelNote(channel);
+  if (!note) return noNote(channel);
   if (note.length > NOTE_CHARS) {
     throw new Refused(422, 'note_too_long', noteWords('chat_channel_note_too_long', { length: note.length, limit: NOTE_CHARS, over: note.length - NOTE_CHARS }));
   }
   state.channelNotes.set(channel.id, note);
+  const drafted = state.channelDrafts.get(channel.id);
+  if (drafted) {
+    const used = note === drafted.draft;
+    decideDraft(channel, used ? 'used' : 'rewritten', used ? 'web.chat.channel_draft_used' : 'web.chat.channel_draft_rewritten', { note });
+    return channelAnswer(channel, noteWords(used ? 'chat_channel_draft_used' : 'chat_channel_note_saved', { channel: channel.name }));
+  }
   logAction('web.chat.channel_note_set', { details: { channel_id: channel.id, channel: channel.name, note, via: 'website' } });
   return channelAnswer(channel, noteWords('chat_channel_note_saved', { channel: channel.name }));
 });
 
 route('DELETE', '/api/chat/channels/:id', (context) => {
   requireStaff(context.session);
-  return clearChannelNote(wantedTextChannel(context.params.id));
+  return noNote(wantedTextChannel(context.params.id));
+});
+
+route('POST', '/api/chat/channels/:id/use', (context) => {
+  requireStaff(context.session);
+  const channel = wantedTextChannel(context.params.id);
+  const drafted = wantedDraft(channel);
+  state.channelNotes.set(channel.id, drafted.draft);
+  decideDraft(channel, 'used', 'web.chat.channel_draft_used', { note: drafted.draft });
+  return channelAnswer(channel, noteWords('chat_channel_draft_used', { channel: channel.name }));
+});
+
+route('POST', '/api/chat/channels/:id/none', (context) => {
+  requireStaff(context.session);
+  return noNote(wantedTextChannel(context.params.id));
+});
+
+route('POST', '/api/chat/channels/:id/reset', (context) => {
+  requireStaff(context.session);
+  const channel = wantedTextChannel(context.params.id);
+  const drafted = wantedDraft(channel);
+  const had = state.channelNotes.delete(channel.id);
+  if (had || drafted.status !== 'draft') decideDraft(channel, 'draft', 'web.chat.channel_draft_reset');
+  return channelAnswer(channel, noteWords('chat_channel_draft_reset', { channel: channel.name }));
 });
 
 function personaMode() {
