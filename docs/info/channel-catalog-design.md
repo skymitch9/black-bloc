@@ -122,3 +122,105 @@ them (the two tests that counted 28 now count 39).
   actually reach the model.
 - The drafts in [`channel-catalog.md`](channel-catalog.md) are the builder's guesses from names
   and categories; the owner approves or rewrites them.
+
+## Follow-up, 2026-09-23 — the Channels page: staff review the drafts on the site
+
+> **Status:** **BUILT, NOT MERGED** — branch `channels-page` off `main` `d6709d48`, worktree
+> `C:/lcw/bb-channels-page`. Nothing deployed; schema 56 has never run against the live database.
+
+**The ask, verbatim (owner, 2026-09-23):** *"make that a page on the website and i will have the
+staff do it"* → *"make it editable too so they can adjust the text"* — said of the 92 drafts in
+[`channel-catalog.md`](channel-catalog.md).
+
+### What was built
+
+- **Schema 56** — `channel_drafts(guild_id, channel_id, draft, status, decided_by, decided_at)`,
+  PK `(guild_id, channel_id)`, `status` ∈ `draft | used | rewritten | none`. Additive
+  (`CREATE TABLE IF NOT EXISTS`, no data moves). ⚠️ Numbered **56**, not 55, because the
+  concurrent `personality-tones` build takes 55 (`chat_voice`); the conductor may renumber — the
+  table creation is idempotent and does not read the version.
+- **The seed** — `black_bloc/channel_drafts_seed.json`, **94 rows** keyed by channel id
+  (`name`, `category`, `draft`, `final`), generated once from the catalog table; 2 `final`
+  (`#general-chat`, `#speed-and-pbs`), 92 drafts. `channel_drafts.seed_drafts` inserts only the
+  rows for channels this guild HAS, with `INSERT OR IGNORE`, so a decided row is never touched
+  and a re-seed is a no-op. It runs on the chat cog's ingest tick (first tick after ready, then
+  every `INGEST_HOURS`), before the knowledge read, and logs `chat.channel_drafts_seeded` once.
+- ⚠️ **The two finals become real notes on first boot.** A final row seeds as `used` AND is
+  written through `channel_notes.set_note` — only when that seed actually inserted the row and
+  no note exists yet. So the live bot reads the owner's two sentences from the first boot after
+  the deploy; if staff later clear one, a restart does NOT bring it back (the row already exists).
+  A note staff wrote before the seed is kept.
+- **The model still reads ONLY `channel_notes`.** A draft nobody decided is never read.
+- **One write path.** `channel_drafts.save_wording` is the save for BOTH doors (the site's
+  `PUT` and the `/chat` ▸ Channel notes modal). A drafted channel records the decision (`used` when
+  the words equal the draft, `rewritten` otherwise; blank = no note); a channel with no draft
+  row falls through to `chat_panel.save_channel_note` unchanged. `use_draft` / `no_note` /
+  `reset_draft` write the note with the existing helpers (`set_note` / `clear_note`). One
+  action row per decision (checklist 34): `chat.channel_draft_used` / `_rewritten` / `_none` /
+  `_reset`, ROUTINE, `web.`-headed from the site.
+- **Status is derived against the note** (`channel_drafts.effective`): a note equal to the draft
+  reads `used`, any other note `rewritten`; no note reads `draft` if nothing was decided, else
+  `none`. So a note changed outside the page never leaves a chip that lies.
+- **API** — `GET /api/chat/channels` rows gain `draft`, `status`, `decided_by {id,name}`,
+  `decided_at`, and a top-level `review {total, reviewed, drafts_left}` (drafted channels only).
+  `POST /api/chat/channels/{id}/use`, `/none`, `/reset` (staff, `writer`); `PUT` as above;
+  `DELETE` on a drafted channel is the no-note decision. Every answer carries `review`.
+  Refusals in words: 404 `no_such_channel`, 404 `no_draft`, 422 `note_too_long`.
+- **Four new word keys** in `settings_store.CHANNEL_NOTE_WORDS`: `chat_channel_draft_used`,
+  `_none`, `_reset`, `_missing`. The `chat` group goes **39 → 43**.
+- **The page** — `site/public/channels.html` + `assets/page-channels.js`, in the rail right
+  after Chat under *Runs the cookout*. Head: *Reviewed N of 94 · M drafts left* and **Next
+  draft**. **Review** section: a filter (Drafts left / Reviewed / All, a category select, a
+  search), then one card per channel — `# name · Category`, the status chip (*Draft / Used /
+  Rewritten / No note · by whom · when*), the told/left-out badge, the Discord topic or *no topic
+  in Discord*, the words in an editable box (the note when one exists, else the draft), **Use
+  this** (only while the box equals the draft), **Save my wording** (when it differs), **No
+  note**, **Reset to the draft** (only when decided), and an `n / 240` counter. A move updates
+  its own card, the block and the progress in place; the card stays in view until the filter
+  changes. **What the bot sees** (the block, bytes of 4096, trimmed names) and **Words** (the
+  fifteen channel-note keys) sit beside it. The Chat page's *Channel directory* section is now a
+  one-line link to the Channels page — one home.
+
+### Decisions and deviations
+
+1. **A fourth key, `chat_channel_draft_missing`** — the brief said three (39 → 42). `use` and
+   `reset` on a channel made after the catalog must refuse in words, and every sentence the API
+   answers with is a key. 39 → **43**.
+2. **A fifth kind, `chat.channel_drafts_seeded`** — the boot seed writes rows, so it leaves one
+   row, like `guide.seeded`.
+3. **`logkinds.FEATURE_PAGES` unchanged** — it maps a FEATURE to a page, and the draft kinds are
+   `chat` kinds, so they link to `chat.html`. Channels is not a feature of its own.
+4. **The seed JSON carries `category`** beside `name/draft/final` — the mock needs it to place
+   the 94 channels in their categories.
+5. **The mock reads the seed JSON at start** (`site/mock/server.mjs` `CHANNEL_DRAFTS_SEED`), adds
+   the 94 channels and their 14 categories to its channel list, and mirrors every move. Its old
+   fixture `#general-chat` / `#speed-and-pbs` rows were removed (the real ids replace them), so
+   the mock lists 102 text channels: the 94 plus 8 fixtures; `#welcome` and `#announcements`
+   appear twice (fixture + seed) — a mock artefact only. The mock seeds `#qotw` as rewritten and
+   `#gif-spam` as no-note so every chip is on screen (Reviewed 4 of 94 at start).
+6. **Contract** gains `POST …/{drafted_channel_id}/use|none|reset`; `{drafted_channel_id}` is the
+   seed's `#welcome` on the mock and a row the contract seed inserts on the real router.
+7. **No Logs section on the page** — the chat kinds already have their Logs section on the Chat
+   page; a second would be two log surfaces for one feature.
+
+### Verified (2026-09-23, branch `channels-page`)
+
+- `tests/test_channel_drafts.py` (26): 94 seed rows, 2 finals, every draft ≤ 240; only channels
+  this guild has; finals become notes once and never again; a pre-existing note is kept; a
+  decided row survives a re-seed; each move's status, `decided_by`, note and single log row;
+  blank save = no note; the undrafted path; refusals; staff wording; the derivation table.
+- `tests/storage/test_db.py` (54 → 56 additive), `tests/api/tools/test_chat.py` (the moves over
+  HTTP, review counts, gate, refusals), `tests/cogs/content/test_chat.py` (the modal records the
+  decision; the ingest tick seeds), `tests/test_logkinds.py`, key counts.
+- The page against the mock in headless Chrome (CDP) at 1400 and 400 px: no horizontal scroll
+  (`scrollWidth == clientWidth` at 400); **Use this** on `#welcome` moved the progress 4 → 5 of
+  94, wrote the used-words sentence on the card, set the chip *Used · by Nick · <time>* and put
+  `#welcome — Where new members land…` into the block; typing on `#roles` showed **Save my
+  wording** + **No note** and hid **Use this**; the Reviewed filter showed the five decided rows.
+
+### NOT verified
+
+- ⚠️ Nothing met live Discord or the live database: not the boot seed against the real 94
+  channels, not the finals landing as notes, not the `/chat` modal's decision row.
+- Real staff names in the chip (the mock's member is *Nick*).
+- The live topics — still unknown until the page is opened after a deploy.

@@ -1,11 +1,12 @@
 # Personality tones — the cookout is the voice, every mood is a tone on it, and the tone follows the person
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — **BUILT, NOT MERGED, NOT DEPLOYED**
-> (branch `personality-tones`, worktree `C:/lcw/bb-personality-tones`, off `main` `083ca538`, with `main` `562e27c9`
-> (birthday-post-today) merged in — three append-only conflicts resolved; built 2026-09-23 by an Opus build agent from
+> (branch `personality-tones`, worktree `C:/lcw/bb-personality-tones`, off `main` `083ca538`, with `main` merged in
+> twice — `562e27c9` (birthday-post-today, three append-only conflicts) and `654be0c8` (channels-page, twelve files:
+> schema 56 kept, the Chat page's channel section is main's link card, both sides' keys/tests/docs kept); built 2026-09-23 by an Opus build agent from
 > the conductor's brief). Secret NAMES only.
-> **Last verified: 2026-09-23, on the merged tree** — `ruff check black_bloc tests site` clean; `pytest -q -n 16`
-> **7561 passed, 3 skipped**; `node site/mock/check.mjs` **ok — 21 pages, 206 routes, 25 core settings** against a mock
+> **Last verified: 2026-09-23, on the tree with `654be0c8` merged** — `ruff check black_bloc tests site` clean;
+> `pytest -q -n 16` **7604 passed, 3 skipped**; `node site/mock/check.mjs` **ok — 22 pages, 209 routes, 25 core settings** against a mock
 > on a private port; `page-chat.js` and `page-settings.js` load as ES modules (fail only on `document is not defined`).
 > ⚠️ **Nothing here has met live Discord, a live model or a browser** — see *Not verified* at the foot.
 
@@ -134,7 +135,7 @@ An empty window re-rolls (`since` = now, turns 0); inside it the tone drifts exa
 3. **`conversational_reply` now answers `(text, tier, tone)`** — a 3-tuple — so the cog can put the tone on the
    `chat.llm_reply` row. Every caller and test was moved.
 4. **27 new keys, not 2 + "a few"**: the sheet, the tone sentence and 25 words (every sentence, label, placeholder and
-   line template either door says). The chat settings group is **66**, so `/settings` ▸ chat reads *25 of 66*; the
+   line template either door says). The chat settings group is **66** on this branch alone and **70** with `channels-page` merged (its four draft words), so `/settings` ▸ chat reads *25 of 70*; the
    `/chat` Settings card leaves the wording keys to the site (they would swamp it).
 5. **The roster's `trope`** is what the member hears *now* as far as it can be known (cookout when the setting is
    cookout, the pin when it is on, the named mood, else the last roll); `last_trope` in the helper is the stored one.
@@ -153,4 +154,4 @@ An empty window re-rolls (`since` = now, turns 0); inside it the tone drifts exa
   checked. The textarea heights are a CSS guess.
 - **The boot sync on the live table:** the rewritten bodies reach `personality_tropes` at the next boot sync, and only
   while `personality_pool_sync` is on (it is on by default). Not seen on the live bot.
-- **Not deployed; no migration run** — schema 55 is additive (one table, three nullable columns).
+- **Not deployed; no migration run** — the schema-55 change is additive (one table, three nullable columns). ⚠️ **Schema number:** this branch built 55; `main` meanwhile went 54 → **56** (`channels-page`, `channel_drafts`) and left 55 free, so the merged tree's `SCHEMA_VERSION` is **56** with this branch's 55 kept as history — every migration here is `CREATE TABLE IF NOT EXISTS` / `ADDED_COLUMNS`, which run on every connect whatever the stored number.

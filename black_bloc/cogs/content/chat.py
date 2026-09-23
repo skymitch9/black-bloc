@@ -9,7 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ... import chat_panel
+from ... import channel_drafts, chat_panel
 from ...actionlog import log_action, send_logs, stamp
 from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
@@ -910,7 +910,7 @@ async def run_channel_note(
 ) -> None:
     if not await opened(interaction):
         return
-    outcome = await chat_panel.save_channel_note(
+    outcome = await channel_drafts.save_wording(
         interaction.client, interaction.guild, interaction.user, channel_id, text
     )
     await render_channel_notes(interaction, previous)
@@ -1271,6 +1271,7 @@ class Chat(commands.Cog):
     async def _ingest(self) -> None:
         if self.usable_db() is None:
             return
+        await self.seed_drafts()
         try:
             await self.ingest_once()
         except Exception as exc:
@@ -1290,6 +1291,16 @@ class Chat(commands.Cog):
         self.last_ingest_error = f"{type(exc).__name__}: {exc}"
         log.error("chat: the knowledge ingest stopped; restarting it", exc_info=exc)
         self._ingest.restart()
+
+    async def seed_drafts(self) -> int:
+        """The catalog's drafts reach each guild that has the channels, before notes are read."""
+        made = 0
+        for guild in list(getattr(self.bot, "guilds", ()) or ()):
+            try:
+                made += await channel_drafts.seed_and_log(self.bot, guild)
+            except Exception as exc:
+                log.warning("chat: channel drafts not seeded in %s — %s", guild.id, exc)
+        return made
 
     async def ingest_once(self) -> int:
         """One pass: what the server says about itself becomes the `server` notes, whole."""

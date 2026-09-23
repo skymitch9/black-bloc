@@ -2,6 +2,7 @@
 
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-23 — one section APPENDED, nothing re-keyed**: *Personality tones — the cookout is the voice* (branch `personality-tones`, off `main` `083ca538`, keyed against `85cb4053`).
 > Before that: **2026-09-23 — one section APPENDED, nothing re-keyed**: *The channel catalog — a note beats the topic* (branch `channel-catalog`, off `main` `8e4ca731`, keyed against `498019b4`).
+> Before that: **2026-09-23 — one more section APPENDED, nothing re-keyed**: *The Channels page* (branch `channels-page`, off `main` `d6709d48`). Before that, **2026-09-23 — one section APPENDED, nothing re-keyed**: *The channel catalog — a note beats the topic* (branch `channel-catalog`, off `main` `8e4ca731`, keyed against `498019b4`).
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-23 — ELEVEN rows RE-KEYED at `ffa19473`, nothing appended, nothing struck** (the re-key the v157 line below said was owed). Checked **31** keyed rows with `grep -n` on their anchor text against HEAD `ffa19473`; **11 were off, 20 held.** Off and fixed — `tests/api/conftest.py`: `web_settings_at` 500→**492**, `module_web` 473→**466**, `reset_bot` 498→**497**, `fresh_client` 445→**456**, `wf` 574→**573**, `one_web_row` 564→**563**; `tests/conftest.py` (moved by the env-proof-tests session fixture): `pytest_collection_modifyitems` 23→**43**, `cog_modules_stay_the_ones_the_test_files_imported` 35→**55**, `put` 88→**107**, `module_db` 109→**128**, `db` 125→**144**. Held — `tests/conftest.py:31`, `:74`; `tests/loopback.py:11`; the eight *bot-check wall* rows (`youtube_live.py:80`, `:84`; `cogs/content/youtube.py:564`, `:593`, `:674`, `:1042`; `youtube.py:320`; `page-golive.js:1609`); the nine *panel nobody holds* rows (`bot.py:80`, `:87`; `orphaned.py:24`, `:47`, `:57`, `:68`, `:106`; `logkinds.py:30`; `settings_store.py:2369`). ⚠️ No other file's keys were re-read; unnumbered rows (`take`, `put` by name, `record_session`) were not touched.
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-23 04:3x — NOTHING re-keyed, the header only**, at the v157 docs ritual. The four code-health builds' rows are keyed against their OWN commits and were not re-keyed after the merges: *The bot-check wall…* (youtube-walled, 8 rows, against its branch head `c0e619d8` — `git diff c0e619d8 HEAD` on `youtube_live.py`, `youtube.py` and `cogs/content/youtube.py` is empty, so its keys hold); *A click on a panel nobody holds any more* (panels-survive-restart, keyed against `67ad0d3e` — since then only `logkinds.py` moved, one line added at ~331, below its one keyed line `logkinds.py:30`, which still reads `PANEL_EXPIRED_CLICK`); the env-proof-tests rows under *`tests/conftest.py`* (`tests/conftest.py:31` still reads `the_shell_environment_never_reaches_a_test`); the gate-names rows `tests/loopback.py:11` (holds) and ⚠️ the *`tests/api/conftest.py`* rows, which are OFF by number at HEAD: `web_settings_at` is at **492** (row says 500), `module_web` 466 (473), `reset_bot` 497 (498), `fresh_client` 456 (445) — `web_settings_at` was already at 492 on the gate-names branch head `03e5b10d`, so the drift predates the merge; the anchor text wins, a re-key is owed. ⚠️ No other row was re-read.
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-22 — one section APPENDED, nothing re-keyed**: *The bot-check wall is its own outcome, and a walled channel row is searched* (branch `youtube-walled`, off `main` `269338c3`; 8 rows keyed against the branch head).
@@ -8078,9 +8079,30 @@ Branch `channel-catalog`, off `main` `8e4ca731`, keyed against `498019b4`. Desig
 | `black_bloc/api/tools/birthdays.py:92` `POST /post-today` | `require_cog` first (503 in words if the cog is not loaded); `off` is a 409 `birthdays_off` carrying the door's sentence. |
 | `site/public/assets/page-birthdays.js:46` `postTodayCard` | Lives in the page-head aside. Reads its four words from the `birthday` settings rows and draws nothing if the bot does not report them, rather than guessing. |
 
+# The Channels page — staff review the drafted descriptions
+
+Branch `channels-page`, off `main` `d6709d48`, keyed against the branch tip. Design:
+[`channel-catalog-design.md`](channel-catalog-design.md) ▸ follow-up.
+
+| Key | Note |
+|---|---|
+| `black_bloc/storage/db.py:934` `channel_drafts` | Schema 56 (55 is the concurrent `personality-tones`), a new table only. `status` is `draft / used / rewritten / none`; `decided_by`/`decided_at` are NULL while it is a draft. |
+| `black_bloc/channel_drafts.py:26` `SEED_FILE` | The 94 catalog rows, keyed by channel id. Generated once from `channel-catalog.md`; the JSON is the source from then on, and the mock reads the same file. |
+| `black_bloc/channel_drafts.py:82` `effective` | The note table is the truth for the text; the stored status only says why a note is absent. A note changed by another door never leaves a chip that lies. |
+| `black_bloc/channel_drafts.py:89` `seed_drafts` | Only channels this guild has; `INSERT OR IGNORE`, so a decided row is never touched. A final writes its note only when THIS call inserted the row and no note exists — a note staff cleared does not come back on restart. |
+| `black_bloc/channel_drafts.py:141` `_decided` | The one place a decision is stored and logged: one row per decision (checklist 34); the four kinds come in as `kind`, listed in `tests/test_logkinds.py:KNOWN_DYNAMIC`. |
+| `black_bloc/channel_drafts.py:188` `save_wording` | Both doors' save. A drafted channel records `used` when the words equal the draft, else `rewritten`; blank is `no_note`; an undrafted channel falls through to `chat_panel.save_channel_note` unchanged. |
+| `black_bloc/channel_drafts.py:240` `reset_draft` | Clears the note and the decision; resetting an undecided draft answers in words and writes no row. |
+| `black_bloc/api/tools/chat.py:270` `draft_fields` | A channel with no draft row carries four nulls, so the page can tell *made after the catalog* from *draft*. |
+| `black_bloc/api/tools/chat.py:838` `_draft_move` | The three POSTs are one shape: staff gate, the shared move with `via=website`, the refreshed row plus block, budget and review. |
+| `black_bloc/cogs/content/chat.py:1069` `seed_drafts` | Runs on the ingest tick before the knowledge read, so the finals are notes before the first daily read; a failure costs the seed, never the read. |
+| `site/public/assets/page-channels.js:104` `reviewCard` | Buttons render only when valid: Use this while the box equals the draft, Save my wording when it differs, Reset only when decided. |
+| `site/public/assets/page-channels.js:323` `answer` | A move redraws its own card, the block and the progress in place; `view.kept` keeps that card visible until the filter changes, so it does not vanish under the cursor. |
+| `site/mock/server.mjs:119` `CHANNEL_DRAFTS_SEED` | The mock's 94 live channels come from the bot's seed, read at start — one source. |
+
 # Personality tones — the cookout is the voice, and who hears what
 
-Branch `personality-tones`, off `main` `083ca538`, keyed against `85cb4053` and re-checked after merging `main` `562e27c9` (only the two `settings_store.py` rows moved, +120); the anchor text wins over the number.
+Branch `personality-tones`, off `main` `083ca538`, keyed against `85cb4053` and re-checked after merging `main` `562e27c9` and again after `654be0c8` (the two `settings_store.py` rows, the route and `voicesSection` moved; every other anchor held); the anchor text wins over the number.
 Design: [`personality-tones-design.md`](personality-tones-design.md).
 
 | Key | Note |
@@ -8102,10 +8124,10 @@ Design: [`personality-tones-design.md`](personality-tones-design.md).
 | `black_bloc/chat_panel.py:311` `voices_buttons` | `page_count` / `wanted_page` below it mirror `modcases`' with a page of 25 — near-duplicates on purpose, NOT interchangeable (different page size). |
 | `black_bloc/chat_panel.py:766` `pin_voice` | THE write both doors use. A bot, a stranger, `cookout`, `pool` and a switched-off mood are all refused in keyed words (404 / 422). |
 | `black_bloc/chat_panel.py:879` `edit_tone` | A blank body is a reset, not an empty row; `forget_tropes` drops the reply path's cached rows so the next answer reads the new wording. |
-| `black_bloc/settings_store.py:3530` `PROMPT_WORDS` | The sheet and the sentence: default, character cap, the noun the refusal names, help. Capped because every character is read on every answer. |
-| `black_bloc/settings_store.py:3595` `VOICE_WORDS` | The 25 words: default, the only placeholders allowed, help — `KEY_TYPES`, `KEY_HELP`, `TEXT_CHECKS` and `default()` are built from it, as `CHANNEL_NOTE_WORDS` does. |
-| `black_bloc/api/tools/chat.py:728` `chat_trope_switch` | `voice` and `enabled` are independent: a body edit alone never toggles the pool (the old route treated a missing `enabled` as "on"). |
+| `black_bloc/settings_store.py:3562` `PROMPT_WORDS` | The sheet and the sentence: default, character cap, the noun the refusal names, help. Capped because every character is read on every answer. |
+| `black_bloc/settings_store.py:3627` `VOICE_WORDS` | The 25 words: default, the only placeholders allowed, help — `KEY_TYPES`, `KEY_HELP`, `TEXT_CHECKS` and `default()` are built from it, as `CHANNEL_NOTE_WORDS` does. |
+| `black_bloc/api/tools/chat.py:749` `chat_trope_switch` | `voice` and `enabled` are independent: a body edit alone never toggles the pool (the old route treated a missing `enabled` as "on"). |
 | `black_bloc/cogs/content/chat.py:122` `WORDING_KEYS` | The channel-note, prompt and voice words stay off the `/chat` Settings card — the 22-line sheet alone would swamp its 4096 characters. |
 | `black_bloc/cogs/content/chat.py:1054` `VoiceMemberPick` | Discord's member picker searches the whole server, so it is the way onto a member not yet listed; the roster itself pages 25 at a time. |
-| `black_bloc/storage/db.py:937` `chat_voice` | Schema 55, its own table so `/memory` forgetting never clears a pin. `trope` = last used, `pinned` = staff's choice. |
-| `site/public/assets/page-chat.js:1077` `voicesSection` | The roster's **Pin** and the picker's **Pin** both PUT `/api/chat/voices/{id}`; the words fold edits what `/chat` says. |
+| `black_bloc/storage/db.py:937` `chat_voice` | Schema 55 (merged as 56 beside `channel_drafts`), its own table so `/memory` forgetting never clears a pin. `trope` = last used, `pinned` = staff's choice. |
+| `site/public/assets/page-chat.js:1044` `voicesSection` | The roster's **Pin** and the picker's **Pin** both PUT `/api/chat/voices/{id}`; the words fold edits what `/chat` says. |

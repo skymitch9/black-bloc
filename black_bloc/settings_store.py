@@ -3437,7 +3437,39 @@ CHANNEL_NOTES_INTRO_KEY = "chat_channel_notes_intro"
 CHANNEL_NOTES_PLACEHOLDER_KEY = "chat_channel_notes_placeholder"
 CHANNEL_NOTE_MODAL_KEY = "chat_channel_note_modal"
 CHANNEL_NOTE_LABEL_KEY = "chat_channel_note_label"
+CHANNEL_DRAFT_USED_KEY = "chat_channel_draft_used"
+CHANNEL_DRAFT_NONE_KEY = "chat_channel_draft_none"
+CHANNEL_DRAFT_RESET_KEY = "chat_channel_draft_reset"
+CHANNEL_DRAFT_MISSING_KEY = "chat_channel_draft_missing"
 CHANNEL_NOTE_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    CHANNEL_DRAFT_USED_KEY: (
+        "The drafted description for **#{channel}** is now its note. Black Bloc reads it in "
+        "place of the channel's topic from its next answer on.",
+        ("channel",),
+        "what staff are told when they use a channel's drafted description as it is, on the "
+        "Channels page. It takes {channel}, the channel's name",
+    ),
+    CHANNEL_DRAFT_NONE_KEY: (
+        "**#{channel}** has no note now, and the draft is set aside. Black Bloc goes by the "
+        "channel's own topic, or just its name when it has none.",
+        ("channel",),
+        "what staff are told when they decide a channel needs no note, on the Channels page. It "
+        "takes {channel}",
+    ),
+    CHANNEL_DRAFT_RESET_KEY: (
+        "**#{channel}** is back to its draft and waiting for review. Black Bloc reads no note "
+        "for it until somebody uses or rewrites the draft.",
+        ("channel",),
+        "what staff are told when they put a channel back to its draft, on the Channels page. It "
+        "takes {channel}",
+    ),
+    CHANNEL_DRAFT_MISSING_KEY: (
+        "**#{channel}** has no drafted description to review, so nothing was done. Write a note "
+        "for it instead.",
+        ("channel",),
+        "what staff are told when they use, set aside or reset a draft on a channel that was "
+        "never drafted (made after the catalog). It takes {channel}",
+    ),
     CHANNEL_NOTE_SAVED_KEY: (
         "The note for **#{channel}** is saved. Black Bloc reads it in place of the channel's "
         "topic from its next answer on.",

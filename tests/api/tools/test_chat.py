@@ -717,6 +717,118 @@ async def test_the_channel_routes_are_staff_only(client, sign_in, guild, wf, web
     assert await wf.kinds_in(web.db) == []
 
 
+async def drafted(web, wf, draft="Where anything goes."):
+    await web.db.conn.execute(
+        "INSERT INTO channel_drafts(guild_id, channel_id, draft) VALUES (?, ?, ?)",
+        (wf.GUILD_ID, wf.OTHER_CHANNEL_ID, draft),
+    )
+    await web.db.conn.commit()
+
+
+def general_row(client):
+    payload = client.get("/api/chat/channels").json()
+    row = next(one for one in payload["channels"] if one["name"] == "general")
+    return row, payload["review"]
+
+
+async def test_a_drafted_channel_carries_its_draft_and_the_review_counts_it(
+    seeded, client, web, wf
+):
+    await drafted(web, wf)
+
+    row, review = general_row(client)
+    rows = client.get("/api/chat/channels").json()["channels"]
+    others = [one for one in rows if one["name"] != "general"]
+
+    assert (row["draft"], row["status"], row["decided_by"], row["decided_at"]) == (
+        "Where anything goes.",
+        "draft",
+        None,
+        None,
+    )
+    assert review == {"total": 1, "reviewed": 0, "drafts_left": 1}
+    assert others and all(one["draft"] is None and one["status"] is None for one in others)
+
+
+async def test_use_writes_the_draft_and_names_who_decided(seeded, client, web, wf, guild):
+    open_general(guild, wf)
+    await drafted(web, wf)
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}"
+
+    used = client.post(f"{path}/use")
+
+    assert used.status_code == 200, used.text
+    body = used.json()
+    assert body["channel"]["note"] == "Where anything goes."
+    assert body["channel"]["status"] == "used"
+    assert body["channel"]["decided_by"]["id"] == "7" and body["channel"]["decided_by"]["name"]
+    assert body["channel"]["decided_at"]
+    assert body["review"] == {"total": 1, "reviewed": 1, "drafts_left": 0}
+    assert "now its note" in body["message"]
+    assert "#general — Where anything goes." in body["directory"]
+
+
+async def test_the_four_moves_walk_every_status_one_row_each(seeded, client, web, wf):
+    await drafted(web, wf)
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}"
+
+    rewritten = client.put(path, json={"note": "Anything goes here."}).json()
+    same = client.put(path, json={"note": "Where anything goes."}).json()
+    none = client.post(f"{path}/none").json()
+    reset = client.post(f"{path}/reset").json()
+
+    assert rewritten["channel"]["status"] == "rewritten" and "is saved" in rewritten["message"]
+    assert same["channel"]["status"] == "used"
+    assert none["channel"]["status"] == "none" and none["channel"]["note"] is None
+    assert "no note now" in none["message"]
+    assert reset["channel"]["status"] == "draft" and reset["channel"]["decided_by"] is None
+    assert "back to its draft" in reset["message"]
+    assert [k for k in await wf.kinds_in(web.db) if k.startswith("web.chat.channel")] == [
+        "web.chat.channel_draft_rewritten",
+        "web.chat.channel_draft_used",
+        "web.chat.channel_draft_none",
+        "web.chat.channel_draft_reset",
+    ]
+
+
+async def test_a_delete_on_a_drafted_channel_is_the_no_note_decision(seeded, client, web, wf):
+    await drafted(web, wf)
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}"
+    client.post(f"{path}/use")
+
+    gone = client.delete(path).json()
+
+    assert gone["channel"]["status"] == "none"
+    assert gone["review"]["reviewed"] == 1
+
+
+async def test_draft_moves_on_an_undrafted_channel_are_refused_in_words(seeded, client, web, wf):
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}"
+
+    for move in ("use", "reset"):
+        response = client.post(f"{path}/{move}")
+        assert response.status_code == 404, move
+        assert response.json()["error"] == "no_draft"
+        assert "no drafted description" in response.json()["message"]
+    for move in ("use", "none", "reset"):
+        response = client.post(f"/api/chat/channels/{wf.VOICE_CHANNEL_ID}/{move}")
+        assert response.status_code == 404 and "not a text channel" in response.json()["message"]
+    assert [k for k in await wf.kinds_in(web.db) if k.startswith("web.chat")] == []
+
+
+async def test_the_draft_moves_are_staff_only(client, sign_in, guild, wf, web):
+    await drafted(web, wf)
+    wf.member(guild, 8, name="ada")
+    sign_in(client, uid=8, staff=False)
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}"
+
+    for move in ("use", "none", "reset"):
+        response = client.post(f"{path}/{move}")
+        assert response.status_code == 403, move
+        assert response.json()["message"]
+    assert await wf.kinds_in(web.db) == []
+
+
 # --- who hears what (personality tones, 2026-09-23) ------------------------------------------
 
 

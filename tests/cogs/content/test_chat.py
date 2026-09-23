@@ -3,10 +3,11 @@ from types import SimpleNamespace
 import discord
 import pytest
 
-from black_bloc import actionlog, chat_panel, knowledge, personas
+from black_bloc import actionlog, channel_drafts, chat_panel, knowledge, personas
 from black_bloc import chat as chat_module
 from black_bloc import chat_llm as chat_llm_module
 from black_bloc.actionlog import log_action
+from black_bloc.channel_notes import notes_for
 from black_bloc.chat import (
     BUILTIN_ORDER,
     UNKNOWN,
@@ -1818,6 +1819,38 @@ async def test_a_blank_box_clears_the_note_through_the_same_write(
     assert "is gone" in interaction.sent
     assert await chat_panel.channel_note(bot, bot.guild, SPEED) == ""
     assert await kinds_of(db) == ["chat.channel_note_set", "chat.channel_note_cleared"]
+
+
+async def test_a_drafted_channel_saved_on_discord_records_the_review_decision(
+    cog, bot, member, db, monkeypatch
+):
+    interaction = await open_channel_notes(cog, bot, member, monkeypatch)
+    await channel_drafts.seed_drafts(db, bot.guild)
+
+    await pick_one(interaction, "A channel to describe…", SimpleNamespace(id=SPEED))
+    modal = interaction.response.modals[-1]
+    fill(modal, note="Runs, times and PBs.")
+    await modal.on_submit(interaction)
+
+    row = await channel_drafts.get_draft(db, GUILD, SPEED)
+    assert (row["status"], row["decided_by"]) == ("rewritten", member.id)
+    assert await kinds_of(db) == ["chat.channel_draft_rewritten"]
+
+
+async def test_the_ingest_tick_seeds_the_drafts_first_and_a_failure_costs_only_the_seed(
+    cog, bot, db, monkeypatch
+):
+    with_text_channels(bot)
+
+    assert await cog.seed_drafts() == 2
+    assert await cog.seed_drafts() == 0
+    assert set(await notes_for(db, GUILD)) == {SPEED, 1411816390414962700}
+
+    async def broken(*_):
+        raise RuntimeError("no table")
+
+    monkeypatch.setattr(channel_drafts, "seed_and_log", broken)
+    assert await cog.seed_drafts() == 0
 
 
 async def test_a_channel_that_is_not_a_text_channel_here_is_refused_in_words(

@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ... import chat_llm, chat_panel, knowledge, personas
+from ... import channel_drafts, chat_llm, chat_panel, knowledge, personas
 from ...channel_notes import NOTE_CHARS, notes_for
 from ...chat import (
     BUILTIN_NAMES,
@@ -269,18 +269,39 @@ def channel_order(channel: Any) -> tuple[int, int]:
     return (at, int(getattr(channel, "position", 0) or 0))
 
 
-def channel_row(channel: Any, notes: dict[int, str], why: str | None) -> dict[str, Any]:
+def channel_row(
+    channel: Any,
+    notes: dict[int, str],
+    why: str | None,
+    drafted: Any = None,
+    guild: Any = None,
+) -> dict[str, Any]:
     category = getattr(channel, "category", None)
+    note = notes.get(int(channel.id)) or None
     return {
         "id": str(channel.id),
         "name": str(channel.name),
         "category": str(category.name) if category is not None else None,
         "category_id": _id(getattr(category, "id", None)),
         "topic": str(getattr(channel, "topic", "") or "") or None,
-        "note": notes.get(int(channel.id)) or None,
+        "note": note,
         "shown": why is None,
         "hidden_because": why,
         "position": int(getattr(channel, "position", 0) or 0),
+        **draft_fields(drafted, note, guild),
+    }
+
+
+def draft_fields(drafted: Any, note: Any, guild: Any) -> dict[str, Any]:
+    if drafted is None:
+        return {"draft": None, "status": None, "decided_by": None, "decided_at": None}
+    status = channel_drafts.effective(drafted["status"], drafted["draft"], note)
+    decided = status != channel_drafts.DRAFT
+    return {
+        "draft": str(drafted["draft"]),
+        "status": status,
+        "decided_by": person(guild, drafted["decided_by"]) if decided and guild else None,
+        "decided_at": drafted["decided_at"] if decided else None,
     }
 
 
@@ -832,11 +853,19 @@ def build_router(bot: Any) -> APIRouter:
     async def _channels(guild: Any) -> dict[str, Any]:
         """Every text channel, the ones the model is not told about included, with the why."""
         notes = await notes_for(bot.db, guild.id)
+        drafts = await channel_drafts.drafts_for(bot.db, guild.id)
         hidden = hidden_category_ids(bot, guild)
         viewer = visibility_role(bot, guild)
         found = sorted(getattr(guild, "text_channels", ()) or (), key=channel_order)
         rows = [
-            channel_row(one, notes, why_hidden(guild, one, hidden, viewer)) for one in found
+            channel_row(
+                one,
+                notes,
+                why_hidden(guild, one, hidden, viewer),
+                drafts.get(int(one.id)),
+                guild,
+            )
+            for one in found
         ]
         shown = directory_preview(bot, guild, notes)
         return {
@@ -849,6 +878,7 @@ def build_router(bot: Any) -> APIRouter:
                 "shown": sum(1 for row in rows if row["shown"]),
                 "noted": sum(1 for row in rows if row["note"]),
             },
+            "review": channel_drafts.review_counts(rows),
             "notes": [],
         }
 
@@ -859,6 +889,7 @@ def build_router(bot: Any) -> APIRouter:
             "channel": row,
             "directory": found["directory"],
             "budget": found["budget"],
+            "review": found["review"],
             "message": outcome.message,
         }
 
@@ -876,7 +907,7 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         outcome = answered(
-            await chat_panel.save_channel_note(
+            await channel_drafts.save_wording(
                 bot,
                 guild,
                 actor_for(bot, who, guild),
@@ -893,11 +924,32 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         outcome = answered(
-            await chat_panel.clear_channel_note(
+            await channel_drafts.no_note(
                 bot, guild, actor_for(bot, who, guild), channel_id, via=VIA_WEBSITE
             )
         )
         return await _channel_answer(guild, channel_id, outcome)
+
+    async def _draft_move(request: Request, channel_id: int, move: Any) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        outcome = answered(
+            await move(bot, guild, actor_for(bot, who, guild), channel_id, via=VIA_WEBSITE)
+        )
+        return await _channel_answer(guild, channel_id, outcome)
+
+    @router.post("/channels/{channel_id}/use")
+    async def chat_channel_draft_use(request: Request, channel_id: int) -> dict[str, Any]:
+        return await _draft_move(request, channel_id, channel_drafts.use_draft)
+
+    @router.post("/channels/{channel_id}/none")
+    async def chat_channel_draft_none(request: Request, channel_id: int) -> dict[str, Any]:
+        return await _draft_move(request, channel_id, channel_drafts.no_note)
+
+    @router.post("/channels/{channel_id}/reset")
+    async def chat_channel_draft_reset(request: Request, channel_id: int) -> dict[str, Any]:
+        return await _draft_move(request, channel_id, channel_drafts.reset_draft)
 
     @router.get("/spend")
     async def chat_spend() -> dict[str, Any]:
