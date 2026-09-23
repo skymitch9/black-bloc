@@ -38,6 +38,7 @@ export const GROUPS = [
       { tab: 'rolemenus', label: 'Role menus', icon: 'navRolemenus', feature: 'rolemenu', count: 'requests' },
       { tab: 'polls', label: 'Polls', icon: 'navPolls', feature: 'poll', count: 'polls' },
       { tab: 'chat', label: 'Chat', icon: 'navChat', feature: 'chat' },
+      { tab: 'channels', label: 'Channels', icon: 'navChannels', feature: 'chat' },
     ],
   },
   {

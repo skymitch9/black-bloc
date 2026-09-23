@@ -16,6 +16,7 @@ export const TABS = [
   { tab: 'rolemenus', href: '/rolemenus.html', label: 'Role menus' },
   { tab: 'polls', href: '/polls.html', label: 'Polls' },
   { tab: 'chat', href: '/chat.html', label: 'Chat' },
+  { tab: 'channels', href: '/channels.html', label: 'Channels' },
   { tab: 'birthdays', href: '/birthdays.html', label: 'Birthdays' },
   { tab: 'tempvoice', href: '/tempvoice.html', label: 'Temp voice' },
   { tab: 'honeypot', href: '/honeypot.html', label: 'Honeypot' },
