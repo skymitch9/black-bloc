@@ -1,11 +1,20 @@
 # Personality tones — the cookout is the voice, every mood is a tone on it, and the tone follows the person
 
-> **Audience:** Claude sessions and the owner. **Status:** TRACKED — **BUILT, NOT MERGED, NOT DEPLOYED**
+> **Audience:** Claude sessions and the owner. **Status:** TRACKED — ✅ **LIVE as v159** (2026-09-23 **14:07** Phoenix, release commit `c54f14a8`, merge `c1f0148d`).
+> **Verified live at the v159 boot:** the boot log (21:07:23Z) read `database: added personality_tropes.voice_edited_by`,
+> `…voice_edited_at`, `…llm_ledger.trope`, `database ready`, `personas: pool v1 synced — 0 inserted, 11 updated,
+> 0 retired` — the eleven rewritten tone bodies are in the live table; `GET /api/chat/voices`, read at the ritual through
+> the operator token, answers setting **`cookout`**, 11 tones, 0 voices, 0 pins. ⚠️ With the server on `cookout` the
+> precedence turns tones OFF for everyone, so no live reply carries a tone until staff pick **pool** or a mood.
+> ⚠️ **NOT verified live:** no model reply under a tone has been read; no Discord (`/chat` ▸ Who hears what…); no browser
+> on the Chat page's new sections. **Until the deploy the status read:** BUILT, NOT MERGED, NOT DEPLOYED
 > (branch `personality-tones`, worktree `C:/lcw/bb-personality-tones`, off `main` `083ca538`, with `main` merged in
 > twice — `562e27c9` (birthday-post-today, three append-only conflicts) and `654be0c8` (channels-page, twelve files:
 > schema 56 kept, the Chat page's channel section is main's link card, both sides' keys/tests/docs kept); built 2026-09-23 by an Opus build agent from
 > the conductor's brief). Secret NAMES only.
-> **Last verified: 2026-09-23, on the tree with `654be0c8` merged** — `ruff check black_bloc tests site` clean;
+> **Last verified: 2026-09-23 14:1x** — the status lines above only, at the v159 docs ritual; the body (including
+> *Not verified* at the foot, whose boot-sync line is now answered above) was not re-read.
+> Before that, **2026-09-23, on the tree with `654be0c8` merged** — `ruff check black_bloc tests site` clean;
 > `pytest -q -n 16` **7604 passed, 3 skipped**; `node site/mock/check.mjs` **ok — 22 pages, 209 routes, 25 core settings** against a mock
 > on a private port; `page-chat.js` and `page-settings.js` load as ES modules (fail only on `document is not defined`).
 > ⚠️ **Nothing here has met live Discord, a live model or a browser** — see *Not verified* at the foot.

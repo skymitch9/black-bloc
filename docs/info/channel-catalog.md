@@ -1,9 +1,14 @@
 # The channel catalog — every live text channel and what it is for
 
 > **Audience:** the owner, who approves or rewrites each description, and whoever writes the
-> approved ones into the bot. **Status:** TRACKED · **BUILT, NOT MERGED** with branch
-> `channel-catalog` — nothing here is in the live bot. Secret NAMES only (this file holds none).
-> **Last verified: 2026-09-23** — the channel list, ids, names and categories were read from the
+> approved ones into the bot. **Status:** TRACKED · ✅ **LIVE as v159** (2026-09-23 **14:07** Phoenix, release commit `c54f14a8`). ✅ **The seed is LIVE:** these rows
+> ship as `black_bloc/channel_drafts_seed.json` and were seeded at the v159 boot — action 10103
+> `chat.channel_drafts_seeded count=94, notes=2` (21:07:27Z); `/api/chat/channels` reads 94 rows, 2 reviewed (the two
+> ✅ owner notes, live), 92 drafts left for staff on the Channels page. **This file is now the history of the seed, not
+> the place to review** — review happens on <https://blackbloc.heygabi.ai/channels.html>. Until the deploy it read:
+> **BUILT, NOT MERGED** with branch `channel-catalog` — nothing here is in the live bot. Secret NAMES only (this file holds none).
+> **Last verified: 2026-09-23 14:1x** — the status line above only (live API read at the v159 ritual; the rows below
+> were NOT re-compared with the live seed). Before that, **2026-09-23** — the channel list, ids, names and categories were read from the
 > live bot with `scripts/read.ps1 -Path /api/ref/channels` (read-only operator token):
 > **94 text channels** in **14 categories**, plus **5 forums** not listed here (forums are not in
 > the channel list the model reads — `collabs-and-community-events`, `ask-a-gdq-staffer`,

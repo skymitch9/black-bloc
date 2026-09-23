@@ -3,7 +3,8 @@
 > **Audience:** whoever deploys or fixes the site, and the reviewer doing the
 > first live sign-in. **Status:** TRACKED (owner, 2026-08-31 — was local-only
 > until then; secret NAMES only). **Last verified:
-> 2026-09-21 — the mock section only**: the `/preview/` door and its `LIVE_ROOT` live mirror of the
+> 2026-09-23 14:1x — the pages count and the `channels.html` row only**, at the v159 ritual: `ls site/public/*.html` is
+> **22** and the row says LIVE v159; nothing else re-read, no browser. Before that, **2026-09-21 — the mock section only**: the `/preview/` door and its `LIVE_ROOT` live mirror of the
 > deployed release are RETIRED (owner, 12:2x, verbatim: *"We don't need the preview pages anymore"*)
 > and **deleted** from `site/mock/server.mjs` on branch `no-previews` (merge `4dd9f649`), ✅
 > **shipped as part of v154 (2026-09-21 20:08)**; the mock serves the WORKING
@@ -245,7 +246,7 @@ until 2026-08-31, which predates Polls, Chat, Requests and Members):
 
 | Page | What it is for |
 |---|---|
-| `channels.html` (2026-09-23, branch `channels-page`, NOT MERGED) | **Channels** — staff review each live channel's drafted description (Use this / Save my wording / No note / Reset to the draft), see *What the bot sees*, and edit the channel-note words. Reads `GET /api/chat/channels`; writes `PUT/DELETE /api/chat/channels/{id}` and `POST …/{id}/use\|none\|reset`. In the rail right after Chat. Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md) ▸ follow-up |
+| `channels.html` (2026-09-23, branch `channels-page`, ✅ LIVE v159, merge `654be0c8`) | **Channels** — staff review each live channel's drafted description (Use this / Save my wording / No note / Reset to the draft), see *What the bot sees*, and edit the channel-note words. Reads `GET /api/chat/channels`; writes `PUT/DELETE /api/chat/channels/{id}` and `POST …/{id}/use\|none\|reset`. In the rail right after Chat. Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md) ▸ follow-up |
 
 ⚠️ **`guides.html` is the SECOND page a signed-in member who is not staff may open**
 (`requests.html` was the first). It is one page for two views — the hub, and a guide at

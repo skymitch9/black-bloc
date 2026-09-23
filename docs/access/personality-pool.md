@@ -1,9 +1,10 @@
 # The global personality pool — runbook
 
-> ⚠️ **2026-09-23 (branch `personality-tones`, BUILT, NOT MERGED):** the eleven voice bodies in `personas.py:VOICES` are now **this server's cookout tones** (rewritten; no manifest change, no version bump), and staff can reword any one on the Chat page ▸ Personality. A staff-worded body is marked `voice_edited_at` and the boot sync below leaves its wording alone (it still takes a new label, wings and order); **Put the shipped wording back** hands it back to the sync. Design: [`../info/personality-tones-design.md`](../info/personality-tones-design.md).
+> ⚠️ **2026-09-23 (branch `personality-tones`, merge `c1f0148d`; ✅ LIVE as v159 2026-09-23 14:07 Phoenix, release commit `c54f14a8` — the boot sync read `personas: pool v1 synced — 0 inserted, 11 updated, 0 retired` at 21:07Z):** the eleven voice bodies in `personas.py:VOICES` are now **this server's cookout tones** (rewritten; no manifest change, no version bump), and staff can reword any one on the Chat page ▸ Personality. A staff-worded body is marked `voice_edited_at` and the boot sync below leaves its wording alone (it still takes a new label, wings and order); **Put the shipped wording back** hands it back to the sync. Design: [`../info/personality-tones-design.md`](../info/personality-tones-design.md).
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED — secret NAMES only.
-> **Last verified: 2026-09-11 08:38** — 🔴 **the "not built yet" half of this file was wrong
+> **Last verified: 2026-09-23 14:1x** — the note above only (its v159 stamp); nothing else re-read. Before that,
+> **2026-09-11 08:38** — 🔴 **the "not built yet" half of this file was wrong
 > and is corrected below.** GABI's half LANDED on 2026-09-05 19:45 (KI-23 closed and moved to
 > [`../DONE.md`](../DONE.md)): her `/api/health` answers `gabi_personality_pool_version: 1`
 > (owner deploy `755cfd54`), and **the canonical file EXISTS** —

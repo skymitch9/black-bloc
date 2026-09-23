@@ -1,6 +1,6 @@
 # The global personality pool — design (next-wave #4)
 
-> ⚠️ **Superseded in part, 2026-09-23** (branch `personality-tones`, BUILT, NOT MERGED): the mood block is now a **tone on the cookout voice** (`## Today's tone (on top of the cookout voice)` + the `chat_tone_clause` sentence), the eleven bodies are cookout tones and editable per mood, and in a server the roll is keyed by **(guild, member)** and stored in `chat_voice`, with a staff pin above it. Read [`personality-tones-design.md`](personality-tones-design.md) for how a reply picks its voice now; this doc still owns the manifest, the roster, the graph, the drift constants and the two shared clauses, none of which changed.
+> ⚠️ **Superseded in part, 2026-09-23** (branch `personality-tones`, merge `c1f0148d`; ✅ **LIVE as v159** 2026-09-23 14:07 Phoenix, release commit `c54f14a8` — the boot sync read `personas: pool v1 synced — 0 inserted, 11 updated, 0 retired` at 21:07Z, the eleven tone bodies landing): the mood block is now a **tone on the cookout voice** (`## Today's tone (on top of the cookout voice)` + the `chat_tone_clause` sentence), the eleven bodies are cookout tones and editable per mood, and in a server the roll is keyed by **(guild, member)** and stored in `chat_voice`, with a staff pin above it. Read [`personality-tones-design.md`](personality-tones-design.md) for how a reply picks its voice now; this doc still owns the manifest, the roster, the graph, the drift constants and the two shared clauses, none of which changed.
 
 > **Audience:** Claude sessions in BOTH repos (this one and `catalog-platform`).
 > **Status:** TRACKED — **Black Bloc half LIVE as v90 `7c59eb1`** (2026-09-05 19:00; built on `worktree-agent-a9f7e266cd87f5c2c`) **and v91 `604226f`** (19:38: roster compared by name, byte-for-byte sync).
@@ -8,7 +8,7 @@
 > `gabi_personality_pool_version: 1` + the eleven, Black Bloc's copy is `synced_from: catalog-platform@de4ef63`, and the self-test compares the two rosters on every boot
 > (§8's landing order held: no red at any step). The runbook is
 > [`../access/personality-pool.md`](../access/personality-pool.md). ✅ All three forks decided (a) by the owner 2026-09-05 16:41–16:43. Written **2026-09-05** by Fable in the
-> main loop. Last verified: **2026-09-11 09:20** — docs-wide staleness pass.
+> main loop. Last verified: **2026-09-23 14:1x** — the superseding note's v159 stamp only (nothing else re-read). Before that, **2026-09-11 09:20** — docs-wide staleness pass.
 > **Re-measured off `main` at `1d090e5`:** `black_bloc/personality_pool.json` holds
 > **11 tropes, version 1, 2 clauses, 4 slots, drift 2, `synced_from:
 > catalog-platform@de4ef63`** — exactly what this design says shipped, six days on and

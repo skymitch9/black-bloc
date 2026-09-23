@@ -28,7 +28,8 @@
 > 4. **v92** (`4b327cf`) — deviation 14's finding was repaired: `cogs/community/requests.py` passes
 >    `allowed_mentions` on its re-renders (`:176`, `:257`, `:625`, `:653`, `:657`).
 >
-> **Last verified: 2026-09-11 08:41** — re-measured in this tree at `1d090e5`: all three §D keys are
+> **Last verified: 2026-09-23 14:1x** — the *Follow-up 2026-09-23* status only (LIVE v159); nothing else re-read.
+> Before that, **2026-09-11 08:41** — re-measured in this tree at `1d090e5`: all three §D keys are
 > registered (`birthday_panel_minutes`, `birthday_panel_next_for_members`, `birthday_panel_lookup`)
 > in a **202**-key registry; the labels §B/§C name still read the same strings — `SET_MINE` /
 > `CHANGE_MINE` / `OPT_OUT` / `OPT_IN` (`birthdays.py:466–470`), `LOOKUP_PLACEHOLDER` /
@@ -420,7 +421,9 @@ was built as this document specifies.
 ## Follow-up 2026-09-23 — post today's wishes by hand (branch `birthday-post-today`)
 
 Owner, verbatim: *"can we add a birthday command to post the days birthdays? that way they can
-be manually triggered"*. Not deployed. Measured the same day: a birthday set mid-day already
+be manually triggered"*. ✅ **LIVE as v159** (2026-09-23 14:07 Phoenix, release commit `c54f14a8`, merge `b67e96e4`; stamped at the
+v159 docs ritual 14:1x — ⚠️ the door has not been pressed live: no `birthday.posted_now` row among the last 200
+actions, sweeps `BT-a`…`BT-d` unwalked). Measured the same day: a birthday set mid-day already
 posts on the next five-minute tick by itself (Anarchy, set 12:29, posted 12:31), so the manual
 trigger is for reposting after a deploy or restart swallowed one, posting again on purpose, or
 posting NOW instead of waiting for the tick.

@@ -6,7 +6,12 @@
 > This retires the 2026-08-26 local-only rule, under which the tree was
 > gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
 > so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
-> Last verified: **2026-09-23 — one count only**, at the loose-ends docs pass: `ls docs/info/*.md` still **108**; one dated
+> Last verified: **2026-09-23 14:1x — the bot's version and two counts only**, at the v158 + v159 docs ritual: the bot is at
+> **v159** (deployed 2026-09-23 14:07 Phoenix, release commit `c54f14a8`; v158 at 12:51, `3dec2518`; [`deploys.log`](deploys.log) is the
+> authority, 158 lines). `ls docs/info/*.md` now **112**, `ls docs/access/*.md` still **12**, the site **22** pages
+> (`ls site/public/*.html`, `channels.html` new). One dated line added under *Where the bot stands*. ⚠️ **NOT re-checked:**
+> that block's mode table and every other figure; nothing met a browser.
+> Before that, **2026-09-23 — one count only**, at the loose-ends docs pass: `ls docs/info/*.md` still **108**; one dated
 > line added under *Where the bot stands* (its mode table NOT re-read). Before that, **2026-09-23 04:3x — the bot's version and two counts only**, at the v157 docs ritual: the bot is at **v157**
 > (deployed 2026-09-23 04:21 Phoenix, release commit `e9ecd0d0`; [`deploys.log`](deploys.log) is the authority, 156 lines).
 > `ls docs/info/*.md` now **108** (`panels-orphaned-click-design.md` landed with v157), `ls docs/access/*.md` still **12**.
@@ -99,6 +104,8 @@ index (§7). `archive/` holds the retired docs and the one-off `current-bots/`
 dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
+
+**2026-09-23 14:1x:** v159 live (four merges: channel catalog, post today's birthdays, the Channels page, personality tones; v158 at 12:51 was the Birthdays Change button) — the drafts seed and the tone bodies verified live at boot, and the chat voice is `cookout`, so no tone is heard yet (see [`DONE.md`](DONE.md) 2026-09-23 v159); the mode table below was NOT re-read.
 
 **2026-09-23:** v157 live; spotlight + YouTube channel rows verified live at boot (see [`DONE.md`](DONE.md) 2026-09-23); the mode table below was NOT re-read.
 

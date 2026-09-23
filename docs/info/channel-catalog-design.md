@@ -1,11 +1,20 @@
 # The channel catalog — what each channel is for, in staff's words
 
 > **Audience:** whoever touches the channel list the conversation models read, and the reviewer.
-> **Status:** TRACKED · **BUILT, NOT MERGED** — branch `channel-catalog`, off `main` `8e4ca731`,
+> **Status:** TRACKED · ✅ **LIVE as v159** (2026-09-23 **14:07** Phoenix, release commit `c54f14a8`; merge `3acc8a83`, and the Channels page follow-up merge `654be0c8`).
+> **Verified live at the v159 boot:** the boot log read `database ready` 21:07:23Z (schema 56: `channel_notes`,
+> `channel_drafts`); action 10103 `chat.channel_drafts_seeded count=94, notes=2` at 21:07:27Z; read at the ritual through
+> the operator token, `GET /api/chat/channels` answers `review {total: 94, reviewed: 2, drafts_left: 92}`,
+> `budget {used: 1454, cap: 4096, trimmed: []}`, the two owner notes (#general-chat, #speed-and-pbs) live as `used`;
+> **23** of 94 channels carry a Discord topic and **24** reach the directory (65 `not_visible`, 4 `archive`,
+> 1 `ignored_category`) — the two unknowns under *What was NOT verified* are now readable on the page.
+> ⚠️ **NOT verified live:** no Discord button (`/chat` ▸ Channel notes…), no browser on the Channels page, no staff
+> review move, real staff names in the chips. **Until the deploy the status read:** BUILT, NOT MERGED — branch `channel-catalog`, off `main` `8e4ca731`,
 > worktree `C:/lcw/bb-channel-catalog`. Nothing deployed; schema 54 has never run against the
 > live database. The draft descriptions for the live channels are in
 > [`channel-catalog.md`](channel-catalog.md) and are **not** in the bot.
-> **Last verified: 2026-09-23** — against the branch tip by `pytest -n 16` (7427 passed),
+> **Last verified: 2026-09-23 14:1x** — the status lines above only, at the v159 docs ritual; the body was not re-read.
+> Before that, **2026-09-23** — against the branch tip by `pytest -n 16` (7427 passed),
 > `ruff check black_bloc tests site` and `node site/mock/check.mjs` (21 pages, 201 routes), and
 > the Chat page drawn in headless Chrome against the mock. ⚠️ Nothing met live Discord.
 

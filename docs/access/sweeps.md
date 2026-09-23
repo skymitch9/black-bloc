@@ -1,7 +1,11 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
-> **2026-09-23** — ONLY the five sections written 2026-09-22 were touched: a ✅ LIVE line added under the
+> **2026-09-23 14:1x** — ONLY the five sections written 2026-09-23 were touched, at the v158 + v159 docs ritual: a ✅ LIVE
+> line added under the headings of `BC-a` (v158, 12:51) and `CC-a`…`CC-d`, `BT-a`…`BT-d`, `CP-a`…`CP-e`, `PT-a`…`PT-e`
+> (v159, 14:07), taken from `deploys.log`, `DONE.md` and the live API through the operator token; the three
+> *⏸️ BUILT, NOT MERGED* lines they replace are gone. Nothing renumbered, no row walked, no other section re-read.
+> Before that, **2026-09-23** — ONLY the five sections written 2026-09-22 were touched: a ✅ LIVE line added under the
 > headings of `RP-a`, `BP-a`, `PR-a` (v156, 2026-09-22 21:18) and `YW-a`…`YW-d`, `PX-a` (v157, 2026-09-23 04:21),
 > taken from `deploys.log` and `DONE.md`. Nothing renumbered, no row walked, no other section re-read. Before that,
 > **2026-09-21 (branch `mode-column`)** — row `MC-a` added at the foot for RECENT STREAMS LOSING THE MODE
@@ -2984,6 +2988,8 @@ defect is [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) ▸ KI-20. Lettered; the co
 
 ## Row `BC-a` — a Change button on each birthday row (branch `birthday-change-button`, 2026-09-23)
 
+✅ **LIVE as v158** — deployed 2026-09-23 **12:51** Phoenix (release commit `3dec2518`, merge `477844da`); boot log `database ready` 19:51:01Z, `logged in as Black_Bloc` 19:51:06Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v158). ⚠️ Nothing below has been walked by a person yet.
+
 Owner: *"yes add a change button next to the remove button"*. Not deployed. Lettered; the conductor numbers it. Walked against the mock in headless Chrome only.
 
 | Row | Do | Expect |
@@ -2992,7 +2998,9 @@ Owner: *"yes add a change button next to the remove button"*. Not deployed. Lett
 
 ## Rows `CC-a` … `CC-d` — the channel catalog: a note per channel beats its topic (branch `channel-catalog`, 2026-09-23)
 
-⏸️ **BUILT, NOT MERGED, NOT DEPLOYED.** Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md);
+✅ **LIVE as v159** — deployed 2026-09-23 **14:07** Phoenix (release commit `c54f14a8`, merge `3acc8a83`); boot log `database ready` 21:07:23Z, `logged in as Black_Bloc` 21:07:27Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v159). ⚠️ Nothing below has been walked by a person yet. ⚠️ `CC-a` and `CC-b`'s *type the two notes* are overtaken: the Chat page's section is now a link (`CP-e`) and the two owner notes are already live (seeded at boot, action 10103).
+
+Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md);
 the drafts: [`../info/channel-catalog.md`](../info/channel-catalog.md). Lettered; the conductor numbers it.
 
 | Row | Do | Expect |
@@ -3005,7 +3013,7 @@ the drafts: [`../info/channel-catalog.md`](../info/channel-catalog.md). Lettered
 ## Rows `BT-a`…`BT-d` — post today's birthday wishes by hand (branch `birthday-post-today`, 2026-09-23)
 
 Owner: *"can we add a birthday command to post the days birthdays? that way they can be manually
-triggered"*. Not deployed. Lettered; the conductor numbers them. Design:
+triggered"*. ✅ **LIVE as v159** — deployed 2026-09-23 **14:07** Phoenix (release commit `c54f14a8`, merge `b67e96e4`); boot log `database ready` 21:07:23Z, `logged in as Black_Bloc` 21:07:27Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v159). ⚠️ Nothing below has been walked by a person yet. Lettered; the conductor numbers them. Design:
 [`../info/birthdays-panel-design.md`](../info/birthdays-panel-design.md) ▸ *Follow-up 2026-09-23*.
 
 | Row | Do | Expect |
@@ -3017,7 +3025,9 @@ triggered"*. Not deployed. Lettered; the conductor numbers them. Design:
 
 ## Rows `CP-a` … `CP-e` — the Channels page: staff review the drafted descriptions (branch `channels-page`, 2026-09-23)
 
-⏸️ **BUILT, NOT MERGED, NOT DEPLOYED.** Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md) ▸ follow-up.
+✅ **LIVE as v159** — deployed 2026-09-23 **14:07** Phoenix (release commit `c54f14a8`, merge `654be0c8`); boot log `database ready` 21:07:23Z, `logged in as Black_Bloc` 21:07:27Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v159); the seed ran at boot — action 10103 `chat.channel_drafts_seeded count=94, notes=2`, and `/api/chat/channels` reads *reviewed 2 of 94, 92 drafts left*, which is what `CP-a` expects. ⚠️ Nothing below has been walked by a person yet.
+
+Design: [`../info/channel-catalog-design.md`](../info/channel-catalog-design.md) ▸ follow-up.
 Lettered; the conductor numbers it. ⚠️ Supersedes `CC-a` (the Chat page's section is now a link).
 
 | Row | Do | Expect |
@@ -3030,7 +3040,9 @@ Lettered; the conductor numbers it. ⚠️ Supersedes `CC-a` (the Chat page's se
 
 ## Rows `PT-a` … `PT-e` — personality tones: the cookout is the voice, and who hears what (branch `personality-tones`, 2026-09-23)
 
-⏸️ **BUILT, NOT MERGED, NOT DEPLOYED.** Design: [`../info/personality-tones-design.md`](../info/personality-tones-design.md).
+✅ **LIVE as v159** — deployed 2026-09-23 **14:07** Phoenix (release commit `c54f14a8`, merge `c1f0148d`); boot log `database ready` 21:07:23Z, `logged in as Black_Bloc` 21:07:27Z, `personas: pool v1 synced — 0 inserted, 11 updated, 0 retired` ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v159). ⚠️ Nothing below has been walked by a person yet. ⚠️ The live voice is **`cookout`** (`/api/chat/voices`, read at the ritual), so `PT-b` will say nobody hears a tone; `PT-c` starts by setting **pool**.
+
+Design: [`../info/personality-tones-design.md`](../info/personality-tones-design.md).
 Lettered; the conductor numbers it. ⚠️ `chat_llm_mode` must be **on** for any reply to use a tone.
 
 | Row | Do | Expect |

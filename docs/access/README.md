@@ -1,7 +1,11 @@
 # access/ — how to OPERATE Black Bloc
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not
-> temporarily) — secret NAMES only. Last verified: **2026-09-23 04:3x — the `deploy.md` and `testing.md` ROWS only**, at the v157
+> temporarily) — secret NAMES only. Last verified: **2026-09-23 14:1x — the `deploy.md` and `site.md` ROWS only**, at the
+> v158 + v159 ritual: [`../deploys.log`](../deploys.log) is **158** lines (`grep -c .`), the last being **v159** `c54f14a8`;
+> `ls site/public/*.html` is **22** (`channels.html`). `ls docs/access/*.md` still **12**. ⚠️ **NOT checked:** every other
+> row's number or the facts inside any file.
+> Before that, **2026-09-23 04:3x — the `deploy.md` and `testing.md` ROWS only**, at the v157
 > ritual: [`../deploys.log`](../deploys.log) is **156** lines (`grep -c .`), the last being **v157** `e9ecd0d0`; the `testing.md`
 > row now names the sections the code-health round added (the environment fixture, the junit file, the 120 s timeout, the loopback
 > plugin). `ls docs/access/*.md` still **12**. ⚠️ **NOT checked:** every other row's number or the facts inside any file.
@@ -35,12 +39,12 @@
 |---|---|
 | [`OWNER_GUIDE.md`](OWNER_GUIDE.md) | **Start here, owner:** before the trip (encrypt `.env`, leave the session open), the laptop once, what to look at on the road, if something looks wrong, when you're back |
 | [`setup.md`](setup.md) | Local run: venv, `.env`, Developer Portal, invite, first start |
-| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **156** lines in [`../deploys.log`](../deploys.log), the last being **v157** on 2026-09-23 04:21 (counted 2026-09-23 04:3x at the v157 ritual; it said 155 / v156). Its *gate's pytest step* section is the `-n 16` / `-rfE` / junit / 120 s timeout gate, first run for real by v157 |
+| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **158** lines in [`../deploys.log`](../deploys.log), the last being **v159** on 2026-09-23 14:07 (counted 2026-09-23 14:1x at the v159 ritual; it said 156 / v157). Its *gate's pytest step* section is the `-n 16` / `-rfE` / junit / 120 s timeout gate, first run for real by v157 |
 | [`RECOVERY.md`](RECOVERY.md) | Rebuild from nothing: inventory, secret custody, named gaps |
 | [`runbook.md`](runbook.md) | **Day to day:** where everything is, the flyctl path, deploy/restart/rollback/logs, secret names, common failures and what they mean, local run, docs bookkeeping |
 | [`sweeps.md`](sweeps.md) | **What the owner has not yet exercised by hand**, in priority order, with what to expect — the verification checklist. Rows **1–620** as of 2026-09-18 (counted 2026-09-19; it said 1–350) |
 | [`operator-read.md`](operator-read.md) | **`OPERATOR_READ_TOKEN`**: the one command the OWNER runs to mint it (it never prints the value), how a session reads live state with `scripts/read.ps1`, the table of readable paths, and how to rotate or revoke. Unset = the door does not exist |
 | [`personality-pool.md`](personality-pool.md) | **The shared mood manifest**: the order of operations for a roster change across both estate bots, `scripts/sync_personality_pool.py`, the two `personality_pool_*` settings, what the boot sync writes (and the one column it never touches), and how to read the `pool.in_step_with_gabi` self-test row. Added 2026-09-05; **both halves have landed since** (KI-23 closed 2026-09-05 19:45) |
-| [`site.md`](site.md) | The config website: the one-hostname deploy, the custom domain, the EXACT Discord OAuth redirect URI to register, the **21** pages (re-counted 2026-09-21, `ls site/public/*.html`; this row said 17) and the mock. It is LIVE at https://blackbloc.heygabi.ai |
+| [`site.md`](site.md) | The config website: the one-hostname deploy, the custom domain, the EXACT Discord OAuth redirect URI to register, the **22** pages (re-counted 2026-09-23 at the v159 ritual, `ls site/public/*.html` — `channels.html` joined with v159; it said 21) and the mock. It is LIVE at https://blackbloc.heygabi.ai |
 | [`guides-capture.md`](guides-capture.md) | **After a deploy whose `release.json` names a feature:** the step-by-step a Claude session follows to re-shoot the guide screenshots that went stale — read `/api/guides/stale` with the operator token, shoot the cards the self-test already posted in the owner's own Discord tab (⚠️ **pressing nothing on his account**), `zoom` straight to disk with `save_to_disk` (no Pillow), upload through the guide page's own **Replace screenshot…**. Added 2026-09-16 by the Guides G2 build. 🔴 **Never drilled** |
 | [`testing.md`](testing.md) | **How to run the tests:** the hermetic suite, the mock's contract check, and `tests/live/` against the DEPLOYED api (the two env NAMES it needs, and why the operator token cannot start a self-test). Since v157 (2026-09-23) also: the suite clears its own environment (the session fixture in `tests/conftest.py`), and *A red or hung run* — reading the gate's junit file, the 120 s per-test timeout, and the `tests/loopback.py` plugin behind KI-26. Added 2026-09-05 by the self-test build |

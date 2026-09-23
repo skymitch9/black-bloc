@@ -1,6 +1,9 @@
 # Personality per person — survey across the HeyGabi estate
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (secret NAMES only).
+> ✅ **The §6 recommendation shipped as v159** (2026-09-23 14:07 Phoenix, release commit `c54f14a8`, merge `c1f0148d`) — see
+> [`personality-tones-design.md`](personality-tones-design.md). Last verified for this line only: **2026-09-23 14:1x**
+> (`deploys.log` line 158); the survey below is a dated snapshot and was not re-read.
 > Owner ask, verbatim (2026-09-23): *"look in the Heygabi workspace, which is catalogplatform book
 > buddy gamebuddy and maybe one other, find out how they do the personality mapping per person. I
 > also want the cookout personality to be the main personality and all other personality are tones
