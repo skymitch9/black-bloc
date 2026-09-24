@@ -188,6 +188,48 @@ refuse-don't-trim). Port `searchBundle`'s scoring shape onto SQLite:
 Ships with `chat_llm_mode off` — flipping it on is the owner's move after the
 keys are set. No deploy risk: everything degrades to today's behaviour.
 
+## Follow-up 2026-09-23 — greetings through the model (branch `greeting-tone`)
+
+🔨 **BUILT on branch `greeting-tone`, NOT MERGED, NOT DEPLOYED.** This doc owns *which path
+answers* (§1's intents-first rule), so the follow-up lives here; the tone precedence it relies on
+is unchanged and stays in [`personality-tones-design.md`](personality-tones-design.md).
+
+**The ask** (owner, 2026-09-23 16:3x, after *whats good* got a canned greeting line with no tone):
+**"yes route greetings through the model too"**.
+
+**What changed** — §1's *"intents first, a matched intent never reaches a model"* now has one
+exception, the `greeting` intent:
+
+| Condition (in this order) | Answer |
+|---|---|
+| `chat_greeting_reaction` on and the message is a bare hello | the wave reaction, as before — checked BEFORE the model, so it costs no call (`chat.would_wave`, the one predicate the cog also uses) |
+| `chat_llm_mode` off, OR `chat_greeting_via_model` off, OR `chat_personality` is `cookout` | the canned greeting line, exactly as before |
+| otherwise | `conversational_reply(..., greeting=True)`: tier forced to **SIMPLE**, the note search skipped (zero notes, whatever the text), the `chat_banter_style` hint and the member's tone (pin, named mood or pool draw) as for any model turn |
+| the model says nothing, errors, is capped or has no key | the canned greeting line, logged as a fallback |
+
+- **Key** `chat_greeting_via_model` — enum `off`/`on`, group chat, default **on** (registry 418 →
+  419, chat group 127 → 128). On the Chat page's Settings list and on Settings; `/settings
+  set-value` reaches it too (checklist 33).
+- **Why cookout keeps the written lines**: the cookout voice has no tone to add, and the written
+  greeting lines ARE the cookout voice — a model call would buy nothing.
+- **Logs**: every model reply's `chat.llm_reply` row now carries `path: model`; a greeting that
+  fell back writes a `chat.llm_reply` row with `{intent: greeting, path: canned, fallback:
+  canned}` (the error or cap already has its own `chat.llm_error` / `chat.llm_capped` row). The
+  process log says `chat: answered <id> (greeting via model)` or `(greeting, canned fallback)`.
+- **Review loop**: `chat_review.answered` never opens an *ungrounded* item for the `greeting`
+  intent. A greeting is SIMPLE, but the ladder climbs to the careful tier when the quick tier fails
+  or has no key, and a greeting always has zero hits — without the guard every such hello would be
+  queued.
+- **Cost**: one SIMPLE-tier call per greeting, through `llm_ledger` and `chat_monthly_cap_usd` like
+  every other turn. The quick tier is Groq (`chat_simple_model`, default `openai/gpt-oss-120b`),
+  priced **$0** in `llm.PRICES`, so a greeting costs nothing in dollars — it spends a turn of
+  `chat_person_hourly_turns` / `chat_daily_turns`. Only when Groq fails or has no key does it climb
+  to Haiku 4.5 ($1 in / $5 out per MTok, cache reads $0.10) and costs what any careful turn
+  costs — not measured for a hello.
+
+Not verified: no live model and no live Discord — the tests fake `conversational_reply` and both
+clients. Sweep `CB-c` in [`../access/sweeps.md`](../access/sweeps.md).
+
 ## Follow-up 2026-09-23 — banter gets banter (branch `chat-banter`)
 
 ✅ **LIVE as v162** — deployed 2026-09-23 **16:20** Phoenix (release commit `4e6e4e4c`; merge `d8278877`, 4 commits; the mention-id line below merge `654570e9`, 1 commit); boot log `database ready` 23:19:53Z, `logged in` 23:19:57Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v162).
