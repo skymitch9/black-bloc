@@ -95,6 +95,7 @@ ERROR_KIND = "chat.llm_error"
 ON = "on"
 LLM_MODE_KEY = "chat_llm_mode"
 SIMPLE_MODEL_KEY = "chat_simple_model"
+GREETING_VIA_MODEL_KEY = "chat_greeting_via_model"
 REPLY_LIMIT = 1900
 NOTHING: tuple[None, None, None] = (None, None, None)
 CLIENTS_ATTR = "_chat_clients"
@@ -485,6 +486,15 @@ def llm_is_on(bot: Any, guild_id: Any) -> bool:
     return read_setting(store, guild_id, LLM_MODE_KEY, "off") == ON
 
 
+def greets_by_model(bot: Any, guild_id: Any) -> bool:
+    """A hello reaches the quick model with the models on, the key on and a voice not cookout."""
+    if not llm_is_on(bot, guild_id):
+        return False
+    if read_setting(bot.store, guild_id, GREETING_VIA_MODEL_KEY, ON) != ON:
+        return False
+    return read_setting(bot.store, guild_id, PERSONALITY_KEY, COOKOUT) != COOKOUT
+
+
 def usable_db(bot: Any) -> Any:
     db = getattr(bot, "db", None)
     return db if db is not None and getattr(db, "is_connected", False) else None
@@ -637,7 +647,7 @@ def channels_block(bot: Any, guild: Any, notes: Any = None) -> str:
 
 
 async def conversational_reply(
-    bot: Any, *, guild: Any, member: Any, channel: Any, text: Any
+    bot: Any, *, guild: Any, member: Any, channel: Any, text: Any, greeting: bool = False
 ) -> tuple[str | None, str | None, str | None]:
     """The whole second rung: knowledge, tier, one or two calls, and the ledger for each."""
     guild_id = getattr(guild, "id", None)
@@ -662,8 +672,8 @@ async def conversational_reply(
         return NOTHING
 
     window = await window_for(db, channel_id, user_id, now=at)
-    hits = await hits_for(db, guild_id, text, guild)
-    tier = tier_for(text, hits, window)
+    hits = () if greeting else await hits_for(db, guild_id, text, guild)
+    tier = SIMPLE if greeting else tier_for(text, hits, window)
     order = ladder(tier, important=important, simple=simple)
     if not order:
         return NOTHING

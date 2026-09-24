@@ -20,6 +20,8 @@ INSULT = "insult"
 GREETING = "greeting"
 
 CANNED = "canned"
+PATH_MODEL = "model"
+WAVE_KEY = "chat_greeting_reaction"
 DATA = "data"
 ROUTE = "route"
 KINDS: tuple[str, ...] = (CANNED, DATA, ROUTE)
@@ -721,6 +723,8 @@ class Answer:
         text: str,
         tier: str | None = None,
         trope: str | None = None,
+        path: str = CANNED,
+        fallback: bool = False,
     ) -> None:
         self.intent = intent
         self.kind = kind
@@ -728,17 +732,41 @@ class Answer:
         self.text = text
         self.tier = tier
         self.trope = trope
+        self.path = path
+        self.fallback = fallback
+
+    def label(self) -> str:
+        if self.intent == GREETING and self.path == PATH_MODEL:
+            return "greeting via model"
+        if self.fallback:
+            return f"{self.intent}, canned fallback"
+        return self.intent
+
+
+def would_wave(bot: Any, guild_id: Any, text: Any, intents: Any = ()) -> bool:
+    """The wave reaction answers a bare hello instead of any sentence, when a server asks."""
+    if guild_id is None or not bot.store.get(guild_id, WAVE_KEY):
+        return False
+    return bare_greeting(text, intents)
+
+
+def greets_through_model(bot: Any, guild_id: Any, intent: str, text: Any, intents: Any) -> bool:
+    from .chat_llm import greets_by_model
+
+    if intent != GREETING or would_wave(bot, guild_id, text, intents):
+        return False
+    return greets_by_model(bot, guild_id)
 
 
 async def a_model_answer(
-    bot: Any, home: Any, member: Any, channel: Any, text: Any
+    bot: Any, home: Any, member: Any, channel: Any, text: Any, *, greeting: bool = False
 ) -> tuple[str | None, str | None, str | None]:
     """Imported here rather than at the top: `chat_llm` reads this module's own words."""
     from .chat_llm import conversational_reply
 
     try:
         return await conversational_reply(
-            bot, guild=home, member=member, channel=channel, text=text
+            bot, guild=home, member=member, channel=channel, text=text, greeting=greeting
         )
     except Exception as exc:
         log.warning("chat: the conversation step failed — %s: %s", type(exc).__name__, exc)
@@ -762,8 +790,11 @@ async def answer_for(
     intent = classify(text, intents, mentions_member=bool(others_mentioned(text, bot)))
     kind = kind_of(intent, intents)
     tokens, filled = await chat_data.tokens_for(bot, home, member, intent, text)
-    if llm and (intent == UNKNOWN or tokens.get(chat_data.PASS_TO_MODEL)):
-        said, tier, trope = await a_model_answer(bot, home, member, channel, text)
+    greeting = llm and greets_through_model(bot, guild_id, intent, text, intents)
+    if greeting or (llm and (intent == UNKNOWN or tokens.get(chat_data.PASS_TO_MODEL))):
+        said, tier, trope = await a_model_answer(
+            bot, home, member, channel, text, greeting=greeting
+        )
         if said:
             return Answer(
                 intent,
@@ -772,6 +803,7 @@ async def answer_for(
                 toned_text(said, tone_for(bot, guild_id)),
                 tier=tier,
                 trope=trope,
+                path=PATH_MODEL,
             )
     slot = FILLED if kind == CANNED or filled else EMPTY
     line = respond(
@@ -783,7 +815,13 @@ async def answer_for(
         slot=slot,
         tokens=tokens,
     )
-    return Answer(intent, kind, slot, toned_text(with_extra(line, tokens), tone_for(bot, guild_id)))
+    return Answer(
+        intent,
+        kind,
+        slot,
+        toned_text(with_extra(line, tokens), tone_for(bot, guild_id)),
+        fallback=greeting,
+    )
 
 
 def with_extra(line: str, tokens: Any) -> str:

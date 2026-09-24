@@ -518,3 +518,17 @@ async def test_opening_an_item_schedules_its_tagging_off_the_reply_path(db, monk
         await task
     assert len(client.calls) == 1
     assert (await review.get_item(db, made))["suggested_kind"] == "phrase"
+
+
+async def test_a_greeting_is_never_queued_as_ungrounded_whatever_tier_answered(bot):
+    review.note_grounding(bot, CHANNEL, MEMBER, ())
+    made = await review.answered(
+        bot,
+        message("<@55> whats good"),
+        SimpleNamespace(id=50),
+        said(tier=IMPORTANT, intent="greeting"),
+        now=NOW,
+    )
+
+    assert made is None
+    assert await items(bot.db) == []

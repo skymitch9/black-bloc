@@ -1287,3 +1287,60 @@ async def test_without_the_guild_a_channel_mention_still_matches_nothing(wired):
     found = await chat_llm.hits_for(wired.db, 7, "<@1> what goes in <#1076003845232148580>")
 
     assert not any(hit.title == "#knuck-up" for hit in found.hits)
+
+
+# --- greetings through the model (owner 2026-09-23: "yes route greetings through the model too")
+
+
+@pytest.mark.parametrize(
+    "values, expected",
+    [
+        ({"chat_llm_mode": "on", "chat_personality": "pool"}, True),
+        ({"chat_llm_mode": "on", "chat_personality": "warm"}, True),
+        ({"chat_llm_mode": "on", "chat_personality": "cookout"}, False),
+        (
+            {"chat_llm_mode": "on", "chat_personality": "pool", "chat_greeting_via_model": "off"},
+            False,
+        ),
+        ({"chat_llm_mode": "off", "chat_personality": "pool"}, False),
+    ],
+)
+def test_a_greeting_goes_to_the_model_only_with_models_on_key_on_and_a_voice_not_cookout(
+    values, expected
+):
+    bot = SimpleNamespace(store=FakeStore(values))
+
+    assert chat_llm.greets_by_model(bot, 7) is expected
+    assert chat_llm.greets_by_model(bot, None) is False
+
+
+async def test_a_greeting_is_a_quick_turn_with_no_notes_the_banter_hint_and_the_members_tone(
+    wired, monkeypatch
+):
+    from black_bloc.chat_voice import pin
+    from black_bloc.personas import BY_NAME
+
+    await server_notes(wired.db)
+    await tones_ready(wired)
+    await pin(wired.db, 7, 900, "scholar", by=1)
+    wired.store.values["chat_personality"] = "pool"
+    quick = Answering(GROQ, "llama-3.3-70b-versatile")
+    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
+    text = "<@1> whats good, where do I post my PBs"
+
+    assert tier_for(text, await chat_llm.hits_for(wired.db, 7, text)) == IMPORTANT
+    said, tier, tone = await conversational_reply(
+        wired,
+        guild=wired.guild,
+        member=FakeMember(900),
+        channel=FakeChannel(),
+        text=text,
+        greeting=True,
+    )
+
+    assert said and tier == SIMPLE and tone == "scholar"
+    system = quick.seen[0]["system"]
+    asked = quick.seen[0]["messages"][-1]["content"]
+    assert BANTER_STYLE in system and BY_NAME["scholar"].voice in system
+    assert GROUNDING_NOTE not in asked and "Speedrunning records" not in asked
+    assert asked == "whats good, where do I post my PBs"

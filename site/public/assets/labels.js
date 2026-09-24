@@ -252,6 +252,7 @@ export const LABELS = {
   chat_staff_can_ping_roles: 'Whether a staffer’s question lets the bot ping a role',
   chat_escalation_names: 'How many online staff the bot names when a mod is asked for',
   chat_greeting_reaction: 'Whether a bare hello gets a wave',
+  chat_greeting_via_model: 'Whether a hello is answered by the model in the member’s tone',
   chat_reply_in_threads: 'Whether the bot answers inside threads',
   chat_route_ping_staff: 'Whether staff are told when a mod is asked for',
   chat_llm_mode: 'Whether a language model answers what the bot cannot',

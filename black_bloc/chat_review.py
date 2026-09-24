@@ -14,6 +14,7 @@ from typing import Any
 from .actionlog import log_action
 from .chat import (
     CANNED,
+    GREETING,
     ChatError,
     add_line,
     clean_name,
@@ -385,7 +386,7 @@ async def answered(
         found.replies[int(one.reply_id)] = one
         while len(found.replies) > REPLIES_KEPT:
             found.replies.popitem(last=False)
-    if one.tier == IMPORTANT and hits == 0:
+    if one.tier == IMPORTANT and hits == 0 and one.intent != GREETING:
         return await open_item(bot, one, UNGROUNDED)
     return None
 
