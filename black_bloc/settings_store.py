@@ -422,6 +422,7 @@ KEY_TYPES: dict[str, str] = {
     "chat_staff_can_ping_roles": "bool",
     "chat_escalation_names": "int",
     "chat_greeting_reaction": "bool",
+    "chat_greeting_via_model": "enum",
     "chat_reply_in_threads": "bool",
     "chat_route_ping_staff": "bool",
     "chat_llm_mode": "enum",
@@ -485,6 +486,7 @@ KEY_CHOICES: dict[str, tuple[str, ...]] = {
     "request_who_can_file": REQUEST_FILERS,
     "chat_mode": CHAT_MODES,
     "chat_llm_mode": CHAT_LLM_MODES,
+    "chat_greeting_via_model": CHAT_LLM_MODES,
     "chat_personality": PERSONALITY_CHOICES,
     "chat_memory_mode": MEMORY_MODES,
     "chat_memory_consent": CONSENT_CHOICES,
@@ -1110,6 +1112,12 @@ KEY_HELP: dict[str, str] = {
     "chat_greeting_reaction": (
         "true to answer a bare hello with a wave reaction instead of a sentence; anything "
         "longer still gets a reply"
+    ),
+    "chat_greeting_via_model": (
+        "on (a hello is answered by the quick model in the member's tone, with no server notes) "
+        "or off (a hello gets one of the greeting's own written lines). Only used while "
+        "chat_llm_mode is on; the cookout voice always uses the written lines, and a model that "
+        "fails or is capped falls back to them"
     ),
     "chat_reply_in_threads": "true to answer @-mentions inside threads as well as channels",
     "chat_route_ping_staff": (
@@ -4778,6 +4786,8 @@ class SettingsStore:
             return CHAT_COOLDOWN_SECONDS
         if key == "chat_greeting_reaction":
             return False
+        if key == "chat_greeting_via_model":
+            return "on"
         if key == "chat_reply_in_threads":
             return True
         if key == "chat_route_ping_staff":

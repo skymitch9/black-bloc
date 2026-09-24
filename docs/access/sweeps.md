@@ -3084,6 +3084,16 @@ gets banter*. ~~BUILT, NOT MERGED, NOT DEPLOYED.~~
 | ✅ | **Owner, 2026-09-23 16:3x: "it worked"** — said "what up" to the bot on v162 and got the short banter reply, no quoted notes. `CB-a` VERIFIED LIVE. | |
 | **`CB-b`** | Branch `mention-names`, 2026-09-23. In a channel the bot answers in, type *@Black_Bloc what goes in #* and **pick #knuck-up from Discord's popup** (so it sends `<#id>`), then send | The reply says what #knuck-up is for (fighting games) in the voice, without quoting the note back; the Logs page shows `chat.llm_reply tier=important` (the resolved `#knuck-up` names the note, so it is strong) |
 
+## Row `CB-c` — greetings through the model (branch `greeting-tone`, 2026-09-23)
+
+Design: [`../info/phase14-design.md`](../info/phase14-design.md) ▸ *Follow-up 2026-09-23 —
+greetings through the model*. 🔨 BUILT on branch `greeting-tone`, NOT MERGED, NOT DEPLOYED.
+Needs `chat_llm_mode` on.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`CB-c`** | With the voice (`chat_personality`) on **pool** and *Whether a hello is answered by the model in the member's tone* on (the default), say *@Black_Bloc whats good*; then set the voice to **cookout** and say it again | The first reply is one or two lines in the member's tone (not one of the written greeting lines), no quoted notes; the Logs page shows `chat.llm_reply tier=simple … path=model`. On cookout the reply is a written greeting line and no `chat.llm_reply` row is written. If `chat_greeting_reaction` is on, a bare *hi* still gets only the wave |
+
 ## Rows `RL-a` … `RL-g` — the chat review loop: answers that may have missed, tagged and reviewed (branch `chat-review-loop`, 2026-09-23)
 
 ✅ **LIVE as v162** — deployed 2026-09-23 **16:20** Phoenix (release commit `4e6e4e4c`, merge `737e660c`; schema **58**); boot log `database ready` 23:19:53Z, `logged in` 23:19:57Z; `GET /api/chat/review` at 16:2x answers every count 0, `items []` — the route is live, the queue empty ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v162). No row walked yet; nothing below has met a live model. ~~BUILT, NOT MERGED, NOT DEPLOYED — branch `chat-review-loop`.~~

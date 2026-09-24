@@ -788,7 +788,7 @@ async def kinds_of(db):
 def answering(said="Pull up a chair, Nia.", tier="simple"):
     seen = []
 
-    async def reply(bot, *, guild, member, channel, text):
+    async def reply(bot, *, guild, member, channel, text, greeting=False):
         seen.append({"text": text, "channel": getattr(channel, "id", None)})
         return (said, tier, "cookout" if said else None)
 
@@ -826,7 +826,7 @@ async def test_the_reply_row_names_the_tone_that_wrote_it(cog, bot, member, db, 
     """Owner 2026-09-23: see which personality each person got — the log row says it."""
     import json
 
-    async def reply(bot_arg, *, guild, member, channel, text):
+    async def reply(bot_arg, *, guild, member, channel, text, greeting=False):
         return ("Smoke was thick that night.", "simple", "noir")
 
     monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
@@ -856,7 +856,7 @@ async def test_a_model_that_says_nothing_leaves_the_written_line_to_answer(
 async def test_a_model_that_throws_leaves_the_written_line_to_answer(
     cog, bot, member, monkeypatch, caplog
 ):
-    async def boom(bot_arg, *, guild, member, channel, text):
+    async def boom(bot_arg, *, guild, member, channel, text, greeting=False):
         raise RuntimeError("the sky fell in")
 
     monkeypatch.setattr(chat_llm_module, "conversational_reply", boom)
@@ -873,7 +873,7 @@ async def test_a_model_that_throws_leaves_the_written_line_to_answer(
 async def test_a_role_question_matching_no_role_at_all_goes_to_the_model(
     cog, bot, member, monkeypatch
 ):
-    async def a_pick(bot_arg, home, member_arg, channel, text):
+    async def a_pick(bot_arg, home, member_arg, channel, text, greeting=False):
         return ("Beerus, easily — destruction beats training arcs.", "simple", "cookout")
 
     monkeypatch.setattr(chat_module, "a_model_answer", a_pick)
@@ -2055,7 +2055,7 @@ async def test_an_ungrounded_careful_answer_is_queued_from_the_message_flow(
 ):
     from black_bloc import chat_review
 
-    async def reply(bot, *, guild, member, channel, text):
+    async def reply(bot, *, guild, member, channel, text, greeting=False):
         chat_review.note_grounding(bot, channel.id, member.id, ())
         return ("Ask a Lead!", "important", "cookout")
 
@@ -2216,3 +2216,129 @@ async def test_the_review_tick_tags_and_posts_the_digest(cog, bot, monkeypatch):
 
     assert tagged == [True] and digests == [GUILD]
     assert cog.loop_health("_review")[1] is None and cog.loop_health("_review")[0]
+
+
+# --- greetings through the model (owner 2026-09-23: "yes route greetings through the model too")
+
+
+def greeting_model(said="Ayy what's good, Nia, pull up.", tier="simple", tone="scholar"):
+    seen = []
+
+    async def reply(bot, *, guild, member, channel, text, greeting=False):
+        seen.append(greeting)
+        return (said, tier, tone if said else None)
+
+    return reply, seen
+
+
+async def voice_on_pool(bot):
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    await bot.store.set(GUILD, "chat_personality", "pool")
+
+
+async def test_a_greeting_on_the_pool_voice_is_answered_by_the_model_in_its_tone(
+    cog, bot, member, db, monkeypatch, caplog
+):
+    import json
+
+    reply, seen = greeting_model()
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await voice_on_pool(bot)
+    message = pinged(bot, member, "<@55> whats good")
+
+    with caplog.at_level("INFO"):
+        await cog.on_message(message)
+
+    assert seen == [True]
+    assert message.replies[0]["content"] == "Ayy what's good, Nia, pull up."
+    details = json.loads((await rows(db, "chat.llm_reply"))[0]["details"])
+    assert (details["tier"], details["trope"], details["path"]) == ("simple", "scholar", "model")
+    assert f"chat: answered {USER} (greeting via model)" in caplog.text
+
+
+async def test_the_cookout_voice_keeps_the_written_greeting(cog, bot, member, db, monkeypatch):
+    reply, seen = greeting_model()
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await bot.store.set(GUILD, "chat_llm_mode", "on")
+    message = pinged(bot, member, "<@55> whats good")
+
+    await cog.on_message(message)
+
+    assert seen == []
+    assert message.replies and message.replies[0]["content"] != "Ayy what's good, Nia, pull up."
+    assert await rows(db, "chat.llm_reply") == []
+
+
+async def test_the_key_off_keeps_the_written_greeting(cog, bot, member, db, monkeypatch):
+    reply, seen = greeting_model()
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await voice_on_pool(bot)
+    await bot.store.set(GUILD, "chat_greeting_via_model", "off")
+    message = pinged(bot, member, "<@55> whats good")
+
+    await cog.on_message(message)
+
+    assert seen == []
+    assert message.replies and await rows(db, "chat.llm_reply") == []
+
+
+@pytest.mark.parametrize("fails", ["nothing", "throws"])
+async def test_a_model_that_fails_a_greeting_falls_back_to_the_written_line_and_says_so(
+    cog, bot, member, db, monkeypatch, caplog, fails
+):
+    import json
+
+    seen = []
+
+    async def reply(bot_arg, *, guild, member, channel, text, greeting=False):
+        seen.append(greeting)
+        if fails == "throws":
+            raise RuntimeError("capped or keyless")
+        return (None, None, None)
+
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await voice_on_pool(bot)
+    message = pinged(bot, member, "<@55> whats good")
+
+    with caplog.at_level("INFO"):
+        await cog.on_message(message)
+
+    assert seen == [True]
+    assert message.replies and message.replies[0]["content"]
+    details = json.loads((await rows(db, "chat.llm_reply"))[0]["details"])
+    assert (details["intent"], details["path"], details["fallback"]) == (
+        "greeting",
+        "canned",
+        "canned",
+    )
+    assert f"chat: answered {USER} (greeting, canned fallback)" in caplog.text
+
+
+async def test_the_wave_still_wins_over_the_model(cog, bot, member, monkeypatch):
+    reply, seen = greeting_model()
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await voice_on_pool(bot)
+    await bot.store.set(GUILD, "chat_greeting_reaction", True)
+    message = pinged(bot, member, "<@55> hi")
+
+    await cog.on_message(message)
+
+    assert seen == []
+    assert message.replies == [] and message.reactions == ["\U0001f44b\U0001f3ff"]
+
+
+async def test_a_greeting_through_the_model_never_opens_a_review_item(
+    cog, bot, member, db, monkeypatch, no_tagging
+):
+    from black_bloc import chat_review
+
+    async def reply(bot_arg, *, guild, member, channel, text, greeting=False):
+        chat_review.note_grounding(bot_arg, channel.id, member.id, ())
+        return ("Ayy.", "important", "scholar")
+
+    monkeypatch.setattr(chat_llm_module, "conversational_reply", reply)
+    await voice_on_pool(bot)
+
+    await cog.on_message(numbered(bot, member, "<@55> whats good"))
+
+    assert await review_rows(db) == []

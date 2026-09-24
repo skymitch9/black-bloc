@@ -491,6 +491,7 @@ const SETTING_SPECS = [
   ['chat_staff_can_ping_roles', 'bool', true, true, "on lets Black Bloc's conversational answers mention a role when the person who @-mentioned it is staff — an Auntie or Uncle and up. Nobody else can make it ping anything, and `@everyone` and `@here` never go through for anyone. Off means a conversational answer pings nobody at all, whoever asked"],
   ['chat_escalation_names', 'int', 2, 2, 'how many online staff Black Bloc names when somebody asks for a mod, 0 to name nobody and up to 10. They are named in plain words, never pinged — the person does that themselves. Nobody online says so instead', null, 10],
   ['chat_greeting_reaction', 'bool', false, false, 'true to answer a bare hello with a wave reaction instead of a sentence; anything longer still gets a reply'],
+  ['chat_greeting_via_model', 'enum', 'on', 'on', "on (a hello is answered by the quick model in the member's tone, with no server notes) or off (a hello gets one of the greeting's own written lines). Only used while chat_llm_mode is on; the cookout voice always uses the written lines, and a model that fails or is capped falls back to them", ['off', 'on']],
   ['chat_reply_in_threads', 'bool', true, true, 'true to answer @-mentions inside threads as well as channels'],
   ['chat_route_ping_staff', 'bool', false, false, 'true to drop one line in the staff channel when somebody asks the bot for a mod; only used while modmail_enabled is true'],
   ['chat_llm_mode', 'enum', 'on', 'off', 'off, or on (an @-mention no built-in intent recognises is answered by a language model instead of the catch-all line). Off is the default and off is safe: with it off, or with no keys set, Black Bloc answers exactly as it does today', ['off', 'on']],
@@ -7233,7 +7234,7 @@ const CHAT_TOKENS = {
 };
 const CHAT_SETTING_KEYS = ['chat_mode', 'chat_cooldown_seconds', 'chat_ignore_channels',
   'chat_ignore_categories', 'chat_home_channel_id', 'chat_visibility_role_id', 'chat_staff_can_ping_roles', 'chat_escalation_names',
-  'chat_greeting_reaction', 'chat_reply_in_threads',
+  'chat_greeting_reaction', 'chat_greeting_via_model', 'chat_reply_in_threads',
   'chat_route_ping_staff', 'chat_llm_mode', 'chat_simple_model', 'chat_personality',
   'chat_person_hourly_turns', 'chat_daily_turns', 'chat_monthly_cap_usd', 'chat_panel_minutes',
   'chat_log_level'];

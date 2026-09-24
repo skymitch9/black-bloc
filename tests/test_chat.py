@@ -717,3 +717,28 @@ def test_a_line_needs_words_and_a_slot_has_to_be_one_of_three():
             clean_text(given)
     with pytest.raises(ChatError):
         clean_slot("somewhere")
+
+
+def test_the_wave_needs_the_setting_a_server_and_a_bare_hello():
+    from black_bloc.chat import would_wave
+
+    def bot(on):
+        return SimpleNamespace(store=SimpleNamespace(get=lambda guild_id, key: on))
+
+    assert would_wave(bot(True), 7, "<@1> hi") is True
+    assert would_wave(bot(True), 7, "<@1> hi, how are you") is False
+    assert would_wave(bot(False), 7, "<@1> hi") is False
+    assert would_wave(bot(True), None, "<@1> hi") is False
+
+
+def test_the_log_label_says_which_path_answered_a_greeting():
+    from black_bloc.chat import PATH_MODEL, Answer
+
+    assert Answer("greeting", CANNED, FILLED, "Yo.", path=PATH_MODEL).label() == (
+        "greeting via model"
+    )
+    assert Answer("greeting", CANNED, FILLED, "Yo.", fallback=True).label() == (
+        "greeting, canned fallback"
+    )
+    assert Answer("greeting", CANNED, FILLED, "Yo.").label() == "greeting"
+    assert Answer(UNKNOWN, CANNED, FILLED, "Hm.", path=PATH_MODEL).label() == UNKNOWN

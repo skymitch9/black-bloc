@@ -18,11 +18,11 @@ from ...chat import (
     ROUTE,
     TRIGGER_LIMIT,
     answer_for,
-    bare_greeting,
     guild_intents,
     invalidate,
     list_intents,
     seed_defaults,
+    would_wave,
 )
 from ...chat_distil import run as distil_run
 from ...chat_llm import (
@@ -1796,7 +1796,7 @@ class Chat(commands.Cog):
             return
         self._answered[user_id] = now
         await self.remember_answer(message, reply, said)
-        log.info("chat: answered %s (%s)", user_id, said.intent)
+        log.info("chat: answered %s (%s)", user_id, said.label())
         if guild is None:
             return
         if said.tier:
@@ -1805,7 +1805,15 @@ class Chat(commands.Cog):
                 guild,
                 REPLY_KIND,
                 actor=author,
-                details={"tier": said.tier, "trope": said.trope or COOKOUT},
+                details={"tier": said.tier, "trope": said.trope or COOKOUT, "path": said.path},
+            )
+        elif said.fallback:
+            await log_action(
+                self.bot,
+                guild,
+                REPLY_KIND,
+                actor=author,
+                details={"intent": said.intent, "path": said.path, "fallback": said.path},
             )
         if said.intent == INSULT:
             await log_action(
@@ -1860,9 +1868,7 @@ class Chat(commands.Cog):
         """A bare hello gets a wave rather than a sentence, when a server asks for that."""
         if intent != GREETING or guild_id is None:
             return False
-        if not self.bot.store.get(guild_id, "chat_greeting_reaction"):
-            return False
-        if not bare_greeting(text, await guild_intents(self.bot, guild_id)):
+        if not would_wave(self.bot, guild_id, text, await guild_intents(self.bot, guild_id)):
             return False
         try:
             await message.add_reaction(toned(WAVE, tone_for(self.bot, guild_id)))

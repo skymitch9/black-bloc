@@ -8203,3 +8203,17 @@ Design: [`personality-tones-design.md`](personality-tones-design.md).
 | `black_bloc/cogs/content/chat.py:1613` `review_once` | Why a second loop: the ingest tick is 24 h, which can neither tag promptly nor hit a 9 o'clock digest. |
 | `black_bloc/api/tools/chat.py:1122` `chat_review_markdown` | Behind the reader gate, so the operator token may read it; every write route is behind the writer gate, which the operator token can never pass. |
 | `black_bloc/settings_store.py:3896` `TEXT_MAY_BE_BLANK` | The emoji and both phrase lists may be blank — blank is how each reason is turned off. |
+
+## Greetings through the model (branch `greeting-tone`, 2026-09-23)
+
+*(off `main` `6e26b452`, keyed against `da04ac4b`; the anchor text wins over the number. Design: [`phase14-design.md`](phase14-design.md) ▸ *Follow-up 2026-09-23 — greetings through the model*.)*
+
+| Where | Why |
+|---|---|
+| `black_bloc/chat.py:746` `would_wave` | The one wave predicate: `answer_for` asks it BEFORE the model (so a wave costs no call) and the cog's `waved_instead` asks it before reacting. |
+| ⚠️ `black_bloc/chat.py:793` `greeting = llm and greets_through_model(...)` | **The only matched intent that reaches a model.** When the model answers, `path` is `model`; when it does not, the canned line is built as before and `fallback=greeting` (`:823`) marks it, so the cog can log the fallback. |
+| `black_bloc/chat.py:738` `Answer.label` | The word in `chat: answered <id> (...)` — `greeting via model` / `greeting, canned fallback` / the intent. |
+| `black_bloc/chat_llm.py:489` `greets_by_model` | Models on, `chat_greeting_via_model` on, `chat_personality` not `cookout`. Lives beside `llm_is_on` because `chat.py` may only import `chat_llm` lazily (it reads `chat.py`'s words). |
+| ⚠️ `black_bloc/chat_llm.py:675` `hits = () if greeting` | **A greeting is SIMPLE with zero notes, whatever it says** — no search at all, so *whats good, where do I post my PBs* stays banter. The ladder can still climb to the careful tier on a quick-tier failure. |
+| `black_bloc/chat_review.py:389` `one.intent != GREETING` | A careful-tier greeting (the climb above) always has zero hits; without this every such hello would open an *ungrounded* item. |
+| `black_bloc/cogs/content/chat.py:1810` `elif said.fallback` | The fallback row is a `chat.llm_reply` with `path`/`fallback` = `canned` and no tier, so the Logs page tells it from a model reply (which now carries `path: model`). |
