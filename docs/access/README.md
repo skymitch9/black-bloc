@@ -1,7 +1,8 @@
 # access/ — how to OPERATE Black Bloc
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not
-> temporarily) — secret NAMES only. Last verified: **2026-09-23 16:2x — the `deploy.md` ROW only**, at the v162 ritual: [`../deploys.log`](../deploys.log) is **161** lines (`grep -c .`), the last being **v162** `4e6e4e4c`; the row names `deploy.md`'s new dirty-tree gotcha. `ls docs/access/*.md` still **12**. ⚠️ **NOT checked:** every other row's number or the facts inside any file.
+> temporarily) — secret NAMES only. Last verified: **2026-09-23 18:3x — the `deploy.md` ROW only**, at the v163 ritual: [`../deploys.log`](../deploys.log) is **162** lines (`grep -c .`), the last being **v163** `8acfcde2`. `ls docs/access/*.md` still **12**. ⚠️ **NOT checked:** every other row's number or the facts inside any file.
+> Before that, **2026-09-23 16:2x — the `deploy.md` ROW only**, at the v162 ritual: [`../deploys.log`](../deploys.log) is **161** lines (`grep -c .`), the last being **v162** `4e6e4e4c`; the row names `deploy.md`'s new dirty-tree gotcha. `ls docs/access/*.md` still **12**. ⚠️ **NOT checked:** every other row's number or the facts inside any file.
 > Before that, **2026-09-23 15:1x — the `deploy.md` and `testing.md` ROWS only**, at the
 > v160 + v161 ritual: [`../deploys.log`](../deploys.log) is **160** lines (`grep -c .`), the last being **v161** `c8d2403d`; the `testing.md` row names its new stale-mock gotcha. `ls docs/access/*.md` still **12**. ⚠️ **NOT checked:** every other row's number or the facts inside any file.
 > Before that, **2026-09-23 14:1x — the `deploy.md` and `site.md` ROWS only**, at the
@@ -42,7 +43,7 @@
 |---|---|
 | [`OWNER_GUIDE.md`](OWNER_GUIDE.md) | **Start here, owner:** before the trip (encrypt `.env`, leave the session open), the laptop once, what to look at on the road, if something looks wrong, when you're back |
 | [`setup.md`](setup.md) | Local run: venv, `.env`, Developer Portal, invite, first start |
-| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **161** lines in [`../deploys.log`](../deploys.log), the last being **v162** on 2026-09-23 16:20 (counted 2026-09-23 16:2x at the v162 ritual; it said 160 / v161). Its check-clean step carries the *do not touch the tree between launching `deploy.ps1` and its check-clean* gotcha (v162). Its *gate's pytest step* section is the `-n 16` / `-rfE` / junit / 120 s timeout gate, first run for real by v157 |
+| [`deploy.md`](deploy.md) | Hosting on Fly.io: first launch, secrets, volume, redeploy, logs. The redeploy path is heavily exercised — **162** lines in [`../deploys.log`](../deploys.log), the last being **v163** on 2026-09-23 18:32 (counted 2026-09-23 18:3x at the v163 ritual; it said 161 / v162). Its check-clean step carries the *do not touch the tree between launching `deploy.ps1` and its check-clean* gotcha (v162). Its *gate's pytest step* section is the `-n 16` / `-rfE` / junit / 120 s timeout gate, first run for real by v157 |
 | [`RECOVERY.md`](RECOVERY.md) | Rebuild from nothing: inventory, secret custody, named gaps |
 | [`runbook.md`](runbook.md) | **Day to day:** where everything is, the flyctl path, deploy/restart/rollback/logs, secret names, common failures and what they mean, local run, docs bookkeeping |
 | [`sweeps.md`](sweeps.md) | **What the owner has not yet exercised by hand**, in priority order, with what to expect — the verification checklist. Rows **1–620** as of 2026-09-18 (counted 2026-09-19; it said 1–350) |

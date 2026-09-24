@@ -6,7 +6,8 @@
 > This retires the 2026-08-26 local-only rule, under which the tree was
 > gitignored and purged from GitHub history. ⚠️ A clone now carries this tree,
 > so: **secret NAMES only, never values.** See `access/RECOVERY.md`.
-> Last verified: **2026-09-23 16:2x — the bot's version and two counts only**, at the v162 docs ritual: the bot is at **v162** (deployed 2026-09-23 16:20 Phoenix, release commit `4e6e4e4c`; [`deploys.log`](deploys.log) is the authority, 161 lines). `ls docs/info/*.md` now **113** (`chat-review-loop-design.md`), `ls docs/access/*.md` still **12**, the site **22** pages. One dated line added under *Where the bot stands*. ⚠️ **NOT re-checked:** that block's mode table and every other figure; nothing met a browser.
+> Last verified: **2026-09-23 18:3x — the bot's version and two counts only**, at the v163 docs ritual: the bot is at **v163** (deployed 2026-09-23 18:32 Phoenix, release commit `8acfcde2`; [`deploys.log`](deploys.log) is the authority, 162 lines). `ls docs/info/*.md` still **113**, `ls docs/access/*.md` still **12**, the site **22** pages. One dated line added under *Where the bot stands*. ⚠️ **NOT re-checked:** that block's mode table and every other figure; nothing met a browser.
+> Before that, **2026-09-23 16:2x — the bot's version and two counts only**, at the v162 docs ritual: the bot is at **v162** (deployed 2026-09-23 16:20 Phoenix, release commit `4e6e4e4c`; [`deploys.log`](deploys.log) is the authority, 161 lines). `ls docs/info/*.md` now **113** (`chat-review-loop-design.md`), `ls docs/access/*.md` still **12**, the site **22** pages. One dated line added under *Where the bot stands*. ⚠️ **NOT re-checked:** that block's mode table and every other figure; nothing met a browser.
 > Before that, **2026-09-23 15:1x — the bot's version and two counts only**, at the v160 + v161 docs ritual: the bot is at **v161** (deployed 2026-09-23 15:03 Phoenix, release commit `c8d2403d`; v160 the `foldout` hotfix at 14:20, `d7cda292`; [`deploys.log`](deploys.log) is the authority, 160 lines). `ls docs/info/*.md` still **112**, `ls docs/access/*.md` still **12**, the site **22** pages. One dated line added under *Where the bot stands*. ⚠️ **NOT re-checked:** that block's mode table and every other figure; nothing met a browser.
 > Before that, **2026-09-23 14:1x — the bot's version and two counts only**, at the v158 + v159 docs ritual: the bot is at
 > **v159** (deployed 2026-09-23 14:07 Phoenix, release commit `c54f14a8`; v158 at 12:51, `3dec2518`; [`deploys.log`](deploys.log) is the
@@ -106,6 +107,8 @@ index (§7). `archive/` holds the retired docs and the one-off `current-bots/`
 dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
+
+**2026-09-23 18:3x:** v163 live (one merge: a hello is answered by the model on the short banter path in the member's tone unless the voice is cookout or `chat_greeting_via_model` is off — the wave still comes first, a model failure falls back to the canned line; schema 58, 419 keys; see [`DONE.md`](DONE.md) 2026-09-23 v163); the mode table below was NOT re-read.
 
 **2026-09-23 16:2x:** v162 live (three merges: banter gets banter — small talk carries no notes; a popup-picked channel, role or member mention matches its note like the typed name; weak replies land in a review queue on the Chat page, tagged by the cheap model, approved by staff with one click — the queue empty at boot; schema 58, 418 keys; see [`DONE.md`](DONE.md) 2026-09-23 v162); the mode table below was NOT re-read.
 

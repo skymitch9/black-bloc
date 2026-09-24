@@ -22,7 +22,8 @@
 > `black_bloc/personality_pool.json` is the shared manifest. See
 > [`personality-pool-design.md`](personality-pool-design.md) and `DONE.md`.
 >
-> **Last verified: 2026-09-23 16:2x — the *Follow-up 2026-09-23* section's status only**, at the v162 docs ritual: the banter follow-up and its mention-id line are ✅ **LIVE as v162** (16:20, release commit `4e6e4e4c`; merges `d8278877` and `654570e9`), from `git log` and [`../deploys.log`](../deploys.log). ⚠️ Nothing else in this doc re-read; no live model reply under the new matching seen.
+> **Last verified: 2026-09-23 18:3x — the *greetings through the model* follow-up's status only**, at the v163 docs ritual: ✅ **LIVE as v163** (18:32, release commit `8acfcde2`; merge `9f49581d`), from `git log` and [`../deploys.log`](../deploys.log). ⚠️ Nothing else re-read; no live greeting under a tone has been read (`CB-c` is the owner's check); no Discord, no browser.
+> Before that, **2026-09-23 16:2x — the *Follow-up 2026-09-23* section's status only**, at the v162 docs ritual: the banter follow-up and its mention-id line are ✅ **LIVE as v162** (16:20, release commit `4e6e4e4c`; merges `d8278877` and `654570e9`), from `git log` and [`../deploys.log`](../deploys.log). ⚠️ Nothing else in this doc re-read; no live model reply under the new matching seen.
 > Before that, **2026-09-11 10:28** — re-checked against the tree at `1d090e5`:
 > `black_bloc/llm.py`, `groq.py`, `knowledge.py`, `personas.py`, `chat_llm.py` and
 > `personality_pool.json` all exist; `tier_for` is `chat_llm.py:156`; `llm.py:17` still pins
@@ -190,7 +191,7 @@ keys are set. No deploy risk: everything degrades to today's behaviour.
 
 ## Follow-up 2026-09-23 — greetings through the model (branch `greeting-tone`)
 
-🔨 **BUILT on branch `greeting-tone`, NOT MERGED, NOT DEPLOYED.** This doc owns *which path
+✅ **LIVE as v163** — deployed 2026-09-23 **18:32** Phoenix (release commit `8acfcde2`; merge `9f49581d`, 2 commits `da04ac4b` + `9983a0be`); boot log `database ready` 01:32:49Z, `logged in` 01:32:53Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v163). ⚠️ **NOT verified:** no live greeting under a tone has been read (`CB-c` is the owner's check); no Discord, no browser. ~~🔨 BUILT on branch `greeting-tone`, NOT MERGED, NOT DEPLOYED.~~ This doc owns *which path
 answers* (§1's intents-first rule), so the follow-up lives here; the tone precedence it relies on
 is unchanged and stays in [`personality-tones-design.md`](personality-tones-design.md).
 

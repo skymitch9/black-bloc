@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-23 18:3x** — ONLY the `CB-c` section was touched, at the v163 docs ritual: it gained a ✅ LIVE v163 line from `deploys.log`. (Since 16:2x: the owner's `CB-a` ✅ row at 16:33, `2d5defa0`; the `CB-c` section appended with the `greeting-tone` branch, `9983a0be`.) No row walked by this pass, no other section re-read. Before that,
 > **2026-09-23 16:2x** — ONLY the `CB-a`/`CB-b` and `RL-a`…`RL-g` sections were touched, at the v162 docs ritual: each gained a ✅ LIVE v162 line from `deploys.log`, `DONE.md` and the conductor's boot-log / operator-token read. Nothing renumbered (still lettered), no row walked, no other section re-read. Before that,
 > **2026-09-23 (branch `chat-review-loop`)** — ONE section APPENDED (`RL-a`…`RL-g`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-23 15:1x** — ONLY the `CV-a`…`CV-e` section was touched, at the v160 + v161 docs ritual: its *BUILT, NOT MERGED* line became a ✅ LIVE v161 line with `CV-a`'s live API proof, from `deploys.log`, `DONE.md` and the conductor's operator-token read. Nothing renumbered, no row walked, no other section re-read. Before that,
@@ -3087,8 +3088,10 @@ gets banter*. ~~BUILT, NOT MERGED, NOT DEPLOYED.~~
 ## Row `CB-c` — greetings through the model (branch `greeting-tone`, 2026-09-23)
 
 Design: [`../info/phase14-design.md`](../info/phase14-design.md) ▸ *Follow-up 2026-09-23 —
-greetings through the model*. 🔨 BUILT on branch `greeting-tone`, NOT MERGED, NOT DEPLOYED.
+greetings through the model*. ~~🔨 BUILT on branch `greeting-tone`, NOT MERGED, NOT DEPLOYED.~~
 Needs `chat_llm_mode` on.
+
+✅ **LIVE as v163** — deployed 2026-09-23 **18:32** Phoenix (release commit `8acfcde2`, merge `9f49581d`); boot log `database ready` 01:32:49Z, `logged in` 01:32:53Z ([`../DONE.md`](../DONE.md) ▸ 2026-09-23 v163). Row not walked yet — the owner's check.
 
 | Row | Do | Expect |
 |---|---|---|
