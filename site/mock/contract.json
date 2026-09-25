@@ -1618,7 +1618,8 @@
         "where_channel_id",
         "where_label",
         "moved_to",
-        "moved_word"
+        "moved_word",
+        "marathon"
       ]
     },
     {
@@ -1659,7 +1660,8 @@
           "where_channel_id",
           "where_label",
           "moved_to",
-          "moved_word"
+          "moved_word",
+          "marathon"
         ]
       }
     },
@@ -4669,7 +4671,8 @@
       "keys": [
         "mode",
         "marathons",
-        "next_waiting"
+        "next_waiting",
+        "makes_event"
       ],
       "rows": {
         "marathons": [
@@ -4690,7 +4693,8 @@
           "channel_login",
           "channel_gone",
           "next",
-          "next_waiting"
+          "next_waiting",
+          "event"
         ]
       }
     },
@@ -4747,7 +4751,8 @@
         "pairings",
         "unmatched",
         "next",
-        "next_waiting"
+        "next_waiting",
+        "event"
       ],
       "rows": {
         "run_list": [
@@ -4835,6 +4840,50 @@
         "board_message_id",
         "message"
       ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_bare_id}/event",
+      "read_by": [
+        "marathons-section.js (events.html) Make an event now"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "event",
+        "message"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "status",
+          "wanted",
+          "waiting",
+          "line"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/marathons/{marathon_waiting_id}/event",
+      "read_by": [
+        "marathons-section.js (events.html) Unlink"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "event",
+        "message"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "status",
+          "wanted",
+          "waiting",
+          "line"
+        ]
+      }
     },
     {
       "method": "GET",
@@ -6987,6 +7036,9 @@
     "web.chat.review_dismissed",
     "web.chat.review_reopened",
     "web.marathon.added",
+    "web.marathon.event_made",
+    "web.marathon.event_unlinked",
+    "web.marathon.event_cancelled",
     "web.marathon.updated",
     "web.marathon.paused",
     "web.marathon.resumed",

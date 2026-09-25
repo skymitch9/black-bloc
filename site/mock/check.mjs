@@ -78,6 +78,10 @@ const IDS = {
   // AGDQ 2027 is done, so Mark it upcoming reaches it.
   marathon_over_id: '2',
   marathon_done_run_id: '4',
+  // The event link: GDQx 2026 (3) has no dates and no event, so Make an event now answers
+  // "waiting for the schedule"; AGDQ 2027 (1) carries event 5, so Unlink reaches it.
+  marathon_bare_id: '3',
+  marathon_waiting_id: '1',
   // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
   // reach it without ending a stream the other entries expect to still be live.
   spotlight_id: '3',

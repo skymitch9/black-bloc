@@ -1,11 +1,12 @@
 import { api, listOf, names, refChannels, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
-import { marathonsSection } from './marathons-section.js';
+import { marathonHref, marathonsSection } from './marathons-section.js';
 import {
   ask,
   badge,
   bar,
+  boldParts,
   button,
   card,
   channelLabel,
@@ -79,7 +80,17 @@ function detailCard(row) {
     line('Announced', row.announced ? 'yes' : 'no'),
     line('Scheduled event', row.scheduled ? 'yes' : 'no'),
     line('Proposed', when(row.created_at)),
+    row.marathon
+      ? line('Marathon', el('a', { href: marathonHref(row.marathon.id) }, boldParts(row.marathon.line)))
+      : null,
   ]);
+}
+
+/** A marathon's drawer opens its event here: every status, so a settled one is still found. */
+function openEvent(eventId) {
+  state.status = '';
+  state.open = eventId;
+  refresh();
 }
 
 const NOWHERE = '— nowhere in particular —';
@@ -292,7 +303,7 @@ async function load() {
 
   const queue = table([
     { label: 'Event', cell: (row) => String(row.id), className: 'mono' },
-    { label: 'Title', cell: (row) => row.title, className: 'wrap' },
+    { label: 'Title', cell: (row) => el('span', {}, [el('span', { text: row.title }), row.marathon ? badge('marathon', 'ok') : null]), className: 'wrap' },
     { label: 'Asked by', cell: (row) => nameNode(row.requester_id, row.requester_name) },
     { label: 'Starts', cell: (row) => when(row.starts_at), className: 'mono' },
     { label: 'Status', cell: (row) => badge(row.status, TONE[row.status] || null) },
@@ -317,7 +328,7 @@ async function load() {
     nodes.push(detail.node);
   }
 
-  nodes.push(await marathonsSection({ reload: () => refresh() }));
+  nodes.push(await marathonsSection({ reload: () => refresh(), openEvent }));
 
   const eventsSettings = await namespaceSettings('events');
   forumMakeAction(eventsSettings, forum.id);

@@ -11,9 +11,11 @@ from ...cogs.content.marathon import (
     add_next,
     create_marathon,
     dismiss_next,
+    event_status_of,
     get_marathon,
     list_marathons,
     look_again,
+    make_event_now,
     marathon_windows,
     mark_done,
     mark_live,
@@ -30,12 +32,17 @@ from ...cogs.content.marathon import (
     set_active,
     set_channel,
     shout_now,
+    unlink_the_event,
     unpair_runner,
 )
 from ...cogs.content.spotlight import channel_by_id
 from ...logkinds import VIA_WEBSITE
 from ...marathon_sources import SOURCE_WORDS, schedule_page
-from ...settings_store import MARATHON_LEAD_DAYS_KEY, MARATHON_MODE_KEY
+from ...settings_store import (
+    MARATHON_LEAD_DAYS_KEY,
+    MARATHON_MAKES_EVENT_KEY,
+    MARATHON_MODE_KEY,
+)
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
 from ..writes import actor_for, require_cog, require_db, require_guild, wanted_id, writer_dependency
@@ -59,6 +66,21 @@ TROUBLE = "could not be read since {when} — {why}"
 NEVER_READ = "not read yet"
 BAD_ACTIVE = "Say true to read this marathon or false to pause it, so nothing was changed."
 BAD_DISMISS = "Say true to dismiss the suggested next event, so nothing was changed."
+BAD_MAKE_EVENT = "Say true or false for making it an event, so nothing was added."
+
+
+async def event_of(bot: Any, row: Any) -> dict[str, Any]:
+    """The drawer's Event line: linked (with the event's own status), waiting, or none."""
+    event_id = row["event_id"]
+    wanted = bool(row["event_wanted"])
+    status = await event_status_of(bot, row)
+    return {
+        "id": event_id,
+        "status": status,
+        "wanted": wanted,
+        "waiting": wanted and not event_id,
+        "line": mt.event_line(row, status),
+    }
 
 
 def _id(value: Any) -> str | None:
@@ -204,6 +226,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "added_by_name": resolve_one(guild, added_by)["display_name"] if added_by else None,
         "next": upcoming,
         "next_waiting": bool(upcoming) and upcoming["state"] == mt.NEXT_OPEN,
+        "event": await event_of(bot, row),
     }
 
 
@@ -259,6 +282,7 @@ def build_router(bot: Any) -> APIRouter:
             "mode": bot.store.get(guild.id, MARATHON_MODE_KEY),
             "marathons": rows,
             "next_waiting": len([one for one in rows if one["next_waiting"]]),
+            "makes_event": bool(bot.store.get(guild.id, MARATHON_MAKES_EVENT_KEY)),
         }
 
     @router.post("")
@@ -280,6 +304,9 @@ def build_router(bot: Any) -> APIRouter:
                 )
             )
             return await detail(guild, linked.value["id"]) | {"message": linked.message}
+        make_event = payload.get("make_event")
+        if make_event is not None and not isinstance(make_event, bool):
+            raise Refused(422, "bad_make_event", BAD_MAKE_EVENT)
         made = answered(
             await create_marathon(
                 bot,
@@ -288,6 +315,7 @@ def build_router(bot: Any) -> APIRouter:
                 name=payload.get("name"),
                 url=payload.get("schedule_url"),
                 spotlight_id=payload.get("spotlight_id"),
+                make_event=make_event,
                 via=VIA_WEBSITE,
             )
         )
@@ -389,6 +417,30 @@ def build_router(bot: Any) -> APIRouter:
         row = await wanted(guild, marathon_id)
         done = answered(
             await look_again(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
+        )
+        return await detail(guild, marathon_id) | {"message": done.message}
+
+    @router.post("/{marathon_id}/event")
+    async def marathon_make_event(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        done = answered(
+            await make_event_now(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
+        )
+        return await detail(guild, marathon_id) | {"message": done.message}
+
+    @router.delete("/{marathon_id}/event")
+    async def marathon_unlink_event(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        done = answered(
+            await unlink_the_event(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
         )
         return await detail(guild, marathon_id) | {"message": done.message}
 
