@@ -4475,19 +4475,19 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_MATCH_HOSTS_KEY: (
         "bool",
         True,
-        "whether a host or a commentator from here counts as one of ours, not only a runner. "
+        "whether a host or a commentator from BaF counts as BaF, not only a runner. "
         "on by default",
     ),
     MARATHON_REMINDER_MINUTES_KEY: (
         "text",
         MARATHON_REMINDER_MINUTES,
-        "minutes before a run of ours that a reminder is posted, separated by commas; "
+        "minutes before a BaF run that a reminder is posted, separated by commas; "
         "`120, 15` by default. marathon_ping_minutes is always one of them",
     ),
     MARATHON_PING_MINUTES_KEY: (
         "int",
         15,
-        "the one reminder that pings: this many minutes before a run of ours, the member's own "
+        "the one reminder that pings: this many minutes before a BaF run, the member's own "
         "ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings "
         "at the scheduled start",
     ),
@@ -4499,7 +4499,7 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_LIVE_PINGS_KEY: (
         "bool",
         False,
-        "whether the shoutout when a run of ours goes live pings too. off by default — the ping "
+        "whether the shoutout when a BaF run goes live pings too. off by default — the ping "
         "already went out marathon_ping_minutes before",
     ),
     MARATHON_REMINDER_STALE_KEY: (
@@ -4564,14 +4564,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "none",
         "what a new marathon does about events, until staff change that marathon: none makes "
         "no event; marathon puts one event for the whole marathon into the events review; runs "
-        "makes one event per run of ours, dated from the schedule and re-dated as it moves; "
+        "makes one event per BaF run, dated from the schedule and re-dated as it moves; "
         "both does the two. none by default — the Add form's Event select starts here, and a "
         "feed's own mode wins for the marathons it adds",
     ),
     MARATHON_RUN_EVENTS_REVIEWED_KEY: (
         "bool",
         False,
-        "whether an event made for a run of ours goes through the events review like any "
+        "whether an event made for a BaF run goes through the events review like any "
         "proposal. off by default — staff already chose the mode, so a run's event is approved "
         "at once and the events feature announces it when it starts",
     ),
@@ -4585,7 +4585,7 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY: (
         "bool",
         False,
-        "whether a run of ours that has its own event still gets the marathon shoutout when it "
+        "whether a BaF run that has its own event still gets the marathon shoutout when it "
         "goes live. off by default — the events feature announces that run as it starts, so the "
         "shoutout would say it twice. The reminders post either way",
     ),
@@ -4600,7 +4600,7 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
 }
 MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_BOARD_TEMPLATE_KEY: (
-        "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}",
+        "**{marathon}** — BaF on the schedule ({count}), {starts} to {ends}. {url}",
         MARATHON_BOARD_FIELDS,
         "the head of a marathon's board, the one message edited in place as the schedule moves. "
         "It takes {marathon} {count} {starts} {ends} {url}",
@@ -4608,24 +4608,24 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_BOARD_LINE_KEY: (
         "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}",
         MARATHON_LINE_FIELDS,
-        "one line of the board per run of ours. It takes {member} {game} {category} {when} "
+        "one line of the board per BaF run. It takes {member} {game} {category} {when} "
         "{relative} {part} {state}; {when} and {relative} show in each reader's own time zone",
     ),
     MARATHON_BOARD_EMPTY_KEY: (
-        "Nobody from here is on this schedule yet. Black Bloc keeps reading it.",
+        "Nobody from BaF is on this schedule yet. Black Bloc keeps reading it.",
         (),
-        "the board's only line while no run of ours has been found",
+        "the board's only line while no BaF run has been found",
     ),
     MARATHON_REMINDER_TEMPLATE_KEY: (
         "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}",
         MARATHON_REMINDER_FIELDS,
-        "a reminder before a run of ours. It takes {member} {game} {category} {in} {when} {url} "
+        "a reminder before a BaF run. It takes {member} {game} {category} {in} {when} {url} "
         "{marathon} {part}",
     ),
     MARATHON_LIVE_TEMPLATE_KEY: (
         "{member} {part} **{game}** ({category}) on **{marathon}** right now! {url}",
         MARATHON_LIVE_FIELDS,
-        "the shoutout the moment a run of ours goes live. It takes {member} {game} {category} "
+        "the shoutout the moment a BaF run goes live. It takes {member} {game} {category} "
         "{url} {marathon} {part}",
     ),
     MARATHON_DONE_TEMPLATE_KEY: (
@@ -4702,13 +4702,13 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_RUN_EVENT_TITLE_KEY: (
         "{member} runs {game} at {marathon}",
         MARATHON_RUN_EVENT_FIELDS,
-        "what an event made for one run of ours is called. {member} is every member of ours on "
+        "what an event made for one BaF run is called. {member} is every BaF member on "
         "the run, their names joined. It takes {member} {game} {category} {marathon}",
     ),
     MARATHON_RUN_EVENT_DESCRIPTION_KEY: (
         "{category} · {marathon} · read from the schedule; times follow it.",
         MARATHON_RUN_EVENT_FIELDS,
-        "what an event made for one run of ours says about itself. It takes {member} {game} "
+        "what an event made for one BaF run says about itself. It takes {member} {game} "
         "{category} {marathon}",
     ),
     MARATHON_NOTICE_TITLE_KEY: (
@@ -4717,7 +4717,7 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the name of the events-forum post a new-marathon notice becomes. It takes {name}",
     ),
     MARATHON_EVENT_DESCRIPTION_KEY: (
-        "{marathon} — read from the GDQ schedule. Our runs are boarded in {channel}.",
+        "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.",
         MARATHON_EVENT_FIELDS,
         "what a marathon's event says about itself in the events review, the announcement and "
         "the Discord scheduled event. It takes {marathon} {channel}",

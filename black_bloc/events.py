@@ -692,7 +692,7 @@ CANCEL_WHY: dict[str, str] = {
         "the marathon it was made for was taken off Black Bloc's list, so its event went with it."
     ),
     "run_dropped": "the marathon's schedule no longer lists that run, so its event went with it.",
-    "not_ours": "nobody from here is on that run any more, so its event went with it.",
+    "not_ours": "nobody from BaF is on that run any more, so its event went with it.",
     "mode_changed": (
         "staff changed what the marathon makes in the events, so the events it had made were "
         "called off."

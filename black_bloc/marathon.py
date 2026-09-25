@@ -21,6 +21,8 @@ from .settings_store import (
 )
 from .timezones import unix
 
+BAF = "BaF"
+
 UPCOMING = "upcoming"
 LIVE = "live"
 DONE = "done"
@@ -64,12 +66,12 @@ TWITCH_URL = "https://twitch.tv/{login}"
 
 PANEL_TITLE = "Marathons"
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /event again"
-OURS_NEXT = "**Ours next**"
+OURS_NEXT = f"**{BAF} next**"
 MY_RUNS = "**My runs**"
-NOTHING_NEXT = "Nobody from here is on a schedule that is coming up."
+NOTHING_NEXT = f"Nobody from {BAF} is on a schedule that is coming up."
 NOTHING_MINE = "You are not on any schedule Black Bloc follows."
 NEXT_LINE = "<t:{unix}:R> · **{game}** — {member} {part} · {marathon}"
-MARATHON_LINE = "**{name}** · {phase} · {dates} · ours {ours} of {runs} · {read}"
+MARATHON_LINE = "**{name}** · {phase} · {dates} · {ours} " + BAF + " of {runs} · {read}"
 NO_DATES = "dates not published"
 READ_AGO = "last read <t:{unix}:R>"
 NEVER_READ = "not read yet"
@@ -94,10 +96,10 @@ REMOVE_QUESTION = (
 )
 REMOVED = "**{name}** is off the list, with its runs and pairings."
 ADDED = "**{name}** is on the list. {read}"
-READ_NOW = "Its schedule has {runs} run(s), {ours} of them ours."
+READ_NOW = "Its schedule has {runs} run(s), {ours} of them " + BAF + "."
 PAUSED_NOW = "**{name}** is paused — nothing is read or posted until it is resumed."
 RESUMED_NOW = "**{name}** is being read again."
-REFRESHED = "**{name}** was read just now: {runs} run(s), {ours} of them ours."
+REFRESHED = "**{name}** was read just now: {runs} run(s), {ours} of them " + BAF + "."
 REFRESH_FAILED = "**{name}** could not be read just now — {why}. Every run is kept as it was."
 BOARD_POSTED = "The board for **{name}** is up to date."
 BOARD_NOT_POSTED = "The board for **{name}** was not posted — {why}."
@@ -111,10 +113,13 @@ NO_SUCH_MARATHON = "Black Bloc follows no marathon **{given}** here, so nothing 
 NO_SUCH_RUN = "That run is not on **{name}**'s schedule any more, so nothing was done."
 NO_SUCH_PAIRING = "That pairing is gone already, so nothing was changed."
 NOT_SHOUTABLE = (
-    "**{game}** is {state} or has its shoutout already, so nothing was posted. Only a run of ours "
-    "that is coming up or on now without a shoutout can be shouted by hand."
+    "**{game}** is {state} or has its shoutout already, so nothing was posted. Only a "
+    + BAF
+    + " run that is coming up or on now without a shoutout can be shouted by hand."
 )
-NOT_OURS = "Nobody from here is on **{game}**, so there is nobody to shout. Pair a name first."
+NOT_OURS = (
+    "Nobody from " + BAF + " is on **{game}**, so there is nobody to shout. Pair a name first."
+)
 ALREADY_DONE = "**{game}** is already {state}, so nothing was changed."
 NO_NAME = "A marathon needs a name, so nothing was added."
 NO_RUNNER = "Pick or type the name as the schedule writes it, so nothing was paired."
@@ -193,7 +198,7 @@ EVENT_UNLINKED = (
 )
 EVENT_STOPPED_WAITING = "**{name}** no longer waits to make an event."
 NO_EVENT = "**{name}** carries no event, so there was nothing to unlink."
-MARATHON_OF_EVENT = "Marathon: **{name}** — {ours} run(s) of ours"
+MARATHON_OF_EVENT = "Marathon: **{name}** — {ours} " + BAF + " run(s)"
 RUN_OF_EVENT = "Marathon run: **{game}** on **{name}**"
 EVENT_MODES_WITH_ONE = ("marathon", "both")
 BAD_ADD_EVENT = (

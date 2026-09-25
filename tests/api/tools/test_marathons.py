@@ -124,7 +124,7 @@ async def test_adding_a_marathon_reads_it_and_answers_with_its_runs(client, sign
     ]
     assert body["run_list"][1]["ours"] is True and body["run_list"][1]["shoutable"] is True
     assert body["unmatched"] == ["Interview Crew", "Somebody"]
-    assert "3 run(s), 1 of them ours" in body["message"]
+    assert "3 run(s), 1 of them BaF" in body["message"]
     assert (await wf.one_web_row(web.db, "web.marathon.added"))["name"] == "AGDQ 2027"
 
 

@@ -650,23 +650,23 @@ const SETTING_SPECS = [
   ["marathon_poll_minutes", "int", 30, 30, "minutes between reads of a marathon's schedule while it is near — from marathon_lead_days before it starts until a day after it ends. 30 by default; a marathon's own row can say otherwise", null, 120, 10],
   ["marathon_far_poll_hours", "int", 24, 24, "hours between reads of a schedule that is still weeks away. 24 by default", null, 168, 1],
   ["marathon_lead_days", "int", 7, 7, "how many days before a marathon starts its schedule counts as near and is read every marathon_poll_minutes. 7 by default", null, 60, 1],
-  ["marathon_move_minutes", "int", 5, 5, "how many minutes a run's start must shift before it counts as moved — a moved run of ours is logged as important with the old and the new time. 5 by default", null, 120, 1],
+  ["marathon_move_minutes", "int", 5, 5, "how many minutes a run's start must shift before it counts as moved — a moved BaF run is logged as important with the old and the new time. 5 by default", null, 120, 1],
   ["marathon_title_confirms", "bool", true, true, "whether the marathon channel's live title and game decide which run is on now. on by default; off goes by the schedule's clock alone"],
   ["marathon_late_grace_minutes", "int", 90, 90, "minutes a run may sit past its scheduled start with no sign on the stream before the schedule alone calls it live — the run before it is probably running long. 90 by default", null, 360, 0],
-  ["marathon_match_hosts", "bool", true, true, "whether a host or a commentator from here counts as one of ours, not only a runner. on by default"],
-  ["marathon_reminder_minutes", "text", "120, 15", "120, 15", "minutes before a run of ours that a reminder is posted, separated by commas; `120, 15` by default. marathon_ping_minutes is always one of them"],
-  ["marathon_ping_minutes", "int", 15, 15, "the one reminder that pings: this many minutes before a run of ours, the member's own ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings at the scheduled start", null, 240, 0],
+  ["marathon_match_hosts", "bool", true, true, "whether a host or a commentator from BaF counts as BaF, not only a runner. on by default"],
+  ["marathon_reminder_minutes", "text", "120, 15", "120, 15", "minutes before a BaF run that a reminder is posted, separated by commas; `120, 15` by default. marathon_ping_minutes is always one of them"],
+  ["marathon_ping_minutes", "int", 15, 15, "the one reminder that pings: this many minutes before a BaF run, the member's own ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings at the scheduled start", null, 240, 0],
   ["marathon_reminder_pings", "bool", true, true, "whether the marathon_ping_minutes reminder mentions any role at all. on by default"],
-  ["marathon_live_pings", "bool", false, false, "whether the shoutout when a run of ours goes live pings too. off by default — the ping already went out marathon_ping_minutes before"],
+  ["marathon_live_pings", "bool", false, false, "whether the shoutout when a BaF run goes live pings too. off by default — the ping already went out marathon_ping_minutes before"],
   ["marathon_reminder_stale_minutes", "int", 30, 30, "minutes past its moment after which a reminder is skipped and logged instead of posted late. 30 by default", null, 240, 1],
   ["marathon_pin_board", "bool", true, true, "whether a marathon's board is pinned while the marathon is on; it comes down a day after the marathon ends. on by default"],
   ["marathon_edit_done", "bool", true, true, "whether a shoutout is rewritten in the past tense when the run is over. on by default"],
   ["marathon_window_slack_hours", "int", 2, 2, "hours either side of a marathon that its channel's ping window stays open, when the channel pings during events only. 2 by default", null, 24, 0],
-  ["marathon_board_template", "text", "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}", "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}", "the head of a marathon's board, the one message edited in place as the schedule moves. It takes {marathon} {count} {starts} {ends} {url}"],
-  ["marathon_board_line_template", "text", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "one line of the board per run of ours. It takes {member} {game} {category} {when} {relative} {part} {state}; {when} and {relative} show in each reader's own time zone"],
-  ["marathon_board_empty_line", "text", "Nobody from here is on this schedule yet. Black Bloc keeps reading it.", "Nobody from here is on this schedule yet. Black Bloc keeps reading it.", "the board's only line while no run of ours has been found"],
-  ["marathon_reminder_template", "text", "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}", "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}", "a reminder before a run of ours. It takes {member} {game} {category} {in} {when} {url} {marathon} {part}"],
-  ["marathon_live_template", "text", "{member} {part} **{game}** ({category}) on **{marathon}** right now! {url}", "{member} {part} **{game}** ({category}) on **{marathon}** right now! {url}", "the shoutout the moment a run of ours goes live. It takes {member} {game} {category} {url} {marathon} {part}"],
+  ["marathon_board_template", "text", "**{marathon}** — BaF on the schedule ({count}), {starts} to {ends}. {url}", "**{marathon}** — BaF on the schedule ({count}), {starts} to {ends}. {url}", "the head of a marathon's board, the one message edited in place as the schedule moves. It takes {marathon} {count} {starts} {ends} {url}"],
+  ["marathon_board_line_template", "text", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "one line of the board per BaF run. It takes {member} {game} {category} {when} {relative} {part} {state}; {when} and {relative} show in each reader's own time zone"],
+  ["marathon_board_empty_line", "text", "Nobody from BaF is on this schedule yet. Black Bloc keeps reading it.", "Nobody from BaF is on this schedule yet. Black Bloc keeps reading it.", "the board's only line while no BaF run has been found"],
+  ["marathon_reminder_template", "text", "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}", "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}", "a reminder before a BaF run. It takes {member} {game} {category} {in} {when} {url} {marathon} {part}"],
+  ["marathon_live_template", "text", "{member} {part} **{game}** ({category}) on **{marathon}** right now! {url}", "{member} {part} **{game}** ({category}) on **{marathon}** right now! {url}", "the shoutout the moment a BaF run goes live. It takes {member} {game} {category} {url} {marathon} {part}"],
   ["marathon_done_template", "text", "{member} {part} **{game}** ({category}) on **{marathon}** — that run is over. Thanks for cheering!", "{member} {part} **{game}** ({category}) on **{marathon}** — that run is over. Thanks for cheering!", "what a shoutout is rewritten to once the run is over. It takes the same words as marathon_live_template and never pings"],
   ["marathon_part_runner", "text", "runs", "runs", "{part} for a runner"],
   ["marathon_part_host", "text", "hosts", "hosts", "{part} for a host"],
@@ -683,13 +683,13 @@ const SETTING_SPECS = [
   ["marathon_next_template", "text", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "the staff notice when a GDQ marathon is over and the tracker lists another event ahead. It takes {marathon} {next} {when} {relative} {url}"],
   ["marathon_next_none_template", "text", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "what staff are told when a GDQ marathon is over and the tracker lists no event ahead. It takes {marathon}"],
   ["marathon_next_added_template", "text", "Added **{next}** \u2014 it will be read from {url}.", "Added **{next}** \u2014 it will be read from {url}.", "what the staff notice is rewritten to once the next event is added. It takes {marathon} {next} {when} {relative} {url}"],
-  ["marathon_event_mode_default", "enum", "none", "none", "what a new marathon does about events, until staff change that marathon: none makes no event; marathon puts one event for the whole marathon into the events review; runs makes one event per run of ours, dated from the schedule and re-dated as it moves; both does the two. none by default — the Add form's Event select starts here, and a feed's own mode wins for the marathons it adds", ["none", "marathon", "runs", "both"]],
-  ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a run of ours goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
+  ["marathon_event_mode_default", "enum", "none", "none", "what a new marathon does about events, until staff change that marathon: none makes no event; marathon puts one event for the whole marathon into the events review; runs makes one event per BaF run, dated from the schedule and re-dated as it moves; both does the two. none by default — the Add form's Event select starts here, and a feed's own mode wins for the marathons it adds", ["none", "marathon", "runs", "both"]],
+  ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a BaF run goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
   ["marathon_run_event_cancel_on_leave", "bool", true, true, "whether a marathon's events are called off when staff change its event mode away from them (reason mode_changed). on by default; off leaves them on the calendar as ordinary events the marathon no longer keeps in step"],
-  ["marathon_shout_when_run_has_event", "bool", false, false, "whether a run of ours that has its own event still gets the marathon shoutout when it goes live. off by default — the events feature announces that run as it starts, so the shoutout would say it twice. The reminders post either way"],
+  ["marathon_shout_when_run_has_event", "bool", false, false, "whether a BaF run that has its own event still gets the marathon shoutout when it goes live. off by default — the events feature announces that run as it starts, so the shoutout would say it twice. The reminders post either way"],
   ["marathon_notice_home", "enum", "events", "events", "where a new-marathon staff notice goes: events — the default — makes it a post in the events forum (tagged marathon) while events are reviewed in a forum, else the staff channel; staff always uses staff_channel_id. shadow still rehearses where shadow_channel_id points", ["events", "staff"]],
-  ["marathon_run_event_title_template", "text", "{member} runs {game} at {marathon}", "{member} runs {game} at {marathon}", "what an event made for one run of ours is called. {member} is every member of ours on the run, their names joined. It takes {member} {game} {category} {marathon}"],
-  ["marathon_run_event_description_template", "text", "{category} · {marathon} · read from the schedule; times follow it.", "{category} · {marathon} · read from the schedule; times follow it.", "what an event made for one run of ours says about itself. It takes {member} {game} {category} {marathon}"],
+  ["marathon_run_event_title_template", "text", "{member} runs {game} at {marathon}", "{member} runs {game} at {marathon}", "what an event made for one BaF run is called. {member} is every BaF member on the run, their names joined. It takes {member} {game} {category} {marathon}"],
+  ["marathon_run_event_description_template", "text", "{category} · {marathon} · read from the schedule; times follow it.", "{category} · {marathon} · read from the schedule; times follow it.", "what an event made for one BaF run says about itself. It takes {member} {game} {category} {marathon}"],
   ["marathon_notice_title_template", "text", "New marathon: {name}", "New marathon: {name}", "the name of the events-forum post a new-marathon notice becomes. It takes {name}"],
   ["marathon_feeds", "bool", true, true, "whether the marathon feeds check on their own — each feed reads the events list of one channel's marathons (the GDQ and RPG Limit Break trackers, ESA on horaro.net) and adds or suggests every new event. on by default; off checks nothing, and Check now on a feed still works"],
   ["marathon_feed_hours", "int", 6, 6, "hours between two checks of one marathon feed. 6 by default", null, 168, 1],
@@ -697,7 +697,7 @@ const SETTING_SPECS = [
   ["marathon_feed_recent_days", "int", 1, 1, "how many days after it started (a tracker event) or ended (a horaro.net schedule) an event still counts as new to a feed. 1 by default", null, 30, 0],
   ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the staff notice when a feed adds a new event to the marathon list; it carries Pause it and Remove it. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_feed_suggest_template", "text", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "the staff notice when a feed in suggest mode finds a new event; it carries Add it and Not this one. It takes {feed} {event} {when} {relative} {url} {channel}"],
-  ["marathon_event_description_template", "text", "{marathon} — read from the GDQ schedule. Our runs are boarded in {channel}.", "{marathon} — read from the GDQ schedule. Our runs are boarded in {channel}.", "what a marathon's event says about itself in the events review, the announcement and the Discord scheduled event. It takes {marathon} {channel}"],
+  ["marathon_event_description_template", "text", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "what a marathon's event says about itself in the events review, the announcement and the Discord scheduled event. It takes {marathon} {channel}"],
   ['rolemenu_panel_minutes', 'int', 10, 10, "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['honeypot_panel_minutes', 'int', 10, 10, "minutes the /honeypot panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['modmail_panel_minutes', 'int', 10, 10, "minutes the /modmail panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -1412,7 +1412,7 @@ function seedState() {
   },
   events: [
     // Marathon 1's own event (marathon-events-page §B): approved, dated from the schedule.
-    { id: 5, requester_id: STAFF.id, title: 'AGDQ 2027', description: 'AGDQ 2027 \u2014 read from the GDQ schedule. Our runs are boarded in <#800000000000000006>.', location: 'https://twitch.tv/gamesdonequick', where_kind: 'other', where_channel_id: null, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 440 * 60000).toISOString(), status: 'approved', created_at: minutesAgo(9000), decided_by: STAFF.id, decided_at: minutesAgo(8990), deny_reason: null, review_channel_id: '800000000000000005', scheduled_event_id: '840000000000000005' },
+    { id: 5, requester_id: STAFF.id, title: 'AGDQ 2027', description: 'AGDQ 2027 \u2014 read from the GDQ schedule. BaF runs are boarded in <#800000000000000006>.', location: 'https://twitch.tv/gamesdonequick', where_kind: 'other', where_channel_id: null, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 440 * 60000).toISOString(), status: 'approved', created_at: minutesAgo(9000), decided_by: STAFF.id, decided_at: minutesAgo(8990), deny_reason: null, review_channel_id: '800000000000000005', scheduled_event_id: '840000000000000005' },
     { id: 4, requester_id: STAFF.id, title: 'Charity marathon', description: 'Twelve hours for the shelter.', location: 'https://twitch.tv/rivetplays', where_kind: 'other', where_channel_id: null, starts_at: minutesAgo(-10080), ends_at: minutesAgo(-9900), status: 'pending', created_at: minutesAgo(55), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' },
     { id: 3, requester_id: MEMBERS[3].id, title: 'Movie night', description: 'Bring snacks.', location: null, where_kind: 'voice', where_channel_id: '800000000000000010', starts_at: minutesAgo(-2880), ends_at: null, status: 'pending', created_at: minutesAgo(60), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' },
     { id: 2, requester_id: MEMBERS[1].id, title: 'Speedrun race', description: null, location: 'Twitch', starts_at: minutesAgo(-10080), ends_at: null, status: 'approved', created_at: minutesAgo(4000), decided_by: STAFF.id, decided_at: minutesAgo(3900), deny_reason: null },
@@ -1701,7 +1701,7 @@ function seedActions() {
 let state = withRunEvents(seedState());
 
 // The event-modes build (docs/info/marathon-event-modes-design.md): AGDQ 2027 makes BOTH its
-// own event and one per run of ours, so the queue carries the *marathon run* badge and the
+// own event and one per BaF run, so the queue carries the *marathon run* badge and the
 // drawer's runs say event #N. Plain literals only: this runs before the MARATHON_* constants.
 function withRunEvents(seeded) {
   const marathon = seeded.marathons.find((one) => one.id === 1);
@@ -5780,8 +5780,8 @@ function marathonRow(row) {
 }
 
 const MARATHON_MODES = ['none', 'marathon', 'runs', 'both'];
-const MARATHON_MODE_WORDS = { none: 'No event', marathon: 'One event for the marathon', runs: 'An event per run of ours', both: 'Both' };
-const MARATHON_MODE_SENTENCES = { none: 'no event', marathon: 'one event for the whole marathon', runs: 'one event per run of ours, kept in step with the schedule', both: 'one event for the marathon and one per run of ours' };
+const MARATHON_MODE_WORDS = { none: 'No event', marathon: 'One event for the marathon', runs: 'An event per BaF run', both: 'Both' };
+const MARATHON_MODE_SENTENCES = { none: 'no event', marathon: 'one event for the whole marathon', runs: 'one event per BaF run, kept in step with the schedule', both: 'one event for the marathon and one per BaF run' };
 const MARATHON_BAD_MODE = '**{given}** is not an event mode, so nothing was changed. Say none, marathon, runs or both.';
 
 function marathonModeOf(row) {
@@ -5922,7 +5922,7 @@ function marathonOfEvent(eventId) {
     return { id: owner.id, name: owner.name, line: `Marathon run: **${run.game}** on **${owner.name}**`, run: { id: run.id, game: run.game } };
   }
   const ours = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped' && marathonOurs(one)).length;
-  return { id: row.id, name: row.name, line: `Marathon: **${row.name}** \u2014 ${ours} run(s) of ours` };
+  return { id: row.id, name: row.name, line: `Marathon: **${row.name}** \u2014 ${ours} BaF run(s)` };
 }
 
 function marathonPairingsFor(row) {
@@ -6371,7 +6371,7 @@ function marathonCreate(name, scheduleUrl, spotlight) {
   marathonSyncWindow(row);
   logAction('web.marathon.added', { details: { marathon_id: id, name, url, via: 'website' } });
   const found = marathonDetail(row);
-  return { row, message: `**${name}** is on the list. Its schedule has ${found.runs} run(s), ${found.ours} of them ours.` };
+  return { row, message: `**${name}** is on the list. Its schedule has ${found.runs} run(s), ${found.ours} of them BaF.` };
 }
 
 route('GET', '/api/marathons/:marathon_id', (context) => {
@@ -6475,7 +6475,7 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/event', (context) => {
   const row = marathonOf(context.params.marathon_id);
   const run = marathonRunOf(row, context.params.run_id);
   if (run.event_id) throw new Refused(409, 'run_event_exists', `**${run.game}** already has event **#${run.event_id}**, so nothing was made.`);
-  if (!marathonOurs(run) || run.state === 'dropped') throw new Refused(409, 'not_ours', `Nobody from here is on **${run.game}**, so it gets no event of its own.`);
+  if (!marathonOurs(run) || run.state === 'dropped') throw new Refused(409, 'not_ours', `Nobody from BaF is on **${run.game}**, so it gets no event of its own.`);
   const id = marathonRunEventMake(row, run);
   return { run: marathonRunRow(run), message: `**${run.game}** has its own event now, **#${id}**.` };
 });
@@ -6505,7 +6505,7 @@ route('POST', '/api/marathons/:marathon_id/refresh', (context) => {
   marathonRematch(row);
   logAction('marathon.fetched', { actor_id: null, details: { marathon_id: row.id, changed: false } });
   const found = marathonDetail(row);
-  return { ...found, message: `**${row.name}** was read just now: ${found.runs} run(s), ${found.ours} of them ours.` };
+  return { ...found, message: `**${row.name}** was read just now: ${found.runs} run(s), ${found.ours} of them BaF.` };
 });
 
 route('POST', '/api/marathons/:marathon_id/board', (context) => {
@@ -6565,9 +6565,9 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/shout', (context) => {
   requireStaff(context.session);
   const row = marathonOf(context.params.marathon_id);
   const run = marathonRunOf(row, context.params.run_id);
-  if (!marathonOurs(run)) throw new Refused(409, 'not_ours', `Nobody from here is on **${run.game}**, so there is nobody to shout. Pair a name first.`);
+  if (!marathonOurs(run)) throw new Refused(409, 'not_ours', `Nobody from BaF is on **${run.game}**, so there is nobody to shout. Pair a name first.`);
   if (!['upcoming', 'live'].includes(run.state) || run.shout_message_id) {
-    throw new Refused(409, 'not_shoutable', `**${run.game}** is ${run.state} or has its shoutout already, so nothing was posted. Only a run of ours that is coming up or on now without a shoutout can be shouted by hand.`);
+    throw new Refused(409, 'not_shoutable', `**${run.game}** is ${run.state} or has its shoutout already, so nothing was posted. Only a BaF run that is coming up or on now without a shoutout can be shouted by hand.`);
   }
   if (run.state === 'upcoming') Object.assign(run, { state: 'live', live_because: 'staff' });
   run.shout_message_id = String(830000000000000500 + run.id);

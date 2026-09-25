@@ -2695,7 +2695,7 @@ def add_site_button(view: Any, bot: Any, row: int) -> None:
 
 
 async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, MarathonPanel]:
-    """One command, two audiences: members read Ours next; staff also manage the list."""
+    """One command, two audiences: members read BaF next; staff also manage the list."""
     staff = bool(bot.store.is_staff(actor))
     rows = await list_marathons(bot.db, guild.id)
     lines = [mt.OURS_NEXT, *(await upcoming_of_ours(bot, guild) or [mt.NOTHING_NEXT])]

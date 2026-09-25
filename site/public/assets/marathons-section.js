@@ -29,6 +29,7 @@ import {
   when,
 } from './ui.js';
 
+const BAF = 'BaF';
 const shown = { id: null, filter: 'ours' };
 const HASH = /^marathon-(\d+)$/;
 let refresh = async () => {};
@@ -38,7 +39,7 @@ let eventModes = [];
 let deepLinked = false;
 
 const LIST_NOTE = 'Every marathon schedule Black Bloc follows. It re-reads each one on its own '
-  + '— every half hour while it is near — and posts a board, a reminder before each run of ours '
+  + '— every half hour while it is near — and posts a board, a reminder before each ' + BAF + ' run '
   + 'and a shoutout when it goes live. A row opens its runs.';
 const NOTHING_YET = 'Black Bloc follows no marathon yet. **Add a marathon** with its GDQ '
   + 'schedule link.';
@@ -54,7 +55,7 @@ const CHANNEL_HELP = 'The Twitch channel it airs on, from the Go-live page. With
 const NO_CHANNEL = 'No channel — each run links its runner';
 const PAIR_NOTE = 'A name on the schedule with no Twitch link, or the wrong one: pair it with '
   + 'the member it is. A pairing beats the automatic match, and Unpair gives it back.';
-const RUNS_NOTE = 'Ours are highlighted. A moved run says where it was; a run the schedule '
+const RUNS_NOTE = BAF + ' runs are highlighted. A moved run says where it was; a run the schedule '
   + 'dropped is kept as history.';
 const NO_RUNS = 'No runs on this schedule yet — it may not be published. Black Bloc keeps '
   + 'reading it.';
@@ -78,7 +79,7 @@ const POLL_HELP = 'Re-read every N minutes while it is near — blank for the de
 const HELD_NOTE = 'held by staff';
 const EVENT_SELECT = 'Event';
 const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes into the events '
-  + 'review above, dated from the schedule. An event per run of ours is approved at once and '
+  + 'review above, dated from the schedule. An event per ' + BAF + ' run is approved at once and '
   + 'follows the schedule as runs move — the events feature announces each one as it starts. '
   + 'Both does the two. marathon_event_mode_default decides where this starts.';
 const EVENT_NOTE = 'Changing the mode applies at once: it makes what the new mode asks for, and '
@@ -87,7 +88,7 @@ const EVENT_NOTE = 'Changing the mode applies at once: it makes what the new mod
 const MODES_FALLBACK = [
   { value: 'none', label: 'No event' },
   { value: 'marathon', label: 'One event for the marathon' },
-  { value: 'runs', label: 'An event per run of ours' },
+  { value: 'runs', label: `An event per ${BAF} run` },
   { value: 'both', label: 'Both' },
 ];
 const FEED_MODE_FOLLOW = 'Whatever the setting says';
@@ -384,15 +385,15 @@ function runsCard(marathon, say) {
       { label: 'People', cell: (row) => personCell(row) },
       { label: 'State', cell: (row) => el('span', { class: 'cell-kind' }, [
         badge(row.state_word, STATE_TONE[row.state] || null),
-        row.ours ? badge('ours', 'ok') : null,
+        row.ours ? badge(BAF, 'ok') : null,
         row.event_id ? badge(`event #${row.event_id}`, EVENT_TONE[row.event_status] || null) : null,
         row.held ? badge(HELD_NOTE, 'warn') : null,
       ]) },
       { label: '', cell: (row) => runTools(marathon, row, say) },
-    ], rows, { empty: marathon.run_list && marathon.run_list.length ? 'None of ours on this schedule yet — pick All to see every run.' : NO_RUNS }));
+    ], rows, { empty: marathon.run_list && marathon.run_list.length ? `No ${BAF} run on this schedule yet — pick All to see every run.` : NO_RUNS }));
   };
   const chips = segment(
-    [{ value: 'ours', label: `Ours (${marathon.ours})` }, { value: 'all', label: `All (${marathon.runs})` }],
+    [{ value: 'ours', label: `${BAF} (${marathon.ours})` }, { value: 'all', label: `All (${marathon.runs})` }],
     shown.filter,
     { onChange: () => { shown.filter = chips.readValue(); paint(); } },
   );
@@ -782,7 +783,7 @@ function listSection(payload, feeds, say) {
     { label: 'Marathon', cell: (row) => textAction(row.name, () => openMarathon(row.id, row.name)) },
     { label: 'Dates', cell: (row) => datesOf(row) },
     { label: 'State', cell: (row) => badge(row.phase_word, PHASE_TONE[row.phase] || null) },
-    { label: 'Ours', cell: (row) => `${row.ours} of ${row.runs}` },
+    { label: `${BAF} runs`, cell: (row) => `${row.ours} of ${row.runs}` },
     { label: 'Channel', cell: (row) => row.channel_login || (row.channel_gone ? 'gone' : '—') },
     { label: 'Event', cell: (row) => eventCell(row) },
     { label: 'Read', cell: (row) => readLine(row) },
