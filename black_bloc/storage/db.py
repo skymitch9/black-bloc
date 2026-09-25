@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 59
+SCHEMA_VERSION = 60
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1014,6 +1014,75 @@ CREATE TABLE IF NOT EXISTS chat_review (
 
 CREATE INDEX IF NOT EXISTS chat_review_by_status ON chat_review(guild_id, status, id);
 CREATE UNIQUE INDEX IF NOT EXISTS chat_review_one_per_reply ON chat_review(reply_id);
+
+CREATE TABLE IF NOT EXISTS marathons (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id         INTEGER NOT NULL,
+    name             TEXT    NOT NULL,
+    schedule_url     TEXT    NOT NULL,
+    source           TEXT    NOT NULL,
+    source_ref       TEXT    NOT NULL,
+    spotlight_id     INTEGER,
+    starts_at        TEXT,
+    ends_at          TEXT,
+    active           INTEGER NOT NULL DEFAULT 1,
+    poll_minutes     INTEGER,
+    board_channel_id INTEGER,
+    board_message_id INTEGER,
+    board_pinned     INTEGER NOT NULL DEFAULT 0,
+    last_fetched_at  TEXT,
+    last_fetch_ok    INTEGER,
+    last_error       TEXT,
+    fetch_failures   INTEGER NOT NULL DEFAULT 0,
+    fetch_hash       TEXT,
+    added_by         INTEGER,
+    added_at         TEXT    NOT NULL,
+    UNIQUE (guild_id, schedule_url)
+);
+
+CREATE TABLE IF NOT EXISTS marathon_runs (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    marathon_id           INTEGER NOT NULL,
+    external_id           TEXT    NOT NULL,
+    order_no              INTEGER,
+    game                  TEXT    NOT NULL,
+    display_name          TEXT,
+    category              TEXT,
+    runners_text          TEXT,
+    people                TEXT    NOT NULL DEFAULT '[]',
+    scheduled_at          TEXT,
+    ends_at               TEXT,
+    run_seconds           INTEGER,
+    previous_scheduled_at TEXT,
+    moved_at              TEXT,
+    state                 TEXT    NOT NULL DEFAULT 'upcoming',
+    live_at               TEXT,
+    live_because          TEXT,
+    done_at               TEXT,
+    shout_message_id      INTEGER,
+    shout_channel_id      INTEGER,
+    reminders_sent        TEXT    NOT NULL DEFAULT '[]',
+    first_seen_at         TEXT    NOT NULL,
+    last_seen_at          TEXT    NOT NULL,
+    UNIQUE (marathon_id, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS marathon_runs_by_time
+    ON marathon_runs(marathon_id, scheduled_at);
+
+CREATE TABLE IF NOT EXISTS marathon_people (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    INTEGER NOT NULL,
+    marathon_id INTEGER,
+    runner_name TEXT    NOT NULL,
+    user_id     INTEGER NOT NULL,
+    added_by    INTEGER,
+    added_at    TEXT    NOT NULL,
+    UNIQUE (guild_id, marathon_id, runner_name)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS marathon_people_everywhere
+    ON marathon_people(guild_id, runner_name) WHERE marathon_id IS NULL;
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (

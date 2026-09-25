@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 59
+        assert SCHEMA_VERSION == 60
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2344,6 +2344,73 @@ async def test_a_schema_58_file_gains_ping_mode_windows_and_the_session_gate(tmp
         )
         assert await cur.fetchone() is not None
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "59"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()
+
+
+async def test_a_schema_59_file_gains_the_three_marathon_tables_and_keeps_its_windows(tmp_path):
+    """59 → 60 is additive: the marathon tables arrive through the bootstrap and a ping window
+    written before is untouched."""
+    path = tmp_path / "old59.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for table in ("marathon_people", "marathon_runs", "marathons"):
+        await db.conn.execute(f"DROP TABLE {table}")
+    await db.conn.execute(
+        "INSERT INTO spotlight_ping_windows(guild_id, spotlight_id, starts_at, ends_at, added_at) "
+        "VALUES (7, 3, '2027-01-04T00:00:00+00:00', '2027-01-11T00:00:00+00:00', "
+        "'2026-09-25T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '59')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'marathon%'"
+        )
+        assert {r["name"] for r in await cur.fetchall()} == {
+            "marathons",
+            "marathon_runs",
+            "marathon_people",
+        }
+        cur = await again.conn.execute("PRAGMA table_info(marathon_runs)")
+        assert {"external_id", "people", "reminders_sent", "shout_message_id", "live_because"} <= {
+            r["name"] for r in await cur.fetchall()
+        }
+        cur = await again.conn.execute("SELECT COUNT(*) AS n FROM spotlight_ping_windows")
+        assert (await cur.fetchone())["n"] == 1
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_run_is_unique_per_marathon_and_an_everywhere_pairing_is_unique_per_name(tmp_path):
+    """The diff leans on (marathon_id, external_id); a NULL marathon_id pairing is still one per
+    name, which the three-column UNIQUE alone would not give (NULLs are distinct in SQLite)."""
+    db = Database(tmp_path / "t.sqlite3")
+    await db.connect()
+    try:
+        insert_run = (
+            "INSERT INTO marathon_runs(marathon_id, external_id, game, first_seen_at, "
+            "last_seen_at) "
+            "VALUES (1, '42', 'Blaster Master', 'x', 'x')"
+        )
+        await db.conn.execute(insert_run)
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(insert_run)
+        pair = (
+            "INSERT INTO marathon_people(guild_id, marathon_id, runner_name, user_id, added_at) "
+            "VALUES (7, NULL, 'kungfufruitcup', 9, 'x')"
+        )
+        await db.conn.execute(pair)
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(pair)
+    finally:
+        await db.close()
