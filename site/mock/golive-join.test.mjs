@@ -19,6 +19,7 @@ import {
   WORDING_WHERE,
   joinStreamers,
   liveStreams,
+  pingSuffix,
   placeSettings,
   routeTyped,
   spotlightCards,
@@ -273,6 +274,15 @@ const SPOTLIGHT = [
       { id: 5, started_at: '2026-09-20T02:00:00+00:00', ended_at: null, title: 'AGDQ 2027 — Day 4', game: 'Celeste', url: 'https://www.twitch.tv/gamesdonequick', mode: 'on', bump_count: 2, announced_message_id: '830000000000000020' },
       { id: 4, started_at: '2026-06-01T02:00:00+00:00', ended_at: '2026-06-08T02:00:00+00:00', title: 'SGDQ 2026', game: 'Super Metroid', url: 'https://www.twitch.tv/gamesdonequick', mode: 'on', bump_count: 6, announced_message_id: '830000000000000019' },
     ],
+    // The owner's ask, 2026-09-25: spotlighted always, pinging only during events — one window
+    // open now and one ahead.
+    ping_mode: 'events',
+    pinging: true,
+    ping_state: 'Pings: during events — open until 19 Jan 23:00',
+    windows: [
+      { id: 1, spotlight_id: 1, starts_at: '2027-01-12T15:00:00+00:00', ends_at: '2027-01-19T23:00:00+00:00', note: 'AGDQ 2027', source: 'staff', source_id: null, source_words: null, staff: true, open: true, line: '12 Jan 15:00 – 19 Jan 23:00 · AGDQ 2027 · **open now**', added_by: '900', added_at: '2026-09-25T00:00:00+00:00' },
+      { id: 2, spotlight_id: 1, starts_at: '2027-06-28T15:00:00+00:00', ends_at: '2027-07-05T23:00:00+00:00', note: 'SGDQ 2027', source: 'marathon', source_id: 4, source_words: 'from the marathon schedule', staff: false, open: false, line: '28 Jun 15:00 – 5 Jul 23:00 · SGDQ 2027 · from the marathon schedule', added_by: null, added_at: '2026-09-25T00:00:00+00:00' },
+    ],
   },
   {
     id: 2,
@@ -340,6 +350,10 @@ const SPOTLIGHT = [
     pin: false,
     spotlight: false,
     announce: false,
+    ping_mode: 'never',
+    pinging: false,
+    ping_state: 'Pings: never',
+    windows: [],
     youtube_channel_id: null,
     youtube_handle: null,
     youtube_url: null,
@@ -445,6 +459,22 @@ const SPOTLIGHT = [
   same(`${where} — a spotlight on a Twitch address is a Twitch card`, cards[0].platforms, ['twitch']);
   same(`${where} — and one on a YouTube address is a YouTube card`, cards[1].platforms, ['youtube']);
   is(`${where} — a channel with the spotlight off is never pinned`, cards[1].pinned, false);
+
+  // The owner's ping windows, 2026-09-25: the row carries its mode, its state line and its
+  // windows through the join untouched, and the Announced cell's suffix names the two modes that
+  // are not the common case.
+  const gdqRow = rows.find((one) => one.twitch === 'gamesdonequick');
+  is(`${where} — an events row carries its mode`, gdqRow.spotlight.ping_mode, 'events');
+  is(`${where} — and its state line`, gdqRow.spotlight.ping_state, 'Pings: during events — open until 19 Jan 23:00');
+  is(`${where} — and both its windows`, gdqRow.spotlight.windows.length, 2);
+  is(`${where} — a marathon window is not staff's to remove`, gdqRow.spotlight.windows[1].staff, false);
+  is(`${where} — an events row says so after the spotlight word`, pingSuffix(gdqRow.spotlight), ' · pings during events');
+  const quiet = rows.find((one) => one.twitch === 'rpglimitbreak');
+  is(`${where} — a never row carries its mode`, quiet.spotlight.ping_mode, 'never');
+  is(`${where} — and says no pings`, pingSuffix(quiet.spotlight), ' · no pings');
+  is(`${where} — an always row says nothing extra`, pingSuffix({ ping_mode: 'always' }), '');
+  is(`${where} — a row from before the build says nothing extra`, pingSuffix({}), '');
+  is(`${where} — a live events row is still a pinned card`, spotlightCards(SPOTLIGHT)[0].pinned, true);
 
   // A scheduled row is a row like any other on the list; what it is NOT is a card or a session.
   const soon = rows.find((one) => one.twitch === 'gdqhotfix');

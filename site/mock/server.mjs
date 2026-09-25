@@ -1326,13 +1326,18 @@ function seedState() {
     // kept for ever and live right now; ESA runs out with its marathon; the expired one is
     // absent, exactly as the sweep leaves it.
     spotlights: [
-      { id: 1, twitch_login: 'gamesdonequick', display_name: 'GamesDoneQuick', note: "the owner's marathon channel", added_by: STAFF.id, added_at: minutesAgo(40000), starts_at: null, expires_at: null, bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: 'UCI3DTtB-a3fJPjKtQ5kYHfA', youtube_handle: '@GamesDoneQuick' },
-      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), starts_at: minutesAgo(2000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2, spotlight: true, announce: false, youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ', youtube_handle: '@esamarathon' },
+      { id: 1, twitch_login: 'gamesdonequick', display_name: 'GamesDoneQuick', note: "the owner's marathon channel", added_by: STAFF.id, added_at: minutesAgo(40000), starts_at: null, expires_at: null, bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: 'UCI3DTtB-a3fJPjKtQ5kYHfA', youtube_handle: '@GamesDoneQuick', ping_mode: 'events' },
+      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), starts_at: minutesAgo(2000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2, spotlight: true, announce: false, youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ', youtube_handle: '@esamarathon', ping_mode: 'always' },
       { id: 3, twitch_login: 'frostfatales', display_name: 'Frost Fatales', note: null, added_by: STAFF.id, added_at: minutesAgo(20000), starts_at: null, expires_at: daysAhead(30), bump_hours: null, pin: false, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null },
       { id: 4, twitch_login: 'rpglimitbreak', display_name: 'RPG Limit Break', note: null, added_by: STAFF.id, added_at: minutesAgo(1200), starts_at: null, expires_at: null, bump_hours: null, pin: false, event_id: null, spotlight: false, announce: false, youtube_channel_id: null, youtube_handle: null },
       // The owner's ask, 2026-09-22: a marathon set up days in advance. Its start has NOT
       // arrived, so it is SCHEDULED — on the list, watched, announced by nobody until then.
       { id: 5, twitch_login: 'gdqhotfix', display_name: 'GDQ Hotfix', note: 'winter marathon, set up early', added_by: STAFF.id, added_at: minutesAgo(60), starts_at: daysAhead(3), expires_at: daysAhead(10), bump_hours: 4, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null },
+    ],
+    // The owner's ask, 2026-09-25: GamesDoneQuick is spotlighted always and pings only during
+    // events, so it carries one staff window ahead — AGDQ 2027 — and pings nothing until then.
+    spotlightWindows: [
+      { id: 1, spotlight_id: 1, starts_at: daysAhead(40), ends_at: daysAhead(47), note: 'AGDQ 2027', source: 'staff', source_id: null, added_by: STAFF.id, added_at: minutesAgo(30) },
     ],
     spotlightSessions: [
       { id: 5, spotlight_id: 1, started_at: minutesAgo(560), ended_at: null, title: 'AGDQ 2027 — Day 4', game: 'Celeste', url: 'https://www.twitch.tv/gamesdonequick', mode: 'shadow', announced_message_id: '830000000000000020', last_bump_at: minutesAgo(80), bump_count: 2 },
@@ -4348,6 +4353,96 @@ function spotlightAnnounced(row) {
   return `${said} · ${state.settings.get('spotlight_scheduled_word') || 'scheduled'}`;
 }
 
+// The bot's spotlight.pings_now / ping_state_words / window_line, one fact each.
+const PING_MODES = ['always', 'never', 'events'];
+
+function pingModeOf(row) {
+  return PING_MODES.includes(row.ping_mode) ? row.ping_mode : 'always';
+}
+
+function windowsOf(id) {
+  return (state.golive.spotlightWindows || [])
+    .filter((one) => one.spotlight_id === id)
+    .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)) || a.id - b.id);
+}
+
+function windowOpen(one, at = Date.now()) {
+  return new Date(one.starts_at).getTime() <= at && at < new Date(one.ends_at).getTime();
+}
+
+function windowWhen(at) {
+  const zone = String(state.settings.get('default_timezone') || 'UTC');
+  const when = new Date(at);
+  let parts;
+  try {
+    parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(when);
+  } catch {
+    parts = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(when);
+  }
+  const bit = (type) => (parts.find((one) => one.type === type) || {}).value || '';
+  return `${bit('day')} ${bit('month')} ${bit('hour')}:${bit('minute')}`;
+}
+
+function pingsNow(row) {
+  const mode = pingModeOf(row);
+  if (mode === 'never') return false;
+  if (mode === 'events') return windowsOf(row.id).some((one) => windowOpen(one));
+  return true;
+}
+
+function pingState(row) {
+  const mode = pingModeOf(row);
+  if (mode === 'always') return String(state.settings.get('spotlight_pings_always_words') || 'Pings: always');
+  if (mode === 'never') return String(state.settings.get('spotlight_pings_never_words') || 'Pings: never');
+  const windows = windowsOf(row.id);
+  const open = windows.filter((one) => windowOpen(one))
+    .sort((a, b) => new Date(b.ends_at) - new Date(a.ends_at))[0];
+  const ahead = windows.filter((one) => new Date(one.starts_at).getTime() > Date.now())
+    .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))[0];
+  let window;
+  if (open) {
+    window = String(state.settings.get('spotlight_window_open_words') || 'open until {end}')
+      .replace('{end}', windowWhen(open.ends_at));
+  } else if (ahead) {
+    window = String(state.settings.get('spotlight_window_next_words') || 'next {start} \u2013 {end}')
+      .replace('{start}', windowWhen(ahead.starts_at))
+      .replace('{end}', windowWhen(ahead.ends_at));
+  } else {
+    window = String(state.settings.get('spotlight_window_none_words') || 'no window set');
+  }
+  return String(state.settings.get('spotlight_pings_events_words') || 'Pings: during events \u2014 {window}')
+    .replace('{window}', window);
+}
+
+function windowRow(one) {
+  const source = one.source || 'staff';
+  const sourceWords = source === 'staff' ? null : (source === 'marathon' ? 'from the marathon schedule' : source);
+  const note = one.note ? ` \u00b7 ${one.note}` : '';
+  const from = sourceWords ? ` \u00b7 ${sourceWords}` : '';
+  const open = windowOpen(one);
+  return {
+    id: one.id,
+    spotlight_id: one.spotlight_id,
+    starts_at: one.starts_at,
+    ends_at: one.ends_at,
+    note: one.note || null,
+    source,
+    source_id: one.source_id ?? null,
+    source_words: sourceWords,
+    staff: source === 'staff',
+    open,
+    line: `${windowWhen(one.starts_at)} \u2013 ${windowWhen(one.ends_at)}${note}${from}${open ? ' \u00b7 **open now**' : ''}`,
+    added_by: one.added_by === null || one.added_by === undefined ? null : String(one.added_by),
+    added_at: one.added_at,
+  };
+}
+
+const PING_MODE_SAID = {
+  always: '**{login}** mentions its ping roles on every announcement again \u2014 the go-live role and its own. Its pin and its reminders are exactly as they were.',
+  never: '**{login}** is still announced, pinned and reminded as before, but nothing it posts mentions a role from now on. **Pings: always** or **Pings: during events** turns them back on.',
+  events: '**{login}** is still announced, pinned and reminded as before, and mentions its ping roles only while one of its ping windows is open. {state}.',
+};
+
 function spotlightRow(row) {
   const live = spotlightOpen(row.id);
   const held = spotlightFanRole(row.id);
@@ -4385,6 +4480,10 @@ function spotlightRow(row) {
     sessions: state.golive.spotlightSessions
       .filter((one) => one.spotlight_id === row.id)
       .map(spotlightSessionRow),
+    ping_mode: pingModeOf(row),
+    pinging: pingsNow(row),
+    ping_state: pingState(row),
+    windows: windowsOf(row.id).map(windowRow),
   };
 }
 
@@ -4610,6 +4709,9 @@ route('POST', '/api/golive/spotlight', async (context) => {
     announce: body.announce === undefined || body.announce === null ? true : Boolean(body.announce),
     youtube_channel_id: null,
     youtube_handle: null,
+    ping_mode: PING_MODES.includes(state.settings.get('spotlight_ping_mode_default'))
+      ? state.settings.get('spotlight_ping_mode_default')
+      : 'always',
   };
   state.golive.spotlights.push(row);
   logAction('web.golive.spotlight_added', { details: { login, starts_at: row.starts_at, expires_at: row.expires_at, spotlight: spotlit } });
@@ -4625,6 +4727,13 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   requireStaff(context.session);
   const row = wantedSpotlight(context.params);
   const body = await context.body();
+  let wantedMode = null;
+  if ('ping_mode' in body) {
+    wantedMode = String(body.ping_mode || '').trim().toLowerCase();
+    if (!PING_MODES.includes(wantedMode)) {
+      throw new Refused(422, 'bad_mode', `**${String(body.ping_mode || '').slice(0, 40)}** is not a ping mode, so nothing was changed. Choose \`always\` to ping on every announcement, \`never\` to ping on none, or \`events\` to ping only inside a ping window.`);
+    }
+  }
   let dated = false;
   if ('starts_at' in body) {
     row.starts_at = readMoment(body.starts_at, body.tz);
@@ -4657,7 +4766,18 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
       logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login, youtube_channel_id: null } });
     }
   }
-  if (said === null) logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login } });
+  const onlyMode = wantedMode !== null && Object.keys(body).every((key) => key === 'ping_mode');
+  if (said === null && !onlyMode) logAction('web.golive.spotlight_updated', { details: { login: row.twitch_login } });
+  if (wantedMode !== null) {
+    const was = pingModeOf(row);
+    row.ping_mode = wantedMode;
+    if (was !== wantedMode) {
+      logAction('web.golive.spotlight_ping_mode_set', { details: { login: row.twitch_login, from: was, to: wantedMode } });
+    }
+    if (said === null) {
+      said = PING_MODE_SAID[wantedMode].replace('{login}', row.twitch_login).replace('{state}', pingState(row));
+    }
+  }
   if (said === null && 'announce' in body) said = channelAnnounceSaid(row, settled);
   else if (said === null && 'spotlight' in body) said = channelSpotlightSaid(row, settled);
   else if (said === null && dated) said = spotlightDated(row);
@@ -4669,12 +4789,71 @@ route('DELETE', '/api/golive/spotlight/:spotlight_id', (context) => {
   const row = wantedSpotlight(context.params);
   state.golive.spotlights = state.golive.spotlights.filter((one) => one.id !== row.id);
   state.golive.spotlightSessions = state.golive.spotlightSessions.filter((one) => one.spotlight_id !== row.id);
+  state.golive.spotlightWindows = (state.golive.spotlightWindows || []).filter((one) => one.spotlight_id !== row.id);
   logAction('web.golive.spotlight_removed', { details: { login: row.twitch_login } });
   return {
     id: row.id,
     twitch_login: row.twitch_login,
     removed: true,
     message: `**${row.twitch_login}** is off the spotlight list. Any announcement it has out there is left as posted; nothing else was changed.`,
+  };
+});
+
+route('GET', '/api/golive/spotlight/:spotlight_id/windows', (context) => {
+  requireStaff(context.session);
+  const row = wantedSpotlight(context.params);
+  return windowsOf(row.id).map(windowRow);
+});
+
+route('POST', '/api/golive/spotlight/:spotlight_id/windows', async (context) => {
+  requireStaff(context.session);
+  const row = wantedSpotlight(context.params);
+  const body = await context.body();
+  const startsAt = readMoment(body.starts_at, body.tz);
+  const endsAt = readMoment(body.ends_at, body.tz);
+  if (!startsAt || !endsAt) {
+    throw new Refused(422, 'needs_both', 'A ping window needs a start AND an end, so nothing was added. Write both as `YYYY-MM-DD HH:MM` \u2014 for example `2027-01-12 15:00` and `2027-01-19 23:00`.');
+  }
+  refuseBackwards(startsAt, endsAt);
+  const windows = state.golive.spotlightWindows || (state.golive.spotlightWindows = []);
+  const one = {
+    id: windows.reduce((top, w) => Math.max(top, w.id), 0) + 1,
+    spotlight_id: row.id,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    note: String(body.note || '').trim().slice(0, 100) || null,
+    source: 'staff',
+    source_id: null,
+    added_by: context.session.id,
+    added_at: now(),
+  };
+  windows.push(one);
+  logAction('web.golive.spotlight_window_added', { details: { login: row.twitch_login, window_id: one.id, starts_at: startsAt, ends_at: endsAt, note: one.note } });
+  const mode = pingModeOf(row);
+  const words = { always: 'always', never: 'never', events: 'during events' };
+  let said = `**${row.twitch_login}** pings from ${windowWhen(startsAt)} to ${windowWhen(endsAt)}${one.note ? ` (${one.note})` : ''}.`;
+  if (mode !== 'events') said += ` Windows only decide anything while its row says **Pings: during events** \u2014 right now it pings ${words[mode]}.`;
+  return { ...spotlightRow(row), window: windowRow(one), message: said };
+});
+
+route('DELETE', '/api/golive/spotlight/:spotlight_id/windows/:window_id', (context) => {
+  requireStaff(context.session);
+  const row = wantedSpotlight(context.params);
+  const windows = state.golive.spotlightWindows || [];
+  const one = windows.find((w) => String(w.id) === String(context.params.window_id) && w.spotlight_id === row.id);
+  if (!one) {
+    throw new Refused(404, 'no_window', 'That ping window is not there any more, so nothing was removed. Somebody else may have removed it, or the sweep purged it after it ended \u2014 the row\u2019s Pings card shows what is left.');
+  }
+  if ((one.source || 'staff') !== 'staff') {
+    throw new Refused(409, 'not_staff_window', 'That window comes from the marathon schedule \u2014 change it there.');
+  }
+  state.golive.spotlightWindows = windows.filter((w) => w !== one);
+  logAction('web.golive.spotlight_window_removed', { details: { login: row.twitch_login, window_id: one.id } });
+  return {
+    ...spotlightRow(row),
+    removed: true,
+    window_id: one.id,
+    message: `The ping window ${windowWhen(one.starts_at)} \u2013 ${windowWhen(one.ends_at)} is off **${row.twitch_login}**'s row. Nothing it already posted was changed.`,
   };
 });
 

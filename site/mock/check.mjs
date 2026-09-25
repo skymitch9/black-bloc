@@ -75,6 +75,10 @@ const IDS = {
   // …and 1 is GamesDoneQuick, the only spotlighted channel whose ping role is a role the server
   // still HAS, so it is the one the rename PATCH can reach — 3's is "deleted by hand" on purpose.
   spotlight_role_id: '1',
+  // Ping windows: GamesDoneQuick is the `events` row, and its window 1 (AGDQ 2027) is a STAFF
+  // one, so the DELETE entry may take it; a marathon window would be refused in words.
+  window_spotlight_id: '1',
+  window_id: '1',
   // Phase 19: form 1 is the Twitch Team form with three questions and people waiting on it;
   // form 2 is the closed one nobody has applied to, so the DELETE entry has something to remove.
   application_form_id: '1',

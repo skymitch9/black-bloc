@@ -256,6 +256,12 @@ export function spotlightCards(spotlight) {
     }));
 }
 
+export const PING_SUFFIX = { events: ' · pings during events', never: ' · no pings' };
+
+export function pingSuffix(one) {
+  return PING_SUFFIX[(one && one.ping_mode) || 'always'] || '';
+}
+
 export function spotlightSessions(spotlight) {
   const found = [];
   for (const one of spotlight || []) {

@@ -3,6 +3,7 @@ import { start } from './app.js';
 import {
   joinStreamers,
   liveStreams,
+  pingSuffix,
   placeSettings,
   routeTyped,
   spotlightCards,
@@ -241,6 +242,26 @@ const SPOTLIGHT_SCHEDULED = 'scheduled';
 const SPOTLIGHT_SCHEDULED_STATE = 'Scheduled — its start has not arrived, so nothing of its '
   + 'is announced, pinned or reminded yet.';
 const NO_MEMBER = 'Nobody here \u2014 this is a channel Black Bloc watches by name.';
+// The owner's ask, 2026-09-25: "I want GDQ to always be spotlighted, but I only want it to ping
+// the marathon role during events". The state line itself is the bot's worded key.
+const PINGS_TITLE = 'Pings';
+const PING_MODE_CHOICES = [
+  { value: 'always', label: 'Always' },
+  { value: 'never', label: 'Never' },
+  { value: 'events', label: 'During events' },
+];
+const PINGS_HELP = 'Only the role mentions change. The announcement, the pin and the reminders go '
+  + 'out exactly as they do now, whichever of the three is picked.';
+const WINDOWS_NONE = 'No window yet, so nothing it posts mentions a role.';
+const ADD_WINDOW = 'Add a window…';
+const WINDOW_TITLE = 'Add a ping window';
+const WINDOW_HELP = 'While a window is open this channel mentions the go-live role and its own '
+  + 'ping role. If it is already live when the window opens, one reminder that pings goes out.';
+const WINDOW_STARTS = 'Pings start';
+const WINDOW_ENDS = 'Pings stop';
+const WINDOW_NOTE = 'What it is for';
+const WINDOW_NOTE_HELP = 'Optional — for example AGDQ 2027. Shown beside the window here.';
+const WINDOW_OPEN = 'open now';
 
 const SPOTLIGHT_ON = 'Spotlight on';
 const SPOTLIGHT_OFF = 'Spotlight off';
@@ -868,6 +889,89 @@ function datesCard(row, say) {
   ]);
 }
 
+/** The owner's split: when a channel pings, and the windows that decide it for an events row. */
+function pingsCard(row, say) {
+  const one = row.spotlight;
+  const current = one.ping_mode || 'always';
+  const after = (done) => {
+    if (!done.ok) return;
+    keepSaying('golive.spotlight', say);
+    closeDrawer();
+    refresh();
+  };
+  const mode = segment(PING_MODE_CHOICES, current, {
+    onChange: async () => {
+      const wanted = mode.readValue();
+      if (wanted === current) return;
+      after(await run(
+        say,
+        () => send(`/api/golive/spotlight/${one.id}`, 'PATCH', { ping_mode: wanted }),
+        (found) => found?.message || 'Pings changed.',
+      ));
+    },
+  });
+  const bits = [
+    el('span', { class: 'cell-quiet', text: one.ping_state || '' }),
+    mode,
+    el('p', { class: 'field-help', text: PINGS_HELP }),
+  ];
+  if (current === 'events') {
+    const windows = one.windows || [];
+    if (!windows.length) bits.push(muted(WINDOWS_NONE));
+    for (const span of windows) {
+      bits.push(el('div', { class: 'bar' }, [
+        el('span', { text: `${when(span.starts_at)} – ${when(span.ends_at)}` }),
+        span.note ? el('span', { class: 'cell-quiet', text: span.note }) : null,
+        span.open ? badge(WINDOW_OPEN, 'ok') : null,
+        span.staff
+          ? button('Remove', async () => after(await run(
+            say,
+            () => send(`/api/golive/spotlight/${one.id}/windows/${span.id}`, 'DELETE'),
+            (found) => found?.message || 'Window removed.',
+          )), { tone: 'quiet' })
+          : badge(span.source_words || span.source),
+      ].filter(Boolean)));
+    }
+    bits.push(el('div', { class: 'bar' }, [
+      button(ADD_WINDOW, () => addWindow(row, say), { tone: 'quiet' }),
+    ]));
+  }
+  return card(PINGS_TITLE, bits);
+}
+
+/** A dialog like Add a ping role: two pickers and a note, read by the same route parsing. */
+async function addWindow(row, say) {
+  const one = row.spotlight;
+  const starts = whenField({ label: WINDOW_STARTS });
+  const ends = whenField({ label: WINDOW_ENDS });
+  const note = el('input', { class: 'input', type: 'text', maxlength: '100', placeholder: 'AGDQ 2027' });
+  let made = null;
+  const sure = await askForm({
+    title: WINDOW_TITLE,
+    body: [
+      WINDOW_HELP,
+      el('div', { class: 'formrow' }, [starts.node, ends.node]),
+      field(WINDOW_NOTE, note, WINDOW_NOTE_HELP),
+    ],
+    confirmLabel: 'Add the window',
+    tone: 'warn',
+    onConfirm: async () => {
+      made = await send(`/api/golive/spotlight/${one.id}/windows`, 'POST', {
+        starts_at: starts.value() || null,
+        ends_at: ends.value() || null,
+        note: note.value.trim() || null,
+        tz: starts.tz() || ends.tz() || null,
+      });
+      return null;
+    },
+  });
+  if (!sure) return;
+  say.say(made?.message || 'Window added.', 'ok');
+  keepSaying('golive.spotlight', say);
+  closeDrawer();
+  refresh();
+}
+
 function channelAnnounceMoves(row, say) {
   const one = row.spotlight;
   const out = one.announce === false;
@@ -1023,6 +1127,7 @@ async function rowPanel(row, say) {
     return [
       panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)),
       datesCard(row, say),
+      pingsCard(row, say),
       panelGroup('Twitch', twitchSaid, twitchMoves(row, say).slice(0, 1)),
       panelGroup('YouTube', channelYoutube, channelYoutubeMoves(row, say)),
       panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
@@ -1033,7 +1138,11 @@ async function rowPanel(row, say) {
   }
   return [
     ...(row.spotlight
-      ? [panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)), datesCard(row, say)]
+      ? [
+        panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)),
+        datesCard(row, say),
+        pingsCard(row, say),
+      ]
       // Owner, 2026-09-21: a link is PREFERRED but never required to spotlight, so the move
       // renders whether or not they have one; with no link the form's box starts empty.
       : [panelGroup('Spotlight', el('span', { class: 'cell-quiet', text: SPOTLIGHT_MEMBER_NOTE }), [
@@ -1060,7 +1169,10 @@ function announcedCell(row) {
   if (row.live) return el('span', { class: 'cell-kind' }, [badge(LIVE_NOW, 'ok')]);
   if (row.spotlight && row.spotlight.spotlight !== false) {
     return el('span', { class: 'cell-quiet' }, [
-      el('span', { text: row.spotlight.announced || row.spotlight.range || row.spotlight.until }),
+      el('span', {
+        text: (row.spotlight.announced || row.spotlight.range || row.spotlight.until)
+          + pingSuffix(row.spotlight),
+      }),
       row.spotlight.scheduled ? badge(SPOTLIGHT_SCHEDULED, 'warn') : null,
     ].filter(Boolean));
   }
