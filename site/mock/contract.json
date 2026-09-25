@@ -1059,7 +1059,8 @@
         "ping_mode",
         "pinging",
         "ping_state",
-        "windows"
+        "windows",
+        "marathons"
       ]
     },
     {
@@ -4696,13 +4697,17 @@
           "ignored_count",
           "suggestions",
           "dismissed",
-          "marathons"
+          "marathons",
+          "event_mode",
+          "event_mode_effective",
+          "event_mode_word"
         ],
         "channels": [
           "id",
           "login",
           "name",
-          "feed_name"
+          "feed_name",
+          "marathons"
         ],
         "sources": [
           "value",
@@ -4768,6 +4773,9 @@
         "suggestions",
         "dismissed",
         "marathons",
+        "event_mode",
+        "event_mode_effective",
+        "event_mode_word",
         "message"
       ]
     },
@@ -4807,6 +4815,28 @@
           "url"
         ]
       }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/feeds/{feed_id}",
+      "body": {
+        "event_mode": "both",
+        "name": "GDQ renamed"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — the Event select, Rename… and Move to channel…"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "spotlight_id",
+        "channel_name",
+        "event_mode",
+        "event_mode_effective",
+        "event_mode_word",
+        "message"
+      ]
     },
     {
       "method": "DELETE",
@@ -4948,7 +4978,8 @@
         "mode",
         "marathons",
         "next_waiting",
-        "makes_event"
+        "event_mode_default",
+        "event_modes"
       ],
       "rows": {
         "marathons": [
@@ -4971,7 +5002,8 @@
           "next",
           "next_waiting",
           "event",
-          "feed_name"
+          "feed_name",
+          "event_mode"
         ]
       }
     },
@@ -4980,7 +5012,8 @@
       "path": "/api/marathons",
       "body": {
         "name": "Contract marathon",
-        "schedule_url": "https://gamesdonequick.com/schedule/75"
+        "schedule_url": "https://gamesdonequick.com/schedule/75",
+        "event_mode": "runs"
       },
       "read_by": [
         "marathons-section.js (events.html) add a marathon",
@@ -4993,7 +5026,8 @@
         "runs",
         "ours",
         "run_list",
-        "message"
+        "message",
+        "event_mode"
       ]
     },
     {
@@ -5030,7 +5064,9 @@
         "next",
         "next_waiting",
         "event",
-        "feed_name"
+        "feed_name",
+        "event_mode",
+        "event_mode_word"
       ],
       "rows": {
         "run_list": [
@@ -5048,7 +5084,10 @@
           "can_mark_done",
           "can_mark_upcoming",
           "can_mark_live",
-          "held"
+          "held",
+          "event_id",
+          "event_status",
+          "event_unlinked"
         ],
         "pairings": [
           "id",
@@ -5075,6 +5114,25 @@
         "name",
         "active",
         "window",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_bare_id}",
+      "body": {
+        "event_mode": "runs"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Event card — the Event select"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "event_mode",
+        "event_mode_word",
+        "event",
+        "run_list",
         "message"
       ]
     },
@@ -5214,6 +5272,46 @@
         "pairings",
         "message"
       ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/runs/{marathon_run_id}/event",
+      "read_by": [
+        "marathons-section.js (events.html) a run of ours — Make it now"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "event_id",
+          "event_status",
+          "event_unlinked"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/marathons/{marathon_id}/runs/{marathon_linked_run_id}/event",
+      "read_by": [
+        "marathons-section.js (events.html) a run of ours — Unlink"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "event_id",
+          "event_status",
+          "event_unlinked"
+        ]
+      }
     },
     {
       "method": "POST",

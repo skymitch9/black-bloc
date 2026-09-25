@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import marathon_feeds as mf
+from ...cogs.content.marathon_events import default_mode
 from ...cogs.content.marathon_feeds import (
     channel_rows,
     channel_word,
@@ -23,6 +24,8 @@ from ...cogs.content.marathon_feeds import (
 )
 from ...cogs.content.spotlight import channel_by_id
 from ...logkinds import VIA_WEBSITE
+from ...marathon_channels import takes_marathons
+from ...marathon_events import MODE_WORDS, clean_mode
 from ...settings_store import MARATHON_FEED_ACTION_KEY, MARATHON_FEEDS_KEY
 from ..auth import Refused, staff_dependency
 from ..writes import actor_for, require_cog, require_db, require_guild, wanted_id, writer_dependency
@@ -57,6 +60,12 @@ async def feed_row(bot: Any, guild: Any, feed: Any) -> dict[str, Any]:
         "channel_login": channel["twitch_login"] if channel is not None else None,
         "channel_name": channel_word(channel),
         "action": feed["action"],
+        "event_mode": clean_mode(feed["event_mode"]),
+        "event_mode_effective": clean_mode(feed["event_mode"]) or default_mode(bot, guild.id),
+        "event_mode_word": MODE_WORDS[
+            clean_mode(feed["event_mode"]) or default_mode(bot, guild.id)
+        ],
+        "held_by_channel": bool(feed["held_by_channel"]),
         "active": bool(feed["active"]),
         "hours": hours_of(bot, guild.id),
         "last_checked_at": feed["last_checked_at"],
@@ -118,6 +127,7 @@ def build_router(bot: Any) -> APIRouter:
                     "login": one["twitch_login"],
                     "name": channel_word(one),
                     "feed_name": taken.get(int(one["id"])),
+                    "marathons": takes_marathons(one),
                 }
                 for one in await channel_rows(bot.db, guild.id)
             ],
@@ -156,7 +166,7 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(422, "bad_active", mf.BAD_ACTIVE)
         if "action" in payload and payload["action"] not in mf.ACTIONS:
             raise Refused(422, "bad_action", mf.BAD_ACTION)
-        if {"active", "action", "name", "spotlight_id"} & set(payload):
+        if {"active", "action", "name", "spotlight_id", "event_mode"} & set(payload):
             given = payload.get("spotlight_id")
             done = answered(
                 await set_feed(
@@ -168,6 +178,7 @@ def build_router(bot: Any) -> APIRouter:
                     action=payload.get("action"),
                     name=payload.get("name") if "name" in payload else None,
                     spotlight_id=wanted_id(given) if given not in (None, "") else None,
+                    event_mode=payload["event_mode"] or "" if "event_mode" in payload else None,
                     via=VIA_WEBSITE,
                 )
             )

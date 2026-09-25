@@ -28,6 +28,8 @@ from ...golive import (
 )
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
+from ...marathon_channels import MARATHONS_OFF_BUTTON, MARATHONS_ON_BUTTON, takes_marathons
+from ...marathon_channels import panel_line as marathons_line
 from ...panels import Panel, answer, opened, retire, still_staff
 from ...settings_store import (
     CHANNEL_OPTOUT_DELETE,
@@ -236,6 +238,7 @@ async def update_channel(db: Any, spotlight_id: int, **fields: Any) -> None:
         "youtube_channel_id",
         "youtube_handle",
         "ping_mode",
+        "marathons",
     )
     wanted = [(name, fields[name]) for name in allowed if name in fields]
     if not wanted:
@@ -2017,6 +2020,7 @@ async def build_spotlight(
                 state=words.ping_state_words(chosen, windows, None, tz_name, **wording),
             )
         )
+        lines.append(marathons_line(chosen))
         if words.ping_mode_of(chosen) == words.PING_EVENTS:
             lines += [
                 words.PANEL_WINDOW.format(line=words.window_line(one, None, tz_name))
@@ -2049,6 +2053,11 @@ async def build_spotlight(
         )
         view.add_item(SpotlightMoveButton("take_role" if held is not None else "give_role",
                                          chosen["id"]))
+        view.add_item(
+            SpotlightMoveButton(
+                "marathons_off" if takes_marathons(chosen) else "marathons_on", chosen["id"]
+            )
+        )
         if words.youtube_of(chosen):
             view.add_item(SpotlightMoveButton("unlink_youtube", chosen["id"]))
         else:
@@ -2125,6 +2134,8 @@ class SpotlightMoveButton(discord.ui.Button):
         "give_role": words.GIVE_PING_ROLE,
         "take_role": words.TAKE_PING_ROLE,
         "remove": words.REMOVE,
+        "marathons_on": MARATHONS_ON_BUTTON,
+        "marathons_off": MARATHONS_OFF_BUTTON,
         "ping_always": words.PINGS_ALWAYS_BUTTON,
         "ping_never": words.PINGS_NEVER_BUTTON,
         "ping_events": words.PINGS_EVENTS_BUTTON,
@@ -2142,6 +2153,8 @@ class SpotlightMoveButton(discord.ui.Button):
         "give_role": discord.ButtonStyle.success,
         "take_role": discord.ButtonStyle.secondary,
         "remove": discord.ButtonStyle.danger,
+        "marathons_on": discord.ButtonStyle.success,
+        "marathons_off": discord.ButtonStyle.secondary,
         "ping_always": discord.ButtonStyle.secondary,
         "ping_never": discord.ButtonStyle.secondary,
         "ping_events": discord.ButtonStyle.primary,
@@ -2153,6 +2166,8 @@ class SpotlightMoveButton(discord.ui.Button):
         "take_role": 2,
         "unlink_youtube": 2,
         "remove": 2,
+        "marathons_on": 2,
+        "marathons_off": 2,
         "ping_always": 3,
         "ping_never": 3,
         "ping_events": 3,
@@ -2214,6 +2229,11 @@ async def run_spotlight_move(
             bot, guild, actor, spotlight_id, action == "spotlight_on"
         )
         return (words.spotlight_said(fresh, settled), True)
+    if action in ("marathons_on", "marathons_off"):
+        from .marathon_channels import set_marathons
+
+        _, said = await set_marathons(bot, guild, actor, spotlight_id, action == "marathons_on")
+        return (said, True)
     if action in ("opt_out", "opt_in"):
         fresh, settled = await set_announce(
             bot, guild, actor, spotlight_id, action == "opt_in"

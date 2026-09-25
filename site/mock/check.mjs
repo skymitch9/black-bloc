@@ -83,11 +83,15 @@ const IDS = {
   marathon_bare_id: '3',
   marathon_waiting_id: '1',
   // Feeds: 1 is GDQ (add mode, one removed event remembered, so Forget ignored reaches it);
-  // 2 is RPG Limit Break (suggest mode) with event 22 waiting; the ESA row (2) has no feed.
+  // 2 is RPG Limit Break (suggest mode) with event 22 waiting. The ESA row (2) is opted out of
+  // marathons (event modes §A2), so Add a feed starts on Frost Fatales (3), which has no feed.
   feed_id: '1',
   feed_suggest_id: '2',
   feed_event_ref: '22',
-  feedless_spotlight_id: '2',
+  feedless_spotlight_id: '3',
+  // Event modes: AGDQ 2027 makes both; runs 5 and 7 carry their own events, so Unlink reaches
+  // 7 and Make it now reaches run 9 (ours through the pairing, no event of its own yet).
+  marathon_linked_run_id: '7',
   // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
   // reach it without ending a stream the other entries expect to still be live.
   spotlight_id: '3',

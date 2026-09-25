@@ -11,6 +11,7 @@ import discord
 from discord.ext import commands, tasks
 
 from ... import marathon as mt
+from ... import marathon_events as me
 from ... import pings
 from ... import shadow as shadow_home
 from ... import spotlight as spot
@@ -38,6 +39,8 @@ from ...events import TITLE_LIMIT as EVENT_TITLE_LIMIT
 from ...golive import now_iso, parse_ts, ping_prefix
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
+from ...marathon_channels import HELD_REFUSAL, OPTED_OUT_REFUSAL, takes_marathons
+from ...marathon_channels import channel_word as channel_word_of
 from ...marathon_sources import (
     GDQ,
     ScheduleClient,
@@ -78,13 +81,14 @@ from ...settings_store import (
     MARATHON_LEAD_DAYS_KEY,
     MARATHON_LIVE_PINGS_KEY,
     MARATHON_LIVE_TEMPLATE_KEY,
-    MARATHON_MAKES_EVENT_KEY,
     MARATHON_MATCH_HOSTS_KEY,
     MARATHON_MODE_KEY,
     MARATHON_MOVE_MINUTES_KEY,
     MARATHON_NEXT_ADDED_TEMPLATE_KEY,
     MARATHON_NEXT_NONE_TEMPLATE_KEY,
     MARATHON_NEXT_TEMPLATE_KEY,
+    MARATHON_NOTICE_HOME_KEY,
+    MARATHON_NOTICE_TITLE_KEY,
     MARATHON_PIN_BOARD_KEY,
     MARATHON_PING_MINUTES_KEY,
     MARATHON_POLL_MINUTES_KEY,
@@ -92,6 +96,7 @@ from ...settings_store import (
     MARATHON_REMINDER_PINGS_KEY,
     MARATHON_REMINDER_STALE_KEY,
     MARATHON_REMINDER_TEMPLATE_KEY,
+    MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY,
     MARATHON_SUGGEST_NEXT_KEY,
     MARATHON_TITLE_CONFIRMS_KEY,
     MARATHON_UNKNOWN_SITE_KEY,
@@ -152,6 +157,12 @@ EVENT_REFUSED_CODE = "event_refused"
 NO_EVENT_CODE = "no_event"
 MARATHON_REMOVED = "marathon_removed"
 EVENT_KEPT_IN_STEP = (EVENT_PENDING, EVENT_APPROVED)
+EVENT_ANNOUNCED = (EVENT_APPROVED, "live")
+NOTICE_EVENTS = "events"
+NOTICE_STAFF = "staff"
+NOTICE_SHADOW = "shadow"
+OPTED_OUT_CODE = "channel_opted_out"
+HELD_CODE = "held_by_channel"
 
 
 def _cell(row: Any, key: str, fallback: Any = None) -> Any:
@@ -263,10 +274,12 @@ async def insert_marathon(
     starts_at: str | None,
     added_by: int | None,
     feed_id: int | None = None,
+    event_mode: str = "none",
 ) -> int:
     cur = await db.conn.execute(
         "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
-        "starts_at, ends_at, added_by, added_at, feed_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "starts_at, ends_at, added_by, added_at, feed_id, event_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             int(guild_id),
             name,
@@ -279,6 +292,7 @@ async def insert_marathon(
             added_by,
             now_iso(),
             feed_id,
+            event_mode,
         ),
     )
     await db.conn.commit()
@@ -305,6 +319,8 @@ MARATHON_COLUMNS = {
     "event_id",
     "event_wanted",
     "feed_id",
+    "event_mode",
+    "held_by_channel",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -327,6 +343,7 @@ RUN_COLUMNS = {
     "shout_channel_id",
     "reminders_sent",
     "last_seen_at",
+    "event_id",
 }
 
 
@@ -414,6 +431,21 @@ async def marathon_windows(db: Any, marathon_id: int) -> list[Any]:
 # --- small reads ------------------------------------------------------------------------------
 
 
+async def opted_out_channel(db: Any, spotlight_id: Any) -> Any:
+    """The channel row when it is opted out of marathons; None when it takes them or is gone."""
+    if spotlight_id in (None, "", 0, "0"):
+        return None
+    try:
+        row = await channel_by_id(db, int(spotlight_id))
+    except (TypeError, ValueError):
+        return None
+    return row if row is not None and not takes_marathons(row) else None
+
+
+def opted_out_said(row: Any) -> str:
+    return OPTED_OUT_REFUSAL.format(channel=channel_word_of(row))
+
+
 def words_for(bot: Any, guild_id: int) -> dict[str, str]:
     return {key: str(bot.store.get(guild_id, key)) for key in MARATHON_WORDS}
 
@@ -458,9 +490,23 @@ async def create_marathon(
     url: Any,
     spotlight_id: Any = None,
     make_event: Any = None,
+    event_mode: Any = None,
     via: str = VIA_DISCORD,
     feed_id: int | None = None,
 ) -> Outcome:
+    from ...marathon_events import BAD_MODE, makes_marathon_event
+    from .marathon_events import BAD_MODE_CODE, mode_for_new
+
+    feed = None
+    if feed_id is not None:
+        from .marathon_feeds import get_feed
+
+        feed = await get_feed(bot.db, guild.id, feed_id)
+    wanted_mode = mode_for_new(
+        bot, guild.id, event_mode=event_mode, make_event=make_event, feed=feed
+    )
+    if wanted_mode is None:
+        return refusal(BAD_MODE.format(given=str(event_mode)[:40]), BAD_MODE_CODE, 422)
     wanted_name = " ".join(str(name or "").split())[:100]
     wanted_url = str(url or "").strip()
     if not wanted_name:
@@ -480,6 +526,8 @@ async def create_marathon(
             return refusal(
                 mt.NO_SUCH_CHANNEL.format(login=str(spotlight_id)[:40]), NO_SUCH_CHANNEL_CODE, 404
             )
+        if not takes_marathons(channel):
+            return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
     cog = cog_of(bot)
     source, ref = found
     try:
@@ -513,23 +561,20 @@ async def create_marathon(
             "ref": ref,
             "spotlight_id": _cell(channel, "id"),
             "feed_id": feed_id,
+            "event_mode": wanted_mode,
             "via": via,
         },
     )
     row = await get_marathon(bot.db, guild.id, marathon_id)
-    wants_event = (
-        bool(bot.store.get(guild.id, MARATHON_MAKES_EVENT_KEY))
-        if make_event is None
-        else bool(make_event)
-    )
     async with cog.lock(marathon_id):
         read = await cog.refresh(guild, row)
         said = mt.ADDED.format(name=wanted_name, read=read.message)
-        if wants_event:
-            made = await make_event_for(
-                bot, guild, actor, await get_marathon(bot.db, guild.id, marathon_id), via=via
-            )
+        await update_marathon(bot.db, marathon_id, event_mode=wanted_mode)
+        fresh = await get_marathon(bot.db, guild.id, marathon_id)
+        if makes_marathon_event(wanted_mode) and not fresh["event_id"]:
+            made = await make_event_for(bot, guild, actor, fresh, via=via)
             said = f"{said} {made.message}"
+        await sync_runs(bot, guild, fresh, actor=actor)
     fresh = await get_marathon(bot.db, guild.id, marathon_id)
     return Outcome(True, said, value=fresh)
 
@@ -549,9 +594,19 @@ async def refresh_marathon(bot: Any, guild: Any, marathon: Any) -> Outcome:
 async def set_active(
     bot: Any, guild: Any, actor: Any, marathon: Any, active: bool, *, via: str = VIA_DISCORD
 ) -> Outcome:
+    if active and _cell(marathon, "held_by_channel"):
+        held = await opted_out_channel(bot.db, _cell(marathon, "spotlight_id"))
+        if held is not None:
+            return refusal(
+                HELD_REFUSAL.format(name=marathon["name"], channel=channel_word_of(held)),
+                HELD_CODE,
+                409,
+            )
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
-        await update_marathon(bot.db, marathon["id"], active=1 if active else 0)
+        await update_marathon(
+            bot.db, marathon["id"], active=1 if active else 0, held_by_channel=0
+        )
         fresh = await get_marathon(bot.db, guild.id, marathon["id"])
         await cog.sync_window(guild, fresh)
     await log_action(
@@ -575,6 +630,8 @@ async def set_channel(
             return refusal(
                 mt.NO_SUCH_CHANNEL.format(login=str(spotlight_id)[:40]), NO_SUCH_CHANNEL_CODE, 404
             )
+        if not takes_marathons(channel):
+            return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
         await update_marathon(bot.db, marathon["id"], spotlight_id=_cell(channel, "id"))
@@ -639,11 +696,13 @@ async def remove_marathon(
     bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     from ...marathon_feeds import VIA_FEED
+    from .marathon_events import cancel_every_run_event
     from .marathon_feeds import ignore_removed
 
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
         await cancel_linked_event(bot, guild, actor, marathon, via=via)
+        await cancel_every_run_event(bot, guild, marathon, actor=actor)
         await cog.drop_windows(guild, marathon)
         await cog.unpin_board(guild, marathon, because="removed")
         await delete_marathon(bot.db, marathon["id"])
@@ -687,6 +746,7 @@ async def pair_runner(
             actor_id(actor),
         )
         await cog.rematch(guild, marathon)
+        await sync_runs(bot, guild, marathon, actor=actor)
         await cog.sync_board(guild, await get_marathon(bot.db, guild.id, marathon["id"]))
     await log_action(
         bot,
@@ -714,6 +774,7 @@ async def unpair_runner(
     async with cog.lock(marathon["id"]):
         await delete_pairing(bot.db, pairing["id"])
         await cog.rematch(guild, marathon)
+        await sync_runs(bot, guild, marathon, actor=actor)
         await cog.sync_board(guild, await get_marathon(bot.db, guild.id, marathon["id"]))
     await log_action(
         bot,
@@ -765,7 +826,7 @@ async def shout_now(
                 bot.db, row["id"], state=mt.LIVE, live_at=now_iso(), live_because=mt.BY_STAFF
             )
             row = await run_by_id(bot.db, marathon["id"], run["id"])
-        why = await cog.shout(guild, marathon, row, actor=actor, via=via)
+        why = await cog.shout(guild, marathon, row, actor=actor, via=via, force=True)
         await cog.sync_board(guild, await get_marathon(bot.db, guild.id, marathon["id"]))
     if why:
         return refusal(mt.SHOUT_NOT_POSTED.format(game=row["game"], why=why), POST_FAILED, 409)
@@ -1019,7 +1080,12 @@ async def marathon_of_event_line(bot: Any, guild_id: int, event_id: Any) -> str:
     """The line an event's card says about the marathon that made it; blank for any other."""
     row = await marathon_for_event(bot.db, guild_id, event_id)
     if row is None:
-        return ""
+        from .marathon_events import run_of_event
+
+        run = await run_of_event(bot.db, guild_id, event_id)
+        if run is None:
+            return ""
+        return mt.RUN_OF_EVENT.format(game=run["game"], name=run["marathon_name"])
     runs = await runs_of(bot.db, row["id"])
     ours = len([one for one in runs if one["state"] != mt.DROPPED and mt.is_ours(one)])
     return mt.MARATHON_OF_EVENT.format(name=row["name"], ours=ours)
@@ -1090,13 +1156,12 @@ async def make_event_for(
             EVENT_EXISTS_CODE,
             409,
         )
-    await update_marathon(bot.db, marathon["id"], event_wanted=1)
     fields = await event_fields_of(bot, guild, marathon)
     if fields is None:
         return Outcome(True, mt.EVENT_WAITING.format(name=marathon["name"]))
     requester = requester_for(guild, marathon, actor)
     if requester is None:
-        await update_marathon(bot.db, marathon["id"], event_wanted=0)
+        await stop_waiting(bot, marathon)
         return refusal(
             mt.EVENT_NOT_MADE.format(why=mt.EVENT_NOBODY), EVENT_REFUSED_CODE, 409
         )
@@ -1104,7 +1169,7 @@ async def make_event_for(
 
     said, row = await propose_from(bot, guild, requester, fields, via=via)
     if row is None:
-        await update_marathon(bot.db, marathon["id"], event_wanted=0)
+        await stop_waiting(bot, marathon)
         return refusal(mt.EVENT_NOT_MADE.format(why=said), EVENT_REFUSED_CODE, 409)
     await update_marathon(bot.db, marathon["id"], event_id=int(row["id"]))
     await log_action(
@@ -1121,14 +1186,33 @@ async def make_event_for(
     )
 
 
+async def stop_waiting(bot: Any, marathon: Any) -> None:
+    """A wish that cannot be met is dropped, as `event_wanted = 0` was: the mode loses its
+    marathon half, so the next read does not try again."""
+    from ...marathon_events import mode_of as event_mode_of
+    from ...marathon_events import with_marathon_event
+
+    fresh = await get_marathon(bot.db, marathon["guild_id"], marathon["id"])
+    mode = event_mode_of(fresh if fresh is not None else marathon)
+    await update_marathon(bot.db, marathon["id"], event_mode=with_marathon_event(mode, False))
+
+
 async def make_event_now(
     bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    """The staff door: under the marathon's lock, so a tick cannot make a second one."""
+    """The staff door: under the marathon's lock, so a tick cannot make a second one. The
+    marathon's mode gains its marathon half, so the event is kept in step from then on."""
+    from ...marathon_events import mode_of as event_mode_of
+    from ...marathon_events import with_marathon_event
+
     async with cog_of(bot).lock(marathon["id"]):
         fresh = await get_marathon(bot.db, guild.id, marathon["id"])
         if fresh is None:
             return refusal(mt.NO_SUCH_MARATHON.format(given=marathon["id"]), NO_SUCH, 404)
+        if not fresh["event_id"]:
+            wanted = with_marathon_event(event_mode_of(fresh), True)
+            await update_marathon(bot.db, fresh["id"], event_mode=wanted)
+            fresh = await get_marathon(bot.db, guild.id, marathon["id"])
         return await make_event_for(bot, guild, actor, fresh, via=via)
 
 
@@ -1145,17 +1229,29 @@ async def unlink_the_event(
 async def unlink_event(
     bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    """Clears the pointer and the wish; the event itself is not touched."""
+    """Clears the pointer and the wish (the mode loses its marathon half); the event itself
+    is not touched."""
+    from ...marathon_events import mode_of as event_mode_of
+    from ...marathon_events import with_marathon_event
+
     event_id = _cell(marathon, "event_id")
-    if not event_id and not _cell(marathon, "event_wanted"):
+    if not event_id and not mt.wants_its_event(marathon):
         return refusal(mt.NO_EVENT.format(name=marathon["name"]), NO_EVENT_CODE, 409)
-    await update_marathon(bot.db, marathon["id"], event_id=None, event_wanted=0)
+    was = event_mode_of(marathon)
+    now = with_marathon_event(was, False)
+    await update_marathon(bot.db, marathon["id"], event_id=None, event_mode=now)
     await log_action(
         bot,
         guild,
         kind_via("marathon.event_unlinked", via),
         actor=actor,
-        details={"marathon_id": marathon["id"], "event_id": event_id, "via": via},
+        details={
+            "marathon_id": marathon["id"],
+            "event_id": event_id,
+            "from": was,
+            "to": now,
+            "via": via,
+        },
     )
     if not event_id:
         return Outcome(True, mt.EVENT_STOPPED_WAITING.format(name=marathon["name"]))
@@ -1165,7 +1261,13 @@ async def unlink_event(
 
 
 async def cancel_linked_event(
-    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    marathon: Any,
+    *,
+    reason: str = MARATHON_REMOVED,
+    via: str = VIA_DISCORD,
 ) -> None:
     """A removed marathon takes its open event with it, through the door the card presses."""
     row = await linked_event(bot, marathon)
@@ -1173,7 +1275,7 @@ async def cancel_linked_event(
         return
     try:
         await cancel_for(
-            bot, guild, row, actor if actor is not None else 0, reason=MARATHON_REMOVED, via=via
+            bot, guild, row, actor if actor is not None else 0, reason=reason, via=via
         )
     except Exception as exc:
         log.warning(
@@ -1191,8 +1293,20 @@ async def cancel_linked_event(
         guild,
         kind_via("marathon.event_cancelled", via),
         actor=actor,
-        details={"marathon_id": marathon["id"], "event_id": int(row["id"]), "via": via},
+        details={
+            "marathon_id": marathon["id"],
+            "event_id": int(row["id"]),
+            "reason": reason,
+            "via": via,
+        },
     )
+
+
+async def sync_runs(bot: Any, guild: Any, marathon: Any, *, actor: Any = None) -> None:
+    """The run events follow whatever just changed; they are the bot's own knock-on rows."""
+    from .marathon_events import sync_run_events
+
+    await sync_run_events(bot, guild, marathon, actor=actor)
 
 
 # --- the cog ----------------------------------------------------------------------------------
@@ -1417,7 +1531,13 @@ class Marathons(commands.Cog):
     async def post_notice(self, guild: Any, marathon: Any, record: dict[str, Any]) -> None:
         text = self.next_words(guild, marathon, record)
         view = notice_view(marathon["id"], record["event_id"])
-        message, channel_id, why = await self._send_staff(guild, text, view)
+        message, channel_id, why = await self._send_staff(
+            guild,
+            text,
+            view,
+            title=record.get("name"),
+            what={"marathon_id": marathon["id"], "event": record["event_id"], "notice": "next"},
+        )
         if message is None:
             await log_action(
                 self.bot,
@@ -1426,7 +1546,11 @@ class Marathons(commands.Cog):
                 details={"marathon_id": marathon["id"], "event": record["event_id"], "reason": why},
             )
             return
-        record |= {"notice_channel_id": channel_id, "notice_message_id": int(message.id)}
+        record |= {
+            "notice_channel_id": channel_id,
+            "notice_message_id": int(message.id),
+            "notice_home": NOTICE_SHADOW if mode_of(self.bot, guild.id) != MODE_ON else "",
+        }
         await save_suggestion(self.bot.db, marathon["id"], record)
 
     async def fold_notice(self, guild: Any, marathon: Any, record: Any) -> None:
@@ -1444,9 +1568,14 @@ class Marathons(commands.Cog):
         else:
             text = "~~" + self.next_words(guild, marathon, {**record, "added_marathon_id": None})
             text += "~~"
-        if str(record.get("notice_channel_id")) != str(
-            self.bot.store.get(guild.id, STAFF_CHANNEL_KEY)
-        ):
+        home = record.get("notice_home")
+        shadowed = (
+            home == NOTICE_SHADOW
+            if home is not None
+            else str(record.get("notice_channel_id"))
+            != str(self.bot.store.get(guild.id, STAFF_CHANNEL_KEY))
+        )
+        if shadowed:
             text = self._staff_shadowed(guild, text)
         try:
             await message.edit(
@@ -1463,12 +1592,18 @@ class Marathons(commands.Cog):
         return f"{said}\n{text}" if said else text
 
     async def _send_staff(
-        self, guild: Any, text: str, view: Any
+        self, guild: Any, text: str, view: Any, *, title: Any = None, what: Any = None
     ) -> tuple[Any, int | None, str | None]:
-        """`on` posts in staff_channel_id; `shadow` rehearses where shadow_channel_id says."""
+        """`on` posts where marathon_notice_home says — a post in the events forum while events
+        are reviewed there, else staff_channel_id; `shadow` rehearses where shadow_channel_id
+        says. Every notice that goes up leaves one marathon.notice_posted row."""
         mode = mode_of(self.bot, guild.id)
         if mode == MODE_OFF:
             return (None, None, MODE_IS_OFF)
+        if mode == MODE_ON and self.notice_in_forum(guild):
+            found = await self._post_in_forum(guild, text, view, title=title, what=what)
+            if found is not None:
+                return found
         home = self.bot.store.get(guild.id, STAFF_CHANNEL_KEY)
         if not home:
             return (None, None, NO_STAFF_CHANNEL)
@@ -1488,7 +1623,59 @@ class Marathons(commands.Cog):
             )
         except Exception as exc:
             return (None, channel_id, spot.reason_of(exc))
+        home_word = NOTICE_STAFF if mode == MODE_ON else NOTICE_SHADOW
+        await self._notice_posted(guild, home_word, channel_id, message, what)
         return (message, channel_id, None)
+
+    def notice_in_forum(self, guild: Any) -> bool:
+        from ...events import forum_channel_id, reviews_in_forum
+
+        store = self.bot.store
+        return (
+            str(store.get(guild.id, MARATHON_NOTICE_HOME_KEY)) == NOTICE_EVENTS
+            and reviews_in_forum(store, guild.id)
+            and forum_channel_id(store, guild.id) is not None
+        )
+
+    async def _post_in_forum(
+        self, guild: Any, text: str, view: Any, *, title: Any, what: Any
+    ) -> tuple[Any, int | None, str | None] | None:
+        """None falls back to the staff channel, with the reason logged."""
+        from ...events import MARATHON_TAG, open_notice_post
+
+        name = mt.render(
+            self.bot.store.get(guild.id, MARATHON_NOTICE_TITLE_KEY),
+            said_default(MARATHON_NOTICE_TITLE_KEY),
+            name=str(title or "").strip() or "?",
+        ).text
+        post, message, why = await open_notice_post(
+            self.bot, guild, name, text, view, tag=MARATHON_TAG
+        )
+        if post is None or message is None:
+            await log_action(
+                self.bot,
+                guild,
+                "marathon.notice_forum_failed",
+                details=dict(what or {}) | {"reason": why, "fallback": NOTICE_STAFF},
+            )
+            return None
+        await self._notice_posted(guild, NOTICE_EVENTS, int(post.id), message, what)
+        return (message, int(post.id), None)
+
+    async def _notice_posted(
+        self, guild: Any, home: str, channel_id: Any, message: Any, what: Any
+    ) -> None:
+        await log_action(
+            self.bot,
+            guild,
+            "marathon.notice_posted",
+            details=dict(what or {})
+            | {
+                "home": home,
+                "channel_id": channel_id,
+                "message_id": str(getattr(message, "id", "")) or None,
+            },
+        )
 
     # --- reading the schedule ---------------------------------------------------------------
 
@@ -1572,6 +1759,7 @@ class Marathons(commands.Cog):
         await self.event_follows(
             guild, marathon, await get_marathon(db, guild.id, marathon["id"])
         )
+        await sync_runs(self.bot, guild, marathon)
         await log_action(
             self.bot,
             guild,
@@ -1592,7 +1780,7 @@ class Marathons(commands.Cog):
         if after is None:
             return
         if not after["event_id"]:
-            if after["event_wanted"] and after["starts_at"] and after["ends_at"]:
+            if mt.wants_its_event(after) and after["starts_at"] and after["ends_at"]:
                 made = await make_event_for(self.bot, guild, None, after)
                 if not made.ok:
                     await log_action(
@@ -2041,8 +2229,18 @@ class Marathons(commands.Cog):
     # --- the shoutout -----------------------------------------------------------------------
 
     async def shout(
-        self, guild: Any, marathon: Any, row: Any, *, actor: Any = None, via: str = VIA_DISCORD
+        self,
+        guild: Any,
+        marathon: Any,
+        row: Any,
+        *,
+        actor: Any = None,
+        via: str = VIA_DISCORD,
+        force: bool = False,
     ) -> str | None:
+        """`force` is staff pressing Shout it now: it posts whatever the run's event says."""
+        if not force and await self.said_by_its_event(guild, marathon, row):
+            return None
         words = words_for(self.bot, guild.id)
         login = await channel_login(self.bot, marathon)
         url = mt.run_url(row, login, marathon["schedule_url"])
@@ -2077,6 +2275,24 @@ class Marathons(commands.Cog):
             details=details | {"message_id": str(message.id), "channel_id": channel_id},
         )
         return None
+
+    async def said_by_its_event(self, guild: Any, marathon: Any, row: Any) -> bool:
+        """A run whose own event is approved is announced by the events feature as it starts;
+        the shoutout would say it twice, so it is skipped unless the key says both."""
+        if self.bot.store.get(guild.id, MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY):
+            return False
+        event_id = _cell(row, "event_id")
+        event = await get_event(self.bot.db, int(event_id)) if event_id else None
+        if event is None or event["status"] not in EVENT_ANNOUNCED:
+            return False
+        await log_action(
+            self.bot,
+            guild,
+            "marathon.shout_skipped",
+            details=self.run_details(marathon, row)
+            | {"because": "run_event", "event_id": int(event_id)},
+        )
+        return True
 
     # --- the board --------------------------------------------------------------------------
 
@@ -2523,6 +2739,7 @@ async def build_card(
     if login:
         lines.append(f"twitch.tv/{login}")
     lines.append(mt.event_line(row, await event_status_of(bot, row)))
+    lines.append(me.EVENT_MODE_LINE.format(words=me.mode_words(me.mode_of(row))))
     ours = [one for one in runs if one["state"] != mt.DROPPED and mt.is_ours(one)]
     lines += [""] + [next_line(one, row, words) for one in ours[:MINE_LIMIT]]
     if not runs:
@@ -2550,6 +2767,7 @@ async def build_card(
     movable = movable_runs(runs, now_for(bot))
     if movable:
         view.add_item(RunPick(movable, words))
+    view.add_item(EventModePick(me.mode_of(row)))
     add_moves(view, mt.card_moves(row, has_unmatched=bool(unmatched), has_next=has_next))
     return (embed, view)
 
@@ -2608,15 +2826,18 @@ async def build_run(bot: Any, guild: Any, marathon_id: Any, run_id: Any) -> tupl
         return (None, None)
     words = words_for(bot, guild.id)
     state = mt.run_fields(run, row, words, url="")["state"]
+    event_id = run["event_id"]
+    event = await get_event(bot.db, int(event_id)) if event_id else None
     lines = [
         f"**{run['game']}** — {run['category'] or ''}",
         f"{mt.stamp_of(run['scheduled_at'], 'f')} · {state}",
         run["runners_text"] or "",
+        me.run_event_line(event_id, _cell(event, "status")) if event_id else "",
     ]
     embed = discord.Embed(title=row["name"], description=clamped([one for one in lines if one]))
     view = MarathonPanel(minutes_for(bot, guild.id), RUN_VIEW, row["id"])
     view.run_id = run["id"]
-    add_moves(view, mt.run_moves(run))
+    add_moves(view, mt.run_moves(run) + me.run_event_moves(run))
     return (embed, view)
 
 
@@ -2735,6 +2956,13 @@ def run_doing(action: str, run_id: Any) -> Any:
     return lambda bot, guild, actor, row: shared(bot, guild, actor, row, {"id": run_id})
 
 
+def run_event_doing(action: str, run_id: Any) -> Any:
+    from .marathon_events import make_run_event_now, unlink_run_event
+
+    shared = make_run_event_now if action == me.MAKE_RUN_EVENT else unlink_run_event
+    return lambda bot, guild, actor, row: shared(bot, guild, actor, row, {"id": run_id})
+
+
 def next_doing(action: str) -> Any:
     shared = {mt.ADD_NEXT: add_next, mt.DISMISS_NEXT: dismiss_next, mt.LOOK_AGAIN: look_again}
     return shared[action]
@@ -2826,12 +3054,16 @@ class MarathonMoveButton(discord.ui.Button):
             await run_move(interaction, view, next_doing(action), back=back_to_next)
         elif action in (mt.SHOUT, mt.MARK_DONE, mt.MARK_UPCOMING, mt.MARK_LIVE):
             await run_move(interaction, view, run_doing(action, view.run_id), back=back_to_run)
+        elif action in (me.MAKE_RUN_EVENT, me.UNLINK_RUN_EVENT):
+            await run_move(
+                interaction, view, run_event_doing(action, view.run_id), back=back_to_run
+            )
         elif action == mt.ADD:
             if await still_staff(interaction):
-                ticked = interaction.client.store.get(
-                    interaction.guild.id, MARATHON_MAKES_EVENT_KEY
-                )
-                await interaction.response.send_modal(AddMarathonModal(view, bool(ticked)))
+                from .marathon_events import default_mode
+
+                wanted = default_mode(interaction.client, interaction.guild.id)
+                await interaction.response.send_modal(AddMarathonModal(view, wanted))
         elif action == mt.MAKE_EVENT:
             await run_move(interaction, view, make_event_now)
         elif action == mt.UNLINK_EVENT:
@@ -2932,19 +3164,19 @@ class AddMarathonModal(AnswersErrors, discord.ui.Modal, title=mt.ADD_TITLE):
     login = discord.ui.TextInput(
         label=mt.ADD_LOGIN, placeholder=mt.ADD_LOGIN_HINT, required=False, max_length=40
     )
-    event = discord.ui.TextInput(label=mt.ADD_EVENT, required=False, max_length=5)
+    event = discord.ui.TextInput(label=me.ADD_EVENT_LABEL, required=False, max_length=8)
 
-    def __init__(self, previous: Any = None, ticked: bool = True) -> None:
+    def __init__(self, previous: Any = None, mode: str = me.NONE) -> None:
         super().__init__()
         self.previous = previous
-        self.event.default = mt.ADD_EVENT_YES[0] if ticked else mt.ADD_EVENT_NO[0]
+        self.event.default = mode
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction):
             return
         bot, guild = interaction.client, interaction.guild
-        make_event = mt.wanted_event_answer(self.event) if str(self.event).strip() else None
-        if str(self.event).strip() and make_event is None:
+        event_mode = me.wanted_mode_answer(self.event) if str(self.event).strip() else None
+        if str(self.event).strip() and event_mode is None:
             await open_root(interaction, self.previous)
             await answer(interaction, mt.BAD_ADD_EVENT)
             return
@@ -2964,13 +3196,35 @@ class AddMarathonModal(AnswersErrors, discord.ui.Modal, title=mt.ADD_TITLE):
             name=str(self.name),
             url=str(self.url),
             spotlight_id=spotlight_id,
-            make_event=make_event,
+            event_mode=event_mode,
         )
         if outcome.ok:
             await open_card(interaction, outcome.value["id"], self.previous)
         else:
             await open_root(interaction, self.previous)
         await answer(interaction, outcome.message)
+
+
+class EventModePick(discord.ui.Select):
+    def __init__(self, current: str) -> None:
+        super().__init__(
+            placeholder=me.PICK_MODE,
+            options=[
+                discord.SelectOption(label=me.MODE_WORDS[one], value=one, default=one == current)
+                for one in me.MODES
+            ],
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        from .marathon_events import set_event_mode
+
+        wanted = self.values[0]
+        await run_move(
+            interaction,
+            self.view,
+            lambda bot, guild, actor, row: set_event_mode(bot, guild, actor, row, wanted),
+        )
 
 
 class PollModal(AnswersErrors, discord.ui.Modal, title=mt.POLL_TITLE):

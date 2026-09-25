@@ -691,6 +691,12 @@ CANCEL_WHY: dict[str, str] = {
     "marathon_removed": (
         "the marathon it was made for was taken off Black Bloc's list, so its event went with it."
     ),
+    "run_dropped": "the marathon's schedule no longer lists that run, so its event went with it.",
+    "not_ours": "nobody from here is on that run any more, so its event went with it.",
+    "mode_changed": (
+        "staff changed what the marathon makes in the events, so the events it had made were "
+        "called off."
+    ),
 }
 HANDED_OFF = "handed_off"
 CANCEL_WHY_DEFAULT = (
@@ -776,6 +782,9 @@ FORUM_TAG_EMOJI: dict[str, str] = {
     CANCELLED: "⚫",
 }
 FORUM_ARCHIVE_STATUSES = (DENIED, DONE, CANCELLED)
+MARATHON_TAG = "marathon"
+NOTICE_TAG_EMOJI: dict[str, str] = {MARATHON_TAG: "🏃"}
+FORUM_TAG_LIMIT = 20
 MAKE_THE_FORUM = "Make the forum"
 FORUM_EXISTS = (
     "<#{where}> is already the events forum, so nothing was made. Clear "
@@ -2158,6 +2167,55 @@ async def apply_decision(
         )
 
 
+async def approved_from(
+    bot: Any,
+    guild: Any,
+    requester: Any,
+    fields: EventFields,
+    *,
+    because: str,
+    via: str = VIA_DISCORD,
+) -> Any:
+    """An event another feature decided on: approved at once, no review place and no
+    approval post — it is announced when it starts, like any approved event."""
+    whose = getattr(requester, "id", requester)
+    event_id = await create_event(
+        bot.db,
+        guild.id,
+        int(whose),
+        title=fields.title,
+        description=fields.description,
+        where=fields.where,
+        starts_at=fields.starts,
+        finishes_at=ends_at(fields.starts, fields.minutes),
+    )
+    me = getattr(getattr(guild, "me", None), "id", None)
+    await set_status(bot.db, event_id, APPROVED, decided_by=me)
+    try:
+        made, why_not = await create_scheduled_event(
+            bot, guild, await get_event(bot.db, event_id)
+        )
+    except Exception as exc:
+        made, why_not = None, f"{type(exc).__name__}: {exc}"
+    await log_action(
+        bot,
+        guild,
+        kind_via("event.created", via),
+        target=int(whose),
+        details={
+            "event_id": event_id,
+            "title": fields.title,
+            "status": APPROVED,
+            "because": because,
+            "scheduled": made is not None,
+            "scheduled_why_not": why_not,
+            "automatic": True,
+            "via": via,
+        },
+    )
+    return await get_event(bot.db, event_id)
+
+
 async def tell_requester(
     guild: Any, requester: Any, row: Any, status: str, reason: str | None
 ) -> None:
@@ -2280,6 +2338,57 @@ async def open_review_post(bot: Any, guild: Any, row: Any, view: Any) -> tuple[A
     )
     await set_review_kind(bot.db, row["id"], POST)
     return (post, "")
+
+
+async def forum_tag(forum: Any, name: str) -> Any:
+    """The named tag, added to the forum the first time a post asks for it; None when the forum
+    will not take one (full, or no right to edit it) — the post then goes up untagged."""
+    found = tag_named(forum, name)
+    if found is not None:
+        return found
+    existing = list(getattr(forum, "available_tags", None) or ())
+    if len(existing) >= FORUM_TAG_LIMIT or not hasattr(forum, "edit"):
+        return None
+    try:
+        await forum.edit(
+            available_tags=[*existing, *library_forum_tags((name,), NOTICE_TAG_EMOJI)],
+            reason="Black Bloc: a tag for marathon notices",
+        )
+    except Exception as exc:
+        log.warning("events: the forum would not take the %s tag — %s", name, exc)
+        return None
+    return tag_named(forum, name)
+
+
+async def open_notice_post(
+    bot: Any, guild: Any, title: str, text: str, view: Any, *, tag: str
+) -> tuple[Any, Any, str | None]:
+    """A staff notice that is not an event, as its own post in the events forum:
+    `(post, first message, why not)`."""
+    forum = forum_of(bot, guild)
+    if forum is None:
+        return (None, None, "no_forum")
+    guard = getattr(bot, "guard", None)
+    if guard is not None and not guard.allows_channel(forum.id):
+        return (None, None, "test_mode")
+    found = await forum_tag(forum, tag)
+    extra = {} if view is None else {"view": view}
+    try:
+        made = await forum.create_thread(
+            name=clamp(title, CHANNEL_NAME_LIMIT) or tag,
+            content=text,
+            applied_tags=[found] if found is not None else [],
+            auto_archive_duration=AUTO_ARCHIVE_MINUTES,
+            allowed_mentions=discord.AllowedMentions.none(),
+            reason="Black Bloc marathon notice",
+            **extra,
+        )
+    except Exception as exc:
+        log.warning("events: could not open a notice post: %s", exc)
+        return (None, None, f"{type(exc).__name__}: {exc}")
+    post = getattr(made, "thread", made)
+    own_room(bot, post)
+    return (post, getattr(made, "message", None), None)
 
 
 def post_is_right(place: Any, wanted: list[Any], archived: bool) -> bool:

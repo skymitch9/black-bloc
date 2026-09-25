@@ -300,6 +300,7 @@ const SPOTLIGHT = [
     pin: true,
     spotlight: true,
     announce: false,
+    marathons: false,
     youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ',
     youtube_handle: '@esamarathon',
     youtube_url: 'https://www.youtube.com/channel/UC3Oe-jfrIqEGygxYBYyN6jQ',
@@ -429,6 +430,8 @@ const SPOTLIGHT = [
   is(`${where} — and it is not live`, esa.live, null);
   is(`${where} — a channel opted out of announcements says so on its row`, esa.opted_out, true);
   is(`${where} — and it keeps its YouTube link while opted out`, esa.youtube_id, 'UC3Oe-jfrIqEGygxYBYyN6jQ');
+  is(`${where} — a channel opted out of marathons carries it on its spotlight facts`, esa.spotlight.marathons, false);
+  is(`${where} — and a channel that takes them says nothing to the contrary`, gdq.spotlight.marathons, undefined);
 
   // ⚠️ Nothing on a channel's session says which side opened it, so the row reads its address:
   // an rpglimitbreak session on a youtube.com url is a YouTube card, not a Twitch one.

@@ -201,10 +201,10 @@ async def test_a_check_adds_every_new_event_on_the_feeds_channel_with_one_notice
 
 async def test_the_make_event_wish_follows_the_setting(bot, cog):  # noqa: F811
     await seeded(bot, cog)
-    await bot.store.set(GUILD, "marathon_makes_event", True)
+    await bot.store.set(GUILD, "marathon_event_mode_default", "marathon")
     await cog.tick_once()
     rows = await list_marathons(bot.db, GUILD)
-    assert rows and all(one["event_wanted"] == 1 and one["event_id"] is None for one in rows)
+    assert rows and all(one["event_mode"] == "marathon" and one["event_id"] is None for one in rows)
 
 
 async def test_never_the_same_event_twice_even_six_hours_later(bot, cog):  # noqa: F811
@@ -491,6 +491,7 @@ async def test_the_feeds_panel_lists_feeds_and_a_feed_card_draws_only_valid_move
     cog,
 ):
     await seeded(bot, cog)
+    await a_channel(bot, "speedstuff4charity", "Speed Stuff 4 Charity")
     await cog.tick_once()
     embed, view = await feeds.feeds_card(bot, bot.guild)
     assert "**GDQ** · GDQ tracker · GamesDoneQuick · adds" in embed.description
@@ -498,8 +499,9 @@ async def test_the_feeds_panel_lists_feeds_and_a_feed_card_draws_only_valid_move
     assert "Add a feed…" in labels and "Back" in labels
     feed = (await all_feeds(bot))[0]
     embed, view = await feeds.feed_card(bot, bot.guild, feed["id"])
-    labels = [getattr(one, "label", None) for one in view.children]
+    labels = [one.label for one in view.children if isinstance(one, cogmod.MarathonMoveButton)]
     assert labels[:3] == ["Check now", "Pause", "Suggest instead of adding"]
+    assert "Rename…" in labels and "Move to channel…" in labels
     assert "Look again" not in labels and "Forget ignored" not in labels
     assert "Awesome Games Done Quick 2027" in embed.description
 

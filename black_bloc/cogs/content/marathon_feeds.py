@@ -9,11 +9,13 @@ from typing import Any
 import discord
 
 from ... import marathon as mt
+from ... import marathon_events as me
 from ... import marathon_feeds as mf
 from ...actionlog import log_action
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, kind_via
+from ...marathon_channels import takes_marathons
 from ...marathon_sources import HORARO_SLUG, ScheduleError
 from ...panels import (
     KEEP_IT,
@@ -36,8 +38,10 @@ from ...settings_store import (
     MARATHON_FEEDS_KEY,
 )
 from .marathon import (
+    HELD_CODE,
     MODE_OFF,
     MODE_ON,
+    OPTED_OUT_CODE,
     UNREADABLE,
     MarathonPanel,
     actor_id,
@@ -48,12 +52,15 @@ from .marathon import (
     minutes_for,
     mode_of,
     open_root,
+    opted_out_channel,
+    opted_out_said,
     remove_marathon,
     render,
     said_default,
     set_active,
     update_marathon,
 )
+from .marathon_events import BAD_MODE_CODE, default_mode
 from .spotlight import channel_by_id
 
 log = logging.getLogger(__name__)
@@ -82,7 +89,8 @@ FEEDS_VIEW = "feeds"
 FEED_VIEW = "feed"
 SUGGESTION_VIEW = "suggestion"
 CHANNEL_VIEW = "feed_channel"
-FEED_VIEWS = (FEEDS_VIEW, FEED_VIEW, SUGGESTION_VIEW, CHANNEL_VIEW)
+MOVE_VIEW = "feed_move"
+FEED_VIEWS = (FEEDS_VIEW, FEED_VIEW, SUGGESTION_VIEW, CHANNEL_VIEW, MOVE_VIEW)
 SELECT_CAP = 25
 MARATHONS_SHOWN = 10
 FEED_COLUMNS = {
@@ -96,6 +104,8 @@ FEED_COLUMNS = {
     "checks_failed",
     "suggested",
     "ignored",
+    "event_mode",
+    "held_by_channel",
 }
 
 
@@ -444,7 +454,18 @@ async def post_notice(
 ) -> tuple[Any, int | None]:
     if mode_of(bot, guild.id) == MODE_OFF:
         return (None, None)
-    message, channel_id, why = await cog_of(bot)._send_staff(guild, text, view)
+    message, channel_id, why = await cog_of(bot)._send_staff(
+        guild,
+        text,
+        view,
+        title=details.get("name"),
+        what={
+            "feed_id": details.get("feed_id"),
+            "event": details.get("event"),
+            "marathon_id": details.get("marathon_id"),
+            "notice": "feed",
+        },
+    )
     if message is None:
         await log_action(
             bot, guild, "marathon.feed_notice_failed", details=details | {"reason": why}
@@ -486,7 +507,10 @@ async def tick_feeds(cog: Any, guild: Any) -> None:
     if not bot.store.get(guild.id, MARATHON_FEEDS_KEY):
         return
     if int(guild.id) not in cog.feeds_seeded:
+        from .marathon_channels import seed_opt_outs
+
         cog.feeds_seeded.add(int(guild.id))
+        await seed_opt_outs(bot, guild)
         await seed_feeds(bot, guild)
     hours = hours_of(bot, guild.id)
     for row in await list_feeds(bot.db, guild.id):
@@ -507,7 +531,7 @@ async def seed_feeds(bot: Any, guild: Any) -> list[str]:
         if await is_seeded(bot.db, guild.id, seed.login):
             continue
         channel = await channel_by_login_in(bot.db, guild.id, seed.login)
-        if channel is None:
+        if channel is None or not takes_marathons(channel):
             continue
         if await feed_by_channel(bot.db, guild.id, channel["id"]) is None:
             try:
@@ -555,6 +579,8 @@ async def create_feed(
             channel = None
     if channel is None or int(channel["guild_id"]) != int(guild.id):
         return refusal(mf.NO_CHANNEL, NO_CHANNEL_CODE, 404)
+    if not takes_marathons(channel):
+        return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
     existing = await feed_by_channel(bot.db, guild.id, channel["id"])
     if existing is not None:
         return refusal(
@@ -662,9 +688,11 @@ async def set_feed(
     action: Any = None,
     name: Any = None,
     spotlight_id: Any = None,
+    event_mode: Any = None,
     via: str = VIA_DISCORD,
 ) -> Outcome:
-    """PATCH in words: each field given is one change and one log row."""
+    """PATCH in words: each field given is one change and one log row. An event mode of ""
+    hands the feed back to marathon_event_mode_default."""
     said: list[str] = []
     async with cog_of(bot).feed_lock(feed["id"]):
         fresh = await get_feed(bot.db, guild.id, feed["id"])
@@ -702,6 +730,8 @@ async def set_feed(
             channel = await channel_by_id(bot.db, int(spotlight_id))
             if channel is None or int(channel["guild_id"]) != int(guild.id):
                 return refusal(mf.NO_CHANNEL, NO_CHANNEL_CODE, 404)
+            if not takes_marathons(channel):
+                return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
             other = await feed_by_channel(bot.db, guild.id, channel["id"])
             if other is not None:
                 return refusal(
@@ -718,8 +748,34 @@ async def set_feed(
                 details=feed_details(fresh, via, moved_to=int(channel["id"])),
             )
             said.append(mf.FEED_MOVED.format(name=fresh["name"], channel=channel_word(channel)))
+        if event_mode is not None:
+            wanted_mode = me.clean_mode(event_mode) if event_mode != "" else None
+            if event_mode != "" and wanted_mode is None:
+                return refusal(
+                    me.BAD_MODE.format(given=str(event_mode)[:40]), BAD_MODE_CODE, 422
+                )
+            if wanted_mode != me.clean_mode(fresh["event_mode"]):
+                await update_feed(bot.db, fresh["id"], event_mode=wanted_mode)
+                await log_action(
+                    bot,
+                    guild,
+                    kind_via("marathon.feed_changed", via),
+                    actor=actor,
+                    details=feed_details(fresh, via, event_mode=wanted_mode),
+                )
+                shown = wanted_mode or default_mode(bot, guild.id)
+                said.append(
+                    me.FEED_MODE_SET.format(name=fresh["name"], words=me.mode_words(shown))
+                )
         if active is not None and bool(active) != bool(fresh["active"]):
-            await update_feed(bot.db, fresh["id"], active=1 if active else 0)
+            held = await opted_out_channel(bot.db, fresh["spotlight_id"]) if active else None
+            if held is not None:
+                return refusal(
+                    mf.FEED_HELD.format(name=fresh["name"], channel=channel_word(held)),
+                    HELD_CODE,
+                    409,
+                )
+            await update_feed(bot.db, fresh["id"], active=1 if active else 0, held_by_channel=0)
             await log_action(
                 bot,
                 guild,
@@ -1021,7 +1077,11 @@ async def feeds_card(bot: Any, guild: Any) -> tuple[Any, Any]:
 
 async def free_channels(bot: Any, guild: Any) -> list[Any]:
     taken = {int(one["spotlight_id"]) for one in await list_feeds(bot.db, guild.id)}
-    return [row for row in await channel_rows(bot.db, guild.id) if int(row["id"]) not in taken]
+    return [
+        row
+        for row in await channel_rows(bot.db, guild.id)
+        if int(row["id"]) not in taken and takes_marathons(row)
+    ]
 
 
 async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
@@ -1030,6 +1090,7 @@ async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
         return (None, None)
     channel = await channel_of(bot.db, feed)
     lines = [mf.feed_line(feed, channel_word(channel), hours_of(bot, guild.id))]
+    lines.append(me.FEED_MODE_LINE.format(words=feed_mode_words(bot, guild, feed)))
     ignored = mf.ignored_of(feed)
     if ignored:
         lines.append(mf.IGNORED_LINE.format(count=len(ignored)))
@@ -1044,7 +1105,32 @@ async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
     view.feed_id = int(feed["id"])
     if waiting:
         view.add_item(SuggestionPick(waiting))
-    add_moves(view, mf.feed_moves(feed))
+    view.add_item(FeedModePick(me.clean_mode(feed["event_mode"])))
+    moves = mf.feed_moves(feed)
+    add_moves(view, moves[:-2] + (me.FEED_RENAME_MOVE, me.FEED_MOVE_MOVE) + moves[-2:])
+    return (embed, view)
+
+
+def feed_mode_words(bot: Any, guild: Any, feed: Any) -> str:
+    explicit = me.clean_mode(feed["event_mode"])
+    if explicit is not None:
+        return me.mode_words(explicit)
+    return me.FEED_MODE_DEFAULT.format(words=me.mode_words(default_mode(bot, guild.id)))
+
+
+async def move_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
+    feed = await get_feed(bot.db, guild.id, feed_id)
+    if feed is None:
+        return (None, None)
+    rows = await free_channels(bot, guild)
+    embed = discord.Embed(
+        title=feed["name"], description=me.PICK_FEED_CHANNEL if rows else mf.NO_CHANNELS
+    )
+    view = MarathonPanel(minutes_for(bot, guild.id), MOVE_VIEW)
+    view.feed_id = int(feed["id"])
+    if rows:
+        view.add_item(MoveChannelPick(rows))
+    add_moves(view, (mf.FEED_BACK_MOVE,))
     return (embed, view)
 
 
@@ -1117,10 +1203,22 @@ async def open_channels(interaction: discord.Interaction, previous: Any) -> None
     await show(interaction, embed, view, previous)
 
 
+async def open_move(interaction: discord.Interaction, feed_id: Any, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    embed, view = await move_card(interaction.client, interaction.guild, feed_id)
+    if view is None:
+        await open_feeds(interaction, previous)
+        return
+    await show(interaction, embed, view, previous)
+
+
 async def reopen_feeds(interaction: discord.Interaction, previous: Any) -> None:
     where = getattr(previous, "where", FEEDS_VIEW)
     feed_id = getattr(previous, "feed_id", None)
-    if where == SUGGESTION_VIEW and feed_id:
+    if where == MOVE_VIEW and feed_id:
+        await open_move(interaction, feed_id, previous)
+    elif where == SUGGESTION_VIEW and feed_id:
         await open_suggestion(interaction, feed_id, getattr(previous, "ref", None), previous)
     elif where == FEED_VIEW and feed_id:
         await open_feed(interaction, feed_id, previous)
@@ -1183,8 +1281,16 @@ async def feed_move(interaction: discord.Interaction, view: Any, action: str) ->
         await open_feeds(interaction, view)
     elif action == mf.FEED_ADD:
         await open_channels(interaction, view)
+    elif action == me.FEED_RENAME:
+        if await still_staff(interaction):
+            feed = await get_feed(interaction.client.db, interaction.guild.id, view.feed_id)
+            await interaction.response.send_modal(
+                RenameFeedModal(view, feed["name"] if feed is not None else "")
+            )
+    elif action == me.FEED_MOVE_CHANNEL:
+        await open_move(interaction, view.feed_id, view)
     elif action == mf.FEED_BACK:
-        if where == SUGGESTION_VIEW:
+        if where in (SUGGESTION_VIEW, MOVE_VIEW):
             await open_feed(interaction, view.feed_id, view)
         elif where in (FEED_VIEW, CHANNEL_VIEW):
             await open_feeds(interaction, view)
@@ -1244,6 +1350,71 @@ class FeedPick(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_feed(interaction, self.values[0], self.view)
+
+
+class FeedModePick(discord.ui.Select):
+    FOLLOW = "setting"
+
+    def __init__(self, current: str | None) -> None:
+        options = [
+            discord.SelectOption(
+                label=me.FEED_MODE_FOLLOW_LABEL, value=self.FOLLOW, default=current is None
+            )
+        ] + [
+            discord.SelectOption(label=me.MODE_WORDS[one], value=one, default=one == current)
+            for one in me.MODES
+        ]
+        super().__init__(placeholder=me.FEED_MODE_PICK, options=options, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        picked = self.values[0]
+        wanted = "" if picked == self.FOLLOW else picked
+        await feed_run(
+            interaction,
+            self.view,
+            lambda bot, guild, actor, feed: set_feed(bot, guild, actor, feed, event_mode=wanted),
+        )
+
+
+class MoveChannelPick(discord.ui.Select):
+    def __init__(self, rows: list[Any]) -> None:
+        super().__init__(
+            placeholder=me.PICK_FEED_CHANNEL,
+            options=[
+                discord.SelectOption(
+                    label=channel_word(row)[:100],
+                    value=str(row["id"]),
+                    description=f"twitch.tv/{row['twitch_login']}"[:100],
+                )
+                for row in rows[:SELECT_CAP]
+            ],
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        picked = int(self.values[0])
+        await feed_run(
+            interaction,
+            self.view,
+            lambda bot, guild, actor, feed: set_feed(bot, guild, actor, feed, spotlight_id=picked),
+        )
+
+
+class RenameFeedModal(AnswersErrors, discord.ui.Modal, title=me.RENAME_TITLE):
+    name = discord.ui.TextInput(label=me.RENAME_LABEL, max_length=mf.NAME_LIMIT)
+
+    def __init__(self, previous: Any, current: str) -> None:
+        super().__init__()
+        self.previous = previous
+        self.name.default = current or None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        given = str(self.name)
+        await feed_run(
+            interaction,
+            self.previous,
+            lambda bot, guild, actor, feed: set_feed(bot, guild, actor, feed, name=given),
+        )
 
 
 class SuggestionPick(discord.ui.Select):

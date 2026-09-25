@@ -111,7 +111,7 @@ async def bot(db, monkeypatch):
     await store.set(GUILD, "shadow_channel_id", SHADOW_CHANNEL)
     await store.set(GUILD, "golive_ping_role_id", GOLIVE_ROLE)
     await store.set(GUILD, "marathon_mode", "on")
-    await store.set(GUILD, "marathon_makes_event", False)
+    await store.set(GUILD, "marathon_event_mode_default", "none")
     await store.set(GUILD, "spotlight_mode", "on")
     await db.conn.execute(
         "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",
@@ -1020,7 +1020,7 @@ async def test_the_card_picks_a_run_and_the_run_view_draws_only_its_moves(bot, c
     metroid = (await runs_by_game(bot, marathon))["Super Metroid"]
     _, run_view = await cogmod.build_run(bot, bot.guild, marathon["id"], metroid["id"])
     labels = [getattr(one, "label", None) for one in run_view.children]
-    assert labels == ["Shout it now", "Mark it live", "Mark done", "Back"]
+    assert labels == ["Shout it now", "Mark it live", "Mark done", "Back", "Make it now"]
 
 
 # --- a marathon is an event (docs/info/marathon-events-page-design.md §B) --------------------
@@ -1090,7 +1090,7 @@ async def test_adding_with_the_box_on_puts_one_pending_event_into_review_dated_f
     assert event["description"] == (
         f"AGDQ 2027 — read from the GDQ schedule. Our runs are boarded in <#{CHANNEL}>."
     )
-    assert marathon["event_wanted"] == 1
+    assert marathon["event_mode"] == "marathon"
     assert f"#{event['id']}" in outcome.message
     made = await details_of(bot.db, "marathon.event_made")
     assert made["event_id"] == event["id"] and made["marathon_id"] == marathon["id"]
@@ -1110,12 +1110,12 @@ async def test_adding_with_the_box_off_makes_no_event_and_does_not_wait_for_one(
     )
     marathon, event = await event_of(bot, outcome.value)
     assert event is None and proposals == []
-    assert marathon["event_wanted"] == 0
+    assert marathon["event_mode"] == "none"
     assert "marathon.event_made" not in await kinds(bot.db)
 
 
-async def test_the_box_starts_where_marathon_makes_event_says(bot, cog, proposals):
-    await bot.store.set(GUILD, "marathon_makes_event", True)
+async def test_the_event_mode_starts_where_marathon_event_mode_default_says(bot, cog, proposals):
+    await bot.store.set(GUILD, "marathon_event_mode_default", "marathon")
     outcome = await create_marathon(bot, bot.guild, FakeActor(), name="AGDQ 2027", url=URL)
     assert (await event_of(bot, outcome.value))[1] is not None
 
@@ -1127,7 +1127,7 @@ async def test_an_unpublished_schedule_makes_no_event_until_the_first_read_with_
     cog.client.runs_given = []
     outcome = await with_event(bot, cog)
     marathon, event = await event_of(bot, outcome.value)
-    assert event is None and marathon["event_wanted"] == 1
+    assert event is None and marathon["event_mode"] == "marathon"
     assert mt.EVENT_WAITING.format(name="AGDQ 2027") in outcome.message
     assert mt.event_line(marathon, None) == mt.EVENT_WAITING_LINE
 
@@ -1148,7 +1148,7 @@ async def test_a_waiting_marathon_with_nobody_to_propose_as_stops_waiting_and_sa
     await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, outcome.value["id"]))
     marathon, event = await event_of(bot, outcome.value)
 
-    assert event is None and marathon["event_wanted"] == 0 and proposals == []
+    assert event is None and marathon["event_mode"] == "none" and proposals == []
     failed = await details_of(bot.db, "marathon.event_make_failed")
     assert "nobody is left to propose it as" in failed["reason"]
 
@@ -1222,7 +1222,7 @@ async def test_unlink_clears_the_pointer_and_never_touches_the_event(bot, cog, p
     fresh, _ = await event_of(bot, marathon)
 
     assert done.ok and f"#{event['id']}" in done.message
-    assert fresh["event_id"] is None and fresh["event_wanted"] == 0
+    assert fresh["event_id"] is None and fresh["event_mode"] == "none"
     from black_bloc.events import get_event
 
     assert (await get_event(bot.db, event["id"]))["status"] == "pending"
@@ -1308,15 +1308,18 @@ async def test_the_events_card_line_names_the_marathon_and_its_runs_of_ours(bot,
     assert await cogmod.marathon_of_event_line(bot, GUILD, 999) == ""
 
 
-def test_the_add_modals_fifth_field_reads_yes_or_no_in_words():
-    assert mt.wanted_event_answer("Yes") is True
-    assert mt.wanted_event_answer(" no ") is False
-    assert mt.wanted_event_answer("maybe") is None
+def test_the_add_modals_fifth_field_reads_a_mode_word_or_yes_or_no_for_one_release():
+    from black_bloc import marathon_events as me
+
+    assert me.wanted_mode_answer(" Runs ") == "runs"
+    assert me.wanted_mode_answer("Yes") == "marathon"
+    assert me.wanted_mode_answer(" no ") == "none"
+    assert me.wanted_mode_answer("maybe") is None
 
 
 async def test_the_add_modal_with_no_makes_the_marathon_and_no_event(bot, cog, proposals):
-    modal = cogmod.AddMarathonModal(None, True)
-    assert modal.event.default == "yes"
+    modal = cogmod.AddMarathonModal(None, "marathon")
+    assert modal.event.default == "marathon"
     modal.name._value = "AGDQ 2027"
     modal.url._value = URL
     modal.login._value = ""
@@ -1330,8 +1333,8 @@ async def test_the_add_modal_with_no_makes_the_marathon_and_no_event(bot, cog, p
 
 
 async def test_the_add_modal_refuses_an_answer_that_is_not_yes_or_no(bot, cog, proposals):
-    modal = cogmod.AddMarathonModal(None, False)
-    assert modal.event.default == "no"
+    modal = cogmod.AddMarathonModal(None, "none")
+    assert modal.event.default == "none"
     modal.name._value = "AGDQ 2027"
     modal.url._value = URL
     modal.login._value = ""

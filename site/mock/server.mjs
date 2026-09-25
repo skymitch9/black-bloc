@@ -683,7 +683,14 @@ const SETTING_SPECS = [
   ["marathon_next_template", "text", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "the staff notice when a GDQ marathon is over and the tracker lists another event ahead. It takes {marathon} {next} {when} {relative} {url}"],
   ["marathon_next_none_template", "text", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "what staff are told when a GDQ marathon is over and the tracker lists no event ahead. It takes {marathon}"],
   ["marathon_next_added_template", "text", "Added **{next}** \u2014 it will be read from {url}.", "Added **{next}** \u2014 it will be read from {url}.", "what the staff notice is rewritten to once the next event is added. It takes {marathon} {next} {when} {relative} {url}"],
-  ["marathon_makes_event", "bool", true, true, "whether the Add form's Also make it an event box starts ticked. A ticked marathon goes into the events review like any proposal the moment its schedule has dates, and its event follows the schedule when the dates move. on by default; each marathon can still Unlink or Make an event now on its own"],
+  ["marathon_event_mode_default", "enum", "none", "none", "what a new marathon does about events, until staff change that marathon: none makes no event; marathon puts one event for the whole marathon into the events review; runs makes one event per run of ours, dated from the schedule and re-dated as it moves; both does the two. none by default — the Add form's Event select starts here, and a feed's own mode wins for the marathons it adds", ["none", "marathon", "runs", "both"]],
+  ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a run of ours goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
+  ["marathon_run_event_cancel_on_leave", "bool", true, true, "whether a marathon's events are called off when staff change its event mode away from them (reason mode_changed). on by default; off leaves them on the calendar as ordinary events the marathon no longer keeps in step"],
+  ["marathon_shout_when_run_has_event", "bool", false, false, "whether a run of ours that has its own event still gets the marathon shoutout when it goes live. off by default — the events feature announces that run as it starts, so the shoutout would say it twice. The reminders post either way"],
+  ["marathon_notice_home", "enum", "events", "events", "where a new-marathon staff notice goes: events — the default — makes it a post in the events forum (tagged marathon) while events are reviewed in a forum, else the staff channel; staff always uses staff_channel_id. shadow still rehearses where shadow_channel_id points", ["events", "staff"]],
+  ["marathon_run_event_title_template", "text", "{member} runs {game} at {marathon}", "{member} runs {game} at {marathon}", "what an event made for one run of ours is called. {member} is every member of ours on the run, their names joined. It takes {member} {game} {category} {marathon}"],
+  ["marathon_run_event_description_template", "text", "{category} · {marathon} · read from the schedule; times follow it.", "{category} · {marathon} · read from the schedule; times follow it.", "what an event made for one run of ours says about itself. It takes {member} {game} {category} {marathon}"],
+  ["marathon_notice_title_template", "text", "New marathon: {name}", "New marathon: {name}", "the name of the events-forum post a new-marathon notice becomes. It takes {name}"],
   ["marathon_feeds", "bool", true, true, "whether the marathon feeds check on their own — each feed reads the events list of one channel's marathons (the GDQ and RPG Limit Break trackers, ESA on horaro.net) and adds or suggests every new event. on by default; off checks nothing, and Check now on a feed still works"],
   ["marathon_feed_hours", "int", 6, 6, "hours between two checks of one marathon feed. 6 by default", null, 168, 1],
   ["marathon_feed_action_default", "enum", "add", "add", "what a new feed does with an event it finds, until staff change that feed: add puts it on the marathon list at once with a staff notice to pause or remove it; suggest posts a staff notice with Add it and Not this one. add by default", ["add", "suggest"]],
@@ -1378,7 +1385,7 @@ function seedState() {
     // absent, exactly as the sweep leaves it.
     spotlights: [
       { id: 1, twitch_login: 'gamesdonequick', display_name: 'GamesDoneQuick', note: "the owner's marathon channel", added_by: STAFF.id, added_at: minutesAgo(40000), starts_at: null, expires_at: null, bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: 'UCI3DTtB-a3fJPjKtQ5kYHfA', youtube_handle: '@GamesDoneQuick', ping_mode: 'events' },
-      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), starts_at: minutesAgo(2000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2, spotlight: true, announce: false, youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ', youtube_handle: '@esamarathon', ping_mode: 'always' },
+      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), starts_at: minutesAgo(2000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2, spotlight: true, announce: false, youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ', youtube_handle: '@esamarathon', ping_mode: 'always', marathons: false },
       { id: 3, twitch_login: 'frostfatales', display_name: 'Frost Fatales', note: null, added_by: STAFF.id, added_at: minutesAgo(20000), starts_at: null, expires_at: daysAhead(30), bump_hours: null, pin: false, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null },
       { id: 4, twitch_login: 'rpglimitbreak', display_name: 'RPG Limit Break', note: null, added_by: STAFF.id, added_at: minutesAgo(1200), starts_at: null, expires_at: null, bump_hours: null, pin: false, event_id: null, spotlight: false, announce: false, youtube_channel_id: null, youtube_handle: null },
       // The owner's ask, 2026-09-22: a marathon set up days in advance. Its start has NOT
@@ -1691,7 +1698,24 @@ function seedActions() {
   ];
 }
 
-let state = seedState();
+let state = withRunEvents(seedState());
+
+// The event-modes build (docs/info/marathon-event-modes-design.md): AGDQ 2027 makes BOTH its
+// own event and one per run of ours, so the queue carries the *marathon run* badge and the
+// drawer's runs say event #N. Plain literals only: this runs before the MARATHON_* constants.
+function withRunEvents(seeded) {
+  const marathon = seeded.marathons.find((one) => one.id === 1);
+  if (marathon) marathon.event_mode = 'both';
+  let top = seeded.events.reduce((most, one) => Math.max(most, one.id), 0);
+  const names = { 5: 'Casey', 7: 'Rivet' };
+  for (const run of seeded.marathonRuns) {
+    if (run.marathon_id !== 1 || !names[run.id]) continue;
+    top += 1;
+    seeded.events.unshift({ id: top, requester_id: STAFF.id, title: `${names[run.id]} runs ${run.game} at AGDQ 2027`, description: `${run.category} \u00b7 AGDQ 2027 \u00b7 read from the schedule; times follow it.`, location: 'https://twitch.tv/gamesdonequick', where_kind: 'other', where_channel_id: null, starts_at: run.scheduled_at, ends_at: run.ends_at, status: run.state === 'live' ? 'live' : 'approved', created_at: minutesAgo(600), decided_by: null, decided_at: minutesAgo(600), deny_reason: null, review_channel_id: null });
+    run.event_id = top;
+  }
+  return seeded;
+}
 
 const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text'];
 const NOT_A_FEATURE = [];
@@ -1999,7 +2023,7 @@ function match(pattern, path) {
 route('POST', '/api/mock/reset', () => {
   // NOT part of the contract: it exists so site/mock/check.mjs can give every route the
   // same fixture, the way each pytest case gets a fresh database.
-  state = seedState();
+  state = withRunEvents(seedState());
   return { reset: true };
 });
 
@@ -4525,6 +4549,7 @@ function spotlightRow(row) {
     spotlight: row.spotlight !== false,
     announce: row.announce !== false,
     opted_out: row.announce === false,
+    marathons: row.marathons !== false,
     youtube_channel_id: row.youtube_channel_id || null,
     youtube_handle: row.youtube_handle || null,
     youtube_url: row.youtube_channel_id ? `https://www.youtube.com/channel/${row.youtube_channel_id}` : null,
@@ -4778,6 +4803,56 @@ route('POST', '/api/golive/spotlight', async (context) => {
   };
 });
 
+const CHANNEL_MARATHONS_SAME = '**{login}** already {state}, so nothing was changed.';
+const CHANNEL_MARATHONS_ON = '**{login}** takes marathons again — a feed can be added for it, and {count} marathon(s) paused when it was opted out are read again.';
+const CHANNEL_MARATHONS_OFF = '**{login}** is opted out of marathons — no feed checks for it, nothing can be added on it, and {count} marathon(s) on it are paused until it is turned back on.';
+const CHANNEL_OPTED_OUT = '**{channel}** is opted out of marathons — turn it on in its row first, so nothing was changed.';
+
+function channelTakesMarathons(row) {
+  return Boolean(row) && row.marathons !== false;
+}
+
+function refuseOptedOutChannel(spotlightId) {
+  const channel = spotlightId ? state.golive.spotlights.find((one) => one.id === Number(spotlightId)) : null;
+  if (channel && !channelTakesMarathons(channel)) {
+    throw new Refused(409, 'channel_opted_out', CHANNEL_OPTED_OUT.replace('{channel}', channel.display_name || channel.twitch_login));
+  }
+}
+
+function channelMarathonsSet(row, on) {
+  const was = channelTakesMarathons(row);
+  if (was === on) {
+    return CHANNEL_MARATHONS_SAME.replace('{login}', row.twitch_login).replace('{state}', was ? 'takes marathons' : 'is opted out of marathons');
+  }
+  row.marathons = on;
+  logAction('web.golive.channel_marathons_set', { details: { spotlight_id: row.id, login: row.twitch_login, from: was, to: on, via: 'website' } });
+  let count = 0;
+  const feed = state.marathonFeeds.find((one) => one.spotlight_id === row.id);
+  if (feed && !on && feed.active) {
+    feed.active = false;
+    feed.held_by_channel = true;
+    logAction('marathon.feed_paused', { details: { feed_id: feed.id, because: 'channel_opted_out', automatic: true } });
+  } else if (feed && on && feed.held_by_channel) {
+    feed.active = true;
+    feed.held_by_channel = false;
+    logAction('marathon.feed_resumed', { details: { feed_id: feed.id, because: 'channel_opted_in', automatic: true } });
+  }
+  for (const one of state.marathons.filter((m) => m.spotlight_id === row.id)) {
+    if (!on && one.active) {
+      one.active = false;
+      one.held_by_channel = true;
+      count += 1;
+      logAction('marathon.paused', { details: { marathon_id: one.id, name: one.name, because: 'channel_opted_out', automatic: true } });
+    } else if (on && one.held_by_channel) {
+      one.active = true;
+      one.held_by_channel = false;
+      count += 1;
+      logAction('marathon.resumed', { details: { marathon_id: one.id, name: one.name, because: 'channel_opted_in', automatic: true } });
+    }
+  }
+  return (on ? CHANNEL_MARATHONS_ON : CHANNEL_MARATHONS_OFF).replace('{login}', row.twitch_login).replace('{count}', String(count));
+}
+
 route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   requireStaff(context.session);
   const row = wantedSpotlight(context.params);
@@ -4807,6 +4882,7 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   if ('announce' in body) row.announce = Boolean(body.announce);
   const settled = settleOpenSession(row, wasAnnouncing, wasSpotlit);
   let said = null;
+  if ('marathons' in body) said = channelMarathonsSet(row, Boolean(body.marathons));
   if ('youtube' in body) {
     const given = String(body.youtube || '').trim();
     if (given) {
@@ -5640,6 +5716,9 @@ function marathonRunRow(run) {
     can_mark_live: ['upcoming', 'done'].includes(run.state),
     held: run.live_because === 'staff' && ['upcoming', 'live'].includes(run.state),
     reminders_sent: run.reminders_sent,
+    event_id: run.event_id || null,
+    event_status: run.event_id ? ((state.events.find((one) => one.id === run.event_id) || {}).status || 'gone') : null,
+    event_unlinked: run.event_id === 0,
   };
 }
 
@@ -5695,7 +5774,108 @@ function marathonRow(row) {
     next: nextRow,
     next_waiting: Boolean(nextRow) && nextRow.state === 'open',
     event: marathonEvent(row),
+    event_mode: marathonModeOf(row),
+    event_mode_word: MARATHON_MODE_WORDS[marathonModeOf(row)],
   };
+}
+
+const MARATHON_MODES = ['none', 'marathon', 'runs', 'both'];
+const MARATHON_MODE_WORDS = { none: 'No event', marathon: 'One event for the marathon', runs: 'An event per run of ours', both: 'Both' };
+const MARATHON_MODE_SENTENCES = { none: 'no event', marathon: 'one event for the whole marathon', runs: 'one event per run of ours, kept in step with the schedule', both: 'one event for the marathon and one per run of ours' };
+const MARATHON_BAD_MODE = '**{given}** is not an event mode, so nothing was changed. Say none, marathon, runs or both.';
+
+function marathonModeOf(row) {
+  return MARATHON_MODES.includes(row.event_mode) ? row.event_mode : 'none';
+}
+
+function marathonWantsItsEvent(row) {
+  return ['marathon', 'both'].includes(marathonModeOf(row));
+}
+
+function marathonWantsRunEvents(row) {
+  return ['runs', 'both'].includes(marathonModeOf(row));
+}
+
+function marathonCleanMode(given) {
+  const word = String(given ?? '').trim().toLowerCase();
+  if (!MARATHON_MODES.includes(word)) throw new Refused(422, 'bad_mode', MARATHON_BAD_MODE.replace('{given}', String(given ?? '').slice(0, 40)));
+  return word;
+}
+
+function marathonRunEventMake(row, run) {
+  const id = state.events.reduce((top, one) => Math.max(top, one.id), 0) + 1;
+  const names = run.people.filter((one) => one.user_id).map((one) => memberName(one.user_id) || one.name);
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+  const review = state.settings.get('marathon_run_events_reviewed') || state.settings.get('marathon_mode') !== 'on';
+  state.events.unshift({ id, requester_id: STAFF.id, title: `${[...new Set(names)].join(' & ')} runs ${run.game} at ${row.name}`, description: `${run.category} \u00b7 ${row.name} \u00b7 read from the schedule; times follow it.`, location: channel ? `https://twitch.tv/${channel.twitch_login}` : row.schedule_url, where_kind: 'other', where_channel_id: null, starts_at: run.scheduled_at, ends_at: run.ends_at, status: review ? 'pending' : 'approved', created_at: now(), decided_by: null, decided_at: review ? null : now(), deny_reason: null, review_channel_id: review ? '800000000000000005' : null });
+  run.event_id = id;
+  logAction('marathon.run_event_made', { details: { marathon_id: row.id, run_id: run.id, event_id: id, reviewed: Boolean(review) } });
+  return id;
+}
+
+function marathonRunEventCancel(row, run, reason) {
+  const event = state.events.find((one) => one.id === run.event_id);
+  run.event_id = null;
+  if (!event || !MARATHON_KEPT_IN_STEP.includes(event.status)) return 0;
+  event.status = 'cancelled';
+  logAction('event.cancelled', { target_id: event.requester_id, reason, details: { event_id: event.id } });
+  logAction('marathon.run_event_cancelled', { details: { marathon_id: row.id, run_id: run.id, event_id: event.id, reason } });
+  return 1;
+}
+
+function marathonSyncRuns(row) {
+  let made = 0;
+  for (const run of marathonRunsOf(row.id)) {
+    if (run.event_id) {
+      if (run.state === 'dropped') marathonRunEventCancel(row, run, 'run_dropped');
+      else if (!marathonOurs(run)) marathonRunEventCancel(row, run, 'not_ours');
+      continue;
+    }
+    const ahead = new Date(run.ends_at || run.scheduled_at || 0).getTime() > Date.now();
+    if (run.event_id === null || run.event_id === undefined) {
+      if (row.active && marathonWantsRunEvents(row) && marathonOurs(run) && ['upcoming', 'live'].includes(run.state) && ahead) {
+        marathonRunEventMake(row, run);
+        made += 1;
+      }
+    }
+  }
+  return made;
+}
+
+function marathonSetMode(row, given) {
+  const wanted = marathonCleanMode(given);
+  const was = marathonModeOf(row);
+  if (wanted === was) return `**${row.name}** already makes ${MARATHON_MODE_SENTENCES[wanted]}, so nothing was changed.`;
+  row.event_mode = wanted;
+  const said = [`**${row.name}** now makes ${MARATHON_MODE_SENTENCES[wanted]}.`];
+  const leaving = Boolean(state.settings.get('marathon_run_event_cancel_on_leave'));
+  if (marathonWantsItsEvent(row) && !row.event_id) said.push(marathonMakeEvent(row));
+  else if (!marathonWantsItsEvent(row) && row.event_id) {
+    const event = state.events.find((one) => one.id === row.event_id);
+    if (leaving && event && MARATHON_KEPT_IN_STEP.includes(event.status)) {
+      event.status = 'cancelled';
+      logAction('marathon.event_cancelled', { details: { marathon_id: row.id, event_id: event.id, reason: 'mode_changed' } });
+    }
+    row.event_id = null;
+  }
+  let counts = {};
+  if (marathonWantsRunEvents(row)) {
+    const made = marathonSyncRuns(row);
+    counts = { made };
+    if (made) said.push(`${made} run event(s) made.`);
+  } else if (['runs', 'both'].includes(was)) {
+    let cancelled = 0;
+    let kept = 0;
+    for (const run of marathonRunsOf(row.id).filter((one) => one.event_id)) {
+      if (leaving) cancelled += marathonRunEventCancel(row, run, 'mode_changed');
+      else { run.event_id = null; kept += 1; }
+    }
+    counts = { cancelled, kept };
+    if (cancelled) said.push(`${cancelled} run event(s) called off.`);
+    if (kept) said.push(`${kept} run event(s) left on the calendar.`);
+  }
+  logAction('web.marathon.event_mode_set', { details: { marathon_id: row.id, from: was, to: wanted, via: 'website', ...counts } });
+  return said.join(' ');
 }
 
 const MARATHON_EVENT_LINE = 'Event **#{id}** \u2014 {status}';
@@ -5708,15 +5888,15 @@ function marathonEvent(row) {
   const status = row.event_id ? (event ? event.status : 'gone') : null;
   let line = MARATHON_EVENT_NONE;
   if (row.event_id) line = MARATHON_EVENT_LINE.replace('{id}', row.event_id).replace('{status}', status);
-  else if (row.event_wanted) line = MARATHON_EVENT_WAITING;
-  return { id: row.event_id || null, status, wanted: Boolean(row.event_wanted), waiting: Boolean(row.event_wanted) && !row.event_id, line };
+  else if (marathonWantsItsEvent(row)) line = MARATHON_EVENT_WAITING;
+  return { id: row.event_id || null, status, wanted: marathonWantsItsEvent(row), waiting: marathonWantsItsEvent(row) && !row.event_id, line };
 }
 
 function marathonMakeEvent(row) {
   if (row.event_id) {
     throw new Refused(409, 'event_exists', `**${row.name}** already carries event **#${row.event_id}**, so nothing was made. **Unlink** it first to make another.`);
   }
-  row.event_wanted = true;
+  if (!marathonWantsItsEvent(row)) row.event_mode = marathonWantsRunEvents(row) ? 'both' : 'marathon';
   if (!row.starts_at || !row.ends_at) {
     return `**${row.name}** has no dates yet, so its event waits for the schedule \u2014 it goes into the events review the moment GDQ publishes one.`;
   }
@@ -5735,7 +5915,12 @@ function marathonMakeEvent(row) {
 
 function marathonOfEvent(eventId) {
   const row = state.marathons.find((one) => one.event_id === eventId);
-  if (!row) return null;
+  if (!row) {
+    const run = state.marathonRuns.find((one) => one.event_id && one.event_id === eventId);
+    const owner = run ? state.marathons.find((one) => one.id === run.marathon_id) : null;
+    if (!owner) return null;
+    return { id: owner.id, name: owner.name, line: `Marathon run: **${run.game}** on **${owner.name}**`, run: { id: run.id, game: run.game } };
+  }
   const ours = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped' && marathonOurs(one)).length;
   return { id: row.id, name: row.name, line: `Marathon: **${row.name}** \u2014 ${ours} run(s) of ours` };
 }
@@ -5872,6 +6057,10 @@ function feedRow(feed) {
     channel_login: channel ? channel.twitch_login : null,
     channel_name: feedChannelName(feed.spotlight_id),
     action: feed.action,
+    event_mode: MARATHON_MODES.includes(feed.event_mode) ? feed.event_mode : null,
+    event_mode_effective: MARATHON_MODES.includes(feed.event_mode) ? feed.event_mode : (MARATHON_MODES.includes(state.settings.get('marathon_event_mode_default')) ? state.settings.get('marathon_event_mode_default') : 'none'),
+    event_mode_word: MARATHON_MODE_WORDS[MARATHON_MODES.includes(feed.event_mode) ? feed.event_mode : (MARATHON_MODES.includes(state.settings.get('marathon_event_mode_default')) ? state.settings.get('marathon_event_mode_default') : 'none')],
+    held_by_channel: Boolean(feed.held_by_channel),
     active: Boolean(feed.active),
     hours: Number(state.settings.get('marathon_feed_hours')),
     last_checked_at: feed.last_checked_at,
@@ -5904,6 +6093,8 @@ function feedCheck(feed) {
       const found = marathonCreate(event.name, `${FEED_GDQ_BASE}/event/${ref}`, feed.spotlight_id);
       found.row.feed_id = feed.id;
       found.row.added_by = null;
+      found.row.event_mode = MARATHON_MODES.includes(feed.event_mode) ? feed.event_mode : (state.settings.get('marathon_event_mode_default') || 'none');
+      marathonSyncRuns(found.row);
       logAction('marathon.feed_added', { actor_id: null, details: { feed_id: feed.id, event: ref, marathon_id: found.row.id } });
       added += 1;
     }
@@ -5926,7 +6117,7 @@ route('GET', '/api/marathons/feeds', (context) => {
     feeds: state.marathonFeeds.map(feedRow),
     channels: state.golive.spotlights
       .filter((one) => !linked.has(String(one.twitch_login).toLowerCase()))
-      .map((one) => ({ id: one.id, login: one.twitch_login, name: one.display_name || one.twitch_login, feed_name: taken.get(one.id) || null })),
+      .map((one) => ({ id: one.id, login: one.twitch_login, name: one.display_name || one.twitch_login, feed_name: taken.get(one.id) || null, marathons: channelTakesMarathons(one) })),
     sources: FEED_SOURCES,
   };
 });
@@ -5937,6 +6128,7 @@ route('POST', '/api/marathons/feeds', async (context) => {
   const spotlightId = Number(body.spotlight_id);
   const channel = state.golive.spotlights.find((one) => one.id === spotlightId);
   if (!channel) throw new Refused(404, 'no_channel', 'A feed belongs to a channel Black Bloc already watches \u2014 add the channel first.');
+  refuseOptedOutChannel(spotlightId);
   const existing = state.marathonFeeds.find((one) => one.spotlight_id === spotlightId);
   if (existing) throw new Refused(409, 'channel_has_feed', `**${feedChannelName(spotlightId)}** already has a feed, **${existing.name}**, so nothing was added. One channel, one feed \u2014 remove that one first.`);
   const pick = String(body.source || '').trim().toLowerCase();
@@ -5972,11 +6164,36 @@ route('PATCH', '/api/marathons/feeds/:feed_id', async (context) => {
   if ('name' in body) {
     const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 60);
     if (!name) throw new Refused(422, 'bad_name', 'A feed needs a name, so nothing was changed.');
+    if (name !== feed.name) logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, renamed: name, via: 'website' } });
     feed.name = name;
     said.push(`The feed is called **${name}** now.`);
   }
+  if ('event_mode' in body) {
+    const wanted = body.event_mode === null || body.event_mode === '' ? null : marathonCleanMode(body.event_mode);
+    if (wanted !== (feed.event_mode || null)) {
+      feed.event_mode = wanted;
+      logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, event_mode: wanted, via: 'website' } });
+      const shown = wanted || state.settings.get('marathon_event_mode_default') || 'none';
+      said.push(`The marathons **${feed.name}** adds now make ${MARATHON_MODE_SENTENCES[shown] || MARATHON_MODE_SENTENCES.none}.`);
+    }
+  }
+  if ('spotlight_id' in body && Number(body.spotlight_id) !== feed.spotlight_id) {
+    const target = state.golive.spotlights.find((one) => one.id === Number(body.spotlight_id));
+    if (!target) throw new Refused(404, 'no_channel', 'A feed belongs to a channel Black Bloc already watches — add the channel first.');
+    refuseOptedOutChannel(target.id);
+    const other = state.marathonFeeds.find((one) => one.spotlight_id === target.id);
+    if (other) throw new Refused(409, 'channel_has_feed', `**${feedChannelName(target.id)}** already has a feed, **${other.name}**, so nothing was added. One channel, one feed — remove that one first.`);
+    feed.spotlight_id = target.id;
+    logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, moved_to: target.id, via: 'website' } });
+    said.push(`**${feed.name}** now belongs to **${feedChannelName(target.id)}**.`);
+  }
   if ('active' in body && body.active !== feed.active) {
+    const held = state.golive.spotlights.find((one) => one.id === feed.spotlight_id);
+    if (body.active && held && !channelTakesMarathons(held)) {
+      throw new Refused(409, 'held_by_channel', `**${feed.name}** is paused because **${held.display_name || held.twitch_login}** is opted out of marathons — turn marathons back on for the channel first, so nothing was changed.`);
+    }
     feed.active = body.active;
+    feed.held_by_channel = false;
     logAction(body.active ? 'web.marathon.feed_resumed' : 'web.marathon.feed_paused', { details: { feed_id: feed.id, via: 'website' } });
     said.push(body.active ? `**${feed.name}** checks again.` : `**${feed.name}** is paused \u2014 it checks nothing until it is resumed.`);
   }
@@ -6052,7 +6269,8 @@ route('GET', '/api/marathons', (context) => {
     mode: state.settings.get('marathon_mode'),
     marathons: rows,
     next_waiting: rows.filter((one) => one.next_waiting).length,
-    makes_event: Boolean(state.settings.get('marathon_makes_event')),
+    event_mode_default: MARATHON_MODES.includes(state.settings.get('marathon_event_mode_default')) ? state.settings.get('marathon_event_mode_default') : 'none',
+    event_modes: MARATHON_MODES.map((value) => ({ value, label: MARATHON_MODE_WORDS[value] })),
   };
 });
 
@@ -6095,10 +6313,14 @@ route('POST', '/api/marathons', async (context) => {
   if (body.make_event !== undefined && body.make_event !== null && typeof body.make_event !== 'boolean') {
     throw new Refused(422, 'bad_make_event', 'Say true or false for making it an event, so nothing was added.');
   }
+  let mode = null;
+  if (body.event_mode !== undefined && body.event_mode !== null && body.event_mode !== '') mode = marathonCleanMode(body.event_mode);
+  else if (typeof body.make_event === 'boolean') mode = body.make_event ? 'marathon' : 'none';
   const found = marathonCreate(name, body.schedule_url, body.spotlight_id);
-  const wanted = body.make_event === undefined || body.make_event === null ? Boolean(state.settings.get('marathon_makes_event')) : body.make_event;
-  const said = wanted ? ` ${marathonMakeEvent(found.row)}` : '';
-  return { ...marathonDetail(found.row), message: found.message + said };
+  found.row.event_mode = mode || (MARATHON_MODES.includes(state.settings.get('marathon_event_mode_default')) ? state.settings.get('marathon_event_mode_default') : 'none');
+  const said = marathonWantsItsEvent(found.row) ? ` ${marathonMakeEvent(found.row)}` : '';
+  const made = marathonSyncRuns(found.row);
+  return { ...marathonDetail(found.row), message: found.message + said + (made ? ` ${made} run event(s) made.` : '') };
 });
 
 route('POST', '/api/marathons/:marathon_id/event', (context) => {
@@ -6111,12 +6333,12 @@ route('POST', '/api/marathons/:marathon_id/event', (context) => {
 route('DELETE', '/api/marathons/:marathon_id/event', (context) => {
   requireStaff(context.session);
   const row = marathonOf(context.params.marathon_id);
-  if (!row.event_id && !row.event_wanted) {
+  if (!row.event_id && !marathonWantsItsEvent(row)) {
     throw new Refused(409, 'no_event', `**${row.name}** carries no event, so there was nothing to unlink.`);
   }
   const eventId = row.event_id;
   row.event_id = null;
-  row.event_wanted = false;
+  row.event_mode = marathonWantsRunEvents(row) ? 'runs' : 'none';
   logAction('web.marathon.event_unlinked', { details: { marathon_id: row.id, event_id: eventId, via: 'website' } });
   const message = eventId
     ? `**${row.name}** no longer carries event **#${eventId}**. The event itself was not touched.`
@@ -6135,6 +6357,7 @@ function marathonCreate(name, scheduleUrl, spotlight) {
   if (spotlightId && !state.golive.spotlights.find((one) => one.id === spotlightId)) {
     throw new Refused(404, 'no_such_channel', `**${String(spotlight).slice(0, 40)}** is not one of the channels on the Go-live page, so nothing was changed. Add the channel there first, or leave it blank.`);
   }
+  refuseOptedOutChannel(spotlightId);
   const id = state.marathons.reduce((top, one) => Math.max(top, one.id), 0) + 1;
   const starts = new Date(Date.now() + 3 * 86400000);
   const row = { id, name, schedule_url: url, source: read.source, source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null };
@@ -6196,6 +6419,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
     }
     logAction('web.marathon.updated', { details: { marathon_id: row.id, via: 'website' } });
   }
+  if ('event_mode' in body) said.push(marathonSetMode(row, body.event_mode));
   if ('dismiss_next' in body) {
     if (body.dismiss_next !== true) throw new Refused(422, 'bad_dismiss', 'Say true to dismiss the suggested next event, so nothing was changed.');
     const record = marathonOpenSuggestion(row, body.event_id);
@@ -6235,6 +6459,7 @@ route('DELETE', '/api/marathons/:marathon_id', (context) => {
     logAction('web.event.cancelled', { target_id: event.requester_id, reason: 'marathon_removed', details: { event_id: event.id, via: 'website' } });
     logAction('web.marathon.event_cancelled', { details: { marathon_id: row.id, event_id: event.id, via: 'website' } });
   }
+  for (const run of marathonRunsOf(row.id).filter((one) => one.event_id)) marathonRunEventCancel(row, run, 'marathon_removed');
   row.active = false;
   marathonSyncWindow(row);
   marathonFeedIgnore(row);
@@ -6243,6 +6468,27 @@ route('DELETE', '/api/marathons/:marathon_id', (context) => {
   state.marathonPeople = state.marathonPeople.filter((one) => one.marathon_id !== row.id);
   logAction('web.marathon.removed', { details: { marathon_id: row.id, name: row.name, via: 'website' } });
   return { removed: true, id: row.id, message: `**${row.name}** is off the list, with its runs and pairings.` };
+});
+
+route('POST', '/api/marathons/:marathon_id/runs/:run_id/event', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const run = marathonRunOf(row, context.params.run_id);
+  if (run.event_id) throw new Refused(409, 'run_event_exists', `**${run.game}** already has event **#${run.event_id}**, so nothing was made.`);
+  if (!marathonOurs(run) || run.state === 'dropped') throw new Refused(409, 'not_ours', `Nobody from here is on **${run.game}**, so it gets no event of its own.`);
+  const id = marathonRunEventMake(row, run);
+  return { run: marathonRunRow(run), message: `**${run.game}** has its own event now, **#${id}**.` };
+});
+
+route('DELETE', '/api/marathons/:marathon_id/runs/:run_id/event', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const run = marathonRunOf(row, context.params.run_id);
+  if (!run.event_id) throw new Refused(409, 'no_run_event', `**${run.game}** carries no event, so there was nothing to unlink.`);
+  const eventId = run.event_id;
+  run.event_id = 0;
+  logAction('web.marathon.run_event_unlinked', { details: { marathon_id: row.id, run_id: run.id, event_id: eventId, via: 'website' } });
+  return { run: marathonRunRow(run), message: `**${run.game}** no longer carries event **#${eventId}**. The event itself was not touched.` };
 });
 
 route('POST', '/api/marathons/:marathon_id/refresh', (context) => {

@@ -33,7 +33,8 @@ const shown = { id: null, filter: 'ours' };
 const HASH = /^marathon-(\d+)$/;
 let refresh = async () => {};
 let showEvent = () => {};
-let makesEvent = true;
+let eventModeDefault = 'none';
+let eventModes = [];
 let deepLinked = false;
 
 const LIST_NOTE = 'Every marathon schedule Black Bloc follows. It re-reads each one on its own '
@@ -75,13 +76,24 @@ const NEXT_WAITING = '{count} marathon{s} {have} a next event waiting — **Next
 const POLL_HELP = 'Re-read every N minutes while it is near — blank for the default '
   + '(marathon_poll_minutes). 10 to 120.';
 const HELD_NOTE = 'held by staff';
-const EVENT_BOX = 'Also make it an event';
-const EVENT_BOX_HELP = 'It goes into the events review above like any proposal, dated from the '
-  + 'schedule — and waits for the schedule if GDQ has not published one yet. Its dates follow '
-  + 'the schedule after that.';
-const EVENT_NOTE = 'A marathon is an event: its dates follow the schedule while it is waiting '
-  + 'for a decision or approved. **Unlink** leaves the event exactly as it is; removing the '
-  + 'marathon calls its event off.';
+const EVENT_SELECT = 'Event';
+const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes into the events '
+  + 'review above, dated from the schedule. An event per run of ours is approved at once and '
+  + 'follows the schedule as runs move — the events feature announces each one as it starts. '
+  + 'Both does the two. marathon_event_mode_default decides where this starts.';
+const EVENT_NOTE = 'Changing the mode applies at once: it makes what the new mode asks for, and '
+  + 'calls off what it no longer keeps (marathon_run_event_cancel_on_leave). **Unlink** leaves '
+  + 'an event exactly as it is; removing the marathon calls its events off.';
+const MODES_FALLBACK = [
+  { value: 'none', label: 'No event' },
+  { value: 'marathon', label: 'One event for the marathon' },
+  { value: 'runs', label: 'An event per run of ours' },
+  { value: 'both', label: 'Both' },
+];
+const FEED_MODE_FOLLOW = 'Whatever the setting says';
+const FEED_MOVE_NOTE = 'Only a channel-only row with no feed of its own, and one that takes '
+  + 'marathons, can be picked.';
+const NO_MARATHONS_CHANNEL = 'opted out of marathons';
 const EVENT_TONE = { pending: 'warn', approved: 'ok', denied: 'danger', cancelled: null, gone: null };
 const PHASE_TONE = { far: null, near: 'warn', live: 'ok', over: null, paused: null };
 const STATE_TONE = { upcoming: null, live: 'ok', done: null, dropped: 'danger' };
@@ -228,9 +240,10 @@ async function channelChoices() {
   const rows = await api('/api/golive/spotlight').catch(() => []);
   return (Array.isArray(rows) ? rows : []).map((one) => ({
     value: String(one.id),
-    label: one.display_name && one.display_name.toLowerCase() !== one.twitch_login
+    label: (one.display_name && one.display_name.toLowerCase() !== one.twitch_login
       ? `${one.twitch_login} · ${one.display_name}`
-      : one.twitch_login,
+      : one.twitch_login) + (one.marathons === false ? ` (${NO_MARATHONS_CHANNEL})` : ''),
+    closed: one.marathons === false,
   }));
 }
 
@@ -240,17 +253,32 @@ function channelPicker(choices, current) {
     ...choices.map((one) => el('option', {
       value: one.value,
       text: one.label,
+      disabled: one.closed && String(current || '') !== one.value ? true : undefined,
       selected: String(current || '') === one.value || undefined,
     })),
   ]);
   return select;
 }
 
+function modeChoices() {
+  return eventModes.length ? eventModes : MODES_FALLBACK;
+}
+
+function modePicker(current, { follow = false } = {}) {
+  const options = modeChoices().map((one) => el('option', {
+    value: one.value,
+    text: one.label,
+    selected: String(current || '') === one.value || undefined,
+  }));
+  if (follow) options.unshift(el('option', { value: '', text: FEED_MODE_FOLLOW, selected: !current || undefined }));
+  return el('select', { class: 'input' }, options);
+}
+
 async function addMarathon() {
   const name = el('input', { class: 'input', type: 'text', placeholder: 'AGDQ 2027' });
   const url = el('input', { class: 'input', type: 'url', placeholder: 'https://gamesdonequick.com/schedule/74' });
   const channel = channelPicker(await channelChoices(), null);
-  const alsoEvent = el('input', { class: 'input switch', type: 'checkbox', checked: makesEvent ? true : undefined });
+  const mode = modePicker(eventModeDefault);
   let made = null;
   const sure = await askForm({
     title: 'Add a marathon',
@@ -259,7 +287,7 @@ async function addMarathon() {
       field('Name', name),
       field('Schedule link', url),
       field('Channel it airs on', channel, CHANNEL_HELP),
-      field(EVENT_BOX, alsoEvent, EVENT_BOX_HELP),
+      field(EVENT_SELECT, mode, EVENT_SELECT_HELP),
     ],
     confirmLabel: 'Add it',
     tone: 'warn',
@@ -268,7 +296,7 @@ async function addMarathon() {
         name: name.value.trim(),
         schedule_url: url.value.trim(),
         spotlight_id: channel.value || null,
-        make_event: alsoEvent.checked,
+        event_mode: mode.value,
       });
       return null;
     },
@@ -321,6 +349,21 @@ function runTools(marathon, row, say) {
       await after(marathon, done);
     }, { tone: 'quiet' }));
   }
+  if (row.event_id) {
+    tools.push(textAction(`event #${row.event_id}${row.event_status ? ` · ${row.event_status}` : ''}`, () => {
+      closeDrawer();
+      showEvent(row.event_id);
+    }));
+    tools.push(button('Unlink', async () => {
+      const done = await run(say, () => send(`/api/marathons/${marathon.id}/runs/${row.id}/event`, 'DELETE'), (found) => found?.message);
+      await after(marathon, done);
+    }, { tone: 'quiet' }));
+  } else if (row.ours && row.state !== 'dropped' && row.state !== 'done') {
+    tools.push(button('Make it now', async () => {
+      const done = await run(say, () => send(`/api/marathons/${marathon.id}/runs/${row.id}/event`, 'POST', {}), (found) => found?.message);
+      await after(marathon, done);
+    }, { tone: 'quiet' }));
+  }
   if (row.can_mark_upcoming) {
     tools.push(button('Mark it upcoming', async () => {
       const done = await run(say, () => send(`/api/marathons/${marathon.id}/runs/${row.id}/upcoming`, 'POST', {}), (found) => found?.message);
@@ -342,6 +385,7 @@ function runsCard(marathon, say) {
       { label: 'State', cell: (row) => el('span', { class: 'cell-kind' }, [
         badge(row.state_word, STATE_TONE[row.state] || null),
         row.ours ? badge('ours', 'ok') : null,
+        row.event_id ? badge(`event #${row.event_id}`, EVENT_TONE[row.event_status] || null) : null,
         row.held ? badge(HELD_NOTE, 'warn') : null,
       ]) },
       { label: '', cell: (row) => runTools(marathon, row, say) },
@@ -430,6 +474,15 @@ function eventCard(marathon, say) {
       showEvent(event.id);
     }));
   }
+  const mode = modePicker(marathon.event_mode || 'none');
+  mode.addEventListener('change', async () => {
+    const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'PATCH', { event_mode: mode.value }), (found) => found?.message);
+    if (!done.ok) {
+      mode.value = marathon.event_mode || 'none';
+      return;
+    }
+    await after(marathon, done);
+  });
   if (event.id || event.wanted) {
     moves.push(button('Unlink', async () => {
       const done = await run(say, () => send(`/api/marathons/${marathon.id}/event`, 'DELETE'), (found) => found?.message);
@@ -448,6 +501,7 @@ function eventCard(marathon, say) {
       ...boldParts(event.line || ''),
     ]),
     fromFeed,
+    field(EVENT_SELECT, mode, EVENT_SELECT_HELP),
     el('p', { class: 'field-help' }, boldParts(EVENT_NOTE)),
     bar(moves),
   ]);
@@ -482,12 +536,62 @@ function feedMoves(feed, say) {
   if (feed.ignored_count) {
     moves.push(button(`Forget ignored (${feed.ignored_count})`, () => feedStep(say, () => send(`${base}/forget`, 'POST', {})), { tone: 'quiet' }));
   }
+  moves.push(button('Rename…', () => renameFeed(feed, say), { tone: 'quiet' }));
+  moves.push(button('Move to channel…', () => moveFeed(feed, say), { tone: 'quiet' }));
   moves.push(button('Remove', async () => {
     const sure = await ask({ title: `Remove the ${feed.name} feed?`, body: [FEED_REMOVE_BODY], confirmLabel: 'Remove it' });
     if (!sure) return;
     await feedStep(say, () => send(base, 'DELETE'));
   }, { tone: 'danger' }));
   return el('div', { class: 'bar' }, moves);
+}
+
+async function renameFeed(feed, say) {
+  const name = el('input', { class: 'input', type: 'text', value: feed.name });
+  let done = null;
+  const sure = await askForm({
+    title: `Rename the ${feed.name} feed`,
+    body: [field('Name', name)],
+    confirmLabel: 'Rename it',
+    tone: 'warn',
+    onConfirm: async () => {
+      done = await send(`/api/marathons/feeds/${feed.id}`, 'PATCH', { name: name.value.trim() });
+      return null;
+    },
+  });
+  if (!sure || !done) return;
+  say.say(done.message || 'Renamed.', 'ok');
+  keepSaying('marathons', say);
+  await refresh();
+}
+
+async function moveFeed(feed, say) {
+  const payload = await api('/api/marathons/feeds').catch(() => ({ channels: [] }));
+  const free = (payload.channels || []).filter((one) => !one.feed_name && one.marathons !== false);
+  const channel = el('select', { class: 'input' }, free.map((one) => el('option', { value: String(one.id), text: `${one.name} · twitch.tv/${one.login}` })));
+  let done = null;
+  const sure = await askForm({
+    title: `Move the ${feed.name} feed`,
+    body: [el('p', { class: 'ask-body', text: FEED_MOVE_NOTE }), field('Channel', channel)],
+    confirmLabel: 'Move it',
+    tone: 'warn',
+    onConfirm: async () => {
+      done = await send(`/api/marathons/feeds/${feed.id}`, 'PATCH', { spotlight_id: channel.value || null });
+      return null;
+    },
+  });
+  if (!sure || !done) return;
+  say.say(done.message || 'Moved.', 'ok');
+  keepSaying('marathons', say);
+  await refresh();
+}
+
+function feedModeCell(feed, say) {
+  const pick = modePicker(feed.event_mode, { follow: true });
+  pick.addEventListener('change', () => {
+    feedStep(say, () => send(`/api/marathons/feeds/${feed.id}`, 'PATCH', { event_mode: pick.value || null }));
+  });
+  return pick;
 }
 
 function actionCell(feed, say) {
@@ -569,6 +673,7 @@ function feedsCard(feeds, say) {
     { label: 'Channel', cell: (row) => row.channel_name },
     { label: 'Checks', cell: (row) => checkedLine(row) },
     { label: 'New events', cell: (row) => actionCell(row, say) },
+    { label: 'Event', cell: (row) => feedModeCell(row, say) },
     { label: '', cell: (row) => feedMoves(row, say) },
   ], rows, { empty: NO_FEEDS });
   const waiting = rows.flatMap((feed) => (feed.suggestions || []).map((one) => suggestionCard(feed, one, say)));
@@ -704,7 +809,8 @@ export async function marathonsSection({ reload, openEvent }) {
     api('/api/marathons'),
     api('/api/marathons/feeds').catch((error) => ({ error: sentenceFor(error) })),
   ]);
-  makesEvent = payload.makes_event !== false;
+  eventModeDefault = payload.event_mode_default || 'none';
+  eventModes = Array.isArray(payload.event_modes) ? payload.event_modes : [];
   const say = sayAgain('marathons', notice());
   const node = listSection(payload, feeds, say);
   const wanted = wantedId();

@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-25 (branch `marathon-event-modes`)** — ONE section APPENDED (`MV-a`…`MV-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-feeds`)** — ONE section APPENDED (`MF-a`…`MF-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `spotlight-ping-windows`)** — ONE section APPENDED (`PW-a`…`PW-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-23 18:3x** — ONLY the `CB-c` section was touched, at the v163 docs ritual: it gained a ✅ LIVE v163 line from `deploys.log`. (Since 16:2x: the owner's `CB-a` ✅ row at 16:33, `2d5defa0`; the `CB-c` section appended with the `greeting-tone` branch, `9983a0be`.) No row walked by this pass, no other section re-read. Before that,
@@ -3216,3 +3217,23 @@ so its event WAITS (the drawer says *Event: waiting for the schedule*).
 | **`ME-b`** | **Add a marathon** ▸ a published schedule (`https://gamesdonequick.com/schedule/66`) ▸ *Also make it an event* ticked ▸ **Add it** | A **pending** event with the marathon's name and the schedule's first/last run in the queue above (badged *marathon*), a review room/post for it, `web.marathon.added` + `web.event.created` + `web.marathon.event_made`; the drawer's **Event** card reads *Event #N — pending* with **Open event #N** and **Unlink**. Unticked: no event, the card offers **Make an event now**. |
 | **`ME-c`** | In Discord: `/event` ▸ **Marathons…** (as a member, then as staff) | A member sees **Ours next** with **My runs**, **Refresh**, **Back**; staff also see the list, **Add a marathon…** (a fifth field *Make it an event? yes or no*), **Logs**, the marathon select — whose card has an *Event* line and **Unlink the event** / **Make an event now**. **Back** returns to `/event`. `/marathon` is gone from the command list. |
 | **`ME-d`** | The old Marathons page address; then a Discord log embed's page footer / a Logs-page row for a `marathon.*` kind | The old address is **404** (the page is gone); links open `events.html` — `events.html#marathon-<id>` opens that marathon's drawer. Removing a marathon whose event is pending/approved calls the event off (`marathon.event_cancelled`, the requester told *the marathon it was made for was taken off…*). |
+
+## Rows `MV-a` … `MV-f` — a marathon's event mode, and a channel that takes no marathons (branch `marathon-event-modes`, 2026-09-25)
+
+🔨 **BUILT on branch `marathon-event-modes`, NOT merged, NOT deployed.** Owner, 2026-09-25: *"post it in events but dont
+make an event by default for a marathon, add a few options … 2 being make an event just for BaF runner (then update this
+event with the schedule api so it stays current)"*, *"lets opt esam out of events"*, *"make sure any channel only can opt
+out of marathons"*. Design: [`../info/marathon-event-modes-design.md`](../info/marathon-event-modes-design.md). Rows
+lettered; the conductor numbers them.
+
+⚠️ **While `marathon_mode` is `shadow`, an event per run of ours goes through the events review** (design Deviation 3) —
+MV-b expects approved events only with `marathon_mode` on.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MV-a`** | <https://blackbloc.heygabi.ai/events.html> ▸ Marathons ▸ **Add a marathon** | The **Event** select shows *No event* selected (from `marathon_event_mode_default`). Adding with it makes no event in the queue. |
+| **`MV-b`** | AGDQ 2027's drawer ▸ Event card ▸ **Event** ▸ *An event per run of ours* | One **approved** event per run of ours still ahead appears in the queue (filter *approved*) with the *marathon run* badge; each run of ours in the drawer says *event #N*. `marathon.event_mode_set` in the Marathons log. |
+| **`MV-c`** | A run of ours moves on the schedule (or **Refresh now** after GDQ moves it) | Its event's start and end follow; `marathon.run_event_redated` with from / to. A run dropped from the schedule calls its event off (`run_dropped`). |
+| **`MV-d`** | A feed adds a new marathon (or **Look again** on a next-event suggestion) while events are reviewed in the forum | The staff notice is a **post in the Events forum**, named *New marathon: …*, tagged *marathon*, its buttons on the first message; `marathon.notice_posted` says `home: events`. |
+| **`MV-e`** | <https://blackbloc.heygabi.ai/golive.html> ▸ the ESAMarathon row | Its Announced cell reads *· no marathons*; the drawer's Announcements card has the **Marathons: on / off** segment on *off*; **Add a marathon** on ESA is refused in words. `/golive` ▸ **Channels…** ▸ ESA shows **Marathons on**. |
+| **`MV-f`** | Events page ▸ Feeds card ▸ GDQ: the **Event** select, **Rename…**, **Move to channel…**; and `/event` ▸ **Marathons…** ▸ **Feeds…** ▸ GDQ | Each change says so in words and leaves one `marathon.feed_changed` row; the move offers only channel-only rows with no feed that take marathons. |

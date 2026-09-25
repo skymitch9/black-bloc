@@ -35,13 +35,21 @@ from ...cogs.content.marathon import (
     unlink_the_event,
     unpair_runner,
 )
+from ...cogs.content.marathon_events import (
+    default_mode,
+    make_run_event_now,
+    set_event_mode,
+    unlink_run_event,
+)
 from ...cogs.content.marathon_feeds import get_feed
 from ...cogs.content.spotlight import channel_by_id
+from ...events import get_event
 from ...logkinds import VIA_WEBSITE
+from ...marathon_events import MODE_WORDS, MODES
+from ...marathon_events import mode_of as event_mode_of
 from ...marathon_sources import SOURCE_WORDS, schedule_page
 from ...settings_store import (
     MARATHON_LEAD_DAYS_KEY,
-    MARATHON_MAKES_EVENT_KEY,
     MARATHON_MODE_KEY,
 )
 from ..auth import Refused, staff_dependency
@@ -73,7 +81,7 @@ BAD_MAKE_EVENT = "Say true or false for making it an event, so nothing was added
 async def event_of(bot: Any, row: Any) -> dict[str, Any]:
     """The drawer's Event line: linked (with the event's own status), waiting, or none."""
     event_id = row["event_id"]
-    wanted = bool(row["event_wanted"])
+    wanted = mt.wants_its_event(row)
     status = await event_status_of(bot, row)
     return {
         "id": event_id,
@@ -106,10 +114,14 @@ def person_row(guild: Any, person: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_row(guild: Any, row: Any) -> dict[str, Any]:
+def run_row(guild: Any, row: Any, statuses: dict[int, str] | None = None) -> dict[str, Any]:
     ours = mt.is_ours(row)
     state = str(row["state"])
+    event_id = row["event_id"]
     return {
+        "event_id": event_id or None,
+        "event_status": (statuses or {}).get(int(event_id)) if event_id else None,
+        "event_unlinked": event_id == 0,
         "id": row["id"],
         "external_id": row["external_id"],
         "order_no": row["order_no"],
@@ -231,7 +243,22 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "next": upcoming,
         "next_waiting": bool(upcoming) and upcoming["state"] == mt.NEXT_OPEN,
         "event": await event_of(bot, row),
+        "event_mode": event_mode_of(row),
+        "event_mode_word": MODE_WORDS[event_mode_of(row)],
     }
+
+
+async def event_statuses(bot: Any, runs: Any) -> dict[int, str]:
+    found: dict[int, str] = {}
+    for one in runs:
+        if one["event_id"]:
+            event = await get_event(bot.db, int(one["event_id"]))
+            found[int(one["event_id"])] = str(event["status"]) if event is not None else "gone"
+    return found
+
+
+def event_modes() -> list[dict[str, str]]:
+    return [{"value": one, "label": MODE_WORDS[one]} for one in MODES]
 
 
 def build_router(bot: Any) -> APIRouter:
@@ -262,8 +289,9 @@ def build_router(bot: Any) -> APIRouter:
             for one in await pairings_of(bot.db, guild.id)
             if one["marathon_id"] in (None, row["id"])
         ]
+        statuses = await event_statuses(bot, runs)
         return await marathon_row(bot, guild, row, runs) | {
-            "run_list": [run_row(guild, one) for one in runs],
+            "run_list": [run_row(guild, one, statuses) for one in runs],
             "pairings": pairings,
             "unmatched": mt.unmatched_names(runs),
         }
@@ -286,7 +314,8 @@ def build_router(bot: Any) -> APIRouter:
             "mode": bot.store.get(guild.id, MARATHON_MODE_KEY),
             "marathons": rows,
             "next_waiting": len([one for one in rows if one["next_waiting"]]),
-            "makes_event": bool(bot.store.get(guild.id, MARATHON_MAKES_EVENT_KEY)),
+            "event_mode_default": default_mode(bot, guild.id),
+            "event_modes": event_modes(),
         }
 
     @router.post("")
@@ -320,6 +349,7 @@ def build_router(bot: Any) -> APIRouter:
                 url=payload.get("schedule_url"),
                 spotlight_id=payload.get("spotlight_id"),
                 make_event=make_event,
+                event_mode=payload.get("event_mode"),
                 via=VIA_WEBSITE,
             )
         )
@@ -368,6 +398,18 @@ def build_router(bot: Any) -> APIRouter:
                     via=VIA_WEBSITE,
                 )
             )
+        if "event_mode" in payload:
+            done = answered(
+                await set_event_mode(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    payload["event_mode"],
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
         if "dismiss_next" in payload:
             if payload["dismiss_next"] is not True:
                 raise Refused(422, "bad_dismiss", BAD_DISMISS)
@@ -555,6 +597,25 @@ def build_router(bot: Any) -> APIRouter:
             "run": run_row(guild, await run_by_id(bot.db, row["id"], run_id)),
             "message": done.message,
         }
+
+    @router.post("/{marathon_id}/runs/{run_id}/event")
+    async def marathon_run_event(
+        request: Request, marathon_id: int, run_id: int
+    ) -> dict[str, Any]:
+        return await run_event_step(request, marathon_id, run_id, make_run_event_now)
+
+    @router.delete("/{marathon_id}/runs/{run_id}/event")
+    async def marathon_run_unlink(
+        request: Request, marathon_id: int, run_id: int
+    ) -> dict[str, Any]:
+        return await run_event_step(request, marathon_id, run_id, unlink_run_event)
+
+    async def run_event_step(
+        request: Request, marathon_id: int, run_id: int, shared: Any
+    ) -> dict[str, Any]:
+        found = await run_step(request, marathon_id, run_id, shared)
+        run = await run_by_id(bot.db, int(marathon_id), run_id)
+        return found | {"run": run_row(require_guild(bot), run, await event_statuses(bot, [run]))}
 
     @router.post("/{marathon_id}/runs/{run_id}/upcoming")
     async def marathon_run_upcoming(

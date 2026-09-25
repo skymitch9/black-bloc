@@ -90,6 +90,25 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-25 (marathon event modes, branch `marathon-event-modes` off `main` `bababb65`; design
+> `info/marathon-event-modes-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration
+> has NOT run on the live database):** schema **63 → 64** (measured: `SCHEMA_VERSION`) — six columns through
+> `ADDED_COLUMNS`: `marathons.event_mode` (none / marathon / runs / both; a one-time backfill turns a marathon that had
+> an event or the old wish into `marathon`), `marathons.held_by_channel`, `marathon_runs.event_id` (0 = staff unlinked),
+> `marathon_feeds.event_mode` (NULL follows the setting), `marathon_feeds.held_by_channel`,
+> `spotlight_channels.marathons`. `event_wanted` stays, unread. New modules `black_bloc/marathon_events.py` +
+> `black_bloc/marathon_channels.py` (pure) and `cogs/content/marathon_events.py` + `cogs/content/marathon_channels.py`
+> (not cogs). `events.approved_from` (an approved event with no review place), `events.open_notice_post` +
+> `forum_tag` (the `marathon` tag, added on demand). Registry keys **475 → 482** (+8: `marathon_event_mode_default`,
+> `marathon_run_event_title_template`, `marathon_run_event_description_template`, `marathon_run_events_reviewed`,
+> `marathon_run_event_cancel_on_leave`, `marathon_shout_when_run_has_event`, `marathon_notice_home`,
+> `marathon_notice_title_template`; −1: `marathon_makes_event`). Routes **+2** (`POST`/`DELETE
+> /api/marathons/{id}/runs/{run_id}/event`; `PATCH /api/marathons/{id}` and `PATCH /api/marathons/feeds/{id}` take
+> `event_mode`, `PATCH /api/golive/spotlight/{id}` takes `marathons`); `check.mjs` reads *22 pages, 250 routes*. Log
+> kinds **+10** (`golive.channel_marathons_set`; `marathon.event_mode_set`, `notice_posted`, `notice_forum_failed`,
+> `run_event_made` / `redated` / `cancelled` / `unlinked` / `failed`, `shout_skipped`). Cogs, pages, top-level
+> commands unchanged.
+>
 > **2026-09-25 (marathon feeds, branch `marathon-feeds` off `main` `05fbd0e6`; design
 > `info/marathon-feeds-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration has
 > NOT run on the live database):** schema **62 → 63** (measured: `SCHEMA_VERSION`) — two tables through the `SCHEMA`

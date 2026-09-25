@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 63
+        assert SCHEMA_VERSION == 64
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2500,7 +2500,7 @@ async def test_schema_63_adds_the_feeds_and_a_marathons_feed_and_keeps_its_rows(
             r["name"] for r in await cur.fetchall()
         }
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "63"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()
 
@@ -2522,3 +2522,60 @@ async def test_a_feed_needs_a_channel_and_a_channel_has_one_feed(tmp_path):
             await db.conn.execute(insert, ("tracker", "https://a", 4))
     finally:
         await db.close()
+
+
+async def test_schema_64_adds_the_event_modes_and_the_channel_opt_out_and_carries_the_wish(
+    tmp_path,
+):
+    path = tmp_path / "t.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for table, column in (
+        ("marathons", "event_mode"),
+        ("marathons", "held_by_channel"),
+        ("marathon_runs", "event_id"),
+        ("marathon_feeds", "event_mode"),
+        ("marathon_feeds", "held_by_channel"),
+        ("spotlight_channels", "marathons"),
+    ):
+        await db.conn.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+    insert = (
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, event_id, "
+        "event_wanted, added_at) VALUES (7, ?, ?, 'gdq', ?, ?, ?, 'x')"
+    )
+    await db.conn.execute(insert, ("Linked", "https://g/1", "1", 5, 0))
+    await db.conn.execute(insert, ("Waiting", "https://g/2", "2", None, 1))
+    await db.conn.execute(insert, ("Bare", "https://g/3", "3", None, 0))
+    await db.conn.execute(
+        "INSERT INTO spotlight_channels(guild_id, twitch_login, added_at) VALUES (7, 'esa', 'x')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '63')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name, event_mode, held_by_channel FROM marathons")
+        modes = {row["name"]: row["event_mode"] for row in await cur.fetchall()}
+        assert modes == {"Linked": "marathon", "Waiting": "marathon", "Bare": "none"}
+        cur = await again.conn.execute("SELECT marathons FROM spotlight_channels")
+        assert (await cur.fetchone())["marathons"] == 1
+        cur = await again.conn.execute("PRAGMA table_info(marathon_runs)")
+        assert "event_id" in {r["name"] for r in await cur.fetchall()}
+        cur = await again.conn.execute("PRAGMA table_info(marathon_feeds)")
+        assert {"event_mode", "held_by_channel"} <= {r["name"] for r in await cur.fetchall()}
+        await again.conn.execute("UPDATE marathons SET event_mode = 'none'")
+        await again.conn.commit()
+    finally:
+        await again.close()
+
+    third = Database(path)
+    await third.connect()
+    try:
+        cur = await third.conn.execute("SELECT DISTINCT event_mode FROM marathons")
+        assert [row["event_mode"] for row in await cur.fetchall()] == ["none"]
+    finally:
+        await third.close()

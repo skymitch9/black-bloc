@@ -1,5 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *A marathon's event mode, and a channel that takes no marathons* (branch `marathon-event-modes`, off `main` `bababb65`, keyed against `20cfcf0c`). Before that:
+> **2026-09-25 — one section APPENDED, nothing re-keyed**: *Marathon feeds — the bot finds the next events itself* (branch `marathon-feeds`, off `main` `05fbd0e6`, keyed against `0f973d75`). Before that:
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *The module database outlives every test loop* (branch `ci-linux-hang`, off `main` `bababb65`, keyed against `fe8befb4`).
 > Before that: **2026-09-25 — one section APPENDED, nothing re-keyed**: *Marathon feeds — the bot finds the next events itself* (branch `marathon-feeds`, off `main` `05fbd0e6`, keyed against `0f973d75`). Before that:
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED and TWO rows RE-KEYED**: *Marathons share the Events page* (branch `marathon-events-page`, off `main` `ed52ffeb`, keyed against its routes commit `ce7b7f80`); the two `page-marathons.js` rows of the marathon sections now point at `marathons-section.js` (the file moved). Nothing else re-keyed.
@@ -8385,6 +8387,36 @@ Design: [`personality-tones-design.md`](personality-tones-design.md).
 | `black_bloc/api/server.py:194` `marathon_feeds.build_router` | Included BEFORE the marathons router: `/api/marathons/{marathon_id}` would otherwise take `/api/marathons/feeds` and answer 422. |
 | `site/public/assets/marathons-section.js:563` `feedsCard` | Above the list; the waiting events are `suggestionCard` (`:503`), a sibling of `nextCard` (Deviation 22). A failed feeds read is a card with the sentence, never a blank section. |
 | `site/mock/server.mjs:5824` `seedMarathonFeeds` | Literal URLs: `seedState` runs at load, before the `FEED_*` constants exist (Deviation 23). |
+
+## A marathon's event mode, and a channel that takes no marathons (branch `marathon-event-modes`, 2026-09-25)
+
+*(Keyed against `20cfcf0c`. Design and deviations: [`marathon-event-modes-design.md`](marathon-event-modes-design.md) — its `## Deviations` are cited by number.)*
+
+| Where | Why |
+|---|---|
+| `black_bloc/storage/db.py:1197` `CARRIED_EVENT_WISH` | Schema 64. Runs ONCE, only in the boot that adds `marathons.event_mode` (`:1371`): a marathon that had an event or the old wish (`event_wanted`) becomes `marathon`, everything else `none`. Running it every boot would undo a staff `none` on a marathon whose old wish column is still 1. |
+| `black_bloc/storage/db.py` `ADDED_COLUMNS` (`event_mode`, `held_by_channel` ×2, `marathon_runs.event_id`, `marathon_feeds.event_mode`, `spotlight_channels.marathons`) | Six columns, not the design's two (Deviations 2, 5). `event_wanted` stays, unread. |
+| `black_bloc/settings_store.py` `MARATHON_EVENT_MODE_DEFAULT_KEY` | `marathon_makes_event` is gone from the registry; a value stored under it is IGNORED (the store logs `settings ignored: marathon_makes_event` at boot) — it is not migrated into the new key, because the owner's order was "no event by default". |
+| `black_bloc/marathon_channels.py:47` `takes_marathons` | A row with no `marathons` cell (the migration has not reached it) takes marathons — the `announces` precedent. |
+| `black_bloc/cogs/content/marathon_channels.py:33` `set_marathons` | The flag moves first and is logged (`golive.channel_marathons_set`); then `hold` (`:67`) / `release` (`:104`). Held rows carry `held_by_channel = 1` so going back ON resumes only what the opt-out paused — a pause staff made stays (Deviation 5). The knock-on `marathon.paused` / `feed_paused` rows are bare with `automatic: true` (checklist 34). |
+| `black_bloc/cogs/content/marathon_channels.py:141` `seed_opt_outs` | Once per channel, ever, in the `marathon_feed_seeds` table under the key `optout:<login>` — a staff turn-back-on is never undone by the next boot (the feed seed's Deviation 4). Runs in the same once-per-process block as the feed seed (`marathon_feeds.py` `tick_feeds`). |
+| `black_bloc/cogs/content/marathon.py` `opted_out_channel` / `set_active` | Resume of a HELD marathon (and of a held feed, `marathon_feeds.py:771`) is refused in words while its channel is off; any staff pause/resume clears the held mark. |
+| `black_bloc/marathon.py:289` `wants_its_event` | The retired `event_wanted` is now "the mode asks for the marathon's event and it has none". `Make an event now` adds the marathon half to the mode; `Unlink` and a failed wish (`stop_waiting`, `cogs/content/marathon.py:1189`) take it off — so a failure still stops the next read retrying, as `event_wanted = 0` did. |
+| `black_bloc/cogs/content/marathon.py:572` `create_marathon` | The row is inserted with mode `none` and the mode is written AFTER the first read, so the first read's `event_follows` does not make the event as a bare row before the Add's own web-headed `event_made` (checklist 34). Run events it makes are bare. |
+| `black_bloc/cogs/content/marathon_events.py:71` `mode_for_new` | Given mode → old `make_event` (true = marathon, false = none, one release) → the feed's own mode → the setting. |
+| `black_bloc/cogs/content/marathon_events.py:141` `reviews_runs` | A run event skips the review only when `marathon_mode` is `on`: in shadow nothing may reach the calendar or the announce channel without a staff press, so it goes through the review (Deviation 3, checklist 37 preface). |
+| `black_bloc/events.py:2170` `approved_from` | An approved event with no review place and no approval post — the events feature announces it at its start like any approved one. A scheduled-event failure of ANY kind is caught so the row is never orphaned (the run's pointer is written right after). |
+| `black_bloc/cogs/content/marathon_events.py:206` `cancel_run_event` | The pointer goes first; success is judged by the EVENT'S status afterwards, not by whether `cancel_for` raised — the DM / room tail can raise after the cancel has landed. |
+| `black_bloc/cogs/content/marathon_events.py:284` `makeable` | Only a run of ours that is upcoming or live, dated, and not yet over — an event whose end has passed would only be marked missed. `event_id = 0` is "staff unlinked": never made again on its own (Deviation 6). |
+| `black_bloc/cogs/content/marathon_events.py:296` `sync_run_events` | Called under the marathon's lock after every read (`apply`), pairing and unpairing, and a mode change. A linked run is kept in step whatever the mode (re-dated, or called off when dropped / no longer ours); only MAKING is gated by the mode and by the marathon being active. |
+| `black_bloc/cogs/content/marathon_events.py:362` `set_event_mode` | One staff row, `marathon.event_mode_set`, with the counts; what it makes or calls off are bare knock-on rows (checklist 34). |
+| `black_bloc/cogs/content/marathon.py:2279` `said_by_its_event` | Only an APPROVED or LIVE run event stands in for the shoutout; a pending, denied or cancelled one does not. `Shout it now` passes `force` — staff final say. |
+| `black_bloc/cogs/content/marathon.py:1630` `notice_in_forum` | Forum only when the key says `events` AND events are reviewed in a forum AND the forum key is set; shadow is checked first in `_send_staff`, so a rehearsal never posts in the forum. A forum that refuses falls back to the staff channel with `marathon.notice_forum_failed` (Deviation 8). |
+| `black_bloc/cogs/content/marathon.py:1572` `shadowed` | A folded next-event notice used to be called a rehearsal when its channel was not the staff channel — a forum post is neither, so the record now carries `notice_home`; old records fall back to the old comparison. |
+| `black_bloc/events.py:2343` `forum_tag` | The `marathon` tag is added to the forum the first time a notice asks for it (not at Make the forum — the forum's made tags stay the six statuses the events tests pin); a full forum (20 tags) or one that refuses posts untagged. |
+| `black_bloc/cogs/content/marathon_feeds.py:1078` `free_channels` | An opted-out channel is never offered to Add a feed or Move to channel; the route refuses it in words too. |
+| `black_bloc/cogs/content/marathon_feeds.py:1355` `FeedModePick` | "Whatever the setting says" is `event_mode = NULL` — the feed follows `marathon_event_mode_default` until staff pin it. |
+| `black_bloc/api/tools/golive.py:560` `"marathons" in payload` | Sets `said`, so a marathons-only PATCH does not also write a `golive.spotlight_updated` row (checklist 34). |
 
 ## The module database outlives every test loop (2026-09-25, branch `ci-linux-hang`)
 
