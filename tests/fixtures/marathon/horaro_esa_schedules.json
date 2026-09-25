@@ -1,0 +1,202 @@
+{
+ "data": [
+  {
+   "id": "2b11lze79ke56c7a91",
+   "name": "2026 - Winter (Stream Two)",
+   "slug": "2026-winter2",
+   "timezone": "Europe/Stockholm",
+   "start": "2026-02-09T14:00:00+01:00",
+   "start_t": 1770642000,
+   "website": "http://www.esamarathon.com/",
+   "twitter": "esamarathon",
+   "twitch": "esamarathon",
+   "bluesky": null,
+   "description": null,
+   "setup": "PT15M",
+   "setup_t": 900,
+   "updated": "2026-02-14T14:32:54Z",
+   "link": "https://horaro.net/esa/2026-winter2",
+   "columns": [
+    "Game",
+    "Player(s)",
+    "Category",
+    "Note",
+    "Platform"
+   ],
+   "items": [
+    {
+     "length": "PT1H45M",
+     "length_t": 6300,
+     "scheduled": "2026-02-09T14:00:00+01:00",
+     "scheduled_t": 1770642000,
+     "data": [
+      "[Noddy and the Magic Book](https://www.youtube.com/watch?v=cRsay3xSr50)",
+      "SixRock",
+      "Any%",
+      null,
+      "PlayStation 2"
+     ]
+    },
+    {
+     "length": "PT12H",
+     "length_t": 43200,
+     "scheduled": "2026-02-13T12:00:00+01:00",
+     "scheduled_t": 1770980400,
+     "data": [
+      "Final Fantasy IX ([Part 1](https://www.youtube.com/watch?v=cAovAiFmRlI), [Part 2](https://www.youtube.com/watch?v=GkT-N8md6ss))",
+      "Mizzow",
+      "Garnet Solo Character Challenge ($20%)",
+      null,
+      "PlayStation 2"
+     ]
+    }
+   ],
+   "links": [
+    {
+     "rel": "self",
+     "uri": "https://horaro.net/-/api/v1/schedules/2b11lze79ke56c7a91"
+    },
+    {
+     "rel": "event",
+     "uri": "https://horaro.net/-/api/v1/events/7a50r46ezxb6yxb41b"
+    },
+    {
+     "rel": "ticker",
+     "uri": "https://horaro.net/-/api/v1/schedules/2b11lze79ke56c7a91/ticker"
+    }
+   ]
+  },
+  {
+   "id": "3811dqd53p76rf7a25",
+   "name": "2026 - Summer (Stream One)",
+   "slug": "2026-summer1",
+   "timezone": "Europe/Stockholm",
+   "start": "2026-08-01T14:00:00+02:00",
+   "start_t": 1785585600,
+   "website": "http://www.esamarathon.com/",
+   "twitter": "esamarathon",
+   "twitch": "esamarathon",
+   "bluesky": null,
+   "description": null,
+   "setup": "PT15M",
+   "setup_t": 900,
+   "updated": "2026-08-08T21:30:05Z",
+   "link": "https://horaro.net/esa/2026-summer1",
+   "columns": [
+    "Game",
+    "Player(s)",
+    "Platform",
+    "Category",
+    "Note"
+   ],
+   "items": [
+    {
+     "length": "PT35M",
+     "length_t": 2100,
+     "scheduled": "2026-08-01T14:00:00+02:00",
+     "scheduled_t": 1785585600,
+     "data": [
+      "[Dragon Ball Z: Budokai 3](https://www.youtube.com/watch?v=k15DZXBfjr8)",
+      "[tharixer](https://twitch.tv/tharixer)",
+      "PlayStation 2",
+      "Goku's Story (Z3, Breakthrough)",
+      null
+     ]
+    },
+    {
+     "length": "PT4H",
+     "length_t": 14400,
+     "scheduled": "2026-08-08T18:28:00+02:00",
+     "scheduled_t": 1786206480,
+     "data": [
+      "[Super Mario Galaxy](https://www.youtube.com/watch?v=FYk8ISkYyoA)",
+      "[360chrism](https://twitch.tv/360chrism)",
+      "Switch 2",
+      "61-Player Relay",
+      null
+     ]
+    }
+   ],
+   "links": [
+    {
+     "rel": "self",
+     "uri": "https://horaro.net/-/api/v1/schedules/3811dqd53p76rf7a25"
+    },
+    {
+     "rel": "event",
+     "uri": "https://horaro.net/-/api/v1/events/7a50r46ezxb6yxb41b"
+    },
+    {
+     "rel": "ticker",
+     "uri": "https://horaro.net/-/api/v1/schedules/3811dqd53p76rf7a25/ticker"
+    }
+   ]
+  },
+  {
+   "id": "6e11mp473j06lu7a8a",
+   "name": "2026 - Summer (Stream Two)",
+   "slug": "2026-summer2",
+   "timezone": "Europe/Stockholm",
+   "start": "2026-08-02T15:00:00+02:00",
+   "start_t": 1785675600,
+   "website": "http://www.esamarathon.com/",
+   "twitter": "esamarathon",
+   "twitch": "esamarathon",
+   "bluesky": null,
+   "description": null,
+   "setup": "PT15M",
+   "setup_t": 900,
+   "updated": "2026-08-07T22:45:04Z",
+   "link": "https://horaro.net/esa/2026-summer2",
+   "columns": [
+    "Game",
+    "Player(s)",
+    "Platform",
+    "Category",
+    "Note"
+   ],
+   "items": [
+    {
+     "length": "PT1H25M",
+     "length_t": 5100,
+     "scheduled": "2026-08-02T15:00:00+02:00",
+     "scheduled_t": 1785675600,
+     "data": [
+      "[Croc 2](https://www.youtube.com/watch?v=paAlANVTKro)",
+      "[hypnoshark](https://twitch.tv/hypnoshark)",
+      "PlayStation 2",
+      "Any%",
+      null
+     ]
+    },
+    {
+     "length": "PT1H20M",
+     "length_t": 4800,
+     "scheduled": "2026-08-07T22:36:00+02:00",
+     "scheduled_t": 1786134960,
+     "data": [
+      "[Sewer Rave](https://www.youtube.com/watch?v=ERYiUU4SkIs)",
+      "[lurven](https://twitch.tv/lurven_), laay",
+      "PC",
+      "8-Player Tournament",
+      "Co-op"
+     ]
+    }
+   ],
+   "links": [
+    {
+     "rel": "self",
+     "uri": "https://horaro.net/-/api/v1/schedules/6e11mp473j06lu7a8a"
+    },
+    {
+     "rel": "event",
+     "uri": "https://horaro.net/-/api/v1/events/7a50r46ezxb6yxb41b"
+    },
+    {
+     "rel": "ticker",
+     "uri": "https://horaro.net/-/api/v1/schedules/6e11mp473j06lu7a8a/ticker"
+    }
+   ]
+  }
+ ]
+}

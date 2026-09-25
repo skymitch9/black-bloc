@@ -1,5 +1,7 @@
 # The next GDQ event — suggested when a marathon ends, added by staff, never by itself
 
+> 🔨 **2026-09-25 — generalised by `marathon-feeds` (NOT merged):** a GDQ feed now reads the same events list every 6 h and ADDS new events by default (or suggests them with this build's record-and-notice shape), so an over GDQ marathon's next event is usually on the list already — this suggestion then records it as added and posts no notice (Deviation 7 here). See [`marathon-feeds-design.md`](marathon-feeds-design.md).
+
 > ✅ **2026-09-25 — LIVE as v164 14:16** (release commit `7787b10c`, [`deploys.log`](../deploys.log)): boot log `database: added marathons.suggested_next` at 21:15:56Z (this design's schema 61); `database ready`, `synced 33 app commands`, `logged in as Black_Bloc` 21:16:01Z, no Traceback; `/health` ready=true 67 ms. Nothing has met Discord by hand — the sweeps are the owner's; the live site was not opened in a browser.
 
 > 🔨 **2026-09-25 — MOVED by branch `marathon-events-page` (NOT merged):** the Marathons page is now the Marathons section of `events.html` (`marathons.html` deleted, `page-marathons.js` → `marathons-section.js`, deep link `events.html#marathon-<id>`), `/marathon` is retired into `/event` ▸ **Marathons…** (`marathon_panel_minutes` → `event_panel_minutes`), and a marathon now makes an event — see [`marathon-events-page-design.md`](marathon-events-page-design.md). Behaviour below is unchanged; only the address and the command moved.

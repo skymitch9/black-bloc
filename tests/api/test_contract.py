@@ -34,6 +34,7 @@ from black_bloc.cogs.community.role_menus import add_option, create_menu, get_me
 from black_bloc.cogs.community.tempvoice import add_channel
 from black_bloc.cogs.content.golive import set_link, set_optout, start_session
 from black_bloc.cogs.content.marathon import Marathons, create_marathon, runs_of, upsert_pairing
+from black_bloc.cogs.content.marathon_feeds import insert_feed
 from black_bloc.cogs.content.raidtrain import create_train
 from black_bloc.cogs.content.raidtrain import set_status as set_train_status
 from black_bloc.cogs.content.spotlight import add_channel as add_spotlight
@@ -113,7 +114,10 @@ class ContractSchedule:
             one(3, 120, "Blaster Master", "Interview Crew", "host"),
         ]
 
-    async def events(self):
+    async def horaro_schedules(self, slug):
+        return []
+
+    async def events(self, source="gdq"):
         ahead = (datetime.now(UTC) + timedelta(days=90)).replace(microsecond=0)
         return [
             {
@@ -804,6 +808,51 @@ async def seed_world(client, web, guild, wf) -> dict:
         (guild_id, ended.isoformat()),
     )
     marathon_waiting_id = int(cur.lastrowid)
+    # Marathon feeds (schema 63): GDQ in add mode on the GDQ row, remembering one removed event
+    # so Forget ignored has something to forget; RPG Limit Break in suggest mode on its own row
+    # with one event waiting. The ESA row has no feed (ESA opted out), so POST can start there.
+    rpglb_spotlight_id = await add_spotlight(
+        db, guild_id, "rpglimitbreak", added_by=7, expires_at=None, pin=False
+    )
+    feed_id = await insert_feed(
+        db,
+        guild_id,
+        source="tracker",
+        feed_ref="https://tracker.gamesdonequick.com/tracker",
+        spotlight_id=spotlight_id,
+        name="GDQ",
+        action="add",
+        added_by=7,
+    )
+    await db.conn.execute("UPDATE marathon_feeds SET ignored = '[\"70\"]' WHERE id = ?", (feed_id,))
+    feed_suggest_id = await insert_feed(
+        db,
+        guild_id,
+        source="tracker",
+        feed_ref="https://tracker.rpglimitbreak.com",
+        spotlight_id=rpglb_spotlight_id,
+        name="RPG Limit Break",
+        action="suggest",
+        added_by=7,
+    )
+    await db.conn.execute(
+        "UPDATE marathon_feeds SET suggested = ? WHERE id = ?",
+        (
+            json.dumps(
+                [
+                    {
+                        "ref": "22",
+                        "name": "RPG Limit Break 2027",
+                        "starts_at": (datetime.now(UTC) + timedelta(days=200)).isoformat(),
+                        "url": "https://tracker.rpglimitbreak.com/event/22",
+                        "found_at": ended.isoformat(),
+                        "dismissed_at": None,
+                    }
+                ]
+            ),
+            feed_suggest_id,
+        ),
+    )
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
     await db.conn.execute(
         "INSERT OR IGNORE INTO channel_drafts(guild_id, channel_id, draft) VALUES (?, ?, ?)",
@@ -867,6 +916,10 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_bare_id": str(marathon_id),
         "marathon_waiting_id": str(marathon_waiting_id),
         "marathon_done_run_id": str(marathon_done_run_id),
+        "feed_id": str(feed_id),
+        "feed_suggest_id": str(feed_suggest_id),
+        "feed_event_ref": "22",
+        "feedless_spotlight_id": str(role_spotlight_id),
         "recording_meeting_id": str(recording_meeting_id),
     }
 

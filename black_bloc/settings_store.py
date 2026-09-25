@@ -4375,6 +4375,14 @@ MARATHON_NEXT_NONE_TEMPLATE_KEY = "marathon_next_none_template"
 MARATHON_NEXT_ADDED_TEMPLATE_KEY = "marathon_next_added_template"
 MARATHON_MAKES_EVENT_KEY = "marathon_makes_event"
 MARATHON_EVENT_DESCRIPTION_KEY = "marathon_event_description_template"
+MARATHON_FEEDS_KEY = "marathon_feeds"
+MARATHON_FEED_HOURS_KEY = "marathon_feed_hours"
+MARATHON_FEED_ACTION_KEY = "marathon_feed_action_default"
+MARATHON_FEED_RECENT_KEY = "marathon_feed_recent_days"
+MARATHON_FEED_ADDED_TEMPLATE_KEY = "marathon_feed_added_template"
+MARATHON_FEED_SUGGEST_TEMPLATE_KEY = "marathon_feed_suggest_template"
+MARATHON_FEED_ACTIONS = ("add", "suggest")
+MARATHON_FEED_FIELDS = ("feed", "event", "when", "relative", "url", "channel")
 MARATHON_EVENT_FIELDS = ("marathon", "channel")
 MARATHON_NEXT_FIELDS = ("marathon", "next", "when", "relative", "url")
 MARATHON_REMINDER_MINUTES = "120, 15"
@@ -4515,6 +4523,32 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "Marathons section of the Events page. on by default; nothing is ever added until staff "
         "press Add it",
     ),
+    MARATHON_FEEDS_KEY: (
+        "bool",
+        True,
+        "whether the marathon feeds check on their own — each feed reads the events list of one "
+        "channel's marathons (the GDQ and RPG Limit Break trackers, ESA on horaro.net) and adds "
+        "or suggests every new event. on by default; off checks nothing, and Check now on a "
+        "feed still works",
+    ),
+    MARATHON_FEED_HOURS_KEY: (
+        "int",
+        6,
+        "hours between two checks of one marathon feed. 6 by default",
+    ),
+    MARATHON_FEED_ACTION_KEY: (
+        "enum",
+        "add",
+        "what a new feed does with an event it finds, until staff change that feed: add puts "
+        "it on the marathon list at once with a staff notice to pause or remove it; suggest "
+        "posts a staff notice with Add it and Not this one. add by default",
+    ),
+    MARATHON_FEED_RECENT_KEY: (
+        "int",
+        1,
+        "how many days after it started (a tracker event) or ended (a horaro.net schedule) an "
+        "event still counts as new to a feed. 1 by default",
+    ),
     MARATHON_MAKES_EVENT_KEY: (
         "bool",
         True,
@@ -4573,7 +4607,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{state} on the board for a run the schedule no longer lists",
     ),
     MARATHON_UNKNOWN_SITE_KEY: (
-        "For now I can read the GDQ schedule only — that link is something else.",
+        "I can read the GDQ and RPG Limit Break trackers and horaro.net schedules — that link "
+        "is none of them.",
         (),
         "what staff are told when a schedule link is from a site Black Bloc cannot read",
     ),
@@ -4612,6 +4647,18 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "what the staff notice is rewritten to once the next event is added. It takes "
         "{marathon} {next} {when} {relative} {url}",
     ),
+    MARATHON_FEED_ADDED_TEMPLATE_KEY: (
+        "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.",
+        MARATHON_FEED_FIELDS,
+        "the staff notice when a feed adds a new event to the marathon list; it carries Pause "
+        "it and Remove it. It takes {feed} {event} {when} {relative} {url} {channel}",
+    ),
+    MARATHON_FEED_SUGGEST_TEMPLATE_KEY: (
+        "{feed} has a new event: **{event}**, {when} ({relative}). Add it?",
+        MARATHON_FEED_FIELDS,
+        "the staff notice when a feed in suggest mode finds a new event; it carries Add it and "
+        "Not this one. It takes {feed} {event} {when} {relative} {url} {channel}",
+    ),
     MARATHON_EVENT_DESCRIPTION_KEY: (
         "{marathon} — read from the GDQ schedule. Our runs are boarded in {channel}.",
         MARATHON_EVENT_FIELDS,
@@ -4628,6 +4675,8 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_PING_MINUTES_KEY: (0, 240),
     MARATHON_REMINDER_STALE_KEY: (1, 240),
     MARATHON_WINDOW_SLACK_KEY: (0, 24),
+    MARATHON_FEED_HOURS_KEY: (1, 168),
+    MARATHON_FEED_RECENT_KEY: (0, 30),
 }
 
 
@@ -4678,6 +4727,7 @@ KEY_HELP.update({key: said for key, (_, _, said) in MARATHON_SETTINGS.items()})
 KEY_TYPES.update({key: "text" for key in MARATHON_WORDS})
 KEY_HELP.update({key: said for key, (_, _, said) in MARATHON_WORDS.items()})
 KEY_CHOICES[MARATHON_MODE_KEY] = MARATHON_MODES
+KEY_CHOICES[MARATHON_FEED_ACTION_KEY] = MARATHON_FEED_ACTIONS
 KEY_MIN.update({key: floor for key, (floor, _) in MARATHON_RANGES.items()})
 KEY_MAX.update({key: ceiling for key, (_, ceiling) in MARATHON_RANGES.items()})
 TEXT_CHECKS[MARATHON_REMINDER_MINUTES_KEY] = checked_marks

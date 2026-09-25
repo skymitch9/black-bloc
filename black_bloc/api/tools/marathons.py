@@ -35,6 +35,7 @@ from ...cogs.content.marathon import (
     unlink_the_event,
     unpair_runner,
 )
+from ...cogs.content.marathon_feeds import get_feed
 from ...cogs.content.spotlight import channel_by_id
 from ...logkinds import VIA_WEBSITE
 from ...marathon_sources import SOURCE_WORDS, schedule_page
@@ -186,6 +187,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
     phase = mt.phase(row, now, lead_days=int(bot.store.get(guild.id, MARATHON_LEAD_DAYS_KEY)))
     upcoming = await next_row(bot, guild, row, now)
     added_by = row["added_by"]
+    feed = await get_feed(db, guild.id, row["feed_id"]) if row["feed_id"] else None
     return {
         "id": row["id"],
         "name": row["name"],
@@ -224,6 +226,8 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         ),
         "added_at": row["added_at"],
         "added_by_name": resolve_one(guild, added_by)["display_name"] if added_by else None,
+        "feed_id": row["feed_id"],
+        "feed_name": feed["name"] if feed is not None else None,
         "next": upcoming,
         "next_waiting": bool(upcoming) and upcoming["state"] == mt.NEXT_OPEN,
         "event": await event_of(bot, row),

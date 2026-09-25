@@ -254,6 +254,14 @@ async def discard_session(db: Any, session_id: int) -> None:
 
 
 async def delete_channel(db: Any, spotlight_id: int) -> bool:
+    await db.conn.execute(
+        "UPDATE marathons SET feed_id = NULL WHERE feed_id IN "
+        "(SELECT id FROM marathon_feeds WHERE spotlight_id = ?)",
+        (int(spotlight_id),),
+    )
+    await db.conn.execute(
+        "DELETE FROM marathon_feeds WHERE spotlight_id = ?", (int(spotlight_id),)
+    )
     cur = await db.conn.execute(
         "DELETE FROM spotlight_channels WHERE id = ?", (int(spotlight_id),)
     )
@@ -262,6 +270,12 @@ async def delete_channel(db: Any, spotlight_id: int) -> bool:
     )
     await db.conn.commit()
     return cur.rowcount > 0
+
+
+async def drop_feeds_of_channel(bot: Any, guild: Any, spotlight_id: Any, actor: Any = None) -> int:
+    from .marathon_feeds import drop_feeds_of_channel as dropped
+
+    return await dropped(bot, guild, spotlight_id, actor)
 
 
 async def windows_for(db: Any, spotlight_id: int) -> list[Any]:
@@ -632,6 +646,7 @@ class Spotlight(commands.Cog):
         if session is not None:
             await self._end(guild, row, session, words.EXPIRED)
         await drop_fan_role(self.bot, guild, row, because=words.FAN_ROLE_EXPIRED)
+        await drop_feeds_of_channel(self.bot, guild, row["id"])
         await delete_channel(self.bot.db, row["id"])
         self.misses.pop(int(row["id"]), None)
         self.scheduled.discard(int(row["id"]))
@@ -1721,6 +1736,7 @@ async def forget_spotlight(
         async with cog._lock(spotlight_id):
             await cog._end(guild, row, session, words.REMOVED_BECAUSE)
     await drop_fan_role(bot, guild, row, because=words.FAN_ROLE_REMOVED, actor=actor, via=via)
+    await drop_feeds_of_channel(bot, guild, spotlight_id, actor)
     await delete_channel(bot.db, spotlight_id)
     if cog is not None:
         cog.misses.pop(int(spotlight_id), None)

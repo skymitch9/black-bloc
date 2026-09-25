@@ -85,6 +85,24 @@ const EVENT_NOTE = 'A marathon is an event: its dates follow the schedule while 
 const EVENT_TONE = { pending: 'warn', approved: 'ok', denied: 'danger', cancelled: null, gone: null };
 const PHASE_TONE = { far: null, near: 'warn', live: 'ok', over: null, paused: null };
 const STATE_TONE = { upcoming: null, live: 'ok', done: null, dropped: 'danger' };
+const FEEDS_NOTE = 'A feed reads the events list of one channel Black Bloc already watches and '
+  + 'adds (or suggests) every new marathon it finds — only for channels on the Go-live page, '
+  + 'never random ones. A marathon a feed added and staff removed is never added again until '
+  + '**Forget ignored**.';
+const FEEDS_OFF = 'Feeds are off (marathon_feeds in **Marathon settings**), so nothing checks '
+  + 'on its own. **Check now** still works.';
+const NO_FEEDS = 'No feeds yet. **Add a feed…** starts from a channel on the Go-live page.';
+const FEED_ADD_NOTE = 'Pick the channel first — a feed belongs to a channel Black Bloc already '
+  + 'watches, one feed per channel. Then what to read: the GDQ tracker, the RPG Limit Break '
+  + 'tracker, or a horaro.net event by its slug (ESA is `esa`).';
+const FEED_NO_CHANNELS = 'Every channel-only row on the Go-live page has a feed already, or '
+  + 'there is none. Add the channel there first.';
+const SUGGESTION_LINE = '**{feed}** has a new event: **{event}**, {date} ({relative}).';
+const SUGGESTION_NOTE = 'Staff decide: nothing is added until someone presses **Add it**. It airs '
+  + 'on the feed’s channel.';
+const FEED_REMOVE_BODY = 'It stops checking. The marathons it added stay on the list.';
+const FROM_FEED = 'Added by the **{feed}** feed.';
+const ACTION_CHOICES = [{ value: 'add', label: 'Add' }, { value: 'suggest', label: 'Suggest' }];
 
 function full(node) {
   node.setAttribute('data-span', 'full');
@@ -402,6 +420,9 @@ async function channelCard(marathon, say) {
 
 function eventCard(marathon, say) {
   const event = marathon.event || {};
+  const fromFeed = marathon.feed_name
+    ? el('p', { class: 'field-help' }, boldParts(said(FROM_FEED, { feed: marathon.feed_name })))
+    : null;
   const moves = [];
   if (event.id && event.status !== 'gone') {
     moves.push(textAction(`Open event #${event.id}`, () => {
@@ -426,9 +447,138 @@ function eventCard(marathon, say) {
       el('span', { text: event.status ? ' ' : '' }),
       ...boldParts(event.line || ''),
     ]),
+    fromFeed,
     el('p', { class: 'field-help' }, boldParts(EVENT_NOTE)),
     bar(moves),
   ]);
+}
+
+async function feedStep(say, work) {
+  const done = await run(say, work, (found) => found?.message);
+  if (done.ok) {
+    keepSaying('marathons', say);
+    await refresh();
+  }
+  return done;
+}
+
+function checkedLine(feed) {
+  if (feed.trouble) return el('span', { class: 'cell-quiet', 'data-tone': 'danger', text: feed.trouble });
+  const every = `checks every ${feed.hours} h`;
+  if (!feed.last_checked_at) return el('span', { class: 'cell-quiet', text: `${every} · not checked yet` });
+  const read = ago(feed.last_checked_at);
+  return el('span', { class: 'cell-quiet', title: read.title, text: `${every} · last checked ${read.text}` });
+}
+
+function feedMoves(feed, say) {
+  const base = `/api/marathons/feeds/${feed.id}`;
+  const moves = [
+    button(feed.active ? 'Pause' : 'Resume', () => feedStep(say, () => send(base, 'PATCH', { active: !feed.active })), { tone: 'quiet' }),
+    button('Check now', () => feedStep(say, () => send(`${base}/check`, 'POST', {})), { tone: 'warn' }),
+  ];
+  if ((feed.dismissed || []).length) {
+    moves.push(button('Look again', () => feedStep(say, () => send(`${base}/look`, 'POST', {})), { tone: 'quiet' }));
+  }
+  if (feed.ignored_count) {
+    moves.push(button(`Forget ignored (${feed.ignored_count})`, () => feedStep(say, () => send(`${base}/forget`, 'POST', {})), { tone: 'quiet' }));
+  }
+  moves.push(button('Remove', async () => {
+    const sure = await ask({ title: `Remove the ${feed.name} feed?`, body: [FEED_REMOVE_BODY], confirmLabel: 'Remove it' });
+    if (!sure) return;
+    await feedStep(say, () => send(base, 'DELETE'));
+  }, { tone: 'danger' }));
+  return el('div', { class: 'bar' }, moves);
+}
+
+function actionCell(feed, say) {
+  const chips = segment(ACTION_CHOICES, feed.action, {
+    onChange: () => {
+      const wanted = chips.readValue();
+      if (wanted !== feed.action) feedStep(say, () => send(`/api/marathons/feeds/${feed.id}`, 'PATCH', { action: wanted }));
+    },
+  });
+  return chips;
+}
+
+function suggestionCard(feed, record, say) {
+  const base = `/api/marathons/feeds/${feed.id}`;
+  const line = said(SUGGESTION_LINE, {
+    feed: feed.name,
+    event: record.name,
+    date: record.starts_at ? new Date(record.starts_at).toLocaleDateString() : 'no date yet',
+    relative: relative(record.starts_at),
+  });
+  return card('Next up', [
+    el('p', {}, boldParts(line)),
+    el('p', { class: 'field-help' }, boldParts(SUGGESTION_NOTE)),
+    record.url ? el('p', { class: 'field-help' }, [el('a', { href: record.url, text: 'the schedule', rel: 'noreferrer', target: '_blank' })]) : null,
+    bar([
+      button('Add it', async () => {
+        const done = await feedStep(say, () => send(`${base}/add`, 'POST', { event_ref: record.ref }));
+        if (done.ok && done.found.marathon_id) await openMarathon(done.found.marathon_id, record.name, done.found.message);
+      }, { tone: 'warn' }),
+      button('Not this one', () => feedStep(say, () => send(base, 'PATCH', { dismiss: record.ref })), { tone: 'quiet' }),
+    ]),
+  ]);
+}
+
+async function addFeed(payload) {
+  const free = (payload.channels || []).filter((one) => !one.feed_name);
+  const channel = el('select', { class: 'input' }, free.map((one) => el('option', { value: String(one.id), text: `${one.name} · twitch.tv/${one.login}` })));
+  const source = el('select', { class: 'input' }, (payload.sources || []).map((one) => el('option', { value: one.value, text: one.label })));
+  const slug = el('input', { class: 'input', type: 'text', placeholder: 'esa' });
+  const name = el('input', { class: 'input', type: 'text', placeholder: 'the channel’s name' });
+  const action = segment(ACTION_CHOICES, payload.action_default || 'add');
+  let made = null;
+  const sure = await askForm({
+    title: 'Add a feed',
+    body: [
+      el('p', { class: 'ask-body' }, boldParts(free.length ? FEED_ADD_NOTE : FEED_NO_CHANNELS)),
+      field('Channel', channel),
+      field('Read from', source),
+      field('horaro.net event slug', slug, 'Only for horaro.net — the part after horaro.net/.'),
+      field('Name', name, 'Blank uses the channel’s name.'),
+      field('New events', action),
+    ],
+    confirmLabel: 'Add the feed',
+    tone: 'warn',
+    onConfirm: async () => {
+      made = await send('/api/marathons/feeds', 'POST', {
+        spotlight_id: channel.value || null,
+        source: source.value,
+        slug: slug.value.trim() || null,
+        name: name.value.trim() || null,
+        action: action.readValue(),
+      });
+      return null;
+    },
+  });
+  if (!sure || !made) return;
+  const say = notice();
+  say.say(made.message, 'ok');
+  keepSaying('marathons', say);
+  await refresh();
+}
+
+function feedsCard(feeds, say) {
+  if (feeds.error) return card('Feeds', [notice(feeds.error.text, feeds.error.tone)]);
+  const rows = feeds.feeds || [];
+  const grid = table([
+    { label: 'Feed', cell: (row) => el('span', {}, [el('span', { class: 'cell-name', text: row.name }), row.active ? null : badge('paused')]) },
+    { label: 'Reads', cell: (row) => row.source_word },
+    { label: 'Channel', cell: (row) => row.channel_name },
+    { label: 'Checks', cell: (row) => checkedLine(row) },
+    { label: 'New events', cell: (row) => actionCell(row, say) },
+    { label: '', cell: (row) => feedMoves(row, say) },
+  ], rows, { empty: NO_FEEDS });
+  const waiting = rows.flatMap((feed) => (feed.suggestions || []).map((one) => suggestionCard(feed, one, say)));
+  return card('Feeds', [
+    el('p', { class: 'field-help' }, boldParts(FEEDS_NOTE)),
+    feeds.enabled === false ? el('p', { class: 'field-help' }, boldParts(FEEDS_OFF)) : null,
+    bar([button('Add a feed…', () => addFeed(feeds), { tone: 'warn' })]),
+    grid,
+    ...waiting,
+  ], { count: rows.length });
 }
 
 function eventCell(row) {
@@ -519,7 +669,7 @@ async function openMarathon(marathonId, title, message = '') {
   }
 }
 
-function listSection(payload, say) {
+function listSection(payload, feeds, say) {
   const rows = payload.marathons || [];
   const list = section('Marathons', LIST_NOTE, { count: rows.length, id: 'marathons', open: true });
   const add = button('Add a marathon', () => addMarathon(), { tone: 'warn' });
@@ -539,8 +689,9 @@ function listSection(payload, say) {
     el('p', { class: 'field-help' }, [el('span', { text: 'Marathon posts are ' }), modeChip(payload.mode), el('span', { text: '.' })]),
     payload.mode === 'off' ? el('p', { class: 'field-help' }, boldParts(said(MODE_OFF, { mode: payload.mode }))) : null,
     payload.mode === 'shadow' ? el('p', { class: 'field-help' }, boldParts(MODE_SHADOW)) : null,
-    card(null, [bar([add]), grid]),
     say,
+    feedsCard(feeds, say),
+    card(null, [bar([add]), grid]),
   ].filter(Boolean));
   return full(list.node);
 }
@@ -549,10 +700,13 @@ function listSection(payload, say) {
 export async function marathonsSection({ reload, openEvent }) {
   refresh = reload;
   showEvent = openEvent;
-  const payload = await api('/api/marathons');
+  const [payload, feeds] = await Promise.all([
+    api('/api/marathons'),
+    api('/api/marathons/feeds').catch((error) => ({ error: sentenceFor(error) })),
+  ]);
   makesEvent = payload.makes_event !== false;
   const say = sayAgain('marathons', notice());
-  const node = listSection(payload, say);
+  const node = listSection(payload, feeds, say);
   const wanted = wantedId();
   if (wanted && !deepLinked) {
     deepLinked = true;

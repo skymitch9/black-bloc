@@ -41,6 +41,8 @@
       "handoff_confirm_hours": 1,
       "logs_count": 1,
       "marathon_far_poll_hours": 1,
+      "marathon_feed_hours": 1,
+      "marathon_feed_recent_days": 0,
       "marathon_late_grace_minutes": 0,
       "marathon_lead_days": 1,
       "marathon_move_minutes": 1,
@@ -98,6 +100,8 @@
       "honeypot_purge_days": 7,
       "logs_count": 50,
       "marathon_far_poll_hours": 168,
+      "marathon_feed_hours": 168,
+      "marathon_feed_recent_days": 30,
       "marathon_late_grace_minutes": 360,
       "marathon_lead_days": 60,
       "marathon_move_minutes": 120,
@@ -4663,6 +4667,278 @@
     },
     {
       "method": "GET",
+      "path": "/api/marathons/feeds",
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — the feed list, the channel picker and the source picker"
+      ],
+      "shape": "object",
+      "keys": [
+        "enabled",
+        "hours",
+        "action_default",
+        "feeds",
+        "channels",
+        "sources"
+      ],
+      "rows": {
+        "feeds": [
+          "id",
+          "name",
+          "source",
+          "source_word",
+          "spotlight_id",
+          "channel_name",
+          "action",
+          "active",
+          "hours",
+          "last_checked_at",
+          "trouble",
+          "ignored_count",
+          "suggestions",
+          "dismissed",
+          "marathons"
+        ],
+        "channels": [
+          "id",
+          "login",
+          "name",
+          "feed_name"
+        ],
+        "sources": [
+          "value",
+          "label"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/feeds",
+      "body": {
+        "spotlight_id": "{feedless_spotlight_id}",
+        "source": "horaro",
+        "slug": "esa"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — Add a feed…"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source",
+        "source_word",
+        "spotlight_id",
+        "channel_name",
+        "action",
+        "active",
+        "hours",
+        "last_checked_at",
+        "trouble",
+        "ignored_count",
+        "suggestions",
+        "dismissed",
+        "marathons",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/feeds/{feed_id}",
+      "body": {
+        "action": "suggest",
+        "active": false
+      },
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — Pause / Resume and the Add / Suggest segment"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source",
+        "source_word",
+        "spotlight_id",
+        "channel_name",
+        "action",
+        "active",
+        "hours",
+        "last_checked_at",
+        "trouble",
+        "ignored_count",
+        "suggestions",
+        "dismissed",
+        "marathons",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/feeds/{feed_suggest_id}",
+      "body": {
+        "dismiss": "{feed_event_ref}"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — Not this one on a waiting event"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source",
+        "source_word",
+        "spotlight_id",
+        "channel_name",
+        "action",
+        "active",
+        "hours",
+        "last_checked_at",
+        "trouble",
+        "ignored_count",
+        "suggestions",
+        "dismissed",
+        "marathons",
+        "message"
+      ],
+      "rows": {
+        "dismissed": [
+          "ref",
+          "name",
+          "starts_at",
+          "url"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/marathons/feeds/{feed_id}",
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — Remove"
+      ],
+      "shape": "object",
+      "keys": [
+        "removed",
+        "id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/feeds/{feed_id}/check",
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — Check now"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source",
+        "source_word",
+        "spotlight_id",
+        "channel_name",
+        "action",
+        "active",
+        "hours",
+        "last_checked_at",
+        "trouble",
+        "ignored_count",
+        "suggestions",
+        "dismissed",
+        "marathons",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/feeds/{feed_suggest_id}/look",
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — Look again"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source",
+        "source_word",
+        "spotlight_id",
+        "channel_name",
+        "action",
+        "active",
+        "hours",
+        "last_checked_at",
+        "trouble",
+        "ignored_count",
+        "suggestions",
+        "dismissed",
+        "marathons",
+        "message"
+      ],
+      "rows": {
+        "suggestions": [
+          "ref",
+          "name",
+          "starts_at",
+          "url"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/feeds/{feed_id}/forget",
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — Forget ignored"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source",
+        "source_word",
+        "spotlight_id",
+        "channel_name",
+        "action",
+        "active",
+        "hours",
+        "last_checked_at",
+        "trouble",
+        "ignored_count",
+        "suggestions",
+        "dismissed",
+        "marathons",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/feeds/{feed_suggest_id}/add",
+      "body": {
+        "event_ref": "{feed_event_ref}"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) Feeds card — Add it on a waiting event"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source",
+        "source_word",
+        "spotlight_id",
+        "channel_name",
+        "action",
+        "active",
+        "hours",
+        "last_checked_at",
+        "trouble",
+        "ignored_count",
+        "suggestions",
+        "dismissed",
+        "marathons",
+        "message",
+        "marathon_id"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/marathons",
       "read_by": [
         "marathons-section.js (events.html) marathon list"
@@ -4694,7 +4970,8 @@
           "channel_gone",
           "next",
           "next_waiting",
-          "event"
+          "event",
+          "feed_name"
         ]
       }
     },
@@ -4752,7 +5029,8 @@
         "unmatched",
         "next",
         "next_waiting",
-        "event"
+        "event",
+        "feed_name"
       ],
       "rows": {
         "run_list": [
@@ -7062,6 +7340,17 @@
     "web.marathon.next_none",
     "web.marathon.next_failed",
     "web.marathon.next_added",
-    "web.marathon.next_dismissed"
+    "web.marathon.next_dismissed",
+    "web.marathon.feed_created",
+    "web.marathon.feed_changed",
+    "web.marathon.feed_paused",
+    "web.marathon.feed_resumed",
+    "web.marathon.feed_removed",
+    "web.marathon.feed_checked",
+    "web.marathon.feed_failed",
+    "web.marathon.feed_looked",
+    "web.marathon.feed_forgot",
+    "web.marathon.feed_dismissed",
+    "web.marathon.feed_taken"
   ]
 }

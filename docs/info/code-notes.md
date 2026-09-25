@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *Marathon feeds — the bot finds the next events itself* (branch `marathon-feeds`, off `main` `05fbd0e6`, keyed against `0f973d75`). Before that:
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED and TWO rows RE-KEYED**: *Marathons share the Events page* (branch `marathon-events-page`, off `main` `ed52ffeb`, keyed against its routes commit `ce7b7f80`); the two `page-marathons.js` rows of the marathon sections now point at `marathons-section.js` (the file moved). Nothing else re-keyed.
 > Before that: **2026-09-25 — one section APPENDED, nothing re-keyed**: *The next GDQ event, and a way back for a done run* (branch `marathon-next-event`, off `main` `6bb49274`, keyed against its last code commit). Before that, the same day: *Marathon schedules* (branch `marathon-schedule`, off `main` `08e03fbf`).
 > Before that: **2026-09-25 — one section APPENDED, nothing re-keyed**: *A spotlight split from its ping* (branch `spotlight-ping-windows`, off `main` `84f94347`, keyed against `d32efb57`).
@@ -8348,3 +8349,38 @@ Design: [`personality-tones-design.md`](personality-tones-design.md).
 | `black_bloc/api/tools/events.py:143` `shown` | Every event answer carries `marathon` (or null), so the page never has to ask twice. |
 | `site/public/assets/marathons-section.js:100` `wantedId` | `#marathon-<id>` — a bare number on the Events page could be anything; the prefix is what the staff notice and the Logs page link to. |
 | `site/public/assets/marathons-section.js:403` `eventCard` | **Open event #N** asks the Events page (`openEvent`, `page-events.js:90`) to show every status and open the detail, so a settled event is still found. |
+
+## Marathon feeds — the bot finds the next events itself (branch `marathon-feeds`, 2026-09-25)
+
+*(Keyed against `0f973d75`. Design and deviations: [`marathon-feeds-design.md`](marathon-feeds-design.md) — its `## Deviations` are cited by number.)*
+
+| Where | Why |
+|---|---|
+| `black_bloc/storage/db.py:1088` `marathon_feeds` | Schema 63. A feed always belongs to a channel row (`spotlight_id NOT NULL`); `suggested` and `ignored` are JSON lists on the row, not tables — a handful of refs per feed. |
+| `black_bloc/storage/db.py:1108` `marathon_feeds_one_per_channel` | One channel, one feed, as a constraint behind the refusal in words (Deviation 5, checklist 6). |
+| `black_bloc/storage/db.py:1111` `marathon_feed_seeds` | The "seeded once, ever" marker per channel login — without it a seeded feed staff removed would come back on the next boot (Deviation 4). |
+| `black_bloc/marathon_sources.py:26` `TRACKER_BASES` | GDQ and RPGLB run the same tracker software; the base is `<host>/tracker` for GDQ and the bare host for RPGLB, so the API is `base + /api/v2` either way. A feed's base must be one of these (`tracker_source`, `:152`) — Deviation 2. |
+| `black_bloc/marathon_sources.py:119` `read_url` | `rpglimitbreak.com/schedule` carries no id (it 302s to the current event), so it reads as `latest` and `resolve` takes the newest event on the list (`:442`, Deviation 3). |
+| `black_bloc/marathon_sources.py:284` `parse_horaro` | Columns are found by NAME (a schedule may reorder or rename them); `hidden:ID` is the run id, else the item's place (Deviation 18). Times come from `scheduled_t` + `length_t`. |
+| `black_bloc/marathon_sources.py:256` `horaro_people` | `PLAYER_SPLIT` (`:68`) splits on `,` `&` `vs`/`vs.` `and`; `[name](twitch link)` yields a login — ESA 2026 summer links most players (Deviation 17). |
+| `black_bloc/marathon_sources.py:321` `horaro_span` | The events list inlines each schedule's items, so a schedule's END is its last item's start + length — no second read per schedule. |
+| `black_bloc/marathon_sources.py:422` `horaro_schedules` | The slug is checked before it goes into a URL (`HORARO_SLUG`), so a staff-typed `../x` is refused in words, not requested. |
+| `black_bloc/marathon_feeds.py:44` `SEEDS` | GDQ and RPGLB only — ESA opted out (Deviation 1). A horaro.net feed is staff's to add. |
+| `black_bloc/marathon_feeds.py:247` `tracker_candidates` | A draft is kept (every announced tracker event is a draft until its schedule is up); "recent" is by START because a tracker event has no end (Deviation 9). |
+| `black_bloc/marathon_feeds.py:289` `fresh` | "Never twice": a marathon already on the list (paused and over ones count), a ref staff removed (`ignored`), a ref already suggested or dismissed. |
+| `black_bloc/marathon.py:410` `named` / `:422` | The Discord-username step only runs for a person the schedule gave NO link — a link that matches nobody is not second-guessed by a name (Deviation 17). |
+| `black_bloc/cogs/content/marathon_feeds.py:309` `run_check` | Called with the feed's lock held (checklist 6); the adopt loop (`:327`) gives an existing marathon of the same ref the feed's id (Deviation 11). |
+| `black_bloc/cogs/content/marathon_feeds.py:375` `add_candidate` | Exactly a staff Add (`create_marathon`, the make-event wish from the key), then the log row, then ONE notice (checklist 12). Shadow still adds — a row is not a post (Deviation 10). |
+| `black_bloc/cogs/content/marathon_feeds.py:410` `suggest` | The caller saves the record BEFORE this posts; the notice's ids are written after, so a crash between re-posts nothing on the next check (checklist 12). |
+| `black_bloc/cogs/content/marathon_feeds.py:253` `feed_details` | `actionlog` rewrites `via` to discord/website, so an automatic row says `automatic: true` instead (Deviation 8). |
+| `black_bloc/cogs/content/marathon_feeds.py:484` `tick_feeds` | One `try` per feed (checklist 24): a feed that raises does not stop the others or the marathon tick. Seeding runs once per process, before the first check. |
+| `black_bloc/cogs/content/marathon_feeds.py:611` `run_check(…, via=mf.VIA_FEED)` | Add a feed's first check (and Look again's, `:744`) is an automatic row, so the web write leaves one `web.` row (Deviation 12, checklist 34). |
+| `black_bloc/cogs/content/marathon_feeds.py:883` `ignore_removed` | One atomic `json_insert … WHERE NOT EXISTS` UPDATE — no feed lock, so no lock order with a running check (Deviation 14). |
+| `black_bloc/cogs/content/marathon_feeds.py:920` `FeedButton` | KI-20: a `DynamicItem`; pause/remove carry the MARATHON id, add/dismiss the event ref. `notice_view` (`:986`) posts no buttons for a ref a custom id cannot hold (Deviation 15). |
+| `black_bloc/cogs/content/marathon_feeds.py:644` `drop_feeds_of_channel` | A channel row that goes takes its feed (logged `because: channel_removed`); `spotlight.delete_channel` also deletes the rows in SQL for a bot with no marathon cog. |
+| `black_bloc/cogs/content/marathon.py:650` `ignore_removed(…, via=VIA_FEED)` | Any door's Remove of a feed-made marathon is remembered; the row is automatic so a web DELETE stays one `web.` row. The default `via` stays discord (the shared-logger guard). |
+| `black_bloc/cogs/content/marathon.py:1287` `await tick_feeds` | Feeds ride the marathon tick and its `Reconciler`, never in `off`. |
+| `black_bloc/cogs/content/marathon.py:2802` `feed_move` | Every `feed_*` panel move (and **Feeds…**) is routed to the feeds module by a lazy import — it imports this cog at module load. |
+| `black_bloc/api/server.py:194` `marathon_feeds.build_router` | Included BEFORE the marathons router: `/api/marathons/{marathon_id}` would otherwise take `/api/marathons/feeds` and answer 422. |
+| `site/public/assets/marathons-section.js:563` `feedsCard` | Above the list; the waiting events are `suggestionCard` (`:503`), a sibling of `nextCard` (Deviation 22). A failed feeds read is a card with the sentence, never a blank section. |
+| `site/mock/server.mjs:5824` `seedMarathonFeeds` | Literal URLs: `seedState` runs at load, before the `FEED_*` constants exist (Deviation 23). |

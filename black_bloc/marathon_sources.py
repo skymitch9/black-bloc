@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .golive import twitch_login_from_url
@@ -12,19 +12,28 @@ from .youtube import BROWSER_AGENT
 log = logging.getLogger(__name__)
 
 GDQ = "gdq"
-SOURCES = (GDQ,)
-SOURCE_WORDS = {GDQ: "GDQ tracker"}
+RPGLB = "rpglb"
+HORARO = "horaro"
+TRACKER_SOURCES = (GDQ, RPGLB)
+SOURCES = (*TRACKER_SOURCES, HORARO)
+SOURCE_WORDS = {GDQ: "GDQ tracker", RPGLB: "RPG Limit Break tracker", HORARO: "horaro.net"}
+SITE_WORDS = {GDQ: "the GDQ tracker", RPGLB: "the RPG Limit Break tracker", HORARO: "horaro.net"}
 RUNNER = "runner"
 HOST = "host"
 COMMENTATOR = "commentator"
 PARTS = (RUNNER, HOST, COMMENTATOR)
 
-TRACKER = "https://tracker.gamesdonequick.com/tracker/api/v2"
-EVENT_URL = TRACKER + "/events/{ref}/"
-RUNS_URL = TRACKER + "/events/{ref}/runs/?limit=500"
-SHORT_URL = TRACKER + "/events/?short={short}"
-EVENTS_URL = TRACKER + "/events/"
-TRACKER_EVENT = "https://tracker.gamesdonequick.com/tracker/event/{ref}"
+TRACKER_BASES = {
+    GDQ: "https://tracker.gamesdonequick.com/tracker",
+    RPGLB: "https://tracker.rpglimitbreak.com",
+}
+API_PATH = "/api/v2"
+TRACKER = TRACKER_BASES[GDQ] + API_PATH
+EVENT_URL = "{api}/events/{ref}/"
+RUNS_URL = "{api}/events/{ref}/runs/?limit=500"
+SHORT_URL = "{api}/events/?short={short}"
+EVENTS_URL = "{api}/events/"
+TRACKER_EVENT = "{base}/event/{ref}"
 SCHEDULE_PAGE = "https://gamesdonequick.com/schedule/{ref}"
 REQUEST_TIMEOUT_SECONDS = 20
 PAGES_MAX = 20
@@ -37,17 +46,44 @@ GDQ_TRACKER = re.compile(
     r"(?:[?#].*)?$",
     re.IGNORECASE,
 )
+RPGLB_SCHEDULE = re.compile(
+    r"^https?://(?:www\.)?rpglimitbreak\.com/schedule/?(?:[?#].*)?$", re.IGNORECASE
+)
+RPGLB_TRACKER = re.compile(
+    r"^https?://(?:(?:www\.)?rpglimitbreak\.com/tracker|tracker\.rpglimitbreak\.com)/"
+    r"(?:event|runs|index)/([A-Za-z0-9_-]+)/?(?:[?#].*)?$",
+    re.IGNORECASE,
+)
+HORARO_SCHEDULE = re.compile(
+    r"^https?://(?:www\.)?horaro\.net/([A-Za-z0-9][A-Za-z0-9_-]*)/"
+    r"([A-Za-z0-9][A-Za-z0-9_-]*?)(?:\.json)?/?(?:[?#].*)?$",
+    re.IGNORECASE,
+)
+HORARO_SITE = "https://horaro.net"
+HORARO_PAGE = HORARO_SITE + "/{ref}"
+HORARO_JSON = HORARO_SITE + "/{ref}.json"
+HORARO_SCHEDULES = HORARO_SITE + "/-/api/v1/events/{slug}/schedules"
+HORARO_SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,60}$")
+MARKDOWN_LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]*)\)")
+PLAYER_SPLIT = re.compile(r"\s*(?:,|&|\s+vs\.?\s+|\s+and\s+)\s*", re.IGNORECASE)
+GAME_COLUMNS = ("game",)
+PLAYER_COLUMNS = ("player(s)", "players", "player", "runner(s)", "runners", "runner")
+CATEGORY_COLUMNS = ("category",)
+ID_COLUMNS = ("hidden:id",)
 GDQ_SHORT = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{2,40}$")
 SHORT_PREFIX = "short:"
+LATEST = "latest"
 
-NOT_PUBLISHED = (
-    "the GDQ tracker has the event but has not published its schedule yet (it answers 404 for "
-    "the runs)"
+NOT_PUBLISHED_AT = (
+    "{site} has the event but has not published its schedule yet (it answers 404 for the runs)"
 )
-NO_SUCH_EVENT = "the GDQ tracker has no event {ref}"
-ANSWERED = "the GDQ tracker answered {status}"
-UNREACHABLE = "the GDQ tracker could not be reached ({why})"
-NOT_JSON = "the GDQ tracker answered with something that is not a schedule"
+NOT_PUBLISHED = NOT_PUBLISHED_AT.format(site=SITE_WORDS[GDQ])
+NO_SUCH_EVENT = "{site} has no event {ref}"
+NO_EVENT_YET = "{site} lists no event yet"
+ANSWERED = "{site} answered {status}"
+UNREACHABLE = "{site} could not be reached ({why})"
+NOT_JSON = "{site} answered with something that is not a schedule"
+UNKNOWN_SOURCE = "Black Bloc has no reader for {source}"
 TOO_MANY_PAGES = "the schedule ran past {pages} pages, so only the first ones were read"
 
 
@@ -86,10 +122,16 @@ def read_url(url: Any) -> tuple[str, str] | None:
     found = GDQ_SCHEDULE.match(text)
     if found:
         return (GDQ, found.group(1))
-    found = GDQ_TRACKER.match(text)
+    for source, pattern in ((GDQ, GDQ_TRACKER), (RPGLB, RPGLB_TRACKER)):
+        found = pattern.match(text)
+        if found:
+            ref = found.group(1)
+            return (source, ref if ref.isdigit() else SHORT_PREFIX + ref)
+    if RPGLB_SCHEDULE.match(text):
+        return (RPGLB, LATEST)
+    found = HORARO_SCHEDULE.match(text)
     if found:
-        ref = found.group(1)
-        return (GDQ, ref if ref.isdigit() else SHORT_PREFIX + ref)
+        return (HORARO, f"{found.group(1).lower()}/{found.group(2).lower()}")
     if GDQ_SHORT.match(text) and not text.isdigit() and "." not in text:
         return (GDQ, SHORT_PREFIX + text)
     return None
@@ -99,8 +141,31 @@ def is_short(ref: Any) -> bool:
     return str(ref or "").startswith(SHORT_PREFIX)
 
 
+def site_of(source: Any) -> str:
+    return SITE_WORDS.get(str(source or ""), str(source or ""))
+
+
+def api_of(source: str) -> str:
+    return TRACKER_BASES[source] + API_PATH
+
+
+def tracker_source(base: Any) -> str | None:
+    """The source word a tracker base URL stands for, or None for a tracker Black Bloc lacks."""
+    wanted = str(base or "").strip().rstrip("/").lower()
+    for source, known in TRACKER_BASES.items():
+        if known.lower() == wanted:
+            return source
+    return None
+
+
 def schedule_page(source: str, ref: Any) -> str:
-    return SCHEDULE_PAGE.format(ref=ref) if source == GDQ and not is_short(ref) else ""
+    if source == GDQ and not is_short(ref):
+        return SCHEDULE_PAGE.format(ref=ref)
+    if source in TRACKER_BASES and str(ref or "").isdigit():
+        return event_url(ref, source)
+    if source == HORARO and ref:
+        return HORARO_PAGE.format(ref=ref)
+    return ""
 
 
 def seconds_of(text: Any) -> int | None:
@@ -169,13 +234,114 @@ def parse_gdq(payload: Any) -> list[Run]:
     return found
 
 
+def unlinked(text: Any) -> str:
+    """`[Name](url)` → `Name`, the way horaro.net writes a linked cell."""
+    return _text(MARKDOWN_LINK.sub(lambda found: found.group(1), str(text or "")))
+
+
+def _column(columns: list[str], wanted: tuple[str, ...]) -> int | None:
+    lowered = [" ".join(str(one or "").split()).lower() for one in columns]
+    for name in wanted:
+        if name in lowered:
+            return lowered.index(name)
+    return None
+
+
+def _cell_of(data: Any, index: int | None) -> Any:
+    if index is None or not isinstance(data, list) or index >= len(data):
+        return None
+    return data[index]
+
+
+def horaro_people(cell: Any) -> tuple[Person, ...]:
+    """A player cell split on `,` `&` `vs` `and`; `[name](twitch link)` gives a login."""
+    found: list[Person] = []
+    for piece in PLAYER_SPLIT.split(str(cell or "").strip()):
+        link = MARKDOWN_LINK.fullmatch(piece.strip())
+        name = _text(link.group(1) if link else piece)
+        if not name:
+            continue
+        found.append(Person(name, twitch_login_from_url(link.group(2)) if link else None, RUNNER))
+    return tuple(found)
+
+
+def _moment(stamp: Any, text: Any) -> datetime | None:
+    if isinstance(stamp, int | float) and not isinstance(stamp, bool):
+        return datetime.fromtimestamp(stamp, UTC)
+    found = utc_iso(text)
+    return datetime.fromisoformat(found) if found else None
+
+
+def horaro_schedule_of(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    for key in ("schedule", "data"):
+        if isinstance(payload.get(key), dict):
+            return payload[key]
+    return payload
+
+
+def parse_horaro(payload: Any) -> list[Run]:
+    """One horaro.net schedule into runs: the columns are found by name, not by position."""
+    schedule = horaro_schedule_of(payload)
+    columns = [str(one or "") for one in schedule.get("columns") or ()]
+    game_at = _column(columns, GAME_COLUMNS)
+    players_at = _column(columns, PLAYER_COLUMNS)
+    category_at = _column(columns, CATEGORY_COLUMNS)
+    id_at = _column(columns, ID_COLUMNS)
+    found: list[Run] = []
+    for index, item in enumerate(schedule.get("items") or ()):
+        if not isinstance(item, dict):
+            continue
+        data = item.get("data")
+        game = unlinked(_cell_of(data, game_at))
+        if not game:
+            continue
+        starts = _moment(item.get("scheduled_t"), item.get("scheduled"))
+        length = item.get("length_t")
+        seconds = int(length) if isinstance(length, int) and length >= 0 else None
+        ends = starts + timedelta(seconds=seconds) if starts and seconds is not None else None
+        given_id = _text(_cell_of(data, id_at))
+        found.append(
+            Run(
+                external_id=given_id or f"#{index}",
+                order=index + 1,
+                game=game,
+                display_name=game,
+                category=unlinked(_cell_of(data, category_at)),
+                starts_at=starts.isoformat() if starts else None,
+                ends_at=ends.isoformat() if ends else None,
+                run_seconds=seconds,
+                people=horaro_people(_cell_of(data, players_at)),
+            )
+        )
+    return found
+
+
+def horaro_span(schedule: Any) -> tuple[str | None, str | None]:
+    """A listed schedule's start and, from its last item, its end."""
+    if not isinstance(schedule, dict):
+        return (None, None)
+    starts = _moment(schedule.get("start_t"), schedule.get("start"))
+    ends = None
+    for item in schedule.get("items") or ():
+        if not isinstance(item, dict):
+            continue
+        at = _moment(item.get("scheduled_t"), item.get("scheduled"))
+        length = item.get("length_t")
+        if at is not None:
+            end = at + timedelta(seconds=length if isinstance(length, int) else 0)
+            ends = end if ends is None or end > ends else ends
+    return (starts.isoformat() if starts else None, ends.isoformat() if ends else None)
+
+
 def next_page(payload: Any) -> str | None:
     found = payload.get("next") if isinstance(payload, dict) else None
     return str(found) if found else None
 
 
-def event_url(ref: Any) -> str:
-    return TRACKER_EVENT.format(ref=ref)
+def event_url(ref: Any, source: str = GDQ) -> str:
+    return TRACKER_EVENT.format(base=TRACKER_BASES[source], ref=ref)
 
 
 def next_gdq_event(events: Any, after: Any, now: datetime) -> dict[str, Any] | None:
@@ -229,65 +395,103 @@ class ScheduleClient:
                 except ValueError:
                     return (200, None)
         except (TimeoutError, aiohttp.ClientError, OSError) as exc:
-            raise ScheduleError(UNREACHABLE.format(why=type(exc).__name__)) from exc
+            raise ScheduleError(
+                UNREACHABLE.format(site=_site_of_url(url), why=type(exc).__name__)
+            ) from exc
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
             await self._session.close()
         self._session = None
 
-    async def _json(self, url: str) -> tuple[int, Any]:
+    async def _json(self, url: str, source: str = GDQ) -> tuple[int, Any]:
         status, body = await self._request(url)
         if status == 200 and not isinstance(body, dict):
-            raise ScheduleError(NOT_JSON)
+            raise ScheduleError(NOT_JSON.format(site=site_of(source)))
         return (status, body)
+
+    async def horaro(self, ref: str) -> dict[str, Any]:
+        """One horaro.net schedule's JSON export; a missing one is refused in words."""
+        status, body = await self._json(HORARO_JSON.format(ref=ref), HORARO)
+        if status == 404:
+            raise ScheduleError(NO_SUCH_EVENT.format(site=site_of(HORARO), ref=ref))
+        if status != 200:
+            raise ScheduleError(ANSWERED.format(site=site_of(HORARO), status=status))
+        return horaro_schedule_of(body)
+
+    async def horaro_schedules(self, slug: str) -> list[dict[str, Any]]:
+        """Every schedule horaro.net lists for one event, oldest first."""
+        if not HORARO_SLUG.match(str(slug or "")):
+            raise ScheduleError(NO_SUCH_EVENT.format(site=site_of(HORARO), ref=str(slug)[:40]))
+        status, body = await self._json(HORARO_SCHEDULES.format(slug=slug), HORARO)
+        if status == 404:
+            raise ScheduleError(NO_SUCH_EVENT.format(site=site_of(HORARO), ref=slug))
+        if status != 200:
+            raise ScheduleError(ANSWERED.format(site=site_of(HORARO), status=status))
+        return [row for row in body.get("data") or () if isinstance(row, dict)]
 
     async def resolve(self, source: str, ref: str) -> tuple[str, str]:
         """(the event id, its name) — a short such as `AGDQ2027` is looked up once here."""
-        if source != GDQ:
-            raise ScheduleError(NO_SUCH_EVENT.format(ref=ref))
+        if source == HORARO:
+            schedule = await self.horaro(ref)
+            return (ref, _text(schedule.get("name")) or ref)
+        if source not in TRACKER_BASES:
+            raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
+        site = site_of(source)
+        api = api_of(source)
+        if ref == LATEST:
+            listed = [row for row in await self.events(source) if row.get("id") is not None]
+            if not listed:
+                raise ScheduleError(NO_EVENT_YET.format(site=site))
+            newest = listed[0]
+            return (str(newest["id"]), _text(newest.get("name")) or str(newest["id"]))
         if is_short(ref):
             short = ref[len(SHORT_PREFIX) :]
-            status, body = await self._json(SHORT_URL.format(short=short))
+            status, body = await self._json(SHORT_URL.format(api=api, short=short), source)
             if status != 200:
-                raise ScheduleError(ANSWERED.format(status=status))
+                raise ScheduleError(ANSWERED.format(site=site, status=status))
             event = event_from(body)
             if event is None:
-                raise ScheduleError(NO_SUCH_EVENT.format(ref=short))
+                raise ScheduleError(NO_SUCH_EVENT.format(site=site, ref=short))
             return (str(event["id"]), _text(event.get("name")) or short)
-        status, body = await self._json(EVENT_URL.format(ref=ref))
+        status, body = await self._json(EVENT_URL.format(api=api, ref=ref), source)
         if status == 404:
-            raise ScheduleError(NO_SUCH_EVENT.format(ref=ref))
+            raise ScheduleError(NO_SUCH_EVENT.format(site=site, ref=ref))
         if status != 200:
-            raise ScheduleError(ANSWERED.format(status=status))
+            raise ScheduleError(ANSWERED.format(site=site, status=status))
         return (str(body.get("id") or ref), _text(body.get("name")) or str(ref))
 
-    async def events(self) -> list[dict[str, Any]]:
+    async def events(self, source: str = GDQ) -> list[dict[str, Any]]:
         """Every event the tracker lists, newest first; one page today, `next` followed if not."""
-        url: str | None = EVENTS_URL
+        if source not in TRACKER_BASES:
+            raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
+        url: str | None = EVENTS_URL.format(api=api_of(source))
         found: list[dict[str, Any]] = []
         pages = 0
         while url and pages < PAGES_MAX:
-            status, body = await self._json(url)
+            status, body = await self._json(url, source)
             if status != 200:
-                raise ScheduleError(ANSWERED.format(status=status))
+                raise ScheduleError(ANSWERED.format(site=site_of(source), status=status))
             found.extend(row for row in body.get("results") or () if isinstance(row, dict))
             url = next_page(body)
             pages += 1
         return found
 
     async def runs(self, source: str, ref: str) -> list[Run]:
-        if source != GDQ:
-            raise ScheduleError(NO_SUCH_EVENT.format(ref=ref))
-        url: str | None = RUNS_URL.format(ref=ref)
+        if source == HORARO:
+            return parse_horaro(await self.horaro(ref))
+        if source not in TRACKER_BASES:
+            raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
+        site = site_of(source)
+        url: str | None = RUNS_URL.format(api=api_of(source), ref=ref)
         found: list[Run] = []
         pages = 0
         while url and pages < PAGES_MAX:
-            status, body = await self._json(url)
+            status, body = await self._json(url, source)
             if status == 404:
-                raise ScheduleError(NOT_PUBLISHED, unpublished=True)
+                raise ScheduleError(NOT_PUBLISHED_AT.format(site=site), unpublished=True)
             if status != 200:
-                raise ScheduleError(ANSWERED.format(status=status))
+                raise ScheduleError(ANSWERED.format(site=site, status=status))
             found.extend(parse_gdq(body))
             url = next_page(body)
             pages += 1
@@ -296,26 +500,46 @@ class ScheduleClient:
         return found
 
 
+def _site_of_url(url: str) -> str:
+    for source, base in (*TRACKER_BASES.items(), (HORARO, HORARO_SITE)):
+        if url.startswith(base):
+            return site_of(source)
+    parts = url.split("/")
+    return parts[2] if len(parts) > 2 else "the schedule site"
+
+
 __all__ = [
     "COMMENTATOR",
     "GDQ",
+    "HORARO",
     "HOST",
     "PARTS",
+    "RPGLB",
     "RUNNER",
     "SOURCES",
     "SOURCE_WORDS",
+    "TRACKER_BASES",
+    "TRACKER_SOURCES",
     "Person",
     "Run",
     "ScheduleClient",
     "ScheduleError",
     "event_from",
     "event_url",
+    "horaro_people",
+    "horaro_schedule_of",
+    "horaro_span",
+    "api_of",
     "is_short",
     "next_gdq_event",
     "next_page",
     "parse_gdq",
+    "parse_horaro",
     "read_url",
     "schedule_page",
     "seconds_of",
+    "site_of",
+    "tracker_source",
+    "unlinked",
     "utc_iso",
 ]

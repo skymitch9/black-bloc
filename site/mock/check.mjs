@@ -82,6 +82,12 @@ const IDS = {
   // "waiting for the schedule"; AGDQ 2027 (1) carries event 5, so Unlink reaches it.
   marathon_bare_id: '3',
   marathon_waiting_id: '1',
+  // Feeds: 1 is GDQ (add mode, one removed event remembered, so Forget ignored reaches it);
+  // 2 is RPG Limit Break (suggest mode) with event 22 waiting; the ESA row (2) has no feed.
+  feed_id: '1',
+  feed_suggest_id: '2',
+  feed_event_ref: '22',
+  feedless_spotlight_id: '2',
   // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
   // reach it without ending a stream the other entries expect to still be live.
   spotlight_id: '3',
