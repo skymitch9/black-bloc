@@ -4563,10 +4563,11 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "enum",
         "none",
         "what a new marathon does about events, until staff change that marathon: none makes "
-        "no event; marathon puts one event for the whole marathon into the events review; runs "
-        "makes one event per BaF run, dated from the schedule and re-dated as it moves; "
-        "both does the two. none by default — the Add form's Event select starts here, and a "
-        "feed's own mode wins for the marathons it adds",
+        "no event; marathon puts one event for the whole marathon into the events review, dated "
+        "from the schedule; runs makes one event per BaF run, approved at once and re-dated as "
+        "the schedule moves, and the events feature announces each one as it starts; both does "
+        "the two. none by default — the Add form's Event select starts here, a feed's own mode "
+        "wins for the marathons it adds, and each marathon's drawer changes its own",
     ),
     MARATHON_RUN_EVENTS_REVIEWED_KEY: (
         "bool",

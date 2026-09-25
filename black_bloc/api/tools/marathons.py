@@ -49,8 +49,10 @@ from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_sources import SOURCE_WORDS, schedule_page
 from ...settings_store import (
+    MARATHON_FAR_POLL_HOURS_KEY,
     MARATHON_LEAD_DAYS_KEY,
     MARATHON_MODE_KEY,
+    MARATHON_POLL_MINUTES_KEY,
 )
 from ..auth import Refused, staff_dependency
 from ..names import resolve_one
@@ -196,7 +198,15 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
     channel = await channel_by_id(db, int(row["spotlight_id"])) if row["spotlight_id"] else None
     windows = await marathon_windows(db, row["id"])
     now = datetime.now(UTC)
-    phase = mt.phase(row, now, lead_days=int(bot.store.get(guild.id, MARATHON_LEAD_DAYS_KEY)))
+    lead_days = int(bot.store.get(guild.id, MARATHON_LEAD_DAYS_KEY))
+    phase = mt.phase(row, now, lead_days=lead_days)
+    read_at = mt.next_read_at(
+        row,
+        now,
+        poll_minutes=int(bot.store.get(guild.id, MARATHON_POLL_MINUTES_KEY)),
+        far_hours=int(bot.store.get(guild.id, MARATHON_FAR_POLL_HOURS_KEY)),
+        lead_days=lead_days,
+    )
     upcoming = await next_row(bot, guild, row, now)
     added_by = row["added_by"]
     feed = await get_feed(db, guild.id, row["feed_id"]) if row["feed_id"] else None
@@ -220,6 +230,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "runs": len([one for one in rows if one["state"] != mt.DROPPED]),
         "ours": len([one for one in rows if one["state"] != mt.DROPPED and mt.is_ours(one)]),
         "last_fetched_at": row["last_fetched_at"],
+        "next_read_at": read_at.isoformat() if read_at is not None else None,
         "last_fetch_ok": None if row["last_fetch_ok"] is None else bool(row["last_fetch_ok"]),
         "last_error": row["last_error"],
         "fetch_failures": int(row["fetch_failures"] or 0),

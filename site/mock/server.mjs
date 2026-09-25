@@ -683,7 +683,7 @@ const SETTING_SPECS = [
   ["marathon_next_template", "text", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "the staff notice when a GDQ marathon is over and the tracker lists another event ahead. It takes {marathon} {next} {when} {relative} {url}"],
   ["marathon_next_none_template", "text", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "what staff are told when a GDQ marathon is over and the tracker lists no event ahead. It takes {marathon}"],
   ["marathon_next_added_template", "text", "Added **{next}** \u2014 it will be read from {url}.", "Added **{next}** \u2014 it will be read from {url}.", "what the staff notice is rewritten to once the next event is added. It takes {marathon} {next} {when} {relative} {url}"],
-  ["marathon_event_mode_default", "enum", "none", "none", "what a new marathon does about events, until staff change that marathon: none makes no event; marathon puts one event for the whole marathon into the events review; runs makes one event per BaF run, dated from the schedule and re-dated as it moves; both does the two. none by default — the Add form's Event select starts here, and a feed's own mode wins for the marathons it adds", ["none", "marathon", "runs", "both"]],
+  ["marathon_event_mode_default", "enum", "none", "none", "what a new marathon does about events, until staff change that marathon: none makes no event; marathon puts one event for the whole marathon into the events review, dated from the schedule; runs makes one event per BaF run, approved at once and re-dated as the schedule moves, and the events feature announces each one as it starts; both does the two. none by default — the Add form's Event select starts here, a feed's own mode wins for the marathons it adds, and each marathon's drawer changes its own", ["none", "marathon", "runs", "both"]],
   ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a BaF run goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
   ["marathon_run_event_cancel_on_leave", "bool", true, true, "whether a marathon's events are called off when staff change its event mode away from them (reason mode_changed). on by default; off leaves them on the calendar as ordinary events the marathon no longer keeps in step"],
   ["marathon_shout_when_run_has_event", "bool", false, false, "whether a BaF run that has its own event still gets the marathon shoutout when it goes live. off by default — the events feature announces that run as it starts, so the shoutout would say it twice. The reminders post either way"],
@@ -5623,6 +5623,19 @@ function marathonPhase(row) {
   return 'live';
 }
 
+function marathonNextReadAt(row) {
+  if (!row.active) return null;
+  if (!row.last_fetched_at) return new Date().toISOString();
+  const last = new Date(row.last_fetched_at).getTime();
+  const phase = marathonPhase(row);
+  const ends = new Date(row.ends_at || row.starts_at || 0).getTime();
+  const near = phase === 'near' || phase === 'live' || (phase === 'over' && Date.now() <= ends + 86400000);
+  const gap = near
+    ? Number(row.poll_minutes || state.settings.get('marathon_poll_minutes')) * 60000
+    : Number(state.settings.get('marathon_far_poll_hours')) * 3600000;
+  return new Date(last + gap).toISOString();
+}
+
 function marathonOver(row) {
   const ends = row.ends_at || row.starts_at;
   return Boolean(ends) && Date.now() > new Date(ends).getTime();
@@ -5759,6 +5772,7 @@ function marathonRow(row) {
     runs: runs.length,
     ours: runs.filter(marathonOurs).length,
     last_fetched_at: row.last_fetched_at,
+    next_read_at: marathonNextReadAt(row),
     last_fetch_ok: row.last_fetch_ok === null ? null : Boolean(row.last_fetch_ok),
     last_error: row.last_error,
     fetch_failures: row.fetch_failures,

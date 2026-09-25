@@ -538,19 +538,26 @@ def is_near(marathon: Any, now: datetime, *, lead_days: int) -> bool:
     return ends is not None and now <= ends + AFTER_END
 
 
+def next_read_at(
+    marathon: Any, now: datetime, *, poll_minutes: int, far_hours: int, lead_days: int
+) -> datetime | None:
+    if not bool(_cell(marathon, "active", 1)):
+        return None
+    last = parse_ts(_cell(marathon, "last_fetched_at"))
+    if last is None:
+        return now
+    if is_near(marathon, now, lead_days=lead_days):
+        return last + timedelta(minutes=int(_cell(marathon, "poll_minutes") or poll_minutes))
+    return last + timedelta(hours=int(far_hours))
+
+
 def fetch_due(
     marathon: Any, now: datetime, *, poll_minutes: int, far_hours: int, lead_days: int
 ) -> bool:
-    if not bool(_cell(marathon, "active", 1)):
-        return False
-    last = parse_ts(_cell(marathon, "last_fetched_at"))
-    if last is None:
-        return True
-    if is_near(marathon, now, lead_days=lead_days):
-        gap = timedelta(minutes=int(_cell(marathon, "poll_minutes") or poll_minutes))
-    else:
-        gap = timedelta(hours=int(far_hours))
-    return now - last >= gap
+    at = next_read_at(
+        marathon, now, poll_minutes=poll_minutes, far_hours=far_hours, lead_days=lead_days
+    )
+    return at is not None and now >= at
 
 
 def board_due_off(marathon: Any, now: datetime) -> bool:
