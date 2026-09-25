@@ -4573,7 +4573,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{state} on the board for a run the schedule no longer lists",
     ),
     MARATHON_UNKNOWN_SITE_KEY: (
-        "For now I can read the GDQ schedule only — that link is something else.",
+        "I can read the GDQ and RPG Limit Break trackers and horaro.net schedules — that link "
+        "is none of them.",
         (),
         "what staff are told when a schedule link is from a site Black Bloc cannot read",
     ),

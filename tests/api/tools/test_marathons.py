@@ -131,11 +131,11 @@ async def test_an_unknown_site_a_duplicate_and_an_unreadable_link_are_refused_in
 ):
     sign_in(client)
     other = client.post(
-        "/api/marathons", json={"name": "ESA", "schedule_url": "https://horaro.net/esa/2027"}
+        "/api/marathons", json={"name": "ESA", "schedule_url": "https://oengus.io/marathon/LSS26/schedule"}
     )
     assert other.status_code == 422
     assert other.json()["error"] == "unknown_site"
-    assert "GDQ schedule only" in other.json()["message"]
+    assert "horaro.net schedules" in other.json()["message"]
     assert add(client).status_code == 200
     again = add(client, name="Again")
     assert again.status_code == 409 and "already follows" in again.json()["message"]

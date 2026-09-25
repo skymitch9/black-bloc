@@ -31,7 +31,7 @@ def test_read_url_knows_every_gdq_form(url, wanted):
 @pytest.mark.parametrize(
     "url",
     [
-        "https://horaro.net/esa/2026-one",
+        "https://horaro.net/-/api/v1/events/esa/schedules",
         "https://oengus.io/marathon/LSS26/schedule",
         "https://example.com/schedule/74",
         "",
@@ -281,3 +281,117 @@ async def test_an_rpglb_failure_names_the_rpglb_tracker():
     request, _ = pages((200, {"count": 0, "results": []}))
     with pytest.raises(ms.ScheduleError, match="lists no event yet"):
         await ms.ScheduleClient(request=request).resolve("rpglb", "latest")
+
+
+# --- horaro.net (ESA) --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "wanted"),
+    [
+        ("https://horaro.net/esa/2026-summer2", ("horaro", "esa/2026-summer2")),
+        ("https://horaro.net/ESA/2026-Summer2.json", ("horaro", "esa/2026-summer2")),
+        ("https://www.horaro.net/esa/2026-winter1/?tz=utc", ("horaro", "esa/2026-winter1")),
+    ],
+)
+def test_read_url_knows_a_horaro_schedule(url, wanted):
+    assert ms.read_url(url) == wanted
+
+
+def test_a_horaro_schedule_parses_by_column_name_with_links_stripped():
+    runs = ms.parse_horaro(fixture("horaro_esa_2026_summer2.json"))
+
+    assert len(runs) == 10
+    croc = runs[0]
+    assert croc.external_id == "s48365c94628"
+    assert croc.game == "Croc 2" and croc.display_name == "Croc 2"
+    assert croc.category == "Any%"
+    assert croc.starts_at == "2026-08-02T13:00:00+00:00"
+    assert croc.ends_at == "2026-08-02T14:25:00+00:00"
+    assert croc.run_seconds == 5100
+    assert croc.people == (ms.Person("hypnoshark", "hypnoshark", "runner"),)
+
+
+def test_a_bare_player_name_has_no_login_and_players_split_every_way():
+    runs = {one.game: one for one in ms.parse_horaro(fixture("horaro_esa_2026_summer2.json"))}
+    assert runs["Doronko Wanko"].people == (ms.Person("spaceloz", None, "runner"),)
+    assert [one.login for one in runs["Saltwater Sportfishing"].people] == [
+        "zingochris",
+        "superdave2",
+    ]
+    assert [(one.name, one.login) for one in runs["The Little Mermaid"].people] == [
+        ("hirexen", "hirexen"),
+        ("lucha_gym_2", None),
+    ]
+    assert [one.name for one in ms.horaro_people("Ann & Bob and Cy vs Dee")] == [
+        "Ann",
+        "Bob",
+        "Cy",
+        "Dee",
+    ]
+
+
+def test_columns_are_found_by_name_and_an_item_without_an_id_uses_its_place():
+    payload = {
+        "schedule": {
+            "columns": ["Runners", "Game", "Category"],
+            "items": [
+                {
+                    "scheduled_t": 1786000000,
+                    "length_t": 600,
+                    "data": ["[a](https://twitch.tv/aa)", "X", "Any%"],
+                },
+                {
+                    "scheduled": "2026-08-02T15:00:00+02:00",
+                    "length_t": 60,
+                    "data": ["b", "Y", None],
+                },
+                {"scheduled_t": 1786001000, "length_t": 60, "data": ["c", None, None]},
+            ],
+        }
+    }
+    runs = ms.parse_horaro(payload)
+    assert [(one.external_id, one.game, one.category) for one in runs] == [
+        ("#0", "X", "Any%"),
+        ("#1", "Y", ""),
+    ]
+    assert runs[0].people[0].login == "aa"
+    assert runs[1].starts_at == "2026-08-02T13:00:00+00:00"
+    assert ms.parse_horaro(None) == [] and ms.parse_horaro({"schedule": {}}) == []
+
+
+def test_a_listed_schedule_spans_from_its_start_to_its_last_items_end():
+    rows = fixture("horaro_esa_schedules.json")["data"]
+    assert ms.horaro_span(rows[-1]) == (
+        "2026-08-02T13:00:00+00:00",
+        "2026-08-07T21:56:00+00:00",
+    )
+    assert ms.horaro_span({}) == (None, None)
+
+
+async def test_the_horaro_client_reads_the_json_export_and_the_events_list():
+    request, seen = pages((200, fixture("horaro_esa_2026_summer2.json")))
+    client = ms.ScheduleClient(request=request)
+    assert await client.resolve("horaro", "esa/2026-summer2") == (
+        "esa/2026-summer2",
+        "2026 - Summer (Stream Two)",
+    )
+    assert seen == ["https://horaro.net/esa/2026-summer2.json"]
+    request, seen = pages((200, fixture("horaro_esa_2026_summer2.json")))
+    assert len(await ms.ScheduleClient(request=request).runs("horaro", "esa/2026-summer2")) == 10
+    request, seen = pages((200, fixture("horaro_esa_schedules.json")))
+    listed = await ms.ScheduleClient(request=request).horaro_schedules("esa")
+    assert [one["slug"] for one in listed] == ["2026-winter2", "2026-summer1", "2026-summer2"]
+    assert seen == ["https://horaro.net/-/api/v1/events/esa/schedules"]
+    assert ms.schedule_page("horaro", "esa/2026-summer2") == "https://horaro.net/esa/2026-summer2"
+
+
+async def test_a_horaro_slug_that_does_not_answer_is_refused_in_words():
+    request, _ = pages((404, None))
+    with pytest.raises(ms.ScheduleError, match="horaro.net has no event nope"):
+        await ms.ScheduleClient(request=request).horaro_schedules("nope")
+    with pytest.raises(ms.ScheduleError, match="horaro.net has no event"):
+        await ms.ScheduleClient(request=pages()[0]).horaro_schedules("../x")
+    request, _ = pages((404, None))
+    with pytest.raises(ms.ScheduleError, match="horaro.net has no event esa/gone"):
+        await ms.ScheduleClient(request=request).runs("horaro", "esa/gone")

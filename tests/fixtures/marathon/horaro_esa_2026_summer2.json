@@ -1,0 +1,235 @@
+{
+ "meta": {
+  "exported": "2026-09-25T21:29:46Z",
+  "hint": "Use ?callback=yourcallback to use this document via JSONP.",
+  "api": "This is a living document and may change over time. For a stable, well-defined output, use the API instead.",
+  "api-link": "/-/api/v1/schedules/6e11mp473j06lu7a8a"
+ },
+ "schedule": {
+  "name": "2026 - Summer (Stream Two)",
+  "slug": "2026-summer2",
+  "timezone": "Europe/Stockholm",
+  "start": "2026-08-02T15:00:00+02:00",
+  "start_t": 1785675600,
+  "website": "http://www.esamarathon.com/",
+  "twitter": "esamarathon",
+  "twitch": "esamarathon",
+  "bluesky": null,
+  "description": null,
+  "setup": "PT15M",
+  "setup_t": 900,
+  "updated": "2026-08-07T22:45:04Z",
+  "url": "/esa/2026-summer2",
+  "event": {
+   "name": "European Speedrunner Assembly (ESA)",
+   "slug": "esa"
+  },
+  "hidden_columns": [
+   "hidden:Layout",
+   "hidden:UserIDs",
+   "hidden:ID"
+  ],
+  "columns": [
+   "Game",
+   "Player(s)",
+   "Platform",
+   "Category",
+   "Note",
+   "hidden:Layout",
+   "hidden:UserIDs",
+   "hidden:ID"
+  ],
+  "items": [
+   {
+    "length": "PT1H25M",
+    "length_t": 5100,
+    "scheduled": "2026-08-02T15:00:00+02:00",
+    "scheduled_t": 1785675600,
+    "data": [
+     "[Croc 2](https://www.youtube.com/watch?v=paAlANVTKro)",
+     "[hypnoshark](https://twitch.tv/hypnoshark)",
+     "PlayStation 2",
+     "Any%",
+     null,
+     null,
+     "1095",
+     "s48365c94628"
+    ],
+    "options": {
+     "setup": "15m"
+    }
+   },
+   {
+    "length": "PT15M",
+    "length_t": 900,
+    "scheduled": "2026-08-02T16:40:00+02:00",
+    "scheduled_t": 1785681600,
+    "data": [
+     "[Doronko Wanko](https://www.youtube.com/watch?v=ufOCzaGkXrc)",
+     "spaceloz",
+     "PC",
+     "All Gifts (NG+)",
+     null,
+     null,
+     null,
+     "s48450c94607"
+    ],
+    "options": {
+     "setup": "15m"
+    }
+   },
+   {
+    "length": "PT1H12M",
+    "length_t": 4320,
+    "scheduled": "2026-08-02T17:10:00+02:00",
+    "scheduled_t": 1785683400,
+    "data": [
+     "[New Super Luigi U](https://www.youtube.com/watch?v=0me_cZmC5-c)",
+     "[crazy_y0](https://twitch.tv/crazy_y0)",
+     "Wii U",
+     "All Castles (Normal)",
+     null,
+     null,
+     "2009",
+     "s48339c94365"
+    ],
+    "options": {
+     "setup": "15m"
+    }
+   },
+   {
+    "length": "PT15M",
+    "length_t": 900,
+    "scheduled": "2026-08-02T20:34:00+02:00",
+    "scheduled_t": 1785695640,
+    "data": [
+     "[UFO 50](https://www.youtube.com/watch?v=zqwSDUIfyqU)",
+     "[flick](https://twitch.tv/flickazures)",
+     "PC",
+     "Cyber Owls (Gold)",
+     null,
+     null,
+     "1877",
+     "s48374c94453"
+    ],
+    "options": {
+     "setup": "0m"
+    }
+   },
+   {
+    "length": "PT55M",
+    "length_t": 3300,
+    "scheduled": "2026-08-03T13:45:00+02:00",
+    "scheduled_t": 1785757500,
+    "data": [
+     "[Castlevania: Rondo of Blood](https://www.youtube.com/watch?v=K6X5Oqw1Kx8)",
+     "couchman",
+     "PlayStation 4",
+     "100%",
+     null,
+     null,
+     "2157",
+     "s48460c94623"
+    ],
+    "options": {
+     "setup": "15m"
+    }
+   },
+   {
+    "length": "PT38M",
+    "length_t": 2280,
+    "scheduled": "2026-08-05T22:05:00+02:00",
+    "scheduled_t": 1785960300,
+    "data": [
+     "[Saltwater Sportfishing](https://www.youtube.com/watch?v=JiCahZKbv4c)",
+     "[zingochris](https://twitch.tv/zingochris) vs. [superdave2](https://twitch.tv/superdave2)",
+     "PlayStation",
+     "Arcade Mode Any%",
+     "Race",
+     null,
+     "2128,2154",
+     "s48515c94751"
+    ],
+    "options": {
+     "setup": "12h17m"
+    }
+   },
+   {
+    "length": "PT50M",
+    "length_t": 3000,
+    "scheduled": "2026-08-07T17:00:00+02:00",
+    "scheduled_t": 1786114800,
+    "data": [
+     "[Styx: Shards of Darkness](https://www.youtube.com/watch?v=DDSgM1vIbx4)",
+     "[cropax](https://twitch.tv/cropax), [mrwalrus3451](https://twitch.tv/mrwalrus3451)",
+     "PC",
+     "Any% (Co-Op)",
+     "Co-op",
+     null,
+     "376,1697",
+     "s48429c94566"
+    ],
+    "options": {
+     "setup": "15m"
+    }
+   },
+   {
+    "length": "PT11M",
+    "length_t": 660,
+    "scheduled": "2026-08-07T21:30:00+02:00",
+    "scheduled_t": 1786131000,
+    "data": [
+     "[The Little Mermaid](https://www.youtube.com/watch?v=ljLbkyd5Ulg)",
+     "[hirexen](https://twitch.tv/hirexen) vs. lucha_gym_2",
+     "Nintendo Entertainment System",
+     "Any%",
+     "Race",
+     null,
+     "318,",
+     "s48758c95260"
+    ],
+    "options": {
+     "setup": "15m"
+    }
+   },
+   {
+    "length": "PT25M",
+    "length_t": 1500,
+    "scheduled": "2026-08-07T21:56:00+02:00",
+    "scheduled_t": 1786132560,
+    "data": [
+     "[Ikari III: The Rescue](https://www.youtube.com/watch?v=HcX9NIaqHLI)",
+     "[jkl0ser](https://twitch.tv/jkl0ser), lucha_gym_2",
+     "Nintendo Entertainment System",
+     "Co-Op Race (Blind Partners)",
+     "Co-op, Race",
+     null,
+     "182,",
+     "s48488c95065"
+    ],
+    "options": {
+     "setup": "15m"
+    }
+   },
+   {
+    "length": "PT1H20M",
+    "length_t": 4800,
+    "scheduled": "2026-08-07T22:36:00+02:00",
+    "scheduled_t": 1786134960,
+    "data": [
+     "[Sewer Rave](https://www.youtube.com/watch?v=ERYiUU4SkIs)",
+     "[lurven](https://twitch.tv/lurven_), laay",
+     "PC",
+     "8-Player Tournament",
+     "Co-op",
+     null,
+     "232,1051",
+     "s48700c95122"
+    ],
+    "options": {
+     "setup": "0m"
+    }
+   }
+  ]
+ }
+}
