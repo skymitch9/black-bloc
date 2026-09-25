@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-25 (branch `spotlight-ping-windows`)** — ONE section APPENDED (`PW-a`…`PW-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-23 18:3x** — ONLY the `CB-c` section was touched, at the v163 docs ritual: it gained a ✅ LIVE v163 line from `deploys.log`. (Since 16:2x: the owner's `CB-a` ✅ row at 16:33, `2d5defa0`; the `CB-c` section appended with the `greeting-tone` branch, `9983a0be`.) No row walked by this pass, no other section re-read. Before that,
 > **2026-09-23 16:2x** — ONLY the `CB-a`/`CB-b` and `RL-a`…`RL-g` sections were touched, at the v162 docs ritual: each gained a ✅ LIVE v162 line from `deploys.log`, `DONE.md` and the conductor's boot-log / operator-token read. Nothing renumbered (still lettered), no row walked, no other section re-read. Before that,
 > **2026-09-23 (branch `chat-review-loop`)** — ONE section APPENDED (`RL-a`…`RL-g`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3112,3 +3113,27 @@ Design: [`../info/chat-review-loop-design.md`](../info/chat-review-loop-design.m
 | **`RL-e`** | On the page, **Approve** a phrase suggestion; **Change…** another to *A knowledge fact*; **Dismiss** a third, then filter **Dismissed** and **Reopen** it | The phrase appears on that intent under **Intents**; the fact in the named note or *From review* under **Knowledge**; Reopen puts the item back under **Waiting**. Logs show `web.chat.review_*`, Via Website |
 | **`RL-f`** | `/chat` ▸ **Review queue…** ▸ pick an item ▸ the *Change it: this should reach…* picker ▸ an intent ▸ edit the phrase ▸ submit | The phrase lands on that intent and the panel returns to the queue with the sentence |
 | **`RL-g`** | **Download as markdown**; and read `/api/chat/review.md` with the operator token, then try a `POST …/approve` with it | A `chat-review-queue.md` listing the open items; the operator POST answers 403 `operator_read_only`. The next morning after 9 (server time zone) one digest line sits in the log channel while items wait |
+
+## Rows `PW-a` … `PW-e` — a spotlight split from its ping: always, never, or only during events (branch `spotlight-ping-windows`, 2026-09-25)
+
+🔨 **BUILT on branch `spotlight-ping-windows`, NOT merged, NOT deployed.** Owner, 2026-09-25 10:4x Phoenix, verbatim:
+*"I want to have a spotlight split from its ping role, for example I want GDQ to always be spotlighted, but I only want
+it to ping the marathon role (which I will set later) during events. I want this to be customizable, its a lot of
+moving parts."* `spotlight_channels.ping_mode` (schema **59**, default `always` — every existing row is unchanged)
+decides whether a channel row's posts mention the go-live role and its own ping role; an `events` row mentions them
+only inside a **ping window** (`spotlight_ping_windows`). Announce, pin and remind are untouched by the mode. Design:
+[`../info/spotlight-ping-windows-design.md`](../info/spotlight-ping-windows-design.md). Rows lettered; the conductor
+numbers them.
+
+⚠️ **`spotlight_mode` decides where these posts land**: in `shadow` every row below lands in `shadow_channel_id`
+(`#welcome-test`), not the go-live channel. ⚠️ **GDQ needs a ping role first** for any mention to show — the drawer's
+**Add a ping role… ▸ Use an existing role** is how the *Marathons* role goes on it — and `pings_mode` must be on for
+the channel's own role to be mentioned (the global `golive_ping_role_id` is mentioned either way).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PW-a`** | <https://blackbloc.heygabi.ai/golive.html> ▸ click **GamesDoneQuick**'s row ▸ the **Pings** card ▸ press **During events**. Then wait for GDQ's next announcement (or its next go-live) | The card's line reads *Pings: during events — no window set*, and the Announced cell on the list gains ` · pings during events`. GDQ's next announcement is posted, pinned and reminded exactly as before but **mentions no role at all** — no `<@&…>` at the front. The Logs page's `golive.spotlight_announced` row carries `ping_mode: "events"` and `pinged: false`; one `web.golive.spotlight_ping_mode_set` row (`from: always`, `to: events`) and NO `web.golive.spotlight_updated` beside it |
+| **`PW-b`** | With GDQ **live** and set to *During events*, press **Add a window…** on the Pings card; set **Pings start** to a few minutes ago, **Pings stop** to tomorrow, note `sweep`; **Add the window**. Wait one poll (`spotlight_poll_minutes`, 5 by default), then one more | The dialog closes with *"**gamesdonequick** pings from … to … (sweep)."*; the card reads *Pings: during events — open until …* and lists the window with an **open now** badge and **Remove**. On the next poll exactly **ONE** reminder lands in the go-live channel (or the shadow home) that **mentions the go-live role and GDQ's ping role**, not pinned; the log row is `golive.spotlight_bumped` with `because: "window_opened"`, the `window_id`, and `pinged: true`. ⚠️ **The poll after that posts nothing** — a second reminder is the defect. A redeploy mid-window must not post it again either |
+| **`PW-c`** | Keep the window open. Age a reminder (wait `spotlight_bump_hours`, or press **Bump now**) once with `spotlight_bump_pings` **off**, then turn it **on** on the Settings page ▸ **Spotlighted channels** and bump again. Then **Remove** the window and bump once more | With the key off the reminder mentions nothing; with it on the reminder mentions both roles; after the window is removed the reminder mentions nothing again even with the key on. Each `golive.spotlight_bumped` row says `pinged` true/false to match what was posted |
+| **`PW-d`** | Press **Never** on the Pings card, with a window open (add one if needed) | The card reads *Pings: never*, the windows list disappears from the card, and the Announced cell says ` · no pings`. The next announcement or reminder mentions nothing, and is still pinned and reminded as before. **Always** puts everything back: the next announcement mentions both roles again |
+| **`PW-e`** | In Discord run `/golive` ▸ **Channels…** and pick **gamesdonequick** | Under the list the card shows `**gamesdonequick** · Pings: …` in the same words as the site, and the windows (up to five). The buttons drawn are only the two modes it is NOT on (**Pings: always** / **Pings: never** / **Pings: during events**); on *During events* there is also **Add a ping window…** (a modal with **Pings start**, **Pings stop** and a note, read in your own zone) and a **Remove a ping window…** select. Type `next tuesday` in the modal — the refusal is in words and nothing is added. Picking a window **from the marathon schedule** in the select answers *"That window comes from the marathon schedule — change it there."* and removes nothing. Nothing on this card is pressable by a member |

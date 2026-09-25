@@ -1,5 +1,7 @@
 # Spotlight — Twitch channels that are not Discord members, announced, bumped every N hours, pinned for the duration, staff-curated with an expiry
 
+> ➕ **EXTENDED 2026-09-25 (branch `spotlight-ping-windows`, 🔨 BUILT, NOT MERGED, NOT DEPLOYED): a channel row's pin and reminders no longer decide its pings** — `always` (the default, today's behaviour), `never`, or `events` (only inside a ping window). Announce, pin and remind are untouched. Read [`spotlight-ping-windows-design.md`](spotlight-ping-windows-design.md).
+
 > 🔴 **SUPERSEDED IN PART, 2026-09-21 (branch `channel-streamers`): the spotlight row IS NOW THE CHANNEL RECORD.**
 > A `spotlight_channels` row is a channel Black Bloc watches whether or not it is spotlighted — `spotlight` is a
 > toggle ON the row (schema 52), beside `announce` (its own opt-out) and `youtube_channel_id` / `youtube_handle`.

@@ -158,8 +158,78 @@ e: `/golive` ▸ Channels… shows the same three moves). NOT `TODO.md` / `DONE.
 
 ## Deviations
 
-*(the build agent writes this)*
+*(written by the build agent, 2026-09-25, branch `spotlight-ping-windows` off `main` `84f94347`; commits `27edccce`
+… `d32efb57` plus this docs commit. Schema **58 → 59**, registry keys **419 → 428**, Go-live page keys **62 → 71**,
+four new ROUTINE kinds, tests collected **7,810 → 7,875**.)*
+
+1. **The three mode words live in `settings_store.py`** (`PING_ALWAYS` / `PING_NEVER` / `PING_EVENTS` / `PING_MODES`,
+   beside the enum that validates `spotlight_ping_mode_default`) and `black_bloc/spotlight.py` imports them. §A said
+   "constants in `black_bloc/spotlight.py`", but `spotlight.py` already imports `settings_store`, so the reverse import
+   would be circular — and a second copy would break *one fact, one home* (checklist 15).
+2. **The nine keys get their own Settings drawer, *When a channel pings*** (`golive-join.js` `DRAWERS` id
+   `pingwindows`), not *How a stream is spotted*. That drawer is Discord presence, the YouTube probe and linking; the
+   `spotlight-dates` build set the precedent of a drawer per word family.
+3. **A marathon window in the Discord Remove select is listed, not disabled.** Discord cannot disable one option of a
+   select, so the option carries its source words (*from the marathon schedule*) as its description, and picking it
+   answers *"That window comes from the marathon schedule — change it there."* and removes nothing. The site draws the
+   source word instead of a Remove button, as designed.
+4. **A MODE change writes the open session's gate answer too** (`set_ping_mode`), not only the boot reconcile. So
+   *Never → During events* while a window is already open posts nothing; the window-open reminder fires only when a
+   WINDOW opens (or is added covering now — sweep `PW-b`). Without this, switching a live channel to *events* inside an
+   open window would post a reminder saying nothing had opened.
+5. ⚠️ **The window-open reminder requires `announces(row)` but NOT `is_spotlit(row)`.** §A names no spotlight
+   condition, so a channel whose spotlight is OFF (announced like any stream, no periodic reminders) that is live when
+   its window opens still gets the ONE pinged reminder. The reviewer should decide whether that reads as right; the
+   one-line change is adding `or not words.is_spotlit(row)` to the `announces` check in `_window_opened`.
+6. **Window times are written in the guild's `default_timezone`** (`19 Jan 23:00`) in the Discord card, the state line
+   the route returns, and the bot's sentences; §A did not name a zone. The site's own windows list renders `when()` in
+   the browser, like every other date on the page. The Discord modal and the site dialog READ in the person's own
+   zone, like the Dates boxes.
+7. **The window modal / dialog labels are constants, not keys** (*Pings start*, *Pings stop*, *What it is for*), like
+   the button labels §C already made constants. §C named exactly nine keys; the Dates build's two box labels are keys
+   because they are shared by two forms, which these are not.
+8. **Both window ends are read by `read_moment`** — there is no bare-number-of-days shortcut (the Dates end box's
+   `read_end`), and no blank-means-for-ever: a missing end is refused 422 `needs_both` in words (*"A ping window needs
+   a start AND an end…"*). Backwards reuses `spotlight_end_before_start`; unreadable reuses `spotlight_bad_date`.
+9. **The window-open flip is detected on the Twitch poll path only** (`_seen`). A session a YouTube probe opened still
+   goes through the gate at its announcement (`announce_info` is the one door both sweeps use), but no window-open
+   reminder is posted for it.
+10. **A window-open reminder that fails to post is not retried.** The flip is recorded before the post (checklist 12),
+    so a failure is one `golive.spotlight_post_failed` row and the next poll does not try again — otherwise a missing
+    channel would retry every tick for the whole window.
+11. **A row leaving the list takes its windows with it** (`delete_channel`), marathon ones included — Remove, expiry
+    and an event cancel all go through it. Windows are otherwise never deleted by time except by the keep sweep.
+12. **The Discord card draws at most FIVE window lines** (`WINDOWS_SHOWN`) — the embed description is capped at 4,096
+    characters and already carries up to 25 channel lines. The Remove select still lists up to 25.
+13. **The route rows carry one extra field, `pinging`** (the gate's answer now), and the two window WRITE routes
+    answer with the whole spotlight row (+ `window`, or `removed` / `window_id`) so the drawer can redraw from one
+    answer. DELETE of a marathon window is **409** `not_staff_window`; a window on another row or already gone is
+    **404** `no_window`; an unknown mode on PATCH is **422** `bad_mode`, checked before anything is written.
+14. **KI-36 ride-along TAKEN.** `site/mock/golive-join.test.mjs` no longer hand-types its key list or its count: it
+    reads `Object.keys(contract.json settings.help)`, which `tests/api/test_contract.py` already pins to the
+    registry's golive / pings / youtube keys. The Python guard `test_the_golive_page_still_draws_seventy_one_keys` is
+    still a hand-typed number (bumped 62 → 71); that one only ever conflicts loudly, it cannot drop a key.
+15. **Discord shows the state line only for the PICKED channel** (`**login** · Pings: …` under the list), not on every
+    list line, to keep the 25-line list inside the embed.
+16. **Sweep rows are lettered `PW-a` … `PW-e`**, the convention every section since `SD` uses (*"Rows lettered; the
+    conductor numbers them"*), rather than numbered after 739.
 
 ## What was NOT verified
 
-*(the build agent writes this)*
+- ⚠️ **Nothing met Discord or Helix.** The announcement / bump mention sets, the window-open reminder, the panel
+  buttons, the modal and the Remove select were exercised only against the suite's fakes (`FakeChannel`, `FakeHelix`,
+  `FakeInteraction`); Discord's own rendering, its component-row limits and its modal label limits were not.
+- ⚠️ **No browser rendered the Go-live page.** The Pings card, the segment, the Add-a-window dialog and the Announced
+  suffix were checked by `node --check`, the join test (`pingSuffix` and the fixtures), `check.mjs` (shapes of all 219
+  mock routes) and hand `curl`s against the mock on port 8792 (PATCH mode, POST/DELETE window, the three refusals,
+  one `web.golive.spotlight_ping_mode_set` row for a mode-only PATCH). Nobody clicked anything.
+- **The schema 59 migration** was proven on a fresh file and on a file downgraded to 58
+  (`tests/storage/test_db.py::test_a_schema_58_file_gains_ping_mode_windows_and_the_session_gate`), not on the live
+  volume.
+- **Real time**: the reminder was tested by calling `poll_once` twice, not by waiting a poll interval on Fly; nor under
+  `spotlight_mode = shadow` against the real shadow channel.
+- **The marathon schedule** does not exist yet: `source = 'marathon'` windows were only ever seeded by hand in tests.
+- **Timezones** beyond UTC and America/Phoenix in the pure tests; the mock's `windowWhen` is Intl-based and was eyeballed
+  once (*Sep 30 00:05*-style parts), not tested.
+- **Cost per poll**: `pings_for` is one `SELECT` of a row's windows per announce, bump and live row per tick; not
+  measured, assumed small beside the Helix call.

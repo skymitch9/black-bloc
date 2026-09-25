@@ -90,6 +90,25 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-25 (a spotlight split from its ping, branch `spotlight-ping-windows` off `main` `84f94347`; design
+> `info/spotlight-ping-windows-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the
+> migration has NOT run on the live database):** schema **58 → 59** (measured: `SCHEMA_VERSION`) —
+> `spotlight_channels.ping_mode TEXT NOT NULL DEFAULT 'always'` and `spotlight_sessions.pinging_last INTEGER`
+> through `ADDED_COLUMNS`, and a NEW table `spotlight_ping_windows` (`id`, `guild_id`, `spotlight_id`, `starts_at`,
+> `ends_at`, `note`, `source` default `staff`, `source_id`, `added_by`, `added_at`) with the index
+> `spotlight_ping_windows_by_channel (spotlight_id, starts_at)`, both through the `SCHEMA` bootstrap — so
+> migrate-before-deploy is automatic (`Database.connect`), no backfill, and every existing row reads `always`.
+> Registry keys **419 → 428** (measured: `len(settings_store.KEY_TYPES)`), all nine `golive`-namespaced via
+> `NAMESPACE_OVERRIDE`: `spotlight_ping_mode_default` (enum always/never/events, **always**),
+> `spotlight_window_open_reminder` (bool, **true**), `spotlight_window_keep_days` (int 1–365, **30**) and six words —
+> `spotlight_pings_always_words`, `_never_words`, `_events_words` (`{window}`), `spotlight_window_open_words`
+> (`{end}`), `_next_words` (`{start}` `{end}`), `_none_words`; the Go-live page draws **62 → 71** keys, the new ones in
+> their own drawer *When a channel pings*. Four new ROUTINE log kinds: `golive.spotlight_ping_mode_set`,
+> `golive.spotlight_window_added`, `_removed`, `_purged`. Mock routes **216 → 219** (`GET`/`POST
+> /api/golive/spotlight/{id}/windows`, `DELETE …/windows/{window_id}`; `check.mjs`: *22 pages, 219 routes*). No new
+> module: the gate is `spotlight.pings_now`, the moves live in `cogs/content/spotlight.py`. Tests collected
+> **7,810 → 7,875**. ⚠️ The fact table below was NOT re-measured by this branch.
+>
 > **2026-09-20 (Raid trains on a page of their own, and a train that also makes an event, branch
 > `raidtrain-page` off `main` `e177b27`; design `info/raidtrain-page-design.md`; ⚠️ BUILT, NOT
 > MERGED, NOT DEPLOYED, nothing has met Discord and the migration has NOT run on the live
