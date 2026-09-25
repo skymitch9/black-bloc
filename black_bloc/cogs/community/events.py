@@ -218,6 +218,7 @@ from ...settings_store import (
     EVENTS_ROOM_NOTICE_KEY,
     EVENTS_TEST_RETENTION_KEY,
     GUILD_ONLY,
+    MARATHON_MODE_KEY,
     SPOTLIGHT_EVENT_SLACK_KEY,
     WHERE_CHECK_OFF,
     WHERE_CHECK_REFUSE,
@@ -262,6 +263,7 @@ SETTINGS_TITLE = "Events — settings"
 PROPOSE_BUTTON = "Propose an event"
 SETTINGS_BUTTON = "Settings"
 NUMBERS_BUTTON = "Numbers…"
+MARATHONS_BUTTON = "Marathons…"
 FORGET_BUTTON = "Forget…"
 CANCEL_YES = "Yes, call it off"
 FORGET_PLACEHOLDER = "Forget which one?"
@@ -497,6 +499,8 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     if staff:
         view.add_item(SettingsButton())
         view.add_item(LogsButton())
+    if staff or store.get(guild.id, MARATHON_MODE_KEY) != "off":
+        view.add_item(MarathonsButton())
     return embed, view
 
 
@@ -516,9 +520,13 @@ def add_open_link(view: EventView, text: Any, rows: Any) -> None:
     )
 
 
-def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embed, EventView]:
+def build_card(
+    bot: Any, guild: Any, row: Any, actor: Any, marathon: str = ""
+) -> tuple[discord.Embed, EventView]:
     room = review_place(bot, guild, row)
     embed = card_for(row)
+    if marathon:
+        embed.description = f"{embed.description or ''}\n{marathon}".strip()
     override = card_footer_override(row["status"], room_resolves=room is not None)
     if override:
         embed.set_footer(text=override)
@@ -766,13 +774,22 @@ async def render_card(
             NO_SUCH_EVENT, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
         return
-    embed, view = build_card(bot, interaction.guild, row, interaction.user)
+    embed, view = build_card(
+        bot, interaction.guild, row, interaction.user, await marathon_words(bot, row)
+    )
     retire(previous)
     view.message = await interaction.edit_original_response(
         embed=embed,
         view=view,
         allowed_mentions=discord.AllowedMentions.none(),
     )
+
+
+async def marathon_words(bot: Any, row: Any) -> str:
+    """The card's marathon line, from the marathon's own module (it owns the pointer)."""
+    from ..content.marathon import marathon_of_event_line
+
+    return await marathon_of_event_line(bot, row["guild_id"], row["id"])
 
 
 async def open_card(
@@ -795,7 +812,9 @@ async def finish_card(
     if row is None:
         await render_panel(interaction, previous)
     else:
-        embed, view = build_card(bot, interaction.guild, row, interaction.user)
+        embed, view = build_card(
+            bot, interaction.guild, row, interaction.user, await marathon_words(bot, row)
+        )
         retire(previous)
         view.message = await interaction.edit_original_response(
             embed=embed,
@@ -1497,6 +1516,16 @@ class RoomsButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_rooms(interaction, self.view)
+
+
+class MarathonsButton(discord.ui.Button):
+    def __init__(self, row: int = 3) -> None:
+        super().__init__(label=MARATHONS_BUTTON, style=discord.ButtonStyle.secondary, row=row)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        from ..content.marathon import open_root as open_marathons
+
+        await open_marathons(interaction, self.view)
 
 
 class ForumButton(discord.ui.Button):

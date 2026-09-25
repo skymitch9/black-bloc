@@ -1,6 +1,4 @@
-import { api, send, settings, settingsNamespace } from './api.js';
-import { start } from './app.js';
-import { logsSection } from './logs.js';
+import { api, send } from './api.js';
 import {
   ago,
   ask,
@@ -14,7 +12,6 @@ import {
   duration,
   el,
   field,
-  foldout,
   keepSaying,
   memberPicker,
   modeChip,
@@ -27,29 +24,26 @@ import {
   section,
   segment,
   sentenceFor,
-  settingsPanel,
   table,
   textAction,
   when,
 } from './ui.js';
 
 const shown = { id: null, filter: 'ours' };
-let refresh = () => {};
+const HASH = /^marathon-(\d+)$/;
+let refresh = async () => {};
+let showEvent = () => {};
+let makesEvent = true;
 let deepLinked = false;
 
 const LIST_NOTE = 'Every marathon schedule Black Bloc follows. It re-reads each one on its own '
   + '— every half hour while it is near — and posts a board, a reminder before each run of ours '
   + 'and a shoutout when it goes live. A row opens its runs.';
-const MACHINERY_NOTE = 'The reference half of the page: the marathon settings, and everything '
-  + 'the marathon schedules have done. Both are shut until you want them.';
-const SETTINGS_NOTE = 'Whether marathon posts go out, where, how often a schedule is read, when '
-  + 'the reminders go and which one pings, and every word the board, the reminders and the '
-  + 'shoutouts say.';
 const NOTHING_YET = 'Black Bloc follows no marathon yet. **Add a marathon** with its GDQ '
   + 'schedule link.';
 const GETTING_IT = 'Reading the schedule…';
-const MODE_OFF = 'Marathon posts are **{mode}**, so nothing is read or posted. **Settings and '
-  + 'logs** below turns them on.';
+const MODE_OFF = 'Marathon posts are **{mode}**, so nothing is read or posted. **Marathon '
+  + 'settings** below turns them on.';
 const MODE_SHADOW = 'Marathon posts are in **shadow**: the board, the reminders and the '
   + 'shoutouts land where shadow_channel_id points, with the rehearsal note.';
 const ADD_NOTE = 'Paste the GDQ schedule link (gamesdonequick.com/schedule/74) or the tracker '
@@ -81,6 +75,14 @@ const NEXT_WAITING = '{count} marathon{s} {have} a next event waiting — **Next
 const POLL_HELP = 'Re-read every N minutes while it is near — blank for the default '
   + '(marathon_poll_minutes). 10 to 120.';
 const HELD_NOTE = 'held by staff';
+const EVENT_BOX = 'Also make it an event';
+const EVENT_BOX_HELP = 'It goes into the events review above like any proposal, dated from the '
+  + 'schedule — and waits for the schedule if GDQ has not published one yet. Its dates follow '
+  + 'the schedule after that.';
+const EVENT_NOTE = 'A marathon is an event: its dates follow the schedule while it is waiting '
+  + 'for a decision or approved. **Unlink** leaves the event exactly as it is; removing the '
+  + 'marathon calls its event off.';
+const EVENT_TONE = { pending: 'warn', approved: 'ok', denied: 'danger', cancelled: null, gone: null };
 const PHASE_TONE = { far: null, near: 'warn', live: 'ok', over: null, paused: null };
 const STATE_TONE = { upcoming: null, live: 'ok', done: null, dropped: 'danger' };
 
@@ -96,15 +98,15 @@ function said(text, values) {
 }
 
 function wantedId() {
-  const hash = String(location.hash || '').replace(/^#/, '').trim();
-  return /^\d+$/.test(hash) ? hash : null;
+  const found = HASH.exec(String(location.hash || '').replace(/^#/, '').trim());
+  return found ? found[1] : null;
 }
 
 function forgetHash() {
   const drawer = document.querySelector('dialog.drawer');
   if (drawer && drawer.open) return;
   shown.id = null;
-  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  if (wantedId()) history.replaceState(null, '', location.pathname + location.search);
 }
 
 function datesOf(row) {
@@ -230,6 +232,7 @@ async function addMarathon() {
   const name = el('input', { class: 'input', type: 'text', placeholder: 'AGDQ 2027' });
   const url = el('input', { class: 'input', type: 'url', placeholder: 'https://gamesdonequick.com/schedule/74' });
   const channel = channelPicker(await channelChoices(), null);
+  const alsoEvent = el('input', { class: 'input switch', type: 'checkbox', checked: makesEvent ? true : undefined });
   let made = null;
   const sure = await askForm({
     title: 'Add a marathon',
@@ -238,6 +241,7 @@ async function addMarathon() {
       field('Name', name),
       field('Schedule link', url),
       field('Channel it airs on', channel, CHANNEL_HELP),
+      field(EVENT_BOX, alsoEvent, EVENT_BOX_HELP),
     ],
     confirmLabel: 'Add it',
     tone: 'warn',
@@ -246,6 +250,7 @@ async function addMarathon() {
         name: name.value.trim(),
         schedule_url: url.value.trim(),
         spotlight_id: channel.value || null,
+        make_event: alsoEvent.checked,
       });
       return null;
     },
@@ -395,6 +400,44 @@ async function channelCard(marathon, say) {
   ]);
 }
 
+function eventCard(marathon, say) {
+  const event = marathon.event || {};
+  const moves = [];
+  if (event.id && event.status !== 'gone') {
+    moves.push(textAction(`Open event #${event.id}`, () => {
+      closeDrawer();
+      showEvent(event.id);
+    }));
+  }
+  if (event.id || event.wanted) {
+    moves.push(button('Unlink', async () => {
+      const done = await run(say, () => send(`/api/marathons/${marathon.id}/event`, 'DELETE'), (found) => found?.message);
+      await after(marathon, done);
+    }, { tone: 'quiet' }));
+  } else {
+    moves.push(button('Make an event now', async () => {
+      const done = await run(say, () => send(`/api/marathons/${marathon.id}/event`, 'POST', {}), (found) => found?.message);
+      await after(marathon, done);
+    }, { tone: 'warn' }));
+  }
+  return card('Event', [
+    el('p', {}, [
+      event.status ? badge(event.status, EVENT_TONE[event.status] || null) : null,
+      el('span', { text: event.status ? ' ' : '' }),
+      ...boldParts(event.line || ''),
+    ]),
+    el('p', { class: 'field-help' }, boldParts(EVENT_NOTE)),
+    bar(moves),
+  ]);
+}
+
+function eventCell(row) {
+  const event = row.event || {};
+  if (event.id) return badge(`#${event.id} ${event.status}`, EVENT_TONE[event.status] || null);
+  if (event.waiting) return el('span', { class: 'cell-quiet', text: 'waiting for dates' });
+  return el('span', { class: 'cell-quiet', text: '—' });
+}
+
 function moveBar(marathon, say) {
   const moves = [];
   if (marathon.active) {
@@ -453,6 +496,7 @@ async function marathonDrawer(marathon, message) {
       readLine(marathon),
     ]),
     moveBar(marathon, say),
+    eventCard(marathon, say),
     nextCard(marathon, say),
     runsCard(marathon, say),
     pairingsCard(marathon, say),
@@ -462,8 +506,8 @@ async function marathonDrawer(marathon, message) {
 
 async function openMarathon(marathonId, title, message = '') {
   shown.id = String(marathonId);
-  if (String(location.hash).replace(/^#/, '') !== shown.id) {
-    history.replaceState(null, '', `${location.pathname}${location.search}#${shown.id}`);
+  if (wantedId() !== shown.id) {
+    history.replaceState(null, '', `${location.pathname}${location.search}#marathon-${shown.id}`);
   }
   openDrawer(title || `Marathon #${marathonId}`, sayNothing(GETTING_IT), { onClose: forgetHash });
   try {
@@ -485,6 +529,7 @@ function listSection(payload, say) {
     { label: 'State', cell: (row) => badge(row.phase_word, PHASE_TONE[row.phase] || null) },
     { label: 'Ours', cell: (row) => `${row.ours} of ${row.runs}` },
     { label: 'Channel', cell: (row) => row.channel_login || (row.channel_gone ? 'gone' : '—') },
+    { label: 'Event', cell: (row) => eventCell(row) },
     { label: 'Read', cell: (row) => readLine(row) },
     { label: 'Next up', cell: (row) => nextCell(row, say) },
   ], rows, { empty: NOTHING_YET });
@@ -500,37 +545,26 @@ function listSection(payload, say) {
   return full(list.node);
 }
 
-function unsectioned(node) {
-  const inner = node.querySelector('.sect-inner');
-  return inner ? [...inner.childNodes] : [node];
-}
-
-async function machinerySection(specs) {
-  const one = section('Settings and logs', MACHINERY_NOTE, { id: 'machinery' });
-  one.body.append(
-    foldout('Settings', [
-      el('p', { class: 'field-help', text: SETTINGS_NOTE }),
-      await settingsPanel(specs, { where: 'Marathons', onSaved: () => refresh() }),
-    ], { count: specs.length }),
-    foldout('Logs', unsectioned(await logsSection('marathon'))),
-  );
-  return full(one.node);
-}
-
-async function load() {
+/** The Events page's Marathons section: the same list, drawer and moves the Marathons page had. */
+export async function marathonsSection({ reload, openEvent }) {
+  refresh = reload;
+  showEvent = openEvent;
   const payload = await api('/api/marathons');
-  const specs = settingsNamespace(await settings(), 'marathon');
+  makesEvent = payload.makes_event !== false;
   const say = sayAgain('marathons', notice());
-  document.getElementById('dash').replaceChildren(
-    listSection(payload, say),
-    await machinerySection(specs),
-  );
+  const node = listSection(payload, say);
   const wanted = wantedId();
   if (wanted && !deepLinked) {
     deepLinked = true;
     const found = (payload.marathons || []).find((one) => String(one.id) === wanted);
     openMarathon(wanted, found ? found.name : `Marathon #${wanted}`);
   }
+  return node;
+}
+
+/** The Events page's detail card links back here by address, so the drawer opens the same way. */
+export function marathonHref(marathonId) {
+  return `#marathon-${marathonId}`;
 }
 
 window.addEventListener('hashchange', () => {
@@ -542,5 +576,3 @@ window.addEventListener('hashchange', () => {
   if (wanted === shown.id) return;
   openMarathon(wanted, `Marathon #${wanted}`);
 });
-
-refresh = start({ tab: 'marathons', load });

@@ -1656,3 +1656,39 @@ def test_the_forum_page_names_the_move_and_shows_the_line_it_leaves():
 
     assert any(events.MOVE_TO_FORUM_BUTTON in line for line in lines)
     assert any("{post}" in line for line in lines)
+
+
+async def test_moving_a_scheduled_event_answers_none_test_mode_moved_or_failed():
+    from black_bloc.events import (
+        SCHEDULED_MOVED,
+        SCHEDULED_NONE,
+        SCHEDULED_OK,
+        SCHEDULED_TEST_MODE,
+        move_scheduled_event,
+    )
+
+    edits = []
+
+    class Scheduled:
+        async def edit(self, **kwargs):
+            edits.append(kwargs)
+
+    row = {
+        "id": 5,
+        "scheduled_event_id": 77,
+        "starts_at": "2027-01-04T18:00:00+00:00",
+        "ends_at": "2027-01-11T02:00:00+00:00",
+    }
+    guild = SimpleNamespace(get_scheduled_event=lambda found: Scheduled() if found == 77 else None)
+    live = SimpleNamespace(guard=None)
+
+    assert await move_scheduled_event(live, guild, row | {"scheduled_event_id": None}) == (
+        SCHEDULED_NONE
+    )
+    assert await move_scheduled_event(SimpleNamespace(guard=object()), guild, row) == (
+        SCHEDULED_TEST_MODE
+    )
+    assert await move_scheduled_event(live, guild, row) == SCHEDULED_MOVED
+    assert edits[0]["start_time"].isoformat() == row["starts_at"]
+    gone = await move_scheduled_event(live, guild, row | {"scheduled_event_id": 78})
+    assert gone not in SCHEDULED_OK and "no such scheduled event" in gone

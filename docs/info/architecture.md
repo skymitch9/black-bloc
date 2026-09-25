@@ -90,6 +90,21 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-25 (marathons share the Events page, branch `marathon-events-page` off `main` `ed52ffeb`; design
+> `info/marathon-events-page-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the
+> migration has NOT run on the live database):** schema **61 → 62** (measured: `SCHEMA_VERSION`) — two columns through
+> `ADDED_COLUMNS`, `marathons.event_id INTEGER` (the link to its `events` row; the events table is not widened) and
+> `marathons.event_wanted INTEGER NOT NULL DEFAULT 0` (the wish that waits for an unpublished schedule). Registry keys
+> **468 → 469** (`marathon_makes_event`, `marathon_event_description_template` added; `marathon_panel_minutes`
+> retired for `event_panel_minutes`). Top-level commands **34 → 33** — `/marathon` is retired into `/event` ▸
+> **Marathons…** (hidden-when-off rows 17 → 16; `marathon_mode` stays in the `/settings` mode block as a hand-added
+> row naming `/event`). Pages **23 → 22** — `marathons.html` deleted, its content is the Marathons section of
+> `events.html` (`assets/marathons-section.js`; deep link `events.html#marathon-<id>`; `FEATURE_PAGES['marathon'] =
+> 'events.html'`). Routes **235 → 237** (`POST` / `DELETE /api/marathons/{id}/event`; `check.mjs`: *22 pages, 237
+> routes*). A marathon's event goes through `propose_from` like a raid train's and is re-dated with its schedule
+> (`update_event` + the new `events.move_scheduled_event`). Cogs and log features unchanged. ⚠️ The fact table below
+> was NOT re-measured.
+>
 > **2026-09-25 (the next GDQ event + a way back for a done run, branch `marathon-next-event` off `main` `6bb49274`;
 > design `info/marathon-next-event-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the
 > migration has NOT run on the live database):** schema **60 → 61** (measured: `SCHEMA_VERSION`) — one column through

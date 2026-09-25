@@ -264,7 +264,6 @@ async def test_the_seventeen_features_that_hide_each_map_to_one_command():
         "events_mode": ("event",),
         "frontdoor_mode": ("ask",),
         "golive_mode": ("golive",),
-        "marathon_mode": ("marathon",),
         "honeypot_mode": ("honeypot",),
         "minutes_mode": ("minutes",),
         "pings_mode": ("pings",),

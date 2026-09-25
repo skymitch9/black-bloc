@@ -1,5 +1,7 @@
 # The next GDQ event — suggested when a marathon ends, added by staff, never by itself
 
+> 🔨 **2026-09-25 — MOVED by branch `marathon-events-page` (NOT merged):** the Marathons page is now the Marathons section of `events.html` (`marathons.html` deleted, `page-marathons.js` → `marathons-section.js`, deep link `events.html#marathon-<id>`), `/marathon` is retired into `/event` ▸ **Marathons…** (`marathon_panel_minutes` → `event_panel_minutes`), and a marathon now makes an event — see [`marathon-events-page-design.md`](marathon-events-page-design.md). Behaviour below is unchanged; only the address and the command moved.
+
 > 🔨 **2026-09-25 — BUILT on branch `marathon-next-event` (§A–§G), NOT merged, NOT deployed.** Schema 61, registry
 > 468, routes 235; 23 deviations (⚠️ 1: drafts are kept — every event ahead is a draft), the three header questions
 > answered and *What was NOT verified* at the foot.

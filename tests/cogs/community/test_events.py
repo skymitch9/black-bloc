@@ -383,9 +383,10 @@ class FakeBot:
         self.views = []
         self.dynamic = []
         self._cog = None
+        self.cogs = {}
 
     def get_cog(self, name):
-        return self._cog
+        return self.cogs.get(name, self._cog)
 
     def get_channel(self, channel_id):
         return self.guild.get_channel(channel_id)
@@ -5312,3 +5313,84 @@ async def test_calling_the_event_off_takes_its_spotlight_with_it(cog, bot, membe
     assert await spotlight_rows_for(db, GUILD) == []
     details = await action_details(db, "golive.spotlight_expired")
     assert details["because"] == "event_cancelled"
+
+
+# --- /event ▸ Marathons… (docs/info/marathon-events-page-design.md §C) --------------------------
+
+
+@pytest.fixture
+def marathons(bot):
+    from black_bloc.cogs.content.marathon import COG_NAME, Marathons
+
+    made = Marathons(bot)
+    bot.cogs[COG_NAME] = made
+    return made
+
+
+async def test_marathons_opens_the_member_half_of_the_old_marathon_panel_one_level_down(
+    cog, bot, marathons, member
+):
+    from black_bloc import marathon as mt
+
+    panel = await open_panel(cog, bot, member)
+    interaction = await click(bot, member, find_item(panel_view(panel), "Marathons…"))
+
+    view = card_view(interaction)
+    assert card_embed(interaction).title == mt.PANEL_TITLE
+    assert mt.OURS_NEXT in card_embed(interaction).description
+    assert has_item(view, "My runs") and has_item(view, "Back")
+    assert not has_item(view, "Add a marathon…") and not has_item(view, "Logs")
+
+
+async def test_marathons_gives_staff_the_list_the_add_and_the_marathon_logs(
+    cog, bot, marathons, lead
+):
+    panel = await open_panel(cog, bot, lead)
+    interaction = await click(bot, lead, find_item(panel_view(panel), "Marathons…"))
+
+    view = card_view(interaction)
+    assert has_item(view, "Add a marathon…") and has_item(view, "Logs")
+    assert "Marathon posts are" in card_embed(interaction).description
+
+
+async def test_back_on_the_marathons_sub_panel_returns_to_the_event_panel(
+    cog, bot, marathons, member
+):
+    panel = await open_panel(cog, bot, member)
+    sub = await click(bot, member, find_item(panel_view(panel), "Marathons…"))
+
+    back = await click(bot, member, find_item(card_view(sub), "Back"))
+
+    assert card_embed(back).title == events_pure.PANEL_TITLE
+
+
+async def test_with_marathons_off_a_member_sees_no_marathons_button_and_staff_still_do(
+    cog, bot, member, lead
+):
+    await bot.store.set(GUILD, "marathon_mode", "off")
+
+    assert not has_item(panel_view(await open_panel(cog, bot, member)), "Marathons…")
+    assert has_item(panel_view(await open_panel(cog, bot, lead)), "Marathons…")
+
+
+async def test_an_events_card_names_the_marathon_that_made_it(cog, bot, lead, db):
+    event_id = await store_event(db, channel_id=TEST_CHANNEL)
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, event_id, "
+        "event_wanted, added_at) VALUES (?, 'AGDQ 2027', 'https://gamesdonequick.com/schedule/74', "
+        "'gdq', '74', ?, 1, 'x')",
+        (GUILD, event_id),
+    )
+    await db.conn.commit()
+
+    interaction = FakeInteraction(bot, lead)
+    await events_cog.open_card(interaction, event_id)
+
+    assert "Marathon: **AGDQ 2027** — 0 run(s) of ours" in card_embed(interaction).description
+
+
+async def test_an_events_card_with_no_marathon_says_nothing_about_one(cog, bot, lead, db):
+    event_id = await store_event(db, channel_id=TEST_CHANNEL)
+    interaction = FakeInteraction(bot, lead)
+    await events_cog.open_card(interaction, event_id)
+    assert "Marathon:" not in (card_embed(interaction).description or "")

@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import discord
-from discord import app_commands
 from discord.ext import commands, tasks
 
 from ... import marathon as mt
@@ -17,6 +16,25 @@ from ... import shadow as shadow_home
 from ... import spotlight as spot
 from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors, SafeDynamicItem
+from ...events import APPROVED as EVENT_APPROVED
+from ...events import CANCELLED as EVENT_CANCELLED
+from ...events import DESCRIPTION_LIMIT as EVENT_DESCRIPTION_LIMIT
+from ...events import LOCATION_LIMIT as EVENT_LOCATION_LIMIT
+from ...events import PANEL_MINUTES_KEY as EVENT_PANEL_MINUTES_KEY
+from ...events import PENDING as EVENT_PENDING
+from ...events import (
+    SCHEDULED_OK,
+    WHERE_OTHER,
+    EventFields,
+    Where,
+    cancel_for,
+    clamp,
+    get_event,
+    move_scheduled_event,
+    read_where,
+    update_event,
+)
+from ...events import TITLE_LIMIT as EVENT_TITLE_LIMIT
 from ...golive import now_iso, parse_ts, ping_prefix
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
@@ -45,7 +63,6 @@ from ...panels import (
 )
 from ...settings_store import (
     DB_UNAVAILABLE,
-    GUILD_ONLY,
     MARATHON_ALREADY_ADDED_KEY,
     MARATHON_BOARD_EMPTY_KEY,
     MARATHON_BOARD_LINE_KEY,
@@ -55,18 +72,19 @@ from ...settings_store import (
     MARATHON_DEFAULTS,
     MARATHON_DONE_TEMPLATE_KEY,
     MARATHON_EDIT_DONE_KEY,
+    MARATHON_EVENT_DESCRIPTION_KEY,
     MARATHON_FAR_POLL_HOURS_KEY,
     MARATHON_LATE_GRACE_KEY,
     MARATHON_LEAD_DAYS_KEY,
     MARATHON_LIVE_PINGS_KEY,
     MARATHON_LIVE_TEMPLATE_KEY,
+    MARATHON_MAKES_EVENT_KEY,
     MARATHON_MATCH_HOSTS_KEY,
     MARATHON_MODE_KEY,
     MARATHON_MOVE_MINUTES_KEY,
     MARATHON_NEXT_ADDED_TEMPLATE_KEY,
     MARATHON_NEXT_NONE_TEMPLATE_KEY,
     MARATHON_NEXT_TEMPLATE_KEY,
-    MARATHON_PANEL_MINUTES_KEY,
     MARATHON_PIN_BOARD_KEY,
     MARATHON_PING_MINUTES_KEY,
     MARATHON_POLL_MINUTES_KEY,
@@ -129,6 +147,11 @@ NEXT_DISMISS = "dismiss"
 RECENT_DONE_HOURS = 12
 POST_FAILED = "post_failed"
 POLL_RANGE = (10, 120)
+EVENT_EXISTS_CODE = "event_exists"
+EVENT_REFUSED_CODE = "event_refused"
+NO_EVENT_CODE = "no_event"
+MARATHON_REMOVED = "marathon_removed"
+EVENT_KEPT_IN_STEP = (EVENT_PENDING, EVENT_APPROVED)
 
 
 def _cell(row: Any, key: str, fallback: Any = None) -> Any:
@@ -277,6 +300,8 @@ MARATHON_COLUMNS = {
     "fetch_hash",
     "source_ref",
     "suggested_next",
+    "event_id",
+    "event_wanted",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -421,6 +446,7 @@ async def create_marathon(
     name: Any,
     url: Any,
     spotlight_id: Any = None,
+    make_event: Any = None,
     via: str = VIA_DISCORD,
 ) -> Outcome:
     wanted_name = " ".join(str(name or "").split())[:100]
@@ -477,10 +503,21 @@ async def create_marathon(
         },
     )
     row = await get_marathon(bot.db, guild.id, marathon_id)
+    wants_event = (
+        bool(bot.store.get(guild.id, MARATHON_MAKES_EVENT_KEY))
+        if make_event is None
+        else bool(make_event)
+    )
     async with cog.lock(marathon_id):
         read = await cog.refresh(guild, row)
+        said = mt.ADDED.format(name=wanted_name, read=read.message)
+        if wants_event:
+            made = await make_event_for(
+                bot, guild, actor, await get_marathon(bot.db, guild.id, marathon_id), via=via
+            )
+            said = f"{said} {made.message}"
     fresh = await get_marathon(bot.db, guild.id, marathon_id)
-    return Outcome(True, mt.ADDED.format(name=wanted_name, read=read.message), value=fresh)
+    return Outcome(True, said, value=fresh)
 
 
 async def refresh_marathon(bot: Any, guild: Any, marathon: Any) -> Outcome:
@@ -589,6 +626,7 @@ async def remove_marathon(
 ) -> Outcome:
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
+        await cancel_linked_event(bot, guild, actor, marathon, via=via)
         await cog.drop_windows(guild, marathon)
         await cog.unpin_board(guild, marathon, because="removed")
         await delete_marathon(bot.db, marathon["id"])
@@ -944,6 +982,201 @@ async def mark_live(
     return Outcome(True, said)
 
 
+# --- a marathon is an event -------------------------------------------------------------------
+
+
+async def marathon_for_event(db: Any, guild_id: int, event_id: Any) -> Any:
+    try:
+        wanted = int(event_id)
+    except (TypeError, ValueError):
+        return None
+    cur = await db.conn.execute(
+        "SELECT * FROM marathons WHERE guild_id = ? AND event_id = ? ORDER BY id LIMIT 1",
+        (int(guild_id), wanted),
+    )
+    return await cur.fetchone()
+
+
+async def marathon_of_event_line(bot: Any, guild_id: int, event_id: Any) -> str:
+    """The line an event's card says about the marathon that made it; blank for any other."""
+    row = await marathon_for_event(bot.db, guild_id, event_id)
+    if row is None:
+        return ""
+    runs = await runs_of(bot.db, row["id"])
+    ours = len([one for one in runs if one["state"] != mt.DROPPED and mt.is_ours(one)])
+    return mt.MARATHON_OF_EVENT.format(name=row["name"], ours=ours)
+
+
+async def linked_event(bot: Any, marathon: Any) -> Any:
+    event_id = _cell(marathon, "event_id")
+    return await get_event(bot.db, int(event_id)) if event_id else None
+
+
+async def event_status_of(bot: Any, marathon: Any) -> str | None:
+    if not _cell(marathon, "event_id"):
+        return None
+    row = await linked_event(bot, marathon)
+    return str(row["status"]) if row is not None else mt.EVENT_GONE
+
+
+def event_description(bot: Any, guild: Any, marathon: Any) -> str:
+    home = bot.store.get(guild.id, MARATHON_CHANNEL_KEY) or bot.store.get(
+        guild.id, GOLIVE_CHANNEL_KEY
+    )
+    rendered = mt.render(
+        bot.store.get(guild.id, MARATHON_EVENT_DESCRIPTION_KEY),
+        said_default(MARATHON_EVENT_DESCRIPTION_KEY),
+        marathon=marathon["name"],
+        channel=f"<#{int(home)}>" if home else "",
+    )
+    return clamp(rendered.text, EVENT_DESCRIPTION_LIMIT)
+
+
+async def event_fields_of(bot: Any, guild: Any, marathon: Any) -> EventFields | None:
+    """The draft a marathon's event is proposed with; None until the schedule has dates."""
+    starts = parse_ts(marathon["starts_at"])
+    finishes = parse_ts(marathon["ends_at"])
+    if starts is None or finishes is None:
+        return None
+    login = await channel_login(bot, marathon)
+    place = (
+        mt.TWITCH_URL.format(login=login)
+        if login
+        else schedule_page(marathon["source"], marathon["source_ref"]) or marathon["schedule_url"]
+    )
+    return EventFields(
+        clamp(marathon["name"], EVENT_TITLE_LIMIT),
+        event_description(bot, guild, marathon),
+        Where(WHERE_OTHER, None, clamp(place, EVENT_LOCATION_LIMIT)),
+        starts,
+        max(1, int((finishes - starts).total_seconds() // 60)),
+    )
+
+
+def requester_for(guild: Any, marathon: Any, actor: Any = None) -> Any:
+    """Whoever pressed, else whoever added the marathon, else Black Bloc itself."""
+    if actor is not None:
+        return actor
+    added_by = _cell(marathon, "added_by")
+    member = guild.get_member(int(added_by)) if added_by else None
+    return member if member is not None else getattr(guild, "me", None)
+
+
+async def make_event_for(
+    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """A marathon's event goes through the events review like any proposal, never around it."""
+    if _cell(marathon, "event_id"):
+        return refusal(
+            mt.EVENT_ALREADY.format(name=marathon["name"], event_id=int(marathon["event_id"])),
+            EVENT_EXISTS_CODE,
+            409,
+        )
+    await update_marathon(bot.db, marathon["id"], event_wanted=1)
+    fields = await event_fields_of(bot, guild, marathon)
+    if fields is None:
+        return Outcome(True, mt.EVENT_WAITING.format(name=marathon["name"]))
+    requester = requester_for(guild, marathon, actor)
+    if requester is None:
+        await update_marathon(bot.db, marathon["id"], event_wanted=0)
+        return refusal(
+            mt.EVENT_NOT_MADE.format(why=mt.EVENT_NOBODY), EVENT_REFUSED_CODE, 409
+        )
+    from ..community.events import propose_from
+
+    said, row = await propose_from(bot, guild, requester, fields, via=via)
+    if row is None:
+        await update_marathon(bot.db, marathon["id"], event_wanted=0)
+        return refusal(mt.EVENT_NOT_MADE.format(why=said), EVENT_REFUSED_CODE, 409)
+    await update_marathon(bot.db, marathon["id"], event_id=int(row["id"]))
+    await log_action(
+        bot,
+        guild,
+        kind_via("marathon.event_made", via),
+        actor=actor,
+        details={"marathon_id": marathon["id"], "event_id": int(row["id"]), "via": via},
+    )
+    return Outcome(
+        True,
+        mt.EVENT_MADE.format(name=marathon["name"], event_id=int(row["id"])),
+        value=int(row["id"]),
+    )
+
+
+async def make_event_now(
+    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The staff door: under the marathon's lock, so a tick cannot make a second one."""
+    async with cog_of(bot).lock(marathon["id"]):
+        fresh = await get_marathon(bot.db, guild.id, marathon["id"])
+        if fresh is None:
+            return refusal(mt.NO_SUCH_MARATHON.format(given=marathon["id"]), NO_SUCH, 404)
+        return await make_event_for(bot, guild, actor, fresh, via=via)
+
+
+async def unlink_the_event(
+    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    async with cog_of(bot).lock(marathon["id"]):
+        fresh = await get_marathon(bot.db, guild.id, marathon["id"])
+        if fresh is None:
+            return refusal(mt.NO_SUCH_MARATHON.format(given=marathon["id"]), NO_SUCH, 404)
+        return await unlink_event(bot, guild, actor, fresh, via=via)
+
+
+async def unlink_event(
+    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Clears the pointer and the wish; the event itself is not touched."""
+    event_id = _cell(marathon, "event_id")
+    if not event_id and not _cell(marathon, "event_wanted"):
+        return refusal(mt.NO_EVENT.format(name=marathon["name"]), NO_EVENT_CODE, 409)
+    await update_marathon(bot.db, marathon["id"], event_id=None, event_wanted=0)
+    await log_action(
+        bot,
+        guild,
+        kind_via("marathon.event_unlinked", via),
+        actor=actor,
+        details={"marathon_id": marathon["id"], "event_id": event_id, "via": via},
+    )
+    if not event_id:
+        return Outcome(True, mt.EVENT_STOPPED_WAITING.format(name=marathon["name"]))
+    return Outcome(
+        True, mt.EVENT_UNLINKED.format(name=marathon["name"], event_id=int(event_id))
+    )
+
+
+async def cancel_linked_event(
+    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+) -> None:
+    """A removed marathon takes its open event with it, through the door the card presses."""
+    row = await linked_event(bot, marathon)
+    if row is None or row["status"] not in EVENT_KEPT_IN_STEP:
+        return
+    try:
+        await cancel_for(
+            bot, guild, row, actor if actor is not None else 0, reason=MARATHON_REMOVED, via=via
+        )
+    except Exception as exc:
+        log.warning(
+            "marathon: calling off event #%s for marathon %s did not finish — %s: %s",
+            row["id"],
+            marathon["id"],
+            type(exc).__name__,
+            exc,
+        )
+    fresh = await get_event(bot.db, int(row["id"]))
+    if _cell(fresh, "status") != EVENT_CANCELLED:
+        return
+    await log_action(
+        bot,
+        guild,
+        kind_via("marathon.event_cancelled", via),
+        actor=actor,
+        details={"marathon_id": marathon["id"], "event_id": int(row["id"]), "via": via},
+    )
+
+
 # --- the cog ----------------------------------------------------------------------------------
 
 
@@ -986,25 +1219,6 @@ class Marathons(commands.Cog):
         if not self.bot.db.is_connected:
             return
         await self._reconciler.run(self.tick_once, skip_if_recent=True)
-
-    @app_commands.command(
-        name="marathon", description="Marathons: when our people are on a marathon stream"
-    )
-    async def marathon_panel_command(self, interaction: discord.Interaction) -> None:
-        if interaction.guild is None:
-            await answer(interaction, GUILD_ONLY)
-            return
-        if not self.bot.db.is_connected:
-            await answer(interaction, DB_UNAVAILABLE)
-            return
-        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        view.message = await interaction.original_response()
 
     # --- the minute tick --------------------------------------------------------------------
 
@@ -1322,6 +1536,9 @@ class Marathons(commands.Cog):
             fetch_failures=0,
         )
         matched = await self.rematch(guild, marathon)
+        await self.event_follows(
+            guild, marathon, await get_marathon(db, guild.id, marathon["id"])
+        )
         await log_action(
             self.bot,
             guild,
@@ -1336,6 +1553,54 @@ class Marathons(commands.Cog):
                 details={"marathon_id": marathon["id"], **counts},
             )
         return counts | {"changed": changed, "matched": matched}
+
+    async def event_follows(self, guild: Any, before: Any, after: Any) -> None:
+        """The first dated read makes a waiting event; a read that moves the dates re-dates it."""
+        if after is None:
+            return
+        if not after["event_id"]:
+            if after["event_wanted"] and after["starts_at"] and after["ends_at"]:
+                made = await make_event_for(self.bot, guild, None, after)
+                if not made.ok:
+                    await log_action(
+                        self.bot,
+                        guild,
+                        "marathon.event_make_failed",
+                        details={"marathon_id": after["id"], "reason": made.message},
+                    )
+            return
+        span = ("starts_at", "ends_at")
+        if all(before[key] == after[key] for key in span):
+            return
+        await self.redate_event(guild, before, after)
+
+    async def redate_event(self, guild: Any, before: Any, after: Any) -> None:
+        row = await linked_event(self.bot, after)
+        starts, finishes = parse_ts(after["starts_at"]), parse_ts(after["ends_at"])
+        if row is None or row["status"] not in EVENT_KEPT_IN_STEP or not (starts and finishes):
+            return
+        await update_event(
+            self.bot.db,
+            int(row["id"]),
+            title=row["title"],
+            description=row["description"],
+            where=read_where(row),
+            starts_at=starts,
+            finishes_at=finishes,
+        )
+        moved = await move_scheduled_event(
+            self.bot, guild, await get_event(self.bot.db, int(row["id"]))
+        )
+        details = {
+            "marathon_id": after["id"],
+            "event_id": int(row["id"]),
+            "from": {"starts_at": row["starts_at"], "ends_at": row["ends_at"]},
+            "to": {"starts_at": starts.isoformat(), "ends_at": finishes.isoformat()},
+            "scheduled": moved,
+        }
+        await log_action(self.bot, guild, "marathon.event_redated", details=details)
+        if moved not in SCHEDULED_OK:
+            await log_action(self.bot, guild, "marathon.scheduled_move_failed", details=details)
 
     async def _write_plan(self, guild: Any, marathon: Any, plan: Any, now: datetime) -> dict:
         db = self.bot.db
@@ -2068,7 +2333,7 @@ def notice_view(marathon_id: Any, event_id: Any, *, disabled: bool = False) -> d
     return view
 
 
-# --- the /marathon panel ----------------------------------------------------------------------
+# --- /event ▸ Marathons… ----------------------------------------------------------------------
 
 ROOT = "root"
 CARD = "card"
@@ -2096,7 +2361,7 @@ class MarathonPanel(Panel):
 
 
 def minutes_for(bot: Any, guild_id: int) -> int:
-    return panel_minutes(bot.store, guild_id, MARATHON_PANEL_MINUTES_KEY)
+    return panel_minutes(bot.store, guild_id, EVENT_PANEL_MINUTES_KEY)
 
 
 def now_for(bot: Any) -> datetime:
@@ -2218,6 +2483,7 @@ async def build_card(
     lines = [marathon_line(bot, guild, row, runs)]
     if login:
         lines.append(f"twitch.tv/{login}")
+    lines.append(mt.event_line(row, await event_status_of(bot, row)))
     ours = [one for one in runs if one["state"] != mt.DROPPED and mt.is_ours(one)]
     lines += [""] + [next_line(one, row, words) for one in ours[:MINE_LIMIT]]
     if not runs:
@@ -2489,6 +2755,10 @@ class MarathonMoveButton(discord.ui.Button):
         action = self.move.action
         if action == mt.LOGS:
             await send_logs(interaction, FEATURE)
+        elif action == mt.EVENTS:
+            from ..community.events import back_to_panel
+
+            await back_to_panel(interaction, view)
         elif action == mt.MINE:
             await open_mine(interaction, view)
         elif action == mt.BACK:
@@ -2511,7 +2781,14 @@ class MarathonMoveButton(discord.ui.Button):
             await run_move(interaction, view, run_doing(action, view.run_id), back=back_to_run)
         elif action == mt.ADD:
             if await still_staff(interaction):
-                await interaction.response.send_modal(AddMarathonModal(view))
+                ticked = interaction.client.store.get(
+                    interaction.guild.id, MARATHON_MAKES_EVENT_KEY
+                )
+                await interaction.response.send_modal(AddMarathonModal(view, bool(ticked)))
+        elif action == mt.MAKE_EVENT:
+            await run_move(interaction, view, make_event_now)
+        elif action == mt.UNLINK_EVENT:
+            await run_move(interaction, view, unlink_the_event)
         elif action == mt.REFRESH and view.where == ROOT:
             await open_root(interaction, view)
         elif action == mt.REFRESH:
@@ -2608,15 +2885,22 @@ class AddMarathonModal(AnswersErrors, discord.ui.Modal, title=mt.ADD_TITLE):
     login = discord.ui.TextInput(
         label=mt.ADD_LOGIN, placeholder=mt.ADD_LOGIN_HINT, required=False, max_length=40
     )
+    event = discord.ui.TextInput(label=mt.ADD_EVENT, required=False, max_length=5)
 
-    def __init__(self, previous: Any = None) -> None:
+    def __init__(self, previous: Any = None, ticked: bool = True) -> None:
         super().__init__()
         self.previous = previous
+        self.event.default = mt.ADD_EVENT_YES[0] if ticked else mt.ADD_EVENT_NO[0]
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         if not await opened(interaction):
             return
         bot, guild = interaction.client, interaction.guild
+        make_event = mt.wanted_event_answer(self.event) if str(self.event).strip() else None
+        if str(self.event).strip() and make_event is None:
+            await open_root(interaction, self.previous)
+            await answer(interaction, mt.BAD_ADD_EVENT)
+            return
         given = str(self.login).strip().lower().lstrip("@")
         spotlight_id = None
         if given:
@@ -2633,6 +2917,7 @@ class AddMarathonModal(AnswersErrors, discord.ui.Modal, title=mt.ADD_TITLE):
             name=str(self.name),
             url=str(self.url),
             spotlight_id=spotlight_id,
+            make_event=make_event,
         )
         if outcome.ok:
             await open_card(interaction, outcome.value["id"], self.previous)
@@ -2701,6 +2986,9 @@ __all__ = [
     "get_marathon",
     "list_marathons",
     "look_again",
+    "make_event_for",
+    "make_event_now",
+    "marathon_of_event_line",
     "mark_done",
     "mark_live",
     "mark_upcoming",
@@ -2715,5 +3003,6 @@ __all__ = [
     "set_active",
     "set_channel",
     "shout_now",
+    "unlink_the_event",
     "unpair_runner",
 ]

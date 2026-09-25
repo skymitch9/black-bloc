@@ -3,7 +3,8 @@
 > **Audience:** whoever deploys or fixes the site, and the reviewer doing the
 > first live sign-in. **Status:** TRACKED (owner, 2026-08-31 — was local-only
 > until then; secret NAMES only). **Last verified:
-> 2026-09-23 14:1x — the pages count and the `channels.html` row only**, at the v159 ritual: `ls site/public/*.html` is
+> 2026-09-25 — the pages paragraph only**, on branch `marathon-events-page` (NOT merged): 22 pages by
+> `ls site/public/*.html` and `check.mjs`; nothing else re-read. Before that, 2026-09-23 14:1x — the pages count and the `channels.html` row only**, at the v159 ritual: `ls site/public/*.html` is
 > **22** and the row says LIVE v159; nothing else re-read, no browser. Before that, **2026-09-21 — the mock section only**: the `/preview/` door and its `LIVE_ROOT` live mirror of the
 > deployed release are RETIRED (owner, 12:2x, verbatim: *"We don't need the preview pages anymore"*)
 > and **deleted** from `site/mock/server.mjs` on branch `no-previews` (merge `4dd9f649`), ✅
@@ -229,8 +230,10 @@ In order, because each step's failure looks different:
 
 ## The pages
 
-**Twenty-three** HTML files in `site/public/`, served by the same app at `/`
-(re-counted 2026-09-25 on branch `marathon-schedule` — **22 → 23**, `marathons.html` added; `node site/mock/check.mjs` reported **23 pages, 231 routes**. Before that, re-counted 2026-09-23 on branch `channels-page` — **21 → 22**, `channels.html` added; the 22
+**Twenty-two** HTML files in `site/public/`, served by the same app at `/`
+(re-counted 2026-09-25 on branch `marathon-events-page` — **23 → 22**, `marathons.html` DELETED: its content is the
+Marathons section of `events.html` (`assets/marathons-section.js`, deep link `events.html#marathon-<id>`);
+`node site/mock/check.mjs` reported **22 pages, 237 routes**. Before that, re-counted 2026-09-25 on branch `marathon-schedule` — **22 → 23**, `marathons.html` added; `node site/mock/check.mjs` reported **23 pages, 231 routes**. Before that, re-counted 2026-09-23 on branch `channels-page` — **21 → 22**, `channels.html` added; the 22
 names are `site/mock/contract.json`'s `pages` list, and `node site/mock/check.mjs` reported
 **22 pages** against the mock. `raidtrain.html` and `minutes.html` had joined since the count
 below without it being updated. Before that, re-counted 2026-09-16 — **18 → 19**, `posts.html` added by the Posts build on branch
@@ -241,7 +244,7 @@ until 2026-08-31, which predates Polls, Chat, Requests and Members):
 `events.html`, `golive.html`, `rolemenus.html`, `birthdays.html`,
 `tempvoice.html`, `honeypot.html`, `polls.html`, `chat.html`, `requests.html`,
 `members.html`, `settings.html`, `audit.html`,
-`health.html`, `guides.html`, `posts.html`, `raidtrain.html`, `minutes.html`, `channels.html`, `marathons.html`.
+`health.html`, `guides.html`, `posts.html`, `raidtrain.html`, `minutes.html`, `channels.html`.
 `site/README.md` says what each one does.
 
 | Page | What it is for |

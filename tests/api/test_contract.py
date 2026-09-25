@@ -752,6 +752,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         name="AGDQ 2027",
         url="https://gamesdonequick.com/schedule/74",
         spotlight_id=spotlight_id,
+        make_event=False,
     )
     marathon_id = int(made.value["id"])
     marathon_pairing_id = await upsert_pairing(
@@ -796,6 +797,13 @@ async def seed_world(client, web, guild, wf) -> dict:
         ),
     )
     marathon_over_id = int(cur.lastrowid)
+    cur = await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, event_wanted, "
+        "added_at) VALUES (?, 'GDQx 2026', 'https://gamesdonequick.com/schedule/72', 'gdq', "
+        "'72', 1, ?)",
+        (guild_id, ended.isoformat()),
+    )
+    marathon_waiting_id = int(cur.lastrowid)
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
     await db.conn.execute(
         "INSERT OR IGNORE INTO channel_drafts(guild_id, channel_id, draft) VALUES (?, ?, ?)",
@@ -856,6 +864,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_run_id": str(marathon_run_id),
         "marathon_pairing_id": str(marathon_pairing_id),
         "marathon_over_id": str(marathon_over_id),
+        "marathon_bare_id": str(marathon_id),
+        "marathon_waiting_id": str(marathon_waiting_id),
         "marathon_done_run_id": str(marathon_done_run_id),
         "recording_meeting_id": str(recording_meeting_id),
     }

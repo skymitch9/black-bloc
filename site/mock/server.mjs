@@ -342,7 +342,7 @@ const LOG_LEVEL_FEATURES = [
   ['request', 'requests', 'request'],
   ['pings', 'ping roles', 'pings'],
   ['raidtrain', 'raid trains', 'raidtrain'],
-  ['marathon', 'marathons', 'marathon'],
+  ['marathon', 'marathons', 'event'],
   ['applications', 'applications', 'apply'],
   // F-G1: guides are edited on the website only, so there is no panel to name.
   ['guides', 'guides', null],
@@ -662,7 +662,6 @@ const SETTING_SPECS = [
   ["marathon_pin_board", "bool", true, true, "whether a marathon's board is pinned while the marathon is on; it comes down a day after the marathon ends. on by default"],
   ["marathon_edit_done", "bool", true, true, "whether a shoutout is rewritten in the past tense when the run is over. on by default"],
   ["marathon_window_slack_hours", "int", 2, 2, "hours either side of a marathon that its channel's ping window stays open, when the channel pings during events only. 2 by default", null, 24, 0],
-  ["marathon_panel_minutes", "int", 10, 10, "minutes the /marathon panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ["marathon_board_template", "text", "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}", "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}", "the head of a marathon's board, the one message edited in place as the schedule moves. It takes {marathon} {count} {starts} {ends} {url}"],
   ["marathon_board_line_template", "text", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "one line of the board per run of ours. It takes {member} {game} {category} {when} {relative} {part} {state}; {when} and {relative} show in each reader's own time zone"],
   ["marathon_board_empty_line", "text", "Nobody from here is on this schedule yet. Black Bloc keeps reading it.", "Nobody from here is on this schedule yet. Black Bloc keeps reading it.", "the board's only line while no run of ours has been found"],
@@ -680,10 +679,12 @@ const SETTING_SPECS = [
   ["marathon_already_added", "text", "**{name}** already follows that schedule, so nothing was added.", "**{name}** already follows that schedule, so nothing was added.", "what staff are told when a schedule link is already on the list. It takes {name}"],
   ["marathon_could_not_read", "text", "Black Bloc could not read that schedule, so nothing was added: {reason}", "Black Bloc could not read that schedule, so nothing was added: {reason}", "what staff are told when a schedule link will not read. It takes {reason}"],
   ["marathon_no_runs_yet", "text", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "what the page and the panel say about a marathon whose schedule is not published yet. It takes {marathon}"],
-  ["marathon_suggest_next", "bool", true, true, "whether a GDQ marathon that is over looks up the next GDQ event on the tracker and suggests it to staff \u2014 a notice with Add it and Not this one, and a Next up card on the Marathons page. on by default; nothing is ever added until staff press Add it"],
+  ["marathon_suggest_next", "bool", true, true, "whether a GDQ marathon that is over looks up the next GDQ event on the tracker and suggests it to staff \u2014 a notice with Add it and Not this one, and a Next up card in the Marathons section of the Events page. on by default; nothing is ever added until staff press Add it"],
   ["marathon_next_template", "text", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "the staff notice when a GDQ marathon is over and the tracker lists another event ahead. It takes {marathon} {next} {when} {relative} {url}"],
   ["marathon_next_none_template", "text", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "what staff are told when a GDQ marathon is over and the tracker lists no event ahead. It takes {marathon}"],
   ["marathon_next_added_template", "text", "Added **{next}** \u2014 it will be read from {url}.", "Added **{next}** \u2014 it will be read from {url}.", "what the staff notice is rewritten to once the next event is added. It takes {marathon} {next} {when} {relative} {url}"],
+  ["marathon_makes_event", "bool", true, true, "whether the Add form's Also make it an event box starts ticked. A ticked marathon goes into the events review like any proposal the moment its schedule has dates, and its event follows the schedule when the dates move. on by default; each marathon can still Unlink or Make an event now on its own"],
+  ["marathon_event_description_template", "text", "{marathon} — read from the GDQ schedule. Our runs are boarded in {channel}.", "{marathon} — read from the GDQ schedule. Our runs are boarded in {channel}.", "what a marathon's event says about itself in the events review, the announcement and the Discord scheduled event. It takes {marathon} {channel}"],
   ['rolemenu_panel_minutes', 'int', 10, 10, "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['honeypot_panel_minutes', 'int', 10, 10, "minutes the /honeypot panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['modmail_panel_minutes', 'int', 10, 10, "minutes the /modmail panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -1396,6 +1397,8 @@ function seedState() {
     ],
   },
   events: [
+    // Marathon 1's own event (marathon-events-page §B): approved, dated from the schedule.
+    { id: 5, requester_id: STAFF.id, title: 'AGDQ 2027', description: 'AGDQ 2027 \u2014 read from the GDQ schedule. Our runs are boarded in <#800000000000000006>.', location: 'https://twitch.tv/gamesdonequick', where_kind: 'other', where_channel_id: null, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 440 * 60000).toISOString(), status: 'approved', created_at: minutesAgo(9000), decided_by: STAFF.id, decided_at: minutesAgo(8990), deny_reason: null, review_channel_id: '800000000000000005', scheduled_event_id: '840000000000000005' },
     { id: 4, requester_id: STAFF.id, title: 'Charity marathon', description: 'Twelve hours for the shelter.', location: 'https://twitch.tv/rivetplays', where_kind: 'other', where_channel_id: null, starts_at: minutesAgo(-10080), ends_at: minutesAgo(-9900), status: 'pending', created_at: minutesAgo(55), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' },
     { id: 3, requester_id: MEMBERS[3].id, title: 'Movie night', description: 'Bring snacks.', location: null, where_kind: 'voice', where_channel_id: '800000000000000010', starts_at: minutesAgo(-2880), ends_at: null, status: 'pending', created_at: minutesAgo(60), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' },
     { id: 2, requester_id: MEMBERS[1].id, title: 'Speedrun race', description: null, location: 'Twitch', starts_at: minutesAgo(-10080), ends_at: null, status: 'approved', created_at: minutesAgo(4000), decided_by: STAFF.id, decided_at: minutesAgo(3900), deny_reason: null },
@@ -3200,7 +3203,7 @@ const GUIDE_FEATURE_PAGES = {
   modmail: 'modmail.html', golive: 'golive.html', youtube: 'golive.html', events: 'events.html',
   birthday: 'birthdays.html', tempvoice: 'tempvoice.html', rolemenu: 'rolemenus.html',
   poll: 'polls.html', chat: 'chat.html', request: 'requests.html', pings: 'golive.html',
-  raidtrain: 'raidtrain.html', marathon: 'marathons.html', applications: 'rolemenus.html', selftest: 'health.html',
+  raidtrain: 'raidtrain.html', marathon: 'events.html', applications: 'rolemenus.html', selftest: 'health.html',
   guides: 'guides.html',
 };
 const GUIDE_CORE_KEYS = ['staff_channel_id', 'log_channel_id', 'modlog_channel_id', 'role_menu_channel_id'];
@@ -5499,7 +5502,7 @@ function seedMarathons() {
     { id: 2, name: 'Halo Fest', schedule_url: 'https://gamesdonequick.com/schedule/73', source: 'gdq', source_ref: '73', spotlight_id: null, starts_at: minutesAgo(30000), ends_at: minutesAgo(29840), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000299', board_pinned: false, last_fetched_at: minutesAgo(700), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(40000) },
     { id: 3, name: 'GDQx 2026', schedule_url: 'https://gamesdonequick.com/schedule/72', source: 'gdq', source_ref: '72', spotlight_id: null, starts_at: null, ends_at: null, active: false, poll_minutes: 60, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(1500), last_fetch_ok: 0, last_error: 'the GDQ tracker has the event but has not published its schedule yet (it answers 404 for the runs)', fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(2000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
-  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, ...row }));
+  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, ...row }));
 }
 
 function seedMarathonPeople() {
@@ -5682,7 +5685,50 @@ function marathonRow(row) {
     added_by_name: row.added_by ? memberName(row.added_by) : null,
     next: nextRow,
     next_waiting: Boolean(nextRow) && nextRow.state === 'open',
+    event: marathonEvent(row),
   };
+}
+
+const MARATHON_EVENT_LINE = 'Event **#{id}** \u2014 {status}';
+const MARATHON_EVENT_WAITING = 'Event: waiting for the schedule \u2014 made the moment it has dates';
+const MARATHON_EVENT_NONE = 'Event: none \u2014 **Make an event now** puts one into the events review';
+const MARATHON_KEPT_IN_STEP = ['pending', 'approved'];
+
+function marathonEvent(row) {
+  const event = row.event_id ? state.events.find((one) => one.id === row.event_id) : null;
+  const status = row.event_id ? (event ? event.status : 'gone') : null;
+  let line = MARATHON_EVENT_NONE;
+  if (row.event_id) line = MARATHON_EVENT_LINE.replace('{id}', row.event_id).replace('{status}', status);
+  else if (row.event_wanted) line = MARATHON_EVENT_WAITING;
+  return { id: row.event_id || null, status, wanted: Boolean(row.event_wanted), waiting: Boolean(row.event_wanted) && !row.event_id, line };
+}
+
+function marathonMakeEvent(row) {
+  if (row.event_id) {
+    throw new Refused(409, 'event_exists', `**${row.name}** already carries event **#${row.event_id}**, so nothing was made. **Unlink** it first to make another.`);
+  }
+  row.event_wanted = true;
+  if (!row.starts_at || !row.ends_at) {
+    return `**${row.name}** has no dates yet, so its event waits for the schedule \u2014 it goes into the events review the moment GDQ publishes one.`;
+  }
+  const id = state.events.reduce((top, one) => Math.max(top, one.id), 0) + 1;
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+  const home = state.settings.get('marathon_channel_id') || state.settings.get('golive_channel_id');
+  const words = String(state.settings.get('marathon_event_description_template') || '')
+    .replace('{marathon}', row.name)
+    .replace('{channel}', home ? `<#${home}>` : '');
+  state.events.unshift({ id, requester_id: STAFF.id, title: row.name, description: words, location: channel ? `https://twitch.tv/${channel.twitch_login}` : `https://gamesdonequick.com/schedule/${row.source_ref}`, where_kind: 'other', where_channel_id: null, starts_at: row.starts_at, ends_at: row.ends_at, status: 'pending', created_at: now(), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' });
+  row.event_id = id;
+  logAction('web.event.created', { details: { event_id: id, title: row.name, via: 'website' } });
+  logAction('web.marathon.event_made', { details: { marathon_id: row.id, event_id: id, via: 'website' } });
+  return `**${row.name}** is in the events review as event **#${id}**.`;
+}
+
+function marathonOfEvent(eventId) {
+  const row = state.marathons.find((one) => one.event_id === eventId);
+  if (!row) return null;
+  const ours = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped' && marathonOurs(one)).length;
+  return { id: row.id, name: row.name, line: `Marathon: **${row.name}** \u2014 ${ours} run(s) of ours` };
 }
 
 function marathonPairingsFor(row) {
@@ -5747,6 +5793,7 @@ route('GET', '/api/marathons', (context) => {
     mode: state.settings.get('marathon_mode'),
     marathons: rows,
     next_waiting: rows.filter((one) => one.next_waiting).length,
+    makes_event: Boolean(state.settings.get('marathon_makes_event')),
   };
 });
 
@@ -5756,7 +5803,7 @@ function marathonOpenSuggestion(row, eventId) {
     throw new Refused(409, 'nothing_suggested', `**${row.name}** has no next event waiting, so nothing was changed. **Look again** asks the tracker.`);
   }
   if (eventId !== undefined && eventId !== null && String(eventId) !== String(record.event_id)) {
-    throw new Refused(409, 'suggestion_moved', `That is not the suggestion waiting on **${row.name}** any more, so nothing was changed. Open /marathon or the Marathons page for the current one.`);
+    throw new Refused(409, 'suggestion_moved', `That is not the suggestion waiting on **${row.name}** any more, so nothing was changed. Open /event ▸ Marathons… or the Events page for the current one.`);
   }
   return record;
 }
@@ -5786,8 +5833,36 @@ route('POST', '/api/marathons', async (context) => {
   }
   const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 100);
   if (!name) throw new Refused(422, 'no_name', 'A marathon needs a name, so nothing was added.');
+  if (body.make_event !== undefined && body.make_event !== null && typeof body.make_event !== 'boolean') {
+    throw new Refused(422, 'bad_make_event', 'Say true or false for making it an event, so nothing was added.');
+  }
   const found = marathonCreate(name, body.schedule_url, body.spotlight_id);
-  return { ...marathonDetail(found.row), message: found.message };
+  const wanted = body.make_event === undefined || body.make_event === null ? Boolean(state.settings.get('marathon_makes_event')) : body.make_event;
+  const said = wanted ? ` ${marathonMakeEvent(found.row)}` : '';
+  return { ...marathonDetail(found.row), message: found.message + said };
+});
+
+route('POST', '/api/marathons/:marathon_id/event', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const message = marathonMakeEvent(row);
+  return { ...marathonDetail(row), message };
+});
+
+route('DELETE', '/api/marathons/:marathon_id/event', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  if (!row.event_id && !row.event_wanted) {
+    throw new Refused(409, 'no_event', `**${row.name}** carries no event, so there was nothing to unlink.`);
+  }
+  const eventId = row.event_id;
+  row.event_id = null;
+  row.event_wanted = false;
+  logAction('web.marathon.event_unlinked', { details: { marathon_id: row.id, event_id: eventId, via: 'website' } });
+  const message = eventId
+    ? `**${row.name}** no longer carries event **#${eventId}**. The event itself was not touched.`
+    : `**${row.name}** no longer waits to make an event.`;
+  return { ...marathonDetail(row), message };
 });
 
 function marathonCreate(name, scheduleUrl, spotlight) {
@@ -5894,6 +5969,12 @@ route('POST', '/api/marathons/:marathon_id/next', (context) => {
 route('DELETE', '/api/marathons/:marathon_id', (context) => {
   requireStaff(context.session);
   const row = marathonOf(context.params.marathon_id);
+  const event = row.event_id ? state.events.find((one) => one.id === row.event_id) : null;
+  if (event && MARATHON_KEPT_IN_STEP.includes(event.status)) {
+    event.status = 'cancelled';
+    logAction('web.event.cancelled', { target_id: event.requester_id, reason: 'marathon_removed', details: { event_id: event.id, via: 'website' } });
+    logAction('web.marathon.event_cancelled', { details: { marathon_id: row.id, event_id: event.id, via: 'website' } });
+  }
   row.active = false;
   marathonSyncWindow(row);
   state.marathons = state.marathons.filter((one) => one !== row);
@@ -6774,6 +6855,7 @@ function eventRow(row) {
     review_channel_id: row.review_channel_id === undefined ? null : row.review_channel_id,
     review_kind: row.review_kind === 'post' ? 'post' : 'room',
     created_at: row.created_at,
+    marathon: marathonOfEvent(row.id),
   };
 }
 

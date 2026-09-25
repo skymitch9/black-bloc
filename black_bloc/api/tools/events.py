@@ -88,7 +88,7 @@ NO_POST = (
 NO_PLACE: dict[str, str] = {"room": NO_ROOM, "post": NO_POST}
 
 
-def event_row(guild: Any, row: Any) -> dict[str, Any]:
+def event_row(guild: Any, row: Any, marathon: Any = None) -> dict[str, Any]:
     where = read_where(row)
     channel = guild.get_channel(where.channel_id) if where.channel_id else None
     return {
@@ -122,7 +122,26 @@ def event_row(guild: Any, row: Any) -> dict[str, Any]:
         ),
         "review_kind": review_kind(row),
         "created_at": row["created_at"],
+        "marathon": marathon,
     }
+
+
+async def marathon_of(bot: Any, guild: Any, row: Any) -> dict[str, Any] | None:
+    """The marathon that made this event, for the card's link back; None for any other."""
+    from ...cogs.content.marathon import marathon_for_event, marathon_of_event_line
+
+    found = await marathon_for_event(bot.db, guild.id, row["id"])
+    if found is None:
+        return None
+    return {
+        "id": found["id"],
+        "name": found["name"],
+        "line": await marathon_of_event_line(bot, guild.id, row["id"]),
+    }
+
+
+async def shown(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
+    return event_row(guild, row, await marathon_of(bot, guild, row))
 
 
 async def wanted_event(bot: Any, guild: Any, event_id: int) -> Any:
@@ -166,7 +185,7 @@ def build_router(bot: Any) -> APIRouter:
                     UNKNOWN_STATUS.format(given=part, known=", ".join(STATUSES)),
                 )
         rows = await events_by_status(bot.db, guild.id, wanted or STATUSES)
-        return [event_row(guild, row) for row in rows]
+        return [await shown(bot, guild, row) for row in rows]
 
     async def _decide(request: Request, event_id: int, status: str, reason: Any) -> dict[str, Any]:
         who = await writer(request)
@@ -178,13 +197,13 @@ def build_router(bot: Any) -> APIRouter:
         )
         if fresh is None:
             raise Refused(409, "already_decided", said)
-        return {"event": event_row(guild, fresh), "message": said}
+        return {"event": await shown(bot, guild, fresh), "message": said}
 
     @router.get("/{event_id}")
     async def event_detail(event_id: int) -> dict[str, Any]:
         guild = require_guild(bot)
         require_db(bot)
-        return {"event": event_row(guild, await wanted_event(bot, guild, event_id))}
+        return {"event": await shown(bot, guild, await wanted_event(bot, guild, event_id))}
 
     @router.put("/{event_id}")
     async def event_edit(
@@ -258,7 +277,7 @@ def build_router(bot: Any) -> APIRouter:
             notes.append(ANNOUNCEMENT_STALE)
         if fresh["scheduled_event_id"]:
             notes.append(SCHEDULED_STALE)
-        return {"event": event_row(guild, fresh), "message": EDITED, "notes": notes}
+        return {"event": await shown(bot, guild, fresh), "message": EDITED, "notes": notes}
 
     @router.post("/{event_id}/approve")
     async def event_approve(request: Request, event_id: int) -> dict[str, Any]:
@@ -291,7 +310,7 @@ def build_router(bot: Any) -> APIRouter:
                 "not_cancellable",
                 NOT_CANCELLABLE.format(event_id=event_id, status=row["status"]),
             )
-        return {"event": event_row(guild, fresh), "message": "Cancelled."}
+        return {"event": await shown(bot, guild, fresh), "message": "Cancelled."}
 
     @router.post("/{event_id}/spotlight")
     async def event_spotlight(request: Request, event_id: int) -> dict[str, Any]:
@@ -308,7 +327,7 @@ def build_router(bot: Any) -> APIRouter:
             bot, guild, actor_for(bot, who, guild), row, login, via=VIA_WEBSITE
         )
         return {
-            "event": event_row(guild, row),
+            "event": await shown(bot, guild, row),
             "twitch_login": login,
             "message": said,
         }
@@ -336,7 +355,7 @@ def build_router(bot: Any) -> APIRouter:
         if not gone:
             raise Refused(409, "room_kept", said)
         fresh = await wanted_event(bot, guild, event_id)
-        return {"event": event_row(guild, fresh), "message": said}
+        return {"event": await shown(bot, guild, fresh), "message": said}
 
     @router.post("/{event_id}/forum")
     async def event_move_to_forum(request: Request, event_id: int) -> dict[str, Any]:
@@ -359,6 +378,6 @@ def build_router(bot: Any) -> APIRouter:
         if not outcome.ok:
             raise Refused(outcome.status or 400, outcome.code, outcome.message)
         fresh = await wanted_event(bot, guild, event_id)
-        return {"event": event_row(guild, fresh), "message": outcome.message}
+        return {"event": await shown(bot, guild, fresh), "message": outcome.message}
 
     return router

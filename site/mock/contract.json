@@ -1618,7 +1618,8 @@
         "where_channel_id",
         "where_label",
         "moved_to",
-        "moved_word"
+        "moved_word",
+        "marathon"
       ]
     },
     {
@@ -1659,7 +1660,8 @@
           "where_channel_id",
           "where_label",
           "moved_to",
-          "moved_word"
+          "moved_word",
+          "marathon"
         ]
       }
     },
@@ -4663,13 +4665,14 @@
       "method": "GET",
       "path": "/api/marathons",
       "read_by": [
-        "23 page-marathons.js marathon list"
+        "marathons-section.js (events.html) marathon list"
       ],
       "shape": "object",
       "keys": [
         "mode",
         "marathons",
-        "next_waiting"
+        "next_waiting",
+        "makes_event"
       ],
       "rows": {
         "marathons": [
@@ -4690,7 +4693,8 @@
           "channel_login",
           "channel_gone",
           "next",
-          "next_waiting"
+          "next_waiting",
+          "event"
         ]
       }
     },
@@ -4702,8 +4706,8 @@
         "schedule_url": "https://gamesdonequick.com/schedule/75"
       },
       "read_by": [
-        "23 page-marathons.js add a marathon",
-        "23 page-marathons.js Next up — Add it (next_of)"
+        "marathons-section.js (events.html) add a marathon",
+        "marathons-section.js (events.html) Next up — Add it (next_of)"
       ],
       "shape": "object",
       "keys": [
@@ -4719,7 +4723,7 @@
       "method": "GET",
       "path": "/api/marathons/{marathon_id}",
       "read_by": [
-        "23 page-marathons.js marathon drawer"
+        "marathons-section.js (events.html) marathon drawer"
       ],
       "shape": "object",
       "keys": [
@@ -4747,7 +4751,8 @@
         "pairings",
         "unmatched",
         "next",
-        "next_waiting"
+        "next_waiting",
+        "event"
       ],
       "rows": {
         "run_list": [
@@ -4784,7 +4789,7 @@
         "active": false
       },
       "read_by": [
-        "23 page-marathons.js pause and resume"
+        "marathons-section.js (events.html) pause and resume"
       ],
       "shape": "object",
       "keys": [
@@ -4799,7 +4804,7 @@
       "method": "DELETE",
       "path": "/api/marathons/{marathon_id}",
       "read_by": [
-        "23 page-marathons.js remove"
+        "marathons-section.js (events.html) remove"
       ],
       "shape": "object",
       "keys": [
@@ -4812,7 +4817,7 @@
       "method": "POST",
       "path": "/api/marathons/{marathon_id}/refresh",
       "read_by": [
-        "23 page-marathons.js refresh now"
+        "marathons-section.js (events.html) refresh now"
       ],
       "shape": "object",
       "keys": [
@@ -4827,7 +4832,7 @@
       "method": "POST",
       "path": "/api/marathons/{marathon_id}/board",
       "read_by": [
-        "23 page-marathons.js post the board"
+        "marathons-section.js (events.html) post the board"
       ],
       "shape": "object",
       "keys": [
@@ -4837,10 +4842,54 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_bare_id}/event",
+      "read_by": [
+        "marathons-section.js (events.html) Make an event now"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "event",
+        "message"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "status",
+          "wanted",
+          "waiting",
+          "line"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/marathons/{marathon_waiting_id}/event",
+      "read_by": [
+        "marathons-section.js (events.html) Unlink"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "event",
+        "message"
+      ],
+      "nested": {
+        "event": [
+          "id",
+          "status",
+          "wanted",
+          "waiting",
+          "line"
+        ]
+      }
+    },
+    {
       "method": "GET",
       "path": "/api/marathons/{marathon_id}/people",
       "read_by": [
-        "23 page-marathons.js pairings"
+        "marathons-section.js (events.html) pairings"
       ],
       "shape": "list",
       "keys": [
@@ -4859,7 +4908,7 @@
         "user_id": "{member_id}"
       },
       "read_by": [
-        "23 page-marathons.js pair a runner"
+        "marathons-section.js (events.html) pair a runner"
       ],
       "shape": "object",
       "keys": [
@@ -4880,7 +4929,7 @@
       "method": "DELETE",
       "path": "/api/marathons/{marathon_id}/people/{marathon_pairing_id}",
       "read_by": [
-        "23 page-marathons.js unpair"
+        "marathons-section.js (events.html) unpair"
       ],
       "shape": "object",
       "keys": [
@@ -4892,7 +4941,7 @@
       "method": "POST",
       "path": "/api/marathons/{marathon_id}/runs/{marathon_run_id}/shout",
       "read_by": [
-        "23 page-marathons.js shout it now"
+        "marathons-section.js (events.html) shout it now"
       ],
       "shape": "object",
       "keys": [
@@ -4912,7 +4961,7 @@
       "method": "POST",
       "path": "/api/marathons/{marathon_id}/runs/{marathon_run_id}/done",
       "read_by": [
-        "23 page-marathons.js mark done"
+        "marathons-section.js (events.html) mark done"
       ],
       "shape": "object",
       "keys": [
@@ -4932,7 +4981,7 @@
       "method": "POST",
       "path": "/api/marathons/{marathon_over_id}/next",
       "read_by": [
-        "23 page-marathons.js Next up — Look again"
+        "marathons-section.js (events.html) Next up — Look again"
       ],
       "shape": "object",
       "keys": [
@@ -4959,7 +5008,7 @@
         "dismiss_next": true
       },
       "read_by": [
-        "23 page-marathons.js Next up — Not this one"
+        "marathons-section.js (events.html) Next up — Not this one"
       ],
       "shape": "object",
       "keys": [
@@ -4979,7 +5028,7 @@
       "method": "POST",
       "path": "/api/marathons/{marathon_id}/runs/{marathon_done_run_id}/upcoming",
       "read_by": [
-        "23 page-marathons.js mark it upcoming"
+        "marathons-section.js (events.html) mark it upcoming"
       ],
       "shape": "object",
       "keys": [
@@ -5000,7 +5049,7 @@
       "method": "POST",
       "path": "/api/marathons/{marathon_id}/runs/{marathon_run_id}/live",
       "read_by": [
-        "23 page-marathons.js mark it live"
+        "marathons-section.js (events.html) mark it live"
       ],
       "shape": "object",
       "keys": [
@@ -6809,8 +6858,7 @@
     "/requests.html",
     "/guides.html",
     "/posts.html",
-    "/minutes.html",
-    "/marathons.html"
+    "/minutes.html"
   ],
   "action_kinds": [
     "web.operator.read",
@@ -6988,6 +7036,9 @@
     "web.chat.review_dismissed",
     "web.chat.review_reopened",
     "web.marathon.added",
+    "web.marathon.event_made",
+    "web.marathon.event_unlinked",
+    "web.marathon.event_cancelled",
     "web.marathon.updated",
     "web.marathon.paused",
     "web.marathon.resumed",

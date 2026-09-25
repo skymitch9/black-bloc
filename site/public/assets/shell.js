@@ -33,7 +33,6 @@ export const GROUPS = [
       { tab: 'golive', label: 'Go-live', icon: 'navGolive', feature: 'golive' },
       { tab: 'events', label: 'Events', icon: 'navEvents', feature: 'events' },
       { tab: 'raidtrain', label: 'Raid trains', icon: 'navRaidtrain', feature: 'raidtrain' },
-      { tab: 'marathons', label: 'Marathons', icon: 'navMarathon', feature: 'marathon' },
       { tab: 'birthdays', label: 'Birthdays', icon: 'navBirthdays', feature: 'birthday' },
       { tab: 'tempvoice', label: 'Temp voice', icon: 'navTempvoice', feature: 'tempvoice' },
       { tab: 'rolemenus', label: 'Role menus', icon: 'navRolemenus', feature: 'rolemenu', count: 'requests' },

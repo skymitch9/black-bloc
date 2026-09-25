@@ -28,6 +28,8 @@ ROUTES = [
     ("POST", "/api/marathons/1/runs/1/upcoming"),
     ("POST", "/api/marathons/1/runs/1/live"),
     ("POST", "/api/marathons/1/next"),
+    ("POST", "/api/marathons/1/event"),
+    ("DELETE", "/api/marathons/1/event"),
 ]
 
 
@@ -380,3 +382,99 @@ async def test_a_marathons_own_read_gap_is_set_and_cleared_from_the_page(
     assert body["poll_minutes"] is None
     words = client.patch(f"/api/marathons/{marathon_id}", json={"poll_minutes": "soon"})
     assert words.status_code == 422 and "10 to 120 minutes" in words.json()["message"]
+
+
+# --- a marathon is an event (docs/info/marathon-events-page-design.md §B) --------------------
+
+
+@pytest.fixture
+async def review(web, wf):
+    await web.store.set(wf.GUILD_ID, "events_category_id", wf.CATEGORY_ID, by=7)
+
+
+async def web_row(wf, web, kind):
+    found = [details for seen, details in await wf.web_rows_in(web.db) if seen == kind]
+    assert len(found) == 1, await wf.web_rows_in(web.db)
+    assert found[0]["via"] == "website"
+    return found[0]
+
+
+async def test_adding_with_make_event_puts_its_event_on_the_row_and_in_the_queue(
+    client, sign_in, web, cog, wf, review
+):
+    sign_in(client)
+    body = add(client, make_event=True).json()
+
+    event = body["event"]
+    assert event["id"] and event["status"] == "pending" and event["wanted"] is True
+    assert event["waiting"] is False and f"#{event['id']}" in event["line"]
+    queued = client.get("/api/events?status=pending").json()
+    mine = next(one for one in queued if one["id"] == event["id"])
+    assert mine["title"] == "AGDQ 2027" and mine["starts_at"] == at(60)
+    assert mine["marathon"]["id"] == body["id"] and "AGDQ 2027" in mine["marathon"]["line"]
+    assert (await web_row(wf, web, "web.marathon.event_made"))["event_id"] == event["id"]
+
+
+async def test_adding_with_make_event_off_leaves_the_event_line_empty(client, sign_in, cog):
+    sign_in(client)
+    body = add(client, make_event=False).json()
+    assert body["event"] == {
+        "id": None,
+        "status": None,
+        "wanted": False,
+        "waiting": False,
+        "line": body["event"]["line"],
+    }
+    assert "Make an event now" in body["event"]["line"]
+
+
+async def test_make_event_that_is_not_true_or_false_is_refused_in_words(client, sign_in, cog):
+    sign_in(client)
+    refused = add(client, make_event="yes")
+    assert refused.status_code == 422 and refused.json()["error"] == "bad_make_event"
+    assert client.get("/api/marathons").json()["marathons"] == []
+
+
+async def test_the_list_carries_the_add_forms_default_and_each_rows_event(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    add(client, make_event=False)
+    payload = client.get("/api/marathons").json()
+    assert payload["makes_event"] is True
+    assert payload["marathons"][0]["event"]["id"] is None
+    await web.store.set(wf.GUILD_ID, "marathon_makes_event", False)
+    assert client.get("/api/marathons").json()["makes_event"] is False
+
+
+async def test_make_now_then_unlink_from_the_site_and_a_second_unlink_says_why(
+    client, sign_in, web, cog, wf, review
+):
+    sign_in(client)
+    marathon_id = add(client, make_event=False).json()["id"]
+
+    made = client.post(f"/api/marathons/{marathon_id}/event")
+    assert made.status_code == 200, made.text
+    event_id = made.json()["event"]["id"]
+    assert event_id and f"#{event_id}" in made.json()["message"]
+    again = client.post(f"/api/marathons/{marathon_id}/event")
+    assert again.status_code == 409 and again.json()["error"] == "event_exists"
+
+    unlinked = client.delete(f"/api/marathons/{marathon_id}/event")
+    assert unlinked.status_code == 200 and unlinked.json()["event"]["id"] is None
+    assert client.get(f"/api/events/{event_id}").json()["event"]["status"] == "pending"
+    assert client.get(f"/api/events/{event_id}").json()["event"]["marathon"] is None
+    twice = client.delete(f"/api/marathons/{marathon_id}/event")
+    assert twice.status_code == 409 and "carries no event" in twice.json()["message"]
+    assert (await web_row(wf, web, "web.marathon.event_unlinked"))["event_id"] == event_id
+
+
+async def test_removing_from_the_site_calls_the_event_off(client, sign_in, web, cog, wf, review):
+    sign_in(client)
+    body = add(client, make_event=True).json()
+    assert client.delete(f"/api/marathons/{body['id']}").status_code == 200
+    event = client.get(f"/api/events/{body['event']['id']}").json()["event"]
+    assert event["status"] == "cancelled"
+    assert (await web_row(wf, web, "web.marathon.event_cancelled"))["marathon_id"] == body[
+        "id"
+    ]

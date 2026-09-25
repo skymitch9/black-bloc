@@ -1,10 +1,12 @@
 import { api, listOf, names, refChannels, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
+import { marathonHref, marathonsSection } from './marathons-section.js';
 import {
   ask,
   badge,
   bar,
+  boldParts,
   button,
   card,
   channelLabel,
@@ -40,6 +42,9 @@ const MOVE_BUTTON = 'Move to the forum';
 const MOVE_BODY = 'A post goes up in the events forum carrying the same card and the same buttons, '
   + 'the room is told where it went, and then the room is removed. The event is NOT called off, '
   + 'and the messages already in the room are not carried over — Discord cannot move those.';
+const MARATHON_SETTINGS_NOTE = 'Whether marathon posts go out, where, how often a schedule is '
+  + 'read, when the reminders go and which one pings, whether adding one makes an event, and '
+  + 'every word the board, the reminders and the shoutouts say.';
 const NOT_RESENT = 'Saving does not rewrite an announcement that is already up or a Discord ' +
   'scheduled event that already exists; the answer says when that applies.';
 
@@ -75,7 +80,17 @@ function detailCard(row) {
     line('Announced', row.announced ? 'yes' : 'no'),
     line('Scheduled event', row.scheduled ? 'yes' : 'no'),
     line('Proposed', when(row.created_at)),
+    row.marathon
+      ? line('Marathon', el('a', { href: marathonHref(row.marathon.id) }, boldParts(row.marathon.line)))
+      : null,
   ]);
+}
+
+/** A marathon's drawer opens its event here: every status, so a settled one is still found. */
+function openEvent(eventId) {
+  state.status = '';
+  state.open = eventId;
+  refresh();
 }
 
 const NOWHERE = '— nowhere in particular —';
@@ -288,7 +303,7 @@ async function load() {
 
   const queue = table([
     { label: 'Event', cell: (row) => String(row.id), className: 'mono' },
-    { label: 'Title', cell: (row) => row.title, className: 'wrap' },
+    { label: 'Title', cell: (row) => el('span', {}, [el('span', { text: row.title }), row.marathon ? badge('marathon', 'ok') : null]), className: 'wrap' },
     { label: 'Asked by', cell: (row) => nameNode(row.requester_id, row.requester_name) },
     { label: 'Starts', cell: (row) => when(row.starts_at), className: 'mono' },
     { label: 'Status', cell: (row) => badge(row.status, TONE[row.status] || null) },
@@ -313,13 +328,17 @@ async function load() {
     nodes.push(detail.node);
   }
 
+  nodes.push(await marathonsSection({ reload: () => refresh(), openEvent }));
+
   const eventsSettings = await namespaceSettings('events');
   forumMakeAction(eventsSettings, forum.id);
 
   document.getElementById('dash').replaceChildren(
     ...nodes,
     eventsSettings,
-    await logsSection('events'),
+    await namespaceSettings('marathon', { title: 'Marathon settings', note: MARATHON_SETTINGS_NOTE, onSaved: () => refresh() }),
+    await logsSection('events', { title: 'Events log' }),
+    await logsSection('marathon', { title: 'Marathons log' }),
   );
 }
 

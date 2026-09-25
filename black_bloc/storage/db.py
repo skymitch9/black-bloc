@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 61
+SCHEMA_VERSION = 62
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1153,6 +1153,8 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("personality_tropes", "voice_edited_at", "TEXT"),
     ("llm_ledger", "trope", "TEXT"),
     ("marathons", "suggested_next", "TEXT"),
+    ("marathons", "event_id", "INTEGER"),
+    ("marathons", "event_wanted", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")

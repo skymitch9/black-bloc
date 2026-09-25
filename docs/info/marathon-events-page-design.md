@@ -17,6 +17,10 @@
 > `:1494` / `ScheduledButton` `:1423` (the sub-panel buttons a **Marathons…** button sits beside); `tests/test_bot.py`
 > `TOP_LEVEL_NOW = 34` `:13`, the hidden-when-off list (17), `logkinds.FEATURES_WITHOUT_A_COMMAND = ("guides",)`.
 > Schema is **61**; this build takes **62**. ⚠️ Secret NAMES only.
+>
+> 🔨 **2026-09-25 — BUILT on branch `marathon-events-page` (§A–§F), NOT merged, NOT deployed.** Schema 62, registry
+> 469, commands 33, pages 22, routes 237; 23 deviations (⚠️ 1: two columns; ⚠️ 2: the PUT path never moved a scheduled
+> event — a new helper does) and *What was NOT verified* at the foot.
 
 ## The ask, verbatim (owner, 2026-09-25 12:5x Phoenix)
 
@@ -125,8 +129,96 @@ deploy: one column through `ADDED_COLUMNS`.
 
 ## Deviations
 
-*(the build agent writes this)*
+*(written by the build agent, 2026-09-25, branch `marathon-events-page` off `main` `ed52ffeb`. Schema **61 → 62**,
+registry keys **468 → 469** (+2, −1), top-level commands **34 → 33**, hidden-when-off rows **17 → 16**, pages
+**23 → 22**, routes **235 → 237** (`check.mjs`: *22 pages, 237 routes*), log kinds **+6** bare (`event_made`,
+`event_redated`, `event_unlinked`, `event_cancelled` routine; `event_make_failed`, `scheduled_move_failed` important by
+their suffix). Cogs and log features unchanged.)*
+
+**The three "pick, say which":** (a) **settings** — two sections, the events one titled *Settings* exactly as before
+and a second *Marathon settings*: `namespaceSettings` draws one section per namespace and has no two-group form;
+(b) **logs** — two sections, *Events log* and *Marathons log* (`logsSection` takes one feature; widening it would
+touch every page); (c) **`where_kind`** — `other` (`events.WHERE_OTHER`), the raid-train kind, with the URL in
+`location`, so **Spotlight this stream** reads it the same way.
+
+1. ⚠️ **Two columns, not one: `marathons.event_id` AND `marathons.event_wanted INTEGER NOT NULL DEFAULT 0`.** "Box on,
+   schedule unpublished" and "box off" are the same `event_id IS NULL`; the first dated read must know which. A
+   sentinel value in the link column was the alternative and was rejected. Pre-62 rows read `0`: nothing is made for
+   a marathon already on the list until staff press **Make an event now**.
+2. **The re-date is `update_event` (the function `PUT /api/events/{id}` calls) plus a NEW `events.move_scheduled_event`.**
+   ⚠️ §B said the PUT path "already moves the Discord scheduled event" — it does not: the route answers
+   `SCHEDULED_STALE` (*"nothing here edits one that was already made"*). The new helper edits `start_time`/`end_time`,
+   answers `moved`/`none`/`test_mode`/`failed: …` and logs nothing (§E: no new `event.*` kinds). The PUT route is
+   unchanged. Title, description and Where are re-written as the EVENT holds them, so a staff edit survives.
+3. **A failed move is its own IMPORTANT row, `marathon.scheduled_move_failed`** (checklist 2); `marathon.event_redated`
+   carries `scheduled` either way (`test_mode` under the guard).
+4. **A refused automatic proposal is `marathon.event_make_failed`** (IMPORTANT) and clears the wish, so a tick never
+   re-files a cancelled row on every read. A staff press that is refused says why in words (the events module's own
+   sentence, e.g. no review category) and also clears the wish.
+5. **Who proposes it:** the presser; on the tick, the member who added the marathon; else `guild.me`. Nobody at all is
+   refused in words (*nobody is left to propose it as…*) — a review room's overwrites need a member, never an int.
+6. **Marathons… is drawn for staff always and for members while `marathon_mode` is not `off`** (the old `/marathon` hid
+   when off; staff need the door to reach the feature). ⚠️ `/event` itself still hides when `events_mode` is off, and
+   Marathons… goes with it.
+7. **`marathon_mode` stays in the `/settings` mode block** as a hand-added row naming `/event` (the block is
+   `HIDDEN_WHEN_OFF` + hand-added rows; 16 + 4 = 20, unchanged). `back_on_options` now lists only
+   `HIDDEN_WHEN_OFF` keys — otherwise hiding `/event` would ALSO offer *Marathons — turn it on*, which turns on the
+   wrong feature.
+8. **`FEATURES_WITHOUT_A_COMMAND` is unchanged** — the logs-door guard is an AST walk for `send_logs(…, "marathon")`,
+   which the sub-panel's Logs button still is. `LOG_LEVEL_COMMANDS['marathon']` = `event`, so the key's help reads
+   *`/event` ▸ **Logs*** — one hop short of the truth (it is `/event` ▸ **Marathons…** ▸ **Logs**); the guard pins that
+   exact form, so it was left.
+9. **No Settings button on the sub-panel** (the old `/marathon` had none either); the namespace is reachable as ever
+   through `/settings` ▸ *A setting group…* ▸ Marathons and the Events page's *Marathon settings*.
+10. **Where:** the marathon channel's `https://twitch.tv/<login>`, else the schedule PAGE (`gamesdonequick.com/schedule/
+    <id>`) rather than the raw `schedule_url`, which may be a tracker link. **`{channel}`** is `marathon_channel_id`,
+    else the go-live channel (the board's own home), else blank.
+11. **Only `pending` / `approved` events are re-dated or called off.** `live`, `done`, `denied` and `cancelled` are left
+    with the link kept; the drawer says the status.
+12. **`marathon_mode = shadow` does not stop the proposal.** It lands in the STAFF review (events has its own mode), and
+    only a staff Add or press asks for one. `off` stops the tick, so a waiting marathon simply waits.
+13. **Unlink also clears a waiting wish** (*… no longer waits to make an event*); with neither it is refused in words
+    (`no_event`, 409). **Make an event now** on a linked marathon is refused `event_exists`, naming the event.
+14. **The `/event` card's marathon line is appended to the card's description**, not a field; the events API carries
+    `marathon: {id, name, line}` on EVERY event answer (list, detail, approve, deny, edit, cancel, forum, spotlight).
+15. **The Add modal's fifth field** is free text: blank = the key's default, `yes`/`no` (and `y`/`true`/`on`/`1`…),
+    anything else refused in words with nothing added. Pre-filled from `marathon_makes_event`.
+16. **`makes_event` on `GET /api/marathons`** — the page's Add box default, so the section need not read the settings.
+17. **The mock:** AGDQ 2027 (1) carries event **#5, approved** (dated from its schedule), so the Queue's default
+    *waiting for a decision* view does NOT list it — **Open event #5** in its drawer, or *Show: approved*. Adding a
+    marathon with the box ticked files a PENDING event there. `check.mjs` gains `marathon_bare_id` (3, GDQx — no dates,
+    so *waiting*) and `marathon_waiting_id` (1 — Unlink reaches #5); the pytest contract seed adds a waiting GDQx row.
+18. **`CANCEL_WHY['marathon_removed']`** — the requester's DM line is a constant beside the others (they are all
+    constants), not a settings key. Flagged against the every-word-editable rule.
+19. **Guides seed untouched:** there never was a `/marathon` guide row (`marathon-schedule` Deviation 20).
+    `guides.FEATURE_PATHS['marathon']` now names `events.html` and `marathons-section.js`.
+20. **`navMarathon` removed** from `icons.js`; the section heading draws no icon.
+21. **The existing marathon cog tests set `marathon_makes_event` off in their fixture**, so the earlier builds' tests do
+    not grow an event; the new tests pass `make_event=True` or read the key on purpose.
+22. **Sweep rows `ME-a` … `ME-d`**, and `MS-a`, `MS-e`, `MN-a`, `MN-d`, `MN-e` re-pointed at `events.html` /
+    `/event` ▸ Marathons….
+23. **Commits:** the page move and the nav/pages/links sweep landed as ONE commit (`e3ddaa45`); the mock's two new keys
+    rode with the schema commit.
 
 ## What was NOT verified
 
-*(the build agent writes this)*
+- ⚠️ **Nothing met Discord.** The Marathons… sub-panel, its Back, the card's Event line and moves, the modal's fifth
+  field, the `/event` card's marathon line and — most of all — **`ScheduledEvent.edit(start_time=…, end_time=…)`** ran
+  only against fakes. An ACTIVE Discord event cannot change its start; that case would land as
+  `marathon.scheduled_move_failed`, by reasoning, not by trial.
+- **The real `propose_from`** ran only in the API route tests (the web fixture's fake guild, events category set);
+  the cog tests stand a recording `propose_from` in. No real review room or forum post was made.
+- **The tick-driven "first dated read makes the event"** was driven by a fake schedule client and `cog.refresh`, never a
+  real minute loop or a real GDQ publish.
+- **Schema 62** was proven on a fresh file and a file downgraded to 61 (`tests/storage/test_db.py`), not on the live
+  volume.
+- **The page was rendered once**, `chrome-headless-shell` 149.0.7827.22 over raw CDP against the mock on port 8795:
+  `events.html#marathon-1` opened AGDQ 2027's drawer (cards *Event · Runs · Who is who · The channel*, Event reading
+  *APPROVED Event #5 — approved* with **Open event #5** / **Unlink**); the section order was *Queue · Marathons ·
+  Settings · Marathon settings · Events log · Marathons log*; the nav had no Marathons row; **Open event #5** opened
+  the detail with *Marathon: AGDQ 2027 — 3 run(s) of ours*; **Add a marathon** showed *Also make it an event*
+  ticked. **Zero console errors.** NOT clicked in the browser: Unlink, Make an event now, the Add submit (the add
+  was exercised against the mock with curl: a pending #7 with its marathon line), the detail card's link back, a phone
+  width.
+- **The old address answering 404 on Fly**, and whether a Discord scheduled event's description renders `<#id>` as a
+  channel, were not seen.

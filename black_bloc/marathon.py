@@ -63,7 +63,7 @@ MESSAGE_LIMIT = 2000
 TWITCH_URL = "https://twitch.tv/{login}"
 
 PANEL_TITLE = "Marathons"
-PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /marathon again"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /event again"
 OURS_NEXT = "**Ours next**"
 MY_RUNS = "**My runs**"
 NOTHING_NEXT = "Nobody from here is on a schedule that is coming up."
@@ -124,7 +124,7 @@ NO_SUCH_CHANNEL = (
     "channel there first, or leave it blank."
 )
 BAD_POLL = "A marathon's own read gap is 10 to 120 minutes, or blank for the setting's."
-SITE_BUTTON = "Open the Marathons page"
+SITE_BUTTON = "Open the Events page"
 NEXT_ADDED_LINE = "Added — see **{name}** on the list."
 NEXT_NOT_YET = (
     "Black Bloc has not looked up the next GDQ event for this one yet. **Look again** asks the "
@@ -143,7 +143,7 @@ NOTHING_SUGGESTED = (
 )
 SUGGESTION_MOVED = (
     "That is not the suggestion waiting on **{name}** any more, so nothing was changed. Open "
-    "/marathon or the Marathons page for the current one."
+    "/event ▸ Marathons… or the Events page for the current one."
 )
 LOOK_FAILED = (
     "The GDQ tracker could not be read just now — {why}. The suggestion is kept as it was."
@@ -170,6 +170,34 @@ NEXT_BUTTON_ADD = "Add it"
 NEXT_BUTTON_DISMISS = "Not this one"
 NEXT_BUTTON_LOOK = "Look again"
 MOVED_WORDS = "moved from <t:{unix}:t>"
+EVENT_LINE = "Event **#{event_id}** — {status}"
+EVENT_WAITING_LINE = "Event: waiting for the schedule — made the moment it has dates"
+EVENT_NONE_LINE = "Event: none — **Make an event now** puts one into the events review"
+EVENT_GONE = "gone"
+EVENT_MADE = "**{name}** is in the events review as event **#{event_id}**."
+EVENT_WAITING = (
+    "**{name}** has no dates yet, so its event waits for the schedule — it goes into the events "
+    "review the moment GDQ publishes one."
+)
+EVENT_ALREADY = (
+    "**{name}** already carries event **#{event_id}**, so nothing was made. **Unlink** it first "
+    "to make another."
+)
+EVENT_NOT_MADE = "The event was not made: {why}"
+EVENT_NOBODY = (
+    "nobody is left to propose it as — whoever added the marathon is not on the server. Press "
+    "**Make an event now** yourself."
+)
+EVENT_UNLINKED = (
+    "**{name}** no longer carries event **#{event_id}**. The event itself was not touched."
+)
+EVENT_STOPPED_WAITING = "**{name}** no longer waits to make an event."
+NO_EVENT = "**{name}** carries no event, so there was nothing to unlink."
+MARATHON_OF_EVENT = "Marathon: **{name}** — {ours} run(s) of ours"
+ADD_EVENT = "Make it an event? yes or no"
+ADD_EVENT_YES = ("yes", "y", "true", "on", "1")
+ADD_EVENT_NO = ("no", "n", "false", "off", "0")
+BAD_ADD_EVENT = "Say yes or no to making it an event, so nothing was added."
 
 ADD = "add"
 REFRESH = "refresh"
@@ -180,6 +208,7 @@ REMOVE = "remove"
 PAIR = "pair"
 LOGS = "logs"
 BACK = "back"
+EVENTS = "events"
 MINE = "mine"
 NEXT = "next"
 POLL = "poll"
@@ -190,6 +219,8 @@ SHOUT = "shout"
 MARK_DONE = "mark_done"
 MARK_UPCOMING = "mark_upcoming"
 MARK_LIVE = "mark_live"
+MAKE_EVENT = "make_event"
+UNLINK_EVENT = "unlink_event"
 
 
 class MarathonMove(NamedTuple):
@@ -211,6 +242,7 @@ BOARD_REFRESH_MOVE = MarathonMove(BOARD, "Refresh the board", row=2)
 REMOVE_MOVE = MarathonMove(REMOVE, "Remove", "danger", 3)
 PAIR_MOVE = MarathonMove(PAIR, "Pair a runner…", row=3)
 BACK_MOVE = MarathonMove(BACK, "Back", row=4)
+EVENTS_MOVE = MarathonMove(EVENTS, "Back", row=4)
 NEXT_MOVE = MarathonMove(NEXT, "Next up…", row=3)
 POLL_MOVE = MarathonMove(POLL, POLL_TITLE, row=3)
 ADD_NEXT_MOVE = MarathonMove(ADD_NEXT, NEXT_BUTTON_ADD, "primary", 2)
@@ -220,13 +252,15 @@ SHOUT_MOVE = MarathonMove(SHOUT, "Shout it now", "primary", 2)
 MARK_DONE_MOVE = MarathonMove(MARK_DONE, "Mark done", row=2)
 MARK_UPCOMING_MOVE = MarathonMove(MARK_UPCOMING, "Mark it upcoming", row=2)
 MARK_LIVE_MOVE = MarathonMove(MARK_LIVE, "Mark it live", row=2)
+MAKE_EVENT_MOVE = MarathonMove(MAKE_EVENT, "Make an event now", row=3)
+UNLINK_EVENT_MOVE = MarathonMove(UNLINK_EVENT, "Unlink the event", row=3)
 
 
 def root_moves(*, staff: bool) -> tuple[MarathonMove, ...]:
     return (
-        (ADD_MOVE, MINE_MOVE, REFRESH_ROOT_MOVE, LOGS_MOVE)
+        (ADD_MOVE, MINE_MOVE, REFRESH_ROOT_MOVE, LOGS_MOVE, EVENTS_MOVE)
         if staff
-        else (MINE_MOVE, REFRESH_ROOT_MOVE)
+        else (MINE_MOVE, REFRESH_ROOT_MOVE, EVENTS_MOVE)
     )
 
 
@@ -244,8 +278,35 @@ def card_moves(
     if has_next:
         found.append(NEXT_MOVE)
     found.append(POLL_MOVE)
+    found.append(event_move(marathon))
     found.append(BACK_MOVE)
     return tuple(found)
+
+
+def event_move(marathon: Any) -> MarathonMove:
+    """Staff final say both ways: a linked or waiting marathon unlinks, a bare one makes one."""
+    if _cell(marathon, "event_id") or _cell(marathon, "event_wanted"):
+        return UNLINK_EVENT_MOVE
+    return MAKE_EVENT_MOVE
+
+
+def event_line(marathon: Any, status: Any) -> str:
+    event_id = _cell(marathon, "event_id")
+    if event_id:
+        return EVENT_LINE.format(event_id=int(event_id), status=status or EVENT_GONE)
+    if _cell(marathon, "event_wanted"):
+        return EVENT_WAITING_LINE
+    return EVENT_NONE_LINE
+
+
+def wanted_event_answer(given: Any) -> bool | None:
+    """The Add modal's fifth field: yes / no in words, None when it is neither."""
+    text = str(given or "").strip().lower()
+    if text in ADD_EVENT_YES:
+        return True
+    if text in ADD_EVENT_NO:
+        return False
+    return None
 
 
 def next_moves(record: Any, *, over: bool) -> tuple[MarathonMove, ...]:

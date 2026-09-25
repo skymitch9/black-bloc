@@ -13,6 +13,7 @@ from .settings_store import (
     KEY_MAX,
     KEY_MIN,
     KEY_TYPES,
+    MARATHON_MODE_KEY,
     SELFTEST_CHANNEL_ID,
     SELFTEST_ON_BOOT,
     SELFTEST_PURGE_MINUTES,
@@ -108,6 +109,7 @@ EXTRA_MODES: tuple[FeatureMode, ...] = (
         MODMAIL_ENABLED_KEY, "modmail", "Modmail", (MODMAIL_ANSWERING, MODMAIL_NOT_ANSWERING)
     ),
     FeatureMode(ROLEMENU_MODE_KEY, "rolemenu", FEATURE_LABELS["rolemenu"]),
+    FeatureMode(MARATHON_MODE_KEY, "event", FEATURE_LABELS["marathon"]),
 )
 
 
@@ -539,7 +541,7 @@ def back_on_options(bot: Any, guild_id: int) -> tuple[BackOn, ...]:
     return tuple(
         BackOn(row.key, row.command, BACK_ON_OPTION.format(label=row.label))
         for row in FEATURE_MODES
-        if row.command in hidden
+        if row.command in hidden and row.key in HIDDEN_WHEN_OFF
     )
 
 
