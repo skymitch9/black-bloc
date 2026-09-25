@@ -520,9 +520,13 @@ def add_open_link(view: EventView, text: Any, rows: Any) -> None:
     )
 
 
-def build_card(bot: Any, guild: Any, row: Any, actor: Any) -> tuple[discord.Embed, EventView]:
+def build_card(
+    bot: Any, guild: Any, row: Any, actor: Any, marathon: str = ""
+) -> tuple[discord.Embed, EventView]:
     room = review_place(bot, guild, row)
     embed = card_for(row)
+    if marathon:
+        embed.description = f"{embed.description or ''}\n{marathon}".strip()
     override = card_footer_override(row["status"], room_resolves=room is not None)
     if override:
         embed.set_footer(text=override)
@@ -770,13 +774,22 @@ async def render_card(
             NO_SUCH_EVENT, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
         return
-    embed, view = build_card(bot, interaction.guild, row, interaction.user)
+    embed, view = build_card(
+        bot, interaction.guild, row, interaction.user, await marathon_words(bot, row)
+    )
     retire(previous)
     view.message = await interaction.edit_original_response(
         embed=embed,
         view=view,
         allowed_mentions=discord.AllowedMentions.none(),
     )
+
+
+async def marathon_words(bot: Any, row: Any) -> str:
+    """The card's marathon line, from the marathon's own module (it owns the pointer)."""
+    from ..content.marathon import marathon_of_event_line
+
+    return await marathon_of_event_line(bot, row["guild_id"], row["id"])
 
 
 async def open_card(
@@ -799,7 +812,9 @@ async def finish_card(
     if row is None:
         await render_panel(interaction, previous)
     else:
-        embed, view = build_card(bot, interaction.guild, row, interaction.user)
+        embed, view = build_card(
+            bot, interaction.guild, row, interaction.user, await marathon_words(bot, row)
+        )
         retire(previous)
         view.message = await interaction.edit_original_response(
             embed=embed,

@@ -111,6 +111,7 @@ async def bot(db, monkeypatch):
     await store.set(GUILD, "shadow_channel_id", SHADOW_CHANNEL)
     await store.set(GUILD, "golive_ping_role_id", GOLIVE_ROLE)
     await store.set(GUILD, "marathon_mode", "on")
+    await store.set(GUILD, "marathon_makes_event", False)
     await store.set(GUILD, "spotlight_mode", "on")
     await db.conn.execute(
         "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",
@@ -1020,3 +1021,324 @@ async def test_the_card_picks_a_run_and_the_run_view_draws_only_its_moves(bot, c
     _, run_view = await cogmod.build_run(bot, bot.guild, marathon["id"], metroid["id"])
     labels = [getattr(one, "label", None) for one in run_view.children]
     assert labels == ["Shout it now", "Mark it live", "Mark done", "Back"]
+
+
+# --- a marathon is an event (docs/info/marathon-events-page-design.md §B) --------------------
+
+
+@pytest.fixture
+def proposals(monkeypatch):
+    """The events review, offline: `propose_from` files the row exactly as the review would."""
+    from black_bloc.events import create_event, ends_at, get_event
+
+    made = []
+
+    async def fake(bot, guild, actor, fields, *, requester=None, via="discord"):
+        event_id = await create_event(
+            bot.db,
+            guild.id,
+            getattr(actor, "id", actor),
+            title=fields.title,
+            description=fields.description,
+            where=fields.where,
+            starts_at=fields.starts,
+            finishes_at=ends_at(fields.starts, fields.minutes),
+        )
+        made.append({"actor": actor, "fields": fields, "via": via})
+        return ("proposed", await get_event(bot.db, event_id))
+
+    monkeypatch.setattr("black_bloc.cogs.community.events.propose_from", fake)
+    return made
+
+
+class FakeScheduled:
+    def __init__(self):
+        self.edits = []
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
+
+
+async def event_of(bot, marathon):
+    from black_bloc.events import get_event
+
+    fresh = await get_marathon(bot.db, GUILD, marathon["id"])
+    return fresh, (await get_event(bot.db, fresh["event_id"]) if fresh["event_id"] else None)
+
+
+async def with_event(bot, cog, **given):
+    outcome = await create_marathon(
+        bot, bot.guild, FakeActor(), name="AGDQ 2027", url=URL, make_event=True, **given
+    )
+    assert outcome.ok, outcome.message
+    return outcome
+
+
+async def test_adding_with_the_box_on_puts_one_pending_event_into_review_dated_from_the_schedule(
+    bot, cog, proposals
+):
+    await bot.store.set(GUILD, "marathon_channel_id", CHANNEL)
+    channel = await gdq_row(bot)
+    outcome = await with_event(bot, cog, spotlight_id=channel["id"])
+    marathon, event = await event_of(bot, outcome.value)
+
+    assert len(proposals) == 1 and event["status"] == "pending"
+    assert event["title"] == "AGDQ 2027"
+    assert event["starts_at"] == at(-120) and event["ends_at"] == at(210)
+    assert event["location"] == "https://twitch.tv/gamesdonequick"
+    assert event["where_kind"] == "other"
+    assert event["description"] == (
+        f"AGDQ 2027 — read from the GDQ schedule. Our runs are boarded in <#{CHANNEL}>."
+    )
+    assert marathon["event_wanted"] == 1
+    assert f"#{event['id']}" in outcome.message
+    made = await details_of(bot.db, "marathon.event_made")
+    assert made["event_id"] == event["id"] and made["marathon_id"] == marathon["id"]
+
+
+async def test_with_no_channel_the_events_where_is_the_schedule_page(bot, cog, proposals):
+    outcome = await with_event(bot, cog)
+    _, event = await event_of(bot, outcome.value)
+    assert event["location"] == "https://gamesdonequick.com/schedule/74"
+
+
+async def test_adding_with_the_box_off_makes_no_event_and_does_not_wait_for_one(
+    bot, cog, proposals
+):
+    outcome = await create_marathon(
+        bot, bot.guild, FakeActor(), name="AGDQ 2027", url=URL, make_event=False
+    )
+    marathon, event = await event_of(bot, outcome.value)
+    assert event is None and proposals == []
+    assert marathon["event_wanted"] == 0
+    assert "marathon.event_made" not in await kinds(bot.db)
+
+
+async def test_the_box_starts_where_marathon_makes_event_says(bot, cog, proposals):
+    await bot.store.set(GUILD, "marathon_makes_event", True)
+    outcome = await create_marathon(bot, bot.guild, FakeActor(), name="AGDQ 2027", url=URL)
+    assert (await event_of(bot, outcome.value))[1] is not None
+
+
+async def test_an_unpublished_schedule_makes_no_event_until_the_first_read_with_dates(
+    bot, cog, proposals, monkeypatch
+):
+    monkeypatch.setattr(bot.guild, "get_member", lambda user_id: FakeActor(), raising=False)
+    cog.client.runs_given = []
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+    assert event is None and marathon["event_wanted"] == 1
+    assert mt.EVENT_WAITING.format(name="AGDQ 2027") in outcome.message
+    assert mt.event_line(marathon, None) == mt.EVENT_WAITING_LINE
+
+    cog.client.runs_given = list(SCHEDULE)
+    await cog.refresh(bot.guild, marathon)
+    marathon, event = await event_of(bot, marathon)
+
+    assert event is not None and event["starts_at"] == at(-120)
+    assert len(proposals) == 1 and proposals[0]["actor"].id == FakeActor.id
+
+
+async def test_a_waiting_marathon_with_nobody_to_propose_as_stops_waiting_and_says_so(
+    bot, cog, proposals
+):
+    cog.client.runs_given = []
+    outcome = await with_event(bot, cog)
+    cog.client.runs_given = list(SCHEDULE)
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, outcome.value["id"]))
+    marathon, event = await event_of(bot, outcome.value)
+
+    assert event is None and marathon["event_wanted"] == 0 and proposals == []
+    failed = await details_of(bot.db, "marathon.event_make_failed")
+    assert "nobody is left to propose it as" in failed["reason"]
+
+
+async def test_a_read_that_moves_the_dates_re_dates_the_event_and_its_scheduled_event(
+    bot, cog, proposals
+):
+    from black_bloc.events import set_scheduled
+
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+    await set_scheduled(bot.db, event["id"], 4242)
+    scheduled = FakeScheduled()
+    bot.guild.get_scheduled_event = lambda scheduled_id: scheduled if scheduled_id == 4242 else None
+
+    cog.client.runs_given = [a_run(0, -180), *SCHEDULE[1:], a_run(6, 300)]
+    await cog.refresh(bot.guild, marathon)
+    _, event = await event_of(bot, marathon)
+
+    assert event["starts_at"] == at(-180) and event["ends_at"] == at(360)
+    assert event["title"] == "AGDQ 2027" and event["status"] == "pending"
+    assert scheduled.edits[0]["start_time"].isoformat() == at(-180)
+    assert scheduled.edits[0]["end_time"].isoformat() == at(360)
+    redated = await details_of(bot.db, "marathon.event_redated")
+    assert redated["from"]["starts_at"] == at(-120) and redated["to"]["starts_at"] == at(-180)
+    assert redated["scheduled"] == "moved"
+
+
+async def test_a_scheduled_event_that_will_not_move_is_its_own_failed_row(bot, cog, proposals):
+    from black_bloc.events import set_scheduled
+
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+    await set_scheduled(bot.db, event["id"], 4242)
+    bot.guild.get_scheduled_event = lambda scheduled_id: None
+
+    cog.client.runs_given = [a_run(0, -180), *SCHEDULE[1:]]
+    await cog.refresh(bot.guild, marathon)
+
+    assert (await details_of(bot.db, "marathon.event_redated"))["scheduled"].startswith("failed")
+    assert "marathon.scheduled_move_failed" in await kinds(bot.db)
+
+
+async def test_a_read_that_keeps_the_dates_leaves_the_event_alone(bot, cog, proposals):
+    outcome = await with_event(bot, cog)
+    await cog.refresh(bot.guild, await get_marathon(bot.db, GUILD, outcome.value["id"]))
+    assert "marathon.event_redated" not in await kinds(bot.db)
+
+
+async def test_a_denied_event_is_left_alone_and_the_link_stays(bot, cog, proposals):
+    from black_bloc.events import set_status
+
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+    await set_status(bot.db, event["id"], "denied")
+
+    cog.client.runs_given = [a_run(0, -180), *SCHEDULE[1:]]
+    await cog.refresh(bot.guild, marathon)
+    marathon, event = await event_of(bot, marathon)
+
+    assert event["starts_at"] == at(-120) and marathon["event_id"] == event["id"]
+    assert "marathon.event_redated" not in await kinds(bot.db)
+    assert mt.event_line(marathon, "denied") == f"Event **#{event['id']}** — denied"
+
+
+async def test_unlink_clears_the_pointer_and_never_touches_the_event(bot, cog, proposals):
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+
+    done = await cogmod.unlink_the_event(bot, bot.guild, FakeActor(), marathon)
+    fresh, _ = await event_of(bot, marathon)
+
+    assert done.ok and f"#{event['id']}" in done.message
+    assert fresh["event_id"] is None and fresh["event_wanted"] == 0
+    from black_bloc.events import get_event
+
+    assert (await get_event(bot.db, event["id"]))["status"] == "pending"
+    assert (await details_of(bot.db, "marathon.event_unlinked"))["event_id"] == event["id"]
+    again = await cogmod.unlink_the_event(bot, bot.guild, FakeActor(), fresh)
+    assert not again.ok and again.status == 409
+
+
+async def test_make_an_event_now_after_an_unlink_proposes_a_fresh_one(bot, cog, proposals):
+    outcome = await with_event(bot, cog)
+    marathon, first = await event_of(bot, outcome.value)
+    await cogmod.unlink_the_event(bot, bot.guild, FakeActor(), marathon)
+
+    made = await cogmod.make_event_now(bot, bot.guild, FakeActor(), marathon)
+    _, second = await event_of(bot, marathon)
+
+    assert made.ok and second["id"] != first["id"]
+    refused = await cogmod.make_event_now(
+        bot, bot.guild, FakeActor(), await get_marathon(bot.db, GUILD, marathon["id"])
+    )
+    assert not refused.ok and refused.code == "event_exists"
+    assert f"#{second['id']}" in refused.message
+
+
+async def test_removing_the_marathon_calls_its_event_off_with_the_reason(bot, cog, proposals):
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+
+    await remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    from black_bloc.events import get_event
+
+    assert (await get_event(bot.db, event["id"]))["status"] == "cancelled"
+    assert (await details_of(bot.db, "marathon.event_cancelled"))["event_id"] == event["id"]
+    cur = await bot.db.conn.execute(
+        "SELECT reason FROM action_log WHERE kind = 'event.cancelled' ORDER BY id DESC LIMIT 1"
+    )
+    assert (await cur.fetchone())["reason"] == "marathon_removed"
+
+
+async def test_removing_a_marathon_whose_event_is_settled_leaves_the_event_as_it_is(
+    bot, cog, proposals
+):
+    from black_bloc.events import get_event, set_status
+
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+    await set_status(bot.db, event["id"], "denied")
+
+    await remove_marathon(bot, bot.guild, FakeActor(), marathon)
+
+    assert (await get_event(bot.db, event["id"]))["status"] == "denied"
+    assert "marathon.event_cancelled" not in await kinds(bot.db)
+
+
+async def test_pausing_does_nothing_to_the_event(bot, cog, proposals):
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+    await set_active(bot, bot.guild, FakeActor(), marathon, False)
+    fresh, again = await event_of(bot, marathon)
+    assert again["status"] == "pending" and fresh["event_id"] == event["id"]
+
+
+async def test_the_card_says_the_event_and_draws_unlink_or_make_one_now(bot, cog, proposals):
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+    embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert f"Event **#{event['id']}** — pending" in embed.description
+    assert mt.UNLINK_EVENT_MOVE.label in labels and mt.MAKE_EVENT_MOVE.label not in labels
+
+    await cogmod.unlink_the_event(bot, bot.guild, FakeActor(), marathon)
+    embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert mt.EVENT_NONE_LINE in embed.description
+    assert mt.MAKE_EVENT_MOVE.label in labels and mt.UNLINK_EVENT_MOVE.label not in labels
+
+
+async def test_the_events_card_line_names_the_marathon_and_its_runs_of_ours(bot, cog, proposals):
+    outcome = await with_event(bot, cog)
+    marathon, event = await event_of(bot, outcome.value)
+    line = await cogmod.marathon_of_event_line(bot, GUILD, event["id"])
+    assert line == mt.MARATHON_OF_EVENT.format(name="AGDQ 2027", ours=1)
+    assert await cogmod.marathon_of_event_line(bot, GUILD, 999) == ""
+
+
+def test_the_add_modals_fifth_field_reads_yes_or_no_in_words():
+    assert mt.wanted_event_answer("Yes") is True
+    assert mt.wanted_event_answer(" no ") is False
+    assert mt.wanted_event_answer("maybe") is None
+
+
+async def test_the_add_modal_with_no_makes_the_marathon_and_no_event(bot, cog, proposals):
+    modal = cogmod.AddMarathonModal(None, True)
+    assert modal.event.default == "yes"
+    modal.name._value = "AGDQ 2027"
+    modal.url._value = URL
+    modal.login._value = ""
+    modal.event._value = "no"
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+
+    await modal.on_submit(interaction)
+
+    rows = await cogmod.list_marathons(bot.db, GUILD)
+    assert len(rows) == 1 and rows[0]["event_id"] is None and proposals == []
+
+
+async def test_the_add_modal_refuses_an_answer_that_is_not_yes_or_no(bot, cog, proposals):
+    modal = cogmod.AddMarathonModal(None, False)
+    assert modal.event.default == "no"
+    modal.name._value = "AGDQ 2027"
+    modal.url._value = URL
+    modal.login._value = ""
+    modal.event._value = "perhaps"
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+
+    await modal.on_submit(interaction)
+
+    assert await cogmod.list_marathons(bot.db, GUILD) == []
+    assert interaction.sent == mt.BAD_ADD_EVENT

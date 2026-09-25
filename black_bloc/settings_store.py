@@ -4373,6 +4373,9 @@ MARATHON_SUGGEST_NEXT_KEY = "marathon_suggest_next"
 MARATHON_NEXT_TEMPLATE_KEY = "marathon_next_template"
 MARATHON_NEXT_NONE_TEMPLATE_KEY = "marathon_next_none_template"
 MARATHON_NEXT_ADDED_TEMPLATE_KEY = "marathon_next_added_template"
+MARATHON_MAKES_EVENT_KEY = "marathon_makes_event"
+MARATHON_EVENT_DESCRIPTION_KEY = "marathon_event_description_template"
+MARATHON_EVENT_FIELDS = ("marathon", "channel")
 MARATHON_NEXT_FIELDS = ("marathon", "next", "when", "relative", "url")
 MARATHON_REMINDER_MINUTES = "120, 15"
 MARATHON_MARKS_MAX = 6
@@ -4512,6 +4515,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "Marathons section of the Events page. on by default; nothing is ever added until staff "
         "press Add it",
     ),
+    MARATHON_MAKES_EVENT_KEY: (
+        "bool",
+        True,
+        "whether the Add form's Also make it an event box starts ticked. A ticked marathon goes "
+        "into the events review like any proposal the moment its schedule has dates, and its "
+        "event follows the schedule when the dates move. on by default; each marathon can still "
+        "Unlink or Make an event now on its own",
+    ),
 }
 MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_BOARD_TEMPLATE_KEY: (
@@ -4600,6 +4611,12 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         MARATHON_NEXT_FIELDS,
         "what the staff notice is rewritten to once the next event is added. It takes "
         "{marathon} {next} {when} {relative} {url}",
+    ),
+    MARATHON_EVENT_DESCRIPTION_KEY: (
+        "{marathon} — read from the GDQ schedule. Our runs are boarded in {channel}.",
+        MARATHON_EVENT_FIELDS,
+        "what a marathon's event says about itself in the events review, the announcement and "
+        "the Discord scheduled event. It takes {marathon} {channel}",
     ),
 }
 MARATHON_RANGES: dict[str, tuple[int, int]] = {

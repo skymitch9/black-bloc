@@ -5371,3 +5371,26 @@ async def test_with_marathons_off_a_member_sees_no_marathons_button_and_staff_st
 
     assert not has_item(panel_view(await open_panel(cog, bot, member)), "Marathons…")
     assert has_item(panel_view(await open_panel(cog, bot, lead)), "Marathons…")
+
+
+async def test_an_events_card_names_the_marathon_that_made_it(cog, bot, lead, db):
+    event_id = await store_event(db, channel_id=TEST_CHANNEL)
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, event_id, "
+        "event_wanted, added_at) VALUES (?, 'AGDQ 2027', 'https://gamesdonequick.com/schedule/74', "
+        "'gdq', '74', ?, 1, 'x')",
+        (GUILD, event_id),
+    )
+    await db.conn.commit()
+
+    interaction = FakeInteraction(bot, lead)
+    await events_cog.open_card(interaction, event_id)
+
+    assert "Marathon: **AGDQ 2027** — 0 run(s) of ours" in card_embed(interaction).description
+
+
+async def test_an_events_card_with_no_marathon_says_nothing_about_one(cog, bot, lead, db):
+    event_id = await store_event(db, channel_id=TEST_CHANNEL)
+    interaction = FakeInteraction(bot, lead)
+    await events_cog.open_card(interaction, event_id)
+    assert "Marathon:" not in (card_embed(interaction).description or "")

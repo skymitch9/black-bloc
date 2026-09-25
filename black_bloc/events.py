@@ -688,6 +688,9 @@ CANCEL_WHY: dict[str, str] = {
         "staff have filed it as a request instead, so it is not on the calendar any more. They "
         "will take it from there, and `/request` shows where it has got to."
     ),
+    "marathon_removed": (
+        "the marathon it was made for was taken off Black Bloc's list, so its event went with it."
+    ),
 }
 HANDED_OFF = "handed_off"
 CANCEL_WHY_DEFAULT = (
@@ -1551,6 +1554,35 @@ async def cancel_scheduled_event(bot: Any, guild: Any, row: Any) -> None:
             "event.cancel_scheduled_failed",
             details=details | {"reason": f"{type(exc).__name__}: {exc}"},
         )
+
+
+SCHEDULED_MOVED = "moved"
+SCHEDULED_NONE = "none"
+SCHEDULED_TEST_MODE = "test_mode"
+SCHEDULED_FAILED = "failed: {why}"
+SCHEDULED_OK = (SCHEDULED_MOVED, SCHEDULED_NONE, SCHEDULED_TEST_MODE)
+
+
+async def move_scheduled_event(bot: Any, guild: Any, row: Any) -> str:
+    """A re-dated event takes its Discord scheduled event with it; the answer says what happened."""
+    scheduled_id = row["scheduled_event_id"]
+    if not scheduled_id:
+        return SCHEDULED_NONE
+    if getattr(bot, "guard", None) is not None:
+        return SCHEDULED_TEST_MODE
+    try:
+        found = await find_scheduled_event(guild, int(scheduled_id))
+        if found is None:
+            raise ValueError("Discord has no such scheduled event")
+        await found.edit(
+            start_time=parse_ts(row["starts_at"]),
+            end_time=parse_ts(row["ends_at"]),
+            reason=f"Black Bloc event {row['id']} re-dated",
+        )
+    except NETWORK_ERRORS as exc:
+        log.warning("events: could not move scheduled event %s: %s", scheduled_id, exc)
+        return SCHEDULED_FAILED.format(why=f"{type(exc).__name__}: {exc}")
+    return SCHEDULED_MOVED
 
 
 async def post_to_announce(

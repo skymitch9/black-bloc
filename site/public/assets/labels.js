@@ -98,6 +98,8 @@ export const LABELS = {
   marathon_next_template: 'What staff are told when the next GDQ event is found',
   marathon_next_none_template: 'What staff are told when the tracker lists nothing ahead',
   marathon_next_added_template: 'What the notice says once the next event is added',
+  marathon_makes_event: 'Whether a new marathon also makes an event',
+  marathon_event_description_template: 'What a marathon’s event says about itself',
   golive_channel_spotlight_default: 'Whether a channel added with nobody behind it starts out spotlighted',
   golive_channel_optout_post: 'What happens to a channel’s announcement when it is opted out mid-stream',
   golive_member_optout_post: 'What happens to a member’s announcement when they are opted out mid-stream',
