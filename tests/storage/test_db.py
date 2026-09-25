@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 60
+        assert SCHEMA_VERSION == 61
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2414,3 +2414,30 @@ async def test_a_run_is_unique_per_marathon_and_an_everywhere_pairing_is_unique_
             await db.conn.execute(pair)
     finally:
         await db.close()
+
+
+async def test_schema_61_adds_the_next_event_suggestion_to_a_marathon_and_keeps_its_rows(tmp_path):
+    path = tmp_path / "t.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE marathons DROP COLUMN suggested_next")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at) "
+        "VALUES (7, 'Halo Fest', 'https://gamesdonequick.com/schedule/73', 'gdq', '73', 'x')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '60')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name, suggested_next FROM marathons")
+        row = await cur.fetchone()
+        assert row["name"] == "Halo Fest" and row["suggested_next"] is None
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "61"
+    finally:
+        await again.close()

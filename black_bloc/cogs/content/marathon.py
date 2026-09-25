@@ -235,6 +235,7 @@ MARATHON_COLUMNS = {
     "fetch_failures",
     "fetch_hash",
     "source_ref",
+    "suggested_next",
 }
 RUN_COLUMNS = {
     "order_no",
