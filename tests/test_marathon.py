@@ -449,3 +449,108 @@ def test_only_moves_that_change_something_are_drawn():
     assert mt.RESUME_MOVE in paused and mt.READ_MOVE not in paused
     assert mt.BOARD_REFRESH_MOVE in paused and mt.PAIR_MOVE in paused
     assert mt.ADD_MOVE not in mt.root_moves(staff=False)
+
+
+# --- staff holds (marathon-next-event §G) ---------------------------------------------------
+
+
+def test_a_run_staff_marked_live_is_never_closed_by_a_title_hit_on_another_run():
+    rows = [row(1, at=-60, state=mt.LIVE, live_because=mt.BY_STAFF), row(2, at=0)]
+    changes = mt.advance(rows, NOW, hit=rows[1], watching=True, grace_minutes=90)
+    assert moves(changes) == [(2, mt.LIVE, mt.BY_TITLE, False)]
+
+
+def test_a_run_staff_marked_upcoming_is_not_skipped_by_a_later_hit_or_a_later_start():
+    held = row(1, at=-30, length=120, live_because=mt.BY_STAFF)
+    rows = [held, row(2, at=-5)]
+    assert moves(mt.advance(rows, NOW, hit=rows[1], watching=True, grace_minutes=90)) == [
+        (2, mt.LIVE, mt.BY_TITLE, False)
+    ]
+    assert (1, mt.DONE, mt.BY_SCHEDULE, True) not in moves(
+        mt.advance(rows, NOW, watching=False, grace_minutes=90)
+    )
+
+
+def test_a_held_run_still_ends_on_the_clock():
+    rows = [row(1, at=-300, length=60, state=mt.LIVE, live_because=mt.BY_STAFF)]
+    assert moves(mt.advance(rows, NOW, watching=True, grace_minutes=90)) == [
+        (1, mt.DONE, mt.BY_SCHEDULE, False)
+    ]
+
+
+def test_the_run_moves_are_only_the_ones_that_change_something():
+    ours = row(1, at=30, people=OURS)
+    assert mt.run_moves(ours)[:3] == (mt.SHOUT_MOVE, mt.MARK_LIVE_MOVE, mt.MARK_DONE_MOVE)
+    done = row(2, at=-300, state=mt.DONE)
+    assert mt.run_moves(done) == (mt.MARK_LIVE_MOVE, mt.MARK_UPCOMING_MOVE, mt.BACK_MOVE)
+    live = row(3, at=-10, state=mt.LIVE, shout_message_id=5, people=OURS)
+    assert mt.run_moves(live) == (mt.MARK_DONE_MOVE, mt.BACK_MOVE)
+    assert mt.run_moves(row(4, at=0, state=mt.DROPPED)) == (mt.BACK_MOVE,)
+
+
+# --- the next GDQ event ---------------------------------------------------------------------
+
+EVENT = {
+    "id": 75,
+    "short": "SGDQ2027",
+    "name": "Summer Games  Done Quick 2027",
+    "datetime": "2027-06-27T12:30:00-04:00",
+}
+
+
+def over(**extra):
+    return marathon(**{"source": "gdq", "starts_at": iso(-900), "ends_at": iso(-60), **extra})
+
+
+def test_a_suggestion_is_wanted_once_for_an_over_gdq_marathon_with_no_record():
+    assert mt.wants_suggestion(over(), NOW)
+    assert not mt.wants_suggestion(over(suggested_next=json.dumps(mt.none_record(NOW))), NOW)
+    assert not mt.wants_suggestion(over(source="horaro"), NOW)
+    assert not mt.wants_suggestion(over(active=0), NOW)
+    assert not mt.wants_suggestion(marathon(source="gdq"), NOW)
+    assert not mt.wants_suggestion(marathon(source="gdq", starts_at=None, ends_at=None), NOW)
+
+
+def test_a_record_reads_open_then_dismissed_or_added_and_a_none_record_is_none():
+    record = mt.suggestion_record(EVENT, NOW)
+    assert record["name"] == "Summer Games Done Quick 2027"
+    assert record["url"] == "https://tracker.gamesdonequick.com/tracker/event/75"
+    assert record["datetime"] == "2027-06-27T16:30:00+00:00"
+    assert mt.next_state(record) == mt.NEXT_OPEN
+    assert mt.next_state(record | {"dismissed_at": iso(0)}) == mt.NEXT_DISMISSED
+    assert mt.next_state(record | {"added_marathon_id": 4}) == mt.NEXT_ADDED
+    assert mt.next_state(mt.none_record(NOW)) == mt.NEXT_NONE
+    assert mt.next_state(None) is None
+    assert mt.suggestion_of({"suggested_next": json.dumps(record)}) == record
+    assert mt.suggestion_of({"suggested_next": "not json"}) is None
+
+
+def test_every_next_word_fills_and_the_date_is_a_discord_stamp():
+    record = mt.suggestion_record(EVENT, NOW)
+    fields = mt.next_fields(M, record)
+    for key in ("marathon_next_template", "marathon_next_added_template"):
+        said = mt.render(WORDS[key], WORDS[key], **fields)
+        assert said.fell_back is False and "{" not in said.text
+    assert "**Summer Games Done Quick 2027**" in mt.render(
+        WORDS["marathon_next_template"], "", **fields
+    ).text
+    assert fields["when"].endswith(":D>") and fields["relative"].endswith(":R>")
+    assert mt.render(WORDS["marathon_next_none_template"], "", **fields).text.startswith(
+        "AGDQ 2027 is over"
+    )
+
+
+def test_the_next_moves_offer_add_and_dismiss_only_while_the_suggestion_is_open():
+    record = mt.suggestion_record(EVENT, NOW)
+    assert mt.next_moves(record, over=True) == (
+        mt.ADD_NEXT_MOVE,
+        mt.DISMISS_NEXT_MOVE,
+        mt.LOOK_AGAIN_MOVE,
+        mt.BACK_MOVE,
+    )
+    dismissed = record | {"dismissed_at": iso(0)}
+    assert mt.next_moves(dismissed, over=True) == (mt.LOOK_AGAIN_MOVE, mt.BACK_MOVE)
+    assert mt.next_moves(None, over=False) == (mt.BACK_MOVE,)
+    card = mt.card_moves({"active": 1}, has_unmatched=False, has_next=True)
+    assert mt.NEXT_MOVE in card and mt.POLL_MOVE in card
+    assert mt.NEXT_MOVE not in mt.card_moves({"active": 1}, has_unmatched=False)

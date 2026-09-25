@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
 from .golive import parse_ts
-from .marathon_sources import COMMENTATOR, HOST, RUNNER, Run
+from .marathon_sources import COMMENTATOR, GDQ, HOST, RUNNER, Run, event_url, utc_iso
 from .settings_store import (
     MARATHON_PART_COMMENTATOR_KEY,
     MARATHON_PART_HOST_KEY,
@@ -125,6 +125,46 @@ NO_SUCH_CHANNEL = (
 )
 BAD_POLL = "A marathon's own read gap is 10 to 120 minutes, or blank for the setting's."
 SITE_BUTTON = "Open the Marathons page"
+NEXT_ADDED_LINE = "Added — see **{name}** on the list."
+NEXT_DISMISSED_LINE = "Dismissed — **Look again** asks the tracker once more."
+NEXT_ALREADY = "**{next}** is already on the list as **{name}**, so there is nothing to add."
+NOT_GDQ = "**{name}** is not a GDQ marathon, so there is no next GDQ event to look up."
+NOT_OVER = (
+    "**{name}** is not over yet, so nothing was looked up. The next GDQ event is suggested once "
+    "it ends."
+)
+NOTHING_SUGGESTED = (
+    "**{name}** has no next event waiting, so nothing was changed. **Look again** asks the "
+    "tracker."
+)
+SUGGESTION_MOVED = (
+    "That is not the suggestion waiting on **{name}** any more, so nothing was changed. Open "
+    "/marathon or the Marathons page for the current one."
+)
+LOOK_FAILED = (
+    "The GDQ tracker could not be read just now — {why}. The suggestion is kept as it was."
+)
+NEXT_DISMISSED = (
+    "**{next}** is dismissed for **{name}**. **Look again** asks the tracker once more."
+)
+RUN_RESET = "**{game}** is coming up again. Reminders already sent stay sent."
+RUN_MARKED_LIVE = "**{game}** is on now, marked by staff."
+NOT_RESETTABLE = (
+    "**{game}** is {state}, so nothing was changed. Only a done run can be marked coming up again."
+)
+NOT_LIVEABLE = (
+    "**{game}** is {state}, so nothing was changed. Only a run coming up or done can be marked "
+    "live."
+)
+POLL_TITLE = "Re-read every…"
+POLL_LABEL = "Minutes between reads — blank for the default"
+POLL_HINT = "30"
+POLL_SAVED = "**{name}** is re-read every {minutes} minutes while it is near."
+POLL_CLEARED = "**{name}** is re-read on the marathon_poll_minutes gap again."
+PICK_RUN = "Pick a run to move…"
+NEXT_BUTTON_ADD = "Add it"
+NEXT_BUTTON_DISMISS = "Not this one"
+NEXT_BUTTON_LOOK = "Look again"
 MOVED_WORDS = "moved from <t:{unix}:t>"
 
 ADD = "add"
@@ -137,6 +177,15 @@ PAIR = "pair"
 LOGS = "logs"
 BACK = "back"
 MINE = "mine"
+NEXT = "next"
+POLL = "poll"
+ADD_NEXT = "add_next"
+DISMISS_NEXT = "dismiss_next"
+LOOK_AGAIN = "look_again"
+SHOUT = "shout"
+MARK_DONE = "mark_done"
+MARK_UPCOMING = "mark_upcoming"
+MARK_LIVE = "mark_live"
 
 
 class MarathonMove(NamedTuple):
@@ -158,6 +207,15 @@ BOARD_REFRESH_MOVE = MarathonMove(BOARD, "Refresh the board", row=2)
 REMOVE_MOVE = MarathonMove(REMOVE, "Remove", "danger", 3)
 PAIR_MOVE = MarathonMove(PAIR, "Pair a runner…", row=3)
 BACK_MOVE = MarathonMove(BACK, "Back", row=4)
+NEXT_MOVE = MarathonMove(NEXT, "Next up…", row=3)
+POLL_MOVE = MarathonMove(POLL, POLL_TITLE, row=3)
+ADD_NEXT_MOVE = MarathonMove(ADD_NEXT, NEXT_BUTTON_ADD, "primary", 2)
+DISMISS_NEXT_MOVE = MarathonMove(DISMISS_NEXT, NEXT_BUTTON_DISMISS, row=2)
+LOOK_AGAIN_MOVE = MarathonMove(LOOK_AGAIN, NEXT_BUTTON_LOOK, row=2)
+SHOUT_MOVE = MarathonMove(SHOUT, "Shout it now", "primary", 2)
+MARK_DONE_MOVE = MarathonMove(MARK_DONE, "Mark done", row=2)
+MARK_UPCOMING_MOVE = MarathonMove(MARK_UPCOMING, "Mark it upcoming", row=2)
+MARK_LIVE_MOVE = MarathonMove(MARK_LIVE, "Mark it live", row=2)
 
 
 def root_moves(*, staff: bool) -> tuple[MarathonMove, ...]:
@@ -168,7 +226,9 @@ def root_moves(*, staff: bool) -> tuple[MarathonMove, ...]:
     )
 
 
-def card_moves(marathon: Any, *, has_unmatched: bool) -> tuple[MarathonMove, ...]:
+def card_moves(
+    marathon: Any, *, has_unmatched: bool, has_next: bool = False
+) -> tuple[MarathonMove, ...]:
     """Only moves that change something are drawn: Pause or Resume, Post or Refresh the board."""
     active = bool(_cell(marathon, "active", 1))
     found = [READ_MOVE] if active else []
@@ -177,8 +237,49 @@ def card_moves(marathon: Any, *, has_unmatched: bool) -> tuple[MarathonMove, ...
     found.append(REMOVE_MOVE)
     if has_unmatched:
         found.append(PAIR_MOVE)
+    if has_next:
+        found.append(NEXT_MOVE)
+    found.append(POLL_MOVE)
     found.append(BACK_MOVE)
     return tuple(found)
+
+
+def next_moves(record: Any, *, over: bool) -> tuple[MarathonMove, ...]:
+    found: list[MarathonMove] = []
+    if next_state(record) == NEXT_OPEN:
+        found += [ADD_NEXT_MOVE, DISMISS_NEXT_MOVE]
+    if over:
+        found.append(LOOK_AGAIN_MOVE)
+    found.append(BACK_MOVE)
+    return tuple(found)
+
+
+def run_moves(row: Any) -> tuple[MarathonMove, ...]:
+    state = _cell(row, "state")
+    found: list[MarathonMove] = []
+    if is_ours(row) and state in (UPCOMING, LIVE) and not _cell(row, "shout_message_id"):
+        found.append(SHOUT_MOVE)
+    if can_mark_live(row):
+        found.append(MARK_LIVE_MOVE)
+    if state in (UPCOMING, LIVE):
+        found.append(MARK_DONE_MOVE)
+    if can_mark_upcoming(row):
+        found.append(MARK_UPCOMING_MOVE)
+    found.append(BACK_MOVE)
+    return tuple(found)
+
+
+def can_mark_upcoming(row: Any) -> bool:
+    return _cell(row, "state") == DONE
+
+
+def can_mark_live(row: Any) -> bool:
+    return _cell(row, "state") in (UPCOMING, DONE)
+
+
+def held(row: Any) -> bool:
+    """Staff put this run where it is: the title never moves it, only the clock's end does."""
+    return _cell(row, "live_because") == BY_STAFF and _cell(row, "state") in (UPCOMING, LIVE)
 
 
 def _cell(row: Any, key: str, fallback: Any = None) -> Any:
@@ -469,7 +570,7 @@ def advance(
         if _cell(hit, "state") != LIVE:
             changes.append(Change(hit, LIVE, BY_TITLE))
         for row in rows:
-            if row is hit or _cell(row, "id") == _cell(hit, "id"):
+            if row is hit or _cell(row, "id") == _cell(hit, "id") or held(row):
                 continue
             if _cell(row, "state") == LIVE:
                 changes.append(Change(row, DONE, BY_TITLE))
@@ -493,7 +594,7 @@ def advance(
     if next_live is not None:
         changes.append(Change(next_live, LIVE, BY_SCHEDULE))
         for row in rows:
-            if row is next_live:
+            if row is next_live or held(row):
                 continue
             if _cell(row, "state") == LIVE or (
                 _cell(row, "state") == UPCOMING
@@ -552,6 +653,84 @@ def rearmed(sent: Any, new_start: Any, now: datetime) -> list[int]:
     if at is None:
         return sorted(set(int(one) for one in sent or ()))
     return sorted({int(one) for one in sent or () if at - timedelta(minutes=int(one)) <= now})
+
+
+# --- the next GDQ event ----------------------------------------------------------------------
+
+NEXT_OPEN = "open"
+NEXT_DISMISSED = "dismissed"
+NEXT_ADDED = "added"
+NEXT_NONE = "none"
+
+
+def suggestion_of(marathon: Any) -> dict[str, Any] | None:
+    raw = _cell(marathon, "suggested_next")
+    if isinstance(raw, dict):
+        return dict(raw)
+    try:
+        found = json.loads(raw) if raw else None
+    except (TypeError, ValueError):
+        return None
+    return found if isinstance(found, dict) else None
+
+
+def next_state(record: Any) -> str | None:
+    if not isinstance(record, dict):
+        return None
+    if record.get("event_id") is None:
+        return NEXT_NONE
+    if record.get("added_marathon_id"):
+        return NEXT_ADDED
+    if record.get("dismissed_at"):
+        return NEXT_DISMISSED
+    return NEXT_OPEN
+
+
+def suggestion_record(event: dict[str, Any], now: datetime) -> dict[str, Any]:
+    return {
+        "event_id": str(event["id"]),
+        "short": str(event.get("short") or ""),
+        "name": " ".join(str(event.get("name") or event.get("short") or event["id"]).split()),
+        "datetime": utc_iso(event.get("datetime")),
+        "url": event_url(event["id"]),
+        "found_at": now.isoformat(),
+        "dismissed_at": None,
+        "added_marathon_id": None,
+    }
+
+
+def none_record(now: datetime) -> dict[str, Any]:
+    return {"event_id": None, "found_at": now.isoformat()}
+
+
+def is_over(marathon: Any, now: datetime) -> bool:
+    ends = parse_ts(_cell(marathon, "ends_at")) or parse_ts(_cell(marathon, "starts_at"))
+    return ends is not None and now > ends
+
+
+def suggests(marathon: Any) -> bool:
+    return _cell(marathon, "source") == GDQ
+
+
+def wants_suggestion(marathon: Any, now: datetime) -> bool:
+    """Once per marathon: a GDQ one, active, over, with no record yet — a NULL is the only retry."""
+    return (
+        suggests(marathon)
+        and bool(_cell(marathon, "active", 1))
+        and is_over(marathon, now)
+        and not _cell(marathon, "suggested_next")
+    )
+
+
+def next_fields(marathon: Any, record: Any) -> dict[str, Any]:
+    record = record or {}
+    return {
+        "marathon": _cell(marathon, "name") or "",
+        "next": record.get("name") or "",
+        "when": stamp_of(record.get("datetime"), "D"),
+        "relative": stamp_of(record.get("datetime"), "R"),
+        "url": record.get("url") or "",
+    }
 
 
 # --- words ------------------------------------------------------------------------------------
