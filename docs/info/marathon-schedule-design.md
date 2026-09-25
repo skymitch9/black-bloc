@@ -120,8 +120,16 @@ that, at `ends_at + grace`.
 | Post | When | What |
 |---|---|---|
 | **the board** — ONE message per marathon, edited in place | posted after the first fetch that finds a run of ours (or on **Post the board** by staff); edited on every fetch that changed a run of ours, on every state change, and when a pairing changes; pinned when `marathon_pin_board` (true) through the spotlight pin helpers; unpinned one day after `ends_at`; `marathon.board_posted` / `board_refreshed` / `board_failed` | `marathon_board_template` head (`{marathon} {count} {starts} {ends} {url}`) + one `marathon_board_line_template` per run of ours in schedule order (`{member} {game} {category} {when} {relative} {part} {state}` — `{when}` and `{relative}` are Discord `<t:unix:f>` / `<t:unix:R>` so every reader sees their own zone; `{member}` is the mention — the board is the one post that may mention members without pinging: `AllowedMentions.none()`), or `marathon_board_empty_line` when none matched yet |
-| **a reminder** per run of ours per mark | at each mark in `marathon_reminder_minutes` (text, default `120, 15`; a validator refuses anything but 1–6 integers 1–1440) once `now ≥ scheduled_at − mark` and that mark is not in `reminders_sent`; a mark older than `marathon_reminder_stale_minutes` (30) past its moment is SKIPPED and logged (`marathon.reminder_skipped`), never posted late — the raid-train `missed_reminders` rule; a run that moved forgets marks that are now in the future again | `marathon_reminder_template` (`{member} {game} {category} {in} {when} {url} {marathon} {part}`); mentions, when `marathon_reminder_pings` (true): the member's own fan role (`pings.announced_fan_role`) AND the marathon channel's ping role through `pings_now` (the ping-windows gate) — never the global `golive_ping_role_id` (this is not a go-live); `marathon.reminded` |
-| **the shoutout** | the moment a run of ours becomes `live` (§C); `shout_message_id` written in the same transaction the state flips, so a restart re-posts nothing | `marathon_live_template` (`{member} {game} {category} {url} {marathon} {part}`; `{url}` is the marathon channel's URL when it has one, else the runner's own); the same mention rule as a reminder; `marathon.shouted`. When the run is `done` and `marathon_edit_done` (true), the shout is edited to `marathon_done_template` (past tense, no mention), `marathon.run_done` |
+| **a reminder** per run of ours per mark | at each mark in `marathon_reminder_minutes` (text, default `120, 15`; a validator refuses anything but 1–6 integers 1–1440) once `now ≥ scheduled_at − mark` and that mark is not in `reminders_sent`; **the ping rides ONE mark: `marathon_ping_minutes` (15, 0–240)** — that mark is always in the list (added if absent) and is the only reminder that mentions roles; the other marks (the 2 h heads-up) post without a mention; a mark older than `marathon_reminder_stale_minutes` (30) past its moment is SKIPPED and logged (`marathon.reminder_skipped`), never posted late — the raid-train `missed_reminders` rule; a run that moved forgets marks that are now in the future again | `marathon_reminder_template` (`{member} {game} {category} {in} {when} {url} {marathon} {part}`); mentions, on the `marathon_ping_minutes` mark only and when `marathon_reminder_pings` (true): the member's own fan role (`pings.announced_fan_role`) AND the marathon channel's ping role through `pings_now` (the ping-windows gate) — never the global `golive_ping_role_id` (this is not a go-live); `marathon.reminded` |
+| **the shoutout** | the moment a run of ours becomes `live` (§C); `shout_message_id` written in the same transaction the state flips, so a restart re-posts nothing | `marathon_live_template` (`{member} {game} {category} {url} {marathon} {part}`; `{url}` is the marathon channel's URL when it has one, else the runner's own); **no mention by default** — the ping already went out `marathon_ping_minutes` before; `marathon_live_pings` (bool, false) turns it on for a server that wants both; `marathon.shouted`. When the run is `done` and `marathon_edit_done` (true), the shout is edited to `marathon_done_template` (past tense, no mention), `marathon.run_done` |
+
+⚠️ **These posts owe nothing to the spotlight's posts.** Owner, 2026-09-25 11:3x, verbatim: *"will this repost no
+matter when the previous post was? like if it was highlighted an hour ago by spotlight I still want it to post again
+for a BaF members run, make it x minutes before for the ping default 15 minutes"*. A reminder and a shoutout are keyed
+off the RUN (`reminders_sent`, `shout_message_id`) and nothing else — the spotlight's announcement, its pinned edit
+and its four-hourly bump are a different cog's business and are never consulted. A marathon post lands even if the
+spotlight bumped the same channel a minute earlier. The ping is the reminder at `marathon_ping_minutes` before the
+run's scheduled start (default **15**), not the shoutout.
 
 `{part}` renders through `marathon_part_runner` / `marathon_part_host` / `marathon_part_commentator` (three text keys,
 *runs* / *hosts* / *is on commentary*). Every posted word is a key (owner rule); panel and page words are constants
@@ -184,13 +192,13 @@ state.
 Behaviour: `marathon_mode` (off / **shadow** / on), `marathon_channel_id` (channel, blank → go-live channel),
 `marathon_poll_minutes` (30, 10–120), `marathon_far_poll_hours` (24, 1–168), `marathon_lead_days` (7, 1–60),
 `marathon_move_minutes` (5, 1–120), `marathon_title_confirms` (bool, true), `marathon_late_grace_minutes` (90, 0–360),
-`marathon_match_hosts` (bool, true), `marathon_reminder_minutes` (text, `120, 15`), `marathon_reminder_pings` (bool,
-true), `marathon_reminder_stale_minutes` (30, 1–240), `marathon_pin_board` (bool, true), `marathon_edit_done` (bool,
+`marathon_match_hosts` (bool, true), `marathon_reminder_minutes` (text, `120, 15`), `marathon_ping_minutes` (15, 0–240), `marathon_reminder_pings` (bool,
+true), `marathon_live_pings` (bool, false), `marathon_reminder_stale_minutes` (30, 1–240), `marathon_pin_board` (bool, true), `marathon_edit_done` (bool,
 true), `marathon_window_slack_hours` (2, 0–24). Words: `marathon_board_template`, `marathon_board_line_template`,
 `marathon_board_empty_line`, `marathon_reminder_template`, `marathon_live_template`, `marathon_done_template`,
 `marathon_part_runner`, `marathon_part_host`, `marathon_part_commentator`, `marathon_unknown_site`,
 `marathon_already_added`, `marathon_could_not_read`, `marathon_no_runs_yet`. Template validators refuse an unknown
-`{…}` the way `spotlight_bump_template`'s does. Twenty-eight keys plus the two family keys.
+`{…}` the way `spotlight_bump_template`'s does. Thirty keys plus the two family keys.
 
 ## H. Logging — a new feature `marathon` (`FEATURES`, `HEADS`, `FEATURE_PAGES`, a Logs chip)
 
