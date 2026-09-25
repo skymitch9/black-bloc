@@ -81,7 +81,7 @@ function detailCard(row) {
     line('Scheduled event', row.scheduled ? 'yes' : 'no'),
     line('Proposed', when(row.created_at)),
     row.marathon
-      ? line('Marathon', el('a', { href: marathonHref(row.marathon.id) }, boldParts(row.marathon.line)))
+      ? line(row.marathon.run ? 'Marathon run' : 'Marathon', el('a', { href: marathonHref(row.marathon.id) }, boldParts(row.marathon.line)))
       : null,
   ]);
 }
@@ -303,7 +303,7 @@ async function load() {
 
   const queue = table([
     { label: 'Event', cell: (row) => String(row.id), className: 'mono' },
-    { label: 'Title', cell: (row) => el('span', {}, [el('span', { text: row.title }), row.marathon ? badge('marathon', 'ok') : null]), className: 'wrap' },
+    { label: 'Title', cell: (row) => el('span', {}, [el('span', { text: row.title }), row.marathon ? badge('marathon', 'ok') : null, row.marathon && row.marathon.run ? badge('marathon run', 'ok') : null]), className: 'wrap' },
     { label: 'Asked by', cell: (row) => nameNode(row.requester_id, row.requester_name) },
     { label: 'Starts', cell: (row) => when(row.starts_at), className: 'mono' },
     { label: 'Status', cell: (row) => badge(row.status, TONE[row.status] || null) },

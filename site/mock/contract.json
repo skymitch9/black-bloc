@@ -5134,14 +5134,7 @@
         "event",
         "run_list",
         "message"
-      ],
-      "rows": {
-        "run_list": [
-          "id",
-          "event_id",
-          "event_status"
-        ]
-      }
+      ]
     },
     {
       "method": "DELETE",
