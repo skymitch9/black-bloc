@@ -1089,7 +1089,10 @@ async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
     if feed is None:
         return (None, None)
     channel = await channel_of(bot.db, feed)
-    lines = [mf.feed_line(feed, channel_word(channel), hours_of(bot, guild.id))]
+    lines = [
+        mf.reading_line(feed, hours_of(bot, guild.id)),
+        mf.head_line(feed, channel_word(channel)),
+    ]
     lines.append(me.FEED_MODE_LINE.format(words=feed_mode_words(bot, guild, feed)))
     ignored = mf.ignored_of(feed)
     if ignored:

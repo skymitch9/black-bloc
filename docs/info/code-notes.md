@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-25 — one section APPENDED, nothing re-keyed**: *The Events page made plain — three sections, Schedule first, BaF* (branch `marathon-ux`, off `main` `5ed00717`, keyed against `33c4363d`). Before that:
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *A marathon's event mode, and a channel that takes no marathons* (branch `marathon-event-modes`, off `main` `bababb65`, keyed against `20cfcf0c`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *Marathon feeds — the bot finds the next events itself* (branch `marathon-feeds`, off `main` `05fbd0e6`, keyed against `0f973d75`). Before that:
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *The module database outlives every test loop* (branch `ci-linux-hang`, off `main` `bababb65`, keyed against `fe8befb4`).
@@ -8431,3 +8432,27 @@ Why in [`ci-linux-hang.md`](ci-linux-hang.md). One aiosqlite connection per modu
 | `tests/conftest.py:174` `await settle(module_db)` | Why `db` yields instead of returning. Do not revert it to a `return`. |
 | `tests/conftest.py:135` `if worker_is_alive(database)` | `close()` on a dead thread queues a stop nobody reads and hangs the module's teardown — the 15-minute signal-method hang. |
 | `.github/workflows/ci.yml:31` `--timeout-method=signal` | Linux only: the timeout raises inside the hung test (named failure, traceback) instead of `os._exit`-ing the worker. `pyproject.toml` keeps `thread` because Windows has no `SIGALRM`. `-rfE` prints each failure and error's name in the summary. |
+
+## The Events page made plain — three sections, Schedule first, BaF (branch `marathon-ux`, 2026-09-25)
+
+Why in [`marathon-ux-design.md`](marathon-ux-design.md). Keyed against `33c4363d`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon.py:24` `BAF` | The one Python spelling of the word a person reads. Identifiers (`is_ours`, `ours`) keep their names on purpose — the rule is the READ word. `settings_store.py` cannot import it (marathon.py imports settings_store), so the registry DEFAULTS spell "BaF" as data; a stored value is never rewritten. |
+| `black_bloc/marathon.py:553` `next_read_at` | The one computation of "when is this schedule read next"; `fetch_due` is now `now >= next_read_at`, so the page's *next read in N min*, the panel's *next read <t:R>* and the cog's tick can never disagree. `None` = paused; a never-read marathon is due now. |
+| `black_bloc/api/tools/marathons.py:233` `next_read_at` | The one row field this build added (§D). The cadence words (*every 30 min while near, every 24 h when far*) are NOT on the row: the page reads `marathon_poll_minutes` / `marathon_far_poll_hours` from `/api/settings` (`readCadence`). |
+| `site/mock/server.mjs:5626` `marathonNextReadAt` | Mirrors `mt.next_read_at`, including the one day after the end that still counts as near (`is_near`). |
+| `black_bloc/cogs/content/marathon.py:2693` `schedule_line` | The `/event` ▸ Marathons… card's first line after the phase/dates head; the card then runs **Runs** · **Event** · **Channel** · **Posts**, the drawer's order. The mode-change rule the drawer used to print (*changing the mode applies at once; it makes what the new mode asks for and calls off what it no longer keeps, per marathon_run_event_cancel_on_leave; Unlink leaves an event as it is; removing the marathon calls its events off*) lives here now, not on the page. |
+| `black_bloc/marathon_feeds.py:349` `reading_line` | The Feeds… card's first line. Next check = last check + `marathon_feed_hours`, only while the feed is active. |
+| `black_bloc/settings_store.py:4562` `MARATHON_EVENT_MODE_DEFAULT_KEY` | Its help took the drawer's long Event paragraph (§A.4): what each of the four modes makes, and that a feed's own mode and each drawer override it. |
+| `site/public/assets/marathon-words.js:86` `readingLine` | PURE (no DOM) so `site/mock/marathon-words.test.mjs` proves it. A failed read wins over everything and is the warn tone; a paused marathon never shows a next read; the cadence uses the row's own `poll_minutes` when set. |
+| `site/public/assets/marathon-words.js:105` `scheduleCell` | Short on purpose — the table's Schedule column; the full reason is in the drawer. *not published* = read fine but zero runs. |
+| `site/public/assets/marathon-words.js:163` `drawerCards` | The drawer's card titles in order, asserted by the node test. `marathons-section.js:marathonDrawer` builds the cards from the same `CARD_*` constants; the moves bar (Pause/Resume · Remove) follows the last card and is not a card. |
+| `site/public/assets/marathons-section.js:385` `scheduleCard` | The answer to "where are we scanning": source + link (+ the feed that found it), the reading line, the counts, the Re-read-every field (label left, box, unit, Save — never in a button bar), **Read it now**, and — only when the marathon is over — the next-event suggestion as its last lines. |
+| `site/public/assets/marathons-section.js:566` `names([...board_channel_id])` | `nameNode` shows a raw snowflake unless the id was resolved first; the Posts card needs the board channel's name. |
+| `site/public/assets/marathons-section.js:819` `open: waiting.length > 0` | The Sources foldout is shut by default (§A0) but OPENS itself while a feed suggestion waits — a decision for staff must not be folded away. Deviation 3 in the design doc. |
+| `site/public/assets/marathons-section.js:609` `feedDrawerStep` | A move made inside the feed drawer reloads the page AND reopens that feed's drawer with fresh rows, so the drawer never shows the state from before the move. Remove closes it instead. |
+| `site/public/assets/page-events.js:328` `id: 'queue'` | The section is titled *Events* now; the id keeps `sect-queue` so a remembered open/shut state and any old anchor still land. |
+| `site/public/assets/page-events.js:388` `machinerySection` | ONE *Settings and logs* section with id `settings` (keeps `#sect-settings`); the Marathons settings foldout carries `sect-marathon-settings`, the two log holders `sect-logs-events` / `sect-logs-marathon` — every id the two old sections and two log sections had. |
+| `site/public/assets/page-events.js:345` `unsectioned` | The page-posts / page-raidtrain / page-requests pattern (a shared block demoted out of the rail), plus a wrapper that keeps the old section id. |

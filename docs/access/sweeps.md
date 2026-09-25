@@ -3237,3 +3237,19 @@ MV-b expects approved events only with `marathon_mode` on.
 | **`MV-d`** | A feed adds a new marathon (or **Look again** on a next-event suggestion) while events are reviewed in the forum | The staff notice is a **post in the Events forum**, named *New marathon: …*, tagged *marathon*, its buttons on the first message; `marathon.notice_posted` says `home: events`. |
 | **`MV-e`** | <https://blackbloc.heygabi.ai/golive.html> ▸ the ESAMarathon row | Its Announced cell reads *· no marathons*; the drawer's Announcements card has the **Marathons: on / off** segment on *off*; **Add a marathon** on ESA is refused in words. `/golive` ▸ **Channels…** ▸ ESA shows **Marathons on**. |
 | **`MV-f`** | Events page ▸ Feeds card ▸ GDQ: the **Event** select, **Rename…**, **Move to channel…**; and `/event` ▸ **Marathons…** ▸ **Feeds…** ▸ GDQ | Each change says so in words and leaves one `marathon.feed_changed` row; the move offers only channel-only rows with no feed that take marathons. |
+
+## Rows `MX-a` … `MX-f` — the Events page made plain: three sections, Schedule first, BaF (branch `marathon-ux`, 2026-09-25)
+
+🔨 **BUILT on branch `marathon-ux`, NOT merged, NOT deployed.** Owner, 2026-09-25: *"the ui is confusing now in the modal,
+and i dont see where we're scanning for schedules"*, *"i think the whole events page and the marathon modal are confusing
+to look at"*, *"for marathon highlights don't say ours say BaF as the category"*. Design:
+[`../info/marathon-ux-design.md`](../info/marathon-ux-design.md). Rows lettered; the conductor numbers them.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MX-a`** | <https://blackbloc.heygabi.ai/events.html> | Three sections — **Events**, **Marathons**, **Settings and logs** — and the *On this page* rail lists exactly those three. |
+| **`MX-b`** | Marathons ▸ **AGDQ 2027** (the row opens its drawer) | The first card is **Schedule**: *Read from the GDQ tracker — the schedule ↗* (· *found by the GDQ feed* when a feed added it), then *Last read N min ago · next read in N min · every 30 min while it is near, every 24 h when it is far*, then *N runs · N BaF …*. Cards below: Runs · Who is who · Event · The channel · Posts, then Pause · Remove. |
+| **`MX-c`** | Same card ▸ **Re-read every** `20` ▸ **Save**; then blank ▸ **Save** | *AGDQ 2027 is re-read every 20 minutes while it is near.* and the reading line says *every 20 min*; blank puts it back on the default. |
+| **`MX-d`** | The marathon table | Columns *Marathon · Dates · State · BaF runs · Schedule · Event* — no Next up column; when a marathon has a next event waiting, ONE strip under the table names it, and its drawer's Schedule card ends with *After this one: …* and **Add it · Not this one**. |
+| **`MX-e`** | Under the table ▸ **Where marathons come from · N sources · next check in …** | Shut unless a suggestion waits; open, each row shows Channel · Source · *every 6 h · last … · next in …* · Add/Suggest · **Check now** · **Pause**. The channel name opens **The … feed** drawer with the Event select, Look again / Forget ignored (N) when they apply, **Rename…**, **Move to channel…**, **Remove**. |
+| **`MX-f`** | Read the whole page with every fold open, a drawer, and `/event` ▸ **Marathons…** (member and staff) | Not one *ours*: the chip is **BaF**, the column **BaF runs**, the member view **BaF next**; Settings ▸ `marathon_board_template` default reads *— BaF on the schedule ({count})*. The picked marathon's card reads **Schedule:** first, then Runs, Event, Channel, Posts; its button is **Read it now**. |

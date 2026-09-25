@@ -284,12 +284,12 @@ async def test_a_far_marathon_waits_the_far_gap(bot, cog):
 async def test_the_board_posts_once_pinned_then_edits_in_place(bot, cog):
     marathon = await added(bot, cog)
     await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
-    board = [one for one in posts(bot) if "our people" in one.content]
+    board = [one for one in posts(bot) if "BaF on the schedule" in one.content]
     assert len(board) == 1 and board[0].pinned
     assert "Super Metroid" in board[0].content and "<@9001>" in board[0].content
     assert board[0].kwargs["allowed_mentions"].users is False
     await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
-    assert len([one for one in posts(bot) if "our people" in one.content]) == 1
+    assert len([one for one in posts(bot) if "BaF on the schedule" in one.content]) == 1
     await pair_runner(bot, bot.guild, FakeActor(), marathon, "Interview Crew", 42, everywhere=False)
     assert "Blaster Master" in board[0].content and "<@42>" in board[0].content
     assert (await kinds(bot.db)).count("marathon.board_posted") == 1
@@ -299,7 +299,7 @@ async def test_the_board_posts_once_pinned_then_edits_in_place(bot, cog):
 async def test_the_board_comes_down_a_day_after_the_end(bot, cog):
     marathon = await added(bot, cog)
     await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
-    board = next(one for one in posts(bot) if "our people" in one.content)
+    board = next(one for one in posts(bot) if "BaF on the schedule" in one.content)
     cog.clock = lambda: NOW + timedelta(days=2)
     await cog.tick_marathon(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
     assert board.pinned is False
@@ -313,7 +313,7 @@ async def test_staff_post_the_board_even_with_nobody_of_ours_found(bot, cog):
     assert posts(bot) == []
     outcome = await post_board(bot, bot.guild, FakeActor(), marathon)
     assert outcome.ok
-    assert "Nobody from here" in posts(bot)[0].content
+    assert "Nobody from BaF" in posts(bot)[0].content
 
 
 # --- reminders ------------------------------------------------------------------------------
@@ -323,7 +323,7 @@ async def reminders(bot):
     return [
         one
         for one in posts(bot)
-        if "our people" not in one.content and "right now" not in one.content
+        if "BaF on the schedule" not in one.content and "right now" not in one.content
     ]
 
 
@@ -643,7 +643,7 @@ async def test_a_member_sees_ours_next_and_no_staff_moves(bot, cog):
     bot.store.is_staff = lambda member: False
     embed, view = await cogmod.build_panel(bot, bot.guild, Member(SKY))
 
-    assert "Ours next" in embed.description and "Super Metroid" in embed.description
+    assert "BaF next" in embed.description and "Super Metroid" in embed.description
     assert "<@9001>" in embed.description
     labels = [getattr(one, "label", None) for one in view.children]
     assert "Add a marathon…" not in labels and "Logs" not in labels
@@ -655,7 +655,7 @@ async def test_a_member_sees_ours_next_and_no_staff_moves(bot, cog):
 async def test_staff_see_every_marathon_with_its_read_state_and_the_moves(bot, cog):
     await added(bot, cog)
     embed, view = await cogmod.build_panel(bot, bot.guild, FakeActor())
-    assert "AGDQ 2027" in embed.description and "ours 1 of 5" in embed.description
+    assert "AGDQ 2027" in embed.description and "1 BaF of 5" in embed.description
     labels = [getattr(one, "label", None) for one in view.children]
     assert {"Add a marathon…", "Logs", "Refresh"} <= set(labels)
 
@@ -677,7 +677,18 @@ async def test_the_card_draws_only_the_moves_that_change_something(bot, cog):
     await set_active(bot, bot.guild, FakeActor(), marathon, False)
     _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
     labels = [getattr(one, "label", None) for one in view.children]
-    assert "Resume" in labels and "Refresh now" not in labels
+    assert "Resume" in labels and "Read it now" not in labels
+
+
+async def test_the_card_reads_schedule_runs_event_channel_posts_in_that_order(bot, cog):
+    marathon = await added(bot, cog)
+    embed, _ = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    lines = embed.description.splitlines()
+    heads = ["**Schedule:**", mt.CARD_RUNS, mt.CARD_EVENT, "**Channel:**", "**Posts:**"]
+    found = [next(at for at, one in enumerate(lines) if one.startswith(head)) for head in heads]
+    assert found == sorted(found) and found[0] == 1
+    assert "GDQ tracker" in lines[1] and "last read <t:" in lines[1]
+    assert "next read <t:" in lines[1] and "BaF" in lines[1]
 
 
 async def test_pairing_from_the_panel_picks_a_schedule_name_then_the_member(bot, cog):
@@ -699,7 +710,7 @@ async def test_a_pinned_board_still_comes_down_after_marathon_posts_are_turned_o
     """Checklist 38: `off` stops new effects, never the end of one already out."""
     marathon = await added(bot, cog)
     await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
-    board = next(one for one in posts(bot) if "our people" in one.content)
+    board = next(one for one in posts(bot) if "BaF on the schedule" in one.content)
     assert board.pinned
     await bot.store.set(GUILD, "marathon_mode", "off")
     cog.clock = lambda: NOW + timedelta(days=2)
@@ -1088,7 +1099,7 @@ async def test_adding_with_the_box_on_puts_one_pending_event_into_review_dated_f
     assert event["location"] == "https://twitch.tv/gamesdonequick"
     assert event["where_kind"] == "other"
     assert event["description"] == (
-        f"AGDQ 2027 — read from the GDQ schedule. Our runs are boarded in <#{CHANNEL}>."
+        f"AGDQ 2027 — read from the GDQ schedule. BaF runs are boarded in <#{CHANNEL}>."
     )
     assert marathon["event_mode"] == "marathon"
     assert f"#{event['id']}" in outcome.message

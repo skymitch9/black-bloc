@@ -80,6 +80,8 @@ if ($env:BLACKBLOC_SKIP_GATE -eq "1") {
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the dashboard column fixtures are not green." }
     node site/mock/discordmock.test.mjs
     if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the Discord mock's fixtures are not green." }
+    node site/mock/marathon-words.test.mjs
+    if ($LASTEXITCODE -ne 0) { Write-Error "REFUSED: the marathon words' fixtures are not green." }
 }
 
 # Every gate has passed, so this is the last thing that can add a commit.

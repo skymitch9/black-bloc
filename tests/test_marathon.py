@@ -187,6 +187,23 @@ def test_near_ones_read_every_poll_gap_and_far_ones_every_far_gap():
     assert not mt.fetch_due(far, NOW, poll_minutes=30, far_hours=24, lead_days=7)
 
 
+def test_the_next_read_is_the_last_read_plus_the_gap_fetch_due_uses():
+    gaps = {"poll_minutes": 30, "far_hours": 24, "lead_days": 7}
+    last = NOW - timedelta(minutes=20)
+    near = marathon(last_fetched_at=last.isoformat())
+    assert mt.next_read_at(near, NOW, **gaps) == last + timedelta(minutes=30)
+    own = marathon(poll_minutes=10, last_fetched_at=last.isoformat())
+    assert mt.next_read_at(own, NOW, **gaps) == last + timedelta(minutes=10)
+    far = marathon(
+        starts_at=(NOW + timedelta(days=30)).isoformat(),
+        ends_at=(NOW + timedelta(days=37)).isoformat(),
+        last_fetched_at=last.isoformat(),
+    )
+    assert mt.next_read_at(far, NOW, **gaps) == last + timedelta(hours=24)
+    assert mt.next_read_at(marathon(), NOW, **gaps) == NOW
+    assert mt.next_read_at(marathon(active=0), NOW, **gaps) is None
+
+
 def test_a_day_after_the_end_the_marathon_is_far_again_and_its_board_comes_down():
     later = NOW + timedelta(minutes=600) + timedelta(days=1, minutes=1)
     assert not mt.is_near(marathon(), later, lead_days=7)

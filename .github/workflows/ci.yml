@@ -52,3 +52,5 @@ jobs:
         run: node site/mock/layout.test.mjs
       - name: Discord mock
         run: node site/mock/discordmock.test.mjs
+      - name: Marathon words
+        run: node site/mock/marathon-words.test.mjs

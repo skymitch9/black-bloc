@@ -21,6 +21,8 @@ from .settings_store import (
 )
 from .timezones import unix
 
+BAF = "BaF"
+
 UPCOMING = "upcoming"
 LIVE = "live"
 DONE = "done"
@@ -64,13 +66,25 @@ TWITCH_URL = "https://twitch.tv/{login}"
 
 PANEL_TITLE = "Marathons"
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /event again"
-OURS_NEXT = "**Ours next**"
+OURS_NEXT = f"**{BAF} next**"
 MY_RUNS = "**My runs**"
-NOTHING_NEXT = "Nobody from here is on a schedule that is coming up."
+NOTHING_NEXT = f"Nobody from {BAF} is on a schedule that is coming up."
 NOTHING_MINE = "You are not on any schedule Black Bloc follows."
 NEXT_LINE = "<t:{unix}:R> · **{game}** — {member} {part} · {marathon}"
-MARATHON_LINE = "**{name}** · {phase} · {dates} · ours {ours} of {runs} · {read}"
+MARATHON_LINE = "**{name}** · {phase} · {dates} · {ours} " + BAF + " of {runs} · {read}"
 NO_DATES = "dates not published"
+CARD_HEAD = "{phase} · {dates}"
+CARD_SCHEDULE = "**Schedule:** [{source}]({url}) · {read} · {next} · {counts}"
+NEXT_READ = "next read <t:{unix}:R>"
+NEXT_READ_PAUSED = "paused — not read until it is resumed"
+CARD_COUNTS = "{runs} run(s), {ours} " + BAF
+CARD_RUNS = "**Runs**"
+CARD_EVENT = "**Event**"
+CARD_CHANNEL = "**Channel:** {channel}"
+CARD_NO_CHANNEL = "none — each run links its runner"
+CARD_POSTS = "**Posts:** {board}"
+CARD_BOARD_UP = "the board is up in <#{channel}>"
+CARD_BOARD_NONE = "no board yet"
 READ_AGO = "last read <t:{unix}:R>"
 NEVER_READ = "not read yet"
 FETCH_TROUBLE = "could not be read since <t:{unix}:f> — {why}"
@@ -94,10 +108,10 @@ REMOVE_QUESTION = (
 )
 REMOVED = "**{name}** is off the list, with its runs and pairings."
 ADDED = "**{name}** is on the list. {read}"
-READ_NOW = "Its schedule has {runs} run(s), {ours} of them ours."
+READ_NOW = "Its schedule has {runs} run(s), {ours} of them " + BAF + "."
 PAUSED_NOW = "**{name}** is paused — nothing is read or posted until it is resumed."
 RESUMED_NOW = "**{name}** is being read again."
-REFRESHED = "**{name}** was read just now: {runs} run(s), {ours} of them ours."
+REFRESHED = "**{name}** was read just now: {runs} run(s), {ours} of them " + BAF + "."
 REFRESH_FAILED = "**{name}** could not be read just now — {why}. Every run is kept as it was."
 BOARD_POSTED = "The board for **{name}** is up to date."
 BOARD_NOT_POSTED = "The board for **{name}** was not posted — {why}."
@@ -111,10 +125,13 @@ NO_SUCH_MARATHON = "Black Bloc follows no marathon **{given}** here, so nothing 
 NO_SUCH_RUN = "That run is not on **{name}**'s schedule any more, so nothing was done."
 NO_SUCH_PAIRING = "That pairing is gone already, so nothing was changed."
 NOT_SHOUTABLE = (
-    "**{game}** is {state} or has its shoutout already, so nothing was posted. Only a run of ours "
-    "that is coming up or on now without a shoutout can be shouted by hand."
+    "**{game}** is {state} or has its shoutout already, so nothing was posted. Only a "
+    + BAF
+    + " run that is coming up or on now without a shoutout can be shouted by hand."
 )
-NOT_OURS = "Nobody from here is on **{game}**, so there is nobody to shout. Pair a name first."
+NOT_OURS = (
+    "Nobody from " + BAF + " is on **{game}**, so there is nobody to shout. Pair a name first."
+)
 ALREADY_DONE = "**{game}** is already {state}, so nothing was changed."
 NO_NAME = "A marathon needs a name, so nothing was added."
 NO_RUNNER = "Pick or type the name as the schedule writes it, so nothing was paired."
@@ -193,7 +210,7 @@ EVENT_UNLINKED = (
 )
 EVENT_STOPPED_WAITING = "**{name}** no longer waits to make an event."
 NO_EVENT = "**{name}** carries no event, so there was nothing to unlink."
-MARATHON_OF_EVENT = "Marathon: **{name}** — {ours} run(s) of ours"
+MARATHON_OF_EVENT = "Marathon: **{name}** — {ours} " + BAF + " run(s)"
 RUN_OF_EVENT = "Marathon run: **{game}** on **{name}**"
 EVENT_MODES_WITH_ONE = ("marathon", "both")
 BAD_ADD_EVENT = (
@@ -236,7 +253,7 @@ ADD_MOVE = MarathonMove(ADD, "Add a marathon…", "primary", 2)
 MINE_MOVE = MarathonMove(MINE, "My runs", row=2)
 REFRESH_ROOT_MOVE = MarathonMove(REFRESH, "Refresh", row=2)
 LOGS_MOVE = MarathonMove(LOGS, "Logs", row=2)
-READ_MOVE = MarathonMove(REFRESH, "Refresh now", "primary", 2)
+READ_MOVE = MarathonMove(REFRESH, "Read it now", "primary", 2)
 PAUSE_MOVE = MarathonMove(PAUSE, "Pause", row=2)
 RESUME_MOVE = MarathonMove(RESUME, "Resume", row=2)
 BOARD_POST_MOVE = MarathonMove(BOARD, "Post the board", row=2)
@@ -533,19 +550,26 @@ def is_near(marathon: Any, now: datetime, *, lead_days: int) -> bool:
     return ends is not None and now <= ends + AFTER_END
 
 
+def next_read_at(
+    marathon: Any, now: datetime, *, poll_minutes: int, far_hours: int, lead_days: int
+) -> datetime | None:
+    if not bool(_cell(marathon, "active", 1)):
+        return None
+    last = parse_ts(_cell(marathon, "last_fetched_at"))
+    if last is None:
+        return now
+    if is_near(marathon, now, lead_days=lead_days):
+        return last + timedelta(minutes=int(_cell(marathon, "poll_minutes") or poll_minutes))
+    return last + timedelta(hours=int(far_hours))
+
+
 def fetch_due(
     marathon: Any, now: datetime, *, poll_minutes: int, far_hours: int, lead_days: int
 ) -> bool:
-    if not bool(_cell(marathon, "active", 1)):
-        return False
-    last = parse_ts(_cell(marathon, "last_fetched_at"))
-    if last is None:
-        return True
-    if is_near(marathon, now, lead_days=lead_days):
-        gap = timedelta(minutes=int(_cell(marathon, "poll_minutes") or poll_minutes))
-    else:
-        gap = timedelta(hours=int(far_hours))
-    return now - last >= gap
+    at = next_read_at(
+        marathon, now, poll_minutes=poll_minutes, far_hours=far_hours, lead_days=lead_days
+    )
+    return at is not None and now >= at
 
 
 def board_due_off(marathon: Any, now: datetime) -> bool:

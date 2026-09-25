@@ -304,7 +304,7 @@ async def test_the_card_carries_the_mode_select_and_the_run_view_its_event(
     embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
     pick = next(one for one in view.children if isinstance(one, cogmod.EventModePick))
     assert [one.value for one in pick.options if one.default] == ["runs"]
-    assert "Event mode: **one event per run of ours" in embed.description
+    assert "Event mode: **one event per BaF run" in embed.description
     metroid = (await runs(bot, marathon))["Super Metroid"]
     embed, run_view = await cogmod.build_run(bot, bot.guild, marathon["id"], metroid["id"])
     assert f"event **#{metroid['event_id']}** — approved" in embed.description
@@ -348,7 +348,7 @@ async def test_a_feeds_own_mode_wins_over_the_setting_for_what_it_adds(
     )
     feed = await feeds.get_feed(bot.db, GUILD, feed_id)
     set_done = await feeds.set_feed(bot, bot.guild, FakeActor(), feed, event_mode="runs")
-    assert set_done.ok and "one event per run of ours" in set_done.message
+    assert set_done.ok and "one event per BaF run" in set_done.message
     bad = await feeds.set_feed(bot, bot.guild, FakeActor(), feed, event_mode="often")
     assert not bad.ok and bad.status == 422
 

@@ -43,6 +43,7 @@ from ...marathon_channels import HELD_REFUSAL, OPTED_OUT_REFUSAL, takes_marathon
 from ...marathon_channels import channel_word as channel_word_of
 from ...marathon_sources import (
     GDQ,
+    SOURCE_WORDS,
     ScheduleClient,
     ScheduleError,
     next_gdq_event,
@@ -2656,26 +2657,55 @@ async def upcoming_of_ours(bot: Any, guild: Any, *, member_id: int | None = None
     return [next_line(row, marathon, words) for row, marathon in found[:limit]]
 
 
-def marathon_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
+def dates_of(row: Any) -> str:
     starts = parse_ts(row["starts_at"])
     ends = parse_ts(row["ends_at"])
-    dates = f"<t:{unix(starts)}:d> – <t:{unix(ends or starts)}:d>" if starts else mt.NO_DATES
+    return f"<t:{unix(starts)}:d> – <t:{unix(ends or starts)}:d>" if starts else mt.NO_DATES
+
+
+def read_of(row: Any) -> str:
     fetched = parse_ts(row["last_fetched_at"])
     if row["last_fetch_ok"] == 0 and fetched is not None:
-        read = mt.FETCH_TROUBLE.format(unix=unix(fetched), why=row["last_error"] or "")
-    elif fetched is not None:
-        read = mt.READ_AGO.format(unix=unix(fetched))
-    else:
-        read = mt.NEVER_READ
+        return mt.FETCH_TROUBLE.format(unix=unix(fetched), why=row["last_error"] or "")
+    if fetched is not None:
+        return mt.READ_AGO.format(unix=unix(fetched))
+    return mt.NEVER_READ
+
+
+def counts_of(runs: list[Any]) -> tuple[int, int]:
     live = [one for one in runs if one["state"] != mt.DROPPED]
+    return (len(live), len([one for one in live if mt.is_ours(one)]))
+
+
+def marathon_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
     phase = phase_of(bot, guild, row)
+    total, ours = counts_of(runs)
     return mt.MARATHON_LINE.format(
         name=row["name"],
         phase=mt.PHASE_WORDS.get(phase, phase),
-        dates=dates,
-        ours=len([one for one in live if mt.is_ours(one)]),
-        runs=len(live),
-        read=read,
+        dates=dates_of(row),
+        ours=ours,
+        runs=total,
+        read=read_of(row),
+    )
+
+
+def schedule_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
+    store = bot.store
+    due = mt.next_read_at(
+        row,
+        now_for(bot),
+        poll_minutes=int(store.get(guild.id, MARATHON_POLL_MINUTES_KEY)),
+        far_hours=int(store.get(guild.id, MARATHON_FAR_POLL_HOURS_KEY)),
+        lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY)),
+    )
+    total, ours = counts_of(runs)
+    return mt.CARD_SCHEDULE.format(
+        source=SOURCE_WORDS.get(row["source"], row["source"]),
+        url=schedule_page(row["source"], row["source_ref"]) or row["schedule_url"],
+        read=read_of(row),
+        next=mt.NEXT_READ.format(unix=unix(due)) if due is not None else mt.NEXT_READ_PAUSED,
+        counts=mt.CARD_COUNTS.format(runs=total, ours=ours),
     )
 
 
@@ -2695,7 +2725,7 @@ def add_site_button(view: Any, bot: Any, row: int) -> None:
 
 
 async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, MarathonPanel]:
-    """One command, two audiences: members read Ours next; staff also manage the list."""
+    """One command, two audiences: members read BaF next; staff also manage the list."""
     staff = bool(bot.store.is_staff(actor))
     rows = await list_marathons(bot.db, guild.id)
     lines = [mt.OURS_NEXT, *(await upcoming_of_ours(bot, guild) or [mt.NOTHING_NEXT])]
@@ -2735,13 +2765,18 @@ async def build_card(
     runs = await runs_of(bot.db, row["id"])
     words = words_for(bot, guild.id)
     login = await channel_login(bot, row)
-    lines = [marathon_line(bot, guild, row, runs)]
-    if login:
-        lines.append(f"twitch.tv/{login}")
-    lines.append(mt.event_line(row, await event_status_of(bot, row)))
-    lines.append(me.EVENT_MODE_LINE.format(words=me.mode_words(me.mode_of(row))))
+    phase = phase_of(bot, guild, row)
+    lines = [
+        mt.CARD_HEAD.format(phase=mt.PHASE_WORDS.get(phase, phase), dates=dates_of(row)),
+        schedule_line(bot, guild, row, runs),
+    ]
+    if row["poll_minutes"]:
+        lines.append(mt.POLL_SAVED.format(name=row["name"], minutes=row["poll_minutes"]))
+    has_next = mt.suggests(row) and mt.is_over(row, now_for(bot))
+    if has_next:
+        lines.append(next_line_of(bot, guild, row))
     ours = [one for one in runs if one["state"] != mt.DROPPED and mt.is_ours(one)]
-    lines += [""] + [next_line(one, row, words) for one in ours[:MINE_LIMIT]]
+    lines += ["", mt.CARD_RUNS] + [next_line(one, row, words) for one in ours[:MINE_LIMIT]]
     if not runs:
         lines.append(
             mt.render(
@@ -2750,11 +2785,20 @@ async def build_card(
                 marathon=row["name"],
             ).text
         )
-    has_next = mt.suggests(row) and mt.is_over(row, now_for(bot))
-    if has_next:
-        lines += ["", next_line_of(bot, guild, row)]
-    if row["poll_minutes"]:
-        lines.append(mt.POLL_SAVED.format(name=row["name"], minutes=row["poll_minutes"]))
+    board = (
+        mt.CARD_BOARD_UP.format(channel=row["board_channel_id"])
+        if row["board_message_id"] and row["board_channel_id"]
+        else mt.CARD_BOARD_NONE
+    )
+    lines += [
+        "",
+        mt.CARD_EVENT,
+        mt.event_line(row, await event_status_of(bot, row)),
+        me.EVENT_MODE_LINE.format(words=me.mode_words(me.mode_of(row))),
+        "",
+        mt.CARD_CHANNEL.format(channel=f"twitch.tv/{login}" if login else mt.CARD_NO_CHANNEL),
+        mt.CARD_POSTS.format(board=board),
+    ]
     unmatched = mt.unmatched_names(runs)
     embed = discord.Embed(title=row["name"], description=clamped(lines))
     view = MarathonPanel(minutes_for(bot, guild.id), PAIR_VIEW if pairing else CARD, row["id"])

@@ -159,8 +159,8 @@ three buttons: **Ask staff privately** opens a modmail ticket, **Request somethi
 request, and **Propose an event** starts an event proposal. The same three sit on a message
 staff can post in a channel.
 `/event` — propose an event. It opens a panel; **Propose an event** is the form, and staff
-look it over first. **My time zone** is on the same panel. **Marathons…** on it opens **Ours
-next**: when people from here are on a marathon stream (running, hosting or on commentary), read
+look it over first. **My time zone** is on the same panel. **Marathons…** on it opens **BaF
+next**: when people from BaF are on a marathon stream (running, hosting or on commentary), read
 off the posted schedule, and **My runs** for your own.
 `/request` — ask the server for something. It opens a panel; **File a request** files one for
 staff to decide on.

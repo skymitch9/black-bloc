@@ -1,6 +1,21 @@
-import { api, send } from './api.js';
+import { api, names, send, settings, settingsNamespace } from './api.js';
 import {
-  ago,
+  BAF,
+  CARD_CHANNEL,
+  CARD_EVENT,
+  CARD_PEOPLE,
+  CARD_POSTS,
+  CARD_RUNS,
+  CARD_SCHEDULE,
+  countsLine,
+  feedReading,
+  postsLines,
+  readingLine,
+  said,
+  scheduleCell,
+  sourcesTitle,
+} from './marathon-words.js';
+import {
   ask,
   askForm,
   badge,
@@ -12,6 +27,7 @@ import {
   duration,
   el,
   field,
+  foldout,
   keepSaying,
   memberPicker,
   modeChip,
@@ -35,16 +51,16 @@ let refresh = async () => {};
 let showEvent = () => {};
 let eventModeDefault = 'none';
 let eventModes = [];
+let cadence = { near: null, far: null };
 let deepLinked = false;
 
-const LIST_NOTE = 'Every marathon schedule Black Bloc follows. It re-reads each one on its own '
-  + '— every half hour while it is near — and posts a board, a reminder before each run of ours '
-  + 'and a shoutout when it goes live. A row opens its runs.';
+const LIST_NOTE = 'Every marathon schedule Black Bloc reads; a row opens where it is read from, '
+  + 'its runs, its event and its posts.';
 const NOTHING_YET = 'Black Bloc follows no marathon yet. **Add a marathon** with its GDQ '
   + 'schedule link.';
 const GETTING_IT = 'Reading the schedule…';
-const MODE_OFF = 'Marathon posts are **{mode}**, so nothing is read or posted. **Marathon '
-  + 'settings** below turns them on.';
+const MODE_OFF = 'Marathon posts are **{mode}**, so nothing is read or posted. **Marathons** '
+  + 'under Settings and logs turns them on.';
 const MODE_SHADOW = 'Marathon posts are in **shadow**: the board, the reminders and the '
   + 'shoutouts land where shadow_channel_id points, with the rehearsal note.';
 const ADD_NOTE = 'Paste the GDQ schedule link (gamesdonequick.com/schedule/74) or the tracker '
@@ -54,10 +70,11 @@ const CHANNEL_HELP = 'The Twitch channel it airs on, from the Go-live page. With
 const NO_CHANNEL = 'No channel — each run links its runner';
 const PAIR_NOTE = 'A name on the schedule with no Twitch link, or the wrong one: pair it with '
   + 'the member it is. A pairing beats the automatic match, and Unpair gives it back.';
-const RUNS_NOTE = 'Ours are highlighted. A moved run says where it was; a run the schedule '
+const RUNS_NOTE = BAF + ' runs are highlighted. A moved run says where it was; a run the schedule '
   + 'dropped is kept as history.';
 const NO_RUNS = 'No runs on this schedule yet — it may not be published. Black Bloc keeps '
   + 'reading it.';
+const NO_BAF_RUNS = `No ${BAF} run on this schedule yet — pick All to see every run.`;
 const NO_PAIRINGS = 'No pairings. The automatic match reads each runner’s Twitch link.';
 const REMOVE_BODY = 'Its runs and pairings go with it and its ping window closes. Posts already '
   + 'made stay where they are.';
@@ -65,55 +82,67 @@ const WINDOW_LINE = 'Ping window on **{login}**: {start} – {end}.';
 const NO_WINDOW = 'No ping window — the marathon has no channel, no dates yet, or is paused.';
 const CHANNEL_GONE = 'Its channel row is gone from the Go-live page, so it has no window and '
   + 'no live title. Pick another channel, or none.';
+const READ_FROM = 'Read from the ';
+const SCHEDULE_LINK = 'the schedule ↗';
+const FOUND_BY = ' · found by the **{feed}** feed';
+const POLL_LABEL = 'Re-read every';
+const POLL_UNIT = 'minutes';
+const POLL_HELP = 'Blank = the default ({minutes}). 10 to 120; used while it is near.';
+const NEXT_WHEN_ENDS = 'After this one: ';
 const NEXT_LINE = '{marathon} is over — the next GDQ event is **{next}**, {date} ({relative}).';
-const NEXT_ADDED = 'Added — see **{name}** below.';
+const NEXT_ADDED = 'Added — see **{name}** on the list.';
 const NEXT_DISMISSED = 'Dismissed — **Look again** asks the tracker once more.';
 const NEXT_NONE = '{marathon} is over and the GDQ tracker lists nothing ahead yet.';
 const NEXT_NOT_YET = '{marathon} is over. Black Bloc has not looked up the next GDQ event yet.';
 const NEXT_NOTE = 'Staff decide: nothing is added until someone presses **Add it**. It is read '
   + 'from the tracker link and airs on this marathon’s channel.';
-const NEXT_WAITING = '{count} marathon{s} {have} a next event waiting — **Next up** on the row.';
-const POLL_HELP = 'Re-read every N minutes while it is near — blank for the default '
-  + '(marathon_poll_minutes). 10 to 120.';
+const NEXT_WAITING = '{count} marathon{s} {have} a next event waiting: ';
 const HELD_NOTE = 'held by staff';
 const EVENT_SELECT = 'Event';
 const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes into the events '
-  + 'review above, dated from the schedule. An event per run of ours is approved at once and '
+  + 'review above, dated from the schedule. An event per ' + BAF + ' run is approved at once and '
   + 'follows the schedule as runs move — the events feature announces each one as it starts. '
   + 'Both does the two. marathon_event_mode_default decides where this starts.';
-const EVENT_NOTE = 'Changing the mode applies at once: it makes what the new mode asks for, and '
-  + 'calls off what it no longer keeps (marathon_run_event_cancel_on_leave). **Unlink** leaves '
-  + 'an event exactly as it is; removing the marathon calls its events off.';
+const EVENT_SELECT_SHORT = 'Which Discord events this marathon makes; the setting explains the '
+  + 'four choices.';
+const EVENT_NONE = 'No event.';
+const EVENT_WAITING = 'Waiting for the schedule to publish, then one event for the marathon.';
+const EVENT_OPEN = 'Open ↗';
 const MODES_FALLBACK = [
   { value: 'none', label: 'No event' },
   { value: 'marathon', label: 'One event for the marathon' },
-  { value: 'runs', label: 'An event per run of ours' },
+  { value: 'runs', label: `An event per ${BAF} run` },
   { value: 'both', label: 'Both' },
 ];
 const FEED_MODE_FOLLOW = 'Whatever the setting says';
+const FEED_MODE_HELP = 'What a marathon this feed adds does about events; the first choice '
+  + 'follows marathon_event_mode_default.';
 const FEED_MOVE_NOTE = 'Only a channel-only row with no feed of its own, and one that takes '
   + 'marathons, can be picked.';
 const NO_MARATHONS_CHANNEL = 'opted out of marathons';
 const EVENT_TONE = { pending: 'warn', approved: 'ok', denied: 'danger', cancelled: null, gone: null };
 const PHASE_TONE = { far: null, near: 'warn', live: 'ok', over: null, paused: null };
 const STATE_TONE = { upcoming: null, live: 'ok', done: null, dropped: 'danger' };
-const FEEDS_NOTE = 'A feed reads the events list of one channel Black Bloc already watches and '
+const FEEDS_NOTE = 'A source reads the events list of one channel Black Bloc already watches and '
   + 'adds (or suggests) every new marathon it finds — only for channels on the Go-live page, '
-  + 'never random ones. A marathon a feed added and staff removed is never added again until '
-  + '**Forget ignored**.';
-const FEEDS_OFF = 'Feeds are off (marathon_feeds in **Marathon settings**), so nothing checks '
-  + 'on its own. **Check now** still works.';
-const NO_FEEDS = 'No feeds yet. **Add a feed…** starts from a channel on the Go-live page.';
+  + 'never random ones. A row opens the rest of its moves.';
+const FEEDS_OFF = 'Checks are off (marathon_feeds under **Marathons** in Settings and logs), so '
+  + 'nothing checks on its own. **Check now** still works.';
+const NO_FEEDS = 'No sources yet. **Add a feed…** starts from a channel on the Go-live page.';
 const FEED_ADD_NOTE = 'Pick the channel first — a feed belongs to a channel Black Bloc already '
   + 'watches, one feed per channel. Then what to read: the GDQ tracker, the RPG Limit Break '
   + 'tracker, or a horaro.net event by its slug (ESA is `esa`).';
 const FEED_NO_CHANNELS = 'Every channel-only row on the Go-live page has a feed already, or '
   + 'there is none. Add the channel there first.';
+const FEED_IGNORED_NOTE = 'A marathon this feed added and staff removed is never added again '
+  + 'until **Forget ignored**.';
+const FEED_ADDED = 'Added by this feed: ';
+const FEED_DRAWER = 'The {feed} feed';
 const SUGGESTION_LINE = '**{feed}** has a new event: **{event}**, {date} ({relative}).';
 const SUGGESTION_NOTE = 'Staff decide: nothing is added until someone presses **Add it**. It airs '
   + 'on the feed’s channel.';
 const FEED_REMOVE_BODY = 'It stops checking. The marathons it added stay on the list.';
-const FROM_FEED = 'Added by the **{feed}** feed.';
+const FEED_GONE = 'That feed is gone — the list below is current.';
 const ACTION_CHOICES = [{ value: 'add', label: 'Add' }, { value: 'suggest', label: 'Suggest' }];
 
 function full(node) {
@@ -121,10 +150,8 @@ function full(node) {
   return node;
 }
 
-function said(text, values) {
-  let out = String(text);
-  for (const [key, value] of Object.entries(values)) out = out.replaceAll(`{${key}}`, String(value));
-  return out;
+function line(text, tone = null) {
+  return el('p', { class: 'field-help mx-line', 'data-tone': tone || undefined }, boldParts(text));
 }
 
 function wantedId() {
@@ -156,13 +183,13 @@ function nextSentence(row) {
   if (next.state === 'added') return said(NEXT_ADDED, { name: next.added_name || next.name || '' });
   if (next.state === 'none') return said(NEXT_NONE, { marathon: row.name });
   if (!next.state) return said(NEXT_NOT_YET, { marathon: row.name });
-  const line = said(NEXT_LINE, {
+  const words = said(NEXT_LINE, {
     marathon: row.name,
     next: next.name,
     date: next.datetime ? new Date(next.datetime).toLocaleDateString() : 'no date yet',
     relative: relative(next.datetime),
   });
-  return next.state === 'dismissed' ? `${line} ${NEXT_DISMISSED}` : line;
+  return next.state === 'dismissed' ? `${words} ${NEXT_DISMISSED}` : words;
 }
 
 async function addNext(row, say) {
@@ -192,48 +219,10 @@ function nextMoves(row, say) {
   if (next.state === 'added' && next.added_marathon_id) {
     moves.push(textAction(`Open ${next.added_name || next.name}`, () => openMarathon(next.added_marathon_id, next.added_name || next.name)));
   }
-  if (next.can_look_again && next.state !== 'open' && next.state !== 'added') {
+  if (next.can_look_again && next.state !== 'added') {
     moves.push(button('Look again', () => lookAgain(row, say), { tone: 'quiet' }));
   }
   return moves;
-}
-
-function nextCell(row, say) {
-  if (!row.next) return el('span', { class: 'cell-quiet', text: '—' });
-  const next = row.next;
-  const words = {
-    open: `${next.name} · ${next.datetime ? new Date(next.datetime).toLocaleDateString() : 'no date yet'}`,
-    dismissed: `Dismissed: ${next.name}`,
-    added: `Added: ${next.added_name || next.name}`,
-    none: 'Nothing listed ahead yet',
-  }[next.state] || 'Not looked up yet';
-  return el('span', {}, [
-    el('span', { class: next.state === 'open' ? 'cell-name' : 'cell-quiet' }, boldParts(words)),
-    el('div', { class: 'bar' }, nextMoves(row, say)),
-  ]);
-}
-
-function nextCard(marathon, say) {
-  if (!marathon.next) return null;
-  const moves = nextMoves(marathon, say);
-  if (marathon.next.state === 'open' && marathon.next.can_look_again) {
-    moves.push(button('Look again', () => lookAgain(marathon, say), { tone: 'quiet' }));
-  }
-  return card('Next up', [
-    el('p', {}, boldParts(nextSentence(marathon))),
-    marathon.next.state === 'open' ? el('p', { class: 'field-help' }, boldParts(NEXT_NOTE)) : null,
-    marathon.next.url && marathon.next.state !== 'none'
-      ? el('p', { class: 'field-help' }, [el('a', { href: marathon.next.url, text: 'the tracker', rel: 'noreferrer', target: '_blank' })])
-      : null,
-    bar(moves),
-  ]);
-}
-
-function readLine(row) {
-  if (row.trouble) return el('span', { class: 'cell-quiet', 'data-tone': 'danger', text: row.trouble });
-  if (!row.last_fetched_at) return el('span', { class: 'cell-quiet', text: 'not read yet' });
-  const read = ago(row.last_fetched_at);
-  return el('span', { class: 'cell-quiet', title: read.title, text: `last read ${read.text}` });
 }
 
 async function channelChoices() {
@@ -248,7 +237,7 @@ async function channelChoices() {
 }
 
 function channelPicker(choices, current) {
-  const select = el('select', { class: 'input' }, [
+  return el('select', { class: 'input' }, [
     el('option', { value: '', text: NO_CHANNEL, selected: !current || undefined }),
     ...choices.map((one) => el('option', {
       value: one.value,
@@ -257,7 +246,6 @@ function channelPicker(choices, current) {
       selected: String(current || '') === one.value || undefined,
     })),
   ]);
-  return select;
 }
 
 function modeChoices() {
@@ -306,19 +294,19 @@ async function addMarathon() {
   await openMarathon(made.id, made.name, made.message);
 }
 
-function personCell(run) {
-  return el('span', {}, run.people.map((one, index) => el('span', {}, [
+function personCell(one) {
+  return el('span', {}, one.people.map((person, index) => el('span', {}, [
     index ? el('span', { text: ', ' }) : null,
-    one.user_id ? nameNode(one.user_id, one.member_name) : el('span', { text: one.name }),
-    el('span', { class: 'cell-quiet', text: one.part === 'runner' ? '' : ` (${one.part})` }),
+    person.user_id ? nameNode(person.user_id, person.member_name) : el('span', { text: person.name }),
+    el('span', { class: 'cell-quiet', text: person.part === 'runner' ? '' : ` (${person.part})` }),
   ])));
 }
 
-function whenCell(run) {
+function whenCell(one) {
   return el('span', {}, [
-    el('span', { class: 'mono', text: when(run.scheduled_at) }),
-    run.moved && run.previous_scheduled_at
-      ? el('span', { class: 'cell-quiet', 'data-tone': 'warn', text: ` · moved from ${when(run.previous_scheduled_at)}` })
+    el('span', { class: 'mono', text: when(one.scheduled_at) }),
+    one.moved && one.previous_scheduled_at
+      ? el('span', { class: 'cell-quiet', 'data-tone': 'warn', text: ` · moved from ${when(one.previous_scheduled_at)}` })
       : null,
   ]);
 }
@@ -329,48 +317,92 @@ async function after(marathon, done) {
   await openMarathon(marathon.id, marathon.name, (done.found || {}).message || '');
 }
 
+function step(marathon, say, label, work, tone = 'quiet') {
+  return button(label, async () => {
+    const done = await run(say, work, (found) => found?.message);
+    await after(marathon, done);
+  }, { tone });
+}
+
 function runTools(marathon, row, say) {
+  const base = `/api/marathons/${marathon.id}/runs/${row.id}`;
   const tools = [];
-  if (row.shoutable) {
-    tools.push(button('Shout it now', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/runs/${row.id}/shout`, 'POST', {}), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'warn' }));
-  }
+  if (row.shoutable) tools.push(step(marathon, say, 'Shout it now', () => send(`${base}/shout`, 'POST', {}), 'warn'));
   if (row.can_mark_done && (row.ours || row.state === 'live')) {
-    tools.push(button('Mark done', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/runs/${row.id}/done`, 'POST', {}), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'quiet' }));
+    tools.push(step(marathon, say, 'Mark done', () => send(`${base}/done`, 'POST', {})));
   }
-  if (row.can_mark_live && !row.shoutable) {
-    tools.push(button('Mark it live', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/runs/${row.id}/live`, 'POST', {}), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'quiet' }));
-  }
+  if (row.can_mark_live && !row.shoutable) tools.push(step(marathon, say, 'Mark it live', () => send(`${base}/live`, 'POST', {})));
   if (row.event_id) {
     tools.push(textAction(`event #${row.event_id}${row.event_status ? ` · ${row.event_status}` : ''}`, () => {
       closeDrawer();
       showEvent(row.event_id);
     }));
-    tools.push(button('Unlink', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/runs/${row.id}/event`, 'DELETE'), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'quiet' }));
+    tools.push(step(marathon, say, 'Unlink', () => send(`${base}/event`, 'DELETE')));
   } else if (row.ours && row.state !== 'dropped' && row.state !== 'done') {
-    tools.push(button('Make it now', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/runs/${row.id}/event`, 'POST', {}), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'quiet' }));
+    tools.push(step(marathon, say, 'Make it now', () => send(`${base}/event`, 'POST', {})));
   }
-  if (row.can_mark_upcoming) {
-    tools.push(button('Mark it upcoming', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/runs/${row.id}/upcoming`, 'POST', {}), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'quiet' }));
-  }
+  if (row.can_mark_upcoming) tools.push(step(marathon, say, 'Mark it upcoming', () => send(`${base}/upcoming`, 'POST', {})));
   return el('div', { class: 'bar' }, tools);
+}
+
+function pollField(marathon, say) {
+  const poll = el('input', {
+    class: 'input',
+    type: 'text',
+    inputmode: 'numeric',
+    size: 4,
+    placeholder: 'default',
+    value: marathon.poll_minutes ? String(marathon.poll_minutes) : '',
+    'aria-label': `${POLL_LABEL} N ${POLL_UNIT}`,
+  });
+  const save = button('Save', async () => {
+    const given = poll.value.trim();
+    const wanted = given === '' ? null : (/^\d+$/.test(given) ? Number(given) : given);
+    const done = await run(
+      say,
+      () => send(`/api/marathons/${marathon.id}`, 'PATCH', { poll_minutes: wanted }),
+      () => (wanted === null ? `**${marathon.name}** is re-read on the default gap again.` : `**${marathon.name}** is re-read every ${wanted} minutes while it is near.`),
+    );
+    await after(marathon, done);
+  }, { tone: 'quiet' });
+  const box = el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT }), save]);
+  return field(POLL_LABEL, box, said(POLL_HELP, { minutes: cadence.near ?? '—' }));
+}
+
+function nextBlock(marathon, say) {
+  if (!marathon.next) return [];
+  const moves = nextMoves(marathon, say);
+  return [
+    el('p', { class: 'field-help mx-line' }, [el('span', { class: 'cell-quiet', text: NEXT_WHEN_ENDS }), ...boldParts(nextSentence(marathon))]),
+    marathon.next.state === 'open' ? line(NEXT_NOTE) : null,
+    marathon.next.url && marathon.next.state !== 'none'
+      ? el('p', { class: 'field-help' }, [el('a', { href: marathon.next.url, text: 'the tracker ↗', rel: 'noreferrer', target: '_blank' })])
+      : null,
+    moves.length ? bar(moves) : null,
+  ];
+}
+
+function scheduleCard(marathon, say) {
+  const reading = readingLine(marathon, cadence);
+  const source = el('p', { class: 'field-help mx-line' }, [
+    el('span', { text: READ_FROM }),
+    el('strong', { text: marathon.source_word }),
+    el('span', { text: ' — ' }),
+    el('a', { href: marathon.schedule_page, text: SCHEDULE_LINK, rel: 'noreferrer', target: '_blank' }),
+    ...(marathon.feed_name ? boldParts(said(FOUND_BY, { feed: marathon.feed_name })) : []),
+  ]);
+  const moves = [];
+  if (marathon.active) {
+    moves.push(step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn'));
+  }
+  return card(CARD_SCHEDULE, [
+    source,
+    line(reading.text, reading.tone),
+    line(countsLine(marathon.run_list)),
+    pollField(marathon, say),
+    moves.length ? bar(moves) : null,
+    ...nextBlock(marathon, say),
+  ]);
 }
 
 function runsCard(marathon, say) {
@@ -384,20 +416,20 @@ function runsCard(marathon, say) {
       { label: 'People', cell: (row) => personCell(row) },
       { label: 'State', cell: (row) => el('span', { class: 'cell-kind' }, [
         badge(row.state_word, STATE_TONE[row.state] || null),
-        row.ours ? badge('ours', 'ok') : null,
+        row.ours ? badge(BAF, 'ok') : null,
         row.event_id ? badge(`event #${row.event_id}`, EVENT_TONE[row.event_status] || null) : null,
         row.held ? badge(HELD_NOTE, 'warn') : null,
       ]) },
       { label: '', cell: (row) => runTools(marathon, row, say) },
-    ], rows, { empty: marathon.run_list && marathon.run_list.length ? 'None of ours on this schedule yet — pick All to see every run.' : NO_RUNS }));
+    ], rows, { empty: marathon.run_list && marathon.run_list.length ? NO_BAF_RUNS : NO_RUNS }));
   };
   const chips = segment(
-    [{ value: 'ours', label: `Ours (${marathon.ours})` }, { value: 'all', label: `All (${marathon.runs})` }],
+    [{ value: 'ours', label: `${BAF} (${marathon.ours})` }, { value: 'all', label: `All (${marathon.runs})` }],
     shown.filter,
     { onChange: () => { shown.filter = chips.readValue(); paint(); } },
   );
   paint();
-  return card('Runs', [el('p', { class: 'field-help', text: RUNS_NOTE }), chips, holder]);
+  return card(CARD_RUNS, [el('p', { class: 'field-help', text: RUNS_NOTE }), chips, holder]);
 }
 
 function pairingsCard(marathon, say) {
@@ -405,10 +437,7 @@ function pairingsCard(marathon, say) {
     runner: one.runner_name,
     member: nameNode(one.user_id, one.member_name),
     scope: one.everywhere ? 'every schedule' : 'this schedule',
-    tools: button('Unpair', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/people/${one.id}`, 'DELETE'), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'quiet' }),
+    tools: step(marathon, say, 'Unpair', () => send(`/api/marathons/${marathon.id}/people/${one.id}`, 'DELETE')),
   }));
   const pair = button('Pair a runner…', async () => {
     const listed = el('datalist', { id: 'marathon-unmatched' }, (marathon.unmatched || []).map((one) => el('option', { value: one })));
@@ -433,7 +462,7 @@ function pairingsCard(marathon, say) {
     if (!sure || !done) return;
     await after(marathon, { ok: true, found: done });
   }, { tone: 'warn' });
-  return card('Who is who', [
+  return card(CARD_PEOPLE, [
     el('p', { class: 'field-help', text: PAIR_NOTE }),
     table([
       { label: 'Name on the schedule', cell: (row) => row.runner },
@@ -442,6 +471,41 @@ function pairingsCard(marathon, say) {
       { label: '', cell: (row) => row.tools },
     ], rows, { empty: NO_PAIRINGS }),
     bar([pair]),
+  ]);
+}
+
+function eventCard(marathon, say) {
+  const event = marathon.event || {};
+  const state = [];
+  if (event.id) {
+    state.push(badge(event.status || 'gone', EVENT_TONE[event.status] || null), el('span', { text: ` Event #${event.id} ` }));
+    if (event.status !== 'gone') {
+      state.push(textAction(EVENT_OPEN, () => {
+        closeDrawer();
+        showEvent(event.id);
+      }));
+    }
+  } else {
+    state.push(el('span', { text: event.wanted ? EVENT_WAITING : EVENT_NONE }));
+  }
+  const moves = [];
+  if (event.id || event.wanted) {
+    moves.push(step(marathon, say, 'Unlink', () => send(`/api/marathons/${marathon.id}/event`, 'DELETE')));
+  } else {
+    moves.push(step(marathon, say, 'Make an event now', () => send(`/api/marathons/${marathon.id}/event`, 'POST', {}), 'warn'));
+  }
+  const mode = modePicker(marathon.event_mode || 'none');
+  mode.addEventListener('change', async () => {
+    const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'PATCH', { event_mode: mode.value }), (found) => found?.message);
+    if (!done.ok) {
+      mode.value = marathon.event_mode || 'none';
+      return;
+    }
+    await after(marathon, done);
+  });
+  return card(CARD_EVENT, [
+    el('p', { class: 'field-help mx-line' }, [...state, el('span', { text: ' ' }), ...moves]),
+    field(EVENT_SELECT, mode, EVENT_SELECT_SHORT),
   ]);
 }
 
@@ -454,7 +518,7 @@ async function channelCard(marathon, say) {
   const windowLine = marathon.window && marathon.channel_login
     ? said(WINDOW_LINE, { login: marathon.channel_login, start: when(marathon.window.starts_at), end: when(marathon.window.ends_at) })
     : NO_WINDOW;
-  return card('The channel', [
+  return card(CARD_CHANNEL, [
     marathon.channel_gone ? notice(CHANNEL_GONE, 'warn') : null,
     field('Airs on', picker, CHANNEL_HELP),
     el('p', { class: 'field-help' }, boldParts(windowLine)),
@@ -462,49 +526,75 @@ async function channelCard(marathon, say) {
   ]);
 }
 
-function eventCard(marathon, say) {
-  const event = marathon.event || {};
-  const fromFeed = marathon.feed_name
-    ? el('p', { class: 'field-help' }, boldParts(said(FROM_FEED, { feed: marathon.feed_name })))
-    : null;
-  const moves = [];
-  if (event.id && event.status !== 'gone') {
-    moves.push(textAction(`Open event #${event.id}`, () => {
-      closeDrawer();
-      showEvent(event.id);
-    }));
-  }
-  const mode = modePicker(marathon.event_mode || 'none');
-  mode.addEventListener('change', async () => {
-    const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'PATCH', { event_mode: mode.value }), (found) => found?.message);
-    if (!done.ok) {
-      mode.value = marathon.event_mode || 'none';
-      return;
-    }
-    await after(marathon, done);
-  });
-  if (event.id || event.wanted) {
-    moves.push(button('Unlink', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/event`, 'DELETE'), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'quiet' }));
-  } else {
-    moves.push(button('Make an event now', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/event`, 'POST', {}), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'warn' }));
-  }
-  return card('Event', [
-    el('p', {}, [
-      event.status ? badge(event.status, EVENT_TONE[event.status] || null) : null,
-      el('span', { text: event.status ? ' ' : '' }),
-      ...boldParts(event.line || ''),
+function postsCard(marathon, say) {
+  const posts = postsLines(marathon);
+  const board = step(
+    marathon,
+    say,
+    posts.hasBoard ? 'Refresh the board' : 'Post the board',
+    () => send(`/api/marathons/${marathon.id}/board`, 'POST', {}),
+  );
+  const where = posts.hasBoard && marathon.board_channel_id;
+  return card(CARD_POSTS, [
+    el('p', { class: 'field-help mx-line' }, [
+      el('span', { text: posts.board }),
+      where ? el('span', { text: ' ' }) : null,
+      where ? nameNode(marathon.board_channel_id) : null,
+      el('span', { text: ' ' }),
+      board,
     ]),
-    fromFeed,
-    field(EVENT_SELECT, mode, EVENT_SELECT_HELP),
-    el('p', { class: 'field-help' }, boldParts(EVENT_NOTE)),
-    bar(moves),
+    line(posts.sent),
   ]);
+}
+
+function moveBar(marathon, say) {
+  return bar([
+    step(marathon, say, marathon.active ? 'Pause' : 'Resume', () => send(`/api/marathons/${marathon.id}`, 'PATCH', { active: !marathon.active }), null),
+    button('Remove', async () => {
+      const sure = await ask({ title: `Remove ${marathon.name}?`, body: [REMOVE_BODY], confirmLabel: 'Remove it' });
+      if (!sure) return;
+      const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'DELETE'), (found) => found?.message);
+      if (!done.ok) return;
+      keepSaying('marathons', say);
+      closeDrawer();
+      await refresh();
+    }, { tone: 'danger' }),
+  ]);
+}
+
+async function marathonDrawer(marathon, message) {
+  if (marathon.board_channel_id) await names([marathon.board_channel_id]).catch(() => null);
+  const say = notice();
+  if (message) say.say(message, 'ok');
+  return [
+    say,
+    el('p', { class: 'field-help' }, [
+      badge(marathon.phase_word, PHASE_TONE[marathon.phase] || null),
+      el('span', { text: ` ${datesOf(marathon)}` }),
+    ]),
+    scheduleCard(marathon, say),
+    runsCard(marathon, say),
+    pairingsCard(marathon, say),
+    eventCard(marathon, say),
+    await channelCard(marathon, say),
+    postsCard(marathon, say),
+    moveBar(marathon, say),
+  ];
+}
+
+async function openMarathon(marathonId, title, message = '') {
+  shown.id = String(marathonId);
+  if (wantedId() !== shown.id) {
+    history.replaceState(null, '', `${location.pathname}${location.search}#marathon-${shown.id}`);
+  }
+  openDrawer(title || `Marathon #${marathonId}`, sayNothing(GETTING_IT), { onClose: forgetHash });
+  try {
+    const marathon = await api(`/api/marathons/${encodeURIComponent(marathonId)}`);
+    openDrawer(marathon.name, await marathonDrawer(marathon, message), { onClose: forgetHash });
+  } catch (error) {
+    const found = sentenceFor(error);
+    openDrawer(title || `Marathon #${marathonId}`, [notice(found.text, found.tone)], { onClose: forgetHash });
+  }
 }
 
 async function feedStep(say, work) {
@@ -516,37 +606,15 @@ async function feedStep(say, work) {
   return done;
 }
 
-function checkedLine(feed) {
-  if (feed.trouble) return el('span', { class: 'cell-quiet', 'data-tone': 'danger', text: feed.trouble });
-  const every = `checks every ${feed.hours} h`;
-  if (!feed.last_checked_at) return el('span', { class: 'cell-quiet', text: `${every} · not checked yet` });
-  const read = ago(feed.last_checked_at);
-  return el('span', { class: 'cell-quiet', title: read.title, text: `${every} · last checked ${read.text}` });
+async function feedDrawerStep(feed, say, work) {
+  const done = await run(say, work, (found) => found?.message);
+  if (!done.ok) return done;
+  await refresh();
+  await openFeed(feed.id, (done.found || {}).message || '');
+  return done;
 }
 
-function feedMoves(feed, say) {
-  const base = `/api/marathons/feeds/${feed.id}`;
-  const moves = [
-    button(feed.active ? 'Pause' : 'Resume', () => feedStep(say, () => send(base, 'PATCH', { active: !feed.active })), { tone: 'quiet' }),
-    button('Check now', () => feedStep(say, () => send(`${base}/check`, 'POST', {})), { tone: 'warn' }),
-  ];
-  if ((feed.dismissed || []).length) {
-    moves.push(button('Look again', () => feedStep(say, () => send(`${base}/look`, 'POST', {})), { tone: 'quiet' }));
-  }
-  if (feed.ignored_count) {
-    moves.push(button(`Forget ignored (${feed.ignored_count})`, () => feedStep(say, () => send(`${base}/forget`, 'POST', {})), { tone: 'quiet' }));
-  }
-  moves.push(button('Rename…', () => renameFeed(feed, say), { tone: 'quiet' }));
-  moves.push(button('Move to channel…', () => moveFeed(feed, say), { tone: 'quiet' }));
-  moves.push(button('Remove', async () => {
-    const sure = await ask({ title: `Remove the ${feed.name} feed?`, body: [FEED_REMOVE_BODY], confirmLabel: 'Remove it' });
-    if (!sure) return;
-    await feedStep(say, () => send(base, 'DELETE'));
-  }, { tone: 'danger' }));
-  return el('div', { class: 'bar' }, moves);
-}
-
-async function renameFeed(feed, say) {
+async function renameFeed(feed) {
   const name = el('input', { class: 'input', type: 'text', value: feed.name });
   let done = null;
   const sure = await askForm({
@@ -560,12 +628,11 @@ async function renameFeed(feed, say) {
     },
   });
   if (!sure || !done) return;
-  say.say(done.message || 'Renamed.', 'ok');
-  keepSaying('marathons', say);
   await refresh();
+  await openFeed(feed.id, done.message || 'Renamed.');
 }
 
-async function moveFeed(feed, say) {
+async function moveFeed(feed) {
   const payload = await api('/api/marathons/feeds').catch(() => ({ channels: [] }));
   const free = (payload.channels || []).filter((one) => !one.feed_name && one.marathons !== false);
   const channel = el('select', { class: 'input' }, free.map((one) => el('option', { value: String(one.id), text: `${one.name} · twitch.tv/${one.login}` })));
@@ -581,17 +648,8 @@ async function moveFeed(feed, say) {
     },
   });
   if (!sure || !done) return;
-  say.say(done.message || 'Moved.', 'ok');
-  keepSaying('marathons', say);
   await refresh();
-}
-
-function feedModeCell(feed, say) {
-  const pick = modePicker(feed.event_mode, { follow: true });
-  pick.addEventListener('change', () => {
-    feedStep(say, () => send(`/api/marathons/feeds/${feed.id}`, 'PATCH', { event_mode: pick.value || null }));
-  });
-  return pick;
+  await openFeed(feed.id, done.message || 'Moved.');
 }
 
 function actionCell(feed, say) {
@@ -604,26 +662,90 @@ function actionCell(feed, say) {
   return chips;
 }
 
-function suggestionCard(feed, record, say) {
+function suggestionCard(feed, record, say, { inDrawer = false } = {}) {
   const base = `/api/marathons/feeds/${feed.id}`;
-  const line = said(SUGGESTION_LINE, {
+  const words = said(SUGGESTION_LINE, {
     feed: feed.name,
     event: record.name,
     date: record.starts_at ? new Date(record.starts_at).toLocaleDateString() : 'no date yet',
     relative: relative(record.starts_at),
   });
+  const dismiss = () => send(base, 'PATCH', { dismiss: record.ref });
   return card('Next up', [
-    el('p', {}, boldParts(line)),
+    el('p', {}, boldParts(words)),
     el('p', { class: 'field-help' }, boldParts(SUGGESTION_NOTE)),
-    record.url ? el('p', { class: 'field-help' }, [el('a', { href: record.url, text: 'the schedule', rel: 'noreferrer', target: '_blank' })]) : null,
+    record.url ? el('p', { class: 'field-help' }, [el('a', { href: record.url, text: 'the schedule ↗', rel: 'noreferrer', target: '_blank' })]) : null,
     bar([
       button('Add it', async () => {
         const done = await feedStep(say, () => send(`${base}/add`, 'POST', { event_ref: record.ref }));
         if (done.ok && done.found.marathon_id) await openMarathon(done.found.marathon_id, record.name, done.found.message);
       }, { tone: 'warn' }),
-      button('Not this one', () => feedStep(say, () => send(base, 'PATCH', { dismiss: record.ref })), { tone: 'quiet' }),
+      button('Not this one', () => (inDrawer ? feedDrawerStep(feed, say, dismiss) : feedStep(say, dismiss)), { tone: 'quiet' }),
     ]),
   ]);
+}
+
+function feedDrawer(feed, message) {
+  const say = notice();
+  if (message) say.say(message, 'ok');
+  const base = `/api/marathons/feeds/${feed.id}`;
+  const reading = feedReading(feed);
+  const mode = modePicker(feed.event_mode, { follow: true });
+  mode.addEventListener('change', () => {
+    feedDrawerStep(feed, say, () => send(base, 'PATCH', { event_mode: mode.value || null }));
+  });
+  const moves = [];
+  if ((feed.dismissed || []).length) {
+    moves.push(button('Look again', () => feedDrawerStep(feed, say, () => send(`${base}/look`, 'POST', {})), { tone: 'quiet' }));
+  }
+  if (feed.ignored_count) {
+    moves.push(button(`Forget ignored (${feed.ignored_count})`, () => feedDrawerStep(feed, say, () => send(`${base}/forget`, 'POST', {})), { tone: 'quiet' }));
+  }
+  moves.push(button('Rename…', () => renameFeed(feed), { tone: 'quiet' }));
+  moves.push(button('Move to channel…', () => moveFeed(feed), { tone: 'quiet' }));
+  moves.push(button('Remove', async () => {
+    const sure = await ask({ title: `Remove the ${feed.name} feed?`, body: [FEED_REMOVE_BODY], confirmLabel: 'Remove it' });
+    if (!sure) return;
+    const done = await run(say, () => send(base, 'DELETE'), (found) => found?.message);
+    if (!done.ok) return;
+    keepSaying('marathons', say);
+    closeDrawer();
+    await refresh();
+  }, { tone: 'danger' }));
+  const added = feed.marathons || [];
+  return [
+    say,
+    el('p', { class: 'field-help mx-line' }, [
+      el('span', { text: READ_FROM }),
+      el('strong', { text: feed.source_word }),
+      el('span', { text: ` · ${feed.channel_name} ` }),
+      feed.active ? null : badge('paused'),
+    ]),
+    line(reading.text, reading.tone),
+    added.length
+      ? el('p', { class: 'field-help mx-line' }, [
+        el('span', { class: 'cell-quiet', text: FEED_ADDED }),
+        ...added.flatMap((one, index) => [
+          index ? el('span', { text: ' · ' }) : null,
+          textAction(one.name, () => openMarathon(one.id, one.name)),
+        ]),
+      ])
+      : null,
+    field('Event', mode, FEED_MODE_HELP),
+    ...(feed.suggestions || []).map((one) => suggestionCard(feed, one, say, { inDrawer: true })),
+    line(FEED_IGNORED_NOTE),
+    bar(moves),
+  ];
+}
+
+async function openFeed(feedId, message = '') {
+  const payload = await api('/api/marathons/feeds').catch((error) => ({ error: sentenceFor(error) }));
+  const feed = (payload.feeds || []).find((one) => String(one.id) === String(feedId));
+  if (!feed) {
+    openDrawer(said(FEED_DRAWER, { feed: `#${feedId}` }), [notice(payload.error ? payload.error.text : FEED_GONE, 'warn')]);
+    return;
+  }
+  openDrawer(said(FEED_DRAWER, { feed: feed.name }), feedDrawer(feed, message));
 }
 
 async function addFeed(payload) {
@@ -664,26 +786,37 @@ async function addFeed(payload) {
   await refresh();
 }
 
-function feedsCard(feeds, say) {
-  if (feeds.error) return card('Feeds', [notice(feeds.error.text, feeds.error.tone)]);
+function feedTools(row, say) {
+  const base = `/api/marathons/feeds/${row.id}`;
+  return el('div', { class: 'bar' }, [
+    button('Check now', () => feedStep(say, () => send(`${base}/check`, 'POST', {})), { tone: 'warn' }),
+    button(row.active ? 'Pause' : 'Resume', () => feedStep(say, () => send(base, 'PATCH', { active: !row.active })), { tone: 'quiet' }),
+  ]);
+}
+
+function feedCheckCell(row) {
+  const reading = feedReading(row);
+  return el('span', { class: 'cell-quiet mx-line', 'data-tone': reading.tone || undefined, text: reading.text });
+}
+
+function sourcesFoldout(feeds, say) {
+  if (feeds.error) return foldout(sourcesTitle([]), [notice(feeds.error.text, feeds.error.tone)]);
   const rows = feeds.feeds || [];
   const grid = table([
-    { label: 'Feed', cell: (row) => el('span', {}, [el('span', { class: 'cell-name', text: row.name }), row.active ? null : badge('paused')]) },
-    { label: 'Reads', cell: (row) => row.source_word },
-    { label: 'Channel', cell: (row) => row.channel_name },
-    { label: 'Checks', cell: (row) => checkedLine(row) },
+    { label: 'Channel', cell: (row) => el('span', {}, [textAction(row.channel_name || row.name, () => openFeed(row.id)), row.active ? null : badge('paused')]) },
+    { label: 'Source', cell: (row) => row.source_word },
+    { label: 'Checks', cell: (row) => feedCheckCell(row) },
     { label: 'New events', cell: (row) => actionCell(row, say) },
-    { label: 'Event', cell: (row) => feedModeCell(row, say) },
-    { label: '', cell: (row) => feedMoves(row, say) },
+    { label: '', cell: (row) => feedTools(row, say) },
   ], rows, { empty: NO_FEEDS });
   const waiting = rows.flatMap((feed) => (feed.suggestions || []).map((one) => suggestionCard(feed, one, say)));
-  return card('Feeds', [
+  return foldout(sourcesTitle(rows, { enabled: feeds.enabled }), [
     el('p', { class: 'field-help' }, boldParts(FEEDS_NOTE)),
     feeds.enabled === false ? el('p', { class: 'field-help' }, boldParts(FEEDS_OFF)) : null,
     bar([button('Add a feed…', () => addFeed(feeds), { tone: 'warn' })]),
     grid,
     ...waiting,
-  ], { count: rows.length });
+  ], { open: waiting.length > 0 });
 }
 
 function eventCell(row) {
@@ -693,85 +826,17 @@ function eventCell(row) {
   return el('span', { class: 'cell-quiet', text: '—' });
 }
 
-function moveBar(marathon, say) {
-  const moves = [];
-  if (marathon.active) {
-    moves.push(button('Refresh now', async () => {
-      const done = await run(say, () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), (found) => found?.message);
-      await after(marathon, done);
-    }, { tone: 'warn' }));
-  }
-  moves.push(button(marathon.active ? 'Pause' : 'Resume', async () => {
-    const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'PATCH', { active: !marathon.active }), (found) => found?.message);
-    await after(marathon, done);
-  }));
-  const poll = el('input', {
-    class: 'input',
-    type: 'text',
-    inputmode: 'numeric',
-    size: 4,
-    placeholder: 'default',
-    value: marathon.poll_minutes ? String(marathon.poll_minutes) : '',
-    title: POLL_HELP,
-    'aria-label': 'Re-read every N minutes',
-  });
-  moves.push(el('label', { class: 'field-help', title: POLL_HELP }, [el('span', { text: 'Re-read every ' }), poll, el('span', { text: ' minutes' })]));
-  moves.push(button('Save', async () => {
-    const given = poll.value.trim();
-    const wanted = given === '' ? null : (/^\d+$/.test(given) ? Number(given) : given);
-    const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'PATCH', { poll_minutes: wanted }), () => (wanted === null ? `**${marathon.name}** is re-read on the default gap again.` : `**${marathon.name}** is re-read every ${wanted} minutes while it is near.`));
-    await after(marathon, done);
-  }, { tone: 'quiet' }));
-  moves.push(button(marathon.board_message_id ? 'Refresh the board' : 'Post the board', async () => {
-    const done = await run(say, () => send(`/api/marathons/${marathon.id}/board`, 'POST', {}), (found) => found?.message);
-    await after(marathon, done);
-  }));
-  moves.push(button('Remove', async () => {
-    const sure = await ask({ title: `Remove ${marathon.name}?`, body: [REMOVE_BODY], confirmLabel: 'Remove it' });
-    if (!sure) return;
-    const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'DELETE'), (found) => found?.message);
-    if (!done.ok) return;
-    keepSaying('marathons', say);
-    closeDrawer();
-    await refresh();
-  }, { tone: 'danger' }));
-  return bar(moves);
-}
-
-async function marathonDrawer(marathon, message) {
-  const say = notice();
-  if (message) say.say(message, 'ok');
-  return [
-    say,
-    el('p', { class: 'field-help' }, [
-      badge(marathon.phase_word, PHASE_TONE[marathon.phase] || null),
-      el('span', { text: ` ${datesOf(marathon)} · ${marathon.source_word} · ` }),
-      el('a', { href: marathon.schedule_page, text: 'the schedule', rel: 'noreferrer', target: '_blank' }),
-      el('span', { text: ' · ' }),
-      readLine(marathon),
+function waitingStrip(rows) {
+  const waiting = rows.filter((one) => one.next_waiting);
+  if (!waiting.length) return null;
+  const count = waiting.length;
+  return el('p', { class: 'notice mx-line', 'data-tone': 'warn' }, [
+    el('span', { text: said(NEXT_WAITING, { count, s: count === 1 ? '' : 's', have: count === 1 ? 'has' : 'have' }) }),
+    ...waiting.flatMap((one, index) => [
+      index ? el('span', { text: ' · ' }) : null,
+      textAction(one.name, () => openMarathon(one.id, one.name)),
     ]),
-    moveBar(marathon, say),
-    eventCard(marathon, say),
-    nextCard(marathon, say),
-    runsCard(marathon, say),
-    pairingsCard(marathon, say),
-    await channelCard(marathon, say),
-  ];
-}
-
-async function openMarathon(marathonId, title, message = '') {
-  shown.id = String(marathonId);
-  if (wantedId() !== shown.id) {
-    history.replaceState(null, '', `${location.pathname}${location.search}#marathon-${shown.id}`);
-  }
-  openDrawer(title || `Marathon #${marathonId}`, sayNothing(GETTING_IT), { onClose: forgetHash });
-  try {
-    const marathon = await api(`/api/marathons/${encodeURIComponent(marathonId)}`);
-    openDrawer(marathon.name, await marathonDrawer(marathon, message), { onClose: forgetHash });
-  } catch (error) {
-    const line = sentenceFor(error);
-    openDrawer(title || `Marathon #${marathonId}`, [notice(line.text, line.tone)], { onClose: forgetHash });
-  }
+  ]);
 }
 
 function listSection(payload, feeds, say) {
@@ -782,33 +847,45 @@ function listSection(payload, feeds, say) {
     { label: 'Marathon', cell: (row) => textAction(row.name, () => openMarathon(row.id, row.name)) },
     { label: 'Dates', cell: (row) => datesOf(row) },
     { label: 'State', cell: (row) => badge(row.phase_word, PHASE_TONE[row.phase] || null) },
-    { label: 'Ours', cell: (row) => `${row.ours} of ${row.runs}` },
-    { label: 'Channel', cell: (row) => row.channel_login || (row.channel_gone ? 'gone' : '—') },
+    { label: `${BAF} runs`, cell: (row) => `${row.ours} of ${row.runs}` },
+    { label: 'Schedule', cell: (row) => el('span', {
+      class: 'cell-quiet mx-line',
+      'data-tone': row.last_fetch_ok === false ? 'warn' : undefined,
+      text: scheduleCell(row),
+    }) },
     { label: 'Event', cell: (row) => eventCell(row) },
-    { label: 'Read', cell: (row) => readLine(row) },
-    { label: 'Next up', cell: (row) => nextCell(row, say) },
   ], rows, { empty: NOTHING_YET });
-  const waiting = Number(payload.next_waiting || 0);
   list.body.append(...[
-    waiting ? notice(said(NEXT_WAITING, { count: waiting, s: waiting === 1 ? '' : 's', have: waiting === 1 ? 'has' : 'have' }), 'warn') : null,
     el('p', { class: 'field-help' }, [el('span', { text: 'Marathon posts are ' }), modeChip(payload.mode), el('span', { text: '.' })]),
     payload.mode === 'off' ? el('p', { class: 'field-help' }, boldParts(said(MODE_OFF, { mode: payload.mode }))) : null,
     payload.mode === 'shadow' ? el('p', { class: 'field-help' }, boldParts(MODE_SHADOW)) : null,
     say,
-    feedsCard(feeds, say),
-    card(null, [bar([add]), grid]),
+    card(null, [grid, bar([add])]),
+    waitingStrip(rows),
+    sourcesFoldout(feeds, say),
   ].filter(Boolean));
   return full(list.node);
 }
 
-/** The Events page's Marathons section: the same list, drawer and moves the Marathons page had. */
+async function readCadence() {
+  const specs = settingsNamespace(await settings().catch(() => ({})), 'marathon');
+  const held = (key) => {
+    const found = specs.find((one) => one.key === key);
+    return found ? (found.value ?? found.default ?? null) : null;
+  };
+  return { near: held('marathon_poll_minutes'), far: held('marathon_far_poll_hours') };
+}
+
+/** The Events page's Marathons section: the list, its drawer and the sources that feed it. */
 export async function marathonsSection({ reload, openEvent }) {
   refresh = reload;
   showEvent = openEvent;
-  const [payload, feeds] = await Promise.all([
+  const [payload, feeds, found] = await Promise.all([
     api('/api/marathons'),
     api('/api/marathons/feeds').catch((error) => ({ error: sentenceFor(error) })),
+    readCadence(),
   ]);
+  cadence = found;
   eventModeDefault = payload.event_mode_default || 'none';
   eventModes = Array.isArray(payload.event_modes) ? payload.event_modes : [];
   const say = sayAgain('marathons', notice());
@@ -816,8 +893,8 @@ export async function marathonsSection({ reload, openEvent }) {
   const wanted = wantedId();
   if (wanted && !deepLinked) {
     deepLinked = true;
-    const found = (payload.marathons || []).find((one) => String(one.id) === wanted);
-    openMarathon(wanted, found ? found.name : `Marathon #${wanted}`);
+    const one = (payload.marathons || []).find((row) => String(row.id) === wanted);
+    openMarathon(wanted, one ? one.name : `Marathon #${wanted}`);
   }
   return node;
 }

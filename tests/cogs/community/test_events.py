@@ -5386,7 +5386,7 @@ async def test_an_events_card_names_the_marathon_that_made_it(cog, bot, lead, db
     interaction = FakeInteraction(bot, lead)
     await events_cog.open_card(interaction, event_id)
 
-    assert "Marathon: **AGDQ 2027** — 0 run(s) of ours" in card_embed(interaction).description
+    assert "Marathon: **AGDQ 2027** — 0 BaF run(s)" in card_embed(interaction).description
 
 
 async def test_an_events_card_with_no_marathon_says_nothing_about_one(cog, bot, lead, db):

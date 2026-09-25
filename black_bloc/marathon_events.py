@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple
 
-from .marathon import MarathonMove, _cell, ours, people_of
+from .marathon import BAF, MarathonMove, _cell, ours, people_of
 from .settings_store import MARATHON_EVENT_MODES
 
 NONE = "none"
@@ -13,7 +13,7 @@ MODES = MARATHON_EVENT_MODES
 MODE_WORDS = {
     NONE: "No event",
     MARATHON: "One event for the marathon",
-    RUNS: "An event per run of ours",
+    RUNS: f"An event per {BAF} run",
     BOTH: "Both",
 }
 LEGACY_YES = ("yes", "y", "true", "on", "1")
@@ -34,8 +34,8 @@ MODE_SAME = "**{name}** already makes {words}, so nothing was changed."
 MODE_SENTENCES = {
     NONE: "no event",
     MARATHON: "one event for the whole marathon",
-    RUNS: "one event per run of ours, kept in step with the schedule",
-    BOTH: "one event for the marathon and one per run of ours",
+    RUNS: f"one event per {BAF} run, kept in step with the schedule",
+    BOTH: f"one event for the marathon and one per {BAF} run",
 }
 RUN_EVENTS_MADE = "{count} run event(s) made."
 RUN_EVENTS_CANCELLED = "{count} run event(s) called off."
@@ -43,7 +43,7 @@ RUN_EVENTS_KEPT = "{count} run event(s) left on the calendar."
 RUN_EVENT_LINE = "event **#{event_id}** — {status}"
 RUN_EVENT_MADE = "**{game}** has its own event now, **#{event_id}**."
 RUN_EVENT_ALREADY = "**{game}** already has event **#{event_id}**, so nothing was made."
-RUN_EVENT_NOT_OURS = "Nobody from here is on **{game}**, so it gets no event of its own."
+RUN_EVENT_NOT_OURS = "Nobody from " + BAF + " is on **{game}**, so it gets no event of its own."
 RUN_EVENT_NO_TIME = (
     "**{game}** has no time on the schedule yet, so there is nothing to date an event by."
 )

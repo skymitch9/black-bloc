@@ -2703,3 +2703,10 @@ body[data-show-was="1"] .preview-was { display: block; }
 /* Personality tones: the cookout sheet is twenty lines, so its box is tall enough to read. */
 .cookout-sheet .setrow[data-key="chat_cookout_voice"] textarea { min-height: 22em; }
 .tone-area { width: 100%; min-height: 6em; }
+
+/* ---- marathons: the drawer's Schedule card and the reading lines ----------- */
+.mx-line[data-tone="warn"] { color: var(--et-warn); }
+.mx-line .btn { vertical-align: middle; }
+.mx-poll { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mx-poll .input { width: 6em; }
+.mx-poll > span { color: var(--et-muted); font-size: var(--et-ui-xs); }

@@ -12,16 +12,17 @@ import {
   channelLabel,
   el,
   field,
+  foldout,
   idsIn,
   keepSaying,
   localWhen,
   nameNode,
-  namespaceSettings,
   notice,
   run,
   sayAgain,
   sayNothing,
   section,
+  settingsPanel,
   table,
   when,
   whenField,
@@ -42,9 +43,21 @@ const MOVE_BUTTON = 'Move to the forum';
 const MOVE_BODY = 'A post goes up in the events forum carrying the same card and the same buttons, '
   + 'the room is told where it went, and then the room is removed. The event is NOT called off, '
   + 'and the messages already in the room are not carried over — Discord cannot move those.';
+const QUEUE_TITLE = 'Events';
+const QUEUE_NOTE = 'Every event proposed here or in Discord, with the same lock and the same '
+  + 'allowed-transition check as the buttons there.';
+const MACHINERY_TITLE = 'Settings and logs';
+const MACHINERY_NOTE = 'How events and marathons behave, and what the bot did about them. All '
+  + 'shut until you open one.';
+const EVENTS_SETTINGS = 'Events';
+const EVENTS_SETTINGS_NOTE = 'Where proposals are reviewed, when an approved event is announced, '
+  + 'and whether a Discord scheduled event is made.';
+const MARATHON_SETTINGS = 'Marathons';
 const MARATHON_SETTINGS_NOTE = 'Whether marathon posts go out, where, how often a schedule is '
   + 'read, when the reminders go and which one pings, whether adding one makes an event, and '
   + 'every word the board, the reminders and the shoutouts say.';
+const LOG_TITLE = 'Log';
+const LOG_CHIPS = [{ feature: 'events', label: 'Events' }, { feature: 'marathon', label: 'Marathons' }];
 const NOT_RESENT = 'Saving does not rewrite an announcement that is already up or a Discord ' +
   'scheduled event that already exists; the answer says when that applies.';
 
@@ -259,9 +272,9 @@ function decide(row, say, forum) {
 
 /**
  * The one place the events forum is made from the website; the bot presses the same path.
- * `namespaceSettings` draws the `events_forum_channel_id` row but gives no per-row action
+ * `settingsPanel` draws the `events_forum_channel_id` row but gives no per-row action
  * slot, so this finds that row (by the `data-key` the shared code already stamps on it, in
- * the block `namespaceSettings('events')` returned) and appends the action beside it — shown
+ * the block `settingsFold('events')` returned) and appends the action beside it — shown
  * only while the key is unset, gone the moment Make the forum succeeds and the page reloads.
  */
 function forumMakeAction(settingsNode, forumId) {
@@ -312,11 +325,7 @@ async function load() {
     { label: '', cell: (row) => decide(row, say, forum) },
   ], rows, { empty: 'Nothing matches that.' });
 
-  const one = section(
-    'Queue',
-    'The same lock and the same allowed-transition check as the buttons in Discord.',
-    { count: rows.length },
-  );
+  const one = section(QUEUE_TITLE, QUEUE_NOTE, { count: rows.length, id: 'queue' });
   one.body.append(bar([field('Show', status)], { sticky: true }), queue, sayAgain('events', say));
 
   const nodes = [one.node];
@@ -330,16 +339,60 @@ async function load() {
 
   nodes.push(await marathonsSection({ reload: () => refresh(), openEvent }));
 
-  const eventsSettings = await namespaceSettings('events');
-  forumMakeAction(eventsSettings, forum.id);
+  document.getElementById('dash').replaceChildren(...nodes, await machinerySection(forum));
+}
 
-  document.getElementById('dash').replaceChildren(
-    ...nodes,
-    eventsSettings,
-    await namespaceSettings('marathon', { title: 'Marathon settings', note: MARATHON_SETTINGS_NOTE, onSaved: () => refresh() }),
-    await logsSection('events', { title: 'Events log' }),
-    await logsSection('marathon', { title: 'Marathons log' }),
-  );
+function unsectioned(node, id) {
+  const inner = node.querySelector('.sect-inner');
+  return el('div', { id }, inner ? [...inner.childNodes] : [node]);
+}
+
+function chipButton(label, pressed, onPick) {
+  return el('button', {
+    class: 'chip-filter',
+    type: 'button',
+    'aria-pressed': pressed ? 'true' : 'false',
+    text: label,
+    on: { click: onPick },
+  });
+}
+
+async function settingsFold(namespace, title, note, extra = {}) {
+  const specs = settingsNamespace(await settings(), namespace);
+  const panel = await settingsPanel(specs, {
+    where: title,
+    empty: `The bot registers no settings under ${namespace}.`,
+    ...extra,
+  });
+  return { panel, fold: foldout(title, [el('p', { class: 'field-help', text: note }), panel], { count: specs.length }) };
+}
+
+async function logFold() {
+  const holders = await Promise.all(LOG_CHIPS.map(async (one) => ({
+    feature: one.feature,
+    node: unsectioned(await logsSection(one.feature, { title: one.label }), `sect-logs-${one.feature}`),
+  })));
+  const chips = el('div', { class: 'chipbar' });
+  const state = { pick: LOG_CHIPS[0].feature };
+  const paint = () => {
+    chips.replaceChildren(...LOG_CHIPS.map((one) => chipButton(one.label, state.pick === one.feature, () => {
+      state.pick = one.feature;
+      paint();
+    })));
+    for (const holder of holders) holder.node.hidden = holder.feature !== state.pick;
+  };
+  paint();
+  return foldout(LOG_TITLE, [chips, ...holders.map((one) => one.node)]);
+}
+
+async function machinerySection(forum) {
+  const group = section(MACHINERY_TITLE, MACHINERY_NOTE, { id: 'settings' });
+  const events = await settingsFold('events', EVENTS_SETTINGS, EVENTS_SETTINGS_NOTE);
+  forumMakeAction(events.panel, forum.id);
+  const marathons = await settingsFold('marathon', MARATHON_SETTINGS, MARATHON_SETTINGS_NOTE, { onSaved: () => refresh() });
+  marathons.fold.id = 'sect-marathon-settings';
+  group.body.append(events.fold, marathons.fold, await logFold());
+  return group.node;
 }
 
 refresh = start({
