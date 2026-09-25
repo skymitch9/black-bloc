@@ -1,5 +1,7 @@
 # A spotlight is split from its ping — a channel pings always, never, or only during events
 
+> **2026-09-25 — the `marathon` source of a window is LIVE in code** (branch `marathon-schedule`, not merged): each marathon with a channel keeps ONE `source='marathon'`, `source_id=<marathon id>` window from its first run's start − `marathon_window_slack_hours` to its last run's end + slack, note = its name; pause, remove and a lost channel drop it. See [`marathon-schedule-design.md`](marathon-schedule-design.md).
+
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 10:5x Phoenix),
 > dispatched to Opus as branch `spotlight-ping-windows`** off `main` `a959ebfe` (v163 live).
 > **Last verified: 2026-09-25 10:5x** against `main` `a959ebfe`: `cogs/content/spotlight.py` — `announce_info` `:555`

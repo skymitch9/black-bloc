@@ -90,6 +90,22 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-25 (marathon schedules — request #12, branch `marathon-schedule` off `main` `08e03fbf`; design
+> `info/marathon-schedule-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration has
+> NOT run on the live database):** schema **59 → 60** (measured: `SCHEMA_VERSION`) — three NEW tables through the
+> `SCHEMA` bootstrap: `marathons` (one followed schedule: `source` `gdq`, `source_ref` the tracker event id,
+> `spotlight_id` the channel it airs on, derived `starts_at`/`ends_at`, `active`, `poll_minutes`, the board's
+> channel/message/pin, the read's health, `UNIQUE (guild_id, schedule_url)`), `marathon_runs` (`UNIQUE (marathon_id,
+> external_id)`, `people` JSON with each matched `user_id`, `state` upcoming/live/done/dropped, `reminders_sent`,
+> `shout_message_id`, `twitch_game`) and `marathon_people` (staff pairings, a partial unique index for every-schedule
+> rows) — migrate-before-deploy is automatic. Cogs **23 → 24** (`cogs/content/marathon.py`, a one-minute `ticker` through
+> the `Reconciler`), top-level commands **33 → 34** (`/marathon`, member-visible, hidden when `marathon_mode` is off),
+> log features **21 → 22** (`marathon`, its own Logs chip), settings groups **24 → 25** (`marathon`, the `/settings`
+> group select's 25th and last slot), registry keys **428 → 464** (35 `marathon_*` + `marathon_log_level`; mode ships
+> **shadow**). New modules `marathon.py` (pure) and `marathon_sources.py` (the GDQ reader). Routes **219 → 231**
+> (`/api/marathons` …, staff-gated), pages **22 → 23** (`marathons.html`; `check.mjs`: *23 pages, 231 routes*). It
+> writes `spotlight_ping_windows` rows with `source = 'marathon'`. ⚠️ The fact table below was NOT re-measured.
+>
 > **2026-09-25 (a spotlight split from its ping, branch `spotlight-ping-windows` off `main` `84f94347`; design
 > `info/spotlight-ping-windows-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the
 > migration has NOT run on the live database):** schema **58 → 59** (measured: `SCHEMA_VERSION`) —

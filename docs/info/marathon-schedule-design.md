@@ -1,5 +1,7 @@
 # Marathon schedules — our people on a marathon stream, read off the posted schedule, re-read every half hour
 
+> 🔨 **2026-09-25 — BUILT on branch `marathon-schedule` (GDQ reader only), NOT merged, NOT deployed.** Schema 60, cog 24, `/marathon`, page 23 `marathons.html`, 35 keys + `marathon_log_level`; 21 deviations, the three open calls answered and *What was NOT verified* at the foot. ⚠️ AGDQ 2027's schedule is not published yet (the tracker 404s its runs) and the runs route is `/events/<id>/runs/` — Deviations 1–2.
+>
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 11:xx Phoenix)
 > — dispatches to Opus as branch `marathon-schedule` AFTER `spotlight-ping-windows` merges** (it writes that
 > build's `spotlight_ping_windows` table and calls its `pings_now` gate). Member request **#12** on the Requests page.
@@ -251,8 +253,104 @@ first four are one dispatch and the last four another; the seam is the API.
 
 ## Deviations
 
-*(the build agent writes this)*
+*(written by the build agent, 2026-09-25, branch `marathon-schedule` off `main` `08e03fbf` — the brief named
+`8b76aafd`, which is on no branch; `git diff 8b76aafd 08e03fbf` is EMPTY, so the tree is the same. Schema **59 → 60**,
+registry keys **428 → 464**, cogs **23 → 24**, `TOP_LEVEL_NOW` **33 → 34**, log features **21 → 22**, pages **22 → 23**,
+routes **219 → 231**.)*
+
+1. ⚠️ **The runs route is `/api/v2/events/<id>/runs/`, not `/api/v2/runs/?event=<id>`.** Measured 2026-09-25 11:5x: the
+   tracker IGNORES `event=` (and `event_id=`, `event__id=`) on `/runs/` — `?event=74` answered `count: 6031` starting
+   at SGDQ 2011's *blaster master*, every event's runs. The nested route answers the one event (SGDQ 2026 id 66: 157
+   runs, `next: null`). The §E header's "verified" fetch was reading all of GDQ history. `marathon_sources.RUNS_URL`.
+2. ⚠️ **AGDQ 2027 has no published schedule yet.** Events 71–74 are `draft: true`; their runs route answers **404**
+   ("does not exist or you do not have permission"). So (a) the fixture is **SGDQ 2026** (id 66), trimmed to 11 runs
+   (orders 1–10 and 152, which carries the one YouTube-platform talent), not AGDQ 2027; and (b) **adding a marathon
+   whose runs 404 is ACCEPTED**, not refused: the event itself must resolve (`/events/<id>/`, or the short through
+   `/events/?short=`), the row is stored with `last_error` *"…has not published its schedule yet…"*, the read does
+   **not** count toward `fetch_failures`, and it is re-read at the far cadence until the runs appear. Refusing it would
+   make the owner's own example un-addable until GDQ publishes. §F's "refuses a URL that will not read" still holds for
+   a link whose EVENT does not exist.
+3. **`twitch_name` is the run's Twitch CATEGORY, not a login** (*Devil May Cry 5*, *Games Done Quick*; mostly blank).
+   Logins come only from a talent's `stream` (`twitch_login_from_url`). `twitch_name` is kept as `marathon_runs.
+   twitch_game` and is a title-match signal (next).
+4. **Signal 2 reads the session's GAME too:** a run matches when a name of it is in the title OR the stream's category
+   equals its `twitch_game`. During an event GDQ's title often names the event and not the game (see open call 3), so
+   the title alone would rarely fire. A runner's name in the title breaks ties, then the nearest scheduled time; runs
+   more than **12 h** from now are never candidates (`TITLE_REACH`), and a name shorter than 3 characters never matches.
+5. **Thirty-five keys, not thirty** (plus `marathon_log_level` = 36 in the namespace): the design's 30, `marathon_panel_
+   minutes`, and **four board state words** (`marathon_state_upcoming` / `_live` / `_done` / `_dropped`) — `{state}` is a
+   posted word, and every posted word is a key (owner rule). Defaults and help live in two tables in
+   `settings_store.py` (`MARATHON_SETTINGS`, `MARATHON_WORDS`), the `REVIEW_*` pattern.
+6. **The third consecutive failure is its own kind, `marathon.schedule_stale` (IMPORTANT)**; every `marathon.fetch_failed`
+   is ROUTINE. Importance is per kind in `logkinds`, and `notify=True` would ignore the level entirely.
+7. **`run_live` / `run_done` / `run_skipped` are logged for runs of OURS only.** A GDQ marathon is ~150 runs; logging
+   every one would bury the rows staff read. Runs nobody here is on still move state silently.
+8. **The board is pinned only in `on`.** A shadow copy in `#welcome-test` is not pinned. The pin helpers are the
+   marathon cog's own (`marathon.board_pinned` / `board_unpinned` / `*_failed`), not the spotlight's — those log
+   `golive.*` kinds keyed on a channel row a board may not have. The unpin reads the MESSAGE's pin (checklist 3).
+9. **The board is edited only when its text changed** (an in-memory copy of the last text sent, then a compare with the
+   message's content) — the follow runs every minute and an edit per minute would be noise and rate-limit bait.
+10. **Records first (checklist 12):** a reminder's mark is written to `reminders_sent` BEFORE it is posted, so a failed
+    post is one `marathon.reminder_failed` row and is not retried; the state flips to `live` before the shoutout, and
+    `shout_message_id` is written after the post succeeds. A crash between the two leaves a live run with no shout — a
+    restart posts nothing (only the flip shouts) and **Shout it now** recovers it. Not literally "one transaction".
+11. **When several marks are due at once** (a run moved earlier), only the LATEST (smallest) posts; the others are
+    `reminder_skipped` — two reminders in one minute say the same thing twice.
+12. **Aged-out runs:** an `upcoming` run whose whole slot plus the grace has passed (the bot was down) goes `done`
+    with no shout; if it is ours, `run_skipped` (checklist 31). `done` runs are never marked `dropped` — history.
+13. **`marathon_people` has a partial unique index** for `marathon_id IS NULL` (every-schedule pairings): SQLite treats
+    NULLs as distinct, so the three-column `UNIQUE` alone would allow the same every-schedule name twice.
+14. **No `placeSettings` drawer.** The marathon keys are their own namespace, not golive/pings/youtube, so they are
+    not on the Go-live page; they appear as a **Marathons** group on `settings.html` (and the Marathons page's own
+    Settings foldout, the raid-train pattern). `golive-join.test.mjs` is untouched and still derives its keys (KI-36).
+15. **`/marathon` hides when `marathon_mode` is off** (`HIDDEN_WHEN_OFF`, 16 → 17 rows), like every other feature
+    command; the Settings panel's *turn it back on* list names it.
+16. **The panel's Add modal takes the channel's Twitch login** (a modal cannot hold a select); an unknown login is
+    refused in words. The panel pairs for *this schedule* only; the page offers *every schedule* too.
+17. **Ours next / My runs skip far-off and over marathons** and are capped at 5 / 10 lines.
+18. **A marathon's own read gap (`poll_minutes`) is on the PATCH route only**, not on the page or the panel — nothing
+    in §F drew a control for it. ⚠️ That is a checklist-33 gap (one door); the next pass should add it to the drawer.
+19. ⚠️ **`done` is terminal for a run.** Staff can mark a run done (page) and can shout a live or upcoming one, but
+    nothing moves a `done` run back. The owner's *never a terminal state staff cannot leave* rule says there should be;
+    the design named no move. Flagged, not built.
+20. **No guide row:** `tests/test_guides.py` guards no guide per command. `guides.FEATURE_PATHS` gained a `marathon`
+    entry so a release naming these files flags the right guides.
+21. **Sweep rows are lettered `MS-a` … `MS-f`**, the convention since `SD`.
+
+## Open calls, answered
+
+1. **Yes — the schedule page's id IS the tracker event id.** `GET https://gamesdonequick.com/schedule/74` answers a page
+   titled *Awesome Games Done Quick 2027 Schedule*; `/schedule/66` is *Summer Games Done Quick 2026 Schedule*;
+   `/api/v2/events/74/` is `AGDQ2027`. `read_url` takes the number as-is.
+2. **(GDQ half only.)** A runner's Twitch login is `runners[].stream` (`platform: TWITCH` on 639 of the 640 talent slots
+   in SGDQ 2026; one `YOUTUBE`). Some talent have no stream at all (*Interview Crew*, *Palix*) — those need a pairing,
+   which is why *Who is who* exists. Measured with the bot's own `ScheduleClient` from the build machine: 157 runs, 587
+   people with a login.
+3. **Built to read all three plus the category.** The live title itself was **NOT read** — the Twitch channel page is
+   rendered by script and its HTML carries no current title; no API key was used. What the page DID carry, as recent
+   VOD names, shows both shapes: between events a game-first title (*"Elden Ring - Bingo ft. @blanxz vs.
+   @NuclearPastaTom on Crosshair - !crosshair !schedule"*), and during an event an event-first one with no game at all
+   (*"[Rerun] Flame Fatales 2026 benefiting Malala Fund - Day 5 !schedule !donate"*). Hence deviation 4: the stream's
+   category (`game`) against the run's `twitch_name` is the signal most likely to hit during AGDQ, with the grace as
+   the fallback.
 
 ## What was NOT verified
 
-*(the build agent writes this)*
+- ⚠️ **Nothing met Discord.** The board, reminders, shoutouts, pins, the `/marathon` panel, its modal, selects and
+  confirm were exercised only against the suite's fakes (`FakeChannel`, `FakeInteraction`) and `build_*` calls; Discord's
+  rendering of `<t:…>` stamps, component-row limits and the 2,000-character board cap were not.
+- ⚠️ **No AGDQ 2027 run was ever read** — it is unpublished. The parser is proven on SGDQ 2026 (fixture + one live read
+  through `ScheduleClient` from the build machine, 2026-09-25 12:35). **Not from Fly** (KI-30's datacenter wall was not
+  seen on this JSON API from home; untested from a datacenter address).
+- ⚠️ **The title match was never shown a real live GDQ title** (open call 3). Its rules are pure-tested on invented titles.
+- **The page was rendered once in a browser** against the mock on port 8793: the list, the AGDQ 2027 drawer (runs,
+  *Who is who*, the channel card with its window line) and the *Pair a runner* form opened with **no console errors**;
+  two defects found there were fixed (`last read [object Object]`, a stray `null`). Nothing was submitted from the
+  browser; the writes were checked by `check.mjs` and the route tests.
+- **Real time:** the minute tick, the 30-minute cadence and the 90-minute grace were driven by an injected clock, never
+  waited out; the loop's `before_loop` / `error` restart path is covered only by the shared `test_loops` guards.
+- **Schema 60** was proven on a fresh file and a file downgraded to 59, not on the live volume.
+- **Shadow** was tested against the fake shadow channel, not `#welcome-test`.
+- **Cost:** one tracker GET per 500 runs per read (AGDQ ≈ 150 runs → one GET every 30 min while near); each minute's
+  follow is a handful of SELECTs per marathon and, only when the board text changed, one `fetch_message` + edit. Not
+  measured.
