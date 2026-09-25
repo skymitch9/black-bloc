@@ -83,6 +83,7 @@ MODE_SHADOW = "shadow"
 SOURCE = "spotlight"
 EXTEND_DAYS = 7
 SELECT_CAP = 25
+WINDOWS_SHOWN = 5
 NO_CHANNEL = "no_channel_configured"
 NOT_VISIBLE = "channel_not_visible"
 TEST_MODE = "test_mode"
@@ -2003,7 +2004,7 @@ async def build_spotlight(
         if words.ping_mode_of(chosen) == words.PING_EVENTS:
             lines += [
                 words.PANEL_WINDOW.format(line=words.window_line(one, None, tz_name))
-                for one in windows[:SELECT_CAP]
+                for one in windows[:WINDOWS_SHOWN]
             ]
     if chosen is not None:
         live = int(chosen["id"]) in open_by_id
