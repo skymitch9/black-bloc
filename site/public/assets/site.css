@@ -1804,6 +1804,19 @@ dialog.drawer::backdrop { background: var(--bb-scrim); }
 .trigchip-x:hover { color: var(--et-danger); }
 .trigchip-x:focus-visible { outline: var(--et-focus-ring); outline-offset: 2px; }
 
+/* A sub-section inside a drawer card (the Spotlight card's Dates): a hairline and a
+   small label, not a second card, so it reads as part of the thing above it. */
+.card-sub { display: grid; gap: 8px; padding-top: 10px; border-top: var(--et-border-w) solid var(--et-hairline); }
+.card-sub > h4 {
+  margin: 0;
+  color: var(--et-muted);
+  font-family: var(--et-font-label);
+  font-size: var(--et-ui-xs);
+  font-weight: var(--et-weight-medium);
+  letter-spacing: var(--et-label-tracking);
+  text-transform: var(--et-label-transform);
+}
+
 .chatblock { margin-top: 12px; }
 .chatblock > h4 {
   margin: 0 0 6px;

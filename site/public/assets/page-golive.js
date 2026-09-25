@@ -222,7 +222,6 @@ const SPOTLIGHT_MODE_HELP = 'off, shadow (rehearse where shadow_channel_id point
   + 'go-live channel.';
 const SPOTLIGHT_NOTE = 'Watched by name. No member here is behind them.';
 const SPOTLIGHT_MEMBER_NOTE = 'Not spotlighted. Spotlighting a channel pins its announcement while it streams and reminds people every few hours — for a marathon, say. A linked Twitch account is preferred but not needed: the form takes any channel name.';
-const SPOTLIGHT_KEPT = 'Kept for ever \u2014 no purge takes it off the list.';
 const SPOTLIGHT_ADD_TITLE = 'Spotlight a channel';
 const SPOTLIGHT_ADD_HELP = 'For an org channel like GamesDoneQuick, or a marathon nobody here '
   + 'runs. Black Bloc announces it in the go-live channel whenever it goes live, reminds people '
@@ -265,9 +264,6 @@ const WINDOW_OPEN = 'open now';
 
 const SPOTLIGHT_ON = 'Spotlight on';
 const SPOTLIGHT_OFF = 'Spotlight off';
-const SPOTLIT_STATE = 'Spotlighted \u2014 pinned while it streams, reminded every {hours} h.';
-const NOT_SPOTLIT_STATE = 'Announced like any other stream \u2014 no pin, no reminders, and no '
-  + 'purge takes it off the list.';
 const CHANNEL_OPTED_OUT_STATE = 'Opted out \u2014 nothing of its is announced, whatever the '
   + 'spotlight says. The row, its ping role and its YouTube link all stay.';
 const CHANNEL_OPT_OUT = 'Opt out of announcements';
@@ -280,8 +276,6 @@ const CHANNEL_REMOVE = 'Remove this channel';
 const CHANNEL_REMOVE_ASK = 'Removes {name} from the list, its spotlight, its YouTube link and '
   + 'its ping role (per pings_fan_role_delete). Nothing in Discord is deleted except the role '
   + 'if that setting says so.';
-const CHANNEL_KEEP_MOVES = 'The kept / expires / bump / pin moves are the spotlight\u2019s, so '
-  + 'they show while it is on.';
 
 function platformPill(platform) {
   return el('span', {
@@ -811,11 +805,9 @@ function announceMoves(row, say) {
 
 function spotlightMoves(row, say) {
   const one = row.spotlight;
-  const after = (done) => {
+  const after = async (done) => {
     if (!done.ok) return;
-    keepSaying('golive.spotlight', say);
-    closeDrawer();
-    refresh();
+    await redrawRow(row, say);
   };
   const patch = (body, fallback) => run(
     say,
@@ -878,11 +870,10 @@ function datesCard(row, say) {
       (found) => found?.message || 'Dates saved.',
     );
     if (!done.ok) return;
-    keepSaying('golive.spotlight', say);
-    closeDrawer();
-    refresh();
+    await redrawRow(row, say);
   }, { tone: 'quiet' });
-  return card(SPOTLIGHT_DATES, [
+  return el('div', { class: 'card-sub' }, [
+    el('h4', { text: SPOTLIGHT_DATES }),
     el('span', { class: 'cell-quiet', text: one.scheduled ? SPOTLIGHT_SCHEDULED_STATE : (one.range || one.until) }),
     el('div', { class: 'formrow' }, [starts.node, ends.node]),
     el('div', { class: 'bar' }, [go]),
@@ -1063,22 +1054,15 @@ function channelRemoveMoves(row, say) {
   }, { tone: 'danger' })];
 }
 
-function spotlightSaid(row) {
+/** Only facts a person cannot see elsewhere in the card: the note, the event it was set up for. */
+function spotlightQuiet(row) {
   const one = row.spotlight;
   const bits = [];
-  if (one.announce === false) bits.push(CHANNEL_OPTED_OUT_STATE);
-  else if (one.spotlight === false) bits.push(NOT_SPOTLIT_STATE);
-  else bits.push(SPOTLIT_STATE.replace('{hours}', String(one.bump_hours || 4)));
-  if (one.spotlight !== false) {
-    if (one.scheduled) bits.push(SPOTLIGHT_SCHEDULED_STATE);
-    bits.push(one.kept ? SPOTLIGHT_KEPT : `Runs out ${when(one.expires_at)}.`);
-    if (one.starts_at) bits.push(`Starts ${when(one.starts_at)}.`);
-    bits.push(CHANNEL_KEEP_MOVES);
-  }
   if (one.event_id) bits.push(`Set up for event #${one.event_id}.`);
   if (one.note) bits.push(one.note);
-  return el('span', { text: bits.join(' ') });
+  return bits.length ? el('span', { class: 'cell-quiet', text: bits.join(' ') }) : null;
 }
+
 
 function announcedSaidFor(row) {
   return el('span', {
@@ -1131,8 +1115,11 @@ async function rowPanel(row, say) {
       ])
       : muted(NOT_LINKED);
     return [
-      panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)),
-      datesCard(row, say),
+      card('Spotlight', [
+        spotlightQuiet(row),
+        el('div', { class: 'bar' }, spotlightMoves(row, say)),
+        datesCard(row, say),
+      ].filter(Boolean)),
       pingsCard(row, say),
       panelGroup('Twitch', twitchSaid, twitchMoves(row, say).slice(0, 1)),
       panelGroup('YouTube', channelYoutube, channelYoutubeMoves(row, say)),
@@ -1145,8 +1132,11 @@ async function rowPanel(row, say) {
   return [
     ...(row.spotlight
       ? [
-        panelGroup('Spotlight', spotlightSaid(row), spotlightMoves(row, say)),
-        datesCard(row, say),
+        card('Spotlight', [
+          spotlightQuiet(row),
+          el('div', { class: 'bar' }, spotlightMoves(row, say)),
+          datesCard(row, say),
+        ].filter(Boolean)),
         pingsCard(row, say),
       ]
       // Owner, 2026-09-21: a link is PREFERRED but never required to spotlight, so the move
