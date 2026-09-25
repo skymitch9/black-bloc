@@ -38,6 +38,8 @@ from ...events import TITLE_LIMIT as EVENT_TITLE_LIMIT
 from ...golive import now_iso, parse_ts, ping_prefix
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
+from ...marathon_channels import HELD_REFUSAL, OPTED_OUT_REFUSAL, takes_marathons
+from ...marathon_channels import channel_word as channel_word_of
 from ...marathon_sources import (
     GDQ,
     ScheduleClient,
@@ -152,6 +154,8 @@ EVENT_REFUSED_CODE = "event_refused"
 NO_EVENT_CODE = "no_event"
 MARATHON_REMOVED = "marathon_removed"
 EVENT_KEPT_IN_STEP = (EVENT_PENDING, EVENT_APPROVED)
+OPTED_OUT_CODE = "channel_opted_out"
+HELD_CODE = "held_by_channel"
 
 
 def _cell(row: Any, key: str, fallback: Any = None) -> Any:
@@ -305,6 +309,8 @@ MARATHON_COLUMNS = {
     "event_id",
     "event_wanted",
     "feed_id",
+    "event_mode",
+    "held_by_channel",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -327,6 +333,7 @@ RUN_COLUMNS = {
     "shout_channel_id",
     "reminders_sent",
     "last_seen_at",
+    "event_id",
 }
 
 
@@ -414,6 +421,21 @@ async def marathon_windows(db: Any, marathon_id: int) -> list[Any]:
 # --- small reads ------------------------------------------------------------------------------
 
 
+async def opted_out_channel(db: Any, spotlight_id: Any) -> Any:
+    """The channel row when it is opted out of marathons; None when it takes them or is gone."""
+    if spotlight_id in (None, "", 0, "0"):
+        return None
+    try:
+        row = await channel_by_id(db, int(spotlight_id))
+    except (TypeError, ValueError):
+        return None
+    return row if row is not None and not takes_marathons(row) else None
+
+
+def opted_out_said(row: Any) -> str:
+    return OPTED_OUT_REFUSAL.format(channel=channel_word_of(row))
+
+
 def words_for(bot: Any, guild_id: int) -> dict[str, str]:
     return {key: str(bot.store.get(guild_id, key)) for key in MARATHON_WORDS}
 
@@ -480,6 +502,8 @@ async def create_marathon(
             return refusal(
                 mt.NO_SUCH_CHANNEL.format(login=str(spotlight_id)[:40]), NO_SUCH_CHANNEL_CODE, 404
             )
+        if not takes_marathons(channel):
+            return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
     cog = cog_of(bot)
     source, ref = found
     try:
@@ -549,9 +573,19 @@ async def refresh_marathon(bot: Any, guild: Any, marathon: Any) -> Outcome:
 async def set_active(
     bot: Any, guild: Any, actor: Any, marathon: Any, active: bool, *, via: str = VIA_DISCORD
 ) -> Outcome:
+    if active and _cell(marathon, "held_by_channel"):
+        held = await opted_out_channel(bot.db, _cell(marathon, "spotlight_id"))
+        if held is not None:
+            return refusal(
+                HELD_REFUSAL.format(name=marathon["name"], channel=channel_word_of(held)),
+                HELD_CODE,
+                409,
+            )
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
-        await update_marathon(bot.db, marathon["id"], active=1 if active else 0)
+        await update_marathon(
+            bot.db, marathon["id"], active=1 if active else 0, held_by_channel=0
+        )
         fresh = await get_marathon(bot.db, guild.id, marathon["id"])
         await cog.sync_window(guild, fresh)
     await log_action(
@@ -575,6 +609,8 @@ async def set_channel(
             return refusal(
                 mt.NO_SUCH_CHANNEL.format(login=str(spotlight_id)[:40]), NO_SUCH_CHANNEL_CODE, 404
             )
+        if not takes_marathons(channel):
+            return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
         await update_marathon(bot.db, marathon["id"], spotlight_id=_cell(channel, "id"))

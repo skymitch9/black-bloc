@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 63
+SCHEMA_VERSION = 64
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1186,7 +1186,19 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "event_id", "INTEGER"),
     ("marathons", "event_wanted", "INTEGER NOT NULL DEFAULT 0"),
     ("marathons", "feed_id", "INTEGER"),
+    ("marathons", "event_mode", "TEXT NOT NULL DEFAULT 'none'"),
+    ("marathons", "held_by_channel", "INTEGER NOT NULL DEFAULT 0"),
+    ("marathon_runs", "event_id", "INTEGER"),
+    ("marathon_feeds", "event_mode", "TEXT"),
+    ("marathon_feeds", "held_by_channel", "INTEGER NOT NULL DEFAULT 0"),
+    ("spotlight_channels", "marathons", "INTEGER NOT NULL DEFAULT 1"),
 )
+
+CARRIED_EVENT_WISH = (
+    "UPDATE marathons SET event_mode = 'marathon' "
+    "WHERE event_id IS NOT NULL OR event_wanted = 1"
+)
+BACKFILLS: dict[tuple[str, str], str] = {("marathons", "event_mode"): CARRIED_EVENT_WISH}
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")
 OPEN_THE_RETIRED_STATUSES = (
@@ -1356,6 +1368,9 @@ class Database:
                     f"ALTER TABLE {table} ADD COLUMN {column} {declaration}"
                 )
                 log.info("database: added %s.%s", table, column)
+                backfill = BACKFILLS.get((table, column))
+                if backfill is not None:
+                    await self.conn.execute(backfill)
 
     async def close(self) -> None:
         if self._conn is not None:

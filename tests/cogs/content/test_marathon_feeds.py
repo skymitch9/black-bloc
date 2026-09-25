@@ -491,6 +491,7 @@ async def test_the_feeds_panel_lists_feeds_and_a_feed_card_draws_only_valid_move
     cog,
 ):
     await seeded(bot, cog)
+    await a_channel(bot, "speedstuff4charity", "Speed Stuff 4 Charity")
     await cog.tick_once()
     embed, view = await feeds.feeds_card(bot, bot.guild)
     assert "**GDQ** · GDQ tracker · GamesDoneQuick · adds" in embed.description

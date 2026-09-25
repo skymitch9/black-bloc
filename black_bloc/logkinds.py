@@ -398,6 +398,7 @@ ROUTINE: frozenset[str] = frozenset(
         "golive.spotlight_started",
         "golive.spotlight_unpinned",
         "golive.spotlight_updated",
+        "golive.channel_marathons_set",
         "golive.spotlight_window_added",
         "golive.spotlight_window_purged",
         "golive.spotlight_window_removed",

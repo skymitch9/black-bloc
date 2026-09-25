@@ -1064,6 +1064,47 @@ function spotlightQuiet(row) {
 }
 
 
+const MARATHONS_CHOICES = [{ value: 'on', label: 'Marathons: on' }, { value: 'off', label: 'off' }];
+const MARATHONS_OFF_SAID = 'Marathons: off — no feed checks for it, nothing can be added on it, and its marathons are paused until it is turned back on.';
+const NO_MARATHONS = 'no marathons';
+
+function takesMarathons(one) {
+  return Boolean(one) && one.marathons !== false;
+}
+
+function channelMarathonsMoves(row, say) {
+  const one = row.spotlight;
+  const chips = segment(MARATHONS_CHOICES, takesMarathons(one) ? 'on' : 'off', {
+    onChange: async () => {
+      const wanted = chips.readValue() === 'on';
+      if (wanted === takesMarathons(one)) return;
+      const done = await run(
+        say,
+        () => send(`/api/golive/spotlight/${one.id}`, 'PATCH', { marathons: wanted }),
+        (found) => found?.message || (wanted ? 'Marathons on.' : 'Marathons off.'),
+      );
+      if (!done.ok) {
+        chips.setValue(takesMarathons(one) ? 'on' : 'off');
+        return;
+      }
+      keepSaying('golive.spotlight', say);
+      closeDrawer();
+      refresh();
+    },
+  });
+  return [chips];
+}
+
+function marathonsSuffix(one) {
+  return takesMarathons(one) ? '' : ` · ${NO_MARATHONS}`;
+}
+
+function channelAnnouncementsSaid(row) {
+  const said = announcedSaidFor(row);
+  if (takesMarathons(row.spotlight)) return said;
+  return el('span', {}, [said, el('span', { class: 'cell-quiet', text: ` ${MARATHONS_OFF_SAID}` })]);
+}
+
 function announcedSaidFor(row) {
   return el('span', {
     text: row.spotlight.announce === false
@@ -1124,7 +1165,7 @@ async function rowPanel(row, say) {
       panelGroup('Twitch', twitchSaid, twitchMoves(row, say).slice(0, 1)),
       panelGroup('YouTube', channelYoutube, channelYoutubeMoves(row, say)),
       panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
-      panelGroup('Announcements', announcedSaidFor(row), channelAnnounceMoves(row, say)),
+      panelGroup('Announcements', channelAnnouncementsSaid(row), [...channelAnnounceMoves(row, say), ...channelMarathonsMoves(row, say)]),
       panelGroup('Remove', el('span', { class: 'cell-quiet', text: NO_MEMBER }), channelRemoveMoves(row, say)),
       say,
     ];
@@ -1167,11 +1208,13 @@ function announcedCell(row) {
     return el('span', { class: 'cell-quiet' }, [
       el('span', {
         text: (row.spotlight.announced || row.spotlight.range || row.spotlight.until)
-          + pingSuffix(row.spotlight),
+          + pingSuffix(row.spotlight)
+          + (spotlightOnly(row) ? marathonsSuffix(row.spotlight) : ''),
       }),
       row.spotlight.scheduled ? badge(SPOTLIGHT_SCHEDULED, 'warn') : null,
     ].filter(Boolean));
   }
+  if (spotlightOnly(row) && !takesMarathons(row.spotlight)) return muted(`${READY} · ${NO_MARATHONS}`);
   return muted(READY);
 }
 

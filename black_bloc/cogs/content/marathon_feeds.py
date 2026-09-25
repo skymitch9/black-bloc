@@ -14,6 +14,7 @@ from ...actionlog import log_action
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, kind_via
+from ...marathon_channels import takes_marathons
 from ...marathon_sources import HORARO_SLUG, ScheduleError
 from ...panels import (
     KEEP_IT,
@@ -36,8 +37,10 @@ from ...settings_store import (
     MARATHON_FEEDS_KEY,
 )
 from .marathon import (
+    HELD_CODE,
     MODE_OFF,
     MODE_ON,
+    OPTED_OUT_CODE,
     UNREADABLE,
     MarathonPanel,
     actor_id,
@@ -48,6 +51,8 @@ from .marathon import (
     minutes_for,
     mode_of,
     open_root,
+    opted_out_channel,
+    opted_out_said,
     remove_marathon,
     render,
     said_default,
@@ -96,6 +101,8 @@ FEED_COLUMNS = {
     "checks_failed",
     "suggested",
     "ignored",
+    "event_mode",
+    "held_by_channel",
 }
 
 
@@ -486,7 +493,10 @@ async def tick_feeds(cog: Any, guild: Any) -> None:
     if not bot.store.get(guild.id, MARATHON_FEEDS_KEY):
         return
     if int(guild.id) not in cog.feeds_seeded:
+        from .marathon_channels import seed_opt_outs
+
         cog.feeds_seeded.add(int(guild.id))
+        await seed_opt_outs(bot, guild)
         await seed_feeds(bot, guild)
     hours = hours_of(bot, guild.id)
     for row in await list_feeds(bot.db, guild.id):
@@ -507,7 +517,7 @@ async def seed_feeds(bot: Any, guild: Any) -> list[str]:
         if await is_seeded(bot.db, guild.id, seed.login):
             continue
         channel = await channel_by_login_in(bot.db, guild.id, seed.login)
-        if channel is None:
+        if channel is None or not takes_marathons(channel):
             continue
         if await feed_by_channel(bot.db, guild.id, channel["id"]) is None:
             try:
@@ -555,6 +565,8 @@ async def create_feed(
             channel = None
     if channel is None or int(channel["guild_id"]) != int(guild.id):
         return refusal(mf.NO_CHANNEL, NO_CHANNEL_CODE, 404)
+    if not takes_marathons(channel):
+        return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
     existing = await feed_by_channel(bot.db, guild.id, channel["id"])
     if existing is not None:
         return refusal(
@@ -702,6 +714,8 @@ async def set_feed(
             channel = await channel_by_id(bot.db, int(spotlight_id))
             if channel is None or int(channel["guild_id"]) != int(guild.id):
                 return refusal(mf.NO_CHANNEL, NO_CHANNEL_CODE, 404)
+            if not takes_marathons(channel):
+                return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
             other = await feed_by_channel(bot.db, guild.id, channel["id"])
             if other is not None:
                 return refusal(
@@ -719,7 +733,14 @@ async def set_feed(
             )
             said.append(mf.FEED_MOVED.format(name=fresh["name"], channel=channel_word(channel)))
         if active is not None and bool(active) != bool(fresh["active"]):
-            await update_feed(bot.db, fresh["id"], active=1 if active else 0)
+            held = await opted_out_channel(bot.db, fresh["spotlight_id"]) if active else None
+            if held is not None:
+                return refusal(
+                    mf.FEED_HELD.format(name=fresh["name"], channel=channel_word(held)),
+                    HELD_CODE,
+                    409,
+                )
+            await update_feed(bot.db, fresh["id"], active=1 if active else 0, held_by_channel=0)
             await log_action(
                 bot,
                 guild,
@@ -1021,7 +1042,11 @@ async def feeds_card(bot: Any, guild: Any) -> tuple[Any, Any]:
 
 async def free_channels(bot: Any, guild: Any) -> list[Any]:
     taken = {int(one["spotlight_id"]) for one in await list_feeds(bot.db, guild.id)}
-    return [row for row in await channel_rows(bot.db, guild.id) if int(row["id"]) not in taken]
+    return [
+        row
+        for row in await channel_rows(bot.db, guild.id)
+        if int(row["id"]) not in taken and takes_marathons(row)
+    ]
 
 
 async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:

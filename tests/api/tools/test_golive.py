@@ -598,6 +598,26 @@ async def test_a_channel_can_be_opted_out_of_announcements_and_back_in(client, s
     assert back["announce"] is True and "opted back in" in back["message"]
 
 
+async def test_a_channel_can_be_opted_out_of_marathons_and_back_in_with_one_row_each(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    made = client.post("/api/golive/spotlight", json={"twitch_login": "esamarathon"}).json()
+    assert made["marathons"] is True
+
+    out = client.patch(f"/api/golive/spotlight/{made['id']}", json={"marathons": False}).json()
+
+    assert out["marathons"] is False and "opted out of marathons" in out["message"]
+    cur = await web.db.conn.execute("SELECT kind, details FROM action_log ORDER BY id")
+    rows = [(row["kind"], row["details"]) for row in await cur.fetchall()]
+    kinds = [kind for kind, _ in rows]
+    assert kinds.count("web.golive.channel_marathons_set") == 1
+    assert "web.golive.spotlight_updated" not in kinds
+
+    back = client.patch(f"/api/golive/spotlight/{made['id']}", json={"marathons": True}).json()
+    assert back["marathons"] is True and "takes marathons again" in back["message"]
+
+
 async def test_opting_a_live_channel_out_from_the_site_ends_the_open_session(
     client, sign_in, web, wf
 ):

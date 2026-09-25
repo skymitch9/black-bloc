@@ -87,6 +87,10 @@ FEED_ADDED = (
 )
 FEED_REMOVED = "**{name}** is gone. The marathons it added stay on the list."
 FEED_PAUSED = "**{name}** is paused — it checks nothing until it is resumed."
+FEED_HELD = (
+    "**{name}** is paused because **{channel}** is opted out of marathons — turn marathons back "
+    "on for the channel first, so nothing was changed."
+)
 FEED_RESUMED = "**{name}** checks again."
 FEED_ACTION_SET = "**{name}** now {action} every new event it finds."
 FEED_RENAMED = "The feed is called **{name}** now."

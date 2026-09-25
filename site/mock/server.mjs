@@ -1378,7 +1378,7 @@ function seedState() {
     // absent, exactly as the sweep leaves it.
     spotlights: [
       { id: 1, twitch_login: 'gamesdonequick', display_name: 'GamesDoneQuick', note: "the owner's marathon channel", added_by: STAFF.id, added_at: minutesAgo(40000), starts_at: null, expires_at: null, bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: 'UCI3DTtB-a3fJPjKtQ5kYHfA', youtube_handle: '@GamesDoneQuick', ping_mode: 'events' },
-      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), starts_at: minutesAgo(2000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2, spotlight: true, announce: false, youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ', youtube_handle: '@esamarathon', ping_mode: 'always' },
+      { id: 2, twitch_login: 'esamarathon', display_name: 'ESA Marathon', note: 'summer marathon', added_by: STAFF.id, added_at: minutesAgo(3000), starts_at: minutesAgo(2000), expires_at: daysAhead(6), bump_hours: 6, pin: true, event_id: 2, spotlight: true, announce: false, youtube_channel_id: 'UC3Oe-jfrIqEGygxYBYyN6jQ', youtube_handle: '@esamarathon', ping_mode: 'always', marathons: false },
       { id: 3, twitch_login: 'frostfatales', display_name: 'Frost Fatales', note: null, added_by: STAFF.id, added_at: minutesAgo(20000), starts_at: null, expires_at: daysAhead(30), bump_hours: null, pin: false, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null },
       { id: 4, twitch_login: 'rpglimitbreak', display_name: 'RPG Limit Break', note: null, added_by: STAFF.id, added_at: minutesAgo(1200), starts_at: null, expires_at: null, bump_hours: null, pin: false, event_id: null, spotlight: false, announce: false, youtube_channel_id: null, youtube_handle: null },
       // The owner's ask, 2026-09-22: a marathon set up days in advance. Its start has NOT
@@ -4525,6 +4525,7 @@ function spotlightRow(row) {
     spotlight: row.spotlight !== false,
     announce: row.announce !== false,
     opted_out: row.announce === false,
+    marathons: row.marathons !== false,
     youtube_channel_id: row.youtube_channel_id || null,
     youtube_handle: row.youtube_handle || null,
     youtube_url: row.youtube_channel_id ? `https://www.youtube.com/channel/${row.youtube_channel_id}` : null,
@@ -4778,6 +4779,56 @@ route('POST', '/api/golive/spotlight', async (context) => {
   };
 });
 
+const CHANNEL_MARATHONS_SAME = '**{login}** already {state}, so nothing was changed.';
+const CHANNEL_MARATHONS_ON = '**{login}** takes marathons again — a feed can be added for it, and {count} marathon(s) paused when it was opted out are read again.';
+const CHANNEL_MARATHONS_OFF = '**{login}** is opted out of marathons — no feed checks for it, nothing can be added on it, and {count} marathon(s) on it are paused until it is turned back on.';
+const CHANNEL_OPTED_OUT = '**{channel}** is opted out of marathons — turn it on in its row first, so nothing was changed.';
+
+function channelTakesMarathons(row) {
+  return Boolean(row) && row.marathons !== false;
+}
+
+function refuseOptedOutChannel(spotlightId) {
+  const channel = spotlightId ? state.golive.spotlights.find((one) => one.id === Number(spotlightId)) : null;
+  if (channel && !channelTakesMarathons(channel)) {
+    throw new Refused(409, 'channel_opted_out', CHANNEL_OPTED_OUT.replace('{channel}', channel.display_name || channel.twitch_login));
+  }
+}
+
+function channelMarathonsSet(row, on) {
+  const was = channelTakesMarathons(row);
+  if (was === on) {
+    return CHANNEL_MARATHONS_SAME.replace('{login}', row.twitch_login).replace('{state}', was ? 'takes marathons' : 'is opted out of marathons');
+  }
+  row.marathons = on;
+  logAction('web.golive.channel_marathons_set', { details: { spotlight_id: row.id, login: row.twitch_login, from: was, to: on, via: 'website' } });
+  let count = 0;
+  const feed = state.marathonFeeds.find((one) => one.spotlight_id === row.id);
+  if (feed && !on && feed.active) {
+    feed.active = false;
+    feed.held_by_channel = true;
+    logAction('marathon.feed_paused', { details: { feed_id: feed.id, because: 'channel_opted_out', automatic: true } });
+  } else if (feed && on && feed.held_by_channel) {
+    feed.active = true;
+    feed.held_by_channel = false;
+    logAction('marathon.feed_resumed', { details: { feed_id: feed.id, because: 'channel_opted_in', automatic: true } });
+  }
+  for (const one of state.marathons.filter((m) => m.spotlight_id === row.id)) {
+    if (!on && one.active) {
+      one.active = false;
+      one.held_by_channel = true;
+      count += 1;
+      logAction('marathon.paused', { details: { marathon_id: one.id, name: one.name, because: 'channel_opted_out', automatic: true } });
+    } else if (on && one.held_by_channel) {
+      one.active = true;
+      one.held_by_channel = false;
+      count += 1;
+      logAction('marathon.resumed', { details: { marathon_id: one.id, name: one.name, because: 'channel_opted_in', automatic: true } });
+    }
+  }
+  return (on ? CHANNEL_MARATHONS_ON : CHANNEL_MARATHONS_OFF).replace('{login}', row.twitch_login).replace('{count}', String(count));
+}
+
 route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   requireStaff(context.session);
   const row = wantedSpotlight(context.params);
@@ -4807,6 +4858,7 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   if ('announce' in body) row.announce = Boolean(body.announce);
   const settled = settleOpenSession(row, wasAnnouncing, wasSpotlit);
   let said = null;
+  if ('marathons' in body) said = channelMarathonsSet(row, Boolean(body.marathons));
   if ('youtube' in body) {
     const given = String(body.youtube || '').trim();
     if (given) {
@@ -5926,7 +5978,7 @@ route('GET', '/api/marathons/feeds', (context) => {
     feeds: state.marathonFeeds.map(feedRow),
     channels: state.golive.spotlights
       .filter((one) => !linked.has(String(one.twitch_login).toLowerCase()))
-      .map((one) => ({ id: one.id, login: one.twitch_login, name: one.display_name || one.twitch_login, feed_name: taken.get(one.id) || null })),
+      .map((one) => ({ id: one.id, login: one.twitch_login, name: one.display_name || one.twitch_login, feed_name: taken.get(one.id) || null, marathons: channelTakesMarathons(one) })),
     sources: FEED_SOURCES,
   };
 });
@@ -5937,6 +5989,7 @@ route('POST', '/api/marathons/feeds', async (context) => {
   const spotlightId = Number(body.spotlight_id);
   const channel = state.golive.spotlights.find((one) => one.id === spotlightId);
   if (!channel) throw new Refused(404, 'no_channel', 'A feed belongs to a channel Black Bloc already watches \u2014 add the channel first.');
+  refuseOptedOutChannel(spotlightId);
   const existing = state.marathonFeeds.find((one) => one.spotlight_id === spotlightId);
   if (existing) throw new Refused(409, 'channel_has_feed', `**${feedChannelName(spotlightId)}** already has a feed, **${existing.name}**, so nothing was added. One channel, one feed \u2014 remove that one first.`);
   const pick = String(body.source || '').trim().toLowerCase();
@@ -5976,7 +6029,12 @@ route('PATCH', '/api/marathons/feeds/:feed_id', async (context) => {
     said.push(`The feed is called **${name}** now.`);
   }
   if ('active' in body && body.active !== feed.active) {
+    const held = state.golive.spotlights.find((one) => one.id === feed.spotlight_id);
+    if (body.active && held && !channelTakesMarathons(held)) {
+      throw new Refused(409, 'held_by_channel', `**${feed.name}** is paused because **${held.display_name || held.twitch_login}** is opted out of marathons — turn marathons back on for the channel first, so nothing was changed.`);
+    }
     feed.active = body.active;
+    feed.held_by_channel = false;
     logAction(body.active ? 'web.marathon.feed_resumed' : 'web.marathon.feed_paused', { details: { feed_id: feed.id, via: 'website' } });
     said.push(body.active ? `**${feed.name}** checks again.` : `**${feed.name}** is paused \u2014 it checks nothing until it is resumed.`);
   }
@@ -6135,6 +6193,7 @@ function marathonCreate(name, scheduleUrl, spotlight) {
   if (spotlightId && !state.golive.spotlights.find((one) => one.id === spotlightId)) {
     throw new Refused(404, 'no_such_channel', `**${String(spotlight).slice(0, 40)}** is not one of the channels on the Go-live page, so nothing was changed. Add the channel there first, or leave it blank.`);
   }
+  refuseOptedOutChannel(spotlightId);
   const id = state.marathons.reduce((top, one) => Math.max(top, one.id), 0) + 1;
   const starts = new Date(Date.now() + 3 * 86400000);
   const row = { id, name, schedule_url: url, source: read.source, source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null };

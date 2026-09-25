@@ -20,6 +20,7 @@ from ...cogs.content.golive import (
     recent_sessions,
     unlink_channel,
 )
+from ...cogs.content.marathon_channels import set_marathons
 from ...cogs.content.spotlight import (
     add_ping_window,
     bump_now,
@@ -41,6 +42,7 @@ from ...cogs.content.spotlight import (
 from ...cogs.content.spotlight import recent_sessions as recent_spotlight_sessions
 from ...golive import optout_said
 from ...logkinds import VIA_WEBSITE
+from ...marathon_channels import takes_marathons
 from ...settings_store import (
     DEFAULT_TIMEZONE_KEY,
     SPOTLIGHT_BAD_DATE_KEY,
@@ -206,6 +208,7 @@ def spotlight_row(
         "spotlight": spot.is_spotlit(row),
         "announce": spot.announces(row),
         "opted_out": not spot.announces(row),
+        "marathons": takes_marathons(row),
         "youtube_channel_id": spot.youtube_of(row),
         "youtube_handle": row["youtube_handle"],
         "youtube_url": spot.youtube_url(spot.youtube_of(row)),
@@ -554,6 +557,13 @@ def build_router(bot: Any) -> APIRouter:
                 raise Refused(503, "no_cog", said)
             if outcome == "not_linked":
                 raise Refused(404, "not_linked", said)
+        if "marathons" in payload:
+            fresh, marathons_said = await set_marathons(
+                bot, guild, who_acts, spotlight_id, bool(payload["marathons"]), via=VIA_WEBSITE
+            )
+            if fresh is None:
+                raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
+            said = " ".join(one for one in (said, marathons_said) if one) or None
         if ping_mode is not None:
             outcome, fresh, moded = await set_ping_mode(
                 bot, guild, who_acts, spotlight_id, ping_mode, via=VIA_WEBSITE
