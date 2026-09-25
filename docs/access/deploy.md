@@ -122,6 +122,14 @@ edit:
 Keep `[mounts]` too (`black_bloc_data` → `/data`, where the SQLite file lives), and
 never run `fly launch` — it rewrites the file.
 
+> ⚠️ **`git pull --rebase` FLATTENS a local merge commit (2026-09-25 11:5x).** After `git merge --no-ff <branch>` on
+> `main`, a `git pull --rebase --autostash` before the push replayed the branch's nine commits linearly onto `main` and
+> DROPPED the merge commit `f25561ee` — even though `origin/main` had nothing new. Content was identical; only the
+> history shape changed, and `git branch --merged main` no longer lists the branch (its hashes differ). To keep a merge
+> commit: `git fetch origin && git merge --ff-only origin/main` (or `git pull --rebase=merges`) before pushing, and
+> only fall back to a plain rebase when there are no local merges. Recorded here because the deploy runbook is where
+> the next session will look when a merge hash cited in `DONE.md` cannot be found.
+
 ## Every later deploy — `scripts/deploy.ps1`, nothing else
 
 ```powershell
