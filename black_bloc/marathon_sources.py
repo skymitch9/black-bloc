@@ -12,19 +12,27 @@ from .youtube import BROWSER_AGENT
 log = logging.getLogger(__name__)
 
 GDQ = "gdq"
-SOURCES = (GDQ,)
-SOURCE_WORDS = {GDQ: "GDQ tracker"}
+RPGLB = "rpglb"
+TRACKER_SOURCES = (GDQ, RPGLB)
+SOURCES = TRACKER_SOURCES
+SOURCE_WORDS = {GDQ: "GDQ tracker", RPGLB: "RPG Limit Break tracker"}
+SITE_WORDS = {GDQ: "the GDQ tracker", RPGLB: "the RPG Limit Break tracker"}
 RUNNER = "runner"
 HOST = "host"
 COMMENTATOR = "commentator"
 PARTS = (RUNNER, HOST, COMMENTATOR)
 
-TRACKER = "https://tracker.gamesdonequick.com/tracker/api/v2"
-EVENT_URL = TRACKER + "/events/{ref}/"
-RUNS_URL = TRACKER + "/events/{ref}/runs/?limit=500"
-SHORT_URL = TRACKER + "/events/?short={short}"
-EVENTS_URL = TRACKER + "/events/"
-TRACKER_EVENT = "https://tracker.gamesdonequick.com/tracker/event/{ref}"
+TRACKER_BASES = {
+    GDQ: "https://tracker.gamesdonequick.com/tracker",
+    RPGLB: "https://tracker.rpglimitbreak.com",
+}
+API_PATH = "/api/v2"
+TRACKER = TRACKER_BASES[GDQ] + API_PATH
+EVENT_URL = "{api}/events/{ref}/"
+RUNS_URL = "{api}/events/{ref}/runs/?limit=500"
+SHORT_URL = "{api}/events/?short={short}"
+EVENTS_URL = "{api}/events/"
+TRACKER_EVENT = "{base}/event/{ref}"
 SCHEDULE_PAGE = "https://gamesdonequick.com/schedule/{ref}"
 REQUEST_TIMEOUT_SECONDS = 20
 PAGES_MAX = 20
@@ -37,17 +45,28 @@ GDQ_TRACKER = re.compile(
     r"(?:[?#].*)?$",
     re.IGNORECASE,
 )
+RPGLB_SCHEDULE = re.compile(
+    r"^https?://(?:www\.)?rpglimitbreak\.com/schedule/?(?:[?#].*)?$", re.IGNORECASE
+)
+RPGLB_TRACKER = re.compile(
+    r"^https?://(?:(?:www\.)?rpglimitbreak\.com/tracker|tracker\.rpglimitbreak\.com)/"
+    r"(?:event|runs|index)/([A-Za-z0-9_-]+)/?(?:[?#].*)?$",
+    re.IGNORECASE,
+)
 GDQ_SHORT = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{2,40}$")
 SHORT_PREFIX = "short:"
+LATEST = "latest"
 
-NOT_PUBLISHED = (
-    "the GDQ tracker has the event but has not published its schedule yet (it answers 404 for "
-    "the runs)"
+NOT_PUBLISHED_AT = (
+    "{site} has the event but has not published its schedule yet (it answers 404 for the runs)"
 )
-NO_SUCH_EVENT = "the GDQ tracker has no event {ref}"
-ANSWERED = "the GDQ tracker answered {status}"
-UNREACHABLE = "the GDQ tracker could not be reached ({why})"
-NOT_JSON = "the GDQ tracker answered with something that is not a schedule"
+NOT_PUBLISHED = NOT_PUBLISHED_AT.format(site=SITE_WORDS[GDQ])
+NO_SUCH_EVENT = "{site} has no event {ref}"
+NO_EVENT_YET = "{site} lists no event yet"
+ANSWERED = "{site} answered {status}"
+UNREACHABLE = "{site} could not be reached ({why})"
+NOT_JSON = "{site} answered with something that is not a schedule"
+UNKNOWN_SOURCE = "Black Bloc has no reader for {source}"
 TOO_MANY_PAGES = "the schedule ran past {pages} pages, so only the first ones were read"
 
 
@@ -86,10 +105,13 @@ def read_url(url: Any) -> tuple[str, str] | None:
     found = GDQ_SCHEDULE.match(text)
     if found:
         return (GDQ, found.group(1))
-    found = GDQ_TRACKER.match(text)
-    if found:
-        ref = found.group(1)
-        return (GDQ, ref if ref.isdigit() else SHORT_PREFIX + ref)
+    for source, pattern in ((GDQ, GDQ_TRACKER), (RPGLB, RPGLB_TRACKER)):
+        found = pattern.match(text)
+        if found:
+            ref = found.group(1)
+            return (source, ref if ref.isdigit() else SHORT_PREFIX + ref)
+    if RPGLB_SCHEDULE.match(text):
+        return (RPGLB, LATEST)
     if GDQ_SHORT.match(text) and not text.isdigit() and "." not in text:
         return (GDQ, SHORT_PREFIX + text)
     return None
@@ -99,8 +121,29 @@ def is_short(ref: Any) -> bool:
     return str(ref or "").startswith(SHORT_PREFIX)
 
 
+def site_of(source: Any) -> str:
+    return SITE_WORDS.get(str(source or ""), str(source or ""))
+
+
+def api_of(source: str) -> str:
+    return TRACKER_BASES[source] + API_PATH
+
+
+def tracker_source(base: Any) -> str | None:
+    """The source word a tracker base URL stands for, or None for a tracker Black Bloc lacks."""
+    wanted = str(base or "").strip().rstrip("/").lower()
+    for source, known in TRACKER_BASES.items():
+        if known.lower() == wanted:
+            return source
+    return None
+
+
 def schedule_page(source: str, ref: Any) -> str:
-    return SCHEDULE_PAGE.format(ref=ref) if source == GDQ and not is_short(ref) else ""
+    if source == GDQ and not is_short(ref):
+        return SCHEDULE_PAGE.format(ref=ref)
+    if source in TRACKER_BASES and str(ref or "").isdigit():
+        return event_url(ref, source)
+    return ""
 
 
 def seconds_of(text: Any) -> int | None:
@@ -174,8 +217,8 @@ def next_page(payload: Any) -> str | None:
     return str(found) if found else None
 
 
-def event_url(ref: Any) -> str:
-    return TRACKER_EVENT.format(ref=ref)
+def event_url(ref: Any, source: str = GDQ) -> str:
+    return TRACKER_EVENT.format(base=TRACKER_BASES[source], ref=ref)
 
 
 def next_gdq_event(events: Any, after: Any, now: datetime) -> dict[str, Any] | None:
@@ -229,65 +272,78 @@ class ScheduleClient:
                 except ValueError:
                     return (200, None)
         except (TimeoutError, aiohttp.ClientError, OSError) as exc:
-            raise ScheduleError(UNREACHABLE.format(why=type(exc).__name__)) from exc
+            raise ScheduleError(
+                UNREACHABLE.format(site=_site_of_url(url), why=type(exc).__name__)
+            ) from exc
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
             await self._session.close()
         self._session = None
 
-    async def _json(self, url: str) -> tuple[int, Any]:
+    async def _json(self, url: str, source: str = GDQ) -> tuple[int, Any]:
         status, body = await self._request(url)
         if status == 200 and not isinstance(body, dict):
-            raise ScheduleError(NOT_JSON)
+            raise ScheduleError(NOT_JSON.format(site=site_of(source)))
         return (status, body)
 
     async def resolve(self, source: str, ref: str) -> tuple[str, str]:
         """(the event id, its name) — a short such as `AGDQ2027` is looked up once here."""
-        if source != GDQ:
-            raise ScheduleError(NO_SUCH_EVENT.format(ref=ref))
+        if source not in TRACKER_BASES:
+            raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
+        site = site_of(source)
+        api = api_of(source)
+        if ref == LATEST:
+            listed = [row for row in await self.events(source) if row.get("id") is not None]
+            if not listed:
+                raise ScheduleError(NO_EVENT_YET.format(site=site))
+            newest = listed[0]
+            return (str(newest["id"]), _text(newest.get("name")) or str(newest["id"]))
         if is_short(ref):
             short = ref[len(SHORT_PREFIX) :]
-            status, body = await self._json(SHORT_URL.format(short=short))
+            status, body = await self._json(SHORT_URL.format(api=api, short=short), source)
             if status != 200:
-                raise ScheduleError(ANSWERED.format(status=status))
+                raise ScheduleError(ANSWERED.format(site=site, status=status))
             event = event_from(body)
             if event is None:
-                raise ScheduleError(NO_SUCH_EVENT.format(ref=short))
+                raise ScheduleError(NO_SUCH_EVENT.format(site=site, ref=short))
             return (str(event["id"]), _text(event.get("name")) or short)
-        status, body = await self._json(EVENT_URL.format(ref=ref))
+        status, body = await self._json(EVENT_URL.format(api=api, ref=ref), source)
         if status == 404:
-            raise ScheduleError(NO_SUCH_EVENT.format(ref=ref))
+            raise ScheduleError(NO_SUCH_EVENT.format(site=site, ref=ref))
         if status != 200:
-            raise ScheduleError(ANSWERED.format(status=status))
+            raise ScheduleError(ANSWERED.format(site=site, status=status))
         return (str(body.get("id") or ref), _text(body.get("name")) or str(ref))
 
-    async def events(self) -> list[dict[str, Any]]:
+    async def events(self, source: str = GDQ) -> list[dict[str, Any]]:
         """Every event the tracker lists, newest first; one page today, `next` followed if not."""
-        url: str | None = EVENTS_URL
+        if source not in TRACKER_BASES:
+            raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
+        url: str | None = EVENTS_URL.format(api=api_of(source))
         found: list[dict[str, Any]] = []
         pages = 0
         while url and pages < PAGES_MAX:
-            status, body = await self._json(url)
+            status, body = await self._json(url, source)
             if status != 200:
-                raise ScheduleError(ANSWERED.format(status=status))
+                raise ScheduleError(ANSWERED.format(site=site_of(source), status=status))
             found.extend(row for row in body.get("results") or () if isinstance(row, dict))
             url = next_page(body)
             pages += 1
         return found
 
     async def runs(self, source: str, ref: str) -> list[Run]:
-        if source != GDQ:
-            raise ScheduleError(NO_SUCH_EVENT.format(ref=ref))
-        url: str | None = RUNS_URL.format(ref=ref)
+        if source not in TRACKER_BASES:
+            raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
+        site = site_of(source)
+        url: str | None = RUNS_URL.format(api=api_of(source), ref=ref)
         found: list[Run] = []
         pages = 0
         while url and pages < PAGES_MAX:
-            status, body = await self._json(url)
+            status, body = await self._json(url, source)
             if status == 404:
-                raise ScheduleError(NOT_PUBLISHED, unpublished=True)
+                raise ScheduleError(NOT_PUBLISHED_AT.format(site=site), unpublished=True)
             if status != 200:
-                raise ScheduleError(ANSWERED.format(status=status))
+                raise ScheduleError(ANSWERED.format(site=site, status=status))
             found.extend(parse_gdq(body))
             url = next_page(body)
             pages += 1
@@ -296,20 +352,32 @@ class ScheduleClient:
         return found
 
 
+def _site_of_url(url: str) -> str:
+    for source, base in TRACKER_BASES.items():
+        if url.startswith(base):
+            return site_of(source)
+    parts = url.split("/")
+    return parts[2] if len(parts) > 2 else "the schedule site"
+
+
 __all__ = [
     "COMMENTATOR",
     "GDQ",
     "HOST",
     "PARTS",
+    "RPGLB",
     "RUNNER",
     "SOURCES",
     "SOURCE_WORDS",
+    "TRACKER_BASES",
+    "TRACKER_SOURCES",
     "Person",
     "Run",
     "ScheduleClient",
     "ScheduleError",
     "event_from",
     "event_url",
+    "api_of",
     "is_short",
     "next_gdq_event",
     "next_page",
@@ -317,5 +385,7 @@ __all__ = [
     "read_url",
     "schedule_page",
     "seconds_of",
+    "site_of",
+    "tracker_source",
     "utc_iso",
 ]

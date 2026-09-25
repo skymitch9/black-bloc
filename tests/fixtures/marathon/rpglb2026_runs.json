@@ -1,0 +1,516 @@
+{
+  "count": 8,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "type": "speedrun",
+      "id": 628,
+      "name": "Pre-Show",
+      "display_name": "Pre-Show",
+      "twitch_name": "509663",
+      "description": "",
+      "category": "",
+      "coop": false,
+      "onsite": "ONSITE",
+      "console": "",
+      "release_year": null,
+      "runners": [
+        {
+          "type": "talent",
+          "id": 726,
+          "name": "ateatree",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        },
+        {
+          "type": "talent",
+          "id": 161,
+          "name": "HeroicSpiritGamer",
+          "stream": "http://twitch.tv/HeroicSpiritGamer",
+          "twitter": "Gamer0278",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        },
+        {
+          "type": "talent",
+          "id": 732,
+          "name": "Ambelie",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "She/Her"
+        },
+        {
+          "type": "talent",
+          "id": 207,
+          "name": "vanni_van",
+          "stream": "http://twitch.tv/vanni_van",
+          "twitter": "vanni_van5",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "hosts": [],
+      "commentators": [],
+      "starttime": "2026-05-17T11:30:00-06:00",
+      "endtime": "2026-05-17T12:02:00-06:00",
+      "order": 1,
+      "run_time": "0:32:00",
+      "setup_time": "0",
+      "anchor_time": null,
+      "layout": "",
+      "video_links": [],
+      "priority_tag": null,
+      "tags": []
+    },
+    {
+      "type": "speedrun",
+      "id": 629,
+      "name": "Mass Effect 3",
+      "display_name": "Mass Effect 3",
+      "twitch_name": "1052065999",
+      "description": "",
+      "category": "LE Any% NG",
+      "coop": false,
+      "onsite": "ONSITE",
+      "console": "PC",
+      "release_year": 2012,
+      "runners": [
+        {
+          "type": "talent",
+          "id": 532,
+          "name": "Sanjan",
+          "stream": "http://twitch.tv/sanjan_",
+          "twitter": "SanjanRS",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "hosts": [
+        {
+          "type": "talent",
+          "id": 723,
+          "name": "agDeeds",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "commentators": [
+        {
+          "type": "talent",
+          "id": 754,
+          "name": "PT",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "starttime": "2026-05-17T12:02:00-06:00",
+      "endtime": "2026-05-17T13:47:56-06:00",
+      "order": 2,
+      "run_time": "1:30:40",
+      "setup_time": "0:15:16",
+      "anchor_time": null,
+      "layout": "GAME - HD",
+      "video_links": [],
+      "priority_tag": null,
+      "tags": []
+    },
+    {
+      "type": "speedrun",
+      "id": 630,
+      "name": "Langrisser 1",
+      "display_name": "Langrisser 1",
+      "twitch_name": "2929",
+      "description": "",
+      "category": "Any%",
+      "coop": false,
+      "onsite": "ONSITE",
+      "console": "PC",
+      "release_year": 1998,
+      "runners": [
+        {
+          "type": "talent",
+          "id": 678,
+          "name": "LadyErianna",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "She/Her"
+        }
+      ],
+      "hosts": [
+        {
+          "type": "talent",
+          "id": 723,
+          "name": "agDeeds",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "commentators": [
+        {
+          "type": "talent",
+          "id": 762,
+          "name": "QueenPeels",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "starttime": "2026-05-17T13:47:56-06:00",
+      "endtime": "2026-05-17T15:42:24-06:00",
+      "order": 3,
+      "run_time": "1:33:41",
+      "setup_time": "0:20:47",
+      "anchor_time": null,
+      "layout": "GAME - HD",
+      "video_links": [],
+      "priority_tag": null,
+      "tags": []
+    },
+    {
+      "type": "speedrun",
+      "id": 631,
+      "name": "Breath of Fire: Dragon Quarter",
+      "display_name": "Breath of Fire\\nDragon Quarter",
+      "twitch_name": "1168",
+      "description": "",
+      "category": "Any% Race",
+      "coop": false,
+      "onsite": "ONSITE",
+      "console": "PS2",
+      "release_year": 2002,
+      "runners": [
+        {
+          "type": "talent",
+          "id": 616,
+          "name": "The_Sid",
+          "stream": "http://twitch.tv/The_Sid_",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "He/Him"
+        },
+        {
+          "type": "talent",
+          "id": 405,
+          "name": "SwimmyLionni",
+          "stream": "http://twitch.tv/SwimmyLionni",
+          "twitter": "SwimmyLionni",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "hosts": [
+        {
+          "type": "talent",
+          "id": 626,
+          "name": "Hebinx",
+          "stream": "http://twitch.tv/Hebinx",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "commentators": [
+        {
+          "type": "talent",
+          "id": 490,
+          "name": "Sawneyrath11",
+          "stream": "http://twitch.tv/Sawneyrath11",
+          "twitter": "Sawneyrath",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "He/Them"
+        }
+      ],
+      "starttime": "2026-05-17T15:42:24-06:00",
+      "endtime": "2026-05-17T17:39:53-06:00",
+      "order": 4,
+      "run_time": "1:19:27",
+      "setup_time": "0:38:02",
+      "anchor_time": null,
+      "layout": "GAME - SD 2P",
+      "video_links": [],
+      "priority_tag": null,
+      "tags": []
+    },
+    {
+      "type": "speedrun",
+      "id": 632,
+      "name": "Final Fantasy: 20th Anniversary Edition",
+      "display_name": "Final Fantasy\\n20th Anniversary Edition",
+      "twitch_name": "2130500323",
+      "description": "",
+      "category": "Any%",
+      "coop": false,
+      "onsite": "ONSITE",
+      "console": "PSTV",
+      "release_year": 2007,
+      "runners": [
+        {
+          "type": "talent",
+          "id": 490,
+          "name": "Sawneyrath11",
+          "stream": "http://twitch.tv/Sawneyrath11",
+          "twitter": "Sawneyrath",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "He/Them"
+        }
+      ],
+      "hosts": [
+        {
+          "type": "talent",
+          "id": 626,
+          "name": "Hebinx",
+          "stream": "http://twitch.tv/Hebinx",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "commentators": [
+        {
+          "type": "talent",
+          "id": 405,
+          "name": "SwimmyLionni",
+          "stream": "http://twitch.tv/SwimmyLionni",
+          "twitter": "SwimmyLionni",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        },
+        {
+          "type": "talent",
+          "id": 616,
+          "name": "The_Sid",
+          "stream": "http://twitch.tv/The_Sid_",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "He/Him"
+        }
+      ],
+      "starttime": "2026-05-17T17:39:53-06:00",
+      "endtime": "2026-05-17T19:52:40-06:00",
+      "order": 5,
+      "run_time": "1:31:45",
+      "setup_time": "0:41:02",
+      "anchor_time": null,
+      "layout": "GAME - HD",
+      "video_links": [],
+      "priority_tag": null,
+      "tags": []
+    },
+    {
+      "type": "speedrun",
+      "id": 633,
+      "name": "EarthBound",
+      "display_name": "EarthBound",
+      "twitch_name": "30367",
+      "description": "",
+      "category": "Glitchless (No Manipulation)",
+      "coop": false,
+      "onsite": "ONSITE",
+      "console": "SNES",
+      "release_year": 1994,
+      "runners": [
+        {
+          "type": "talent",
+          "id": 389,
+          "name": "andyperfect",
+          "stream": "http://twitch.tv/AndyPerfect",
+          "twitter": "andyperfect1",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "He/him"
+        }
+      ],
+      "hosts": [
+        {
+          "type": "talent",
+          "id": 718,
+          "name": "Xathien",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "commentators": [
+        {
+          "type": "talent",
+          "id": 151,
+          "name": "Drumboardist",
+          "stream": "http://www.twitch.tv/drumboardist",
+          "twitter": "Drumboardist",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "He/Him"
+        },
+        {
+          "type": "talent",
+          "id": 575,
+          "name": "RJsmangit",
+          "stream": "https://www.twitch.tv/RJsmangit",
+          "twitter": "RJsmangit",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "he/him"
+        },
+        {
+          "type": "talent",
+          "id": 753,
+          "name": "Sharpless",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "starttime": "2026-05-17T19:52:40-06:00",
+      "endtime": "2026-05-18T00:31:01-06:00",
+      "order": 6,
+      "run_time": "4:18:27",
+      "setup_time": "0:19:54",
+      "anchor_time": null,
+      "layout": "GAME - SD",
+      "video_links": [],
+      "priority_tag": null,
+      "tags": []
+    },
+    {
+      "type": "speedrun",
+      "id": 634,
+      "name": "Digimon Story: Time Stranger",
+      "display_name": "Digimon Story\\nTime Stranger",
+      "twitch_name": "197489698",
+      "description": "",
+      "category": "Any% Hard",
+      "coop": false,
+      "onsite": "ONSITE",
+      "console": "PC",
+      "release_year": 2025,
+      "runners": [
+        {
+          "type": "talent",
+          "id": 60,
+          "name": "Ouro",
+          "stream": "http://twitch.tv/Ourolen",
+          "twitter": "Ourolen",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "He/Him"
+        }
+      ],
+      "hosts": [
+        {
+          "type": "talent",
+          "id": 200,
+          "name": "SUMDeaner",
+          "stream": "http://twitch.tv/SUMDeaner",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": "he/him"
+        }
+      ],
+      "commentators": [
+        {
+          "type": "talent",
+          "id": 755,
+          "name": "Cassie",
+          "stream": "",
+          "twitter": "",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "starttime": "2026-05-18T00:31:01-06:00",
+      "endtime": "2026-05-18T04:53:26-06:00",
+      "order": 7,
+      "run_time": "4:02:23",
+      "setup_time": "0:20:02",
+      "anchor_time": null,
+      "layout": "GAME - HD",
+      "video_links": [],
+      "priority_tag": null,
+      "tags": []
+    },
+    {
+      "type": "speedrun",
+      "id": 635,
+      "name": "Dragon Quest Heroes: Rocket Slime",
+      "display_name": "Dragon Quest Heroes\\nRocket Slime",
+      "twitch_name": "9411",
+      "description": "",
+      "category": "Any% (English)",
+      "coop": false,
+      "onsite": "ONLINE",
+      "console": "DS",
+      "release_year": 2005,
+      "runners": [
+        {
+          "type": "talent",
+          "id": 663,
+          "name": "ref417",
+          "stream": "https://www.twitch.tv/ref417",
+          "twitter": "ref417",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "hosts": [
+        {
+          "type": "talent",
+          "id": 308,
+          "name": "bobtheninjagoldfish",
+          "stream": "http://twitch.tv/bobtheninjagoldfish",
+          "twitter": "BobTGoldfish",
+          "youtube": "",
+          "platform": "TWITCH",
+          "pronouns": ""
+        }
+      ],
+      "commentators": [],
+      "starttime": "2026-05-18T04:53:26-06:00",
+      "endtime": "2026-05-18T07:08:56-06:00",
+      "order": 8,
+      "run_time": "2:03:58",
+      "setup_time": "0:11:32",
+      "anchor_time": null,
+      "layout": "GAME - DS REMOTE",
+      "video_links": [],
+      "priority_tag": null,
+      "tags": []
+    }
+  ]
+}

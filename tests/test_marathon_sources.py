@@ -221,3 +221,63 @@ async def test_an_events_list_that_will_not_read_is_refused_in_words():
     request, _ = pages((503, None))
     with pytest.raises(ms.ScheduleError, match="answered 503"):
         await ms.ScheduleClient(request=request).events()
+
+
+# --- RPG Limit Break: the same tracker software on another host ------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "wanted"),
+    [
+        ("https://rpglimitbreak.com/schedule", ("rpglb", "latest")),
+        ("https://rpglimitbreak.com/tracker/runs/rpglb2026", ("rpglb", "short:rpglb2026")),
+        ("https://tracker.rpglimitbreak.com/runs/rpglb2026", ("rpglb", "short:rpglb2026")),
+        ("https://tracker.rpglimitbreak.com/event/21", ("rpglb", "21")),
+    ],
+)
+def test_read_url_knows_the_rpglb_forms(url, wanted):
+    assert ms.read_url(url) == wanted
+
+
+def test_a_tracker_base_names_its_source_and_its_event_pages():
+    assert ms.tracker_source("https://tracker.rpglimitbreak.com/") == "rpglb"
+    assert ms.tracker_source("https://tracker.gamesdonequick.com/tracker") == "gdq"
+    assert ms.tracker_source("https://tracker.example.com") is None
+    assert ms.event_url(21, "rpglb") == "https://tracker.rpglimitbreak.com/event/21"
+    assert ms.read_url(ms.event_url(21, "rpglb")) == ("rpglb", "21")
+    assert ms.schedule_page("rpglb", "21") == "https://tracker.rpglimitbreak.com/event/21"
+
+
+def test_the_rpglb_runs_parse_like_gdq_ones_with_logins_from_stream():
+    runs = ms.parse_gdq(fixture("rpglb2026_runs.json"))
+
+    assert len(runs) == 8
+    mass = next(one for one in runs if one.external_id == "629")
+    assert mass.game == "Mass Effect 3"
+    assert mass.starts_at == "2026-05-17T18:02:00+00:00"
+    parts = [(one.name, one.login, one.part) for one in mass.people]
+    assert ("Sanjan", "sanjan_", "runner") in parts
+    assert ("agDeeds", None, "host") in parts
+
+
+async def test_the_rpglb_client_reads_its_own_api_base():
+    request, seen = pages((200, fixture("rpglb2026_runs.json")))
+    runs = await ms.ScheduleClient(request=request).runs("rpglb", "21")
+    assert len(runs) == 8
+    assert seen == ["https://tracker.rpglimitbreak.com/api/v2/events/21/runs/?limit=500"]
+    request, seen = pages((200, fixture("rpglb_events_list.json")))
+    assert await ms.ScheduleClient(request=request).resolve("rpglb", "latest") == (
+        "21",
+        "RPG Limit Break 2026",
+    )
+    assert seen == ["https://tracker.rpglimitbreak.com/api/v2/events/"]
+
+
+async def test_an_rpglb_failure_names_the_rpglb_tracker():
+    request, _ = pages((404, None))
+    with pytest.raises(ms.ScheduleError, match="RPG Limit Break tracker has the event") as caught:
+        await ms.ScheduleClient(request=request).runs("rpglb", "22")
+    assert caught.value.unpublished is True
+    request, _ = pages((200, {"count": 0, "results": []}))
+    with pytest.raises(ms.ScheduleError, match="lists no event yet"):
+        await ms.ScheduleClient(request=request).resolve("rpglb", "latest")
