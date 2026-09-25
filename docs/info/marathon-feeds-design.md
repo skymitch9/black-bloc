@@ -1,5 +1,7 @@
 # Marathon feeds — the bot polls GDQ (and ESA on horaro.net) for events itself, so staff never paste a schedule URL
 
+> 🔨 **2026-09-25 — `marathon-event-modes` (branch, BUILT, NOT merged):** `marathon_makes_event` is retired for `marathon_event_mode_default` (**none**); a feed carries its own `event_mode` (blank follows the setting) and the Feeds card / **Feeds…** panel gain an Event select, **Rename…** and **Move to channel…** (closes Deviation 21); the notices become posts in the Events forum (`marathon_notice_home`); an opted-out channel row gets no feed and holds the one it has. [`marathon-event-modes-design.md`](marathon-event-modes-design.md).
+
 > 🔨 **2026-09-25 — BUILT on branch `marathon-feeds` (tracker GDQ + RPGLB, horaro.net; Oengus parked), NOT merged, NOT
 > deployed.** Schema 63, keys 475, 28 deviations (⚠️ 1: no ESA seed — ESA opted out; ⚠️ 17: the username match is new;
 > ⚠️ 25: SS4C parked with what was tried) and *What was NOT verified* at the foot.

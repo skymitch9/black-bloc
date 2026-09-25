@@ -1,5 +1,7 @@
 # Channel streamers — an org channel is a persistent row like any linked member; spotlight and the ping role are toggles on it
 
+> 🔨 **2026-09-25 — `marathon-event-modes` (branch, BUILT, NOT merged):** a channel row gains **Marathons: on / off** (`spotlight_channels.marathons`) — its drawer's Announcements card, the Announced cell's *· no marathons*, `/golive` ▸ **Channels…** **Marathons on / off**, `PATCH /api/golive/spotlight/{id}` `marathons`. ESA is seeded off once. [`marathon-event-modes-design.md`](marathon-event-modes-design.md) §A2.
+
 > 📌 **FOLLOW-UP LIVE as v156 (2026-09-22 21:18 Phoenix, release commit `4fb69e00`, merge `0ef4534c`): Spotlight ON settles the pin** —
 > live + unpinned → pinned, no session + stale pin → unpinned, toggle time only. Read
 > [**§ Follow-up 2026-09-22**](#follow-up-2026-09-22-spotlight-on-settles-the-pin-the-retro-pin); it rewords sweeps 721 and 731.

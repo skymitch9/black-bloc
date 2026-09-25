@@ -1,5 +1,7 @@
 # A marathon's event mode — none, the marathon, our runs, or both; and the staff notice lives in Events
 
+> 🔨 **2026-09-25 — BUILT on branch `marathon-event-modes` (off `main` `bababb65`), NOT merged, NOT deployed.** Schema 64, keys 475 → 482, 16 deviations (⚠️ 3: run events are reviewed while `marathon_mode` is shadow; ⚠️ 6: `event_id = 0` marks a run staff unlinked; ⚠️ 11: the knock-on rows are bare) and *What was NOT verified* at the foot.
+
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 14:5x Phoenix)
 > — dispatches to Opus as branch `marathon-event-modes` AFTER `marathon-feeds` merges** (both touch `create_marathon`,
 > the Add form and the staff notice). **Last verified: 2026-09-25 14:4x** — live settings through the operator token:
@@ -127,8 +129,94 @@ queue; c: a moved run re-dates its event; d: the new-marathon notice is a post i
 
 ## Deviations
 
-*(the build agent writes this)*
+*(written by the build agent, 2026-09-25, branch `marathon-event-modes` off `main` `bababb65`. Schema **63 → 64**,
+registry keys **475 → 482**, real routes **+2** (the contract carries **+4** entries — `check.mjs` reads *22 pages, 250
+routes*), log kinds **+10**. Cogs, pages and top-level commands unchanged.)*
+
+1. **Schema 64, six columns, not two** (`ADDED_COLUMNS`): `marathons.event_mode`, `marathons.held_by_channel`,
+   `marathon_runs.event_id`, `marathon_feeds.event_mode` (NULL = follow `marathon_event_mode_default`),
+   `marathon_feeds.held_by_channel`, `spotlight_channels.marathons`. A **one-time backfill** runs only in the boot that
+   adds `marathons.event_mode`: a marathon that had an event or the old wish becomes `marathon`, everything else `none`
+   — so v164's live AGDQ-style rows keep their events and the NEW default is none.
+2. **`held_by_channel` (not in §A2).** "Resume when it goes back on" needs to know WHICH marathons the opt-out paused —
+   a pause staff made before must stay (staff final say). Held rows (marathons and the feed) are marked and only they
+   come back. A held marathon's **Resume** is refused in words while the channel is off, like the feed's (§A2 named
+   only the feed).
+3. ⚠️ **Run events skip the review only while `marathon_mode` is `on`.** In `shadow` (the live setting) a run event
+   goes through the events review like the marathon-level one, as if `marathon_run_events_reviewed` were on: an approved
+   run event is a Discord scheduled event plus a ping in `events_announce_channel_id` at its start, and the review
+   checklist's rule is that anything a build makes that POSTS ships shadow. `marathon.run_event_made` carries
+   `reviewed`.
+4. **The ESA opt-out is seeded once, ever**, beside the feed seeds, in `marathon_feed_seeds` under the key
+   `optout:esamarathon` — a staff turn-back-on is never undone by the next boot. The feed seed skips an opted-out
+   channel WITHOUT marking it, so a channel turned back on is offered its seed on the next boot. Add a feed and Move to
+   channel never offer an opted-out row (the route refuses one in words too).
+5. **Moving a marathon onto an opted-out channel is refused** (`set_channel`), as is Add a marathon (§A2 named Add).
+6. ⚠️ **`marathon_runs.event_id = 0` means "staff unlinked"** — Unlink must stick, and in `runs` mode the next read
+   would otherwise make the event again. **Make it now** works in any mode and clears it. A LINKED run is kept in step
+   (re-dated, or called off when dropped / no longer ours) whatever the mode; only MAKING is gated by the mode (and by
+   the marathon being active and the run not yet over).
+7. **Eight keys, not seven: `marathon_notice_title_template`** (*New marathon: {name}*) — the forum post's name is a
+   posted word, so it is a key. ⚠️ **The forum tag's name, `marathon`, is a constant**, not a key: a renamed key would
+   mint a second tag on the forum. Flagged against the every-word rule for the conductor. The tag is added to an
+   existing forum the first time a notice asks for it (`events.forum_tag`), NOT at **Make the forum** — that forum's
+   made tags stay the six statuses the events tests pin; a full forum (20 tags) posts untagged.
+8. **`marathon.notice_posted` did not exist; it is new** (one row per notice that goes up, `home` = events / staff /
+   shadow, plus what the notice is about). A forum that refuses the post falls back to the staff channel with
+   `marathon.notice_forum_failed` (IMPORTANT by suffix). A next-event record now carries `notice_home` so its fold
+   knows a forum post is not a rehearsal; old records fall back to the old channel comparison.
+9. **Log kinds beyond §F:** `run_event_unlinked` (the staff door), `notice_forum_failed`, `golive.channel_marathons_set`
+   (§A2). Leaving `runs` with the cancel key OFF writes no per-run row; `marathon.event_mode_set` carries `kept` /
+   `cancelled` / `made` counts. The 10: routine `event_mode_set`, `notice_posted`, `run_event_made`,
+   `run_event_redated`, `run_event_cancelled`, `run_event_unlinked`, `shout_skipped`, `golive.channel_marathons_set`;
+   suffix `run_event_failed`, `notice_forum_failed`.
+10. **Make an event now / Unlink move the mode's marathon half** (`none`→`marathon`, `runs`→`both` and back), so the
+    mode never lies about what the marathon keeps. A wish that cannot be met (nobody to propose as, the review refused)
+    drops the marathon half (`stop_waiting`) — exactly what `event_wanted = 0` did, so a read does not retry it forever.
+11. ⚠️ **The knock-on rows are bare** (checklist 34): run events made or called off by an Add, a mode PATCH, a pairing or
+    a read carry no `web.` head; the marathon event a mode change makes or calls off is bare too. Add's own marathon
+    event keeps its shipped `web.marathon.event_made` (the existing test pins it). To keep that, `create_marathon`
+    inserts with mode `none` and writes the chosen mode after the first read.
+12. **Discord doors:** the Add modal's fifth field takes a mode word (yes / no still map for one release); the card's
+    **Event mode…** is a select (row 1); a run's **Unlink** / **Make it now** sit on row 3; the Feeds card gains an
+    event select (with *Whatever the setting says*), **Rename…** (a modal) and **Move to channel…** (a channel-select
+    view, only rows without a feed that take marathons). `/golive` ▸ **Channels…** gains **Marathons on / off** and a
+    *Marathons:* line for the picked row.
+13. **Site doors:** the Add form's **Event** select, the drawer's Event card select (applies at once, reverts on a
+    refusal), each run's *event #N* link + **Unlink** / **Make it now** and an *event #N* badge, the Feeds card's
+    **Event** column + **Rename…** / **Move to channel…**, the queue's *marathon run* badge (beside *marathon*) and the
+    detail card's **Marathon run** line. The Go-live drawer's segment is IN the Announcements card (as §A2 says); the
+    Add form's channel picker greys out opted-out rows.
+14. **Shout it now always posts** (staff final say); **Mark it live** by staff does not force — a run with an approved
+    event is still announced by the events feature.
+15. **Tests mirror the package** (the repo rule wins over §G's file names): `tests/cogs/content/test_marathon_events.py`,
+    `tests/cogs/content/test_marathon_channels.py`, `tests/test_marathon_events.py`, `tests/test_marathon_channels.py`;
+    `approved_from` and `forum_tag` in `tests/test_events.py`; the run link on `/api/events` in
+    `tests/api/tools/test_marathons.py`. **Mock:** AGDQ 2027 is seeded in `both` with events on runs 5 and 7; the ESA
+    row is `marathons: false`, so `check.mjs`'s `feedless_spotlight_id` moved to Frost Fatales (3).
+16. **Sweep rows `MV-a` … `MV-f`** (`e` the channel opt-out, `f` the feed's doors). Commits carry the trailer of the model
+    that did the work (Opus 5.5), not the brief's Fable 5.1 line.
 
 ## What was NOT verified
 
-*(the build agent writes this)*
+- ⚠️ **Nothing met Discord.** The forum-post notice (and adding the `marathon` tag to a real forum — `forum.edit`
+  permissions), the Event mode select, the run view's Unlink / Make it now, the feed's Rename modal and Move view, and
+  `/golive` ▸ Channels… Marathons on/off ran only against the suite's fakes.
+- ⚠️ **No run event has been approved against Discord.** Every test turns `events_create_scheduled` off, so
+  `approved_from`'s scheduled-event creation and the run-event re-date's `move_scheduled_event` were never exercised;
+  nor was the events feature announcing a run event at its start — §C's "the events announcement is the shoutout" rests
+  on the existing events sweep, not on a run here.
+- ⚠️ **First boot after deploy:** the ESA row (live id 4) is opted out once — any marathon on it is paused (held) and its
+  feed, if staff made one, paused. Every marathon that has an event today becomes `marathon` by the backfill; everything
+  else, and every feed-made marathon from then on, makes NO event (the feeds build's "waiting event wish on each" no
+  longer happens). With `marathon_mode = shadow` live, `runs` mode proposes run events through the review.
+- **Schema 64** was proven on a fresh file and on a file with the six columns dropped and set back to 63 (the backfill,
+  and that it does not run a second time), not on the live volume.
+- **Shadow → reviewed** was tested with `propose_from` faked, as the shipped marathon-event tests do.
+- **The page was rendered headless only** (Chrome `--dump-dom`, my mock on port 8798): AGDQ 2027's drawer shows
+  *event #6 · live*, *event #7 · approved*, **Unlink** ×2 and **Make it now**, the Event select on *Both*; the Feeds
+  card's Event select and Rename… / Move to channel…; the Go-live list's ESA cell *spotlight · … · no marathons*.
+  **Nothing was clicked** and console errors were not read; the writes were checked by `check.mjs` and the route tests.
+  The conductor's mock on 8797 still serves `main` until it is restarted after the merge.
+- **Cost:** one extra `get_event` per linked run per read, and one event row per run of ours in `runs` mode. Not
+  measured.
