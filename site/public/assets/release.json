@@ -1,7 +1,12 @@
 {
-  "release": "v163",
-  "commit": "ddf90db6",
+  "release": "v164",
+  "commit": "642ea8ce",
   "changed_features": [
-    "chat"
+    "core",
+    "events",
+    "golive",
+    "guides",
+    "marathon",
+    "selftest"
   ]
 }
