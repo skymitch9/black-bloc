@@ -135,8 +135,64 @@ default says BaF). NOT `TODO.md` /
 
 ## Deviations
 
-*(the build agent writes this)*
+*(build agent, branch `marathon-ux`, 2026-09-25 — BUILT, not merged, not deployed)*
+
+1. **The JS `BAF` constant lives in a new pure module, `site/public/assets/marathon-words.js`**, which
+   `marathons-section.js` imports — not in `marathons-section.js` itself. Why: §E asks for the drawer's card order in a
+   node test, and `marathons-section.js` touches `window`/`document` at import. The module holds `BAF`, the card
+   titles, `readingLine`, `scheduleCell`, `countsLine`, `feedReading`, `sourcesTitle`, `postsLines`, `drawerCards()`;
+   `site/mock/marathon-words.test.mjs` (8 tests) proves them and is wired into `ci.yml` and `deploy.ps1`.
+2. **`settings_store.py` spells "BaF" literally** in the registry defaults and helps: it cannot import
+   `black_bloc/marathon.py` (that module imports `settings_store`). Every other Python use goes through `mt.BAF`.
+3. **The Sources foldout opens itself while a feed suggestion waits** (shut otherwise, as §A0 says). A decision
+   waiting on staff must not be folded away; the foldout's title still says how many sources and when the next check is.
+4. **Template DEFAULTS that changed** (registry AND mock; stored values untouched): `marathon_board_template`
+   (*our people on the schedule* → *BaF on the schedule*), `marathon_board_empty_line` (*Nobody from here* → *Nobody
+   from BaF*), `marathon_event_description_template` (*Our runs are boarded* → *BaF runs are boarded*). The reminder,
+   shoutout, done and run-event title/description defaults never said *ours*, so they are unchanged (their HELP text
+   and labels now say *BaF run*). Also renamed where people read them: the event-mode words (*An event per BaF run*),
+   `/event` ▸ Marathons… member view **BaF next** / *Nobody from BaF…*, the refresh/add replies (*N of them BaF*), the
+   not-shoutable and not-ours refusals, the events card's *Marathon: … — N BaF run(s)*, the events `not_ours` reason,
+   the persona's description of the panel, and `labels.js`.
+5. **Posts card has no "posted 12 min ago"**: the row carries no board-posted time and §D allows one row field, which
+   went to `next_read_at`. The card says *Board: up (and pinned) in #channel* / *Board: none yet.*, the counts line, and
+   **Refresh the board** / **Post the board**.
+6. **Cadence words come from `/api/settings`**, not the row: `marathon_poll_minutes` and `marathon_far_poll_hours` are
+   read once per page load (`readCadence`). `next_read_at` is the one field added (API, mock, contract) and the cog's
+   `fetch_due` now uses the same `mt.next_read_at`.
+7. **The next-event line in the Schedule card is prefixed *After this one:*,** not *When this ends:* — the suggestion
+   only exists once the marathon IS over, so "when this ends" read wrong on the page.
+8. **The event state line** shows the status badge + *Event #5* + **Open ↗** + **Unlink** on one line (not *Event #5 —
+   approved*: the badge already says approved).
+9. **Settings and logs** uses three `foldout()`s (Events · Marathons · Log) inside one section, the Posts/Raid-trains
+   pattern; the Log holds a two-chip switch **Events / Marathons**, not an *All* chip. Old ids are kept: the section is
+   `#sect-settings`, the marathons foldout `#sect-marathon-settings`, the log holders `#sect-logs-events` /
+   `#sect-logs-marathon`, the Events (queue) section `#sect-queue`.
+10. **The table drops the *Channel* column** (§A0 lists six columns without it); the channel is in the drawer.
+11. **The feed row's name is the Channel cell**, a text action that opens the feed drawer; the drawer also lists the
+    marathons the feed added (each opens its drawer) and repeats the row's open suggestions.
+12. **Commit shape**: the drawer, the three sections and the feed drawer landed as one commit (`93b778fd`) — they are
+    one file's rewrite (`marathons-section.js`) plus `page-events.js`; splitting would have left a half-built drawer.
+13. **Panel (§C)**: the picked marathon's card now reads a head line (*phase · dates*), **Schedule:** *[GDQ tracker](link)
+    · last read · next read · N run(s), N BaF*, the re-read line when set, the next-event line when over, then **Runs**,
+    **Event** (+ the mode line), **Channel:**, **Posts:**. *Refresh now* is **Read it now** on the panel too. The
+    staff root list line (`MARATHON_LINE`) keeps its shape with *N BaF of M*.
 
 ## What was NOT verified
 
-*(the build agent writes this)*
+- **Not against the real bot or Discord.** Every render was the local mock (`MOCK_PORT=8799`) in
+  `chrome-headless-shell` 149 over raw CDP; the `/event` ▸ Marathons… card was checked only by the test suite (embed
+  text), never looked at in a Discord client.
+- **Not every move was pressed in the browser.** Pressed and seen: **Save** on *Re-read every* (20 → reading line said
+  *every 20 min*, next read moved), opening a feed drawer from its row, opening drawers by deep link (`#marathon-1`,
+  `#marathon-4`). NOT pressed: Read it now, Pause/Resume, Remove, Unlink, Make an event now, the Event select, the
+  board button, feed Check now / Pause / Rename / Move / Forget ignored / Look again / Remove, Add it / Not this one.
+  Their routes and payloads are unchanged from `main` (the same `send()` calls, moved), and `check.mjs` exercises the
+  routes themselves.
+- **Stored values with the old *ours* wording** on the live database are untouched by design; nothing checks the live
+  store for them.
+- **Light theme and other themes** were not rendered; only the default dark *blackbloc* theme at 1400 px and 390 px.
+- **The rail count** beside *Settings and logs* shows a number the section does not set (inherited from the shared
+  `mountSections` paint); not investigated.
+- **`next_read_at` under a real clock**: proved by `tests/test_marathon.py::test_the_next_read_is_the_last_read_plus_the_gap_fetch_due_uses`
+  and the existing `fetch_due` tests, not by watching a live tick.

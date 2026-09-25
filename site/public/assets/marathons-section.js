@@ -88,7 +88,7 @@ const FOUND_BY = ' · found by the **{feed}** feed';
 const POLL_LABEL = 'Re-read every';
 const POLL_UNIT = 'minutes';
 const POLL_HELP = 'Blank = the default ({minutes}). 10 to 120; used while it is near.';
-const NEXT_WHEN_ENDS = 'When this ends: ';
+const NEXT_WHEN_ENDS = 'After this one: ';
 const NEXT_LINE = '{marathon} is over — the next GDQ event is **{next}**, {date} ({relative}).';
 const NEXT_ADDED = 'Added — see **{name}** on the list.';
 const NEXT_DISMISSED = 'Dismissed — **Look again** asks the tracker once more.';
@@ -351,7 +351,7 @@ function pollField(marathon, say) {
     type: 'text',
     inputmode: 'numeric',
     size: 4,
-    placeholder: String(cadence.near ?? ''),
+    placeholder: 'default',
     value: marathon.poll_minutes ? String(marathon.poll_minutes) : '',
     'aria-label': `${POLL_LABEL} N ${POLL_UNIT}`,
   });

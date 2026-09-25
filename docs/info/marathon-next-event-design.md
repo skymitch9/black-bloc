@@ -1,5 +1,7 @@
 # The next GDQ event — suggested when a marathon ends, added by staff, never by itself
 
+> 🔨 **2026-09-25 — the page and panel shapes moved, branch `marathon-ux` (NOT merged):** the marathon drawer now opens on a **Schedule** card (source, last read, next read, the Re-read-every field, Read it now), then Runs · Who is who · Event · The channel · Posts · Pause/Remove; the Events page is three sections; feeds sit in a *Where marathons come from* foldout whose rows open a feed drawer; *ours* reads **BaF**. Where this doc describes the old page or panel layout, [`marathon-ux-design.md`](marathon-ux-design.md) wins.
+
 > 🔨 **2026-09-25 — generalised by `marathon-feeds` (NOT merged):** a GDQ feed now reads the same events list every 6 h and ADDS new events by default (or suggests them with this build's record-and-notice shape), so an over GDQ marathon's next event is usually on the list already — this suggestion then records it as added and posts no notice (Deviation 7 here). See [`marathon-feeds-design.md`](marathon-feeds-design.md).
 
 > ✅ **2026-09-25 — LIVE as v164 14:16** (release commit `7787b10c`, [`deploys.log`](../deploys.log)): boot log `database: added marathons.suggested_next` at 21:15:56Z (this design's schema 61); `database ready`, `synced 33 app commands`, `logged in as Black_Bloc` 21:16:01Z, no Traceback; `/health` ready=true 67 ms. Nothing has met Discord by hand — the sweeps are the owner's; the live site was not opened in a browser.
