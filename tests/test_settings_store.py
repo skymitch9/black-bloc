@@ -2668,11 +2668,11 @@ def golive_page_keys() -> list[str]:
     )
 
 
-def test_the_golive_page_still_draws_sixty_two_keys():
+def test_the_golive_page_still_draws_seventy_one_keys():
     """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
     A key added to one of these namespaces has to be added there too, or it lands in the
     Everything else catch-all with nobody noticing."""
-    assert len(golive_page_keys()) == 62
+    assert len(golive_page_keys()) == 71
 
 
 def test_every_golive_page_key_says_in_words_what_it_does():
@@ -2755,6 +2755,71 @@ async def test_the_bad_date_refusal_may_only_name_what_was_typed(store):
     await store.set(1, "spotlight_bad_date", "{given} is no good")
 
 
+# The owner's ping-windows ask, 2026-09-25: a spotlight split from its ping.
+SPOTLIGHT_PING_KEYS = (
+    "spotlight_ping_mode_default",
+    "spotlight_window_open_reminder",
+    "spotlight_window_keep_days",
+    "spotlight_pings_always_words",
+    "spotlight_pings_never_words",
+    "spotlight_pings_events_words",
+    "spotlight_window_open_words",
+    "spotlight_window_next_words",
+    "spotlight_window_none_words",
+)
+
+
+def test_every_ping_window_decision_and_word_is_a_golive_key_with_plain_help():
+    for key in SPOTLIGHT_PING_KEYS:
+        assert len(KEY_HELP[key].split()) >= GOLIVE_PAGE_HELP_MIN_WORDS
+        assert settings_store.namespace_of(key) == "golive"
+    assert KEY_CHOICES["spotlight_ping_mode_default"] == ("always", "never", "events")
+    assert KEY_TYPES["spotlight_window_open_reminder"] == "bool"
+    assert KEY_TYPES["spotlight_window_keep_days"] == "int"
+
+
+async def test_the_ping_defaults_leave_every_live_row_pinging_as_it_did(store):
+    assert store.get(1, "spotlight_ping_mode_default") == "always"
+    assert store.get(1, "spotlight_window_open_reminder") is True
+    assert store.get(1, "spotlight_window_keep_days") == 30
+    assert store.get(1, "spotlight_pings_events_words") == "Pings: during events — {window}"
+
+
+async def test_an_unknown_ping_mode_is_refused_in_words(store):
+    with pytest.raises(SettingError) as trouble:
+        await store.set(1, "spotlight_ping_mode_default", "sometimes")
+    assert "always" in str(trouble.value)
+    await store.set(1, "spotlight_ping_mode_default", "events")
+
+
+async def test_the_ping_state_words_only_take_the_fields_they_can_fill(store):
+    with pytest.raises(SettingError):
+        await store.set(1, "spotlight_pings_events_words", "Pings: {end}")
+    await store.set(1, "spotlight_pings_events_words", "Events only — {window}")
+    with pytest.raises(SettingError):
+        await store.set(1, "spotlight_window_open_words", "open from {start}")
+    await store.set(1, "spotlight_window_open_words", "on until {end}")
+    with pytest.raises(SettingError):
+        await store.set(1, "spotlight_window_next_words", "next {window}")
+    await store.set(1, "spotlight_window_next_words", "{start} to {end}")
+    for key in (
+        "spotlight_pings_always_words",
+        "spotlight_pings_never_words",
+        "spotlight_window_none_words",
+    ):
+        with pytest.raises(SettingError):
+            await store.set(1, key, "{window}")
+        await store.set(1, key, "Quiet")
+
+
+async def test_the_window_keep_days_are_clamped(store):
+    with pytest.raises(SettingError):
+        await store.set(1, "spotlight_window_keep_days", 0)
+    with pytest.raises(SettingError):
+        await store.set(1, "spotlight_window_keep_days", 366)
+    await store.set(1, "spotlight_window_keep_days", 365)
+
+
 async def test_the_birthday_post_words_only_take_the_fields_they_can_fill(store):
     with pytest.raises(SettingError):
         await store.set(1, "birthday_post_posted", "{n} to {where}")
@@ -2781,4 +2846,4 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 419
+    assert len(settings_store.KEY_TYPES) == 428

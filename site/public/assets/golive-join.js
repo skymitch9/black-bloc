@@ -381,6 +381,24 @@ export const DRAWERS = [
     ],
   },
   {
+    id: 'pingwindows',
+    title: 'When a channel pings',
+    note: 'Whether a new channel pings always, never or only during events, the reminder that '
+      + 'pings when a window opens on a channel already live, how long an ended window is kept, '
+      + 'and every word the ping state is written in.',
+    keys: [
+      'spotlight_ping_mode_default',
+      'spotlight_window_open_reminder',
+      'spotlight_window_keep_days',
+      'spotlight_pings_always_words',
+      'spotlight_pings_never_words',
+      'spotlight_pings_events_words',
+      'spotlight_window_open_words',
+      'spotlight_window_next_words',
+      'spotlight_window_none_words',
+    ],
+  },
+  {
     id: 'costream',
     title: 'Two platforms at once',
     note: 'What ONE announcement says when somebody is live on Twitch and YouTube at the same '

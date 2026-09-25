@@ -1795,6 +1795,19 @@ SPOTLIGHT_STARTS_LABEL_KEY = "spotlight_starts_label"
 SPOTLIGHT_ENDS_LABEL_KEY = "spotlight_ends_label"
 SPOTLIGHT_END_BEFORE_START_KEY = "spotlight_end_before_start"
 SPOTLIGHT_BAD_DATE_KEY = "spotlight_bad_date"
+SPOTLIGHT_PING_MODE_DEFAULT_KEY = "spotlight_ping_mode_default"
+SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY = "spotlight_window_open_reminder"
+SPOTLIGHT_WINDOW_KEEP_DAYS_KEY = "spotlight_window_keep_days"
+SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY = "spotlight_pings_always_words"
+SPOTLIGHT_PINGS_NEVER_WORDS_KEY = "spotlight_pings_never_words"
+SPOTLIGHT_PINGS_EVENTS_WORDS_KEY = "spotlight_pings_events_words"
+SPOTLIGHT_WINDOW_OPEN_WORDS_KEY = "spotlight_window_open_words"
+SPOTLIGHT_WINDOW_NEXT_WORDS_KEY = "spotlight_window_next_words"
+SPOTLIGHT_WINDOW_NONE_WORDS_KEY = "spotlight_window_none_words"
+PING_ALWAYS = "always"
+PING_NEVER = "never"
+PING_EVENTS = "events"
+PING_MODES = (PING_ALWAYS, PING_NEVER, PING_EVENTS)
 CHANNEL_SPOTLIGHT_DEFAULT_KEY = "golive_channel_spotlight_default"
 CHANNEL_OPTOUT_POST_KEY = "golive_channel_optout_post"
 CHANNEL_OPTOUT_END = "end"
@@ -1843,6 +1856,17 @@ SPOTLIGHT_BAD_DATE = (
     "`YYYY-MM-DD` or `YYYY-MM-DD HH:MM` — for example `2026-09-30 19:00` — or leave the "
     "box blank."
 )
+SPOTLIGHT_WINDOW_KEEP_DAYS = 30
+SPOTLIGHT_WINDOW_KEEP_DAYS_MIN = 1
+SPOTLIGHT_WINDOW_KEEP_DAYS_MAX = 365
+SPOTLIGHT_WINDOW_FIELDS = ("window",)
+SPOTLIGHT_END_FIELDS = ("end",)
+SPOTLIGHT_PINGS_ALWAYS_WORDS = "Pings: always"
+SPOTLIGHT_PINGS_NEVER_WORDS = "Pings: never"
+SPOTLIGHT_PINGS_EVENTS_WORDS = "Pings: during events — {window}"
+SPOTLIGHT_WINDOW_OPEN_WORDS = "open until {end}"
+SPOTLIGHT_WINDOW_NEXT_WORDS = "next {start} – {end}"
+SPOTLIGHT_WINDOW_NONE_WORDS = "no window set"
 KEY_TYPES.update(
     {
         SPOTLIGHT_MODE_KEY: "enum",
@@ -1863,12 +1887,24 @@ KEY_TYPES.update(
         SPOTLIGHT_ENDS_LABEL_KEY: "text",
         SPOTLIGHT_END_BEFORE_START_KEY: "text",
         SPOTLIGHT_BAD_DATE_KEY: "text",
+        SPOTLIGHT_PING_MODE_DEFAULT_KEY: "enum",
+        SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY: "bool",
+        SPOTLIGHT_WINDOW_KEEP_DAYS_KEY: "int",
+        SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY: "text",
+        SPOTLIGHT_PINGS_NEVER_WORDS_KEY: "text",
+        SPOTLIGHT_PINGS_EVENTS_WORDS_KEY: "text",
+        SPOTLIGHT_WINDOW_OPEN_WORDS_KEY: "text",
+        SPOTLIGHT_WINDOW_NEXT_WORDS_KEY: "text",
+        SPOTLIGHT_WINDOW_NONE_WORDS_KEY: "text",
         CHANNEL_SPOTLIGHT_DEFAULT_KEY: "bool",
         CHANNEL_OPTOUT_POST_KEY: "enum",
         MEMBER_OPTOUT_POST_KEY: "enum",
     }
 )
 KEY_CHOICES[SPOTLIGHT_MODE_KEY] = SPOTLIGHT_MODES
+KEY_CHOICES[SPOTLIGHT_PING_MODE_DEFAULT_KEY] = PING_MODES
+KEY_MIN[SPOTLIGHT_WINDOW_KEEP_DAYS_KEY] = SPOTLIGHT_WINDOW_KEEP_DAYS_MIN
+KEY_MAX[SPOTLIGHT_WINDOW_KEEP_DAYS_KEY] = SPOTLIGHT_WINDOW_KEEP_DAYS_MAX
 KEY_CHOICES[CHANNEL_OPTOUT_POST_KEY] = CHANNEL_OPTOUT_POSTS
 KEY_CHOICES[MEMBER_OPTOUT_POST_KEY] = MEMBER_OPTOUT_POSTS
 KEY_MIN[SPOTLIGHT_POLL_MINUTES_KEY] = SPOTLIGHT_POLL_MIN_MINUTES
@@ -1997,6 +2033,45 @@ KEY_HELP.update(
         SPOTLIGHT_BAD_DATE_KEY: (
             "what somebody is told when a start or end box holds something that is not a date. "
             "It takes {given}, which is what they typed; nothing is stored when this is said"
+        ),
+        SPOTLIGHT_PING_MODE_DEFAULT_KEY: (
+            "when a NEWLY added channel mentions its ping roles. always — the default — pings "
+            "on every announcement; never announces, pins and reminds with no role mentioned; "
+            "events pings only inside a ping window staff set on its row. Each channel's own "
+            "row can say otherwise at any time"
+        ),
+        SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY: (
+            "whether a channel that is ALREADY live when one of its ping windows opens gets one "
+            "reminder that pings, so a marathon starting on a channel running reruns is not "
+            "missed. on by default; the window closing posts nothing"
+        ),
+        SPOTLIGHT_WINDOW_KEEP_DAYS_KEY: (
+            "how many days a ping window is kept after it ends, as history on the channel's "
+            "row, before the sweep purges it. 30 by default"
+        ),
+        SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY: (
+            "how a channel that pings on every announcement says so, on its row and in the "
+            "/golive Channels panel"
+        ),
+        SPOTLIGHT_PINGS_NEVER_WORDS_KEY: (
+            "how a channel that never mentions a role says so, on its row and in the /golive "
+            "Channels panel"
+        ),
+        SPOTLIGHT_PINGS_EVENTS_WORDS_KEY: (
+            "how a channel that pings only during events says so. It takes {window}, which is "
+            "one of the three window lines below"
+        ),
+        SPOTLIGHT_WINDOW_OPEN_WORDS_KEY: (
+            "the {window} line while a ping window is open. It takes {end}, the moment it "
+            "closes, like 19 Jan 23:00"
+        ),
+        SPOTLIGHT_WINDOW_NEXT_WORDS_KEY: (
+            "the {window} line while the next ping window is still ahead. It takes {start} "
+            "and {end}, each like 12 Jan 15:00"
+        ),
+        SPOTLIGHT_WINDOW_NONE_WORDS_KEY: (
+            "the {window} line when a channel pings only during events and has no window "
+            "ahead of it, so nothing it posts mentions a role"
         ),
         CHANNEL_SPOTLIGHT_DEFAULT_KEY: (
             "whether a channel added through **Add a streamer** with nobody here behind it is "
@@ -3116,6 +3191,15 @@ NAMESPACE_OVERRIDE = {
     SPOTLIGHT_ENDS_LABEL_KEY: "golive",
     SPOTLIGHT_END_BEFORE_START_KEY: "golive",
     SPOTLIGHT_BAD_DATE_KEY: "golive",
+    SPOTLIGHT_PING_MODE_DEFAULT_KEY: "golive",
+    SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY: "golive",
+    SPOTLIGHT_WINDOW_KEEP_DAYS_KEY: "golive",
+    SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY: "golive",
+    SPOTLIGHT_PINGS_NEVER_WORDS_KEY: "golive",
+    SPOTLIGHT_PINGS_EVENTS_WORDS_KEY: "golive",
+    SPOTLIGHT_WINDOW_OPEN_WORDS_KEY: "golive",
+    SPOTLIGHT_WINDOW_NEXT_WORDS_KEY: "golive",
+    SPOTLIGHT_WINDOW_NONE_WORDS_KEY: "golive",
 }
 
 
@@ -3349,6 +3433,16 @@ def checked_given(given: Any) -> str:
     return _checked_words(given, SPOTLIGHT_GIVEN_FIELDS)
 
 
+def checked_window(given: Any) -> str:
+    """`{window}` only — the one line that says whether a window is open, next or none."""
+    return _checked_words(given, SPOTLIGHT_WINDOW_FIELDS)
+
+
+def checked_end(given: Any) -> str:
+    """`{end}` only — an open window has no start left to name."""
+    return _checked_words(given, SPOTLIGHT_END_FIELDS)
+
+
 def checked_plain(given: Any) -> str:
     """A label or a state word stands in for nothing, so a brace in it would post raw."""
     return _checked_words(given, ())
@@ -3418,6 +3512,12 @@ TEXT_CHECKS: dict[str, Any] = {
     SPOTLIGHT_DATES_BUTTON_KEY: checked_plain,
     SPOTLIGHT_STARTS_LABEL_KEY: checked_plain,
     SPOTLIGHT_ENDS_LABEL_KEY: checked_plain,
+    SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY: checked_plain,
+    SPOTLIGHT_PINGS_NEVER_WORDS_KEY: checked_plain,
+    SPOTLIGHT_PINGS_EVENTS_WORDS_KEY: checked_window,
+    SPOTLIGHT_WINDOW_OPEN_WORDS_KEY: checked_end,
+    SPOTLIGHT_WINDOW_NEXT_WORDS_KEY: checked_range,
+    SPOTLIGHT_WINDOW_NONE_WORDS_KEY: checked_plain,
     BIRTHDAY_POST_BUTTON_KEY: checked_plain,
     BIRTHDAY_POST_CONFIRM_KEY: checked_plain,
     BIRTHDAY_POST_UNSENT_KEY: checked_plain,
@@ -4552,6 +4652,24 @@ class SettingsStore:
             return SPOTLIGHT_END_BEFORE_START
         if key == SPOTLIGHT_BAD_DATE_KEY:
             return SPOTLIGHT_BAD_DATE
+        if key == SPOTLIGHT_PING_MODE_DEFAULT_KEY:
+            return PING_ALWAYS
+        if key == SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY:
+            return True
+        if key == SPOTLIGHT_WINDOW_KEEP_DAYS_KEY:
+            return SPOTLIGHT_WINDOW_KEEP_DAYS
+        if key == SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY:
+            return SPOTLIGHT_PINGS_ALWAYS_WORDS
+        if key == SPOTLIGHT_PINGS_NEVER_WORDS_KEY:
+            return SPOTLIGHT_PINGS_NEVER_WORDS
+        if key == SPOTLIGHT_PINGS_EVENTS_WORDS_KEY:
+            return SPOTLIGHT_PINGS_EVENTS_WORDS
+        if key == SPOTLIGHT_WINDOW_OPEN_WORDS_KEY:
+            return SPOTLIGHT_WINDOW_OPEN_WORDS
+        if key == SPOTLIGHT_WINDOW_NEXT_WORDS_KEY:
+            return SPOTLIGHT_WINDOW_NEXT_WORDS
+        if key == SPOTLIGHT_WINDOW_NONE_WORDS_KEY:
+            return SPOTLIGHT_WINDOW_NONE_WORDS
         if key == CHANNEL_SPOTLIGHT_DEFAULT_KEY:
             return False
         if key == CHANNEL_OPTOUT_POST_KEY:

@@ -9,6 +9,8 @@
 // Exits 0 when every fixture matched, 1 with a list of what did not.
 // scripts/deploy.ps1 and .github/workflows/ci.yml run it beside clipmd.test.mjs.
 
+import { readFileSync } from 'node:fs';
+
 import {
   DRAWERS,
   STRIP_KEYS,
@@ -464,41 +466,19 @@ const SPOTLIGHT = [
 }
 
 // --- ⚠️ every settings key lands in exactly one drawer or one named surface -------------------
-// The 54 keys the three namespaces held on 2026-09-21, measured with
-//   python -c "from black_bloc import settings_store as s; print([k for k in s.KEY_TYPES if
-//              s.namespace_of(k) in ('golive','pings','youtube')])"
-// The catch-all is what keeps this satisfiable: a key added tomorrow appears in Everything
-// else rather than vanishing from the page, and the last assertion below pins that. Since
-// 2026-09-21 every one of the 54 has a NAMED home, so the catch-all is empty and the page
-// does not draw it — it exists for the key nobody has added yet.
-const NAMESPACE_KEYS = [
-  'golive_mode', 'golive_channel_id', 'golive_template', 'golive_live_author',
-  'golive_end_template', 'golive_end_author', 'golive_end_keep_mention', 'golive_live_role_id',
-  'golive_require_role_id', 'golive_ignore_role_id', 'golive_cooldown_minutes',
-  'golive_ping_role_id', 'golive_max_session_hours', 'golive_embed', 'golive_boot_sweep',
-  'golive_autolink_presence', 'golive_autolink_youtube_video', 'golive_log_level',
-  'golive_panel_minutes', 'golive_costream_mode', 'golive_costream_template',
-  'golive_costream_author',
-  'pings_mode', 'pings_events_role_name', 'pings_fan_role_creation', 'pings_fan_role_template',
-  'pings_fan_role_on_unlink', 'pings_fan_role_delete', 'pings_streamer_stale_days',
-  'pings_empty_role_days', 'pings_onboarding_managed', 'pings_onboarding_prompt_title',
-  'pings_onboarding_option_cap', 'pings_log_level', 'pings_panel_minutes',
-  'youtube_log_level', 'youtube_panel_minutes', 'youtube_unlink_dms_them', 'youtube_live_mode',
-  'youtube_live_poll_minutes', 'youtube_live_end_misses',
-  'spotlight_mode', 'spotlight_poll_minutes', 'spotlight_end_misses', 'spotlight_bump_hours',
-  'spotlight_bump_template', 'spotlight_bump_cleanup', 'spotlight_bump_pings', 'spotlight_pin',
-  'spotlight_default_days', 'spotlight_event_slack_hours',
-  'golive_channel_spotlight_default', 'golive_channel_optout_post',
-  'golive_member_optout_post',
-  // The owner's date-range ask, 2026-09-22: every word the range is written in is a key.
-  'spotlight_range_template', 'spotlight_range_kept_template', 'spotlight_scheduled_word',
-  'spotlight_dates_button', 'spotlight_starts_label', 'spotlight_ends_label',
-  'spotlight_end_before_start', 'spotlight_bad_date',
-];
+// KI-36, taken as a ride-along 2026-09-25: the list is DERIVED, never hand-typed. The
+// contract's `settings.help` block holds every golive / pings / youtube key, and
+// tests/api/test_contract.py pins it to the registry, so two branches that each add a key
+// merge without a conflict and the merged tree measures itself. The catch-all is what keeps
+// this satisfiable: a key added tomorrow appears in Everything else rather than vanishing from
+// the page, and the last assertion below pins that.
+const CONTRACT = JSON.parse(readFileSync(new URL('./contract.json', import.meta.url), 'utf8'));
+const NAMESPACE_KEYS = Object.keys(CONTRACT.settings.help);
 
 {
   const where = 'every key lands once';
-  is(`${where} — the namespaces held 62 keys when this was measured`, NAMESPACE_KEYS.length, 62);
+  ok(`${where} — the registry's golive, pings and youtube keys were read`, NAMESPACE_KEYS.length > 0,
+    'contract.json settings.help is empty');
 
   const specs = NAMESPACE_KEYS.map((key) => ({ key, type: 'text', value: null }));
   const placed = placeSettings(specs);
@@ -526,6 +506,7 @@ const NAMESPACE_KEYS = [
   same(`${where} — spotlighted channels`, home('spotlight'), sorted(drawerOf('spotlight').keys));
   same(`${where} — two platforms at once`, home('costream'), sorted(drawerOf('costream').keys));
   same(`${where} — what a spotlight's dates say`, home('dates'), sorted(drawerOf('dates').keys));
+  same(`${where} — when a channel pings`, home('pingwindows'), sorted(drawerOf('pingwindows').keys));
   same(`${where} — slash panels and log lines`, home('panels'), sorted(drawerOf('panels').keys));
   is(`${where} — ping roles holds every pings_* but the mode, the log level and the panel`, home('pings').length, 10);
   for (const key of ['pings_mode', 'pings_log_level', 'pings_panel_minutes']) {
@@ -567,7 +548,7 @@ process.stdout.write(
     + 'has a row; two open sessions are one row; a co-stream says both platforms; an ambiguous '
     + 'address is refused in words; a spotlighted channel with no member is its own row and one '
     + 'that IS a linked login is not a second; a channel row carries its YouTube link, its '
-    + 'opt-out and the side its session opened on; all 62 settings keys land in exactly one '
+    + `opt-out and the side its session opened on; all ${NAMESPACE_KEYS.length} settings keys land in exactly one `
     + 'NAMED place, no two drawers share a name, every drawer says what is inside it, and the '
     + 'Everything else catch-all is empty\n',
 );
