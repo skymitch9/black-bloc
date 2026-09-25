@@ -99,7 +99,8 @@ test's loop closes. `settle` removes exactly that state. No timeout, retry or sk
 |---|---|---|
 | The pair (`test_spotlight.py` + `test_modmail.py`), `-n 2`, Linux | hung in 3 of 5 runs (loops hung at runs 2, 2 and 1) | **20 of 20 green** (360 passed each, ~9.5 s) |
 | Forced dead thread (throwaway test, not committed) | — | next test **fails in 0.40 s** with the message above; module teardown does not hang |
-| Full suite `-n 4 -rfE --timeout-method=signal`, Linux | CI: 2 worker crashes | see the branch report (two runs) |
+| The pair again, `-n 2 -rfE --timeout-method=signal`, fresh copy, no scratch plugin | — | **5 of 5 green** (360 passed, 7–13 s) |
+| Full suite `-n 4 -rfE --timeout-method=signal`, Linux | CI run 36190704964: 2 worker crashes; the conductor's container run: `E`s at 71 %, 92 %, 96 % | run 1: 8259 passed, **2 failed** — `tests/scripts/test_sync_personality_pool.py`, `FileNotFoundError: 'git'` (the slim image has no git; with git installed that file is 7 of 7 green); runs 2 and 3: **8261 passed, 1 skipped**, 258 s / 375 s, no hang |
 | Windows gate `-n 8`, forward / `BB_REVERSE=1` | — | **8259 passed, 3 skipped** both orders (116 s / 122 s) |
 
 ## Still open (not fixed here, not observed hanging)
