@@ -4373,7 +4373,17 @@ MARATHON_SUGGEST_NEXT_KEY = "marathon_suggest_next"
 MARATHON_NEXT_TEMPLATE_KEY = "marathon_next_template"
 MARATHON_NEXT_NONE_TEMPLATE_KEY = "marathon_next_none_template"
 MARATHON_NEXT_ADDED_TEMPLATE_KEY = "marathon_next_added_template"
-MARATHON_MAKES_EVENT_KEY = "marathon_makes_event"
+MARATHON_EVENT_MODE_DEFAULT_KEY = "marathon_event_mode_default"
+MARATHON_EVENT_MODES = ("none", "marathon", "runs", "both")
+MARATHON_RUN_EVENT_TITLE_KEY = "marathon_run_event_title_template"
+MARATHON_RUN_EVENT_DESCRIPTION_KEY = "marathon_run_event_description_template"
+MARATHON_RUN_EVENTS_REVIEWED_KEY = "marathon_run_events_reviewed"
+MARATHON_RUN_EVENT_CANCEL_ON_LEAVE_KEY = "marathon_run_event_cancel_on_leave"
+MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY = "marathon_shout_when_run_has_event"
+MARATHON_NOTICE_HOME_KEY = "marathon_notice_home"
+MARATHON_NOTICE_HOMES = ("events", "staff")
+MARATHON_NOTICE_TITLE_KEY = "marathon_notice_title_template"
+MARATHON_RUN_EVENT_FIELDS = ("member", "game", "category", "marathon")
 MARATHON_EVENT_DESCRIPTION_KEY = "marathon_event_description_template"
 MARATHON_FEEDS_KEY = "marathon_feeds"
 MARATHON_FEED_HOURS_KEY = "marathon_feed_hours"
@@ -4549,13 +4559,43 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "how many days after it started (a tracker event) or ended (a horaro.net schedule) an "
         "event still counts as new to a feed. 1 by default",
     ),
-    MARATHON_MAKES_EVENT_KEY: (
+    MARATHON_EVENT_MODE_DEFAULT_KEY: (
+        "enum",
+        "none",
+        "what a new marathon does about events, until staff change that marathon: none makes "
+        "no event; marathon puts one event for the whole marathon into the events review; runs "
+        "makes one event per run of ours, dated from the schedule and re-dated as it moves; "
+        "both does the two. none by default — the Add form's Event select starts here, and a "
+        "feed's own mode wins for the marathons it adds",
+    ),
+    MARATHON_RUN_EVENTS_REVIEWED_KEY: (
+        "bool",
+        False,
+        "whether an event made for a run of ours goes through the events review like any "
+        "proposal. off by default — staff already chose the mode, so a run's event is approved "
+        "at once and the events feature announces it when it starts",
+    ),
+    MARATHON_RUN_EVENT_CANCEL_ON_LEAVE_KEY: (
         "bool",
         True,
-        "whether the Add form's Also make it an event box starts ticked. A ticked marathon goes "
-        "into the events review like any proposal the moment its schedule has dates, and its "
-        "event follows the schedule when the dates move. on by default; each marathon can still "
-        "Unlink or Make an event now on its own",
+        "whether a marathon's events are called off when staff change its event mode away from "
+        "them (reason mode_changed). on by default; off leaves them on the calendar as ordinary "
+        "events the marathon no longer keeps in step",
+    ),
+    MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY: (
+        "bool",
+        False,
+        "whether a run of ours that has its own event still gets the marathon shoutout when it "
+        "goes live. off by default — the events feature announces that run as it starts, so the "
+        "shoutout would say it twice. The reminders post either way",
+    ),
+    MARATHON_NOTICE_HOME_KEY: (
+        "enum",
+        "events",
+        "where a new-marathon staff notice goes: events — the default — makes it a post in the "
+        "events forum (tagged marathon) while events are reviewed in a forum, else the staff "
+        "channel; staff always uses staff_channel_id. shadow still rehearses where "
+        "shadow_channel_id points",
     ),
 }
 MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
@@ -4659,6 +4699,23 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the staff notice when a feed in suggest mode finds a new event; it carries Add it and "
         "Not this one. It takes {feed} {event} {when} {relative} {url} {channel}",
     ),
+    MARATHON_RUN_EVENT_TITLE_KEY: (
+        "{member} runs {game} at {marathon}",
+        MARATHON_RUN_EVENT_FIELDS,
+        "what an event made for one run of ours is called. {member} is every member of ours on "
+        "the run, their names joined. It takes {member} {game} {category} {marathon}",
+    ),
+    MARATHON_RUN_EVENT_DESCRIPTION_KEY: (
+        "{category} · {marathon} · read from the schedule; times follow it.",
+        MARATHON_RUN_EVENT_FIELDS,
+        "what an event made for one run of ours says about itself. It takes {member} {game} "
+        "{category} {marathon}",
+    ),
+    MARATHON_NOTICE_TITLE_KEY: (
+        "New marathon: {name}",
+        ("name",),
+        "the name of the events-forum post a new-marathon notice becomes. It takes {name}",
+    ),
     MARATHON_EVENT_DESCRIPTION_KEY: (
         "{marathon} — read from the GDQ schedule. Our runs are boarded in {channel}.",
         MARATHON_EVENT_FIELDS,
@@ -4728,6 +4785,8 @@ KEY_TYPES.update({key: "text" for key in MARATHON_WORDS})
 KEY_HELP.update({key: said for key, (_, _, said) in MARATHON_WORDS.items()})
 KEY_CHOICES[MARATHON_MODE_KEY] = MARATHON_MODES
 KEY_CHOICES[MARATHON_FEED_ACTION_KEY] = MARATHON_FEED_ACTIONS
+KEY_CHOICES[MARATHON_EVENT_MODE_DEFAULT_KEY] = MARATHON_EVENT_MODES
+KEY_CHOICES[MARATHON_NOTICE_HOME_KEY] = MARATHON_NOTICE_HOMES
 KEY_MIN.update({key: floor for key, (floor, _) in MARATHON_RANGES.items()})
 KEY_MAX.update({key: ceiling for key, (_, ceiling) in MARATHON_RANGES.items()})
 TEXT_CHECKS[MARATHON_REMINDER_MINUTES_KEY] = checked_marks

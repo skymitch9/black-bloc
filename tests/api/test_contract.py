@@ -802,12 +802,29 @@ async def seed_world(client, web, guild, wf) -> dict:
     )
     marathon_over_id = int(cur.lastrowid)
     cur = await db.conn.execute(
-        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, event_wanted, "
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, event_mode, "
         "added_at) VALUES (?, 'GDQx 2026', 'https://gamesdonequick.com/schedule/72', 'gdq', "
-        "'72', 1, ?)",
+        "'72', 'marathon', ?)",
         (guild_id, ended.isoformat()),
     )
     marathon_waiting_id = int(cur.lastrowid)
+    marathon_linked_run_id = next(
+        row["id"] for row in await runs_of(db, marathon_id) if row["id"] != marathon_run_id
+    )
+    run_event_id = await create_event(
+        db,
+        guild_id,
+        7,
+        title="Contract Runner runs Kirby at AGDQ 2027",
+        description="Any%",
+        where=Where(WHERE_OTHER, None, "https://twitch.tv/gamesdonequick"),
+        starts_at=datetime.now(UTC) + timedelta(days=3),
+        finishes_at=datetime.now(UTC) + timedelta(days=3, hours=1),
+    )
+    await db.conn.execute(
+        "UPDATE marathon_runs SET event_id = ? WHERE id = ?", (run_event_id, marathon_linked_run_id)
+    )
+    await db.conn.commit()
     # Marathon feeds (schema 63): GDQ in add mode on the GDQ row, remembering one removed event
     # so Forget ignored has something to forget; RPG Limit Break in suggest mode on its own row
     # with one event waiting. The ESA row has no feed (ESA opted out), so POST can start there.
@@ -916,6 +933,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_bare_id": str(marathon_id),
         "marathon_waiting_id": str(marathon_waiting_id),
         "marathon_done_run_id": str(marathon_done_run_id),
+        "marathon_linked_run_id": str(marathon_linked_run_id),
         "feed_id": str(feed_id),
         "feed_suggest_id": str(feed_suggest_id),
         "feed_event_ref": "22",

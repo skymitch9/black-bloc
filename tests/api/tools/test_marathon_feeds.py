@@ -58,7 +58,7 @@ class FeedClient:
 @pytest.fixture
 async def cog(web, wf):
     await web.store.set(wf.GUILD_ID, "marathon_mode", "on")
-    await web.store.set(wf.GUILD_ID, "marathon_makes_event", False)
+    await web.store.set(wf.GUILD_ID, "marathon_event_mode_default", "none")
     made = Marathons(web)
     made.client = FeedClient()
     web.cogs["Marathons"] = made
@@ -226,3 +226,23 @@ async def test_forget_ignored_and_remove_the_feed(client, sign_in, web, wf, cog)
     assert await get_feed(web.db, wf.GUILD_ID, feed_id) is None
     missing = client.post(f"/api/marathons/feeds/{feed_id}/check")
     assert missing.status_code == 404 and missing.json()["message"]
+
+
+async def test_patch_sets_the_feeds_event_mode_renames_and_moves_it(client, sign_in, web, wf, cog):
+    feed_id = await gdq_feed(web, wf)
+    other = await channel(web, wf, "speedstuff4charity", "Speed Stuff 4 Charity")
+    sign_in(client)
+
+    body = client.patch(
+        f"/api/marathons/feeds/{feed_id}", json={"event_mode": "both", "name": "Games Done Quick"}
+    ).json()
+    assert body["event_mode"] == "both" and body["event_mode_effective"] == "both"
+    assert body["name"] == "Games Done Quick"
+
+    body = client.patch(f"/api/marathons/feeds/{feed_id}", json={"event_mode": None}).json()
+    assert body["event_mode"] is None and body["event_mode_effective"] == "none"
+    bad = client.patch(f"/api/marathons/feeds/{feed_id}", json={"event_mode": "often"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_mode"
+
+    moved = client.patch(f"/api/marathons/feeds/{feed_id}", json={"spotlight_id": other}).json()
+    assert moved["spotlight_id"] == other and "Speed Stuff 4 Charity" in moved["message"]

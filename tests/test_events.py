@@ -1692,3 +1692,54 @@ async def test_moving_a_scheduled_event_answers_none_test_mode_moved_or_failed()
     assert edits[0]["start_time"].isoformat() == row["starts_at"]
     gone = await move_scheduled_event(live, guild, row | {"scheduled_event_id": 78})
     assert gone not in SCHEDULED_OK and "no such scheduled event" in gone
+
+
+class _Tag(SimpleNamespace):
+    pass
+
+
+class _Forum:
+    def __init__(self, tags=(), editable=True):
+        self.id = 88
+        self.available_tags = [_Tag(id=n, name=name) for n, name in enumerate(tags, 1)]
+        self.edits = []
+        if not editable:
+            self.edit = None
+
+    async def edit(self, **kwargs):
+        self.edits.append(kwargs)
+        self.available_tags = [
+            _Tag(id=getattr(one, "id", None) or 99, name=one.name)
+            for one in kwargs["available_tags"]
+        ]
+
+
+async def test_a_forum_is_given_the_marathon_tag_once_and_a_full_one_goes_untagged():
+    forum = _Forum(("pending", "approved"))
+    found = await events.forum_tag(forum, events.MARATHON_TAG)
+    assert found.name == "marathon" and len(forum.edits) == 1
+    assert (await events.forum_tag(forum, events.MARATHON_TAG)).name == "marathon"
+    assert len(forum.edits) == 1
+
+    full = _Forum(tuple(f"t{n}" for n in range(events.FORUM_TAG_LIMIT)))
+    assert await events.forum_tag(full, events.MARATHON_TAG) is None and full.edits == []
+
+
+async def test_an_approved_from_event_is_approved_at_once_with_no_review_place(db):
+    store = SimpleNamespace(get=lambda guild_id, key: False)
+    bot = SimpleNamespace(db=db, store=store, guard=None)
+    guild = SimpleNamespace(id=5, me=SimpleNamespace(id=42))
+    starts = datetime(2027, 1, 5, 18, 0, tzinfo=UTC)
+    fields = events.EventFields(
+        "Sky runs Celeste at AGDQ 2027",
+        "Any%",
+        events.Where(events.WHERE_OTHER, None, "https://twitch.tv/skyruns"),
+        starts,
+        45,
+    )
+
+    row = await events.approved_from(bot, guild, 9001, fields, because="marathon_run")
+
+    assert row["status"] == events.APPROVED and row["decided_by"] == 42
+    assert row["review_channel_id"] is None and row["announce_message_id"] is None
+    assert row["ends_at"] == (starts + timedelta(minutes=45)).isoformat()

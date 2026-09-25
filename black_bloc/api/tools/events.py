@@ -132,11 +132,22 @@ async def marathon_of(bot: Any, guild: Any, row: Any) -> dict[str, Any] | None:
 
     found = await marathon_for_event(bot.db, guild.id, row["id"])
     if found is None:
-        return None
+        from ...cogs.content.marathon_events import run_of_event
+
+        run = await run_of_event(bot.db, guild.id, row["id"])
+        if run is None:
+            return None
+        return {
+            "id": run["marathon_id"],
+            "name": run["marathon_name"],
+            "line": await marathon_of_event_line(bot, guild.id, row["id"]),
+            "run": {"id": run["id"], "game": run["game"]},
+        }
     return {
         "id": found["id"],
         "name": found["name"],
         "line": await marathon_of_event_line(bot, guild.id, row["id"]),
+        "run": None,
     }
 
 

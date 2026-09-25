@@ -30,6 +30,8 @@ ROUTES = [
     ("POST", "/api/marathons/1/next"),
     ("POST", "/api/marathons/1/event"),
     ("DELETE", "/api/marathons/1/event"),
+    ("POST", "/api/marathons/1/runs/1/event"),
+    ("DELETE", "/api/marathons/1/runs/1/event"),
 ]
 
 
@@ -441,10 +443,12 @@ async def test_the_list_carries_the_add_forms_default_and_each_rows_event(
     sign_in(client)
     add(client, make_event=False)
     payload = client.get("/api/marathons").json()
-    assert payload["makes_event"] is True
+    assert payload["event_mode_default"] == "none"
+    assert [one["value"] for one in payload["event_modes"]] == ["none", "marathon", "runs", "both"]
     assert payload["marathons"][0]["event"]["id"] is None
-    await web.store.set(wf.GUILD_ID, "marathon_makes_event", False)
-    assert client.get("/api/marathons").json()["makes_event"] is False
+    assert payload["marathons"][0]["event_mode"] == "none"
+    await web.store.set(wf.GUILD_ID, "marathon_event_mode_default", "runs")
+    assert client.get("/api/marathons").json()["event_mode_default"] == "runs"
 
 
 async def test_make_now_then_unlink_from_the_site_and_a_second_unlink_says_why(
@@ -478,3 +482,73 @@ async def test_removing_from_the_site_calls_the_event_off(client, sign_in, web, 
     assert (await web_row(wf, web, "web.marathon.event_cancelled"))["marathon_id"] == body[
         "id"
     ]
+
+
+# --- event modes (docs/info/marathon-event-modes-design.md §B) --------------------------------
+
+
+@pytest.fixture
+async def quiet(web, wf):
+    await web.store.set(wf.GUILD_ID, "events_create_scheduled", False)
+
+
+async def test_adding_with_an_event_mode_makes_the_run_events_and_one_web_row(
+    client, sign_in, web, cog, wf, quiet
+):
+    sign_in(client)
+    body = add(client, event_mode="runs").json()
+
+    assert body["event_mode"] == "runs" and body["event"]["id"] is None
+    metroid = next(one for one in body["run_list"] if one["game"] == "Super Metroid")
+    assert metroid["event_id"] and metroid["event_status"] == "approved"
+    assert metroid["event_unlinked"] is False
+    assert [kind for kind, _ in await wf.web_rows_in(web.db)] == ["web.marathon.added"]
+    queued = client.get("/api/events?status=approved").json()
+    mine = next(one for one in queued if one["id"] == metroid["event_id"])
+    assert mine["marathon"]["run"]["game"] == "Super Metroid"
+
+
+async def test_a_mode_that_is_not_a_mode_is_refused_and_make_event_still_maps(
+    client, sign_in, cog, quiet
+):
+    sign_in(client)
+    refused = add(client, event_mode="often")
+    assert refused.status_code == 422 and refused.json()["error"] == "bad_mode"
+    assert add(client, make_event=False).json()["event_mode"] == "none"
+
+
+async def test_patch_event_mode_applies_at_once_and_leaves_one_web_row(
+    client, sign_in, web, cog, wf, quiet
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"event_mode": "runs"}).json()
+
+    assert body["event_mode"] == "runs" and "1 run event(s) made" in body["message"]
+    kinds = [kind for kind, _ in await wf.web_rows_in(web.db)]
+    assert kinds == ["web.marathon.added", "web.marathon.event_mode_set"]
+    assert (await web_row(wf, web, "web.marathon.event_mode_set"))["to"] == "runs"
+    wrong = client.patch(f"/api/marathons/{marathon_id}", json={"event_mode": 3})
+    assert wrong.status_code == 422
+
+
+async def test_a_run_event_is_unlinked_and_made_again_from_the_site(
+    client, sign_in, web, cog, wf, quiet
+):
+    sign_in(client)
+    body = add(client, event_mode="runs").json()
+    metroid = next(one for one in body["run_list"] if one["game"] == "Super Metroid")
+    base = f"/api/marathons/{body['id']}/runs/{metroid['id']}/event"
+
+    gone = client.delete(base).json()
+    assert gone["run"]["event_id"] is None and gone["run"]["event_unlinked"] is True
+    again = client.delete(base)
+    assert again.status_code == 409 and "carries no event" in again.json()["message"]
+    made = client.post(base).json()
+    assert made["run"]["event_id"] and made["run"]["event_status"] == "approved"
+    twice = client.post(base)
+    assert twice.status_code == 409 and twice.json()["error"] == "run_event_exists"
+    celeste = next(one for one in body["run_list"] if one["game"] == "Celeste")
+    refused = client.post(f"/api/marathons/{body['id']}/runs/{celeste['id']}/event")
+    assert refused.status_code == 409 and refused.json()["error"] == "not_ours"

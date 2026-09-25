@@ -194,10 +194,11 @@ EVENT_UNLINKED = (
 EVENT_STOPPED_WAITING = "**{name}** no longer waits to make an event."
 NO_EVENT = "**{name}** carries no event, so there was nothing to unlink."
 MARATHON_OF_EVENT = "Marathon: **{name}** — {ours} run(s) of ours"
-ADD_EVENT = "Make it an event? yes or no"
-ADD_EVENT_YES = ("yes", "y", "true", "on", "1")
-ADD_EVENT_NO = ("no", "n", "false", "off", "0")
-BAD_ADD_EVENT = "Say yes or no to making it an event, so nothing was added."
+RUN_OF_EVENT = "Marathon run: **{game}** on **{name}**"
+EVENT_MODES_WITH_ONE = ("marathon", "both")
+BAD_ADD_EVENT = (
+    "Say none, marathon, runs or both for what it makes in the events, so nothing was added."
+)
 
 ADD = "add"
 REFRESH = "refresh"
@@ -285,9 +286,13 @@ def card_moves(
     return tuple(found)
 
 
+def wants_its_event(marathon: Any) -> bool:
+    return str(_cell(marathon, "event_mode") or "none") in EVENT_MODES_WITH_ONE
+
+
 def event_move(marathon: Any) -> MarathonMove:
     """Staff final say both ways: a linked or waiting marathon unlinks, a bare one makes one."""
-    if _cell(marathon, "event_id") or _cell(marathon, "event_wanted"):
+    if _cell(marathon, "event_id") or wants_its_event(marathon):
         return UNLINK_EVENT_MOVE
     return MAKE_EVENT_MOVE
 
@@ -296,19 +301,9 @@ def event_line(marathon: Any, status: Any) -> str:
     event_id = _cell(marathon, "event_id")
     if event_id:
         return EVENT_LINE.format(event_id=int(event_id), status=status or EVENT_GONE)
-    if _cell(marathon, "event_wanted"):
+    if wants_its_event(marathon):
         return EVENT_WAITING_LINE
     return EVENT_NONE_LINE
-
-
-def wanted_event_answer(given: Any) -> bool | None:
-    """The Add modal's fifth field: yes / no in words, None when it is neither."""
-    text = str(given or "").strip().lower()
-    if text in ADD_EVENT_YES:
-        return True
-    if text in ADD_EVENT_NO:
-        return False
-    return None
 
 
 def next_moves(record: Any, *, over: bool) -> tuple[MarathonMove, ...]:
