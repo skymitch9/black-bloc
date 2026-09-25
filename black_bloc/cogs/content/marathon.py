@@ -784,13 +784,16 @@ class Marathons(commands.Cog):
         if not self.bot.db.is_connected:
             return
         for guild in self._guilds():
-            if mode_of(self.bot, guild.id) == MODE_OFF:
-                continue
+            off = mode_of(self.bot, guild.id) == MODE_OFF
             for row in await list_marathons(self.bot.db, guild.id):
                 async with self.lock(row["id"]):
                     fresh = await get_marathon(self.bot.db, guild.id, row["id"])
-                    if fresh is not None:
+                    if fresh is None:
+                        continue
+                    if not off:
                         await self.tick_marathon(guild, fresh)
+                    elif fresh["board_pinned"] and mt.board_due_off(fresh, self.clock()):
+                        await self.unpin_board(guild, fresh, because="over")
         self.last_tick_ok_at = now_iso()
         self.last_tick_error = None
 

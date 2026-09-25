@@ -690,3 +690,15 @@ async def test_pairing_from_the_panel_picks_a_schedule_name_then_the_member(bot,
 
 async def test_a_card_for_a_marathon_that_is_gone_is_nothing_to_draw(bot, cog):
     assert await cogmod.build_card(bot, bot.guild, 999) == (None, None)
+
+
+async def test_a_pinned_board_still_comes_down_after_marathon_posts_are_turned_off(bot, cog):
+    """Checklist 38: `off` stops new effects, never the end of one already out."""
+    marathon = await added(bot, cog)
+    await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    board = next(one for one in posts(bot) if "our people" in one.content)
+    assert board.pinned
+    await bot.store.set(GUILD, "marathon_mode", "off")
+    cog.clock = lambda: NOW + timedelta(days=2)
+    await cog.tick_once()
+    assert board.pinned is False
