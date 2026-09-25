@@ -1758,6 +1758,7 @@ dialog.drawer::backdrop { background: var(--bb-scrim); }
    A pill or a fixed value in a field's control slot has the same problem: a grid
    item is stretched unless it is told not to be. */
 .field > .seg,
+.card-body > .seg,
 .field > .badge,
 .field > .chat-fixed { justify-self: start; }
 

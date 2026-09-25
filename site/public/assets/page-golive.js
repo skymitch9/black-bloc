@@ -890,14 +890,22 @@ function datesCard(row, say) {
 }
 
 /** The owner's split: when a channel pings, and the windows that decide it for an events row. */
+/** A Pings-card write keeps the drawer open: the row takes the fresh answer and is drawn again. */
+async function redrawRow(row, say) {
+  const one = row.spotlight;
+  const fresh = listOf(await api('/api/golive/spotlight'), 'spotlight').find((it) => it.id === one.id);
+  if (fresh) row.spotlight = fresh;
+  keepSaying('golive.spotlight', say);
+  refresh();
+  openDrawer(row.name || row.user_id, await rowPanel(row, say));
+}
+
 function pingsCard(row, say) {
   const one = row.spotlight;
   const current = one.ping_mode || 'always';
-  const after = (done) => {
+  const after = async (done) => {
     if (!done.ok) return;
-    keepSaying('golive.spotlight', say);
-    closeDrawer();
-    refresh();
+    await redrawRow(row, say);
   };
   const mode = segment(PING_MODE_CHOICES, current, {
     onChange: async () => {
@@ -967,9 +975,7 @@ async function addWindow(row, say) {
   });
   if (!sure) return;
   say.say(made?.message || 'Window added.', 'ok');
-  keepSaying('golive.spotlight', say);
-  closeDrawer();
-  refresh();
+  await redrawRow(row, say);
 }
 
 function channelAnnounceMoves(row, say) {
