@@ -243,7 +243,7 @@ const KIND_HEADS = {
   birthday: 'birthday', tempvoice: 'tempvoice',
   role: 'rolemenu', role_menu: 'rolemenu', rolemenu: 'rolemenu',
   poll: 'poll', chat: 'chat', request: 'request', requests: 'request',
-  pings: 'pings', raidtrain: 'raidtrain',
+  pings: 'pings', raidtrain: 'raidtrain', marathon: 'marathon',
   application: 'applications', applications: 'applications',
   selftest: 'selftest',
 };
@@ -342,6 +342,7 @@ const LOG_LEVEL_FEATURES = [
   ['request', 'requests', 'request'],
   ['pings', 'ping roles', 'pings'],
   ['raidtrain', 'raid trains', 'raidtrain'],
+  ['marathon', 'marathons', 'marathon'],
   ['applications', 'applications', 'apply'],
   // F-G1: guides are edited on the website only, so there is no panel to name.
   ['guides', 'guides', null],
@@ -644,6 +645,41 @@ const SETTING_SPECS = [
   ['automod_arm_needs_confirm', 'bool', true, true, 'true to ask a second time before automod is turned on from the panel, naming what will start happening; turning it off or back to shadow is always one press'],
   ['raidtrain_panel_minutes', 'int', 10, 10, "minutes the /raidtrain panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['raidtrain_event_default', 'bool', false, false, 'whether **Also make an event** starts ticked when somebody begins a raid train, on the Raid trains page and on the /raidtrain draft panel alike; off by default. Ticking it sends the train through the same events review a proposal goes through, so a Lead still approves or denies it. This is only the starting position of a tick box — whoever starts the train can always set it the other way'],
+  ["marathon_mode", "enum", "shadow", "shadow", "whether marathon schedules post at all. off reads nothing and posts nothing; shadow — the default — posts the board, the reminders and the shoutouts where shadow_channel_id points with the rehearsal note; on posts them in marathon_channel_id", ["off", "shadow", "on"]],
+  ["marathon_channel_id", "channel", null, null, "where the marathon board, the reminders and the shoutouts go. Blank uses the go-live channel"],
+  ["marathon_poll_minutes", "int", 30, 30, "minutes between reads of a marathon's schedule while it is near — from marathon_lead_days before it starts until a day after it ends. 30 by default; a marathon's own row can say otherwise", null, 120, 10],
+  ["marathon_far_poll_hours", "int", 24, 24, "hours between reads of a schedule that is still weeks away. 24 by default", null, 168, 1],
+  ["marathon_lead_days", "int", 7, 7, "how many days before a marathon starts its schedule counts as near and is read every marathon_poll_minutes. 7 by default", null, 60, 1],
+  ["marathon_move_minutes", "int", 5, 5, "how many minutes a run's start must shift before it counts as moved — a moved run of ours is logged as important with the old and the new time. 5 by default", null, 120, 1],
+  ["marathon_title_confirms", "bool", true, true, "whether the marathon channel's live title and game decide which run is on now. on by default; off goes by the schedule's clock alone"],
+  ["marathon_late_grace_minutes", "int", 90, 90, "minutes a run may sit past its scheduled start with no sign on the stream before the schedule alone calls it live — the run before it is probably running long. 90 by default", null, 360, 0],
+  ["marathon_match_hosts", "bool", true, true, "whether a host or a commentator from here counts as one of ours, not only a runner. on by default"],
+  ["marathon_reminder_minutes", "text", "120, 15", "120, 15", "minutes before a run of ours that a reminder is posted, separated by commas; `120, 15` by default. marathon_ping_minutes is always one of them"],
+  ["marathon_ping_minutes", "int", 15, 15, "the one reminder that pings: this many minutes before a run of ours, the member's own ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings at the scheduled start", null, 240, 0],
+  ["marathon_reminder_pings", "bool", true, true, "whether the marathon_ping_minutes reminder mentions any role at all. on by default"],
+  ["marathon_live_pings", "bool", false, false, "whether the shoutout when a run of ours goes live pings too. off by default — the ping already went out marathon_ping_minutes before"],
+  ["marathon_reminder_stale_minutes", "int", 30, 30, "minutes past its moment after which a reminder is skipped and logged instead of posted late. 30 by default", null, 240, 1],
+  ["marathon_pin_board", "bool", true, true, "whether a marathon's board is pinned while the marathon is on; it comes down a day after the marathon ends. on by default"],
+  ["marathon_edit_done", "bool", true, true, "whether a shoutout is rewritten in the past tense when the run is over. on by default"],
+  ["marathon_window_slack_hours", "int", 2, 2, "hours either side of a marathon that its channel's ping window stays open, when the channel pings during events only. 2 by default", null, 24, 0],
+  ["marathon_panel_minutes", "int", 10, 10, "minutes the /marathon panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
+  ["marathon_board_template", "text", "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}", "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}", "the head of a marathon's board, the one message edited in place as the schedule moves. It takes {marathon} {count} {starts} {ends} {url}"],
+  ["marathon_board_line_template", "text", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "one line of the board per run of ours. It takes {member} {game} {category} {when} {relative} {part} {state}; {when} and {relative} show in each reader's own time zone"],
+  ["marathon_board_empty_line", "text", "Nobody from here is on this schedule yet. Black Bloc keeps reading it.", "Nobody from here is on this schedule yet. Black Bloc keeps reading it.", "the board's only line while no run of ours has been found"],
+  ["marathon_reminder_template", "text", "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}", "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}", "a reminder before a run of ours. It takes {member} {game} {category} {in} {when} {url} {marathon} {part}"],
+  ["marathon_live_template", "text", "{member} {part} **{game}** ({category}) on **{marathon}** right now! {url}", "{member} {part} **{game}** ({category}) on **{marathon}** right now! {url}", "the shoutout the moment a run of ours goes live. It takes {member} {game} {category} {url} {marathon} {part}"],
+  ["marathon_done_template", "text", "{member} {part} **{game}** ({category}) on **{marathon}** — that run is over. Thanks for cheering!", "{member} {part} **{game}** ({category}) on **{marathon}** — that run is over. Thanks for cheering!", "what a shoutout is rewritten to once the run is over. It takes the same words as marathon_live_template and never pings"],
+  ["marathon_part_runner", "text", "runs", "runs", "{part} for a runner"],
+  ["marathon_part_host", "text", "hosts", "hosts", "{part} for a host"],
+  ["marathon_part_commentator", "text", "is on commentary", "is on commentary", "{part} for a commentator"],
+  ["marathon_state_upcoming", "text", "coming up", "coming up", "{state} on the board for a run not yet on"],
+  ["marathon_state_live", "text", "on now", "on now", "{state} on the board for the run on now"],
+  ["marathon_state_done", "text", "done", "done", "{state} on the board for a run that is over"],
+  ["marathon_state_dropped", "text", "off the schedule", "off the schedule", "{state} on the board for a run the schedule no longer lists"],
+  ["marathon_unknown_site", "text", "For now I can read the GDQ schedule only — that link is something else.", "For now I can read the GDQ schedule only — that link is something else.", "what staff are told when a schedule link is from a site Black Bloc cannot read"],
+  ["marathon_already_added", "text", "**{name}** already follows that schedule, so nothing was added.", "**{name}** already follows that schedule, so nothing was added.", "what staff are told when a schedule link is already on the list. It takes {name}"],
+  ["marathon_could_not_read", "text", "Black Bloc could not read that schedule, so nothing was added: {reason}", "Black Bloc could not read that schedule, so nothing was added: {reason}", "what staff are told when a schedule link will not read. It takes {reason}"],
+  ["marathon_no_runs_yet", "text", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "what the page and the panel say about a marathon whose schedule is not published yet. It takes {marathon}"],
   ['rolemenu_panel_minutes', 'int', 10, 10, "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['honeypot_panel_minutes', 'int', 10, 10, "minutes the /honeypot panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['modmail_panel_minutes', 'int', 10, 10, "minutes the /modmail panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -957,6 +993,9 @@ function seedState() {
   return {
   raidTrains,
   raidSlots: seedRaidSlots(raidTrains),
+  marathons: seedMarathons(),
+  marathonRuns: seedMarathonRuns(),
+  marathonPeople: seedMarathonPeople(),
   nextRaidTrain: 4,
   settings: new Map(SETTING_SPECS.map((spec) => [spec[0], spec[2]])),
   audit: [
@@ -1338,6 +1377,8 @@ function seedState() {
     // events, so it carries one staff window ahead — AGDQ 2027 — and pings nothing until then.
     spotlightWindows: [
       { id: 1, spotlight_id: 1, starts_at: daysAhead(40), ends_at: daysAhead(47), note: 'AGDQ 2027', source: 'staff', source_id: null, added_by: STAFF.id, added_at: minutesAgo(30) },
+      // The marathon schedule's own window (schema 60): AGDQ 2027 is on now, so it is open.
+      { id: 2, spotlight_id: 1, starts_at: minutesAgo(420), ends_at: minutesAgo(-560), note: 'AGDQ 2027', source: 'marathon', source_id: 1, added_by: null, added_at: minutesAgo(9000) },
     ],
     spotlightSessions: [
       { id: 5, spotlight_id: 1, started_at: minutesAgo(560), ended_at: null, title: 'AGDQ 2027 — Day 4', game: 'Celeste', url: 'https://www.twitch.tv/gamesdonequick', mode: 'shadow', announced_message_id: '830000000000000020', last_bump_at: minutesAgo(80), bump_count: 2 },
@@ -3155,7 +3196,7 @@ const GUIDE_FEATURE_PAGES = {
   modmail: 'modmail.html', golive: 'golive.html', youtube: 'golive.html', events: 'events.html',
   birthday: 'birthdays.html', tempvoice: 'tempvoice.html', rolemenu: 'rolemenus.html',
   poll: 'polls.html', chat: 'chat.html', request: 'requests.html', pings: 'golive.html',
-  raidtrain: 'raidtrain.html', applications: 'rolemenus.html', selftest: 'health.html',
+  raidtrain: 'raidtrain.html', marathon: 'marathons.html', applications: 'rolemenus.html', selftest: 'health.html',
   guides: 'guides.html',
 };
 const GUIDE_CORE_KEYS = ['staff_channel_id', 'log_channel_id', 'modlog_channel_id', 'role_menu_channel_id'];
@@ -5369,6 +5410,462 @@ function raidDetail(row) {
     lineup: raidLineup(row),
   });
 }
+
+// --- Marathon schedules (docs/info/marathon-schedule-design.md) ----------------------------
+// Three marathons: AGDQ 2027 on GamesDoneQuick (on now, twelve runs, three of ours — one moved
+// forty minutes, one live), Halo Fest (over), and GDQx 2026 (paused, schedule not published).
+
+const MARATHON_STATE_WORDS = { upcoming: 'coming up', live: 'on now', done: 'done', dropped: 'off the schedule' };
+const MARATHON_PHASE_WORDS = { far: 'far off', near: 'coming up', live: 'on now', over: 'over', paused: 'paused' };
+const MARATHON_BECAUSE_WORDS = { title: "the stream's title", schedule: "the schedule's clock", staff: 'staff' };
+const MARATHON_GDQ = /^https?:\/\/(?:www\.)?gamesdonequick\.com\/schedule\/(\d+)\/?(?:[?#].*)?$/i;
+const MARATHON_TRACKER = /^https?:\/\/tracker\.gamesdonequick\.com\/tracker\/(?:event|runs|index)\/([A-Za-z0-9_-]+)\/?(?:[?#].*)?$/i;
+const MARATHON_SHORT = /^[A-Za-z][A-Za-z0-9_-]{2,40}$/;
+const MARATHON_POLL_RANGE = [10, 120];
+
+function marathonPerson(name, login, part, userId = null) {
+  return { name, login, part, user_id: userId };
+}
+
+function seedMarathonRuns() {
+  const at = (minutes) => new Date(Date.now() + minutes * 60000).toISOString();
+  const run = (id, marathonId, order, start, game, category, people, extra = {}) => ({
+    id,
+    marathon_id: marathonId,
+    external_id: String(8000 + id),
+    order_no: order,
+    game,
+    category,
+    runners_text: people.filter((one) => one.part === 'runner').map((one) => one.name).join(', '),
+    people,
+    scheduled_at: at(start),
+    ends_at: at(start + 60),
+    previous_scheduled_at: null,
+    moved_at: null,
+    state: start + 60 < 0 ? 'done' : 'upcoming',
+    live_because: null,
+    shout_message_id: null,
+    reminders_sent: [],
+    ...extra,
+  });
+  const casey = MEMBERS[1].id;
+  const rivet = MEMBERS[2].id;
+  const moth = MEMBERS[3].id;
+  return [
+    run(1, 1, 1, -300, 'AGDQ 2027 Pre-Show', 'Pre-Show', [marathonPerson('Interview Crew', null, 'runner')]),
+    run(2, 1, 2, -240, 'Donkey Kong Country 2', '102%', [marathonPerson('Ryan Ford', 'ryan_ford522', 'runner')]),
+    run(3, 1, 3, -180, 'The Talos Principle', 'All Sigils', [marathonPerson('Gelly', 'gelly', 'runner')]),
+    run(4, 1, 4, -120, 'Fire Emblem: Three Houses', 'Blue Lions', [marathonPerson('GretaIceVixen', 'greticevixen', 'runner')]),
+    run(5, 1, 5, -40, 'Super Metroid', 'Any%', [marathonPerson('Casey', 'caseyfast', 'runner', casey), marathonPerson('TheKingsPride', 'thekingspride', 'host')], { state: 'live', live_because: 'title', shout_message_id: '830000000000000301', reminders_sent: [120, 15] }),
+    run(6, 1, 6, 20, 'Celeste', 'Any%', [marathonPerson('Flyingludicolo', 'flyingludicolo', 'runner')]),
+    run(7, 1, 7, 80, 'Kirby Air Riders', 'Air Ride — All Tracks', [marathonPerson('Bluekandy', 'bluekandy', 'runner'), marathonPerson('Rivet', 'rivetplays', 'host', rivet)], { previous_scheduled_at: at(40), moved_at: minutesAgo(12), reminders_sent: [] }),
+    run(8, 1, 8, 140, 'Devil May Cry 5', 'NG (Human)', [marathonPerson('DECosmic', 'decosmic', 'runner')]),
+    run(9, 1, 9, 200, 'Crypt of the NecroDancer', 'Story Mode', [marathonPerson('Spooty', 'spootybiscuit', 'runner'), marathonPerson('Moth', null, 'commentator', moth)]),
+    run(10, 1, 10, 260, 'Castlevania: Symphony of the Night', 'Any% (Luck Mode)', [marathonPerson('Dr4gonBlitz', 'dr4gonblitz', 'runner')]),
+    run(11, 1, 11, 320, 'Blaster Master', 'Any%', [marathonPerson('UraniumAnchor', 'uraniumanchor', 'runner')]),
+    run(12, 1, 12, 380, 'I Am Your Beast', 'All Story Levels', [marathonPerson('Palix', null, 'runner')], { state: 'dropped' }),
+    run(13, 2, 1, -30000, 'Halo 2', 'Legendary', [marathonPerson('Casey', 'caseyfast', 'runner', casey)], { shout_message_id: '830000000000000302' }),
+    run(14, 2, 2, -29900, 'Halo 3', 'Easy', [marathonPerson('Somebody', 'somebody', 'runner')]),
+  ];
+}
+
+function seedMarathons() {
+  return [
+    { id: 1, name: 'AGDQ 2027', schedule_url: 'https://gamesdonequick.com/schedule/74', source: 'gdq', source_ref: '74', spotlight_id: 1, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 440 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000300', board_pinned: true, last_fetched_at: minutesAgo(12), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(9000) },
+    { id: 2, name: 'Halo Fest', schedule_url: 'https://gamesdonequick.com/schedule/73', source: 'gdq', source_ref: '73', spotlight_id: null, starts_at: minutesAgo(30000), ends_at: minutesAgo(29840), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000299', board_pinned: false, last_fetched_at: minutesAgo(700), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(40000) },
+    { id: 3, name: 'GDQx 2026', schedule_url: 'https://gamesdonequick.com/schedule/72', source: 'gdq', source_ref: '72', spotlight_id: null, starts_at: null, ends_at: null, active: false, poll_minutes: 60, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(1500), last_fetch_ok: 0, last_error: 'the GDQ tracker has the event but has not published its schedule yet (it answers 404 for the runs)', fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(2000) },
+  ];
+}
+
+function seedMarathonPeople() {
+  return [
+    { id: 1, marathon_id: null, runner_name: 'moth', user_id: MEMBERS[3].id, added_by: STAFF.id, added_at: minutesAgo(3000) },
+  ];
+}
+
+function marathonOf(id) {
+  const found = state.marathons.find((one) => String(one.id) === String(id));
+  if (!found) throw new Refused(404, 'not_found', `Black Bloc follows no marathon **${String(id).slice(0, 40)}** here, so nothing was done.`);
+  return found;
+}
+
+function marathonRunsOf(id) {
+  return state.marathonRuns
+    .filter((one) => one.marathon_id === id)
+    .sort((a, b) => String(a.scheduled_at).localeCompare(String(b.scheduled_at)) || a.order_no - b.order_no);
+}
+
+function marathonOurs(run) {
+  return run.people.some((one) => one.user_id);
+}
+
+function marathonPhase(row) {
+  if (!row.active) return 'paused';
+  if (!row.starts_at) return 'far';
+  const now = Date.now();
+  const starts = new Date(row.starts_at).getTime();
+  const ends = new Date(row.ends_at || row.starts_at).getTime();
+  const lead = Number(state.settings.get('marathon_lead_days') || 7) * 86400000;
+  if (now < starts - lead) return 'far';
+  if (now < starts) return 'near';
+  if (now > ends) return 'over';
+  return 'live';
+}
+
+function marathonWindowOf(id) {
+  return (state.golive.spotlightWindows || []).find((one) => one.source === 'marathon' && one.source_id === id) || null;
+}
+
+function marathonSyncWindow(row) {
+  const windows = state.golive.spotlightWindows || (state.golive.spotlightWindows = []);
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+  const keep = channel && row.active && row.starts_at;
+  const current = marathonWindowOf(row.id);
+  if (!keep) {
+    if (current) {
+      state.golive.spotlightWindows = windows.filter((one) => one !== current);
+      logAction('marathon.window_dropped', { actor_id: null, details: { marathon_id: row.id, window_id: current.id } });
+    }
+    return;
+  }
+  const slack = Number(state.settings.get('marathon_window_slack_hours') || 0) * 3600000;
+  const starts = new Date(new Date(row.starts_at).getTime() - slack).toISOString();
+  const ends = new Date(new Date(row.ends_at || row.starts_at).getTime() + slack).toISOString();
+  if (current) {
+    Object.assign(current, { spotlight_id: channel.id, starts_at: starts, ends_at: ends, note: row.name });
+    return;
+  }
+  const id = windows.reduce((top, one) => Math.max(top, one.id), 0) + 1;
+  windows.push({ id, spotlight_id: channel.id, starts_at: starts, ends_at: ends, note: row.name, source: 'marathon', source_id: row.id, added_by: null, added_at: new Date().toISOString() });
+  logAction('marathon.window_set', { actor_id: null, details: { marathon_id: row.id, window_id: id } });
+}
+
+function marathonPersonRow(one) {
+  return { ...one, member_name: one.user_id ? memberName(one.user_id) : null };
+}
+
+function marathonRunRow(run) {
+  const ours = marathonOurs(run);
+  return {
+    id: run.id,
+    external_id: run.external_id,
+    order_no: run.order_no,
+    game: run.game,
+    category: run.category,
+    runners_text: run.runners_text,
+    people: run.people.map(marathonPersonRow),
+    scheduled_at: run.scheduled_at,
+    ends_at: run.ends_at,
+    previous_scheduled_at: run.previous_scheduled_at,
+    moved_at: run.moved_at,
+    moved: Boolean(run.moved_at),
+    state: run.state,
+    state_word: MARATHON_STATE_WORDS[run.state] || run.state,
+    live_because: run.live_because,
+    live_because_word: MARATHON_BECAUSE_WORDS[run.live_because] || null,
+    ours,
+    shouted: Boolean(run.shout_message_id),
+    shoutable: ours && ['upcoming', 'live'].includes(run.state) && !run.shout_message_id,
+    can_mark_done: ['upcoming', 'live'].includes(run.state),
+    reminders_sent: run.reminders_sent,
+  };
+}
+
+function marathonPairingRow(one) {
+  return {
+    id: one.id,
+    marathon_id: one.marathon_id,
+    everywhere: one.marathon_id === null,
+    runner_name: one.runner_name,
+    user_id: one.user_id,
+    member_name: memberName(one.user_id),
+  };
+}
+
+function marathonRow(row) {
+  const runs = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped');
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+  const window = marathonWindowOf(row.id);
+  const phase = marathonPhase(row);
+  return {
+    id: row.id,
+    name: row.name,
+    schedule_url: row.schedule_url,
+    schedule_page: /^\d+$/.test(row.source_ref) ? `https://gamesdonequick.com/schedule/${row.source_ref}` : row.schedule_url,
+    source: row.source,
+    source_word: 'GDQ tracker',
+    source_ref: row.source_ref,
+    spotlight_id: row.spotlight_id,
+    channel_login: channel ? channel.twitch_login : null,
+    channel_gone: Boolean(row.spotlight_id) && !channel,
+    starts_at: row.starts_at,
+    ends_at: row.ends_at,
+    active: Boolean(row.active),
+    poll_minutes: row.poll_minutes,
+    phase,
+    phase_word: MARATHON_PHASE_WORDS[phase],
+    runs: runs.length,
+    ours: runs.filter(marathonOurs).length,
+    last_fetched_at: row.last_fetched_at,
+    last_fetch_ok: row.last_fetch_ok === null ? null : Boolean(row.last_fetch_ok),
+    last_error: row.last_error,
+    fetch_failures: row.fetch_failures,
+    trouble: row.last_fetch_ok === 0 ? `could not be read since ${row.last_fetched_at} — ${row.last_error}` : null,
+    board_message_id: row.board_message_id,
+    board_channel_id: row.board_channel_id,
+    board_pinned: Boolean(row.board_pinned),
+    window: window ? { id: window.id, starts_at: window.starts_at, ends_at: window.ends_at } : null,
+    added_at: row.added_at,
+    added_by_name: row.added_by ? memberName(row.added_by) : null,
+  };
+}
+
+function marathonPairingsFor(row) {
+  return state.marathonPeople
+    .filter((one) => one.marathon_id === null || one.marathon_id === row.id)
+    .map(marathonPairingRow);
+}
+
+function marathonDetail(row) {
+  const runs = marathonRunsOf(row.id);
+  const unmatched = new Map();
+  for (const run of runs) {
+    for (const one of run.people) {
+      if (!one.user_id && !unmatched.has(one.name.toLowerCase())) unmatched.set(one.name.toLowerCase(), one.name);
+    }
+  }
+  return {
+    ...marathonRow(row),
+    run_list: runs.map(marathonRunRow),
+    pairings: marathonPairingsFor(row),
+    unmatched: [...unmatched.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
+  };
+}
+
+function marathonRematch(row) {
+  const links = new Map((state.golive.links || []).map((one) => [String(one.twitch_login).toLowerCase(), one.user_id]));
+  const hosts = Boolean(state.settings.get('marathon_match_hosts'));
+  for (const run of marathonRunsOf(row.id)) {
+    run.people = run.people.map((one) => {
+      let userId = null;
+      if (one.part === 'runner' || hosts) {
+        const key = one.name.trim().toLowerCase();
+        const pairing = state.marathonPeople.find((p) => p.runner_name === key && p.marathon_id === row.id)
+          || state.marathonPeople.find((p) => p.runner_name === key && p.marathon_id === null);
+        userId = pairing ? pairing.user_id : (one.login ? links.get(String(one.login).toLowerCase()) || null : null);
+      }
+      return { ...one, user_id: userId };
+    });
+  }
+}
+
+function marathonWords(key) {
+  return String(state.settings.get(key) || '');
+}
+
+function marathonRead(url) {
+  const text = String(url || '').trim();
+  let found = MARATHON_GDQ.exec(text);
+  if (found) return found[1];
+  found = MARATHON_TRACKER.exec(text);
+  if (found) return /^\d+$/.test(found[1]) ? found[1] : '74';
+  if (MARATHON_SHORT.test(text) && !/^\d+$/.test(text)) return '74';
+  return null;
+}
+
+route('GET', '/api/marathons', (context) => {
+  requireStaff(context.session);
+  return {
+    mode: state.settings.get('marathon_mode'),
+    marathons: [...state.marathons]
+      .sort((a, b) => String(a.starts_at || '9999').localeCompare(String(b.starts_at || '9999')) || a.id - b.id)
+      .map(marathonRow),
+  };
+});
+
+route('POST', '/api/marathons', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!name) throw new Refused(422, 'no_name', 'A marathon needs a name, so nothing was added.');
+  const url = String(body.schedule_url || '').trim();
+  const ref = marathonRead(url);
+  if (ref === null) throw new Refused(422, 'unknown_site', marathonWords('marathon_unknown_site'));
+  const twin = state.marathons.find((one) => one.schedule_url === url);
+  if (twin) throw new Refused(409, 'duplicate', marathonWords('marathon_already_added').replace('{name}', twin.name));
+  const spotlightId = body.spotlight_id ? Number(body.spotlight_id) : null;
+  if (spotlightId && !state.golive.spotlights.find((one) => one.id === spotlightId)) {
+    throw new Refused(404, 'no_such_channel', `**${String(body.spotlight_id).slice(0, 40)}** is not one of the channels on the Go-live page, so nothing was changed. Add the channel there first, or leave it blank.`);
+  }
+  const id = state.marathons.reduce((top, one) => Math.max(top, one.id), 0) + 1;
+  const starts = new Date(Date.now() + 3 * 86400000);
+  const row = { id, name, schedule_url: url, source: 'gdq', source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString() };
+  state.marathons.push(row);
+  const top = state.marathonRuns.reduce((most, one) => Math.max(most, one.id), 0);
+  [['Celeste', 'Any%', 'Flyingludicolo', 'flyingludicolo'], ['Super Metroid', 'Any%', 'Casey', 'caseyfast'], ['Blaster Master', 'Any%', 'Interview Crew', null]].forEach(([game, category, runner, login], index) => {
+    const at = new Date(starts.getTime() + index * 60 * 60000);
+    state.marathonRuns.push({ id: top + index + 1, marathon_id: id, external_id: String(9000 + top + index), order_no: index + 1, game, category, runners_text: runner, people: [marathonPerson(runner, login, 'runner')], scheduled_at: at.toISOString(), ends_at: new Date(at.getTime() + 3600000).toISOString(), previous_scheduled_at: null, moved_at: null, state: 'upcoming', live_because: null, shout_message_id: null, reminders_sent: [] });
+  });
+  marathonRematch(row);
+  marathonSyncWindow(row);
+  logAction('web.marathon.added', { details: { marathon_id: id, name, url, via: 'website' } });
+  const found = marathonDetail(row);
+  return { ...found, message: `**${name}** is on the list. Its schedule has ${found.runs} run(s), ${found.ours} of them ours.` };
+});
+
+route('GET', '/api/marathons/:marathon_id', (context) => {
+  requireStaff(context.session);
+  return marathonDetail(marathonOf(context.params.marathon_id));
+});
+
+route('PATCH', '/api/marathons/:marathon_id', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const body = await context.body();
+  const said = [];
+  if ('active' in body) {
+    if (typeof body.active !== 'boolean') throw new Refused(422, 'bad_active', 'Say true to read this marathon or false to pause it, so nothing was changed.');
+    if (body.active !== row.active) {
+      row.active = body.active;
+      marathonSyncWindow(row);
+      logAction(body.active ? 'web.marathon.resumed' : 'web.marathon.paused', { details: { marathon_id: row.id, via: 'website' } });
+      said.push(body.active ? `**${row.name}** is being read again.` : `**${row.name}** is paused — nothing is read or posted until it is resumed.`);
+    }
+  }
+  if ('spotlight_id' in body) {
+    const wanted = body.spotlight_id ? Number(body.spotlight_id) : null;
+    if (wanted && !state.golive.spotlights.find((one) => one.id === wanted)) {
+      throw new Refused(404, 'no_such_channel', `**${String(body.spotlight_id).slice(0, 40)}** is not one of the channels on the Go-live page, so nothing was changed. Add the channel there first, or leave it blank.`);
+    }
+    if (wanted !== row.spotlight_id) {
+      row.spotlight_id = wanted;
+      marathonSyncWindow(row);
+      logAction('web.marathon.channel_set', { details: { marathon_id: row.id, to: wanted, via: 'website' } });
+    }
+  }
+  if ('name' in body || 'poll_minutes' in body) {
+    if ('name' in body) {
+      const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 100);
+      if (!name) throw new Refused(422, 'no_name', 'A marathon needs a name, so nothing was added.');
+      row.name = name;
+    }
+    if ('poll_minutes' in body) {
+      const given = body.poll_minutes;
+      if (given === null || given === '' || given === 0) row.poll_minutes = null;
+      else if (!Number.isInteger(given) || given < MARATHON_POLL_RANGE[0] || given > MARATHON_POLL_RANGE[1]) {
+        throw new Refused(422, 'bad_poll', "A marathon's own read gap is 10 to 120 minutes, or blank for the setting's.");
+      } else row.poll_minutes = given;
+    }
+    logAction('web.marathon.updated', { details: { marathon_id: row.id, via: 'website' } });
+  }
+  return { ...marathonDetail(row), message: said.join(' ') };
+});
+
+route('DELETE', '/api/marathons/:marathon_id', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  row.active = false;
+  marathonSyncWindow(row);
+  state.marathons = state.marathons.filter((one) => one !== row);
+  state.marathonRuns = state.marathonRuns.filter((one) => one.marathon_id !== row.id);
+  state.marathonPeople = state.marathonPeople.filter((one) => one.marathon_id !== row.id);
+  logAction('web.marathon.removed', { details: { marathon_id: row.id, name: row.name, via: 'website' } });
+  return { removed: true, id: row.id, message: `**${row.name}** is off the list, with its runs and pairings.` };
+});
+
+route('POST', '/api/marathons/:marathon_id/refresh', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  if (row.id === 3) {
+    row.last_fetched_at = new Date().toISOString();
+    throw new Refused(502, 'unreadable', `**${row.name}** could not be read just now — ${row.last_error}. Every run is kept as it was.`);
+  }
+  row.last_fetched_at = new Date().toISOString();
+  row.last_fetch_ok = 1;
+  row.last_error = null;
+  row.fetch_failures = 0;
+  marathonRematch(row);
+  logAction('marathon.fetched', { actor_id: null, details: { marathon_id: row.id, changed: false } });
+  const found = marathonDetail(row);
+  return { ...found, message: `**${row.name}** was read just now: ${found.runs} run(s), ${found.ours} of them ours.` };
+});
+
+route('POST', '/api/marathons/:marathon_id/board', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const shadow = state.settings.get('marathon_mode') !== 'on';
+  const kind = row.board_message_id ? (shadow ? 'web.marathon.would_refresh_board' : 'web.marathon.board_refreshed') : (shadow ? 'web.marathon.would_post_board' : 'web.marathon.board_posted');
+  if (!row.board_message_id) {
+    row.board_message_id = String(830000000000000400 + row.id);
+    row.board_channel_id = '800000000000000006';
+  }
+  logAction(kind, { details: { marathon_id: row.id, via: 'website' } });
+  return { ...marathonDetail(row), message: `The board for **${row.name}** is up to date.` };
+});
+
+route('GET', '/api/marathons/:marathon_id/people', (context) => {
+  requireStaff(context.session);
+  return marathonPairingsFor(marathonOf(context.params.marathon_id));
+});
+
+route('POST', '/api/marathons/:marathon_id/people', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const body = await context.body();
+  const name = String(body.runner_name || '').trim().replace(/\s+/g, ' ').slice(0, 100);
+  if (!name) throw new Refused(422, 'no_runner', 'Pick or type the name as the schedule writes it, so nothing was paired.');
+  const userId = String(body.user_id || '').replace(/\D/g, '');
+  if (!userId) throw new Refused(422, 'no_member', 'Pick the member that name is, so nothing was paired.');
+  const key = name.toLowerCase();
+  const scope = body.everywhere ? null : row.id;
+  state.marathonPeople = state.marathonPeople.filter((one) => !(one.runner_name === key && one.marathon_id === scope));
+  const id = state.marathonPeople.reduce((top, one) => Math.max(top, one.id), 0) + 1;
+  state.marathonPeople.push({ id, marathon_id: scope, runner_name: key, user_id: userId, added_by: STAFF.id, added_at: new Date().toISOString() });
+  marathonRematch(row);
+  logAction('web.marathon.paired', { target_id: userId, details: { marathon_id: row.id, runner: name, member_id: userId, via: 'website' } });
+  return { pairings: marathonPairingsFor(row), message: `**${name}** on ${scope === null ? 'every schedule' : 'this schedule'} is ${memberName(userId) || userId} from now on.` };
+});
+
+route('DELETE', '/api/marathons/:marathon_id/people/:pairing_id', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const pairing = state.marathonPeople.find((one) => String(one.id) === String(context.params.pairing_id) && (one.marathon_id === null || one.marathon_id === row.id));
+  if (!pairing) throw new Refused(404, 'no_such_pairing', 'That pairing is gone already, so nothing was changed.');
+  state.marathonPeople = state.marathonPeople.filter((one) => one !== pairing);
+  marathonRematch(row);
+  logAction('web.marathon.unpaired', { target_id: pairing.user_id, details: { marathon_id: row.id, runner: pairing.runner_name, via: 'website' } });
+  return { pairings: marathonPairingsFor(row), message: `**${pairing.runner_name}** is no longer paired — the automatic match decides again.` };
+});
+
+function marathonRunOf(row, id) {
+  const run = state.marathonRuns.find((one) => one.marathon_id === row.id && String(one.id) === String(id));
+  if (!run) throw new Refused(404, 'no_such_run', `That run is not on **${row.name}**'s schedule any more, so nothing was done.`);
+  return run;
+}
+
+route('POST', '/api/marathons/:marathon_id/runs/:run_id/shout', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const run = marathonRunOf(row, context.params.run_id);
+  if (!marathonOurs(run)) throw new Refused(409, 'not_ours', `Nobody from here is on **${run.game}**, so there is nobody to shout. Pair a name first.`);
+  if (!['upcoming', 'live'].includes(run.state) || run.shout_message_id) {
+    throw new Refused(409, 'not_shoutable', `**${run.game}** is ${run.state} or has its shoutout already, so nothing was posted. Only a run of ours that is coming up or on now without a shoutout can be shouted by hand.`);
+  }
+  if (run.state === 'upcoming') Object.assign(run, { state: 'live', live_because: 'staff' });
+  run.shout_message_id = String(830000000000000500 + run.id);
+  logAction(state.settings.get('marathon_mode') === 'on' ? 'web.marathon.shouted' : 'web.marathon.would_shout', { details: { marathon_id: row.id, run_id: run.id, via: 'website' } });
+  return { run: marathonRunRow(run), message: `The shoutout for **${run.game}** is out.` };
+});
+
+route('POST', '/api/marathons/:marathon_id/runs/:run_id/done', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const run = marathonRunOf(row, context.params.run_id);
+  if (['done', 'dropped'].includes(run.state)) throw new Refused(409, 'already_done', `**${run.game}** is already ${run.state}, so nothing was changed.`);
+  run.state = 'done';
+  logAction('web.marathon.run_done', { details: { marathon_id: row.id, run_id: run.id, because: 'staff', via: 'website' } });
+  return { run: marathonRunRow(run), message: `**${run.game}** is marked done.` };
+});
 
 route('GET', '/api/raidtrains/status', (context) => {
   requireStaff(context.session);
