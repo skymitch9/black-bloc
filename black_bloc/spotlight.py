@@ -23,15 +23,25 @@ from .settings_store import (
     CHANNEL_OPTOUT_DELETE,
     CHANNEL_OPTOUT_END,
     CHANNEL_OPTOUT_LEAVE,
+    PING_ALWAYS,
+    PING_EVENTS,
+    PING_MODES,
+    PING_NEVER,
     SPOTLIGHT_BAD_DATE,
     SPOTLIGHT_BUMP_TEMPLATE,
     SPOTLIGHT_DATES_BUTTON,
     SPOTLIGHT_END_BEFORE_START,
     SPOTLIGHT_ENDS_LABEL,
+    SPOTLIGHT_PINGS_ALWAYS_WORDS,
+    SPOTLIGHT_PINGS_EVENTS_WORDS,
+    SPOTLIGHT_PINGS_NEVER_WORDS,
     SPOTLIGHT_RANGE,
     SPOTLIGHT_RANGE_KEPT,
     SPOTLIGHT_SCHEDULED_WORD,
     SPOTLIGHT_STARTS_LABEL,
+    SPOTLIGHT_WINDOW_NEXT_WORDS,
+    SPOTLIGHT_WINDOW_NONE_WORDS,
+    SPOTLIGHT_WINDOW_OPEN_WORDS,
 )
 from .timezones import DEFAULT_TZ, zone
 
@@ -739,3 +749,255 @@ def added_said(row: Any, hours: int, **wording: Any) -> str:
 
 def reason_of(exc: BaseException) -> str:
     return f"{type(exc).__name__}: {exc}"
+
+
+WINDOW_STAFF = "staff"
+WINDOW_MARATHON = "marathon"
+WINDOW_SOURCES = {WINDOW_MARATHON: "from the marathon schedule"}
+WINDOW_OPENED_BECAUSE = "window_opened"
+WINDOW_PURGED_BECAUSE = "window_purged"
+NEEDS_BOTH = "needs_both"
+BAD_MODE = "bad_mode"
+WINDOW_NOTE_MAX = 100
+
+PINGS_ALWAYS_BUTTON = "Pings: always"
+PINGS_NEVER_BUTTON = "Pings: never"
+PINGS_EVENTS_BUTTON = "Pings: during events"
+PING_MODE_BUTTONS = {
+    PING_ALWAYS: PINGS_ALWAYS_BUTTON,
+    PING_NEVER: PINGS_NEVER_BUTTON,
+    PING_EVENTS: PINGS_EVENTS_BUTTON,
+}
+PING_MODE_WORDS = {
+    PING_ALWAYS: "always",
+    PING_NEVER: "never",
+    PING_EVENTS: "during events",
+}
+ADD_WINDOW = "Add a ping window…"
+REMOVE_WINDOW = "Remove a ping window…"
+WINDOW_MODAL_TITLE = "A ping window"
+WINDOW_STARTS_LABEL = "Pings start"
+WINDOW_ENDS_LABEL = "Pings stop"
+WINDOW_NOTE_LABEL = "What it is for — blank for nothing"
+WINDOW_NOTE_PLACEHOLDER = "AGDQ 2027"
+WINDOW_LINE = "{start} – {end}{note}{source}"
+WINDOW_LINE_NOTE = " · {note}"
+WINDOW_LINE_SOURCE = " · {source}"
+WINDOW_LINE_OPEN = " · **open now**"
+
+PING_MODE_SAID = {
+    PING_ALWAYS: (
+        "**{login}** mentions its ping roles on every announcement again — the go-live role and "
+        "its own. Its pin and its reminders are exactly as they were."
+    ),
+    PING_NEVER: (
+        "**{login}** is still announced, pinned and reminded as before, but nothing it posts "
+        "mentions a role from now on. **Pings: always** or **Pings: during events** turns them "
+        "back on."
+    ),
+    PING_EVENTS: (
+        "**{login}** is still announced, pinned and reminded as before, and mentions its ping "
+        "roles only while one of its ping windows is open. {state}."
+    ),
+}
+PING_MODE_REFUSED = (
+    "**{given}** is not a ping mode, so nothing was changed. Choose `always` to ping on every "
+    "announcement, `never` to ping on none, or `events` to ping only inside a ping window."
+)
+WINDOW_NEEDS_BOTH = (
+    "A ping window needs a start AND an end, so nothing was added. Write both as "
+    "`YYYY-MM-DD HH:MM` — for example `2027-01-12 15:00` and `2027-01-19 23:00`."
+)
+WINDOW_ADDED_SAID = "**{login}** pings from {start} to {end}{note}."
+WINDOW_ADDED_NOT_EVENTS = (
+    " Windows only decide anything while its row says **Pings: during events** — right now it "
+    "pings {mode}."
+)
+WINDOW_REMOVED_SAID = (
+    "The ping window {start} – {end} is off **{login}**'s row. Nothing it already posted was "
+    "changed."
+)
+WINDOW_GONE = (
+    "That ping window is not there any more, so nothing was removed. Somebody else may have "
+    "removed it, or the sweep purged it after it ended — the row's Pings card shows what is left."
+)
+WINDOW_FROM_MARATHON = "That window comes from the marathon schedule — change it there."
+
+
+def ping_mode_of(row: Any) -> str:
+    """A row with no `ping_mode` cell, or an unknown word in it, pings as it always did."""
+    found = str(_cell(row, "ping_mode") or "").strip().lower()
+    return found if found in PING_MODES else PING_ALWAYS
+
+
+def clean_ping_mode(given: Any) -> str | None:
+    """`None` is the refusal: an unknown mode is never quietly read as `always`."""
+    found = str(given or "").strip().lower()
+    return found if found in PING_MODES else None
+
+
+def window_span(window: Any) -> tuple[datetime, datetime] | None:
+    start = parse_ts(_cell(window, "starts_at"))
+    end = parse_ts(_cell(window, "ends_at"))
+    if start is None or end is None:
+        return None
+    return (start, end)
+
+
+def window_is_open(window: Any, now: datetime | None = None) -> bool:
+    """Open from its start up to, but not at, its end; an unreadable window never opens."""
+    span = window_span(window)
+    if span is None:
+        return False
+    at = now or datetime.now(UTC)
+    return span[0] <= at < span[1]
+
+
+def open_window(windows: Any, now: datetime | None = None) -> Any:
+    """Of the windows open now, the one that stays open longest."""
+    found = [one for one in windows or () if window_is_open(one, now)]
+    if not found:
+        return None
+    return max(found, key=lambda one: window_span(one)[1])
+
+
+def next_window(windows: Any, now: datetime | None = None) -> Any:
+    at = now or datetime.now(UTC)
+    ahead = [
+        one
+        for one in windows or ()
+        if (span := window_span(one)) is not None and span[0] > at
+    ]
+    if not ahead:
+        return None
+    return min(ahead, key=lambda one: window_span(one)[0])
+
+
+def pings_now(row: Any, windows: Any, now: datetime | None = None) -> bool:
+    """The one gate every post a channel row makes goes through: always, never, or in a window."""
+    mode = ping_mode_of(row)
+    if mode == PING_NEVER:
+        return False
+    if mode == PING_EVENTS:
+        return open_window(windows, now) is not None
+    return True
+
+
+def window_when(value: Any, tz_name: Any = None) -> str:
+    """`19 Jan 23:00`, in the zone asked for — a window is hours, not days."""
+    when = parse_ts(value)
+    if when is None:
+        return ""
+    local = when.astimezone(zone(tz_name) or zone(DEFAULT_TZ))
+    return f"{local.day} {local.strftime('%b %H:%M')}"
+
+
+def ping_state_words(
+    row: Any, windows: Any, now: datetime | None = None, tz_name: Any = None, **wording: Any
+) -> str:
+    """`Pings: always` / `never` / `during events — open until …`, `— next …`, `— no window set`."""
+    mode = ping_mode_of(row)
+    if mode == PING_ALWAYS:
+        return _worded(wording.get("always"), SPOTLIGHT_PINGS_ALWAYS_WORDS)
+    if mode == PING_NEVER:
+        return _worded(wording.get("never"), SPOTLIGHT_PINGS_NEVER_WORDS)
+    window = _window_words(windows, now, tz_name, wording)
+    wanted = str(wording.get("events") or "").strip() or SPOTLIGHT_PINGS_EVENTS_WORDS
+    return _filled(wanted, SPOTLIGHT_PINGS_EVENTS_WORDS, window=window)
+
+
+def _window_words(windows: Any, now: Any, tz_name: Any, wording: dict[str, Any]) -> str:
+    found = open_window(windows, now)
+    if found is not None:
+        wanted = str(wording.get("open") or "").strip() or SPOTLIGHT_WINDOW_OPEN_WORDS
+        return _filled(
+            wanted,
+            SPOTLIGHT_WINDOW_OPEN_WORDS,
+            end=window_when(_cell(found, "ends_at"), tz_name),
+        )
+    found = next_window(windows, now)
+    if found is not None:
+        wanted = str(wording.get("next") or "").strip() or SPOTLIGHT_WINDOW_NEXT_WORDS
+        return _filled(
+            wanted,
+            SPOTLIGHT_WINDOW_NEXT_WORDS,
+            start=window_when(_cell(found, "starts_at"), tz_name),
+            end=window_when(_cell(found, "ends_at"), tz_name),
+        )
+    return _worded(wording.get("none"), SPOTLIGHT_WINDOW_NONE_WORDS)
+
+
+def _worded(given: Any, fallback: str) -> str:
+    return str(given or "").strip() or fallback
+
+
+def is_staff_window(window: Any) -> bool:
+    return str(_cell(window, "source") or WINDOW_STAFF) == WINDOW_STAFF
+
+
+def window_source_words(window: Any) -> str:
+    source = str(_cell(window, "source") or WINDOW_STAFF)
+    return "" if source == WINDOW_STAFF else WINDOW_SOURCES.get(source, source)
+
+
+def window_line(window: Any, now: datetime | None = None, tz_name: Any = None) -> str:
+    note = str(_cell(window, "note") or "").strip()
+    source = window_source_words(window)
+    said = WINDOW_LINE.format(
+        start=window_when(_cell(window, "starts_at"), tz_name),
+        end=window_when(_cell(window, "ends_at"), tz_name),
+        note=WINDOW_LINE_NOTE.format(note=note) if note else "",
+        source=WINDOW_LINE_SOURCE.format(source=source) if source else "",
+    )
+    return said + (WINDOW_LINE_OPEN if window_is_open(window, now) else "")
+
+
+def window_problem(starts_at: Any, ends_at: Any) -> str | None:
+    """A window has no blank-means-for-ever: both ends are needed, the end after the start."""
+    if not str(starts_at or "").strip() or not str(ends_at or "").strip():
+        return NEEDS_BOTH
+    return range_problem(starts_at, ends_at)
+
+
+def window_is_past_keeping(window: Any, keep_days: Any, now: datetime | None = None) -> bool:
+    """An unreadable end is never purged — it is left for staff to see and remove."""
+    end = parse_ts(_cell(window, "ends_at"))
+    if end is None:
+        return False
+    try:
+        days = max(1, int(keep_days))
+    except (TypeError, ValueError):
+        days = 1
+    return (now or datetime.now(UTC)) >= end + timedelta(days=days)
+
+
+def ping_mode_said(
+    row: Any, windows: Any, now: Any = None, tz_name: Any = None, **wording: Any
+) -> str:
+    mode = ping_mode_of(row)
+    return PING_MODE_SAID[mode].format(
+        login=_cell(row, "twitch_login"),
+        state=ping_state_words(row, windows, now, tz_name, **wording),
+    )
+
+
+def window_added_said(row: Any, window: Any, tz_name: Any = None) -> str:
+    note = str(_cell(window, "note") or "").strip()
+    said = WINDOW_ADDED_SAID.format(
+        login=_cell(row, "twitch_login"),
+        start=window_when(_cell(window, "starts_at"), tz_name),
+        end=window_when(_cell(window, "ends_at"), tz_name),
+        note=f" ({note})" if note else "",
+    )
+    mode = ping_mode_of(row)
+    if mode == PING_EVENTS:
+        return said
+    return said + WINDOW_ADDED_NOT_EVENTS.format(mode=PING_MODE_WORDS[mode])
+
+
+def window_removed_said(row: Any, window: Any, tz_name: Any = None) -> str:
+    return WINDOW_REMOVED_SAID.format(
+        login=_cell(row, "twitch_login"),
+        start=window_when(_cell(window, "starts_at"), tz_name),
+        end=window_when(_cell(window, "ends_at"), tz_name),
+    )

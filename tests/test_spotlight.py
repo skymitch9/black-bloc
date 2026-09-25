@@ -359,3 +359,140 @@ def test_what_a_row_says_it_was_added_as_reads_the_range_not_only_the_end():
         expires_at=(NOW + timedelta(days=10)).isoformat(),
     )
     assert "from 23 Sep to 30 Sep" in spotlight.added_said(both, 4)
+
+
+def window(**fields):
+    base = {
+        "id": 1,
+        "spotlight_id": 1,
+        "starts_at": (NOW + timedelta(days=2)).isoformat(),
+        "ends_at": (NOW + timedelta(days=9)).isoformat(),
+        "note": "AGDQ 2027",
+        "source": "staff",
+        "source_id": None,
+    }
+    return base | fields
+
+
+OPEN = window(id=2, starts_at=(NOW - timedelta(hours=1)).isoformat(),
+              ends_at=(NOW + timedelta(hours=5)).isoformat())
+AHEAD = window(id=3)
+PAST = window(id=4, starts_at=(NOW - timedelta(days=9)).isoformat(),
+              ends_at=(NOW - timedelta(days=2)).isoformat())
+
+
+def test_always_pings_whatever_the_windows_say_and_is_what_an_old_row_reads_as():
+    assert spotlight.ping_mode_of(row()) == "always"
+    assert spotlight.ping_mode_of(row(ping_mode="nonsense")) == "always"
+    assert spotlight.pings_now(row(), [], NOW) is True
+    assert spotlight.pings_now(row(ping_mode="always"), [PAST], NOW) is True
+
+
+def test_never_pings_even_inside_an_open_window():
+    assert spotlight.pings_now(row(ping_mode="never"), [OPEN], NOW) is False
+
+
+def test_events_pings_only_while_a_window_is_open():
+    events = row(ping_mode="events")
+    assert spotlight.pings_now(events, [], NOW) is False
+    assert spotlight.pings_now(events, [AHEAD], NOW) is False
+    assert spotlight.pings_now(events, [PAST], NOW) is False
+    assert spotlight.pings_now(events, [PAST, OPEN, AHEAD], NOW) is True
+
+
+def test_a_window_opens_at_its_start_and_is_closed_at_its_end():
+    at_start = datetime.fromisoformat(OPEN["starts_at"])
+    at_end = datetime.fromisoformat(OPEN["ends_at"])
+    events = row(ping_mode="events")
+    assert spotlight.pings_now(events, [OPEN], at_start) is True
+    assert spotlight.pings_now(events, [OPEN], at_end - timedelta(seconds=1)) is True
+    assert spotlight.pings_now(events, [OPEN], at_end) is False
+
+
+def test_an_unreadable_window_never_opens():
+    broken = window(starts_at="soon", ends_at="later")
+    assert spotlight.window_is_open(broken, NOW) is False
+    assert spotlight.next_window([broken], NOW) is None
+
+
+def test_open_and_next_window_pick_the_right_one():
+    later = window(id=5, starts_at=(NOW + timedelta(days=20)).isoformat(),
+                   ends_at=(NOW + timedelta(days=21)).isoformat())
+    assert spotlight.open_window([PAST, OPEN, AHEAD], NOW)["id"] == 2
+    assert spotlight.open_window([PAST, AHEAD], NOW) is None
+    assert spotlight.next_window([later, AHEAD, PAST], NOW)["id"] == 3
+    assert spotlight.next_window([PAST], NOW) is None
+
+
+def test_the_ping_state_reads_all_five_shapes():
+    assert spotlight.ping_state_words(row(), [], NOW, "UTC") == "Pings: always"
+    assert spotlight.ping_state_words(row(ping_mode="never"), [OPEN], NOW, "UTC") == "Pings: never"
+    events = row(ping_mode="events")
+    assert (
+        spotlight.ping_state_words(events, [OPEN, AHEAD], NOW, "UTC")
+        == "Pings: during events — open until 20 Sep 17:00"
+    )
+    assert (
+        spotlight.ping_state_words(events, [AHEAD, PAST], NOW, "UTC")
+        == "Pings: during events — next 22 Sep 12:00 – 29 Sep 12:00"
+    )
+    assert (
+        spotlight.ping_state_words(events, [PAST], NOW, "UTC")
+        == "Pings: during events — no window set"
+    )
+
+
+def test_the_ping_state_is_worded_by_its_keys_and_survives_a_broken_one():
+    events = row(ping_mode="events")
+    said = spotlight.ping_state_words(
+        events, [OPEN], NOW, "UTC", events="Marathon pings — {window}", open="till {end}"
+    )
+    assert said == "Marathon pings — till 20 Sep 17:00"
+    broken = spotlight.ping_state_words(events, [], NOW, "UTC", events="{nope}")
+    assert broken == "Pings: during events — no window set"
+    assert spotlight.ping_state_words(row(), [], NOW, always="Loud") == "Loud"
+
+
+def test_a_window_reads_in_the_zone_asked_for():
+    assert spotlight.window_when("2027-01-19T23:00:00+00:00", "UTC") == "19 Jan 23:00"
+    assert spotlight.window_when("2027-01-19T23:00:00+00:00", "America/Phoenix") == "19 Jan 16:00"
+    assert spotlight.window_when("not a date") == ""
+
+
+def test_a_window_needs_both_ends_and_the_end_after_the_start():
+    start = NOW.isoformat()
+    end = (NOW + timedelta(hours=1)).isoformat()
+    assert spotlight.window_problem(start, end) is None
+    assert spotlight.window_problem(None, end) == spotlight.NEEDS_BOTH
+    assert spotlight.window_problem(start, "") == spotlight.NEEDS_BOTH
+    assert spotlight.window_problem(end, start) == spotlight.END_BEFORE_START
+    assert spotlight.window_problem(start, start) == spotlight.END_BEFORE_START
+
+
+def test_a_marathon_window_says_where_it_came_from_and_a_staff_one_does_not():
+    marathon = window(source="marathon", source_id=9)
+    assert spotlight.is_staff_window(AHEAD) is True
+    assert spotlight.is_staff_window(marathon) is False
+    assert "from the marathon schedule" in spotlight.window_line(marathon, NOW, "UTC")
+    assert spotlight.window_line(AHEAD, NOW, "UTC") == "22 Sep 12:00 – 29 Sep 12:00 · AGDQ 2027"
+    assert spotlight.window_line(OPEN, NOW, "UTC").endswith("**open now**")
+
+
+def test_a_window_is_purged_only_once_its_end_is_older_than_the_keep():
+    assert spotlight.window_is_past_keeping(PAST, 30, NOW) is False
+    assert spotlight.window_is_past_keeping(PAST, 1, NOW) is True
+    assert spotlight.window_is_past_keeping(OPEN, 1, NOW) is False
+    assert spotlight.window_is_past_keeping(window(ends_at="garbage"), 1, NOW) is False
+
+
+def test_an_unknown_ping_mode_is_refused_not_read_as_always():
+    assert spotlight.clean_ping_mode("Events") == "events"
+    assert spotlight.clean_ping_mode("sometimes") is None
+    assert spotlight.clean_ping_mode(None) is None
+
+
+def test_adding_a_window_to_a_row_that_is_not_on_events_says_it_decides_nothing_yet():
+    said = spotlight.window_added_said(row(), AHEAD, "UTC")
+    assert "pings from 22 Sep 12:00 to 29 Sep 12:00 (AGDQ 2027)" in said
+    assert "right now it pings always" in said
+    assert "right now" not in spotlight.window_added_said(row(ping_mode="events"), AHEAD, "UTC")
