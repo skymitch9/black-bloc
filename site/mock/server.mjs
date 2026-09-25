@@ -342,7 +342,7 @@ const LOG_LEVEL_FEATURES = [
   ['request', 'requests', 'request'],
   ['pings', 'ping roles', 'pings'],
   ['raidtrain', 'raid trains', 'raidtrain'],
-  ['marathon', 'marathons', 'marathon'],
+  ['marathon', 'marathons', 'event'],
   ['applications', 'applications', 'apply'],
   // F-G1: guides are edited on the website only, so there is no panel to name.
   ['guides', 'guides', null],
@@ -662,7 +662,6 @@ const SETTING_SPECS = [
   ["marathon_pin_board", "bool", true, true, "whether a marathon's board is pinned while the marathon is on; it comes down a day after the marathon ends. on by default"],
   ["marathon_edit_done", "bool", true, true, "whether a shoutout is rewritten in the past tense when the run is over. on by default"],
   ["marathon_window_slack_hours", "int", 2, 2, "hours either side of a marathon that its channel's ping window stays open, when the channel pings during events only. 2 by default", null, 24, 0],
-  ["marathon_panel_minutes", "int", 10, 10, "minutes the /marathon panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ["marathon_board_template", "text", "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}", "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}", "the head of a marathon's board, the one message edited in place as the schedule moves. It takes {marathon} {count} {starts} {ends} {url}"],
   ["marathon_board_line_template", "text", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "one line of the board per run of ours. It takes {member} {game} {category} {when} {relative} {part} {state}; {when} and {relative} show in each reader's own time zone"],
   ["marathon_board_empty_line", "text", "Nobody from here is on this schedule yet. Black Bloc keeps reading it.", "Nobody from here is on this schedule yet. Black Bloc keeps reading it.", "the board's only line while no run of ours has been found"],
@@ -680,7 +679,7 @@ const SETTING_SPECS = [
   ["marathon_already_added", "text", "**{name}** already follows that schedule, so nothing was added.", "**{name}** already follows that schedule, so nothing was added.", "what staff are told when a schedule link is already on the list. It takes {name}"],
   ["marathon_could_not_read", "text", "Black Bloc could not read that schedule, so nothing was added: {reason}", "Black Bloc could not read that schedule, so nothing was added: {reason}", "what staff are told when a schedule link will not read. It takes {reason}"],
   ["marathon_no_runs_yet", "text", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "what the page and the panel say about a marathon whose schedule is not published yet. It takes {marathon}"],
-  ["marathon_suggest_next", "bool", true, true, "whether a GDQ marathon that is over looks up the next GDQ event on the tracker and suggests it to staff \u2014 a notice with Add it and Not this one, and a Next up card on the Marathons page. on by default; nothing is ever added until staff press Add it"],
+  ["marathon_suggest_next", "bool", true, true, "whether a GDQ marathon that is over looks up the next GDQ event on the tracker and suggests it to staff \u2014 a notice with Add it and Not this one, and a Next up card in the Marathons section of the Events page. on by default; nothing is ever added until staff press Add it"],
   ["marathon_next_template", "text", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "the staff notice when a GDQ marathon is over and the tracker lists another event ahead. It takes {marathon} {next} {when} {relative} {url}"],
   ["marathon_next_none_template", "text", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "what staff are told when a GDQ marathon is over and the tracker lists no event ahead. It takes {marathon}"],
   ["marathon_next_added_template", "text", "Added **{next}** \u2014 it will be read from {url}.", "Added **{next}** \u2014 it will be read from {url}.", "what the staff notice is rewritten to once the next event is added. It takes {marathon} {next} {when} {relative} {url}"],
@@ -5756,7 +5755,7 @@ function marathonOpenSuggestion(row, eventId) {
     throw new Refused(409, 'nothing_suggested', `**${row.name}** has no next event waiting, so nothing was changed. **Look again** asks the tracker.`);
   }
   if (eventId !== undefined && eventId !== null && String(eventId) !== String(record.event_id)) {
-    throw new Refused(409, 'suggestion_moved', `That is not the suggestion waiting on **${row.name}** any more, so nothing was changed. Open /marathon or the Marathons page for the current one.`);
+    throw new Refused(409, 'suggestion_moved', `That is not the suggestion waiting on **${row.name}** any more, so nothing was changed. Open /event ▸ Marathons… or the Events page for the current one.`);
   }
   return record;
 }

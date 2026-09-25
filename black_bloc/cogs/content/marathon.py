@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import discord
-from discord import app_commands
 from discord.ext import commands, tasks
 
 from ... import marathon as mt
@@ -17,6 +16,7 @@ from ... import shadow as shadow_home
 from ... import spotlight as spot
 from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors, SafeDynamicItem
+from ...events import PANEL_MINUTES_KEY as EVENT_PANEL_MINUTES_KEY
 from ...golive import now_iso, parse_ts, ping_prefix
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
@@ -45,7 +45,6 @@ from ...panels import (
 )
 from ...settings_store import (
     DB_UNAVAILABLE,
-    GUILD_ONLY,
     MARATHON_ALREADY_ADDED_KEY,
     MARATHON_BOARD_EMPTY_KEY,
     MARATHON_BOARD_LINE_KEY,
@@ -66,7 +65,6 @@ from ...settings_store import (
     MARATHON_NEXT_ADDED_TEMPLATE_KEY,
     MARATHON_NEXT_NONE_TEMPLATE_KEY,
     MARATHON_NEXT_TEMPLATE_KEY,
-    MARATHON_PANEL_MINUTES_KEY,
     MARATHON_PIN_BOARD_KEY,
     MARATHON_PING_MINUTES_KEY,
     MARATHON_POLL_MINUTES_KEY,
@@ -986,25 +984,6 @@ class Marathons(commands.Cog):
         if not self.bot.db.is_connected:
             return
         await self._reconciler.run(self.tick_once, skip_if_recent=True)
-
-    @app_commands.command(
-        name="marathon", description="Marathons: when our people are on a marathon stream"
-    )
-    async def marathon_panel_command(self, interaction: discord.Interaction) -> None:
-        if interaction.guild is None:
-            await answer(interaction, GUILD_ONLY)
-            return
-        if not self.bot.db.is_connected:
-            await answer(interaction, DB_UNAVAILABLE)
-            return
-        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        view.message = await interaction.original_response()
 
     # --- the minute tick --------------------------------------------------------------------
 
@@ -2068,7 +2047,7 @@ def notice_view(marathon_id: Any, event_id: Any, *, disabled: bool = False) -> d
     return view
 
 
-# --- the /marathon panel ----------------------------------------------------------------------
+# --- /event ▸ Marathons… ----------------------------------------------------------------------
 
 ROOT = "root"
 CARD = "card"
@@ -2096,7 +2075,7 @@ class MarathonPanel(Panel):
 
 
 def minutes_for(bot: Any, guild_id: int) -> int:
-    return panel_minutes(bot.store, guild_id, MARATHON_PANEL_MINUTES_KEY)
+    return panel_minutes(bot.store, guild_id, EVENT_PANEL_MINUTES_KEY)
 
 
 def now_for(bot: Any) -> datetime:
@@ -2489,6 +2468,10 @@ class MarathonMoveButton(discord.ui.Button):
         action = self.move.action
         if action == mt.LOGS:
             await send_logs(interaction, FEATURE)
+        elif action == mt.EVENTS:
+            from ..community.events import back_to_panel
+
+            await back_to_panel(interaction, view)
         elif action == mt.MINE:
             await open_mine(interaction, view)
         elif action == mt.BACK:

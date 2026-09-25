@@ -61,7 +61,6 @@ export const LABELS = {
   spotlight_window_none_words: 'The window line when no ping window is set',
   marathon_mode: 'Whether marathon schedules post at all',
   marathon_log_level: 'How much of the marathon work is repeated into Discord',
-  marathon_panel_minutes: 'How long the /marathon panel stays live',
   marathon_channel_id: 'Where the marathon board, reminders and shoutouts go',
   marathon_poll_minutes: 'How often a near marathon’s schedule is read',
   marathon_far_poll_hours: 'How often a far-off marathon’s schedule is read',

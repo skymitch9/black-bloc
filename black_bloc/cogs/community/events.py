@@ -218,6 +218,7 @@ from ...settings_store import (
     EVENTS_ROOM_NOTICE_KEY,
     EVENTS_TEST_RETENTION_KEY,
     GUILD_ONLY,
+    MARATHON_MODE_KEY,
     SPOTLIGHT_EVENT_SLACK_KEY,
     WHERE_CHECK_OFF,
     WHERE_CHECK_REFUSE,
@@ -262,6 +263,7 @@ SETTINGS_TITLE = "Events — settings"
 PROPOSE_BUTTON = "Propose an event"
 SETTINGS_BUTTON = "Settings"
 NUMBERS_BUTTON = "Numbers…"
+MARATHONS_BUTTON = "Marathons…"
 FORGET_BUTTON = "Forget…"
 CANCEL_YES = "Yes, call it off"
 FORGET_PLACEHOLDER = "Forget which one?"
@@ -497,6 +499,8 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     if staff:
         view.add_item(SettingsButton())
         view.add_item(LogsButton())
+    if staff or store.get(guild.id, MARATHON_MODE_KEY) != "off":
+        view.add_item(MarathonsButton())
     return embed, view
 
 
@@ -1497,6 +1501,16 @@ class RoomsButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         await open_rooms(interaction, self.view)
+
+
+class MarathonsButton(discord.ui.Button):
+    def __init__(self, row: int = 3) -> None:
+        super().__init__(label=MARATHONS_BUTTON, style=discord.ButtonStyle.secondary, row=row)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        from ..content.marathon import open_root as open_marathons
+
+        await open_marathons(interaction, self.view)
 
 
 class ForumButton(discord.ui.Button):

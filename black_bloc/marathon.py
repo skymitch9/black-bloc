@@ -63,7 +63,7 @@ MESSAGE_LIMIT = 2000
 TWITCH_URL = "https://twitch.tv/{login}"
 
 PANEL_TITLE = "Marathons"
-PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /marathon again"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /event again"
 OURS_NEXT = "**Ours next**"
 MY_RUNS = "**My runs**"
 NOTHING_NEXT = "Nobody from here is on a schedule that is coming up."
@@ -143,7 +143,7 @@ NOTHING_SUGGESTED = (
 )
 SUGGESTION_MOVED = (
     "That is not the suggestion waiting on **{name}** any more, so nothing was changed. Open "
-    "/marathon or the Marathons page for the current one."
+    "/event ▸ Marathons… or the Events page for the current one."
 )
 LOOK_FAILED = (
     "The GDQ tracker could not be read just now — {why}. The suggestion is kept as it was."
@@ -180,6 +180,7 @@ REMOVE = "remove"
 PAIR = "pair"
 LOGS = "logs"
 BACK = "back"
+EVENTS = "events"
 MINE = "mine"
 NEXT = "next"
 POLL = "poll"
@@ -211,6 +212,7 @@ BOARD_REFRESH_MOVE = MarathonMove(BOARD, "Refresh the board", row=2)
 REMOVE_MOVE = MarathonMove(REMOVE, "Remove", "danger", 3)
 PAIR_MOVE = MarathonMove(PAIR, "Pair a runner…", row=3)
 BACK_MOVE = MarathonMove(BACK, "Back", row=4)
+EVENTS_MOVE = MarathonMove(EVENTS, "Back", row=4)
 NEXT_MOVE = MarathonMove(NEXT, "Next up…", row=3)
 POLL_MOVE = MarathonMove(POLL, POLL_TITLE, row=3)
 ADD_NEXT_MOVE = MarathonMove(ADD_NEXT, NEXT_BUTTON_ADD, "primary", 2)
@@ -224,9 +226,9 @@ MARK_LIVE_MOVE = MarathonMove(MARK_LIVE, "Mark it live", row=2)
 
 def root_moves(*, staff: bool) -> tuple[MarathonMove, ...]:
     return (
-        (ADD_MOVE, MINE_MOVE, REFRESH_ROOT_MOVE, LOGS_MOVE)
+        (ADD_MOVE, MINE_MOVE, REFRESH_ROOT_MOVE, LOGS_MOVE, EVENTS_MOVE)
         if staff
-        else (MINE_MOVE, REFRESH_ROOT_MOVE)
+        else (MINE_MOVE, REFRESH_ROOT_MOVE, EVENTS_MOVE)
     )
 
 

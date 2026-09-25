@@ -1281,7 +1281,7 @@ LOG_LEVEL_COMMANDS: dict[str, str] = {
     "request": "request",
     "pings": "pings",
     "raidtrain": "raidtrain",
-    "marathon": "marathon",
+    "marathon": "event",
     "applications": "apply",
     "selftest": "settings",
     "posts": "posts",
@@ -4352,7 +4352,6 @@ MARATHON_REMINDER_STALE_KEY = "marathon_reminder_stale_minutes"
 MARATHON_PIN_BOARD_KEY = "marathon_pin_board"
 MARATHON_EDIT_DONE_KEY = "marathon_edit_done"
 MARATHON_WINDOW_SLACK_KEY = "marathon_window_slack_hours"
-MARATHON_PANEL_MINUTES_KEY = "marathon_panel_minutes"
 MARATHON_BOARD_TEMPLATE_KEY = "marathon_board_template"
 MARATHON_BOARD_LINE_KEY = "marathon_board_line_template"
 MARATHON_BOARD_EMPTY_KEY = "marathon_board_empty_line"
@@ -4505,20 +4504,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "hours either side of a marathon that its channel's ping window stays open, when the "
         "channel pings during events only. 2 by default",
     ),
-    MARATHON_PANEL_MINUTES_KEY: (
-        "int",
-        10,
-        "minutes the /marathon panel stays live before its buttons disable themselves; 10 by "
-        "default. The 'this panel has gone quiet' footer can only be written while Discord's "
-        "15-minute interaction window is still open, so 15 or more means the buttons simply "
-        "stop working with no footer to explain it",
-    ),
     MARATHON_SUGGEST_NEXT_KEY: (
         "bool",
         True,
         "whether a GDQ marathon that is over looks up the next GDQ event on the tracker and "
-        "suggests it to staff — a notice with Add it and Not this one, and a Next up card on the "
-        "Marathons page. on by default; nothing is ever added until staff press Add it",
+        "suggests it to staff — a notice with Add it and Not this one, and a Next up card in the "
+        "Marathons section of the Events page. on by default; nothing is ever added until staff "
+        "press Add it",
     ),
 }
 MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
