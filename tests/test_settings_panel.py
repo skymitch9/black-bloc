@@ -73,7 +73,7 @@ from black_bloc.storage.db import Database
 
 GUILD = 7
 TEST_CH = 111
-GROUP_COUNT = 24
+GROUP_COUNT = 25
 
 
 @pytest.fixture
@@ -170,7 +170,7 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     assert "**Modmail** — True" not in said
 
 
-def test_every_key_lands_in_exactly_one_of_the_twenty_four_groups():
+def test_every_key_lands_in_exactly_one_of_the_twenty_five_groups():
     found = groups()
     assert len(found) == GROUP_COUNT
     counted = Counter(key for group in found for key in keys_in(group))
@@ -217,9 +217,10 @@ def test_the_settings_groups_fit_the_select():
 def test_three_groups_are_over_the_cap_and_find_is_what_reaches_the_rest():
     """`events` joined them when meeting minutes filed its eleven keys there, and `golive` when
     spotlight filed its nine — the group select is at its 25-cap, so a `spotlight` namespace
-    would have been dropped silently instead. `core` joined at `panel_expired_text`."""
+    would have been dropped silently instead. `core` joined at `panel_expired_text`, and
+    `marathon` — the 25th group, the select's last slot — arrived with its 36 keys."""
     over = [group for group in groups() if needs_find(group)]
-    assert over == ["chat", "core", "events", "golive", "modmail"]
+    assert over == ["chat", "core", "events", "golive", "marathon", "modmail"]
 
     every = editable_options("chat")
     assert len(every.keys) == SELECT_LIMIT
@@ -348,7 +349,7 @@ def test_every_log_level_fits_one_select_and_shows_the_level_it_is_on():
 def test_every_panel_minutes_key_fits_one_select_including_the_panels_own():
     found = panel_minutes_keys()
     assert "settings_panel_minutes" in found
-    assert len(found) == 21 <= SELECT_LIMIT
+    assert len(found) == 22 <= SELECT_LIMIT
 
     store = FakeStore(defaults=dict.fromkeys(found, 10))
     assert all(label.endswith("— 10 minute(s)") for _, label in panel_minutes_options(store, GUILD))

@@ -128,9 +128,7 @@ async def test_resolve_reads_a_short_once_and_an_id_by_its_event():
         "74",
         "Awesome Games Done Quick 2027",
     )
-    assert seen == [
-        "https://tracker.gamesdonequick.com/tracker/api/v2/events/?short=AGDQ2027"
-    ]
+    assert seen == ["https://tracker.gamesdonequick.com/tracker/api/v2/events/?short=AGDQ2027"]
     request, _ = pages((200, {"id": 74, "name": "Awesome Games Done Quick 2027"}))
     assert await ms.ScheduleClient(request=request).resolve("gdq", "74") == (
         "74",

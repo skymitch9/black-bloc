@@ -4333,6 +4333,323 @@ TEXT_CHECKS.update(
 )
 
 
+MARATHON_MODES = ("off", "shadow", "on")
+MARATHON_MODE_KEY = "marathon_mode"
+MARATHON_CHANNEL_KEY = "marathon_channel_id"
+MARATHON_POLL_MINUTES_KEY = "marathon_poll_minutes"
+MARATHON_FAR_POLL_HOURS_KEY = "marathon_far_poll_hours"
+MARATHON_LEAD_DAYS_KEY = "marathon_lead_days"
+MARATHON_MOVE_MINUTES_KEY = "marathon_move_minutes"
+MARATHON_TITLE_CONFIRMS_KEY = "marathon_title_confirms"
+MARATHON_LATE_GRACE_KEY = "marathon_late_grace_minutes"
+MARATHON_MATCH_HOSTS_KEY = "marathon_match_hosts"
+MARATHON_REMINDER_MINUTES_KEY = "marathon_reminder_minutes"
+MARATHON_PING_MINUTES_KEY = "marathon_ping_minutes"
+MARATHON_REMINDER_PINGS_KEY = "marathon_reminder_pings"
+MARATHON_LIVE_PINGS_KEY = "marathon_live_pings"
+MARATHON_REMINDER_STALE_KEY = "marathon_reminder_stale_minutes"
+MARATHON_PIN_BOARD_KEY = "marathon_pin_board"
+MARATHON_EDIT_DONE_KEY = "marathon_edit_done"
+MARATHON_WINDOW_SLACK_KEY = "marathon_window_slack_hours"
+MARATHON_PANEL_MINUTES_KEY = "marathon_panel_minutes"
+MARATHON_BOARD_TEMPLATE_KEY = "marathon_board_template"
+MARATHON_BOARD_LINE_KEY = "marathon_board_line_template"
+MARATHON_BOARD_EMPTY_KEY = "marathon_board_empty_line"
+MARATHON_REMINDER_TEMPLATE_KEY = "marathon_reminder_template"
+MARATHON_LIVE_TEMPLATE_KEY = "marathon_live_template"
+MARATHON_DONE_TEMPLATE_KEY = "marathon_done_template"
+MARATHON_PART_RUNNER_KEY = "marathon_part_runner"
+MARATHON_PART_HOST_KEY = "marathon_part_host"
+MARATHON_PART_COMMENTATOR_KEY = "marathon_part_commentator"
+MARATHON_STATE_UPCOMING_KEY = "marathon_state_upcoming"
+MARATHON_STATE_LIVE_KEY = "marathon_state_live"
+MARATHON_STATE_DONE_KEY = "marathon_state_done"
+MARATHON_STATE_DROPPED_KEY = "marathon_state_dropped"
+MARATHON_UNKNOWN_SITE_KEY = "marathon_unknown_site"
+MARATHON_ALREADY_ADDED_KEY = "marathon_already_added"
+MARATHON_COULD_NOT_READ_KEY = "marathon_could_not_read"
+MARATHON_NO_RUNS_YET_KEY = "marathon_no_runs_yet"
+MARATHON_REMINDER_MINUTES = "120, 15"
+MARATHON_MARKS_MAX = 6
+MARATHON_MARK_MAX_MINUTES = 1440
+MARATHON_BOARD_FIELDS = ("marathon", "count", "starts", "ends", "url")
+MARATHON_LINE_FIELDS = ("member", "game", "category", "when", "relative", "part", "state")
+MARATHON_REMINDER_FIELDS = (
+    "member",
+    "game",
+    "category",
+    "in",
+    "when",
+    "url",
+    "marathon",
+    "part",
+)
+MARATHON_LIVE_FIELDS = ("member", "game", "category", "url", "marathon", "part")
+MARATHON_UNKNOWN_FIELD = (
+    "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. This "
+    "marathon post may stand in for {allowed}; write any other braces out as words."
+)
+MARATHON_BAD_MARKS = (
+    "**{given}** is not a list Black Bloc can remind on, so nothing was changed. Write one to "
+    "{most} whole numbers of minutes between 1 and {limit}, separated by commas — for example "
+    "`120, 15`."
+)
+MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
+    MARATHON_MODE_KEY: (
+        "enum",
+        "shadow",
+        "whether marathon schedules post at all. off reads nothing and posts nothing; shadow — "
+        "the default — posts the board, the reminders and the shoutouts where "
+        "shadow_channel_id points with the rehearsal note; on posts them in "
+        "marathon_channel_id",
+    ),
+    MARATHON_CHANNEL_KEY: (
+        "channel",
+        None,
+        "where the marathon board, the reminders and the shoutouts go. Blank uses the go-live "
+        "channel",
+    ),
+    MARATHON_POLL_MINUTES_KEY: (
+        "int",
+        30,
+        "minutes between reads of a marathon's schedule while it is near — from "
+        "marathon_lead_days before it starts until a day after it ends. 30 by default; a "
+        "marathon's own row can say otherwise",
+    ),
+    MARATHON_FAR_POLL_HOURS_KEY: (
+        "int",
+        24,
+        "hours between reads of a schedule that is still weeks away. 24 by default",
+    ),
+    MARATHON_LEAD_DAYS_KEY: (
+        "int",
+        7,
+        "how many days before a marathon starts its schedule counts as near and is read every "
+        "marathon_poll_minutes. 7 by default",
+    ),
+    MARATHON_MOVE_MINUTES_KEY: (
+        "int",
+        5,
+        "how many minutes a run's start must shift before it counts as moved — a moved run of "
+        "ours is logged as important with the old and the new time. 5 by default",
+    ),
+    MARATHON_TITLE_CONFIRMS_KEY: (
+        "bool",
+        True,
+        "whether the marathon channel's live title and game decide which run is on now. on by "
+        "default; off goes by the schedule's clock alone",
+    ),
+    MARATHON_LATE_GRACE_KEY: (
+        "int",
+        90,
+        "minutes a run may sit past its scheduled start with no sign on the stream before the "
+        "schedule alone calls it live — the run before it is probably running long. 90 by "
+        "default",
+    ),
+    MARATHON_MATCH_HOSTS_KEY: (
+        "bool",
+        True,
+        "whether a host or a commentator from here counts as one of ours, not only a runner. "
+        "on by default",
+    ),
+    MARATHON_REMINDER_MINUTES_KEY: (
+        "text",
+        MARATHON_REMINDER_MINUTES,
+        "minutes before a run of ours that a reminder is posted, separated by commas; "
+        "`120, 15` by default. marathon_ping_minutes is always one of them",
+    ),
+    MARATHON_PING_MINUTES_KEY: (
+        "int",
+        15,
+        "the one reminder that pings: this many minutes before a run of ours, the member's own "
+        "ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings "
+        "at the scheduled start",
+    ),
+    MARATHON_REMINDER_PINGS_KEY: (
+        "bool",
+        True,
+        "whether the marathon_ping_minutes reminder mentions any role at all. on by default",
+    ),
+    MARATHON_LIVE_PINGS_KEY: (
+        "bool",
+        False,
+        "whether the shoutout when a run of ours goes live pings too. off by default — the ping "
+        "already went out marathon_ping_minutes before",
+    ),
+    MARATHON_REMINDER_STALE_KEY: (
+        "int",
+        30,
+        "minutes past its moment after which a reminder is skipped and logged instead of posted "
+        "late. 30 by default",
+    ),
+    MARATHON_PIN_BOARD_KEY: (
+        "bool",
+        True,
+        "whether a marathon's board is pinned while the marathon is on; it comes down a day "
+        "after the marathon ends. on by default",
+    ),
+    MARATHON_EDIT_DONE_KEY: (
+        "bool",
+        True,
+        "whether a shoutout is rewritten in the past tense when the run is over. on by default",
+    ),
+    MARATHON_WINDOW_SLACK_KEY: (
+        "int",
+        2,
+        "hours either side of a marathon that its channel's ping window stays open, when the "
+        "channel pings during events only. 2 by default",
+    ),
+    MARATHON_PANEL_MINUTES_KEY: (
+        "int",
+        10,
+        "minutes the /marathon panel stays live before its buttons disable themselves; 10 by "
+        "default. The 'this panel has gone quiet' footer can only be written while Discord's "
+        "15-minute interaction window is still open, so 15 or more means the buttons simply "
+        "stop working with no footer to explain it",
+    ),
+}
+MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    MARATHON_BOARD_TEMPLATE_KEY: (
+        "**{marathon}** — our people on the schedule ({count}), {starts} to {ends}. {url}",
+        MARATHON_BOARD_FIELDS,
+        "the head of a marathon's board, the one message edited in place as the schedule moves. "
+        "It takes {marathon} {count} {starts} {ends} {url}",
+    ),
+    MARATHON_BOARD_LINE_KEY: (
+        "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}",
+        MARATHON_LINE_FIELDS,
+        "one line of the board per run of ours. It takes {member} {game} {category} {when} "
+        "{relative} {part} {state}; {when} and {relative} show in each reader's own time zone",
+    ),
+    MARATHON_BOARD_EMPTY_KEY: (
+        "Nobody from here is on this schedule yet. Black Bloc keeps reading it.",
+        (),
+        "the board's only line while no run of ours has been found",
+    ),
+    MARATHON_REMINDER_TEMPLATE_KEY: (
+        "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}",
+        MARATHON_REMINDER_FIELDS,
+        "a reminder before a run of ours. It takes {member} {game} {category} {in} {when} {url} "
+        "{marathon} {part}",
+    ),
+    MARATHON_LIVE_TEMPLATE_KEY: (
+        "{member} {part} **{game}** ({category}) on **{marathon}** right now! {url}",
+        MARATHON_LIVE_FIELDS,
+        "the shoutout the moment a run of ours goes live. It takes {member} {game} {category} "
+        "{url} {marathon} {part}",
+    ),
+    MARATHON_DONE_TEMPLATE_KEY: (
+        "{member} {part} **{game}** ({category}) on **{marathon}** — that run is over. Thanks "
+        "for cheering!",
+        MARATHON_LIVE_FIELDS,
+        "what a shoutout is rewritten to once the run is over. It takes the same words as "
+        "marathon_live_template and never pings",
+    ),
+    MARATHON_PART_RUNNER_KEY: ("runs", (), "{part} for a runner"),
+    MARATHON_PART_HOST_KEY: ("hosts", (), "{part} for a host"),
+    MARATHON_PART_COMMENTATOR_KEY: ("is on commentary", (), "{part} for a commentator"),
+    MARATHON_STATE_UPCOMING_KEY: ("coming up", (), "{state} on the board for a run not yet on"),
+    MARATHON_STATE_LIVE_KEY: ("on now", (), "{state} on the board for the run on now"),
+    MARATHON_STATE_DONE_KEY: ("done", (), "{state} on the board for a run that is over"),
+    MARATHON_STATE_DROPPED_KEY: (
+        "off the schedule",
+        (),
+        "{state} on the board for a run the schedule no longer lists",
+    ),
+    MARATHON_UNKNOWN_SITE_KEY: (
+        "For now I can read the GDQ schedule only — that link is something else.",
+        (),
+        "what staff are told when a schedule link is from a site Black Bloc cannot read",
+    ),
+    MARATHON_ALREADY_ADDED_KEY: (
+        "**{name}** already follows that schedule, so nothing was added.",
+        ("name",),
+        "what staff are told when a schedule link is already on the list. It takes {name}",
+    ),
+    MARATHON_COULD_NOT_READ_KEY: (
+        "Black Bloc could not read that schedule, so nothing was added: {reason}",
+        ("reason",),
+        "what staff are told when a schedule link will not read. It takes {reason}",
+    ),
+    MARATHON_NO_RUNS_YET_KEY: (
+        "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the "
+        "list the moment the schedule goes up.",
+        ("marathon",),
+        "what the page and the panel say about a marathon whose schedule is not published yet. "
+        "It takes {marathon}",
+    ),
+}
+MARATHON_RANGES: dict[str, tuple[int, int]] = {
+    MARATHON_POLL_MINUTES_KEY: (10, 120),
+    MARATHON_FAR_POLL_HOURS_KEY: (1, 168),
+    MARATHON_LEAD_DAYS_KEY: (1, 60),
+    MARATHON_MOVE_MINUTES_KEY: (1, 120),
+    MARATHON_LATE_GRACE_KEY: (0, 360),
+    MARATHON_PING_MINUTES_KEY: (0, 240),
+    MARATHON_REMINDER_STALE_KEY: (1, 240),
+    MARATHON_WINDOW_SLACK_KEY: (0, 24),
+}
+
+
+def marathon_marks(given: Any) -> tuple[int, ...] | None:
+    """One to six whole minutes, 1–1440, in any order; anything else is None."""
+    parts = [one.strip() for one in str(given or "").split(",")]
+    if not parts or len(parts) > MARATHON_MARKS_MAX or not all(one.isdigit() for one in parts):
+        return None
+    found = tuple(int(one) for one in parts)
+    if not all(1 <= one <= MARATHON_MARK_MAX_MINUTES for one in found):
+        return None
+    return found
+
+
+def checked_marks(given: Any) -> str:
+    text = str(given or "").strip()
+    found = marathon_marks(text)
+    if found is None:
+        raise SettingError(
+            MARATHON_BAD_MARKS.format(
+                given=text[:40], most=MARATHON_MARKS_MAX, limit=MARATHON_MARK_MAX_MINUTES
+            )
+        )
+    return ", ".join(str(one) for one in sorted(set(found), reverse=True))
+
+
+def checked_marathon(fields: tuple[str, ...]) -> Any:
+    def check(given: Any) -> str:
+        text = str(given or "").strip()
+        stray = next(
+            (one.strip() for one in PLACEHOLDERS.findall(text) if one.strip() not in fields),
+            None,
+        )
+        if stray is not None:
+            raise SettingError(
+                MARATHON_UNKNOWN_FIELD.format(
+                    found=stray[:40],
+                    allowed=", ".join(f"`{{{one}}}`" for one in fields) or "nothing",
+                )
+            )
+        return text
+
+    return check
+
+
+KEY_TYPES.update({key: kind for key, (kind, _, _) in MARATHON_SETTINGS.items()})
+KEY_HELP.update({key: said for key, (_, _, said) in MARATHON_SETTINGS.items()})
+KEY_TYPES.update({key: "text" for key in MARATHON_WORDS})
+KEY_HELP.update({key: said for key, (_, _, said) in MARATHON_WORDS.items()})
+KEY_CHOICES[MARATHON_MODE_KEY] = MARATHON_MODES
+KEY_MIN.update({key: floor for key, (floor, _) in MARATHON_RANGES.items()})
+KEY_MAX.update({key: ceiling for key, (_, ceiling) in MARATHON_RANGES.items()})
+TEXT_CHECKS[MARATHON_REMINDER_MINUTES_KEY] = checked_marks
+TEXT_CHECKS.update(
+    {key: checked_marathon(fields) for key, (_, fields, _) in MARATHON_WORDS.items()}
+)
+MARATHON_DEFAULTS: dict[str, Any] = {
+    **{key: default for key, (_, default, _) in MARATHON_SETTINGS.items()},
+    **{key: default for key, (default, _, _) in MARATHON_WORDS.items()},
+}
+
+
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
     kind = KEY_TYPES.get(key)
@@ -4894,6 +5211,8 @@ class SettingsStore:
             return PROMPT_WORDS[key][0]
         if key in VOICE_WORDS:
             return VOICE_WORDS[key][0]
+        if key in MARATHON_DEFAULTS:
+            return MARATHON_DEFAULTS[key]
         if key in REVIEW_SETTINGS:
             return REVIEW_SETTINGS[key][1]
         if key in REVIEW_WORDS:

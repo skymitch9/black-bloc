@@ -1047,6 +1047,7 @@ CREATE TABLE IF NOT EXISTS marathon_runs (
     order_no              INTEGER,
     game                  TEXT    NOT NULL,
     display_name          TEXT,
+    twitch_game           TEXT,
     category              TEXT,
     runners_text          TEXT,
     people                TEXT    NOT NULL DEFAULT '[]',
