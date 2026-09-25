@@ -25,6 +25,9 @@ ROUTES = [
     ("DELETE", "/api/marathons/1/people/1"),
     ("POST", "/api/marathons/1/runs/1/shout"),
     ("POST", "/api/marathons/1/runs/1/done"),
+    ("POST", "/api/marathons/1/runs/1/upcoming"),
+    ("POST", "/api/marathons/1/runs/1/live"),
+    ("POST", "/api/marathons/1/next"),
 ]
 
 
@@ -61,7 +64,7 @@ class FakeClient:
     async def resolve(self, source, ref):
         if self.raises is not None:
             raise self.raises
-        return ("74", "Awesome Games Done Quick 2027")
+        return (ref if str(ref).isdigit() else "74", "Awesome Games Done Quick 2027")
 
     async def runs(self, source, ref):
         if self.raises is not None:
@@ -254,3 +257,126 @@ async def test_a_write_with_no_cog_loaded_is_refused_in_words_not_a_bare_status(
     response = add(client)
     assert response.status_code == 503
     assert "Marathon schedules" in response.json()["message"]
+
+
+# --- the next GDQ event and the run moves (marathon-next-event) ---------------------------
+
+NEXT_EVENT = {
+    "id": 75,
+    "short": "SGDQ2027",
+    "name": "Summer Games Done Quick 2027",
+    "datetime": (NOW + timedelta(days=200)).isoformat(),
+    "archived": False,
+    "draft": True,
+}
+PAST = [
+    a_run(1, -900, "Celeste", [("Somebody", "somebody", "runner")]),
+    a_run(2, -800, "Super Metroid", [("Sky", "skyruns", "runner")]),
+]
+
+
+def an_over_marathon(client, cog):
+    cog.client.runs_given = list(PAST)
+    cog.client.events = lambda: _events()
+    return add(client).json()["id"]
+
+
+async def _events():
+    return [NEXT_EVENT]
+
+
+async def test_look_again_suggests_the_next_event_and_the_row_carries_it(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = an_over_marathon(client, cog)
+    before = client.get(f"/api/marathons/{marathon_id}").json()
+    assert before["phase"] == "over" and before["next"]["state"] is None
+    assert before["next"]["can_look_again"] is True
+
+    looked = client.post(f"/api/marathons/{marathon_id}/next")
+    assert looked.status_code == 200, looked.text
+    body = looked.json()
+    assert body["next"]["state"] == "open" and body["next"]["name"] == NEXT_EVENT["name"]
+    assert body["next_waiting"] is True and "is over" in body["message"]
+    listed = client.get("/api/marathons").json()
+    assert listed["next_waiting"] == 1
+    assert "web.marathon.next_suggested" in await wf.kinds_in(web.db)
+
+
+async def test_not_this_one_folds_the_card_and_add_it_links_the_new_row(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = an_over_marathon(client, cog)
+    client.post(f"/api/marathons/{marathon_id}/next")
+    dismissed = client.patch(f"/api/marathons/{marathon_id}", json={"dismiss_next": True})
+    assert dismissed.status_code == 200 and dismissed.json()["next"]["state"] == "dismissed"
+    again = client.patch(f"/api/marathons/{marathon_id}", json={"dismiss_next": True})
+    assert again.status_code == 409 and "no next event waiting" in again.json()["message"]
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"dismiss_next": "yes"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_dismiss"
+
+    client.post(f"/api/marathons/{marathon_id}/next")
+    cog.client.runs_given = list(SCHEDULE)
+    made = client.post("/api/marathons", json={"next_of": marathon_id, "event_id": "75"})
+    assert made.status_code == 200, made.text
+    body = made.json()
+    assert body["name"] == NEXT_EVENT["name"] and body["source_ref"] == "75"
+    parent = client.get(f"/api/marathons/{marathon_id}").json()
+    assert parent["next"]["state"] == "added"
+    assert parent["next"]["added_marathon_id"] == body["id"]
+    assert parent["next"]["added_name"] == NEXT_EVENT["name"]
+    kinds = await wf.kinds_in(web.db)
+    assert "web.marathon.next_dismissed" in kinds and "web.marathon.next_added" in kinds
+
+
+async def test_the_next_routes_refuse_in_words_not_gdq_not_over_nothing_suggested(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    near = add(client).json()["id"]
+    early = client.post(f"/api/marathons/{near}/next")
+    assert early.status_code == 409 and "not over yet" in early.json()["message"]
+    nothing = client.post("/api/marathons", json={"next_of": near})
+    assert nothing.status_code == 409 and nothing.json()["error"] == "nothing_suggested"
+    await web.db.conn.execute("UPDATE marathons SET source = 'horaro' WHERE id = ?", (near,))
+    await web.db.conn.commit()
+    other = client.post(f"/api/marathons/{near}/next")
+    assert other.status_code == 409 and "not a GDQ marathon" in other.json()["message"]
+    assert client.get(f"/api/marathons/{near}").json()["next"] is None
+    missing = client.post("/api/marathons/9999/next")
+    assert missing.status_code == 404
+
+
+async def test_a_done_run_can_be_marked_upcoming_and_then_live(client, sign_in, web, cog, wf):
+    sign_in(client)
+    body = add(client).json()
+    marathon_id = body["id"]
+    ours = next(one for one in body["run_list"] if one["ours"])
+    client.post(f"/api/marathons/{marathon_id}/runs/{ours['id']}/done")
+
+    back = client.post(f"/api/marathons/{marathon_id}/runs/{ours['id']}/upcoming")
+    assert back.status_code == 200, back.text
+    run = back.json()["run"]
+    assert run["state"] == "upcoming" and run["held"] is True and run["can_mark_live"] is True
+    twice = client.post(f"/api/marathons/{marathon_id}/runs/{ours['id']}/upcoming")
+    assert twice.status_code == 409 and twice.json()["error"] == "not_resettable"
+    live = client.post(f"/api/marathons/{marathon_id}/runs/{ours['id']}/live").json()
+    assert live["run"]["state"] == "live" and live["run"]["shouted"] is True
+    assert "marked by staff" in live["message"]
+    kinds = await wf.kinds_in(web.db)
+    assert "web.marathon.run_reset" in kinds and "web.marathon.run_live" in kinds
+
+
+async def test_a_marathons_own_read_gap_is_set_and_cleared_from_the_page(
+    client, sign_in, cog
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"poll_minutes": 45}).json()
+    assert body["poll_minutes"] == 45
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"poll_minutes": None}).json()
+    assert body["poll_minutes"] is None
+    words = client.patch(f"/api/marathons/{marathon_id}", json={"poll_minutes": "soon"})
+    assert words.status_code == 422 and "10 to 120 minutes" in words.json()["message"]

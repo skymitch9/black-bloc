@@ -8,11 +8,16 @@ from fastapi import APIRouter, Depends, Request
 
 from ... import marathon as mt
 from ...cogs.content.marathon import (
+    add_next,
     create_marathon,
+    dismiss_next,
     get_marathon,
     list_marathons,
+    look_again,
     marathon_windows,
     mark_done,
+    mark_live,
+    mark_upcoming,
     pair_runner,
     pairing_by_id,
     pairings_of,
@@ -53,6 +58,7 @@ BECAUSE_WORDS = {
 TROUBLE = "could not be read since {when} — {why}"
 NEVER_READ = "not read yet"
 BAD_ACTIVE = "Say true to read this marathon or false to pause it, so nothing was changed."
+BAD_DISMISS = "Say true to dismiss the suggested next event, so nothing was changed."
 
 
 def _id(value: Any) -> str | None:
@@ -101,7 +107,34 @@ def run_row(guild: Any, row: Any) -> dict[str, Any]:
         "shouted": bool(row["shout_message_id"]),
         "shoutable": ours and state in (mt.UPCOMING, mt.LIVE) and not row["shout_message_id"],
         "can_mark_done": state in (mt.UPCOMING, mt.LIVE),
+        "can_mark_upcoming": mt.can_mark_upcoming(row),
+        "can_mark_live": mt.can_mark_live(row),
+        "held": mt.held(row),
         "reminders_sent": mt.marks_of(row),
+    }
+
+
+async def next_row(bot: Any, guild: Any, row: Any, now: datetime) -> dict[str, Any] | None:
+    """The Next up card: only a GDQ marathon, and only once it is over or has a record."""
+    record = mt.suggestion_of(row)
+    over = mt.is_over(row, now)
+    if not mt.suggests(row) or (record is None and not over):
+        return None
+    record = record or {}
+    added_id = record.get("added_marathon_id")
+    added = await get_marathon(bot.db, guild.id, added_id) if added_id else None
+    return {
+        "state": mt.next_state(record) if record else None,
+        "event_id": record.get("event_id"),
+        "short": record.get("short"),
+        "name": record.get("name"),
+        "datetime": record.get("datetime"),
+        "url": record.get("url"),
+        "found_at": record.get("found_at"),
+        "dismissed_at": record.get("dismissed_at"),
+        "added_marathon_id": added_id,
+        "added_name": added["name"] if added is not None else None,
+        "can_look_again": over,
     }
 
 
@@ -129,6 +162,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
     windows = await marathon_windows(db, row["id"])
     now = datetime.now(UTC)
     phase = mt.phase(row, now, lead_days=int(bot.store.get(guild.id, MARATHON_LEAD_DAYS_KEY)))
+    upcoming = await next_row(bot, guild, row, now)
     added_by = row["added_by"]
     return {
         "id": row["id"],
@@ -168,6 +202,8 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         ),
         "added_at": row["added_at"],
         "added_by_name": resolve_one(guild, added_by)["display_name"] if added_by else None,
+        "next": upcoming,
+        "next_waiting": bool(upcoming) and upcoming["state"] == mt.NEXT_OPEN,
     }
 
 
@@ -216,12 +252,13 @@ def build_router(bot: Any) -> APIRouter:
     async def marathon_list() -> dict[str, Any]:
         guild = require_guild(bot)
         require_db(bot)
+        rows = [
+            await marathon_row(bot, guild, row) for row in await list_marathons(bot.db, guild.id)
+        ]
         return {
             "mode": bot.store.get(guild.id, MARATHON_MODE_KEY),
-            "marathons": [
-                await marathon_row(bot, guild, row)
-                for row in await list_marathons(bot.db, guild.id)
-            ],
+            "marathons": rows,
+            "next_waiting": len([one for one in rows if one["next_waiting"]]),
         }
 
     @router.post("")
@@ -230,6 +267,19 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         require_cog(bot, COG, FEATURE)
+        if payload.get("next_of") not in (None, ""):
+            parent = await wanted(guild, payload["next_of"])
+            linked = answered(
+                await add_next(
+                    bot,
+                    guild,
+                    actor_for(bot, who, guild),
+                    parent,
+                    event_id=payload.get("event_id"),
+                    via=VIA_WEBSITE,
+                )
+            )
+            return await detail(guild, linked.value["id"]) | {"message": linked.message}
         made = answered(
             await create_marathon(
                 bot,
@@ -274,6 +324,7 @@ def build_router(bot: Any) -> APIRouter:
             if wanted_channel != row["spotlight_id"]:
                 answered(await set_channel(bot, guild, actor, row, wanted_channel, via=VIA_WEBSITE))
         if "name" in payload or "poll_minutes" in payload:
+            poll = payload.get("poll_minutes")
             answered(
                 await rename_marathon(
                     bot,
@@ -281,10 +332,24 @@ def build_router(bot: Any) -> APIRouter:
                     actor,
                     await wanted(guild, marathon_id),
                     payload.get("name"),
-                    payload.get("poll_minutes"),
+                    "" if "poll_minutes" in payload and poll is None else poll,
                     via=VIA_WEBSITE,
                 )
             )
+        if "dismiss_next" in payload:
+            if payload["dismiss_next"] is not True:
+                raise Refused(422, "bad_dismiss", BAD_DISMISS)
+            done = answered(
+                await dismiss_next(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    event_id=payload.get("event_id"),
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
         return await detail(guild, marathon_id) | {"message": " ".join(said)}
 
     @router.delete("/{marathon_id}")
@@ -314,6 +379,18 @@ def build_router(bot: Any) -> APIRouter:
                 ours=len([one for one in await runs_of(bot.db, row["id"]) if mt.is_ours(one)]),
             )
         }
+
+    @router.post("/{marathon_id}/next")
+    async def marathon_next(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        done = answered(
+            await look_again(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
+        )
+        return await detail(guild, marathon_id) | {"message": done.message}
 
     @router.post("/{marathon_id}/board")
     async def marathon_board(request: Request, marathon_id: int) -> dict[str, Any]:
@@ -407,5 +484,30 @@ def build_router(bot: Any) -> APIRouter:
             "run": run_row(guild, await run_by_id(bot.db, row["id"], run_id)),
             "message": done.message,
         }
+
+    async def run_step(request: Request, marathon_id: int, run_id: int, shared: Any) -> Any:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        run = await wanted_run(row, run_id)
+        done = answered(
+            await shared(bot, guild, actor_for(bot, who, guild), row, run, via=VIA_WEBSITE)
+        )
+        return {
+            "run": run_row(guild, await run_by_id(bot.db, row["id"], run_id)),
+            "message": done.message,
+        }
+
+    @router.post("/{marathon_id}/runs/{run_id}/upcoming")
+    async def marathon_run_upcoming(
+        request: Request, marathon_id: int, run_id: int
+    ) -> dict[str, Any]:
+        return await run_step(request, marathon_id, run_id, mark_upcoming)
+
+    @router.post("/{marathon_id}/runs/{run_id}/live")
+    async def marathon_run_live(request: Request, marathon_id: int, run_id: int) -> dict[str, Any]:
+        return await run_step(request, marathon_id, run_id, mark_live)
 
     return router

@@ -23,6 +23,8 @@ TRACKER = "https://tracker.gamesdonequick.com/tracker/api/v2"
 EVENT_URL = TRACKER + "/events/{ref}/"
 RUNS_URL = TRACKER + "/events/{ref}/runs/?limit=500"
 SHORT_URL = TRACKER + "/events/?short={short}"
+EVENTS_URL = TRACKER + "/events/"
+TRACKER_EVENT = "https://tracker.gamesdonequick.com/tracker/event/{ref}"
 SCHEDULE_PAGE = "https://gamesdonequick.com/schedule/{ref}"
 REQUEST_TIMEOUT_SECONDS = 20
 PAGES_MAX = 20
@@ -172,6 +174,30 @@ def next_page(payload: Any) -> str | None:
     return str(found) if found else None
 
 
+def event_url(ref: Any) -> str:
+    return TRACKER_EVENT.format(ref=ref)
+
+
+def next_gdq_event(events: Any, after: Any, now: datetime) -> dict[str, Any] | None:
+    """The soonest event still ahead that is not `after` (the marathon's own id); archived ones
+    are history. A draft is kept: every announced GDQ event is a draft until its schedule is up."""
+    own = str(after or "")
+    ahead: list[tuple[datetime, dict[str, Any]]] = []
+    for row in events or ():
+        if not isinstance(row, dict) or row.get("id") is None or row.get("archived"):
+            continue
+        if str(row["id"]) == own:
+            continue
+        starts = utc_iso(row.get("datetime"))
+        if starts is None:
+            continue
+        moment = datetime.fromisoformat(starts)
+        if moment > now:
+            ahead.append((moment, row))
+    ahead.sort(key=lambda one: (one[0], str(one[1]["id"])))
+    return ahead[0][1] if ahead else None
+
+
 def event_from(payload: Any) -> dict[str, Any] | None:
     rows = payload.get("results") if isinstance(payload, dict) else None
     for row in rows or ():
@@ -236,6 +262,20 @@ class ScheduleClient:
             raise ScheduleError(ANSWERED.format(status=status))
         return (str(body.get("id") or ref), _text(body.get("name")) or str(ref))
 
+    async def events(self) -> list[dict[str, Any]]:
+        """Every event the tracker lists, newest first; one page today, `next` followed if not."""
+        url: str | None = EVENTS_URL
+        found: list[dict[str, Any]] = []
+        pages = 0
+        while url and pages < PAGES_MAX:
+            status, body = await self._json(url)
+            if status != 200:
+                raise ScheduleError(ANSWERED.format(status=status))
+            found.extend(row for row in body.get("results") or () if isinstance(row, dict))
+            url = next_page(body)
+            pages += 1
+        return found
+
     async def runs(self, source: str, ref: str) -> list[Run]:
         if source != GDQ:
             raise ScheduleError(NO_SUCH_EVENT.format(ref=ref))
@@ -269,7 +309,9 @@ __all__ = [
     "ScheduleClient",
     "ScheduleError",
     "event_from",
+    "event_url",
     "is_short",
+    "next_gdq_event",
     "next_page",
     "parse_gdq",
     "read_url",

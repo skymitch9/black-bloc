@@ -1,5 +1,9 @@
 # Marathon schedules — our people on a marathon stream, read off the posted schedule, re-read every half hour
 
+> 🔨 **2026-09-25 — follow-up BUILT on branch `marathon-next-event`, NOT merged:** closes this build's Deviations 18
+> (`poll_minutes` now has a door on the page and in `/marathon`) and 19 (**Mark it upcoming** / **Mark it live**, with a
+> staff hold in `advance`) — see [`marathon-next-event-design.md`](marathon-next-event-design.md) §G and its Deviations.
+
 > 🔨 **2026-09-25 — BUILT on branch `marathon-schedule` (GDQ reader only), NOT merged, NOT deployed.** Schema 60, cog 24, `/marathon`, page 23 `marathons.html`, 35 keys + `marathon_log_level`; 21 deviations, the three open calls answered and *What was NOT verified* at the foot. ⚠️ AGDQ 2027's schedule is not published yet (the tracker 404s its runs) and the runs route is `/events/<id>/runs/` — Deviations 1–2.
 >
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 11:xx Phoenix)

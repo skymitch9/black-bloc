@@ -4668,7 +4668,8 @@
       "shape": "object",
       "keys": [
         "mode",
-        "marathons"
+        "marathons",
+        "next_waiting"
       ],
       "rows": {
         "marathons": [
@@ -4687,7 +4688,9 @@
           "last_fetch_ok",
           "trouble",
           "channel_login",
-          "channel_gone"
+          "channel_gone",
+          "next",
+          "next_waiting"
         ]
       }
     },
@@ -4699,7 +4702,8 @@
         "schedule_url": "https://gamesdonequick.com/schedule/75"
       },
       "read_by": [
-        "23 page-marathons.js add a marathon"
+        "23 page-marathons.js add a marathon",
+        "23 page-marathons.js Next up — Add it (next_of)"
       ],
       "shape": "object",
       "keys": [
@@ -4741,7 +4745,9 @@
         "window",
         "run_list",
         "pairings",
-        "unmatched"
+        "unmatched",
+        "next",
+        "next_waiting"
       ],
       "rows": {
         "run_list": [
@@ -4756,7 +4762,10 @@
           "state_word",
           "ours",
           "shoutable",
-          "can_mark_done"
+          "can_mark_done",
+          "can_mark_upcoming",
+          "can_mark_live",
+          "held"
         ],
         "pairings": [
           "id",
@@ -4916,6 +4925,94 @@
           "state",
           "state_word",
           "can_mark_done"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_over_id}/next",
+      "read_by": [
+        "23 page-marathons.js Next up — Look again"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "next",
+        "next_waiting",
+        "message"
+      ],
+      "nested": {
+        "next": [
+          "state",
+          "name",
+          "datetime",
+          "url",
+          "can_look_again"
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_over_id}",
+      "body": {
+        "dismiss_next": true
+      },
+      "read_by": [
+        "23 page-marathons.js Next up — Not this one"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "next",
+        "message"
+      ],
+      "nested": {
+        "next": [
+          "state",
+          "name",
+          "dismissed_at"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/runs/{marathon_done_run_id}/upcoming",
+      "read_by": [
+        "23 page-marathons.js mark it upcoming"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "state",
+          "state_word",
+          "can_mark_upcoming",
+          "can_mark_live"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/runs/{marathon_run_id}/live",
+      "read_by": [
+        "23 page-marathons.js mark it live"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "state",
+          "state_word",
+          "held"
         ]
       }
     },
@@ -6906,6 +7003,14 @@
     "web.marathon.shouted",
     "web.marathon.shout_failed",
     "web.marathon.would_shout",
-    "web.marathon.run_done"
+    "web.marathon.run_done",
+    "web.marathon.run_reset",
+    "web.marathon.run_live",
+    "web.marathon.next_suggested",
+    "web.marathon.would_suggest_next",
+    "web.marathon.next_none",
+    "web.marathon.next_failed",
+    "web.marathon.next_added",
+    "web.marathon.next_dismissed"
   ]
 }

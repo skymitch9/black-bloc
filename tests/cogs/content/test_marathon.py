@@ -37,7 +37,9 @@ from tests.cogs.content.test_spotlight import (
     SHADOW_CHANNEL,
     FakeActor,
     FakeBot,
+    FakeChannel,
     FakeGuild,
+    FakeInteraction,
     details_of,
     kinds,
 )
@@ -702,3 +704,319 @@ async def test_a_pinned_board_still_comes_down_after_marathon_posts_are_turned_o
     cog.clock = lambda: NOW + timedelta(days=2)
     await cog.tick_once()
     assert board.pinned is False
+
+
+# --- the next GDQ event (marathon-next-event) -----------------------------------------------
+
+STAFF_ROOM = 444
+AFTER = NOW + timedelta(days=1)
+SGDQ = {
+    "id": 75,
+    "short": "SGDQ2027",
+    "name": "Summer Games Done Quick 2027",
+    "datetime": "2027-06-27T12:30:00-04:00",
+    "archived": False,
+    "draft": True,
+}
+AGDQ = {
+    "id": 74,
+    "short": "AGDQ2027",
+    "name": "Awesome Games Done Quick 2027",
+    "datetime": "2027-01-03T11:30:00-05:00",
+    "archived": False,
+    "draft": True,
+}
+
+
+class EventsClient(FakeClient):
+    def __init__(self, events=None, events_raise=None):
+        super().__init__()
+        self.events_given = list(events if events is not None else [SGDQ, AGDQ])
+        self.events_raise = events_raise
+        self.event_calls = 0
+
+    async def events(self):
+        self.event_calls += 1
+        if self.events_raise is not None:
+            raise self.events_raise
+        return list(self.events_given)
+
+
+async def staff_room(bot):
+    bot.guild.channels[STAFF_ROOM] = FakeChannel(STAFF_ROOM)
+    await bot.store.set(GUILD, "staff_channel_id", STAFF_ROOM)
+
+
+def booted_cog(bot, client=None):
+    made = Marathons(bot)
+    made.client = client or EventsClient()
+    made.clock = lambda: AFTER
+    bot.cogs[cogmod.COG_NAME] = made
+    return made
+
+
+@pytest.fixture
+async def over(bot, cog):
+    await staff_room(bot)
+    cog.client = EventsClient()
+    marathon = await added(bot, cog)
+    cog.clock = lambda: AFTER
+    return marathon
+
+
+async def fresh(bot, marathon):
+    return await get_marathon(bot.db, GUILD, marathon["id"])
+
+
+async def record_now(bot, marathon):
+    return mt.suggestion_of(await fresh(bot, marathon))
+
+
+async def test_an_over_gdq_marathon_suggests_the_next_event_once_with_one_notice(bot, cog, over):
+    await cog.tick_once()
+    await cog.tick_once()
+
+    record = await record_now(bot, over)
+    assert record["event_id"] == "75" and record["name"] == "Summer Games Done Quick 2027"
+    assert record["url"] == "https://tracker.gamesdonequick.com/tracker/event/75"
+    notices = posts(bot, STAFF_ROOM)
+    assert len(notices) == 1 and cog.client.event_calls == 1
+    assert "AGDQ 2027 is over" in notices[0].content
+    assert "**Summer Games Done Quick 2027**" in notices[0].content
+    assert record["notice_message_id"] == notices[0].id
+    view = notices[0].kwargs["view"]
+    assert [one.item.custom_id for one in view.children] == [
+        f"marathon:{over['id']}:next:75:add",
+        f"marathon:{over['id']}:next:75:dismiss",
+    ]
+    found = await details_of(bot.db, "marathon.next_suggested")
+    assert found["event"] == "75" and found["short"] == "SGDQ2027"
+    assert found["datetime"] == "2027-06-27T16:30:00+00:00"
+
+
+async def test_a_marathon_that_is_not_over_is_never_looked_up(bot, cog, over):
+    cog.clock = lambda: NOW
+    await cog.tick_once()
+    assert cog.client.event_calls == 0 and await record_now(bot, over) is None
+
+
+async def test_the_switch_off_suggests_nothing(bot, cog, over):
+    await bot.store.set(GUILD, "marathon_suggest_next", False)
+    await cog.tick_once()
+    assert cog.client.event_calls == 0 and posts(bot, STAFF_ROOM) == []
+
+
+async def test_a_failed_lookup_leaves_null_and_only_the_next_boot_tries_again(bot, cog, over):
+    cog.client.events_raise = ScheduleError("the GDQ tracker answered 503")
+    await cog.tick_once()
+    await cog.tick_once()
+    assert cog.client.event_calls == 1
+    assert (await fresh(bot, over))["suggested_next"] is None
+    assert (await details_of(bot.db, "marathon.next_failed"))["reason"].endswith("503")
+
+    booted = booted_cog(bot)
+    await booted.tick_once()
+    assert (await record_now(bot, over))["event_id"] == "75"
+    assert len(posts(bot, STAFF_ROOM)) == 1
+
+
+async def test_nothing_ahead_is_a_none_record_and_is_not_asked_again(bot, cog, over):
+    cog.client.events_given = [AGDQ]
+    await cog.tick_once()
+    record = await record_now(bot, over)
+    assert record["event_id"] is None and mt.next_state(record) == mt.NEXT_NONE
+    assert "marathon.next_none" in await kinds(bot.db)
+    assert posts(bot, STAFF_ROOM) == []
+    again = booted_cog(bot)
+    await again.tick_once()
+    assert again.client.event_calls == 0
+
+
+async def test_a_non_gdq_marathon_never_gets_a_suggestion(bot, cog, over):
+    await bot.db.conn.execute(
+        "UPDATE marathons SET source = 'horaro' WHERE id = ?", (over["id"],)
+    )
+    await bot.db.conn.commit()
+    await cog.tick_once()
+    assert cog.client.event_calls == 0
+    refused = await cogmod.look_again(bot, bot.guild, FakeActor(), await fresh(bot, over))
+    assert refused.code == "not_gdq" and "not a GDQ marathon" in refused.message
+
+
+async def test_not_this_one_dismisses_folds_the_notice_and_is_never_re_suggested(bot, cog, over):
+    await cog.tick_once()
+    done = await cogmod.dismiss_next(bot, bot.guild, FakeActor(), await fresh(bot, over))
+    assert done.ok and "dismissed" in done.message
+    assert mt.next_state(await record_now(bot, over)) == mt.NEXT_DISMISSED
+    notice = posts(bot, STAFF_ROOM)[0]
+    assert notice.content.startswith("~~") and notice.content.endswith("~~")
+    assert all(one.item.disabled for one in notice.edits[-1]["view"].children)
+    booted = booted_cog(bot)
+    await booted.tick_once()
+    assert booted.client.event_calls == 0
+    again = await cogmod.dismiss_next(bot, bot.guild, FakeActor(), await fresh(bot, over))
+    assert again.code == "nothing_suggested"
+
+
+async def test_look_again_after_a_dismissal_suggests_again_without_a_new_notice(bot, cog, over):
+    await cog.tick_once()
+    await cogmod.dismiss_next(bot, bot.guild, FakeActor(), await fresh(bot, over))
+    looked = await cogmod.look_again(bot, bot.guild, FakeActor(), await fresh(bot, over))
+    assert looked.ok and "Summer Games Done Quick 2027" in looked.message
+    record = await record_now(bot, over)
+    assert mt.next_state(record) == mt.NEXT_OPEN and record.get("dismissed_at") is None
+    assert len(posts(bot, STAFF_ROOM)) == 1
+
+
+async def test_look_again_refuses_in_words_before_the_marathon_is_over(bot, cog, over):
+    cog.clock = lambda: NOW
+    refused = await cogmod.look_again(bot, bot.guild, FakeActor(), await fresh(bot, over))
+    assert refused.code == "not_over" and refused.status == 409
+
+
+async def test_add_it_makes_the_next_marathon_on_the_same_channel_and_links_it(bot, cog):
+    await staff_room(bot)
+    cog.client = EventsClient()
+    channel = await gdq_row(bot)
+    parent = await added(bot, cog, channel=channel)
+    cog.clock = lambda: AFTER
+    await cog.tick_once()
+
+    outcome = await cogmod.add_next(
+        bot, bot.guild, FakeActor(), await fresh(bot, parent), event_id=75
+    )
+    assert outcome.ok, outcome.message
+    made = outcome.value
+    assert made["name"] == "Summer Games Done Quick 2027"
+    assert made["schedule_url"] == "https://tracker.gamesdonequick.com/tracker/event/75"
+    assert made["spotlight_id"] == channel["id"]
+    record = await record_now(bot, parent)
+    assert record["added_marathon_id"] == made["id"] and record["added_by"] == FakeActor.id
+    found = await details_of(bot.db, "marathon.next_added")
+    assert found["marathon_id"] == made["id"] and found["by"] == FakeActor.id
+    notice = posts(bot, STAFF_ROOM)[0]
+    assert notice.content.startswith("Added **Summer Games Done Quick 2027**")
+    twice = await cogmod.add_next(bot, bot.guild, FakeActor(), await fresh(bot, parent))
+    assert twice.code == "nothing_suggested"
+
+
+async def test_an_old_notice_for_another_event_changes_nothing(bot, cog, over):
+    await cog.tick_once()
+    refused = await cogmod.add_next(
+        bot, bot.guild, FakeActor(), await fresh(bot, over), event_id=99
+    )
+    assert refused.code == "suggestion_moved"
+    assert mt.next_state(await record_now(bot, over)) == mt.NEXT_OPEN
+
+
+async def test_an_event_already_on_the_list_is_linked_not_posted(bot, cog, over):
+    await bot.db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (GUILD, "SGDQ 2027", "https://gamesdonequick.com/schedule/75", "gdq", "75", "x"),
+    )
+    await bot.db.conn.commit()
+    await cog.tick_once()
+    record = await record_now(bot, over)
+    assert mt.next_state(record) == mt.NEXT_ADDED and posts(bot, STAFF_ROOM) == []
+
+
+async def test_shadow_sends_the_notice_to_the_shadow_home_as_would_suggest(bot, cog, over):
+    await bot.store.set(GUILD, "marathon_mode", "shadow")
+    await cog.tick_once()
+    assert posts(bot, STAFF_ROOM) == []
+    shadowed = [one for one in posts(bot, SHADOW_CHANNEL) if "is over" in one.content]
+    assert len(shadowed) == 1 and f"<#{STAFF_ROOM}>" in shadowed[0].content
+    found = await kinds(bot.db)
+    assert "marathon.would_suggest_next" in found and "marathon.next_suggested" not in found
+
+
+async def test_no_staff_channel_is_a_failed_notice_row_and_the_record_stays(bot, cog, over):
+    await bot.store.clear(GUILD, "staff_channel_id")
+    await cog.tick_once()
+    assert mt.next_state(await record_now(bot, over)) == mt.NEXT_OPEN
+    failed = await details_of(bot.db, "marathon.next_notice_failed")
+    assert "staff_channel_id" in failed["reason"]
+
+
+async def test_the_notice_buttons_are_staff_only_and_rebuild_from_their_custom_id(bot, cog, over):
+    await cog.tick_once()
+    notice = posts(bot, STAFF_ROOM)[0]
+    custom = notice.kwargs["view"].children[0].item.custom_id
+    match = cogmod.re.fullmatch(cogmod.NEXT_TEMPLATE, custom)
+    button = await cogmod.NextButton.from_custom_id(None, None, match)
+    assert (button.marathon_id, button.event_id, button.action) == (over["id"], 75, "add")
+
+    bot.store.is_staff = lambda member: False
+    stranger = FakeInteraction(bot, Member(42), bot.guild)
+    await button.on_click(stranger)
+    assert "staff only" in stranger.sent
+    assert mt.next_state(await record_now(bot, over)) == mt.NEXT_OPEN
+
+    bot.store.is_staff = lambda member: True
+    lead = FakeInteraction(bot, FakeActor(), bot.guild)
+    await cogmod.NextButton(over["id"], 75, "dismiss").on_click(lead)
+    assert "dismissed" in lead.sent
+    assert mt.next_state(await record_now(bot, over)) == mt.NEXT_DISMISSED
+
+
+async def test_the_panel_card_offers_next_up_and_the_next_view_its_three_moves(bot, cog, over):
+    await cog.tick_once()
+    embed, view = await cogmod.build_card(bot, bot.guild, over["id"])
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert "Next up…" in labels and "Re-read every…" in labels
+    assert "Summer Games Done Quick 2027" in embed.description
+    embed, view = await cogmod.build_next(bot, bot.guild, over["id"])
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert labels == ["Add it", "Not this one", "Look again", "Back"]
+    cog.clock = lambda: NOW
+    _, view = await cogmod.build_card(bot, bot.guild, over["id"])
+    assert "Next up…" not in [getattr(one, "label", None) for one in view.children]
+
+
+# --- §G: a done run has a way back ----------------------------------------------------------
+
+
+async def test_mark_it_upcoming_brings_a_done_run_back_and_keeps_its_reminders(bot, cog):
+    marathon = await added(bot, cog)
+    cog.clock = lambda: NOW + timedelta(minutes=31)
+    await cog.follow(bot.guild, await fresh(bot, marathon))
+    metroid = (await runs_by_game(bot, marathon))["Super Metroid"]
+    await mark_done(bot, bot.guild, FakeActor(), marathon, metroid)
+    sent = (await runs_by_game(bot, marathon))["Super Metroid"]["reminders_sent"]
+
+    outcome = await cogmod.mark_upcoming(bot, bot.guild, FakeActor(), marathon, metroid)
+    row = (await runs_by_game(bot, marathon))["Super Metroid"]
+    assert outcome.ok and row["state"] == mt.UPCOMING
+    assert row["live_at"] is None and row["done_at"] is None
+    assert row["live_because"] == mt.BY_STAFF and row["reminders_sent"] == sent
+    found = await details_of(bot.db, "marathon.run_reset")
+    assert found["because"] == "staff" and found["from"] == mt.DONE
+    again = await cogmod.mark_upcoming(bot, bot.guild, FakeActor(), marathon, metroid)
+    assert again.code == "not_resettable"
+
+
+async def test_mark_it_live_holds_the_run_and_shouts_one_of_ours_that_never_was(bot, cog):
+    marathon = await added(bot, cog)
+    metroid = (await runs_by_game(bot, marathon))["Super Metroid"]
+    await mark_done(bot, bot.guild, FakeActor(), marathon, metroid)
+    before = len(posts(bot))
+
+    outcome = await cogmod.mark_live(bot, bot.guild, FakeActor(), marathon, metroid)
+    row = (await runs_by_game(bot, marathon))["Super Metroid"]
+    assert outcome.ok and row["state"] == mt.LIVE and row["live_because"] == mt.BY_STAFF
+    assert row["shout_message_id"] and len(posts(bot)) > before
+    assert (await details_of(bot.db, "marathon.run_live"))["because"] == "staff"
+    refused = await cogmod.mark_live(bot, bot.guild, FakeActor(), marathon, metroid)
+    assert refused.code == "not_liveable"
+
+
+async def test_the_card_picks_a_run_and_the_run_view_draws_only_its_moves(bot, cog):
+    marathon = await added(bot, cog)
+    _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    pick = next(one for one in view.children if isinstance(one, cogmod.RunPick))
+    assert "Super Metroid" in [option.label for option in pick.options]
+    metroid = (await runs_by_game(bot, marathon))["Super Metroid"]
+    _, run_view = await cogmod.build_run(bot, bot.guild, marathon["id"], metroid["id"])
+    labels = [getattr(one, "label", None) for one in run_view.children]
+    assert labels == ["Shout it now", "Mark it live", "Mark done", "Back"]

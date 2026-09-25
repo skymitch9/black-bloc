@@ -74,6 +74,10 @@ const IDS = {
   marathon_id: '1',
   marathon_run_id: '9',
   marathon_pairing_id: '1',
+  // Next up: Halo Fest (2) is over with Games Done Hitless suggested and still open; run 4 on
+  // AGDQ 2027 is done, so Mark it upcoming reaches it.
+  marathon_over_id: '2',
+  marathon_done_run_id: '4',
   // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
   // reach it without ending a stream the other entries expect to still be live.
   spotlight_id: '3',

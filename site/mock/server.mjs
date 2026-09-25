@@ -680,6 +680,10 @@ const SETTING_SPECS = [
   ["marathon_already_added", "text", "**{name}** already follows that schedule, so nothing was added.", "**{name}** already follows that schedule, so nothing was added.", "what staff are told when a schedule link is already on the list. It takes {name}"],
   ["marathon_could_not_read", "text", "Black Bloc could not read that schedule, so nothing was added: {reason}", "Black Bloc could not read that schedule, so nothing was added: {reason}", "what staff are told when a schedule link will not read. It takes {reason}"],
   ["marathon_no_runs_yet", "text", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "what the page and the panel say about a marathon whose schedule is not published yet. It takes {marathon}"],
+  ["marathon_suggest_next", "bool", true, true, "whether a GDQ marathon that is over looks up the next GDQ event on the tracker and suggests it to staff \u2014 a notice with Add it and Not this one, and a Next up card on the Marathons page. on by default; nothing is ever added until staff press Add it"],
+  ["marathon_next_template", "text", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "{marathon} is over \u2014 the next GDQ event is **{next}**, {when} ({relative}). Add it?", "the staff notice when a GDQ marathon is over and the tracker lists another event ahead. It takes {marathon} {next} {when} {relative} {url}"],
+  ["marathon_next_none_template", "text", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "{marathon} is over and the GDQ tracker lists nothing ahead yet \u2014 Look again later.", "what staff are told when a GDQ marathon is over and the tracker lists no event ahead. It takes {marathon}"],
+  ["marathon_next_added_template", "text", "Added **{next}** \u2014 it will be read from {url}.", "Added **{next}** \u2014 it will be read from {url}.", "what the staff notice is rewritten to once the next event is added. It takes {marathon} {next} {when} {relative} {url}"],
   ['rolemenu_panel_minutes', 'int', 10, 10, "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['honeypot_panel_minutes', 'int', 10, 10, "minutes the /honeypot panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['modmail_panel_minutes', 'int', 10, 10, "minutes the /modmail panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -5412,8 +5416,9 @@ function raidDetail(row) {
 }
 
 // --- Marathon schedules (docs/info/marathon-schedule-design.md) ----------------------------
-// Three marathons: AGDQ 2027 on GamesDoneQuick (on now, twelve runs, three of ours — one moved
-// forty minutes, one live), Halo Fest (over), and GDQx 2026 (paused, schedule not published).
+// Four marathons: AGDQ 2027 on GamesDoneQuick (on now, twelve runs, three of ours — one moved
+// forty minutes, one live), Halo Fest (over, the next GDQ event suggested and waiting), GDQx 2026
+// (paused, schedule not published) and Flame Fatales 2026 (over, its suggestion dismissed).
 
 const MARATHON_STATE_WORDS = { upcoming: 'coming up', live: 'on now', done: 'done', dropped: 'off the schedule' };
 const MARATHON_PHASE_WORDS = { far: 'far off', near: 'coming up', live: 'on now', over: 'over', paused: 'paused' };
@@ -5422,6 +5427,25 @@ const MARATHON_GDQ = /^https?:\/\/(?:www\.)?gamesdonequick\.com\/schedule\/(\d+)
 const MARATHON_TRACKER = /^https?:\/\/tracker\.gamesdonequick\.com\/tracker\/(?:event|runs|index)\/([A-Za-z0-9_-]+)\/?(?:[?#].*)?$/i;
 const MARATHON_SHORT = /^[A-Za-z][A-Za-z0-9_-]{2,40}$/;
 const MARATHON_POLL_RANGE = [10, 120];
+// The next GDQ event the mock's tracker lists. Not AGDQ 2027 — that one is already marathon 1.
+function marathonNextEvent() {
+  return { id: 71, short: 'GDHitless2026', name: 'Games Done Hitless', days: 28 };
+}
+
+function marathonSuggestion(extra = {}) {
+  const event = marathonNextEvent();
+  return {
+    event_id: String(event.id),
+    short: event.short,
+    name: event.name,
+    datetime: daysAhead(event.days),
+    url: `https://tracker.gamesdonequick.com/tracker/event/${event.id}`,
+    found_at: minutesAgo(600),
+    dismissed_at: null,
+    added_marathon_id: null,
+    ...extra,
+  };
+}
 
 function marathonPerson(name, login, part, userId = null) {
   return { name, login, part, user_id: userId };
@@ -5474,7 +5498,8 @@ function seedMarathons() {
     { id: 1, name: 'AGDQ 2027', schedule_url: 'https://gamesdonequick.com/schedule/74', source: 'gdq', source_ref: '74', spotlight_id: 1, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 440 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000300', board_pinned: true, last_fetched_at: minutesAgo(12), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(9000) },
     { id: 2, name: 'Halo Fest', schedule_url: 'https://gamesdonequick.com/schedule/73', source: 'gdq', source_ref: '73', spotlight_id: null, starts_at: minutesAgo(30000), ends_at: minutesAgo(29840), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000299', board_pinned: false, last_fetched_at: minutesAgo(700), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(40000) },
     { id: 3, name: 'GDQx 2026', schedule_url: 'https://gamesdonequick.com/schedule/72', source: 'gdq', source_ref: '72', spotlight_id: null, starts_at: null, ends_at: null, active: false, poll_minutes: 60, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(1500), last_fetch_ok: 0, last_error: 'the GDQ tracker has the event but has not published its schedule yet (it answers 404 for the runs)', fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(2000) },
-  ];
+    { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
+  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, ...row }));
 }
 
 function seedMarathonPeople() {
@@ -5510,6 +5535,40 @@ function marathonPhase(row) {
   if (now < starts) return 'near';
   if (now > ends) return 'over';
   return 'live';
+}
+
+function marathonOver(row) {
+  const ends = row.ends_at || row.starts_at;
+  return Boolean(ends) && Date.now() > new Date(ends).getTime();
+}
+
+function marathonNextState(record) {
+  if (!record) return null;
+  if (record.event_id === null || record.event_id === undefined) return 'none';
+  if (record.added_marathon_id) return 'added';
+  if (record.dismissed_at) return 'dismissed';
+  return 'open';
+}
+
+function marathonNextRow(row) {
+  const over = marathonOver(row);
+  const record = row.suggested_next || null;
+  if (row.source !== 'gdq' || (!record && !over)) return null;
+  const found = record || {};
+  const added = found.added_marathon_id ? state.marathons.find((one) => one.id === found.added_marathon_id) : null;
+  return {
+    state: marathonNextState(record),
+    event_id: found.event_id ?? null,
+    short: found.short ?? null,
+    name: found.name ?? null,
+    datetime: found.datetime ?? null,
+    url: found.url ?? null,
+    found_at: found.found_at ?? null,
+    dismissed_at: found.dismissed_at ?? null,
+    added_marathon_id: found.added_marathon_id ?? null,
+    added_name: added ? added.name : null,
+    can_look_again: over,
+  };
 }
 
 function marathonWindowOf(id) {
@@ -5567,6 +5626,9 @@ function marathonRunRow(run) {
     shouted: Boolean(run.shout_message_id),
     shoutable: ours && ['upcoming', 'live'].includes(run.state) && !run.shout_message_id,
     can_mark_done: ['upcoming', 'live'].includes(run.state),
+    can_mark_upcoming: run.state === 'done',
+    can_mark_live: ['upcoming', 'done'].includes(run.state),
+    held: run.live_because === 'staff' && ['upcoming', 'live'].includes(run.state),
     reminders_sent: run.reminders_sent,
   };
 }
@@ -5587,6 +5649,7 @@ function marathonRow(row) {
   const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
   const window = marathonWindowOf(row.id);
   const phase = marathonPhase(row);
+  const nextRow = marathonNextRow(row);
   return {
     id: row.id,
     name: row.name,
@@ -5617,6 +5680,8 @@ function marathonRow(row) {
     window: window ? { id: window.id, starts_at: window.starts_at, ends_at: window.ends_at } : null,
     added_at: row.added_at,
     added_by_name: row.added_by ? memberName(row.added_by) : null,
+    next: nextRow,
+    next_waiting: Boolean(nextRow) && nextRow.state === 'open',
   };
 }
 
@@ -5675,31 +5740,69 @@ function marathonRead(url) {
 
 route('GET', '/api/marathons', (context) => {
   requireStaff(context.session);
+  const rows = [...state.marathons]
+    .sort((a, b) => String(a.starts_at || '9999').localeCompare(String(b.starts_at || '9999')) || a.id - b.id)
+    .map(marathonRow);
   return {
     mode: state.settings.get('marathon_mode'),
-    marathons: [...state.marathons]
-      .sort((a, b) => String(a.starts_at || '9999').localeCompare(String(b.starts_at || '9999')) || a.id - b.id)
-      .map(marathonRow),
+    marathons: rows,
+    next_waiting: rows.filter((one) => one.next_waiting).length,
   };
 });
+
+function marathonOpenSuggestion(row, eventId) {
+  const record = row.suggested_next;
+  if (marathonNextState(record) !== 'open') {
+    throw new Refused(409, 'nothing_suggested', `**${row.name}** has no next event waiting, so nothing was changed. **Look again** asks the tracker.`);
+  }
+  if (eventId !== undefined && eventId !== null && String(eventId) !== String(record.event_id)) {
+    throw new Refused(409, 'suggestion_moved', `That is not the suggestion waiting on **${row.name}** any more, so nothing was changed. Open /marathon or the Marathons page for the current one.`);
+  }
+  return record;
+}
+
+function marathonAddNext(parent, eventId) {
+  const record = marathonOpenSuggestion(parent, eventId);
+  const existing = state.marathons.find((one) => one.source === 'gdq' && one.source_ref === String(record.event_id));
+  let made = existing;
+  let message = existing ? `**${record.name}** is already on the list as **${existing.name}**, so there is nothing to add.` : '';
+  if (!existing) {
+    const found = marathonCreate(record.name, record.url, parent.spotlight_id);
+    made = found.row;
+    message = found.message;
+  }
+  record.added_marathon_id = made.id;
+  record.added_at = new Date().toISOString();
+  record.added_by = STAFF.id;
+  logAction('web.marathon.next_added', { details: { marathon_id: made.id, from_marathon_id: parent.id, event: record.event_id, by: STAFF.id, via: 'website' } });
+  return { ...marathonDetail(made), message };
+}
 
 route('POST', '/api/marathons', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
+  if (body.next_of !== undefined && body.next_of !== null && body.next_of !== '') {
+    return marathonAddNext(marathonOf(body.next_of), body.event_id);
+  }
   const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 100);
   if (!name) throw new Refused(422, 'no_name', 'A marathon needs a name, so nothing was added.');
-  const url = String(body.schedule_url || '').trim();
+  const found = marathonCreate(name, body.schedule_url, body.spotlight_id);
+  return { ...marathonDetail(found.row), message: found.message };
+});
+
+function marathonCreate(name, scheduleUrl, spotlight) {
+  const url = String(scheduleUrl || '').trim();
   const ref = marathonRead(url);
   if (ref === null) throw new Refused(422, 'unknown_site', marathonWords('marathon_unknown_site'));
   const twin = state.marathons.find((one) => one.schedule_url === url);
   if (twin) throw new Refused(409, 'duplicate', marathonWords('marathon_already_added').replace('{name}', twin.name));
-  const spotlightId = body.spotlight_id ? Number(body.spotlight_id) : null;
+  const spotlightId = spotlight ? Number(spotlight) : null;
   if (spotlightId && !state.golive.spotlights.find((one) => one.id === spotlightId)) {
-    throw new Refused(404, 'no_such_channel', `**${String(body.spotlight_id).slice(0, 40)}** is not one of the channels on the Go-live page, so nothing was changed. Add the channel there first, or leave it blank.`);
+    throw new Refused(404, 'no_such_channel', `**${String(spotlight).slice(0, 40)}** is not one of the channels on the Go-live page, so nothing was changed. Add the channel there first, or leave it blank.`);
   }
   const id = state.marathons.reduce((top, one) => Math.max(top, one.id), 0) + 1;
   const starts = new Date(Date.now() + 3 * 86400000);
-  const row = { id, name, schedule_url: url, source: 'gdq', source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString() };
+  const row = { id, name, schedule_url: url, source: 'gdq', source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null };
   state.marathons.push(row);
   const top = state.marathonRuns.reduce((most, one) => Math.max(most, one.id), 0);
   [['Celeste', 'Any%', 'Flyingludicolo', 'flyingludicolo'], ['Super Metroid', 'Any%', 'Casey', 'caseyfast'], ['Blaster Master', 'Any%', 'Interview Crew', null]].forEach(([game, category, runner, login], index) => {
@@ -5710,8 +5813,8 @@ route('POST', '/api/marathons', async (context) => {
   marathonSyncWindow(row);
   logAction('web.marathon.added', { details: { marathon_id: id, name, url, via: 'website' } });
   const found = marathonDetail(row);
-  return { ...found, message: `**${name}** is on the list. Its schedule has ${found.runs} run(s), ${found.ours} of them ours.` };
-});
+  return { row, message: `**${name}** is on the list. Its schedule has ${found.runs} run(s), ${found.ours} of them ours.` };
+}
 
 route('GET', '/api/marathons/:marathon_id', (context) => {
   requireStaff(context.session);
@@ -5758,7 +5861,34 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
     }
     logAction('web.marathon.updated', { details: { marathon_id: row.id, via: 'website' } });
   }
+  if ('dismiss_next' in body) {
+    if (body.dismiss_next !== true) throw new Refused(422, 'bad_dismiss', 'Say true to dismiss the suggested next event, so nothing was changed.');
+    const record = marathonOpenSuggestion(row, body.event_id);
+    record.dismissed_at = new Date().toISOString();
+    record.dismissed_by = STAFF.id;
+    logAction('web.marathon.next_dismissed', { details: { marathon_id: row.id, event: record.event_id, by: STAFF.id, via: 'website' } });
+    said.push(`**${record.name}** is dismissed for **${row.name}**. **Look again** asks the tracker once more.`);
+  }
   return { ...marathonDetail(row), message: said.join(' ') };
+});
+
+route('POST', '/api/marathons/:marathon_id/next', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  if (row.source !== 'gdq') throw new Refused(409, 'not_gdq', `**${row.name}** is not a GDQ marathon, so there is no next GDQ event to look up.`);
+  if (!marathonOver(row)) throw new Refused(409, 'not_over', `**${row.name}** is not over yet, so nothing was looked up. The next GDQ event is suggested once it ends.`);
+  const event = marathonNextEvent();
+  const existing = state.marathons.find((one) => one.source === 'gdq' && one.source_ref === String(event.id) && one.id !== row.id);
+  row.suggested_next = marathonSuggestion({ found_at: new Date().toISOString(), added_marathon_id: existing ? existing.id : null });
+  const shadow = state.settings.get('marathon_mode') !== 'on';
+  logAction(shadow ? 'web.marathon.would_suggest_next' : 'web.marathon.next_suggested', { details: { marathon_id: row.id, event: String(event.id), short: event.short, via: 'website' } });
+  const words = marathonWords('marathon_next_template')
+    .replace('{marathon}', row.name)
+    .replace('{next}', event.name)
+    .replace('{when}', new Date(row.suggested_next.datetime).toDateString())
+    .replace('{relative}', `in ${event.days} days`)
+    .replace('{url}', row.suggested_next.url);
+  return { ...marathonDetail(row), message: words };
 });
 
 route('DELETE', '/api/marathons/:marathon_id', (context) => {
@@ -5855,6 +5985,32 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/shout', (context) => {
   run.shout_message_id = String(830000000000000500 + run.id);
   logAction(state.settings.get('marathon_mode') === 'on' ? 'web.marathon.shouted' : 'web.marathon.would_shout', { details: { marathon_id: row.id, run_id: run.id, via: 'website' } });
   return { run: marathonRunRow(run), message: `The shoutout for **${run.game}** is out.` };
+});
+
+route('POST', '/api/marathons/:marathon_id/runs/:run_id/upcoming', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const run = marathonRunOf(row, context.params.run_id);
+  if (run.state !== 'done') throw new Refused(409, 'not_resettable', `**${run.game}** is ${run.state}, so nothing was changed. Only a done run can be marked coming up again.`);
+  const from = run.state;
+  Object.assign(run, { state: 'upcoming', live_because: 'staff' });
+  logAction('web.marathon.run_reset', { details: { marathon_id: row.id, run_id: run.id, from, because: 'staff', via: 'website' } });
+  return { run: marathonRunRow(run), message: `**${run.game}** is coming up again. Reminders already sent stay sent.` };
+});
+
+route('POST', '/api/marathons/:marathon_id/runs/:run_id/live', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const run = marathonRunOf(row, context.params.run_id);
+  if (!['upcoming', 'done'].includes(run.state)) throw new Refused(409, 'not_liveable', `**${run.game}** is ${run.state}, so nothing was changed. Only a run coming up or done can be marked live.`);
+  const from = run.state;
+  Object.assign(run, { state: 'live', live_because: 'staff' });
+  logAction('web.marathon.run_live', { details: { marathon_id: row.id, run_id: run.id, from, because: 'staff', via: 'website' } });
+  if (marathonOurs(run) && !run.shout_message_id) {
+    run.shout_message_id = String(830000000000000500 + run.id);
+    logAction(state.settings.get('marathon_mode') === 'on' ? 'web.marathon.shouted' : 'web.marathon.would_shout', { details: { marathon_id: row.id, run_id: run.id, via: 'website' } });
+  }
+  return { run: marathonRunRow(run), message: `**${run.game}** is on now, marked by staff.` };
 });
 
 route('POST', '/api/marathons/:marathon_id/runs/:run_id/done', (context) => {

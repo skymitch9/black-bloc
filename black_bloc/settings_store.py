@@ -4370,6 +4370,11 @@ MARATHON_UNKNOWN_SITE_KEY = "marathon_unknown_site"
 MARATHON_ALREADY_ADDED_KEY = "marathon_already_added"
 MARATHON_COULD_NOT_READ_KEY = "marathon_could_not_read"
 MARATHON_NO_RUNS_YET_KEY = "marathon_no_runs_yet"
+MARATHON_SUGGEST_NEXT_KEY = "marathon_suggest_next"
+MARATHON_NEXT_TEMPLATE_KEY = "marathon_next_template"
+MARATHON_NEXT_NONE_TEMPLATE_KEY = "marathon_next_none_template"
+MARATHON_NEXT_ADDED_TEMPLATE_KEY = "marathon_next_added_template"
+MARATHON_NEXT_FIELDS = ("marathon", "next", "when", "relative", "url")
 MARATHON_REMINDER_MINUTES = "120, 15"
 MARATHON_MARKS_MAX = 6
 MARATHON_MARK_MAX_MINUTES = 1440
@@ -4508,6 +4513,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "15-minute interaction window is still open, so 15 or more means the buttons simply "
         "stop working with no footer to explain it",
     ),
+    MARATHON_SUGGEST_NEXT_KEY: (
+        "bool",
+        True,
+        "whether a GDQ marathon that is over looks up the next GDQ event on the tracker and "
+        "suggests it to staff — a notice with Add it and Not this one, and a Next up card on the "
+        "Marathons page. on by default; nothing is ever added until staff press Add it",
+    ),
 }
 MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_BOARD_TEMPLATE_KEY: (
@@ -4578,6 +4590,24 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("marathon",),
         "what the page and the panel say about a marathon whose schedule is not published yet. "
         "It takes {marathon}",
+    ),
+    MARATHON_NEXT_TEMPLATE_KEY: (
+        "{marathon} is over — the next GDQ event is **{next}**, {when} ({relative}). Add it?",
+        MARATHON_NEXT_FIELDS,
+        "the staff notice when a GDQ marathon is over and the tracker lists another event ahead. "
+        "It takes {marathon} {next} {when} {relative} {url}",
+    ),
+    MARATHON_NEXT_NONE_TEMPLATE_KEY: (
+        "{marathon} is over and the GDQ tracker lists nothing ahead yet — Look again later.",
+        ("marathon",),
+        "what staff are told when a GDQ marathon is over and the tracker lists no event ahead. "
+        "It takes {marathon}",
+    ),
+    MARATHON_NEXT_ADDED_TEMPLATE_KEY: (
+        "Added **{next}** — it will be read from {url}.",
+        MARATHON_NEXT_FIELDS,
+        "what the staff notice is rewritten to once the next event is added. It takes "
+        "{marathon} {next} {when} {relative} {url}",
     ),
 }
 MARATHON_RANGES: dict[str, tuple[int, int]] = {
