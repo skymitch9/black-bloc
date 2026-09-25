@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 58
+SCHEMA_VERSION = 59
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -894,6 +894,7 @@ CREATE TABLE IF NOT EXISTS spotlight_channels (
     announce           INTEGER NOT NULL DEFAULT 1,
     youtube_channel_id TEXT,
     youtube_handle     TEXT,
+    ping_mode          TEXT    NOT NULL DEFAULT 'always',
     UNIQUE (guild_id, twitch_login)
 );
 
@@ -909,7 +910,8 @@ CREATE TABLE IF NOT EXISTS spotlight_sessions (
     mode                 TEXT    NOT NULL,
     announced_message_id INTEGER,
     last_bump_at         TEXT,
-    bump_count           INTEGER NOT NULL DEFAULT 0
+    bump_count           INTEGER NOT NULL DEFAULT 0,
+    pinging_last         INTEGER
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS spotlight_open_session
@@ -924,6 +926,22 @@ CREATE TABLE IF NOT EXISTS spotlight_bumps (
     at         TEXT    NOT NULL,
     PRIMARY KEY (session_id, message_id)
 );
+
+CREATE TABLE IF NOT EXISTS spotlight_ping_windows (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id     INTEGER NOT NULL,
+    spotlight_id INTEGER NOT NULL,
+    starts_at    TEXT    NOT NULL,
+    ends_at      TEXT    NOT NULL,
+    note         TEXT,
+    source       TEXT    NOT NULL DEFAULT 'staff',
+    source_id    INTEGER,
+    added_by     INTEGER,
+    added_at     TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS spotlight_ping_windows_by_channel
+    ON spotlight_ping_windows(spotlight_id, starts_at);
 
 CREATE TABLE IF NOT EXISTS channel_notes (
     guild_id   INTEGER NOT NULL,
@@ -1059,6 +1077,8 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("spotlight_channels", "youtube_channel_id", "TEXT"),
     ("spotlight_channels", "youtube_handle", "TEXT"),
     ("spotlight_channels", "starts_at", "TEXT"),
+    ("spotlight_channels", "ping_mode", "TEXT NOT NULL DEFAULT 'always'"),
+    ("spotlight_sessions", "pinging_last", "INTEGER"),
     ("personality_tropes", "voice_edited_by", "INTEGER"),
     ("personality_tropes", "voice_edited_at", "TEXT"),
     ("llm_ledger", "trope", "TEXT"),

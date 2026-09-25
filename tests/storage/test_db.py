@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 58
+        assert SCHEMA_VERSION == 59
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2214,7 +2214,7 @@ async def test_a_schema_57_file_gains_the_chat_review_table_and_keeps_its_rows(t
         cur = await again.conn.execute("SELECT shown FROM channel_reach WHERE channel_id = 1")
         assert (await cur.fetchone())["shown"] == 1
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "58"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
         row = (
             "INSERT INTO chat_review(guild_id, channel_id, user_id, asked, answered, reason, "
             "reply_id, at, status) VALUES (7, 1, 2, 'q', 'a', 'reask', ?, 'x', ?)"
@@ -2291,5 +2291,59 @@ async def test_a_schema_54_file_gains_chat_voice_and_three_columns_and_keeps_its
         await again.conn.execute("INSERT INTO chat_voice(guild_id, user_id) VALUES (7, 1)")
         with pytest.raises(sqlite3.IntegrityError):
             await again.conn.execute("INSERT INTO chat_voice(guild_id, user_id) VALUES (7, 1)")
+    finally:
+        await again.close()
+
+
+async def test_a_schema_58_file_gains_ping_mode_windows_and_the_session_gate(tmp_path):
+    """58 → 59: a row written before keeps pinging always, and its open session has no
+    remembered gate answer yet, so the boot reconcile writes one without posting."""
+    path = tmp_path / "old58.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE spotlight_ping_windows")
+    await db.conn.execute("ALTER TABLE spotlight_channels DROP COLUMN ping_mode")
+    await db.conn.execute("ALTER TABLE spotlight_sessions DROP COLUMN pinging_last")
+    await db.conn.execute(
+        "INSERT INTO spotlight_channels(id, guild_id, twitch_login, added_at, pin) "
+        "VALUES (1, 7, 'gamesdonequick', '2026-09-20T00:00:00+00:00', 1)"
+    )
+    await db.conn.execute(
+        "INSERT INTO spotlight_sessions(id, guild_id, spotlight_id, started_at, mode) "
+        "VALUES (1, 7, 1, '2026-09-24T00:00:00+00:00', 'on')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '58')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT ping_mode FROM spotlight_channels WHERE id = 1")
+        assert (await cur.fetchone())["ping_mode"] == "always"
+        cur = await again.conn.execute("SELECT pinging_last FROM spotlight_sessions WHERE id = 1")
+        assert (await cur.fetchone())["pinging_last"] is None
+        cur = await again.conn.execute("PRAGMA table_info(spotlight_ping_windows)")
+        assert {r["name"] for r in await cur.fetchall()} == {
+            "id",
+            "guild_id",
+            "spotlight_id",
+            "starts_at",
+            "ends_at",
+            "note",
+            "source",
+            "source_id",
+            "added_by",
+            "added_at",
+        }
+        cur = await again.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' "
+            "AND name='spotlight_ping_windows_by_channel'"
+        )
+        assert await cur.fetchone() is not None
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "59"
     finally:
         await again.close()
