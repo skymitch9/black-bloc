@@ -36,6 +36,7 @@ from black_bloc.cogs.content.golive import set_link, set_optout, start_session
 from black_bloc.cogs.content.raidtrain import create_train
 from black_bloc.cogs.content.raidtrain import set_status as set_train_status
 from black_bloc.cogs.content.spotlight import add_channel as add_spotlight
+from black_bloc.cogs.content.spotlight import add_window as add_ping_window_row
 from black_bloc.cogs.content.youtube import YouTube
 from black_bloc.cogs.content.youtube import set_link as set_youtube_link
 from black_bloc.cogs.moderation.honeypot import record_hit
@@ -665,6 +666,17 @@ async def seed_world(client, web, guild, wf) -> dict:
     # A ping role of the channel's own (schema 50). Its Discord role is deliberately one the
     # fake guild does NOT have, so the DELETE entry cannot take a role another entry reads.
     await pings.set_fan_role(db, guild_id, None, 999_999, 7, spotlight_id=spotlight_id)
+    # A staff ping window on it (schema 59), so the windows list has a row and the DELETE entry
+    # has one it may take; ping_mode stays `always`, so no other entry's announcement changes.
+    window_id = await add_ping_window_row(
+        db,
+        guild_id,
+        spotlight_id,
+        (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+        (datetime.now(UTC) + timedelta(days=37)).isoformat(),
+        note="AGDQ 2027",
+        added_by=7,
+    )
     # A second channel whose ping role IS a role this guild has, because the rename PATCH edits
     # the role itself. `rewind` builds a fresh guild per entry, so the new name never escapes.
     role_spotlight_id = await add_spotlight(
@@ -732,6 +744,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         "post_version_n": "1",
         "spotlight_id": str(spotlight_id),
         "spotlight_role_id": str(role_spotlight_id),
+        "window_spotlight_id": str(spotlight_id),
+        "window_id": str(window_id),
         "meeting_id": str(meeting_id),
         "recording_meeting_id": str(recording_meeting_id),
     }

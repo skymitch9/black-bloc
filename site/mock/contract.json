@@ -1035,7 +1035,11 @@
         "role_wearers",
         "url",
         "live",
-        "sessions"
+        "sessions",
+        "ping_mode",
+        "pinging",
+        "ping_state",
+        "windows"
       ]
     },
     {
@@ -1076,6 +1080,10 @@
         "url",
         "live",
         "sessions",
+        "ping_mode",
+        "pinging",
+        "ping_state",
+        "windows",
         "message"
       ]
     },
@@ -1115,6 +1123,10 @@
         "url",
         "live",
         "sessions",
+        "ping_mode",
+        "pinging",
+        "ping_state",
+        "windows",
         "message"
       ]
     },
@@ -1129,6 +1141,118 @@
         "id",
         "twitch_login",
         "removed",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/golive/spotlight/{window_spotlight_id}/windows",
+      "read_by": [
+        "page-golive.js pingsCard"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "spotlight_id",
+        "starts_at",
+        "ends_at",
+        "note",
+        "source",
+        "source_id",
+        "source_words",
+        "staff",
+        "open",
+        "line",
+        "added_by",
+        "added_at"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/golive/spotlight/{window_spotlight_id}/windows",
+      "body": {
+        "starts_at": "2027-01-12 15:00",
+        "ends_at": "2027-01-19 23:00",
+        "note": "Contract marathon",
+        "tz": "UTC"
+      },
+      "read_by": [
+        "page-golive.js addWindow"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "twitch_login",
+        "display_name",
+        "note",
+        "added_by",
+        "added_by_name",
+        "added_at",
+        "expires_at",
+        "kept",
+        "until",
+        "bump_hours",
+        "pin",
+        "spotlight",
+        "announce",
+        "opted_out",
+        "youtube_channel_id",
+        "youtube_handle",
+        "youtube_url",
+        "event_id",
+        "role_id",
+        "role",
+        "role_wearers",
+        "url",
+        "live",
+        "sessions",
+        "ping_mode",
+        "pinging",
+        "ping_state",
+        "windows",
+        "window",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/golive/spotlight/{window_spotlight_id}/windows/{window_id}",
+      "read_by": [
+        "page-golive.js pingsCard"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "twitch_login",
+        "display_name",
+        "note",
+        "added_by",
+        "added_by_name",
+        "added_at",
+        "expires_at",
+        "kept",
+        "until",
+        "bump_hours",
+        "pin",
+        "spotlight",
+        "announce",
+        "opted_out",
+        "youtube_channel_id",
+        "youtube_handle",
+        "youtube_url",
+        "event_id",
+        "role_id",
+        "role",
+        "role_wearers",
+        "url",
+        "live",
+        "sessions",
+        "ping_mode",
+        "pinging",
+        "ping_state",
+        "windows",
+        "removed",
+        "window_id",
         "message"
       ]
     },

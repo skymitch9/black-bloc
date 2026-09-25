@@ -21,6 +21,7 @@ from ...cogs.content.golive import (
     unlink_channel,
 )
 from ...cogs.content.spotlight import (
+    add_ping_window,
     bump_now,
     changed_spotlight,
     channel_by_id,
@@ -28,14 +29,20 @@ from ...cogs.content.spotlight import (
     forget_spotlight,
     link_youtube,
     open_session,
+    ping_wording_for,
+    remove_ping_window,
+    set_ping_mode,
     spotlight_channel,
     unlink_youtube,
+    windows_for,
+    windows_in_guild,
     wording_for,
 )
 from ...cogs.content.spotlight import recent_sessions as recent_spotlight_sessions
 from ...golive import optout_said
 from ...logkinds import VIA_WEBSITE
 from ...settings_store import (
+    DEFAULT_TIMEZONE_KEY,
     SPOTLIGHT_BAD_DATE_KEY,
     SPOTLIGHT_BUMP_HOURS_KEY,
     SPOTLIGHT_END_BEFORE_START_KEY,
@@ -136,6 +143,24 @@ def spotlight_session_row(row: Any) -> dict[str, Any]:
     }
 
 
+def window_row(window: Any, tz_name: Any = None) -> dict[str, Any]:
+    return {
+        "id": window["id"],
+        "spotlight_id": window["spotlight_id"],
+        "starts_at": window["starts_at"],
+        "ends_at": window["ends_at"],
+        "note": window["note"],
+        "source": window["source"],
+        "source_id": window["source_id"],
+        "source_words": spot.window_source_words(window) or None,
+        "staff": spot.is_staff_window(window),
+        "open": spot.window_is_open(window),
+        "line": spot.window_line(window, None, tz_name),
+        "added_by": str(window["added_by"]) if window["added_by"] else None,
+        "added_at": window["added_at"],
+    }
+
+
 def _ranged(said: dict[str, Any]) -> dict[str, Any]:
     return {name: said[name] for name in ("template", "kept_template") if name in said}
 
@@ -147,9 +172,14 @@ def spotlight_row(
     sessions: list[Any],
     held: Any = None,
     said: dict[str, Any] | None = None,
+    windows: list[Any] | None = None,
+    pinged: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """A spotlight as the Go-live page reads it: a streamer row with no member behind it."""
     said = dict(said or {})
+    pinged = dict(pinged or {})
+    tz_name = pinged.pop("tz_name", None)
+    windows = list(windows or [])
     role = guild.get_role(int(held["role_id"])) if held is not None else None
     return {
         "role_id": str(held["role_id"]) if held is not None else None,
@@ -184,6 +214,10 @@ def spotlight_row(
         "live": live is not None,
         "session": spotlight_session_row(live) if live is not None else None,
         "sessions": [spotlight_session_row(one) for one in sessions],
+        "ping_mode": spot.ping_mode_of(row),
+        "pinging": spot.pings_now(row, windows),
+        "ping_state": spot.ping_state_words(row, windows, None, tz_name, **pinged),
+        "windows": [window_row(one, tz_name) for one in windows],
     }
 
 
@@ -191,6 +225,8 @@ async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
     recent = await recent_spotlight_sessions(bot.db, guild.id, 200)
     held = await pings.spotlight_fan_roles(bot.db, guild.id)
     said = wording_for(bot, guild.id)
+    pinged = ping_wording_for(bot, guild.id)
+    windows = await windows_in_guild(bot.db, guild.id)
     found = []
     for row in await channels_for(bot.db, guild.id):
         mine = [one for one in recent if int(one["spotlight_id"]) == int(row["id"])]
@@ -202,6 +238,8 @@ async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
                 mine[:SPOTLIGHT_SESSIONS],
                 pings.spotlight_row_for(held, row["id"]),
                 said,
+                [one for one in windows if int(one["spotlight_id"]) == int(row["id"])],
+                pinged,
             )
         )
     return found
@@ -218,7 +256,22 @@ async def one_spotlight(bot: Any, guild: Any, spotlight_id: int) -> dict[str, An
         [],
         await pings.get_spotlight_fan_role(bot.db, guild.id, spotlight_id),
         wording_for(bot, guild.id),
+        await windows_for(bot.db, spotlight_id),
+        ping_wording_for(bot, guild.id),
     )
+
+
+def wanted_ping_mode(payload: dict[str, Any]) -> Any:
+    """Checked BEFORE anything is written, so a bad mode never lands half a PATCH."""
+    if "ping_mode" not in payload:
+        return None
+    given = payload.get("ping_mode")
+    wanted = spot.clean_ping_mode(given)
+    if wanted is None:
+        raise Refused(
+            422, spot.BAD_MODE, spot.PING_MODE_REFUSED.format(given=str(given or "")[:40])
+        )
+    return wanted
 
 
 def bad_date(bot: Any, guild: Any, given: Any) -> Refused:
@@ -454,6 +507,7 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         seen = await one_spotlight(bot, guild, spotlight_id)
+        ping_mode = wanted_ping_mode(payload)
         fields: dict[str, Any] = {}
         starts_at = seen["starts_at"]
         expires_at = seen["expires_at"]
@@ -500,6 +554,13 @@ def build_router(bot: Any) -> APIRouter:
                 raise Refused(503, "no_cog", said)
             if outcome == "not_linked":
                 raise Refused(404, "not_linked", said)
+        if ping_mode is not None:
+            outcome, fresh, moded = await set_ping_mode(
+                bot, guild, who_acts, spotlight_id, ping_mode, via=VIA_WEBSITE
+            )
+            if outcome == "no_row":
+                raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
+            said = said or moded
         settled = None
         if fields or said is None:
             fresh, settled = await changed_spotlight(
@@ -561,6 +622,66 @@ def build_router(bot: Any) -> APIRouter:
         return await one_spotlight(bot, guild, spotlight_id) | {
             "bumped": True,
             "message": SPOTLIGHT_BUMPED.format(login=row["twitch_login"]),
+        }
+
+    @router.get("/spotlight/{spotlight_id}/windows")
+    async def golive_spotlight_windows(spotlight_id: int) -> list[dict[str, Any]]:
+        guild = require_guild(bot)
+        require_db(bot)
+        seen = await one_spotlight(bot, guild, spotlight_id)
+        return seen["windows"]
+
+    @router.post("/spotlight/{spotlight_id}/windows")
+    async def golive_spotlight_window_add(
+        request: Request, spotlight_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await one_spotlight(bot, guild, spotlight_id)
+        starts_at = read_or_refuse(bot, guild, payload, "starts_at", end=False)
+        ends_at = read_or_refuse(bot, guild, payload, "ends_at", end=False)
+        outcome, _, window, said = await add_ping_window(
+            bot,
+            guild,
+            actor_for(bot, who, guild),
+            spotlight_id,
+            starts_at,
+            ends_at,
+            payload.get("note"),
+            via=VIA_WEBSITE,
+        )
+        if outcome == "no_row":
+            raise Refused(404, "no_spotlight", said)
+        if window is None:
+            raise Refused(422, str(outcome), said)
+        tz_name = bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)
+        return await one_spotlight(bot, guild, spotlight_id) | {
+            "window": window_row(window, tz_name),
+            "message": said,
+        }
+
+    @router.delete("/spotlight/{spotlight_id}/windows/{window_id}")
+    async def golive_spotlight_window_remove(
+        request: Request, spotlight_id: int, window_id: int
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await one_spotlight(bot, guild, spotlight_id)
+        outcome, _, _, said = await remove_ping_window(
+            bot, guild, actor_for(bot, who, guild), spotlight_id, window_id, via=VIA_WEBSITE
+        )
+        if outcome == "no_row":
+            raise Refused(404, "no_spotlight", said)
+        if outcome == "no_window":
+            raise Refused(404, "no_window", said)
+        if outcome == "not_staff":
+            raise Refused(409, "not_staff_window", said)
+        return await one_spotlight(bot, guild, spotlight_id) | {
+            "removed": True,
+            "window_id": int(window_id),
+            "message": said,
         }
 
     @router.get("/sessions")

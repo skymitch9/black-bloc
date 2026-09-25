@@ -16,11 +16,13 @@ from black_bloc.cogs.content.golive import (
 )
 from black_bloc.cogs.content.spotlight import (
     add_channel,
+    add_window,
     channel_by_id,
     channel_by_login,
     channels_for,
     set_announced,
     start_session,
+    windows_for,
 )
 from black_bloc.golive import HISTORY_NOTHING, StreamInfo
 
@@ -38,6 +40,9 @@ ROUTES = [
     ("PATCH", "/api/golive/spotlight/1"),
     ("DELETE", "/api/golive/spotlight/1"),
     ("POST", "/api/golive/spotlight/1/bump"),
+    ("GET", "/api/golive/spotlight/1/windows"),
+    ("POST", "/api/golive/spotlight/1/windows"),
+    ("DELETE", "/api/golive/spotlight/1/windows/1"),
 ]
 
 
@@ -903,3 +908,151 @@ async def test_the_dates_routes_stay_staff_only(client, sign_in, web, wf):
 
     assert response.status_code == 403
     assert (await channel_by_id(web.db, spotlight_id))["starts_at"] is None
+
+
+# --- ping windows (owner, 2026-09-25) ----------------------------------------------------------
+
+
+async def a_window(web, wf, spotlight_id, start_hours, end_hours, **fields):
+    now = datetime.now(UTC)
+    return await add_window(
+        web.db,
+        wf.GUILD_ID,
+        spotlight_id,
+        (now + timedelta(hours=start_hours)).isoformat(),
+        (now + timedelta(hours=end_hours)).isoformat(),
+        **fields,
+    )
+
+
+async def test_a_row_carries_its_ping_mode_its_state_and_its_windows(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf, ping_mode="events")
+    await a_window(web, wf, spotlight_id, -1, 5, note="AGDQ 2027")
+    await a_window(web, wf, spotlight_id, 48, 72, source="marathon", source_id=4)
+    await a_spotlight(web, wf, "esamarathon")
+    sign_in(client)
+
+    rows = {one["twitch_login"]: one for one in client.get("/api/golive/spotlight").json()}
+
+    gdq = rows["gamesdonequick"]
+    assert gdq["ping_mode"] == "events" and gdq["pinging"] is True
+    assert gdq["ping_state"].startswith("Pings: during events — open until ")
+    assert [one["staff"] for one in gdq["windows"]] == [True, False]
+    assert gdq["windows"][0]["open"] is True and gdq["windows"][0]["note"] == "AGDQ 2027"
+    assert gdq["windows"][1]["source_words"] == "from the marathon schedule"
+    assert rows["esamarathon"]["ping_mode"] == "always"
+    assert rows["esamarathon"]["ping_state"] == "Pings: always"
+    assert rows["esamarathon"]["windows"] == []
+
+
+async def test_a_patch_sets_the_ping_mode_and_leaves_one_row(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    sign_in(client)
+
+    answer = client.patch(f"/api/golive/spotlight/{spotlight_id}", json={"ping_mode": "never"})
+
+    assert answer.status_code == 200
+    body = answer.json()
+    assert body["ping_mode"] == "never" and body["ping_state"] == "Pings: never"
+    assert "nothing it posts mentions a role" in body["message"]
+    assert await wf.kinds_in(web.db) == ["web.golive.spotlight_ping_mode_set"]
+    said = await wf.one_web_row(web.db, "web.golive.spotlight_ping_mode_set")
+    assert said["from"] == "always" and said["to"] == "never"
+
+
+async def test_an_unknown_ping_mode_is_refused_before_anything_is_written(
+    client, sign_in, web, wf
+):
+    spotlight_id = await a_spotlight(web, wf)
+    sign_in(client)
+
+    answer = client.patch(
+        f"/api/golive/spotlight/{spotlight_id}", json={"ping_mode": "loud", "pin": False}
+    )
+
+    assert answer.status_code == 422
+    assert "**loud** is not a ping mode" in answer.json()["message"]
+    row = await channel_by_id(web.db, spotlight_id)
+    assert row["ping_mode"] == "always" and row["pin"] == 1
+    assert await wf.kinds_in(web.db) == []
+
+
+async def test_windows_are_listed_added_and_removed_through_their_routes(
+    client, sign_in, web, wf
+):
+    spotlight_id = await a_spotlight(web, wf, ping_mode="events")
+    sign_in(client)
+
+    added = client.post(
+        f"/api/golive/spotlight/{spotlight_id}/windows",
+        json={
+            "starts_at": "2027-01-12 15:00",
+            "ends_at": "2027-01-19 23:00",
+            "note": "AGDQ 2027",
+            "tz": "UTC",
+        },
+    )
+
+    assert added.status_code == 200
+    body = added.json()
+    assert body["window"]["starts_at"] == "2027-01-12T15:00:00+00:00"
+    assert "pings from 12 Jan" in body["message"]
+    assert [one["note"] for one in body["windows"]] == ["AGDQ 2027"]
+    listed = client.get(f"/api/golive/spotlight/{spotlight_id}/windows").json()
+    assert [one["id"] for one in listed] == [body["window"]["id"]]
+    assert await wf.kinds_in(web.db) == ["web.golive.spotlight_window_added"]
+
+    gone = client.delete(f"/api/golive/spotlight/{spotlight_id}/windows/{body['window']['id']}")
+
+    assert gone.status_code == 200 and gone.json()["removed"] is True
+    assert await windows_for(web.db, spotlight_id) == []
+    assert await wf.kinds_in(web.db) == [
+        "web.golive.spotlight_window_added",
+        "web.golive.spotlight_window_removed",
+    ]
+
+
+async def test_a_window_is_refused_in_words_without_both_ends_backwards_or_unreadable(
+    client, sign_in, web, wf
+):
+    spotlight_id = await a_spotlight(web, wf)
+    sign_in(client)
+    path = f"/api/golive/spotlight/{spotlight_id}/windows"
+
+    half = client.post(path, json={"starts_at": "2027-01-12 15:00", "tz": "UTC"})
+    backwards = client.post(
+        path, json={"starts_at": "2027-01-19 23:00", "ends_at": "2027-01-12 15:00", "tz": "UTC"}
+    )
+    garbled = client.post(path, json={"starts_at": "someday", "ends_at": "2027-01-12 15:00"})
+
+    assert half.status_code == 422 and "start AND an end" in half.json()["message"]
+    assert backwards.status_code == 422
+    assert "ends before it starts" in backwards.json()["message"]
+    assert garbled.status_code == 422 and "someday" in garbled.json()["message"]
+    assert await windows_for(web.db, spotlight_id) == []
+
+
+async def test_a_marathon_window_cannot_be_removed_from_here(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    window_id = await a_window(web, wf, spotlight_id, 24, 48, source="marathon", source_id=4)
+    sign_in(client)
+
+    answer = client.delete(f"/api/golive/spotlight/{spotlight_id}/windows/{window_id}")
+
+    assert answer.status_code == 409
+    assert answer.json()["message"] == (
+        "That window comes from the marathon schedule — change it there."
+    )
+    assert len(await windows_for(web.db, spotlight_id)) == 1
+
+
+async def test_a_window_on_another_row_or_gone_is_a_404_in_words(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    other = await a_spotlight(web, wf, "esamarathon")
+    window_id = await a_window(web, wf, other, 24, 48)
+    sign_in(client)
+
+    answer = client.delete(f"/api/golive/spotlight/{spotlight_id}/windows/{window_id}")
+
+    assert answer.status_code == 404
+    assert "not there any more" in answer.json()["message"]
