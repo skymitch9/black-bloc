@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
-> Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *Marathon feeds — the bot finds the next events itself* (branch `marathon-feeds`, off `main` `05fbd0e6`, keyed against `0f973d75`). Before that:
+> Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *The module database outlives every test loop* (branch `ci-linux-hang`, off `main` `bababb65`, keyed against `fe8befb4`).
+> Before that: **2026-09-25 — one section APPENDED, nothing re-keyed**: *Marathon feeds — the bot finds the next events itself* (branch `marathon-feeds`, off `main` `05fbd0e6`, keyed against `0f973d75`). Before that:
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED and TWO rows RE-KEYED**: *Marathons share the Events page* (branch `marathon-events-page`, off `main` `ed52ffeb`, keyed against its routes commit `ce7b7f80`); the two `page-marathons.js` rows of the marathon sections now point at `marathons-section.js` (the file moved). Nothing else re-keyed.
 > Before that: **2026-09-25 — one section APPENDED, nothing re-keyed**: *The next GDQ event, and a way back for a done run* (branch `marathon-next-event`, off `main` `6bb49274`, keyed against its last code commit). Before that, the same day: *Marathon schedules* (branch `marathon-schedule`, off `main` `08e03fbf`).
 > Before that: **2026-09-25 — one section APPENDED, nothing re-keyed**: *A spotlight split from its ping* (branch `spotlight-ping-windows`, off `main` `84f94347`, keyed against `d32efb57`).
@@ -8384,3 +8385,17 @@ Design: [`personality-tones-design.md`](personality-tones-design.md).
 | `black_bloc/api/server.py:194` `marathon_feeds.build_router` | Included BEFORE the marathons router: `/api/marathons/{marathon_id}` would otherwise take `/api/marathons/feeds` and answer 422. |
 | `site/public/assets/marathons-section.js:563` `feedsCard` | Above the list; the waiting events are `suggestionCard` (`:503`), a sibling of `nextCard` (Deviation 22). A failed feeds read is a card with the sentence, never a blank section. |
 | `site/mock/server.mjs:5824` `seedMarathonFeeds` | Literal URLs: `seedState` runs at load, before the `FEED_*` constants exist (Deviation 23). |
+
+## The module database outlives every test loop (2026-09-25, branch `ci-linux-hang`)
+
+Why in [`ci-linux-hang.md`](ci-linux-hang.md). One aiosqlite connection per module, one event loop per test: a query still on aiosqlite's worker thread when its test's loop closes kills that thread (`call_soon_threadsafe` raises twice), and every later query on the connection waits for ever.
+
+| Where | Why |
+|---|---|
+| `tests/conftest.py:145` `worker_is_alive` | Reads aiosqlite's private `Connection._thread` through `getattr`, so a future aiosqlite without it degrades to "alive" (no guard) rather than an `AttributeError`. A closed database counts as alive: there is nothing to wait on. |
+| `tests/conftest.py:152` `settle` | Cancels and awaits every other pending task on the test's loop — the leaked cog `tasks.loop`s (`cog_load()` starts them; no test fixture stops them) — while the loop is still open. pytest-asyncio would cancel them a moment later anyway, but after the loop starts closing. |
+| `tests/conftest.py:161` `SELECT 1` | The barrier. aiosqlite's queue is FIFO on one thread, so when this answers every earlier query has delivered its result to a loop that is still open. Cancelling alone is not enough: a cancelled task's query is still running on the thread. |
+| `tests/conftest.py:171` `pytest.fail(...)` | A dead thread fails the next test in 0.4 s with a message naming the doc, instead of a 120 s hang and a crashed worker. |
+| `tests/conftest.py:174` `await settle(module_db)` | Why `db` yields instead of returning. Do not revert it to a `return`. |
+| `tests/conftest.py:135` `if worker_is_alive(database)` | `close()` on a dead thread queues a stop nobody reads and hangs the module's teardown — the 15-minute signal-method hang. |
+| `.github/workflows/ci.yml:31` `--timeout-method=signal` | Linux only: the timeout raises inside the hung test (named failure, traceback) instead of `os._exit`-ing the worker. `pyproject.toml` keeps `thread` because Windows has no `SIGALRM`. `-rfE` prints each failure and error's name in the summary. |

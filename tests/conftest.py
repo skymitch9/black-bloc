@@ -1,3 +1,4 @@
+import asyncio
 import os
 import secrets
 import sqlite3
@@ -131,7 +132,8 @@ async def module_db(tmp_path_factory):
     try:
         yield database
     finally:
-        await database.close()
+        if worker_is_alive(database):
+            await database.close()
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
@@ -140,14 +142,36 @@ async def module_db_blank(module_db):
     return await take(module_db)
 
 
+def worker_is_alive(database: Any) -> bool:
+    if not database.is_connected:
+        return True
+    thread = getattr(database.conn, "_thread", None)
+    return thread is None or thread.is_alive()
+
+
+async def settle(database: Any) -> None:
+    """Every task the test left running ends, then every query already queued is answered,
+    all while this test's loop is still open."""
+    here = asyncio.current_task()
+    left = [task for task in asyncio.all_tasks() if task is not here and not task.done()]
+    for task in left:
+        task.cancel()
+    await asyncio.gather(*left, return_exceptions=True)
+    if database.is_connected and worker_is_alive(database):
+        await (await database.conn.execute("SELECT 1")).close()
+
+
 @pytest.fixture
 async def db(module_db, module_db_blank):
     """The module's one schema-v32 database, rewound to what a per-test one would have handed over.
     Reconnected first when the test before it closed the database on purpose."""
     if not module_db.is_connected:
         await module_db.connect()
+    if not worker_is_alive(module_db):
+        pytest.fail("the module database's aiosqlite thread died: docs/info/ci-linux-hang.md")
     await put(module_db, module_db_blank)
-    return module_db
+    yield module_db
+    await settle(module_db)
 
 
 # At least SESSION_SECRET_MIN characters, or site_login_configured stays False

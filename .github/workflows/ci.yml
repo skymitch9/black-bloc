@@ -28,7 +28,7 @@ jobs:
         run: ruff check .
 
       - name: Tests
-        run: python -m pytest -q -n auto
+        run: python -m pytest -q -n auto -rfE --timeout-method=signal
 
       - name: Dashboard contract
         run: |
