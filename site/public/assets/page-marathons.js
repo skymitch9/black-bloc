@@ -169,9 +169,12 @@ function nextMoves(row, say) {
 function nextCell(row, say) {
   if (!row.next) return el('span', { class: 'cell-quiet', text: '—' });
   const next = row.next;
-  const words = next.state === 'open'
-    ? `${next.name} · ${next.datetime ? new Date(next.datetime).toLocaleDateString() : 'no date yet'}`
-    : nextSentence(row);
+  const words = {
+    open: `${next.name} · ${next.datetime ? new Date(next.datetime).toLocaleDateString() : 'no date yet'}`,
+    dismissed: `Dismissed: ${next.name}`,
+    added: `Added: ${next.added_name || next.name}`,
+    none: 'Nothing listed ahead yet',
+  }[next.state] || 'Not looked up yet';
   return el('span', {}, [
     el('span', { class: next.state === 'open' ? 'cell-name' : 'cell-quiet' }, boldParts(words)),
     el('div', { class: 'bar' }, nextMoves(row, say)),
