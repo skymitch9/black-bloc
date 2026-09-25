@@ -68,8 +68,9 @@ feed lists its marathons. Schema 62 → **63**.
 
 **Seed on first boot** (a boot reconcile, one row per boot): a `tracker` feed (`https://tracker.gamesdonequick.com/tracker`)
 on the channel row whose `twitch_login` is `gamesdonequick`, a `tracker` feed (`https://tracker.rpglimitbreak.com`) on
-`rpglimitbreak`, and a `horaro` feed `esa` on `esamarathon` — each only when that channel row exists and that row has
-no feed yet; `action` from `marathon_feed_action_default`. **Removing a channel row removes its
+`rpglimitbreak`, and — ⚠️ **NOT any more: owner, 2026-09-25 15:0x, verbatim *"yes have esam opted out for marathons"*** — ~~a `horaro`
+feed `esa` on `esamarathon`~~ (the Horaro reader is still built here, for any channel row staff give a Horaro feed by
+hand; the ESA row gets no seeded feed) — each only when that channel row exists and that row has no feed yet; `action` from `marathon_feed_action_default`. **Removing a channel row removes its
 feed** (`delete_channel` → the feed row goes, `marathon.feed_removed` with `because: channel_removed`); the marathons
 it made stay, as history, with `feed_id` cleared.
 

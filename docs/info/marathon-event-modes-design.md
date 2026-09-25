@@ -53,6 +53,21 @@ same thing a second time. §C settles it with a key.
   chose the mode, and a review post per run of ours would be a queue nobody asked for; the key turns the review back
   on. Staff final say is the event's own Cancel, and the marathon drawer's **Unlink** / **Make it now** per run.
 
+## A2. A channel row can opt OUT of marathons altogether
+
+**Owner, 2026-09-25 15:0x, verbatim: *"yes have esam opted out for marathons, make sure any channel only can opt out of
+marathons"*.** `spotlight_channels.marathons INTEGER NOT NULL DEFAULT 1` (`ADDED_COLUMNS`, the same schema bump), a
+toggle beside `announce` and `spotlight`. Off means: no feed is seeded for the row and an existing feed on it is
+paused (`marathon.feed_paused`, `because: channel_opted_out`) and cannot be resumed while it is off; **Add a
+marathon** refuses that channel row in words (*ESAMarathon is opted out of marathons — turn it on in its row
+first.*); marathons already on it are paused the same way and resume when it goes back on. **The ESA row
+(`esamarathon`) is seeded OFF** by the same boot reconcile that seeds feeds; every other row is on. Doors: the
+Go-live page row drawer's Announcements card gains **Marathons: on / off** (a segment, staff), the row's Announced
+cell reads `· no marathons` when off; `/golive` ▸ Channels… gains **Marathons on** / **Marathons off** on the picked
+channel; `PATCH /api/golive/spotlight/{id}` accepts `marathons`; the row carries `marathons` and the join fixture
+gains it. Log `golive.channel_marathons_set` (`from`, `to`, `via`, routine). This supersedes the ESA
+`event_mode = none` note in §A — ESA gets no marathons at all, so no events either.
+
 ## B. The doors
 
 - The Add form's *Also make it an event* box becomes an **Event** select — *No event* / *One event for the marathon*
