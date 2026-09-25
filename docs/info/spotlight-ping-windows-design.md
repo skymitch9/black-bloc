@@ -177,10 +177,7 @@ four new ROUTINE kinds, tests collected **7,810 → 7,875**.)*
    *Never → During events* while a window is already open posts nothing; the window-open reminder fires only when a
    WINDOW opens (or is added covering now — sweep `PW-b`). Without this, switching a live channel to *events* inside an
    open window would post a reminder saying nothing had opened.
-5. ⚠️ **The window-open reminder requires `announces(row)` but NOT `is_spotlit(row)`.** §A names no spotlight
-   condition, so a channel whose spotlight is OFF (announced like any stream, no periodic reminders) that is live when
-   its window opens still gets the ONE pinged reminder. The reviewer should decide whether that reads as right; the
-   one-line change is adding `or not words.is_spotlit(row)` to the `announces` check in `_window_opened`.
+5. ~~The window-open reminder checks `announces(row)` but not `is_spotlit(row)`.~~ **Closed at review (Fable, 2026-09-25 11:5x):** the guard now requires `is_spotlit(row)` too — spotlight OFF means *no reminders* (§A of `channel-streamers-design.md`), and this reminder is one; `test_a_window_opening_on_a_live_channel_with_spotlight_off_posts_nothing` covers it (the gate answer is still recorded, so nothing posts later either).
 6. **Window times are written in the guild's `default_timezone`** (`19 Jan 23:00`) in the Discord card, the state line
    the route returns, and the bot's sentences; §A did not name a zone. The site's own windows list renders `when()` in
    the browser, like every other date on the page. The Discord modal and the site dialog READ in the person's own

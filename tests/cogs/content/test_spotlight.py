@@ -2222,6 +2222,20 @@ async def test_a_window_opening_on_a_live_channel_posts_one_pinged_reminder(bot,
     assert len(bot.guild.channel.messages) == 2
 
 
+async def test_a_window_opening_on_a_live_channel_with_spotlight_off_posts_nothing(bot, cog):
+    row, _ = await pinging_row(bot)
+    await set_spotlight(bot, bot.guild, FakeActor(), row["id"], False)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1
+
+    await a_window(bot, row, -1, 5, note="AGDQ 2027")
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1
+    session = await open_session(bot.db, row["id"])
+    assert session["pinging_last"] == 1
+
+
 async def test_the_window_reminder_ignores_the_bump_pings_key_but_honours_its_own(bot, cog):
     await bot.store.set(GUILD, "spotlight_window_open_reminder", False)
     row, _ = await pinging_row(bot)

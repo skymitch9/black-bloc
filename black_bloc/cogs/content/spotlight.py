@@ -692,7 +692,7 @@ class Spotlight(commands.Cog):
         opened_now = was is not None and not bool(was) and pinging
         if not opened_now or words.ping_mode_of(row) != words.PING_EVENTS:
             return False
-        if not words.announces(row):
+        if not words.announces(row) or not words.is_spotlit(row):
             return False
         if not self.bot.store.get(guild.id, SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY):
             return False
