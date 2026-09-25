@@ -4661,6 +4661,266 @@
     },
     {
       "method": "GET",
+      "path": "/api/marathons",
+      "read_by": [
+        "23 page-marathons.js marathon list"
+      ],
+      "shape": "object",
+      "keys": [
+        "mode",
+        "marathons"
+      ],
+      "rows": {
+        "marathons": [
+          "id",
+          "name",
+          "source_word",
+          "schedule_page",
+          "phase",
+          "phase_word",
+          "starts_at",
+          "ends_at",
+          "runs",
+          "ours",
+          "active",
+          "last_fetched_at",
+          "last_fetch_ok",
+          "trouble",
+          "channel_login",
+          "channel_gone"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons",
+      "body": {
+        "name": "Contract marathon",
+        "schedule_url": "https://gamesdonequick.com/schedule/75"
+      },
+      "read_by": [
+        "23 page-marathons.js add a marathon"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "runs",
+        "ours",
+        "run_list",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/marathons/{marathon_id}",
+      "read_by": [
+        "23 page-marathons.js marathon drawer"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source_word",
+        "schedule_page",
+        "phase",
+        "phase_word",
+        "starts_at",
+        "ends_at",
+        "runs",
+        "ours",
+        "active",
+        "last_fetched_at",
+        "last_fetch_ok",
+        "trouble",
+        "channel_login",
+        "channel_gone",
+        "spotlight_id",
+        "poll_minutes",
+        "board_message_id",
+        "window",
+        "run_list",
+        "pairings",
+        "unmatched"
+      ],
+      "rows": {
+        "run_list": [
+          "id",
+          "game",
+          "category",
+          "people",
+          "scheduled_at",
+          "previous_scheduled_at",
+          "moved",
+          "state",
+          "state_word",
+          "ours",
+          "shoutable",
+          "can_mark_done"
+        ],
+        "pairings": [
+          "id",
+          "runner_name",
+          "member_name",
+          "everywhere",
+          "user_id"
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_id}",
+      "body": {
+        "name": "Contract marathon renamed",
+        "active": false
+      },
+      "read_by": [
+        "23 page-marathons.js pause and resume"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "active",
+        "window",
+        "message"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/marathons/{marathon_id}",
+      "read_by": [
+        "23 page-marathons.js remove"
+      ],
+      "shape": "object",
+      "keys": [
+        "removed",
+        "id",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/refresh",
+      "read_by": [
+        "23 page-marathons.js refresh now"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "runs",
+        "run_list",
+        "last_fetched_at",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/board",
+      "read_by": [
+        "23 page-marathons.js post the board"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "board_message_id",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/marathons/{marathon_id}/people",
+      "read_by": [
+        "23 page-marathons.js pairings"
+      ],
+      "shape": "list",
+      "keys": [
+        "id",
+        "runner_name",
+        "member_name",
+        "everywhere",
+        "user_id"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/people",
+      "body": {
+        "runner_name": "Interview Crew",
+        "user_id": "{member_id}"
+      },
+      "read_by": [
+        "23 page-marathons.js pair a runner"
+      ],
+      "shape": "object",
+      "keys": [
+        "pairings",
+        "message"
+      ],
+      "rows": {
+        "pairings": [
+          "id",
+          "runner_name",
+          "member_name",
+          "everywhere",
+          "user_id"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/marathons/{marathon_id}/people/{marathon_pairing_id}",
+      "read_by": [
+        "23 page-marathons.js unpair"
+      ],
+      "shape": "object",
+      "keys": [
+        "pairings",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/runs/{marathon_run_id}/shout",
+      "read_by": [
+        "23 page-marathons.js shout it now"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "state",
+          "state_word",
+          "shoutable"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_id}/runs/{marathon_run_id}/done",
+      "read_by": [
+        "23 page-marathons.js mark done"
+      ],
+      "shape": "object",
+      "keys": [
+        "run",
+        "message"
+      ],
+      "nested": {
+        "run": [
+          "id",
+          "state",
+          "state_word",
+          "can_mark_done"
+        ]
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/applications/status",
       "read_by": [
         "page-rolemenus.js applications"
@@ -6452,7 +6712,8 @@
     "/requests.html",
     "/guides.html",
     "/posts.html",
-    "/minutes.html"
+    "/minutes.html",
+    "/marathons.html"
   ],
   "action_kinds": [
     "web.operator.read",
@@ -6628,6 +6889,23 @@
     "web.chat.review_approved",
     "web.chat.review_changed",
     "web.chat.review_dismissed",
-    "web.chat.review_reopened"
+    "web.chat.review_reopened",
+    "web.marathon.added",
+    "web.marathon.updated",
+    "web.marathon.paused",
+    "web.marathon.resumed",
+    "web.marathon.channel_set",
+    "web.marathon.removed",
+    "web.marathon.paired",
+    "web.marathon.unpaired",
+    "web.marathon.board_posted",
+    "web.marathon.board_refreshed",
+    "web.marathon.board_failed",
+    "web.marathon.would_post_board",
+    "web.marathon.would_refresh_board",
+    "web.marathon.shouted",
+    "web.marathon.shout_failed",
+    "web.marathon.would_shout",
+    "web.marathon.run_done"
   ]
 }

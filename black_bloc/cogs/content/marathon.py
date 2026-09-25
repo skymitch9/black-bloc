@@ -484,7 +484,14 @@ async def set_channel(
 
 
 async def rename_marathon(
-    bot: Any, guild: Any, actor: Any, marathon: Any, name: Any, poll_minutes: Any, *, via: str
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    marathon: Any,
+    name: Any,
+    poll_minutes: Any,
+    *,
+    via: str = VIA_DISCORD,
 ) -> Outcome:
     changes: dict[str, Any] = {}
     if name is not None:

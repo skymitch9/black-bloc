@@ -33,6 +33,7 @@ from black_bloc.cogs.community.polls import (
 from black_bloc.cogs.community.role_menus import add_option, create_menu, get_menu
 from black_bloc.cogs.community.tempvoice import add_channel
 from black_bloc.cogs.content.golive import set_link, set_optout, start_session
+from black_bloc.cogs.content.marathon import Marathons, create_marathon, runs_of, upsert_pairing
 from black_bloc.cogs.content.raidtrain import create_train
 from black_bloc.cogs.content.raidtrain import set_status as set_train_status
 from black_bloc.cogs.content.spotlight import add_channel as add_spotlight
@@ -46,6 +47,7 @@ from black_bloc.golive import StreamInfo
 from black_bloc.llm import ANTHROPIC, GROQ, Usage
 from black_bloc.llm import MODEL as HAIKU
 from black_bloc.llm import record as llm_record
+from black_bloc.marathon_sources import Person, Run
 from black_bloc.modcases import add_case, mark_case_void
 from black_bloc.modmail import IN
 from black_bloc.polls import next_occurrence
@@ -81,6 +83,38 @@ class FakeCog:
 
     def loop_health(self, name: str):
         return (datetime.now(UTC).isoformat(), None)
+
+
+class ContractSchedule:
+    """The GDQ tracker, canned: three runs from two hours out, so every run is upcoming."""
+
+    async def resolve(self, source, ref):
+        return ("74", "Awesome Games Done Quick 2027")
+
+    async def runs(self, source, ref):
+        start = datetime.now(UTC).replace(microsecond=0) + timedelta(hours=2)
+
+        def one(ident, minutes, game, name, part):
+            return Run(
+                str(ident),
+                ident,
+                game,
+                game,
+                "Any%",
+                (start + timedelta(minutes=minutes)).isoformat(),
+                (start + timedelta(minutes=minutes + 60)).isoformat(),
+                3600,
+                (Person(name, None, part),),
+            )
+
+        return [
+            one(1, 0, "Celeste", "Somebody", "runner"),
+            one(2, 60, "Super Metroid", "Contract Runner", "runner"),
+            one(3, 120, "Blaster Master", "Interview Crew", "host"),
+        ]
+
+    async def close(self):
+        return None
 
 
 class FakeRaidTrains:
@@ -691,6 +725,29 @@ async def seed_world(client, web, guild, wf) -> dict:
     await pings.set_fan_role(
         db, guild_id, None, wf.PLAIN_ROLE_ID, 7, spotlight_id=role_spotlight_id
     )
+    # Marathon schedules (schema 60): the real cog on a canned tracker, one marathon on the GDQ
+    # row, three runs, and a pairing that makes the second run ours.
+    marathons = Marathons(web)
+    marathons.client = ContractSchedule()
+    web.cogs["Marathons"] = marathons
+    await web.store.set(guild_id, "marathon_mode", "on", by=7)
+    await web.store.set(guild_id, "marathon_channel_id", wf.TEST_CHANNEL_ID, by=7)
+    made = await create_marathon(
+        web,
+        guild,
+        None,
+        name="AGDQ 2027",
+        url="https://gamesdonequick.com/schedule/74",
+        spotlight_id=spotlight_id,
+    )
+    marathon_id = int(made.value["id"])
+    marathon_pairing_id = await upsert_pairing(
+        db, guild_id, marathon_id, "Contract Runner", MEMBER_ID, 7
+    )
+    await marathons.rematch(guild, made.value)
+    marathon_run_id = next(
+        row["id"] for row in await runs_of(db, marathon_id) if row["game"] == "Super Metroid"
+    )
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
     await db.conn.execute(
         "INSERT OR IGNORE INTO channel_drafts(guild_id, channel_id, draft) VALUES (?, ?, ?)",
@@ -747,6 +804,9 @@ async def seed_world(client, web, guild, wf) -> dict:
         "window_spotlight_id": str(spotlight_id),
         "window_id": str(window_id),
         "meeting_id": str(meeting_id),
+        "marathon_id": str(marathon_id),
+        "marathon_run_id": str(marathon_run_id),
+        "marathon_pairing_id": str(marathon_pairing_id),
         "recording_meeting_id": str(recording_meeting_id),
     }
 

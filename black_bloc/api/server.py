@@ -26,6 +26,7 @@ from .tools import (
     golive,
     guides,
     honeypot,
+    marathons,
     members,
     minutes,
     mod,
@@ -189,6 +190,7 @@ def create_app(bot: Any, *, oauth_request: Any = None) -> FastAPI:
     app.include_router(chat_memory.build_router(bot))
     app.include_router(requests.build_router(bot))
     app.include_router(raidtrain.build_router(bot))
+    app.include_router(marathons.build_router(bot))
     app.include_router(applications.build_router(bot))
     app.include_router(guides.build_router(bot))
     app.include_router(posts.build_router(bot))
