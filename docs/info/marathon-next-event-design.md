@@ -99,6 +99,21 @@ the builder's own. Docs: `code-notes.md`; this doc's `## Deviations` + `## What 
 one folds the card and the notice; d: Look again after a dismissal). NOT `TODO.md` / `DONE.md` / `deploys.log` /
 `KNOWN_ISSUES.md`. ⚠️ Migrate before deploy: one column through `ADDED_COLUMNS`.
 
+## G. Two leftovers from `marathon-schedule`, built here because they are the same surfaces
+
+The `marathon-schedule` build flagged two gaps it did not close (its Deviations, 2026-09-25):
+
+1. **A marathon's own `poll_minutes` has no door.** It is accepted by `PATCH /api/marathons/{id}` only. Checklist 33
+   (configurable both ways) wants a control: on the Marathons page drawer a small *Re-read every N minutes — blank
+   for the default* field beside Pause / Resume, and in `/marathon`'s staff half a **Re-read every…** modal on the
+   picked marathon (one `TextInput`, blank clears it; bounds as the key's, refused in words).
+2. **A `done` run has no move back.** Staff get the final say, and a run the title match marked done by mistake
+   (a rerun in the title, a mis-scored game name) must be recoverable: **Mark it upcoming** on a `done` or `dropped`-
+   then-back run (state → `upcoming`, `live_at` / `done_at` cleared, `reminders_sent` kept so nothing re-posts) and
+   **Mark it live** (state → `live`, `live_because: staff`; shouts if it has not) on the page's run row and in
+   `/marathon` on the run pick the **Shout it now** move already uses. Routes: `POST …/runs/{run_id}/upcoming`,
+   `POST …/runs/{run_id}/live`. Log `marathon.run_reset` / `marathon.run_live` (`because: staff`).
+
 ## Deviations
 
 *(the build agent writes this)*
