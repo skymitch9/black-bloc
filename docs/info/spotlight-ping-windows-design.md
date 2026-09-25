@@ -1,5 +1,7 @@
 # A spotlight is split from its ping — a channel pings always, never, or only during events
 
+> ✅ **2026-09-25 — LIVE as v164 14:16** (release commit `7787b10c`, [`deploys.log`](../deploys.log)): boot log `database: added spotlight_channels.ping_mode` and `spotlight_sessions.pinging_last` at 21:15:56Z (this design's schema 59), `loaded cog spotlight`; `database ready`, `synced 33 app commands`, `logged in as Black_Bloc` 21:16:01Z, no Traceback; `/health` ready=true 67 ms. Nothing has met Discord by hand — the sweeps are the owner's; the live site was not opened in a browser.
+
 > **2026-09-25 — the `marathon` source of a window is LIVE in code** (branch `marathon-schedule`, not merged): each marathon with a channel keeps ONE `source='marathon'`, `source_id=<marathon id>` window from its first run's start − `marathon_window_slack_hours` to its last run's end + slack, note = its name; pause, remove and a lost channel drop it. See [`marathon-schedule-design.md`](marathon-schedule-design.md).
 
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 10:5x Phoenix),

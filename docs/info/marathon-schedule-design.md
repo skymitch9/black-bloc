@@ -1,5 +1,7 @@
 # Marathon schedules — our people on a marathon stream, read off the posted schedule, re-read every half hour
 
+> ✅ **2026-09-25 — LIVE as v164 14:16** (release commit `7787b10c`, [`deploys.log`](../deploys.log)): boot log `loaded cog … marathon` (this design's schema 60 tables are among the four new tables of schema 58 → 62; the `database: added …` lines name added columns only, so no line names them by itself); `marathon_mode` ships shadow; `database ready`, `synced 33 app commands`, `logged in as Black_Bloc` 21:16:01Z, no Traceback; `/health` ready=true 67 ms. Nothing has met Discord by hand — the sweeps are the owner's; the live site was not opened in a browser.
+
 > 🔨 **2026-09-25 — MOVED by branch `marathon-events-page` (NOT merged):** the Marathons page is now the Marathons section of `events.html` (`marathons.html` deleted, `page-marathons.js` → `marathons-section.js`, deep link `events.html#marathon-<id>`), `/marathon` is retired into `/event` ▸ **Marathons…** (`marathon_panel_minutes` → `event_panel_minutes`), and a marathon now makes an event — see [`marathon-events-page-design.md`](marathon-events-page-design.md). Behaviour below is unchanged; only the address and the command moved.
 
 > 🔨 **2026-09-25 — follow-up BUILT on branch `marathon-next-event`, NOT merged:** closes this build's Deviations 18

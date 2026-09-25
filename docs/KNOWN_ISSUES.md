@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-23 18:3x** — KI-10 only, at the v163 docs ritual: one sighting line (01:32:43Z, the v163 swap, from `deploys.log`). ⚠️ Nothing else re-read.
+> Last verified: **2026-09-25 14:2x** — KI-10 only, at the v164 docs ritual: one sighting line (21:15:49Z, the v164 swap, from `deploys.log`). ⚠️ Nothing else re-read.
+> Before that, **2026-09-23 18:3x** — KI-10 only, at the v163 docs ritual: one sighting line (01:32:43Z, the v163 swap, from `deploys.log`). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 16:2x** — KI-10 only, at the v162 docs ritual: one sighting line (23:19:48Z, the v162 swap, from `deploys.log` and the conductor's log read). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 04:3x** — the v157 docs ritual. **KI-32 CLOSED** (its landing gate was green) and **KI-35 CLOSED**
 > (cannot recur: the first real gate on the new script wrote its junit file — `tests=7382 failures=0`, read at the ritual);
@@ -985,6 +986,7 @@ the retiring machine's last line before the new one's `database ready` at 16:07:
 running machine, still one per deploy.
 Sighting **2026-09-23 23:19:48Z, the v162 swap**: one line from the retiring process, five seconds before the new one's `database ready` (23:19:53Z) — still shutdown-only, still one (per `deploys.log`; the running machine's log since was not read by this ritual).
 Sighting **2026-09-24 01:32:43Z, the v163 swap** (18:32 Phoenix): one line from the retiring process, six seconds before the new one's `database ready` (01:32:49Z) — still shutdown-only, still one (per `deploys.log`; the running machine's log since was not read by this ritual).
+Sighting **2026-09-25 21:15:49Z, the v164 swap** (14:16 Phoenix): one line from the retiring process, seven seconds before the new one's `database: added …` lines and `database ready` (21:15:56Z) — still shutdown-only, still one (per `deploys.log`; the running machine's log since was not read by this ritual).
 
 **Why tolerated.** An aiohttp `ClientSession` that was never `close()`d is
 reported by its finaliser at interpreter exit; it costs nothing after the

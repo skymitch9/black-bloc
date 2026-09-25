@@ -1,5 +1,7 @@
 # Marathons share the Events page — a marathon is an event, so it lives where events live
 
+> ✅ **2026-09-25 — LIVE as v164 14:16** (release commit `7787b10c`, [`deploys.log`](../deploys.log)): boot log `database: added marathons.event_id` and `marathons.event_wanted` at 21:15:56Z (this design's schema 62); `synced 33 app commands` matches `TOP_LEVEL_NOW` 33 with `/marathon` gone; `database ready`, `synced 33 app commands`, `logged in as Black_Bloc` 21:16:01Z, no Traceback; `/health` ready=true 67 ms. Nothing has met Discord by hand — the sweeps are the owner's; the live site was not opened in a browser.
+
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 13:3x Phoenix),
 > dispatched to Opus as branch `marathon-events-page`** off `main` `054515c3` (v163 live + three merged, undeployed
 > builds: `spotlight-ping-windows`, `marathon-schedule`, `marathon-next-event`). **Last verified: 2026-09-25 13:2x**
