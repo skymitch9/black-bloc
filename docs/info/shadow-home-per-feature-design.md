@@ -1,4 +1,4 @@
-# A rehearsal home per feature — the front door rehearses in #welcome-test, everything else in #blackbloc-logs
+# A rehearsal home per feature, and a marathon notice with the detail and the control staff need
 
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 17:0x Phoenix),
 > dispatched to Opus as branch `shadow-home-per-feature`** off `main` `0374f5a5` (v165 live; `marathon-ux` merged, not
@@ -67,6 +67,34 @@ node tests, `check.mjs` on a port of the builder's own. Docs: `code-notes.md`; t
 feature now); `sweeps.md` rows `SH-a…` (a: set `frontdoor_shadow_channel_id` and `shadow_channel_id` as above → the
 next front-door rehearsal lands in #welcome-test and the next marathon notice in #blackbloc-logs; b: blank the front
 door's → it follows the global). NOT `TODO.md` / `DONE.md` / `deploys.log` / `KNOWN_ISSUES.md`. No schema.
+
+## E. The marathon notice — detail and control, not two buttons (owner, 17:0x: *"also pause it and remove it, thats not enough control over the schedule or enough detail"*)
+
+The feed's *added* notice (and the next-event / suggestion notices, same shape) today is one sentence with **Pause it** /
+**Remove it**. It becomes:
+
+- **An embed** (the same construct the go-live card uses) titled with the marathon's name, and fields: **When** (the
+  schedule's start – end as `<t:…:f>`, or *dates not published yet*), **Read from** (the source words + the schedule
+  link), **Channel** (the channel row it airs on, as a link), **Schedule** (the reading line: *read 2 min ago · next in
+  28 min · 11 runs · 3 BaF* or *not published yet — the tracker answers 404; read again in 30 min*), **Event** (the mode
+  word: *No event* / *One event for the marathon* / *An event per BaF run* / *Both*, and *Event #N — approved* when one
+  exists), **Found by** (the feed) — every label a constant, every value from the row (`marathon_feed_added_template`
+  stays the text above the embed).
+- **Row 1 — the decisions:** **Pause it** / **Remove it** (as today, persistent, staff-gated) and **Read it now**
+  (re-read the schedule, then EDIT the notice's embed with the fresh reading — the one place the schedule's detail
+  updates in Discord without the panel).
+- **Row 2 — the event select:** a persistent `Select` *Event: none / marathon / runs / both* (`custom_id`
+  `marathon:feed:<feed>:<ref>:mode`) that sets the marathon's `event_mode` (§A of the event-modes design, the same
+  function the site uses) and edits the embed's Event field.
+- **Row 3 — everything else:** **Manage…** opens the SAME marathon card `/event` ▸ Marathons… shows for that marathon,
+  ephemeral to the presser (the run pick, Who is who, the channel, the interval, Refresh the board, the board's pin) —
+  full control without a second copy of the moves — and **Open on the site** (a link button to `events.html#marathon-<id>`).
+- After Remove it the embed stays with a struck title and the buttons are removed, as today. Every button and the
+  select survive a restart (KI-20, the `DynamicItem` template the feeds build used).
+- Tests: the notice's embed fields from a fixture row (published / unpublished / with an event); Read it now edits the
+  embed; the select sets the mode and edits; Manage… opens the card for staff and refuses a member in words; the
+  custom ids round-trip through `from_custom_id`. Sweeps `SH-c`: a feed-added notice in the rehearsal home shows the
+  six fields and the three rows.
 
 ## Deviations
 
