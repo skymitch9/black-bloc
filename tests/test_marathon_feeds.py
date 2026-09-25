@@ -39,11 +39,10 @@ def test_a_feed_names_the_marathon_source_it_makes():
     assert mf.source_word(feed()) == "GDQ tracker"
 
 
-def test_the_three_seeds_are_the_gdq_rpglb_and_esa_channel_rows():
+def test_the_seeds_are_the_two_tracker_channel_rows_and_not_esa():
     assert [(one.login, mf.marathon_source(one._asdict())) for one in mf.SEEDS] == [
         ("gamesdonequick", "gdq"),
         ("rpglimitbreak", "rpglb"),
-        ("esamarathon", "horaro"),
     ]
 
 

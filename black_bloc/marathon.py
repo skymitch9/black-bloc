@@ -221,6 +221,7 @@ MARK_UPCOMING = "mark_upcoming"
 MARK_LIVE = "mark_live"
 MAKE_EVENT = "make_event"
 UNLINK_EVENT = "unlink_event"
+FEEDS = "feeds"
 
 
 class MarathonMove(NamedTuple):
@@ -254,11 +255,12 @@ MARK_UPCOMING_MOVE = MarathonMove(MARK_UPCOMING, "Mark it upcoming", row=2)
 MARK_LIVE_MOVE = MarathonMove(MARK_LIVE, "Mark it live", row=2)
 MAKE_EVENT_MOVE = MarathonMove(MAKE_EVENT, "Make an event now", row=3)
 UNLINK_EVENT_MOVE = MarathonMove(UNLINK_EVENT, "Unlink the event", row=3)
+FEEDS_MOVE = MarathonMove(FEEDS, "Feeds…", row=3)
 
 
 def root_moves(*, staff: bool) -> tuple[MarathonMove, ...]:
     return (
-        (ADD_MOVE, MINE_MOVE, REFRESH_ROOT_MOVE, LOGS_MOVE, EVENTS_MOVE)
+        (ADD_MOVE, MINE_MOVE, REFRESH_ROOT_MOVE, LOGS_MOVE, FEEDS_MOVE, EVENTS_MOVE)
         if staff
         else (MINE_MOVE, REFRESH_ROOT_MOVE, EVENTS_MOVE)
     )
@@ -392,8 +394,10 @@ def match_people(
     *,
     marathon_id: Any = None,
     match_hosts: bool = True,
+    usernames: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Staff pairings first (this marathon's, then everywhere's), then the member's Twitch link."""
+    """Staff pairings first, then the member's Twitch link, then — only for a name the schedule
+    gave no link for — a member whose Discord username is exactly that name."""
     here: dict[str, int] = {}
     everywhere: dict[str, int] = {}
     for row in pairings or ():
@@ -403,6 +407,7 @@ def match_people(
         if owner is None or marathon_id is None or int(owner) == int(marathon_id):
             target[name] = int(_cell(row, "user_id"))
     lowered = {str(login).lower(): int(user) for login, user in (links or {}).items()}
+    named = {runner_key(name): int(user) for name, user in (usernames or {}).items()}
     found: list[dict[str, Any]] = []
     for person in people or ():
         name = str(_cell(person, "name") if isinstance(person, dict) else person.name)
@@ -414,6 +419,8 @@ def match_people(
             user_id = here.get(key) or everywhere.get(key)
             if user_id is None and login:
                 user_id = lowered.get(str(login).lower())
+            if user_id is None and not login:
+                user_id = named.get(key)
         found.append({"name": name, "login": login, "part": part, "user_id": user_id})
     return found
 

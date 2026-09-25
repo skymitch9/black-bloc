@@ -262,10 +262,11 @@ async def insert_marathon(
     spotlight_id: int | None,
     starts_at: str | None,
     added_by: int | None,
+    feed_id: int | None = None,
 ) -> int:
     cur = await db.conn.execute(
         "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
-        "starts_at, ends_at, added_by, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "starts_at, ends_at, added_by, added_at, feed_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             int(guild_id),
             name,
@@ -277,6 +278,7 @@ async def insert_marathon(
             starts_at,
             added_by,
             now_iso(),
+            feed_id,
         ),
     )
     await db.conn.commit()
@@ -302,6 +304,7 @@ MARATHON_COLUMNS = {
     "suggested_next",
     "event_id",
     "event_wanted",
+    "feed_id",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -387,6 +390,14 @@ async def delete_pairing(db: Any, pairing_id: int) -> bool:
     return cur.rowcount > 0
 
 
+def usernames_of(guild: Any) -> dict[str, int]:
+    return {
+        str(member.name).lower(): int(member.id)
+        for member in list(getattr(guild, "members", None) or ())
+        if getattr(member, "name", None) and not getattr(member, "bot", False)
+    }
+
+
 async def links_of(db: Any) -> dict[str, int]:
     cur = await db.conn.execute("SELECT twitch_login, user_id FROM golive_links")
     return {str(row["twitch_login"]).lower(): int(row["user_id"]) for row in await cur.fetchall()}
@@ -448,6 +459,7 @@ async def create_marathon(
     spotlight_id: Any = None,
     make_event: Any = None,
     via: str = VIA_DISCORD,
+    feed_id: int | None = None,
 ) -> Outcome:
     wanted_name = " ".join(str(name or "").split())[:100]
     wanted_url = str(url or "").strip()
@@ -486,6 +498,7 @@ async def create_marathon(
         spotlight_id=int(channel["id"]) if channel is not None else None,
         starts_at=None,
         added_by=actor_id(actor),
+        feed_id=feed_id,
     )
     await log_action(
         bot,
@@ -499,6 +512,7 @@ async def create_marathon(
             "source": source,
             "ref": ref,
             "spotlight_id": _cell(channel, "id"),
+            "feed_id": feed_id,
             "via": via,
         },
     )
@@ -624,12 +638,15 @@ async def rename_marathon(
 async def remove_marathon(
     bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
+    from .marathon_feeds import ignore_removed
+
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
         await cancel_linked_event(bot, guild, actor, marathon, via=via)
         await cog.drop_windows(guild, marathon)
         await cog.unpin_board(guild, marathon, because="removed")
         await delete_marathon(bot.db, marathon["id"])
+        await ignore_removed(bot, guild, actor, marathon, via=via)
     await log_action(
         bot,
         guild,
@@ -1189,6 +1206,8 @@ class Marathons(commands.Cog):
         self._reconciler = Reconciler()
         self._board_sent: dict[int, tuple[Any, str]] = {}
         self._next_tried: set[int] = set()
+        self._feed_locks: dict[int, asyncio.Lock] = {}
+        self.feeds_seeded: set[int] = set()
         self.last_tick_ok_at: str | None = None
         self.last_tick_error: str | None = None
 
@@ -1204,8 +1223,17 @@ class Marathons(commands.Cog):
             found = self._locks[key] = asyncio.Lock()
         return found
 
+    def feed_lock(self, feed_id: Any) -> asyncio.Lock:
+        key = int(feed_id)
+        found = self._feed_locks.get(key)
+        if found is None:
+            found = self._feed_locks[key] = asyncio.Lock()
+        return found
+
     async def cog_load(self) -> None:
-        self.bot.add_dynamic_items(NextButton)
+        from .marathon_feeds import FeedButton
+
+        self.bot.add_dynamic_items(NextButton, FeedButton)
         if not self.bot.db.is_connected:
             return
         self.ticker.start()
@@ -1248,10 +1276,14 @@ class Marathons(commands.Cog):
         ]
 
     async def tick_once(self) -> None:
+        from .marathon_feeds import tick_feeds
+
         if not self.bot.db.is_connected:
             return
         for guild in self._guilds():
             off = mode_of(self.bot, guild.id) == MODE_OFF
+            if not off:
+                await tick_feeds(self, guild)
             for row in await list_marathons(self.bot.db, guild.id):
                 async with self.lock(row["id"]):
                     fresh = await get_marathon(self.bot.db, guild.id, row["id"])
@@ -1682,11 +1714,17 @@ class Marathons(commands.Cog):
         links = await links_of(db)
         pairings = await pairings_of(db, guild.id)
         hosts = bool(self.bot.store.get(guild.id, MARATHON_MATCH_HOSTS_KEY))
+        usernames = usernames_of(guild)
         newly = 0
         for row in await runs_of(db, marathon["id"]):
             before = mt.people_of(row)
             after = mt.match_people(
-                before, links, pairings, marathon_id=marathon["id"], match_hosts=hosts
+                before,
+                links,
+                pairings,
+                marathon_id=marathon["id"],
+                match_hosts=hosts,
+                usernames=usernames,
             )
             if after == before:
                 continue
@@ -2646,8 +2684,12 @@ async def open_run(
 
 
 async def reopen(interaction: discord.Interaction, previous: Any) -> None:
+    from .marathon_feeds import FEED_VIEWS, reopen_feeds
+
     where = getattr(previous, "where", ROOT)
-    if where == NEXT_VIEW and getattr(previous, "marathon_id", None):
+    if where in FEED_VIEWS:
+        await reopen_feeds(interaction, previous)
+    elif where == NEXT_VIEW and getattr(previous, "marathon_id", None):
         await open_next(interaction, previous.marathon_id, previous)
     elif where == RUN_VIEW and getattr(previous, "run_id", None):
         await open_run(interaction, previous.marathon_id, previous.run_id, previous)
@@ -2753,7 +2795,11 @@ class MarathonMoveButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
         action = self.move.action
-        if action == mt.LOGS:
+        if action == mt.FEEDS or action.startswith("feed_"):
+            from .marathon_feeds import feed_move
+
+            await feed_move(interaction, view, action)
+        elif action == mt.LOGS:
             await send_logs(interaction, FEATURE)
         elif action == mt.EVENTS:
             from ..community.events import back_to_panel

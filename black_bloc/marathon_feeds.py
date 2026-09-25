@@ -44,7 +44,6 @@ class Seed(NamedTuple):
 SEEDS = (
     Seed("gamesdonequick", TRACKER, TRACKER_BASES[GDQ], "GDQ"),
     Seed("rpglimitbreak", TRACKER, TRACKER_BASES[RPGLB], "RPG Limit Break"),
-    Seed("esamarathon", HORARO_FEED, "esa", "ESA"),
 )
 
 PICK_GDQ = "gdq"
@@ -132,7 +131,6 @@ SUGGESTION_LINE = "**{event}** — {when} ({relative})"
 WAITING_HEAD = "Waiting for staff:"
 CHANNEL_GONE = "a channel that is gone"
 
-FEEDS = "feeds"
 FEED_ADD = "feed_add"
 FEED_CHECK = "feed_check"
 FEED_PAUSE = "feed_pause"
@@ -145,7 +143,6 @@ FEED_BACK = "feed_back"
 FEED_TAKE = "feed_take"
 FEED_DISMISS = "feed_dismiss"
 
-FEEDS_MOVE = MarathonMove(FEEDS, "Feeds…", row=2)
 FEED_ADD_MOVE = MarathonMove(FEED_ADD, "Add a feed…", "primary", 2)
 FEED_CHECK_MOVE = MarathonMove(FEED_CHECK, "Check now", "primary", 2)
 FEED_PAUSE_MOVE = MarathonMove(FEED_PAUSE, "Pause", row=2)
