@@ -8,10 +8,15 @@ from black_bloc import spotlight as words
 from black_bloc.cogs.content.golive import GoLive
 from black_bloc.cogs.content.spotlight import (
     AddChannelModal,
+    AddWindowButton,
     DatesButton,
     DatesModal,
+    RemoveWindowPick,
     Spotlight,
+    WindowModal,
     add_channel,
+    add_ping_window,
+    add_window,
     build_spotlight,
     bump_now,
     bumps_of,
@@ -28,16 +33,19 @@ from black_bloc.cogs.content.spotlight import (
     open_sessions,
     read_dates,
     recent_sessions,
+    remove_ping_window,
     render_spotlight,
     run_spotlight_move,
     set_announce,
     set_announced,
     set_dates,
+    set_ping_mode,
     set_spotlight,
     spotlight_channel,
     start_session,
     unlink_youtube,
     update_channel,
+    windows_for,
 )
 from black_bloc.config import load_settings
 from black_bloc.golive import StreamInfo, now_iso
@@ -2073,3 +2081,339 @@ async def test_the_panel_marks_a_scheduled_row_with_the_key_the_owner_can_change
     again = FakeInteraction(bot, FakeActor(), bot.guild)
     await render_spotlight(again)
     assert "not yet" in again.words
+
+
+# --- ping windows: a spotlight split from its ping (owner, 2026-09-25) --------------------------
+
+
+async def pinging_row(bot, mode="events"):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await bot.store.set(GUILD, "golive_ping_role_id", PING_ROLE)
+    bot.guild.roles.append(FakeRole(PING_ROLE, "Events"))
+    row = await a_row(bot)
+    role_id = await a_fan_role(bot, row)
+    await set_ping_mode(bot, bot.guild, FakeActor(), row["id"], mode)
+    return await channel_by_id(bot.db, row["id"]), role_id
+
+
+async def a_window(bot, row, start_hours, end_hours, **fields):
+    now = datetime.now(UTC)
+    return await add_window(
+        bot.db,
+        GUILD,
+        row["id"],
+        (now + timedelta(hours=start_hours)).isoformat(),
+        (now + timedelta(hours=end_hours)).isoformat(),
+        **fields,
+    )
+
+
+async def overdue_bump(bot, row, hours=9):
+    session = await open_session(bot.db, row["id"])
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET started_at = ?, last_bump_at = ? WHERE id = ?",
+        (
+            (datetime.now(UTC) - timedelta(hours=hours)).isoformat(),
+            (datetime.now(UTC) - timedelta(hours=hours)).isoformat(),
+            session["id"],
+        ),
+    )
+    await bot.db.conn.commit()
+
+
+async def test_an_events_row_announces_with_no_mention_outside_a_window(bot, cog):
+    row, _ = await pinging_row(bot)
+    await a_window(bot, row, 24, 48)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    posted = bot.guild.channel.messages[0]
+    assert "<@&" not in posted.content
+    assert posted.kwargs["allowed_mentions"].roles is False
+    said = await details_of(bot.db, "golive.spotlight_announced")
+    assert said["pinged"] is False and said["ping_mode"] == "events"
+    assert said["fan_role_id"] is None
+    assert (await open_session(bot.db, row["id"]))["pinging_last"] == 0
+
+
+async def test_an_events_row_announces_with_both_roles_inside_a_window(bot, cog):
+    row, role_id = await pinging_row(bot)
+    await a_window(bot, row, -1, 5)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.startswith(f"<@&{PING_ROLE}> <@&{role_id}> ")
+    assert [one.id for one in posted.kwargs["allowed_mentions"].roles] == [PING_ROLE, role_id]
+    assert (await details_of(bot.db, "golive.spotlight_announced"))["pinged"] is True
+
+
+async def test_never_mentions_nothing_even_inside_a_window_and_still_pins(bot, cog):
+    row, _ = await pinging_row(bot, "never")
+    await a_window(bot, row, -1, 5)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    posted = bot.guild.channel.messages[0]
+    assert "<@&" not in posted.content
+    assert posted.kwargs["allowed_mentions"].roles is False
+    assert posted.pinned is True
+
+
+async def test_always_is_the_default_and_pings_as_it_did(bot, cog):
+    row, role_id = await pinging_row(bot, "always")
+    assert row["ping_mode"] == "always"
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    assert bot.guild.channel.messages[0].content.startswith(f"<@&{PING_ROLE}> <@&{role_id}> ")
+    assert (await open_session(bot.db, row["id"]))["pinging_last"] == 1
+
+
+async def test_a_new_row_takes_the_default_ping_mode(bot):
+    await bot.store.set(GUILD, "spotlight_ping_mode_default", "events")
+    row = await a_row(bot, "esamarathon")
+    assert row["ping_mode"] == "events"
+    assert (await details_of(bot.db, "golive.spotlight_added"))["ping_mode"] == "events"
+
+
+async def test_a_bump_under_events_pings_only_in_a_window_and_only_with_the_key(bot, cog):
+    row, role_id = await pinging_row(bot)
+    window_id = await a_window(bot, row, -1, 5)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    await overdue_bump(bot, row)
+    await cog.poll_once()
+    quiet = bot.guild.channel.messages[1]
+    assert "<@&" not in quiet.content
+    assert (await details_of(bot.db, "golive.spotlight_bumped"))["pinged"] is False
+
+    await bot.store.set(GUILD, "spotlight_bump_pings", True)
+    await overdue_bump(bot, row)
+    await cog.poll_once()
+    loud = bot.guild.channel.messages[2]
+    assert loud.content.startswith(f"<@&{PING_ROLE}> <@&{role_id}> ")
+    said = await details_of(bot.db, "golive.spotlight_bumped")
+    assert said["pinged"] is True and said["ping_mode"] == "events"
+
+    await remove_ping_window(bot, bot.guild, FakeActor(), row["id"], window_id)
+    await overdue_bump(bot, row)
+    await cog.poll_once()
+    closed = bot.guild.channel.messages[3]
+    assert "<@&" not in closed.content
+    assert closed.kwargs["allowed_mentions"].roles is False
+
+
+async def test_a_window_opening_on_a_live_channel_posts_one_pinged_reminder(bot, cog):
+    row, role_id = await pinging_row(bot)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1
+
+    window_id = await a_window(bot, row, -1, 5, note="AGDQ 2027")
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 2
+    reminder = bot.guild.channel.messages[1]
+    assert reminder.content.startswith(f"<@&{PING_ROLE}> <@&{role_id}> ")
+    assert reminder.pinned is False
+    said = await details_of(bot.db, "golive.spotlight_bumped")
+    assert said["because"] == "window_opened" and said["window_id"] == window_id
+    assert said["pinged"] is True
+    session = await open_session(bot.db, row["id"])
+    assert session["pinging_last"] == 1 and session["last_bump_at"] is not None
+
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 2
+
+
+async def test_the_window_reminder_ignores_the_bump_pings_key_but_honours_its_own(bot, cog):
+    await bot.store.set(GUILD, "spotlight_window_open_reminder", False)
+    row, _ = await pinging_row(bot)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    await a_window(bot, row, -1, 5)
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1
+    assert (await open_session(bot.db, row["id"]))["pinging_last"] == 1
+
+
+async def test_a_restart_mid_window_never_posts_the_reminder_again(bot, cog):
+    row, _ = await pinging_row(bot)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    await a_window(bot, row, -1, 5)
+
+    again = Spotlight(bot)
+    bot.cogs["Spotlight"] = again
+    await again.reconcile_open_sessions()
+    assert (await open_session(bot.db, row["id"]))["pinging_last"] == 1
+    await again.poll_once()
+    assert len(bot.guild.channel.messages) == 1
+
+
+async def test_a_session_from_before_the_migration_is_read_once_without_posting(bot, cog):
+    row, _ = await pinging_row(bot)
+    await a_window(bot, row, -1, 5)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    session = await open_session(bot.db, row["id"])
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET pinging_last = NULL WHERE id = ?", (session["id"],)
+    )
+    await bot.db.conn.commit()
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1
+    assert (await open_session(bot.db, row["id"]))["pinging_last"] == 1
+
+
+async def test_changing_the_mode_never_posts_by_itself(bot, cog):
+    row, _ = await pinging_row(bot, "never")
+    await a_window(bot, row, -1, 5)
+    helix_of(bot, twitch_stream())
+    await cog.poll_once()
+    outcome, fresh, said = await set_ping_mode(bot, bot.guild, FakeActor(), row["id"], "events")
+    assert outcome == "set" and fresh["ping_mode"] == "events"
+    assert "open until" in said
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1
+    logged = await details_of(bot.db, "golive.spotlight_ping_mode_set")
+    assert logged["from"] == "never" and logged["to"] == "events" and logged["via"] == "discord"
+
+
+async def test_an_unknown_ping_mode_is_refused_in_words_and_changes_nothing(bot):
+    row = await a_row(bot)
+    outcome, _, said = await set_ping_mode(bot, bot.guild, FakeActor(), row["id"], "sometimes")
+    assert outcome == "bad_mode" and "sometimes" in said and "`events`" in said
+    assert (await channel_by_id(bot.db, row["id"]))["ping_mode"] == "always"
+
+
+async def test_a_window_needs_both_ends_in_the_right_order(bot):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "UTC")
+    row = await a_row(bot)
+    outcome, _, window, said = await add_ping_window(
+        bot, bot.guild, FakeActor(), row["id"], "2027-01-12T15:00:00+00:00", None
+    )
+    assert outcome == "needs_both" and window is None and "start AND an end" in said
+    outcome, _, _, said = await add_ping_window(
+        bot,
+        bot.guild,
+        FakeActor(),
+        row["id"],
+        "2027-01-19T23:00:00+00:00",
+        "2027-01-12T15:00:00+00:00",
+    )
+    assert outcome == "end_before_start" and "ends before it starts" in said
+    assert await windows_for(bot.db, row["id"]) == []
+    outcome, _, window, said = await add_ping_window(
+        bot,
+        bot.guild,
+        FakeActor(),
+        row["id"],
+        "2027-01-12T15:00:00+00:00",
+        "2027-01-19T23:00:00+00:00",
+        "AGDQ 2027",
+    )
+    assert outcome == "added" and window["note"] == "AGDQ 2027" and window["source"] == "staff"
+    assert "12 Jan 15:00 to 19 Jan 23:00 (AGDQ 2027)" in said
+    assert "right now it pings always" in said
+    assert (await details_of(bot.db, "golive.spotlight_window_added"))["window_id"] == window["id"]
+
+
+async def test_a_marathon_window_is_refused_in_words_and_a_staff_one_goes(bot):
+    row = await a_row(bot)
+    marathon = await a_window(bot, row, 24, 48, source="marathon", source_id=9)
+    staff = await a_window(bot, row, 72, 96)
+    outcome, _, _, said = await remove_ping_window(bot, bot.guild, FakeActor(), row["id"], marathon)
+    assert outcome == "not_staff"
+    assert said == "That window comes from the marathon schedule — change it there."
+    outcome, _, _, said = await remove_ping_window(bot, bot.guild, FakeActor(), row["id"], staff)
+    assert outcome == "removed" and GDQ in said
+    assert [one["id"] for one in await windows_for(bot.db, row["id"])] == [marathon]
+    outcome, _, _, said = await remove_ping_window(bot, bot.guild, FakeActor(), row["id"], staff)
+    assert outcome == "no_window" and "not there any more" in said
+    assert "golive.spotlight_window_removed" in await kinds(bot.db)
+
+
+async def test_an_ended_window_is_purged_once_older_than_the_keep(bot, cog):
+    row = await a_row(bot)
+    old = await a_window(bot, row, -24 * 45, -24 * 40)
+    recent = await a_window(bot, row, -24 * 3, -24 * 2)
+    await cog.poll_once()
+    assert [one["id"] for one in await windows_for(bot.db, row["id"])] == [recent]
+    purged = await details_of(bot.db, "golive.spotlight_window_purged")
+    assert purged["window_id"] == old and purged["keep_days"] == 30
+
+
+async def test_a_row_that_leaves_the_list_takes_its_windows_with_it(bot):
+    row = await a_row(bot)
+    await a_window(bot, row, 1, 2)
+    await delete_channel(bot.db, row["id"])
+    assert await windows_for(bot.db, row["id"]) == []
+
+
+async def test_the_panel_draws_only_the_ping_moves_that_change_something(bot, cog):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "UTC")
+    row = await a_row(bot)
+    embed, view = await build_spotlight(bot, bot.guild, row["id"])
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert "Pings: always" not in labels
+    assert {"Pings: never", "Pings: during events"} <= set(labels)
+    assert words.ADD_WINDOW not in labels
+    assert "Pings: always" in embed.description
+    assert all(len([one for one in view.children if one.row == n]) <= 5 for n in range(5))
+
+    said, keep = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "ping_events")
+    assert keep is True and "no window set" in said
+    await a_window(bot, row, 24, 48, note="AGDQ 2027")
+    await a_window(bot, row, 72, 96, source="marathon", source_id=3)
+    embed, view = await build_spotlight(bot, bot.guild, row["id"])
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert {"Pings: always", "Pings: never", words.ADD_WINDOW} <= set(labels)
+    assert "Pings: during events" not in labels
+    assert "Pings: during events — next" in embed.description
+    assert "AGDQ 2027" in embed.description and "from the marathon schedule" in embed.description
+    pick = next(one for one in view.children if isinstance(one, RemoveWindowPick))
+    assert len(pick.options) == 2
+    assert pick.options[1].description == "from the marathon schedule"
+    assert any(isinstance(one, AddWindowButton) for one in view.children)
+    assert all(len([one for one in view.children if one.row == n]) <= 5 for n in range(5))
+
+
+async def test_the_window_modal_reads_the_boxes_in_the_persons_zone(bot, cog):
+    await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "UTC")
+    row = await a_row(bot)
+    modal = WindowModal(row["id"])
+    modal.starts._value = "2027-01-12 15:00"
+    modal.ends._value = "2027-01-19 23:00"
+    modal.note._value = "AGDQ 2027"
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(interaction)
+    [window] = await windows_for(bot.db, row["id"])
+    assert window["starts_at"] == "2027-01-12T15:00:00+00:00"
+    assert window["ends_at"] == "2027-01-19T23:00:00+00:00"
+    assert "pings from 12 Jan 15:00" in (interaction.sent or "")
+
+
+async def test_the_window_modal_refuses_an_unreadable_date_in_words(bot, cog):
+    row = await a_row(bot)
+    modal = WindowModal(row["id"])
+    modal.starts._value = "next tuesday"
+    modal.ends._value = "2027-01-19 23:00"
+    modal.note._value = ""
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(interaction)
+    assert "next tuesday" in (interaction.sent or "")
+    assert await windows_for(bot.db, row["id"]) == []
+
+
+async def test_the_remove_pick_takes_a_staff_window_off_and_refuses_a_marathon_one(bot, cog):
+    row = await a_row(bot)
+    await set_ping_mode(bot, bot.guild, FakeActor(), row["id"], "events")
+    staff = await a_window(bot, row, 24, 48)
+    marathon = await a_window(bot, row, 72, 96, source="marathon", source_id=3)
+    windows = await windows_for(bot.db, row["id"])
+    pick = RemoveWindowPick(row["id"], windows)
+    pick._values = [str(marathon)]
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pick.callback(interaction)
+    assert "marathon schedule" in (interaction.sent or "")
+    pick._values = [str(staff)]
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pick.callback(interaction)
+    assert [one["id"] for one in await windows_for(bot.db, row["id"])] == [marathon]

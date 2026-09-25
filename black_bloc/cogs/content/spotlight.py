@@ -47,12 +47,21 @@ from ...settings_store import (
     SPOTLIGHT_ENDS_LABEL_KEY,
     SPOTLIGHT_MODE_KEY,
     SPOTLIGHT_PIN_KEY,
+    SPOTLIGHT_PING_MODE_DEFAULT_KEY,
+    SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY,
+    SPOTLIGHT_PINGS_EVENTS_WORDS_KEY,
+    SPOTLIGHT_PINGS_NEVER_WORDS_KEY,
     SPOTLIGHT_POLL_MINUTES,
     SPOTLIGHT_POLL_MINUTES_KEY,
     SPOTLIGHT_RANGE_KEPT_KEY,
     SPOTLIGHT_RANGE_KEY,
     SPOTLIGHT_SCHEDULED_WORD_KEY,
     SPOTLIGHT_STARTS_LABEL_KEY,
+    SPOTLIGHT_WINDOW_KEEP_DAYS_KEY,
+    SPOTLIGHT_WINDOW_NEXT_WORDS_KEY,
+    SPOTLIGHT_WINDOW_NONE_WORDS_KEY,
+    SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY,
+    SPOTLIGHT_WINDOW_OPEN_WORDS_KEY,
 )
 from ...timezones import get_timezone
 from ...twitch import TwitchError
@@ -97,6 +106,20 @@ def wording_for(bot: Any, guild_id: int) -> dict[str, Any]:
     }
 
 
+def ping_wording_for(bot: Any, guild_id: int) -> dict[str, Any]:
+    """The six ping-state words and the guild's zone, read once per render."""
+    store = bot.store
+    return {
+        "tz_name": store.get(guild_id, DEFAULT_TIMEZONE_KEY),
+        "always": store.get(guild_id, SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY),
+        "never": store.get(guild_id, SPOTLIGHT_PINGS_NEVER_WORDS_KEY),
+        "events": store.get(guild_id, SPOTLIGHT_PINGS_EVENTS_WORDS_KEY),
+        "open": store.get(guild_id, SPOTLIGHT_WINDOW_OPEN_WORDS_KEY),
+        "next": store.get(guild_id, SPOTLIGHT_WINDOW_NEXT_WORDS_KEY),
+        "none": store.get(guild_id, SPOTLIGHT_WINDOW_NONE_WORDS_KEY),
+    }
+
+
 async def zone_for(bot: Any, guild: Any, actor: Any) -> str:
     """A typed date is read in the person's own zone, falling back to the guild's."""
     fallback = bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)
@@ -125,13 +148,14 @@ async def add_channel(
     announce: bool = True,
     youtube_channel_id: str | None = None,
     youtube_handle: str | None = None,
+    ping_mode: str = words.PING_ALWAYS,
 ) -> int | None:
     try:
         cur = await db.conn.execute(
             "INSERT INTO spotlight_channels(guild_id, twitch_login, twitch_user_id, "
             "display_name, note, added_by, added_at, starts_at, expires_at, bump_hours, pin, "
-            "event_id, spotlight, announce, youtube_channel_id, youtube_handle) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "event_id, spotlight, announce, youtube_channel_id, youtube_handle, ping_mode) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 guild_id,
                 login,
@@ -149,6 +173,7 @@ async def add_channel(
                 1 if announce else 0,
                 youtube_channel_id,
                 youtube_handle,
+                words.clean_ping_mode(ping_mode) or words.PING_ALWAYS,
             ),
         )
     except sqlite3.IntegrityError:
@@ -209,6 +234,7 @@ async def update_channel(db: Any, spotlight_id: int, **fields: Any) -> None:
         "announce",
         "youtube_channel_id",
         "youtube_handle",
+        "ping_mode",
     )
     wanted = [(name, fields[name]) for name in allowed if name in fields]
     if not wanted:
@@ -230,18 +256,105 @@ async def delete_channel(db: Any, spotlight_id: int) -> bool:
     cur = await db.conn.execute(
         "DELETE FROM spotlight_channels WHERE id = ?", (int(spotlight_id),)
     )
+    await db.conn.execute(
+        "DELETE FROM spotlight_ping_windows WHERE spotlight_id = ?", (int(spotlight_id),)
+    )
     await db.conn.commit()
     return cur.rowcount > 0
 
 
+async def windows_for(db: Any, spotlight_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_ping_windows WHERE spotlight_id = ? ORDER BY starts_at, id",
+        (int(spotlight_id),),
+    )
+    return list(await cur.fetchall())
+
+
+async def windows_in_guild(db: Any, guild_id: int) -> list[Any]:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_ping_windows WHERE guild_id = ? ORDER BY spotlight_id, starts_at",
+        (int(guild_id),),
+    )
+    return list(await cur.fetchall())
+
+
+async def window_by_id(db: Any, window_id: int) -> Any:
+    cur = await db.conn.execute(
+        "SELECT * FROM spotlight_ping_windows WHERE id = ?", (int(window_id),)
+    )
+    return await cur.fetchone()
+
+
+async def add_window(
+    db: Any,
+    guild_id: int,
+    spotlight_id: int,
+    starts_at: str,
+    ends_at: str,
+    *,
+    note: str | None = None,
+    added_by: int | None = None,
+    source: str = words.WINDOW_STAFF,
+    source_id: int | None = None,
+) -> int:
+    cur = await db.conn.execute(
+        "INSERT INTO spotlight_ping_windows(guild_id, spotlight_id, starts_at, ends_at, note, "
+        "source, source_id, added_by, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            int(guild_id),
+            int(spotlight_id),
+            starts_at,
+            ends_at,
+            note,
+            source,
+            source_id,
+            added_by,
+            now_iso(),
+        ),
+    )
+    await db.conn.commit()
+    return int(cur.lastrowid)
+
+
+async def delete_window(db: Any, window_id: int) -> bool:
+    cur = await db.conn.execute(
+        "DELETE FROM spotlight_ping_windows WHERE id = ?", (int(window_id),)
+    )
+    await db.conn.commit()
+    return cur.rowcount > 0
+
+
+async def set_pinging_last(db: Any, session_id: int, pinging: bool) -> None:
+    await db.conn.execute(
+        "UPDATE spotlight_sessions SET pinging_last = ? WHERE id = ?",
+        (1 if pinging else 0, int(session_id)),
+    )
+    await db.conn.commit()
+
+
+async def pings_for(db: Any, row: Any) -> bool:
+    """The gate, read fresh from the row's own windows."""
+    return words.pings_now(row, await windows_for(db, row["id"]))
+
+
 async def start_session(
-    db: Any, guild_id: int, spotlight_id: int, info: Any, mode: str
+    db: Any, guild_id: int, spotlight_id: int, info: Any, mode: str, pinging: Any = None
 ) -> int | None:
     try:
         cur = await db.conn.execute(
             "INSERT INTO spotlight_sessions(guild_id, spotlight_id, started_at, title, game, "
-            "url, mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (guild_id, int(spotlight_id), now_iso(), info.title, info.game, info.url, mode),
+            "url, mode, pinging_last) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                guild_id,
+                int(spotlight_id),
+                now_iso(),
+                info.title,
+                info.game,
+                info.url,
+                mode,
+                None if pinging is None else (1 if pinging else 0),
+            ),
         )
     except sqlite3.IntegrityError:
         log.info("spotlight: a session for %s is already open", spotlight_id)
@@ -385,6 +498,9 @@ class Spotlight(commands.Cog):
             for session in await open_sessions(self.bot.db, guild.id):
                 row = await channel_by_id(self.bot.db, session["spotlight_id"])
                 if row is not None and await self._message(guild, session) is not None:
+                    await set_pinging_last(
+                        self.bot.db, session["id"], await pings_for(self.bot.db, row)
+                    )
                     continue
                 await end_session(self.bot.db, session["id"], now_iso())
                 await log_action(
@@ -441,6 +557,7 @@ class Spotlight(commands.Cog):
             if self._mode(guild.id) == MODE_OFF:
                 continue
             await self.sweep_expiries(guild)
+            await self.sweep_windows(guild)
             rows = await channels_for(self.bot.db, guild.id)
             await self.sweep_starts(guild, rows)
             if not rows:
@@ -494,6 +611,21 @@ class Spotlight(commands.Cog):
                     continue
                 await self._expire(guild, fresh, words.EXPIRED)
 
+    async def sweep_windows(self, guild: Any) -> None:
+        """A ping window ended longer ago than the keep is history nobody needs; routine."""
+        keep = self.bot.store.get(guild.id, SPOTLIGHT_WINDOW_KEEP_DAYS_KEY)
+        for window in await windows_in_guild(self.bot.db, guild.id):
+            if not words.window_is_past_keeping(window, keep):
+                continue
+            if not await delete_window(self.bot.db, window["id"]):
+                continue
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_window_purged",
+                details=window_details(window) | {"keep_days": keep},
+            )
+
     async def _expire(self, guild: Any, row: Any, because: str) -> None:
         session = await open_session(self.bot.db, row["id"])
         if session is not None:
@@ -533,6 +665,8 @@ class Spotlight(commands.Cog):
                     info, refreshed = await self._follow(
                         guild, fresh, session, from_twitch(stream)
                     )
+                    if await self._window_opened(guild, fresh, session, info, refreshed):
+                        return
                     await self._maybe_bump(guild, fresh, session, info, refreshed=refreshed)
                 return
             if session is None or words.platform_of(_cell(session, "url")) != words.PLATFORM:
@@ -542,6 +676,36 @@ class Spotlight(commands.Cog):
             if seen < self._end_misses(guild.id):
                 return
             await self._end(guild, fresh, session, words.ENDED)
+
+    async def _window_opened(
+        self, guild: Any, row: Any, session: Any, info: Any, refreshed: bool | None
+    ) -> bool:
+        """The gate remembered per session: closed → open posts ONE pinged reminder; a first
+        look (NULL) and every other change only write the new answer. True when it posted."""
+        windows = await windows_for(self.bot.db, row["id"])
+        pinging = words.pings_now(row, windows)
+        was = _cell(session, "pinging_last")
+        if was is not None and bool(was) == pinging:
+            return False
+        await set_pinging_last(self.bot.db, session["id"], pinging)
+        opened_now = was is not None and not bool(was) and pinging
+        if not opened_now or words.ping_mode_of(row) != words.PING_EVENTS:
+            return False
+        if not words.announces(row):
+            return False
+        if not self.bot.store.get(guild.id, SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY):
+            return False
+        found = words.open_window(windows)
+        message = await self.bump(
+            guild,
+            row,
+            session,
+            info,
+            refreshed=refreshed,
+            because=words.WINDOW_OPENED_BECAUSE,
+            window_id=_cell(found, "id"),
+        )
+        return message is not None
 
     # --- the three posts -------------------------------------------------------------------
 
@@ -558,15 +722,20 @@ class Spotlight(commands.Cog):
         if not words.announces(row):
             return
         mode = self._mode(guild.id)
-        session_id = await start_session(self.bot.db, guild.id, row["id"], info, mode)
+        pinging = await pings_for(self.bot.db, row)
+        session_id = await start_session(self.bot.db, guild.id, row["id"], info, mode, pinging)
         if session_id is None:
             return
         store = self.bot.store
-        fan_role_id = await pings.announced_spotlight_fan_role(self.bot, guild, row["id"])
+        fan_role_id = (
+            await pings.announced_spotlight_fan_role(self.bot, guild, row["id"])
+            if pinging
+            else None
+        )
         text = render(
             store.get(guild.id, TEMPLATE_KEY),
             info,
-            ping_role_id=store.get(guild.id, PING_KEY),
+            ping_role_id=store.get(guild.id, PING_KEY) if pinging else None,
             fan_role_id=fan_role_id,
             name=name,
         )
@@ -580,7 +749,9 @@ class Spotlight(commands.Cog):
             if store.get(guild.id, EMBED_KEY)
             else None
         )
-        message, reason = await self._post(guild, text, embed, mode, fan_role_id=fan_role_id)
+        message, reason = await self._post(
+            guild, text, embed, mode, fan_role_id=fan_role_id, pinging=pinging
+        )
         details = {
             "spotlight_id": row["id"],
             "session_id": session_id,
@@ -595,6 +766,8 @@ class Spotlight(commands.Cog):
             "announce": words.announces(row),
             "platform": info.platform,
             "fan_role_id": fan_role_id,
+            "ping_mode": words.ping_mode_of(row),
+            "pinged": pinging,
         }
         if embed is not None:
             details["embed"] = embed_summary(embed)
@@ -663,8 +836,11 @@ class Spotlight(commands.Cog):
         via: str = VIA_DISCORD,
         actor: Any = None,
         refreshed: bool | None = None,
+        because: str | None = None,
+        window_id: Any = None,
     ) -> Any:
-        """One short reminder, never pinned; it pings only while `spotlight_bump_pings` is on."""
+        """One short reminder, never pinned. It pings only when the row's gate says so AND
+        `spotlight_bump_pings` is on — except the window-open reminder, which is the ping."""
         stream = info if info is not None else await self._current(row, session)
         looked = refreshed is None
         if looked:
@@ -673,7 +849,11 @@ class Spotlight(commands.Cog):
         if looked and refreshed:
             await self._refresh_announcement(guild, row, session, stream)
         at = now_iso()
-        pinging = bool(self.bot.store.get(guild.id, SPOTLIGHT_BUMP_PINGS_KEY))
+        gate = await pings_for(self.bot.db, row)
+        opened = because == words.WINDOW_OPENED_BECAUSE
+        pinging = gate and (
+            opened or bool(self.bot.store.get(guild.id, SPOTLIGHT_BUMP_PINGS_KEY))
+        )
         fan_role_id = (
             await pings.announced_spotlight_fan_role(self.bot, guild, row["id"], notice=False)
             if pinging
@@ -742,8 +922,10 @@ class Spotlight(commands.Cog):
                 "bump": int(_cell(session, "bump_count") or 0) + 1,
                 "pinged": pinging,
                 "fan_role_id": fan_role_id,
+                "ping_mode": words.ping_mode_of(row),
                 "via": via,
             }
+            | ({"because": because, "window_id": window_id} if because else {})
             | said,
         )
         return message
@@ -1262,6 +1444,7 @@ async def spotlight_channel(
         )
     )
     wanted_pin = bool(store.get(guild.id, SPOTLIGHT_PIN_KEY) if pin is None else pin)
+    ping_mode = words.clean_ping_mode(store.get(guild.id, SPOTLIGHT_PING_MODE_DEFAULT_KEY))
     spotlight_id = await add_channel(
         bot.db,
         guild.id,
@@ -1278,6 +1461,7 @@ async def spotlight_channel(
         announce=bool(announce),
         youtube_channel_id=youtube_channel_id,
         youtube_handle=youtube_handle,
+        ping_mode=ping_mode or words.PING_ALWAYS,
     )
     if spotlight_id is None:
         return ("already", None)
@@ -1298,6 +1482,7 @@ async def spotlight_channel(
             "youtube_channel_id": youtube_channel_id,
             "bump_hours": bump_hours,
             "event_id": event_id,
+            "ping_mode": ping_mode or words.PING_ALWAYS,
             "via": via,
         },
     )
@@ -1588,6 +1773,154 @@ async def bump_now(
     return ("bumped" if message is not None else "bump_failed", row)
 
 
+def window_details(window: Any) -> dict[str, Any]:
+    return {
+        "window_id": window["id"],
+        "spotlight_id": window["spotlight_id"],
+        "starts_at": window["starts_at"],
+        "ends_at": window["ends_at"],
+        "note": window["note"],
+        "source": window["source"],
+    }
+
+
+def _row_lock(bot: Any, spotlight_id: int) -> asyncio.Lock:
+    cog = cog_of(bot)
+    return cog._lock(spotlight_id) if cog is not None else asyncio.Lock()
+
+
+async def set_ping_mode(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, mode: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any, str]:
+    """`(outcome, row, said)`. Only the mention set moves: the announcement, the pin and the
+    reminders are untouched. The open session takes the new answer at once, so a mode change
+    never posts by itself — only a window OPENING does."""
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return ("no_row", None, words.NO_SUCH_ROW)
+    wanted = words.clean_ping_mode(mode)
+    if wanted is None:
+        return (words.BAD_MODE, row, words.PING_MODE_REFUSED.format(given=str(mode or "")[:40]))
+    was = words.ping_mode_of(row)
+    async with _row_lock(bot, spotlight_id):
+        await update_channel(bot.db, spotlight_id, ping_mode=wanted)
+        fresh = await channel_by_id(bot.db, spotlight_id)
+        windows = await windows_for(bot.db, spotlight_id)
+        session = await open_session(bot.db, spotlight_id)
+        if session is not None:
+            await set_pinging_last(bot.db, session["id"], words.pings_now(fresh, windows))
+    if was != wanted:
+        await log_action(
+            bot,
+            guild,
+            kind_via("golive.spotlight_ping_mode_set", via),
+            actor=actor,
+            details={
+                "spotlight_id": spotlight_id,
+                "login": row["twitch_login"],
+                "from": was,
+                "to": wanted,
+                "via": via,
+            },
+        )
+    wording = ping_wording_for(bot, guild.id)
+    tz_name = wording.pop("tz_name")
+    return ("set", fresh, words.ping_mode_said(fresh, windows, None, tz_name, **wording))
+
+
+async def read_window(
+    bot: Any, guild: Any, actor: Any, given_start: Any, given_end: Any
+) -> tuple[Any, Any, str | None]:
+    """`(starts_at, ends_at, refusal)` — both boxes read in the person's own zone."""
+    tz_name = await zone_for(bot, guild, actor)
+    start, trouble = words.read_moment(given_start, tz_name)
+    if trouble is not None:
+        return (None, None, _bad_date(bot, guild, given_start))
+    end, trouble = words.read_moment(given_end, tz_name)
+    if trouble is not None:
+        return (None, None, _bad_date(bot, guild, given_end))
+    return (start, end, None)
+
+
+def window_refusal(bot: Any, guild: Any, starts_at: Any, ends_at: Any) -> str | None:
+    problem = words.window_problem(starts_at, ends_at)
+    if problem is None:
+        return None
+    if problem == words.NEEDS_BOTH:
+        return words.WINDOW_NEEDS_BOTH
+    return words.end_before_start_said(
+        starts_at, ends_at, bot.store.get(guild.id, SPOTLIGHT_END_BEFORE_START_KEY)
+    )
+
+
+async def add_ping_window(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    spotlight_id: int,
+    starts_at: Any,
+    ends_at: Any,
+    note: Any = None,
+    *,
+    via: str = VIA_DISCORD,
+) -> tuple[str, Any, Any, str]:
+    """`(outcome, row, window, said)` — one door for the modal and the route."""
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return ("no_row", None, None, words.NO_SUCH_ROW)
+    refusal = window_refusal(bot, guild, starts_at, ends_at)
+    if refusal is not None:
+        return (words.window_problem(starts_at, ends_at), row, None, refusal)
+    said_note = str(note or "").strip()[: words.WINDOW_NOTE_MAX] or None
+    window_id = await add_window(
+        bot.db,
+        guild.id,
+        spotlight_id,
+        starts_at,
+        ends_at,
+        note=said_note,
+        added_by=getattr(actor, "id", actor),
+    )
+    window = await window_by_id(bot.db, window_id)
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.spotlight_window_added", via),
+        actor=actor,
+        details=window_details(window) | {"login": row["twitch_login"], "via": via},
+    )
+    tz_name = bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)
+    return ("added", row, window, words.window_added_said(row, window, tz_name))
+
+
+async def remove_ping_window(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, window_id: Any, *, via: str = VIA_DISCORD
+) -> tuple[str, Any, Any, str]:
+    """`(outcome, row, window, said)`. A window the marathon schedule wrote is its to change."""
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return ("no_row", None, None, words.NO_SUCH_ROW)
+    try:
+        window = await window_by_id(bot.db, int(window_id))
+    except (TypeError, ValueError):
+        window = None
+    if window is None or int(window["spotlight_id"]) != int(spotlight_id):
+        return ("no_window", row, None, words.WINDOW_GONE)
+    if not words.is_staff_window(window):
+        return ("not_staff", row, window, words.WINDOW_FROM_MARATHON)
+    if not await delete_window(bot.db, window["id"]):
+        return ("no_window", row, None, words.WINDOW_GONE)
+    await log_action(
+        bot,
+        guild,
+        kind_via("golive.spotlight_window_removed", via),
+        actor=actor,
+        details=window_details(window) | {"login": row["twitch_login"], "via": via},
+    )
+    tz_name = bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY)
+    return ("removed", row, window, words.window_removed_said(row, window, tz_name))
+
+
 async def live_now(bot: Any, guild: Any) -> dict[int, Any]:
     return {
         int(session["spotlight_id"]): session
@@ -1655,6 +1988,23 @@ async def build_spotlight(
     view = SpotlightPanel(minutes_for(bot, guild.id))
     if rows:
         view.add_item(ChannelPick(rows[:SELECT_CAP], chosen))
+    windows: list[Any] = []
+    tz_name = None
+    if chosen is not None:
+        windows = await windows_for(bot.db, chosen["id"])
+        wording = ping_wording_for(bot, guild.id)
+        tz_name = wording.pop("tz_name")
+        lines.append(
+            words.PANEL_PINGS.format(
+                login=chosen["twitch_login"],
+                state=words.ping_state_words(chosen, windows, None, tz_name, **wording),
+            )
+        )
+        if words.ping_mode_of(chosen) == words.PING_EVENTS:
+            lines += [
+                words.PANEL_WINDOW.format(line=words.window_line(one, None, tz_name))
+                for one in windows[:SELECT_CAP]
+            ]
     if chosen is not None:
         live = int(chosen["id"]) in open_by_id
         held = await pings.get_spotlight_fan_role(bot.db, guild.id, chosen["id"])
@@ -1687,6 +2037,14 @@ async def build_spotlight(
         else:
             view.add_item(LinkYouTubeButton(chosen["id"]))
         view.add_item(SpotlightMoveButton("remove", chosen["id"]))
+        mode = words.ping_mode_of(chosen)
+        for one in words.PING_MODES:
+            if one != mode:
+                view.add_item(SpotlightMoveButton(PING_MOVES[one], chosen["id"]))
+        if mode == words.PING_EVENTS:
+            view.add_item(AddWindowButton(chosen["id"]))
+            if windows:
+                view.add_item(RemoveWindowPick(chosen["id"], windows[:SELECT_CAP], tz_name))
     view.add_item(AddChannelButton())
     view.add_item(SpotlightBackButton())
     embed = discord.Embed(title=words.CHANNELS_TITLE, description="\n".join(lines))
@@ -1728,6 +2086,14 @@ class ChannelPick(discord.ui.Select):
         await render_spotlight(interaction, int(self.values[0]), self.view)
 
 
+PING_MOVES = {
+    words.PING_ALWAYS: "ping_always",
+    words.PING_NEVER: "ping_never",
+    words.PING_EVENTS: "ping_events",
+}
+MOVE_PINGS = {move: mode for mode, move in PING_MOVES.items()}
+
+
 class SpotlightMoveButton(discord.ui.Button):
     LABELS = {
         "extend": words.EXTEND_WEEK,
@@ -1742,6 +2108,9 @@ class SpotlightMoveButton(discord.ui.Button):
         "give_role": words.GIVE_PING_ROLE,
         "take_role": words.TAKE_PING_ROLE,
         "remove": words.REMOVE,
+        "ping_always": words.PINGS_ALWAYS_BUTTON,
+        "ping_never": words.PINGS_NEVER_BUTTON,
+        "ping_events": words.PINGS_EVENTS_BUTTON,
     }
     STYLES = {
         "extend": discord.ButtonStyle.primary,
@@ -1756,6 +2125,9 @@ class SpotlightMoveButton(discord.ui.Button):
         "give_role": discord.ButtonStyle.success,
         "take_role": discord.ButtonStyle.secondary,
         "remove": discord.ButtonStyle.danger,
+        "ping_always": discord.ButtonStyle.secondary,
+        "ping_never": discord.ButtonStyle.secondary,
+        "ping_events": discord.ButtonStyle.primary,
     }
     ROWS = {
         "opt_out": 2,
@@ -1764,6 +2136,9 @@ class SpotlightMoveButton(discord.ui.Button):
         "take_role": 2,
         "unlink_youtube": 2,
         "remove": 2,
+        "ping_always": 3,
+        "ping_never": 3,
+        "ping_events": 3,
     }
 
     def __init__(self, action: str, spotlight_id: Any) -> None:
@@ -1800,6 +2175,9 @@ async def run_spotlight_move(
     if row is None or int(row["guild_id"]) != int(guild.id):
         return (words.NO_SUCH_ROW, False)
     login = row["twitch_login"]
+    if action in MOVE_PINGS:
+        _, _, said = await set_ping_mode(bot, guild, actor, spotlight_id, MOVE_PINGS[action])
+        return (said, True)
     if action == "remove":
         await forget_spotlight(bot, guild, actor, spotlight_id)
         return (words.REMOVED.format(login=login), False)
@@ -1945,6 +2323,95 @@ class DatesModal(AnswersErrors, discord.ui.Modal, title=words.DATES_MODAL_TITLE)
             )
         await render_spotlight(interaction, self.spotlight_id, self.previous)
         await answer(interaction, refusal)
+
+
+class AddWindowButton(discord.ui.Button):
+    def __init__(self, spotlight_id: Any) -> None:
+        super().__init__(label=words.ADD_WINDOW, style=discord.ButtonStyle.primary, row=3)
+        self.spotlight_id = int(spotlight_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await interaction.response.send_modal(WindowModal(self.spotlight_id, self.view))
+
+
+class WindowModal(AnswersErrors, discord.ui.Modal, title=words.WINDOW_MODAL_TITLE):
+    starts = discord.ui.TextInput(
+        label=words.WINDOW_STARTS_LABEL,
+        placeholder=words.STARTS_PLACEHOLDER,
+        max_length=20,
+    )
+    ends = discord.ui.TextInput(
+        label=words.WINDOW_ENDS_LABEL,
+        placeholder=words.WINDOW_ENDS_PLACEHOLDER,
+        max_length=20,
+    )
+    note = discord.ui.TextInput(
+        label=words.WINDOW_NOTE_LABEL,
+        placeholder=words.WINDOW_NOTE_PLACEHOLDER,
+        required=False,
+        max_length=words.WINDOW_NOTE_MAX,
+    )
+
+    def __init__(self, spotlight_id: int, previous: Any = None) -> None:
+        super().__init__()
+        self.spotlight_id = int(spotlight_id)
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction, staff=False):
+            return
+        bot = interaction.client
+        start, end, said = await read_window(
+            bot, interaction.guild, interaction.user, str(self.starts), str(self.ends)
+        )
+        if said is None:
+            _, _, _, said = await add_ping_window(
+                bot,
+                interaction.guild,
+                interaction.user,
+                self.spotlight_id,
+                start,
+                end,
+                str(self.note),
+            )
+        await render_spotlight(interaction, self.spotlight_id, self.previous)
+        await answer(interaction, said)
+
+
+class RemoveWindowPick(discord.ui.Select):
+    def __init__(self, spotlight_id: Any, windows: list[Any], tz_name: Any = None) -> None:
+        super().__init__(
+            placeholder=words.REMOVE_WINDOW,
+            options=[
+                discord.SelectOption(
+                    label=words.window_line(one, None, tz_name).replace("**", "")[:100],
+                    value=str(one["id"]),
+                    description=(words.window_source_words(one) or None),
+                )
+                for one in windows
+            ],
+            min_values=1,
+            max_values=1,
+            row=4,
+        )
+        self.spotlight_id = int(spotlight_id)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        if not await opened(interaction, staff=False):
+            return
+        _, _, _, said = await remove_ping_window(
+            interaction.client,
+            interaction.guild,
+            interaction.user,
+            self.spotlight_id,
+            self.values[0],
+        )
+        await render_spotlight(interaction, self.spotlight_id, self.view)
+        await answer(interaction, said)
 
 
 class LinkYouTubeButton(discord.ui.Button):

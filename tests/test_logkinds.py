@@ -999,6 +999,10 @@ QUIET_CHANNEL_KINDS: tuple[str, ...] = (
     "golive.spotlight_unpinned",
     "golive.spotlight_updated",
     "golive.channel_announced",
+    "golive.spotlight_ping_mode_set",
+    "golive.spotlight_window_added",
+    "golive.spotlight_window_removed",
+    "golive.spotlight_window_purged",
 )
 
 
