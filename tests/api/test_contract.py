@@ -113,6 +113,19 @@ class ContractSchedule:
             one(3, 120, "Blaster Master", "Interview Crew", "host"),
         ]
 
+    async def events(self):
+        ahead = (datetime.now(UTC) + timedelta(days=90)).replace(microsecond=0)
+        return [
+            {
+                "id": 75,
+                "short": "SGDQ2027",
+                "name": "Summer Games Done Quick 2027",
+                "datetime": ahead.isoformat(),
+                "archived": False,
+                "draft": True,
+            }
+        ]
+
     async def close(self):
         return None
 
@@ -748,6 +761,41 @@ async def seed_world(client, web, guild, wf) -> dict:
     marathon_run_id = next(
         row["id"] for row in await runs_of(db, marathon_id) if row["game"] == "Super Metroid"
     )
+    marathon_done_run_id = next(
+        row["id"] for row in await runs_of(db, marathon_id) if row["game"] == "Celeste"
+    )
+    await db.conn.execute(
+        "UPDATE marathon_runs SET state = 'done', done_at = ? WHERE id = ?",
+        (datetime.now(UTC).isoformat(), marathon_done_run_id),
+    )
+    # Halo Fest is over with SGDQ 2027 suggested and still open, so Look again and Not this
+    # one both reach it; its own runs are not needed by any entry.
+    ended = datetime.now(UTC) - timedelta(days=20)
+    cur = await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, starts_at, "
+        "ends_at, suggested_next, added_at) VALUES (?, ?, ?, 'gdq', '73', ?, ?, ?, ?)",
+        (
+            guild_id,
+            "Halo Fest",
+            "https://gamesdonequick.com/schedule/73",
+            (ended - timedelta(days=2)).isoformat(),
+            ended.isoformat(),
+            json.dumps(
+                {
+                    "event_id": "75",
+                    "short": "SGDQ2027",
+                    "name": "Summer Games Done Quick 2027",
+                    "datetime": (datetime.now(UTC) + timedelta(days=90)).isoformat(),
+                    "url": "https://tracker.gamesdonequick.com/tracker/event/75",
+                    "found_at": ended.isoformat(),
+                    "dismissed_at": None,
+                    "added_marathon_id": None,
+                }
+            ),
+            ended.isoformat(),
+        ),
+    )
+    marathon_over_id = int(cur.lastrowid)
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
     await db.conn.execute(
         "INSERT OR IGNORE INTO channel_drafts(guild_id, channel_id, draft) VALUES (?, ?, ?)",
@@ -807,6 +855,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_id": str(marathon_id),
         "marathon_run_id": str(marathon_run_id),
         "marathon_pairing_id": str(marathon_pairing_id),
+        "marathon_over_id": str(marathon_over_id),
+        "marathon_done_run_id": str(marathon_done_run_id),
         "recording_meeting_id": str(recording_meeting_id),
     }
 
