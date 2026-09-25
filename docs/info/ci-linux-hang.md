@@ -1,5 +1,7 @@
 # The Linux CI hang — a dead aiosqlite thread under the module database
 
+> ✅ **2026-09-25 16:15 — merged (`fe81a137`) and shipped inside v165's image** (tests only). **CI GREEN** on GitHub Actions: run `36198821056` at `fc267114` (15:54), and the next two pushes (`gh run list`, 16:1x) — GitHub Actions has now run the fix on `main` (the *has not run this branch* note below is history). KI-26 stays `WATCHING`.
+
 > **Audience:** Claude sessions and the owner (anyone debugging a hung or "worker crashed" test run).
 > **Status:** TRACKED. **Last verified: 2026-09-25** (branch `ci-linux-hang`, off `main` `bababb65`) —
 > reproduced, diagnosed and fixed in a `python:3.12-slim` container and on Windows; every number below

@@ -1,5 +1,7 @@
 # A marathon's event mode — none, the marathon, our runs, or both; and the staff notice lives in Events
 
+> ✅ **2026-09-25 16:15 — LIVE as v165** (release commit `2351311a`, merge `ba513bb9`). Boot log: `database: added marathons.event_mode` / `marathons.held_by_channel` / `marathon_runs.event_id` / `marathon_feeds.event_mode` / `marathon_feeds.held_by_channel` / `spotlight_channels.marathons` at 23:15:04Z (schema 64); first boot `golive.channel_marathons_set esamarathon from=True to=False` 23:15:07Z, no event wish made. ⚠️ Nothing has met Discord by hand; no run event approved against Discord; the notice not seen in forum mode (live is shadow); sweeps `MV-a`…`MV-f` are the owner's.
+
 > 🔨 **2026-09-25 — BUILT on branch `marathon-event-modes` (off `main` `bababb65`), NOT merged, NOT deployed.** Schema 64, keys 475 → 482, 16 deviations (⚠️ 3: run events are reviewed while `marathon_mode` is shadow; ⚠️ 6: `event_id = 0` marks a run staff unlinked; ⚠️ 11: the knock-on rows are bare) and *What was NOT verified* at the foot.
 
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 14:5x Phoenix)

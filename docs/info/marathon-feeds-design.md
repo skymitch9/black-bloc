@@ -1,5 +1,7 @@
 # Marathon feeds — the bot polls GDQ (and ESA on horaro.net) for events itself, so staff never paste a schedule URL
 
+> ✅ **2026-09-25 16:15 — LIVE as v165** (release commit `2351311a`, merge `fafdb5e4`). Boot log: `database: added marathons.feed_id` at 23:15:04Z (the `marathon_feeds` + `marathon_feed_seeds` tables are the deploy's two new tables); first boot `marathon.feed_seeded feeds=['GDQ','RPG Limit Break']` and the GDQ feed added four marathons, each schedule unpublished (404, expected), notices to `#welcome-test` under shadow. §H (SS4C / Oengus) is NOT shipped — queued as branch `marathon-feeds-oengus`. ⚠️ Nothing has met Discord by hand; sweeps `MF-a`…`MF-e` are the owner's.
+
 > 🔨 **2026-09-25 — `marathon-event-modes` (branch, BUILT, NOT merged):** `marathon_makes_event` is retired for `marathon_event_mode_default` (**none**); a feed carries its own `event_mode` (blank follows the setting) and the Feeds card / **Feeds…** panel gain an Event select, **Rename…** and **Move to channel…** (closes Deviation 21); the notices become posts in the Events forum (`marathon_notice_home`); an opted-out channel row gets no feed and holds the one it has. [`marathon-event-modes-design.md`](marathon-event-modes-design.md).
 
 > 🔨 **2026-09-25 — BUILT on branch `marathon-feeds` (tracker GDQ + RPGLB, horaro.net; Oengus parked), NOT merged, NOT

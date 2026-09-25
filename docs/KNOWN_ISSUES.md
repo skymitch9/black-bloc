@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-25 14:2x** — KI-10 only, at the v164 docs ritual: one sighting line (21:15:49Z, the v164 swap, from `deploys.log`). ⚠️ Nothing else re-read.
+> Last verified: **2026-09-25 16:2x** — KI-10 and KI-26 only, at the v165 docs ritual: a KI-10 line for the v165 swap (the line itself NOT read — Fly's log buffer starts at the new machine); KI-26: the fix shipped inside v165, CI green (`gh run list`). ⚠️ Nothing else re-read.
+> Before that, **2026-09-25 14:2x** — KI-10 only, at the v164 docs ritual: one sighting line (21:15:49Z, the v164 swap, from `deploys.log`). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 18:3x** — KI-10 only, at the v163 docs ritual: one sighting line (01:32:43Z, the v163 swap, from `deploys.log`). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 16:2x** — KI-10 only, at the v162 docs ritual: one sighting line (23:19:48Z, the v162 swap, from `deploys.log` and the conductor's log read). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 04:3x** — the v157 docs ritual. **KI-32 CLOSED** (its landing gate was green) and **KI-35 CLOSED**
@@ -530,6 +531,8 @@ panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
 
+> **2026-09-25 16:15 — the fix SHIPPED inside v165** (merge `fe81a137`, tests only; release commit `2351311a`) and CI ran GREEN: run `36198821056` at `fc267114` (15:54), then `36200070117` and `36200184603` on the next two pushes (`gh run list`, 16:1x). Still `WATCHING` — three green CI runs and one green deploy gate are not the run of deploys the closing condition asks for.
+
 > **2026-09-25 15:5x — the D8 shape MEASURED on Linux and FIXED (branch `ci-linux-hang`, merged; NOT yet deployed —
 > tests only).** py-spy of a hung CI-style worker: the main thread waiting in the root `db` fixture's setup, no
 > aiosqlite thread alive. Cause: `tests/conftest.py` shares one aiosqlite connection per module while each test runs
@@ -999,6 +1002,7 @@ running machine, still one per deploy.
 Sighting **2026-09-23 23:19:48Z, the v162 swap**: one line from the retiring process, five seconds before the new one's `database ready` (23:19:53Z) — still shutdown-only, still one (per `deploys.log`; the running machine's log since was not read by this ritual).
 Sighting **2026-09-24 01:32:43Z, the v163 swap** (18:32 Phoenix): one line from the retiring process, six seconds before the new one's `database ready` (01:32:49Z) — still shutdown-only, still one (per `deploys.log`; the running machine's log since was not read by this ritual).
 Sighting **2026-09-25 21:15:49Z, the v164 swap** (14:16 Phoenix): one line from the retiring process, seven seconds before the new one's `database: added …` lines and `database ready` (21:15:56Z) — still shutdown-only, still one (per `deploys.log`; the running machine's log since was not read by this ritual).
+Swap **2026-09-25 23:15:0xZ, v165** (16:15 Phoenix): the new machine's first line is 23:15:00Z and its `database ready` / `logged in` 23:15:04Z / 23:15:07Z; the retiring process's `Unclosed client session` line was NOT read — `flyctl logs --no-tail` at 16:1x starts at the new machine, and `deploys.log`'s v165 line does not record one. Neither a sighting nor proof of absence.
 
 **Why tolerated.** An aiohttp `ClientSession` that was never `close()`d is
 reported by its finaliser at interpreter exit; it costs nothing after the
