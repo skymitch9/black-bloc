@@ -34,7 +34,7 @@ export const LOG_FEATURES = [
   { feature: 'request', label: 'Requests', tab: 'requests' },
   { feature: 'minutes', label: 'Meeting minutes', tab: 'minutes' },
   { feature: 'raidtrain', label: 'Raid trains', tab: 'events' },
-  { feature: 'marathon', label: 'Marathons', tab: 'marathons' },
+  { feature: 'marathon', label: 'Marathons', tab: 'events' },
   { feature: 'applications', label: 'Applications', tab: 'requests' },
   { feature: 'guides', label: 'Guides', tab: 'guides' },
   { feature: 'posts', label: 'Posts', tab: 'posts' },

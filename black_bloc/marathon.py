@@ -124,7 +124,7 @@ NO_SUCH_CHANNEL = (
     "channel there first, or leave it blank."
 )
 BAD_POLL = "A marathon's own read gap is 10 to 120 minutes, or blank for the setting's."
-SITE_BUTTON = "Open the Marathons page"
+SITE_BUTTON = "Open the Events page"
 NEXT_ADDED_LINE = "Added — see **{name}** on the list."
 NEXT_NOT_YET = (
     "Black Bloc has not looked up the next GDQ event for this one yet. **Look again** asks the "

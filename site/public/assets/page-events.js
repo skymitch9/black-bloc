@@ -1,6 +1,7 @@
 import { api, listOf, names, refChannels, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { logsSection } from './logs.js';
+import { marathonsSection } from './marathons-section.js';
 import {
   ask,
   badge,
@@ -40,6 +41,9 @@ const MOVE_BUTTON = 'Move to the forum';
 const MOVE_BODY = 'A post goes up in the events forum carrying the same card and the same buttons, '
   + 'the room is told where it went, and then the room is removed. The event is NOT called off, '
   + 'and the messages already in the room are not carried over — Discord cannot move those.';
+const MARATHON_SETTINGS_NOTE = 'Whether marathon posts go out, where, how often a schedule is '
+  + 'read, when the reminders go and which one pings, whether adding one makes an event, and '
+  + 'every word the board, the reminders and the shoutouts say.';
 const NOT_RESENT = 'Saving does not rewrite an announcement that is already up or a Discord ' +
   'scheduled event that already exists; the answer says when that applies.';
 
@@ -313,13 +317,17 @@ async function load() {
     nodes.push(detail.node);
   }
 
+  nodes.push(await marathonsSection({ reload: () => refresh() }));
+
   const eventsSettings = await namespaceSettings('events');
   forumMakeAction(eventsSettings, forum.id);
 
   document.getElementById('dash').replaceChildren(
     ...nodes,
     eventsSettings,
-    await logsSection('events'),
+    await namespaceSettings('marathon', { title: 'Marathon settings', note: MARATHON_SETTINGS_NOTE, onSaved: () => refresh() }),
+    await logsSection('events', { title: 'Events log' }),
+    await logsSection('marathon', { title: 'Marathons log' }),
   );
 }
 

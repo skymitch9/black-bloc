@@ -3200,7 +3200,7 @@ const GUIDE_FEATURE_PAGES = {
   modmail: 'modmail.html', golive: 'golive.html', youtube: 'golive.html', events: 'events.html',
   birthday: 'birthdays.html', tempvoice: 'tempvoice.html', rolemenu: 'rolemenus.html',
   poll: 'polls.html', chat: 'chat.html', request: 'requests.html', pings: 'golive.html',
-  raidtrain: 'raidtrain.html', marathon: 'marathons.html', applications: 'rolemenus.html', selftest: 'health.html',
+  raidtrain: 'raidtrain.html', marathon: 'events.html', applications: 'rolemenus.html', selftest: 'health.html',
   guides: 'guides.html',
 };
 const GUIDE_CORE_KEYS = ['staff_channel_id', 'log_channel_id', 'modlog_channel_id', 'role_menu_channel_id'];

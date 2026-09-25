@@ -1,6 +1,4 @@
-import { api, send, settings, settingsNamespace } from './api.js';
-import { start } from './app.js';
-import { logsSection } from './logs.js';
+import { api, send } from './api.js';
 import {
   ago,
   ask,
@@ -14,7 +12,6 @@ import {
   duration,
   el,
   field,
-  foldout,
   keepSaying,
   memberPicker,
   modeChip,
@@ -27,29 +24,24 @@ import {
   section,
   segment,
   sentenceFor,
-  settingsPanel,
   table,
   textAction,
   when,
 } from './ui.js';
 
 const shown = { id: null, filter: 'ours' };
-let refresh = () => {};
+const HASH = /^marathon-(\d+)$/;
+let refresh = async () => {};
 let deepLinked = false;
 
 const LIST_NOTE = 'Every marathon schedule Black Bloc follows. It re-reads each one on its own '
   + '— every half hour while it is near — and posts a board, a reminder before each run of ours '
   + 'and a shoutout when it goes live. A row opens its runs.';
-const MACHINERY_NOTE = 'The reference half of the page: the marathon settings, and everything '
-  + 'the marathon schedules have done. Both are shut until you want them.';
-const SETTINGS_NOTE = 'Whether marathon posts go out, where, how often a schedule is read, when '
-  + 'the reminders go and which one pings, and every word the board, the reminders and the '
-  + 'shoutouts say.';
 const NOTHING_YET = 'Black Bloc follows no marathon yet. **Add a marathon** with its GDQ '
   + 'schedule link.';
 const GETTING_IT = 'Reading the schedule…';
-const MODE_OFF = 'Marathon posts are **{mode}**, so nothing is read or posted. **Settings and '
-  + 'logs** below turns them on.';
+const MODE_OFF = 'Marathon posts are **{mode}**, so nothing is read or posted. **Marathon '
+  + 'settings** below turns them on.';
 const MODE_SHADOW = 'Marathon posts are in **shadow**: the board, the reminders and the '
   + 'shoutouts land where shadow_channel_id points, with the rehearsal note.';
 const ADD_NOTE = 'Paste the GDQ schedule link (gamesdonequick.com/schedule/74) or the tracker '
@@ -96,15 +88,15 @@ function said(text, values) {
 }
 
 function wantedId() {
-  const hash = String(location.hash || '').replace(/^#/, '').trim();
-  return /^\d+$/.test(hash) ? hash : null;
+  const found = HASH.exec(String(location.hash || '').replace(/^#/, '').trim());
+  return found ? found[1] : null;
 }
 
 function forgetHash() {
   const drawer = document.querySelector('dialog.drawer');
   if (drawer && drawer.open) return;
   shown.id = null;
-  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  if (wantedId()) history.replaceState(null, '', location.pathname + location.search);
 }
 
 function datesOf(row) {
@@ -462,8 +454,8 @@ async function marathonDrawer(marathon, message) {
 
 async function openMarathon(marathonId, title, message = '') {
   shown.id = String(marathonId);
-  if (String(location.hash).replace(/^#/, '') !== shown.id) {
-    history.replaceState(null, '', `${location.pathname}${location.search}#${shown.id}`);
+  if (wantedId() !== shown.id) {
+    history.replaceState(null, '', `${location.pathname}${location.search}#marathon-${shown.id}`);
   }
   openDrawer(title || `Marathon #${marathonId}`, sayNothing(GETTING_IT), { onClose: forgetHash });
   try {
@@ -500,37 +492,19 @@ function listSection(payload, say) {
   return full(list.node);
 }
 
-function unsectioned(node) {
-  const inner = node.querySelector('.sect-inner');
-  return inner ? [...inner.childNodes] : [node];
-}
-
-async function machinerySection(specs) {
-  const one = section('Settings and logs', MACHINERY_NOTE, { id: 'machinery' });
-  one.body.append(
-    foldout('Settings', [
-      el('p', { class: 'field-help', text: SETTINGS_NOTE }),
-      await settingsPanel(specs, { where: 'Marathons', onSaved: () => refresh() }),
-    ], { count: specs.length }),
-    foldout('Logs', unsectioned(await logsSection('marathon'))),
-  );
-  return full(one.node);
-}
-
-async function load() {
+/** The Events page's Marathons section: the same list, drawer and moves the Marathons page had. */
+export async function marathonsSection({ reload }) {
+  refresh = reload;
   const payload = await api('/api/marathons');
-  const specs = settingsNamespace(await settings(), 'marathon');
   const say = sayAgain('marathons', notice());
-  document.getElementById('dash').replaceChildren(
-    listSection(payload, say),
-    await machinerySection(specs),
-  );
+  const node = listSection(payload, say);
   const wanted = wantedId();
   if (wanted && !deepLinked) {
     deepLinked = true;
     const found = (payload.marathons || []).find((one) => String(one.id) === wanted);
     openMarathon(wanted, found ? found.name : `Marathon #${wanted}`);
   }
+  return node;
 }
 
 window.addEventListener('hashchange', () => {
@@ -542,5 +516,3 @@ window.addEventListener('hashchange', () => {
   if (wanted === shown.id) return;
   openMarathon(wanted, `Marathon #${wanted}`);
 });
-
-refresh = start({ tab: 'marathons', load });

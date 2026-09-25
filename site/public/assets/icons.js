@@ -19,7 +19,6 @@ export const ICONS = {
   navModmail: { body: '<rect x="3" y="5.5" width="18" height="13" rx="2"></rect><path d="m3.9 7.1 8.1 5.9 8.1-5.9"></path>', width: 1.7 },
   navGolive: { body: '<circle cx="12" cy="12" r="8.4"></circle><path d="M10.3 8.7 16 12l-5.7 3.3z"></path>', width: 1.7 },
   navEvents: { body: '<rect x="3.5" y="5.5" width="17" height="15" rx="2"></rect><path d="M3.5 10.2h17M8 3.5v4M16 3.5v4"></path>', width: 1.7 },
-  navMarathon: { body: '<circle cx="12" cy="13" r="7.5"></circle><path d="M12 9v4l2.6 1.6M10 2.8h4M12 2.8v2.7"></path>', width: 1.7 },
   navRaidtrain: { body: '<rect x="2.8" y="8.5" width="5.4" height="6.2" rx="1.3"></rect><rect x="9.6" y="8.5" width="4.8" height="6.2" rx="1.3"></rect><rect x="15.8" y="8.5" width="5.4" height="6.2" rx="1.3"></rect><path d="M2.8 18.5h18.4"></path>', width: 1.7 },
   navBirthdays: { body: '<path d="M4 20h16"></path><path d="M5.2 20v-6.4c0-1 .8-1.8 1.8-1.8h10c1 0 1.8.8 1.8 1.8V20"></path><path d="M12 11.8V8.2"></path><path d="M12 4.9c1 .9 1 1.9 0 2.8-1-.9-1-1.9 0-2.8z"></path>', width: 1.7 },
   navTempvoice: { body: '<rect x="9" y="3.2" width="6" height="10" rx="3"></rect><path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0M12 17.8V21"></path>', width: 1.7 },

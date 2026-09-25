@@ -141,7 +141,7 @@ FEATURE_PAGES: dict[str, str] = {
     "request": "requests.html",
     "pings": "golive.html",
     "raidtrain": "raidtrain.html",
-    "marathon": "marathons.html",
+    "marathon": "events.html",
     "applications": "rolemenus.html",
     "selftest": "health.html",
     "guides": "guides.html",
