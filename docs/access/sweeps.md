@@ -3158,3 +3158,23 @@ runs), so a-row adds it and it reads *no runs published yet*; to see runs today,
 | **`MS-d`** | During a live marathon, a GDQ title or category naming one of our games (or **Shout it now** on the run) | The run flips **on now** (`live_because` title / staff), ONE shoutout with no ping (`marathon_live_pings` off); after the run it is rewritten in the past tense (`marathon.run_done`, `edited: true`). An earlier run of ours that was skipped logs `marathon.run_skipped` (important) |
 | **`MS-e`** | In Discord: `/marathon` | A member sees **Ours next** and **My runs** only; staff also see each marathon with its read state, **Add a marathon…**, **Logs**, and a marathon select whose card offers only the moves that change something |
 | **`MS-f`** | <https://blackbloc.heygabi.ai/golive.html> ▸ **GamesDoneQuick**'s row ▸ the **Pings** card (set *During events*) | A window named **AGDQ 2027** *from the marathon schedule*, spanning the marathon's dates ± `marathon_window_slack_hours`, with no Remove button; pausing or removing the marathon drops it (`marathon.window_dropped`) |
+
+## Rows `MN-a` … `MN-e` — the next GDQ event, and a way back for a done run (branch `marathon-next-event`, 2026-09-25)
+
+🔨 **BUILT on branch `marathon-next-event`, NOT merged, NOT deployed.** Owner, 2026-09-25: *"use the api to grab the
+next event and suggest that once the marathon ends."* Design:
+[`../info/marathon-next-event-design.md`](../info/marathon-next-event-design.md). Rows lettered; the conductor numbers them.
+
+⚠️ **`marathon_mode` ships `shadow`**: the staff notice lands in `shadow_channel_id` (`#welcome-test`) with the
+rehearsal note, and the log says `marathon.would_suggest_next`. ⚠️ Needs `staff_channel_id` set for the `on` notice.
+⚠️ Today every GDQ marathon's next event is **71 *Games Done Hitless*** (2026-10-23) — measured 2026-09-25 13:1x.
+To see a suggestion without waiting for AGDQ 2027 to end, add a past event (`https://gamesdonequick.com/schedule/69`,
+Flame Fatales 2026 — it reads *over*) and press **Look again**, or restart once for the automatic one (the reconcile tries every over GDQ marathon with no record).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MN-a`** | <https://blackbloc.heygabi.ai/marathons.html> with an over GDQ marathon on the list (the first tick after it ends, or **Look again** in its drawer) | A strip *1 marathon has a next event waiting*; the row's **Next up** column reads *Games Done Hitless · 10/23/2026* with **Add it** / **Not this one**; its drawer's **Next up** card says *… is over — the next GDQ event is **Games Done Hitless** …*; one `marathon.next_suggested` row (IMPORTANT) — or `would_suggest_next` in shadow — and ONE staff notice with the two buttons. A second boot posts nothing more. |
+| **`MN-b`** | **Add it** (on the page, or on the notice) | A new marathon *Games Done Hitless* read from `tracker.gamesdonequick.com/tracker/event/71`, on the ending marathon's channel; the old row reads *Added: Games Done Hitless* with a link to it; the notice is rewritten to *Added **Games Done Hitless** — it will be read from …* with its buttons disabled; `marathon.added` + `marathon.next_added`. |
+| **`MN-c`** | **Not this one** (page or notice) on a fresh suggestion | The card folds to *Dismissed: …* with **Look again**; the notice is struck through, buttons disabled; `marathon.next_dismissed`; no boot re-suggests it. A non-staff click on the notice is refused in words and changes nothing. |
+| **`MN-d`** | **Look again** after a dismissal (page, or `/marathon` ▸ the marathon ▸ **Next up…**) | The suggestion is open again (the same event today); no new notice; `web.marathon.next_suggested` from the page. On a marathon not over yet: *… is not over yet, so nothing was looked up.* |
+| **`MN-e`** | §G — a drawer's **Re-read every [ ] minutes** ▸ `45` ▸ **Save**, then blank ▸ **Save**; a done run ▸ **Mark it upcoming**, then **Mark it live**; the same from `/marathon` ▸ the marathon ▸ **Re-read every…** and the run select | `poll_minutes` 45 then back to the default (`5` or `soon` is refused in words); the run reads *coming up* + *held by staff*, then *on now* with ONE shoutout if it is ours and never had one; `marathon.run_reset` then `marathon.run_live` (`because: staff`). A later title match on another run does NOT close the held run. |

@@ -90,6 +90,17 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-25 (the next GDQ event + a way back for a done run, branch `marathon-next-event` off `main` `6bb49274`;
+> design `info/marathon-next-event-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the
+> migration has NOT run on the live database):** schema **60 → 61** (measured: `SCHEMA_VERSION`) — one column through
+> `ADDED_COLUMNS`, `marathons.suggested_next` (a JSON record: the event, its tracker URL, found / dismissed / added).
+> Registry keys **464 → 468** (`marathon_suggest_next`, `marathon_next_template`, `marathon_next_none_template`,
+> `marathon_next_added_template`). Routes **231 → 235** (`POST /api/marathons/{id}/next`, `POST …/runs/{run_id}/upcoming`,
+> `POST …/runs/{run_id}/live`, and — no new path — `PATCH` `dismiss_next`, `POST /api/marathons` `next_of`; `check.mjs`:
+> *23 pages, 235 routes*). One more persistent button family (`NextButton`, `marathon:<id>:next:<event>:add|dismiss`) on
+> a staff notice in `staff_channel_id`. Cogs, pages, commands and log features unchanged. ⚠️ The fact table below was
+> NOT re-measured.
+>
 > **2026-09-25 (marathon schedules — request #12, branch `marathon-schedule` off `main` `08e03fbf`; design
 > `info/marathon-schedule-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration has
 > NOT run on the live database):** schema **59 → 60** (measured: `SCHEMA_VERSION`) — three NEW tables through the
