@@ -146,7 +146,7 @@ def test_the_mode_block_is_the_hide_table_plus_exactly_three_hand_added_rows():
     joined the hand-added three at the pings remake (§C6) — it stopped hiding its command."""
     from black_bloc.settings_panel import FEATURE_MODES
 
-    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 19
+    assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 20
     assert "rolemenu_mode" in {row.key for row in EXTRA_MODES}
     assert {row.key for row in FEATURE_MODES} == set(HIDDEN_WHEN_OFF) | {
         row.key for row in EXTRA_MODES
@@ -160,7 +160,7 @@ def test_the_mode_block_says_modmail_in_words_and_never_as_on_or_off():
     lines = mode_lines(store, GUILD)
     said = "\n".join(lines)
 
-    assert len(lines) == 19
+    assert len(lines) == 20
     assert any(line.startswith("**The front door** —") and "`/ask`" in line for line in lines)
     assert f"**Modmail** — {MODMAIL_ANSWERING} · `/modmail` to change" in lines
     assert "**YouTube** — shadow · `/youtube` to change" in lines
@@ -308,7 +308,7 @@ def test_row_two_never_grows_past_the_five_controls_discord_allows():
 
 @pytest.mark.parametrize(
     "hidden,expected",
-    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 16)],
+    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 17)],
 )
 def test_turn_a_feature_back_on_lists_exactly_what_is_hidden_and_never_more(hidden, expected):
     values = {HIDE_COMMANDS_WHEN_OFF: True}

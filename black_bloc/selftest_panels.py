@@ -54,6 +54,7 @@ PANELS: tuple[PanelDoor, ...] = (
     PanelDoor("youtube", "youtube", "black_bloc.cogs.content.youtube", "build_panel"),
     PanelDoor("pings", "pings", "black_bloc.cogs.content.pings", "build_panel"),
     PanelDoor("raidtrain", "raidtrain", "black_bloc.cogs.content.raidtrain", "build_panel"),
+    PanelDoor("marathon", "marathon", "black_bloc.cogs.content.marathon", "build_panel"),
 )
 
 

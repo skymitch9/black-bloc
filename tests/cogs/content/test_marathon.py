@@ -623,3 +623,70 @@ async def test_every_row_a_member_run_writes_carries_the_marathon_the_run_and_th
         assert found["marathon_id"] == marathon["id"], kind
         assert found["run_id"] and found["member_id"] == SKY, kind
     assert json.loads((await runs_by_game(bot, marathon))["Super Metroid"]["reminders_sent"]) == []
+
+
+# --- the /marathon panel --------------------------------------------------------------------
+
+
+class Member:
+    def __init__(self, user_id):
+        self.id = user_id
+        self.display_name = "Sky"
+        self.bot = False
+
+
+async def test_a_member_sees_ours_next_and_no_staff_moves(bot, cog):
+    await added(bot, cog)
+    bot.store.is_staff = lambda member: False
+    embed, view = await cogmod.build_panel(bot, bot.guild, Member(SKY))
+
+    assert "Ours next" in embed.description and "Super Metroid" in embed.description
+    assert "<@9001>" in embed.description
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert "Add a marathon…" not in labels and "Logs" not in labels
+    assert "My runs" in labels
+    assert not any(isinstance(one, cogmod.MarathonPick) for one in view.children)
+    assert view.render_again is not None
+
+
+async def test_staff_see_every_marathon_with_its_read_state_and_the_moves(bot, cog):
+    await added(bot, cog)
+    embed, view = await cogmod.build_panel(bot, bot.guild, FakeActor())
+    assert "AGDQ 2027" in embed.description and "ours 1 of 5" in embed.description
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert {"Add a marathon…", "Logs", "Refresh"} <= set(labels)
+
+
+async def test_my_runs_lists_only_the_members_own(bot, cog):
+    await added(bot, cog)
+    embed, _ = await cogmod.build_mine(bot, bot.guild, Member(SKY))
+    assert "Super Metroid" in embed.description
+    embed, _ = await cogmod.build_mine(bot, bot.guild, Member(42))
+    assert mt.NOTHING_MINE in embed.description
+
+
+async def test_the_card_draws_only_the_moves_that_change_something(bot, cog):
+    marathon = await added(bot, cog)
+    _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert "Pause" in labels and "Resume" not in labels
+    assert "Post the board" in labels and "Pair a runner…" in labels
+    await set_active(bot, bot.guild, FakeActor(), marathon, False)
+    _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert "Resume" in labels and "Refresh now" not in labels
+
+
+async def test_pairing_from_the_panel_picks_a_schedule_name_then_the_member(bot, cog):
+    marathon = await added(bot, cog)
+    _, view = await cogmod.build_card(
+        bot, bot.guild, marathon["id"], pairing=True, runner="Interview Crew"
+    )
+    names = next(one for one in view.children if isinstance(one, cogmod.NamePick))
+    assert "Interview Crew" in [option.value for option in names.options]
+    await pair_runner(bot, bot.guild, FakeActor(), marathon, view.runner, 77)
+    assert mt.member_ids((await runs_by_game(bot, marathon))["Blaster Master"]) == [77]
+
+
+async def test_a_card_for_a_marathon_that_is_gone_is_nothing_to_draw(bot, cog):
+    assert await cogmod.build_card(bot, bot.guild, 999) == (None, None)

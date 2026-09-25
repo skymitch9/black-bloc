@@ -179,6 +179,9 @@ pings* and *Notifications* panels do the same.
 see the whole lineup and which hours are free, **Take an hour…** claims one (link Twitch on
 `/golive` first), **Give back slot #N** hands it back, and **My slots…** says what you hold.
 Black Bloc DMs you before your slot with who raids into you and who you raid next.
+`/marathon` — marathons. It opens one window with **Ours next**: when people from here are on
+a marathon stream (running, hosting or on commentary), read off the posted schedule, and **My
+runs** for your own.
 `/voice` — one window for your own temporary voice channel: rename it, set how many people fit,
 lock it, hide it, let people in or keep them out, and hand it to somebody else.
 `/memory` — does the bot remember me? It opens one window with everything Black Bloc has written

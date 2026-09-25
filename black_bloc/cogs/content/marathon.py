@@ -7,19 +7,37 @@ from datetime import UTC, datetime
 from typing import Any
 
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 
 from ... import marathon as mt
 from ... import pings
 from ... import shadow as shadow_home
 from ... import spotlight as spot
-from ...actionlog import log_action
-from ...golive import now_iso, ping_prefix
+from ...actionlog import log_action, send_logs
+from ...command_errors import AnswersErrors
+from ...golive import now_iso, parse_ts, ping_prefix
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
 from ...marathon_sources import ScheduleClient, ScheduleError, read_url, schedule_page
-from ...panels import Outcome, refusal
+from ...panels import (
+    KEEP_IT,
+    Outcome,
+    Panel,
+    answer,
+    clamped,
+    confirm,
+    confirm_items,
+    opened,
+    panel_minutes,
+    refusal,
+    retire,
+    site_page_url,
+    still_staff,
+)
 from ...settings_store import (
+    DB_UNAVAILABLE,
+    GUILD_ONLY,
     MARATHON_ALREADY_ADDED_KEY,
     MARATHON_BOARD_EMPTY_KEY,
     MARATHON_BOARD_LINE_KEY,
@@ -37,6 +55,7 @@ from ...settings_store import (
     MARATHON_MATCH_HOSTS_KEY,
     MARATHON_MODE_KEY,
     MARATHON_MOVE_MINUTES_KEY,
+    MARATHON_PANEL_MINUTES_KEY,
     MARATHON_PIN_BOARD_KEY,
     MARATHON_PING_MINUTES_KEY,
     MARATHON_POLL_MINUTES_KEY,
@@ -49,7 +68,8 @@ from ...settings_store import (
     MARATHON_WINDOW_SLACK_KEY,
     MARATHON_WORDS,
 )
-from .spotlight import channel_by_id, open_session, windows_for
+from ...timezones import unix
+from .spotlight import channel_by_id, channel_by_login, open_session, windows_for
 
 log = logging.getLogger(__name__)
 
@@ -713,6 +733,25 @@ class Marathons(commands.Cog):
         if not self.bot.db.is_connected:
             return
         await self._reconciler.run(self.tick_once, skip_if_recent=True)
+
+    @app_commands.command(
+        name="marathon", description="Marathons: when our people are on a marathon stream"
+    )
+    async def marathon_panel_command(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            await answer(interaction, GUILD_ONLY)
+            return
+        if not self.bot.db.is_connected:
+            await answer(interaction, DB_UNAVAILABLE)
+            return
+        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        view.message = await interaction.original_response()
 
     # --- the minute tick --------------------------------------------------------------------
 
@@ -1539,6 +1578,408 @@ class Marathons(commands.Cog):
         except Exception as exc:
             log.info("marathon: could not read message %s — %s", message_id, spot.reason_of(exc))
             return None
+
+
+# --- the /marathon panel ----------------------------------------------------------------------
+
+ROOT = "root"
+CARD = "card"
+MINE_VIEW = "mine"
+PAIR_VIEW = "pair"
+STYLES = {
+    "primary": discord.ButtonStyle.primary,
+    "secondary": discord.ButtonStyle.secondary,
+    "danger": discord.ButtonStyle.danger,
+}
+SELECT_CAP = 25
+NEXT_LIMIT = 5
+MINE_LIMIT = 10
+
+
+class MarathonPanel(Panel):
+    def __init__(self, minutes: int, where: str = ROOT, marathon_id: Any = None) -> None:
+        super().__init__(minutes, footer=mt.PANEL_TIMEOUT_FOOTER, again=reopen)
+        self.where = where
+        self.marathon_id = marathon_id
+        self.runner: str | None = None
+
+
+def minutes_for(bot: Any, guild_id: int) -> int:
+    return panel_minutes(bot.store, guild_id, MARATHON_PANEL_MINUTES_KEY)
+
+
+def now_for(bot: Any) -> datetime:
+    cog = cog_of(bot)
+    return cog.clock() if cog is not None else datetime.now(UTC)
+
+
+def phase_of(bot: Any, guild: Any, row: Any) -> str:
+    lead = int(bot.store.get(guild.id, MARATHON_LEAD_DAYS_KEY))
+    return mt.phase(row, now_for(bot), lead_days=lead)
+
+
+def next_line(row: Any, marathon: Any, words: dict[str, str]) -> str:
+    fields = mt.run_fields(row, marathon, words, url="")
+    at = parse_ts(row["scheduled_at"])
+    return mt.NEXT_LINE.format(
+        unix=unix(at) if at is not None else 0,
+        game=row["game"],
+        member=fields["member"],
+        part=fields["part"],
+        marathon=marathon["name"],
+    )
+
+
+async def upcoming_of_ours(bot: Any, guild: Any, *, member_id: int | None = None) -> list[str]:
+    now = now_for(bot)
+    words = words_for(bot, guild.id)
+    found: list[tuple[Any, Any]] = []
+    for marathon in await list_marathons(bot.db, guild.id):
+        if not marathon["active"] or phase_of(bot, guild, marathon) in (mt.OVER, mt.FAR):
+            continue
+        for row in mt.next_runs(await runs_of(bot.db, marathon["id"]), now, limit=MINE_LIMIT):
+            if member_id is None or int(member_id) in mt.member_ids(row):
+                found.append((row, marathon))
+    found.sort(key=lambda one: str(one[0]["scheduled_at"] or ""))
+    limit = NEXT_LIMIT if member_id is None else MINE_LIMIT
+    return [next_line(row, marathon, words) for row, marathon in found[:limit]]
+
+
+def marathon_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
+    starts = parse_ts(row["starts_at"])
+    ends = parse_ts(row["ends_at"])
+    dates = f"<t:{unix(starts)}:d> – <t:{unix(ends or starts)}:d>" if starts else mt.NO_DATES
+    fetched = parse_ts(row["last_fetched_at"])
+    if row["last_fetch_ok"] == 0 and fetched is not None:
+        read = mt.FETCH_TROUBLE.format(unix=unix(fetched), why=row["last_error"] or "")
+    elif fetched is not None:
+        read = mt.READ_AGO.format(unix=unix(fetched))
+    else:
+        read = mt.NEVER_READ
+    live = [one for one in runs if one["state"] != mt.DROPPED]
+    phase = phase_of(bot, guild, row)
+    return mt.MARATHON_LINE.format(
+        name=row["name"],
+        phase=mt.PHASE_WORDS.get(phase, phase),
+        dates=dates,
+        ours=len([one for one in live if mt.is_ours(one)]),
+        runs=len(live),
+        read=read,
+    )
+
+
+def add_moves(view: Any, moves: Any) -> None:
+    for move in moves:
+        view.add_item(MarathonMoveButton(move))
+
+
+def add_site_button(view: Any, bot: Any, row: int) -> None:
+    url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), FEATURE)
+    if url:
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link, label=mt.SITE_BUTTON, url=url, row=row
+            )
+        )
+
+
+async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, MarathonPanel]:
+    """One command, two audiences: members read Ours next; staff also manage the list."""
+    staff = bool(bot.store.is_staff(actor))
+    rows = await list_marathons(bot.db, guild.id)
+    lines = [mt.OURS_NEXT, *(await upcoming_of_ours(bot, guild) or [mt.NOTHING_NEXT])]
+    if staff:
+        lines += ["", mt.MODE_LINE.format(mode=mode_of(bot, guild.id))]
+        for row in rows[:SELECT_CAP]:
+            lines.append(marathon_line(bot, guild, row, await runs_of(bot.db, row["id"])))
+        if not rows:
+            lines.append(mt.NO_MARATHONS)
+    embed = discord.Embed(title=mt.PANEL_TITLE, description=clamped(lines))
+    view = MarathonPanel(minutes_for(bot, guild.id))
+    if staff and rows:
+        view.add_item(MarathonPick(rows))
+    add_moves(view, mt.root_moves(staff=staff))
+    if staff:
+        add_site_button(view, bot, row=3)
+    return (embed, view)
+
+
+async def build_mine(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, MarathonPanel]:
+    lines = [
+        mt.MY_RUNS,
+        *(await upcoming_of_ours(bot, guild, member_id=actor.id) or [mt.NOTHING_MINE]),
+    ]
+    embed = discord.Embed(title=mt.PANEL_TITLE, description=clamped(lines))
+    view = MarathonPanel(minutes_for(bot, guild.id), MINE_VIEW)
+    add_moves(view, (mt.BACK_MOVE,))
+    return (embed, view)
+
+
+async def build_card(
+    bot: Any, guild: Any, marathon_id: Any, *, pairing: bool = False, runner: Any = None
+) -> tuple[discord.Embed | None, MarathonPanel | None]:
+    row = await get_marathon(bot.db, guild.id, marathon_id)
+    if row is None:
+        return (None, None)
+    runs = await runs_of(bot.db, row["id"])
+    words = words_for(bot, guild.id)
+    login = await channel_login(bot, row)
+    lines = [marathon_line(bot, guild, row, runs)]
+    if login:
+        lines.append(f"twitch.tv/{login}")
+    ours = [one for one in runs if one["state"] != mt.DROPPED and mt.is_ours(one)]
+    lines += [""] + [next_line(one, row, words) for one in ours[:MINE_LIMIT]]
+    if not runs:
+        lines.append(
+            mt.render(
+                words["marathon_no_runs_yet"],
+                said_default("marathon_no_runs_yet"),
+                marathon=row["name"],
+            ).text
+        )
+    unmatched = mt.unmatched_names(runs)
+    embed = discord.Embed(title=row["name"], description=clamped(lines))
+    view = MarathonPanel(minutes_for(bot, guild.id), PAIR_VIEW if pairing else CARD, row["id"])
+    if pairing:
+        view.runner = runner
+        view.add_item(NamePick(unmatched, runner))
+        view.add_item(WhoPick())
+        add_moves(view, (mt.BACK_MOVE,))
+        return (embed, view)
+    add_moves(view, mt.card_moves(row, has_unmatched=bool(unmatched)))
+    return (embed, view)
+
+
+async def render(interaction: discord.Interaction, embed: Any, view: Any, previous: Any) -> None:
+    retire(previous)
+    view.message = await interaction.edit_original_response(
+        embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+async def open_root(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction, staff=False):
+        return
+    embed, view = await build_panel(interaction.client, interaction.guild, interaction.user)
+    await render(interaction, embed, view, previous)
+
+
+async def open_mine(interaction: discord.Interaction, previous: Any = None) -> None:
+    if not await opened(interaction, staff=False):
+        return
+    embed, view = await build_mine(interaction.client, interaction.guild, interaction.user)
+    await render(interaction, embed, view, previous)
+
+
+async def open_card(
+    interaction: discord.Interaction,
+    marathon_id: Any,
+    previous: Any = None,
+    *,
+    pairing: bool = False,
+    runner: Any = None,
+) -> None:
+    if not await opened(interaction):
+        return
+    embed, view = await build_card(
+        interaction.client, interaction.guild, marathon_id, pairing=pairing, runner=runner
+    )
+    if view is None:
+        await open_root(interaction, previous)
+        await answer(interaction, mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def reopen(interaction: discord.Interaction, previous: Any) -> None:
+    where = getattr(previous, "where", ROOT)
+    if where in (CARD, PAIR_VIEW) and getattr(previous, "marathon_id", None):
+        await open_card(interaction, previous.marathon_id, previous)
+    elif where == MINE_VIEW:
+        await open_mine(interaction, previous)
+    else:
+        await open_root(interaction, previous)
+
+
+async def run_move(interaction: discord.Interaction, view: Any, doing: Any) -> None:
+    """Every staff move re-reads the marathon first: another door may have removed it."""
+    if not await opened(interaction):
+        return
+    bot, guild = interaction.client, interaction.guild
+    row = await get_marathon(bot.db, guild.id, view.marathon_id)
+    if row is None:
+        await open_root(interaction, view)
+        await answer(interaction, mt.NO_SUCH_MARATHON.format(given=str(view.marathon_id)[:40]))
+        return
+    outcome = await doing(bot, guild, interaction.user, row)
+    if await get_marathon(bot.db, guild.id, row["id"]) is None:
+        await open_root(interaction, view)
+    else:
+        await open_card(interaction, row["id"], view)
+    if outcome.message:
+        await answer(interaction, outcome.message)
+
+
+async def ask_remove(interaction: discord.Interaction, view: Any) -> None:
+    if not await opened(interaction):
+        return
+    row = await get_marathon(interaction.client.db, interaction.guild.id, view.marathon_id)
+    if row is None:
+        await open_root(interaction, view)
+        return
+    embed, fresh = await build_card(interaction.client, interaction.guild, row["id"])
+    fresh.clear_items()
+
+    async def yes(one: discord.Interaction, card: Any) -> None:
+        await run_move(
+            one,
+            card,
+            lambda bot, guild, actor, marathon: remove_marathon(bot, guild, actor, marathon),
+        )
+
+    async def no(one: discord.Interaction, card: Any) -> None:
+        await open_card(one, row["id"], card)
+
+    await confirm(
+        interaction,
+        fresh,
+        embed,
+        confirm_items(yes=mt.REMOVE_MOVE.label, no=KEEP_IT, on_yes=yes, on_no=no),
+        view,
+        question=mt.REMOVE_QUESTION.format(name=row["name"]),
+    )
+
+
+class MarathonMoveButton(discord.ui.Button):
+    def __init__(self, move: Any) -> None:
+        super().__init__(label=move.label, style=STYLES[move.style], row=move.row)
+        self.move = move
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        action = self.move.action
+        if action == mt.LOGS:
+            await send_logs(interaction, FEATURE)
+        elif action == mt.MINE:
+            await open_mine(interaction, view)
+        elif action == mt.BACK:
+            if view.where == PAIR_VIEW:
+                await open_card(interaction, view.marathon_id, view)
+            else:
+                await open_root(interaction, view)
+        elif action == mt.ADD:
+            if await still_staff(interaction):
+                await interaction.response.send_modal(AddMarathonModal(view))
+        elif action == mt.REFRESH and view.where == ROOT:
+            await open_root(interaction, view)
+        elif action == mt.REFRESH:
+            await run_move(
+                interaction,
+                view,
+                lambda bot, guild, actor, row: refresh_marathon(bot, guild, row),
+            )
+        elif action in (mt.PAUSE, mt.RESUME):
+            await run_move(
+                interaction,
+                view,
+                lambda bot, guild, actor, row: set_active(
+                    bot, guild, actor, row, action == mt.RESUME
+                ),
+            )
+        elif action == mt.BOARD:
+            await run_move(interaction, view, post_board)
+        elif action == mt.REMOVE:
+            await ask_remove(interaction, view)
+        elif action == mt.PAIR:
+            await open_card(interaction, view.marathon_id, view, pairing=True)
+
+
+class MarathonPick(discord.ui.Select):
+    def __init__(self, rows: list[Any]) -> None:
+        super().__init__(
+            placeholder=mt.PICK_MARATHON,
+            options=[
+                discord.SelectOption(label=str(row["name"])[:100], value=str(row["id"]))
+                for row in rows[:SELECT_CAP]
+            ],
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_card(interaction, self.values[0], self.view)
+
+
+class NamePick(discord.ui.Select):
+    def __init__(self, names: list[str], chosen: Any = None) -> None:
+        options = [
+            discord.SelectOption(label=name[:100], value=name[:100], default=name == chosen)
+            for name in names[:SELECT_CAP]
+        ] or [discord.SelectOption(label="—", value="")]
+        super().__init__(placeholder=mt.PICK_UNMATCHED, options=options, row=0, disabled=not names)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await open_card(
+            interaction, self.view.marathon_id, self.view, pairing=True, runner=self.values[0]
+        )
+
+
+class WhoPick(discord.ui.UserSelect):
+    def __init__(self) -> None:
+        super().__init__(placeholder=mt.PICK_MEMBER, row=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not view.runner:
+            if await still_staff(interaction):
+                await answer(interaction, mt.NO_RUNNER)
+            return
+        member_id = int(self.values[0].id)
+        await run_move(
+            interaction,
+            view,
+            lambda bot, guild, actor, row: pair_runner(
+                bot, guild, actor, row, view.runner, member_id
+            ),
+        )
+
+
+class AddMarathonModal(AnswersErrors, discord.ui.Modal, title=mt.ADD_TITLE):
+    name = discord.ui.TextInput(label=mt.ADD_NAME, placeholder=mt.ADD_NAME_HINT, max_length=100)
+    url = discord.ui.TextInput(label=mt.ADD_URL, placeholder=mt.ADD_URL_HINT, max_length=200)
+    login = discord.ui.TextInput(
+        label=mt.ADD_LOGIN, placeholder=mt.ADD_LOGIN_HINT, required=False, max_length=40
+    )
+
+    def __init__(self, previous: Any = None) -> None:
+        super().__init__()
+        self.previous = previous
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        bot, guild = interaction.client, interaction.guild
+        given = str(self.login).strip().lower().lstrip("@")
+        spotlight_id = None
+        if given:
+            channel = await channel_by_login(bot.db, guild.id, given)
+            if channel is None:
+                await open_root(interaction, self.previous)
+                await answer(interaction, mt.NO_SUCH_CHANNEL.format(login=given[:40]))
+                return
+            spotlight_id = channel["id"]
+        outcome = await create_marathon(
+            bot,
+            guild,
+            interaction.user,
+            name=str(self.name),
+            url=str(self.url),
+            spotlight_id=spotlight_id,
+        )
+        if outcome.ok:
+            await open_card(interaction, outcome.value["id"], self.previous)
+        else:
+            await open_root(interaction, self.previous)
+        await answer(interaction, outcome.message)
 
 
 def _raw_people(run: Any) -> list[dict[str, Any]]:
