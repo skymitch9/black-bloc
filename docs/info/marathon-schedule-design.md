@@ -1,5 +1,7 @@
 # Marathon schedules — our people on a marathon stream, read off the posted schedule, re-read every half hour
 
+> 🔨 **2026-09-25 — MOVED by branch `marathon-events-page` (NOT merged):** the Marathons page is now the Marathons section of `events.html` (`marathons.html` deleted, `page-marathons.js` → `marathons-section.js`, deep link `events.html#marathon-<id>`), `/marathon` is retired into `/event` ▸ **Marathons…** (`marathon_panel_minutes` → `event_panel_minutes`), and a marathon now makes an event — see [`marathon-events-page-design.md`](marathon-events-page-design.md). Behaviour below is unchanged; only the address and the command moved.
+
 > 🔨 **2026-09-25 — follow-up BUILT on branch `marathon-next-event`, NOT merged:** closes this build's Deviations 18
 > (`poll_minutes` now has a door on the page and in `/marathon`) and 19 (**Mark it upcoming** / **Mark it live**, with a
 > staff hold in `advance`) — see [`marathon-next-event-design.md`](marathon-next-event-design.md) §G and its Deviations.
