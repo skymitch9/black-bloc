@@ -169,6 +169,27 @@ schedule's runs list our people by name after a pairing). NOT `TODO.md` / `DONE.
 add / suggest, notice, ignore) → routes → the Feeds card + mock → the panel → docs. GDQ + RPGLB first end to end, ESA second, SS4C last and only if the Oengus lines endpoint verifies in minutes;
 if room runs out, that is the order things wait in, and the report says so.
 
+## H. Follow-up — the Oengus feed for Speed Stuff 4 Charity (owner, 2026-09-25 15:2x: *"can we scrape speed stuff for charity"*)
+
+**Yes.** What the `marathon-feeds` build could not find (Deviation 25: no way to list a channel's marathons) is
+answered by two live reads (Fable, 15:2x): **`GET https://oengus.io/api/v1/marathons/<id>`** carries **`twitch`** (the
+channel's login — `speedstuff4charity` on `ss4c8`, `longspeedrunsummit` on `LSS26`), `creator.username`,
+`moderators[]`, `startDate`, `endDate`, **`scheduleDone`** and `selectionDone`; and **`GET
+https://oengus.io/api/v2/marathons/for-home`** lists `live` (5), `next` (5, ~2 weeks ahead today) and `open` (17,
+submissions open — to 2026-12-25 today), each `{id, name, startDate, endDate, submissionsEndDate, …}` with no
+`twitch` field. So an **`oengus` feed** on a channel row: every `marathon_feed_hours`, read `for-home`, and for every
+id not yet seen (a per-feed `seen TEXT` JSON of ids, so v1 is read once per marathon) read v1 and **keep it when its
+`twitch` equals the feed's channel login** (case-insensitive) — that is the "list a channel's marathons" the build
+lacked, done by filter. A kept marathon is added / suggested exactly as a tracker one, `source = oengus`, `source_ref`
+= the Oengus id, schedule URL `https://oengus.io/marathon/<id>/schedule`; the schedule reader takes the published
+schedule from `/api/v2/marathons/<id>/schedules` and its lines from `…/schedules/for-slug/<slug>` (Deviation 25 found
+it, with runners' Twitch connections → logins). Until `scheduleDone` is true the runs read empty and the marathon is
+re-read like an unpublished GDQ event. Seed: an `oengus` feed on the `speedstuff4charity` row (id 6), through the
+once-ever seed marker. Caveat to record: `for-home` is a window, not an archive — an SS4C event appears once it is
+within *next* or while submissions are open, which a six-hour poll catches. Build as branch `marathon-feeds-oengus`
+AFTER `marathon-event-modes` merges (same files); fixtures: one captured `for-home`, one v1 marathon, one `for-slug`
+lines payload, trimmed. Tests mirror §F for the new source.
+
 ## Deviations
 
 *(written by the build agent, 2026-09-25, branch `marathon-feeds` off `main` `05fbd0e6`. Schema **62 → 63**
