@@ -118,6 +118,9 @@ NEVER_CHECKED = "not checked yet"
 CHECKED_AGO = "last checked <t:{unix}:R>"
 CHECK_TROUBLE = "could not be checked since <t:{unix}:f> — {why}"
 FEED_LINE = "**{name}** · {source} · {channel} · {action} · every {hours} h · {read}{paused}"
+FEED_HEAD_LINE = "**{name}** · {source} · {channel} · {action}"
+FEED_READING = "**Checks:** every {hours} h · {read}{next}{paused}"
+NEXT_CHECK = " · next check <t:{unix}:R>"
 PAUSED_MARK = " · **paused**"
 IGNORED_LINE = "{count} removed event(s) it will not add again"
 NO_FEEDS = "No feeds yet. **Add a feed…** picks one of the channels Black Bloc watches."
@@ -340,6 +343,27 @@ def feed_line(feed: Any, channel: str, hours: int) -> str:
         hours=hours,
         read=read_line(feed),
         paused="" if _cell(feed, "active", 1) else PAUSED_MARK,
+    )
+
+
+def reading_line(feed: Any, hours: int) -> str:
+    checked = parse_ts(_cell(feed, "last_checked_at"))
+    active = bool(_cell(feed, "active", 1))
+    due = checked + timedelta(hours=int(hours)) if checked is not None and active else None
+    return FEED_READING.format(
+        hours=hours,
+        read=read_line(feed),
+        next=NEXT_CHECK.format(unix=unix(due)) if due is not None else "",
+        paused="" if active else PAUSED_MARK,
+    )
+
+
+def head_line(feed: Any, channel: str) -> str:
+    return FEED_HEAD_LINE.format(
+        name=_cell(feed, "name"),
+        source=source_word(feed),
+        channel=channel,
+        action=ACTION_WORDS.get(str(_cell(feed, "action")), str(_cell(feed, "action"))),
     )
 
 

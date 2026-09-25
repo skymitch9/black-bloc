@@ -73,6 +73,18 @@ NOTHING_MINE = "You are not on any schedule Black Bloc follows."
 NEXT_LINE = "<t:{unix}:R> · **{game}** — {member} {part} · {marathon}"
 MARATHON_LINE = "**{name}** · {phase} · {dates} · {ours} " + BAF + " of {runs} · {read}"
 NO_DATES = "dates not published"
+CARD_HEAD = "{phase} · {dates}"
+CARD_SCHEDULE = "**Schedule:** [{source}]({url}) · {read} · {next} · {counts}"
+NEXT_READ = "next read <t:{unix}:R>"
+NEXT_READ_PAUSED = "paused — not read until it is resumed"
+CARD_COUNTS = "{runs} run(s), {ours} " + BAF
+CARD_RUNS = "**Runs**"
+CARD_EVENT = "**Event**"
+CARD_CHANNEL = "**Channel:** {channel}"
+CARD_NO_CHANNEL = "none — each run links its runner"
+CARD_POSTS = "**Posts:** {board}"
+CARD_BOARD_UP = "the board is up in <#{channel}>"
+CARD_BOARD_NONE = "no board yet"
 READ_AGO = "last read <t:{unix}:R>"
 NEVER_READ = "not read yet"
 FETCH_TROUBLE = "could not be read since <t:{unix}:f> — {why}"
@@ -241,7 +253,7 @@ ADD_MOVE = MarathonMove(ADD, "Add a marathon…", "primary", 2)
 MINE_MOVE = MarathonMove(MINE, "My runs", row=2)
 REFRESH_ROOT_MOVE = MarathonMove(REFRESH, "Refresh", row=2)
 LOGS_MOVE = MarathonMove(LOGS, "Logs", row=2)
-READ_MOVE = MarathonMove(REFRESH, "Refresh now", "primary", 2)
+READ_MOVE = MarathonMove(REFRESH, "Read it now", "primary", 2)
 PAUSE_MOVE = MarathonMove(PAUSE, "Pause", row=2)
 RESUME_MOVE = MarathonMove(RESUME, "Resume", row=2)
 BOARD_POST_MOVE = MarathonMove(BOARD, "Post the board", row=2)

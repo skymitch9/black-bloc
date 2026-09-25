@@ -677,7 +677,18 @@ async def test_the_card_draws_only_the_moves_that_change_something(bot, cog):
     await set_active(bot, bot.guild, FakeActor(), marathon, False)
     _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
     labels = [getattr(one, "label", None) for one in view.children]
-    assert "Resume" in labels and "Refresh now" not in labels
+    assert "Resume" in labels and "Read it now" not in labels
+
+
+async def test_the_card_reads_schedule_runs_event_channel_posts_in_that_order(bot, cog):
+    marathon = await added(bot, cog)
+    embed, _ = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    lines = embed.description.splitlines()
+    heads = ["**Schedule:**", mt.CARD_RUNS, mt.CARD_EVENT, "**Channel:**", "**Posts:**"]
+    found = [next(at for at, one in enumerate(lines) if one.startswith(head)) for head in heads]
+    assert found == sorted(found) and found[0] == 1
+    assert "GDQ tracker" in lines[1] and "last read <t:" in lines[1]
+    assert "next read <t:" in lines[1] and "BaF" in lines[1]
 
 
 async def test_pairing_from_the_panel_picks_a_schedule_name_then_the_member(bot, cog):

@@ -504,6 +504,8 @@ async def test_the_feeds_panel_lists_feeds_and_a_feed_card_draws_only_valid_move
     assert "Rename…" in labels and "Move to channel…" in labels
     assert "Look again" not in labels and "Forget ignored" not in labels
     assert "Awesome Games Done Quick 2027" in embed.description
+    first = embed.description.splitlines()[0]
+    assert first.startswith("**Checks:** every ") and "next check <t:" in first
 
 
 async def test_the_marathon_root_offers_feeds_to_staff(bot, cog):  # noqa: F811
