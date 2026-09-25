@@ -1,12 +1,9 @@
 {
-  "release": "v164",
-  "commit": "642ea8ce",
+  "release": "v165",
+  "commit": "e121d984",
   "changed_features": [
-    "core",
     "events",
     "golive",
-    "guides",
-    "marathon",
-    "selftest"
+    "marathon"
   ]
 }
