@@ -28,7 +28,7 @@ jobs:
         run: ruff check .
 
       - name: Tests
-        run: pytest -q
+        run: python -m pytest -q -n auto
 
       - name: Dashboard contract
         run: |
