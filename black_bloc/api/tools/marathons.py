@@ -1,0 +1,411 @@
+from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime
+from typing import Any
+
+from fastapi import APIRouter, Depends, Request
+
+from ... import marathon as mt
+from ...cogs.content.marathon import (
+    create_marathon,
+    get_marathon,
+    list_marathons,
+    marathon_windows,
+    mark_done,
+    pair_runner,
+    pairing_by_id,
+    pairings_of,
+    post_board,
+    refresh_marathon,
+    remove_marathon,
+    rename_marathon,
+    run_by_id,
+    runs_of,
+    set_active,
+    set_channel,
+    shout_now,
+    unpair_runner,
+)
+from ...cogs.content.spotlight import channel_by_id
+from ...logkinds import VIA_WEBSITE
+from ...marathon_sources import SOURCE_WORDS, schedule_page
+from ...settings_store import MARATHON_LEAD_DAYS_KEY, MARATHON_MODE_KEY
+from ..auth import Refused, staff_dependency
+from ..names import resolve_one
+from ..writes import actor_for, require_cog, require_db, require_guild, wanted_id, writer_dependency
+
+log = logging.getLogger(__name__)
+
+COG = "Marathons"
+FEATURE = "Marathon schedules"
+STATE_WORDS = {
+    mt.UPCOMING: "coming up",
+    mt.LIVE: "on now",
+    mt.DONE: "done",
+    mt.DROPPED: "off the schedule",
+}
+BECAUSE_WORDS = {
+    mt.BY_TITLE: "the stream's title",
+    mt.BY_SCHEDULE: "the schedule's clock",
+    mt.BY_STAFF: "staff",
+}
+TROUBLE = "could not be read since {when} — {why}"
+NEVER_READ = "not read yet"
+BAD_ACTIVE = "Say true to read this marathon or false to pause it, so nothing was changed."
+
+
+def _id(value: Any) -> str | None:
+    return str(value) if value else None
+
+
+def answered(outcome: Any) -> Any:
+    """The shared function's refusal, in its own words, with the status the site expects."""
+    if not outcome.ok:
+        raise Refused(outcome.status, outcome.code, outcome.message)
+    return outcome
+
+
+def person_row(guild: Any, person: dict[str, Any]) -> dict[str, Any]:
+    user_id = person.get("user_id")
+    return {
+        "name": person.get("name"),
+        "login": person.get("login"),
+        "part": person.get("part"),
+        "user_id": _id(user_id),
+        "member_name": resolve_one(guild, user_id)["display_name"] if user_id else None,
+    }
+
+
+def run_row(guild: Any, row: Any) -> dict[str, Any]:
+    ours = mt.is_ours(row)
+    state = str(row["state"])
+    return {
+        "id": row["id"],
+        "external_id": row["external_id"],
+        "order_no": row["order_no"],
+        "game": row["game"],
+        "category": row["category"],
+        "runners_text": row["runners_text"],
+        "people": [person_row(guild, one) for one in mt.people_of(row)],
+        "scheduled_at": row["scheduled_at"],
+        "ends_at": row["ends_at"],
+        "previous_scheduled_at": row["previous_scheduled_at"],
+        "moved_at": row["moved_at"],
+        "moved": bool(row["moved_at"]),
+        "state": state,
+        "state_word": STATE_WORDS.get(state, state),
+        "live_because": row["live_because"],
+        "live_because_word": BECAUSE_WORDS.get(str(row["live_because"] or ""), None),
+        "ours": ours,
+        "shouted": bool(row["shout_message_id"]),
+        "shoutable": ours and state in (mt.UPCOMING, mt.LIVE) and not row["shout_message_id"],
+        "can_mark_done": state in (mt.UPCOMING, mt.LIVE),
+        "reminders_sent": mt.marks_of(row),
+    }
+
+
+def pairing_row(guild: Any, row: Any) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "marathon_id": row["marathon_id"],
+        "everywhere": row["marathon_id"] is None,
+        "runner_name": row["runner_name"],
+        "user_id": str(row["user_id"]),
+        "member_name": resolve_one(guild, row["user_id"])["display_name"],
+    }
+
+
+def trouble_of(row: Any) -> str | None:
+    if row["last_fetch_ok"] is None or int(row["last_fetch_ok"]):
+        return None
+    return TROUBLE.format(when=row["last_fetched_at"] or "", why=row["last_error"] or "")
+
+
+async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict[str, Any]:
+    db = bot.db
+    rows = list(runs) if runs is not None else await runs_of(db, row["id"])
+    channel = await channel_by_id(db, int(row["spotlight_id"])) if row["spotlight_id"] else None
+    windows = await marathon_windows(db, row["id"])
+    now = datetime.now(UTC)
+    phase = mt.phase(row, now, lead_days=int(bot.store.get(guild.id, MARATHON_LEAD_DAYS_KEY)))
+    added_by = row["added_by"]
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_url": row["schedule_url"],
+        "schedule_page": schedule_page(row["source"], row["source_ref"]) or row["schedule_url"],
+        "source": row["source"],
+        "source_word": SOURCE_WORDS.get(row["source"], row["source"]),
+        "source_ref": row["source_ref"],
+        "spotlight_id": row["spotlight_id"],
+        "channel_login": channel["twitch_login"] if channel is not None else None,
+        "channel_gone": bool(row["spotlight_id"]) and channel is None,
+        "starts_at": row["starts_at"],
+        "ends_at": row["ends_at"],
+        "active": bool(row["active"]),
+        "poll_minutes": row["poll_minutes"],
+        "phase": phase,
+        "phase_word": mt.PHASE_WORDS.get(phase, phase),
+        "runs": len([one for one in rows if one["state"] != mt.DROPPED]),
+        "ours": len([one for one in rows if one["state"] != mt.DROPPED and mt.is_ours(one)]),
+        "last_fetched_at": row["last_fetched_at"],
+        "last_fetch_ok": None if row["last_fetch_ok"] is None else bool(row["last_fetch_ok"]),
+        "last_error": row["last_error"],
+        "fetch_failures": int(row["fetch_failures"] or 0),
+        "trouble": trouble_of(row),
+        "board_message_id": _id(row["board_message_id"]),
+        "board_channel_id": _id(row["board_channel_id"]),
+        "board_pinned": bool(row["board_pinned"]),
+        "window": (
+            {
+                "id": windows[0]["id"],
+                "starts_at": windows[0]["starts_at"],
+                "ends_at": windows[0]["ends_at"],
+            }
+            if windows
+            else None
+        ),
+        "added_at": row["added_at"],
+        "added_by_name": resolve_one(guild, added_by)["display_name"] if added_by else None,
+    }
+
+
+def build_router(bot: Any) -> APIRouter:
+    writer = writer_dependency(bot)
+    router = APIRouter(
+        prefix="/api/marathons",
+        tags=["marathons"],
+        dependencies=[Depends(staff_dependency(bot))],
+    )
+
+    async def wanted(guild: Any, marathon_id: Any) -> Any:
+        row = await get_marathon(bot.db, guild.id, marathon_id)
+        if row is None:
+            raise Refused(404, "not_found", mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
+        return row
+
+    async def wanted_run(marathon: Any, run_id: Any) -> Any:
+        row = await run_by_id(bot.db, marathon["id"], run_id)
+        if row is None:
+            raise Refused(404, "no_such_run", mt.NO_SUCH_RUN.format(name=marathon["name"]))
+        return row
+
+    async def detail(guild: Any, marathon_id: Any) -> dict[str, Any]:
+        row = await wanted(guild, marathon_id)
+        runs = await runs_of(bot.db, row["id"])
+        pairings = [
+            pairing_row(guild, one)
+            for one in await pairings_of(bot.db, guild.id)
+            if one["marathon_id"] in (None, row["id"])
+        ]
+        return await marathon_row(bot, guild, row, runs) | {
+            "run_list": [run_row(guild, one) for one in runs],
+            "pairings": pairings,
+            "unmatched": mt.unmatched_names(runs),
+        }
+
+    async def people(guild: Any, marathon: Any) -> list[dict[str, Any]]:
+        return [
+            pairing_row(guild, one)
+            for one in await pairings_of(bot.db, guild.id)
+            if one["marathon_id"] in (None, marathon["id"])
+        ]
+
+    @router.get("")
+    async def marathon_list() -> dict[str, Any]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return {
+            "mode": bot.store.get(guild.id, MARATHON_MODE_KEY),
+            "marathons": [
+                await marathon_row(bot, guild, row)
+                for row in await list_marathons(bot.db, guild.id)
+            ],
+        }
+
+    @router.post("")
+    async def marathon_create(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        made = answered(
+            await create_marathon(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                name=payload.get("name"),
+                url=payload.get("schedule_url"),
+                spotlight_id=payload.get("spotlight_id"),
+                via=VIA_WEBSITE,
+            )
+        )
+        return await detail(guild, made.value["id"]) | {"message": made.message}
+
+    @router.get("/{marathon_id}")
+    async def marathon_one(marathon_id: int) -> dict[str, Any]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return await detail(guild, marathon_id)
+
+    @router.patch("/{marathon_id}")
+    async def marathon_patch(
+        request: Request, marathon_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        actor = actor_for(bot, who, guild)
+        said: list[str] = []
+        if "active" in payload:
+            if not isinstance(payload["active"], bool):
+                raise Refused(422, "bad_active", BAD_ACTIVE)
+            if bool(payload["active"]) != bool(row["active"]):
+                done = answered(
+                    await set_active(bot, guild, actor, row, payload["active"], via=VIA_WEBSITE)
+                )
+                said.append(done.message)
+        if "spotlight_id" in payload:
+            given = payload["spotlight_id"]
+            wanted_channel = None if given in (None, "", 0, "0") else wanted_id(given)
+            if wanted_channel != row["spotlight_id"]:
+                answered(await set_channel(bot, guild, actor, row, wanted_channel, via=VIA_WEBSITE))
+        if "name" in payload or "poll_minutes" in payload:
+            answered(
+                await rename_marathon(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    payload.get("name"),
+                    payload.get("poll_minutes"),
+                    via=VIA_WEBSITE,
+                )
+            )
+        return await detail(guild, marathon_id) | {"message": " ".join(said)}
+
+    @router.delete("/{marathon_id}")
+    async def marathon_delete(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        done = answered(
+            await remove_marathon(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
+        )
+        return {"removed": True, "id": marathon_id, "message": done.message}
+
+    @router.post("/{marathon_id}/refresh")
+    async def marathon_refresh(request: Request, marathon_id: int) -> dict[str, Any]:
+        await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        read = answered(await refresh_marathon(bot, guild, row))
+        return await detail(guild, marathon_id) | {
+            "message": mt.REFRESHED.format(
+                name=row["name"],
+                runs=(read.value or {}).get("runs", 0),
+                ours=len([one for one in await runs_of(bot.db, row["id"]) if mt.is_ours(one)]),
+            )
+        }
+
+    @router.post("/{marathon_id}/board")
+    async def marathon_board(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        done = answered(
+            await post_board(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
+        )
+        return await detail(guild, marathon_id) | {"message": done.message}
+
+    @router.get("/{marathon_id}/people")
+    async def marathon_people(marathon_id: int) -> list[dict[str, Any]]:
+        guild = require_guild(bot)
+        require_db(bot)
+        return await people(guild, await wanted(guild, marathon_id))
+
+    @router.post("/{marathon_id}/people")
+    async def marathon_pair(
+        request: Request, marathon_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        given = payload.get("user_id")
+        done = answered(
+            await pair_runner(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                row,
+                payload.get("runner_name"),
+                wanted_id(given) if given not in (None, "") else None,
+                everywhere=bool(payload.get("everywhere")),
+                via=VIA_WEBSITE,
+            )
+        )
+        return {"pairings": await people(guild, row), "message": done.message}
+
+    @router.delete("/{marathon_id}/people/{pairing_id}")
+    async def marathon_unpair(
+        request: Request, marathon_id: int, pairing_id: int
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        pairing = await pairing_by_id(bot.db, guild.id, pairing_id)
+        if pairing is None or pairing["marathon_id"] not in (None, row["id"]):
+            raise Refused(404, "no_such_pairing", mt.NO_SUCH_PAIRING)
+        done = answered(
+            await unpair_runner(
+                bot, guild, actor_for(bot, who, guild), row, pairing, via=VIA_WEBSITE
+            )
+        )
+        return {"pairings": await people(guild, row), "message": done.message}
+
+    @router.post("/{marathon_id}/runs/{run_id}/shout")
+    async def marathon_shout(request: Request, marathon_id: int, run_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        run = await wanted_run(row, run_id)
+        done = answered(
+            await shout_now(bot, guild, actor_for(bot, who, guild), row, run, via=VIA_WEBSITE)
+        )
+        return {
+            "run": run_row(guild, await run_by_id(bot.db, row["id"], run_id)),
+            "message": done.message,
+        }
+
+    @router.post("/{marathon_id}/runs/{run_id}/done")
+    async def marathon_run_done(request: Request, marathon_id: int, run_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        run = await wanted_run(row, run_id)
+        done = answered(
+            await mark_done(bot, guild, actor_for(bot, who, guild), row, run, via=VIA_WEBSITE)
+        )
+        return {
+            "run": run_row(guild, await run_by_id(bot.db, row["id"], run_id)),
+            "message": done.message,
+        }
+
+    return router

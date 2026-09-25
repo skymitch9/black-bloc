@@ -1,0 +1,777 @@
+{
+ "count": 11,
+ "next": null,
+ "previous": null,
+ "results": [
+  {
+   "type": "speedrun",
+   "id": 7558,
+   "name": "SGDQ 2026 Pre-Show",
+   "display_name": "SGDQ 2026 Pre-Show",
+   "twitch_name": "Games Done Quick",
+   "description": "## Summer Games Done Quick 2026\r\n\r\nJoin us as we kickoff SGDQ 2026, a week-long speedrunning marathon fundraising for Doctors Without Borders!",
+   "category": "Pre-Show",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "Live",
+   "release_year": null,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 1434,
+     "name": "Interview Crew",
+     "stream": "",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "hosts": [],
+   "commentators": [],
+   "starttime": "2026-07-05T12:30:00-04:00",
+   "endtime": "2026-07-05T13:21:00-04:00",
+   "order": 1,
+   "run_time": "0:30:00",
+   "setup_time": "0:21:00",
+   "original_estimate": "0:30:00",
+   "anchor_time": null,
+   "layout": "",
+   "video_links": [
+    {
+     "id": 3918,
+     "link_type": "youtube",
+     "url": "https://youtu.be/OyinOZGPLtY"
+    }
+   ],
+   "priority_tag": null,
+   "tags": [
+    "kickoff"
+   ]
+  },
+  {
+   "type": "speedrun",
+   "id": 7559,
+   "name": "Donkey Kong Country 2: Diddy's Kong-Quest",
+   "display_name": "Donkey Kong Country 2:\\nDiddy's Kong-Quest",
+   "twitch_name": "",
+   "description": "",
+   "category": "102%",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "SNES",
+   "release_year": 1995,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 1494,
+     "name": "Ryan Ford",
+     "stream": "https://twitch.tv/Ryan_Ford522",
+     "twitter": "Ryan_Ford522",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "hosts": [
+    {
+     "type": "talent",
+     "id": 4525,
+     "name": "JRisJunior",
+     "stream": "",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "commentators": [],
+   "starttime": "2026-07-05T13:21:00-04:00",
+   "endtime": "2026-07-05T15:23:00-04:00",
+   "order": 2,
+   "run_time": "1:36:54",
+   "setup_time": "0:25:06",
+   "original_estimate": "1:38:00",
+   "anchor_time": null,
+   "layout": "Standard 1",
+   "video_links": [
+    {
+     "id": 3919,
+     "link_type": "youtube",
+     "url": "https://youtu.be/YeR1Laks_Y4"
+    }
+   ],
+   "priority_tag": null,
+   "tags": [
+    "opener"
+   ]
+  },
+  {
+   "type": "speedrun",
+   "id": 7560,
+   "name": "The Talos Principle",
+   "display_name": "The Talos Principle",
+   "twitch_name": "",
+   "description": "",
+   "category": "All Sigils",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "PC",
+   "release_year": 2014,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 1028,
+     "name": "Gelly",
+     "stream": "https://twitch.tv/gelly",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "hosts": [
+    {
+     "type": "talent",
+     "id": 4525,
+     "name": "JRisJunior",
+     "stream": "",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "commentators": [
+    {
+     "type": "talent",
+     "id": 4576,
+     "name": "Exto",
+     "stream": "https://twitch.tv/Extodasher",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "He/Him"
+    },
+    {
+     "type": "talent",
+     "id": 1377,
+     "name": "BobbyBurm",
+     "stream": "https://twitch.tv/BobbyBurm",
+     "twitter": "bobbyburm",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "he/him"
+    },
+    {
+     "type": "talent",
+     "id": 4575,
+     "name": "Zem",
+     "stream": "https://twitch.tv/Zemmiphobiac",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "starttime": "2026-07-05T15:23:00-04:00",
+   "endtime": "2026-07-05T16:22:00-04:00",
+   "order": 3,
+   "run_time": "0:41:22",
+   "setup_time": "0:17:38",
+   "original_estimate": "0:42:00",
+   "anchor_time": null,
+   "layout": "Widescreen 1",
+   "video_links": [
+    {
+     "id": 3920,
+     "link_type": "youtube",
+     "url": "https://youtu.be/zNRD4q91Udc"
+    }
+   ],
+   "priority_tag": null,
+   "tags": []
+  },
+  {
+   "type": "speedrun",
+   "id": 7561,
+   "name": "Fire Emblem: Three Houses",
+   "display_name": "Fire Emblem: Three Houses",
+   "twitch_name": "",
+   "description": "",
+   "category": "Blue Lions — NG+ (Azure Moon)",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "Switch 2",
+   "release_year": 2019,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 1959,
+     "name": "GretaIceVixen",
+     "stream": "https://twitch.tv/GretaIceVixen",
+     "twitter": "gretaicevixen",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "She/They"
+    }
+   ],
+   "hosts": [
+    {
+     "type": "talent",
+     "id": 4525,
+     "name": "JRisJunior",
+     "stream": "",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "commentators": [
+    {
+     "type": "talent",
+     "id": 1532,
+     "name": "Corvimae",
+     "stream": "https://twitch.tv/Corvimae",
+     "twitter": "corvimae",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "she/her"
+    },
+    {
+     "type": "talent",
+     "id": 4166,
+     "name": "Yogcavey",
+     "stream": "https://twitch.tv/Yogcavey",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "she/they"
+    }
+   ],
+   "starttime": "2026-07-05T16:22:00-04:00",
+   "endtime": "2026-07-05T17:58:00-04:00",
+   "order": 4,
+   "run_time": "1:20:15",
+   "setup_time": "0:15:45",
+   "original_estimate": "1:22:00",
+   "anchor_time": null,
+   "layout": "Widescreen 1",
+   "video_links": [
+    {
+     "id": 3921,
+     "link_type": "youtube",
+     "url": "https://youtu.be/eaSrhSRfVPQ"
+    }
+   ],
+   "priority_tag": null,
+   "tags": []
+  },
+  {
+   "type": "speedrun",
+   "id": 7562,
+   "name": "I Am Your Beast",
+   "display_name": "I Am Your Beast",
+   "twitch_name": "",
+   "description": "",
+   "category": "All Story Levels (100%)",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "PC",
+   "release_year": 2024,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 4353,
+     "name": "Flyingludicolo",
+     "stream": "https://twitch.tv/Flyingludicolo",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "they/she"
+    }
+   ],
+   "hosts": [
+    {
+     "type": "talent",
+     "id": 2567,
+     "name": "TheKingsPride",
+     "stream": "https://twitch.tv/thekingspride",
+     "twitter": "thekingspride",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "He/Him"
+    }
+   ],
+   "commentators": [
+    {
+     "type": "talent",
+     "id": 4577,
+     "name": "Xalavier Nelson Jr.",
+     "stream": "https://twitch.tv/writnelson",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "He/Him"
+    },
+    {
+     "type": "talent",
+     "id": 1957,
+     "name": "aco",
+     "stream": "https://twitch.tv/aco_dt",
+     "twitter": "aco_dt",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "she/any"
+    },
+    {
+     "type": "talent",
+     "id": 2849,
+     "name": "Hallow",
+     "stream": "https://twitch.tv/hallow",
+     "twitter": "alias_hallow",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "they/them"
+    }
+   ],
+   "starttime": "2026-07-05T17:58:00-04:00",
+   "endtime": "2026-07-05T19:04:00-04:00",
+   "order": 5,
+   "run_time": "1:02:24",
+   "setup_time": "0:03:36",
+   "original_estimate": "1:06:00",
+   "anchor_time": null,
+   "layout": "Widescreen 1",
+   "video_links": [
+    {
+     "id": 3922,
+     "link_type": "youtube",
+     "url": "https://youtu.be/JKQoepm1cmI"
+    }
+   ],
+   "priority_tag": null,
+   "tags": []
+  },
+  {
+   "type": "speedrun",
+   "id": 7563,
+   "name": "The Checkpoint",
+   "display_name": "The Checkpoint",
+   "twitch_name": "Games Done Quick",
+   "description": "",
+   "category": "The Delicious and Wonderful World of Kirby!",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "Live",
+   "release_year": null,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 1433,
+     "name": "Bluekandy",
+     "stream": "https://twitch.tv/Bluekandy",
+     "twitter": "Bluekandy",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "he/him"
+    },
+    {
+     "type": "talent",
+     "id": 60,
+     "name": "spikevegeta",
+     "stream": "https://twitch.tv/spikevegeta",
+     "twitter": "spikevegeta",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    },
+    {
+     "type": "talent",
+     "id": 1029,
+     "name": "adef",
+     "stream": "https://twitch.tv/adef",
+     "twitter": "adef",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "he/him"
+    }
+   ],
+   "hosts": [],
+   "commentators": [],
+   "starttime": "2026-07-05T19:04:00-04:00",
+   "endtime": "2026-07-05T19:21:00-04:00",
+   "order": 6,
+   "run_time": "0:09:00",
+   "setup_time": "0:08:00",
+   "original_estimate": "0",
+   "anchor_time": null,
+   "layout": "",
+   "video_links": [],
+   "priority_tag": null,
+   "tags": [
+    "checkpoint"
+   ]
+  },
+  {
+   "type": "speedrun",
+   "id": 7564,
+   "name": "Devil May Cry 5: Special Edition",
+   "display_name": "Devil May Cry 5: Special Edition",
+   "twitch_name": "Devil May Cry 5",
+   "description": "",
+   "category": "NG (Human)",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "PS5",
+   "release_year": 2019,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 1063,
+     "name": "DECosmic",
+     "stream": "https://twitch.tv/DECosmic",
+     "twitter": "DECosmic",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "hosts": [
+    {
+     "type": "talent",
+     "id": 2567,
+     "name": "TheKingsPride",
+     "stream": "https://twitch.tv/thekingspride",
+     "twitter": "thekingspride",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "He/Him"
+    }
+   ],
+   "commentators": [
+    {
+     "type": "talent",
+     "id": 795,
+     "name": "bryonato",
+     "stream": "https://twitch.tv/bryonato",
+     "twitter": "bryonato",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "they/any"
+    },
+    {
+     "type": "talent",
+     "id": 2032,
+     "name": "Bobbeigh",
+     "stream": "https://twitch.tv/Bobbeigh",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    },
+    {
+     "type": "talent",
+     "id": 259,
+     "name": "Maxylobes",
+     "stream": "https://twitch.tv/Maxylobes",
+     "twitter": "maxylobes",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "He/Him"
+    }
+   ],
+   "starttime": "2026-07-05T19:21:00-04:00",
+   "endtime": "2026-07-05T21:00:00-04:00",
+   "order": 7,
+   "run_time": "1:07:15",
+   "setup_time": "0:31:45",
+   "original_estimate": "1:20:00",
+   "anchor_time": null,
+   "layout": "Widescreen 1",
+   "video_links": [
+    {
+     "id": 3923,
+     "link_type": "youtube",
+     "url": "https://youtu.be/zC4l_Wp4weI"
+    }
+   ],
+   "priority_tag": null,
+   "tags": []
+  },
+  {
+   "type": "speedrun",
+   "id": 7698,
+   "name": "Castlevania: Symphony of the Night",
+   "display_name": "Castlevania: Symphony of the Night",
+   "twitch_name": "",
+   "description": "",
+   "category": "Any% (Luck Mode)",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "Xbox 360",
+   "release_year": 1997,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 548,
+     "name": "Dr4gonBlitz",
+     "stream": "https://twitch.tv/dr4gonblitz",
+     "twitter": "dr4gonblitz",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "he/him"
+    }
+   ],
+   "hosts": [
+    {
+     "type": "talent",
+     "id": 1840,
+     "name": "Quacksilver",
+     "stream": "https://twitch.tv/quacksilverplays",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "commentators": [],
+   "starttime": "2026-07-05T21:00:00-04:00",
+   "endtime": "2026-07-05T21:30:00-04:00",
+   "order": 8,
+   "run_time": "0:16:44",
+   "setup_time": "0:13:16",
+   "original_estimate": "0:20:00",
+   "anchor_time": null,
+   "layout": "Standard 1",
+   "video_links": [
+    {
+     "id": 3924,
+     "link_type": "youtube",
+     "url": "https://youtu.be/QBGBBRH2_ZY"
+    }
+   ],
+   "priority_tag": null,
+   "tags": []
+  },
+  {
+   "type": "speedrun",
+   "id": 7565,
+   "name": "Kirby Air Riders",
+   "display_name": "Kirby Air Riders",
+   "twitch_name": "",
+   "description": "",
+   "category": "Air Ride — All Tracks",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "Switch 2",
+   "release_year": 2025,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 1433,
+     "name": "Bluekandy",
+     "stream": "https://twitch.tv/Bluekandy",
+     "twitter": "Bluekandy",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "he/him"
+    }
+   ],
+   "hosts": [
+    {
+     "type": "talent",
+     "id": 1840,
+     "name": "Quacksilver",
+     "stream": "https://twitch.tv/quacksilverplays",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "commentators": [
+    {
+     "type": "talent",
+     "id": 4632,
+     "name": "SgtAimBlaze",
+     "stream": "http://twitch.tv/sgtaimblaze",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "starttime": "2026-07-05T21:30:00-04:00",
+   "endtime": "2026-07-05T22:30:00-04:00",
+   "order": 9,
+   "run_time": "0:37:54",
+   "setup_time": "0:22:06",
+   "original_estimate": "0:40:00",
+   "anchor_time": null,
+   "layout": "Widescreen 1",
+   "video_links": [
+    {
+     "id": 3925,
+     "link_type": "youtube",
+     "url": "https://youtu.be/oAFHR5Yjpbc"
+    }
+   ],
+   "priority_tag": null,
+   "tags": []
+  },
+  {
+   "type": "speedrun",
+   "id": 7566,
+   "name": "Crypt of the NecroDancer: Synchrony",
+   "display_name": "Crypt of the NecroDancer: Synchrony",
+   "twitch_name": "Crypt of the NecroDancer",
+   "description": "",
+   "category": "Story Mode",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "PC",
+   "release_year": 2015,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 2628,
+     "name": "Spooty",
+     "stream": "https://twitch.tv/spootybiscuit",
+     "twitter": "Spootaloo",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "He/him"
+    }
+   ],
+   "hosts": [
+    {
+     "type": "talent",
+     "id": 1840,
+     "name": "Quacksilver",
+     "stream": "https://twitch.tv/quacksilverplays",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "commentators": [
+    {
+     "type": "talent",
+     "id": 2122,
+     "name": "ehseezed",
+     "stream": "https://twitch.tv/Ehseezed",
+     "twitter": "ehseezed",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "starttime": "2026-07-05T22:30:00-04:00",
+   "endtime": "2026-07-05T23:29:00-04:00",
+   "order": 10,
+   "run_time": "0:41:33",
+   "setup_time": "0:17:27",
+   "original_estimate": "0:40:00",
+   "anchor_time": null,
+   "layout": "Widescreen 1",
+   "video_links": [
+    {
+     "id": 3926,
+     "link_type": "youtube",
+     "url": "https://youtu.be/n4go0Bi4LFo"
+    }
+   ],
+   "priority_tag": null,
+   "tags": []
+  },
+  {
+   "type": "speedrun",
+   "id": 7692,
+   "name": "Super Mario 64",
+   "display_name": "Super Mario 64",
+   "twitch_name": "",
+   "description": "",
+   "category": "120 Star TAS",
+   "coop": false,
+   "onsite": "ONSITE",
+   "console": "N64",
+   "release_year": 1996,
+   "runners": [
+    {
+     "type": "talent",
+     "id": 4490,
+     "name": "Palix",
+     "stream": "",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "he/him"
+    }
+   ],
+   "hosts": [
+    {
+     "type": "talent",
+     "id": 2603,
+     "name": "Xenadir",
+     "stream": "https://twitch.tv/Xenadir",
+     "twitter": "XenRising",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": "He/Him"
+    }
+   ],
+   "commentators": [
+    {
+     "type": "talent",
+     "id": 2828,
+     "name": "1ted59",
+     "stream": "https://twitch.tv/1ted59",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    },
+    {
+     "type": "talent",
+     "id": 4628,
+     "name": "Crackhex",
+     "stream": "",
+     "twitter": "",
+     "youtube": "crackhex",
+     "platform": "YOUTUBE",
+     "pronouns": "she/her"
+    },
+    {
+     "type": "talent",
+     "id": 4630,
+     "name": "ERGC Xander",
+     "stream": "https://twitch.tv/mike_xander",
+     "twitter": "",
+     "youtube": "",
+     "platform": "TWITCH",
+     "pronouns": ""
+    }
+   ],
+   "starttime": "2026-07-11T19:00:00-04:00",
+   "endtime": "2026-07-11T20:51:00-04:00",
+   "order": 152,
+   "run_time": "1:14:04",
+   "setup_time": "0:36:56",
+   "original_estimate": "1:20:00",
+   "anchor_time": null,
+   "layout": "Standard 1",
+   "video_links": [
+    {
+     "id": 4054,
+     "link_type": "youtube",
+     "url": "https://youtu.be/9JhYbnx_h0w"
+    }
+   ],
+   "priority_tag": null,
+   "tags": []
+  }
+ ]
+}

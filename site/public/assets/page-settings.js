@@ -17,6 +17,7 @@ const NAMESPACE_NOTES = {
   automod: 'automod_rules has its own editor on the Automod tab; the JSON box here is the fallback.',
   cost: 'The Costs card on the Health page is where this figure is read; nothing on the bot can see an invoice.',
   pings: 'The Pings section on the Go-live tab is where the Events role is set up and a streamer’s own role is started.',
+  marathon: 'The Marathons page is where schedules are added, paired and paused; these are the defaults every marathon follows.',
 };
 
 const NAMESPACE_NAMES = {
@@ -34,6 +35,7 @@ const NAMESPACE_NAMES = {
   poll: 'Polls',
   chat: 'Chat',
   request: 'Requests',
+  marathon: 'Marathons',
   cost: 'Costs',
 };
 

@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
-> Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *A spotlight split from its ping* (branch `spotlight-ping-windows`, off `main` `84f94347`, keyed against `d32efb57`).
+> Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *Marathon schedules* (branch `marathon-schedule`, off `main` `08e03fbf`, keyed against its last code commit).
+> Before that: **2026-09-25 — one section APPENDED, nothing re-keyed**: *A spotlight split from its ping* (branch `spotlight-ping-windows`, off `main` `84f94347`, keyed against `d32efb57`).
 > Before that: **2026-09-23 18:3x — NOTHING re-keyed, the header only**, at the v163 docs ritual. The *Greetings through the model* section (appended with `9983a0be` on branch `greeting-tone`, off `main` `6e26b452`) is keyed against `da04ac4b` and is LIVE as v163 (merge `9f49581d`); its rows were not re-keyed after the merge — trust the anchor text over the number. Before that: **2026-09-23 16:2x — NOTHING re-keyed, the header only**, at the v162 docs ritual. The three v162 builds' rows are keyed against their OWN commits and were not re-keyed after the merges: *Banter gets banter* (chat-banter, `1ee6e618`), *A picked mention matches like a typed name* (mention-names, the branch tip `144b8045`), *The chat review loop* (chat-review-loop, `3c40ef5d`) — all three LIVE as v162 (merges `d8278877`, `654570e9`, `737e660c`). ⚠️ The later merges touched files the earlier sections key into (`chat_llm.py`, `settings_store.py`, `cogs/content/chat.py`), so trust the anchor text over the number; no re-key at this ritual. Before that: **2026-09-23 — one section APPENDED, nothing re-keyed**: *The chat review loop* (branch `chat-review-loop`, off `main` `c69ac22e`, keyed against `3c40ef5d`). Before that: **2026-09-23 15:1x — NOTHING re-keyed, the header only**, at the v160 + v161 docs ritual. The *channel reach* rows (channel-visibility, keyed against `3f700cd6`) are LIVE as v161 (merge `cbdcb6a3`); their keys were not re-checked after the merge. No re-key at this ritual. Before that, **2026-09-23 14:1x — NOTHING re-keyed, the header only**, at the v158 + v159 docs ritual. The five builds' sections are keyed against their OWN commits (read from each section's header) and were not re-keyed after the merges: *A Change button on each birthday row* (birthday-change-button, `0c8b6a93`; live v158); *The channel catalog — a note beats the topic* (channel-catalog, `498019b4`); *Post today's birthday wishes by hand* (birthday-post-today, `435a136a`); *The Channels page* (channels-page, its branch tip); *Personality tones* (personality-tones, `85cb4053`, re-checked by its builder after its two merges of main) — the last four live v159. ⚠️ The later merges touched files the earlier sections key into (`settings_store.py`, the chat panel/API/page), so trust the anchor text over the number; the re-key is owed and was NOT done here.
 > Before that: **2026-09-23 — one section APPENDED, nothing re-keyed**: *Personality tones — the cookout is the voice* (branch `personality-tones`, off `main` `083ca538`, keyed against `85cb4053`).
 > Before that: **2026-09-23 — one section APPENDED, nothing re-keyed**: *The channel catalog — a note beats the topic* (branch `channel-catalog`, off `main` `8e4ca731`, keyed against `498019b4`).
@@ -8251,3 +8252,44 @@ Design: [`personality-tones-design.md`](personality-tones-design.md).
 | `site/mock/golive-join.test.mjs:506` `NAMESPACE_KEYS` | KI-36: derived from `contract.json` `settings.help`, which `test_contract` pins to the registry — no hand-typed list or count left to collide on. |
 | `site/public/assets/golive-join.js:261` `pingSuffix` | The Announced cell names only the two uncommon modes; `always` (and a row from before the build) adds nothing. |
 | `site/public/assets/page-golive.js:893` `pingsCard` | The segment PATCHes on change and closes the drawer on success, like every other drawer move; the windows list and Add a window… render only for `events`. |
+
+## Marathon schedules — our people on a marathon stream (branch `marathon-schedule`, 2026-09-25)
+
+*(off `main` `08e03fbf`, keyed against the branch's last code commit; the anchor text wins over the number. Design:
+[`marathon-schedule-design.md`](marathon-schedule-design.md).)*
+
+| Where | Why |
+|---|---|
+| ⚠️ `black_bloc/marathon_sources.py:24` `RUNS_URL` | `/events/<id>/runs/` — the tracker IGNORES `?event=` on `/runs/` and hands back every event since 2011 (Deviation 1). A draft event's runs answer 404, read as `unpublished` and not counted as a failure (Deviation 2). |
+| `black_bloc/marathon_sources.py:81` `read_url` | GDQ only, by the owner's word; a bare short (`AGDQ2027`) is resolved once through `/events/?short=`. Anything else is None and the caller says `marathon_unknown_site`. |
+| `black_bloc/marathon_sources.py:129` `_people` | A login comes ONLY from a talent's `stream`; the run's `twitch_name` is the Twitch category and is kept as `twitch_game` (Deviation 3). |
+| `black_bloc/marathon_sources.py:239` `runs` | Follows `next` up to 20 pages; every failure is a `ScheduleError` in words (checklist 7). |
+| `black_bloc/storage/db.py:1085` `marathon_people_everywhere` | NULLs are distinct in SQLite, so the every-schedule pairing needs its own partial unique index (Deviation 13). |
+| `black_bloc/settings_store.py:4595` `marathon_marks` | 1–6 whole minutes, 1–1440; the ping mark is added by `reminder_marks`, never stored in the text. |
+| `black_bloc/settings_store.py:4648` `MARATHON_DEFAULTS` | The two tables (`MARATHON_SETTINGS`, `MARATHON_WORDS`) are the keys' one home — type, default, help, placeholders; `SettingsStore.default` reads this map. |
+| `black_bloc/marathon.py:222` `match_people` | Staff first: this marathon's pairing, then an every-schedule pairing, then the Twitch link. Hosts and commentators only while `marathon_match_hosts`. |
+| `black_bloc/marathon.py:301` `diff` | By external id: insert, move (≥ `marathon_move_minutes`), drop — never delete. |
+| `black_bloc/marathon.py:317` `if external_id not in seen …` | A `done` run is history and is never dropped. |
+| `black_bloc/marathon.py:368` `fetch_due` | Near (lead days before → a day after) every poll gap or the row's own; far every far gap; paused never; never read = now. |
+| ⚠️ `black_bloc/marathon.py:410` `title_hit` | Title names OR category equals `twitch_game`; runner name breaks ties, then nearest time; only runs within `TITLE_REACH` (12 h) and names of 3+ characters, matched on word boundaries (Deviation 4). |
+| `black_bloc/marathon.py:458` `advance` | A hit makes that run live and every earlier upcoming run done-skipped; without one, the schedule decides at the start (or after the grace when a title is being watched). |
+| `black_bloc/marathon.py:487` `if ends is not None and now > ends + grace` | Aged out: a run whose slot and grace went by unposted is done without a shout (checklist 31, Deviation 12). |
+| `black_bloc/marathon.py:521` `due_marks` | The latest due mark wins; older due marks and stale ones are skipped, never posted late (Deviation 11). |
+| `black_bloc/marathon.py:549` `rearmed` | A moved run keeps only the marks whose moment is still behind us, so a delay re-arms the 15-minute ping. |
+| `black_bloc/marathon.py:565` `render` | Checklist 17: a staff template that will not fill falls back to the shipped words. |
+| `black_bloc/cogs/content/marathon.py:406` `cog.client.resolve` | The EVENT must exist to add a marathon; its runs may still be unpublished (Deviation 2). |
+| `black_bloc/cogs/content/marathon.py:783` `tick_once` | Runs under the `Reconciler` lock — the loop and `on_ready` cannot both post a board (checklist 37). |
+| `black_bloc/cogs/content/marathon.py:795` `elif fresh["board_pinned"] …` | Checklist 38: `off` stops new effects, but a pinned board still comes down a day after the end. |
+| `black_bloc/cogs/content/marathon.py:867` `if failures == FAILURES_IMPORTANT …` | The IMPORTANT row is a separate kind, `marathon.schedule_stale`, once at the third failure (Deviation 6). |
+| `black_bloc/cogs/content/marathon.py:989` `rematch` | Runs on every read, even an unchanged one, so a member who links Twitch mid-marathon is found at the next read. |
+| `black_bloc/cogs/content/marathon.py:1027` `sync_window` | ONE `source='marathon'` window per marathon on its channel; a channel row that is gone (spotlight Deviation 11) just means no window. |
+| `black_bloc/cogs/content/marathon.py:1159` `if not fresh["shout_message_id"]` | The shoutout follows the flip only; a restart re-reads the row and posts nothing (Deviation 10). |
+| `black_bloc/cogs/content/marathon.py:1248` `reminders_sent=` | Written BEFORE the post (checklist 12). |
+| `black_bloc/cogs/content/marathon.py:1294` `_ping_roles` | The member's own role, and the channel's through `spotlight.pings_now` — never `golive_ping_role_id`. The spotlight's own posts are never consulted (owner, 11:3x). |
+| `black_bloc/cogs/content/marathon.py:1401` `self._board_sent.get(key)` | The board is edited only when its text changed (Deviation 9). |
+| `black_bloc/cogs/content/marathon.py:1470` `not shadow` | Pinned only in `on` (Deviation 8). |
+| `black_bloc/cogs/content/marathon.py:1541` `_send` | `on` → `marathon_channel_id` or the go-live channel; `shadow` → `shadow_channel_id` with the note. `users=False` always — `{member}` renders without pinging. |
+| `black_bloc/cogs/content/marathon.py:1614` `now_for` | The panel reads the cog's clock, so tests and the tick agree on "now". |
+| `black_bloc/cogs/content/marathon.py:1992` `_merged_people` | Yesterday's matches are carried onto a changed row so `rematch` can say who is NEWLY ours. |
+| `black_bloc/api/tools/marathons.py:102` `"shoutable"` | The page draws Shout it now only where the route would accept it. |
+| `site/public/assets/page-marathons.js:220` `onChange` | `segment` calls `onChange()` with no argument; the value is read back with `readValue()`. |

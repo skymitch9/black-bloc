@@ -10,7 +10,7 @@ from black_bloc.logkinds import FEATURES
 
 TOP_LEVEL_MAX = 100
 CHILDREN_MAX = 25
-TOP_LEVEL_NOW = 33
+TOP_LEVEL_NOW = 34
 RETIRED_GROUPS = (
     "chat",
     "mod",
@@ -50,6 +50,7 @@ MEMBER_COMMANDS = {
     "event",
     "golive",
     "help",
+    "marathon",
     "memory",
     "modmail",
     "ping",

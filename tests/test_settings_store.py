@@ -1141,7 +1141,7 @@ def test_the_ping_role_mode_is_read_as_a_feature_switch_on_the_health_page():
 
 async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
     keys = [f"{feature}_log_level" for feature in FEATURES]
-    assert len(keys) == 21
+    assert len(keys) == 22
     assert "request_log_level" in keys
     assert "pings_log_level" in keys
     assert "raidtrain_log_level" in keys
@@ -1506,7 +1506,7 @@ async def test_both_new_settings_keys_file_under_core_not_a_group_of_their_own(s
     """
     assert namespace_of("settings_panel_minutes") == "core"
     assert namespace_of("settings_core_keys_admin_only") == "core"
-    assert len({namespace_of(key) for key in KEY_TYPES}) == 24
+    assert len({namespace_of(key) for key in KEY_TYPES}) == 25
 
 
 async def test_the_automod_panel_stays_up_ten_minutes_by_default(store):
@@ -2846,4 +2846,4 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 428
+    assert len(settings_store.KEY_TYPES) == 464

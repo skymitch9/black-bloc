@@ -1,0 +1,30 @@
+{
+ "count": 1,
+ "next": null,
+ "previous": null,
+ "results": [
+  {
+   "type": "event",
+   "id": 74,
+   "short": "AGDQ2027",
+   "name": "Awesome Games Done Quick 2027",
+   "paypalcurrency": "USD",
+   "hashtag": "agdq2027",
+   "datetime": "2027-01-03T11:30:00-05:00",
+   "timezone": "US/Eastern",
+   "receivername": "Prevent Cancer Foundation",
+   "receiver_short": "PCF",
+   "receiver_solicitation_text": "",
+   "receiver_logo": "",
+   "receiver_privacy_policy": "",
+   "use_one_step_screening": false,
+   "screening_mode": "two_pass",
+   "locked": false,
+   "archived": false,
+   "draft": true,
+   "allow_donations": false,
+   "minimumdonation": 5.0,
+   "maximum_paypal_donation": null
+  }
+ ]
+}

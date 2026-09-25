@@ -3137,3 +3137,24 @@ the channel's own role to be mentioned (the global `golive_ping_role_id` is ment
 | **`PW-c`** | Keep the window open. Age a reminder (wait `spotlight_bump_hours`, or press **Bump now**) once with `spotlight_bump_pings` **off**, then turn it **on** on the Settings page ▸ **Spotlighted channels** and bump again. Then **Remove** the window and bump once more | With the key off the reminder mentions nothing; with it on the reminder mentions both roles; after the window is removed the reminder mentions nothing again even with the key on. Each `golive.spotlight_bumped` row says `pinged` true/false to match what was posted |
 | **`PW-d`** | Press **Never** on the Pings card, with a window open (add one if needed) | The card reads *Pings: never*, the windows list disappears from the card, and the Announced cell says ` · no pings`. The next announcement or reminder mentions nothing, and is still pinned and reminded as before. **Always** puts everything back: the next announcement mentions both roles again |
 | **`PW-e`** | In Discord run `/golive` ▸ **Channels…** and pick **gamesdonequick** | Under the list the card shows `**gamesdonequick** · Pings: …` in the same words as the site, and the windows (up to five). The buttons drawn are only the two modes it is NOT on (**Pings: always** / **Pings: never** / **Pings: during events**); on *During events* there is also **Add a ping window…** (a modal with **Pings start**, **Pings stop** and a note, read in your own zone) and a **Remove a ping window…** select. Type `next tuesday` in the modal — the refusal is in words and nothing is added. Picking a window **from the marathon schedule** in the select answers *"That window comes from the marathon schedule — change it there."* and removes nothing. Nothing on this card is pressable by a member |
+
+## Rows `MS-a` … `MS-f` — marathon schedules: our people on a marathon stream (branch `marathon-schedule`, 2026-09-25)
+
+🔨 **BUILT on branch `marathon-schedule`, NOT merged, NOT deployed.** Member request **#12** (Sky): *"a way to know
+during a marathon or event when runners who are apart of this community are scheduled to do a run"*; owner,
+2026-09-25: GDQ tracker only for now. Design: [`../info/marathon-schedule-design.md`](../info/marathon-schedule-design.md).
+Rows lettered; the conductor numbers them.
+
+⚠️ **`marathon_mode` ships `shadow`**: every post below lands in `shadow_channel_id` (`#welcome-test`) with the
+rehearsal note until it is `on`. ⚠️ **AGDQ 2027's schedule is NOT published yet** (the tracker answers 404 for its
+runs), so a-row adds it and it reads *no runs published yet*; to see runs today, add a published event such as
+`https://gamesdonequick.com/schedule/66` (SGDQ 2026 — past, so it reads *over*) or wait for GDQ to publish.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MS-a`** | <https://blackbloc.heygabi.ai/marathons.html> ▸ **Add a marathon** ▸ name `AGDQ 2027`, link `https://gamesdonequick.com/schedule/74`, channel `gamesdonequick` ▸ **Add it** | The drawer opens on it. Today: *has no runs published yet* and *last read … ago*, no trouble counted. Once GDQ publishes: every run listed, **Ours** first with runs of linked members highlighted, `web.marathon.added` + `marathon.fetched` + one `marathon.run_matched` per member on the Logs page |
+| **`MS-b`** | In that drawer ▸ **Pair a runner…** ▸ a host's name from the schedule ▸ pick a member ▸ **Pair them** | *Who is who* gains the pairing; the run turns **ours**; the board (if posted) gains the line; `web.marathon.paired`. **Unpair** takes it back |
+| **`MS-c`** | With `marathon_mode = shadow` and a run of ours inside two hours | The board and a reminder land in `#welcome-test` under the rehearsal note, nothing pinned; `marathon.would_post_board` and `marathon.would_remind` rows. The 15-minute reminder mentions the member's ping role and (inside the window) the channel's — never the go-live role |
+| **`MS-d`** | During a live marathon, a GDQ title or category naming one of our games (or **Shout it now** on the run) | The run flips **on now** (`live_because` title / staff), ONE shoutout with no ping (`marathon_live_pings` off); after the run it is rewritten in the past tense (`marathon.run_done`, `edited: true`). An earlier run of ours that was skipped logs `marathon.run_skipped` (important) |
+| **`MS-e`** | In Discord: `/marathon` | A member sees **Ours next** and **My runs** only; staff also see each marathon with its read state, **Add a marathon…**, **Logs**, and a marathon select whose card offers only the moves that change something |
+| **`MS-f`** | <https://blackbloc.heygabi.ai/golive.html> ▸ **GamesDoneQuick**'s row ▸ the **Pings** card (set *During events*) | A window named **AGDQ 2027** *from the marathon schedule*, spanning the marathon's dates ± `marathon_window_slack_hours`, with no Remove button; pausing or removing the marathon drops it (`marathon.window_dropped`) |

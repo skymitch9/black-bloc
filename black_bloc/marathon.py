@@ -1,0 +1,663 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import Any, NamedTuple
+
+from .golive import parse_ts
+from .marathon_sources import COMMENTATOR, HOST, RUNNER, Run
+from .settings_store import (
+    MARATHON_PART_COMMENTATOR_KEY,
+    MARATHON_PART_HOST_KEY,
+    MARATHON_PART_RUNNER_KEY,
+    MARATHON_STATE_DONE_KEY,
+    MARATHON_STATE_DROPPED_KEY,
+    MARATHON_STATE_LIVE_KEY,
+    MARATHON_STATE_UPCOMING_KEY,
+    marathon_marks,
+)
+from .timezones import unix
+
+UPCOMING = "upcoming"
+LIVE = "live"
+DONE = "done"
+DROPPED = "dropped"
+RUN_STATES = (UPCOMING, LIVE, DONE, DROPPED)
+BY_TITLE = "title"
+BY_SCHEDULE = "schedule"
+BY_STAFF = "staff"
+
+FAR = "far"
+NEAR = "near"
+ON = "live"
+OVER = "over"
+PAUSED = "paused"
+PHASES = (FAR, NEAR, ON, OVER, PAUSED)
+PHASE_WORDS = {
+    FAR: "far off",
+    NEAR: "coming up",
+    ON: "on now",
+    OVER: "over",
+    PAUSED: "paused",
+}
+AFTER_END = timedelta(days=1)
+TITLE_REACH = timedelta(hours=12)
+NAME_FLOOR = 3
+
+PART_KEYS = {
+    RUNNER: MARATHON_PART_RUNNER_KEY,
+    HOST: MARATHON_PART_HOST_KEY,
+    COMMENTATOR: MARATHON_PART_COMMENTATOR_KEY,
+}
+STATE_KEYS = {
+    UPCOMING: MARATHON_STATE_UPCOMING_KEY,
+    LIVE: MARATHON_STATE_LIVE_KEY,
+    DONE: MARATHON_STATE_DONE_KEY,
+    DROPPED: MARATHON_STATE_DROPPED_KEY,
+}
+PART_ORDER = (RUNNER, HOST, COMMENTATOR)
+MESSAGE_LIMIT = 2000
+TWITCH_URL = "https://twitch.tv/{login}"
+
+PANEL_TITLE = "Marathons"
+PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /marathon again"
+OURS_NEXT = "**Ours next**"
+MY_RUNS = "**My runs**"
+NOTHING_NEXT = "Nobody from here is on a schedule that is coming up."
+NOTHING_MINE = "You are not on any schedule Black Bloc follows."
+NEXT_LINE = "<t:{unix}:R> · **{game}** — {member} {part} · {marathon}"
+MARATHON_LINE = "**{name}** · {phase} · {dates} · ours {ours} of {runs} · {read}"
+NO_DATES = "dates not published"
+READ_AGO = "last read <t:{unix}:R>"
+NEVER_READ = "not read yet"
+FETCH_TROUBLE = "could not be read since <t:{unix}:f> — {why}"
+MODE_LINE = "Marathon posts are **{mode}**."
+NO_MARATHONS = (
+    "Black Bloc follows no marathon schedule yet. Staff add one with **Add a marathon…**."
+)
+PICK_MARATHON = "Pick a marathon to manage…"
+PICK_UNMATCHED = "Pick a name from this schedule…"
+PICK_MEMBER = "…then the member it is"
+ADD_TITLE = "Add a marathon"
+ADD_NAME = "Name"
+ADD_URL = "Schedule link (GDQ)"
+ADD_LOGIN = "Twitch channel it airs on — blank for none"
+ADD_NAME_HINT = "AGDQ 2027"
+ADD_URL_HINT = "https://gamesdonequick.com/schedule/74"
+ADD_LOGIN_HINT = "gamesdonequick"
+REMOVE_QUESTION = (
+    "Remove **{name}**? Its runs and pairings go with it and its ping window closes. Posts already "
+    "made stay where they are."
+)
+REMOVED = "**{name}** is off the list, with its runs and pairings."
+ADDED = "**{name}** is on the list. {read}"
+READ_NOW = "Its schedule has {runs} run(s), {ours} of them ours."
+PAUSED_NOW = "**{name}** is paused — nothing is read or posted until it is resumed."
+RESUMED_NOW = "**{name}** is being read again."
+REFRESHED = "**{name}** was read just now: {runs} run(s), {ours} of them ours."
+REFRESH_FAILED = "**{name}** could not be read just now — {why}. Every run is kept as it was."
+BOARD_POSTED = "The board for **{name}** is up to date."
+BOARD_NOT_POSTED = "The board for **{name}** was not posted — {why}."
+PAIRED = "**{runner}** on this schedule is {member} from now on."
+PAIRED_EVERYWHERE = "**{runner}** on every schedule is {member} from now on."
+UNPAIRED = "**{runner}** is no longer paired — the automatic match decides again."
+SHOUTED = "The shoutout for **{game}** is out."
+SHOUT_NOT_POSTED = "The shoutout for **{game}** was not posted — {why}."
+MARKED_DONE = "**{game}** is marked done."
+NO_SUCH_MARATHON = "Black Bloc follows no marathon **{given}** here, so nothing was done."
+NO_SUCH_RUN = "That run is not on **{name}**'s schedule any more, so nothing was done."
+NO_SUCH_PAIRING = "That pairing is gone already, so nothing was changed."
+NOT_SHOUTABLE = (
+    "**{game}** is {state} or has its shoutout already, so nothing was posted. Only a run of ours "
+    "that is coming up or on now without a shoutout can be shouted by hand."
+)
+NOT_OURS = "Nobody from here is on **{game}**, so there is nobody to shout. Pair a name first."
+ALREADY_DONE = "**{game}** is already {state}, so nothing was changed."
+NO_NAME = "A marathon needs a name, so nothing was added."
+NO_RUNNER = "Pick or type the name as the schedule writes it, so nothing was paired."
+NO_MEMBER = "Pick the member that name is, so nothing was paired."
+NO_SUCH_CHANNEL = (
+    "**{login}** is not one of the channels on the Go-live page, so nothing was changed. Add the "
+    "channel there first, or leave it blank."
+)
+BAD_POLL = "A marathon's own read gap is 10 to 120 minutes, or blank for the setting's."
+SITE_BUTTON = "Open the Marathons page"
+MOVED_WORDS = "moved from <t:{unix}:t>"
+
+ADD = "add"
+REFRESH = "refresh"
+PAUSE = "pause"
+RESUME = "resume"
+BOARD = "board"
+REMOVE = "remove"
+PAIR = "pair"
+LOGS = "logs"
+BACK = "back"
+MINE = "mine"
+
+
+class MarathonMove(NamedTuple):
+    action: str
+    label: str
+    style: str = "secondary"
+    row: int = 2
+
+
+ADD_MOVE = MarathonMove(ADD, "Add a marathon…", "primary", 2)
+MINE_MOVE = MarathonMove(MINE, "My runs", row=2)
+REFRESH_ROOT_MOVE = MarathonMove(REFRESH, "Refresh", row=2)
+LOGS_MOVE = MarathonMove(LOGS, "Logs", row=2)
+READ_MOVE = MarathonMove(REFRESH, "Refresh now", "primary", 2)
+PAUSE_MOVE = MarathonMove(PAUSE, "Pause", row=2)
+RESUME_MOVE = MarathonMove(RESUME, "Resume", row=2)
+BOARD_POST_MOVE = MarathonMove(BOARD, "Post the board", row=2)
+BOARD_REFRESH_MOVE = MarathonMove(BOARD, "Refresh the board", row=2)
+REMOVE_MOVE = MarathonMove(REMOVE, "Remove", "danger", 3)
+PAIR_MOVE = MarathonMove(PAIR, "Pair a runner…", row=3)
+BACK_MOVE = MarathonMove(BACK, "Back", row=4)
+
+
+def root_moves(*, staff: bool) -> tuple[MarathonMove, ...]:
+    return (
+        (ADD_MOVE, MINE_MOVE, REFRESH_ROOT_MOVE, LOGS_MOVE)
+        if staff
+        else (MINE_MOVE, REFRESH_ROOT_MOVE)
+    )
+
+
+def card_moves(marathon: Any, *, has_unmatched: bool) -> tuple[MarathonMove, ...]:
+    """Only moves that change something are drawn: Pause or Resume, Post or Refresh the board."""
+    active = bool(_cell(marathon, "active", 1))
+    found = [READ_MOVE] if active else []
+    found.append(PAUSE_MOVE if active else RESUME_MOVE)
+    found.append(BOARD_REFRESH_MOVE if _cell(marathon, "board_message_id") else BOARD_POST_MOVE)
+    found.append(REMOVE_MOVE)
+    if has_unmatched:
+        found.append(PAIR_MOVE)
+    found.append(BACK_MOVE)
+    return tuple(found)
+
+
+def _cell(row: Any, key: str, fallback: Any = None) -> Any:
+    if row is None:
+        return fallback
+    if isinstance(row, dict):
+        return row.get(key, fallback)
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return fallback
+
+
+def people_of(row: Any) -> list[dict[str, Any]]:
+    raw = _cell(row, "people")
+    if isinstance(raw, list):
+        return [dict(one) for one in raw if isinstance(one, dict)]
+    try:
+        found = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [one for one in found if isinstance(one, dict)] if isinstance(found, list) else []
+
+
+def marks_of(row: Any) -> list[int]:
+    raw = _cell(row, "reminders_sent")
+    try:
+        found = json.loads(raw or "[]") if not isinstance(raw, list) else raw
+    except (TypeError, ValueError):
+        return []
+    return sorted({int(one) for one in found if isinstance(one, int)}) if found else []
+
+
+# --- matching ---------------------------------------------------------------------------------
+
+
+def runner_key(name: Any) -> str:
+    return " ".join(str(name or "").split()).lower()
+
+
+def match_people(
+    people: Any,
+    links: dict[str, int],
+    pairings: Any,
+    *,
+    marathon_id: Any = None,
+    match_hosts: bool = True,
+) -> list[dict[str, Any]]:
+    """Staff pairings first (this marathon's, then everywhere's), then the member's Twitch link."""
+    here: dict[str, int] = {}
+    everywhere: dict[str, int] = {}
+    for row in pairings or ():
+        name = runner_key(_cell(row, "runner_name"))
+        owner = _cell(row, "marathon_id")
+        target = everywhere if owner is None else here
+        if owner is None or marathon_id is None or int(owner) == int(marathon_id):
+            target[name] = int(_cell(row, "user_id"))
+    lowered = {str(login).lower(): int(user) for login, user in (links or {}).items()}
+    found: list[dict[str, Any]] = []
+    for person in people or ():
+        name = str(_cell(person, "name") if isinstance(person, dict) else person.name)
+        login = _cell(person, "login") if isinstance(person, dict) else person.login
+        part = str(_cell(person, "part") if isinstance(person, dict) else person.part)
+        user_id: int | None = None
+        if part == RUNNER or match_hosts:
+            key = runner_key(name)
+            user_id = here.get(key) or everywhere.get(key)
+            if user_id is None and login:
+                user_id = lowered.get(str(login).lower())
+        found.append({"name": name, "login": login, "part": part, "user_id": user_id})
+    return found
+
+
+def ours(people: Any) -> list[dict[str, Any]]:
+    """The people of ours on a run, one line per member, the runner part first."""
+    kept: dict[int, dict[str, Any]] = {}
+    for person in sorted(
+        (one for one in people or () if one.get("user_id")),
+        key=lambda one: PART_ORDER.index(one["part"]) if one["part"] in PART_ORDER else 9,
+    ):
+        kept.setdefault(int(person["user_id"]), person)
+    return list(kept.values())
+
+
+def is_ours(row: Any) -> bool:
+    return bool(ours(people_of(row)))
+
+
+def unmatched_names(runs: Any) -> list[str]:
+    seen: dict[str, str] = {}
+    for run in runs or ():
+        for person in people_of(run):
+            if not person.get("user_id"):
+                seen.setdefault(runner_key(person.get("name")), str(person.get("name") or ""))
+    return sorted((name for name in seen.values() if name), key=str.lower)
+
+
+# --- the diff ---------------------------------------------------------------------------------
+
+
+@dataclass
+class Plan:
+    inserts: list[Run] = field(default_factory=list)
+    updates: list[tuple[Any, Run, bool]] = field(default_factory=list)
+    dropped: list[Any] = field(default_factory=list)
+    reappeared: list[Any] = field(default_factory=list)
+
+    @property
+    def moved(self) -> list[tuple[Any, Run, bool]]:
+        return [one for one in self.updates if one[2]]
+
+
+def moved_by(before: Any, after: Any) -> float | None:
+    old, new = parse_ts(before), parse_ts(after)
+    if old is None or new is None:
+        return None
+    return abs((new - old).total_seconds()) / 60
+
+
+def diff(rows: Any, runs: list[Run], *, move_minutes: int) -> Plan:
+    """By external id: new rows in, moved ones flagged, missing ones dropped, never deleted."""
+    known = {str(_cell(row, "external_id")): row for row in rows or ()}
+    plan = Plan()
+    seen: set[str] = set()
+    for run in runs:
+        seen.add(run.external_id)
+        row = known.get(run.external_id)
+        if row is None:
+            plan.inserts.append(run)
+            continue
+        shift = moved_by(_cell(row, "scheduled_at"), run.starts_at)
+        plan.updates.append((row, run, shift is not None and shift >= int(move_minutes)))
+        if _cell(row, "state") == DROPPED:
+            plan.reappeared.append(row)
+    for external_id, row in known.items():
+        if external_id not in seen and _cell(row, "state") not in (DROPPED, DONE):
+            plan.dropped.append(row)
+    return plan
+
+
+def schedule_hash(runs: list[Run]) -> str:
+    shape = [
+        [one.external_id, one.order, one.game, one.category, one.starts_at, one.ends_at]
+        + [[p.name, p.login, p.part] for p in one.people]
+        for one in runs
+    ]
+    return hashlib.sha256(
+        json.dumps(shape, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def span(runs: list[Run]) -> tuple[str | None, str | None]:
+    starts = sorted(one.starts_at for one in runs if one.starts_at)
+    ends = sorted(one.ends_at or one.starts_at for one in runs if one.ends_at or one.starts_at)
+    return (starts[0] if starts else None, ends[-1] if ends else None)
+
+
+# --- when a marathon is read ------------------------------------------------------------------
+
+
+def phase(marathon: Any, now: datetime, *, lead_days: int) -> str:
+    if not bool(_cell(marathon, "active", 1)):
+        return PAUSED
+    starts = parse_ts(_cell(marathon, "starts_at"))
+    ends = parse_ts(_cell(marathon, "ends_at")) or starts
+    if starts is None:
+        return FAR
+    if now < starts - timedelta(days=int(lead_days)):
+        return FAR
+    if now < starts:
+        return NEAR
+    if ends is not None and now > ends:
+        return OVER
+    return ON
+
+
+def is_near(marathon: Any, now: datetime, *, lead_days: int) -> bool:
+    found = phase(marathon, now, lead_days=lead_days)
+    if found in (NEAR, ON):
+        return True
+    if found != OVER:
+        return False
+    ends = parse_ts(_cell(marathon, "ends_at")) or parse_ts(_cell(marathon, "starts_at"))
+    return ends is not None and now <= ends + AFTER_END
+
+
+def fetch_due(
+    marathon: Any, now: datetime, *, poll_minutes: int, far_hours: int, lead_days: int
+) -> bool:
+    if not bool(_cell(marathon, "active", 1)):
+        return False
+    last = parse_ts(_cell(marathon, "last_fetched_at"))
+    if last is None:
+        return True
+    if is_near(marathon, now, lead_days=lead_days):
+        gap = timedelta(minutes=int(_cell(marathon, "poll_minutes") or poll_minutes))
+    else:
+        gap = timedelta(hours=int(far_hours))
+    return now - last >= gap
+
+
+def board_due_off(marathon: Any, now: datetime) -> bool:
+    ends = parse_ts(_cell(marathon, "ends_at"))
+    return ends is not None and now > ends + AFTER_END
+
+
+def window_bounds(marathon: Any, slack_hours: int) -> tuple[str, str] | None:
+    starts = parse_ts(_cell(marathon, "starts_at"))
+    ends = parse_ts(_cell(marathon, "ends_at")) or starts
+    if starts is None or ends is None:
+        return None
+    slack = timedelta(hours=int(slack_hours))
+    return ((starts - slack).isoformat(), (ends + slack).isoformat())
+
+
+# --- the live title ---------------------------------------------------------------------------
+
+PUNCTUATION = re.compile(r"[^\w\s]+", re.UNICODE)
+
+
+def normalise(text: Any) -> str:
+    return " ".join(PUNCTUATION.sub(" ", str(text or "").lower()).split())
+
+
+def _contains(haystack: str, needle: str) -> bool:
+    return bool(needle) and len(needle) >= NAME_FLOOR and f" {needle} " in f" {haystack} "
+
+
+def title_hit(title: Any, game: Any, runs: Any, now: datetime) -> Any:
+    """The run the stream is showing: a game name in the title, or the stream's category equal
+    to the run's Twitch game; a runner's name breaks a tie, then the nearest scheduled time."""
+    said = normalise(title)
+    category = normalise(game)
+    best: tuple[int, float] | None = None
+    found = None
+    for row in runs or ():
+        if _cell(row, "state") in (DONE, DROPPED):
+            continue
+        at = parse_ts(_cell(row, "scheduled_at"))
+        if at is None or abs(at - now) > TITLE_REACH:
+            continue
+        names = {
+            normalise(_cell(row, "game")),
+            normalise(_cell(row, "display_name")),
+            normalise(_cell(row, "twitch_game")),
+        }
+        named = any(_contains(said, one) for one in names)
+        same_game = bool(category) and category == normalise(_cell(row, "twitch_game"))
+        if not (named or same_game):
+            continue
+        runner = any(
+            _contains(said, normalise(person.get("name")))
+            for person in people_of(row)
+            if person.get("part") == RUNNER
+        )
+        score = (int(named) * 2 + int(runner), -abs((at - now).total_seconds()))
+        if best is None or score > best:
+            best, found = score, row
+    return found
+
+
+# --- states -----------------------------------------------------------------------------------
+
+
+class Change(NamedTuple):
+    row: Any
+    to: str
+    because: str
+    skipped: bool = False
+
+
+def _when(row: Any) -> tuple[datetime, int]:
+    at = parse_ts(_cell(row, "scheduled_at")) or datetime.max.replace(tzinfo=UTC)
+    return (at, int(_cell(row, "order_no") or 0))
+
+
+def advance(
+    runs: Any, now: datetime, *, hit: Any = None, watching: bool, grace_minutes: int
+) -> list[Change]:
+    """Every state move one tick makes. `watching` means a live title can confirm runs, so the
+    schedule alone waits out the grace; without it the schedule decides at the start time."""
+    grace = timedelta(minutes=int(grace_minutes))
+    rows = sorted((one for one in runs or () if _cell(one, "state") != DROPPED), key=_when)
+    changes: list[Change] = []
+    live_now = [one for one in rows if _cell(one, "state") == LIVE]
+    if hit is not None:
+        hit_at = _when(hit)
+        if _cell(hit, "state") != LIVE:
+            changes.append(Change(hit, LIVE, BY_TITLE))
+        for row in rows:
+            if row is hit or _cell(row, "id") == _cell(hit, "id"):
+                continue
+            if _cell(row, "state") == LIVE:
+                changes.append(Change(row, DONE, BY_TITLE))
+            elif _cell(row, "state") == UPCOMING and _when(row) < hit_at:
+                changes.append(Change(row, DONE, BY_TITLE, skipped=True))
+        return changes
+    next_live = None
+    for row in rows:
+        if _cell(row, "state") != UPCOMING:
+            continue
+        at = parse_ts(_cell(row, "scheduled_at"))
+        ends = parse_ts(_cell(row, "ends_at")) or at
+        if at is None or at > now:
+            continue
+        if ends is not None and now > ends + grace:
+            changes.append(Change(row, DONE, BY_SCHEDULE, skipped=True))
+            continue
+        if watching and now < at + grace:
+            continue
+        next_live = row
+    if next_live is not None:
+        changes.append(Change(next_live, LIVE, BY_SCHEDULE))
+        for row in rows:
+            if row is next_live:
+                continue
+            if _cell(row, "state") == LIVE or (
+                _cell(row, "state") == UPCOMING
+                and _when(row) < _when(next_live)
+                and not any(one.row is row for one in changes)
+            ):
+                changes.append(Change(row, DONE, BY_SCHEDULE, skipped=_cell(row, "state") != LIVE))
+        return changes
+    for row in live_now:
+        ends = parse_ts(_cell(row, "ends_at")) or parse_ts(_cell(row, "scheduled_at"))
+        if ends is not None and now > ends + grace:
+            changes.append(Change(row, DONE, BY_SCHEDULE))
+    return changes
+
+
+# --- reminders --------------------------------------------------------------------------------
+
+
+def reminder_marks(text: Any, ping_minutes: int) -> tuple[int, ...]:
+    found = set(marathon_marks(text) or ())
+    found.add(int(ping_minutes))
+    return tuple(sorted(found, reverse=True))
+
+
+def due_marks(
+    row: Any, marks: Any, now: datetime, *, stale_minutes: int
+) -> tuple[int | None, list[int]]:
+    """(the one mark to post now, the marks to skip): the latest due mark wins, anything older
+    than `stale_minutes` past its moment is skipped and never posted late."""
+    if _cell(row, "state") != UPCOMING:
+        return (None, [])
+    at = parse_ts(_cell(row, "scheduled_at"))
+    if at is None:
+        return (None, [])
+    sent = set(marks_of(row))
+    due: list[int] = []
+    stale: list[int] = []
+    for mark in sorted(set(int(one) for one in marks or ())):
+        if mark in sent:
+            continue
+        moment = at - timedelta(minutes=mark)
+        if now < moment:
+            continue
+        if now - moment > timedelta(minutes=int(stale_minutes)):
+            stale.append(mark)
+        else:
+            due.append(mark)
+    if not due:
+        return (None, stale)
+    return (due[0], stale + due[1:])
+
+
+def rearmed(sent: Any, new_start: Any, now: datetime) -> list[int]:
+    """A run that moved later forgets every mark whose moment is in the future again."""
+    at = parse_ts(new_start)
+    if at is None:
+        return sorted(set(int(one) for one in sent or ()))
+    return sorted({int(one) for one in sent or () if at - timedelta(minutes=int(one)) <= now})
+
+
+# --- words ------------------------------------------------------------------------------------
+
+
+class Rendered(NamedTuple):
+    text: str
+    fell_back: bool
+
+
+def render(template: Any, default: str, **fields: Any) -> Rendered:
+    """Checklist 17: a staff template that will not fill falls back to the shipped words."""
+    try:
+        return Rendered(str(template).format_map(fields), False)
+    except Exception:
+        return Rendered(default.format_map(fields), True)
+
+
+def stamp_of(value: Any, style: str) -> str:
+    at = parse_ts(value)
+    return f"<t:{unix(at)}:{style}>" if at is not None else "—"
+
+
+def mention_line(people: list[dict[str, Any]]) -> str:
+    return ", ".join(f"<@{int(one['user_id'])}>" for one in people)
+
+
+def member_ids(row: Any) -> list[int]:
+    return [int(one["user_id"]) for one in ours(people_of(row))]
+
+
+def run_url(row: Any, channel_login: Any, fallback: str = "") -> str:
+    """The marathon's channel when it has one, else the first of ours with a Twitch login."""
+    if channel_login:
+        return TWITCH_URL.format(login=channel_login)
+    for person in ours(people_of(row)):
+        if person.get("login"):
+            return TWITCH_URL.format(login=person["login"])
+    return fallback
+
+
+def run_fields(row: Any, marathon: Any, words: dict[str, str], *, url: str) -> dict[str, Any]:
+    people = ours(people_of(row))
+    part = people[0]["part"] if people else RUNNER
+    return {
+        "member": mention_line(people),
+        "game": _cell(row, "game") or "",
+        "category": _cell(row, "category") or "",
+        "url": url,
+        "marathon": _cell(marathon, "name") or "",
+        "part": words.get(PART_KEYS.get(part, MARATHON_PART_RUNNER_KEY), part),
+        "when": stamp_of(_cell(row, "scheduled_at"), "f"),
+        "relative": stamp_of(_cell(row, "scheduled_at"), "R"),
+        "in": stamp_of(_cell(row, "scheduled_at"), "R"),
+        "state": words.get(STATE_KEYS.get(str(_cell(row, "state")), ""), _cell(row, "state")),
+    }
+
+
+def board_text(
+    marathon: Any,
+    rows: Any,
+    words: dict[str, str],
+    *,
+    head: Any,
+    head_default: str,
+    line: Any,
+    line_default: str,
+    empty: str,
+    url: str,
+) -> Rendered:
+    mine = sorted((one for one in rows or () if is_ours(one)), key=_when)
+    top = render(
+        head,
+        head_default,
+        marathon=_cell(marathon, "name") or "",
+        count=len(mine),
+        starts=stamp_of(_cell(marathon, "starts_at"), "f"),
+        ends=stamp_of(_cell(marathon, "ends_at"), "f"),
+        url=url,
+    )
+    fell_back = top.fell_back
+    lines = [top.text]
+    for row in mine:
+        one = render(line, line_default, **run_fields(row, marathon, words, url=url))
+        fell_back = fell_back or one.fell_back
+        lines.append(one.text)
+    if not mine:
+        lines.append(empty)
+    kept: list[str] = []
+    spent = 0
+    for text in lines:
+        if spent + len(text) + 1 > MESSAGE_LIMIT:
+            break
+        kept.append(text)
+        spent += len(text) + 1
+    return Rendered("\n".join(kept), fell_back)
+
+
+def next_runs(rows: Any, now: datetime, limit: int = 5) -> list[Any]:
+    return sorted(
+        (
+            one
+            for one in rows or ()
+            if _cell(one, "state") in (UPCOMING, LIVE)
+            and is_ours(one)
+            and (parse_ts(_cell(one, "ends_at")) or now) >= now
+        ),
+        key=_when,
+    )[:limit]

@@ -69,6 +69,11 @@ const IDS = {
   ping_member_id: '700000000000000004',
   // Phase 18: train 1 is the upcoming one, still open, so lock/assign/swap all reach it.
   raid_train_id: '1',
+  // Marathons: AGDQ 2027 is on now; run 9 is ours (Moth, on commentary through the every-
+  // schedule pairing 1), still coming up and never shouted, so shout and done both reach it.
+  marathon_id: '1',
+  marathon_run_id: '9',
+  marathon_pairing_id: '1',
   // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
   // reach it without ending a stream the other entries expect to still be live.
   spotlight_id: '3',

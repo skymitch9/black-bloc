@@ -229,8 +229,8 @@ In order, because each step's failure looks different:
 
 ## The pages
 
-**Twenty-two** HTML files in `site/public/`, served by the same app at `/`
-(re-counted 2026-09-23 on branch `channels-page` — **21 → 22**, `channels.html` added; the 22
+**Twenty-three** HTML files in `site/public/`, served by the same app at `/`
+(re-counted 2026-09-25 on branch `marathon-schedule` — **22 → 23**, `marathons.html` added; `node site/mock/check.mjs` reported **23 pages, 231 routes**. Before that, re-counted 2026-09-23 on branch `channels-page` — **21 → 22**, `channels.html` added; the 22
 names are `site/mock/contract.json`'s `pages` list, and `node site/mock/check.mjs` reported
 **22 pages** against the mock. `raidtrain.html` and `minutes.html` had joined since the count
 below without it being updated. Before that, re-counted 2026-09-16 — **18 → 19**, `posts.html` added by the Posts build on branch
@@ -241,7 +241,7 @@ until 2026-08-31, which predates Polls, Chat, Requests and Members):
 `events.html`, `golive.html`, `rolemenus.html`, `birthdays.html`,
 `tempvoice.html`, `honeypot.html`, `polls.html`, `chat.html`, `requests.html`,
 `members.html`, `settings.html`, `audit.html`,
-`health.html`, `guides.html`, `posts.html`, `raidtrain.html`, `minutes.html`, `channels.html`.
+`health.html`, `guides.html`, `posts.html`, `raidtrain.html`, `minutes.html`, `channels.html`, `marathons.html`.
 `site/README.md` says what each one does.
 
 | Page | What it is for |
