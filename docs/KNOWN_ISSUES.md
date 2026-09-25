@@ -530,6 +530,18 @@ panel with **A guide…** → **A step…** → a modal, built on `panels.py`.
 
 ## KI-26 — `deploy.ps1` hangs mid-pytest with every xdist worker idle, roughly one run in four — `WATCHING`
 
+> **2026-09-25 15:5x — the D8 shape MEASURED on Linux and FIXED (branch `ci-linux-hang`, merged; NOT yet deployed —
+> tests only).** py-spy of a hung CI-style worker: the main thread waiting in the root `db` fixture's setup, no
+> aiosqlite thread alive. Cause: `tests/conftest.py` shares one aiosqlite connection per module while each test runs
+> its own loop; a test that calls `cog_load()` leaves the cog's `tasks.loop` running into its teardown, its first
+> pass queues a query, the loop closes, and the answer's `call_soon_threadsafe` raises `Event loop is closed` twice
+> and kills aiosqlite's thread — the NEXT test's `db` fixture then waits forever. The two tests CI named were victims.
+> Fix: `db` now yields and its teardown `settle()`s (cancels leftover tasks, then a `SELECT 1` barrier) while the loop
+> is open; a dead thread fails the next test in 0.4 s by name; CI runs `--timeout-method=signal`. Measured: the
+> spotlight + modmail pair hung 3 of 5 runs before, 25/25 green after; the full Linux suite green twice; the Windows
+> gate green both orders. Full account: [`info/ci-linux-hang.md`](info/ci-linux-hang.md). Still `WATCHING` until
+> a run of deploys shows no hang; the Windows one-in-four was the loopback cause, this is the other one.
+
 > **2026-09-23 04:21 — shipped as v157** (release commit `e9ecd0d0`, merge `01309d43`): the fix is now on `main` and in every tree cut from it. The v157 gate — the first on the fix —
 > was green on the first run at `-n 16`, 44.8 s, no `crashed while running` line (junit `failures=0`). That is **1 of the 10**
 > consecutive clean gates the closing condition below asks for. Still `WATCHING`. Before that —
