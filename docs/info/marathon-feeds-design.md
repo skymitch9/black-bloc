@@ -20,7 +20,16 @@
 > `suggest_next` / `add_next` — the suggestion record + persistent-button notice this design generalises),
 > `black_bloc/marathon.py` (`match_people`), the Marathons section on `events.html` (`marathons-section.js`), the
 > `/event` ▸ Marathons… sub-panel. Live channel rows: GamesDoneQuick `id 3` (Twitch `gamesdonequick`), ESAMarathon
-> `id 4` (`esamarathon`, opted out of announcements). ⚠️ Secret NAMES only.
+> `id 4` (`esamarathon`, opted out of announcements), RPG Limit Break `id 5` (`rpglimitbreak`), Speed Stuff 4 Charity
+> `id 6` (`speedstuff4charity`), RetroGamingLiveTV `id 7` (`retrogaminglivetv`). **14:4x, owner: *"check retro and
+> rpglimit too"* — checked live:** **RPGLB** runs the SAME tracker software as GDQ — `https://rpglimitbreak.com/schedule`
+> redirects to `rpglimitbreak.com/tracker/runs/rpglb2026`, and `GET https://tracker.rpglimitbreak.com/api/v2/events/`
+> answers the identical `{count, next, previous, results[]}` shape (newest: id **21** `rpglb2026`, 2026-05-17, not a
+> draft; 20 `rpglb2025`; 19 `rpglb2024`); its horaro.net archive (`rpglb`) stops at 2025. **SS4C**'s past events are on
+> oengus.io (`oengus.io/marathon/ss4c8`) and the horaro.org archive — an Oengus feed needs the Oengus lines endpoint,
+> still unverified (parked in the schedule design). **RGL**: the live title says *!schedule* but no readable source was
+> found — `retrogaminglive.tv` does not resolve, the Twitch about panels are script-rendered, no horaro.net or Oengus
+> event names it — so RGL gets no feed until someone finds where its schedule lives. ⚠️ Secret NAMES only.
 
 ## The ask, verbatim (owner, 2026-09-25 14:2x Phoenix)
 
@@ -33,34 +42,43 @@ today); the seed makes feeds only for channel rows that exist; **Add a feed…**
 slug box; a channel row that is removed takes its feed with it (the feed's marathons stay, as history). Nothing here
 can add a marathon for a channel the server does not already follow.
 
-**The answer to "any of the other channel-only ones":** yes for **ESA** — its whole archive and every future schedule
-is on horaro.net with a JSON list and a JSON per schedule (verified above), so an ESA feed is buildable in this same
-build with the parked Horaro reader; the one honest limit is that ESA names people instead of linking them, so
-matching is by name. GDQ stays first: it is built and verified first, ESA second, and if room runs out ESA is the
-part that waits.
+**The answer to "any of the other channel-only ones", per channel row we have:**
+
+| Channel row | Source | Feed? | How |
+|---|---|---|---|
+| GamesDoneQuick (3) | GDQ tracker | **yes, first** | the events list, already read by `next_gdq_event` |
+| RPG Limit Break (5) | the SAME tracker software at `tracker.rpglimitbreak.com` | **yes, free** — the GDQ reader with a different base URL | a `tracker` source whose `feed_ref` is the tracker's base (`https://tracker.gamesdonequick.com/tracker`, `https://tracker.rpglimitbreak.com`); `read_url` learns the RPGLB forms (`rpglimitbreak.com/schedule`, `…/tracker/runs/<short>`, the tracker event URL) |
+| ESAMarathon (4) | horaro.net | **yes, second** | the Horaro reader parked in the schedule design, built here; people match by NAME only (ESA writes names, not Twitch links) |
+| Speed Stuff 4 Charity (6) | oengus.io | **maybe, last** | only if the builder can verify the Oengus lines endpoint on a live marathon in a few minutes; otherwise recorded as parked with what was tried |
+| RetroGamingLiveTV (7) | none found | **no** | no readable schedule source found (see the header); the row stays a plain channel |
+
+GDQ first, RPGLB with it (same code), ESA second, SS4C only if cheap, RGL not at all. If room runs out, the order
+above is the order things wait in.
 
 ## A. The model — a feed per source channel, and marathons it makes
 
-**`marathon_feeds`** (new table): `id, guild_id, source` (`gdq` / `horaro`), `feed_ref` (GDQ: `''`; Horaro: the
-event slug, `esa`), `spotlight_id` (the channel row its marathons air on — GDQ `3`, ESA `4`), `name` (*GDQ*,
+**`marathon_feeds`** (new table): `id, guild_id, source` (`tracker` / `horaro` / `oengus` — `gdq` marathons keep
+their `source` word; a feed's `tracker` source covers GDQ and RPGLB alike), `feed_ref` (tracker: the base URL;
+Horaro: the event slug, `esa`; Oengus: nothing — it would list by organiser, which the builder finds or parks), `spotlight_id` (the channel row its marathons air on — GDQ `3`, ESA `4`), `name` (*GDQ*,
 *ESA*), `action` (`add` / `suggest`), `active INTEGER NOT NULL DEFAULT 1`, `last_checked_at, last_ok INTEGER,
 last_error, checks_failed INTEGER NOT NULL DEFAULT 0, added_by, added_at`, `UNIQUE (guild_id, source, feed_ref)`, and **`spotlight_id` is NOT NULL** — a feed without a channel row is refused
 in words (*A feed belongs to a channel Black Bloc already watches — add the channel first.*).
 `marathons` gains **`feed_id INTEGER`** (nullable; `ADDED_COLUMNS`) so a marathon knows the feed that made it and a
 feed lists its marathons. Schema 62 → **63**.
 
-**Seed on first boot** (a boot reconcile, one row per boot): a `gdq` feed on the channel row whose `twitch_login` is
-`gamesdonequick`, and a `horaro` feed `esa` on the row whose login is `esamarathon` — each only when that channel row
-exists and no feed for that source exists yet; `action` from `marathon_feed_action_default`. **Removing a channel row removes its
+**Seed on first boot** (a boot reconcile, one row per boot): a `tracker` feed (`https://tracker.gamesdonequick.com/tracker`)
+on the channel row whose `twitch_login` is `gamesdonequick`, a `tracker` feed (`https://tracker.rpglimitbreak.com`) on
+`rpglimitbreak`, and a `horaro` feed `esa` on `esamarathon` — each only when that channel row exists and that row has
+no feed yet; `action` from `marathon_feed_action_default`. **Removing a channel row removes its
 feed** (`delete_channel` → the feed row goes, `marathon.feed_removed` with `because: channel_removed`); the marathons
 it made stay, as history, with `feed_id` cleared.
 
 ## B. The poll — every `marathon_feed_hours` (6), one list read per feed, additive only
 
 On the marathon cog's minute tick, a feed whose `last_checked_at` is older than `marathon_feed_hours` (6, 1–168) is
-checked: **GDQ** reads the events list (`next_gdq_event`'s fetch, all pages); **Horaro** reads
+checked: a **tracker** feed reads `<base>/api/v2/events/` (`next_gdq_event`'s fetch, all pages, the base from `feed_ref`); **Horaro** reads
 `/-/api/v1/events/<slug>/schedules`. Every event / schedule whose start is ahead of now (or ended less than
-`marathon_feed_recent_days` = 1 day ago) and is not `archived` (GDQ) and is not already a marathon (by `source` +
+`marathon_feed_recent_days` = 1 day ago) and is not `archived` (tracker) and is not already a marathon (by `source` +
 `source_ref` — the tracker id / the Horaro `event/slug`) is **new**:
 
 - `action = add` → `create_marathon` exactly as a staff Add does (name = the event's name; schedule URL = the
@@ -137,14 +155,14 @@ staff gate, the refusals in words: unknown source, a slug that does not answer),
 tests, a mock port of the builder's own. Docs: `code-notes.md`; this doc's foot; `architecture.md` (schema 63, the
 table, the routes); `docs/info/README.md` (one row); `marathon-schedule-design.md` (§E's parked Horaro paragraph
 gains a dated *BUILT for ESA by `marathon-feeds`* line) and `marathon-next-event-design.md` (one dated line);
-`sweeps.md` rows `MF-a…` (a: the Feeds card shows GDQ and ESA after the first boot; b: Check now on GDQ adds the
+`sweeps.md` rows `MF-a…` (a: the Feeds card shows GDQ, RPGLB and ESA after the first boot; b: Check now on GDQ adds the
 tracker's future events as marathons and posts the notice; c: Pause it on the notice pauses the marathon; d: an ESA
 schedule's runs list our people by name after a pairing). NOT `TODO.md` / `DONE.md` / `deploys.log` /
 `KNOWN_ISSUES.md`. ⚠️ Migrate before deploy: one table + one column through the bootstrap.
 
-**Build order (commit at each):** storage → the Horaro reader + fixture → the pure feed logic → the cog (seed, poll,
-add / suggest, notice, ignore) → routes → the Feeds card + mock → the panel → docs. GDQ first end to end, ESA second;
-if room runs out, ESA's reader and feed are what wait, and the report says so.
+**Build order (commit at each):** storage → the tracker base URL (RPGLB) → the Horaro reader + fixture → the pure feed logic → the cog (seed, poll,
+add / suggest, notice, ignore) → routes → the Feeds card + mock → the panel → docs. GDQ + RPGLB first end to end, ESA second, SS4C last and only if the Oengus lines endpoint verifies in minutes;
+if room runs out, that is the order things wait in, and the report says so.
 
 ## Deviations
 
