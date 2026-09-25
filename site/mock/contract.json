@@ -7351,7 +7351,6 @@
     "web.marathon.feed_looked",
     "web.marathon.feed_forgot",
     "web.marathon.feed_dismissed",
-    "web.marathon.feed_taken",
-    "web.marathon.feed_ignored"
+    "web.marathon.feed_taken"
   ]
 }

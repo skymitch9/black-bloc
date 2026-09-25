@@ -335,8 +335,11 @@ async def run_check(
     added = suggested = 0
     for candidate in new:
         if feed["action"] == mf.SUGGEST:
-            records.append(await suggest(bot, guild, feed, candidate, now))
+            record = mf.suggestion_record(candidate, now)
+            records.append(record)
             await update_feed(bot.db, feed["id"], suggested=json.dumps(records))
+            if await suggest(bot, guild, feed, candidate, record):
+                await update_feed(bot.db, feed["id"], suggested=json.dumps(records))
             suggested += 1
         elif await add_candidate(bot, guild, feed, candidate):
             added += 1
@@ -405,10 +408,10 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
 
 
 async def suggest(
-    bot: Any, guild: Any, feed: Any, candidate: mf.Candidate, now: Any
-) -> dict[str, Any]:
-    """`suggest` mode: the record first, then the log row, then the notice (checklist 12)."""
-    record = mf.suggestion_record(candidate, now)
+    bot: Any, guild: Any, feed: Any, candidate: mf.Candidate, record: dict[str, Any]
+) -> bool:
+    """`suggest` mode, after the record is saved: the log row, then the notice (checklist 12);
+    True when the notice's ids were added to the record."""
     shadow = mode_of(bot, guild.id) != MODE_ON
     details = feed_details(
         feed,
@@ -426,9 +429,10 @@ async def suggest(
     text = words(bot, guild, MARATHON_FEED_SUGGEST_TEMPLATE_KEY, await fields_of(bot, feed, record))
     view = notice_view(feed["id"], candidate.ref, (TAKE, DISMISS))
     message, channel_id = await post_notice(bot, guild, feed, text, view, details)
-    if message is not None:
-        record |= {"notice_channel_id": channel_id, "notice_message_id": int(message.id)}
-    return record
+    if message is None:
+        return False
+    record |= {"notice_channel_id": channel_id, "notice_message_id": int(message.id)}
+    return True
 
 
 async def fields_of(bot: Any, feed: Any, record: Any) -> dict[str, Any]:

@@ -5891,7 +5891,7 @@ function marathonFeedIgnore(row) {
   const feed = row.feed_id ? state.marathonFeeds.find((one) => one.id === row.feed_id) : null;
   if (!feed || feed.ignored.includes(row.source_ref)) return;
   feed.ignored.push(row.source_ref);
-  logAction('web.marathon.feed_ignored', { details: { feed_id: feed.id, event: row.source_ref, marathon_id: row.id, via: 'website' } });
+  logAction('marathon.feed_ignored', { actor_id: null, details: { feed_id: feed.id, event: row.source_ref, marathon_id: row.id, automatic: true } });
 }
 
 function feedCheck(feed) {

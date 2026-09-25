@@ -638,6 +638,7 @@ async def rename_marathon(
 async def remove_marathon(
     bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
+    from ...marathon_feeds import VIA_FEED
     from .marathon_feeds import ignore_removed
 
     cog = cog_of(bot)
@@ -646,7 +647,7 @@ async def remove_marathon(
         await cog.drop_windows(guild, marathon)
         await cog.unpin_board(guild, marathon, because="removed")
         await delete_marathon(bot.db, marathon["id"])
-        await ignore_removed(bot, guild, actor, marathon, via=via)
+        await ignore_removed(bot, guild, actor, marathon, via=VIA_FEED)
     await log_action(
         bot,
         guild,
