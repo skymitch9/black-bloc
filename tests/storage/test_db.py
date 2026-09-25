@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 62
+        assert SCHEMA_VERSION == 63
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2374,7 +2374,7 @@ async def test_a_schema_59_file_gains_the_three_marathon_tables_and_keeps_its_wi
         cur = await again.conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'marathon%'"
         )
-        assert {r["name"] for r in await cur.fetchall()} == {
+        assert {r["name"] for r in await cur.fetchall()} >= {
             "marathons",
             "marathon_runs",
             "marathon_people",
@@ -2467,6 +2467,58 @@ async def test_schema_62_links_a_marathon_to_its_event_and_keeps_its_rows(tmp_pa
         assert row["name"] == "AGDQ 2027"
         assert row["event_id"] is None and row["event_wanted"] == 0
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "62"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()
+
+
+async def test_schema_63_adds_the_feeds_and_a_marathons_feed_and_keeps_its_rows(tmp_path):
+    path = tmp_path / "t.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE marathon_feeds")
+    await db.conn.execute("DROP TABLE marathon_feed_seeds")
+    await db.conn.execute("ALTER TABLE marathons DROP COLUMN feed_id")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at) "
+        "VALUES (7, 'AGDQ 2027', 'https://gamesdonequick.com/schedule/74', 'gdq', '74', 'x')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '62')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name, feed_id FROM marathons")
+        row = await cur.fetchone()
+        assert row["name"] == "AGDQ 2027" and row["feed_id"] is None
+        cur = await again.conn.execute("PRAGMA table_info(marathon_feeds)")
+        assert {"source", "feed_ref", "spotlight_id", "action", "suggested", "ignored"} <= {
+            r["name"] for r in await cur.fetchall()
+        }
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "63"
+    finally:
+        await again.close()
+
+
+async def test_a_feed_needs_a_channel_and_a_channel_has_one_feed(tmp_path):
+    db = Database(tmp_path / "t.sqlite3")
+    await db.connect()
+    try:
+        insert = (
+            "INSERT INTO marathon_feeds(guild_id, source, feed_ref, spotlight_id, name, added_at) "
+            "VALUES (7, ?, ?, ?, 'GDQ', 'x')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(insert, ("tracker", "https://a", None))
+        await db.conn.execute(insert, ("tracker", "https://a", 3))
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(insert, ("horaro", "esa", 3))
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(insert, ("tracker", "https://a", 4))
+    finally:
+        await db.close()

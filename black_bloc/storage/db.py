@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 62
+SCHEMA_VERSION = 63
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1084,6 +1084,36 @@ CREATE TABLE IF NOT EXISTS marathon_people (
 
 CREATE UNIQUE INDEX IF NOT EXISTS marathon_people_everywhere
     ON marathon_people(guild_id, runner_name) WHERE marathon_id IS NULL;
+
+CREATE TABLE IF NOT EXISTS marathon_feeds (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id        INTEGER NOT NULL,
+    source          TEXT    NOT NULL,
+    feed_ref        TEXT    NOT NULL,
+    spotlight_id    INTEGER NOT NULL,
+    name            TEXT    NOT NULL,
+    action          TEXT    NOT NULL DEFAULT 'add',
+    active          INTEGER NOT NULL DEFAULT 1,
+    last_checked_at TEXT,
+    last_ok         INTEGER,
+    last_error      TEXT,
+    checks_failed   INTEGER NOT NULL DEFAULT 0,
+    suggested       TEXT    NOT NULL DEFAULT '[]',
+    ignored         TEXT    NOT NULL DEFAULT '[]',
+    added_by        INTEGER,
+    added_at        TEXT    NOT NULL,
+    UNIQUE (guild_id, source, feed_ref)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS marathon_feeds_one_per_channel
+    ON marathon_feeds(guild_id, spotlight_id);
+
+CREATE TABLE IF NOT EXISTS marathon_feed_seeds (
+    guild_id     INTEGER NOT NULL,
+    twitch_login TEXT    NOT NULL,
+    seeded_at    TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, twitch_login)
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
@@ -1155,6 +1185,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "suggested_next", "TEXT"),
     ("marathons", "event_id", "INTEGER"),
     ("marathons", "event_wanted", "INTEGER NOT NULL DEFAULT 0"),
+    ("marathons", "feed_id", "INTEGER"),
 )
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")
