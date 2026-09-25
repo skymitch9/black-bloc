@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-25 (branch `marathon-feeds`)** — ONE section APPENDED (`MF-a`…`MF-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `spotlight-ping-windows`)** — ONE section APPENDED (`PW-a`…`PW-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-23 18:3x** — ONLY the `CB-c` section was touched, at the v163 docs ritual: it gained a ✅ LIVE v163 line from `deploys.log`. (Since 16:2x: the owner's `CB-a` ✅ row at 16:33, `2d5defa0`; the `CB-c` section appended with the `greeting-tone` branch, `9983a0be`.) No row walked by this pass, no other section re-read. Before that,
 > **2026-09-23 16:2x** — ONLY the `CB-a`/`CB-b` and `RL-a`…`RL-g` sections were touched, at the v162 docs ritual: each gained a ✅ LIVE v162 line from `deploys.log`, `DONE.md` and the conductor's boot-log / operator-token read. Nothing renumbered (still lettered), no row walked, no other section re-read. Before that,
@@ -3178,6 +3179,26 @@ Flame Fatales 2026 — it reads *over*) and press **Look again**, or restart onc
 | **`MN-c`** | **Not this one** (page or notice) on a fresh suggestion | The card folds to *Dismissed: …* with **Look again**; the notice is struck through, buttons disabled; `marathon.next_dismissed`; no boot re-suggests it. A non-staff click on the notice is refused in words and changes nothing. |
 | **`MN-d`** | **Look again** after a dismissal (page, or `/event` ▸ **Marathons…** ▸ the marathon ▸ **Next up…**) | The suggestion is open again (the same event today); no new notice; `web.marathon.next_suggested` from the page. On a marathon not over yet: *… is not over yet, so nothing was looked up.* |
 | **`MN-e`** | §G — a drawer's **Re-read every [ ] minutes** ▸ `45` ▸ **Save**, then blank ▸ **Save**; a done run ▸ **Mark it upcoming**, then **Mark it live**; the same from `/event` ▸ **Marathons…** ▸ the marathon ▸ **Re-read every…** and the run select | `poll_minutes` 45 then back to the default (`5` or `soon` is refused in words); the run reads *coming up* + *held by staff*, then *on now* with ONE shoutout if it is ours and never had one; `marathon.run_reset` then `marathon.run_live` (`because: staff`). A later title match on another run does NOT close the held run. |
+
+## Rows `MF-a` … `MF-e` — marathon feeds (branch `marathon-feeds`, 2026-09-25)
+
+🔨 **BUILT on branch `marathon-feeds`, NOT merged, NOT deployed.** Owner, 2026-09-25: *"constantly poll gdq to get
+events, check if we can do that for any of the other channel only ones we have"*, *"only do marathons we have in channel
+though"*, *"check retro and rpglimit too"*. Design: [`../info/marathon-feeds-design.md`](../info/marathon-feeds-design.md).
+Rows lettered; the conductor numbers them.
+
+⚠️ **The first boot with `marathon_feeds` on ADDS every GDQ event ahead that is not already a marathon** (measured
+2026-09-25: 71 *Games Done Hitless*, 72 *GDQx 2026*, 73 *Halo Fest*, 74 *AGDQ 2027*), one staff notice each (shadow →
+`#welcome-test` while `marathon_mode` is shadow), and — with `marathon_makes_event` on — a waiting event wish on each.
+Existing ones are adopted, not duplicated. RPGLB finds nothing today (2026 was in May). No ESA feed is seeded.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MF-a`** | <https://blackbloc.heygabi.ai/events.html> — the **Marathons** section, the **Feeds** card above the list, after the first boot | Two rows: **GDQ** · *GDQ tracker* · GamesDoneQuick · *checks every 6 h · last checked …* · Add/Suggest · Pause · Check now · Remove; **RPG Limit Break** · *RPG Limit Break tracker*. No ESA row. `marathon.feed_seeded` once in the Marathons log. |
+| **`MF-b`** | **Check now** on GDQ (or wait for the first tick) | New GDQ events appear as marathons on the GamesDoneQuick channel; one notice per event in the staff channel (*GDQ has a new event: **…**, … — added*) with **Pause it** / **Remove it**; `marathon.feed_added` (IMPORTANT). A second Check now adds nothing. |
+| **`MF-c`** | **Pause it** on one notice; **Remove it** on another; then the GDQ row's **Forget ignored (1)** and **Check now** | The first marathon is paused, the notice gains *Paused by @you* and loses its buttons; the second is gone, *Removed by @you — the feed will not add it again*, `Forget ignored (1)` appears; forgetting + checking adds it back. A non-staff click is refused in words. |
+| **`MF-d`** | Pair a name on a horaro.net marathon: **Add a feed…** on a channel row ▸ *horaro.net* ▸ slug `esa` ▸ *Suggest* (or **Add a marathon** with `https://horaro.net/esa/2026-summer2`) — then **Pair a runner…** a bare name | The runs list the players; a player with a `twitch.tv` link matches by the link; a bare name matches a member whose Discord username is exactly that name, else after the pairing. |
+| **`MF-e`** | `/event` ▸ **Marathons…** ▸ **Feeds…** (staff) | The same rows; a feed select → **Check now / Pause / Suggest instead of adding / Look again / Forget ignored / Remove**, only the valid ones; **Add a feed…** → a channel select → a modal (source guessed from the login). Waiting suggestions in suggest mode → **Add it / Not this one**. |
 
 ## Rows `ME-a` … `ME-d` — marathons share the Events page (branch `marathon-events-page`, 2026-09-25)
 

@@ -90,6 +90,24 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-25 (marathon feeds, branch `marathon-feeds` off `main` `05fbd0e6`; design
+> `info/marathon-feeds-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration has
+> NOT run on the live database):** schema **62 → 63** (measured: `SCHEMA_VERSION`) — two tables through the `SCHEMA`
+> bootstrap, `marathon_feeds` (one per channel row: `source` `tracker` / `horaro`, `feed_ref` the tracker base URL or
+> the horaro.net event slug, `spotlight_id NOT NULL`, `action` add / suggest, `active`, the last check's health,
+> `suggested` / `ignored` JSON lists; `UNIQUE (guild_id, source, feed_ref)` and a unique index on `(guild_id,
+> spotlight_id)`) and `marathon_feed_seeds` (the seeded-once marker per channel login), plus `marathons.feed_id`
+> through `ADDED_COLUMNS`. Marathon `source` words **`gdq` + `rpglb` + `horaro`** (`marathon_sources.TRACKER_BASES`,
+> the horaro.net reader `parse_horaro`). New modules `black_bloc/marathon_feeds.py` (pure) and
+> `cogs/content/marathon_feeds.py` (not a cog — the feeds' tables, moves, `FeedButton`, the **Feeds…** panel; the
+> Marathons cog's tick calls `tick_feeds`). Registry keys **469 → 475** (`marathon_feeds`, `marathon_feed_hours`,
+> `marathon_feed_action_default`, `marathon_feed_recent_days`, `marathon_feed_added_template`,
+> `marathon_feed_suggest_template`). Routes **+8** (`GET`/`POST /api/marathons/feeds`, `PATCH`/`DELETE …/{feed_id}`,
+> `POST …/{feed_id}/check|look|forget|add`; router `api/tools/marathon_feeds.py`, included BEFORE the marathons
+> router); `check.mjs`: *22 pages, 246 routes* (the contract lists `PATCH` twice). One more persistent button family
+> (`FeedButton`, `marathon:feed:<feed_id>:<ref>:pause|remove|add|dismiss`). Log kinds **+20** under `marathon`. Cogs,
+> pages, top-level commands and log features unchanged. ⚠️ The fact table below was NOT re-measured.
+>
 > **2026-09-25 (marathons share the Events page, branch `marathon-events-page` off `main` `ed52ffeb`; design
 > `info/marathon-events-page-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the
 > migration has NOT run on the live database):** schema **61 → 62** (measured: `SCHEMA_VERSION`) — two columns through
