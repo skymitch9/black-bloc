@@ -1281,6 +1281,7 @@ LOG_LEVEL_COMMANDS: dict[str, str] = {
     "request": "request",
     "pings": "pings",
     "raidtrain": "raidtrain",
+    "marathon": "marathon",
     "applications": "apply",
     "selftest": "settings",
     "posts": "posts",

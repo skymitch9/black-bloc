@@ -318,6 +318,7 @@ REAL_COGS = [
         {"live_poller": _record("last_probe_at")},
     ),
     ("black_bloc.cogs.content.raidtrain", "RaidTrains", {"sweep": _record("last_sweep_ok_at")}),
+    ("black_bloc.cogs.content.marathon", "Marathons", {"ticker": _record("last_tick_ok_at")}),
     (
         "black_bloc.cogs.community.birthdays",
         "Birthdays",

@@ -342,7 +342,7 @@ def test_every_log_level_fits_one_select_and_shows_the_level_it_is_on():
     store = FakeStore(defaults={f"{feature}_log_level": "important" for feature in FEATURES})
     found = log_level_options(store, GUILD)
 
-    assert len(found) == len(FEATURES) == 21 <= SELECT_LIMIT
+    assert len(found) == len(FEATURES) == 22 <= SELECT_LIMIT
     assert all(label.endswith("— important") for _, label in found)
 
 
