@@ -604,7 +604,7 @@ async def create_feed(
         details=feed_details(feed, via, action=wanted_action, feed_ref=feed["feed_ref"]),
     )
     async with cog_of(bot).feed_lock(feed_id):
-        checked = await run_check(bot, guild, feed, actor=actor, via=via)
+        checked = await run_check(bot, guild, feed, via=mf.VIA_FEED)
     said = mf.FEED_ADDED.format(
         name=wanted_name,
         source=mf.source_word(feed),
@@ -755,7 +755,7 @@ async def look_again(
             details=feed_details(fresh, via, forgot=[one.get("ref") for one in dropped]),
         )
         checked = await run_check(
-            bot, guild, await get_feed(bot.db, guild.id, fresh["id"]), actor=actor, via=via
+            bot, guild, await get_feed(bot.db, guild.id, fresh["id"]), via=mf.VIA_FEED
         )
     said = mf.FEED_LOOKED.format(name=fresh["name"], count=len(dropped))
     return Outcome(checked.ok, f"{said} {checked.message}", checked.code, checked.status)
