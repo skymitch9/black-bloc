@@ -126,6 +126,10 @@ NO_SUCH_CHANNEL = (
 BAD_POLL = "A marathon's own read gap is 10 to 120 minutes, or blank for the setting's."
 SITE_BUTTON = "Open the Marathons page"
 NEXT_ADDED_LINE = "Added — see **{name}** on the list."
+NEXT_NOT_YET = (
+    "Black Bloc has not looked up the next GDQ event for this one yet. **Look again** asks the "
+    "tracker now."
+)
 NEXT_DISMISSED_LINE = "Dismissed — **Look again** asks the tracker once more."
 NEXT_ALREADY = "**{next}** is already on the list as **{name}**, so there is nothing to add."
 NOT_GDQ = "**{name}** is not a GDQ marathon, so there is no next GDQ event to look up."
