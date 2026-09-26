@@ -394,8 +394,16 @@ async def test_links_for_names_every_published_guide_by_its_command(bot, db):
         if one["audience"] == "member" and one["command"]
     }
     assert len(found) == len(member_commands) == 11
-    assert found["/pings"] == "https://blackbloc.test/guides.html#pings-follow"
-    assert found["/golive"] == "https://blackbloc.test/guides.html#golive-announce"
+    assert found["/pings"] == [
+        ("Choose what pings you", "https://blackbloc.test/guides.html#pings-follow")
+    ]
+    assert [url for _, url in found["/golive"]] == [
+        "https://blackbloc.test/guides.html#golive-announce"
+    ]
+    assert [url for _, url in found["/event"]] == [
+        "https://blackbloc.test/guides.html#event-propose",
+        "https://blackbloc.test/guides.html#marathons-follow",
+    ]
     assert "/settings" not in found, "a staff guide is not a link a member can follow"
 
 
@@ -418,22 +426,71 @@ async def test_links_for_is_empty_while_guides_are_off(bot, db):
     assert await guides.links_for(bot, GUILD) == {}
 
 
-async def test_one_command_may_only_have_one_published_guide(bot, db):
-    import sqlite3
-
+async def test_one_command_may_have_several_published_guides(bot, db):
     await guides.seed_guides(db, GUILD)
 
-    with pytest.raises(sqlite3.IntegrityError):
-        await guides.create_guide(
-            db,
-            GUILD,
-            slug="golive-second",
-            title="Another",
-            goal="A goal.",
-            feature="golive",
-            command="/golive",
-            published=True,
-        )
+    await guides.create_guide(
+        db,
+        GUILD,
+        slug="golive-second",
+        title="Another",
+        goal="A goal.",
+        feature="golive",
+        command="/golive",
+        sort=11,
+        published=True,
+    )
+
+    member = await guides.published_for(db, GUILD, "/golive")
+    staff = await guides.published_for(db, GUILD, "/golive", guides.STAFF)
+    assert [row["slug"] for row in member] == ["golive-announce", "golive-second"]
+    assert [row["slug"] for row in staff] == ["golive-channels", "ping-windows"]
+    assert [row["slug"] for row in await guides.published_for(db, GUILD, "/event")] == [
+        "event-propose",
+        "marathons-follow",
+    ]
+
+
+async def test_the_seed_gives_every_guide_a_command_but_the_ones_it_means_not_to(bot, db):
+    by_slug = {one["slug"]: one["command"] for one in guides.seed_entries()}
+
+    assert by_slug["marathons-follow"] == "/event"
+    assert by_slug["marathons-manage"] == "/event"
+    assert by_slug["golive-channels"] == "/golive"
+    assert by_slug["ping-windows"] == "/golive"
+    assert [slug for slug, command in by_slug.items() if not command] == []
+
+
+async def test_a_changed_seed_fills_a_null_command_and_leaves_everything_else(
+    bot, db, monkeypatch
+):
+    await guides.seed_guides(db, GUILD)
+    guide = await guides.get_guide(db, GUILD, "marathons-follow")
+    step = (await guides.steps_of(db, guide["id"]))[0]
+    await db.conn.execute(
+        "UPDATE guides SET command = NULL, title = 'Staff title', goal = 'Staff goal', "
+        "seed_hash = 'the old seed' WHERE id = ?",
+        (guide["id"],),
+    )
+    await db.conn.execute(
+        "UPDATE guide_steps SET do_text = 'Staff words.' WHERE id = ?", (step["id"],)
+    )
+    await db.conn.execute(
+        "UPDATE guides SET command = '/staff-picked', seed_hash = 'the old seed' "
+        "WHERE guild_id = ? AND slug = 'ping-windows'",
+        (GUILD,),
+    )
+    await db.conn.commit()
+
+    assert await guides.refresh_seeds(db, GUILD) == 2
+
+    fresh = await guides.get_guide(db, GUILD, "marathons-follow")
+    assert fresh["command"] == "/event"
+    assert (fresh["title"], fresh["goal"]) == ("Staff title", "Staff goal")
+    assert (await guides.steps_of(db, guide["id"]))[0]["do_text"] == "Staff words."
+    kept = await guides.get_guide(db, GUILD, "ping-windows")
+    assert kept["command"] == "/staff-picked"
+    assert await guides.refresh_seeds(db, GUILD) == 0
 
 
 async def test_two_guilds_keep_their_own_guides(bot, db):

@@ -91,6 +91,7 @@ const PICTURE_GONE = 'This picture did not load. The words above are the whole s
 
 const AUDIENCE_SAID = { member: 'For everyone', staff: 'For staff' };
 const SOURCE_SAID = { capture: 'screenshot', mock: 'illustration' };
+const COMMAND_HINT = 'Several guides may share a command; /help links every published guide for everyone.';
 const WHERE_SAID = { discord: 'in Discord', website: 'on this site' };
 
 const WHERE_CHIPS = [
@@ -243,6 +244,18 @@ function filters(payload) {
   return el('div', { class: 'guidefilters' }, rows);
 }
 
+function byCommand(rows) {
+  const order = new Map();
+  rows.forEach((row, at) => {
+    const key = row.command || `#${at}`;
+    if (!order.has(key)) order.set(key, order.size);
+  });
+  return rows
+    .map((row, at) => ({ row, at, group: order.get(row.command || `#${at}`) }))
+    .sort((a, b) => a.group - b.group || a.at - b.at)
+    .map((one) => one.row);
+}
+
 function kept(rows) {
   return rows.filter((row) => {
     if (state.audience && row.audience !== state.audience) return false;
@@ -292,7 +305,7 @@ function newGuideCard(payload, say) {
     el('div', { class: 'formrow' }, [
       field('Who it is for', audience, 'Staff guides are hidden from members and from /help.'),
       field('Which feature', feature, 'Decides the Where it happens link and which release makes its shots stale.'),
-      field('Command', command, 'Only one published member guide per command.'),
+      field('Command', command, COMMAND_HINT),
     ]),
     bar([make]),
     say,
@@ -340,7 +353,7 @@ async function loadHub(payload) {
           refresh();
         }),
       )
-      : el('div', { class: 'guidegrid' }, shown.map((one) => hubCard(one, payload.may_edit))),
+      : el('div', { class: 'guidegrid' }, byCommand(shown).map((one) => hubCard(one, payload.may_edit))),
   );
   blocks.push(full(list.node));
 
@@ -1079,7 +1092,7 @@ function editGuide(payload, hub) {
         el('div', { class: 'formrow' }, [field('Goal', goal, 'One sentence — it is what the hub card reads.')]),
         el('div', { class: 'formrow' }, [
           field('Which feature', feature, 'Sets the Where it happens link and which release makes its shots stale.'),
-          field('Command', command, 'Only one published member guide per command.'),
+          field('Command', command, COMMAND_HINT),
         ]),
         bar([publish, reset, remove]),
         say,

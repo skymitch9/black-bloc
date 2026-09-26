@@ -333,7 +333,9 @@ async def test_publishing_and_unpublishing_go_through_the_same_body(as_staff, we
     assert "is published" in on.json()["message"]
 
 
-async def test_a_second_published_guide_for_one_command_is_refused_in_words(as_staff, web, wf):
+async def test_a_second_published_guide_for_one_command_publishes_beside_the_first(
+    as_staff, web, wf
+):
     made = as_staff.post(
         "/api/guides",
         json={
@@ -350,9 +352,19 @@ async def test_a_second_published_guide_for_one_command_is_refused_in_words(as_s
     payload["published"] = True
     answered = save(as_staff, slug, payload)
 
-    assert answered.status_code == 409
-    assert "already has a published guide" in answered.json()["message"]
-    assert "golive-announce" in answered.json()["message"]
+    assert answered.status_code == 200
+    assert "is published" in answered.json()["message"]
+    cards = {one["slug"]: one for one in as_staff.get("/api/guides").json()["guides"]}
+    assert cards[slug]["command"] == "/golive"
+    assert cards["golive-announce"]["command"] == "/golive"
+    assert cards[slug]["published"] and cards["golive-announce"]["published"]
+
+
+async def test_the_hub_card_carries_the_command_of_a_guide_that_had_none(as_member):
+    cards = {one["slug"]: one for one in as_member.get("/api/guides").json()["guides"]}
+
+    assert cards["marathons-follow"]["command"] == "/event"
+    assert cards["event-propose"]["command"] == "/event"
 
 
 async def test_guides_who_edits_manage_guild_refuses_a_plain_staffer_and_takes_a_lead(

@@ -141,11 +141,6 @@ NO_SUCH_PROBE = (
     "**{ref}** is not one of the live values Black Bloc can read, so nothing was saved. The ones "
     "it has are: {known}."
 )
-COMMAND_TAKEN = (
-    "**{command}** already has a published guide (**{slug}**), and `/help` can only link to one, "
-    "so this one was left unpublished. Unpublish that guide first, or leave this one's command "
-    "blank."
-)
 MEDIA_TOO_BIG = (
     "That picture is {size} and Black Bloc keeps guide screenshots under {limit}. Nothing was "
     "uploaded — crop it, or save it again as a PNG at no more than {side} pixels on its longest "
@@ -640,13 +635,15 @@ async def stale_media(db: Any, guild_id: int) -> list[Any]:
     return list(await cur.fetchall())
 
 
-async def published_for(db: Any, guild_id: int, command: str, audience: str = MEMBER) -> Any:
+async def published_for(
+    db: Any, guild_id: int, command: str, audience: str = MEMBER
+) -> list[Any]:
     cur = await db.conn.execute(
         "SELECT * FROM guides WHERE guild_id = ? AND command = ? AND audience = ? "
-        "AND published = 1",
+        "AND published = 1 ORDER BY sort, title, id",
         (int(guild_id), str(command), str(audience)),
     )
-    return await cur.fetchone()
+    return list(await cur.fetchall())
 
 
 async def create_guide(
@@ -877,7 +874,8 @@ async def refresh_seeds(db: Any, guild_id: int) -> int:
                 (seed["do"], seed.get("expect"), int(step["id"])),
             )
         await db.conn.execute(
-            "UPDATE guides SET seed_hash = ? WHERE id = ?", (fresh, int(guide["id"]))
+            "UPDATE guides SET seed_hash = ?, command = COALESCE(command, ?) WHERE id = ?",
+            (fresh, entry.get("command") or None, int(guide["id"])),
         )
         changed += 1
     await db.conn.commit()
@@ -1108,8 +1106,8 @@ def hub_url(origin: str) -> str:
     return f"{str(origin).rstrip('/')}/{PAGE}"
 
 
-async def links_for(bot: Any, guild_id: int) -> dict[str, str]:
-    """Command name → guide url, for the published guides only; empty when guides are off."""
+async def links_for(bot: Any, guild_id: int) -> dict[str, list[tuple[str, str]]]:
+    """Command name → (title, url) per published member guide; empty when guides are off."""
     db = getattr(bot, "db", None)
     if db is None or not getattr(db, "is_connected", False):
         return {}
@@ -1120,14 +1118,16 @@ async def links_for(bot: Any, guild_id: int) -> dict[str, str]:
     if not origin:
         return {}
     cur = await db.conn.execute(
-        "SELECT command, slug FROM guides WHERE guild_id = ? AND published = 1 "
-        "AND command IS NOT NULL AND audience = ? ORDER BY sort, id",
+        "SELECT command, slug, title FROM guides WHERE guild_id = ? AND published = 1 "
+        "AND command IS NOT NULL AND audience = ? ORDER BY sort, title, id",
         (int(guild_id), MEMBER),
     )
-    return {
-        str(row["command"]): guide_url(origin, str(row["slug"]))
-        for row in await cur.fetchall()
-    }
+    found: dict[str, list[tuple[str, str]]] = {}
+    for row in await cur.fetchall():
+        found.setdefault(str(row["command"]), []).append(
+            (str(row["title"]), guide_url(origin, str(row["slug"])))
+        )
+    return found
 
 
 # --- media on disk ----------------------------------------------------------------------------
@@ -1260,7 +1260,6 @@ async def drop_media(bot: Any, row: Any) -> None:
 
 __all__ = [
     "AUDIENCES",
-    "COMMAND_TAKEN",
     "FACTS_MAX",
     "FEATURE_PATHS",
     "GUIDES_OFF",

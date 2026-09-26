@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 65
+SCHEMA_VERSION = 66
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -733,8 +733,7 @@ CREATE TABLE IF NOT EXISTS guides (
     UNIQUE (guild_id, slug)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS guides_one_published_command
-    ON guides(guild_id, command, audience) WHERE published = 1 AND command IS NOT NULL;
+CREATE INDEX IF NOT EXISTS guides_by_command ON guides(guild_id, command, audience);
 CREATE INDEX IF NOT EXISTS guides_by_guild ON guides(guild_id, sort, id);
 
 CREATE TABLE IF NOT EXISTS guide_steps (
@@ -1233,6 +1232,7 @@ MOD_CASES_OLD = "mod_cases_before_null_user"
 
 FAN_ROLES_OLD = "golive_fan_roles_before_spotlights"
 FAN_ROLES_INDEXES = ("golive_fan_roles_one_member", "golive_fan_roles_one_spotlight")
+RETIRED_INDEXES = ("guides_one_published_command",)
 
 CLOSE_DUPLICATE_OPEN_SESSIONS = """
 UPDATE golive_sessions SET ended_at = ?
@@ -1268,6 +1268,7 @@ class Database:
         await self._set_aside_mod_cases_with_a_required_user()
         await self._set_aside_fan_roles_that_require_a_member()
         await self._conn.executescript(SCHEMA)
+        await self._drop_retired_indexes()
         await self._add_missing_columns()
         await self._restore_set_aside_mod_cases()
         await self._restore_set_aside_fan_roles()
@@ -1278,6 +1279,10 @@ class Database:
             (str(SCHEMA_VERSION),),
         )
         await self._conn.commit()
+
+    async def _drop_retired_indexes(self) -> None:
+        for name in RETIRED_INDEXES:
+            await self.conn.execute(f"DROP INDEX IF EXISTS {name}")
 
     async def _table_columns(self, table: str) -> set[str]:
         cur = await self.conn.execute(f"PRAGMA table_info({table})")

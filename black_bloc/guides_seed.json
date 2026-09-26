@@ -552,7 +552,7 @@
       "goal": "Every BaF run on a schedule Black Bloc follows, soonest first, with reminders before each.",
       "audience": "member",
       "feature": "marathon",
-      "command": null,
+      "command": "/event",
       "sort": 35,
       "steps": [
         {"do": "Type **/event** and press **Marathons…**.", "expect": "A panel headed BaF next: every BaF run on a schedule Black Bloc follows, soonest first."},
@@ -573,7 +573,7 @@
       "goal": "Add a marathon, pair its runners, and keep one board post up to date.",
       "audience": "staff",
       "feature": "marathon",
-      "command": null,
+      "command": "/event",
       "sort": 205,
       "steps": [
         {"do": "Type **/event**, press **Marathons…**, then **Add a marathon…** and paste the schedule link.", "expect": "The marathon is listed with its dates, its runs and how many are BaF."},
@@ -613,7 +613,7 @@
       "goal": "A watched channel's announcements still post; they ping only inside a window.",
       "audience": "staff",
       "feature": "golive",
-      "command": null,
+      "command": "/golive",
       "sort": 214,
       "steps": [
         {"do": "On **/golive** ▸ **Channels…** pick the channel.", "expect": "Its Pings line: always, never or during events."},
