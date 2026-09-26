@@ -141,14 +141,16 @@ def test_automod_rules_is_the_only_key_in_the_registry_with_no_editor():
     assert {key for key in KEY_TYPES if not has_editor(key)} == {"automod_rules"}
 
 
-def test_the_mode_block_is_the_hide_table_plus_exactly_four_hand_added_rows():
-    """Derived, so the mode block and the hide table can never drift apart. `rolemenu_mode`
-    joined the hand-added rows at the pings remake (§C6) — it stopped hiding its command —
-    and `marathon_mode` when `/marathon` folded into `/event` ▸ Marathons…."""
+def test_the_mode_block_is_the_hide_table_plus_exactly_three_hand_added_rows():
+    """Derived, so the mode block and the hide table can never drift apart. `marathon_mode`
+    joined the hand-added rows when `/marathon` folded into `/event` ▸ Marathons…;
+    `rolemenu_mode` left them 2026-09-25 (owner, "B") when it went back to hiding `/rolemenu`."""
     from black_bloc.settings_panel import FEATURE_MODES
 
     assert len(FEATURE_MODES) == len(HIDDEN_WHEN_OFF) + len(EXTRA_MODES) == 20
-    assert {"rolemenu_mode", "marathon_mode"} <= {row.key for row in EXTRA_MODES}
+    assert len(EXTRA_MODES) == 3
+    assert "marathon_mode" in {row.key for row in EXTRA_MODES}
+    assert "rolemenu_mode" in HIDDEN_WHEN_OFF
     assert {row.key for row in FEATURE_MODES} == set(HIDDEN_WHEN_OFF) | {
         row.key for row in EXTRA_MODES
     }
@@ -309,7 +311,7 @@ def test_row_two_never_grows_past_the_five_controls_discord_allows():
 
 @pytest.mark.parametrize(
     "hidden,expected",
-    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 16)],
+    [(set(), 0), ({"youtube"}, 1), ({names[0] for names in HIDDEN_WHEN_OFF.values()}, 17)],
 )
 def test_turn_a_feature_back_on_lists_exactly_what_is_hidden_and_never_more(hidden, expected):
     values = {HIDE_COMMANDS_WHEN_OFF: True}

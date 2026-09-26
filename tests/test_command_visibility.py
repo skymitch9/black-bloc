@@ -256,6 +256,8 @@ async def test_every_command_in_the_table_is_a_real_top_level_command(real_tree)
 
 
 async def test_the_seventeen_features_that_hide_each_map_to_one_command():
+    """`rolemenu_mode` came back (owner, 2026-09-25 "B") once `/mod` ▸ Role grants… became a
+    door onto the Grants console that no mode hides."""
     assert cv.HIDDEN_WHEN_OFF == {
         "applications_mode": ("apply",),
         "automod_mode": ("automod",),
@@ -271,11 +273,14 @@ async def test_the_seventeen_features_that_hide_each_map_to_one_command():
         "posts_mode": ("posts",),
         "raidtrain_mode": ("raidtrain",),
         "request_mode": ("request",),
+        "rolemenu_mode": ("rolemenu",),
         "tempvoice_mode": ("voice",),
         "youtube_live_mode": ("youtube",),
     }
+    assert len(cv.HIDDEN_WHEN_OFF) == 17
     assert "modmail_mode" not in cv.HIDDEN_WHEN_OFF
-    assert "rolemenu" in cv.NEVER_HIDDEN
+    assert "rolemenu" not in cv.NEVER_HIDDEN
+    assert "mod" not in {name for names in cv.HIDDEN_WHEN_OFF.values() for name in names}
 
 
 async def test_modmail_lost_its_lock_because_anybody_may_open_a_ticket(tmp_path, monkeypatch):
@@ -370,19 +375,16 @@ async def test_every_hidden_feature_can_still_be_turned_back_on_from_discord():
         assert "shadow" not in KEY_CHOICES[key] or parse_value(key, "shadow") == "shadow"
 
 
-async def test_apply_hides_with_the_rest_but_memory_and_rolemenu_stay(bot):
+async def test_apply_and_rolemenu_hide_with_the_rest_but_memory_stays(bot):
     """`/apply` hides — owner, 2026-09-03: "Visible". `/memory` KEEPS its carve-out (fork
     I-M1, "open it"): turning memory off deletes nothing, the site is staff-only, so the panel
-    is a member's only door to notes held about them (KI-14). `/rolemenu` took the same
-    carve-out back at the pings remake (§C6): the mode governs who MEMBERS may pick from, and
-    Grants…, the timed grants and Hand roles out… have no onboarding equivalent, so hiding the
-    command took staff's only door to them away."""
+    is a member's only door to notes held about them (KI-14). `/rolemenu` held the same
+    carve-out from the pings remake (§C6) until 2026-09-25 (owner, "B"): the Grants console
+    now also opens from `/mod` ▸ Role grants…, which no mode hides."""
     assert "chat_memory_mode" not in cv.HIDDEN_WHEN_OFF
     assert all("memory" not in names for names in cv.HIDDEN_WHEN_OFF.values())
-    assert "rolemenu_mode" not in cv.HIDDEN_WHEN_OFF
     assert bot.store.get(GUILD, "rolemenu_mode") == "off"
-    assert "rolemenu" not in cv.hidden_names(bot, GUILD)
-    for key, name in (("applications_mode", "apply"),):
+    for key, name in (("applications_mode", "apply"), ("rolemenu_mode", "rolemenu")):
         assert bot.store.get(GUILD, key) == "off"
         assert name in cv.hidden_names(bot, GUILD)
         await bot.store.set(GUILD, key, "on", by=5)
@@ -427,6 +429,48 @@ async def test_the_real_command_tree_hides_and_gives_back_the_group(tmp_path, mo
     await black_bloc.close()
 
     assert synced == [GUILD]
+
+
+async def test_rolemenu_leaves_the_tree_when_off_and_mod_keeps_the_grants_door(
+    tmp_path, monkeypatch, waits
+):
+    """Owner, 2026-09-25 "B": with role menus off `/rolemenu` hides, `/mod` never does, and
+    `/mod` ▸ Role grants… is the console's door; turned on, both doors are back."""
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(
+        _env_file=None,
+        dev_guild_id=GUILD,
+        test_mode=True,
+        test_channel_id=TEST_CHANNEL,
+        database_path=tmp_path / "rolemenu.sqlite3",
+    )
+    black_bloc = BlackBlocBot(settings)
+    await black_bloc.db.connect()
+    await black_bloc.store.load()
+    assert black_bloc.store.get(GUILD, "rolemenu_mode") == "off"
+    for name in (
+        "black_bloc.cogs.core",
+        "black_bloc.cogs.community.role_menus",
+        "black_bloc.cogs.moderation.modcmds",
+    ):
+        assert name in COGS
+        await black_bloc.load_extension(name)
+    black_bloc.tree.copy_global_to(guild=DEV_GUILD)
+    black_bloc.tree.sync = lambda *, guild=None: asyncio.sleep(0, [])
+    control = cv.install(black_bloc)
+
+    in_guild = {command.name for command in black_bloc.tree.get_commands(guild=DEV_GUILD)}
+    assert "rolemenu" not in in_guild
+    assert {"mod", "settings"} <= in_guild
+    assert "rolemenu" in cv.hidden_names(black_bloc, GUILD)
+
+    await black_bloc.store.set(GUILD, "rolemenu_mode", "on", by=5)
+
+    in_guild = {command.name for command in black_bloc.tree.get_commands(guild=DEV_GUILD)}
+    assert {"rolemenu", "mod"} <= in_guild
+    waits.gate.set()
+    await control.task
+    await black_bloc.close()
 
 
 async def test_the_staff_lock_survives_a_copy_to_the_guild_and_a_hide_and_show(
