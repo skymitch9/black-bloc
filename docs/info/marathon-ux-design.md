@@ -1,5 +1,7 @@
 # The Events page, made plain — three sections, one Schedule card first in the marathon drawer, one Next up, and "BaF" where it said "ours"
 
+> ✅ **2026-09-25 — LIVE as v166 19:30** (merge `c86b9660`; release commit `b06d4f1d`; boot `database ready` 02:30:22Z, `logged in` 02:30:27Z, no Traceback, `/health` 65 ms — `deploys.log`'s v166 line). The ➕ notes below describe the later builds that reshaped this drawer; all of them shipped in the same release. Nothing has met Discord by hand; sweeps `MX-a`…`MX-f` are the owner's.
+>
 > ➕ **2026-09-25 (branch `event-drawer`, 🔨 BUILT, NOT MERGED): an event opens in a drawer too** — the queue's Open (and `#event-<id>` / `#detail=<id>`) opens a drawer like the marathon's; the inline *Event #N* section and its rail row are gone, so the page is back to *Events · Marathons · Settings and logs*. [`event-drawer-design.md`](event-drawer-design.md).
 > ➕ **2026-09-25 (branch `marathon-drawer-lite`, 🔨 BUILT, NOT MERGED): the drawer is now two header lines · People · a shut *Settings for this marathon* · a Posts line · Read it now / Pause / Remove** — the Schedule, Event, The channel and Posts cards are gone. [`marathon-drawer-lite-design.md`](marathon-drawer-lite-design.md).
 

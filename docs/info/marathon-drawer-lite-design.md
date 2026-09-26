@@ -1,5 +1,7 @@
 # The marathon drawer, lightened — a two-line header, People as the body, settings folded, one moves bar
 
+> ✅ **2026-09-25 — LIVE as v166 19:30** (merge `213fe142`; release commit `b06d4f1d`; boot `database ready` 02:30:22Z, `logged in` 02:30:27Z, no Traceback, `/health` 65 ms — `deploys.log`'s v166 line). No browser opened the live drawer; sweeps `ML-a`…`ML-d` are the owner's.
+>
 > 🔨 **BUILT 2026-09-25 on branch `marathon-drawer-lite` (worktree `C:/lcw/bb-marathon-drawer-lite`), NOT MERGED, NOT DEPLOYED** — see *Deviations* and *What was NOT verified* at the foot.
 
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 18:1x Phoenix),

@@ -1,5 +1,7 @@
 # An event opens in a drawer — the facts that are set, the decision, the edit folded
 
+> ✅ **2026-09-25 — LIVE as v166 19:30** (merge `0eb2650d`, and `event-links` merge `b0401e0c` in the same release; release commit `b06d4f1d`; boot `database ready` 02:30:22Z, `logged in` 02:30:27Z, no Traceback, `/health` 65 ms — `deploys.log`'s v166 line). No live link clicked; sweeps `ED-a`…`ED-e` are the owner's.
+>
 > **2026-09-25 (branch `event-links`, off `main` `271ec7f8`, code `b034cde3` + `ea781d6e`) — Deviation 1 CLOSED, 🔨 BUILT, NOT MERGED, NOT DEPLOYED.** Owner: *"make them links"*. The row (list and detail, one helper `api/tools/events.py:event_links`) now carries `announce_url`, `scheduled_event_url` and `review_url` (each `null` when absent); the drawer shows *Announced: announcement ↗*, *Discord event: on the server's Events list ↗* and the review room/post name as a link ↗, **Delete this room/post** still beside it. ⚠️ The row does not store the channel the announcement went to, so `announce_url` uses the `events_announce_channel_id` setting AT READ TIME — if staff move that setting after an event was announced, its link points at the new channel and Discord says the message is not there. With no announce channel set the row keeps `announced: true` and `announce_url: null`, and the drawer falls back to the old words. NOT verified: no link was clicked in Discord (sweep `ED-e`).
 
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 18:0x Phoenix),

@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then).
-> Last verified: **2026-09-25 16:2x** — KI-10 and KI-26 only, at the v165 docs ritual: a KI-10 line for the v165 swap (the line itself NOT read — Fly's log buffer starts at the new machine); KI-26: the fix shipped inside v165, CI green (`gh run list`). ⚠️ Nothing else re-read.
+> Last verified: **2026-09-25 19:3x** — KI-10 only, at the v166 docs ritual: a KI-10 line for the v166 swap (the line itself NOT read — `flyctl logs --no-tail` at 19:3x starts at 02:32:34Z, after the boot). ⚠️ Nothing else re-read.
+> Before that, **2026-09-25 16:2x** — KI-10 and KI-26 only, at the v165 docs ritual: a KI-10 line for the v165 swap (the line itself NOT read — Fly's log buffer starts at the new machine); KI-26: the fix shipped inside v165, CI green (`gh run list`). ⚠️ Nothing else re-read.
 > Before that, **2026-09-25 14:2x** — KI-10 only, at the v164 docs ritual: one sighting line (21:15:49Z, the v164 swap, from `deploys.log`). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 18:3x** — KI-10 only, at the v163 docs ritual: one sighting line (01:32:43Z, the v163 swap, from `deploys.log`). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 16:2x** — KI-10 only, at the v162 docs ritual: one sighting line (23:19:48Z, the v162 swap, from `deploys.log` and the conductor's log read). ⚠️ Nothing else re-read.
@@ -1003,6 +1004,7 @@ Sighting **2026-09-23 23:19:48Z, the v162 swap**: one line from the retiring pro
 Sighting **2026-09-24 01:32:43Z, the v163 swap** (18:32 Phoenix): one line from the retiring process, six seconds before the new one's `database ready` (01:32:49Z) — still shutdown-only, still one (per `deploys.log`; the running machine's log since was not read by this ritual).
 Sighting **2026-09-25 21:15:49Z, the v164 swap** (14:16 Phoenix): one line from the retiring process, seven seconds before the new one's `database: added …` lines and `database ready` (21:15:56Z) — still shutdown-only, still one (per `deploys.log`; the running machine's log since was not read by this ritual).
 Swap **2026-09-25 23:15:0xZ, v165** (16:15 Phoenix): the new machine's first line is 23:15:00Z and its `database ready` / `logged in` 23:15:04Z / 23:15:07Z; the retiring process's `Unclosed client session` line was NOT read — `flyctl logs --no-tail` at 16:1x starts at the new machine, and `deploys.log`'s v165 line does not record one. Neither a sighting nor proof of absence.
+Swap **2026-09-26 02:30Z, v166** (19:30 Phoenix): the new machine's `database ready` / `logged in` 02:30:22Z / 02:30:27Z (per `deploys.log`); the retiring process's `Unclosed client session` line was NOT read — `flyctl logs --app black-bloc --no-tail` at 19:3x starts at 02:32:34Z, after the boot, and `deploys.log`'s v166 line does not record it. Still no sighting on a RUNNING machine.
 
 **Why tolerated.** An aiohttp `ClientSession` that was never `close()`d is
 reported by its finaliser at interpreter exit; it costs nothing after the

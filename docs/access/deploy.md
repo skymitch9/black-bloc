@@ -2,7 +2,8 @@
 
 > **Audience:** Claude sessions and the owner. **Status:** TRACKED (owner,
 > 2026-08-31 — was local-only until then; secret NAMES only).
-> Last verified: **2026-09-23 16:2x — ONE gotcha added only**, at the v162 docs ritual: the dirty-tree refusal of the first v162 launch, under *Where `release.json` is written* (from `deploys.log`'s v162 line). ⚠️ Nothing else re-read.
+> Last verified: **2026-09-25 19:3x — ONE gotcha added only**, at the v166 docs ritual: *flyctl can lose its login mid-day*, above *Every later deploy* (from `deploys.log`'s v166 line and the conductor's 19:1x `flyctl auth whoami` read recorded in `TODO.md` at `9b84b06e`). ⚠️ NOT known: why the token vanished; nothing else re-read.
+> Before that, **2026-09-23 16:2x — ONE gotcha added only**, at the v162 docs ritual: the dirty-tree refusal of the first v162 launch, under *Where `release.json` is written* (from `deploys.log`'s v162 line). ⚠️ Nothing else re-read.
 > Before that, **2026-09-23 04:3x — the gate's pytest step only**, at the v157 docs ritual: the step shipped with `gate-names`
 > (merge `01309d43`) and **v157 was the first real deploy gate to run it** — green on the first run, `deploys.log` line 156; its junit
 > file, read at the ritual, says `tests=7382 failures=0 errors=0 skipped=3`, 44.8 s. ⚠️ No RED gate has run it yet, so the
@@ -129,6 +130,8 @@ never run `fly launch` — it rewrites the file.
 > commit: `git fetch origin && git merge --ff-only origin/main` (or `git pull --rebase=merges`) before pushing, and
 > only fall back to a plain rebase when there are no local merges. Recorded here because the deploy runbook is where
 > the next session will look when a merge hash cited in `DONE.md` cannot be found.
+
+> ⚠️ **flyctl can lose its login mid-day (2026-09-25 19:14, the v166 launch).** `flyctl auth whoami` began answering *no access token available* at 19:14:49, when `~/.fly/config.yml` was rewritten during the pre-deploy snapshot's `flyctl ssh console` (the 16:12 v165 deploy had worked). Run `flyctl auth whoami` before launching. The owner's `flyctl auth login` needs a real window, and a token from the Fly page works when the terminal callback does not — never paste a token into a Claude session.
 
 ## Every later deploy — `scripts/deploy.ps1`, nothing else
 

@@ -1,5 +1,7 @@
 # The source is a column, and a marathon opens on its people — BaF first, then everyone, each one linkable or spotlightable
 
+> ✅ **2026-09-25 — LIVE as v166 19:30** (merge `afba30b2`; release commit `b06d4f1d`; boot `database ready` 02:30:22Z, `logged in` 02:30:27Z, no Traceback, `/health` 65 ms — `deploys.log`'s v166 line). Migration: schema **64 → 65**, `marathon_spotlights` is a NEW TABLE, so the boot log has no `database: added` line for it (it names added columns only); `SCHEMA_VERSION` 65 read at HEAD. Nothing has met Discord by hand; sweeps `MP-a`…`MP-f` are the owner's.
+>
 > ➕ **2026-09-25 (branch `marathon-drawer-lite`, 🔨 BUILT, NOT MERGED): the drawer is now two header lines · People · a shut *Settings for this marathon* · a Posts line · Read it now / Pause / Remove** — the Schedule, Event, The channel and Posts cards are gone. [`marathon-drawer-lite-design.md`](marathon-drawer-lite-design.md).
 
 > 🔨 **BUILT 2026-09-25 on branch `marathon-people` (worktree `C:/lcw/bb-marathon-people`), NOT MERGED, NOT DEPLOYED** — see *Deviations* and *What was NOT verified* at the foot.
