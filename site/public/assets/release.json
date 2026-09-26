@@ -1,8 +1,7 @@
 {
-  "release": "v168",
-  "commit": "a34acd82",
+  "release": "v169",
+  "commit": "1c92ec00",
   "changed_features": [
-    "core",
-    "guides"
+    "marathon"
   ]
 }
