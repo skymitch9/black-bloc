@@ -3368,7 +3368,7 @@ with its schedule published — a deploy before 2026-09-29 adds it at once, and 
 
 ## Rows `HE-a` … `HE-d` — the horaro.net events feed for Fast Paced Events (branch `marathon-horaro-events`, 2026-09-26)
 
-🔨 **BUILT on branch `marathon-horaro-events`, NOT merged, NOT deployed.** Owner, 2026-09-26: *"Build them all now"*.
+🔨 **BUILT on branch `marathon-horaro-events`, LIVE as v173.** Owner, 2026-09-26: *"Build them all now"*.
 Design: [`../info/marathon-horaro-events-design.md`](../info/marathon-horaro-events-design.md). Rows lettered; the
 conductor numbers them. Local check first: `MOCK_PORT=8807 node site/mock/server.mjs` from the branch, then
 <http://localhost:8807/events.html> ▸ **Sources…**.
@@ -3387,7 +3387,7 @@ wait for FPE to create one.
 
 ## Rows `FF-a` … `FF-d` — the Fastest Furs feed (branch `marathon-fastestfurs`, 2026-09-26)
 
-🔨 **BUILT on branch `marathon-fastestfurs`, NOT merged, NOT deployed.** Owner, 2026-09-26: *"Build them all now"*.
+🔨 **BUILT on branch `marathon-fastestfurs`, LIVE as v173.** Owner, 2026-09-26: *"Build them all now"*.
 Design: [`../info/marathon-fastestfurs-design.md`](../info/marathon-fastestfurs-design.md). Rows lettered; the
 conductor numbers them. Local check first: `MOCK_PORT=8806 node site/mock/server.mjs` from the branch, then
 <http://localhost:8806/events.html> ▸ **Sources…**.
@@ -3408,7 +3408,7 @@ shadow).
 
 ## Rows `LA-a` … `LA-d` — Lady Arcaders, found by probing ladyarcaders.com (branch `marathon-ladyarcaders`, 2026-09-26)
 
-🔨 **BUILT on branch `marathon-ladyarcaders`, NOT merged, NOT deployed.** Owner, 2026-09-26: *"Build them all now"*.
+🔨 **BUILT on branch `marathon-ladyarcaders`, LIVE as v173.** Owner, 2026-09-26: *"Build them all now"*.
 Design: [`../info/marathon-ladyarcaders-design.md`](../info/marathon-ladyarcaders-design.md). Rows lettered; the
 conductor numbers them. Local check first: `MOCK_PORT=8808 node site/mock/server.mjs` from the branch, then
 <http://localhost:8808/events.html> ▸ **Sources…**.

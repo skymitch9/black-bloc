@@ -1,5 +1,7 @@
 # Marathon feed `horaro_events` — find a channel's events on horaro.net (Fast Paced Events)
 
+> ✅ **2026-09-26 13:4x — LIVE as v173 13:35** (merge `62aefd31`; release commit `5a66acd2` (`release.json` v173 at `aee13ffe`); ONE fast-forward of `main` to `merge-marathon-sources` `282ce0ee`; boot `database ready` 20:35:43Z, `synced 33 app commands` 20:35:43Z, `logged in as Black_Bloc` 20:35:46Z, no Traceback, `/health` 63 ms — `deploys.log`'s v173 line). After the deploy the session added channel row **9 `fastpacedevents`** (marathons ON, spotlight and announce OFF) and feed **6 *Fast Pace*** (horaro events) through the owner's browser session; its first check found **0** — nothing announced yet, as the research said. So this reader has NOT yet met a live event from Fly. Sweeps `HE-a…d` are the owner's. The status line below is history.
+
 > **Audience:** the conductor, reviewers and the next build agent. **Status:** TRACKED · 🔨 **BUILT on branch
 > `marathon-horaro-events`** (off `main` `a3ac5132`; commits `053ebcfa` code + tests + fixtures, `87ddd4ba` site +
 > mock, and the docs commit) — **NOT merged, NOT deployed, nothing has met Discord or Fly.** **Last verified:

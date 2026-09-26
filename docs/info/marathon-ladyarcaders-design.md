@@ -1,5 +1,7 @@
 # Lady Arcaders — a fifth marathon source, found by probing ladyarcaders.com's next event numbers
 
+> ✅ **2026-09-26 13:4x — LIVE as v173 13:35** (merge `b8a86dfe` of `480d6291`; the floor became the key `marathon_ladyarcaders_floor`, default 24, in `fca7a18b` — keys 493; release commit `5a66acd2` (`release.json` v173 at `aee13ffe`); ONE fast-forward of `main` to `merge-marathon-sources` `282ce0ee`; boot `database ready` 20:35:43Z, `synced 33 app commands` 20:35:43Z, `logged in as Black_Bloc` 20:35:46Z, no Traceback, `/health` 63 ms — `deploys.log`'s v173 line). After the deploy the session added channel row **10 `ladyarcaders`** (marathons ON, spotlight and announce OFF) and feed **7 Lady Arcaders** through the owner's browser session; its first check found **0** — nothing announced yet, as the research said. So this reader has NOT yet met a live event from Fly. Sweeps `LA-a…d` are the owner's. The status line below is history.
+
 > **Audience:** the conductor, reviewers and future sessions touching marathon sources. **Status:** TRACKED ·
 > 🔨 **BUILT on branch `marathon-ladyarcaders`** (off `main` `a3ac5132`; commits `f450ee59` code + tests + fixtures,
 > `8d0d4400` site + mock, and the docs commit) — **NOT merged, NOT deployed, nothing has met Discord or Fly.**
