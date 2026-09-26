@@ -4422,6 +4422,8 @@ MARATHON_FEED_RECENT_KEY = "marathon_feed_recent_days"
 MARATHON_FEED_ADDED_TEMPLATE_KEY = "marathon_feed_added_template"
 MARATHON_FEED_SUGGEST_TEMPLATE_KEY = "marathon_feed_suggest_template"
 MARATHON_FEED_ACTIONS = ("add", "suggest")
+MARATHON_FEED_NOTICE_WHEN_KEY = "marathon_feed_notice_when"
+MARATHON_FEED_NOTICE_WHENS = ("published", "added")
 MARATHON_FEED_FIELDS = ("feed", "event", "when", "relative", "url", "channel")
 MARATHON_EVENT_FIELDS = ("marathon", "channel")
 MARATHON_NEXT_FIELDS = ("marathon", "next", "when", "relative", "url")
@@ -4594,6 +4596,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "what a new feed does with an event it finds, until staff change that feed: add puts "
         "it on the marathon list at once with a staff notice to pause or remove it; suggest "
         "posts a staff notice with Add it and Not this one. add by default",
+    ),
+    MARATHON_FEED_NOTICE_WHEN_KEY: (
+        "enum",
+        "published",
+        "when staff are told about a marathon a feed found: published — the default — adds it "
+        "to the list quietly and posts the staff notice once its schedule is posted (the first "
+        "read that finds runs); added posts the notice the moment it is found. Either way a "
+        "marathon is noticed once",
     ),
     MARATHON_FEED_RECENT_KEY: (
         "int",
@@ -4836,6 +4846,7 @@ KEY_TYPES.update({key: "text" for key in MARATHON_WORDS})
 KEY_HELP.update({key: said for key, (_, _, said) in MARATHON_WORDS.items()})
 KEY_CHOICES[MARATHON_MODE_KEY] = MARATHON_MODES
 KEY_CHOICES[MARATHON_FEED_ACTION_KEY] = MARATHON_FEED_ACTIONS
+KEY_CHOICES[MARATHON_FEED_NOTICE_WHEN_KEY] = MARATHON_FEED_NOTICE_WHENS
 KEY_CHOICES[MARATHON_EVENT_MODE_DEFAULT_KEY] = MARATHON_EVENT_MODES
 KEY_CHOICES[MARATHON_NOTICE_HOME_KEY] = MARATHON_NOTICE_HOMES
 KEY_MIN.update({key: floor for key, (floor, _) in MARATHON_RANGES.items()})

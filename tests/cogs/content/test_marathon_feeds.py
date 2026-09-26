@@ -15,6 +15,7 @@ from black_bloc.cogs.content.marathon import (
     create_marathon,
     get_marathon,
     list_marathons,
+    refresh_marathon,
     remove_marathon,
     runs_of,
     update_marathon,
@@ -110,8 +111,9 @@ async def all_feeds(bot):  # noqa: F811
     return await feeds.list_feeds(bot.db, GUILD)
 
 
-async def seeded(bot, cog):  # noqa: F811
+async def seeded(bot, cog, when="added"):  # noqa: F811
     await staff_room(bot)
+    await bot.store.set(GUILD, "marathon_feed_notice_when", when)
     gdq = await a_channel(bot, "gamesdonequick", "GamesDoneQuick")
     await a_channel(bot, "rpglimitbreak", "RPG Limit Break")
     await a_channel(bot, "esamarathon", "ESAMarathon")
@@ -719,3 +721,149 @@ async def test_every_notice_item_outlives_a_restart():
     await Marathons.cog_load(cog)
 
     assert feeds.FeedButton in registered and feeds.NoticeModePick in registered
+
+
+# --- the notice waits for the schedule ------------------------------------------------------
+
+AGDQ = "74"
+FIRST_RUN = "2027-01-04T17:00:00+00:00"
+LAST_RUN = "2027-01-04T19:00:00+00:00"
+
+
+def two_runs():
+    return [
+        Run("r1", 1, "Croc 2", "Croc 2", "Any%", FIRST_RUN, "2027-01-04T18:00:00+00:00", 3600),
+        Run("r2", 2, "Willow", "Willow", "Any%", "2027-01-04T18:00:00+00:00", LAST_RUN, 3600),
+    ]
+
+
+async def by_ref(bot):  # noqa: F811
+    return {row["source_ref"]: row for row in await list_marathons(bot.db, GUILD)}
+
+
+async def posted(bot):  # noqa: F811
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'marathon.notice_posted' ORDER BY id"
+    )
+    return [json.loads(row["details"]) for row in await cur.fetchall()]
+
+
+async def publish(bot, cog, ref=AGDQ):  # noqa: F811
+    cog.client.runs_by_ref[("gdq", ref)] = two_runs()
+    return await refresh_marathon(bot, bot.guild, (await by_ref(bot))[ref])
+
+
+async def test_published_mode_adds_quietly_and_notices_once_on_the_first_read_with_runs(
+    bot,  # noqa: F811
+    cog,
+):
+    await seeded(bot, cog, "published")
+    await cog.tick_once()
+    made = await by_ref(bot)
+    assert sorted(made) == ["71", "72", "73", "74"] and notices(bot) == []
+    assert {row["noticed_at"] for row in made.values()} == {None}
+    assert "marathon.feed_added" in await kinds(bot.db)
+    await refresh_marathon(bot, bot.guild, made[AGDQ])
+    assert notices(bot) == []
+
+    await publish(bot, cog)
+
+    assert len(notices(bot)) == 1
+    notice = notices(bot)[0]
+    assert "**Awesome Games Done Quick 2027**" in notice.content
+    fields = field_map(notice.kwargs["embed"])
+    assert fields[mf.NOTICE_SCHEDULE].endswith(mt.CARD_COUNTS.format(runs=2, ours=0))
+    assert fields[mf.NOTICE_WHEN] == "<t:1799082000:f> – <t:1799089200:f>"
+    ids = [getattr(child, "item", child) for child in notice.kwargs["view"].children]
+    assert f"marathon:people:{made[AGDQ]['id']}" in [getattr(one, "custom_id", None) for one in ids]
+    assert (await get_marathon(bot.db, GUILD, made[AGDQ]["id"]))["noticed_at"]
+    rows = await posted(bot)
+    assert len(rows) == 1
+    assert rows[0]["because"] == "published" and rows[0]["home"] == "staff"
+    assert rows[0]["marathon_id"] == made[AGDQ]["id"]
+
+    await publish(bot, cog)
+    later(cog, 48)
+    await cog.tick_once()
+    assert len(notices(bot)) == 1 and len(await posted(bot)) == 1
+
+
+async def test_added_mode_notices_at_add_and_not_again_on_publish(bot, cog):  # noqa: F811
+    await seeded(bot, cog, "added")
+    await cog.tick_once()
+    assert len(notices(bot)) == 4
+    assert None not in {row["noticed_at"] for row in (await by_ref(bot)).values()}
+    assert {row["because"] for row in await posted(bot)} == {"added"}
+
+    await publish(bot, cog)
+
+    assert len(notices(bot)) == 4 and len(await posted(bot)) == 4
+
+
+async def test_a_schedule_already_published_at_discovery_notices_on_its_first_read(
+    bot,  # noqa: F811
+    cog,
+):
+    await seeded(bot, cog, "published")
+    cog.client.runs_by_ref[("gdq", AGDQ)] = two_runs()
+
+    await cog.tick_once()
+
+    assert len(notices(bot)) == 1
+    assert "Awesome Games Done Quick 2027" in notices(bot)[0].content
+    kinds_seen = await kinds(bot.db)
+    assert kinds_seen.index("marathon.feed_added") < kinds_seen.index("marathon.notice_posted")
+
+    cog.client.runs_by_ref[("gdq", "73")] = two_runs()
+    later(cog, 48)
+    await cog.tick_once()
+    assert len(notices(bot)) == 2
+    assert [row["because"] for row in await posted(bot)] == ["published", "published"]
+
+
+async def test_a_held_notice_rehearses_in_the_shadow_home(bot, cog):  # noqa: F811
+    await seeded(bot, cog, "published")
+    await bot.store.set(GUILD, "marathon_mode", "shadow")
+    await cog.tick_once()
+    shadow = bot.guild.channels[SHADOW_CHANNEL].messages
+    assert not [one for one in shadow if "new event" in one.content]
+
+    await publish(bot, cog)
+
+    assert notices(bot) == []
+    assert len([one for one in shadow if "new event" in one.content]) == 1
+    assert [row["home"] for row in await posted(bot)] == ["shadow"]
+
+
+async def test_a_held_notice_is_a_post_in_the_events_forum(bot, cog):  # noqa: F811
+    from tests.cogs.content.test_marathon_events import forum_mode
+
+    await seeded(bot, cog, "published")
+    forum = await forum_mode(bot)
+    await cog.tick_once()
+    assert forum.posts == []
+
+    await publish(bot, cog)
+
+    assert [post.name for post in forum.posts] == ["New marathon: Awesome Games Done Quick 2027"]
+    assert notices(bot) == []
+    rows = await posted(bot)
+    assert [(row["home"], row["because"]) for row in rows] == [("events", "published")]
+
+
+async def test_off_holds_the_notice_unclaimed_and_a_feedless_marathon_never_notices(
+    bot,  # noqa: F811
+    cog,
+):
+    await seeded(bot, cog, "published")
+    await cog.tick_once()
+    await bot.store.set(GUILD, "marathon_mode", "off")
+    await publish(bot, cog)
+    assert (await by_ref(bot))[AGDQ]["noticed_at"] is None
+    await update_marathon(bot.db, (await by_ref(bot))["73"]["id"], feed_id=None)
+    await bot.store.set(GUILD, "marathon_mode", "on")
+
+    await publish(bot, cog)
+    await publish(bot, cog, "73")
+
+    assert len(notices(bot)) == 1 and (await by_ref(bot))["73"]["noticed_at"] is None

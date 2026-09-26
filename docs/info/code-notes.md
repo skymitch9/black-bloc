@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-25 — one section APPENDED, nothing re-keyed**: *The feed notice waits for the schedule* (branch `marathon-notice-when`, off `main` `791b5543`, keyed against `f518c143`). Before that:
 > **2026-09-25 — one section APPENDED, one row retired, nothing re-keyed**: *Several guides per command* (branch `guides-per-command`, off `main` `582977f1`, keyed against `2f86e8bb`). Before that:
 > **2026-09-25 — one section APPENDED, two rows rewritten, nothing re-keyed**: */mod ▸ Role grants… and `/rolemenu` hiding again* (branch `hide-rolemenu`, off `main` `dad277d2`, keyed against `27fe6c27`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The guides seed may carry `"command": null`* (guides re-shoot, `main` `7a3cdff1`). Before that:
@@ -8619,3 +8620,18 @@ Owner, 2026-09-25 20:3x: *"why does marathon have an empty event category"*. Key
 | `site/public/assets/page-guides.js:247` `byCommand` | Stable regroup of the hub's cards by command in the API's order; a guide with no command keeps its own place (`#<index>` cannot collide with a command, which starts with `/`). |
 | `site/public/assets/page-guides.js:94` `COMMAND_HINT` | The Command field's hint, shared by the editor and the new-guide form (it used to say one guide per command). |
 | `site/mock/server.mjs:1084` `golive-channels` | A second `/golive` guide (staff) in the mock, so a staff hub shows two cards under one command. |
+
+## The feed notice waits for the schedule (branch `marathon-notice-when`, 2026-09-25)
+
+Owner, 2026-09-25 22:1x: *"we can pre load up any event we find but i only want it to create an event thread for the marathon once the schedule is out"*. Keyed against `f518c143`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/storage/db.py:1201` `marathons.noticed_at` · `:1212` `STAFF_MADE_NOTICED` | NULL = the staff notice has not gone out. The backfill stamps only rows with no `feed_id` (they were never going to get a feed notice); feed-made rows stay NULL on purpose, so a live GDQ marathon notices once when its schedule publishes. |
+| `black_bloc/cogs/content/marathon.py:280` `insert_marathon(noticed=True)` · `:523` `create_marathon(noticed=True)` | Every staff-made row is born noticed (Add, a taken suggestion, the next-event Add it). Only `add_candidate` passes `noticed=False`, and only under `published`. |
+| `black_bloc/cogs/content/marathon.py:366` `claim_notice` | One conditional UPDATE (`… AND noticed_at IS NULL`); the rowcount is the answer, so two readers racing (a tick and a Read it now) cannot both post. The claim IS the record-before-post (checklist 12); a failed post is logged `marathon.feed_notice_failed` and not retried, as every notice here. |
+| `black_bloc/cogs/content/marathon.py:624` `notice_if_published` · `:620` · `:1463` | The two read doors that are not the add: `refresh_marathon` (site, panel, Read it now) and `tick_marathon`. Not inside `Marathons.refresh` itself, because `create_marathon` reads BEFORE it sets `event_mode` and makes the event, so a notice from there would show the wrong Event field and land before `marathon.feed_added`. |
+| `black_bloc/cogs/content/marathon_feeds.py:441` `add_candidate` — `if not at_once` | The add's own first read already ran inside `create_marathon`; the runs it wrote are counted from the table under the marathon's lock, so a schedule already out at discovery notices at once, after the `feed_added` row. |
+| `black_bloc/cogs/content/marathon_feeds.py:471` `notice_published` | Fires on any feed-made row with `noticed_at` NULL whatever the key says, so flipping `published` → `added` never strands a held notice. `off` returns before the claim (the notice waits); a row whose feed was deleted (`feed_id` NULL) never notices. |
+| `black_bloc/cogs/content/marathon_feeds.py:454` `send_added_notice` | The one builder both paths use — the sentence, `notice_embed`, `added_view` + `people_on` — so the held notice is the same notice, with real dates and counts. |
+| `black_bloc/cogs/content/marathon_feeds.py:550` `post_notice` — `because` | Rides into `what`, so `marathon.notice_posted` says why it posted (`published` / `added`); the suggest notice carries no `because` and its row is unchanged. |

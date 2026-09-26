@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 66
+        assert SCHEMA_VERSION == 67
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -1534,7 +1534,35 @@ async def test_a_schema_65_file_loses_the_one_published_guide_index(tmp_path):
         cur = await again.conn.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
         )
-        assert (await cur.fetchone())["value"] == "66"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_66_file_gains_noticed_at_stamped_only_for_staff_made_marathons(tmp_path):
+    """Schema 67: a feed-made marathon waits for its notice; a staff-made one never had one."""
+    path = tmp_path / "old66.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE marathons DROP COLUMN noticed_at")
+    for name, feed_id in (("staff", None), ("feed", 3)):
+        await db.conn.execute(
+            "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, "
+            "added_at, feed_id) VALUES (1, ?, ?, 'gdq', ?, '2026-09-25T16:15:00+00:00', ?)",
+            (name, f"https://x/{name}", name, feed_id),
+        )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '66')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name, noticed_at FROM marathons ORDER BY name")
+        found = {row["name"]: row["noticed_at"] for row in await cur.fetchall()}
+        assert found == {"feed": None, "staff": "2026-09-25T16:15:00+00:00"}
     finally:
         await again.close()
 

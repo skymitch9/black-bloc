@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 66
+SCHEMA_VERSION = 67
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1198,6 +1198,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "feed_id", "INTEGER"),
     ("marathons", "event_mode", "TEXT NOT NULL DEFAULT 'none'"),
     ("marathons", "held_by_channel", "INTEGER NOT NULL DEFAULT 0"),
+    ("marathons", "noticed_at", "TEXT"),
     ("marathon_runs", "event_id", "INTEGER"),
     ("marathon_feeds", "event_mode", "TEXT"),
     ("marathon_feeds", "held_by_channel", "INTEGER NOT NULL DEFAULT 0"),
@@ -1208,7 +1209,11 @@ CARRIED_EVENT_WISH = (
     "UPDATE marathons SET event_mode = 'marathon' "
     "WHERE event_id IS NOT NULL OR event_wanted = 1"
 )
-BACKFILLS: dict[tuple[str, str], str] = {("marathons", "event_mode"): CARRIED_EVENT_WISH}
+STAFF_MADE_NOTICED = "UPDATE marathons SET noticed_at = added_at WHERE feed_id IS NULL"
+BACKFILLS: dict[tuple[str, str], str] = {
+    ("marathons", "event_mode"): CARRIED_EVENT_WISH,
+    ("marathons", "noticed_at"): STAFF_MADE_NOTICED,
+}
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")
 OPEN_THE_RETIRED_STATUSES = (

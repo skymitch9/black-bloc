@@ -1,5 +1,7 @@
 # A rehearsal home per feature, and a marathon notice with the detail and the control staff need
 
+> 🔨 **2026-09-25 22:xx — §E's notice now waits for the schedule, branch `marathon-notice-when` (BUILT, NOT merged):** the SAME embed + rows + People… (`send_added_notice`), through the same `_send_staff` (forum post under `marathon_notice_home = events`, staff channel, or the shadow home), posts on the first read that finds runs while `marathon_feed_notice_when = published` (default); `added` posts at add as §E shipped. `marathon.notice_posted` gains `because`. [`marathon-feeds-design.md`](marathon-feeds-design.md)'s top line has the rules.
+>
 > ✅ **2026-09-25 — LIVE as v166 19:30** (merge `0fecffa9`; release commit `b06d4f1d`; boot `database ready` 02:30:22Z, `logged in` 02:30:27Z, no Traceback, `/health` 65 ms — `deploys.log`'s v166 line). Set through the site at 19:3x by the conductor: `shadow_channel_id` → #blackbloc-logs, `frontdoor_shadow_channel_id` + `posts_shadow_channel_id` → #welcome-test (each answered 200 and read back — not re-read by the docs ritual). No rehearsal copy seen in its new home yet; sweeps `SH-a`…`SH-c` are the owner's.
 >
 > 🔨 **2026-09-25 — BUILT on branch `shadow-home-per-feature`, NOT merged, NOT deployed.** Six keys, not eleven (Deviation 1); §E covers the feed-added notice (Deviation 8). No live values set. See `## Deviations` and `## What was NOT verified` at the foot.
