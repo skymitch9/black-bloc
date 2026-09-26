@@ -13,7 +13,7 @@ from ... import marathon_events as me
 from ... import marathon_feeds as mf
 from ...actionlog import log_action
 from ...command_errors import AnswersErrors, SafeDynamicItem
-from ...golive import now_iso
+from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...marathon_channels import takes_marathons
 from ...marathon_sources import HORARO_SLUG, ScheduleError
@@ -26,6 +26,7 @@ from ...panels import (
     confirm_items,
     opened,
     refusal,
+    site_page_url,
     still_staff,
 )
 from ...settings_store import (
@@ -37,7 +38,9 @@ from ...settings_store import (
     MARATHON_FEED_SUGGEST_TEMPLATE_KEY,
     MARATHON_FEEDS_KEY,
 )
+from ...timezones import unix
 from .marathon import (
+    FEATURE,
     HELD_CODE,
     MODE_OFF,
     MODE_ON,
@@ -46,22 +49,29 @@ from .marathon import (
     MarathonPanel,
     actor_id,
     add_moves,
+    build_card,
+    channel_login,
     cog_of,
     create_marathon,
+    event_status_of,
     get_marathon,
     minutes_for,
     mode_of,
     open_root,
     opted_out_channel,
     opted_out_said,
+    reading_of,
+    refresh_marathon,
     rehearsal_details,
     remove_marathon,
     render,
+    runs_of,
     said_default,
     set_active,
+    source_of,
     update_marathon,
 )
-from .marathon_events import BAD_MODE_CODE, default_mode
+from .marathon_events import BAD_MODE_CODE, default_mode, set_event_mode
 from .spotlight import channel_by_id
 
 log = logging.getLogger(__name__)
@@ -79,11 +89,15 @@ SUGGESTION_GONE_CODE = "suggestion_gone"
 NOTHING_IGNORED_CODE = "nothing_ignored"
 FEED_TEMPLATE = (
     r"marathon:feed:(?P<feed_id>[0-9]+):(?P<ref>[A-Za-z0-9_./-]{1,60}):"
-    r"(?P<action>pause|remove|add|dismiss)"
+    r"(?P<action>pause|remove|add|dismiss|read|manage)"
 )
+MODE_TEMPLATE = r"marathon:feed:(?P<feed_id>[0-9]+):(?P<ref>[A-Za-z0-9_./-]{1,60}):mode"
 REF_LIMIT = 60
 PAUSE = "pause"
 REMOVE = "remove"
+READ = "read"
+MANAGE = "manage"
+MODE = "mode"
 TAKE = "add"
 DISMISS = "dismiss"
 FEEDS_VIEW = "feeds"
@@ -414,9 +428,12 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
     record = {"ref": candidate.ref, "name": candidate.name, "starts_at": candidate.starts_at}
     record["url"] = candidate.url
     text = words(bot, guild, MARATHON_FEED_ADDED_TEMPLATE_KEY, await fields_of(bot, feed, record))
-    ref = str(marathon["id"])
-    view = notice_view(feed["id"], ref, (PAUSE, REMOVE))
-    await post_notice(bot, guild, feed, text, view, details | {"marathon_id": marathon["id"]})
+    marathon = await get_marathon(bot.db, guild.id, marathon["id"]) or marathon
+    embed = await notice_embed(bot, guild, marathon, feed)
+    view = added_view(bot, feed["id"], marathon)
+    await post_notice(
+        bot, guild, feed, text, view, details | {"marathon_id": marathon["id"]}, embed=embed
+    )
     return True
 
 
@@ -453,7 +470,14 @@ async def fields_of(bot: Any, feed: Any, record: Any) -> dict[str, Any]:
 
 
 async def post_notice(
-    bot: Any, guild: Any, feed: Any, text: str, view: Any, details: dict[str, Any]
+    bot: Any,
+    guild: Any,
+    feed: Any,
+    text: str,
+    view: Any,
+    details: dict[str, Any],
+    *,
+    embed: Any = None,
 ) -> tuple[Any, int | None]:
     if mode_of(bot, guild.id) == MODE_OFF:
         return (None, None)
@@ -468,6 +492,7 @@ async def post_notice(
             "marathon_id": details.get("marathon_id"),
             "notice": "feed",
         },
+        embed=embed,
     )
     if message is None:
         await log_action(
@@ -492,11 +517,16 @@ async def fold_message(message: Any, line: str, *, struck: bool) -> None:
     body = str(getattr(message, "content", "") or "")
     if struck and body and not body.startswith("~~"):
         body = f"~~{body}~~"
+    embeds = list(getattr(message, "embeds", None) or [])
+    if struck and embeds and embeds[0].title and not str(embeds[0].title).startswith("~~"):
+        embeds[0] = embeds[0].copy()
+        embeds[0].title = f"~~{embeds[0].title}~~"
     try:
         await message.edit(
             content=f"{body}\n{line}" if body else line,
             view=None,
             allowed_mentions=discord.AllowedMentions.none(),
+            **({"embeds": embeds} if embeds else {}),
         )
     except Exception as exc:
         log.warning("marathon: could not fold a feed notice — %s", type(exc).__name__)
@@ -984,7 +1014,10 @@ class FeedButton(
         REMOVE: ("Remove it", discord.ButtonStyle.danger),
         TAKE: ("Add it", discord.ButtonStyle.primary),
         DISMISS: ("Not this one", discord.ButtonStyle.secondary),
+        READ: (mf.NOTICE_READ_LABEL, discord.ButtonStyle.secondary),
+        MANAGE: (mf.NOTICE_MANAGE_LABEL, discord.ButtonStyle.secondary),
     }
+    ROWS = {MANAGE: 2}
 
     def __init__(self, feed_id: int, ref: str, action: str, *, disabled: bool = False) -> None:
         self.feed_id = int(feed_id)
@@ -997,6 +1030,7 @@ class FeedButton(
                 style=style,
                 custom_id=notice_custom_id(feed_id, ref, action),
                 disabled=disabled,
+                row=self.ROWS.get(action, 0),
             )
         )
 
@@ -1017,6 +1051,12 @@ class FeedButton(
             return
         await interaction.response.defer(ephemeral=True)
         guild, user = interaction.guild, interaction.user
+        if self.action == MANAGE:
+            await open_manage(interaction, self.ref)
+            return
+        if self.action == READ:
+            await read_now(interaction, self.feed_id, self.ref)
+            return
         if self.action in (PAUSE, REMOVE):
             marathon = await get_marathon(bot.db, guild.id, self.ref)
             if marathon is None:
@@ -1050,6 +1090,159 @@ def notice_view(feed_id: Any, ref: Any, actions: tuple[str, ...]) -> Any:
     for action in actions:
         view.add_item(FeedButton(int(feed_id), str(ref), action))
     return view
+
+
+class NoticeModePick(
+    SafeDynamicItem, discord.ui.DynamicItem[discord.ui.Select], template=MODE_TEMPLATE
+):
+    def __init__(self, feed_id: int, ref: str, current: Any = None) -> None:
+        self.feed_id = int(feed_id)
+        self.ref = str(ref)
+        super().__init__(
+            discord.ui.Select(
+                custom_id=notice_custom_id(feed_id, ref, MODE),
+                placeholder=mf.NOTICE_MODE_PLACEHOLDER,
+                options=[
+                    discord.SelectOption(
+                        label=me.MODE_WORDS[one], value=one, default=one == current
+                    )
+                    for one in me.MODES
+                ],
+                row=1,
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: re.Match):
+        return cls(int(match["feed_id"]), match["ref"])
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        bot = interaction.client
+        guard = getattr(bot, "guard", None)
+        if guard is not None and not guard.allows_channel(interaction.channel_id):
+            await answer(interaction, guard.refusal_message())
+            return
+        if not await still_staff(interaction):
+            return
+        if not bot.db.is_connected:
+            await answer(interaction, DB_UNAVAILABLE)
+            return
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        marathon = await get_marathon(bot.db, guild.id, self.ref)
+        if marathon is None:
+            await answer(interaction, mf.NOTICE_GONE)
+            return
+        wanted = (self.item.values or [None])[0]
+        outcome = await set_event_mode(bot, guild, interaction.user, marathon, wanted)
+        if outcome.ok:
+            await redraw_notice(interaction, self.feed_id, self.ref)
+        await answer(interaction, outcome.message)
+
+
+def site_link(bot: Any, marathon_id: Any) -> str | None:
+    url = site_page_url(getattr(getattr(bot, "settings", None), "origin", ""), FEATURE)
+    return f"{url}#marathon-{int(marathon_id)}" if url else None
+
+
+def added_view(bot: Any, feed_id: Any, marathon: Any) -> Any:
+    """The added notice's three rows: the decisions, the event select, everything else."""
+    ref = str(marathon["id"])
+    if not buttonable(ref):
+        return None
+    view = discord.ui.View(timeout=None)
+    for action in (PAUSE, REMOVE, READ):
+        view.add_item(FeedButton(int(feed_id), ref, action))
+    view.add_item(NoticeModePick(int(feed_id), ref, me.mode_of(marathon)))
+    view.add_item(FeedButton(int(feed_id), ref, MANAGE))
+    url = site_link(bot, marathon["id"])
+    if url:
+        view.add_item(
+            discord.ui.Button(
+                style=discord.ButtonStyle.link, label=mf.NOTICE_SITE_LABEL, url=url, row=2
+            )
+        )
+    return view
+
+
+def when_of(marathon: Any) -> str:
+    starts = parse_ts(_cell(marathon, "starts_at"))
+    if starts is None:
+        return mf.NOTICE_NO_DATES
+    ends = parse_ts(_cell(marathon, "ends_at")) or starts
+    return mf.NOTICE_WHEN_RANGE.format(starts=unix(starts), ends=unix(ends))
+
+
+async def event_of(bot: Any, marathon: Any) -> str:
+    words = me.MODE_WORDS.get(me.mode_of(marathon), me.MODE_WORDS[me.NONE])
+    if not _cell(marathon, "event_id"):
+        return words
+    return f"{words}\n{mt.event_line(marathon, await event_status_of(bot, marathon))}"
+
+
+async def notice_embed(bot: Any, guild: Any, marathon: Any, feed: Any) -> discord.Embed:
+    """The added notice's detail: every label a constant, every value from the row."""
+    runs = await runs_of(bot.db, marathon["id"])
+    source, url = source_of(marathon)
+    login = await channel_login(bot, marathon)
+    channel = f"[twitch.tv/{login}](https://twitch.tv/{login})" if login else mf.NOTICE_NO_CHANNEL
+    embed = discord.Embed(title=str(marathon["name"])[:256])
+    fields = (
+        (mf.NOTICE_WHEN, when_of(marathon)),
+        (mf.NOTICE_READ_FROM, f"[{source}]({url})" if url else source),
+        (mf.NOTICE_CHANNEL, channel),
+        (mf.NOTICE_SCHEDULE, mf.NOTICE_READING.format(**reading_of(bot, guild, marathon, runs))),
+        (mf.NOTICE_EVENT, await event_of(bot, marathon)),
+        (mf.NOTICE_FOUND_BY, str(_cell(feed, "name") or mf.NOTICE_FEED_GONE)),
+    )
+    for name, value in fields:
+        embed.add_field(name=name, value=str(value)[:1024] or "—", inline=False)
+    return embed
+
+
+async def redraw_notice(interaction: discord.Interaction, feed_id: Any, ref: Any) -> None:
+    """Cosmetic, last: the notice's embed and rows re-read from the row, never raising."""
+    bot, guild = interaction.client, interaction.guild
+    marathon = await get_marathon(bot.db, guild.id, ref)
+    message = getattr(interaction, "message", None)
+    if marathon is None or message is None:
+        return
+    feed = await get_feed(bot.db, guild.id, feed_id)
+    try:
+        await message.edit(
+            embed=await notice_embed(bot, guild, marathon, feed),
+            view=added_view(bot, feed_id, marathon),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except Exception as exc:
+        log.warning("marathon: could not redraw a feed notice — %s", type(exc).__name__)
+
+
+async def read_now(interaction: discord.Interaction, feed_id: Any, ref: Any) -> None:
+    bot, guild = interaction.client, interaction.guild
+    marathon = await get_marathon(bot.db, guild.id, ref)
+    if marathon is None:
+        await fold_message(interaction.message, mf.NOTICE_GONE, struck=True)
+        await answer(interaction, mf.NOTICE_GONE)
+        return
+    outcome = await refresh_marathon(bot, guild, marathon)
+    await redraw_notice(interaction, feed_id, ref)
+    await answer(interaction, outcome.message)
+
+
+async def open_manage(interaction: discord.Interaction, ref: Any) -> None:
+    """The same card /event ▸ Marathons… shows, ephemeral to the staffer who pressed."""
+    embed, view = await build_card(interaction.client, interaction.guild, ref)
+    if view is None:
+        await answer(interaction, mf.NOTICE_GONE)
+        return
+    view.message = await interaction.followup.send(
+        embed=embed,
+        view=view,
+        ephemeral=True,
+        allowed_mentions=discord.AllowedMentions.none(),
+        wait=True,
+    )
 
 
 # --- /event ▸ Marathons… ▸ Feeds… --------------------------------------------------------------
@@ -1509,6 +1702,7 @@ class AddFeedModal(AnswersErrors, discord.ui.Modal, title=mf.ADD_FEED_TITLE):
 __all__ = [
     "FEED_VIEWS",
     "FeedButton",
+    "NoticeModePick",
     "check_now",
     "create_feed",
     "dismiss_suggestion",

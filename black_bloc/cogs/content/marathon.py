@@ -1359,9 +1359,9 @@ class Marathons(commands.Cog):
         return found
 
     async def cog_load(self) -> None:
-        from .marathon_feeds import FeedButton
+        from .marathon_feeds import FeedButton, NoticeModePick
 
-        self.bot.add_dynamic_items(NextButton, FeedButton)
+        self.bot.add_dynamic_items(NextButton, FeedButton, NoticeModePick)
         if not self.bot.db.is_connected:
             return
         self.ticker.start()
@@ -1605,7 +1605,14 @@ class Marathons(commands.Cog):
         return f"{said}\n{text}" if said else text
 
     async def _send_staff(
-        self, guild: Any, text: str, view: Any, *, title: Any = None, what: Any = None
+        self,
+        guild: Any,
+        text: str,
+        view: Any,
+        *,
+        title: Any = None,
+        what: Any = None,
+        embed: Any = None,
     ) -> tuple[Any, int | None, str | None]:
         """`on` posts where marathon_notice_home says — a post in the events forum while events
         are reviewed there, else staff_channel_id; `shadow` rehearses where shadow_channel_id
@@ -1614,7 +1621,9 @@ class Marathons(commands.Cog):
         if mode == MODE_OFF:
             return (None, None, MODE_IS_OFF)
         if mode == MODE_ON and self.notice_in_forum(guild):
-            found = await self._post_in_forum(guild, text, view, title=title, what=what)
+            found = await self._post_in_forum(
+                guild, text, view, title=title, what=what, embed=embed
+            )
             if found is not None:
                 return found
         home = self.bot.store.get(guild.id, STAFF_CHANNEL_KEY)
@@ -1632,7 +1641,10 @@ class Marathons(commands.Cog):
         body = text if mode == MODE_ON else self._staff_shadowed(guild, text)
         try:
             message = await channel.send(
-                body, view=view, allowed_mentions=discord.AllowedMentions.none()
+                body,
+                view=view,
+                allowed_mentions=discord.AllowedMentions.none(),
+                **({"embed": embed} if embed is not None else {}),
             )
         except Exception as exc:
             return (None, channel_id, spot.reason_of(exc))
@@ -1651,7 +1663,7 @@ class Marathons(commands.Cog):
         )
 
     async def _post_in_forum(
-        self, guild: Any, text: str, view: Any, *, title: Any, what: Any
+        self, guild: Any, text: str, view: Any, *, title: Any, what: Any, embed: Any = None
     ) -> tuple[Any, int | None, str | None] | None:
         """None falls back to the staff channel, with the reason logged."""
         from ...events import MARATHON_TAG, open_notice_post
@@ -1662,7 +1674,7 @@ class Marathons(commands.Cog):
             name=str(title or "").strip() or "?",
         ).text
         post, message, why = await open_notice_post(
-            self.bot, guild, name, text, view, tag=MARATHON_TAG
+            self.bot, guild, name, text, view, tag=MARATHON_TAG, embed=embed
         )
         if post is None or message is None:
             await log_action(
@@ -2706,7 +2718,8 @@ def marathon_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
     )
 
 
-def schedule_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
+def reading_of(bot: Any, guild: Any, row: Any, runs: list[Any]) -> dict[str, str]:
+    """The reading line's three parts, shared by the card and the staff notice's embed."""
     store = bot.store
     due = mt.next_read_at(
         row,
@@ -2716,13 +2729,23 @@ def schedule_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
         lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY)),
     )
     total, ours = counts_of(runs)
-    return mt.CARD_SCHEDULE.format(
-        source=SOURCE_WORDS.get(row["source"], row["source"]),
-        url=schedule_page(row["source"], row["source_ref"]) or row["schedule_url"],
-        read=read_of(row),
-        next=mt.NEXT_READ.format(unix=unix(due)) if due is not None else mt.NEXT_READ_PAUSED,
-        counts=mt.CARD_COUNTS.format(runs=total, ours=ours),
+    return {
+        "read": read_of(row),
+        "next": mt.NEXT_READ.format(unix=unix(due)) if due is not None else mt.NEXT_READ_PAUSED,
+        "counts": mt.CARD_COUNTS.format(runs=total, ours=ours),
+    }
+
+
+def source_of(row: Any) -> tuple[str, str]:
+    return (
+        SOURCE_WORDS.get(row["source"], row["source"]),
+        schedule_page(row["source"], row["source_ref"]) or row["schedule_url"],
     )
+
+
+def schedule_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
+    source, url = source_of(row)
+    return mt.CARD_SCHEDULE.format(source=source, url=url, **reading_of(bot, guild, row, runs))
 
 
 def add_moves(view: Any, moves: Any) -> None:
