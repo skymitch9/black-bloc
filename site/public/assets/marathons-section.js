@@ -1079,7 +1079,7 @@ function eventCell(row) {
   const event = row.event || {};
   if (event.id) return badge(`#${event.id} ${event.status}`, EVENT_TONE[event.status] || null);
   if (event.waiting) return el('span', { class: 'cell-quiet', text: 'waiting for dates' });
-  return el('span', { class: 'cell-quiet', text: '—' });
+  return el('span', { class: 'cell-quiet', text: row.event_mode_word || EVENT_NONE.replace(/\.$/, '') });
 }
 
 
