@@ -61,6 +61,7 @@ from .polls import SHADOW_NOTE as POLL_SHADOW_NOTE
 from .shadow import NOTE_DEFAULT as REHEARSAL_NOTE_DEFAULT
 from .shadow import NOTE_KEY as REHEARSAL_NOTE
 from .shadow import REHEARSAL_KEY as SHADOW_CHANNEL
+from .shadow import feature_key as shadow_feature_key
 from .storage.db import Database
 from .timezones import DEFAULT_TZ, is_known, suggest
 
@@ -3067,13 +3068,37 @@ KEY_HELP.update(
             "where every rehearsal goes while a feature is in shadow — the welcome post, the "
             "front door, the ticket button, polls; blank means the bot's own log channel. "
             "Setting it is the deliberate act that lets test mode speak in that one channel "
-            "as well, so pick a channel only the people reviewing can see"
+            "as well, so pick a channel only the people reviewing can see. A feature's own "
+            "…_shadow_channel_id wins over this"
         ),
         REHEARSAL_NOTE: (
             "the line the front door and the ticket button carry at the top of their rehearsal "
             "copy; {channel} is replaced with the channel the real one is aimed at. Blank "
             "leaves the copy with no note at all"
         ),
+    }
+)
+
+
+# A rehearsal home per feature: blank follows shadow_channel_id, set wins over it.
+SHADOW_HOME_WORDS = {
+    "frontdoor": "the front door's copy and the Open a ticket button it replaces",
+    "posts": "posts such as the welcome post and the rules",
+    "golive": "spotlight announcements",
+    "marathon": "the marathon board, reminders, shoutouts and staff notices",
+    "poll": "polls and their results",
+    "birthday": "birthday wishes",
+}
+SHADOW_HOME_KEYS = {feature: shadow_feature_key(feature) for feature in SHADOW_HOME_WORDS}
+KEY_TYPES.update({key: "channel" for key in SHADOW_HOME_KEYS.values()})
+KEY_HELP.update(
+    {
+        SHADOW_HOME_KEYS[feature]: (
+            f"where this feature's rehearsals land while it is in shadow ({words}); blank "
+            "means shadow_channel_id. Set it to send only this feature's rehearsals somewhere "
+            "else"
+        )
+        for feature, words in SHADOW_HOME_WORDS.items()
     }
 )
 
@@ -3161,6 +3186,7 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_FOLLOWS_POST: "modmail",
     FRONTDOOR_REPLACES_TICKET_BUTTON: "modmail",
     FRONTDOOR_PANEL_MINUTES: "modmail",
+    SHADOW_HOME_KEYS["frontdoor"]: "modmail",
     HANDOFF_MODE: "request",
     HANDOFF_CONFIRM_HOURS: "request",
     "minutes_mode": "events",

@@ -2833,6 +2833,25 @@ async def test_a_channel_the_guard_refuses_is_rehearsed_in_the_home_instead(cog,
     assert "modmail.panel_posted_shadow" in await action_kinds(db)
 
 
+async def test_the_ticket_button_rehearses_in_the_front_doors_own_home(cog, bot, lead, db):
+    """The button follows the door, so it lands where frontdoor_shadow_channel_id says."""
+    import json
+
+    bot.guard = FakeGuard()
+    own = FakeText(5555, guild=bot.guild, name="welcome-test")
+    bot.guild.channels[5555] = own
+    bot.guard.own_channel(5555)
+    await bot.store.set(GUILD, "frontdoor_shadow_channel_id", 5555)
+
+    await post_the_button(cog, bot, lead, channel=bot.guild.channels[LOG_CHANNEL])
+
+    assert own.messages and not bot.guild.channels[TEST_CHANNEL].messages
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'modmail.panel_posted_shadow'"
+    )
+    assert json.loads((await cur.fetchone())["details"])["shadow_home"] == 5555
+
+
 async def test_the_rehearsal_copy_carries_the_note_naming_the_real_channel(cog, bot, lead):
     bot.guard = FakeGuard()
     home = bot.guild.channels[TEST_CHANNEL]

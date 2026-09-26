@@ -1,5 +1,7 @@
 # The next GDQ event — suggested when a marathon ends, added by staff, never by itself
 
+> 🔨 **2026-09-25 — `shadow-home-per-feature` (BUILT, NOT merged):** the next-event notice keeps its shape (Add it / Not this one — it describes a candidate that is not a marathon yet, so the added notice's embed and rows have nothing to act on); it rehearses in `marathon_shadow_channel_id` when set, and `marathon.would_suggest_next` carries `shadow_home`. [`shadow-home-per-feature-design.md`](shadow-home-per-feature-design.md).
+
 > 🔨 **2026-09-25 — the page and panel shapes moved, branch `marathon-ux` (NOT merged):** the marathon drawer now opens on a **Schedule** card (source, last read, next read, the Re-read-every field, Read it now), then Runs · Who is who · Event · The channel · Posts · Pause/Remove; the Events page is three sections; feeds sit in a *Where marathons come from* foldout whose rows open a feed drawer; *ours* reads **BaF**. Where this doc describes the old page or panel layout, [`marathon-ux-design.md`](marathon-ux-design.md) wins.
 
 > 🔨 **2026-09-25 — generalised by `marathon-feeds` (NOT merged):** a GDQ feed now reads the same events list every 6 h and ADDS new events by default (or suggests them with this build's record-and-notice shape), so an over GDQ marathon's next event is usually on the list already — this suggestion then records it as added and posts no notice (Deviation 7 here). See [`marathon-feeds-design.md`](marathon-feeds-design.md).

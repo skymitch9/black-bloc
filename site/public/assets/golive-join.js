@@ -367,6 +367,7 @@ export const DRAWERS = [
       'spotlight_default_days',
       'spotlight_event_slack_hours',
       'golive_channel_spotlight_default',
+      'golive_shadow_channel_id',
     ],
   },
   {

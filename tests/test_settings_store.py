@@ -2465,6 +2465,29 @@ async def test_the_rehearsal_home_help_says_it_widens_test_mode(store):
     assert "test mode" in said and "one channel" in said
 
 
+async def test_every_feature_that_rehearses_has_its_own_home_key_shipped_blank(store):
+    """A feature's own home is a channel key in its OWN namespace, blank meaning the global one."""
+    wanted = {
+        "frontdoor_shadow_channel_id": "modmail",
+        "posts_shadow_channel_id": "posts",
+        "golive_shadow_channel_id": "golive",
+        "marathon_shadow_channel_id": "marathon",
+        "poll_shadow_channel_id": "poll",
+        "birthday_shadow_channel_id": "birthday",
+    }
+
+    assert set(settings_store.SHADOW_HOME_KEYS.values()) == set(wanted)
+    for key, namespace in wanted.items():
+        assert KEY_TYPES[key] == "channel"
+        assert namespace_of(key) == namespace
+        assert store.get(7, key) is None
+        assert "shadow_channel_id" in KEY_HELP[key] and "blank" in KEY_HELP[key]
+
+
+async def test_the_global_home_says_a_features_own_home_wins(store):
+    assert "_shadow_channel_id wins over this" in KEY_HELP[settings_store.SHADOW_CHANNEL]
+
+
 async def test_the_three_boot_status_keys_are_core_and_reachable_from_both_doors(store):
     """Checklist 33, and the 25-group cap: `boot_` and `shutdown_` would each be a group."""
     for key in (
@@ -2668,11 +2691,11 @@ def golive_page_keys() -> list[str]:
     )
 
 
-def test_the_golive_page_still_draws_seventy_one_keys():
+def test_the_golive_page_still_draws_seventy_two_keys():
     """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
     A key added to one of these namespaces has to be added there too, or it lands in the
     Everything else catch-all with nobody noticing."""
-    assert len(golive_page_keys()) == 71
+    assert len(golive_page_keys()) == 72
 
 
 def test_every_golive_page_key_says_in_words_what_it_does():
@@ -2846,4 +2869,4 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 482
+    assert len(settings_store.KEY_TYPES) == 488

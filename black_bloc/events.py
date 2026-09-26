@@ -2361,7 +2361,7 @@ async def forum_tag(forum: Any, name: str) -> Any:
 
 
 async def open_notice_post(
-    bot: Any, guild: Any, title: str, text: str, view: Any, *, tag: str
+    bot: Any, guild: Any, title: str, text: str, view: Any, *, tag: str, embed: Any = None
 ) -> tuple[Any, Any, str | None]:
     """A staff notice that is not an event, as its own post in the events forum:
     `(post, first message, why not)`."""
@@ -2373,6 +2373,8 @@ async def open_notice_post(
         return (None, None, "test_mode")
     found = await forum_tag(forum, tag)
     extra = {} if view is None else {"view": view}
+    if embed is not None:
+        extra["embed"] = embed
     try:
         made = await forum.create_thread(
             name=clamp(title, CHANNEL_NAME_LIMIT) or tag,

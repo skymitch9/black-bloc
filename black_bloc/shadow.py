@@ -13,6 +13,11 @@ LOG_CHANNEL_KEY = "log_channel_id"
 REHEARSAL_KEY = "shadow_channel_id"
 NOTE_KEY = "rehearsal_note"
 NOTE_DEFAULT = "Rehearsal — this is where it would go: {channel}"
+FEATURE_KEY = "{feature}_shadow_channel_id"
+
+
+def feature_key(feature: str) -> str:
+    return FEATURE_KEY.format(feature=feature)
 
 
 def as_channel_id(value: Any) -> int | None:
@@ -33,15 +38,27 @@ def _guard_channel(bot: Any) -> Any:
     return getattr(guard, "test_channel_id", None) if guard is not None else None
 
 
-def home_id(bot: Any, guild: Any) -> int | None:
-    """The rehearsal home the key names, and nothing else — blank is blank."""
-    return as_channel_id(bot.store.get(guild_id_of(guild), REHEARSAL_KEY))
+def _override(bot: Any, guild_id: int, feature: str | None) -> Any:
+    return bot.store.get(guild_id, feature_key(feature)) if feature else None
 
 
-def channel_id(bot: Any, guild: Any, *, log_key: str = LOG_CHANNEL_KEY) -> int | None:
-    """Where a rehearsal GOES: the rehearsal home, else the guard's own channel, else the log."""
+def home_id(bot: Any, guild: Any, *, feature: str | None = None) -> int | None:
+    """The rehearsal home the keys name, the feature's own first, and nothing else."""
+    guild_id = guild_id_of(guild)
+    for wanted in (_override(bot, guild_id, feature), bot.store.get(guild_id, REHEARSAL_KEY)):
+        found = as_channel_id(wanted)
+        if found is not None:
+            return found
+    return None
+
+
+def channel_id(
+    bot: Any, guild: Any, *, log_key: str = LOG_CHANNEL_KEY, feature: str | None = None
+) -> int | None:
+    """Where a rehearsal GOES: the feature's home, the rehearsal home, the guard's, the log."""
     guild_id = guild_id_of(guild)
     for wanted in (
+        _override(bot, guild_id, feature),
         bot.store.get(guild_id, REHEARSAL_KEY),
         _guard_channel(bot),
         bot.store.get(guild_id, log_key),
@@ -52,11 +69,14 @@ def channel_id(bot: Any, guild: Any, *, log_key: str = LOG_CHANNEL_KEY) -> int |
     return None
 
 
-def channel_ids(bot: Any, guild: Any, *, log_key: str = LOG_CHANNEL_KEY) -> list[int]:
+def channel_ids(
+    bot: Any, guild: Any, *, log_key: str = LOG_CHANNEL_KEY, feature: str | None = None
+) -> list[int]:
     """Where a rehearsal already IS: the key may have moved under a copy that is already up."""
     guild_id = guild_id_of(guild)
     found: list[int] = []
     for wanted in (
+        _override(bot, guild_id, feature),
         bot.store.get(guild_id, REHEARSAL_KEY),
         _guard_channel(bot),
         getattr(getattr(bot, "settings", None), "test_channel_id", None),
@@ -78,12 +98,17 @@ def channel_of(bot: Any, guild: Any, wanted: Any) -> Any:
 
 
 async def find_copy(
-    bot: Any, guild: Any, message_id: Any, *, log_key: str = LOG_CHANNEL_KEY
+    bot: Any,
+    guild: Any,
+    message_id: Any,
+    *,
+    log_key: str = LOG_CHANNEL_KEY,
+    feature: str | None = None,
 ) -> tuple[Any, Any]:
     """A rehearsal copy and the channel it is in, hunted through every home it could be in."""
     if not message_id:
         return (None, None)
-    for wanted in channel_ids(bot, guild, log_key=log_key):
+    for wanted in channel_ids(bot, guild, log_key=log_key, feature=feature):
         channel = channel_of(bot, guild, wanted)
         if channel is None:
             continue
@@ -130,6 +155,7 @@ def install(bot: Any) -> None:
 
 
 __all__ = [
+    "FEATURE_KEY",
     "LOG_CHANNEL_KEY",
     "NOTE_DEFAULT",
     "NOTE_KEY",
@@ -138,6 +164,7 @@ __all__ = [
     "channel_id",
     "channel_ids",
     "channel_of",
+    "feature_key",
     "find_copy",
     "guild_id_of",
     "home_id",

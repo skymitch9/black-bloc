@@ -351,8 +351,14 @@ const LOG_LEVEL_FEATURES = [
 
 const SETTING_SPECS = [
   ['log_channel_id', 'channel', '800000000000000004', null, 'where Black Bloc posts what it did'],
-  ['shadow_channel_id', 'channel', null, null, 'where every rehearsal goes while a feature is in shadow — the welcome post, the front door, the ticket button, polls; blank means the bot’s own log channel. Setting it is the deliberate act that lets test mode speak in that one channel as well, so pick a channel only the people reviewing can see'],
+  ['shadow_channel_id', 'channel', null, null, 'where every rehearsal goes while a feature is in shadow — the welcome post, the front door, the ticket button, polls; blank means the bot’s own log channel. Setting it is the deliberate act that lets test mode speak in that one channel as well, so pick a channel only the people reviewing can see. A feature’s own …_shadow_channel_id wins over this'],
   ['rehearsal_note', 'text', 'Rehearsal — this is where it would go: {channel}', 'Rehearsal — this is where it would go: {channel}', 'the line the front door and the ticket button carry at the top of their rehearsal copy; {channel} is replaced with the channel the real one is aimed at. Blank leaves the copy with no note at all'],
+  ["frontdoor_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (the front door's copy and the Open a ticket button it replaces); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
+  ["posts_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (posts such as the welcome post and the rules); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
+  ["golive_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (spotlight announcements); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
+  ["marathon_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (the marathon board, reminders, shoutouts and staff notices); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
+  ["poll_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (polls and their results); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
+  ["birthday_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (birthday wishes); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
   ['role_menu_channel_id', 'channel', '800000000000000002', null, 'the channel /rolemenu offers first when a menu is posted'],
   ['golive_mode', 'enum', 'shadow', 'off', 'whether a stream is announced at all. off watches nobody; shadow watches and logs what it would have posted without posting it; on posts the announcement. Off by default, so nothing reaches the server until somebody turns it on', ['off', 'shadow', 'on']],
@@ -1742,6 +1748,7 @@ const NAMESPACE_OVERRIDE = {
   frontdoor_follows_post: 'modmail',
   frontdoor_replaces_ticket_button: 'modmail',
   frontdoor_panel_minutes: 'modmail',
+  frontdoor_shadow_channel_id: 'modmail',
   handoff_mode: 'request',
   handoff_confirm_hours: 'request',
   minutes_mode: 'events',
@@ -8063,7 +8070,7 @@ route('POST', '/api/birthdays/post-today', async (context) => {
   }
   logAction('web.birthday.posted_now', { details: { via: 'website', again, mode, ...counts } });
   if (mode === 'off') throw new Refused(409, 'birthdays_off', birthdayWord('birthday_post_off'));
-  const where = mode === 'on' ? state.settings.get('birthday_channel_id') : (state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id'));
+  const where = mode === 'on' ? state.settings.get('birthday_channel_id') : (state.settings.get('birthday_shadow_channel_id') || state.settings.get('shadow_channel_id') || state.settings.get('log_channel_id'));
   const found = CHANNELS.find((one) => one.id === String(where));
   const channel = found ? `#${found.name}` : (where ? `<#${where}>` : '');
   const lines = [];

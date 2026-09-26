@@ -517,7 +517,11 @@ black_bloc/
 │                       TEST_MODE=true, so a LOCAL run is still guarded
 ├── shadow.py         ← the rehearsal home: `channel_id` (shadow_channel_id, else the guard's
 │                       channel, else log_channel_id) and `channel_ids` — where a *_mode=shadow
-│                       copy goes now that the guard is gone (v129)
+│                       copy goes now that the guard is gone (v129). Per feature since
+│                       2026-09-25 (`shadow-home-per-feature`): `feature=` reads
+│                       `<feature>_shadow_channel_id` first — six keys, `channel`, blank =
+│                       the global one: frontdoor_ (namespace modmail; the ticket button uses
+│                       it too), posts_, golive_ (spotlights), marathon_, poll_, birthday_
 ├── posted.py         ← one posted-and-kept-current message: the post/edit/take-down path the
 │                       front door and the ticket button share, and `duplicates_near`, which
 │                       reads the last five minutes and logs `*.duplicate_seen` rather than

@@ -437,6 +437,24 @@ async def test_in_forum_mode_the_notice_is_a_tagged_post_in_the_events_forum(
     assert len(forum.edits) == 1
 
 
+async def test_in_forum_mode_the_notice_carries_its_embed_and_rows(bot, cog):  # noqa: F811
+    forum = await forum_mode(bot)
+    seen = {}
+    made = forum.create_thread
+
+    async def recorded(name, **kwargs):
+        seen.update(kwargs)
+        return await made(name, **kwargs)
+
+    forum.create_thread = recorded
+    embed = discord.Embed(title="SGDQ 2027")
+    view = discord.ui.View(timeout=None)
+
+    await cog._send_staff(bot.guild, "text", view, title="SGDQ 2027", embed=embed)
+
+    assert seen["embed"] is embed and seen["view"] is view
+
+
 async def test_room_mode_and_the_staff_key_keep_the_notice_in_the_staff_channel(
     bot, cog  # noqa: F811
 ):

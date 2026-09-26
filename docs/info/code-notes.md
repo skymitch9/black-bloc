@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-25 — one section APPENDED, nothing re-keyed**: *A rehearsal home per feature, and a marathon notice with detail and control* (branch `shadow-home-per-feature`, off `main` `dd25f79d`, keyed against `6b698f18`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The Events page made plain — three sections, Schedule first, BaF* (branch `marathon-ux`, off `main` `5ed00717`, keyed against `33c4363d`). Before that:
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *A marathon's event mode, and a channel that takes no marathons* (branch `marathon-event-modes`, off `main` `bababb65`, keyed against `20cfcf0c`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *Marathon feeds — the bot finds the next events itself* (branch `marathon-feeds`, off `main` `05fbd0e6`, keyed against `0f973d75`). Before that:
@@ -8456,3 +8457,29 @@ Why in [`marathon-ux-design.md`](marathon-ux-design.md). Keyed against `33c4363d
 | `site/public/assets/page-events.js:328` `id: 'queue'` | The section is titled *Events* now; the id keeps `sect-queue` so a remembered open/shut state and any old anchor still land. |
 | `site/public/assets/page-events.js:388` `machinerySection` | ONE *Settings and logs* section with id `settings` (keeps `#sect-settings`); the Marathons settings foldout carries `sect-marathon-settings`, the two log holders `sect-logs-events` / `sect-logs-marathon` — every id the two old sections and two log sections had. |
 | `site/public/assets/page-events.js:345` `unsectioned` | The page-posts / page-raidtrain / page-requests pattern (a shared block demoted out of the rail), plus a wrapper that keeps the old section id. |
+
+## A rehearsal home per feature, and a marathon notice with detail and control (branch `shadow-home-per-feature`, 2026-09-25)
+
+Why in [`shadow-home-per-feature-design.md`](shadow-home-per-feature-design.md). Keyed against `6b698f18`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/shadow.py:19` `feature_key` | `<feature>_shadow_channel_id` — the FEATURE word, not the namespace: the front door's keys live in `modmail` but its word is `frontdoor`. One place builds the name; callers only pass `feature=`. |
+| `black_bloc/shadow.py:41` `_override` | Read first by `home_id`, `channel_id` and `channel_ids`; blank (or no `feature`) means exactly the old order — global home, guard, (settings test channel), log. `note_line` takes no feature: its words never depended on the home. |
+| `black_bloc/shadow.py:100` `find_copy` | Hunts the feature's home FIRST, then every older home, so a copy posted before the override was set is still found and taken down. |
+| `black_bloc/settings_store.py:3084` `SHADOW_HOME_WORDS` | Six keys, one per feature that puts a rehearsal COPY somewhere: frontdoor, posts, golive (spotlights — go-live itself posts nothing in shadow), marathon, poll, birthday. No key for modmail (its ticket button has no mode; in shadow it follows the door), minutes (no shadow mode; the home is read only under the retired TEST_MODE guard), tempvoice / honeypot / automod (their shadow writes log rows, never a copy). |
+| `black_bloc/settings_store.py:3189` `SHADOW_HOME_KEYS["frontdoor"]` | Filed under `modmail` beside every other `frontdoor_*` key (the `/settings` group select is at its cap); `namespace_of` would otherwise make `frontdoor` a 26th group. |
+| `black_bloc/frontdoor.py:36` `SHADOW_FEATURE` | Imported by BOTH the door and the modmail cog: the Open a ticket button's rehearsal copy lands in the door's home, so "one door per channel holds in the rehearsal home" keeps holding. |
+| `black_bloc/posts.py:1115` `home` | `shadow_home` rides only on shadow rows (`post.would_post`, `post.shadow_posted/updated`); an `on` post has no home. |
+| `black_bloc/cogs/community/polls.py:1544` `shadow_home` | Beside the older `shadow_channel_id` field (kept — the audit tab and tests read it). |
+| `black_bloc/cogs/content/marathon.py:468` `rehearsal_details` | Module-level so `marathon_feeds.py` can use it without the cog (a test bot may have none); `{}` while `on`. Every marathon would-row splats it. |
+| `black_bloc/cogs/content/marathon.py:1615` `embed` | `_send_staff` → `_post_in_forum` → `events.open_notice_post` all carry the embed, so a forum-mode notice is the same card as a staff-channel one. |
+| `black_bloc/cogs/content/marathon.py:2721` `reading_of` | The card's reading line split into parts so the notice's **Schedule** field says exactly what the card says (no second computation of *next read*). |
+| `black_bloc/cogs/content/marathon_feeds.py:94` `MODE_TEMPLATE` | The select's own persistent template; `FEED_TEMPLATE`'s action list never matches `mode`, so the two DynamicItems cannot claim one id. |
+| `black_bloc/cogs/content/marathon_feeds.py:1020` `ROWS` | Pause/Remove/Read it now on row 0, the select on row 1, Manage… and the link on row 2. The suggestion notices (Add it / Not this one) keep their one row. |
+| `black_bloc/cogs/content/marathon_feeds.py:1095` `NoticeModePick` | Named so because `FeedModePick` is the feed card's (ephemeral, per-FEED) select; this one is per-MARATHON and persistent (KI-20). It calls `set_event_mode` — the site's function — then redraws. |
+| `black_bloc/cogs/content/marathon_feeds.py:1183` `notice_embed` | Every label a constant (`mf.NOTICE_*`), every value from the row; the sentence above it stays `marathon_feed_added_template`. |
+| `black_bloc/cogs/content/marathon_feeds.py:1203` `redraw_notice` | Cosmetic, last (checklist 12): the move already happened and was logged; a failed edit only warns. |
+| `black_bloc/cogs/content/marathon_feeds.py:1233` `open_manage` | The SAME `build_card` `/event` ▸ Marathons… uses, sent as a followup (the click was deferred ephemeral), so every move on it edits that ephemeral card and never the notice. |
+| `black_bloc/cogs/content/marathon_feeds.py:516` `fold_message` | Remove it also strikes the embed's title (`embeds=` on the edit), and the rows go, as before. |
+| `site/public/assets/page-modmail.js:365` `shadowId` | The door's staff line names the door's OWN home first, the same order the bot uses. |

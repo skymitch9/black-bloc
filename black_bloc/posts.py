@@ -47,6 +47,7 @@ SAVED = "post.saved"
 POSTED = "post.posted"
 UPDATED = "post.updated"
 WOULD_POST = "post.would_post"
+SHADOW_FEATURE = "posts"
 POST_FAILED = "post.post_failed"
 TAKEN_DOWN = "post.taken_down"
 WOULD_TAKE_DOWN = "post.would_take_down"
@@ -982,12 +983,12 @@ def as_channel_id(value: Any) -> int | None:
 
 def shadow_channel_id(bot: Any, guild: Any) -> int | None:
     """Where a rehearsal GOES — one home, `black_bloc/shadow.py`."""
-    return shadow_home.channel_id(bot, guild, log_key=LOG_CHANNEL_KEY)
+    return shadow_home.channel_id(bot, guild, log_key=LOG_CHANNEL_KEY, feature=SHADOW_FEATURE)
 
 
 def shadow_channel_ids(bot: Any, guild: Any) -> list[int]:
     """Where a rehearsal already IS — one home, `black_bloc/shadow.py`."""
-    return shadow_home.channel_ids(bot, guild, log_key=LOG_CHANNEL_KEY)
+    return shadow_home.channel_ids(bot, guild, log_key=LOG_CHANNEL_KEY, feature=SHADOW_FEATURE)
 
 
 def shadow_words(bot: Any, guild: Any, row: Any) -> str:
@@ -1043,7 +1044,9 @@ async def _existing_message(
 
 async def _shadow_message(bot: Any, guild: Any, message_id: Any) -> Any:
     """The rehearsal, hunted through every channel it could be sitting in — one home."""
-    _, message = await shadow_home.find_copy(bot, guild, message_id, log_key=LOG_CHANNEL_KEY)
+    _, message = await shadow_home.find_copy(
+        bot, guild, message_id, log_key=LOG_CHANNEL_KEY, feature=SHADOW_FEATURE
+    )
     return message
 
 
@@ -1109,13 +1112,21 @@ async def publish_post(
     if refused is not None:
         return refusal(refused, "body_too_long", 400)
     target = shadow_channel_id(bot, guild) if shadow else channel_id
+    home = {"shadow_home": target} if shadow else {}
     if shadow and not target:
         return refusal(
             NO_SHADOW_CHANNEL.format(title=title), "no_shadow_channel", 409
         )
     if not guard_allows(bot, target):
         await note(
-            bot, guild, row, WOULD_POST, actor, via=via, channel=where_words(guild, target)
+            bot,
+            guild,
+            row,
+            WOULD_POST,
+            actor,
+            via=via,
+            channel=where_words(guild, target),
+            **home,
         )
         return refusal(guard_refusal(bot), "test_mode", 409)
     channel = channel_of(bot, guild, target)
@@ -1154,6 +1165,7 @@ async def publish_post(
         via=via,
         message_id=int(message.id),
         version=await version_now(bot, row, made),
+        **home,
     )
     if not shadow:
         await _drop_shadow(bot, guild, row, actor, via)
@@ -1431,6 +1443,7 @@ __all__ = [
     "SAVED",
     "SEEDED_CANNOT_BE_DELETED",
     "SHADOW",
+    "SHADOW_FEATURE",
     "SHADOW_LINE",
     "SHADOW_LINE_NOWHERE",
     "SHADOW_LINE_SAME",

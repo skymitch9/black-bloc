@@ -1,5 +1,7 @@
 # Cutover plan — from test mode to running the server
 
+> 🔨 **2026-09-25 — the shadow home is PER FEATURE now, branch `shadow-home-per-feature` (BUILT, NOT merged):** a feature's own `<feature>_shadow_channel_id` (frontdoor, posts, golive, marathon, poll, birthday) wins over `shadow_channel_id`; blank follows it. The owner's state after the deploy: `shadow_channel_id` → #blackbloc-logs, `frontdoor_shadow_channel_id` → #welcome-test (set by the conductor, not the build). [`shadow-home-per-feature-design.md`](shadow-home-per-feature-design.md).
+
 > **Audience:** the owner (who flips the switches) + Claude sessions (who watch and
 > verify). **Status:** TRACKED · ▶️ **STARTED — P5 TAKEN 2026-09-18 16:08; the §2 ladder is
 > now the live to-do list, at the owner's pace.**

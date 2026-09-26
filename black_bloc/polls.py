@@ -285,6 +285,7 @@ SHADOW_NOTE = "Posted here because polls are in **shadow** — it would have gon
 NO_CHANNEL_WORD = "no channel"
 CHANNEL_UNSEEN = "a channel Black Bloc cannot see"
 OPENED_SHADOW = "poll.opened_shadow"
+SHADOW_FEATURE = "poll"
 PINNED = "poll.pinned"
 PIN_FAILED = "poll.pin_failed"
 UNPINNED = "poll.unpinned"
@@ -814,11 +815,11 @@ def pins_are_on(store: Any, guild_id: int) -> bool:
 
 
 def shadow_channel_id(bot: Any, guild: Any) -> int | None:
-    return shadow.channel_id(bot, guild)
+    return shadow.channel_id(bot, guild, feature=SHADOW_FEATURE)
 
 
 def shadow_channel_ids(bot: Any, guild: Any) -> list[int]:
-    return shadow.channel_ids(bot, guild)
+    return shadow.channel_ids(bot, guild, feature=SHADOW_FEATURE)
 
 
 def shadow_id(row: Any) -> Any:

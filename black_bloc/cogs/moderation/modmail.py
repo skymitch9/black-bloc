@@ -19,7 +19,12 @@ from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...command_visibility import STAFF_ONLY
 from ...events import clamp
-from ...frontdoor import door_takes_over, panel_follows_the_door, rehearsal_takes_over
+from ...frontdoor import (
+    SHADOW_FEATURE,
+    door_takes_over,
+    panel_follows_the_door,
+    rehearsal_takes_over,
+)
 from ...golive import now_iso, parse_ts
 from ...handoff import (
     ASK_BODY_LABEL,
@@ -2320,7 +2325,7 @@ async def drop_panel_rehearsal(bot: Any, guild: Any, actor: Any = None, *, via: 
     message_id = panel_rehearsal_copy(bot.store, guild.id)
     if not message_id:
         return None
-    where, _ = await shadow.find_copy(bot, guild, message_id)
+    where, _ = await shadow.find_copy(bot, guild, message_id, feature=SHADOW_FEATURE)
     if where is not None and not await drop_panel_message(bot, guild, where, message_id):
         return None
     await bot.store.clear(guild.id, PANEL_SHADOW_MESSAGE_KEY)
@@ -2348,12 +2353,12 @@ async def rehearse_panel(
     The caller owns the would-row, exactly as the front door's does."""
     store = bot.store
     guard = getattr(bot, "guard", None)
-    home_id = shadow.channel_id(bot, guild)
+    home_id = shadow.channel_id(bot, guild, feature=SHADOW_FEATURE)
     home = shadow.channel_of(bot, guild, home_id)
     if home is None or (guard is not None and not guard.allows_channel(home_id)):
         return refusal(PANEL_GUARDED, "test_mode", 409)
     copy_id = panel_rehearsal_copy(store, guild.id)
-    where, message = await shadow.find_copy(bot, guild, copy_id)
+    where, message = await shadow.find_copy(bot, guild, copy_id, feature=SHADOW_FEATURE)
     here = message is not None and int(where.id) == int(home.id)
     overtaken = (
         await post_below_button(bot, guild, home, copy_id) if here else None
@@ -2377,6 +2382,7 @@ async def rehearse_panel(
             actor=actor,
             details={
                 "channel_id": home.id,
+                "shadow_home": home.id,
                 "wanted_channel_id": getattr(wanted, "id", wanted),
                 "message_id": int(message.id),
                 "via": via,
@@ -2413,6 +2419,7 @@ async def rehearse_panel(
         actor=actor,
         details={
             "channel_id": home.id,
+            "shadow_home": home.id,
             "wanted_channel_id": getattr(wanted, "id", wanted),
             "message_id": fresh.id,
             "via": via,
@@ -2466,7 +2473,11 @@ async def post_ticket_panel(
                 guild,
                 kind_via("modmail.would_post_panel", via),
                 actor=actor,
-                details={"channel_id": channel.id, "via": via},
+                details={
+                    "channel_id": channel.id,
+                    "shadow_home": shadow.channel_id(bot, guild, feature=SHADOW_FEATURE),
+                    "via": via,
+                },
             )
         return outcome
     old_channel, old_id = panel_where(bot, guild)
@@ -2854,7 +2865,11 @@ class Modmail(commands.Cog):
                     bot,
                     guild,
                     "modmail.would_post_panel",
-                    details={"channel_id": channel.id, "reason": "reconcile"},
+                    details={
+                        "channel_id": channel.id,
+                        "shadow_home": shadow.channel_id(bot, guild, feature=SHADOW_FEATURE),
+                        "reason": "reconcile",
+                    },
                 )
             return
         await drop_panel_rehearsal(bot, guild, None)

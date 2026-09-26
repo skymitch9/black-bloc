@@ -3,6 +3,7 @@ import pathlib
 import re
 from datetime import UTC, datetime, timedelta
 
+import discord
 import pytest
 
 from black_bloc import marathon as mt
@@ -16,12 +17,14 @@ from black_bloc.cogs.content.marathon import (
     list_marathons,
     remove_marathon,
     runs_of,
+    update_marathon,
 )
 from black_bloc.cogs.content.spotlight import forget_spotlight
 from black_bloc.marathon_sources import Person, Run, ScheduleError
 from tests.cogs.content.test_marathon import STAFF_ROOM, Member, bot  # noqa: F401
 from tests.cogs.content.test_spotlight import (
     GUILD,
+    LOG_CHANNEL,
     SHADOW_CHANNEL,
     FakeActor,
     FakeChannel,
@@ -191,8 +194,9 @@ async def test_a_check_adds_every_new_event_on_the_feeds_channel_with_one_notice
     assert len(notices(bot)) == 4
     words = [one.content for one in notices(bot)]
     assert any("GDQ has a new event: **Awesome Games Done Quick 2027**" in one for one in words)
-    labels = [child.item.label for child in notices(bot)[0].kwargs["view"].children]
-    assert labels == ["Pause it", "Remove it"]
+    items = [getattr(child, "item", child) for child in notices(bot)[0].kwargs["view"].children]
+    labels = [one.label for one in items if isinstance(one, discord.ui.Button)]
+    assert labels[:4] == ["Pause it", "Remove it", "Read it now", "Manage…"]
     added = await details_of(bot.db, "marathon.feed_added")
     assert added["feed"] == "GDQ" and added["automatic"] is True
     assert (await details_of(bot.db, "marathon.added"))["feed_id"] == feed["id"]
@@ -398,6 +402,17 @@ async def test_shadow_adds_the_marathon_but_notices_the_shadow_home(bot, cog):  
     assert "marathon.would_feed_add" in found and "marathon.feed_added" not in found
 
 
+async def test_a_feed_notice_rehearses_in_the_marathon_home(bot, cog):  # noqa: F811
+    await seeded(bot, cog)
+    await bot.store.set(GUILD, "marathon_mode", "shadow")
+    await bot.store.set(GUILD, "marathon_shadow_channel_id", LOG_CHANNEL)
+    await cog.tick_once()
+
+    assert not [m for m in bot.guild.channels[SHADOW_CHANNEL].messages if "new event" in m.content]
+    assert [m for m in bot.guild.channels[LOG_CHANNEL].messages if "new event" in m.content]
+    assert (await details_of(bot.db, "marathon.would_feed_add"))["shadow_home"] == LOG_CHANNEL
+
+
 async def test_off_checks_nothing(bot, cog):  # noqa: F811
     await seeded(bot, cog)
     await bot.store.set(GUILD, "marathon_mode", "off")
@@ -526,3 +541,178 @@ async def test_add_a_feed_in_the_panel_picks_a_channel_then_opens_the_modal(bot,
     await pick.callback(lead)
     modal = lead.response.modals[0]
     assert isinstance(modal, feeds.AddFeedModal) and modal.source.default == "horaro"
+
+
+# --- the added notice: detail and control (shadow-home design §E) -----------------------------
+
+
+async def the_notice(bot, cog):  # noqa: F811
+    await seeded(bot, cog)
+    await cog.tick_once()
+    notice = notices(bot)[0]
+    view = notice.kwargs["view"]
+    items = [getattr(child, "item", child) for child in view.children]
+    read = next(one for one in items if getattr(one, "custom_id", "").endswith(":read"))
+    match = re.fullmatch(feeds.FEED_TEMPLATE, read.custom_id)
+    return notice, items, int(match["feed_id"]), int(match["ref"])
+
+
+def field_map(embed):
+    return {field.name: field.value for field in embed.fields}
+
+
+async def test_the_added_notice_is_an_embed_with_the_six_fields_and_three_rows(
+    bot,  # noqa: F811
+    cog,
+):
+    notice, items, feed_id, marathon_id = await the_notice(bot, cog)
+    embed = notice.kwargs["embed"]
+    marathon = await get_marathon(bot.db, GUILD, marathon_id)
+
+    assert embed.title == marathon["name"]
+    fields = field_map(embed)
+    assert list(fields) == [
+        mf.NOTICE_WHEN,
+        mf.NOTICE_READ_FROM,
+        mf.NOTICE_CHANNEL,
+        mf.NOTICE_SCHEDULE,
+        mf.NOTICE_EVENT,
+        mf.NOTICE_FOUND_BY,
+    ]
+    assert fields[mf.NOTICE_FOUND_BY] == "GDQ"
+    assert "twitch.tv/gamesdonequick" in fields[mf.NOTICE_CHANNEL]
+    assert fields[mf.NOTICE_EVENT].startswith("No event")
+    rows = {(type(one).__name__, one.row) for one in items}
+    assert {row for _kind, row in rows} == {0, 1, 2}
+    ids = [one.custom_id for one in items if getattr(one, "custom_id", None)]
+    assert ids == [
+        f"marathon:feed:{feed_id}:{marathon_id}:{action}"
+        for action in ("pause", "remove", "read", "mode", "manage")
+    ]
+
+
+async def test_the_when_field_says_so_when_there_are_no_dates_and_the_event_when_one_exists(
+    bot,  # noqa: F811
+    cog,
+):
+    _notice, _items, feed_id, marathon_id = await the_notice(bot, cog)
+    await update_marathon(bot.db, marathon_id, starts_at=None, ends_at=None, event_id=77)
+    marathon = await get_marathon(bot.db, GUILD, marathon_id)
+    feed = await feeds.get_feed(bot.db, GUILD, feed_id)
+
+    fields = field_map(await feeds.notice_embed(bot, bot.guild, marathon, feed))
+
+    assert fields[mf.NOTICE_WHEN] == mf.NOTICE_NO_DATES
+    assert "Event **#77**" in fields[mf.NOTICE_EVENT]
+    fields = field_map(await feeds.notice_embed(bot, bot.guild, marathon, None))
+    assert fields[mf.NOTICE_FOUND_BY] == mf.NOTICE_FEED_GONE
+
+
+async def test_a_published_schedule_shows_its_dates_as_discord_times(bot, cog):  # noqa: F811
+    _notice, _items, feed_id, marathon_id = await the_notice(bot, cog)
+    starts, ends = "2027-01-04T17:00:00+00:00", "2027-01-11T05:00:00+00:00"
+    await update_marathon(bot.db, marathon_id, starts_at=starts, ends_at=ends)
+    marathon = await get_marathon(bot.db, GUILD, marathon_id)
+
+    fields = field_map(await feeds.notice_embed(bot, bot.guild, marathon, None))
+
+    assert fields[mf.NOTICE_WHEN] == "<t:1799082000:f> – <t:1799643600:f>"
+
+
+async def test_read_it_now_reads_the_schedule_and_edits_the_embed(bot, cog):  # noqa: F811
+    notice, _items, feed_id, marathon_id = await the_notice(bot, cog)
+    button = await feeds.FeedButton.from_custom_id(
+        None, None, re.fullmatch(feeds.FEED_TEMPLATE, f"marathon:feed:{feed_id}:{marathon_id}:read")
+    )
+    lead = FakeInteraction(bot, FakeActor(), bot.guild)
+    lead.message = notice
+
+    await button.on_click(lead)
+
+    assert lead.sent
+    edited = notice.edits[-1]
+    assert edited["embed"].fields[0].name == mf.NOTICE_WHEN
+    assert edited["view"] is not None
+    assert (await get_marathon(bot.db, GUILD, marathon_id))["last_fetched_at"]
+
+
+async def test_the_event_select_sets_the_mode_and_edits_the_embed(bot, cog):  # noqa: F811
+    notice, _items, feed_id, marathon_id = await the_notice(bot, cog)
+    match = re.fullmatch(feeds.MODE_TEMPLATE, f"marathon:feed:{feed_id}:{marathon_id}:mode")
+    pick = await feeds.NoticeModePick.from_custom_id(None, None, match)
+    pick.item._values = ["none"]
+    await update_marathon(bot.db, marathon_id, event_mode="runs")
+    lead = FakeInteraction(bot, FakeActor(), bot.guild)
+    lead.message = notice
+
+    await pick.on_click(lead)
+
+    assert (await get_marathon(bot.db, GUILD, marathon_id))["event_mode"] == "none"
+    assert field_map(notice.edits[-1]["embed"])[mf.NOTICE_EVENT].startswith("No event")
+    assert "now makes" in lead.sent
+
+
+async def test_manage_opens_the_marathon_card_for_staff_and_refuses_a_member_in_words(
+    bot,  # noqa: F811
+    cog,
+):
+    notice, _items, feed_id, marathon_id = await the_notice(bot, cog)
+    button = feeds.FeedButton(feed_id, str(marathon_id), "manage")
+
+    bot.store.is_staff = lambda member: False
+    stranger = FakeInteraction(bot, Member(42), bot.guild)
+    stranger.message = notice
+    await button.on_click(stranger)
+    assert "staff only" in stranger.sent
+    assert not [one for one in stranger.response.messages if one["kwargs"].get("embed")]
+
+    bot.store.is_staff = lambda member: True
+    lead = FakeInteraction(bot, FakeActor(), bot.guild)
+    lead.message = notice
+    await button.on_click(lead)
+    card = lead.response.messages[-1]["kwargs"]
+    marathon = await get_marathon(bot.db, GUILD, marathon_id)
+    assert card["embed"].title == marathon["name"] and card["view"] is not None
+
+
+async def test_remove_it_strikes_the_embed_title_and_takes_the_rows_away(bot, cog):  # noqa: F811
+    notice, _items, feed_id, marathon_id = await the_notice(bot, cog)
+    title = notice.embeds[0].title
+    remove = feeds.FeedButton(feed_id, str(marathon_id), "remove")
+    lead = FakeInteraction(bot, FakeActor(), bot.guild)
+    lead.message = notice
+
+    await remove.on_click(lead)
+
+    assert notice.edits[-1]["view"] is None
+    assert notice.edits[-1]["embeds"][0].title == f"~~{title}~~"
+
+
+async def test_every_notice_custom_id_round_trips_through_from_custom_id():
+    for action in ("pause", "remove", "read", "manage"):
+        made = feeds.FeedButton(7, "12", action)
+        match = re.fullmatch(feeds.FEED_TEMPLATE, made.item.custom_id)
+        back = await feeds.FeedButton.from_custom_id(None, None, match)
+        assert (back.feed_id, back.ref, back.action) == (7, "12", action)
+    pick = feeds.NoticeModePick(7, "12", "runs")
+    match = re.fullmatch(feeds.MODE_TEMPLATE, pick.item.custom_id)
+    back = await feeds.NoticeModePick.from_custom_id(None, None, match)
+    assert (back.feed_id, back.ref) == (7, "12")
+    assert re.fullmatch(feeds.FEED_TEMPLATE, pick.item.custom_id) is None
+
+
+
+class NotConnected:
+    is_connected = False
+
+
+async def test_every_notice_item_outlives_a_restart():
+    """KI-20: the cog registers the buttons AND the event select as persistent items."""
+    registered = []
+    cog = Marathons.__new__(Marathons)
+    cog.bot = type("Bot", (), {"db": NotConnected()})()
+    cog.bot.add_dynamic_items = lambda *items: registered.extend(items)
+
+    await Marathons.cog_load(cog)
+
+    assert feeds.FeedButton in registered and feeds.NoticeModePick in registered
