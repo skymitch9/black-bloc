@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 65
+        assert SCHEMA_VERSION == 66
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -1497,7 +1497,49 @@ async def test_a_schema_34_file_gains_the_six_guides_tables_and_keeps_its_rows(t
         await again.close()
 
 
-async def test_a_guide_keeps_one_slug_and_one_published_guide_per_command(tmp_path):
+async def test_a_schema_65_file_loses_the_one_published_guide_index(tmp_path):
+    """Schema 66: several published guides may share a command; the rows are kept."""
+    path = tmp_path / "old65.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute(
+        "CREATE UNIQUE INDEX guides_one_published_command ON guides(guild_id, command, "
+        "audience) WHERE published = 1 AND command IS NOT NULL"
+    )
+    await db.conn.execute(
+        "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
+        "published, updated_at) VALUES (1, 'a', 'A', 'g', 'member', 'events', '/event', "
+        "1, '2026-09-25T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '65')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
+        names = {row["name"] for row in await cur.fetchall()}
+        assert "guides_one_published_command" not in names
+        assert "guides_by_command" in names
+        await again.conn.execute(
+            "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
+            "published, updated_at) VALUES (1, 'b', 'B', 'g', 'member', 'marathon', '/event', "
+            "1, '2026-09-25T00:00:00+00:00')"
+        )
+        cur = await again.conn.execute("SELECT slug FROM guides ORDER BY slug")
+        assert [row["slug"] for row in await cur.fetchall()] == ["a", "b"]
+        cur = await again.conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        )
+        assert (await cur.fetchone())["value"] == "66"
+    finally:
+        await again.close()
+
+
+async def test_a_guide_keeps_one_slug_and_many_published_guides_per_command(tmp_path):
     db = Database(tmp_path / "guides.sqlite3")
     await db.connect()
     try:
@@ -1508,13 +1550,12 @@ async def test_a_guide_keeps_one_slug_and_one_published_guide_per_command(tmp_pa
         )
         await db.conn.commit()
 
-        with pytest.raises(sqlite3.IntegrityError):
-            await db.conn.execute(
-                "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
-                "published, updated_at) VALUES (1, 'b', 'B', 'g', 'member', 'golive', "
-                "'/golive', 1, '2026-09-16T00:00:00+00:00')"
-            )
-        # Unpublished, a staff one, and another guild are all allowed beside it.
+        await db.conn.execute(
+            "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
+            "published, updated_at) VALUES (1, 'b', 'B', 'g', 'member', 'golive', "
+            "'/golive', 1, '2026-09-16T00:00:00+00:00')"
+        )
+        # Unpublished, a staff one, and another guild are all allowed beside it too.
         await db.conn.execute(
             "INSERT INTO guides(guild_id, slug, title, goal, audience, feature, command, "
             "published, updated_at) VALUES (1, 'c', 'C', 'g', 'member', 'golive', '/golive', "

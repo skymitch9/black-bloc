@@ -1079,6 +1079,25 @@ function seedState() {
       faults: [{ id: 3, symptom: 'No Edit this guide', answer: 'guides_who_edits is manage_guild. Ask a Lead.' }],
       facts: [{ kind: 'probe', ref: 'test_mode' }],
     },
+    {
+      id: 3,
+      slug: 'golive-channels',
+      title: 'Watch a channel nobody here streams from',
+      goal: 'Announce a Twitch channel that no member here owns, and spotlight it while it streams.',
+      audience: 'staff',
+      feature: 'golive',
+      command: '/golive',
+      sort: 212,
+      published: true,
+      seeded: true,
+      updated_at: minutesAgo(300),
+      updated_by: null,
+      steps: [
+        { id: 4, do_text: 'Type **/golive** and press **Channels…**.', expect_text: 'Every channel watched by name, and whether it is spotlit.', media_id: null, seed_do: 'Type **/golive** and press **Channels…**.', seed_expect: 'Every channel watched by name, and whether it is spotlit.' },
+      ],
+      faults: [],
+      facts: [],
+    },
   ],
   guideMedia: [
     {
@@ -1217,8 +1236,8 @@ function seedState() {
     { id: 3, meeting_id: 1, speaker_id: STAFF.id, speaker: 'Mod', started_at: minutesAgo(197), text: 'Agreed. Nobody turns it on until we have tested it.' },
   ],
   nextMeetingMessage: 830000000000000002,
-  nextGuide: 3,
-  nextGuideStep: 4,
+  nextGuide: 4,
+  nextGuideStep: 5,
   nextGuideMedia: 3,
   rules: JSON.parse(JSON.stringify(RULES)),
   menus: [

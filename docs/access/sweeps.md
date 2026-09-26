@@ -3330,3 +3330,14 @@ the conductor numbers them. ⚠️ The command list re-syncs on boot, so the hid
 |---|---|---|
 | **`RM-a`** | With role menus **off** (the live posture since 2026-09-16) and `hide_commands_when_off` on: type `/` in the server and look for `/rolemenu`; then `/mod` ▸ **Role grants…** ▸ **Give somebody a role…** ▸ **Back** ▸ **Back** | `/rolemenu` is gone from the list (after the deploy's sync; `/settings` ▸ **Turn a feature back on…** now lists *Role menus*). `/mod`'s bottom row reads **Logs · Role grants… · Open on the site**; **Role grants…** opens *Timed roles running right now* (the same console `/rolemenu` ▸ **Grants…** opened: Whose roles?, the grant picker, **Give somebody a role…**, **Back**, **Refresh**); the first **Back** returns to the console, the second to the `/mod` page you left. A member never sees `/mod`; a staffer who lost staff mid-panel gets the staff-only sentence and nothing redraws. Turning role menus **on** brings `/rolemenu` back with its own **Grants…** — both doors work. |
 | **`RM-b`** | With role menus off, find a role request still **pending** in the approval channel (or make one with the mode on, then turn it off) and press **Approve** / **Deny…** on its card | The card's buttons still work exactly as before (they are not part of any panel and not hidden with the command): Approve hands the role over and DMs, Deny asks why and DMs the reason; the card is edited to say who decided. ⚠️ The **Waiting on staff (n)…** list and a menu's **Hand roles out…** live only on `/rolemenu`, so with the mode off they are reachable only by turning it on (or on the site's Role menus page). |
+
+## Row `GP-a` — several guides per command (branch `guides-per-command`, 2026-09-25)
+
+🔨 **BUILT on branch `guides-per-command`, NOT merged, NOT deployed.** Owner, 2026-09-25 20:3x: *"why does marathon have
+an empty event category"*. Why in [`../info/code-notes.md`](../info/code-notes.md) ▸ *Several guides per command*. The
+row is lettered; the conductor numbers it. ⚠️ The live commands fill at the FIRST BOOT after the deploy (the guides
+loop's first tick), not before.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`GP-a`** | After the deploy's boot: open the site's Guides hub as staff, look at *See when BaF runs at a marathon*, *Follow a marathon's schedule* and *Ping only during an event*; filter **in Discord**; then run `/help` as a member (no filter) and `/help event` | The three cards' feet read `/event · N steps`, `/event · N steps`, `/golive · N steps` and they appear under **in Discord**, each next to the other guide(s) for its command. `/help`'s `/event` heading ends `· [guide: Propose an event](…) · [guide: See when BaF runs at a marathon](…)` — both links open their guide; no staff guide is linked. `/golive` still carries its single ` · [guide](…)`. Editing a guide's Command to one another guide already has and publishing it saves (no refusal). |

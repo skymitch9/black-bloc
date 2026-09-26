@@ -1,5 +1,9 @@
 # Guides — one web page per goal, staff-editable, with real screenshots and live values
 
+> **2026-09-25 (branch `guides-per-command`, schema 66):** the one-published-guide-per-command index is DROPPED — a
+> command may carry several published guides per audience (`/event` ▸ Marathons…, `/golive` ▸ Channels…); `/help`
+> names each one. §D6 is taken and Deviation 1 is superseded — see *Several guides per command* at the foot.
+
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v111** — merges `cad1abc` (G1 core) and `307b759` (G2 pages), release `67aee7e`, deployed **2026-09-16 09:07** Phoenix (`../deploys.log`); landing entry in [`../DONE.md`](../DONE.md) (*"2026-09-16 — GUIDES"*). The two `## Deviations` feet below are the truth where they depart from the body. ⚠️ Rows **360–389** of [`../access/sweeps.md`](../access/sweeps.md) are the owner's; the capture runbook has never been drilled. Was: 📐 DESIGN, not built (owner, 2026-09-15: "dont build yet jusy mock", then "write the design doc"; 2026-09-16 06:5x: "do it all").
 > Mock the owner reacted to: https://claude.ai/artifact/C6MGnYLSdSyDHL42y729YA (the hub, one guide,
 > the phone view, the augmented `/help`). Owner asks, verbatim, 2026-09-15 21:2x–21:5x:
@@ -547,3 +551,30 @@ faults (its deviation 11). Fixed: `seed_guides` (idempotent by slug) runs on eve
 with the count of what it added; `refresh_seeds` follows as before. One test. Steps and faults added to an EXISTING
 guide still reach a fresh seed only — that stays a known limit (**Reset the whole guide** brings them in).
 
+### Several guides per command (branch `guides-per-command`, off `main` `582977f1`, 2026-09-25)
+
+Owner, 2026-09-25 20:3x: *"why does marathon have an empty event category"*. §D6 exercised: the index is gone.
+
+1. **Schema 66.** `guides_one_published_command` is dropped at boot (`DROP INDEX IF EXISTS`, the additive way) and
+   `guides_by_command (guild_id, command, audience)` is a plain index for the lookups. Deviation 1 above is history.
+2. **`/help` puts every published MEMBER guide for a command on that command's heading line.** One guide keeps the
+   old clause exactly (` · [guide](url)`); two or more each read ` · [guide: <title>](url)`, ordered by `sort`, then
+   title. They ride the heading rather than a line each so a `/help` filter keeps them with their command and the page
+   count does not grow. Staff guides are still never linked (Deviation 2). `/event` for a member now reads
+   `**/event** — … · [guide: Propose an event](…#event-propose) · [guide: See when BaF runs at a marathon](…#marathons-follow)`
+   (titles as seeded; staff-edited titles show as edited).
+3. **The site's refusal is REMOVED, words and all** (`COMMAND_TAKEN`, `409 command_taken`). No unpublished-duplicate
+   case needed it: a new guide is always made unpublished, and publishing a second guide for a command is now allowed.
+   The editor's and the new-guide form's hint now say several guides may share a command.
+4. **The hub keeps a command's cards together** (`page-guides.js:byCommand`, stable, in the API's order); every card's
+   foot still reads `/command · N steps`.
+5. **The seed:** `marathons-follow` and `marathons-manage` → `/event`, `ping-windows` → `/golive`. ⚠️ The brief named
+   four; `golive-channels` already carried `/golive` in the seed (it was the first staff `/golive` guide), so only three
+   were null.
+6. ⚠️ **The boot refresh fills a NULL command and touches nothing else a person wrote.** `refresh_seeds` runs only for
+   a guide whose `seed_hash` differs from the shipped entry (the three changed entries do, once); for those it now sets
+   `command = COALESCE(command, <seed command>)` beside the `seed_hash`, `seed_do`, `seed_expect` it always wrote. It
+   does NOT write title, goal, audience, feature, sort, published, steps' shown text, faults, facts or media, and it
+   never overwrites a command that is set. Limit: a staffer who had deliberately blanked one of these three commands
+   gets it back once, at the first boot after this ships (the hash then matches, so never again); clearing it again
+   sticks.

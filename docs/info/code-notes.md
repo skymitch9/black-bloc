@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-25 — one section APPENDED, one row retired, nothing re-keyed**: *Several guides per command* (branch `guides-per-command`, off `main` `582977f1`, keyed against `2f86e8bb`). Before that:
 > **2026-09-25 — one section APPENDED, two rows rewritten, nothing re-keyed**: */mod ▸ Role grants… and `/rolemenu` hiding again* (branch `hide-rolemenu`, off `main` `dad277d2`, keyed against `27fe6c27`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The guides seed may carry `"command": null`* (guides re-shoot, `main` `7a3cdff1`). Before that:
 > **2026-09-25 — one section APPENDED, one row's text corrected, nothing re-keyed**: *An event's three Discord links* (branch `event-links`, off `main` `271ec7f8`, keyed against `ea781d6e`). Before that:
@@ -8577,13 +8578,13 @@ Why in [`event-drawer-design.md`](event-drawer-design.md) (the dated line at the
 | `site/public/assets/event-drawer.js:270` `placeNode` | The review name stays a `nameNode` (resolved like before) wrapped in the link, so **Delete this room/post** and **Move to the forum** still sit beside it outside the anchor. |
 | `site/mock/server.mjs:7558` `eventLinks` | The mock's copy of `event_links`, using `REVIEW_GUILD_ID` as the guild and the mock's own `events_announce_channel_id` setting. Event 5 gained an `announce_message_id` so all three show. |
 
-## The guides seed may carry `"command": null` (guides re-shoot, 2026-09-25)
+## ~~The guides seed may carry `"command": null`~~ — retired (guides re-shoot, 2026-09-25)
 
 Keyed against `7a3cdff1`.
 
 | Where | Why |
 |---|---|
-| `black_bloc/guides_seed.json:555` `marathons-follow` · `:576` `marathons-manage` · `:616` `ping-windows` | `null`, not the command they live under (`/event`, `/event`, `/golive`): `guides_one_published_command` (`black_bloc/storage/db.py:736`) allows ONE published guide per (guild, command, audience), and `seed_one` publishes every entry, so a second `/event` member guide would fail the insert. A null command also keeps `/help` linking the primary guide. `seed_one` passes `entry.get("command")` through, so null needs no code. |
+| `black_bloc/guides_seed.json:555` `marathons-follow` · `:576` `marathons-manage` · `:616` `ping-windows` | ⚠️ **RETIRED 2026-09-25 (branch `guides-per-command`, schema 66):** the three now carry `/event`, `/event`, `/golive`; the unique index that forced `null` is dropped. See *Several guides per command* below. Was: `null`, because `guides_one_published_command` allowed ONE published guide per (guild, command, audience). |
 
 ## `/mod` ▸ Role grants… and `/rolemenu` hiding again (branch `hide-rolemenu`, 2026-09-25)
 
@@ -8599,3 +8600,20 @@ The owner's option "B" (2026-09-25 20:1x): the Grants console gets a door on `/m
 | `black_bloc/cogs/community/role_menus.py:2186` `open_grants_from` | The other door's entry: `opened` (staff + database), `build_grants`, stamp `home`, render over the caller's panel (which `retire` stops). Log kinds are the role-menu feature's, unchanged — the door moves nothing new. |
 | `black_bloc/cogs/community/role_menus.py:2252` `back_from` — `home` wins only on the Grants list | A grant card or the new-grant form still steps back to the Grants list first; only the list's own **Back** leaves the console, the same depth `/rolemenu`'s Back had. |
 | `black_bloc/settings_store.py:1053` — `rolemenu_mode`'s description | It said *"/rolemenu itself stays either way"*, now false. ⚠️ `site/mock/server.mjs:491` carries its own copy of the old sentence and was NOT touched by this build (no JS); the mock text is stale until someone edits it. |
+
+## Several guides per command (branch `guides-per-command`, 2026-09-25)
+
+Owner, 2026-09-25 20:3x: *"why does marathon have an empty event category"*. Keyed against `2f86e8bb`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/storage/db.py:736` `guides_by_command` | A plain index where the partial UNIQUE one stood. `/event` hosts Marathons… and `/golive` hosts Channels…, so one command carries several features and several guides. |
+| `black_bloc/storage/db.py:1235` `RETIRED_INDEXES` · `:1283` `_drop_retired_indexes` | `CREATE INDEX IF NOT EXISTS` never removes an old index, so a schema-65 file would keep refusing the second guide. `DROP INDEX IF EXISTS` at every boot is the additive way (the same move `_set_aside_*` makes); it runs after `SCHEMA`, touches no row, and is a no-op on a fresh file. |
+| `black_bloc/guides.py:638` `published_for` | A list, `ORDER BY sort, title, id`. No caller in the app needs it since the site's refusal went; kept as the one query for "the guides of a command" and exercised by the tests. |
+| `black_bloc/guides.py:877` `refresh_seeds` — `command = COALESCE(command, ?)` | The boot refresh carries a command to a live guide that has NONE, so the three live guides saved without one gain it at the next boot with no hand write. Only inside the hash-changed branch, so it happens once per seed change: a set command is never replaced, and a command staff clear again afterwards stays clear. Title, goal, steps' shown text, faults, facts and media are not written. |
+| `black_bloc/guides.py:1109` `links_for` | Command → `[(title, url)]`, member guides only (Deviation 2 stands). The title rides along so `/help` can tell two links apart. |
+| `black_bloc/cogs/core.py:136` `guide_clause` · `:59` `NAMED_GUIDE_CLAUSE` | One guide keeps the old ` · [guide](url)` exactly; two or more are named by their guide title, which staff edit on the site, so the words stay editable. They stay on the heading line: a `/help` filter keeps the heading with its clauses, and no page grows a line. |
+| `black_bloc/api/tools/guides.py` `guide_save` — no `_published_elsewhere` | The refusal and its sentence (`COMMAND_TAKEN`) are gone. A new guide is always created unpublished, so there was no unpublished-duplicate case left for them to guard. |
+| `site/public/assets/page-guides.js:247` `byCommand` | Stable regroup of the hub's cards by command in the API's order; a guide with no command keeps its own place (`#<index>` cannot collide with a command, which starts with `/`). |
+| `site/public/assets/page-guides.js:94` `COMMAND_HINT` | The Command field's hint, shared by the editor and the new-guide form (it used to say one guide per command). |
+| `site/mock/server.mjs:1084` `golive-channels` | A second `/golive` guide (staff) in the mock, so a staff hub shows two cards under one command. |

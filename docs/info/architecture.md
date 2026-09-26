@@ -90,6 +90,13 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-25 (several guides per command, branch `guides-per-command` off `main` `582977f1`; design
+> `info/guides-design.md` ▸ Deviation 1 superseded; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the
+> migration has NOT run on the live database):** schema **65 → 66** (measured: `SCHEMA_VERSION`) — the partial unique
+> index `guides_one_published_command` is dropped at boot (`storage/db.py:RETIRED_INDEXES`, `DROP INDEX IF EXISTS`)
+> and a plain `guides_by_command (guild_id, command, audience)` replaces it; no table or column moves. Routes, keys,
+> log kinds and pages unchanged (`check.mjs`: *22 pages, 252 routes*). ⚠️ Nothing else on this page was re-checked.
+>
 > **2026-09-25 (marathon people, branch `marathon-people` off `main` `def0c5ef`; design
 > `info/marathon-people-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration
 > has NOT run on the live database):** schema **64 → 65** (measured: `SCHEMA_VERSION`) — one table through the

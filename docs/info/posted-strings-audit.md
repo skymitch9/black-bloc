@@ -2738,7 +2738,7 @@ rows the site already edits. The rows below are the Discord door only.*
 | `black_bloc/guides.py:131` | **{ref}** is not a value a guide may show: it is one of the keys that decide who… | ephemeral answer | no | `guides_setting_is_private` | 2 |
 | `black_bloc/guides.py:136` | **{ref}** only decides how much of a feature is repeated into the Discord log, w… | ephemeral answer | no | `guides_setting_is_a_log_level` | 2 |
 | `black_bloc/guides.py:140` | **{ref}** is not one of the live values Black Bloc can read, so nothing was save… | ephemeral answer | no | `guides_no_such_probe` | 2 |
-| `black_bloc/guides.py:144` | **{command}** already has a published guide (**{slug}**), and `/help` can only l… | ephemeral answer | no | `guides_command_taken` | 2 |
+| ~~`black_bloc/guides.py:144`~~ RETIRED 2026-09-25 (`guides-per-command`: several guides per command, the refusal is gone) | **{command}** already has a published guide (**{slug}**), and `/help` can only l… | ephemeral answer | no | `guides_command_taken` | 2 |
 | `black_bloc/guides.py:149` | That picture is {size} and Black Bloc keeps guide screenshots under {limit}. Not… | ephemeral answer | no | `guides_media_too_big` | 2 |
 | `black_bloc/guides.py:154` | **{name}** is not a picture Black Bloc can serve. Nothing was uploaded — send a … | ephemeral answer | no | `guides_media_wrong_type` | 2 |
 | `black_bloc/guides.py:158` | That upload did not arrive as a picture Black Bloc could read, so nothing was up… | ephemeral answer | no | `guides_media_unreadable` | 2 |

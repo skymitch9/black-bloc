@@ -1039,6 +1039,11 @@ async def a_golive_command(interaction):
     await interaction.response.send_message("live")
 
 
+@app_commands.command(name="event", description="Events")
+async def an_event_command(interaction):
+    await interaction.response.send_message("event")
+
+
 @app_commands.command(name="here", description="Only this guild has it")
 async def a_guild_only_command(interaction):
     await interaction.response.send_message("here")
@@ -1414,7 +1419,7 @@ async def seed_guides_for(bot):
 
 
 def test_help_lines_put_a_masked_guide_link_on_the_line_that_has_one():
-    links = {"/ping": "https://blackbloc.test/guides.html#ping-it"}
+    links = {"/ping": [("Ping it", "https://blackbloc.test/guides.html#ping-it")]}
 
     lines = help_lines([a_plain_command, tempvoice], "", links)
 
@@ -1431,7 +1436,7 @@ def test_help_lines_put_a_masked_guide_link_on_the_line_that_has_one():
 
 
 def test_the_guide_link_rides_the_heading_and_leaves_the_filter_alone():
-    links = {"/tempvoice": "https://blackbloc.test/guides.html#voice-room"}
+    links = {"/tempvoice": [("Voice room", "https://blackbloc.test/guides.html#voice-room")]}
 
     assert help_lines([a_plain_command, tempvoice], "zoo", links) == [
         "**/tempvoice** — Temporary voice channels"
@@ -1490,6 +1495,39 @@ async def test_a_command_with_a_seeded_guide_carries_the_link(bot, cog, member):
     url = guides.guide_url(bot.settings.origin, "golive-announce")
     assert f"**/golive** — Announce your streams · [guide]({url})" in said
     assert "[guide](" not in said.split("**/ping**")[1].split("\n")[0]
+
+
+def test_a_command_with_two_guides_names_each_on_its_heading():
+    links = {
+        "/ping": [
+            ("Ping it", "https://blackbloc.test/guides.html#ping-it"),
+            ("Ping again", "https://blackbloc.test/guides.html#ping-again"),
+        ]
+    }
+
+    assert help_lines([a_plain_command], "", links) == [
+        "**/ping** — Check that Black Bloc is alive"
+        " · [guide: Ping it](https://blackbloc.test/guides.html#ping-it)"
+        " · [guide: Ping again](https://blackbloc.test/guides.html#ping-again)"
+    ]
+
+
+async def test_help_lists_both_event_guides_for_a_member(bot, cog, member):
+    from black_bloc import guides
+
+    bot.tree = FakeTree([a_plain_command, an_event_command])
+    await seed_guides_for(bot)
+    interaction = FakeInteraction(bot, member)
+
+    await cog.help_command.callback(cog, interaction, None)
+
+    said = "\n".join(message["content"] for message in interaction.response.messages)
+    line = said.split("**/event**")[1].split("\n")[0]
+    propose = guides.guide_url(bot.settings.origin, "event-propose")
+    marathons = guides.guide_url(bot.settings.origin, "marathons-follow")
+    assert f"]({propose})" in line and f"]({marathons})" in line
+    assert line.index(propose) < line.index(marathons)
+    assert "marathons-manage" not in said and "event-review" not in said
 
 
 async def test_the_last_page_carries_one_link_button_to_the_hub(bot, cog, member):
@@ -1563,12 +1601,14 @@ async def test_eighteen_guide_links_keep_every_help_page_under_discords_limit(se
     await black_bloc.close()
 
     origin = bot.settings.origin
-    links = {
-        one["command"]: guides.guide_url(origin, one["slug"])
-        for one in guides.seed_entries()
-        if one["command"]
-    }
+    links: dict = {}
+    for one in guides.seed_entries():
+        if one["command"]:
+            links.setdefault(one["command"], []).append(
+                (one["title"], guides.guide_url(origin, one["slug"]))
+            )
     assert len(links) == 20
+    assert sum(len(found) for found in links.values()) == 27
 
     pages = pages_under_limit([core_cog.HELP_HEADER, *help_lines(entries, "", links)])
     longest = max(len(page) for page in pages)

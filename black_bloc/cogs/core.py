@@ -56,6 +56,7 @@ NO_MATCH = (
     "the filter to see all of them."
 )
 GUIDE_CLAUSE = " · [guide]({url})"
+NAMED_GUIDE_CLAUSE = " · [guide: {title}]({url})"
 ALL_THE_GUIDES = "All the guides"
 HIDDEN_NOTE = (
     "\n*{count} command(s) are not listed because their feature is turned off. A Lead brings "
@@ -134,8 +135,10 @@ def subcommand_lines(command: Any, path: str) -> list[str]:
 
 def guide_clause(links: Any, path: str) -> str:
     """Masked Markdown, which Discord draws as a small link: no embed, no second message."""
-    url = (links or {}).get(path)
-    return GUIDE_CLAUSE.format(url=url) if url else ""
+    found = (links or {}).get(path) or []
+    if len(found) == 1:
+        return GUIDE_CLAUSE.format(url=found[0][1])
+    return "".join(NAMED_GUIDE_CLAUSE.format(title=title, url=url) for title, url in found)
 
 
 def help_lines(entries: Any, wanted: str = "", guides: Any = None) -> list[str]:
@@ -334,7 +337,7 @@ class Core(commands.Cog):
                 **extra,
             )
 
-    async def _guide_links(self, guild: Any) -> dict[str, str]:
+    async def _guide_links(self, guild: Any) -> dict[str, list[tuple[str, str]]]:
         guild_id = getattr(guild, "id", None)
         if guild_id is None or not guides.help_links_on(self.bot.store, guild_id):
             return {}
