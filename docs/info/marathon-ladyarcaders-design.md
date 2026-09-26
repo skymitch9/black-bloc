@@ -136,6 +136,8 @@ Remove) works unchanged — staff final say is the existing feed surface.
    checks (two days) to walk the history, re-probing old events. 24 is the newest event seen live (Super Showcase
    2026). It is a code constant, not a settings key: staff move the probe by adding a higher event by link (it counts
    as known) and reset it with **Look again**. Flagged for checklist 33 — the reviewer may want it a key.
+   **Superseded at the merge (2026-09-26, branch `merge-marathon-sources`):** it IS a key now,
+   `marathon_ladyarcaders_floor` (int, default 24), read per guild where the probe read `FLOOR`.
 6. **Found records stay in `seen` and stay candidates while recent** (like the Oengus memory), so a failed add is
    retried, an adopted row keeps its feed, and **Forget ignored** can re-add — with no second probe.
 7. **A probe that fails mid-way writes nothing from that check** (the error is raised before `merged`); earlier

@@ -115,7 +115,9 @@ dropped) and `fastestfurs_schedule_21.json` (4,549 B — Fall Fest 2026's first 
    reached*, the host from the URL, which is accurate.
 10. **The Discord modal's source field**: `max_length` 10 → **20** (`fastestfurs` is 11 characters) and its label is now
     *Source: gdq/rpglb/horaro/oengus/fastestfurs* (43 characters — Discord caps a label at 45, so the old
-    *Read from — gdq, rpglb, horaro or oengus* could not simply grow).
+    *Read from — gdq, rpglb, horaro or oengus* could not simply grow). **Superseded at the merge (2026-09-26):** with
+    seven picks the label is *Source — a pick; clear the box to list all* and the list is the field's placeholder
+    (`code-notes.md`, the marathon-source merges section).
 11. **No new settings key.** Every new sentence (`PICK_WORDS`, the unpublished line, the site's pick help) is a panel
     or page constant beside its siblings, which the bot does not post; `marathon_unknown_site` changed default only.
     The help texts of `marathon_feeds` / `marathon_feed_recent_days` were NOT touched (they still list the older

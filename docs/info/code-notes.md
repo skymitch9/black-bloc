@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — the three marathon-source sections RE-KEYED at the merge, one section APPENDED**: *The horaro.net events feed*, *The Fastest Furs feed* and *Lady Arcaders* re-keyed against `fca7a18b` (branch `merge-marathon-sources`: the merges `e29563c6` + `b8a86dfe`, then the wording pass and the `marathon_ladyarcaders_floor` key); *The marathon-source merges — one wording pass and the floor key* appended. Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The horaro.net events feed for Fast Paced Events* (branch `marathon-horaro-events`, off `main` `a3ac5132`, keyed against `87ddd4ba`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The Fastest Furs feed* (branch `marathon-fastestfurs`, off `main` `a3ac5132`, keyed against `e34426d2`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Lady Arcaders — probed by event number on ladyarcaders.com* (branch `marathon-ladyarcaders`, off `main` `a3ac5132`, keyed against `8d0d4400`). Before that:
@@ -8673,7 +8674,7 @@ Deviations. Keyed against `4eff650f`.
 ## The horaro.net events feed for Fast Paced Events (branch `marathon-horaro-events`, 2026-09-26)
 
 Owner, 2026-09-26 12:3x: *"Build them all now"* (after the marathon orgs research). Design
-`marathon-horaro-events-design.md`. Keyed against `87ddd4ba`.
+`marathon-horaro-events-design.md`. Keyed against `87ddd4ba`; **re-keyed against `fca7a18b`** after the merges.
 
 | Where | Why |
 |---|---|
@@ -8684,21 +8685,21 @@ Owner, 2026-09-26 12:3x: *"Build them all now"* (after the marathon orgs researc
 | `black_bloc/marathon_horaro_events.py:78` `remembered` | A re-read replaces what the memory said about the same event; the cap is `marathon_feeds.seen_after`'s `SEEN_LIMIT`. |
 | ⚠️ `black_bloc/marathon_horaro_events.py:84` `candidates` | The ref is `<event>/<schedule>` — the `source_ref` `read_url` gives a pasted horaro.net link — so `known`, adoption and Remove's `ignored` compare equal strings (Deviation 2). The event must be in THIS search and remembered as the login's. "Recent" is by END. |
 | `black_bloc/marathon_horaro_events.py:105` `check` | The search is by the FEED'S NAME (Deviation 1); a blank name raises `NO_QUERY` (a failed check, in words). A failed schedules read is logged at info and not remembered. Returns the memory only when it changed, so an unchanged check writes nothing. |
-| `black_bloc/marathon_sources.py:78` `HORARO_EVENTS` · `:572` `horaro_events` | `name` is URL-quoted; `max=100`; at most `HORARO_EVENT_PAGES` 3 pages. A blank name returns `[]` without a request — an empty search would list all 3,600+ events. |
-| `black_bloc/marathon_sources.py:464` `horaro_next` | `pagination.links[rel=next]`, only when it stays on `https://horaro.net/` (a link is never followed off-site). |
-| `black_bloc/marathon_feeds.py:54` `SEEDS` — `fastpacedevents` | Named **Fast Pace** because the name IS the search, and FPE's events are *Fast Pace for …* (`Fast Paced Events` finds 0). Seeded at the first boot after staff add the row (the marker is only written when the row exists). |
-| `black_bloc/marathon_feeds.py:232` `marathon_source` · `:238` `source_word` · `:253` `pick_for` | The marathons are plain `horaro`; the feed's own word (*horaro.net events*) and pick are checked on the feed's `source` before the horaro branch, which would say `horaro.net/<login>`. |
-| `black_bloc/cogs/content/marathon_feeds.py:340` `horaro_events_candidates_of` | The Oengus shape: the channel row's CURRENT login (the ref is the fallback), `seen` written only when changed, under the feed lock `run_check` already holds. |
-| `black_bloc/cogs/content/marathon_feeds.py:724` · `:876` | Add a feed and Move to channel… key the ref on the login, as Oengus does (one feed per channel login under the table's UNIQUE). |
-| `black_bloc/cogs/content/marathon_feeds.py:970` `look_again` — `again` | The re-read sentence names horaro.net for this kind; the clear itself is the generic `seen = NULL`. |
-| `black_bloc/cogs/content/marathon_feeds.py:1787` `AddFeedModal.source` | `max_length` 20: `horaro_events` is 13 characters (Deviation 8). |
-| `site/public/assets/marathons-section.js:181` `PICK_HELP.horaro_events` · `:184` `PICK_GUESS` · `:187` `FEED_SEEN_NOTE_HORARO` · `:999` | The help line tells staff the Name is the search; the pick is guessed for `fastpacedevents`; the drawer's memory line names horaro.net events for this kind. |
-| `site/mock/server.mjs:1429` channel 12 · `:6103` feed 12 · `:6078` `FEED_SOURCES` | The mock's FPE row and its feed (two remembered events, no marathon — nothing announced today). Ids 12 keep clear of the sibling branches' likely 8–11. |
+| `black_bloc/marathon_sources.py:84` `HORARO_EVENTS` · `:626` `horaro_events` | `name` is URL-quoted; `max=100`; at most `HORARO_EVENT_PAGES` 3 pages. A blank name returns `[]` without a request — an empty search would list all 3,600+ events. |
+| `black_bloc/marathon_sources.py:494` `horaro_next` | `pagination.links[rel=next]`, only when it stays on `https://horaro.net/` (a link is never followed off-site). |
+| `black_bloc/marathon_feeds.py:65` `SEEDS` — `fastpacedevents` | Named **Fast Pace** because the name IS the search, and FPE's events are *Fast Pace for …* (`Fast Paced Events` finds 0). Seeded at the first boot after staff add the row (the marker is only written when the row exists). |
+| `black_bloc/marathon_feeds.py:245` `marathon_source` · `:263` `source_word` · `:278` `pick_for` | The marathons are plain `horaro`; the feed's own word (*horaro.net events*) and pick are checked on the feed's `source` before the horaro branch, which would say `horaro.net/<login>`. |
+| `black_bloc/cogs/content/marathon_feeds.py:347` `horaro_events_candidates_of` | The Oengus shape: the channel row's CURRENT login (the ref is the fallback), `seen` written only when changed, under the feed lock `run_check` already holds. |
+| `black_bloc/cogs/content/marathon_feeds.py:746` · `:898` (`create_feed` / `set_feed`, one `in (...)` test for the three login-keyed kinds since the merge) | Add a feed and Move to channel… key the ref on the login, as Oengus does (one feed per channel login under the table's UNIQUE). |
+| `black_bloc/cogs/content/marathon_feeds.py:996` `look_again` — `again` | The re-read sentence names horaro.net for this kind (`hre.REREAD`, picked from a source → sentence map since the merge); the clear itself is the generic `seen = NULL`. |
+| `black_bloc/cogs/content/marathon_feeds.py:1816` `AddFeedModal.source` | `max_length` 20 (`mf.ADD_FEED_SOURCE_LIMIT` since the merge): `horaro_events` is 13 characters (Deviation 8). |
+| `site/public/assets/marathons-section.js:182` `PICK_HELP.horaro_events` · `:188` `PICK_GUESS` · `:191` `FEED_SEEN_NOTE_HORARO` · `:1005` | The help line tells staff the Name is the search; the pick is guessed for `fastpacedevents`; the drawer's memory line names horaro.net events for this kind. |
+| `site/mock/server.mjs:1434` channel 12 · `:6125` feed 12 · `:6092` `FEED_SOURCES` | The mock's FPE row and its feed (two remembered events, no marathon — nothing announced today). Ids 12 keep clear of the sibling branches' likely 8–11. |
 
 ## The Fastest Furs feed (branch `marathon-fastestfurs`, 2026-09-26)
 
 Owner, 2026-09-26: *"Build them all now"*. Design [`marathon-fastestfurs-design.md`](marathon-fastestfurs-design.md)
-and its Deviations. Keyed against `e34426d2`.
+and its Deviations. Keyed against `e34426d2`; **re-keyed against `fca7a18b`** after the merges.
 
 | Where | Why |
 |---|---|
@@ -8710,47 +8711,63 @@ and its Deviations. Keyed against `e34426d2`.
 | `black_bloc/marathon_fastestfurs.py:160` `read_events` | `/api/events` is a bare JSON list, which `ScheduleClient._json` refuses, so the reader takes the client's `_request` and checks the list itself (Deviation 1). |
 | `black_bloc/marathon_fastestfurs.py:170` `resolve` | The name comes from the events list, so an event whose schedule is not out still resolves on a staff Add (Deviation 8). |
 | `black_bloc/marathon_fastestfurs.py:181` `read_runs` | A 404 or a 200 with no run items is `ScheduleError(unpublished=True)` — the GDQ-404 path: runs kept, no failure counted (Deviation 6). |
-| `black_bloc/marathon_sources.py:217` `_ff` | The one door to `marathon_fastestfurs`: a function-level import, because that module imports `Run` / `Person` / `ScheduleError` from here. `read_url` (`:172`), `schedule_page` (`:212`), `resolve` (`:629`) and `runs` (`:678`) each have one branch after Oengus. |
-| `black_bloc/marathon_sources.py:589` `fastestfurs_events` | The feed's one list read, through the same `_request` (and so the same agent and `ScheduleError` wrapping) as every other source. |
-| `black_bloc/marathon_feeds.py:29` `FASTESTFURS_FEED` · `:55` seed · `:62` pick | The feed source, the once-ever seed on the `fastestfurs` channel row, and the Add a feed pick. `feed_ref` is the channel login (Oengus §H Deviation 3); `seen` is unused, so Look again is not offered. |
-| `black_bloc/cogs/content/marathon_feeds.py:314` `candidates_of` | One branch after Oengus: the events list → `ff.candidates`; the rest of `run_check` (fresh, adopt, `add_candidate`) is shared, so the quiet add and the published notice hold. `:712` `create_feed` and `:864` `set_feed` key the ref on the channel login. |
-| `black_bloc/cogs/content/marathon_feeds.py:1774` `AddFeedModal.source` | `max_length` 20 (`fastestfurs` is 11); the label `mf.ADD_FEED_SOURCE` is kept ≤ 45 characters, Discord's cap (Deviation 10). |
-| `site/public/assets/marathons-section.js:181` `PICK_HELP.fastestfurs` · `:183` `PICK_GUESS` | The pick's one line and the guess from the channel login; no slug field. |
-| `site/mock/server.mjs:1428` channel 31 · `:6111` feed 31 · `:5639` marathon 31 · `:5624` runs 31–32 | The mock's Fastest Furs row, feed and Fall Fest 2026 with name-only runners and a host; ids 31 to stay clear of the sibling branches' samples. `:6046` `MARATHON_FASTESTFURS` mirrors `read_ref`. |
+| `black_bloc/marathon_sources.py:236` `_ff` | The one door to `marathon_fastestfurs`: a function-level import, because that module imports `Run` / `Person` / `ScheduleError` from here. `read_url` (`:186`), `schedule_page` (`:229`), `resolve` (`:702`) and `runs` (`:755`) each have one branch after Oengus (and before Lady Arcaders'). |
+| `black_bloc/marathon_sources.py:662` `fastestfurs_events` | The feed's one list read, through the same `_request` (and so the same agent and `ScheduleError` wrapping) as every other source. |
+| `black_bloc/marathon_feeds.py:31` `FASTESTFURS_FEED` · `:66` seed · `:75` pick | The feed source, the once-ever seed on the `fastestfurs` channel row, and the Add a feed pick. `feed_ref` is the channel login (Oengus §H Deviation 3); `seen` is unused, so Look again is not offered. |
+| `black_bloc/cogs/content/marathon_feeds.py:319` `candidates_of` | One branch after Oengus and horaro.net events: the events list → `ff.candidates`; the rest of `run_check` (fresh, adopt, `add_candidate`) is shared, so the quiet add and the published notice hold. `:746` `create_feed` and `:898` `set_feed` key the ref on the channel login. |
+| `black_bloc/cogs/content/marathon_feeds.py:1816` `AddFeedModal.source` | `max_length` 20 (`fastestfurs` is 11); the label `mf.ADD_FEED_SOURCE` is kept ≤ 45 characters, Discord's cap (Deviation 10) — since the merge it no longer lists the picks (see the wording-pass section below). |
+| `site/public/assets/marathons-section.js:184` `PICK_HELP.fastestfurs` · `:188` `PICK_GUESS` | The pick's one line and the guess from the channel login; no slug field. |
+| `site/mock/server.mjs:1429` channel 31 · `:6131` feed 31 · `:5644` marathon 31 · `:5630` runs 31–32 | The mock's Fastest Furs row, feed and Fall Fest 2026 with name-only runners and a host; ids 31 to stay clear of the sibling branches' samples. `:6054` `MARATHON_FASTESTFURS` mirrors `read_ref`. |
 
 ## Lady Arcaders — probed by event number on ladyarcaders.com (branch `marathon-ladyarcaders`, 2026-09-26)
 
 Owner, 2026-09-26 12:3x: *"Build them all now"*. Design [`marathon-ladyarcaders-design.md`](marathon-ladyarcaders-design.md)
-and its Deviations. Keyed against `8d0d4400`.
+and its Deviations. Keyed against `8d0d4400`; **re-keyed against `fca7a18b`** after the merges.
 
 | Where | Why |
 |---|---|
-| `black_bloc/marathon_ladyarcaders.py:25` `FLOOR` | 24 = the newest event seen live 2026-09-26; without it the first check would walk the history from 1 (Deviation 5). A staff-added higher event moves the probe; Look again resets it. |
-| `black_bloc/marathon_ladyarcaders.py:26` `PROBE_AHEAD` · `:27` `EMPTY_RETRY_CHECKS` | Three numbers ahead; an empty one is asked again after `marathon_feed_hours` × 4 (24 h at the default) — the feed keeps probing without hammering the site. |
-| `black_bloc/marathon_ladyarcaders.py:29` `ORG_NAMES` | The org's own segments name `Lady Arcaders` as performer; dropped from people, the segment stays a run (Deviation 3). |
-| `black_bloc/marathon_ladyarcaders.py:41` `unfolded` | CRLF, LF or CR; a leading space OR tab continues the last line (RFC 5545). The live file is CRLF with no folds and lines past 75 chars. |
-| `black_bloc/marathon_ladyarcaders.py:52` `unescaped` | `\,` `\;` `\\` `\n` `\N`; any other backslash is kept as written. |
-| `black_bloc/marathon_ladyarcaders.py:66` `split_property` | Splits on the first `:` outside double quotes, so a quoted `TZID="…"` parameter survives. |
-| `black_bloc/marathon_ladyarcaders.py:86` `ics_moment` | `TZID` → that zone; `Z` → UTC; floating → the calendar's `X-WR-TIMEZONE`, else UTC; an unknown `TZID` falls back the same way; date-only → midnight UTC; junk → None. Always a UTC ISO string. |
-| `black_bloc/marathon_ladyarcaders.py:103` `parse_ics` | A stack of components: only properties directly inside a `VEVENT` land on it (a `VALARM`'s do not); the first of a repeated property wins. |
-| `black_bloc/marathon_ladyarcaders.py:153` `trailing_group` · `:177` `read_event` | The performers are the LAST balanced group of `SUMMARY`; the category is the last balanced group of `DESCRIPTION` once `Time Estimate` and `by <performers>` are cut, taken only when what precedes it is the game — so `NG+ All Bosses (Modifiers)` keeps its inner parentheses. |
-| `black_bloc/marathon_ladyarcaders.py:197` `parse_ladyarcaders` | Start order; `run_seconds` from the estimate, else `DTEND − DTSTART`; `UID` is the run id. No logins — people match by name / pairing only. |
-| `black_bloc/marathon_ladyarcaders.py:229` `calendar_answer` · `:235` `read_calendar` | The number is checked before it reaches a URL. 404 / other status / non-calendar body are refused in words; an empty body is `""`. |
-| `black_bloc/marathon_ladyarcaders.py:248` `calendar_runs` | No VEVENT is `unpublished=True` — the GDQ-404 path: runs kept, no failure counted. |
-| `black_bloc/marathon_ladyarcaders.py:258` `calendar_resolve` | An empty calendar is refused (not unpublished), so an LA event cannot be added before its calendar has runs (Deviation 4). |
-| `black_bloc/marathon_ladyarcaders.py:287` `highest_known` · `:298` `to_probe` | Known = the list's `ladyarcaders` refs + `ignored` + FOUND records, never empties; an empty number is skipped until its gap has passed (an unparseable `empty_at` counts as due). |
-| `black_bloc/marathon_ladyarcaders.py:331` `probe` | 404 stops the loop; any other non-200 raises (the check fails, nothing from it is written — Deviation 7); VEVENTs → found, anything else → empty. |
-| `black_bloc/marathon_ladyarcaders.py:345` `merged` | Replaces the same numbers, keeps the rest, capped at `SEEN_LIMIT`. |
-| `black_bloc/marathon_ladyarcaders.py:352` `candidates` | Every found record still recent by END — stays a candidate on later checks (retry, adoption, re-add after Forget ignored), like the Oengus memory (Deviation 6). |
-| `black_bloc/marathon_sources.py:95` `LADYARCADERS_URL` · `:180` `read_url` | `/events/<n>`, `…/schedule`, `…/schedule/calendar`, `…/calendar` → the number without leading zeros. The slug pages (`/event/lass-2026/`) carry no number and do not read. |
-| `black_bloc/marathon_sources.py:102` `LADYARCADERS_CALENDAR` | `…/schedule/calendar/` — `/events/<n>/calendar/` is a 404 (Deviation 1). |
-| `black_bloc/marathon_sources.py:522` `_open` · `:547` `_aiohttp_text` · `:560` `text` | One aiohttp session for JSON and text reads; `text_request=` is the tests' door. A non-string body reads as `""`. |
-| `black_bloc/marathon_sources.py:651` `resolve` · `:702` `runs` — `LADYARCADERS` | A local import: `marathon_ladyarcaders` imports this module. |
-| `black_bloc/marathon_feeds.py:55` `SEEDS` | Keyed on the `ladyarcaders` login; no such channel row exists live today, so it seeds on the first boot after staff add one. `feed_ref` is the login (as Oengus). |
-| `black_bloc/marathon_feeds.py:124` `FEED_REPROBE` | Look again's answer for this source — a panel answer, not a posted word. |
-| `black_bloc/cogs/content/marathon_feeds.py:340` `ladyarcaders_candidates_of` | Under the feed lock (inside `run_check`); reads the raw `seen` (not `mf.seen_of`, which drops the fields — Deviation 8); writes the memory BEFORE the candidates are judged. |
-| `black_bloc/cogs/content/marathon_feeds.py:726` `create_feed` · `:878` `set_feed` move — `LADYARCADERS_FEED` | The ref is the channel's login and follows a move, as Oengus. |
-| `black_bloc/cogs/content/marathon_feeds.py:973` `look_again` | Clears `seen` (the shared path) and says `FEED_REPROBE` for this source. |
-| `black_bloc/cogs/content/marathon_feeds.py:1791` `AddFeedModal.source` | `max_length` 20: `ladyarcaders` is 12. |
-| `site/public/assets/marathons-section.js:181` `PICK_HELP` · `:184` `PICK_GUESS` · `:187` `FEED_PROBE_NOTE` · `:999` | The pick's help line, the login guess, and the drawer's memory line chosen by `feed.source`. |
-| `site/mock/server.mjs:1428` channel 20 · `:6110` feed 20 · `:5637` marathon 20 | The mock's Lady Arcaders row, its feed (four remembered numbers) and the event it found; ids 20 so the sibling builds' samples do not collide. `:6044` `MARATHON_LADYARCADERS` mirrors `LADYARCADERS_URL`. |
+| `black_bloc/settings_store.py:4617` `MARATHON_LADYARCADERS_FLOOR_KEY` · `:4809` bounds · `black_bloc/cogs/content/marathon_feeds.py:365` | Was the code constant `FLOOR`; a settings key since the merge (checklist 33), `marathon_ladyarcaders_floor`, default 24 = the newest event seen live 2026-09-26; without it the first check would walk the history from 1 (Deviation 5). Read per guild on each check and passed to `to_probe`. Staff raise the key, or add a higher event by link (that moves the probe too); Look again forgets the probes. |
+| `black_bloc/marathon_ladyarcaders.py:25` `PROBE_AHEAD` · `:26` `EMPTY_RETRY_CHECKS` | Three numbers ahead; an empty one is asked again after `marathon_feed_hours` × 4 (24 h at the default) — the feed keeps probing without hammering the site. |
+| `black_bloc/marathon_ladyarcaders.py:28` `ORG_NAMES` | The org's own segments name `Lady Arcaders` as performer; dropped from people, the segment stays a run (Deviation 3). |
+| `black_bloc/marathon_ladyarcaders.py:40` `unfolded` | CRLF, LF or CR; a leading space OR tab continues the last line (RFC 5545). The live file is CRLF with no folds and lines past 75 chars. |
+| `black_bloc/marathon_ladyarcaders.py:51` `unescaped` | `\,` `\;` `\\` `\n` `\N`; any other backslash is kept as written. |
+| `black_bloc/marathon_ladyarcaders.py:65` `split_property` | Splits on the first `:` outside double quotes, so a quoted `TZID="…"` parameter survives. |
+| `black_bloc/marathon_ladyarcaders.py:85` `ics_moment` | `TZID` → that zone; `Z` → UTC; floating → the calendar's `X-WR-TIMEZONE`, else UTC; an unknown `TZID` falls back the same way; date-only → midnight UTC; junk → None. Always a UTC ISO string. |
+| `black_bloc/marathon_ladyarcaders.py:102` `parse_ics` | A stack of components: only properties directly inside a `VEVENT` land on it (a `VALARM`'s do not); the first of a repeated property wins. |
+| `black_bloc/marathon_ladyarcaders.py:152` `trailing_group` · `:176` `read_event` | The performers are the LAST balanced group of `SUMMARY`; the category is the last balanced group of `DESCRIPTION` once `Time Estimate` and `by <performers>` are cut, taken only when what precedes it is the game — so `NG+ All Bosses (Modifiers)` keeps its inner parentheses. |
+| `black_bloc/marathon_ladyarcaders.py:196` `parse_ladyarcaders` | Start order; `run_seconds` from the estimate, else `DTEND − DTSTART`; `UID` is the run id. No logins — people match by name / pairing only. |
+| `black_bloc/marathon_ladyarcaders.py:228` `calendar_answer` · `:234` `read_calendar` | The number is checked before it reaches a URL. 404 / other status / non-calendar body are refused in words; an empty body is `""`. |
+| `black_bloc/marathon_ladyarcaders.py:247` `calendar_runs` | No VEVENT is `unpublished=True` — the GDQ-404 path: runs kept, no failure counted. |
+| `black_bloc/marathon_ladyarcaders.py:257` `calendar_resolve` | An empty calendar is refused (not unpublished), so an LA event cannot be added before its calendar has runs (Deviation 4). |
+| `black_bloc/marathon_ladyarcaders.py:286` `highest_known` · `:297` `to_probe` | The floor is a parameter (the settings key, never a default here). Known = the list's `ladyarcaders` refs + `ignored` + FOUND records, never empties; an empty number is skipped until its gap has passed (an unparseable `empty_at` counts as due). |
+| `black_bloc/marathon_ladyarcaders.py:330` `probe` | 404 stops the loop; any other non-200 raises (the check fails, nothing from it is written — Deviation 7); VEVENTs → found, anything else → empty. |
+| `black_bloc/marathon_ladyarcaders.py:344` `merged` | Replaces the same numbers, keeps the rest, capped at `SEEN_LIMIT`. |
+| `black_bloc/marathon_ladyarcaders.py:351` `candidates` | Every found record still recent by END — stays a candidate on later checks (retry, adoption, re-add after Forget ignored), like the Oengus memory (Deviation 6). |
+| `black_bloc/marathon_sources.py:101` `LADYARCADERS_URL` · `:189` `read_url` | `/events/<n>`, `…/schedule`, `…/schedule/calendar`, `…/calendar` → the number without leading zeros. The slug pages (`/event/lass-2026/`) carry no number and do not read. |
+| `black_bloc/marathon_sources.py:108` `LADYARCADERS_CALENDAR` | `…/schedule/calendar/` — `/events/<n>/calendar/` is a 404 (Deviation 1). |
+| `black_bloc/marathon_sources.py:552` `_open` · `:577` `_aiohttp_text` · `:590` `text` | One aiohttp session for JSON and text reads; `text_request=` is the tests' door. A non-string body reads as `""`. |
+| `black_bloc/marathon_sources.py:704` `resolve` · `:757` `runs` — `LADYARCADERS` | A local import: `marathon_ladyarcaders` imports this module. |
+| `black_bloc/marathon_feeds.py:67` `SEEDS` | Keyed on the `ladyarcaders` login; no such channel row exists live today, so it seeds on the first boot after staff add one. `feed_ref` is the login (as Oengus). |
+| `black_bloc/marathon_feeds.py:146` `FEED_REPROBE` | Look again's answer for this source — a panel answer, not a posted word. |
+| `black_bloc/cogs/content/marathon_feeds.py:359` `ladyarcaders_candidates_of` | Under the feed lock (inside `run_check`); reads the raw `seen` (not `mf.seen_of`, which drops the fields — Deviation 8); writes the memory BEFORE the candidates are judged. |
+| `black_bloc/cogs/content/marathon_feeds.py:746` `create_feed` · `:898` `set_feed` move — `LADYARCADERS_FEED` | The ref is the channel's login and follows a move, as Oengus. |
+| `black_bloc/cogs/content/marathon_feeds.py:965` `look_again` (`:996` the sentence map) | Clears `seen` (the shared path) and says `FEED_REPROBE` for this source. |
+| `black_bloc/cogs/content/marathon_feeds.py:1816` `AddFeedModal.source` | `max_length` 20: `ladyarcaders` is 12. |
+| `site/public/assets/marathons-section.js:185` `PICK_HELP` · `:188` `PICK_GUESS` · `:193` `FEED_PROBE_NOTE` · `:1005` | The pick's help line, the login guess, and the drawer's memory line chosen by `feed.source`. |
+| `site/mock/server.mjs:1431` channel 20 · `:6133` feed 20 · `:5647` marathon 20 | The mock's Lady Arcaders row, its feed (four remembered numbers) and the event it found; ids 20 so the sibling builds' samples do not collide. `:6055` `MARATHON_LADYARCADERS` mirrors `LADYARCADERS_URL`. |
+
+## The marathon-source merges — one wording pass and the floor key (branch `merge-marathon-sources`, 2026-09-26)
+
+The three source branches (horaro.net events, Fastest Furs, Lady Arcaders) each left the shared pick-list sentences for
+ONE pass at the merge. Keyed against `fca7a18b`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_feeds.py:188` `ADD_FEED_SOURCE` · `:189` `ADD_FEED_SOURCE_HINT` · `:190` `ADD_FEED_SOURCE_LIMIT` | Seven picks do not fit Discord's 45-character label, so the label says *Source — a pick; clear the box to list all* and the list is the field's PLACEHOLDER (≤ 100): the field is pre-filled with the guessed pick, so the list shows the moment staff clear it. `max_length` is one constant, 20 (`horaro_events` 13, `ladyarcaders` 12). `tests/test_marathon_feeds.py` checks every `PICKS` key is named and fits. |
+| `black_bloc/cogs/content/marathon_feeds.py:1816` `AddFeedModal.source` | Label, placeholder and `max_length` all from the three constants above. |
+| `black_bloc/marathon_feeds.py:108` `UNKNOWN_PICK` · `site/mock/server.mjs:6265` `unknown_source` | Names the seven pick VALUES (what the person typed or the API was sent), not site names; the mock mirrors it word for word. |
+| `black_bloc/settings_store.py:4581` `marathon_feeds` · `:4610` `marathon_feed_recent_days` · `:4712` `marathon_unknown_site` | Help and default name every source; the mock rows (`site/mock/server.mjs:703`, `:707`, `:687`) mirror them. `marathon_unknown_site` is a default change only — a stored staff override is kept. |
+| `site/public/assets/marathons-section.js:172` `FEED_ADD_NOTE` | Names every pick in the order of the dropdown. |
+| `black_bloc/cogs/content/marathon_feeds.py:996` `look_again` — `again` | Three re-read sentences stay three (`FEED_REREAD` Oengus records, `hre.REREAD` horaro.net events, `FEED_REPROBE` Lady Arcaders numbers): each says something different, so a source → sentence map, `FEED_REREAD` the fallback. |
+| `black_bloc/settings_store.py:4422` `MARATHON_LADYARCADERS_FLOOR_KEY` · `:4617` · `:4809` | Checklist 33: the Lady Arcaders `FLOOR` constant became `marathon_ladyarcaders_floor` (int, 24, 1–99999, Marathons group). Mock row `site/mock/server.mjs:708`, bounds in `site/mock/contract.json:46` / `:108`, label `site/public/assets/labels.js:123`. Registry keys 492 → 493. |
+| `site/public/assets/marathons-section.js:1005` | The drawer's memory line picks its sentence from a source map (horaro.net events, Lady Arcaders, else Oengus). |
