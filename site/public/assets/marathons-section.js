@@ -171,15 +171,16 @@ const FEEDS_OFF = 'Checks are off (marathon_feeds under **Marathons** in Setting
 const NO_FEEDS = 'No sources yet. **Add a feed…** starts from a channel on the Go-live page.';
 const FEED_ADD_NOTE = 'Pick the channel first — a feed belongs to a channel Black Bloc already '
   + 'watches, one feed per channel. Then what to read: the GDQ tracker, the RPG Limit Break '
-  + 'tracker, a horaro.net event by its slug (ESA is `esa`), or Oengus, which finds the '
-  + 'channel’s own marathons on oengus.io by itself.';
+  + 'tracker, a horaro.net event by its slug (ESA is `esa`), Oengus, which finds the '
+  + 'channel’s own marathons on oengus.io by itself, or Fastest Furs’ own event list.';
 const PICK_HELP = {
   gdq: 'Every event on the GDQ tracker that is still ahead.',
   rpglb: 'Every event on the RPG Limit Break tracker that is still ahead.',
   horaro: 'Every schedule of one horaro.net event — give its slug below.',
   oengus: 'Every marathon on oengus.io that streams on this channel’s Twitch — nothing to type.',
+  fastestfurs: 'Every event on Fastest Furs’ own list at fastestfurs.com — nothing to type.',
 };
-const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus' };
+const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus', fastestfurs: 'fastestfurs' };
 const FEED_SEEN_NOTE = 'Remembers {count} Oengus marathon(s) it has already looked at, so each is '
   + 'read once. **Look again** reads them all once more.';
 const FEED_NO_CHANNELS = 'Every channel-only row on the Go-live page has a feed already, or '
