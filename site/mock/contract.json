@@ -4719,6 +4719,7 @@
           "last_error",
           "trouble",
           "ignored_count",
+          "seen_count",
           "suggestions",
           "dismissed",
           "marathons",
