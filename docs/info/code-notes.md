@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-25 — one section APPENDED, nothing re-keyed**: *An event opens in a drawer* (branch `event-drawer`, off `main` `ac4e79e2`, keyed against `847874ed`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *A rehearsal home per feature, and a marathon notice with detail and control* (branch `shadow-home-per-feature`, off `main` `dd25f79d`, keyed against `6b698f18`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *A marathon opens on its people* (branch `marathon-people`, off `main` `def0c5ef`, keyed against `b72c32a8`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The Events page made plain — three sections, Schedule first, BaF* (branch `marathon-ux`, off `main` `5ed00717`, keyed against `33c4363d`). Before that:
@@ -8512,3 +8513,29 @@ Why in [`marathon-people-design.md`](marathon-people-design.md). Keyed against `
 | `site/public/assets/marathons-section.js:819` `feedStep` | Inside the Sources drawer a move reopens that drawer with the outcome; from the page it parks the sentence for the reload as before. |
 | `site/public/assets/marathons-section.js:1070` `feedWaitingStrip` | The Sources drawer is shut until pressed, so a waiting feed suggestion also gets a line under the table — the same "never fold a decision away" rule `marathon-ux` Deviation 3 set for the old foldout. |
 | `site/mock/server.mjs:6605` `marathonPeopleOf` | The mock's copy of `group_people` / `matched_by` / `looks_like`; `marathonBoard` answers the same shape as `GET /api/marathons/{id}/people`. |
+## An event opens in a drawer (branch `event-drawer`, 2026-09-25)
+
+Why in [`event-drawer-design.md`](event-drawer-design.md). Keyed against `847874ed`. ⚠️ The older rows keyed
+`page-events.js:whereControl` now describe `event-drawer.js:whereControl` (moved unchanged), and the `eventCard` row's
+`page-events.js:90` `openEvent` is now `page-events.js:52` `showEvent` — left for the conductor's re-key.
+
+| Where | Why |
+|---|---|
+| `site/public/assets/event-drawer.js:83` `tick` | `openEvent` waits one task before drawing: the marathon drawer calls `closeDrawer()` then `showEvent`, and its `close` event (dispatched a task late) must reach ITS `forgetHash` before `openDrawer` swaps the listener, or the marathon section keeps a stale `shown.id` and *Open ↗* back to it does nothing. |
+| `site/public/assets/event-drawer.js:95` `wantedEvent` | Reads `#event-<id>` and the old `#detail=<id>`; `openEvent` always writes back `#event-<id>`. |
+| `site/public/assets/event-drawer.js:100` `forgetHash` | The page-posts / raid-train pattern: a drawer replaced in the meantime (by the marathon drawer) keeps its hash. |
+| `site/public/assets/event-drawer.js:117` `twitchLogin` | A page-side mirror of `cogs/community/events.py:spotlight_login`, only to decide whether the button renders; the route decides for real. |
+| `site/public/assets/event-drawer.js:134` `landed` | Every drawer write: refresh the queue underneath, then `openEvent` again with the route's `message` — the `page-golive.js:redrawRow` pattern. |
+| `site/public/assets/event-drawer.js:141` `eventMoves` | ONE copy of Approve / Deny… / Cancel… for the queue row and the Decide card; the caller says what happens after (`refresh` on the row, `landed` in the drawer). Rendered only where the status allows the move. |
+| `site/public/assets/event-drawer.js:187` `forumMove` | Same rule the row always used (an open room, review mode `forum`, a forum set); the row and the review fact share it. |
+| `site/public/assets/event-drawer.js:203` `deletePlace` | `room/delete` removes a room OR a post (`NO_PLACE`), so the label follows `review_kind`; the note field is the route's optional `note`. |
+| `site/public/assets/event-drawer.js:259` `eventCard` | A fact with no value is not drawn. Announced / Discord event are words, not links — the row has only booleans (Deviation 1). |
+| `site/public/assets/event-drawer.js:276` `decideCard` | The decision line AND whatever moves are still legal (an approved event keeps Cancel…) — Deviation 4. |
+| `site/public/assets/event-drawer.js:350` `changeFold` | The old editor, unchanged, inside a shut `foldout`; a settled event gets the sentence instead. Save refreshes the queue and redraws the drawer; a refusal stays under Save. |
+| `site/public/assets/event-drawer.js:430` | A redraw (a `message` is passed) keeps the old content until the fresh row lands, so a write never flashes *Getting the event…*. |
+| `site/public/assets/event-drawer.js:444` `eventDrawerFor` | Called at the end of every `load()`; the deep link opens once per page load (`deepLinked`), like `marathonsSection`. |
+| `site/public/assets/event-drawer.js:454` hashchange | An event hash opens the drawer; an EMPTY hash closes it; a marathon hash is left to the marathon section (closing here would shut the drawer it just opened). |
+| `site/public/assets/page-events.js:52` `showEvent` | What the marathon drawer calls: every status in the queue (a settled event is still found), then the drawer. |
+| `site/public/assets/page-events.js:58` `rowMoves` | The queue row: Open (the drawer), the shared moves, Move to the forum. The section and its rail row are gone. |
+| `site/mock/server.mjs:7708` `POST /api/events/:id/spotlight` | The mock's copy of the real route's refusal and success words; it does not add a Go-live row (Deviation 6). |
+| `site/public/assets/site.css:2710` `.ev-*` | The header line (badge · avatar · asked by · range), the fact rows at the UI-small size, the foot. |

@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-25 (branch `event-drawer`)** — ONE section APPENDED (`ED-a`…`ED-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-people`)** — ONE section APPENDED (`MP-a`…`MP-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-event-modes`)** — ONE section APPENDED (`MV-a`…`MV-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-feeds`)** — ONE section APPENDED (`MF-a`…`MF-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3286,3 +3287,18 @@ spotlighting afterwards if it was only a test.
 | **`MP-d`** | In the schedule, click a race (several runners); then **Link to a member…** on a stranger in it | The race is ONE row with every runner as a chip (✦BaF on members, hosts/commentators dashed); opening it lists each person on their own line. Linking one: *… on this schedule is … from now on.*, the chip turns ✦BaF, the person joins the BaF block, the day's BaF count rises, and the board gains the line. A name one letter off a member's username shows *looks like @name — Link?* (one click). |
 | **`MP-e`** | A BaF person's **Spotlight…** (or one on a slot) ▸ **Spotlight them**; then <https://blackbloc.heygabi.ai/golive.html> ▸ Streamers | A channel-only row for that login with the note *Name at Marathon*, starting 2 h before their first run (or that slot) and running out 2 h after their last; the People line says *Spotlit until …* with **Open on Go-live ↗** and **Stop spotlighting**, which removes the row the way the Go-live page does. A runner already on the Go-live page shows *already on the Go-live page ↗* instead. |
 | **`MP-f`** | `/event` ▸ **Marathons…** as a member (pick a marathon in *Who from BaF is on…*) and as staff (a marathon ▸ **People…**) | Member: the BaF lines only, and Back. Staff: the same lines, then a day select → a slot select → the slot's people with a person select, **Link to a member…** (a member picker), **Spotlight**, **Unlink** / **Stop spotlighting** where they apply. A feed's *new marathon* notice carries **People…**, which opens the same view privately. |
+
+## Rows `ED-a` … `ED-d` — an event opens in a drawer (branch `event-drawer`, 2026-09-25)
+
+🔨 **BUILT on branch `event-drawer`, NOT merged, NOT deployed; nothing has met Discord.** Owner, 2026-09-25: *"the outer
+page looks good … now we need to work on the modal that opens when you click on an event"*. Design:
+[`../info/event-drawer-design.md`](../info/event-drawer-design.md). Site-only — walkable from a laptop. Rows lettered;
+the conductor numbers them. ⚠️ **`ED-a` and `ED-c` act on real events** — Approve, Deny and Spotlight are the live
+moves; pick a test event, or open the drawer and stop short of confirming.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`ED-a`** | <https://blackbloc.heygabi.ai/events.html> ▸ Events ▸ **Open** on a pending event (and paste `events.html#event-<id>`) | A drawer titled with the event: *PENDING · avatar asked by {name} · start – end*; **The event** shows only the facts that are set (What it is, Where, When · length · zone, the review room/post with **Delete this room**); **Decide** holds **Approve / Deny / Cancel**; no `—` row anywhere; no *Event #N* section grows under the queue and the *On this page* rail stays *Events · Marathons · Settings and logs*. |
+| **`ED-b`** | Same drawer ▸ **Change it** | It opens shut; opened it holds the old form (Title, What it is, Where, link, Starts + zone, How long, Save) under the one warning line. **Save** keeps the drawer open, redraws it with the new facts and the route's sentence on top, and the queue row changes under it. |
+| **`ED-c`** | Open an **approved** event whose Where is one `twitch.tv/…` address | **Spotlight this stream** beside the link; confirming adds the channel to the Go-live spotlight list until the event ends and the drawer shows the route's sentence. A pending event, or a Where that is anything else, shows no such button. |
+| **`ED-d`** | Open a marathon's event (Marathons ▸ a marathon ▸ Event ▸ **Open ↗**) | The event drawer with a **Marathon** card: *Marathon: {name} — N BaF run(s)* (or the *Marathon run* line) and **Open ↗**, which opens that marathon's drawer again. |

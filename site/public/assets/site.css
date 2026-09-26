@@ -2707,6 +2707,11 @@ body[data-show-was="1"] .preview-was { display: block; }
 /* ---- marathons: the drawer's Schedule card and the reading lines ----------- */
 .mx-line[data-tone="warn"] { color: var(--et-warn); }
 .mx-line .btn { vertical-align: middle; }
+.ev-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
+.ev-head .avatar { width: 22px; height: 22px; font-size: var(--et-ui-2xs); }
+.ev-fact { font-size: var(--et-ui-sm); display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; overflow-wrap: anywhere; }
+.ev-about { font-size: var(--et-ui-sm); margin: 0 0 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ev-foot { margin-top: 4px; }
 .mx-poll { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mx-poll .input { width: 6em; }
 .mx-poll > span { color: var(--et-muted); font-size: var(--et-ui-xs); }
