@@ -1,5 +1,7 @@
 # The spotlight follows the marathon — a running marathon spotlights its channel, and pings need the spotlight
 
+> ✅ **2026-09-26 15:53 — LIVE as v174** (release `7a505098`, merge `9f343f75`; boot adds both schema-69 columns, no Traceback — `deploys.log`'s v174 line). No live `marathon.spotlight_set` yet; sweeps `MSP-a…d` are the owner's.
+
 > **Audience:** the conductor, reviewers, and the next session touching marathons or spotlight pings.
 > **Status:** TRACKED · 🔨 **BUILT on branch `marathon-spotlight` (off `main` `bbdfb390`), NOT merged, NOT deployed.**
 > Schema **68 → 69**, registry keys **493 → 497**, four new log kinds, eighteen deviations below.
