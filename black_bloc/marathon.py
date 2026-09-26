@@ -99,11 +99,6 @@ ADD_LOGIN = "Twitch channel it airs on — blank for none"
 ADD_NAME_HINT = "AGDQ 2027"
 ADD_URL_HINT = "https://gamesdonequick.com/schedule/74"
 ADD_LOGIN_HINT = "gamesdonequick"
-REMOVE_QUESTION = (
-    "Remove **{name}**? Its runs and pairings go with it and its ping window closes. Posts already "
-    "made stay where they are."
-)
-REMOVED = "**{name}** is off the list, with its runs and pairings."
 ADDED = "**{name}** is on the list. {read}"
 READ_NOW = "Its schedule has {runs} run(s), {ours} of them " + BAF + "."
 PAUSED_NOW = "**{name}** is paused — nothing is read or posted until it is resumed."

@@ -11,6 +11,7 @@ import discord
 from discord.ext import commands, tasks
 
 from ... import marathon as mt
+from ... import marathon_archive as ma
 from ... import marathon_events as me
 from ... import marathon_spotlight as ms
 from ... import pings
@@ -98,6 +99,7 @@ from ...settings_store import (
     MARATHON_REMINDER_PINGS_KEY,
     MARATHON_REMINDER_STALE_KEY,
     MARATHON_REMINDER_TEMPLATE_KEY,
+    MARATHON_REMOVE_QUESTION_KEY,
     MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY,
     MARATHON_SUGGEST_NEXT_KEY,
     MARATHON_TITLE_CONFIRMS_KEY,
@@ -205,10 +207,13 @@ async def get_marathon(db: Any, guild_id: int, marathon_id: Any) -> Any:
 
 
 async def marathon_by_ref(db: Any, guild_id: int, source: str, ref: Any) -> Any:
+    """Live first, then the archive: an event already followed once is never added twice."""
     cur = await db.conn.execute(
-        "SELECT * FROM marathons WHERE guild_id = ? AND source = ? AND source_ref = ? "
-        "ORDER BY id LIMIT 1",
-        (int(guild_id), source, str(ref)),
+        "SELECT id, name, 0 AS archived FROM marathons "
+        "WHERE guild_id = ? AND source = ? AND source_ref = ? "
+        "UNION ALL SELECT id, name, 1 AS archived FROM marathons_archive "
+        "WHERE guild_id = ? AND source = ? AND source_ref = ? ORDER BY archived, id LIMIT 1",
+        (int(guild_id), source, str(ref)) * 2,
     )
     return await cur.fetchone()
 
@@ -734,26 +739,10 @@ async def rename_marathon(
 async def remove_marathon(
     bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    from ...marathon_feeds import VIA_FEED
-    from .marathon_events import cancel_every_run_event
-    from .marathon_feeds import ignore_removed
+    """Nothing about a marathon is deleted any more: Remove archives it as `removed`."""
+    from .marathon_archive import archive_marathon
 
-    cog = cog_of(bot)
-    async with cog.lock(marathon["id"]):
-        await cancel_linked_event(bot, guild, actor, marathon, via=via)
-        await cancel_every_run_event(bot, guild, marathon, actor=actor)
-        await cog.drop_windows(guild, marathon)
-        await cog.unpin_board(guild, marathon, because="removed")
-        await delete_marathon(bot.db, marathon["id"])
-        await ignore_removed(bot, guild, actor, marathon, via=VIA_FEED)
-    await log_action(
-        bot,
-        guild,
-        kind_via("marathon.removed", via),
-        actor=actor,
-        details={"marathon_id": marathon["id"], "name": marathon["name"], "via": via},
-    )
-    return Outcome(True, mt.REMOVED.format(name=marathon["name"]))
+    return await archive_marathon(bot, guild, actor, marathon, why=ma.REMOVED, via=via)
 
 
 async def pair_runner(
@@ -1104,15 +1093,20 @@ async def mark_live(
 
 
 async def marathon_for_event(db: Any, guild_id: int, event_id: Any) -> Any:
+    """Live first, then the archive, so an event keeps its marathon line after the move."""
     try:
         wanted = int(event_id)
     except (TypeError, ValueError):
         return None
-    cur = await db.conn.execute(
-        "SELECT * FROM marathons WHERE guild_id = ? AND event_id = ? ORDER BY id LIMIT 1",
-        (int(guild_id), wanted),
-    )
-    return await cur.fetchone()
+    for table in ("marathons", "marathons_archive"):
+        cur = await db.conn.execute(
+            f"SELECT * FROM {table} WHERE guild_id = ? AND event_id = ? ORDER BY id LIMIT 1",
+            (int(guild_id), wanted),
+        )
+        found = await cur.fetchone()
+        if found is not None:
+            return found
+    return None
 
 
 async def marathon_of_event_line(bot: Any, guild_id: int, event_id: Any) -> str:
@@ -1125,7 +1119,12 @@ async def marathon_of_event_line(bot: Any, guild_id: int, event_id: Any) -> str:
         if run is None:
             return ""
         return mt.RUN_OF_EVENT.format(game=run["game"], name=run["marathon_name"])
-    runs = await runs_of(bot.db, row["id"])
+    if "archived_at" in row.keys():
+        from .marathon_archive import archived_runs
+
+        runs = await archived_runs(bot.db, row["id"])
+    else:
+        runs = await runs_of(bot.db, row["id"])
     ours = len([one for one in runs if one["state"] != mt.DROPPED and mt.is_ours(one)])
     return mt.MARATHON_OF_EVENT.format(name=row["name"], ours=ours)
 
@@ -1370,6 +1369,11 @@ class Marathons(commands.Cog):
             return (None, None)
         return (self.last_tick_ok_at, self.last_tick_error)
 
+    def forget(self, marathon_id: Any) -> None:
+        key = int(marathon_id)
+        self._next_tried.discard(key)
+        self._board_sent.pop(key, None)
+
     def lock(self, marathon_id: Any) -> asyncio.Lock:
         key = int(marathon_id)
         found = self._locks.get(key)
@@ -1431,6 +1435,7 @@ class Marathons(commands.Cog):
         ]
 
     async def tick_once(self) -> None:
+        from .marathon_archive import archive_one
         from .marathon_feeds import tick_feeds
 
         if not self.bot.db.is_connected:
@@ -1439,7 +1444,8 @@ class Marathons(commands.Cog):
             off = mode_of(self.bot, guild.id) == MODE_OFF
             if not off:
                 await tick_feeds(self, guild)
-            for row in await list_marathons(self.bot.db, guild.id):
+            rows = await list_marathons(self.bot.db, guild.id)
+            for row in rows:
                 async with self.lock(row["id"]):
                     fresh = await get_marathon(self.bot.db, guild.id, row["id"])
                     if fresh is None:
@@ -1448,6 +1454,7 @@ class Marathons(commands.Cog):
                         await self.tick_marathon(guild, fresh)
                     elif fresh["board_pinned"] and mt.board_due_off(fresh, self.clock()):
                         await self.unpin_board(guild, fresh, because="over")
+            await archive_one(self, guild, rows)
         self.last_tick_ok_at = now_iso()
         self.last_tick_error = None
 
@@ -2658,6 +2665,7 @@ def notice_view(marathon_id: Any, event_id: Any, *, disabled: bool = False) -> d
 ROOT = "root"
 CARD = "card"
 MINE_VIEW = "mine"
+ARCHIVE_VIEW = "archive"
 PAIR_VIEW = "pair"
 NEXT_VIEW = "next"
 RUN_VIEW = "run"
@@ -2835,7 +2843,7 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
         from .marathon_people import MarathonPeoplePick
 
         view.add_item(MarathonPeoplePick(rows))
-    add_moves(view, mt.root_moves(staff=staff))
+    add_moves(view, mt.root_moves(staff=staff) + ((ma.ARCHIVE_LIST_MOVE,) if staff else ()))
     if staff:
         add_site_button(view, bot, row=3)
     return (embed, view)
@@ -2896,7 +2904,8 @@ async def build_card(
     add_moves(
         view,
         mt.card_moves(row, has_unmatched=bool(unmatched), has_next=has_next)
-        + ms.card_moves(row),
+        + ms.card_moves(row)
+        + (ma.ARCHIVE_MOVE,),
     )
     return (embed, view)
 
@@ -3048,6 +3057,10 @@ async def reopen(interaction: discord.Interaction, previous: Any) -> None:
         await open_card(interaction, previous.marathon_id, previous)
     elif where == MINE_VIEW:
         await open_mine(interaction, previous)
+    elif where == ARCHIVE_VIEW:
+        from .marathon_archive import open_archive
+
+        await open_archive(interaction, previous)
     else:
         await open_root(interaction, previous)
 
@@ -3141,7 +3154,11 @@ async def ask_remove(interaction: discord.Interaction, view: Any) -> None:
         embed,
         confirm_items(yes=mt.REMOVE_MOVE.label, no=KEEP_IT, on_yes=yes, on_no=no),
         view,
-        question=mt.REMOVE_QUESTION.format(name=row["name"]),
+        question=mt.render(
+            interaction.client.store.get(interaction.guild.id, MARATHON_REMOVE_QUESTION_KEY),
+            said_default(MARATHON_REMOVE_QUESTION_KEY),
+            name=row["name"],
+        ).text,
     )
 
 
@@ -3226,6 +3243,14 @@ class MarathonMoveButton(discord.ui.Button):
             await run_move(interaction, view, post_board)
         elif action == mt.REMOVE:
             await ask_remove(interaction, view)
+        elif action == ma.ARCHIVE_ACTION:
+            from .marathon_archive import ask_archive
+
+            await ask_archive(interaction, view)
+        elif action == ma.ARCHIVE_LIST_ACTION:
+            from .marathon_archive import open_archive
+
+            await open_archive(interaction, view)
         elif action == mt.PAIR:
             await open_card(interaction, view.marathon_id, view, pairing=True)
         elif action == mt.PEOPLE:
