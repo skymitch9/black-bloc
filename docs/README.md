@@ -114,6 +114,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-26 16:4x:** v175 live (one merge: ended marathons move to an archive table; an expired row that carries a marathon or a feed is kept, not deleted; schema 70, 508 keys; see [`DONE.md`](DONE.md) 2026-09-26 v175). The mode table below was NOT re-read.
+
 **2026-09-26 15:5x:** v174 live (one merge: the spotlight follows a running marathon and is lifted at its end; `events` ping mode needs the spotlight; schema 69, 497 keys; see [`DONE.md`](DONE.md) 2026-09-26 v174). The mode table below was NOT re-read.
 
 **2026-09-26 13:4x:** v173 live (one fast-forward: three marathon sources — Fastest Furs' JSON API, a horaro.net feed that finds Fast Paced Events' events by channel, Lady Arcaders' ICS calendars; schema 68, 493 keys; rows 8/9/10 and feeds 5/6/7 added after the deploy, and the first check added *Fastest Furs Fall Fest 2026* as marathon #7 with two BaF runners, the notice to the shadow home; see [`DONE.md`](DONE.md) 2026-09-26 v173). The mode table below was NOT re-read.
