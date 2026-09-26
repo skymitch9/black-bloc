@@ -1,5 +1,5 @@
-// The Events page's marathon words, proved without a browser: the drawer's card order, the
-// Schedule card's reading line, the table's Schedule cell and the Sources foldout's title.
+// The Events page's marathon words, proved without a browser: the drawer's five parts, the
+// header's reading and counts, the full reading line, the table's Schedule cell and the Sources foldout's title.
 //
 //   node --test site/mock/marathon-words.test.mjs
 
@@ -8,10 +8,10 @@ import test from 'node:test';
 
 import {
   BAF,
-  countsLine,
   dayTitle,
   daysOf,
-  drawerCards,
+  datesWords,
+  drawerParts,
   entryFor,
   runChip,
   runLength,
@@ -20,7 +20,9 @@ import {
   slotTime,
   sourceCell,
   feedReading,
-  postsLines,
+  headerCounts,
+  headerReading,
+  postsLine,
   readingLine,
   scheduleCell,
   sourcesTitle,
@@ -30,14 +32,30 @@ const NOW = Date.parse('2026-09-25T18:00:00Z');
 const at = (minutes) => new Date(NOW + minutes * 60000).toISOString();
 const CADENCE = { near: 30, far: 24 };
 
-test('the drawer opens on the Schedule card, then People — Runs and Who is who are folded into it', () => {
-  assert.deepEqual(drawerCards(), ['Schedule', 'People', 'Event', 'The channel', 'Posts']);
+test('the drawer is five parts: the header, People, the shut Settings, the posts line, the moves', () => {
+  assert.deepEqual(drawerParts(), ['the header', 'People', 'Settings for this marathon', 'the posts line', 'the moves']);
+});
+
+test('the header reads short: when it was read, when next, and the counts', () => {
+  assert.deepEqual(headerReading({ active: true, last_fetch_ok: true, last_fetched_at: at(-24), next_read_at: at(6) }, NOW), { text: 'read 24 min ago · next in 6 min', tone: null });
+  assert.equal(headerReading({ active: false, last_fetched_at: at(-60) }, NOW).text, 'read 1 h ago · paused');
+  assert.equal(headerReading({ active: true }, NOW).text, 'not read yet');
+  const trouble = headerReading({ active: true, last_fetch_ok: false, last_fetched_at: at(-30), last_error: 'no schedule yet', next_read_at: at(10) }, NOW);
+  assert.equal(trouble.tone, 'warn');
+  assert.match(trouble.text, /^Could not be read since .+ — no schedule yet; read again in 10 min$/);
+  assert.equal(headerCounts([{ state: 'done', ours: true }, { state: 'live', ours: false }, { state: 'upcoming', ours: true }, { state: 'dropped', ours: true }]), '3 runs · 2 BaF');
+  assert.equal(headerCounts([{ state: 'upcoming', ours: false }]), '1 run · 0 BaF');
+  assert.equal(headerCounts([]), 'no runs yet');
+});
+
+test('the header dates read in the guild zone, weekday first', () => {
+  const row = { starts_at: '2026-09-25T19:59:00Z', ends_at: '2026-09-27T16:59:00Z' };
+  assert.equal(datesWords(row, 'America/Phoenix'), 'Fri 25 Sep 12:59 – Sun 27 Sep 09:59');
+  assert.equal(datesWords({}, 'America/Phoenix'), 'dates not published');
 });
 
 test('the word a person reads is BaF', () => {
   assert.equal(BAF, 'BaF');
-  assert.equal(countsLine([{ state: 'done', ours: true }, { state: 'live', ours: false }, { state: 'upcoming', ours: true }, { state: 'dropped', ours: true }]), '3 runs · 2 BaF · 1 done · 1 on now');
-  assert.equal(countsLine([]), 'No runs yet — nothing published.');
 });
 
 test('a healthy read says when it was, when it is next, and the cadence', () => {
@@ -78,11 +96,11 @@ test('a feed reads in the same shape, and the foldout title names the soonest ch
   assert.equal(sourcesTitle(feeds, { enabled: false }, NOW), 'Where marathons come from · 3 sources · checks are off');
 });
 
-test('posts count the reminders and shoutouts from the runs', () => {
-  const found = postsLines({ board_message_id: '1', board_pinned: true, run_list: [{ reminders_sent: [120, 15], shouted: true }, { reminders_sent: [], shouted: false }] });
-  assert.equal(found.board, 'Board: up and pinned in');
-  assert.equal(found.sent, 'Reminders: 2 sent · Shoutouts: 1');
-  assert.equal(postsLines({ run_list: [] }).board, 'Board: none yet.');
+test('the posts line counts the reminders and shoutouts from the runs, and says nothing of zero', () => {
+  const found = postsLine({ board_message_id: '1', board_pinned: true, run_list: [{ reminders_sent: [120, 15], shouted: true }, { reminders_sent: [], shouted: false }] });
+  assert.deepEqual(found, { board: 'Board pinned in', hasBoard: true, sent: '2 reminders · 1 shoutout' });
+  assert.equal(postsLine({ board_message_id: '1', run_list: [] }).board, 'Board up in');
+  assert.deepEqual(postsLine({ run_list: [] }), { board: 'No board yet', hasBoard: false, sent: '' });
 });
 
 test('the table names the source, and a feed-made row says so', () => {

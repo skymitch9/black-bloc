@@ -2704,7 +2704,14 @@ body[data-show-was="1"] .preview-was { display: block; }
 .cookout-sheet .setrow[data-key="chat_cookout_voice"] textarea { min-height: 22em; }
 .tone-area { width: 100%; min-height: 6em; }
 
-/* ---- marathons: the drawer's Schedule card and the reading lines ----------- */
+/* ---- marathons: the drawer's header, Settings foldout and posts line (marathon-drawer-lite) ---- */
+.mx-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; margin: 0 0 2px; font-size: var(--et-ui-sm); }
+.mx-head .badge { margin-right: 6px; }
+.mx-head-quiet { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
+.mx-dot { color: var(--et-muted); white-space: pre; }
+.mx-settings { margin-top: 12px; }
+.mx-settings .foldout-body { display: flex; flex-direction: column; gap: 10px; }
+.mx-posts { display: flex; flex-wrap: wrap; align-items: center; margin: 12px 0 10px; }
 .mx-line[data-tone="warn"] { color: var(--et-warn); }
 .mx-line .btn { vertical-align: middle; }
 .mx-poll { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -2722,15 +2729,25 @@ body[data-show-was="1"] .preview-was { display: block; }
   text-transform: var(--et-label-transform);
 }
 .mx-people { display: flex; flex-direction: column; }
-.mx-person {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 8px 0;
-  border-bottom: var(--et-hairline-w) solid var(--et-hairline);
-}
+.mx-person { border-bottom: var(--et-hairline-w) solid var(--et-hairline); }
 .mx-person:last-child { border-bottom: 0; }
-.mx-person-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; font-size: var(--et-ui-sm); }
+.mx-person-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 6px 4px;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--et-ui-sm);
+}
+.mx-person-head::-webkit-details-marker { display: none; }
+.mx-person-head:hover { background: var(--et-row-hover); }
+.mx-person-head:focus-visible { outline: var(--et-focus-ring); outline-offset: -2px; }
+.mx-person[open] > .mx-person-head { background: var(--et-shell-inset); }
+.mx-person[data-live="true"] > .mx-person-head { box-shadow: inset 3px 0 0 var(--et-ok); }
+.mx-person-part { margin-left: auto; font-size: var(--et-ui-xs); color: var(--et-muted); }
+.mx-person-body { padding: 6px 4px 10px 40px; font-size: var(--et-ui-sm); }
 .mx-person-who { overflow-wrap: anywhere; }
 .mx-person-who .cell-quiet, .mx-person-moves .cell-quiet, .mx-slot-name .cell-quiet { font-size: var(--et-ui-xs); color: var(--et-muted); }
 .mx-person-who a { color: var(--et-muted); font-size: var(--et-ui-xs); text-decoration: none; }

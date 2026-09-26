@@ -4,12 +4,9 @@
 
 export const BAF = 'BaF';
 
-export const CARD_SCHEDULE = 'Schedule';
 export const CARD_PEOPLE = 'People';
-export const CARD_EVENT = 'Event';
-export const CARD_CHANNEL = 'The channel';
-export const CARD_POSTS = 'Posts';
-export const DRAWER_CARDS = [CARD_SCHEDULE, CARD_PEOPLE, CARD_EVENT, CARD_CHANNEL, CARD_POSTS];
+export const SETTINGS_FOLD = 'Settings for this marathon';
+export const DRAWER_PARTS = ['the header', CARD_PEOPLE, SETTINGS_FOLD, 'the posts line', 'the moves'];
 
 const LAST_READ = 'Last read {ago}';
 const NOT_READ = 'Not read yet';
@@ -19,7 +16,6 @@ const CADENCE = 'every {near} min while it is near, every {far} h when it is far
 const PAUSED_READ = 'paused — not read until it is resumed';
 const TROUBLE = 'Could not be read since {when} — {reason}; read again {in}';
 const TROUBLE_PAUSED = 'Could not be read since {when} — {reason}; paused, so not read again until it is resumed';
-const NO_RUNS_YET = 'No runs yet — nothing published.';
 const CELL_READ = 'read {ago}';
 const CELL_NOT_READ = 'not read yet';
 const CELL_PAUSED = 'paused';
@@ -34,11 +30,17 @@ const FEED_TROUBLE = 'Could not be checked since {when} — {reason}; checked ag
 const SOURCES_TITLE = 'Where marathons come from · {count} source{s}';
 const SOURCES_NEXT = 'next check {in}';
 const SOURCES_OFF = 'checks are off';
-const BOARD_UP = 'Board: up in';
-const BOARD_UP_PINNED = 'Board: up and pinned in';
-const BOARD_NONE = 'Board: none yet.';
-const SENT_LINE = 'Reminders: {reminders} sent · Shoutouts: {shouts}';
 const FEED_MARK = ' · feed';
+const HEAD_READ = 'read {ago}';
+const HEAD_NOT_READ = 'not read yet';
+const HEAD_NEXT = 'next {in}';
+const HEAD_PAUSED = 'paused';
+const HEAD_RUNS = '{runs} run{s} · {baf} ' + BAF;
+const HEAD_NO_RUNS = 'no runs yet';
+const POSTS_PINNED = 'Board pinned in';
+const POSTS_UP = 'Board up in';
+const POSTS_NONE = 'No board yet';
+const DATES_UNPUBLISHED = 'dates not published';
 const DAY_TITLE = '{day} · {slots} slot{s} · {baf} ' + BAF;
 
 export function said(text, values) {
@@ -83,7 +85,7 @@ export function whenWords(iso) {
   return new Date(at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-/** The Schedule card's reading line: `{ text, tone }`, tone `warn` when the last read failed. */
+/** The full reading line (the header uses its warn-tone reason): `{ text, tone }`, tone `warn` when the last read failed. */
 export function readingLine(row, cadence = {}, now = Date.now()) {
   const next = inWords(row.next_read_at, now);
   if (row.last_fetch_ok === false) {
@@ -112,15 +114,23 @@ export function scheduleCell(row, now = Date.now()) {
   return said(CELL_READ, { ago: agoWords(row.last_fetched_at, now) });
 }
 
-export function countsLine(runList) {
+/** The header's quiet reading: `read 24 min ago · next in 6 min`, or the warn-tone reason. */
+export function headerReading(row, now = Date.now()) {
+  if (row.last_fetch_ok === false) return readingLine(row, {}, now);
+  const bits = [row.last_fetched_at ? said(HEAD_READ, { ago: agoWords(row.last_fetched_at, now) }) : HEAD_NOT_READ];
+  if (row.active === false) bits.push(HEAD_PAUSED);
+  else {
+    const next = inWords(row.next_read_at, now);
+    if (next) bits.push(said(HEAD_NEXT, { in: next }));
+  }
+  return { text: bits.join(' · '), tone: null };
+}
+
+/** The header's counts: `16 runs · 5 BaF`. */
+export function headerCounts(runList) {
   const runs = (runList || []).filter((one) => one.state !== 'dropped');
-  if (!runs.length) return NO_RUNS_YET;
-  const bits = [`${runs.length} run${runs.length === 1 ? '' : 's'}`, `${runs.filter((one) => one.ours).length} ${BAF}`];
-  const done = runs.filter((one) => one.state === 'done').length;
-  const live = runs.filter((one) => one.state === 'live').length;
-  if (done) bits.push(`${done} done`);
-  if (live) bits.push(`${live} on now`);
-  return bits.join(' · ');
+  if (!runs.length) return HEAD_NO_RUNS;
+  return said(HEAD_RUNS, { runs: runs.length, s: runs.length === 1 ? '' : 's', baf: runs.filter((one) => one.ours).length });
 }
 
 export function feedNextAt(feed) {
@@ -151,18 +161,23 @@ export function sourcesTitle(feeds, { enabled = true } = {}, now = Date.now()) {
   return soonest ? `${head} · ${said(SOURCES_NEXT, { in: inWords(soonest, now) })}` : head;
 }
 
-/** `{ board, sent }`: the board words (the channel is drawn beside them) and the sent counts. */
-export function postsLines(row) {
+/** The drawer's five parts, top to bottom. */
+export function drawerParts() {
+  return [...DRAWER_PARTS];
+}
+
+/** The one Posts line: `{ board, sent, hasBoard }` — `Board pinned in` (channel drawn beside it), `2 reminders · 1 shoutout`. */
+export function postsLine(row) {
   const runs = row.run_list || [];
   const reminders = runs.reduce((total, one) => total + (Array.isArray(one.reminders_sent) ? one.reminders_sent.length : 0), 0);
   const shouts = runs.filter((one) => one.shouted).length;
-  const board = row.board_message_id ? (row.board_pinned ? BOARD_UP_PINNED : BOARD_UP) : BOARD_NONE;
-  return { board, hasBoard: Boolean(row.board_message_id), sent: said(SENT_LINE, { reminders, shouts }) };
-}
-
-/** The drawer's card titles, in order; the moves bar (Pause / Remove) follows the last. */
-export function drawerCards() {
-  return [...DRAWER_CARDS];
+  const hasBoard = Boolean(row.board_message_id);
+  const board = hasBoard ? (row.board_pinned ? POSTS_PINNED : POSTS_UP) : POSTS_NONE;
+  const sent = [
+    reminders ? `${reminders} reminder${reminders === 1 ? '' : 's'}` : null,
+    shouts ? `${shouts} shoutout${shouts === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(' · ');
+  return { board, hasBoard, sent };
 }
 
 /** The marathon table's Source cell: the source words, and `· feed` when a feed made the row. */
@@ -191,6 +206,14 @@ function zoned(iso, timeZone) {
     day: `${parts.weekday} ${Number(parts.day)} ${parts.month === 'Sept' ? 'Sep' : parts.month}`,
     time: `${parts.hour}:${parts.minute}`,
   };
+}
+
+/** The header's dates in the guild's zone: `Fri 25 Sep 12:59 – Sat 27 Sep 09:59`. */
+export function datesWords(row, timeZone) {
+  const start = zoned(row.starts_at, timeZone);
+  if (!start) return DATES_UNPUBLISHED;
+  const end = zoned(row.ends_at, timeZone);
+  return end ? `${start.day} ${start.time} – ${end.day} ${end.time}` : `${start.day} ${start.time}`;
 }
 
 /** `15:15` in the guild's zone. */
