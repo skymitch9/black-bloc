@@ -111,8 +111,14 @@ async def test_the_list_carries_feeds_and_the_channel_rows_a_feed_may_start_from
     channels = {one["login"]: one for one in body["channels"]}
     assert channels["gamesdonequick"]["feed_name"] == "GDQ"
     assert channels["esamarathon"]["feed_name"] is None
-    assert [one["value"] for one in body["sources"]][:4] == ["gdq", "rpglb", "horaro", "oengus"]
-    assert "horaro_events" in [one["value"] for one in body["sources"]]
+    assert [one["value"] for one in body["sources"]] == [
+        "gdq",
+        "rpglb",
+        "horaro",
+        "oengus",
+        "horaro_events",
+        "fastestfurs",
+    ]
 
 
 async def test_adding_a_horaro_feed_checks_it_and_leaves_one_web_row(

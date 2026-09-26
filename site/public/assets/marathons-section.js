@@ -171,8 +171,8 @@ const FEEDS_OFF = 'Checks are off (marathon_feeds under **Marathons** in Setting
 const NO_FEEDS = 'No sources yet. **Add a feed…** starts from a channel on the Go-live page.';
 const FEED_ADD_NOTE = 'Pick the channel first — a feed belongs to a channel Black Bloc already '
   + 'watches, one feed per channel. Then what to read: the GDQ tracker, the RPG Limit Break '
-  + 'tracker, a horaro.net event by its slug (ESA is `esa`), or Oengus, which finds the '
-  + 'channel’s own marathons on oengus.io by itself.';
+  + 'tracker, a horaro.net event by its slug (ESA is `esa`), Oengus, which finds the '
+  + 'channel’s own marathons on oengus.io by itself, or Fastest Furs’ own event list.';
 const PICK_HELP = {
   gdq: 'Every event on the GDQ tracker that is still ahead.',
   rpglb: 'Every event on the RPG Limit Break tracker that is still ahead.',
@@ -180,8 +180,9 @@ const PICK_HELP = {
   oengus: 'Every marathon on oengus.io that streams on this channel’s Twitch — nothing to type.',
   horaro_events: 'Every horaro.net event that streams on this channel’s Twitch, found by searching '
     + 'event names for the Name below — Fast Paced Events’ are “Fast Pace for …”, so “Fast Pace”.',
+  fastestfurs: 'Every event on Fastest Furs’ own list at fastestfurs.com — nothing to type.',
 };
-const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus', fastpacedevents: 'horaro_events' };
+const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus', fastpacedevents: 'horaro_events', fastestfurs: 'fastestfurs' };
 const FEED_SEEN_NOTE = 'Remembers {count} Oengus marathon(s) it has already looked at, so each is '
   + 'read once. **Look again** reads them all once more.';
 const FEED_SEEN_NOTE_HORARO = 'Remembers {count} horaro.net event(s) it has already looked at, '

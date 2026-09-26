@@ -45,6 +45,7 @@ def test_the_seeds_are_the_two_tracker_channel_rows_and_ss4c_on_oengus_and_not_e
         ("rpglimitbreak", "rpglb"),
         ("speedstuff4charity", "oengus"),
         ("fastpacedevents", "horaro"),
+        ("fastestfurs", "fastestfurs"),
     ]
     ss4c = mf.SEEDS[2]
     assert (ss4c.source, ss4c.feed_ref, ss4c.name) == (
@@ -200,6 +201,26 @@ def test_look_again_is_offered_on_an_oengus_feed_that_remembers_what_it_read():
     assert mf.FEED_LOOK in [one.action for one in mf.feed_moves(remembering)]
 
 
+def test_the_fastestfurs_seed_pick_and_words_name_the_orgs_own_site():
+    seed = mf.SEEDS[4]
+    assert (seed.login, seed.source, seed.feed_ref, seed.name) == (
+        "fastestfurs",
+        mf.FASTESTFURS_FEED,
+        "fastestfurs",
+        "Fastest Furs",
+    )
+    assert mf.FASTESTFURS_FEED in mf.FEED_SOURCES
+    assert mf.pick_of(" FastestFurs ") == (mf.FASTESTFURS_FEED, None)
+    furs = feed(source=mf.FASTESTFURS_FEED, feed_ref="fastestfurs", name="Fastest Furs")
+    assert mf.marathon_source(furs) == "fastestfurs"
+    assert mf.pick_for(furs) == mf.PICK_FASTESTFURS
+    assert mf.source_word(furs) == "Fastest Furs"
+    assert "fastestfurs.com" in mf.PICK_WORDS[mf.PICK_FASTESTFURS]
+    assert "Fastest Furs" in mf.UNKNOWN_PICK and "fastestfurs" in mf.ADD_FEED_SOURCE
+    assert len(mf.ADD_FEED_SOURCE) <= 45
+    assert mf.FEED_LOOK not in [one.action for one in mf.feed_moves(furs)]
+
+
 def test_the_feed_line_says_what_it_reads_and_when_it_last_did():
     line = mf.feed_line(feed(), "GamesDoneQuick", 6)
     assert "**GDQ** · GDQ tracker · GamesDoneQuick · adds · every 6 h · not checked yet" == line
@@ -216,4 +237,4 @@ def test_a_horaro_events_feed_makes_horaro_marathons_and_reads_back_its_own_pick
     assert mf.pick_for(fpe) == "horaro_events"
     assert "finds this channel's events on horaro.net" in mf.PICK_WORDS["horaro_events"]
     fpe_seed = mf.Seed("fastpacedevents", mf.HORARO_EVENTS_FEED, "fastpacedevents", "Fast Pace")
-    assert mf.SEEDS[-1] == fpe_seed
+    assert mf.SEEDS[3] == fpe_seed

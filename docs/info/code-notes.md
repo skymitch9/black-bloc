@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The horaro.net events feed for Fast Paced Events* (branch `marathon-horaro-events`, off `main` `a3ac5132`, keyed against `87ddd4ba`). Before that:
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *The Fastest Furs feed* (branch `marathon-fastestfurs`, off `main` `a3ac5132`, keyed against `e34426d2`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The Oengus feed for Speed Stuff 4 Charity* (branch `marathon-feeds-oengus`, off `main` `69750bd7`, keyed against `4eff650f`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The feed notice waits for the schedule* (branch `marathon-notice-when`, off `main` `791b5543`, keyed against `f518c143`). Before that:
 > **2026-09-25 — one section APPENDED, one row retired, nothing re-keyed**: *Several guides per command* (branch `guides-per-command`, off `main` `582977f1`, keyed against `2f86e8bb`). Before that:
@@ -8692,3 +8693,26 @@ Owner, 2026-09-26 12:3x: *"Build them all now"* (after the marathon orgs researc
 | `black_bloc/cogs/content/marathon_feeds.py:1787` `AddFeedModal.source` | `max_length` 20: `horaro_events` is 13 characters (Deviation 8). |
 | `site/public/assets/marathons-section.js:181` `PICK_HELP.horaro_events` · `:184` `PICK_GUESS` · `:187` `FEED_SEEN_NOTE_HORARO` · `:999` | The help line tells staff the Name is the search; the pick is guessed for `fastpacedevents`; the drawer's memory line names horaro.net events for this kind. |
 | `site/mock/server.mjs:1429` channel 12 · `:6103` feed 12 · `:6078` `FEED_SOURCES` | The mock's FPE row and its feed (two remembered events, no marathon — nothing announced today). Ids 12 keep clear of the sibling branches' likely 8–11. |
+
+## The Fastest Furs feed (branch `marathon-fastestfurs`, 2026-09-26)
+
+Owner, 2026-09-26: *"Build them all now"*. Design [`marathon-fastestfurs-design.md`](marathon-fastestfurs-design.md)
+and its Deviations. Keyed against `e34426d2`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_fastestfurs.py:32` `URL` · `:42` `read_ref` | `fastestfurs.com/schedule/<id>` (and `www.`) and the API link `cheetah.fastestfurs.com/api/public/schedules/event/<id>`, both → the id; the id is digits only (`EVENT_ID`) before it reaches a URL. |
+| `black_bloc/marathon_fastestfurs.py:60` `people_of` | `runners` is ONE plain string (`"a, b"` for a race) split with horaro.net's `PLAYER_SPLIT`; hosts from `scheduleItemHosts[].host.name` as part `host`. Never a login — the match falls to the Discord-username step and pairings. |
+| `black_bloc/marathon_fastestfurs.py:81` `parse_fastestfurs` | No item carries a start: the clock starts at `startDateTime` and each item (breaks too) adds `duration + setupTime` minutes, in `orderIndex` order (`_order`, `:76`). Setup FOLLOWS its run (Deviation 2); `run_seconds` = `duration`; `external_id` = the run's id, stable across a rebuilt schedule (Deviation 7); `actualDuration` ignored (Deviation 4). |
+| `black_bloc/marathon_fastestfurs.py:126` `event_span` · `:134` `_day` | The list writes dates as midnight UTC: the start moves to noon so a `<t:…:D>` stamp shows the right day either side of UTC, the end to the midnight after the last day (Deviation 5). A stamp that is not midnight is kept. |
+| `black_bloc/marathon_fastestfurs.py:144` `candidates` | Every listed event whose end is ahead of now or within `recent_days`. No per-event channel check — the API is the org's own. |
+| `black_bloc/marathon_fastestfurs.py:160` `read_events` | `/api/events` is a bare JSON list, which `ScheduleClient._json` refuses, so the reader takes the client's `_request` and checks the list itself (Deviation 1). |
+| `black_bloc/marathon_fastestfurs.py:170` `resolve` | The name comes from the events list, so an event whose schedule is not out still resolves on a staff Add (Deviation 8). |
+| `black_bloc/marathon_fastestfurs.py:181` `read_runs` | A 404 or a 200 with no run items is `ScheduleError(unpublished=True)` — the GDQ-404 path: runs kept, no failure counted (Deviation 6). |
+| `black_bloc/marathon_sources.py:217` `_ff` | The one door to `marathon_fastestfurs`: a function-level import, because that module imports `Run` / `Person` / `ScheduleError` from here. `read_url` (`:172`), `schedule_page` (`:212`), `resolve` (`:629`) and `runs` (`:678`) each have one branch after Oengus. |
+| `black_bloc/marathon_sources.py:589` `fastestfurs_events` | The feed's one list read, through the same `_request` (and so the same agent and `ScheduleError` wrapping) as every other source. |
+| `black_bloc/marathon_feeds.py:29` `FASTESTFURS_FEED` · `:55` seed · `:62` pick | The feed source, the once-ever seed on the `fastestfurs` channel row, and the Add a feed pick. `feed_ref` is the channel login (Oengus §H Deviation 3); `seen` is unused, so Look again is not offered. |
+| `black_bloc/cogs/content/marathon_feeds.py:314` `candidates_of` | One branch after Oengus: the events list → `ff.candidates`; the rest of `run_check` (fresh, adopt, `add_candidate`) is shared, so the quiet add and the published notice hold. `:712` `create_feed` and `:864` `set_feed` key the ref on the channel login. |
+| `black_bloc/cogs/content/marathon_feeds.py:1774` `AddFeedModal.source` | `max_length` 20 (`fastestfurs` is 11); the label `mf.ADD_FEED_SOURCE` is kept ≤ 45 characters, Discord's cap (Deviation 10). |
+| `site/public/assets/marathons-section.js:181` `PICK_HELP.fastestfurs` · `:183` `PICK_GUESS` | The pick's one line and the guess from the channel login; no slug field. |
+| `site/mock/server.mjs:1428` channel 31 · `:6111` feed 31 · `:5639` marathon 31 · `:5624` runs 31–32 | The mock's Fastest Furs row, feed and Fall Fest 2026 with name-only runners and a host; ids 31 to stay clear of the sibling branches' samples. `:6046` `MARATHON_FASTESTFURS` mirrors `read_ref`. |

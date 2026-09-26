@@ -1,0 +1,235 @@
+{
+ "id": 23,
+ "eventId": 21,
+ "startDateTime": "2026-10-08T14:00:00.000Z",
+ "timeZone": "UTC",
+ "events": {
+  "id": 21,
+  "name": "Fastest Furs Fall Fest 2026",
+  "short": "FFFF26",
+  "startDate": "2026-10-08T00:00:00.000Z",
+  "endDate": "2026-10-11T00:00:00.000Z"
+ },
+ "scheduleItems": [
+  {
+   "id": 5373,
+   "runId": 843,
+   "itemType": "run",
+   "duration": 35,
+   "setupTime": 10,
+   "actualDuration": null,
+   "orderIndex": 0,
+   "label": null,
+   "runs": {
+    "id": 843,
+    "name": "Kena: Bridge of Spirits",
+    "category": "Any% No Major Glitches",
+    "console": "PC",
+    "estimatedTime": "00:35:00",
+    "runners": "bouzny",
+    "status": "Accepted"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "ClockworkOphelia"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5372,
+   "runId": 879,
+   "itemType": "run",
+   "duration": 70,
+   "setupTime": 10,
+   "actualDuration": null,
+   "orderIndex": 1,
+   "label": null,
+   "runs": {
+    "id": 879,
+    "name": "Skylanders: Spyro's Adventure",
+    "category": "Any%",
+    "console": "Wii",
+    "estimatedTime": "01:10:00",
+    "runners": "Kory_",
+    "status": "Accepted"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "ClockworkOphelia"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5371,
+   "runId": 873,
+   "itemType": "run",
+   "duration": 40,
+   "setupTime": 14,
+   "actualDuration": null,
+   "orderIndex": 2,
+   "label": null,
+   "runs": {
+    "id": 873,
+    "name": "Muramasa Rebirth",
+    "category": "Okoi Any%",
+    "console": "Playstation Vita",
+    "estimatedTime": "00:40:00",
+    "runners": "jupi",
+    "status": "Accepted"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "ClockworkOphelia"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5370,
+   "runId": 874,
+   "itemType": "run",
+   "duration": 35,
+   "setupTime": 10,
+   "actualDuration": null,
+   "orderIndex": 3,
+   "label": null,
+   "runs": {
+    "id": 874,
+    "name": "Racin' Ratz",
+    "category": "Chris vs Betty Any% Race",
+    "console": "GBC",
+    "estimatedTime": "00:35:00",
+    "runners": "karma_dragoness, winnerbit",
+    "status": "Accepted"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "ClockworkOphelia"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5369,
+   "runId": 838,
+   "itemType": "run",
+   "duration": 51,
+   "setupTime": 10,
+   "actualDuration": null,
+   "orderIndex": 4,
+   "label": null,
+   "runs": {
+    "id": 838,
+    "name": "KilaFlow",
+    "category": "Any%",
+    "console": "PC",
+    "estimatedTime": "00:51:00",
+    "runners": "AnimeeArcade",
+    "status": "Accepted"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "IanKeith"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5368,
+   "runId": 906,
+   "itemType": "run",
+   "duration": 32,
+   "setupTime": 10,
+   "actualDuration": null,
+   "orderIndex": 5,
+   "label": null,
+   "runs": {
+    "id": 906,
+    "name": "Gordon and Daxter",
+    "category": "No LTS",
+    "console": "PC",
+    "estimatedTime": "00:32:00",
+    "runners": "TheBakaRem",
+    "status": "Accepted"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "londeerbun"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5367,
+   "runId": 910,
+   "itemType": "run",
+   "duration": 40,
+   "setupTime": 10,
+   "actualDuration": null,
+   "orderIndex": 6,
+   "label": null,
+   "runs": {
+    "id": 910,
+    "name": "Overload",
+    "category": "Trainee Any%",
+    "console": "PC",
+    "estimatedTime": "00:40:00",
+    "runners": "ZELLLOOO",
+    "status": "Accepted"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "londeerbun"
+     }
+    }
+   ]
+  },
+  {
+   "id": 5310,
+   "runId": null,
+   "itemType": "break",
+   "duration": 15,
+   "setupTime": 0,
+   "actualDuration": null,
+   "orderIndex": 7,
+   "label": "Interview Team Segment 1",
+   "runs": null,
+   "scheduleItemHosts": []
+  },
+  {
+   "id": 5366,
+   "runId": 849,
+   "itemType": "run",
+   "duration": 63,
+   "setupTime": 20,
+   "actualDuration": null,
+   "orderIndex": 8,
+   "label": null,
+   "runs": {
+    "id": 849,
+    "name": "Resident Evil 2: Remake",
+    "category": "Claire A vs. Leon A NG Bidwar",
+    "console": "PC",
+    "estimatedTime": "01:03:00",
+    "runners": "DrakeLeLionBlanc",
+    "status": "Accepted"
+   },
+   "scheduleItemHosts": [
+    {
+     "host": {
+      "name": "londeerbun"
+     }
+    }
+   ]
+  }
+ ]
+}

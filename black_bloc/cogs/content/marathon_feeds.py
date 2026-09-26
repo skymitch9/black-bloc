@@ -10,6 +10,7 @@ import discord
 
 from ... import marathon as mt
 from ... import marathon_events as me
+from ... import marathon_fastestfurs as ff
 from ... import marathon_feeds as mf
 from ... import marathon_horaro_events as hre
 from ...actionlog import log_action
@@ -313,6 +314,8 @@ async def candidates_of(bot: Any, guild: Any, feed: Any, now: Any) -> list[mf.Ca
         return await oengus_candidates_of(bot, feed, now, recent)
     if feed["source"] == mf.HORARO_EVENTS_FEED:
         return await horaro_events_candidates_of(bot, feed, now, recent)
+    if feed["source"] == mf.FASTESTFURS_FEED:
+        return ff.candidates(await cog.client.fastestfurs_events(), now, recent)
     if source is None:
         raise ScheduleError(mf.UNKNOWN_PICK.format(given=str(feed["feed_ref"])[:60]))
     return mf.tracker_candidates(source, await cog.client.events(source), now, recent)
@@ -721,7 +724,7 @@ async def create_feed(
     source, feed_ref = picked
     if source == mf.OENGUS_FEED:
         feed_ref = str(channel["twitch_login"]).lower()
-    if source == mf.HORARO_EVENTS_FEED:
+    if source in (mf.HORARO_EVENTS_FEED, mf.FASTESTFURS_FEED):
         feed_ref = str(channel["twitch_login"]).lower()
     if source == mf.HORARO_FEED:
         feed_ref = str(slug or "").strip().lower().strip("/")
@@ -873,7 +876,7 @@ async def set_feed(
             moved = {"spotlight_id": int(channel["id"])}
             if fresh["source"] == mf.OENGUS_FEED:
                 moved["feed_ref"] = str(channel["twitch_login"]).lower()
-            if fresh["source"] == mf.HORARO_EVENTS_FEED:
+            if fresh["source"] in (mf.HORARO_EVENTS_FEED, mf.FASTESTFURS_FEED):
                 moved["feed_ref"] = str(channel["twitch_login"]).lower()
             try:
                 await update_feed(bot.db, fresh["id"], **moved)

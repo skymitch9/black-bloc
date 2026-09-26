@@ -7,6 +7,7 @@ from typing import Any, NamedTuple
 from .golive import parse_ts
 from .marathon import MarathonMove, stamp_of
 from .marathon_sources import (
+    FASTESTFURS,
     GDQ,
     HORARO,
     HORARO_PAGE,
@@ -26,7 +27,8 @@ TRACKER = "tracker"
 HORARO_FEED = "horaro"
 OENGUS_FEED = "oengus"
 HORARO_EVENTS_FEED = "horaro_events"
-FEED_SOURCES = (TRACKER, HORARO_FEED, OENGUS_FEED, HORARO_EVENTS_FEED)
+FASTESTFURS_FEED = "fastestfurs"
+FEED_SOURCES = (TRACKER, HORARO_FEED, OENGUS_FEED, HORARO_EVENTS_FEED, FASTESTFURS_FEED)
 ADD = "add"
 SUGGEST = "suggest"
 ACTIONS = (ADD, SUGGEST)
@@ -52,6 +54,7 @@ SEEDS = (
     Seed("rpglimitbreak", TRACKER, TRACKER_BASES[RPGLB], "RPG Limit Break"),
     Seed("speedstuff4charity", OENGUS_FEED, "speedstuff4charity", "Speed Stuff 4 Charity"),
     Seed("fastpacedevents", HORARO_EVENTS_FEED, "fastpacedevents", "Fast Pace"),
+    Seed("fastestfurs", FASTESTFURS_FEED, "fastestfurs", "Fastest Furs"),
 )
 
 PICK_GDQ = "gdq"
@@ -59,12 +62,14 @@ PICK_RPGLB = "rpglb"
 PICK_HORARO = "horaro"
 PICK_OENGUS = "oengus"
 PICK_HORARO_EVENTS = "horaro_events"
+PICK_FASTESTFURS = "fastestfurs"
 PICKS = {
     PICK_GDQ: (TRACKER, TRACKER_BASES[GDQ]),
     PICK_RPGLB: (TRACKER, TRACKER_BASES[RPGLB]),
     PICK_HORARO: (HORARO_FEED, None),
     PICK_OENGUS: (OENGUS_FEED, None),
     PICK_HORARO_EVENTS: (HORARO_EVENTS_FEED, None),
+    PICK_FASTESTFURS: (FASTESTFURS_FEED, None),
 }
 PICK_WORDS = {
     PICK_GDQ: "the GDQ tracker",
@@ -77,6 +82,7 @@ PICK_WORDS = {
         "horaro.net events — finds this channel's events on horaro.net, searching by the "
         "feed's name (Fast Paced Events' home)"
     ),
+    PICK_FASTESTFURS: "Fastest Furs — every event on the org's own list at fastestfurs.com",
 }
 PICK_NAMES = {PICK_GDQ: "GDQ", PICK_RPGLB: "RPG Limit Break"}
 
@@ -88,7 +94,7 @@ CHANNEL_HAS_FEED = (
 SAME_FEED = "**{name}** already reads that, so nothing was added."
 UNKNOWN_PICK = (
     "**{given}** is not something a feed can read, so nothing was added. Pick the GDQ tracker, "
-    "the RPG Limit Break tracker, horaro.net or Oengus."
+    "the RPG Limit Break tracker, horaro.net, Oengus or Fastest Furs."
 )
 NO_SLUG = (
     "A horaro.net feed needs the event's slug — the part after horaro.net/, for example `esa` — "
@@ -165,7 +171,7 @@ PICK_FEED = "Pick a feed to manage…"
 PICK_CHANNEL = "Pick the channel the feed belongs to…"
 PICK_SUGGESTION = "Pick a waiting event…"
 ADD_FEED_TITLE = "Add a feed"
-ADD_FEED_SOURCE = "Read from — gdq, rpglb, horaro or oengus"
+ADD_FEED_SOURCE = "Source: gdq/rpglb/horaro/oengus/fastestfurs"
 ADD_FEED_SLUG = "horaro.net event slug — horaro only"
 ADD_FEED_SLUG_HINT = "esa"
 ADD_FEED_NAME = "Name — blank for the channel's"
@@ -231,6 +237,8 @@ def marathon_source(feed: Any) -> str | None:
         return OENGUS
     if kind == HORARO_EVENTS_FEED:
         return HORARO
+    if kind == FASTESTFURS_FEED:
+        return FASTESTFURS
     return None
 
 
@@ -257,6 +265,8 @@ def pick_for(feed: Any) -> str | None:
         return PICK_HORARO
     if source == OENGUS:
         return PICK_OENGUS
+    if source == FASTESTFURS:
+        return PICK_FASTESTFURS
     return {GDQ: PICK_GDQ, RPGLB: PICK_RPGLB}.get(str(source or ""))
 
 
@@ -496,6 +506,7 @@ def clean_name(given: Any) -> str:
 __all__ = [
     "ACTIONS",
     "ADD",
+    "FASTESTFURS_FEED",
     "FEED_SOURCES",
     "HORARO_EVENTS_FEED",
     "HORARO_FEED",

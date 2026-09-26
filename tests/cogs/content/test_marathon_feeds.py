@@ -97,7 +97,15 @@ class FeedClient:
     async def runs(self, source, ref):
         if source == "oengus" and (source, str(ref)) not in self.runs_by_ref:
             raise ScheduleError("oengus.io has not published it", unpublished=True)
+        if source == "fastestfurs" and (source, str(ref)) not in self.runs_by_ref:
+            raise ScheduleError("fastestfurs.com has not published it", unpublished=True)
         return list(self.runs_by_ref.get((source, str(ref)), []))
+
+    async def fastestfurs_events(self):
+        self.list_calls.append("fastestfurs")
+        if self.raises is not None:
+            raise self.raises
+        return fixture("fastestfurs_events.json")
 
     async def close(self):
         return None
@@ -1178,3 +1186,88 @@ async def test_add_a_feed_with_the_horaro_events_pick_needs_no_slug_and_keys_on_
     assert (made.value["source"], made.value["feed_ref"]) == ("horaro_events", "ladyarcaders")
     assert "now reads horaro.net events for **Lady Arcaders**" in made.message
     assert list(await by_ref(bot)) == [FPFF3]
+# --- Fastest Furs -----------------------------------------------------------------------------
+
+FALL_FEST = "21"
+
+
+async def furs_feed(bot, cog, when="published"):  # noqa: F811
+    await staff_room(bot)
+    await bot.store.set(GUILD, "marathon_feed_notice_when", when)
+    row = await a_channel(bot, "fastestfurs", "Fastest Furs")
+    await cog.tick_once()
+    feed = next(one for one in await all_feeds(bot) if one["source"] == mf.FASTESTFURS_FEED)
+    return row, feed
+
+
+async def test_the_seed_gives_the_fastestfurs_channel_row_its_feed_once(bot, cog):  # noqa: F811
+    row, feed = await furs_feed(bot, cog)
+    assert (feed["name"], feed["feed_ref"], feed["spotlight_id"]) == (
+        "Fastest Furs",
+        "fastestfurs",
+        row,
+    )
+    await feeds.remove_feed(bot, bot.guild, FakeActor(), feed)
+    again = Marathons(bot)
+    again.client = FeedClient()
+    again.clock = lambda: SEPT
+    bot.cogs[cogmod.COG_NAME] = again
+    await again.tick_once()
+    assert await all_feeds(bot) == []
+
+
+async def test_a_fastestfurs_check_adds_the_upcoming_event_quietly_and_skips_past_ones(
+    bot,  # noqa: F811
+    cog,
+):
+    row, feed = await furs_feed(bot, cog)
+    made = await by_ref(bot)
+    assert list(made) == [FALL_FEST]
+    fall = made[FALL_FEST]
+    assert fall["source"] == "fastestfurs" and fall["name"] == "Fastest Furs Fall Fest 2026"
+    assert fall["schedule_url"] == "https://fastestfurs.com/schedule/21"
+    assert fall["spotlight_id"] == row and fall["feed_id"] == feed["id"]
+    assert fall["noticed_at"] is None and notices(bot) == []
+    assert cog.client.list_calls == ["fastestfurs"]
+    checked = await checked_of(bot, "Fastest Furs")
+    assert (checked["found"], checked["added"]) == (1, 1)
+    added = await logged(bot, "marathon.feed_added")
+    assert [(one["event"], one["source"]) for one in added] == [(FALL_FEST, "fastestfurs")]
+
+
+async def test_a_second_fastestfurs_check_adds_nothing_twice(bot, cog):  # noqa: F811
+    await furs_feed(bot, cog)
+    later(cog, 7)
+    await cog.tick_once()
+    assert list(await by_ref(bot)) == [FALL_FEST]
+    checked = await checked_of(bot, "Fastest Furs")
+    assert (checked["found"], checked["new"], checked["added"]) == (1, 0, 0)
+    assert len(await logged(bot, "marathon.feed_added")) == 1
+
+
+async def test_a_fastestfurs_event_notices_once_when_its_schedule_yields_runs(bot, cog):  # noqa: F811
+    await furs_feed(bot, cog)
+    marathon = (await by_ref(bot))[FALL_FEST]
+    unpublished = await refresh_marathon(bot, bot.guild, marathon)
+    assert not unpublished.ok and notices(bot) == []
+    fresh = await get_marathon(bot.db, GUILD, marathon["id"])
+    assert fresh["fetch_failures"] == 0 and "not published" in fresh["last_error"]
+    cog.client.runs_by_ref[("fastestfurs", FALL_FEST)] = two_runs()
+    await refresh_marathon(bot, bot.guild, marathon)
+    await refresh_marathon(bot, bot.guild, marathon)
+    assert len(notices(bot)) == 1
+    assert "**Fastest Furs Fall Fest 2026**" in notices(bot)[0].content
+    assert [row["because"] for row in await posted(bot)] == ["published"]
+
+
+async def test_add_a_feed_with_the_fastestfurs_pick_keys_on_the_channel(bot, cog):  # noqa: F811
+    await staff_room(bot)
+    furs = await a_channel(bot, "FastestFurs", "Fastest Furs")
+    made = await feeds.create_feed(
+        bot, bot.guild, FakeActor(), spotlight_id=furs, pick="fastestfurs"
+    )
+    assert made.ok, made.message
+    assert (made.value["source"], made.value["feed_ref"]) == ("fastestfurs", "fastestfurs")
+    assert "now reads Fastest Furs for **Fastest Furs**" in made.message
+    assert list(await by_ref(bot)) == [FALL_FEST]
+    assert feeds.guess_pick("fastestfurs") == "fastestfurs"

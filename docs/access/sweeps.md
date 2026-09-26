@@ -2,6 +2,7 @@
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-09-26 (branch `marathon-horaro-events`)** — ONE section APPENDED (`HE-a`…`HE-d`, BUILT, NOT MERGED); nothing else touched. Before that,
+> **2026-09-26 (branch `marathon-fastestfurs`)** — ONE section APPENDED (`FF-a`…`FF-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-feeds-oengus`)** — ONE section APPENDED (`MO-a`…`MO-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `hide-rolemenu`)** — ONE section APPENDED (`RM-a`, `RM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-links`)** — ONE row ADDED to the `ED-` section (`ED-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3382,3 +3383,24 @@ wait for FPE to create one.
 | **`HE-b`** | Once FPE creates its next horaro.net event: **Check now** on the row (or wait ≤ 6 h) | That event appears on the Marathons list as a plain *horaro.net* marathon on the Fast Paced Events channel, **without** a staff notice while its schedule has no runs; `marathon.feed_checked` counts it. An event the same search finds that streams elsewhere (e.g. `fpfh`, `tgh_sr`) is **not** added; a second check adds nothing twice. |
 | **`HE-c`** | Wait for (or press **Read it now** on) that marathon once its schedule has runs | ONE staff notice (*Fast Pace has a new event: **…***, the embed, the three rows), `marathon.notice_posted` with `because: published`; the next read posts nothing. Runners are plain names (FPE writes no Twitch links), so they match by pairing / Discord username only. |
 | **`HE-d`** | Open the Fast Pace feed ▸ **Look again** | The answer ends *It read every horaro.net event it had looked at again (N remembered before).*; nothing already added is added twice; `marathon.feed_looked` carries `reread: N`. |
+
+## Rows `FF-a` … `FF-d` — the Fastest Furs feed (branch `marathon-fastestfurs`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-fastestfurs`, NOT merged, NOT deployed.** Owner, 2026-09-26: *"Build them all now"*.
+Design: [`../info/marathon-fastestfurs-design.md`](../info/marathon-fastestfurs-design.md). Rows lettered; the
+conductor numbers them. Local check first: `MOCK_PORT=8806 node site/mock/server.mjs` from the branch, then
+<http://localhost:8806/events.html> ▸ **Sources…**.
+
+⚠️ **Precondition: a Go-live channel row for `fastestfurs`** (twitch.tv/fastestfurs, channel-only, taking marathons).
+The live bot has none (2026-09-26). The seed makes the feed on the **first boot after** that row exists — or staff
+press **Add a feed… ▸ Fastest Furs** at once. Measured 2026-09-26: *Fastest Furs Fall Fest 2026* (id 21, 2026-10-08 →
+10-11) is on their list with its schedule published (55 runs), so the first check adds it and — the schedule being
+out — its first read posts the staff notice straight away (shadow → the rehearsal home while `marathon_mode` is
+shadow).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`FF-a`** | Events ▸ **Sources…** ▸ **Add a feed…** ▸ the **Fastest Furs** channel row ▸ *Read from* **Fastest Furs** (or look for the seeded row after the first boot) | The pick is guessed from the login; the line under it says *Every event on Fastest Furs' own list at fastestfurs.com — nothing to type*; no slug field. **Add the feed** answers *… now reads Fastest Furs for **Fastest Furs***; the Sources list shows the row with *Fastest Furs* as its source. |
+| **`FF-b`** | **Check now** on the Fastest Furs row (or the first boot's check) | *Fastest Furs Fall Fest 2026* appears on the Marathons list as *Fastest Furs · feed* on the Fastest Furs channel, schedule link `https://fastestfurs.com/schedule/21`; FWA 2026 and older events are **not** added; `marathon.feed_checked` found 1 / added 1; a second **Check now** adds nothing. |
+| **`FF-c`** | Watch the staff notice home after FF-b (or press **Read it now** on the marathon) | ONE staff notice (*Fastest Furs has a new event: **Fastest Furs Fall Fest 2026***, the embed, the three rows), `marathon.notice_posted` with `because: published`; the next read posts nothing. If the schedule were not out, the row would wait quietly with *fastestfurs.com has the event but has not published its schedule yet*. |
+| **`FF-d`** | Open *Fastest Furs Fall Fest 2026* ▸ its schedule / the board once posted | 55 runs from Thu 8 Oct 14:00 UTC (7:00 Phoenix), each timed from the one before; runners and hosts listed by NAME (no Twitch link); a race lists both runners; a BaF member whose Discord username is a runner's name (or who is paired) shows as ours. Compare two or three slot times with fastestfurs.com/schedule/21 — the times are computed (design Deviation 2). |
