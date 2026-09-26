@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathons are archived, never deleted* (branch `marathon-archive-local`, off `main` `33b9838a`, keyed against `c19366d9`). Before that:
 > **2026-09-26 — the three marathon-source sections RE-KEYED at the merge, one section APPENDED**: *The horaro.net events feed*, *The Fastest Furs feed* and *Lady Arcaders* re-keyed against `fca7a18b` (branch `merge-marathon-sources`: the merges `e29563c6` + `b8a86dfe`, then the wording pass and the `marathon_ladyarcaders_floor` key); *The marathon-source merges — one wording pass and the floor key* appended. Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The horaro.net events feed for Fast Paced Events* (branch `marathon-horaro-events`, off `main` `a3ac5132`, keyed against `87ddd4ba`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The Fastest Furs feed* (branch `marathon-fastestfurs`, off `main` `a3ac5132`, keyed against `e34426d2`). Before that:
@@ -8804,3 +8805,37 @@ Design: [`marathon-spotlight-design.md`](marathon-spotlight-design.md). Keyed ag
 | `site/public/assets/marathons-section.js:769` · `:787` | The switch rides the foldout's one Save, like the Event select; sends `spotlight_mode` only when it changed. |
 | `site/public/assets/page-golive.js:915` | The help line renders only when the row carries one. |
 | `site/mock/server.mjs:4514` · `:4522` · `:4529` · `:5885` | The mock mirrors the gate, the new-row default, the marathon-channel test and the switch's words. It has no tick, so it never spotlights a channel by itself. |
+
+## Marathons are archived, never deleted (branch `marathon-archive-local`, 2026-09-26)
+
+Design: [`marathon-archive-design.md`](marathon-archive-design.md). Keyed against `c19366d9`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/storage/db.py:1212` `ARCHIVED_TABLES` · `:1217` `ARCHIVE_EXTRAS` | The twin rule lives beside `ADDED_COLUMNS`: each archive table is named here and built from its live table, never spelled out in `SCHEMA`, so a column added to `marathons` cannot be forgotten on `marathons_archive`. |
+| `black_bloc/storage/db.py:1274` `archive_column` | A mirrored column keeps its type, its DEFAULT and the `id` PRIMARY KEY — and drops NOT NULL / UNIQUE / CHECK: an archive holds whatever the live row held, and `ALTER TABLE … ADD COLUMN` could not carry a NOT NULL with no default anyway. `id` stays the live id (AUTOINCREMENT never reuses one), which is what lets Restore put it back as itself. |
+| `black_bloc/storage/db.py:1312` · `:1431` `_mirror_archived_tables` | Runs every boot AFTER `_add_missing_columns`, so a schema 68 file takes 69's columns and then 70's twins in one boot. Missing twin → `CREATE TABLE` from `PRAGMA table_info`; present → `ADD COLUMN` for each live column it lacks. |
+| `black_bloc/marathon_channels.py:38` `CARRIES` · `:77` `carries_marathons` | Three reads, in a fixed order, so the log names every signal: a feed on the row, any marathon on it (paused ones too), a spotlight a marathon turned on. Pure over `db.conn`, so the test fakes it. |
+| `black_bloc/cogs/content/spotlight.py:669` `_expire` · `:696` `_keep` | The rule is inside `_expire`, so BOTH doors keep a marathon channel: the date sweep and `expire_for_event` (a cancelled event). Both call `_expire` holding the row lock, which is why `_keep` unpins by hand instead of calling `settle_open_session` (it takes the same lock — a deadlock). The session is NOT ended: ending it would make the next poll announce the still-live stream a second time (Deviation 2). |
+| `black_bloc/marathon_archive.py:41` `end_of` · `:50` `is_ended` | The end is `ends_at` (the last run's end `apply` writes), never before `starts_at`; no `ends_at` → never ends by itself. `now > end + grace`: strictly after, so grace 0 still waits for the end. |
+| `black_bloc/marathon_archive.py:55` `first_ended` | The ONE marathon a tick moves: the one that ended longest ago, id breaks ties — deterministic, so a test can say which. |
+| `black_bloc/cogs/content/marathon_archive.py:78` `copy_rows` | The column list is the intersection of both tables' `PRAGMA table_info`, spelled out (checklist 6); the archive's own three columns ride as bound parameters. |
+| `black_bloc/cogs/content/marathon_archive.py:95` `archive_rows` | One transaction: copy row, runs, people; then delete runs, people, `marathon_spotlights`, the marathon's `source='marathon'` ping windows, the row. A failure rolls the lot back. No row copied → nothing deleted. |
+| `black_bloc/cogs/content/marathon_archive.py:127` `restore_rows` | The reverse copy, then `active = 0` and `board_pinned = 0`: a restored marathon posts nothing until staff Resume it. |
+| `black_bloc/cogs/content/marathon_archive.py:200` `archived_people_state` | The People card of an archived marathon: its own archived pairings plus the live every-schedule ones; no Go-live row, no spotlight, no near-miss — nothing on it can be pressed. |
+| `black_bloc/cogs/content/marathon_archive.py:249` `archive_held` | Called holding the marathon lock. Staff moves call off the linked event and the run events first (they read the LIVE runs); the sweep does not — its marathon is a week over (Deviation 4). Then the ping window, a spotlight this marathon holds (`lift`, `marathon_archived`), the move, the log row, Remove's ignore-list entry, and the board unpin last (cosmetic, checklist 12). |
+| `black_bloc/cogs/content/marathon_archive.py:283` `archive_marathon` | The staff door (Archive it, and Remove through `remove_marathon`): takes the lock and re-reads, so a marathon the tick just moved answers *no such marathon* in words. |
+| `black_bloc/cogs/content/marathon_archive.py:296` `restore_marathon` | Refuses in words when a live marathon has the same schedule link (the live table's UNIQUE would otherwise raise) and when the id is not archived. |
+| `black_bloc/cogs/content/marathon_archive.py:340` `archive_one` | The tick's hook: pick from the rows the tick already read, then take THAT marathon's lock and re-check on a fresh read (checklist 37). One per guild per tick, in every `marathon_mode` — archiving posts nothing. |
+| `black_bloc/cogs/content/marathon_archive.py:380` `build_archive` · `:437` `ask_restore` | `/event` ▸ Marathons… ▸ **Archive…**: the 25 newest, a pick, a Restore confirm, then the restored card. |
+| `black_bloc/cogs/content/marathon.py:209` `marathon_by_ref` | Live then archive in one UNION, `id, name` only — its callers (the GDQ next event) read nothing else. |
+| `black_bloc/cogs/content/marathon.py:739` `remove_marathon` | Now one line: an archive with `archived_why = removed`. The log row stays `marathon.removed` (one write, one row). |
+| `black_bloc/cogs/content/marathon.py:1095` `marathon_for_event` | Live first, then the archive, so the Events card keeps its *Marathon: …* line after the move. |
+| `black_bloc/cogs/content/marathon.py:1457` | The tick's archive call, after every live marathon has had its turn. |
+| `black_bloc/cogs/content/marathon.py:2846` · `:2908` · `:3246` | The panel's two new moves ride beside the old tuples rather than inside `marathon.card_moves` — `marathon_archive.py` imports `MarathonMove` from `marathon.py`, so the reverse import would be a cycle. |
+| `black_bloc/cogs/content/marathon_feeds.py:218` `marathons_by_ref` · `:225` · `:417` | Live and archived refs in one UNION, live first. A REMOVED archive row is left out on purpose: the feed's ignore list governs it, and **Forget ignored** must still let the feed add it again (Deviation 6). An archived ref is never adopted. |
+| `black_bloc/api/tools/marathons.py:321` `archived_row` · `:410` · `:458` | `GET /{id}` and `/{id}/people` fall through to the archive; `GET /archive` is registered BEFORE `/{marathon_id}`, or FastAPI would try `"archive"` as an int and answer 422. |
+| `site/public/assets/marathons-section.js:392` · `:537` · `:551` · `:711` | One flag, `shown.archived`, turns the live People card read-only: no run tools, no spotlight or link moves, no other-pairings fold. |
+| `site/public/assets/marathons-section.js:1208` `archiveLine` · `:1218` `archiveFold` | Shut by default; 50 at a time with **Show N more**. |
+| `site/public/assets/marathon-words.js:303` `roughly` | Whole days once it is two days or more, so an old row reads *82 days ago*, not *81 d 22 h ago*. |
+| `site/mock/server.mjs:5692` · `:6647` · `:6285` | The mock keeps archived runs and pairings in the same arrays keyed by `marathon_id` (only the row moves), and its feed check skips archived refs except removed ones, as the bot does. |

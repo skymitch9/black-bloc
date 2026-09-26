@@ -1,8 +1,8 @@
 # Marathons are archived, never deleted — an archive table for ended marathons, and an expiry that keeps marathon channels
 
 > **Audience:** the build agent (a cloud agent under an Opus 5.5 conductor, per the owner 2026-09-26 14:3x) and reviewers.
-> **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-26 14:3x Phoenix), NOT built** — queued for the Sunday 2026-09-27 16:00 weekly reset (weekly 89 % at 14:07, the project's dispatch cut-off is 90 %). Branch `marathon-archive`, off `main` at or after `76501919` (v173 live; `marathon-spotlight` MERGED and NOT deployed — schema is **69** on `main`, so this build takes **70**).
-> **Last verified: 2026-09-26 14:3x** — by reading the code on `main` `76501919`: `black_bloc/storage/db.py` (`marathons` `:1017` with its `ADDED_COLUMNS` `:1195–1207`, `marathon_runs` `:1042`, `marathon_people` `:1073`, `marathon_feeds` `:1087`, `marathon_spotlights` `:1117`, `spotlight_ping_windows` `:929`), `black_bloc/cogs/content/spotlight.py:661` `_expire` (the sweep that DELETES an expired row: `_end` the open session → `drop_fan_role` → `drop_feeds_of_channel` → `delete_channel`), `black_bloc/marathon_spotlight.py` (`is_kept`, `held_by`, `lifted_fields` — the follow build's rule that a marathon never writes `expires_at`), `black_bloc/cogs/content/marathon_feeds.py` (`marathons_by_ref` — the dedupe that must keep seeing archived refs), `site/public/assets/marathons-section.js` (`listSection`, the table, `marathonDrawer`). ⚠️ NOT verified: nothing was run; the live database was not read for this doc (the 13:3x read of the rows is in `TODO.md`). Secret NAMES only.
+> **Status:** TRACKED · 🔨 **BUILT 2026-09-26 on branch `marathon-archive-local` (off `main` `33b9838a`, schema 70, keys 508), NOT merged, NOT deployed** — §B, §C and §D as below, with the numbered Deviations at the foot. Was: 📐 **DESIGN (Fable, 2026-09-26 14:3x Phoenix), NOT built** — queued for the Sunday 2026-09-27 16:00 weekly reset (weekly 89 % at 14:07, the project's dispatch cut-off is 90 %). Branch `marathon-archive`, off `main` at or after `76501919` (v173 live; `marathon-spotlight` MERGED and NOT deployed — schema is **69** on `main`, so this build takes **70**).
+> **Last verified: 2026-09-26 (the build)** — by running it: the full suite, `check.mjs` and a headless render against the branch's mock (figures and what was NOT checked at the foot). Before that, **2026-09-26 14:3x** — by reading the code on `main` `76501919`: `black_bloc/storage/db.py` (`marathons` `:1017` with its `ADDED_COLUMNS` `:1195–1207`, `marathon_runs` `:1042`, `marathon_people` `:1073`, `marathon_feeds` `:1087`, `marathon_spotlights` `:1117`, `spotlight_ping_windows` `:929`), `black_bloc/cogs/content/spotlight.py:661` `_expire` (the sweep that DELETES an expired row: `_end` the open session → `drop_fan_role` → `drop_feeds_of_channel` → `delete_channel`), `black_bloc/marathon_spotlight.py` (`is_kept`, `held_by`, `lifted_fields` — the follow build's rule that a marathon never writes `expires_at`), `black_bloc/cogs/content/marathon_feeds.py` (`marathons_by_ref` — the dedupe that must keep seeing archived refs), `site/public/assets/marathons-section.js` (`listSection`, the table, `marathonDrawer`). ⚠️ NOT verified: nothing was run; the live database was not read for this doc (the 13:3x read of the rows is in `TODO.md`). Secret NAMES only.
 
 ## The ask, verbatim (owner, 2026-09-26 Phoenix)
 
@@ -90,8 +90,84 @@ Tests mirror the package: `tests/storage/test_db.py` (schema 70 on a fresh file 
 
 ## Deviations
 
-*(the build agent writes these)*
+Written by the build (Opus 5.5, branch `marathon-archive-local`, 2026-09-26). Where the spec and the code disagreed,
+the code's pattern won for shape and the spec for behaviour.
+
+1. **The twins are made at boot, not spelled out in `SCHEMA`.** `db.py:ARCHIVED_TABLES` names them and
+   `_mirror_archived_tables` builds each from its live table's `PRAGMA table_info` (and adds any column the live table
+   has and the twin lacks, every boot). So the §C1 guard *"a future `ADDED_COLUMNS` entry fails a test until its twin
+   exists"* became stronger: the twin is grown for you, and `tests/storage/test_db.py` asserts both the equal column
+   lists and that a grown live table grows its twin. Mirrored columns keep type, DEFAULT and the `id` PRIMARY KEY, and
+   drop NOT NULL / UNIQUE / CHECK (an archive holds what the live row held). Three indexes, not one: the design's
+   `marathons_archive_by_guild` plus one on `marathon_id` for each of the runs and people twins.
+2. **§B: the open session is not ENDED — the live post is unpinned and the session kept**, as
+   `marathon_spotlight.lift` does. Ending it (`_end`, EXPIRED words) would make the very next poll announce the
+   still-live stream again, unpinned — a second post in `#go-live` for the same stream. And `_expire` runs holding the
+   row lock, so `settle_open_session` (which takes that lock) could not be reused without a deadlock; `_keep` unpins
+   by hand. `starts_at` is cleared too, as §B said.
+3. **§B applies to `expire_for_event` as well** (a cancelled event), because the rule lives in `_expire`, as
+   specified. `golive.spotlight_kept` carries `held_by` (the list of signals), `because: marathon_channel` and
+   `expired_because` (the sweep's EXPIRED or `event_cancelled`). The "live marathons row" signal counts a paused
+   marathon too — it is still on the list.
+4. **The sweep calls off no event; Archive it and Remove do.** A marathon archived by the tick ended a week ago, so its
+   events are past; calling them off would post cancellations nobody needs. Remove keeps its old behaviour (calls off
+   the linked event and every run event); **Archive it** does the same, so an early archive never strands an approved
+   event on the calendar. Ping windows, `marathon_spotlights` rows and a channel spotlight this marathon holds go at
+   every archive (the held spotlight is lifted with `because: marathon_archived`).
+5. **Remove still logs `marathon.removed`** (one write, one row — checklist 34), with `archived_why: removed` and the
+   counts; `marathon.archived` is the sweep's and Archive it's row.
+6. **The feed dedupe leaves REMOVED archive rows to the ignore list.** `marathons_by_ref` reads live + archive in one
+   UNION but skips `archived_why = 'removed'`: those refs are already on the feed's `ignored` list, and **Forget
+   ignored** is the staff override that must still let the feed add them again (the existing behaviour, and
+   `tests/cogs/content/test_marathon_feeds.py::test_a_removed_feed_marathon_is_ignored_and_forget_ignored_adds_it_again`).
+   A known ref that is archived is never *adopted* by a feed.
+7. **The next-event suggestion.** There was no separate "newest ended marathon of a source" read to redirect: the
+   suggestion is written on the live marathon the day after it ends and travels into the archive with the row (a week
+   later). What now reads the archive is `marathon_by_ref`, the "already on the list" check, so an event followed
+   once and archived is linked, never added twice. A staff notice's Add it / Not this one pressed after the move
+   answers *no such marathon*, in words.
+8. **The inbox thread (§C3) does not exist yet** — `marathon-inbox` is the next build. `marathon_archived_word` is
+   registered and used where an archived marathon's message is today: the archived drawer's header and the API's
+   `archived_word`. Nothing is edited on Discord at the move except the board's pin (unpinned if it still carries one).
+9. **Eleven keys, not four.** `golive_expiry_keeps_marathon_channels` (Go-live), `marathon_archive_after_days`,
+   `marathon_archived_word`, and — per *every other new sentence the bot posts is a key* — `marathon_archive_question`,
+   `marathon_archived_said`, `marathon_remove_question` and `marathon_removed_said` (these two replace the code
+   constants `marathon.REMOVE_QUESTION` / `REMOVED`, now deleted), `marathon_restore_question`,
+   `marathon_restored_said`, `marathon_restore_taken`, `marathon_not_archived`. `marathon_archive_title` stayed a
+   site constant, as §C5 said. The site's own confirm bodies (Archive it, Remove, Restore) are site constants like the
+   existing `REMOVE_BODY`; the answers they show come from the keys.
+10. **Restore refuses in words when a live marathon has the same schedule link** (409, `marathon_restore_taken`) — the
+    live table's `UNIQUE (guild_id, schedule_url)` would otherwise raise. It also clears `board_pinned`.
+11. **Tests mirror the new modules**: `tests/test_marathon_archive.py` and `tests/cogs/content/test_marathon_archive.py`
+    carry the tick, the move, Restore and the dedupe (the design listed `test_marathon.py`; the repo rule is one test
+    file per source file).
+12. **The `/event` panel.** *Archive it* sits on the card's row 4 (row 3 already holds up to five buttons); the root
+    gains **Archive…** (row 3): the 25 newest archived, a pick, a Restore confirm, then the restored card — Restore
+    from Discord too, so the decision is reachable both ways (checklist 33).
+13. **The tick archives in every `marathon_mode`, `off` included** — archiving posts nothing — one marathon per guild
+    per tick, the one that ended longest ago.
+14. **The archived People card** reads its own archived pairings plus the live every-schedule ones and fills no Go-live
+    row, spotlight or near-miss — it has no moves.
+15. **The mock** keeps an archived marathon's runs and pairings in the same arrays keyed by `marathon_id` (only the row
+    moves to `state.marathonArchive`); it has no tick.
 
 ## What was NOT verified
 
-*(the build agent writes these)*
+- **Nothing met Discord.** The bot was not run; no panel button was pressed in a real client (the Discord side —
+  *Archive it*, *Archive…*, the Restore confirm — is exercised through `build_card` / `build_panel` / `build_archive`
+  in tests only). The board unpin at archive was not exercised against Discord.
+- **The live database was not read and the migration has NOT run on it.** Schema 70 was proved on fresh files and on
+  downgraded 69 and 68 files in tests only. Rows 6 (`speedstuff4charity`) and 7 (`retrogaminglivetv`) were not
+  touched; this build does nothing about their current dates beyond the §B rule once it is deployed.
+- **The event call-offs on Archive it / Remove** are the existing Remove code path; the archive tests stub
+  `cancel_linked_event` to prove it is (and is not) called, they did not re-run a real cancellation.
+- **Feeds other than GDQ** (Oengus, horaro, horaro events, Fastest Furs, Lady Arcaders) were not run against an
+  archived ref; only `marathons_by_ref` itself is tested. Lady Arcaders' prober now sees archived event numbers as
+  known — untested.
+- **Rendered** in `chrome-headless-shell` 149.0.7827.22 over raw CDP against this branch's mock (`MOCK_PORT=8811`):
+  the Archive foldout open at 1400 and 390 px, the archived drawer (SGDQ 2026) at 1400 px with the day folds open, and
+  ESA Winter 2026's at 390 px; no page errors, no horizontal scroll at 390. The flow **Archive it → confirm** (the
+  drawer closed, *Archive · 3*) and **Restore → confirm** (*…is back on the list, paused*, the drawer offered Resume
+  and Archive it, *Archive · 2*) was clicked through in the same browser. NOT rendered: the light theme, **Show N
+  more** (the mock seeds two), the Events card's marathon line for an archived marathon.
+
