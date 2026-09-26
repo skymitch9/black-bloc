@@ -34,6 +34,7 @@ from ...settings_store import (
     MARATHON_FEED_ACTION_KEY,
     MARATHON_FEED_ADDED_TEMPLATE_KEY,
     MARATHON_FEED_HOURS_KEY,
+    MARATHON_FEED_NOTICE_WHEN_KEY,
     MARATHON_FEED_RECENT_KEY,
     MARATHON_FEED_SUGGEST_TEMPLATE_KEY,
     MARATHON_FEEDS_KEY,
@@ -51,6 +52,7 @@ from .marathon import (
     add_moves,
     build_card,
     channel_login,
+    claim_notice,
     cog_of,
     create_marathon,
     event_status_of,
@@ -397,8 +399,18 @@ async def run_check(
     return Outcome(True, said, value={"found": len(candidates), "added": added})
 
 
+NOTICE_PUBLISHED = "published"
+NOTICE_ADDED = "added"
+
+
+def notice_when(bot: Any, guild: Any) -> str:
+    return str(bot.store.get(guild.id, MARATHON_FEED_NOTICE_WHEN_KEY))
+
+
 async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate) -> bool:
-    """`add` mode: the marathon exactly as a staff Add makes it, then ONE staff notice."""
+    """`add` mode: the marathon exactly as a staff Add makes it; ONE staff notice, now or at
+    the first read that finds runs."""
+    at_once = notice_when(bot, guild) == NOTICE_ADDED
     made = await create_marathon(
         bot,
         guild,
@@ -408,6 +420,7 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
         spotlight_id=feed["spotlight_id"],
         via=mf.VIA_FEED,
         feed_id=int(feed["id"]),
+        noticed=at_once,
     )
     details = feed_details(feed, mf.VIA_FEED, event=candidate.ref, name=candidate.name)
     if not made.ok:
@@ -425,15 +438,57 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
         | {"marathon_id": marathon["id"], "starts_at": candidate.starts_at}
         | rehearsal_details(bot, guild),
     )
+    if not at_once:
+        async with cog_of(bot).lock(marathon["id"]):
+            await notice_published(
+                bot, guild, marathon["id"], len(await runs_of(bot.db, marathon["id"]))
+            )
+        return True
     record = {"ref": candidate.ref, "name": candidate.name, "starts_at": candidate.starts_at}
     record["url"] = candidate.url
-    text = words(bot, guild, MARATHON_FEED_ADDED_TEMPLATE_KEY, await fields_of(bot, feed, record))
     marathon = await get_marathon(bot.db, guild.id, marathon["id"]) or marathon
+    await send_added_notice(bot, guild, feed, marathon, record, details, NOTICE_ADDED)
+    return True
+
+
+async def send_added_notice(
+    bot: Any, guild: Any, feed: Any, marathon: Any, record: Any, details: Any, because: str
+) -> None:
+    text = words(bot, guild, MARATHON_FEED_ADDED_TEMPLATE_KEY, await fields_of(bot, feed, record))
     embed = await notice_embed(bot, guild, marathon, feed)
     view = people_on(added_view(bot, feed["id"], marathon), marathon["id"])
     await post_notice(
-        bot, guild, feed, text, view, details | {"marathon_id": marathon["id"]}, embed=embed
+        bot,
+        guild,
+        feed,
+        text,
+        view,
+        details | {"marathon_id": marathon["id"], "because": because},
+        embed=embed,
     )
+
+
+async def notice_published(bot: Any, guild: Any, marathon_id: Any, runs: int) -> bool:
+    """The held notice of a feed-made marathon, on the first read that finds runs; the
+    noticed_at claim is taken before the post (checklist 12)."""
+    if runs < 1 or mode_of(bot, guild.id) == MODE_OFF:
+        return False
+    marathon = await get_marathon(bot.db, guild.id, marathon_id)
+    if marathon is None or marathon["noticed_at"] or not marathon["feed_id"]:
+        return False
+    feed = await get_feed(bot.db, guild.id, marathon["feed_id"])
+    if feed is None or not await claim_notice(bot.db, marathon["id"]):
+        return False
+    record = {
+        "ref": marathon["source_ref"],
+        "name": marathon["name"],
+        "starts_at": marathon["starts_at"],
+        "url": marathon["schedule_url"],
+    }
+    details = feed_details(
+        feed, mf.VIA_FEED, event=marathon["source_ref"], name=marathon["name"]
+    )
+    await send_added_notice(bot, guild, feed, marathon, record, details, NOTICE_PUBLISHED)
     return True
 
 
@@ -491,7 +546,8 @@ async def post_notice(
             "event": details.get("event"),
             "marathon_id": details.get("marathon_id"),
             "notice": "feed",
-        },
+        }
+        | ({"because": details["because"]} if details.get("because") else {}),
         embed=embed,
     )
     if message is None:

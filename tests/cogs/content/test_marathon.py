@@ -7,11 +7,13 @@ from black_bloc import marathon as mt
 from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content.marathon import (
     Marathons,
+    claim_notice,
     create_marathon,
     get_marathon,
     mark_done,
     pair_runner,
     post_board,
+    refresh_marathon,
     remove_marathon,
     runs_of,
     set_active,
@@ -250,6 +252,23 @@ async def test_an_unpublished_schedule_is_kept_and_does_not_count_as_a_failure(b
     fresh = outcome.value
     assert fresh["fetch_failures"] == 0 and fresh["last_error"] == "not published"
     assert (await details_of(bot.db, "marathon.fetch_failed"))["unpublished"] is True
+
+
+async def test_a_staff_added_marathon_counts_as_noticed_and_never_gets_a_held_notice(
+    bot, cog
+):
+    marathon = await added(bot, cog)
+    assert marathon["noticed_at"] and marathon["feed_id"] is None
+    await refresh_marathon(bot, bot.guild, marathon)
+    assert "marathon.notice_posted" not in await kinds(bot.db)
+
+
+async def test_claim_notice_is_taken_once(bot, cog):
+    marathon = await added(bot, cog)
+    await bot.db.conn.execute("UPDATE marathons SET noticed_at = NULL")
+    assert await claim_notice(bot.db, marathon["id"]) is True
+    assert await claim_notice(bot.db, marathon["id"]) is False
+    assert (await get_marathon(bot.db, GUILD, marathon["id"]))["noticed_at"]
 
 
 # --- the cadence ----------------------------------------------------------------------------

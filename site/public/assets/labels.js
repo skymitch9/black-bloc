@@ -118,6 +118,7 @@ export const LABELS = {
   marathon_feeds: 'Whether the marathon feeds check on their own',
   marathon_feed_hours: 'Hours between two checks of a feed',
   marathon_feed_action_default: 'What a new feed does with an event it finds',
+  marathon_feed_notice_when: 'When staff are told about a marathon a feed found',
   marathon_feed_recent_days: 'Days an event that already began still counts as new',
   marathon_feed_added_template: 'What staff are told when a feed adds an event',
   marathon_feed_suggest_template: 'What staff are told when a feed suggests an event',

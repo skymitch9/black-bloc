@@ -2869,4 +2869,17 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 491
+    assert len(settings_store.KEY_TYPES) == 492
+
+
+async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
+    key = settings_store.MARATHON_FEED_NOTICE_WHEN_KEY
+    assert key == "marathon_feed_notice_when"
+    assert settings_store.KEY_TYPES[key] == "enum"
+    assert settings_store.KEY_CHOICES[key] == ("published", "added")
+    assert settings_store.namespace_of(key) == "marathon"
+    assert store.get(1, key) == "published"
+    await store.set(1, key, "added")
+    assert store.get(1, key) == "added"
+    with pytest.raises(settings_store.SettingError):
+        await store.set(1, key, "never")

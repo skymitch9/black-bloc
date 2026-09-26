@@ -277,11 +277,13 @@ async def insert_marathon(
     added_by: int | None,
     feed_id: int | None = None,
     event_mode: str = "none",
+    noticed: bool = True,
 ) -> int:
+    stamp = now_iso()
     cur = await db.conn.execute(
         "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
-        "starts_at, ends_at, added_by, added_at, feed_id, event_mode) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             int(guild_id),
             name,
@@ -292,9 +294,10 @@ async def insert_marathon(
             starts_at,
             starts_at,
             added_by,
-            now_iso(),
+            stamp,
             feed_id,
             event_mode,
+            stamp if noticed else None,
         ),
     )
     await db.conn.commit()
@@ -358,6 +361,16 @@ async def update_marathon(db: Any, marathon_id: int, **fields: Any) -> None:
         f"UPDATE marathons SET {sets} WHERE id = ?", (*wanted.values(), int(marathon_id))
     )
     await db.conn.commit()
+
+
+async def claim_notice(db: Any, marathon_id: Any) -> bool:
+    """True for the one caller that stamps noticed_at; every later caller gets False."""
+    cur = await db.conn.execute(
+        "UPDATE marathons SET noticed_at = ? WHERE id = ? AND noticed_at IS NULL",
+        (now_iso(), int(marathon_id)),
+    )
+    await db.conn.commit()
+    return bool(cur.rowcount)
 
 
 async def update_run(db: Any, run_id: int, **fields: Any) -> None:
@@ -507,6 +520,7 @@ async def create_marathon(
     event_mode: Any = None,
     via: str = VIA_DISCORD,
     feed_id: int | None = None,
+    noticed: bool = True,
 ) -> Outcome:
     from ...marathon_events import BAD_MODE, makes_marathon_event
     from .marathon_events import BAD_MODE_CODE, mode_for_new
@@ -561,6 +575,7 @@ async def create_marathon(
         starts_at=None,
         added_by=actor_id(actor),
         feed_id=feed_id,
+        noticed=noticed,
     )
     await log_action(
         bot,
@@ -602,7 +617,15 @@ async def refresh_marathon(bot: Any, guild: Any, marathon: Any) -> Outcome:
         read = await cog.refresh(guild, fresh)
         if read.ok:
             await cog.follow(guild, await get_marathon(bot.db, guild.id, marathon["id"]))
+            await notice_if_published(bot, guild, marathon["id"], read)
     return read
+
+
+async def notice_if_published(bot: Any, guild: Any, marathon_id: Any, read: Outcome) -> None:
+    from .marathon_feeds import notice_published
+
+    runs = int((read.value or {}).get("runs") or 0) if read.ok else 0
+    await notice_published(bot, guild, marathon_id, runs)
 
 
 async def set_active(
@@ -1436,7 +1459,8 @@ class Marathons(commands.Cog):
             far_hours=int(store.get(guild.id, MARATHON_FAR_POLL_HOURS_KEY)),
             lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY)),
         ):
-            await self.refresh(guild, marathon)
+            read = await self.refresh(guild, marathon)
+            await notice_if_published(self.bot, guild, marathon["id"], read)
             marathon = await get_marathon(self.bot.db, guild.id, marathon["id"])
         if marathon is None:
             return
