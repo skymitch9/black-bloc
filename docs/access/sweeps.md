@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-26 (branch `marathon-ladyarcaders`)** — ONE section APPENDED (`LA-a`…`LA-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-feeds-oengus`)** — ONE section APPENDED (`MO-a`…`MO-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `hide-rolemenu`)** — ONE section APPENDED (`RM-a`, `RM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-links`)** — ONE row ADDED to the `ED-` section (`ED-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3362,3 +3363,21 @@ with its schedule published — a deploy before 2026-09-29 adds it at once, and 
 | **`MO-b`** | **Check now** on the Speed Stuff 4 Charity row | Every SS4C marathon on oengus.io's home (`live` / `next` / `open`) appears on the Marathons list as *Oengus · feed* on the SS4C channel, **without** a staff notice while its schedule is unpublished; a marathon on the same home page that streams elsewhere (e.g. LSS26, `longspeedrunsummit`) is **not** added. `marathon.feed_checked` counts it. |
 | **`MO-c`** | Wait for (or press **Read it now** on) an SS4C marathon whose schedule was unpublished once Oengus publishes it | ONE staff notice (*Speed Stuff 4 Charity has a new event: **…***, the embed, the three rows), `marathon.notice_posted` with `because: published`; the next read posts nothing. The runs list the runners, a runner with a Twitch connection on Oengus by that login. |
 | **`MO-d`** | Open the Speed Stuff 4 Charity feed (its row) ▸ **Look again** | The drawer said *Remembers N Oengus marathon(s) it has already looked at*; after the press the answer ends *It read every Oengus marathon's record again (N remembered before).*, nothing already added is added twice, `marathon.feed_looked` carries `reread: N`. |
+
+## Rows `LA-a` … `LA-d` — Lady Arcaders, found by probing ladyarcaders.com (branch `marathon-ladyarcaders`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-ladyarcaders`, NOT merged, NOT deployed.** Owner, 2026-09-26: *"Build them all now"*.
+Design: [`../info/marathon-ladyarcaders-design.md`](../info/marathon-ladyarcaders-design.md). Rows lettered; the
+conductor numbers them. Local check first: `MOCK_PORT=8808 node site/mock/server.mjs` from the branch, then
+<http://localhost:8808/events.html> ▸ **Sources…**.
+
+⚠️ **Nothing seeds until staff add the `ladyarcaders` channel row** (Go-live ▸ add channel `ladyarcaders`, marathons
+on) — there is none live today. The first boot AFTER that seeds a *Lady Arcaders* feed and its first check probes
+events 25–27. Measured 2026-09-26 ~12:4x Phoenix: event 25's calendar answered empty, so nothing is added yet.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`LA-a`** | Events ▸ **Sources…** ▸ **Add a feed…** ▸ the `ladyarcaders` channel row ▸ *Read from* (it guesses **Lady Arcaders**) — or, after the first boot with the row, look for the seeded **Lady Arcaders** feed | The line under the pick says *Lady Arcaders' next events on ladyarcaders.com, found by trying the next event numbers — nothing to type*; no slug field. **Add the feed** answers *… now reads Lady Arcaders for **Lady Arcaders** …*; the Sources list shows the row with *Lady Arcaders* as its source, and its drawer says *Remembers what 3 Lady Arcaders event number(s) answered …*. |
+| **`LA-b`** | While marathon posts are in **shadow**: Events ▸ **Add a marathon** ▸ any name ▸ paste `https://ladyarcaders.com/events/24/schedule/` ▸ the Lady Arcaders channel | It is added (source *Lady Arcaders*) and its Runs list the 47 slots (2026-09-03 → 09-06, Toronto times shown in your zone), e.g. *SAROS — NG+ All Bosses (Modifiers)* by Nimelya; a race lists both performers; the *Welcome* / *Day N Begins!* segments list nobody. Remove it afterwards (it is over). A pasted `https://ladyarcaders.com/events/25/schedule/` is refused: *… no schedule published for event 25 yet*. |
+| **`LA-c`** | When Lady Arcaders publishes their next event (watch their Discord), press **Check now** on the Lady Arcaders feed — or wait: an empty number is asked again after four checks (24 h) | The new event appears on the Marathons list as *Lady Arcaders · feed* on the Lady Arcaders channel, named from its calendar; `marathon.feed_checked` counts it; the numbers that answered empty are not asked again inside 24 h (no second GET in the log / the drawer's count unchanged). |
+| **`LA-d`** | The same new event, right after it is added | ONE staff notice (*Lady Arcaders has a new event: **…***, the embed, the three rows), `marathon.notice_posted` with `because: published` — its calendar already had runs, so it notices on the add's own first read; the next read posts nothing. |
