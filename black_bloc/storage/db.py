@@ -3,12 +3,13 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 69
+SCHEMA_VERSION = 70
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1208,6 +1209,27 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("spotlight_channels", "spotlit_by_marathon", "INTEGER"),
 )
 
+ARCHIVED_TABLES: dict[str, str] = {
+    "marathons": "marathons_archive",
+    "marathon_runs": "marathon_runs_archive",
+    "marathon_people": "marathon_people_archive",
+}
+ARCHIVE_EXTRAS: dict[str, tuple[tuple[str, str], ...]] = {
+    "marathons_archive": (
+        ("archived_at", "TEXT NOT NULL"),
+        ("archived_by", "INTEGER"),
+        ("archived_why", "TEXT NOT NULL"),
+    ),
+}
+ARCHIVE_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS marathons_archive_by_guild "
+    "ON marathons_archive(guild_id, ends_at)",
+    "CREATE INDEX IF NOT EXISTS marathon_runs_archive_by_marathon "
+    "ON marathon_runs_archive(marathon_id)",
+    "CREATE INDEX IF NOT EXISTS marathon_people_archive_by_marathon "
+    "ON marathon_people_archive(marathon_id)",
+)
+
 CARRIED_EVENT_WISH = (
     "UPDATE marathons SET event_mode = 'marathon' "
     "WHERE event_id IS NOT NULL OR event_wanted = 1"
@@ -1250,6 +1272,16 @@ WHERE ended_at IS NULL AND id NOT IN (
 """
 
 
+def archive_column(row: Any) -> tuple[str, str]:
+    name = str(row["name"])
+    parts = [name, str(row["type"] or "")]
+    if row["pk"]:
+        parts.append("PRIMARY KEY")
+    elif row["dflt_value"] is not None:
+        parts.append(f"DEFAULT {row['dflt_value']}")
+    return (name, " ".join(part for part in parts if part))
+
+
 class Database:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -1278,6 +1310,7 @@ class Database:
         await self._conn.executescript(SCHEMA)
         await self._drop_retired_indexes()
         await self._add_missing_columns()
+        await self._mirror_archived_tables()
         await self._restore_set_aside_mod_cases()
         await self._restore_set_aside_fan_roles()
         await self._open_the_retired_request_statuses()
@@ -1395,6 +1428,24 @@ class Database:
                 backfill = BACKFILLS.get((table, column))
                 if backfill is not None:
                     await self.conn.execute(backfill)
+
+    async def _mirror_archived_tables(self) -> None:
+        """Schema 70: each archive twin carries every column of its live table, added at boot."""
+        for live, archive in ARCHIVED_TABLES.items():
+            cur = await self.conn.execute(f"PRAGMA table_info({live})")
+            columns = [archive_column(row) for row in await cur.fetchall()]
+            present = await self._table_columns(archive)
+            if not present:
+                extras = [f"{name} {kind}" for name, kind in ARCHIVE_EXTRAS.get(archive, ())]
+                body = ", ".join([declared for _, declared in columns] + extras)
+                await self.conn.execute(f"CREATE TABLE {archive} ({body})")
+                continue
+            for name, declared in columns:
+                if name not in present:
+                    await self.conn.execute(f"ALTER TABLE {archive} ADD COLUMN {declared}")
+                    log.info("database: added %s.%s", archive, name)
+        for sql in ARCHIVE_INDEXES:
+            await self.conn.execute(sql)
 
     async def close(self) -> None:
         if self._conn is not None:

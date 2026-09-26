@@ -3,7 +3,7 @@ import sqlite3
 import aiosqlite
 import pytest
 
-from black_bloc.storage.db import SCHEMA_VERSION, Database
+from black_bloc.storage.db import ARCHIVE_EXTRAS, ARCHIVED_TABLES, SCHEMA_VERSION, Database
 
 
 async def test_connect_bootstraps_schema(tmp_path):
@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 69
+        assert SCHEMA_VERSION == 70
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -1631,7 +1631,7 @@ async def test_a_schema_68_file_gains_the_marathon_spotlight_columns_empty_and_k
         row = await cur.fetchone()
         assert tuple(row) == ("gamesdonequick", 1, None, None)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "69"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()
 
@@ -2756,5 +2756,99 @@ async def test_schema_65_adds_the_marathon_spotlights_and_keeps_its_rows(tmp_pat
             )
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def _columns(db, table):
+    cur = await db.conn.execute(f"PRAGMA table_info({table})")
+    return [row["name"] for row in await cur.fetchall()]
+
+
+async def test_every_archive_twin_carries_every_column_of_its_live_table(tmp_path):
+    db = Database(tmp_path / "twins.sqlite3")
+    await db.connect()
+    try:
+        for live, archive in ARCHIVED_TABLES.items():
+            extras = [name for name, _ in ARCHIVE_EXTRAS.get(archive, ())]
+            assert await _columns(db, archive) == await _columns(db, live) + extras
+        cur = await db.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+            ("marathons_archive_by_guild",),
+        )
+        assert await cur.fetchone() is not None
+    finally:
+        await db.close()
+
+
+async def test_a_column_added_to_a_live_table_reaches_its_archive_twin_at_the_next_boot(
+    tmp_path,
+):
+    path = tmp_path / "grown.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE marathons ADD COLUMN later TEXT DEFAULT 'x'")
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        assert "later" in await _columns(again, "marathons_archive")
+    finally:
+        await again.close()
+
+
+async def test_a_schema_69_file_gains_the_archive_tables_and_keeps_its_marathons(tmp_path):
+    """Schema 70: the three archive twins arrive empty; nothing live moves at boot."""
+    path = tmp_path / "old69.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for archive in ARCHIVED_TABLES.values():
+        await db.conn.execute(f"DROP TABLE {archive}")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at, "
+        "ends_at) VALUES (1, 'AGDQ 2020', 'https://x', 'gdq', '30', '2020-01-01', '2020-01-12')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '69')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name FROM marathons")
+        assert [row["name"] for row in await cur.fetchall()] == ["AGDQ 2020"]
+        for archive in ARCHIVED_TABLES.values():
+            cur = await again.conn.execute(f"SELECT COUNT(*) FROM {archive}")
+            assert (await cur.fetchone())[0] == 0
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "70"
+    finally:
+        await again.close()
+
+
+async def test_a_schema_68_file_takes_69_and_70_on_one_boot(tmp_path):
+    path = tmp_path / "old68.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for archive in ARCHIVED_TABLES.values():
+        await db.conn.execute(f"DROP TABLE {archive}")
+    await db.conn.execute("ALTER TABLE marathons DROP COLUMN spotlight_mode")
+    await db.conn.execute("ALTER TABLE spotlight_channels DROP COLUMN spotlit_by_marathon")
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '68')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        assert "spotlight_mode" in await _columns(again, "marathons")
+        assert "spotlight_mode" in await _columns(again, "marathons_archive")
+        assert "spotlit_by_marathon" in await _columns(again, "spotlight_channels")
     finally:
         await again.close()
