@@ -1,5 +1,14 @@
 # Guides audit — 2026-09-25: what is stale, what drifted, what is missing, and the re-shoot plan
 
+> ✅ **2026-09-25 20:00 Phoenix — EXECUTED** by the re-shoot session (drill log at the top of
+> [`../access/guides-capture.md`](../access/guides-capture.md)). **DONE:** §2 — every ⚠️/🔴 step and fault fixed live
+> and in the seed (`7a3cdff1`), and the live text of every seeded guide brought to the seed (it was mostly the v111
+> original); the pings audience → member; the six test-mode fault answers (the "seven" of §3 counts `minutes-take`
+> f1, also fixed) rewritten as rehearsal answers. §3 — all 8 guides made and published on the site and in the seed.
+> §4 — self-test run #69, 9 cards shot, 14 pictures uploaded (11 captures + 3 mocks), stale **12 → 0**.
+> **REMAINS:** `/rolemenu` hidden while role menus are off (a CODE change, on TODO); the rolemenu guide itself was
+> left as it is (archive or a "this is off" line is the owner's call); pictures for the 6 new staff guides and
+> `minutes-take`; re-shooting the 6 non-stale older pictures (v121/v127) if their cards drifted.
 > **Audience:** the end-of-day re-shoot session (a Claude session with Claude in Chrome), the
 > conductor, and the owner. **Status:** TRACKED — secret NAMES only. A dated one-off: the
 > re-shoot follows it once, then it is history (move it to `archive/` when the re-shoot lands).

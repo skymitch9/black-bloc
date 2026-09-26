@@ -1,5 +1,33 @@
 # Guide screenshots — the capture session, step by step
 
+> 🗓️ **2026-09-25 19:38–20:00 Phoenix — THE THIRD RE-SHOOT SESSION, at v166, and the WORDS went first.** Stale list
+> read at 19:38: **12** (the audit's 12 — [`../info/guides-audit-2026-09-25.md`](../info/guides-audit-2026-09-25.md)).
+> **Words:** the live guide rows were found to be **the ORIGINAL v111 seed on most guides** — seeding is once, so the
+> later seed rewrites (pings remake, YouTube, request forum moves, modmail forum, ...) never reached the live text.
+> Every seeded guide was therefore brought to the seed **plus** the audit's fixes, through the page's own save
+> (`PUT /api/guides/<slug>`, the call the editor's **Save Changes** makes, from the page's own `fetch`): step ids and
+> pictures kept by position, facts kept as they were. **17 guides saved, 0 refused.** One live edit was KEPT, not
+> overwritten: `apply-form`'s goal (a staff edit by Pawpette, 09-16). `pings-follow` went back to **member**.
+> **New guides:** the site has a door (`POST /api/guides`, the hub's **Make it**), so all **8** were made and
+> published there and added to the seed (commit `7a3cdff1`); `marathons-follow`, `marathons-manage` and `ping-windows`
+> carry **no command**, because their command already has a published guide for that audience (the
+> `guides_one_published_command` index would refuse a second). **Cards:** purge window 1 → **30** (per-key PUT, read
+> back), **Run the self-test** pressed on the Health page → **run #69** (02:48:29Z, `131 OK · 0 FAILED`, **25 cards**,
+> `via: website`), window → **1** after the shots (read back). **Shots:** 9 root cards read then shot with the
+> painted-union recipe (frame 1543×784, `k` 0.6177, `dy` 0.1 — unchanged since 09-17), files in
+> `scripts/scan/guides-2026-09-25/`; every card's body read first. **Uploads:** 14 through **Replace screenshot…**
+> (`file_upload` on step 1's un-hidden picker), `media/42`–`media/55`, all `v166`: captures `event-propose` 42,
+> `event-review` 43, `front-door` 44, `request-file` 45, `feature-modes` 46, `pings-follow` 47, `poll-vote-make` 48,
+> `raidtrain-slot` 49, `chat-memory` 50, `marathons-follow` 51, `marathons-manage` 52 (the `/event ▸ Marathons…` card,
+> the audit's optional step 9); mocks (redrawn from the 09-16/09-17 HTML, invented names, `a drawn illustration`)
+> `golive-announce` 53, `modmail-ticket` 54, `birthday-set` 55. **Stale 12 → 0** (19:59:10). Nothing refused.
+> ⚠️ Judged and flagged, as before: `/request` lists request TITLES (#12, #11 are real members' asks) with no author.
+> ⚠️ Found: `/golive` now lists **nine** live streamers by name and `/modmail` names an open ticket's member —
+> both stay mocks. The front door's card is titled **Need Something? Try a Ticket** (the words are settings keys) —
+> the §2 needle `Ask the server` still finds `/request`; use the title for `/ask`. **Not done:** the 6 new staff
+> guides without a panel card on the self-test (`golive-channels`, `ping-windows`, `chat-panel`, `request-check`,
+> `apply-review`, `posts-welcome`) and `minutes-take` have no picture; the 5 v121 pictures not on the stale list
+> (`apply-form`, `mod-case`, `automod-arm`, `honeypot-set`, `rolemenu-post`) and `voice-room` (v127) were not re-shot.
 > **Audience:** a Claude session with Claude in Chrome, after a deploy. **Status:**
 > TRACKED — ⚠️ **secret NAMES only.** **Last verified: 2026-09-16** — written at the G2
 > build (branch `guides-pages`) and checked against the code it names:

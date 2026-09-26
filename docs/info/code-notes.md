@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-25 — one section APPENDED, nothing re-keyed**: *The guides seed may carry `"command": null`* (guides re-shoot, `main` `7a3cdff1`). Before that:
 > **2026-09-25 — one section APPENDED, one row's text corrected, nothing re-keyed**: *An event's three Discord links* (branch `event-links`, off `main` `271ec7f8`, keyed against `ea781d6e`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *An event opens in a drawer* (branch `event-drawer`, off `main` `ac4e79e2`, keyed against `847874ed`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The marathon drawer, lightened* (branch `marathon-drawer-lite`, off `main` `b90725fc`, keyed against `9798ce99`); its section says which older marathon rows now point at retired functions. Before that:
@@ -8574,3 +8575,11 @@ Why in [`event-drawer-design.md`](event-drawer-design.md) (the dated line at the
 | `site/public/assets/event-drawer.js:266` `linkedFact` | Link when the row has the URL, the old sentence when it has only the boolean (no announce channel set). |
 | `site/public/assets/event-drawer.js:270` `placeNode` | The review name stays a `nameNode` (resolved like before) wrapped in the link, so **Delete this room/post** and **Move to the forum** still sit beside it outside the anchor. |
 | `site/mock/server.mjs:7558` `eventLinks` | The mock's copy of `event_links`, using `REVIEW_GUILD_ID` as the guild and the mock's own `events_announce_channel_id` setting. Event 5 gained an `announce_message_id` so all three show. |
+
+## The guides seed may carry `"command": null` (guides re-shoot, 2026-09-25)
+
+Keyed against `7a3cdff1`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/guides_seed.json:555` `marathons-follow` · `:576` `marathons-manage` · `:616` `ping-windows` | `null`, not the command they live under (`/event`, `/event`, `/golive`): `guides_one_published_command` (`black_bloc/storage/db.py:736`) allows ONE published guide per (guild, command, audience), and `seed_one` publishes every entry, so a second `/event` member guide would fail the insert. A null command also keeps `/help` linking the primary guide. `seed_one` passes `entry.get("command")` through, so null needs no code. |
