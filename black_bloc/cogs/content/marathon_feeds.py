@@ -430,7 +430,7 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
     text = words(bot, guild, MARATHON_FEED_ADDED_TEMPLATE_KEY, await fields_of(bot, feed, record))
     marathon = await get_marathon(bot.db, guild.id, marathon["id"]) or marathon
     embed = await notice_embed(bot, guild, marathon, feed)
-    view = added_view(bot, feed["id"], marathon)
+    view = people_on(added_view(bot, feed["id"], marathon), marathon["id"])
     await post_notice(
         bot, guild, feed, text, view, details | {"marathon_id": marathon["id"]}, embed=embed
     )
@@ -1697,6 +1697,12 @@ class AddFeedModal(AnswersErrors, discord.ui.Modal, title=mf.ADD_FEED_TITLE):
         else:
             await open_feeds(interaction, self.previous)
         await answer(interaction, outcome.message)
+
+
+def people_on(view: Any, marathon_id: Any) -> Any:
+    from .marathon_people import with_people
+
+    return with_people(view, marathon_id, row=FeedButton.ROWS[MANAGE])
 
 
 __all__ = [

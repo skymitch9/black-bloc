@@ -197,6 +197,9 @@ async def test_a_check_adds_every_new_event_on_the_feeds_channel_with_one_notice
     items = [getattr(child, "item", child) for child in notices(bot)[0].kwargs["view"].children]
     labels = [one.label for one in items if isinstance(one, discord.ui.Button)]
     assert labels[:4] == ["Pause it", "Remove it", "Read it now", "Manage…"]
+    assert "People…" in labels
+    people = [one.custom_id for one in items if getattr(one, "label", None) == "People…"][0]
+    assert people in {f"marathon:people:{row['id']}" for row in made.values()}
     added = await details_of(bot.db, "marathon.feed_added")
     assert added["feed"] == "GDQ" and added["automatic"] is True
     assert (await details_of(bot.db, "marathon.added"))["feed_id"] == feed["id"]
@@ -588,7 +591,7 @@ async def test_the_added_notice_is_an_embed_with_the_six_fields_and_three_rows(
     assert ids == [
         f"marathon:feed:{feed_id}:{marathon_id}:{action}"
         for action in ("pause", "remove", "read", "mode", "manage")
-    ]
+    ] + [f"marathon:people:{marathon_id}"]
 
 
 async def test_the_when_field_says_so_when_there_are_no_dates_and_the_event_when_one_exists(

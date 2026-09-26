@@ -35,6 +35,7 @@ from black_bloc.cogs.community.tempvoice import add_channel
 from black_bloc.cogs.content.golive import set_link, set_optout, start_session
 from black_bloc.cogs.content.marathon import Marathons, create_marathon, runs_of, upsert_pairing
 from black_bloc.cogs.content.marathon_feeds import insert_feed
+from black_bloc.cogs.content.marathon_people import spotlight_runner
 from black_bloc.cogs.content.raidtrain import create_train
 from black_bloc.cogs.content.raidtrain import set_status as set_train_status
 from black_bloc.cogs.content.spotlight import add_channel as add_spotlight
@@ -95,7 +96,7 @@ class ContractSchedule:
     async def runs(self, source, ref):
         start = datetime.now(UTC).replace(microsecond=0) + timedelta(hours=2)
 
-        def one(ident, minutes, game, name, part):
+        def one(ident, minutes, game, name, part, login=None):
             return Run(
                 str(ident),
                 ident,
@@ -105,12 +106,12 @@ class ContractSchedule:
                 (start + timedelta(minutes=minutes)).isoformat(),
                 (start + timedelta(minutes=minutes + 60)).isoformat(),
                 3600,
-                (Person(name, None, part),),
+                (Person(name, login, part),),
             )
 
         return [
-            one(1, 0, "Celeste", "Somebody", "runner"),
-            one(2, 60, "Super Metroid", "Contract Runner", "runner"),
+            one(1, 0, "Celeste", "Somebody", "runner", "somebody_runs"),
+            one(2, 60, "Super Metroid", "Contract Runner", "runner", "contractrunner"),
             one(3, 120, "Blaster Master", "Interview Crew", "host"),
         ]
 
@@ -763,6 +764,10 @@ async def seed_world(client, web, guild, wf) -> dict:
         db, guild_id, marathon_id, "Contract Runner", MEMBER_ID, 7
     )
     await marathons.rematch(guild, made.value)
+    # The People card (marathon-people §B): Contract Runner is spotlit from the marathon, so
+    # Stop spotlighting reaches a remembered row; Somebody is not, so Spotlight… reaches them.
+    spotlit = await spotlight_runner(web, guild, None, made.value, "contractrunner")
+    assert spotlit.ok, spotlit.message
     marathon_run_id = next(
         row["id"] for row in await runs_of(db, marathon_id) if row["game"] == "Super Metroid"
     )
@@ -934,6 +939,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_waiting_id": str(marathon_waiting_id),
         "marathon_done_run_id": str(marathon_done_run_id),
         "marathon_linked_run_id": str(marathon_linked_run_id),
+        "marathon_person": "somebody_runs",
+        "marathon_spotlit_person": "contractrunner",
         "feed_id": str(feed_id),
         "feed_suggest_id": str(feed_suggest_id),
         "feed_event_ref": "22",

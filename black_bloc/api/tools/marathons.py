@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import marathon as mt
+from ... import marathon_people as mt_people
 from ...cogs.content.marathon import (
     add_next,
     create_marathon,
@@ -42,6 +43,12 @@ from ...cogs.content.marathon_events import (
     unlink_run_event,
 )
 from ...cogs.content.marathon_feeds import get_feed
+from ...cogs.content.marathon_people import (
+    people_state,
+    spotlight_runner,
+    unspotlight_runner,
+    zone_of,
+)
 from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...logkinds import VIA_WEBSITE
@@ -55,7 +62,7 @@ from ...settings_store import (
     MARATHON_POLL_MINUTES_KEY,
 )
 from ..auth import Refused, staff_dependency
-from ..names import resolve_one
+from ..names import member_row, resolve_one
 from ..writes import actor_for, require_cog, require_db, require_guild, wanted_id, writer_dependency
 
 log = logging.getLogger(__name__)
@@ -148,6 +155,41 @@ def run_row(guild: Any, row: Any, statuses: dict[int, str] | None = None) -> dic
         "can_mark_live": mt.can_mark_live(row),
         "held": mt.held(row),
         "reminders_sent": mt.marks_of(row),
+    }
+
+
+def entry_row(guild: Any, entry: dict[str, Any]) -> dict[str, Any]:
+    """One person on the People card: who they are here, how they matched, their Go-live row."""
+    user_id = entry.get("user_id")
+    member = guild.get_member(int(user_id)) if user_id else None
+    found = member_row(member) if member is not None else None
+    near = entry.get("looks_like")
+    return {
+        "key": entry["key"],
+        "name": entry["name"],
+        "login": entry.get("login"),
+        "user_id": _id(user_id),
+        "member": bool(user_id),
+        "member_name": found["display_name"] if found else None,
+        "username": found["name"] if found else None,
+        "avatar_url": found["avatar_url"] if found else None,
+        "parts": entry["parts"],
+        "runs": entry["runs"],
+        "done": entry["done"],
+        "live": entry["live"],
+        "next_at": entry["next_at"],
+        "first_at": entry["first_at"],
+        "last_end": entry["last_end"],
+        "matched_by": entry.get("matched_by"),
+        "matched_word": mt_people.MATCHED_WORDS.get(entry.get("matched_by") or ""),
+        "pairing_id": entry.get("pairing_id"),
+        "channel_id": entry.get("channel_id"),
+        "spotlight_id": entry.get("spotlight_id"),
+        "spotlight_starts": entry.get("spotlight_starts"),
+        "spotlight_until": entry.get("spotlight_until"),
+        "looks_like": (
+            {"username": near["username"], "user_id": _id(near["user_id"])} if near else None
+        ),
     }
 
 
@@ -313,6 +355,16 @@ def build_router(bot: Any) -> APIRouter:
             for one in await pairings_of(bot.db, guild.id)
             if one["marathon_id"] in (None, marathon["id"])
         ]
+
+    async def board(guild: Any, marathon: Any) -> dict[str, Any]:
+        state = await people_state(bot, guild, marathon)
+        return {
+            "marathon_id": marathon["id"],
+            "timezone": zone_of(bot, guild),
+            "pairings": await people(guild, marathon),
+            "baf": [entry_row(guild, one) for one in state["baf"]],
+            "others": [entry_row(guild, one) for one in state["others"]],
+        }
 
     @router.get("")
     async def marathon_list() -> dict[str, Any]:
@@ -514,10 +566,49 @@ def build_router(bot: Any) -> APIRouter:
         return await detail(guild, marathon_id) | {"message": done.message}
 
     @router.get("/{marathon_id}/people")
-    async def marathon_people(marathon_id: int) -> list[dict[str, Any]]:
+    async def marathon_people(marathon_id: int) -> dict[str, Any]:
         guild = require_guild(bot)
         require_db(bot)
-        return await people(guild, await wanted(guild, marathon_id))
+        return await board(guild, await wanted(guild, marathon_id))
+
+    @router.post("/{marathon_id}/people/{person}/spotlight")
+    async def marathon_spotlight(
+        request: Request, marathon_id: int, person: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        run_id = (payload or {}).get("run_id")
+        done = answered(
+            await spotlight_runner(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                row,
+                person,
+                run_id=wanted_id(run_id) if run_id not in (None, "") else None,
+                via=VIA_WEBSITE,
+            )
+        )
+        return await board(guild, row) | {"message": done.message}
+
+    @router.delete("/{marathon_id}/people/{person}/spotlight")
+    async def marathon_unspotlight(
+        request: Request, marathon_id: int, person: str
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        done = answered(
+            await unspotlight_runner(
+                bot, guild, actor_for(bot, who, guild), row, person, via=VIA_WEBSITE
+            )
+        )
+        return await board(guild, row) | {"message": done.message}
 
     @router.post("/{marathon_id}/people")
     async def marathon_pair(

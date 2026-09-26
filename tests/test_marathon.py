@@ -375,6 +375,20 @@ def test_every_post_fills_every_placeholder_it_takes():
     assert fields["in"] == f"<t:{int((NOW + timedelta(minutes=15)).timestamp())}:R>"
 
 
+def test_a_race_with_two_baf_runners_names_both_in_one_post():
+    """B2 of the marathon-people design: a race shouts once, {member} joins every BaF name."""
+    race = [
+        {"name": "Casey", "login": "caseyfast", "part": "runner", "user_id": 7},
+        {"name": "TheKing", "login": "thekingspride", "part": "runner", "user_id": None},
+        {"name": "Peas", "login": "peasplays", "part": "runner", "user_id": 8},
+    ]
+    one = row(1, at=15, game="Super Mario 64", people=race)
+    fields = mt.run_fields(one, M, WORDS, url="")
+    assert fields["member"] == "<@7>, <@8>"
+    said = mt.render(WORDS[MARATHON_LIVE_TEMPLATE_KEY], "", **fields).text
+    assert said.count("<@") == 2 and mt.member_ids(one) == [7, 8]
+
+
 def test_a_template_that_will_not_fill_falls_back_to_the_shipped_words():
     said = mt.render("{nope} {game}", "{game}!", game="Celeste")
     assert said == mt.Rendered("Celeste!", True)

@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 64
+        assert SCHEMA_VERSION == 65
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2579,3 +2579,44 @@ async def test_schema_64_adds_the_event_modes_and_the_channel_opt_out_and_carrie
         assert [row["event_mode"] for row in await cur.fetchall()] == ["none"]
     finally:
         await third.close()
+
+
+async def test_schema_65_adds_the_marathon_spotlights_and_keeps_its_rows(tmp_path):
+    """64 → 65 is additive: the small table a marathon remembers its spotlit runners in."""
+    path = tmp_path / "old64.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE marathon_spotlights")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at) "
+        "VALUES (7, 'AGDQ 2027', 'https://gamesdonequick.com/schedule/74', 'gdq', '74', "
+        "'2026-09-25T00:00:00+00:00')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '64')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("PRAGMA table_info(marathon_spotlights)")
+        assert {"marathon_id", "login", "spotlight_id", "run_id", "added_at"} <= {
+            r["name"] for r in await cur.fetchall()
+        }
+        cur = await again.conn.execute("SELECT COUNT(*) AS n FROM marathons")
+        assert (await cur.fetchone())["n"] == 1
+        await again.conn.execute(
+            "INSERT INTO marathon_spotlights(marathon_id, login, spotlight_id, added_at) "
+            "VALUES (1, 'caseyfast', 3, '2026-09-25T00:00:00+00:00')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(
+                "INSERT INTO marathon_spotlights(marathon_id, login, spotlight_id, added_at) "
+                "VALUES (1, 'caseyfast', 4, '2026-09-25T00:00:00+00:00')"
+            )
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()

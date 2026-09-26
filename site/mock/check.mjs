@@ -92,6 +92,10 @@ const IDS = {
   // Event modes: AGDQ 2027 makes both; runs 5 and 7 carry their own events, so Unlink reaches
   // 7 and Make it now reaches run 9 (ours through the pairing, no event of its own yet).
   marathon_linked_run_id: '7',
+  // The People card: DECosmic has a Twitch login and no Go-live row, so Spotlight reaches them;
+  // Flyingludicolo is spotlit FROM AGDQ 2027 (row 6), so Stop spotlighting reaches that one.
+  marathon_person: 'decosmic',
+  marathon_spotlit_person: 'flyingludicolo',
   // Spotlight: 3 is Frost Fatales, the row with no open session, so the PATCH and the DELETE
   // reach it without ending a stream the other entries expect to still be live.
   spotlight_id: '3',

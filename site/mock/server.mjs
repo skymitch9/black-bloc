@@ -668,6 +668,9 @@ const SETTING_SPECS = [
   ["marathon_pin_board", "bool", true, true, "whether a marathon's board is pinned while the marathon is on; it comes down a day after the marathon ends. on by default"],
   ["marathon_edit_done", "bool", true, true, "whether a shoutout is rewritten in the past tense when the run is over. on by default"],
   ["marathon_window_slack_hours", "int", 2, 2, "hours either side of a marathon that its channel's ping window stays open, when the channel pings during events only. 2 by default", null, 24, 0],
+  ["marathon_spotlight_lead_hours", "int", 2, 2, "hours before a runner's first run (or the one run it was spotlit from) that Spotlight… on a marathon's People card starts their channel's spotlight. 2 by default", null, 48, 0],
+  ["marathon_spotlight_slack_hours", "int", 2, 2, "hours after a runner's last run ends (or the one run it was spotlit from) that their channel's spotlight from a marathon's People card runs out. 2 by default", null, 48, 0],
+  ["marathon_spotlight_note_template", "text", "{name} at {marathon}", "{name} at {marathon}", "the note a runner's channel row carries on the Go-live page when Spotlight… on a marathon's People card adds it. It takes {name} {marathon}"],
   ["marathon_board_template", "text", "**{marathon}** — BaF on the schedule ({count}), {starts} to {ends}. {url}", "**{marathon}** — BaF on the schedule ({count}), {starts} to {ends}. {url}", "the head of a marathon's board, the one message edited in place as the schedule moves. It takes {marathon} {count} {starts} {ends} {url}"],
   ["marathon_board_line_template", "text", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}", "one line of the board per BaF run. It takes {member} {game} {category} {when} {relative} {part} {state}; {when} and {relative} show in each reader's own time zone"],
   ["marathon_board_empty_line", "text", "Nobody from BaF is on this schedule yet. Black Bloc keeps reading it.", "Nobody from BaF is on this schedule yet. Black Bloc keeps reading it.", "the board's only line while no BaF run has been found"],
@@ -1021,6 +1024,7 @@ function seedState() {
   marathonRuns: seedMarathonRuns(),
   marathonPeople: seedMarathonPeople(),
   marathonFeeds: seedMarathonFeeds(),
+  marathonSpotlights: seedMarathonSpotlights(),
   nextRaidTrain: 4,
   settings: new Map(SETTING_SPECS.map((spec) => [spec[0], spec[2]])),
   audit: [
@@ -1397,6 +1401,8 @@ function seedState() {
       // The owner's ask, 2026-09-22: a marathon set up days in advance. Its start has NOT
       // arrived, so it is SCHEDULED — on the list, watched, announced by nobody until then.
       { id: 5, twitch_login: 'gdqhotfix', display_name: 'GDQ Hotfix', note: 'winter marathon, set up early', added_by: STAFF.id, added_at: minutesAgo(60), starts_at: daysAhead(3), expires_at: daysAhead(10), bump_hours: 4, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null },
+      // Spotlit from AGDQ 2027's People card: its runner's whole span, lead and slack either side.
+      { id: 6, twitch_login: 'flyingludicolo', display_name: 'flyingludicolo', note: 'Flyingludicolo at AGDQ 2027', added_by: STAFF.id, added_at: minutesAgo(30), starts_at: null, expires_at: new Date(Date.now() + (1680 + 120) * 60000).toISOString(), bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null, ping_mode: 'always' },
     ],
     // The owner's ask, 2026-09-25: GamesDoneQuick is spotlighted always and pings only during
     // events, so it carries one staff window ahead — AGDQ 2027 — and pings nothing until then.
@@ -5583,16 +5589,30 @@ function seedMarathonRuns() {
     run(12, 1, 12, 380, 'I Am Your Beast', 'All Story Levels', [marathonPerson('Palix', null, 'runner')], { state: 'dropped' }),
     run(13, 2, 1, -30000, 'Halo 2', 'Legendary', [marathonPerson('Casey', 'caseyfast', 'runner', casey)], { shout_message_id: '830000000000000302' }),
     run(14, 2, 2, -29900, 'Halo 3', 'Easy', [marathonPerson('Somebody', 'somebody', 'runner')]),
+    // The People card (marathon-people-design.md): a four-player race shares ONE slot — Casey is
+    // BaF, QuietKid is one Discord name away from @quietkid (a near miss), the other two are
+    // strangers — with Moth on commentary; then two more days, so the schedule folds by day.
+    run(15, 1, 13, 110, 'Super Mario 64', '16 Star Race', [marathonPerson('Casey', 'caseyfast', 'runner', casey), marathonPerson('TheKingsPride', 'thekingspride', 'runner'), marathonPerson('QuietKid', 'quietkid_tv', 'runner'), marathonPerson('Peas', 'peasplays', 'runner'), marathonPerson('Moth', null, 'commentator', moth)]),
+    run(16, 1, 14, 1500, 'Hollow Knight', 'Any% No Major Glitches', [marathonPerson('Rivet', 'rivetplays', 'runner', rivet)]),
+    run(17, 1, 15, 1620, 'Metroid Dread', 'Any%', [marathonPerson('Flyingludicolo', 'flyingludicolo', 'runner')]),
+    run(18, 1, 16, 2940, 'Portal', 'Inbounds', [marathonPerson('DECosmic', 'decosmic', 'runner')]),
+    run(19, 1, 17, 3060, 'Tetris', 'Race', [marathonPerson('Spooty', 'spootybiscuit', 'runner'), marathonPerson('UraniumAnchor', 'uraniumanchor', 'runner')]),
   ];
 }
 
 function seedMarathons() {
   return [
-    { id: 1, name: 'AGDQ 2027', schedule_url: 'https://gamesdonequick.com/schedule/74', source: 'gdq', source_ref: '74', spotlight_id: 1, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 440 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000300', board_pinned: true, last_fetched_at: minutesAgo(12), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(9000) },
+    { id: 1, name: 'AGDQ 2027', schedule_url: 'https://gamesdonequick.com/schedule/74', source: 'gdq', source_ref: '74', spotlight_id: 1, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 3120 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000300', board_pinned: true, last_fetched_at: minutesAgo(12), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(9000) },
     { id: 2, name: 'Halo Fest', schedule_url: 'https://gamesdonequick.com/schedule/73', source: 'gdq', source_ref: '73', spotlight_id: null, starts_at: minutesAgo(30000), ends_at: minutesAgo(29840), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000299', board_pinned: false, last_fetched_at: minutesAgo(700), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(40000) },
     { id: 3, name: 'GDQx 2026', schedule_url: 'https://gamesdonequick.com/schedule/72', source: 'gdq', source_ref: '72', spotlight_id: null, starts_at: null, ends_at: null, active: false, poll_minutes: 60, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(1500), last_fetch_ok: 0, last_error: 'the GDQ tracker has the event but has not published its schedule yet (it answers 404 for the runs)', fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(2000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
   ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ...row }));
+}
+
+// Flyingludicolo is spotlit FROM AGDQ 2027 (channel row 6 on the Go-live page), so the People
+// card shows *Spotlit until …* with Open on Go-live and Stop spotlighting.
+function seedMarathonSpotlights() {
+  return [{ id: 1, marathon_id: 1, login: 'flyingludicolo', spotlight_id: 6, run_id: null, added_by: STAFF.id, added_at: minutesAgo(30) }];
 }
 
 function seedMarathonPeople() {
@@ -6487,6 +6507,7 @@ route('DELETE', '/api/marathons/:marathon_id', (context) => {
   state.marathons = state.marathons.filter((one) => one !== row);
   state.marathonRuns = state.marathonRuns.filter((one) => one.marathon_id !== row.id);
   state.marathonPeople = state.marathonPeople.filter((one) => one.marathon_id !== row.id);
+  state.marathonSpotlights = state.marathonSpotlights.filter((one) => one.marathon_id !== row.id);
   logAction('web.marathon.removed', { details: { marathon_id: row.id, name: row.name, via: 'website' } });
   return { removed: true, id: row.id, message: `**${row.name}** is off the list, with its runs and pairings.` };
 });
@@ -6544,7 +6565,188 @@ route('POST', '/api/marathons/:marathon_id/board', (context) => {
 
 route('GET', '/api/marathons/:marathon_id/people', (context) => {
   requireStaff(context.session);
-  return marathonPairingsFor(marathonOf(context.params.marathon_id));
+  return marathonBoard(marathonOf(context.params.marathon_id));
+});
+
+// --- The People card (docs/info/marathon-people-design.md §B) -------------------------------
+// The mock's copy of black_bloc/marathon_people.py: everyone once (a member by id, anyone else by
+// login, else name), BaF on now first then soonest, how each member matched, their Go-live row.
+const MARATHON_MATCHED_WORDS = { pairing: 'linked by staff', link: 'matched by their Twitch link', username: 'matched by their Discord name' };
+const MARATHON_PART_ORDER = ['runner', 'host', 'commentator'];
+
+function marathonKeyOf(person) {
+  const login = String(person.login || '').trim().toLowerCase();
+  return login || String(person.name || '').split(/\s+/).filter(Boolean).join(' ').toLowerCase();
+}
+
+function marathonSquash(text) {
+  return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function marathonOneEdit(a, b) {
+  if (a === b || Math.abs(a.length - b.length) > 1) return false;
+  if (a.length === b.length) return [...a].filter((ch, at) => ch !== b[at]).length === 1;
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  for (let at = 0; at < long.length; at += 1) if (long.slice(0, at) + long.slice(at + 1) === short) return true;
+  return false;
+}
+
+function marathonLooksLike(entry) {
+  if (entry.user_id) return null;
+  const wanted = [entry.name, entry.login].filter(Boolean).map((one) => String(one).trim().toLowerCase());
+  for (const member of [...MEMBERS].sort((a, b) => a.name.localeCompare(b.name))) {
+    const username = member.name.toLowerCase();
+    const flat = marathonSquash(username);
+    const head = username.split(/[._\-\s]+/)[0];
+    for (const given of wanted) {
+      const flatGiven = marathonSquash(given);
+      if (!flatGiven) continue;
+      if (flat === flatGiven || (flatGiven.length >= 4 && marathonOneEdit(flat, flatGiven)) || (given.length >= 2 && head === given && head !== username)) {
+        return { username, user_id: member.id };
+      }
+    }
+  }
+  return null;
+}
+
+function marathonPeopleOf(row) {
+  const found = new Map();
+  for (const run of marathonRunsOf(row.id).filter((one) => one.state !== 'dropped')) {
+    for (const person of run.people) {
+      const key = person.user_id ? `member:${person.user_id}` : marathonKeyOf(person);
+      if (!found.has(key)) found.set(key, { key: marathonKeyOf(person), name: person.name, login: person.login || null, user_id: person.user_id || null, parts: [], runs: [] });
+      const entry = found.get(key);
+      if (!entry.login && person.login) entry.login = person.login;
+      if (!entry.parts.includes(person.part)) entry.parts.push(person.part);
+      entry.runs.push({ id: run.id, game: run.game, category: run.category, scheduled_at: run.scheduled_at, ends_at: run.ends_at, state: run.state, part: person.part, name: person.name });
+    }
+  }
+  return [...found.values()].map((entry) => {
+    entry.parts.sort((a, b) => MARATHON_PART_ORDER.indexOf(a) - MARATHON_PART_ORDER.indexOf(b));
+    const ahead = entry.runs.filter((one) => ['upcoming', 'live'].includes(one.state)).map((one) => one.scheduled_at).sort();
+    const starts = entry.runs.map((one) => one.scheduled_at).sort();
+    const ends = entry.runs.map((one) => one.ends_at || one.scheduled_at).sort();
+    return {
+      ...entry,
+      live: entry.runs.some((one) => one.state === 'live'),
+      done: entry.runs.length > 0 && entry.runs.every((one) => one.state === 'done'),
+      next_at: ahead[0] || null,
+      first_at: starts[0] || null,
+      last_end: ends[ends.length - 1] || null,
+    };
+  });
+}
+
+function marathonBoardRow(row, entry) {
+  const names = new Set(entry.runs.map((one) => String(one.name).trim().toLowerCase()));
+  let matchedBy = null;
+  let pairingId = null;
+  if (entry.user_id) {
+    const pairing = state.marathonPeople.find((one) => names.has(one.runner_name) && one.marathon_id === row.id)
+      || state.marathonPeople.find((one) => names.has(one.runner_name) && one.marathon_id === null);
+    const link = (state.golive.links || []).find((one) => String(one.twitch_login).toLowerCase() === String(entry.login || '').toLowerCase());
+    if (pairing && String(pairing.user_id) === String(entry.user_id)) [matchedBy, pairingId] = ['pairing', pairing.id];
+    else if (link && String(link.user_id) === String(entry.user_id)) matchedBy = 'link';
+    else matchedBy = 'username';
+  }
+  const login = String(entry.login || '').toLowerCase();
+  const channel = login ? state.golive.spotlights.find((one) => one.twitch_login === login) : null;
+  const mine = login ? state.marathonSpotlights.find((one) => one.marathon_id === row.id && one.login === login) : null;
+  const spotlit = Boolean(mine && channel && channel.id === mine.spotlight_id);
+  const member = entry.user_id ? MEMBERS.find((one) => one.id === String(entry.user_id)) : null;
+  return {
+    ...entry,
+    user_id: entry.user_id ? String(entry.user_id) : null,
+    member: Boolean(entry.user_id),
+    member_name: entry.user_id ? memberName(entry.user_id) : null,
+    username: member ? member.name : null,
+    avatar_url: member ? member.avatar_url : null,
+    matched_by: matchedBy,
+    matched_word: MARATHON_MATCHED_WORDS[matchedBy] || null,
+    pairing_id: pairingId,
+    channel_id: channel ? channel.id : null,
+    spotlight_id: spotlit ? channel.id : null,
+    spotlight_starts: spotlit ? channel.starts_at : null,
+    spotlight_until: spotlit ? channel.expires_at : null,
+    looks_like: marathonLooksLike(entry),
+  };
+}
+
+function marathonBafOrder(entry) {
+  if (entry.live) return `0${entry.next_at || ''}`;
+  if (entry.next_at) return `1${entry.next_at}`;
+  return `2${entry.last_end || ''}`;
+}
+
+function marathonBoard(row) {
+  const entries = marathonPeopleOf(row).map((one) => marathonBoardRow(row, one));
+  return {
+    marathon_id: row.id,
+    timezone: state.settings.get('default_timezone') || 'America/Phoenix',
+    pairings: marathonPairingsFor(row),
+    baf: entries.filter((one) => one.member).sort((a, b) => marathonBafOrder(a).localeCompare(marathonBafOrder(b)) || a.name.localeCompare(b.name)),
+    others: entries.filter((one) => !one.member).sort((a, b) => a.key.localeCompare(b.key)),
+  };
+}
+
+function marathonEntryFor(row, given) {
+  const wanted = String(given || '').split(/\s+/).filter(Boolean).join(' ').toLowerCase();
+  const entries = marathonPeopleOf(row);
+  const found = entries.find((one) => String(one.login || '').toLowerCase() === wanted || one.key === wanted)
+    || entries.find((one) => one.runs.some((run) => String(run.name).toLowerCase() === wanted));
+  if (!found) throw new Refused(404, 'no_such_person', `Nobody called **${String(given).slice(0, 40)}** is on **${row.name}**'s schedule, so nothing was changed.`);
+  return found;
+}
+
+route('POST', '/api/marathons/:marathon_id/people/:person/spotlight', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const body = (await context.body()) || {};
+  const entry = marathonEntryFor(row, decodeURIComponent(context.params.person));
+  if (!entry.login) throw new Refused(422, 'no_login', `**${entry.name}** has no Twitch channel on this schedule, so there is nothing to spotlight. Add their channel on the Go-live page by hand if you know it.`);
+  const login = String(entry.login).toLowerCase();
+  if (state.golive.spotlights.some((one) => one.twitch_login === login)) {
+    throw new Refused(409, 'already_on_golive', `**twitch.tv/${login}** is already on the Go-live page, so nothing was added — open it there to change its dates or spotlight.`);
+  }
+  const runId = body.run_id !== undefined && body.run_id !== null && body.run_id !== '' ? String(body.run_id) : null;
+  const runs = runId ? entry.runs.filter((one) => String(one.id) === runId) : entry.runs;
+  if (runId && runs.length === 0) throw new Refused(404, 'no_such_run', `That run is not on **${row.name}**'s schedule any more, so nothing was done.`);
+  const lead = Number(state.settings.get('marathon_spotlight_lead_hours') ?? 2) * 3600000;
+  const slack = Number(state.settings.get('marathon_spotlight_slack_hours') ?? 2) * 3600000;
+  const first = Math.min(...runs.map((one) => new Date(one.scheduled_at).getTime()));
+  const last = Math.max(...runs.map((one) => new Date(one.ends_at || one.scheduled_at).getTime()));
+  const starts = Number.isFinite(first) ? first - lead : new Date(row.starts_at).getTime();
+  const ends = Number.isFinite(last) ? last + slack : new Date(row.ends_at).getTime();
+  if (ends <= Date.now()) throw new Refused(409, 'runs_over', `**${entry.name}**'s runs on **${row.name}** are over, so there is nothing to spotlight.`);
+  const note = String(state.settings.get('marathon_spotlight_note_template') || '{name} at {marathon}').replaceAll('{name}', entry.name).replaceAll('{marathon}', row.name);
+  const id = state.golive.spotlights.reduce((top, one) => Math.max(top, one.id), 0) + 1;
+  state.golive.spotlights.push({ id, twitch_login: login, display_name: login, note, added_by: context.session.id, added_at: now(), starts_at: starts > Date.now() ? new Date(starts).toISOString() : null, expires_at: new Date(ends).toISOString(), bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null, ping_mode: 'always' });
+  state.marathonSpotlights.push({ id: state.marathonSpotlights.reduce((top, one) => Math.max(top, one.id), 0) + 1, marathon_id: row.id, login, spotlight_id: id, run_id: runId ? Number(runId) : null, added_by: context.session.id, added_at: now() });
+  logAction('web.golive.spotlight_added', { details: { spotlight_id: id, login, via: 'website' } });
+  logAction('web.marathon.runner_spotlit', { target_id: entry.user_id, details: { marathon_id: row.id, name: entry.name, login, spotlight_id: id, run_id: runId ? Number(runId) : null, via: 'website' } });
+  return { ...marathonBoard(row), message: `**${entry.name}** is spotlit on the Go-live page as **twitch.tv/${login}** for their runs on **${row.name}**.` };
+});
+
+route('DELETE', '/api/marathons/:marathon_id/people/:person/spotlight', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const given = decodeURIComponent(context.params.person).toLowerCase();
+  const entry = marathonPeopleOf(row).find((one) => String(one.login || '').toLowerCase() === given || one.key === given);
+  const login = String((entry && entry.login) || given).toLowerCase();
+  const mine = state.marathonSpotlights.find((one) => one.marathon_id === row.id && one.login === login);
+  const name = entry ? entry.name : login;
+  if (!mine) throw new Refused(404, 'not_spotlit', `**${name}** is not spotlit from **${row.name}**, so nothing was changed.`);
+  const channel = state.golive.spotlights.find((one) => one.id === mine.spotlight_id && one.twitch_login === login);
+  if (channel) {
+    state.golive.spotlights = state.golive.spotlights.filter((one) => one !== channel);
+    logAction('web.golive.spotlight_removed', { details: { login } });
+  }
+  state.marathonSpotlights = state.marathonSpotlights.filter((one) => one !== mine);
+  logAction('web.marathon.runner_unspotlit', { details: { marathon_id: row.id, name, login, spotlight_id: mine.spotlight_id, row_was_gone: !channel, via: 'website' } });
+  const message = channel
+    ? `**${name}** is no longer spotlit — twitch.tv/${login} is off the Go-live page.`
+    : `twitch.tv/${login} was already off the Go-live page, so **${row.name}** has forgotten it.`;
+  return { ...marathonBoard(row), message };
 });
 
 route('POST', '/api/marathons/:marathon_id/people', async (context) => {

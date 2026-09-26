@@ -375,6 +375,7 @@ async def delete_marathon(db: Any, marathon_id: int) -> None:
     for sql in (
         "DELETE FROM marathon_runs WHERE marathon_id = ?",
         "DELETE FROM marathon_people WHERE marathon_id = ?",
+        "DELETE FROM marathon_spotlights WHERE marathon_id = ?",
         "DELETE FROM marathons WHERE id = ?",
     ):
         await db.conn.execute(sql, (int(marathon_id),))
@@ -1360,8 +1361,9 @@ class Marathons(commands.Cog):
 
     async def cog_load(self) -> None:
         from .marathon_feeds import FeedButton, NoticeModePick
+        from .marathon_people import PeopleButton
 
-        self.bot.add_dynamic_items(NextButton, FeedButton, NoticeModePick)
+        self.bot.add_dynamic_items(NextButton, FeedButton, NoticeModePick, PeopleButton)
         if not self.bot.db.is_connected:
             return
         self.ticker.start()
@@ -2778,6 +2780,10 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     view = MarathonPanel(minutes_for(bot, guild.id))
     if staff and rows:
         view.add_item(MarathonPick(rows))
+    elif rows:
+        from .marathon_people import MarathonPeoplePick
+
+        view.add_item(MarathonPeoplePick(rows))
     add_moves(view, mt.root_moves(staff=staff))
     if staff:
         add_site_button(view, bot, row=3)
@@ -3173,6 +3179,10 @@ class MarathonMoveButton(discord.ui.Button):
             await ask_remove(interaction, view)
         elif action == mt.PAIR:
             await open_card(interaction, view.marathon_id, view, pairing=True)
+        elif action == mt.PEOPLE:
+            from .marathon_people import open_people
+
+            await open_people(interaction, view.marathon_id, view)
 
 
 class MarathonPick(discord.ui.Select):

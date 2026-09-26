@@ -90,6 +90,19 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-25 (marathon people, branch `marathon-people` off `main` `def0c5ef`; design
+> `info/marathon-people-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration
+> has NOT run on the live database):** schema **64 → 65** (measured: `SCHEMA_VERSION`) — one table through the
+> bootstrap, `marathon_spotlights (marathon_id, login, spotlight_id, run_id, added_by, added_at, UNIQUE(marathon_id,
+> login))`, the runners a marathon spotlit; `delete_marathon` forgets them (the Go-live rows stay). New modules
+> `black_bloc/marathon_people.py` (pure) and `cogs/content/marathon_people.py` (not a cog — the table, `people_state`,
+> `spotlight_runner` / `unspotlight_runner` through `spotlight_channel` / `forget_spotlight`, the `/event` ▸ Marathons… ▸
+> **People…** views, the persistent `PeopleButton` `marathon:people:<id>` on the feed-added notice). Registry keys
+> **482 → 485** (`marathon_spotlight_lead_hours`, `marathon_spotlight_slack_hours`, `marathon_spotlight_note_template`).
+> Routes **+2** (`POST`/`DELETE /api/marathons/{id}/people/{login-or-name}/spotlight`); `GET /api/marathons/{id}/people`
+> now answers `{marathon_id, timezone, pairings, baf[], others[]}`; `check.mjs` reads *22 pages, 252 routes*. Log kinds
+> **+2** (`marathon.runner_spotlit`, `marathon.runner_unspotlit`, routine). ⚠️ Nothing else on this page was re-checked.
+>
 > **2026-09-25 (marathon event modes, branch `marathon-event-modes` off `main` `bababb65`; design
 > `info/marathon-event-modes-design.md`; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration
 > has NOT run on the live database):** schema **63 → 64** (measured: `SCHEMA_VERSION`) — six columns through

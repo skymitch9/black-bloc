@@ -23,6 +23,8 @@ ROUTES = [
     ("GET", "/api/marathons/1/people"),
     ("POST", "/api/marathons/1/people"),
     ("DELETE", "/api/marathons/1/people/1"),
+    ("POST", "/api/marathons/1/people/somebody/spotlight"),
+    ("DELETE", "/api/marathons/1/people/somebody/spotlight"),
     ("POST", "/api/marathons/1/runs/1/shout"),
     ("POST", "/api/marathons/1/runs/1/done"),
     ("POST", "/api/marathons/1/runs/1/upcoming"),
@@ -552,3 +554,66 @@ async def test_a_run_event_is_unlinked_and_made_again_from_the_site(
     celeste = next(one for one in body["run_list"] if one["game"] == "Celeste")
     refused = client.post(f"/api/marathons/{body['id']}/runs/{celeste['id']}/event")
     assert refused.status_code == 409 and refused.json()["error"] == "not_ours"
+
+
+async def test_the_people_answer_is_baf_then_everyone_with_how_each_matched(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    body = client.get(f"/api/marathons/{marathon_id}/people").json()
+
+    assert body["marathon_id"] == marathon_id and body["timezone"] == "America/Phoenix"
+    assert body["pairings"] == []
+    assert [one["name"] for one in body["baf"]] == ["Sky"]
+    sky = body["baf"][0]
+    assert sky["member"] is True and sky["user_id"] == str(SKY) and sky["login"] == "skyruns"
+    assert sky["matched_by"] == "link" and sky["matched_word"] == "matched by their Twitch link"
+    assert [one["game"] for one in sky["runs"]] == ["Super Metroid"]
+    assert sky["spotlight_id"] is None and sky["channel_id"] is None
+    assert [one["name"] for one in body["others"]] == ["Interview Crew", "Somebody"]
+    assert body["others"][0]["parts"] == ["host"]
+
+
+async def test_spotlight_a_runner_makes_a_go_live_row_and_stop_removes_it(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    lit = client.post(f"/api/marathons/{marathon_id}/people/somebody/spotlight", json={})
+    assert lit.status_code == 200, lit.text
+    somebody = next(one for one in lit.json()["others"] if one["name"] == "Somebody")
+    assert somebody["spotlight_id"] and somebody["spotlight_until"]
+    assert "spotlit on the Go-live page" in lit.json()["message"]
+    rows = client.get("/api/golive/spotlight").json()
+    row = next(one for one in rows if one["twitch_login"] == "somebody")
+    assert row["note"] == "Somebody at AGDQ 2027"
+    kinds = await wf.kinds_in(web.db)
+    assert "web.golive.spotlight_added" in kinds and "web.marathon.runner_spotlit" in kinds
+    twice = client.post(f"/api/marathons/{marathon_id}/people/somebody/spotlight", json={})
+    assert twice.status_code == 409 and twice.json()["error"] == "already_on_golive"
+    assert "already on the Go-live page" in twice.json()["message"]
+
+    stopped = client.delete(f"/api/marathons/{marathon_id}/people/somebody/spotlight")
+    assert stopped.status_code == 200 and "no longer spotlit" in stopped.json()["message"]
+    left = client.get("/api/golive/spotlight").json()
+    assert not any(one["twitch_login"] == "somebody" for one in left)
+    assert "web.marathon.runner_unspotlit" in await wf.kinds_in(web.db)
+    again = client.delete(f"/api/marathons/{marathon_id}/people/somebody/spotlight")
+    assert again.status_code == 404 and again.json()["error"] == "not_spotlit"
+
+
+async def test_spotlight_refuses_in_words_a_name_with_no_twitch_and_a_stranger(
+    client, sign_in, cog
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    crew = client.post(f"/api/marathons/{marathon_id}/people/Interview%20Crew/spotlight")
+    assert crew.status_code == 422 and crew.json()["error"] == "no_login"
+    assert "no Twitch channel" in crew.json()["message"]
+    ghost = client.post(f"/api/marathons/{marathon_id}/people/ghost/spotlight", json={})
+    assert ghost.status_code == 404 and "Nobody called **ghost**" in ghost.json()["message"]
+    bad_run = client.post(
+        f"/api/marathons/{marathon_id}/people/skyruns/spotlight", json={"run_id": 9999}
+    )
+    assert bad_run.status_code == 404

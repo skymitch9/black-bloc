@@ -5,12 +5,11 @@
 export const BAF = 'BaF';
 
 export const CARD_SCHEDULE = 'Schedule';
-export const CARD_RUNS = 'Runs';
-export const CARD_PEOPLE = 'Who is who';
+export const CARD_PEOPLE = 'People';
 export const CARD_EVENT = 'Event';
 export const CARD_CHANNEL = 'The channel';
 export const CARD_POSTS = 'Posts';
-export const DRAWER_CARDS = [CARD_SCHEDULE, CARD_RUNS, CARD_PEOPLE, CARD_EVENT, CARD_CHANNEL, CARD_POSTS];
+export const DRAWER_CARDS = [CARD_SCHEDULE, CARD_PEOPLE, CARD_EVENT, CARD_CHANNEL, CARD_POSTS];
 
 const LAST_READ = 'Last read {ago}';
 const NOT_READ = 'Not read yet';
@@ -39,6 +38,8 @@ const BOARD_UP = 'Board: up in';
 const BOARD_UP_PINNED = 'Board: up and pinned in';
 const BOARD_NONE = 'Board: none yet.';
 const SENT_LINE = 'Reminders: {reminders} sent · Shoutouts: {shouts}';
+const FEED_MARK = ' · feed';
+const DAY_TITLE = '{day} · {slots} slot{s} · {baf} ' + BAF;
 
 export function said(text, values) {
   let out = String(text);
@@ -162,4 +163,103 @@ export function postsLines(row) {
 /** The drawer's card titles, in order; the moves bar (Pause / Remove) follows the last. */
 export function drawerCards() {
   return [...DRAWER_CARDS];
+}
+
+/** The marathon table's Source cell: the source words, and `· feed` when a feed made the row. */
+export function sourceCell(row) {
+  return `${row.source_word || row.source || '—'}${row.feed_id ? FEED_MARK : ''}`;
+}
+
+function zoned(iso, timeZone) {
+  const at = stamp(iso);
+  if (at === null) return null;
+  const parts = {};
+  const format = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timeZone || undefined,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  for (const one of format.formatToParts(new Date(at))) parts[one.type] = one.value;
+  const months = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Sept: '09', Oct: '10', Nov: '11', Dec: '12' };
+  return {
+    key: `${parts.year}-${months[parts.month] || '00'}-${String(parts.day).padStart(2, '0')}`,
+    day: `${parts.weekday} ${Number(parts.day)} ${parts.month === 'Sept' ? 'Sep' : parts.month}`,
+    time: `${parts.hour}:${parts.minute}`,
+  };
+}
+
+/** `15:15` in the guild's zone. */
+export function slotTime(iso, timeZone) {
+  const found = zoned(iso, timeZone);
+  return found ? found.time : '—';
+}
+
+/** How long a run is booked for, as `0:43`. */
+export function runLength(run) {
+  const start = stamp(run.scheduled_at);
+  const end = stamp(run.ends_at);
+  if (start === null || end === null || end < start) return '';
+  const minutes = Math.round((end - start) / 60000);
+  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
+/** A BaF person's run as a short chip: `Sun 12 Jan 15:15 Super Metroid`. */
+export function runChip(run, timeZone) {
+  const found = zoned(run.scheduled_at, timeZone);
+  return found ? `${found.day} ${found.time} ${run.game}` : String(run.game || '');
+}
+
+/**
+ * The schedule by day in the guild's zone: `[{ key, label, runs, baf, today, past, open }]`.
+ * A slot is one run, so a race shares its row. Today is open, a past day shut, a future day
+ * shut unless it holds a BaF run.
+ */
+export function daysOf(runList, timeZone, now = Date.now()) {
+  const today = zoned(new Date(now).toISOString(), timeZone).key;
+  const days = new Map();
+  const runs = (runList || [])
+    .filter((one) => one.state !== 'dropped' && stamp(one.scheduled_at) !== null)
+    .sort((a, b) => stamp(a.scheduled_at) - stamp(b.scheduled_at) || (a.order_no || 0) - (b.order_no || 0));
+  for (const run of runs) {
+    const found = zoned(run.scheduled_at, timeZone);
+    if (!days.has(found.key)) days.set(found.key, { key: found.key, label: found.day, runs: [] });
+    days.get(found.key).runs.push(run);
+  }
+  return [...days.values()].map((day) => {
+    const baf = day.runs.filter((one) => one.ours).length;
+    const isToday = day.key === today;
+    const past = day.key < today;
+    return { ...day, baf, today: isToday, past, open: isToday || (!past && baf > 0) };
+  });
+}
+
+export function dayTitle(day) {
+  const slots = day.runs.length;
+  return said(DAY_TITLE, { day: day.label, slots, s: slots === 1 ? '' : 's', baf: day.baf });
+}
+
+/** The People answer's entry a person on a run belongs to. */
+export function entryFor(board, runId, person) {
+  const all = [...((board && board.baf) || []), ...((board && board.others) || [])];
+  return all.find((entry) => (entry.runs || []).some((one) => String(one.id) === String(runId)
+    && one.name === person.name && one.part === person.part)) || null;
+}
+
+/** Runner chips first, then hosts and commentators, each once. */
+export function slotPeople(run) {
+  const people = run.people || [];
+  return [...people.filter((one) => one.part === 'runner'), ...people.filter((one) => one.part !== 'runner')];
+}
+
+/** The schedule filter: names, Twitch logins and games. */
+export function slotMatches(run, query) {
+  const wanted = String(query || '').trim().toLowerCase();
+  if (!wanted) return true;
+  const words = [run.game, run.category, ...(run.people || []).flatMap((one) => [one.name, one.login, one.member_name])];
+  return words.some((one) => String(one || '').toLowerCase().includes(wanted));
 }

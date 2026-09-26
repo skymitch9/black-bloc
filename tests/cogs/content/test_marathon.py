@@ -439,6 +439,27 @@ async def test_the_title_naming_our_game_flips_it_live_and_shouts_without_a_ping
     assert "marathon.shouted" in await kinds(bot.db)
 
 
+async def test_a_race_with_two_of_baf_on_it_shouts_once_naming_both(bot, cog):
+    """B2 of the marathon-people design: one slot, one shoutout, every BaF name in it."""
+    await bot.db.conn.execute(
+        "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",
+        (77, "peasplays", at(-9999)),
+    )
+    await bot.db.conn.commit()
+    race = (
+        ("Sky", "skyruns", "runner"),
+        ("TheKing", None, "runner"),
+        ("Peas", "peasplays", "runner"),
+    )
+    cog.client.runs_given = [a_run(1, 30, game="Super Mario 64", people=race)]
+    marathon = await added(bot, cog)
+    cog.clock = lambda: NOW + timedelta(minutes=31)
+    await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    shouts = [one for one in posts(bot) if "right now" in one.content]
+    assert len(shouts) == 1
+    assert "<@9001>" in shouts[0].content and "<@77>" in shouts[0].content
+
+
 async def test_a_restart_after_the_shout_posts_nothing_again(bot, cog):
     channel = await gdq_row(bot)
     marathon = await added(bot, cog, channel=channel)

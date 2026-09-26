@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-25 (branch `marathon-people`)** — ONE section APPENDED (`MP-a`…`MP-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-event-modes`)** — ONE section APPENDED (`MV-a`…`MV-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-feeds`)** — ONE section APPENDED (`MF-a`…`MF-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `spotlight-ping-windows`)** — ONE section APPENDED (`PW-a`…`PW-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3267,3 +3268,21 @@ Rows lettered; the conductor numbers them.
 | **`SH-b`** | Blank `frontdoor_shadow_channel_id` ▸ Save; re-post the door | The door's rehearsal follows the global home (**#blackbloc-logs**); the old copy in #welcome-test is found and taken down (the hunt starts at the feature's home, then every older one). |
 | **`SH-c`** | A feed-added marathon notice in the rehearsal home (Events ▸ Marathons ▸ a feed ▸ **Check now**, or wait for the feed) | The sentence, then an embed titled with the marathon's name and six fields — **When · Read from · Channel · Schedule · Event · Found by** — and three rows: **Pause it · Remove it · Read it now** / **Event: none / marathon / runs / both** / **Manage… · Open on the site**. Read it now edits the Schedule field; the select changes Event; Manage… opens the marathon card only you can see; a member pressing anything is refused in words. Remove it strikes the title and takes the rows away. |
 
+## Rows `MP-a` … `MP-f` — a marathon opens on its people; the source is a column (branch `marathon-people`, 2026-09-25)
+
+🔨 **BUILT on branch `marathon-people`, NOT merged, NOT deployed; nothing has met Discord.** Owner, 2026-09-25: *"get rid
+of there where marathon comes from and just put that as a column in the marathons setion. we also need to be able to
+click into it and see which runners are running in a list with the top section of that list set aside for BaF
+members"* and *"sort runners by days … do it by timeslot/game slot. That way if its a 4 player race they share a row"*.
+Design: [`../info/marathon-people-design.md`](../info/marathon-people-design.md). Rows lettered; the conductor numbers
+them. ⚠️ **`MP-e` puts a real channel row on the Go-live page** — pick a runner you are happy to announce, and Stop
+spotlighting afterwards if it was only a test.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MP-a`** | <https://blackbloc.heygabi.ai/events.html> ▸ Marathons | The table reads *Marathon · Source · Dates · State · BaF runs · Schedule · Event*; Source says *GDQ tracker* (or RPG Limit Break tracker / horaro.net) with *· feed* on a row a feed added. No *Where marathons come from* foldout under it. |
+| **`MP-b`** | Same section ▸ **Sources…** (beside Add a marathon); then a feed's channel name; and a marathon's Schedule card ▸ *found by the* **GDQ feed** | A drawer *Where marathons come from · N sources · next check in …* with the feed rows, Add a feed… and any waiting suggestion; a row opens its feed drawer; the Schedule card's link opens the same feed drawer. With a suggestion waiting, a warn line under the table says so with **Sources…**. |
+| **`MP-c`** | Open AGDQ 2027 (or any marathon with runs) | Cards read Schedule · **People** · Event · The channel · Posts. People opens on **BaF · N**: one line per BaF person — name, @discord, twitch.tv/login, their runs as chips (on-now lit, done struck), how they matched (*matched by their Twitch link* / *linked by staff* + **Unlink**) and **Spotlight…**. Below, *The schedule*: one fold per day in the server's zone titled *Sat 26 Sep · 18 slots · 2 BaF* — today open, past days shut, future days shut unless they hold BaF. |
+| **`MP-d`** | In the schedule, click a race (several runners); then **Link to a member…** on a stranger in it | The race is ONE row with every runner as a chip (✦BaF on members, hosts/commentators dashed); opening it lists each person on their own line. Linking one: *… on this schedule is … from now on.*, the chip turns ✦BaF, the person joins the BaF block, the day's BaF count rises, and the board gains the line. A name one letter off a member's username shows *looks like @name — Link?* (one click). |
+| **`MP-e`** | A BaF person's **Spotlight…** (or one on a slot) ▸ **Spotlight them**; then <https://blackbloc.heygabi.ai/golive.html> ▸ Streamers | A channel-only row for that login with the note *Name at Marathon*, starting 2 h before their first run (or that slot) and running out 2 h after their last; the People line says *Spotlit until …* with **Open on Go-live ↗** and **Stop spotlighting**, which removes the row the way the Go-live page does. A runner already on the Go-live page shows *already on the Go-live page ↗* instead. |
+| **`MP-f`** | `/event` ▸ **Marathons…** as a member (pick a marathon in *Who from BaF is on…*) and as staff (a marathon ▸ **People…**) | Member: the BaF lines only, and Back. Staff: the same lines, then a day select → a slot select → the slot's people with a person select, **Link to a member…** (a member picker), **Spotlight**, **Unlink** / **Stop spotlighting** where they apply. A feed's *new marathon* notice carries **People…**, which opens the same view privately. |

@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 64
+SCHEMA_VERSION = 65
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1113,6 +1113,17 @@ CREATE TABLE IF NOT EXISTS marathon_feed_seeds (
     twitch_login TEXT    NOT NULL,
     seeded_at    TEXT    NOT NULL,
     PRIMARY KEY (guild_id, twitch_login)
+);
+
+CREATE TABLE IF NOT EXISTS marathon_spotlights (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    marathon_id  INTEGER NOT NULL,
+    login        TEXT    NOT NULL,
+    spotlight_id INTEGER NOT NULL,
+    run_id       INTEGER,
+    added_by     INTEGER,
+    added_at     TEXT    NOT NULL,
+    UNIQUE (marathon_id, login)
 );
 """
 
