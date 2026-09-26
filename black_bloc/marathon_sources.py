@@ -14,10 +14,21 @@ log = logging.getLogger(__name__)
 GDQ = "gdq"
 RPGLB = "rpglb"
 HORARO = "horaro"
+OENGUS = "oengus"
 TRACKER_SOURCES = (GDQ, RPGLB)
-SOURCES = (*TRACKER_SOURCES, HORARO)
-SOURCE_WORDS = {GDQ: "GDQ tracker", RPGLB: "RPG Limit Break tracker", HORARO: "horaro.net"}
-SITE_WORDS = {GDQ: "the GDQ tracker", RPGLB: "the RPG Limit Break tracker", HORARO: "horaro.net"}
+SOURCES = (*TRACKER_SOURCES, HORARO, OENGUS)
+SOURCE_WORDS = {
+    GDQ: "GDQ tracker",
+    RPGLB: "RPG Limit Break tracker",
+    HORARO: "horaro.net",
+    OENGUS: "Oengus",
+}
+SITE_WORDS = {
+    GDQ: "the GDQ tracker",
+    RPGLB: "the RPG Limit Break tracker",
+    HORARO: "horaro.net",
+    OENGUS: "oengus.io",
+}
 RUNNER = "runner"
 HOST = "host"
 COMMENTATOR = "commentator"
@@ -64,6 +75,25 @@ HORARO_PAGE = HORARO_SITE + "/{ref}"
 HORARO_JSON = HORARO_SITE + "/{ref}.json"
 HORARO_SCHEDULES = HORARO_SITE + "/-/api/v1/events/{slug}/schedules"
 HORARO_SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,60}$")
+OENGUS_URL = re.compile(
+    r"^https?://(?:www\.)?oengus\.io/marathon/([A-Za-z0-9_-]{1,40})"
+    r"(?:/schedule(?:/([A-Za-z0-9_-]{1,40}))?)?/?(?:[?#].*)?$",
+    re.IGNORECASE,
+)
+OENGUS_SITE = "https://oengus.io"
+OENGUS_PAGE = OENGUS_SITE + "/marathon/{id}/schedule"
+OENGUS_MARATHON = OENGUS_SITE + "/api/v1/marathons/{id}"
+OENGUS_SCHEDULES = OENGUS_SITE + "/api/v2/marathons/{id}/schedules"
+OENGUS_LINES = OENGUS_SITE + "/api/v2/marathons/{id}/schedules/for-slug/{slug}"
+OENGUS_HOME = OENGUS_SITE + "/api/v2/marathons/for-home"
+OENGUS_LISTS = ("live", "next", "open")
+OENGUS_ID = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+OENGUS_TWITCH = "TWITCH"
+ISO_DURATION = re.compile(
+    r"^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?"
+    r"(?:(\d+(?:\.\d+)?)S)?)?$",
+    re.IGNORECASE,
+)
 MARKDOWN_LINK = re.compile(r"\[([^\]]*)\]\(([^)\s]*)\)")
 PLAYER_SPLIT = re.compile(r"\s*(?:,|&|\s+vs\.?\s+|\s+and\s+)\s*", re.IGNORECASE)
 GAME_COLUMNS = ("game",)
@@ -83,6 +113,7 @@ NO_EVENT_YET = "{site} lists no event yet"
 ANSWERED = "{site} answered {status}"
 UNREACHABLE = "{site} could not be reached ({why})"
 NOT_JSON = "{site} answered with something that is not a schedule"
+NOT_PUBLISHED_OENGUS = "{site} has the marathon but has not published its schedule yet"
 UNKNOWN_SOURCE = "Black Bloc has no reader for {source}"
 TOO_MANY_PAGES = "the schedule ran past {pages} pages, so only the first ones were read"
 
@@ -132,6 +163,9 @@ def read_url(url: Any) -> tuple[str, str] | None:
     found = HORARO_SCHEDULE.match(text)
     if found:
         return (HORARO, f"{found.group(1).lower()}/{found.group(2).lower()}")
+    found = OENGUS_URL.match(text)
+    if found:
+        return (OENGUS, "/".join(one for one in found.groups() if one))
     if GDQ_SHORT.match(text) and not text.isdigit() and "." not in text:
         return (GDQ, SHORT_PREFIX + text)
     return None
@@ -165,7 +199,26 @@ def schedule_page(source: str, ref: Any) -> str:
         return event_url(ref, source)
     if source == HORARO and ref:
         return HORARO_PAGE.format(ref=ref)
+    if source == OENGUS and ref:
+        marathon, slug = oengus_ref(ref)
+        page = OENGUS_PAGE.format(id=marathon)
+        return f"{page}/{slug}" if slug else page
     return ""
+
+
+def oengus_ref(ref: Any) -> tuple[str, str | None]:
+    """`ss4c8` → (ss4c8, None); `ss4c8/2` → (ss4c8, 2) — a slug only when staff pasted one."""
+    marathon, _, slug = str(ref or "").partition("/")
+    return (marathon, slug or None)
+
+
+def duration_seconds(text: Any) -> int | None:
+    """`PT1H30M` → 5400; Oengus writes every estimate and setup this way."""
+    found = ISO_DURATION.match(str(text or "").strip())
+    if not found or not any(found.groups()):
+        return None
+    days, hours, minutes, seconds = (float(one or 0) for one in found.groups())
+    return int(round(days * 86400 + hours * 3600 + minutes * 60 + seconds))
 
 
 def seconds_of(text: Any) -> int | None:
@@ -318,6 +371,76 @@ def parse_horaro(payload: Any) -> list[Run]:
     return found
 
 
+def oengus_people(runners: Any) -> tuple[Person, ...]:
+    """One runner each; the TWITCH connection gives the login, none leaves the name alone."""
+    found: list[Person] = []
+    for runner in runners or ():
+        if not isinstance(runner, dict):
+            continue
+        profile = runner.get("profile") if isinstance(runner.get("profile"), dict) else {}
+        name = _text(runner.get("runnerName")) or _text(profile.get("displayName"))
+        name = name or _text(profile.get("username"))
+        if not name:
+            continue
+        login = None
+        for link in profile.get("connections") or ():
+            if isinstance(link, dict) and str(link.get("platform") or "").upper() == OENGUS_TWITCH:
+                login = _text(link.get("username")).lower() or None
+                break
+        found.append(Person(name, login, RUNNER))
+    return tuple(found)
+
+
+def parse_oengus(payload: Any) -> list[Run]:
+    """One Oengus schedule's lines into runs; a setup block is not a run. The end takes the
+    setup after the run, as the tracker's end does."""
+    lines = payload.get("lines") if isinstance(payload, dict) else payload
+    found: list[Run] = []
+    for index, line in enumerate(lines or ()):
+        if not isinstance(line, dict) or line.get("setupBlock"):
+            continue
+        game = _text(line.get("game"))
+        if not game:
+            continue
+        starts = _moment(None, line.get("date"))
+        seconds = duration_seconds(line.get("estimate"))
+        setup = duration_seconds(line.get("setupTime")) or 0
+        ends = None
+        if starts is not None and seconds is not None:
+            ends = starts + timedelta(seconds=seconds + setup)
+        position = line.get("position")
+        found.append(
+            Run(
+                external_id=str(line["id"]) if line.get("id") is not None else f"#{index}",
+                order=int(position) + 1 if isinstance(position, int) else index + 1,
+                game=game,
+                display_name=game,
+                category=_text(line.get("category")),
+                starts_at=starts.isoformat() if starts else None,
+                ends_at=ends.isoformat() if ends else None,
+                run_seconds=seconds,
+                people=oengus_people(line.get("runners")),
+            )
+        )
+    return found
+
+
+def oengus_home(payload: Any) -> list[dict[str, Any]]:
+    """`for-home`'s live, next and open lists as one list, each id once."""
+    found: list[dict[str, Any]] = []
+    taken: set[str] = set()
+    for key in OENGUS_LISTS:
+        rows = payload.get(key) if isinstance(payload, dict) else None
+        for row in rows or ():
+            if not isinstance(row, dict) or not OENGUS_ID.match(str(row.get("id") or "")):
+                continue
+            if str(row["id"]) in taken:
+                continue
+            taken.add(str(row["id"]))
+            found.append(row)
+    return found
+
+
 def horaro_span(schedule: Any) -> tuple[str | None, str | None]:
     """A listed schedule's start and, from its last item, its end."""
     if not isinstance(schedule, dict):
@@ -430,11 +553,61 @@ class ScheduleClient:
             raise ScheduleError(ANSWERED.format(site=site_of(HORARO), status=status))
         return [row for row in body.get("data") or () if isinstance(row, dict)]
 
+    async def oengus_marathon(self, marathon: str) -> dict[str, Any]:
+        """One Oengus marathon's v1 record: its name, dates and the Twitch channel it airs on."""
+        site = site_of(OENGUS)
+        if not OENGUS_ID.match(str(marathon or "")):
+            raise ScheduleError(NO_SUCH_EVENT.format(site=site, ref=str(marathon)[:40]))
+        status, body = await self._json(OENGUS_MARATHON.format(id=marathon), OENGUS)
+        if status == 404:
+            raise ScheduleError(NO_SUCH_EVENT.format(site=site, ref=marathon))
+        if status != 200:
+            raise ScheduleError(ANSWERED.format(site=site, status=status))
+        return body
+
+    async def oengus_home(self) -> list[dict[str, Any]]:
+        """The marathons oengus.io's home lists: live, next and open for submissions."""
+        status, body = await self._json(OENGUS_HOME, OENGUS)
+        if status != 200:
+            raise ScheduleError(ANSWERED.format(site=site_of(OENGUS), status=status))
+        return oengus_home(body)
+
+    async def oengus_runs(self, ref: str) -> list[Run]:
+        """The pasted slug, else the first published schedule; none published yet reads like an
+        unpublished tracker event."""
+        site = site_of(OENGUS)
+        marathon, wanted = oengus_ref(ref)
+        if not OENGUS_ID.match(marathon) or (wanted and not OENGUS_ID.match(wanted)):
+            raise ScheduleError(NO_SUCH_EVENT.format(site=site, ref=str(ref)[:40]))
+        status, body = await self._json(OENGUS_SCHEDULES.format(id=marathon), OENGUS)
+        if status == 404:
+            raise ScheduleError(NO_SUCH_EVENT.format(site=site, ref=marathon))
+        if status != 200:
+            raise ScheduleError(ANSWERED.format(site=site, status=status))
+        published = [
+            str(row.get("slug"))
+            for row in body.get("data") or ()
+            if isinstance(row, dict) and row.get("published") and row.get("slug")
+        ]
+        slug = wanted if wanted in published else (published[0] if published else None)
+        if slug is None:
+            raise ScheduleError(NOT_PUBLISHED_OENGUS.format(site=site), unpublished=True)
+        status, body = await self._json(OENGUS_LINES.format(id=marathon, slug=slug), OENGUS)
+        if status == 404:
+            raise ScheduleError(NOT_PUBLISHED_OENGUS.format(site=site), unpublished=True)
+        if status != 200:
+            raise ScheduleError(ANSWERED.format(site=site, status=status))
+        return parse_oengus(body)
+
     async def resolve(self, source: str, ref: str) -> tuple[str, str]:
         """(the event id, its name) — a short such as `AGDQ2027` is looked up once here."""
         if source == HORARO:
             schedule = await self.horaro(ref)
             return (ref, _text(schedule.get("name")) or ref)
+        if source == OENGUS:
+            marathon, _slug = oengus_ref(ref)
+            record = await self.oengus_marathon(marathon)
+            return (ref, _text(record.get("name")) or marathon)
         if source not in TRACKER_BASES:
             raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
         site = site_of(source)
@@ -480,6 +653,8 @@ class ScheduleClient:
     async def runs(self, source: str, ref: str) -> list[Run]:
         if source == HORARO:
             return parse_horaro(await self.horaro(ref))
+        if source == OENGUS:
+            return await self.oengus_runs(ref)
         if source not in TRACKER_BASES:
             raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
         site = site_of(source)
@@ -501,7 +676,7 @@ class ScheduleClient:
 
 
 def _site_of_url(url: str) -> str:
-    for source, base in (*TRACKER_BASES.items(), (HORARO, HORARO_SITE)):
+    for source, base in (*TRACKER_BASES.items(), (HORARO, HORARO_SITE), (OENGUS, OENGUS_SITE)):
         if url.startswith(base):
             return site_of(source)
     parts = url.split("/")
@@ -513,6 +688,7 @@ __all__ = [
     "GDQ",
     "HORARO",
     "HOST",
+    "OENGUS",
     "PARTS",
     "RPGLB",
     "RUNNER",
@@ -530,9 +706,14 @@ __all__ = [
     "horaro_schedule_of",
     "horaro_span",
     "api_of",
+    "duration_seconds",
     "is_short",
     "next_gdq_event",
     "next_page",
+    "oengus_home",
+    "oengus_people",
+    "oengus_ref",
+    "parse_oengus",
     "parse_gdq",
     "parse_horaro",
     "read_url",

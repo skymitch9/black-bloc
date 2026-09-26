@@ -631,7 +631,7 @@ async def test_a_marathon_survives_its_channel_row_being_deleted(bot, cog):
 
 async def test_an_unknown_site_a_duplicate_and_an_unreadable_link_are_refused_in_words(bot, cog):
     other = await create_marathon(
-        bot, bot.guild, FakeActor(), name="ESA", url="https://oengus.io/marathon/LSS26/schedule"
+        bot, bot.guild, FakeActor(), name="ESA", url="https://example.org/marathon/LSS26/schedule"
     )
     assert other.code == "unknown_site" and "horaro.net schedules" in other.message
     await added(bot, cog)

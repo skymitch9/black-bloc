@@ -32,7 +32,8 @@ def test_read_url_knows_every_gdq_form(url, wanted):
     "url",
     [
         "https://horaro.net/-/api/v1/events/esa/schedules",
-        "https://oengus.io/marathon/LSS26/schedule",
+        "https://oengus.io/LSS26/schedule",
+        "https://oengus.io/marathon/LSS26/submit",
         "https://example.com/schedule/74",
         "",
         None,
@@ -395,3 +396,166 @@ async def test_a_horaro_slug_that_does_not_answer_is_refused_in_words():
     request, _ = pages((404, None))
     with pytest.raises(ms.ScheduleError, match="horaro.net has no event esa/gone"):
         await ms.ScheduleClient(request=request).runs("horaro", "esa/gone")
+
+
+# --- oengus.io (Speed Stuff 4 Charity) ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "wanted"),
+    [
+        ("https://oengus.io/marathon/ss4c8", ("oengus", "ss4c8")),
+        ("https://oengus.io/marathon/ss4c8/schedule", ("oengus", "ss4c8")),
+        ("https://www.oengus.io/marathon/LSS26/schedule/", ("oengus", "LSS26")),
+        ("https://oengus.io/marathon/ss4c8/schedule/2?x=1", ("oengus", "ss4c8/2")),
+    ],
+)
+def test_read_url_knows_every_oengus_form(url, wanted):
+    assert ms.read_url(url) == wanted
+
+
+def test_an_oengus_marathon_has_a_schedule_page_and_a_site_word():
+    assert ms.schedule_page("oengus", "ss4c8") == "https://oengus.io/marathon/ss4c8/schedule"
+    assert ms.schedule_page("oengus", "ss4c8/2") == "https://oengus.io/marathon/ss4c8/schedule/2"
+    assert ms.read_url(ms.schedule_page("oengus", "ss4lhs26")) == ("oengus", "ss4lhs26")
+    assert ms.site_of("oengus") == "oengus.io"
+    assert ms.SOURCE_WORDS["oengus"] == "Oengus"
+    assert "oengus" in ms.SOURCES and "oengus" not in ms.TRACKER_SOURCES
+
+
+@pytest.mark.parametrize(
+    ("text", "seconds"),
+    [
+        ("PT57M", 3420),
+        ("PT1H30M", 5400),
+        ("PT2H45M", 9900),
+        ("PT0S", 0),
+        ("PT7M30S", 450),
+        ("P1DT2H", 93600),
+        ("", None),
+        ("57:00", None),
+        ("P", None),
+        (None, None),
+    ],
+)
+def test_an_iso_duration_reads_in_seconds(text, seconds):
+    assert ms.duration_seconds(text) == seconds
+
+
+def test_the_oengus_lines_parse_into_runs_with_setup_blocks_left_out():
+    runs = ms.parse_oengus(fixture("oengus_lines_ss4c8_1.json"))
+
+    assert [one.external_id for one in runs] == ["10073", "10080", "10092", "10150"]
+    zelda = runs[0]
+    assert zelda.game == "The Legend of Zelda: Link's Awakening DX"
+    assert zelda.category == "Any% (No WW/OoB)"
+    assert zelda.order == 2
+    assert zelda.starts_at == "2021-09-03T16:10:00+00:00"
+    assert zelda.run_seconds == 57 * 60
+    assert zelda.ends_at == "2021-09-03T17:14:00+00:00"
+    assert zelda.people == (ms.Person("Ryan Ford", "ryan_ford522", "runner"),)
+
+
+def test_an_oengus_runner_without_a_twitch_connection_is_name_only():
+    runs = {one.game: one for one in ms.parse_oengus(fixture("oengus_lines_ss4c8_1.json"))}
+    assert runs["TimeSplitters 2"].people == (ms.Person("Realm", None, "runner"),)
+    assert runs["Unravel Two"].people == (
+        ms.Person("ripwsb_2", "ripwsb", "runner"),
+        ms.Person("ceebs5", None, "runner"),
+    )
+    assert [one.login for one in runs["It Takes Two"].people] == ["lp3cinema", "bamford"]
+
+
+def test_an_oengus_line_without_a_game_or_a_profile_is_handled_not_raised():
+    lines = {
+        "lines": [
+            {"id": 1, "game": None, "setupBlock": False, "date": "2026-09-26T15:00:00Z"},
+            {
+                "id": 2,
+                "game": "Game",
+                "setupBlock": False,
+                "date": "2026-09-26T15:00:00Z",
+                "estimate": "junk",
+                "runners": [{"runnerName": "Solo", "profile": None}, "x", {"runnerName": ""}],
+            },
+            "not a line",
+        ]
+    }
+    runs = ms.parse_oengus(lines)
+    assert len(runs) == 1
+    assert runs[0].ends_at is None and runs[0].run_seconds is None
+    assert runs[0].people == (ms.Person("Solo", None, "runner"),)
+    assert ms.parse_oengus(None) == []
+
+
+def test_for_home_is_one_list_of_live_next_and_open_each_id_once():
+    payload = fixture("oengus_for_home.json")
+    payload["open"].append(dict(payload["live"][0]))
+    payload["next"].append({"id": "../bad"})
+    listed = ms.oengus_home(payload)
+    assert [one["id"] for one in listed] == ["LSS26", "ss4lhs26", "uksgblue26", "NDS3"]
+    assert ms.oengus_home(None) == []
+
+
+async def test_the_oengus_reader_takes_the_published_schedule_and_its_lines():
+    request, seen = pages(
+        (200, fixture("oengus_schedules_ss4c8.json")),
+        (200, fixture("oengus_lines_ss4c8_1.json")),
+    )
+    runs = await ms.ScheduleClient(request=request).runs("oengus", "ss4c8")
+    assert len(runs) == 4
+    assert seen == [
+        "https://oengus.io/api/v2/marathons/ss4c8/schedules",
+        "https://oengus.io/api/v2/marathons/ss4c8/schedules/for-slug/1",
+    ]
+
+
+async def test_an_oengus_marathon_with_no_published_schedule_reads_as_unpublished():
+    request, seen = pages((200, {"data": [{"id": 9, "slug": "1", "published": False}]}))
+    with pytest.raises(ms.ScheduleError) as caught:
+        await ms.ScheduleClient(request=request).runs("oengus", "ss4lhs26")
+    assert caught.value.unpublished is True
+    assert str(caught.value) == "oengus.io has the marathon but has not published its schedule yet"
+    assert len(seen) == 1
+    request, _ = pages((200, {"data": []}))
+    with pytest.raises(ms.ScheduleError) as caught:
+        await ms.ScheduleClient(request=request).runs("oengus", "ss4lhs26")
+    assert caught.value.unpublished is True
+
+
+async def test_several_published_schedules_take_the_pasted_slug_else_the_first():
+    listed = {
+        "data": [
+            {"id": 1, "slug": "main", "published": True},
+            {"id": 2, "slug": "side", "published": True},
+        ]
+    }
+    lines = fixture("oengus_lines_ss4c8_1.json")
+    request, seen = pages((200, listed), (200, lines))
+    await ms.ScheduleClient(request=request).runs("oengus", "ss4c8")
+    assert seen[-1].endswith("/schedules/for-slug/main")
+    request, seen = pages((200, listed), (200, lines))
+    await ms.ScheduleClient(request=request).runs("oengus", "ss4c8/side")
+    assert seen[-1].endswith("/schedules/for-slug/side")
+
+
+async def test_an_oengus_marathon_resolves_by_its_v1_record_and_a_missing_one_is_refused():
+    request, seen = pages((200, fixture("oengus_marathon_ss4c8.json")))
+    client = ms.ScheduleClient(request=request)
+    assert await client.resolve("oengus", "ss4c8") == ("ss4c8", "Speed Stuff 4 Charity 8")
+    assert seen == ["https://oengus.io/api/v1/marathons/ss4c8"]
+    request, _ = pages((404, None))
+    with pytest.raises(ms.ScheduleError, match="oengus.io has no event gone"):
+        await ms.ScheduleClient(request=request).oengus_marathon("gone")
+    with pytest.raises(ms.ScheduleError, match="oengus.io has no event"):
+        await ms.ScheduleClient(request=pages()[0]).runs("oengus", "../x")
+    request, _ = pages((500, None))
+    with pytest.raises(ms.ScheduleError, match="oengus.io answered 500"):
+        await ms.ScheduleClient(request=request).oengus_home()
+
+
+async def test_the_oengus_home_is_read_through_the_same_client():
+    request, seen = pages((200, fixture("oengus_for_home.json")))
+    listed = await ms.ScheduleClient(request=request).oengus_home()
+    assert [one["id"] for one in listed] == ["LSS26", "ss4lhs26", "uksgblue26", "NDS3"]
+    assert seen == ["https://oengus.io/api/v2/marathons/for-home"]

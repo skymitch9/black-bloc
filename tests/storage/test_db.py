@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 67
+        assert SCHEMA_VERSION == 68
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -1563,6 +1563,34 @@ async def test_a_schema_66_file_gains_noticed_at_stamped_only_for_staff_made_mar
         cur = await again.conn.execute("SELECT name, noticed_at FROM marathons ORDER BY name")
         found = {row["name"]: row["noticed_at"] for row in await cur.fetchall()}
         assert found == {"feed": None, "staff": "2026-09-25T16:15:00+00:00"}
+    finally:
+        await again.close()
+
+
+async def test_a_schema_67_file_gains_marathon_feeds_seen_empty_and_its_rows_kept(tmp_path):
+    """Schema 68: an Oengus feed remembers which marathon records it read; nothing is backfilled."""
+    path = tmp_path / "old67.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE marathon_feeds DROP COLUMN seen")
+    await db.conn.execute(
+        "INSERT INTO marathon_feeds(guild_id, source, feed_ref, spotlight_id, name, ignored, "
+        "added_at) VALUES (1, 'tracker', 'https://x', 3, 'GDQ', '[\"74\"]', '2026-09-25')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '67')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name, ignored, seen FROM marathon_feeds")
+        row = await cur.fetchone()
+        assert (row["name"], row["ignored"], row["seen"]) == ("GDQ", '["74"]', None)
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "68"
     finally:
         await again.close()
 

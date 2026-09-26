@@ -4581,9 +4581,9 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "bool",
         True,
         "whether the marathon feeds check on their own — each feed reads the events list of one "
-        "channel's marathons (the GDQ and RPG Limit Break trackers, ESA on horaro.net) and adds "
-        "or suggests every new event. on by default; off checks nothing, and Check now on a "
-        "feed still works",
+        "channel's marathons (the GDQ and RPG Limit Break trackers, a horaro.net event, Speed "
+        "Stuff 4 Charity on Oengus) and adds or suggests every new event. on by default; off "
+        "checks nothing, and Check now on a feed still works",
     ),
     MARATHON_FEED_HOURS_KEY: (
         "int",
@@ -4608,7 +4608,8 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_FEED_RECENT_KEY: (
         "int",
         1,
-        "how many days after it started (a tracker event) or ended (a horaro.net schedule) an "
+        "how many days after it started (a tracker event) or ended (a horaro.net schedule or an "
+        "Oengus marathon) an "
         "event still counts as new to a feed. 1 by default",
     ),
     MARATHON_EVENT_MODE_DEFAULT_KEY: (
@@ -4700,8 +4701,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{state} on the board for a run the schedule no longer lists",
     ),
     MARATHON_UNKNOWN_SITE_KEY: (
-        "I can read the GDQ and RPG Limit Break trackers and horaro.net schedules — that link "
-        "is none of them.",
+        "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules and Oengus "
+        "marathons — that link is none of them.",
         (),
         "what staff are told when a schedule link is from a site Black Bloc cannot read",
     ),

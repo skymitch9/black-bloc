@@ -21,7 +21,7 @@ from black_bloc.cogs.content.marathon import (
     update_marathon,
 )
 from black_bloc.cogs.content.spotlight import forget_spotlight
-from black_bloc.marathon_sources import Person, Run, ScheduleError
+from black_bloc.marathon_sources import Person, Run, ScheduleError, oengus_home
 from tests.cogs.content.test_marathon import STAFF_ROOM, Member, bot  # noqa: F401
 from tests.cogs.content.test_spotlight import (
     GUILD,
@@ -51,6 +51,15 @@ class FeedClient:
             "rpglb": fixture("rpglb_events_list.json")["results"],
         }
         self.horaro = {"esa": fixture("horaro_esa_schedules.json")["data"]}
+        self.home = fixture("oengus_for_home.json")
+        self.records = {
+            "LSS26": {"id": "LSS26", "twitch": "longspeedrunsummit"},
+            "ss4lhs26": fixture("oengus_marathon_ss4c8.json")
+            | {"id": "ss4lhs26", "name": "Speed Stuff 4 LHS 2026", "twitch": "SpeedStuff4Charity"},
+            "uksgblue26": {"id": "uksgblue26", "twitch": "uksg"},
+            "NDS3": {"id": "NDS3", "twitch": None},
+        }
+        self.v1_calls = []
         self.runs_by_ref = {}
         self.raises = None
         self.list_calls = []
@@ -69,10 +78,24 @@ class FeedClient:
             raise ScheduleError(f"horaro.net has no event {slug}")
         return list(self.horaro[slug])
 
+    async def oengus_home(self):
+        self.list_calls.append("oengus")
+        if self.raises is not None:
+            raise self.raises
+        return oengus_home(self.home)
+
+    async def oengus_marathon(self, ref):
+        self.v1_calls.append(ref)
+        if ref not in self.records:
+            raise ScheduleError(f"oengus.io has no event {ref}")
+        return self.records[ref]
+
     async def resolve(self, source, ref):
         return (str(ref), f"{source} {ref}")
 
     async def runs(self, source, ref):
+        if source == "oengus" and (source, str(ref)) not in self.runs_by_ref:
+            raise ScheduleError("oengus.io has not published it", unpublished=True)
         return list(self.runs_by_ref.get((source, str(ref)), []))
 
     async def close(self):
@@ -433,7 +456,7 @@ async def test_add_a_feed_refuses_in_words_and_one_channel_has_one_feed(bot, cog
     esa = await a_channel(bot, "esamarathon", "ESAMarathon")
     nowhere = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=999, pick="gdq")
     assert not nowhere.ok and nowhere.message == mf.NO_CHANNEL
-    odd = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=esa, pick="oengus")
+    odd = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=esa, pick="kick")
     assert not odd.ok and odd.code == "unknown_source"
     blank = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=esa, pick="horaro")
     assert not blank.ok and blank.code == "no_slug"
@@ -511,7 +534,7 @@ async def test_the_feeds_panel_lists_feeds_and_a_feed_card_draws_only_valid_move
     cog,
 ):
     await seeded(bot, cog)
-    await a_channel(bot, "speedstuff4charity", "Speed Stuff 4 Charity")
+    await a_channel(bot, "retrogaminglivetv", "RetroGamingLiveTV")
     await cog.tick_once()
     embed, view = await feeds.feeds_card(bot, bot.guild)
     assert "**GDQ** · GDQ tracker · GamesDoneQuick · adds" in embed.description
@@ -867,3 +890,178 @@ async def test_off_holds_the_notice_unclaimed_and_a_feedless_marathon_never_noti
     await publish(bot, cog, "73")
 
     assert len(notices(bot)) == 1 and (await by_ref(bot))["73"]["noticed_at"] is None
+
+
+# --- Oengus (Speed Stuff 4 Charity) ------------------------------------------------------------
+
+SS4C = "ss4lhs26"
+EVERY_ID = ["LSS26", SS4C, "uksgblue26", "NDS3"]
+
+
+async def ss4c_feed(bot, cog, when="published"):  # noqa: F811
+    await staff_room(bot)
+    await bot.store.set(GUILD, "marathon_feed_notice_when", when)
+    row = await a_channel(bot, "speedstuff4charity", "Speed Stuff 4 Charity")
+    await cog.tick_once()
+    feed = next(one for one in await all_feeds(bot) if one["source"] == mf.OENGUS_FEED)
+    return row, feed
+
+
+async def logged(bot, kind):  # noqa: F811
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id", (kind,)
+    )
+    return [json.loads(row["details"]) for row in await cur.fetchall()]
+
+
+async def test_the_seed_gives_the_ss4c_channel_row_an_oengus_feed_once(bot, cog):  # noqa: F811
+    row, feed = await ss4c_feed(bot, cog)
+    assert (feed["name"], feed["feed_ref"], feed["spotlight_id"]) == (
+        "Speed Stuff 4 Charity",
+        "speedstuff4charity",
+        row,
+    )
+    await feeds.remove_feed(bot, bot.guild, FakeActor(), feed)
+    again = Marathons(bot)
+    again.client = FeedClient()
+    again.clock = lambda: SEPT
+    bot.cogs[cogmod.COG_NAME] = again
+    await again.tick_once()
+    assert await all_feeds(bot) == []
+
+
+async def test_an_oengus_check_keeps_the_channels_marathon_and_remembers_every_record_read(
+    bot,  # noqa: F811
+    cog,
+):
+    row, feed = await ss4c_feed(bot, cog)
+    made = await by_ref(bot)
+    assert list(made) == [SS4C]
+    ss4c = made[SS4C]
+    assert ss4c["source"] == "oengus" and ss4c["name"] == "Speed Stuff 4 LHS 2026"
+    assert ss4c["schedule_url"] == "https://oengus.io/marathon/ss4lhs26/schedule"
+    assert ss4c["spotlight_id"] == row and ss4c["feed_id"] == feed["id"]
+    assert ss4c["noticed_at"] is None and notices(bot) == []
+    assert sorted(cog.client.v1_calls) == sorted(EVERY_ID)
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert {one["ref"]: one["twitch"] for one in mf.seen_of(feed)} == {
+        "LSS26": "longspeedrunsummit",
+        SS4C: "speedstuff4charity",
+        "uksgblue26": "uksg",
+        "NDS3": "",
+    }
+    checked = await checked_of(bot, "Speed Stuff 4 Charity")
+    assert (checked["found"], checked["added"]) == (1, 1)
+    added = await logged(bot, "marathon.feed_added")
+    assert [(one["event"], one["source"]) for one in added] == [(SS4C, "oengus")]
+
+
+async def test_a_second_oengus_check_reads_no_record_again_and_adds_nothing_twice(
+    bot,  # noqa: F811
+    cog,
+):
+    await ss4c_feed(bot, cog)
+    cog.client.v1_calls.clear()
+    later(cog, 7)
+    await cog.tick_once()
+    assert cog.client.v1_calls == []
+    assert list(await by_ref(bot)) == [SS4C]
+    assert (await checked_of(bot, "Speed Stuff 4 Charity"))["found"] == 1
+
+
+async def test_a_record_that_will_not_read_is_not_remembered_and_is_read_next_check(
+    bot,  # noqa: F811
+    cog,
+):
+    cog.client.home["open"].append({"id": "gone26", "name": "Gone", "endDate": "2026-12-01"})
+    _row, feed = await ss4c_feed(bot, cog)
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert "gone26" not in [one["ref"] for one in mf.seen_of(feed)]
+    cog.client.v1_calls.clear()
+    later(cog, 7)
+    await cog.tick_once()
+    assert cog.client.v1_calls == ["gone26"]
+
+
+async def test_look_again_on_an_oengus_feed_forgets_what_it_read_and_reads_it_all_again(
+    bot,  # noqa: F811
+    cog,
+):
+    _row, feed = await ss4c_feed(bot, cog)
+    cog.client.v1_calls.clear()
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    looked = await feeds.look_again(bot, bot.guild, FakeActor(), feed)
+    assert looked.ok
+    assert mf.FEED_REREAD.format(count=4) in looked.message
+    assert sorted(cog.client.v1_calls) == sorted(EVERY_ID)
+    assert list(await by_ref(bot)) == [SS4C]
+    assert [one["reread"] for one in await logged(bot, "marathon.feed_looked")] == [4]
+
+
+async def test_forget_ignored_leaves_the_oengus_memory_alone(bot, cog):  # noqa: F811
+    _row, feed = await ss4c_feed(bot, cog)
+    marathon = (await by_ref(bot))[SS4C]
+    await remove_marathon(bot, bot.guild, FakeActor(), marathon)
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert mf.ignored_of(feed) == [SS4C]
+    forgot = await feeds.forget_ignored(bot, bot.guild, FakeActor(), feed)
+    assert forgot.ok
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert mf.ignored_of(feed) == [] and len(mf.seen_of(feed)) == 4
+
+
+async def test_an_oengus_marathon_notices_once_when_its_schedule_publishes(bot, cog):  # noqa: F811
+    await ss4c_feed(bot, cog)
+    marathon = (await by_ref(bot))[SS4C]
+    unpublished = await refresh_marathon(bot, bot.guild, marathon)
+    assert not unpublished.ok and notices(bot) == []
+    fresh = await get_marathon(bot.db, GUILD, marathon["id"])
+    assert fresh["fetch_failures"] == 0 and "not published" in fresh["last_error"]
+    assert "marathon.schedule_stale" not in await kinds(bot.db)
+
+    cog.client.runs_by_ref[("oengus", SS4C)] = two_runs()
+    await refresh_marathon(bot, bot.guild, marathon)
+    await refresh_marathon(bot, bot.guild, marathon)
+
+    assert len(notices(bot)) == 1
+    assert "**Speed Stuff 4 LHS 2026**" in notices(bot)[0].content
+    assert [row["because"] for row in await posted(bot)] == ["published"]
+
+
+async def test_an_oengus_feed_follows_its_channel_login_when_it_is_moved(bot, cog):  # noqa: F811
+    _row, feed = await ss4c_feed(bot, cog)
+    lss = await a_channel(bot, "longspeedrunsummit", "Long Speedrun Summit")
+    moved = await feeds.set_feed(bot, bot.guild, FakeActor(), feed, spotlight_id=lss)
+    assert moved.ok and moved.value["feed_ref"] == "longspeedrunsummit"
+    cog.client.v1_calls.clear()
+    await feeds.check_now(bot, bot.guild, FakeActor(), moved.value)
+    assert cog.client.v1_calls == []
+    assert sorted(await by_ref(bot)) == ["LSS26", SS4C]
+
+
+async def test_add_a_feed_with_the_oengus_pick_needs_no_slug_and_keys_on_the_channel(
+    bot,  # noqa: F811
+    cog,
+):
+    await staff_room(bot)
+    lss = await a_channel(bot, "LongSpeedrunSummit", "Long Speedrun Summit")
+    made = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=lss, pick="oengus")
+    assert made.ok, made.message
+    assert (made.value["source"], made.value["feed_ref"]) == ("oengus", "longspeedrunsummit")
+    assert made.value["name"] == "Long Speedrun Summit"
+    assert "now reads Oengus for **Long Speedrun Summit**" in made.message
+    assert list(await by_ref(bot)) == ["LSS26"]
+    other = await a_channel(bot, "speedstuff4charity", "Speed Stuff 4 Charity")
+    second = await feeds.create_feed(
+        bot, bot.guild, FakeActor(), spotlight_id=other, pick="oengus"
+    )
+    assert second.ok and second.value["feed_ref"] == "speedstuff4charity"
+
+
+async def test_a_failed_oengus_home_is_a_failed_check_that_keeps_the_memory(bot, cog):  # noqa: F811
+    _row, feed = await ss4c_feed(bot, cog)
+    cog.client.raises = ScheduleError("oengus.io answered 503")
+    failed = await feeds.check_now(bot, bot.guild, FakeActor(), feed)
+    assert not failed.ok and "oengus.io answered 503" in failed.message
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert len(mf.seen_of(feed)) == 4 and feed["checks_failed"] == 1

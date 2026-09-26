@@ -1,0 +1,165 @@
+{
+  "id": 325,
+  "marathonId": "ss4c8",
+  "name": "Schedule",
+  "slug": "1",
+  "published": true,
+  "lines": [
+    {
+      "id": 10072,
+      "position": 0,
+      "type": "OTHER",
+      "game": null,
+      "category": null,
+      "console": null,
+      "date": "2021-09-03T16:00:00Z",
+      "estimate": "PT0S",
+      "setupTime": "PT10M",
+      "setupBlock": true,
+      "setupBlockText": "Speed Stuff 4 Charity 8 - Goodmorning%",
+      "runners": []
+    },
+    {
+      "id": 10073,
+      "position": 1,
+      "type": "SINGLE",
+      "game": "The Legend of Zelda: Link's Awakening DX",
+      "category": "Any% (No WW/OoB)",
+      "console": "GBC",
+      "date": "2021-09-03T16:10:00Z",
+      "estimate": "PT57M",
+      "setupTime": "PT7M",
+      "setupBlock": false,
+      "setupBlockText": null,
+      "runners": [
+        {
+          "runnerName": "Ryan Ford",
+          "profile": {
+            "username": "ryan_ford",
+            "displayName": "Ryan Ford",
+            "connections": [
+              {
+                "platform": "TWITCH",
+                "username": "ryan_ford522"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 10080,
+      "position": 8,
+      "type": "COOP",
+      "game": "It Takes Two",
+      "category": "Out of Bounds",
+      "console": "PC",
+      "date": "2021-09-03T21:24:00Z",
+      "estimate": "PT2H45M",
+      "setupTime": "PT7M",
+      "setupBlock": false,
+      "setupBlockText": null,
+      "runners": [
+        {
+          "runnerName": "LP3Cinema",
+          "profile": {
+            "username": "lp3cinema",
+            "displayName": "LP3Cinema",
+            "connections": [
+              {
+                "platform": "TWITCH",
+                "username": "lp3cinema"
+              }
+            ]
+          }
+        },
+        {
+          "runnerName": "bamford",
+          "profile": {
+            "username": "bamford",
+            "displayName": "bamford",
+            "connections": [
+              {
+                "platform": "TWITCH",
+                "username": "bamford"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 10092,
+      "position": 23,
+      "type": "SINGLE",
+      "game": "TimeSplitters 2",
+      "category": "Any% (Easy)",
+      "console": "PlayStation 2",
+      "date": "2021-09-04T10:08:00Z",
+      "estimate": "PT40M",
+      "setupTime": "PT7M",
+      "setupBlock": false,
+      "setupBlockText": null,
+      "runners": [
+        {
+          "runnerName": "Realm",
+          "profile": {
+            "username": "realm",
+            "displayName": "Realm",
+            "connections": []
+          }
+        }
+      ]
+    },
+    {
+      "id": 10150,
+      "position": 76,
+      "type": "COOP",
+      "game": "Unravel Two",
+      "category": "Any% Co-op",
+      "console": "PC",
+      "date": "2021-09-07T00:08:00Z",
+      "estimate": "PT1H5M",
+      "setupTime": "PT7M",
+      "setupBlock": false,
+      "setupBlockText": null,
+      "runners": [
+        {
+          "runnerName": "ripwsb_2",
+          "profile": {
+            "username": "ripwsb_2",
+            "displayName": "ripwsb_2",
+            "connections": [
+              {
+                "platform": "TWITCH",
+                "username": "ripwsb"
+              }
+            ]
+          }
+        },
+        {
+          "runnerName": "ceebs5",
+          "profile": {
+            "username": "ceebs5",
+            "displayName": "ceebs5",
+            "connections": []
+          }
+        }
+      ]
+    },
+    {
+      "id": 10160,
+      "position": 82,
+      "type": "OTHER",
+      "game": null,
+      "category": null,
+      "console": null,
+      "date": "2021-09-07T06:35:00Z",
+      "estimate": "PT0S",
+      "setupTime": "PT15M",
+      "setupBlock": true,
+      "setupBlockText": "Speed Stuff 4 Charity - Good Night%",
+      "runners": []
+    }
+  ]
+}
