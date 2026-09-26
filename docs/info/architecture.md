@@ -90,6 +90,8 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-26 (the Oengus feed for Speed Stuff 4 Charity, branch `marathon-feeds-oengus` off `main` `69750bd7`; design `info/marathon-feeds-design.md` §H; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration has NOT run on the live database):** schema **67 → 68** (measured: `SCHEMA_VERSION`) — `marathon_feeds.seen TEXT` through `ADDED_COLUMNS`, no backfill. Registry keys **492** (unchanged, measured: `len(settings_store.KEY_TYPES)`). Routes and pages unchanged (`check.mjs`: *22 pages, 252 routes*); the feed rows gain `seen_count`. A fourth marathon source word, `oengus`. ⚠️ Nothing else on this page was re-checked.
+>
 > **2026-09-25 (the feed notice waits for the schedule, branch `marathon-notice-when` off `main` `791b5543`; design `info/marathon-feeds-design.md` top line; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration has NOT run on the live database):** schema **66 → 67** (measured: `SCHEMA_VERSION`) — `marathons.noticed_at TEXT` through `ADDED_COLUMNS`, backfilled `= added_at` for rows with no `feed_id`. Registry keys **491 → 492** (measured: `len(settings_store.KEY_TYPES)`) — `marathon_feed_notice_when` (enum `published`/`added`, default `published`, Marathons group). Routes and pages unchanged (`check.mjs`: *22 pages, 252 routes*). ⚠️ Nothing else on this page was re-checked.
 >
 > **2026-09-25 (several guides per command, branch `guides-per-command` off `main` `582977f1`; design

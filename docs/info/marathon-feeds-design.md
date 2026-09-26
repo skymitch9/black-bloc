@@ -1,5 +1,7 @@
 # Marathon feeds — the bot polls GDQ (and ESA on horaro.net) for events itself, so staff never paste a schedule URL
 
+> 🔨 **2026-09-26 — §H BUILT: the Oengus feed for Speed Stuff 4 Charity, branch `marathon-feeds-oengus` (off `main` `69750bd7`; commits `b7508d58` code + tests + fixtures, `4eff650f` site + mock, and the docs commit; BUILT, NOT merged, NOT deployed, nothing has met Discord).** A fourth source `oengus` (`oengus.io/marathon/<id>[/schedule[/<slug>]]`, `parse_oengus`, the first published schedule's lines) and a fourth feed source: `for-home` + one v1 read per marathon ever, kept when its `twitch` is the channel's login, added through `add_candidate` so the v171 rule holds (quiet add, notice once runs appear). Seed: **Speed Stuff 4 Charity** on the `speedstuff4charity` row. Schema **67 → 68** (`marathon_feeds.seen`); registry keys **492** (unchanged; `marathon_unknown_site`'s default and two help texts name Oengus). ⚠️ **SS4C has a marathon on `for-home` TODAY** — `ss4lhs26` *Speed Stuff 4 LHS 2026*, 2026-09-26 15:00Z – 09-28 02:50Z, schedule published — so a deploy before 2026-09-29 adds it on the first boot and, its schedule being out, posts its staff notice at once. §H ▸ *Deviations (build)* (17) and *What was NOT verified* below.
+
 > ✅ **2026-09-25 22:3x — the staff notice waits for the schedule, LIVE as v171 22:29** (branch `marathon-notice-when`, merge `083a626a`, release commit `329ea08e`; boot `database: added marathons.noticed_at` 05:29:21Z, `logged in` 05:29:25Z, no Traceback, `/health` 62 ms — `deploys.log`'s v171 line; no live schedule has published yet, so no notice has fired; sweep `MF-f` is the owner's)**:** owner 22:1x — *"I only want to be prompted with a marathon in the event category once the schedule is posted"*. A feed still ADDS the marathon the moment it sees the event (`marathon.feed_added` IMPORTANT; the site list shows it), but with `marathon_feed_notice_when` = **published** (default) the added notice (embed, three rows, People…) posts only on the first read that finds ≥ 1 run — a tick, **Read it now**, or the add's own first read when the schedule is already out. **added** keeps the old notice-at-add. Schema **67**: `marathons.noticed_at` is the once-guard for both paths, claimed by one conditional UPDATE before the post (checklist 12); `marathon.notice_posted` carries `because: published|added`. Only FEED-made rows hold a notice: staff-made rows (Add, Add it on a suggestion, the next-event Add it) are stamped at insert, and the migration stamps every existing row with no `feed_id` (`noticed_at = added_at`). ⚠️ The four live GDQ marathons keep `noticed_at` NULL, so each notices ONCE more when its schedule publishes — including those that got a shadow notice at 16:15 (not stamped; the owner decides). `off` holds the notice unclaimed; a shadow claim is spent on the rehearsal, as the add-time notice always was. The next-event notice and the Events-row rule (`event_follows`) are unchanged.
 
 > 🔨 **2026-09-25 — the added notice got detail and control, branch `shadow-home-per-feature` (BUILT, NOT merged):** an embed (When · Read from · Channel · Schedule · Event · Found by) under the `marathon_feed_added_template` sentence, and three rows — **Pause it · Remove it · Read it now**, a persistent event-mode select (`marathon:feed:<feed>:<ref>:mode`), **Manage…** (the `/event` ▸ Marathons… card, ephemeral) · **Open on the site**. New actions `read` / `manage` on the same custom-id scheme. The SUGGEST notice (Add it / Not this one) is unchanged. Rehearsals now land in `marathon_shadow_channel_id` when set. [`shadow-home-per-feature-design.md`](shadow-home-per-feature-design.md) §E.
@@ -199,6 +201,101 @@ once-ever seed marker. Caveat to record: `for-home` is a window, not an archive 
 within *next* or while submissions are open, which a six-hour poll catches. Build as branch `marathon-feeds-oengus`
 AFTER `marathon-event-modes` merges (same files); fixtures: one captured `for-home`, one v1 marathon, one `for-slug`
 lines payload, trimmed. Tests mirror §F for the new source.
+
+### H — Deviations (build)
+
+*(written by the build agent, 2026-09-26, branch `marathon-feeds-oengus` off `main` `69750bd7`. Schema **67 → 68**,
+registry keys **492 → 492**, `check.mjs` **22 pages, 252 routes** (unchanged). Fixtures captured live 2026-09-26
+~08:18 Phoenix, one GET each, `urllib` with a plain User-Agent: `oengus_for_home.json` (1,362 B — `live` LSS26 +
+ss4lhs26, `next` uksgblue26, `open` NDS3), `oengus_marathon_ss4c8.json` (477 B, long text, moderators and the
+creator's details dropped), `oengus_schedules_ss4c8.json` (147 B), `oengus_lines_ss4c8_1.json` (3,869 B — 6 of 83
+lines: two setup blocks, a runner with a TWITCH connection, two co-op pairs, a runner with none; every connection but
+TWITCH and every profile field but `username` / `displayName` dropped, so no Discord handle is kept).)*
+
+1. **The reader lives in `marathon_sources.ScheduleClient`, not `marathon.py`** — that is where `runs()` dispatches
+   `parse_gdq` / `parse_horaro` by source; `marathon.py` holds no reader. Its tests are in
+   `tests/test_marathon_sources.py` (the mirror rule), so `tests/test_marathon.py` is untouched.
+2. ⚠️ **No published schedule is the GDQ 404 path, not literally "empty runs"**: `oengus_runs` raises
+   `ScheduleError(unpublished=True)` (*oengus.io has the marathon but has not published its schedule yet*). So the runs
+   stay as they were, `fetch_failures` does not count, no `marathon.schedule_stale`, one routine `marathon.fetch_failed`
+   row with `unpublished: true`, and the far cadence re-reads it — exactly "like an unpublished GDQ event". Returning
+   `[]` would have wiped a schedule already read if Oengus ever un-publishes one.
+3. ⚠️ **An Oengus feed's `feed_ref` is the channel's login, not `https://oengus.io`.** The table keeps
+   `UNIQUE (guild_id, source, feed_ref)`, so a fixed ref would allow ONE Oengus feed per server (SS4C, and never
+   LSS). The seed is `Seed("speedstuff4charity", OENGUS_FEED, "speedstuff4charity", "Speed Stuff 4 Charity")`; the
+   match reads the channel row's CURRENT login (the ref is the fallback), and **Move to channel…** rewrites the ref.
+4. **`seen` holds `{ref, twitch}` records, not bare ids** — what each v1 record said. A kept marathon therefore stays a
+   candidate on every later check (adoption, a retry after a failed add, a re-add after **Forget ignored**) with no
+   second v1 read, and a moved feed re-judges its memory against the new login. A bare string reads as "not ours".
+   Capped at `SEEN_LIMIT` 2,000 newest; at most `OENGUS_READS_PER_CHECK` 40 v1 reads per check (31 today).
+5. **A v1 read that fails is not remembered** (logged at info) and is read again next check; it does not fail the
+   check. A `for-home` failure fails the check as any list failure does (`checks_failed`, the third is stale).
+6. **Look again clears `seen`; Forget ignored does not.** Forget ignored means "staff removed it — may add again";
+   `seen` means "already read"; Look again is the "force a re-read" move. **Look again** is now offered on a feed
+   that remembers records (the panel's `feed_moves` and the site drawer), the drawer says how many, the answer gains
+   `FEED_REREAD`, and `marathon.feed_looked` carries `reread`.
+7. **The v1 `startDate` / `endDate` are not stored at add** — the existing tracker add stores `starts_at` NULL and
+   the first read with runs sets the dates, so the Oengus add does the same. The candidate carries `for-home`'s
+   `startDate` / `endDate` into the notice fields and a suggestion record, as a tracker candidate carries its
+   `datetime`. v1 is read only for `twitch` (and its `name` on a staff Add).
+8. **A run's end includes `setupTime`**, `run_seconds` is the `estimate` alone — mirroring the tracker, whose
+   `endtime` runs to the next run's start. Measured on the fixture: each line's `date` = the previous `date` +
+   `estimate` + `setupTime`.
+9. **Several published schedules: a pasted slug wins, else the first published.** `read_url` keeps a slug as
+   `<id>/<slug>`; a feed's own adds never carry one. ss4c8 has one (`slug "1"`); no marathon with two was seen live.
+10. **"Recent" for Oengus is by END** (`endDate`, else `startDate`), like horaro.net, not by start like a tracker —
+    `for-home`'s `live` list is marathons already running.
+11. **Words:** `SOURCE_WORDS["oengus"]` = *Oengus* (the Source column, the Sources list, the notice's *Read from*),
+    `site_of` = *oengus.io*. `marathon_unknown_site`'s default is now *I can read the GDQ and RPG Limit Break
+    trackers, horaro.net schedules and Oengus marathons — that link is none of them.* (a staff override is kept, as
+    Deviation 6 did); the help texts of `marathon_feeds` and `marathon_feed_recent_days` name Oengus (mock mirrored);
+    the unknown-pick refusal and the modal's *Read from* label name it. No new key: every new sentence is a panel
+    answer constant beside its siblings (`FEED_REREAD`, `NOT_PUBLISHED_OENGUS`), which the page does not post.
+12. **Site, beyond the pick:** **Add a feed…** guesses the pick from the channel's login (the panel's `guess_pick`
+    already did), shows one line saying what the picked source reads, and shows the horaro.net slug field only for
+    horaro.net (the slug is not sent otherwise). The feed drawer's *Read from the …* became *Read from: …* — it read
+    *Read from the Oengus* (and *the horaro.net/esa*). `labels.js`'s `marathon_unknown_site` label no longer says
+    "not a GDQ schedule".
+13. **Mock:** channel row **7** `speedstuff4charity` (the live row is **6**; the mock's ids are its own), feed 3
+    (Oengus, add mode, four remembered records), marathon 5 *Speed Stuff 4 LHS 2026* (`source oengus`, feed-made,
+    schedule not published — the waiting state v171 made). The mock's `feedCheck` still acts on the GDQ feed only,
+    so **Check now** on the SS4C row adds nothing there.
+14. **Old tests that used `oengus` as the example of an unknown site / pick** now use `example.org` / `kick`.
+15. ⚠️ **Oengus ids keep their own case** (`LSS26`). A staff-pasted link spelled in another case would not dedupe
+    against a feed-made row (`source_ref` and `schedule_url` compare exactly). Not handled; the feed's own ids come
+    from `for-home` and are consistent.
+16. **`ruff format --check` fails on every touched Python file — and on the same files at `69750bd7`** (e.g.
+    `marathon_feeds.py`'s `FEED_CHECKED`, `settings_store.py`'s `GOLIVE_TEMPLATE`). Whole files were NOT reformatted
+    (it would bury this diff); `ruff check .` is clean.
+17. **Tests:** `tests/test_marathon_sources.py` +11 functions, 23 cases (read_url forms, schedule page, ISO durations, parse incl. setup
+    blocks and name-only runners, for-home, the reader: published / unpublished / several / resolve / refusals),
+    `tests/test_marathon_feeds.py` +5 (and the seed test renamed), `tests/cogs/content/test_marathon_feeds.py` +10 (seed once; keep the matching
+    marathon, drop the rest, remember all four; a second check reads no v1; a failed v1 read is retried; Look again
+    re-reads; Forget ignored leaves `seen`; the notice posts once when the schedule publishes; a moved feed follows
+    its login; Add a feed ▸ Oengus; a failed `for-home`), `tests/storage/test_db.py` +1 (a 67 file gains `seen`).
+
+### H — What was NOT verified
+
+1. ⚠️ **Nothing met Discord or Fly.** The seed, the check, the quiet add and the notice ran only against the suite's
+   fakes; `/event` ▸ Marathons… ▸ Feeds… ▸ Add a feed… with `oengus` only through `create_feed`.
+2. ⚠️ **The bot's own `ScheduleClient` (aiohttp, `BROWSER_AGENT`) never read oengus.io.** The fixtures came from
+   `urllib` on the build machine; the reader is proven on them. **Not from Fly** — KI-30's datacenter wall is
+   untested on oengus.io.
+3. **Live reads, 2026-09-26 ~08:18 Phoenix, five GETs:** the four fixtures, plus ONE v1 read of `ss4lhs26` to answer
+   whether SS4C is on `for-home`: `twitch: speedstuff4charity`, `scheduleDone: true`, `creator gz_hero`,
+   2026-09-26T15:00Z – 2026-09-28T02:50Z. Its lines were NOT read.
+4. **The live SS4C row's login** was not read from the live database; the seed keys on `speedstuff4charity`, the
+   login the design header records for row 6.
+5. **Schema 68** was proven on a fresh file and on a file with `seen` dropped and the version set to 67 — not on the
+   live volume.
+6. **Cost:** one `for-home` GET per 6 h, plus ~31 v1 GETs on the first check and a handful a week after (new
+   marathons only). Oengus's rate limits were not measured.
+7. **The page** was rendered in `chrome-headless-shell` 149.0.7827.22 over raw CDP against this worktree's mock on
+   `MOCK_PORT=8805`: the Marathons list (*Speed Stuff 4 LHS 2026* · *Oengus · feed* · *dates not published*), the
+   Sources list (three rows, *Speed Stuff 4 Charity* · *Oengus*), the SS4C feed drawer (*Read from: **Oengus***, the
+   remembered-records line, **Look again**), and Add a feed… with the Oengus pick (its help line, no slug field) —
+   **zero console errors**, four screenshots looked at. Nothing was submitted in a browser; the writes were checked by
+   `check.mjs` and the tests.
 
 ## Deviations
 

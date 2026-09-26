@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-26 (branch `marathon-feeds-oengus`)** — ONE section APPENDED (`MO-a`…`MO-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `hide-rolemenu`)** — ONE section APPENDED (`RM-a`, `RM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-links`)** — ONE row ADDED to the `ED-` section (`ED-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-drawer`)** — ONE section APPENDED (`ED-a`…`ED-d`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3342,3 +3343,22 @@ loop's first tick), not before.
 | Row | Do | Expect |
 |---|---|---|
 | **`GP-a`** | After the deploy's boot: open the site's Guides hub as staff, look at *See when BaF runs at a marathon*, *Follow a marathon's schedule* and *Ping only during an event*; filter **in Discord**; then run `/help` as a member (no filter) and `/help event` | The three cards' feet read `/event · N steps`, `/event · N steps`, `/golive · N steps` and they appear under **in Discord**, each next to the other guide(s) for its command. `/help`'s `/event` heading ends `· [guide: Propose an event](…) · [guide: See when BaF runs at a marathon](…)` — both links open their guide; no staff guide is linked. `/golive` still carries its single ` · [guide](…)`. Editing a guide's Command to one another guide already has and publishing it saves (no refusal). |
+
+## Rows `MO-a` … `MO-d` — the Oengus feed for Speed Stuff 4 Charity (branch `marathon-feeds-oengus`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-feeds-oengus`, NOT merged, NOT deployed.** Owner, 2026-09-25: *"can we scrape speed
+stuff for charity"*. Design: [`../info/marathon-feeds-design.md`](../info/marathon-feeds-design.md) §H. Rows lettered;
+the conductor numbers them. Local check first: `MOCK_PORT=8805 node site/mock/server.mjs` from the branch, then
+<http://localhost:8805/events.html> ▸ **Sources…**.
+
+⚠️ **The first boot after deploy seeds an Oengus feed on the Speed Stuff 4 Charity row and checks it.** Measured
+2026-09-26 08:18 Phoenix: SS4C's *Speed Stuff 4 LHS 2026* (`ss4lhs26`) is live on oengus.io until 2026-09-28 02:50Z
+with its schedule published — a deploy before 2026-09-29 adds it at once, and its staff notice posts at once too
+(the schedule is out; shadow → the rehearsal home while `marathon_mode` is shadow).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MO-a`** | Events ▸ **Sources…** ▸ **Add a feed…** ▸ a channel-only row ▸ *Read from* **Oengus** (or look at the seeded **Speed Stuff 4 Charity** row after the first boot) | The line under the pick says it reads *every marathon on oengus.io that streams on this channel's Twitch — nothing to type*; no slug field. **Add the feed** answers *… now reads Oengus for **…***; the Sources list shows the row with *Oengus* as its source. |
+| **`MO-b`** | **Check now** on the Speed Stuff 4 Charity row | Every SS4C marathon on oengus.io's home (`live` / `next` / `open`) appears on the Marathons list as *Oengus · feed* on the SS4C channel, **without** a staff notice while its schedule is unpublished; a marathon on the same home page that streams elsewhere (e.g. LSS26, `longspeedrunsummit`) is **not** added. `marathon.feed_checked` counts it. |
+| **`MO-c`** | Wait for (or press **Read it now** on) an SS4C marathon whose schedule was unpublished once Oengus publishes it | ONE staff notice (*Speed Stuff 4 Charity has a new event: **…***, the embed, the three rows), `marathon.notice_posted` with `because: published`; the next read posts nothing. The runs list the runners, a runner with a Twitch connection on Oengus by that login. |
+| **`MO-d`** | Open the Speed Stuff 4 Charity feed (its row) ▸ **Look again** | The drawer said *Remembers N Oengus marathon(s) it has already looked at*; after the press the answer ends *It read every Oengus marathon's record again (N remembered before).*, nothing already added is added twice, `marathon.feed_looked` carries `reread: N`. |
