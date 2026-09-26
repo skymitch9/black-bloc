@@ -734,3 +734,49 @@ async def test_moving_an_event_black_bloc_never_heard_of_is_a_404(client, sign_i
 
 def test_moving_an_event_into_the_forum_needs_a_session(client):
     assert client.post("/api/events/1/forum", json={}).status_code == 401
+
+
+async def test_a_row_with_nothing_posted_carries_no_links(client, sign_in, web, wf):
+    event_id = await an_event(web, wf)
+    sign_in(client)
+
+    body = client.get(f"/api/events/{event_id}").json()["event"]
+
+    assert body["announce_url"] is None
+    assert body["scheduled_event_url"] is None
+    assert body["review_url"] is None
+
+
+async def test_the_detail_and_the_list_carry_the_three_discord_links(client, sign_in, web, wf):
+    event_id = await an_event(web, wf, status="approved")
+    await web.store.set(wf.GUILD_ID, "events_announce_channel_id", 777)
+    await web.db.conn.execute(
+        "UPDATE events SET announce_message_id = ?, scheduled_event_id = ?, "
+        "review_channel_id = ? WHERE id = ?",
+        (555, 666, 888, event_id),
+    )
+    await web.db.conn.commit()
+    sign_in(client)
+
+    detail = client.get(f"/api/events/{event_id}").json()["event"]
+    listed = {row["id"]: row for row in client.get("/api/events").json()}[event_id]
+
+    for body in (detail, listed):
+        assert body["announce_url"] == f"https://discord.com/channels/{wf.GUILD_ID}/777/555"
+        assert body["scheduled_event_url"] == f"https://discord.com/events/{wf.GUILD_ID}/666"
+        assert body["review_url"] == f"https://discord.com/channels/{wf.GUILD_ID}/888"
+
+
+async def test_a_forum_post_links_to_its_thread(client, sign_in, web, wf):
+    event_id = await an_event(web, wf)
+    await web.db.conn.execute(
+        "UPDATE events SET review_kind = 'post', review_channel_id = ? WHERE id = ?",
+        (999, event_id),
+    )
+    await web.db.conn.commit()
+    sign_in(client)
+
+    body = client.get(f"/api/events/{event_id}").json()["event"]
+
+    assert body["review_url"] == f"https://discord.com/channels/{wf.GUILD_ID}/999"
+

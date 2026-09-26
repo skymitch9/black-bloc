@@ -26,11 +26,14 @@ from ...events import (
     events_by_status,
     get_event,
     make_forum,
+    message_url,
     move_room_to_forum,
     moved_words,
     read_where,
     rename_channel,
+    review_channel_url,
     review_kind,
+    scheduled_event_url,
     update_event,
     where_said,
 )
@@ -88,7 +91,18 @@ NO_POST = (
 NO_PLACE: dict[str, str] = {"room": NO_ROOM, "post": NO_POST}
 
 
-def event_row(guild: Any, row: Any, marathon: Any = None) -> dict[str, Any]:
+def event_links(guild: Any, row: Any, announce_channel_id: Any) -> dict[str, str | None]:
+    review_id = cell(row, "review_channel_id")
+    return {
+        "announce_url": message_url(guild.id, announce_channel_id, row["announce_message_id"]),
+        "scheduled_event_url": scheduled_event_url(guild.id, row["scheduled_event_id"]),
+        "review_url": review_channel_url(guild.id, review_id) if review_id else None,
+    }
+
+
+def event_row(
+    guild: Any, row: Any, marathon: Any = None, announce_channel_id: Any = None
+) -> dict[str, Any]:
     where = read_where(row)
     channel = guild.get_channel(where.channel_id) if where.channel_id else None
     return {
@@ -123,7 +137,7 @@ def event_row(guild: Any, row: Any, marathon: Any = None) -> dict[str, Any]:
         "review_kind": review_kind(row),
         "created_at": row["created_at"],
         "marathon": marathon,
-    }
+    } | event_links(guild, row, announce_channel_id)
 
 
 async def marathon_of(bot: Any, guild: Any, row: Any) -> dict[str, Any] | None:
@@ -152,7 +166,12 @@ async def marathon_of(bot: Any, guild: Any, row: Any) -> dict[str, Any] | None:
 
 
 async def shown(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
-    return event_row(guild, row, await marathon_of(bot, guild, row))
+    return event_row(
+        guild,
+        row,
+        await marathon_of(bot, guild, row),
+        bot.store.get(guild.id, "events_announce_channel_id"),
+    )
 
 
 async def wanted_event(bot: Any, guild: Any, event_id: int) -> Any:

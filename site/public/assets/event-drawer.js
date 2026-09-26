@@ -42,6 +42,9 @@ const OPEN_MARATHON = 'Open ↗';
 const PROPOSED = 'Proposed ';
 const ANNOUNCED_WORDS = 'yes — the announcement is up';
 const SCHEDULED_WORDS = 'made — it is on the server’s Events list';
+const ANNOUNCED_LINK = 'announcement ↗';
+const SCHEDULED_LINK = 'on the server’s Events list ↗';
+const OUT_MARK = ' ↗';
 const SETTLED = 'This one is settled, so its details cannot be changed — only an event waiting ' +
   'for a decision or already approved can be edited.';
 const NOT_RESENT = 'Saving does not rewrite an announcement that is already up or a Discord ' +
@@ -256,6 +259,19 @@ function whenWords(row) {
   return [range, row.duration, HERE_ZONE].filter(Boolean).join(' · ');
 }
 
+function outLink(href, children) {
+  return el('a', { href, rel: 'noreferrer', target: '_blank' }, children);
+}
+
+function linkedFact(label, href, linkText, words) {
+  return fact(label, href ? outLink(href, [linkText]) : el('span', { text: words }));
+}
+
+function placeNode(row) {
+  const name = nameNode(row.review_channel_id);
+  return row.review_url ? outLink(row.review_url, [name, OUT_MARK]) : name;
+}
+
 function eventCard(row, say, forum) {
   const facts = [];
   if (row.description) facts.push(el('p', { class: 'ev-about', text: row.description }));
@@ -265,11 +281,11 @@ function eventCard(row, say, forum) {
   if (row.review_channel_id) {
     const kind = row.review_kind === 'post' ? 'post' : 'room';
     const move = forumMove(row, say, forum, (done) => landed(row, done));
-    facts.push(fact(PLACE_WORD[kind], [nameNode(row.review_channel_id), gap(), deletePlace(row, say), move ? gap() : null, move]));
+    facts.push(fact(PLACE_WORD[kind], [placeNode(row), gap(), deletePlace(row, say), move ? gap() : null, move]));
   }
   if (row.moved_word) facts.push(fact('Now', el('span', { text: row.moved_word })));
-  if (row.announced) facts.push(fact('Announced', el('span', { text: ANNOUNCED_WORDS })));
-  if (row.scheduled) facts.push(fact('Discord event', el('span', { text: SCHEDULED_WORDS })));
+  if (row.announced) facts.push(linkedFact('Announced', row.announce_url, ANNOUNCED_LINK, ANNOUNCED_WORDS));
+  if (row.scheduled) facts.push(linkedFact('Discord event', row.scheduled_event_url, SCHEDULED_LINK, SCHEDULED_WORDS));
   return card(CARD_EVENT, facts.filter(Boolean));
 }
 
