@@ -308,7 +308,7 @@ write and the `dismiss` write — so `check.mjs` reads *22 pages, 246 routes*), 
 pages, top-level commands and log features unchanged. **Sources shipped: tracker GDQ, tracker RPGLB, horaro.net
 (ESA-capable). Parked: Oengus (SS4C) — Deviation 25. Not built: RGL (no source).**)*
 
-1. ⚠️ **No ESA seed — owner 2026-09-25 15:0x: ESA opted out of marathons** (relayed by the conductor mid-build as a
+1. ✅ **REVERSED for discovery 2026-09-26 12:5x — owner: *"opt esam back in for marathon discovery but not for golive shout outs"*: the live `esamarathon` row (id 4) has `marathons` on again and feed 4 "ESA" reads horaro.net/esa (added by hand on the site, exactly the path this deviation left open; announce/spotlight stay off). The seed list is unchanged — no code moved.** Was: ⚠️ **No ESA seed — owner 2026-09-25 15:0x: ESA opted out of marathons** (relayed by the conductor mid-build as a
    narrowing). The boot seed makes only the two tracker feeds (GDQ on `gamesdonequick`, RPGLB on `rpglimitbreak`).
    The Horaro reader and the `horaro` feed source are built exactly as §B says, so staff can give any channel row a
    horaro.net feed by hand (**Add a feed…** ▸ horaro ▸ slug `esa`); the ESA fixture and its tests stay. The mock has

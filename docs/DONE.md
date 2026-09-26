@@ -43,6 +43,12 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-26 — ESA back in for marathon discovery (live-site change, no deploy)
+
+Done **12:5x Phoenix** through the owner's browser session; nothing in code changed. Go-live announce for ESA stays off by the owner's word.
+
+- 🔁 **ESA opted BACK IN for marathon discovery, still OUT of go-live shoutouts (owner, 2026-09-26 12:5x Phoenix, verbatim: *"opt esam back in for marathon discovery but not for golive shout outs"*).** Reverses the 2026-09-25 15:0x opt-out for the marathons half only: the `esamarathon` channel row (live id 4) gets `marathons` ON and a fixed-slug horaro.net feed (slug `esa`, the reader built by `marathon-feeds`, Deviation 1 — no seed, added by hand) so ESA events are found and pre-loaded; its go-live announce stays OFF (no spotlight, no ping). Status: ✅ **DONE 2026-09-26 12:5x on the live site** through the owner's signed-in browser session (no code, no deploy): `PATCH /api/golive/spotlight/4 {marathons: true}` answered *esamarathon takes marathons again…*; `POST /api/marathons/feeds {spotlight_id 4, source horaro, slug esa, name ESA}` made **feed 4 "ESA"** reading horaro.net/esa, checked at once: 0 events ahead (nothing listed on horaro today). The row's announce and spotlight stayed OFF (read back false/false). Noted in `marathon-feeds-design.md` Deviation 1.
+
 ## 2026-09-26 — v172: the Oengus feed finds Speed Stuff 4 Charity marathons by itself
 
 Deployed **08:50 Phoenix** (release commit `4b6ce946`, merge `ca5ec825`; gate 8,467 passed + 3 skipped; boot `database: added marathon_feeds.seen` 15:50:46Z, logged in 15:50:49Z, no Traceback; `/health` 63 ms; pre-deploy snapshot `backup-2026-09-26-pre-v172.sqlite3` 3.54 MB). Schema **68**, keys **492**. **Live proof within 8 s of login:** the `speedstuff4charity` feed seeded, its first check found *Speed Stuff 4 LHS 2026* (live on Oengus until 2026-09-28 04:45Z), added it as marathon #6 with 17 runs, matched one BaF runner, set the ping window, and posted the staff notice to the shadow home (`marathon_mode` is shadow). Not opened in Discord by hand; sweeps `MO-a…d` are the owner's. Design: [`info/marathon-feeds-design.md`](info/marathon-feeds-design.md) §H and its build Deviations.
