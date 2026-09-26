@@ -34,19 +34,33 @@ mark them as BaF runners or just spotlight other runners"*
 
 ## B. A marathon opens on its people
 
-The drawer's order becomes **Schedule · People · Runs · Event · The channel · Posts · Pause / Remove** — *People*
-replaces *Who is who* and comes before the runs, because it is what staff open the marathon for.
+The drawer's order becomes **Schedule · People · Event · The channel · Posts · Pause / Remove** — *People* replaces
+both *Who is who* and *Runs*, because it is what staff open the marathon for.
 
-**People** is one list of every person on the schedule (runners, hosts, commentators — `part` shown as a small
-word), built from the runs' `people` JSON grouped by person (name + login), in two blocks:
+**Owner, 17:2x, verbatim:** *"we should also sort runners by days or something, so 2 list sections, a top list with BaF
+members, a bottom list with all members with collapses by days/dates. This should help make it less unruly. Also we
+should do it by timeslot/game slot. That way if its a 4 player race they share a row and we can click in to link them
+instead of it being super long and hard to manage."*
 
-1. **BaF** — everyone matched to a member (by link, by username or by pairing): *display name · @discord · twitch.tv/login ·
-   3 runs (1 done, 1 on now) · runner* with the member's avatar, and the moves **Unlink** (when it is a pairing —
-   removes it; a link-based match says *matched by their Twitch link* and offers nothing to undo here) and
-   **Spotlight…** (below).
-2. **Everyone else** — *name · twitch.tv/login (or no link) · N runs · part*, and per row: **Link to a member…** (the
-   existing pairing, pre-filled with the name: a member picker → `POST …/people` → the row moves up into BaF at once,
-   and the run becomes ours — board, reminders, shoutouts follow), and **Spotlight…**.
+**People** has two blocks:
+
+1. **BaF** — a flat list, sorted by each person's NEXT run (on-now first, then soonest, then people whose runs are all
+   done): *avatar · display name · @discord · twitch.tv/login · their runs as short chips (`Sun 12 Jan 15:15 Super Metroid`,
+   the on-now one lit, done ones dimmed) · part*, and the moves **Unlink** (a pairing) / *matched by their Twitch link* /
+   **Spotlight…** (below). Never folded; it is the point of the card.
+2. **The schedule** — every SLOT (one row per run, races share the row), grouped by **day** in the guild's
+   `default_timezone`, each day a `foldout` titled *Sun 12 Jan · 18 slots · 2 BaF* (today's day open, past days shut, future
+   days shut unless they hold BaF — say so in Deviations if the rule is changed). A slot row: *15:15 · Super Metroid ·
+   Any% · 0:43 · [Casey ✦BaF] [TheKing] [Peas ✦BaF] · runner chips first, then hosts/commentators in a quieter tone ·
+   state* (on now lit, done dimmed, moved shows the old time). **Clicking a slot opens it** (a sub-view inside the drawer,
+   or an inline expansion — the builder picks the one the site's `drawer` supports and says which): each person in
+   that slot on their own line with **Link to a member…** (the pairing, pre-filled; the line turns ✦BaF at once, the
+   run becomes ours) / **Unlink** / **Spotlight…** / *already on the Go-live page ↗*. A 4-player race is one row and one
+   click, four lines inside.
+   A filter box above the schedule matches names, logins and games and opens the days that hold a hit.
+
+The Runs card is retired — the schedule block IS the runs view now (it carries everything Runs did: the moved-from
+note, the states, and the staff run moves *Shout it now / Mark it upcoming / Mark it live* on the opened slot).
 
 **Spotlight…** on any row (with a Twitch login) makes a channel-only spotlight row for that runner through the ONE
 existing path (`spotlight_channel` / `POST /api/golive/spotlight`): login = theirs, starts = the marathon's start (or
@@ -60,18 +74,30 @@ Keys: `marathon_spotlight_lead_hours` (2, 0–48), `marathon_spotlight_slack_hou
 (*{name} at {marathon}*). Log `marathon.runner_spotlit` / `runner_unspotlit` (routine) beside the spotlight's own
 `golive.spotlight_*` rows.
 
-The list has a filter box and a **BaF / Everyone / All** chip like Runs; BaF is open, Everyone else folds shut when it
-is longer than 20 (a `foldout`) — a GDQ schedule has 600 talent slots. The Runs card stays as the schedule view (BaF
-runs highlighted) and gains nothing.
-
-**`/event` ▸ Marathons…** gains **People…** on the picked marathon: the BaF block as lines, then a select of everyone
-else (name · runs) whose pick opens a small view with **Link to a member…** (a `UserSelect`) and **Spotlight** — the
-same functions.
+**`/event` ▸ Marathons…** gains **People…** on the picked marathon: the BaF block as lines (members see this block
+and nothing more — *who from BaF is on, and when*), then, for staff, a day select → a slot select (time · game ·
+people) → the slot view with a person select and **Link to a member…** (a `UserSelect`) / **Spotlight** — the same
+functions. The marathon notice (§E of the shadow-home design) gains a **People…** button beside **Manage…** that opens
+the same view, so linking happens from the notice too.
 
 Routes: `GET /api/marathons/{id}/people` grows to answer the grouped people list (`baf[]`, `others[]`, each with
 `name, login, user_id, member, parts, runs, done, live, pairing_id, spotlight_id, spotlight_until`) beside the pairings it
 answers today; `POST /api/marathons/{id}/people/{login-or-name}/spotlight`, `DELETE …/spotlight`. Contract + mock rows
 (AGDQ 2027: 3 BaF, ~10 others, one spotlit).
+
+## B2. Suggestions folded in (Fable, 17:2x — the owner asked for them; each is small and rides here)
+
+1. **Day headers count BaF** (*18 slots · 2 BaF*) so a busy day is visible shut.
+2. **Near-miss names.** When a schedule is read, names that are one edit away from a Discord username (`Bobbeigh` /
+   `bobbeigh`, `gz` / `gz_hero`) are shown in the slot view as *looks like @bobbeigh — Link?* (one click, the same
+   pairing); the exact-username rule already links by itself.
+3. **A race shouts once.** When two BaF people share a slot, the shoutout and the reminder name both and post once
+   (verify `{member}` joins names; a test).
+4. **The member view is the BaF block only** — `/event` ▸ Marathons… ▸ People… for a member answers *who from BaF is on
+   and when*, nothing else; staff see the schedule below it.
+5. **The notice carries People…** (above), because the moment a marathon appears is when staff want to link.
+6. **Spotlight from the slot honours the slot's time**: a runner spotlit from a slot gets that run's window (lead/slack),
+   from the BaF block their whole span; the design's §B already says both.
 
 ## C. Tests, docs, gate
 
@@ -85,7 +111,8 @@ the two spotlight routes, the staff gate, refusals in words: no Twitch login, al
 orders, `ruff`, ES parse. Docs: `code-notes.md`; this doc's foot; `architecture.md` (the table, the keys, the routes);
 `docs/info/README.md` (one row); one dated line at the top of `marathon-ux-design.md` and `spotlight-design.md`;
 `sweeps.md` rows `MP-a…` (a: the table's Source column; b: Sources… opens the feeds; c: a marathon opens on People
-with BaF on top; d: Link to a member moves a runner up and the board gains the line; e: Spotlight a runner → a
+with BaF on top and the schedule by day below, today open; d: a 4-player race is one row and opening it lists four
+people; Link to a member on one moves them into BaF and the board gains the line; e: Spotlight a runner → a
 channel-only row on the Go-live page with the marathon's dates; f: `/event` ▸ Marathons… ▸ People…). NOT `TODO.md` /
 `DONE.md` / `deploys.log` / `KNOWN_ISSUES.md`. ⚠️ Migrate before deploy: one small table through the bootstrap.
 
