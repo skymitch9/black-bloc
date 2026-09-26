@@ -44,8 +44,9 @@ def test_the_seeds_are_the_two_tracker_channel_rows_and_ss4c_on_oengus_and_not_e
         ("gamesdonequick", "gdq"),
         ("rpglimitbreak", "rpglb"),
         ("speedstuff4charity", "oengus"),
+        ("fastpacedevents", "horaro"),
     ]
-    ss4c = mf.SEEDS[-1]
+    ss4c = mf.SEEDS[2]
     assert (ss4c.source, ss4c.feed_ref, ss4c.name) == (
         mf.OENGUS_FEED,
         "speedstuff4charity",
@@ -205,3 +206,14 @@ def test_the_feed_line_says_what_it_reads_and_when_it_last_did():
     failed = feed(last_checked_at=SEPT.isoformat(), last_ok=0, last_error="boom", active=0)
     assert "could not be checked since" in mf.feed_line(failed, "x", 6)
     assert mf.feed_line(failed, "x", 6).endswith("· **paused**")
+
+
+def test_a_horaro_events_feed_makes_horaro_marathons_and_reads_back_its_own_pick():
+    fpe = feed(source=mf.HORARO_EVENTS_FEED, feed_ref="fastpacedevents", name="Fast Pace")
+    assert mf.marathon_source(fpe) == "horaro"
+    assert mf.source_word(fpe) == "horaro.net events"
+    assert mf.pick_of("horaro_events") == (mf.HORARO_EVENTS_FEED, None)
+    assert mf.pick_for(fpe) == "horaro_events"
+    assert "finds this channel's events on horaro.net" in mf.PICK_WORDS["horaro_events"]
+    fpe_seed = mf.Seed("fastpacedevents", mf.HORARO_EVENTS_FEED, "fastpacedevents", "Fast Pace")
+    assert mf.SEEDS[-1] == fpe_seed

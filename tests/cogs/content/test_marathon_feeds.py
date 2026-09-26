@@ -8,6 +8,7 @@ import pytest
 
 from black_bloc import marathon as mt
 from black_bloc import marathon_feeds as mf
+from black_bloc import marathon_horaro_events as hre
 from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content import marathon_feeds as feeds
 from black_bloc.cogs.content.marathon import (
@@ -1065,3 +1066,115 @@ async def test_a_failed_oengus_home_is_a_failed_check_that_keeps_the_memory(bot,
     assert not failed.ok and "oengus.io answered 503" in failed.message
     feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
     assert len(mf.seen_of(feed)) == 4 and feed["checks_failed"] == 1
+
+
+# --- horaro.net events (Fast Paced Events) ----------------------------------------------------
+
+FPFF3 = "fpff3/schedule"
+LOGIN_FPE = "fastpacedevents"
+BEFORE_FPFF3 = datetime(2026, 8, 20, 12, 0, tzinfo=UTC)
+FPFH2023 = {"slug": "schedule", "name": "Fast Pace for Headspace 2023", "start": "2023-12-01"}
+
+
+async def fpe_feed(bot, cog, when="published"):  # noqa: F811
+    searched = []
+
+    async def horaro_events(name):
+        searched.append(name)
+        return list(fixture("horaro_events_search.json")["data"])
+
+    cog.client.horaro_events = horaro_events
+    cog.client.searched = searched
+    cog.client.horaro |= {
+        "fpff3": fixture("horaro_fpff3_schedules.json")["data"],
+        "fpfh2023": [FPFH2023],
+    }
+    cog.clock = lambda: BEFORE_FPFF3
+    await staff_room(bot)
+    await bot.store.set(GUILD, "marathon_feed_notice_when", when)
+    row = await a_channel(bot, "FastPacedEvents", "Fast Paced Events")
+    await cog.tick_once()
+    feed = next(one for one in await all_feeds(bot) if one["source"] == mf.HORARO_EVENTS_FEED)
+    return row, feed
+
+
+def horaro_reads(cog):
+    return [one for one in cog.client.list_calls if one.startswith("horaro:")]
+
+
+async def test_the_seed_gives_fpe_a_horaro_events_feed_that_adds_its_event_and_not_another(
+    bot,  # noqa: F811
+    cog,
+):
+    row, feed = await fpe_feed(bot, cog)
+    assert (feed["name"], feed["feed_ref"], feed["spotlight_id"]) == ("Fast Pace", LOGIN_FPE, row)
+    assert cog.client.searched == ["Fast Pace"]
+    assert sorted(horaro_reads(cog)) == ["horaro:fpff3", "horaro:fpfh2023"]
+    made = await by_ref(bot)
+    assert list(made) == [FPFF3]
+    fpff3 = made[FPFF3]
+    assert (fpff3["source"], fpff3["name"]) == ("horaro", "Fast Pace for Friendspace 3")
+    assert fpff3["schedule_url"] == "https://horaro.net/fpff3/schedule"
+    assert fpff3["spotlight_id"] == row and fpff3["feed_id"] == feed["id"]
+    assert fpff3["noticed_at"] is None and notices(bot) == []
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert {one["ref"]: one["twitch"] for one in mf.seen_of(feed)} == {
+        "fpff3": LOGIN_FPE,
+        "fpfh2023": LOGIN_FPE,
+        "fpfh": "tgh_sr",
+    }
+    added = await logged(bot, "marathon.feed_added")
+    assert [(one["event"], one["source"]) for one in added] == [(FPFF3, "horaro")]
+
+
+async def test_a_second_horaro_events_check_reads_nothing_again_and_adds_nothing_twice(
+    bot,  # noqa: F811
+    cog,
+):
+    await fpe_feed(bot, cog)
+    cog.client.list_calls.clear()
+    cog.clock = lambda: BEFORE_FPFF3 + timedelta(hours=7)
+    await cog.tick_once()
+    assert horaro_reads(cog) == [] and cog.client.searched == ["Fast Pace", "Fast Pace"]
+    assert list(await by_ref(bot)) == [FPFF3]
+    assert (await checked_of(bot, "Fast Pace"))["found"] == 1
+
+
+async def test_a_horaro_events_marathon_notices_once_its_schedule_yields_runs(bot, cog):  # noqa: F811
+    await fpe_feed(bot, cog)
+    marathon = (await by_ref(bot))[FPFF3]
+    cog.client.runs_by_ref[("horaro", FPFF3)] = two_runs()
+    await refresh_marathon(bot, bot.guild, marathon)
+    await refresh_marathon(bot, bot.guild, marathon)
+    assert len(notices(bot)) == 1
+    assert "**Fast Pace for Friendspace 3**" in notices(bot)[0].content
+    assert [row["because"] for row in await posted(bot)] == ["published"]
+
+
+async def test_look_again_on_a_horaro_events_feed_forgets_and_reads_every_event_again(
+    bot,  # noqa: F811
+    cog,
+):
+    _row, feed = await fpe_feed(bot, cog)
+    cog.client.list_calls.clear()
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    looked = await feeds.look_again(bot, bot.guild, FakeActor(), feed)
+    assert looked.ok and hre.REREAD.format(count=3) in looked.message
+    assert sorted(horaro_reads(cog)) == ["horaro:fpff3", "horaro:fpfh2023"]
+    assert list(await by_ref(bot)) == [FPFF3]
+    assert [one["reread"] for one in await logged(bot, "marathon.feed_looked")] == [3]
+
+
+async def test_add_a_feed_with_the_horaro_events_pick_needs_no_slug_and_keys_on_the_login(
+    bot,  # noqa: F811
+    cog,
+):
+    await fpe_feed(bot, cog)
+    other = await a_channel(bot, "LadyArcaders", "Lady Arcaders")
+    made = await feeds.create_feed(
+        bot, bot.guild, FakeActor(), spotlight_id=other, pick="horaro_events", name="Fast Pace"
+    )
+    assert made.ok, made.message
+    assert (made.value["source"], made.value["feed_ref"]) == ("horaro_events", "ladyarcaders")
+    assert "now reads horaro.net events for **Lady Arcaders**" in made.message
+    assert list(await by_ref(bot)) == [FPFF3]

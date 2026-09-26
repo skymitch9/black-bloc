@@ -11,6 +11,7 @@ import discord
 from ... import marathon as mt
 from ... import marathon_events as me
 from ... import marathon_feeds as mf
+from ... import marathon_horaro_events as hre
 from ...actionlog import log_action
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
@@ -310,6 +311,8 @@ async def candidates_of(bot: Any, guild: Any, feed: Any, now: Any) -> list[mf.Ca
         return mf.horaro_candidates(str(feed["feed_ref"]), feed["name"], rows, now, recent)
     if feed["source"] == mf.OENGUS_FEED:
         return await oengus_candidates_of(bot, feed, now, recent)
+    if feed["source"] == mf.HORARO_EVENTS_FEED:
+        return await horaro_events_candidates_of(bot, feed, now, recent)
     if source is None:
         raise ScheduleError(mf.UNKNOWN_PICK.format(given=str(feed["feed_ref"])[:60]))
     return mf.tracker_candidates(source, await cog.client.events(source), now, recent)
@@ -332,6 +335,18 @@ async def oengus_candidates_of(bot: Any, feed: Any, now: Any, recent: int) -> li
     channel = await channel_of(bot.db, feed)
     login = _cell(channel, "twitch_login") or feed["feed_ref"]
     return mf.oengus_candidates(listed, seen, str(login), now, recent)
+
+
+async def horaro_events_candidates_of(
+    bot: Any, feed: Any, now: Any, recent: int
+) -> list[mf.Candidate]:
+    """A horaro.net search by the feed's name, kept to the channel's login; memory as Oengus."""
+    channel = await channel_of(bot.db, feed)
+    login = str(_cell(channel, "twitch_login") or feed["feed_ref"])
+    found, seen = await hre.check(cog_of(bot).client, feed, login, now, recent)
+    if seen is not None:
+        await update_feed(bot.db, feed["id"], seen=json.dumps(seen))
+    return found
 
 
 async def check_failed(
@@ -706,6 +721,8 @@ async def create_feed(
     source, feed_ref = picked
     if source == mf.OENGUS_FEED:
         feed_ref = str(channel["twitch_login"]).lower()
+    if source == mf.HORARO_EVENTS_FEED:
+        feed_ref = str(channel["twitch_login"]).lower()
     if source == mf.HORARO_FEED:
         feed_ref = str(slug or "").strip().lower().strip("/")
         if not HORARO_SLUG.match(feed_ref):
@@ -856,6 +873,8 @@ async def set_feed(
             moved = {"spotlight_id": int(channel["id"])}
             if fresh["source"] == mf.OENGUS_FEED:
                 moved["feed_ref"] = str(channel["twitch_login"]).lower()
+            if fresh["source"] == mf.HORARO_EVENTS_FEED:
+                moved["feed_ref"] = str(channel["twitch_login"]).lower()
             try:
                 await update_feed(bot.db, fresh["id"], **moved)
             except sqlite3.IntegrityError:
@@ -948,7 +967,8 @@ async def look_again(
         )
     said = mf.FEED_LOOKED.format(name=fresh["name"], count=len(dropped))
     if reread:
-        said = f"{said} {mf.FEED_REREAD.format(count=reread)}"
+        again = hre.REREAD if fresh["source"] == mf.HORARO_EVENTS_FEED else mf.FEED_REREAD
+        said = f"{said} {again.format(count=reread)}"
     return Outcome(checked.ok, f"{said} {checked.message}", checked.code, checked.status)
 
 
@@ -1764,7 +1784,7 @@ def guess_pick(login: str) -> str:
 
 
 class AddFeedModal(AnswersErrors, discord.ui.Modal, title=mf.ADD_FEED_TITLE):
-    source = discord.ui.TextInput(label=mf.ADD_FEED_SOURCE, max_length=10)
+    source = discord.ui.TextInput(label=mf.ADD_FEED_SOURCE, max_length=20)
     slug = discord.ui.TextInput(
         label=mf.ADD_FEED_SLUG, placeholder=mf.ADD_FEED_SLUG_HINT, required=False, max_length=60
     )

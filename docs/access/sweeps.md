@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-26 (branch `marathon-horaro-events`)** — ONE section APPENDED (`HE-a`…`HE-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-feeds-oengus`)** — ONE section APPENDED (`MO-a`…`MO-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `hide-rolemenu`)** — ONE section APPENDED (`RM-a`, `RM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-links`)** — ONE row ADDED to the `ED-` section (`ED-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3362,3 +3363,22 @@ with its schedule published — a deploy before 2026-09-29 adds it at once, and 
 | **`MO-b`** | **Check now** on the Speed Stuff 4 Charity row | Every SS4C marathon on oengus.io's home (`live` / `next` / `open`) appears on the Marathons list as *Oengus · feed* on the SS4C channel, **without** a staff notice while its schedule is unpublished; a marathon on the same home page that streams elsewhere (e.g. LSS26, `longspeedrunsummit`) is **not** added. `marathon.feed_checked` counts it. |
 | **`MO-c`** | Wait for (or press **Read it now** on) an SS4C marathon whose schedule was unpublished once Oengus publishes it | ONE staff notice (*Speed Stuff 4 Charity has a new event: **…***, the embed, the three rows), `marathon.notice_posted` with `because: published`; the next read posts nothing. The runs list the runners, a runner with a Twitch connection on Oengus by that login. |
 | **`MO-d`** | Open the Speed Stuff 4 Charity feed (its row) ▸ **Look again** | The drawer said *Remembers N Oengus marathon(s) it has already looked at*; after the press the answer ends *It read every Oengus marathon's record again (N remembered before).*, nothing already added is added twice, `marathon.feed_looked` carries `reread: N`. |
+
+## Rows `HE-a` … `HE-d` — the horaro.net events feed for Fast Paced Events (branch `marathon-horaro-events`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-horaro-events`, NOT merged, NOT deployed.** Owner, 2026-09-26: *"Build them all now"*.
+Design: [`../info/marathon-horaro-events-design.md`](../info/marathon-horaro-events-design.md). Rows lettered; the
+conductor numbers them. Local check first: `MOCK_PORT=8807 node site/mock/server.mjs` from the branch, then
+<http://localhost:8807/events.html> ▸ **Sources…**.
+
+⚠️ **Precondition: a `fastpacedevents` channel row on the Go-live page (marathons on).** The live bot has none
+(2026-09-26 12:1x). Add it, then the NEXT boot seeds a feed named **Fast Pace** on it (or add the feed by hand, `HE-a`).
+Measured 2026-09-26: FPE has **no upcoming** horaro.net event (newest `fpff3`, 2026-08-22, over), so `HE-b`/`HE-c`
+wait for FPE to create one.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`HE-a`** | Events ▸ **Sources…** ▸ **Add a feed…** ▸ the **Fast Paced Events** row ▸ *Read from* **horaro.net events** (guessed for that row), Name **Fast Pace** — or look at the seeded row after the boot | The line under the pick says it finds every horaro.net event streaming on this channel's Twitch *by searching event names for the Name below*; **no slug field**. **Add the feed** answers *… now reads horaro.net events for **Fast Paced Events** …*; the Sources list shows *horaro.net events* as the source. The feed drawer says *Remembers 8 horaro.net event(s)…* (FPE's 7 + `fpfh`, another channel's). |
+| **`HE-b`** | Once FPE creates its next horaro.net event: **Check now** on the row (or wait ≤ 6 h) | That event appears on the Marathons list as a plain *horaro.net* marathon on the Fast Paced Events channel, **without** a staff notice while its schedule has no runs; `marathon.feed_checked` counts it. An event the same search finds that streams elsewhere (e.g. `fpfh`, `tgh_sr`) is **not** added; a second check adds nothing twice. |
+| **`HE-c`** | Wait for (or press **Read it now** on) that marathon once its schedule has runs | ONE staff notice (*Fast Pace has a new event: **…***, the embed, the three rows), `marathon.notice_posted` with `because: published`; the next read posts nothing. Runners are plain names (FPE writes no Twitch links), so they match by pairing / Discord username only. |
+| **`HE-d`** | Open the Fast Pace feed ▸ **Look again** | The answer ends *It read every horaro.net event it had looked at again (N remembered before).*; nothing already added is added twice; `marathon.feed_looked` carries `reread: N`. |

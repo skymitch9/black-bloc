@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import quote
 
 from .golive import twitch_login_from_url
 from .youtube import BROWSER_AGENT
@@ -74,6 +75,8 @@ HORARO_SITE = "https://horaro.net"
 HORARO_PAGE = HORARO_SITE + "/{ref}"
 HORARO_JSON = HORARO_SITE + "/{ref}.json"
 HORARO_SCHEDULES = HORARO_SITE + "/-/api/v1/events/{slug}/schedules"
+HORARO_EVENTS = HORARO_SITE + "/-/api/v1/events?name={name}&max=100"
+HORARO_EVENT_PAGES = 3
 HORARO_SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,60}$")
 OENGUS_URL = re.compile(
     r"^https?://(?:www\.)?oengus\.io/marathon/([A-Za-z0-9_-]{1,40})"
@@ -458,6 +461,19 @@ def horaro_span(schedule: Any) -> tuple[str | None, str | None]:
     return (starts.isoformat() if starts else None, ends.isoformat() if ends else None)
 
 
+def horaro_next(payload: Any) -> str | None:
+    """horaro.net's `pagination.links` next page, only when it stays on horaro.net."""
+    paging = payload.get("pagination") if isinstance(payload, dict) else None
+    links = paging.get("links") if isinstance(paging, dict) else None
+    for link in links or ():
+        if not isinstance(link, dict):
+            continue
+        uri = str(link.get("uri") or "")
+        if link.get("rel") == "next" and uri.startswith(HORARO_SITE + "/"):
+            return uri
+    return None
+
+
 def next_page(payload: Any) -> str | None:
     found = payload.get("next") if isinstance(payload, dict) else None
     return str(found) if found else None
@@ -552,6 +568,23 @@ class ScheduleClient:
         if status != 200:
             raise ScheduleError(ANSWERED.format(site=site_of(HORARO), status=status))
         return [row for row in body.get("data") or () if isinstance(row, dict)]
+
+    async def horaro_events(self, name: str) -> list[dict[str, Any]]:
+        """The horaro.net events whose name holds `name`, a few pages at most; never all."""
+        wanted = " ".join(str(name or "").split())
+        if not wanted:
+            return []
+        url: str | None = HORARO_EVENTS.format(name=quote(wanted))
+        found: list[dict[str, Any]] = []
+        pages = 0
+        while url and pages < HORARO_EVENT_PAGES:
+            status, body = await self._json(url, HORARO)
+            if status != 200:
+                raise ScheduleError(ANSWERED.format(site=site_of(HORARO), status=status))
+            found.extend(row for row in body.get("data") or () if isinstance(row, dict))
+            url = horaro_next(body)
+            pages += 1
+        return found
 
     async def oengus_marathon(self, marathon: str) -> dict[str, Any]:
         """One Oengus marathon's v1 record: its name, dates and the Twitch channel it airs on."""
@@ -702,6 +735,7 @@ __all__ = [
     "ScheduleError",
     "event_from",
     "event_url",
+    "horaro_next",
     "horaro_people",
     "horaro_schedule_of",
     "horaro_span",

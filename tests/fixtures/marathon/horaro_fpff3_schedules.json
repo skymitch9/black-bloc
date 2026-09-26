@@ -1,0 +1,106 @@
+{
+  "data": [
+    {
+      "id": "7b11z664ujef8y7a9b",
+      "name": "Fast Pace for Friendspace 3",
+      "slug": "schedule",
+      "timezone": "America/Detroit",
+      "start": "2026-08-22T10:00:00-04:00",
+      "start_t": 1787407200,
+      "website": "https://fastpacedevents.com/",
+      "twitter": "FastPacedEvents",
+      "twitch": "fastpacedevents",
+      "bluesky": "fastpacedevents.bsky.social",
+      "description": null,
+      "setup": "PT10M",
+      "setup_t": 600,
+      "updated": "2026-08-22T21:46:34Z",
+      "link": "https://horaro.net/fpff3/schedule",
+      "columns": [
+        "⠀ ",
+        "⠀ ",
+        "Runner",
+        "Game",
+        "Category",
+        "Platform",
+        "Host"
+      ],
+      "items": [
+        {
+          "length": "PT2H",
+          "length_t": 7200,
+          "scheduled": "2026-08-22T10:00:00-04:00",
+          "scheduled_t": 1787407200,
+          "data": [
+            null,
+            null,
+            "Froob",
+            "Yakuza Kiwami 2",
+            "Any%",
+            "PC",
+            "Rhomin"
+          ]
+        },
+        {
+          "length": "PT50M",
+          "length_t": 3000,
+          "scheduled": "2026-08-22T12:10:00-04:00",
+          "scheduled_t": 1787415000,
+          "data": [
+            null,
+            null,
+            "Ryan Ford",
+            "Metroid Zero Mission",
+            "Any% Normal",
+            "GBA",
+            "Adam"
+          ]
+        },
+        {
+          "length": "PT32M",
+          "length_t": 1920,
+          "scheduled": "2026-08-22T13:10:00-04:00",
+          "scheduled_t": 1787418600,
+          "data": [
+            null,
+            null,
+            "McSquid",
+            "Total Nuclear Annihilation",
+            "9 Reactors + Tommy Dollar Bonus Run",
+            "Pinball",
+            "Adam"
+          ]
+        },
+        {
+          "length": "PT25M",
+          "length_t": 1500,
+          "scheduled": "2026-08-22T21:33:00-04:00",
+          "scheduled_t": 1787448780,
+          "data": [
+            null,
+            null,
+            "junior_sm",
+            "SSX (2000)",
+            "All Race Golds (Single Event)",
+            "PS2",
+            "Zokubun"
+          ]
+        }
+      ],
+      "links": [
+        {
+          "rel": "self",
+          "uri": "https://horaro.net/-/api/v1/schedules/7b11z664ujef8y7a9b"
+        },
+        {
+          "rel": "event",
+          "uri": "https://horaro.net/-/api/v1/events/1b50792ekia6j7b40b"
+        },
+        {
+          "rel": "ticker",
+          "uri": "https://horaro.net/-/api/v1/schedules/7b11z664ujef8y7a9b/ticker"
+        }
+      ]
+    }
+  ]
+}
