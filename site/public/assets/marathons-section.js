@@ -114,7 +114,6 @@ const PART_WORDS = { runner: 'runner', host: 'host', commentator: 'on commentary
 const SOURCES_BUTTON = 'Sources…';
 const SOURCES_DRAWER = 'Where marathons come from';
 const GETTING_SOURCES = 'Reading the sources…';
-const FEED_WAITING = '{count} new event{s} from a source {are} waiting for staff: ';
 const REMOVE_BODY = 'Its runs and pairings go with it and its ping window closes. Posts already '
   + 'made stay where they are.';
 const WINDOW_LINE = 'Ping window on **{login}**: {start} – {end}.';
@@ -136,7 +135,6 @@ const NEXT_NONE = '{marathon} is over and the GDQ tracker lists nothing ahead ye
 const NEXT_NOT_YET = '{marathon} is over. Black Bloc has not looked up the next GDQ event yet.';
 const NEXT_NOTE = 'Staff decide: nothing is added until someone presses **Add it**. It is read '
   + 'from the tracker link and airs on this marathon’s channel.';
-const NEXT_WAITING = '{count} marathon{s} {have} a next event waiting: ';
 const HELD_NOTE = 'held by staff';
 const EVENT_SELECT = 'Event';
 const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes into the events '
@@ -1054,27 +1052,7 @@ function eventCell(row) {
   return el('span', { class: 'cell-quiet', text: '—' });
 }
 
-function waitingStrip(rows) {
-  const waiting = rows.filter((one) => one.next_waiting);
-  if (!waiting.length) return null;
-  const count = waiting.length;
-  return el('p', { class: 'notice mx-line', 'data-tone': 'warn' }, [
-    el('span', { text: said(NEXT_WAITING, { count, s: count === 1 ? '' : 's', have: count === 1 ? 'has' : 'have' }) }),
-    ...waiting.flatMap((one, index) => [
-      index ? el('span', { text: ' · ' }) : null,
-      textAction(one.name, () => openMarathon(one.id, one.name)),
-    ]),
-  ]);
-}
 
-function feedWaitingStrip(feeds) {
-  const count = (feeds.feeds || []).reduce((total, one) => total + (one.suggestions || []).length, 0);
-  if (!count) return null;
-  return el('p', { class: 'notice mx-line', 'data-tone': 'warn' }, [
-    el('span', { text: said(FEED_WAITING, { count, s: count === 1 ? '' : 's', are: count === 1 ? 'is' : 'are' }) }),
-    textAction(SOURCES_BUTTON, () => openSources()),
-  ]);
-}
 
 function listSection(payload, feeds, say) {
   const rows = payload.marathons || [];
@@ -1100,8 +1078,6 @@ function listSection(payload, feeds, say) {
     payload.mode === 'shadow' ? el('p', { class: 'field-help' }, boldParts(MODE_SHADOW)) : null,
     say,
     card(null, [grid, bar([add, sources])]),
-    waitingStrip(rows),
-    feedWaitingStrip(feeds),
   ].filter(Boolean));
   return full(list.node);
 }
