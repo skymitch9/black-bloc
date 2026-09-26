@@ -39,6 +39,7 @@ import {
   linkAction,
   memberPicker,
   modeChip,
+  modeSwitch,
   nameNode,
   notice,
   openDrawer,
@@ -60,7 +61,7 @@ let refresh = async () => {};
 let showEvent = () => {};
 let eventModeDefault = 'none';
 let eventModes = [];
-let cadence = { near: null, far: null, lead: null, slack: null };
+let cadence = { near: null, far: null, lead: null, slack: null, modeSpec: null };
 let deepLinked = false;
 
 const LIST_NOTE = 'Every marathon schedule Black Bloc reads; a row opens where it is read from, '
@@ -144,6 +145,7 @@ const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes 
 const EVENT_SELECT_SHORT = 'Which Discord events this marathon makes; the setting explains the '
   + 'four choices.';
 const EVENT_NONE = 'No event.';
+const MODE_LABEL = 'Marathon posts are';
 const EVENT_WAITING = 'Waiting for the schedule to publish, then one event for the marathon.';
 const EVENT_OPEN = 'Open ↗';
 const MODES_FALLBACK = [
@@ -1102,8 +1104,13 @@ function listSection(payload, feeds, say) {
     }) },
     { label: 'Event', cell: (row) => eventCell(row) },
   ], rows, { empty: NOTHING_YET });
+  const switched = cadence.modeSpec
+    ? modeSwitch(cadence.modeSpec, { onSaved: () => refresh() })
+    : null;
   list.body.append(...[
-    el('p', { class: 'field-help' }, [el('span', { text: 'Marathon posts are ' }), modeChip(payload.mode), el('span', { text: '.' })]),
+    switched
+      ? el('div', { class: 'bar mx-mode' }, [el('span', { class: 'cell-quiet', text: MODE_LABEL }), switched.node, switched.say])
+      : el('p', { class: 'field-help' }, [el('span', { text: 'Marathon posts are ' }), modeChip(payload.mode), el('span', { text: '.' })]),
     payload.mode === 'off' ? el('p', { class: 'field-help' }, boldParts(said(MODE_OFF, { mode: payload.mode }))) : null,
     payload.mode === 'shadow' ? el('p', { class: 'field-help' }, boldParts(MODE_SHADOW)) : null,
     say,
@@ -1123,6 +1130,7 @@ async function readCadence() {
     far: held('marathon_far_poll_hours'),
     lead: held('marathon_spotlight_lead_hours'),
     slack: held('marathon_spotlight_slack_hours'),
+    modeSpec: specs.find((one) => one.key === 'marathon_mode') || null,
   };
 }
 
