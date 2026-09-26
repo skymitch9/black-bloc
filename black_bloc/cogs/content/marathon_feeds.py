@@ -41,6 +41,7 @@ from ...settings_store import (
     MARATHON_FEED_RECENT_KEY,
     MARATHON_FEED_SUGGEST_TEMPLATE_KEY,
     MARATHON_FEEDS_KEY,
+    MARATHON_LADYARCADERS_FLOOR_KEY,
 )
 from ...timezones import unix
 from .marathon import (
@@ -361,7 +362,8 @@ async def ladyarcaders_candidates_of(
     """The next event numbers, probed; what each answered is remembered in `seen`."""
     refs = [*await marathons_by_ref(bot.db, guild.id, LADYARCADERS), *mf.ignored_of(feed)]
     seen = mf.list_of(feed["seen"])
-    numbers = la.to_probe(refs, seen, now, hours_of(bot, guild.id))
+    floor = int(bot.store.get(guild.id, MARATHON_LADYARCADERS_FLOOR_KEY))
+    numbers = la.to_probe(refs, seen, now, hours_of(bot, guild.id), floor)
     read = await la.probe(cog_of(bot).client, numbers, now) if numbers else []
     if read:
         seen = la.merged(seen, read)
@@ -1811,7 +1813,11 @@ def guess_pick(login: str) -> str:
 
 
 class AddFeedModal(AnswersErrors, discord.ui.Modal, title=mf.ADD_FEED_TITLE):
-    source = discord.ui.TextInput(label=mf.ADD_FEED_SOURCE, max_length=20)
+    source = discord.ui.TextInput(
+        label=mf.ADD_FEED_SOURCE,
+        placeholder=mf.ADD_FEED_SOURCE_HINT,
+        max_length=mf.ADD_FEED_SOURCE_LIMIT,
+    )
     slug = discord.ui.TextInput(
         label=mf.ADD_FEED_SLUG, placeholder=mf.ADD_FEED_SLUG_HINT, required=False, max_length=60
     )

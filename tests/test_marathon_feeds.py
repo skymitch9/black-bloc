@@ -144,7 +144,7 @@ def test_the_oengus_pick_says_what_it_finds_in_words_a_newcomer_reads():
     words = mf.PICK_WORDS[mf.PICK_OENGUS]
     assert words.startswith("Oengus") and "oengus.io" in words
     assert "Speed Stuff 4 Charity" in words
-    assert "Oengus" in mf.UNKNOWN_PICK and "oengus" in mf.ADD_FEED_SOURCE
+    assert "oengus" in mf.UNKNOWN_PICK and "oengus" in mf.ADD_FEED_SOURCE_HINT
     assert mf.marathon_source(oengus()) == "oengus"
     assert mf.source_word(oengus()) == "Oengus"
     assert mf.feed_line(oengus(), "Speed Stuff 4 Charity", 6).startswith(
@@ -217,8 +217,7 @@ def test_the_fastestfurs_seed_pick_and_words_name_the_orgs_own_site():
     assert mf.pick_for(furs) == mf.PICK_FASTESTFURS
     assert mf.source_word(furs) == "Fastest Furs"
     assert "fastestfurs.com" in mf.PICK_WORDS[mf.PICK_FASTESTFURS]
-    assert "Fastest Furs" in mf.UNKNOWN_PICK and "fastestfurs" in mf.ADD_FEED_SOURCE
-    assert len(mf.ADD_FEED_SOURCE) <= 45
+    assert "fastestfurs" in mf.UNKNOWN_PICK and "fastestfurs" in mf.ADD_FEED_SOURCE_HINT
     assert mf.FEED_LOOK not in [one.action for one in mf.feed_moves(furs)]
 
 
@@ -263,3 +262,10 @@ def test_look_again_is_offered_on_a_lady_arcaders_feed_that_remembers_its_probes
     probed = ladyarcaders(seen='[{"ref": "25", "empty_at": "2026-09-26T19:00:00+00:00"}]')
     assert mf.FEED_LOOK in [one.action for one in mf.feed_moves(probed)]
     assert mf.seen_of(probed) == [{"ref": "25", "twitch": ""}]
+
+
+def test_the_add_a_feed_words_name_every_pick_and_fit_discord():
+    for pick in mf.PICKS:
+        assert pick in mf.UNKNOWN_PICK and pick in mf.ADD_FEED_SOURCE_HINT
+        assert len(pick) <= mf.ADD_FEED_SOURCE_LIMIT
+    assert len(mf.ADD_FEED_SOURCE) <= 45 and len(mf.ADD_FEED_SOURCE_HINT) <= 100

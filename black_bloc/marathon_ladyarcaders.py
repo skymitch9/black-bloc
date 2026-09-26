@@ -22,7 +22,6 @@ from .marathon_sources import (
 )
 from .timezones import zone
 
-FLOOR = 24
 PROBE_AHEAD = 3
 EMPTY_RETRY_CHECKS = 4
 NUMBER = re.compile(r"^\d{1,6}$")
@@ -284,20 +283,20 @@ def found_records(seen: Any) -> list[dict[str, Any]]:
     return [one for one in seen or () if isinstance(one, dict) and not one.get("empty_at")]
 
 
-def highest_known(refs: Any, seen: Any) -> int:
+def highest_known(refs: Any, seen: Any, floor: int) -> int:
     """The highest event number on the list, removed by staff or remembered as found."""
     numbers = [number_of(one) for one in refs or ()]
     numbers += [number_of(one.get("ref")) for one in found_records(seen)]
-    return max([FLOOR, *(one for one in numbers if one is not None)])
+    return max([int(floor), *(one for one in numbers if one is not None)])
 
 
 def retry_gap(hours: Any) -> timedelta:
     return timedelta(hours=max(1, int(hours)) * EMPTY_RETRY_CHECKS)
 
 
-def to_probe(refs: Any, seen: Any, now: datetime, hours: Any) -> list[int]:
+def to_probe(refs: Any, seen: Any, now: datetime, hours: Any, floor: int) -> list[int]:
     """The next PROBE_AHEAD numbers above the highest known, an empty one only after the gap."""
-    top = highest_known(refs, seen)
+    top = highest_known(refs, seen, floor)
     empty = {
         str(one.get("ref")): parse_ts(one.get("empty_at"))
         for one in seen or ()
@@ -374,7 +373,6 @@ def candidates(seen: Any, now: datetime, recent_days: int) -> list[Candidate]:
 
 __all__ = [
     "EMPTY_RETRY_CHECKS",
-    "FLOOR",
     "PROBE_AHEAD",
     "calendar_name",
     "calendar_resolve",

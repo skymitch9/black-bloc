@@ -230,11 +230,12 @@ async def test_the_reader_refuses_in_words():
 
 
 def test_the_probe_starts_above_the_floor_the_list_or_the_memory():
-    assert la.to_probe([], [], NOW, 6) == [25, 26, 27]
-    assert la.to_probe(["30", "short:x", "9"], [], NOW, 6) == [31, 32, 33]
-    assert la.to_probe([], [{"ref": "28", "name": "x"}], NOW, 6) == [29, 30, 31]
+    assert la.to_probe([], [], NOW, 6, 24) == [25, 26, 27]
+    assert la.to_probe(["30", "short:x", "9"], [], NOW, 6, 24) == [31, 32, 33]
+    assert la.to_probe([], [{"ref": "28", "name": "x"}], NOW, 6, 24) == [29, 30, 31]
     empties = [{"ref": "40", "empty_at": NOW.isoformat()}]
-    assert la.highest_known([], empties) == la.FLOOR
+    assert la.highest_known([], empties, 24) == 24
+    assert la.to_probe([], [], NOW, 6, 40) == [41, 42, 43]
 
 
 def test_an_empty_number_waits_the_gap_before_it_is_asked_again():
@@ -244,7 +245,7 @@ def test_an_empty_number_waits_the_gap_before_it_is_asked_again():
         {"ref": "26", "empty_at": (NOW - gap).isoformat()},
         {"ref": "27", "empty_at": "not a time"},
     ]
-    assert la.to_probe([], seen, NOW, 6) == [26, 27]
+    assert la.to_probe([], seen, NOW, 6, 24) == [26, 27]
     assert la.retry_gap(6) == timedelta(hours=24)
     assert la.retry_gap(0) == timedelta(hours=la.EMPTY_RETRY_CHECKS)
 

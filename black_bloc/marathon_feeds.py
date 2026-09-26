@@ -106,8 +106,8 @@ CHANNEL_HAS_FEED = (
 )
 SAME_FEED = "**{name}** already reads that, so nothing was added."
 UNKNOWN_PICK = (
-    "**{given}** is not something a feed can read, so nothing was added. Pick the GDQ tracker, "
-    "the RPG Limit Break tracker, horaro.net, Oengus or Fastest Furs."
+    "**{given}** is not something a feed can read, so nothing was added. Pick one of gdq, "
+    "rpglb, horaro, horaro_events, oengus, fastestfurs or ladyarcaders."
 )
 NO_SLUG = (
     "A horaro.net feed needs the event's slug — the part after horaro.net/, for example `esa` — "
@@ -185,7 +185,9 @@ PICK_FEED = "Pick a feed to manage…"
 PICK_CHANNEL = "Pick the channel the feed belongs to…"
 PICK_SUGGESTION = "Pick a waiting event…"
 ADD_FEED_TITLE = "Add a feed"
-ADD_FEED_SOURCE = "Source: gdq/rpglb/horaro/oengus/fastestfurs"
+ADD_FEED_SOURCE = "Source — a pick; clear the box to list all"
+ADD_FEED_SOURCE_HINT = "gdq, rpglb, horaro, horaro_events, oengus, fastestfurs or ladyarcaders"
+ADD_FEED_SOURCE_LIMIT = 20
 ADD_FEED_SLUG = "horaro.net event slug — horaro only"
 ADD_FEED_SLUG_HINT = "esa"
 ADD_FEED_NAME = "Name — blank for the channel's"

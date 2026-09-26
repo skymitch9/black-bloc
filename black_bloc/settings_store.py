@@ -4419,6 +4419,7 @@ MARATHON_FEEDS_KEY = "marathon_feeds"
 MARATHON_FEED_HOURS_KEY = "marathon_feed_hours"
 MARATHON_FEED_ACTION_KEY = "marathon_feed_action_default"
 MARATHON_FEED_RECENT_KEY = "marathon_feed_recent_days"
+MARATHON_LADYARCADERS_FLOOR_KEY = "marathon_ladyarcaders_floor"
 MARATHON_FEED_ADDED_TEMPLATE_KEY = "marathon_feed_added_template"
 MARATHON_FEED_SUGGEST_TEMPLATE_KEY = "marathon_feed_suggest_template"
 MARATHON_FEED_ACTIONS = ("add", "suggest")
@@ -4581,9 +4582,10 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "bool",
         True,
         "whether the marathon feeds check on their own — each feed reads the events list of one "
-        "channel's marathons (the GDQ and RPG Limit Break trackers, a horaro.net event, Speed "
-        "Stuff 4 Charity on Oengus) and adds or suggests every new event. on by default; off "
-        "checks nothing, and Check now on a feed still works",
+        "channel's marathons (the GDQ and RPG Limit Break trackers, a horaro.net event, horaro.net "
+        "events found by name, Oengus, Fastest Furs' own list, Lady Arcaders' next event numbers) "
+        "and adds or suggests every new event. on by default; off checks nothing, and Check now on "
+        "a feed still works",
     ),
     MARATHON_FEED_HOURS_KEY: (
         "int",
@@ -4609,8 +4611,15 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "int",
         1,
         "how many days after it started (a tracker event) or ended (a horaro.net schedule, an "
-        "Oengus marathon or a Lady Arcaders event) an "
-        "event still counts as new to a feed. 1 by default",
+        "Oengus marathon, a Fastest Furs event or a Lady Arcaders event) an event still counts as "
+        "new to a feed. 1 by default",
+    ),
+    MARATHON_LADYARCADERS_FLOOR_KEY: (
+        "int",
+        24,
+        "the event number the Lady Arcaders feed probes upward from — it asks the next numbers "
+        "above this or above the highest event it already knows, whichever is higher; staff raise "
+        "it after a link is pasted. 24 by default",
     ),
     MARATHON_EVENT_MODE_DEFAULT_KEY: (
         "enum",
@@ -4702,8 +4711,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     MARATHON_UNKNOWN_SITE_KEY: (
         "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus "
-        "marathons, Fastest Furs schedules and Lady Arcaders calendars — that link is none "
-        "of them.",
+        "marathons, Fastest Furs schedules and Lady Arcaders calendars — that link is none of "
+        "them.",
         (),
         "what staff are told when a schedule link is from a site Black Bloc cannot read",
     ),
@@ -4797,6 +4806,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_SPOTLIGHT_SLACK_KEY: (0, 48),
     MARATHON_FEED_HOURS_KEY: (1, 168),
     MARATHON_FEED_RECENT_KEY: (0, 30),
+    MARATHON_LADYARCADERS_FLOOR_KEY: (1, 99999),
 }
 
 
