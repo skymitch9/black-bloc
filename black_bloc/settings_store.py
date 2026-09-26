@@ -1801,6 +1801,7 @@ SPOTLIGHT_BAD_DATE_KEY = "spotlight_bad_date"
 SPOTLIGHT_PING_MODE_DEFAULT_KEY = "spotlight_ping_mode_default"
 SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY = "spotlight_window_open_reminder"
 SPOTLIGHT_WINDOW_KEEP_DAYS_KEY = "spotlight_window_keep_days"
+GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY = "golive_expiry_keeps_marathon_channels"
 SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY = "spotlight_pings_always_words"
 SPOTLIGHT_PINGS_NEVER_WORDS_KEY = "spotlight_pings_never_words"
 SPOTLIGHT_PINGS_EVENTS_WORDS_KEY = "spotlight_pings_events_words"
@@ -1893,6 +1894,7 @@ KEY_TYPES.update(
         SPOTLIGHT_PING_MODE_DEFAULT_KEY: "enum",
         SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY: "bool",
         SPOTLIGHT_WINDOW_KEEP_DAYS_KEY: "int",
+        GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY: "bool",
         SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY: "text",
         SPOTLIGHT_PINGS_NEVER_WORDS_KEY: "text",
         SPOTLIGHT_PINGS_EVENTS_WORDS_KEY: "text",
@@ -2047,6 +2049,13 @@ KEY_HELP.update(
             "whether a channel that is ALREADY live when one of its ping windows opens gets one "
             "reminder that pings, so a marathon starting on a channel running reruns is not "
             "missed. on by default; the window closing posts nothing"
+        ),
+        GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY: (
+            "whether a spotlight whose date passes KEEPS its channel row when the row carries a "
+            "marathon — a marathon feed, a marathon on the list, or a spotlight a marathon turned "
+            "on. on by default: the row turns its spotlight off and is kept for ever, with its "
+            "ping role and its feed; off deletes it with its role and feed like any other row. A "
+            "row with no marathon on it is deleted either way"
         ),
         SPOTLIGHT_WINDOW_KEEP_DAYS_KEY: (
             "how many days a ping window is kept after it ends, as history on the channel's "
@@ -3222,6 +3231,7 @@ NAMESPACE_OVERRIDE = {
     SPOTLIGHT_PING_MODE_DEFAULT_KEY: "golive",
     SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY: "golive",
     SPOTLIGHT_WINDOW_KEEP_DAYS_KEY: "golive",
+    GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY: "golive",
     SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY: "golive",
     SPOTLIGHT_PINGS_NEVER_WORDS_KEY: "golive",
     SPOTLIGHT_PINGS_EVENTS_WORDS_KEY: "golive",
@@ -5231,6 +5241,8 @@ class SettingsStore:
         if key == SPOTLIGHT_PING_MODE_DEFAULT_KEY:
             return PING_ALWAYS
         if key == SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY:
+            return True
+        if key == GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY:
             return True
         if key == SPOTLIGHT_WINDOW_KEEP_DAYS_KEY:
             return SPOTLIGHT_WINDOW_KEEP_DAYS

@@ -2691,11 +2691,11 @@ def golive_page_keys() -> list[str]:
     )
 
 
-def test_the_golive_page_still_draws_seventy_two_keys():
+def test_the_golive_page_still_draws_seventy_three_keys():
     """The number the placement fixture in site/mock/golive-join.test.mjs is written against.
     A key added to one of these namespaces has to be added there too, or it lands in the
     Everything else catch-all with nobody noticing."""
-    assert len(golive_page_keys()) == 72
+    assert len(golive_page_keys()) == 73
 
 
 def test_every_golive_page_key_says_in_words_what_it_does():
@@ -2869,7 +2869,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 497
+    assert len(settings_store.KEY_TYPES) == 498
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):

@@ -195,6 +195,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "marathon.run_skipped",
         "marathon.schedule_stale",
         "marathon.spotlight_set",
+        "golive.spotlight_kept",
         "youtube.probe_unreadable",
         "mod.untimed_out",
         "mod.unbanned",

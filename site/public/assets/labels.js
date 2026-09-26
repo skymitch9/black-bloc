@@ -58,6 +58,7 @@ export const LABELS = {
   spotlight_bad_date: 'What is said when a spotlight date box holds something unreadable',
   spotlight_ping_mode_default: 'When a newly added channel mentions its ping roles',
   spotlight_window_open_reminder: 'Whether a window opening on a live channel posts one pinged reminder',
+  golive_expiry_keeps_marathon_channels: 'Whether a passing date keeps a marathon channel',
   spotlight_window_keep_days: 'How long an ended ping window is kept before it is purged',
   spotlight_pings_always_words: 'How a channel that always pings says so',
   spotlight_pings_never_words: 'How a channel that never pings says so',

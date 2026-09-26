@@ -355,7 +355,8 @@ export const DRAWERS = [
     id: 'spotlight',
     title: 'Spotlighted channels',
     note: 'Channels with nobody here behind them: how often Twitch is asked, the pin, the '
-      + 'reminders while a long stream runs, and how long a row lasts before it is purged.',
+      + 'reminders while a long stream runs, how long a row lasts before it is purged, and the '
+      + 'marathon channel a passing date keeps.',
     keys: [
       'spotlight_poll_minutes',
       'spotlight_end_misses',
@@ -366,6 +367,7 @@ export const DRAWERS = [
       'spotlight_pin',
       'spotlight_default_days',
       'spotlight_event_slack_hours',
+      'golive_expiry_keeps_marathon_channels',
       'golive_channel_spotlight_default',
       'golive_shadow_channel_id',
     ],

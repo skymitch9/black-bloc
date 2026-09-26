@@ -31,6 +31,18 @@ HELD_REFUSAL = (
 PANEL_LINE = "Marathons: **{state}**"
 PANEL_ON = "on"
 PANEL_OFF = "off — nothing is added, read or fed for this channel"
+BECAUSE_MARATHON_CHANNEL = "marathon_channel"
+HELD_BY_FEED = "feed"
+HELD_BY_MARATHON = "marathon"
+HELD_BY_SPOTLIGHT = "spotlit_by_marathon"
+CARRIES = (
+    (HELD_BY_FEED, "SELECT 1 FROM marathon_feeds WHERE spotlight_id = ? LIMIT 1"),
+    (HELD_BY_MARATHON, "SELECT 1 FROM marathons WHERE spotlight_id = ? LIMIT 1"),
+    (
+        HELD_BY_SPOTLIGHT,
+        "SELECT 1 FROM spotlight_channels WHERE id = ? AND spotlit_by_marathon IS NOT NULL",
+    ),
+)
 
 
 def _cell(row: Any, key: str, fallback: Any = None) -> Any:
@@ -62,9 +74,21 @@ def panel_line(row: Any) -> str:
     return PANEL_LINE.format(state=PANEL_ON if takes_marathons(row) else PANEL_OFF)
 
 
+async def carries_marathons(db: Any, spotlight_id: Any) -> tuple[str, ...]:
+    """The marathon signals that hold a channel row; empty when it carries none."""
+    held: list[str] = []
+    for signal, sql in CARRIES:
+        cur = await db.conn.execute(sql, (int(spotlight_id),))
+        if await cur.fetchone() is not None:
+            held.append(signal)
+    return tuple(held)
+
+
 __all__ = [
     "BECAUSE_OPTED_IN",
+    "BECAUSE_MARATHON_CHANNEL",
     "BECAUSE_OPTED_OUT",
+    "carries_marathons",
     "OPTED_OUT_SEEDS",
     "channel_word",
     "panel_line",

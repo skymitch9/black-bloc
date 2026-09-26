@@ -1222,8 +1222,7 @@ ARCHIVE_EXTRAS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
 }
 ARCHIVE_INDEXES = (
-    "CREATE INDEX IF NOT EXISTS marathons_archive_by_guild "
-    "ON marathons_archive(guild_id, ends_at)",
+    "CREATE INDEX IF NOT EXISTS marathons_archive_by_guild ON marathons_archive(guild_id, ends_at)",
     "CREATE INDEX IF NOT EXISTS marathon_runs_archive_by_marathon "
     "ON marathon_runs_archive(marathon_id)",
     "CREATE INDEX IF NOT EXISTS marathon_people_archive_by_marathon "

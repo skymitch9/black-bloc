@@ -29,13 +29,20 @@ from ...golive import (
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
 from ...marathon_channels import (
+    BECAUSE_MARATHON_CHANNEL,
     MARATHONS_OFF_BUTTON,
     MARATHONS_ON_BUTTON,
     OPTED_OUT_SEEDS,
+    carries_marathons,
     takes_marathons,
 )
 from ...marathon_channels import panel_line as marathons_line
-from ...marathon_spotlight import BECAUSE_MARATHON_OVER, held_by, new_row_ping_mode
+from ...marathon_spotlight import (
+    BECAUSE_MARATHON_OVER,
+    held_by,
+    lifted_fields,
+    new_row_ping_mode,
+)
 from ...panels import Panel, answer, opened, retire, still_staff
 from ...settings_store import (
     CHANNEL_OPTOUT_DELETE,
@@ -43,6 +50,7 @@ from ...settings_store import (
     CHANNEL_OPTOUT_POST_KEY,
     CHANNEL_SPOTLIGHT_DEFAULT_KEY,
     DEFAULT_TIMEZONE_KEY,
+    GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY,
     MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY,
     SPOTLIGHT_BAD_DATE_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
@@ -659,6 +667,11 @@ class Spotlight(commands.Cog):
             )
 
     async def _expire(self, guild: Any, row: Any, because: str) -> None:
+        if self.bot.store.get(guild.id, GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY):
+            held = await carries_marathons(self.bot.db, row["id"])
+            if held:
+                await self._keep(guild, row, held, because)
+                return
         session = await open_session(self.bot.db, row["id"])
         if session is not None:
             await self._end(guild, row, session, words.EXPIRED)
@@ -677,6 +690,28 @@ class Spotlight(commands.Cog):
                 "expires_at": row["expires_at"],
                 "event_id": row["event_id"],
                 "because": because,
+            },
+        )
+
+    async def _keep(self, guild: Any, row: Any, held: tuple[str, ...], because: str) -> None:
+        await update_channel(self.bot.db, row["id"], **lifted_fields(), starts_at=None)
+        self.scheduled.discard(int(row["id"]))
+        session = await open_session(self.bot.db, row["id"])
+        if session is not None:
+            message = await self._message(guild, session)
+            await self._unpin(guild, row, message, because=words.SPOTLIGHT_OFF_BECAUSE)
+        await log_action(
+            self.bot,
+            guild,
+            "golive.spotlight_kept",
+            details={
+                "spotlight_id": row["id"],
+                "login": row["twitch_login"],
+                "expires_at": row["expires_at"],
+                "event_id": row["event_id"],
+                "because": BECAUSE_MARATHON_CHANNEL,
+                "expired_because": because,
+                "held_by": list(held),
             },
         )
 
