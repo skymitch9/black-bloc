@@ -55,7 +55,7 @@ Commit at clean boundaries in this order: schema + the inbox table → the inbox
 ## D. Decisions still open (put to the owner one at a time before or during the build)
 
 1. **Existing marathons:** start untracked (the doc's default), or pre-track the ones that already have a board (SS4C's, Fall Fest's)? ✅ **DECIDED 2026-09-26 16:4x (owner, verbatim): *"start untracked"*.** No backfill; every marathon on the list starts untracked and posts nothing until staff press Track.
-2. **Where the marathon threads spawn:** the inbox's channel (events, the default here), or `marathon_channel_id` (the marathon channel) — the owner said *a master thread in events* for the inbox and did not say where the per-marathon threads go.
+2. **Where the marathon threads spawn:** the inbox's channel (events, the default here), or `marathon_channel_id` (the marathon channel) — the owner said *a master thread in events* for the inbox and did not say where the per-marathon threads go. ✅ **DECIDED 2026-09-26 16:4x (owner: *"a"*): the events channel**, beside the master thread — `marathon_thread_channel_id` blank = the inbox's channel stays the default.
 3. **Track default for `action = add` feeds:** the inbox is the master point, so a feed's *add* no longer means *post*; should a key `marathon_track_default` (ask / track, default ask) exist so a trusted feed such as GDQ can auto-track? Default in this doc: no such key yet; Track is always a staff press.
 
 ## E. Dispatch notes for the next conductor
