@@ -61,6 +61,12 @@
 > coordinates, not the CSS pixels `getBoundingClientRect()` returns** — see §2/§3 for the
 > conversion and the measured numbers.
 
+> ⚠️ **Staff-edited wording is theirs (owner, 2026-09-25 20:2x: *"Try not to change the wording too much for the ones the
+> staff edited"*).** Before any wording pass, read `scripts/read.ps1 -Path "/api/actions?kind=web.guide&limit=200"` and list
+> the `web.guide.edited` rows whose actor is not the session's own account: those guides get the minimum fix (a drifted
+> button name), never a replacement from the seed, and the report names them. Measured 2026-09-25: the only such edit was
+> Pawpette's `apply-form` goal (kept); the owner's 16 Sep `pings-follow` edit was an audience switch.
+
 ## What this is for
 
 A guide step carries at most one picture. A picture goes **stale** when the feature it
