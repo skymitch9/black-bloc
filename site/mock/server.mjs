@@ -7555,7 +7555,6 @@ function movedWord(movedTo) {
     : '';
 }
 
-// api/tools/events.py:event_links — the announcement's channel is the setting at read time.
 function eventLinks(row) {
   const guild = REVIEW_GUILD_ID;
   const announceChannel = state.settings.get('events_announce_channel_id');
