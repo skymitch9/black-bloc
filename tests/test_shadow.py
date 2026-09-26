@@ -217,3 +217,71 @@ def test_with_no_guard_installed_nothing_is_taught_and_no_hook_is_registered():
     shadow.install(bot)
 
     assert bot.store.hooks == {}
+
+
+FEATURE_HOME = 555
+
+
+def bot_with_feature_home(feature="marathon", value=FEATURE_HOME, **kwargs):
+    bot = bot_with(**kwargs)
+    bot.store.values[shadow.feature_key(feature)] = value
+    return bot
+
+
+def test_a_features_own_home_wins_over_the_global_one():
+    bot = bot_with_feature_home(home=HOME, guard=GUARD_CHANNEL)
+
+    assert shadow.channel_id(bot, GUILD, feature="marathon") == FEATURE_HOME
+    assert shadow.home_id(bot, GUILD, feature="marathon") == FEATURE_HOME
+
+
+def test_a_blank_feature_home_follows_the_global_one_exactly_as_before():
+    bot = bot_with_feature_home(value=None, home=HOME, guard=GUARD_CHANNEL)
+
+    assert shadow.channel_id(bot, GUILD, feature="marathon") == HOME
+    assert shadow.home_id(bot, GUILD, feature="marathon") == HOME
+    assert shadow.channel_id(bot_with_feature_home(value=""), GUILD, feature="marathon") == (
+        LOG_CHANNEL
+    )
+
+
+def test_another_features_home_is_nobody_elses():
+    bot = bot_with_feature_home(feature="frontdoor", home=HOME)
+
+    assert shadow.channel_id(bot, GUILD, feature="marathon") == HOME
+    assert shadow.channel_id(bot, GUILD) == HOME
+    assert shadow.channel_id(bot, GUILD, feature="frontdoor") == FEATURE_HOME
+
+
+def test_the_hunt_starts_at_the_features_home_then_every_older_one():
+    bot = bot_with_feature_home(home=HOME, guard=GUARD_CHANNEL, settings_channel=SETTINGS_CHANNEL)
+
+    assert shadow.channel_ids(bot, GUILD, feature="marathon") == [
+        FEATURE_HOME,
+        HOME,
+        GUARD_CHANNEL,
+        SETTINGS_CHANNEL,
+        LOG_CHANNEL,
+    ]
+
+
+async def test_a_copy_in_the_features_home_is_found():
+    bot = bot_with_feature_home(home=HOME)
+    mine = FakeChannel(FEATURE_HOME, 901)
+    guild = cache(bot, FakeChannel(HOME), mine, FakeChannel(LOG_CHANNEL))
+
+    assert await shadow.find_copy(bot, guild, 901) == (None, None)
+    channel, message = await shadow.find_copy(bot, guild, 901, feature="marathon")
+
+    assert channel is mine and message.id == 901
+
+
+def test_the_note_line_is_unchanged_by_a_feature_home():
+    bot = bot_with_feature_home(home=HOME)
+    bot.store.values[shadow.NOTE_KEY] = shadow.NOTE_DEFAULT
+
+    assert shadow.note_line(bot, GUILD, "<#5>") == "Rehearsal — this is where it would go: <#5>"
+
+
+def test_the_key_is_the_feature_word_and_a_fixed_tail():
+    assert shadow.feature_key("frontdoor") == "frontdoor_shadow_channel_id"

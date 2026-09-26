@@ -33,10 +33,10 @@ import {
 } from './ui.js';
 
 const MODE_KEY = 'posts_mode';
-const SETTING_KEYS = [MODE_KEY, 'posts_panel_minutes', 'posts_log_level'];
-const SETTINGS_NOTE = 'Whether staff may post at all, how long the /posts panel stays live, and '
+const SETTING_KEYS = [MODE_KEY, 'posts_shadow_channel_id', 'posts_panel_minutes', 'posts_log_level'];
+const SETTINGS_NOTE = 'Whether staff may post at all, where a rehearsal lands, how long the /posts panel stays live, and '
   + 'how much of it is repeated into the Discord log.';
-const MACHINERY_NOTE = 'The reference half of the page: three keys, and everything posts has '
+const MACHINERY_NOTE = 'The reference half of the page: four keys, and everything posts has '
   + 'done. Both are shut until you want them.';
 const LIST_NOTE = 'One message per post. Black Bloc sends it once and edits that same message '
   + 'every time after — it never posts a second copy.';

@@ -362,7 +362,7 @@ async function panelSettings() {
   const channelId = value('modmail_panel_channel_id');
   const forumId = value('modmail_forum_channel_id');
   const doorId = value('frontdoor_channel_id');
-  const shadowId = coreValue('shadow_channel_id') || coreValue('log_channel_id');
+  const shadowId = value('frontdoor_shadow_channel_id') || coreValue('shadow_channel_id') || coreValue('log_channel_id');
   const known = [channelId, forumId, doorId, shadowId].filter(Boolean).map(String);
   if (known.length) await names(known);
   return {
