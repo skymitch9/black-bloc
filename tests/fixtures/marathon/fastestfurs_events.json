@@ -1,0 +1,32 @@
+[
+ {
+  "id": 21,
+  "name": "Fastest Furs Fall Fest 2026",
+  "short": "FFFF26",
+  "startDate": "2026-10-08T00:00:00.000Z",
+  "endDate": "2026-10-11T00:00:00.000Z",
+  "charityName": "Trans Lifeline",
+  "submissionsOpen": false,
+  "isInPerson": false
+ },
+ {
+  "id": 19,
+  "name": "Fastest Furs LIVE at FWA 2026",
+  "short": "FWA2026",
+  "startDate": "2026-05-08T00:00:00.000Z",
+  "endDate": "2026-05-10T00:00:00.000Z",
+  "charityName": "Lost-n-Found Youth",
+  "submissionsOpen": false,
+  "isInPerson": true
+ },
+ {
+  "id": 16,
+  "name": "Fastest Furs Fall Fest 2025",
+  "short": "FFFF25",
+  "startDate": "2025-10-09T00:00:00.000Z",
+  "endDate": "2025-10-09T00:00:00.000Z",
+  "charityName": "Trans Lifeline",
+  "submissionsOpen": false,
+  "isInPerson": false
+ }
+]

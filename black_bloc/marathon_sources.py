@@ -15,19 +15,22 @@ GDQ = "gdq"
 RPGLB = "rpglb"
 HORARO = "horaro"
 OENGUS = "oengus"
+FASTESTFURS = "fastestfurs"
 TRACKER_SOURCES = (GDQ, RPGLB)
-SOURCES = (*TRACKER_SOURCES, HORARO, OENGUS)
+SOURCES = (*TRACKER_SOURCES, HORARO, OENGUS, FASTESTFURS)
 SOURCE_WORDS = {
     GDQ: "GDQ tracker",
     RPGLB: "RPG Limit Break tracker",
     HORARO: "horaro.net",
     OENGUS: "Oengus",
+    FASTESTFURS: "Fastest Furs",
 }
 SITE_WORDS = {
     GDQ: "the GDQ tracker",
     RPGLB: "the RPG Limit Break tracker",
     HORARO: "horaro.net",
     OENGUS: "oengus.io",
+    FASTESTFURS: "fastestfurs.com",
 }
 RUNNER = "runner"
 HOST = "host"
@@ -166,6 +169,9 @@ def read_url(url: Any) -> tuple[str, str] | None:
     found = OENGUS_URL.match(text)
     if found:
         return (OENGUS, "/".join(one for one in found.groups() if one))
+    found = _ff().read_ref(text)
+    if found:
+        return (FASTESTFURS, found)
     if GDQ_SHORT.match(text) and not text.isdigit() and "." not in text:
         return (GDQ, SHORT_PREFIX + text)
     return None
@@ -203,7 +209,15 @@ def schedule_page(source: str, ref: Any) -> str:
         marathon, slug = oengus_ref(ref)
         page = OENGUS_PAGE.format(id=marathon)
         return f"{page}/{slug}" if slug else page
+    if source == FASTESTFURS and ref:
+        return _ff().schedule_page(ref)
     return ""
+
+
+def _ff() -> Any:
+    from . import marathon_fastestfurs
+
+    return marathon_fastestfurs
 
 
 def oengus_ref(ref: Any) -> tuple[str, str | None]:
@@ -572,6 +586,10 @@ class ScheduleClient:
             raise ScheduleError(ANSWERED.format(site=site_of(OENGUS), status=status))
         return oengus_home(body)
 
+    async def fastestfurs_events(self) -> list[dict[str, Any]]:
+        """Every event on Fastest Furs' own list, newest first."""
+        return await _ff().read_events(self._request)
+
     async def oengus_runs(self, ref: str) -> list[Run]:
         """The pasted slug, else the first published schedule; none published yet reads like an
         unpublished tracker event."""
@@ -608,6 +626,8 @@ class ScheduleClient:
             marathon, _slug = oengus_ref(ref)
             record = await self.oengus_marathon(marathon)
             return (ref, _text(record.get("name")) or marathon)
+        if source == FASTESTFURS:
+            return await _ff().resolve(self._request, ref)
         if source not in TRACKER_BASES:
             raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
         site = site_of(source)
@@ -655,6 +675,8 @@ class ScheduleClient:
             return parse_horaro(await self.horaro(ref))
         if source == OENGUS:
             return await self.oengus_runs(ref)
+        if source == FASTESTFURS:
+            return await _ff().read_runs(self._request, ref)
         if source not in TRACKER_BASES:
             raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
         site = site_of(source)
@@ -685,6 +707,7 @@ def _site_of_url(url: str) -> str:
 
 __all__ = [
     "COMMENTATOR",
+    "FASTESTFURS",
     "GDQ",
     "HORARO",
     "HOST",

@@ -424,6 +424,25 @@ def test_an_oengus_marathon_has_a_schedule_page_and_a_site_word():
 
 
 @pytest.mark.parametrize(
+    ("url", "wanted"),
+    [
+        ("https://fastestfurs.com/schedule/21", ("fastestfurs", "21")),
+        ("https://cheetah.fastestfurs.com/api/public/schedules/event/21", ("fastestfurs", "21")),
+    ],
+)
+def test_read_url_knows_the_fastestfurs_forms(url, wanted):
+    assert ms.read_url(url) == wanted
+
+
+def test_a_fastestfurs_event_has_a_schedule_page_and_a_site_word():
+    assert ms.schedule_page("fastestfurs", "21") == "https://fastestfurs.com/schedule/21"
+    assert ms.read_url(ms.schedule_page("fastestfurs", "21")) == ("fastestfurs", "21")
+    assert ms.site_of("fastestfurs") == "fastestfurs.com"
+    assert ms.SOURCE_WORDS["fastestfurs"] == "Fastest Furs"
+    assert "fastestfurs" in ms.SOURCES and "fastestfurs" not in ms.TRACKER_SOURCES
+
+
+@pytest.mark.parametrize(
     ("text", "seconds"),
     [
         ("PT57M", 3420),

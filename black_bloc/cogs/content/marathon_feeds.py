@@ -10,6 +10,7 @@ import discord
 
 from ... import marathon as mt
 from ... import marathon_events as me
+from ... import marathon_fastestfurs as ff
 from ... import marathon_feeds as mf
 from ...actionlog import log_action
 from ...command_errors import AnswersErrors, SafeDynamicItem
@@ -310,6 +311,8 @@ async def candidates_of(bot: Any, guild: Any, feed: Any, now: Any) -> list[mf.Ca
         return mf.horaro_candidates(str(feed["feed_ref"]), feed["name"], rows, now, recent)
     if feed["source"] == mf.OENGUS_FEED:
         return await oengus_candidates_of(bot, feed, now, recent)
+    if feed["source"] == mf.FASTESTFURS_FEED:
+        return ff.candidates(await cog.client.fastestfurs_events(), now, recent)
     if source is None:
         raise ScheduleError(mf.UNKNOWN_PICK.format(given=str(feed["feed_ref"])[:60]))
     return mf.tracker_candidates(source, await cog.client.events(source), now, recent)
@@ -706,6 +709,8 @@ async def create_feed(
     source, feed_ref = picked
     if source == mf.OENGUS_FEED:
         feed_ref = str(channel["twitch_login"]).lower()
+    if source == mf.FASTESTFURS_FEED:
+        feed_ref = str(channel["twitch_login"]).lower()
     if source == mf.HORARO_FEED:
         feed_ref = str(slug or "").strip().lower().strip("/")
         if not HORARO_SLUG.match(feed_ref):
@@ -855,6 +860,8 @@ async def set_feed(
                 )
             moved = {"spotlight_id": int(channel["id"])}
             if fresh["source"] == mf.OENGUS_FEED:
+                moved["feed_ref"] = str(channel["twitch_login"]).lower()
+            if fresh["source"] == mf.FASTESTFURS_FEED:
                 moved["feed_ref"] = str(channel["twitch_login"]).lower()
             try:
                 await update_feed(bot.db, fresh["id"], **moved)
@@ -1764,7 +1771,7 @@ def guess_pick(login: str) -> str:
 
 
 class AddFeedModal(AnswersErrors, discord.ui.Modal, title=mf.ADD_FEED_TITLE):
-    source = discord.ui.TextInput(label=mf.ADD_FEED_SOURCE, max_length=10)
+    source = discord.ui.TextInput(label=mf.ADD_FEED_SOURCE, max_length=20)
     slug = discord.ui.TextInput(
         label=mf.ADD_FEED_SLUG, placeholder=mf.ADD_FEED_SLUG_HINT, required=False, max_length=60
     )
