@@ -684,7 +684,7 @@ const SETTING_SPECS = [
   ["marathon_state_live", "text", "on now", "on now", "{state} on the board for the run on now"],
   ["marathon_state_done", "text", "done", "done", "{state} on the board for a run that is over"],
   ["marathon_state_dropped", "text", "off the schedule", "off the schedule", "{state} on the board for a run the schedule no longer lists"],
-  ["marathon_unknown_site", "text", "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules and Oengus marathons — that link is none of them.", "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules and Oengus marathons — that link is none of them.", "what staff are told when a schedule link is from a site Black Bloc cannot read"],
+  ["marathon_unknown_site", "text", "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus marathons and Lady Arcaders calendars — that link is none of them.", "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus marathons and Lady Arcaders calendars — that link is none of them.", "what staff are told when a schedule link is from a site Black Bloc cannot read"],
   ["marathon_already_added", "text", "**{name}** already follows that schedule, so nothing was added.", "**{name}** already follows that schedule, so nothing was added.", "what staff are told when a schedule link is already on the list. It takes {name}"],
   ["marathon_could_not_read", "text", "Black Bloc could not read that schedule, so nothing was added: {reason}", "Black Bloc could not read that schedule, so nothing was added: {reason}", "what staff are told when a schedule link will not read. It takes {reason}"],
   ["marathon_no_runs_yet", "text", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "what the page and the panel say about a marathon whose schedule is not published yet. It takes {marathon}"],
@@ -704,7 +704,7 @@ const SETTING_SPECS = [
   ["marathon_feed_hours", "int", 6, 6, "hours between two checks of one marathon feed. 6 by default", null, 168, 1],
   ["marathon_feed_action_default", "enum", "add", "add", "what a new feed does with an event it finds, until staff change that feed: add puts it on the marathon list at once with a staff notice to pause or remove it; suggest posts a staff notice with Add it and Not this one. add by default", ["add", "suggest"]],
   ["marathon_feed_notice_when", "enum", "published", "published", "when staff are told about a marathon a feed found: published — the default — adds it to the list quietly and posts the staff notice once its schedule is posted (the first read that finds runs); added posts the notice the moment it is found. Either way a marathon is noticed once", ["published", "added"]],
-  ["marathon_feed_recent_days", "int", 1, 1, "how many days after it started (a tracker event) or ended (a horaro.net schedule or an Oengus marathon) an event still counts as new to a feed. 1 by default", null, 30, 0],
+  ["marathon_feed_recent_days", "int", 1, 1, "how many days after it started (a tracker event) or ended (a horaro.net schedule, an Oengus marathon or a Lady Arcaders event) an event still counts as new to a feed. 1 by default", null, 30, 0],
   ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the staff notice when a feed adds a new event to the marathon list; it carries Pause it and Remove it. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_feed_suggest_template", "text", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "the staff notice when a feed in suggest mode finds a new event; it carries Add it and Not this one. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_event_description_template", "text", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "what a marathon's event says about itself in the events review, the announcement and the Discord scheduled event. It takes {marathon} {channel}"],
@@ -1424,6 +1424,8 @@ function seedState() {
       // Spotlit from AGDQ 2027's People card: its runner's whole span, lead and slack either side.
       // Speed Stuff 4 Charity: a channel-only row whose marathons an Oengus feed finds on oengus.io.
       { id: 7, twitch_login: 'speedstuff4charity', display_name: 'Speed Stuff 4 Charity', note: null, added_by: STAFF.id, added_at: minutesAgo(1100), starts_at: null, expires_at: null, bump_hours: null, pin: false, event_id: null, spotlight: false, announce: false, youtube_channel_id: null, youtube_handle: null },
+      // Lady Arcaders: a channel-only row whose feed probes ladyarcaders.com's next event numbers.
+      { id: 20, twitch_login: 'ladyarcaders', display_name: 'Lady Arcaders', note: null, added_by: STAFF.id, added_at: minutesAgo(1000), starts_at: null, expires_at: null, bump_hours: null, pin: false, event_id: null, spotlight: false, announce: false, youtube_channel_id: null, youtube_handle: null },
       { id: 6, twitch_login: 'flyingludicolo', display_name: 'flyingludicolo', note: 'Flyingludicolo at AGDQ 2027', added_by: STAFF.id, added_at: minutesAgo(30), starts_at: null, expires_at: new Date(Date.now() + (1680 + 120) * 60000).toISOString(), bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null, ping_mode: 'always' },
     ],
     // The owner's ask, 2026-09-25: GamesDoneQuick is spotlighted always and pings only during
@@ -5630,6 +5632,9 @@ function seedMarathons() {
     // Found on oengus.io by the Speed Stuff 4 Charity feed; its schedule is not published yet,
     // so it waits quietly and the staff notice posts once the first read finds runs.
     { id: 5, name: 'Speed Stuff 4 LHS 2026', schedule_url: 'https://oengus.io/marathon/ss4lhs26/schedule', source: 'oengus', source_ref: 'ss4lhs26', spotlight_id: 7, feed_id: 3, starts_at: null, ends_at: null, active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(40), last_fetch_ok: 0, last_error: 'oengus.io has the marathon but has not published its schedule yet', fetch_failures: 0, added_by: null, added_at: minutesAgo(40) },
+    // Found by the Lady Arcaders feed on ladyarcaders.com (event 24); the calendar had runs, so it
+    // was added with its dates and is over now.
+    { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
   ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ...row }));
 }
@@ -5810,7 +5815,7 @@ function marathonRow(row) {
     schedule_url: row.schedule_url,
     schedule_page: row.source === 'gdq' && /^\d+$/.test(row.source_ref) ? `https://gamesdonequick.com/schedule/${row.source_ref}` : row.schedule_url,
     source: row.source,
-    source_word: { gdq: 'GDQ tracker', rpglb: 'RPG Limit Break tracker', horaro: 'horaro.net', oengus: 'Oengus' }[row.source] || row.source,
+    source_word: { gdq: 'GDQ tracker', rpglb: 'RPG Limit Break tracker', horaro: 'horaro.net', oengus: 'Oengus', ladyarcaders: 'Lady Arcaders' }[row.source] || row.source,
     source_ref: row.source_ref,
     spotlight_id: row.spotlight_id,
     channel_login: channel ? channel.twitch_login : null,
@@ -6036,6 +6041,7 @@ function marathonWords(key) {
 
 const MARATHON_RPGLB = /^https?:\/\/tracker\.rpglimitbreak\.com\/(?:event|runs|index)\/(\d+)\/?(?:[?#].*)?$/i;
 const MARATHON_OENGUS = /^https?:\/\/(?:www\.)?oengus\.io\/marathon\/([A-Za-z0-9_-]{1,40})(?:\/schedule(?:\/([A-Za-z0-9_-]{1,40}))?)?\/?(?:[?#].*)?$/i;
+const MARATHON_LADYARCADERS = /^https?:\/\/(?:www\.)?ladyarcaders\.com\/events\/(\d{1,6})(?:\/schedule(?:\/calendar)?|\/calendar)?\/?(?:[?#].*)?$/i;
 const MARATHON_HORARO = /^https?:\/\/(?:www\.)?horaro\.net\/([A-Za-z0-9][A-Za-z0-9_-]*)\/([A-Za-z0-9][A-Za-z0-9_-]*?)(?:\.json)?\/?(?:[?#].*)?$/i;
 
 function marathonReadAny(url) {
@@ -6046,6 +6052,8 @@ function marathonReadAny(url) {
   if (found) return { source: 'horaro', ref: `${found[1].toLowerCase()}/${found[2].toLowerCase()}` };
   found = MARATHON_OENGUS.exec(text);
   if (found) return { source: 'oengus', ref: found[2] ? `${found[1]}/${found[2]}` : found[1] };
+  found = MARATHON_LADYARCADERS.exec(text);
+  if (found) return { source: 'ladyarcaders', ref: String(Number(found[1])) };
   const ref = marathonRead(text);
   return ref === null ? null : { source: 'gdq', ref };
 }
@@ -6073,6 +6081,7 @@ const FEED_SOURCES = [
   { value: 'rpglb', label: 'the RPG Limit Break tracker' },
   { value: 'horaro', label: 'horaro.net \u2014 give the event\u2019s slug' },
   { value: 'oengus', label: 'Oengus \u2014 finds this channel\u2019s marathons on oengus.io (Speed Stuff 4 Charity\u2019s home)' },
+  { value: 'ladyarcaders', label: 'Lady Arcaders \u2014 looks for their next event\u2019s calendar on ladyarcaders.com' },
 ];
 const FEED_ACTION_WORDS = { add: 'adds', suggest: 'suggests' };
 
@@ -6097,6 +6106,15 @@ function seedMarathonFeeds() {
         { ref: 'NDS3', twitch: '' },
       ],
     },
+    {
+      id: 20, source: 'ladyarcaders', feed_ref: 'ladyarcaders', spotlight_id: 20, name: 'Lady Arcaders', action: 'add', active: true, last_checked_at: minutesAgo(40), last_ok: 1, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: null, added_at: minutesAgo(34000),
+      seen: [
+        { ref: '24', name: 'Lady Arcaders Super Showcase 2026', starts_at: minutesAgo(33000), ends_at: minutesAgo(28500) },
+        { ref: '25', empty_at: minutesAgo(40) },
+        { ref: '26', empty_at: minutesAgo(40) },
+        { ref: '27', empty_at: minutesAgo(40) },
+      ],
+    },
   ];
 }
 
@@ -6109,12 +6127,14 @@ function feedOf(id) {
 function feedPick(feed) {
   if (feed.source === 'horaro') return 'horaro';
   if (feed.source === 'oengus') return 'oengus';
+  if (feed.source === 'ladyarcaders') return 'ladyarcaders';
   return feed.feed_ref === FEED_RPGLB_BASE ? 'rpglb' : 'gdq';
 }
 
 function feedSourceWord(feed) {
   if (feed.source === 'horaro') return `horaro.net/${feed.feed_ref}`;
   if (feed.source === 'oengus') return 'Oengus';
+  if (feed.source === 'ladyarcaders') return 'Lady Arcaders';
   return feed.feed_ref === FEED_RPGLB_BASE ? 'RPG Limit Break tracker' : 'GDQ tracker';
 }
 
@@ -6215,18 +6235,19 @@ route('POST', '/api/marathons/feeds', async (context) => {
   const existing = state.marathonFeeds.find((one) => one.spotlight_id === spotlightId);
   if (existing) throw new Refused(409, 'channel_has_feed', `**${feedChannelName(spotlightId)}** already has a feed, **${existing.name}**, so nothing was added. One channel, one feed \u2014 remove that one first.`);
   const pick = String(body.source || '').trim().toLowerCase();
-  if (!['gdq', 'rpglb', 'horaro', 'oengus'].includes(pick)) throw new Refused(422, 'unknown_source', `**${String(body.source || '').slice(0, 40)}** is not something a feed can read, so nothing was added. Pick the GDQ tracker, the RPG Limit Break tracker, horaro.net or Oengus.`);
+  if (!['gdq', 'rpglb', 'horaro', 'oengus', 'ladyarcaders'].includes(pick)) throw new Refused(422, 'unknown_source', `**${String(body.source || '').slice(0, 40)}** is not something a feed can read, so nothing was added. Pick the GDQ tracker, the RPG Limit Break tracker, horaro.net or Oengus.`);
   let ref = pick === 'rpglb' ? FEED_RPGLB_BASE : FEED_GDQ_BASE;
   if (pick === 'oengus') ref = String(channel.twitch_login).toLowerCase();
+  if (pick === 'ladyarcaders') ref = String(channel.twitch_login).toLowerCase();
   if (pick === 'horaro') {
     ref = String(body.slug || '').trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9_-]{0,60}$/.test(ref)) throw new Refused(422, 'no_slug', 'A horaro.net feed needs the event\u2019s slug \u2014 the part after horaro.net/, for example `esa` \u2014 so nothing was added.');
   }
   const action = body.action || state.settings.get('marathon_feed_action_default');
   if (!['add', 'suggest'].includes(action)) throw new Refused(422, 'bad_action', 'Say add or suggest for what a feed does with a new event, so nothing was changed.');
-  const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 60) || { gdq: 'GDQ', rpglb: 'RPG Limit Break' }[pick] || feedChannelName(spotlightId);
+  const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 60) || { gdq: 'GDQ', rpglb: 'RPG Limit Break', ladyarcaders: 'Lady Arcaders' }[pick] || feedChannelName(spotlightId);
   const id = state.marathonFeeds.reduce((top, one) => Math.max(top, one.id), 0) + 1;
-  const feed = { id, source: ['horaro', 'oengus'].includes(pick) ? pick : 'tracker', feed_ref: ref, seen: [], spotlight_id: spotlightId, name, action, active: true, last_checked_at: null, last_ok: null, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: STAFF.id, added_at: new Date().toISOString() };
+  const feed = { id, source: ['horaro', 'oengus', 'ladyarcaders'].includes(pick) ? pick : 'tracker', feed_ref: ref, seen: [], spotlight_id: spotlightId, name, action, active: true, last_checked_at: null, last_ok: null, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: STAFF.id, added_at: new Date().toISOString() };
   state.marathonFeeds.push(feed);
   logAction('web.marathon.feed_created', { details: { feed_id: id, feed: name, source: pick, via: 'website' } });
   const added = feedCheck(feed);
@@ -6269,6 +6290,7 @@ route('PATCH', '/api/marathons/feeds/:feed_id', async (context) => {
     if (other) throw new Refused(409, 'channel_has_feed', `**${feedChannelName(target.id)}** already has a feed, **${other.name}**, so nothing was added. One channel, one feed — remove that one first.`);
     feed.spotlight_id = target.id;
     if (feed.source === 'oengus') feed.feed_ref = String(target.twitch_login).toLowerCase();
+    if (feed.source === 'ladyarcaders') feed.feed_ref = String(target.twitch_login).toLowerCase();
     logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, moved_to: target.id, via: 'website' } });
     said.push(`**${feed.name}** now belongs to **${feedChannelName(target.id)}**.`);
   }
@@ -6319,7 +6341,8 @@ route('POST', '/api/marathons/feeds/:feed_id/look', (context) => {
   const reread = (feed.seen || []).length;
   feedCheck(feed);
   logAction('web.marathon.feed_looked', { details: { feed_id: feed.id, forgot: dropped.map((one) => one.ref), reread, via: 'website' } });
-  const again = reread ? ` It read every Oengus marathon\u2019s record again (${reread} remembered before).` : '';
+  let again = reread ? ` It read every Oengus marathon\u2019s record again (${reread} remembered before).` : '';
+  if (reread && feed.source === 'ladyarcaders') again = ` It asked ladyarcaders.com about the next events again (${reread} remembered before).`;
   return { ...feedRow(feed), message: `**${feed.name}** forgot ${dropped.length} dismissed event(s) and looked again.${again}` };
 });
 

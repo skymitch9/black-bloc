@@ -178,10 +178,14 @@ const PICK_HELP = {
   rpglb: 'Every event on the RPG Limit Break tracker that is still ahead.',
   horaro: 'Every schedule of one horaro.net event — give its slug below.',
   oengus: 'Every marathon on oengus.io that streams on this channel’s Twitch — nothing to type.',
+  ladyarcaders: 'Lady Arcaders’ next events on ladyarcaders.com, found by trying the next event '
+    + 'numbers — nothing to type.',
 };
-const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus' };
+const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus', ladyarcaders: 'ladyarcaders' };
 const FEED_SEEN_NOTE = 'Remembers {count} Oengus marathon(s) it has already looked at, so each is '
   + 'read once. **Look again** reads them all once more.';
+const FEED_PROBE_NOTE = 'Remembers what {count} Lady Arcaders event number(s) answered; one with '
+  + 'no calendar yet is asked again after four checks. **Look again** asks them all now.';
 const FEED_NO_CHANNELS = 'Every channel-only row on the Go-live page has a feed already, or '
   + 'there is none. Add the channel there first.';
 const FEED_IGNORED_NOTE = 'A marathon this feed added and staff removed is never added again '
@@ -992,7 +996,7 @@ function feedDrawer(feed, message) {
       : null,
     field('Event', mode, FEED_MODE_HELP),
     ...(feed.suggestions || []).map((one) => suggestionCard(feed, one, say, { inDrawer: true })),
-    feed.seen_count ? el('p', { class: 'field-help mx-line' }, boldParts(said(FEED_SEEN_NOTE, { count: feed.seen_count }))) : null,
+    feed.seen_count ? el('p', { class: 'field-help mx-line' }, boldParts(said(feed.source === 'ladyarcaders' ? FEED_PROBE_NOTE : FEED_SEEN_NOTE, { count: feed.seen_count }))) : null,
     line(FEED_IGNORED_NOTE),
     bar(moves),
   ];
