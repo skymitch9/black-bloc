@@ -1,5 +1,7 @@
 # An event opens in a drawer — the facts that are set, the decision, the edit folded
 
+> **2026-09-25 (branch `event-links`, off `main` `271ec7f8`, code `b034cde3` + `ea781d6e`) — Deviation 1 CLOSED, 🔨 BUILT, NOT MERGED, NOT DEPLOYED.** Owner: *"make them links"*. The row (list and detail, one helper `api/tools/events.py:event_links`) now carries `announce_url`, `scheduled_event_url` and `review_url` (each `null` when absent); the drawer shows *Announced: announcement ↗*, *Discord event: on the server's Events list ↗* and the review room/post name as a link ↗, **Delete this room/post** still beside it. ⚠️ The row does not store the channel the announcement went to, so `announce_url` uses the `events_announce_channel_id` setting AT READ TIME — if staff move that setting after an event was announced, its link points at the new channel and Discord says the message is not there. With no announce channel set the row keeps `announced: true` and `announce_url: null`, and the drawer falls back to the old words. NOT verified: no link was clicked in Discord (sweep `ED-e`).
+
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 18:0x Phoenix),
 > dispatched to Opus as branch `event-drawer`** off `main` `4b37c659` (v165 live; v166 merged and undeployed).
 > **Last verified: 2026-09-25 18:0x** — by LOOKING in Chrome on the mock (`http://localhost:8797/events.html`, Open on
@@ -69,7 +71,7 @@ stream; d: a linked marathon shows its line). NOT `TODO.md` / `DONE.md` / `deplo
 
 Built on branch `event-drawer` (off `main` `ac4e79e2`), code commit `847874ed`. 🔨 **BUILT, NOT MERGED, NOT DEPLOYED.**
 
-1. **Announced, Discord event and a forum post show as words, not links.** The event row carries only `announced` /
+1. ✅ **CLOSED 2026-09-25 by `event-links` (see the dated line at the top).** **Announced, Discord event and a forum post show as words, not links.** The event row carries only `announced` /
    `scheduled` booleans and the review place's id, and the site knows no guild id, so a message / event / post URL
    needs a route change (§B forbids one). *Announced* reads *yes — the announcement is up*, *Discord event* reads
    *made — it is on the server's Events list*, the review place is its name (`nameNode`) as the section showed it.

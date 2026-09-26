@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-25 (branch `event-links`)** — ONE row ADDED to the `ED-` section (`ED-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-drawer`)** — ONE section APPENDED (`ED-a`…`ED-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-people`)** — ONE section APPENDED (`MP-a`…`MP-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-event-modes`)** — ONE section APPENDED (`MV-a`…`MV-f`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3302,3 +3303,4 @@ moves; pick a test event, or open the drawer and stop short of confirming.
 | **`ED-b`** | Same drawer ▸ **Change it** | It opens shut; opened it holds the old form (Title, What it is, Where, link, Starts + zone, How long, Save) under the one warning line. **Save** keeps the drawer open, redraws it with the new facts and the route's sentence on top, and the queue row changes under it. |
 | **`ED-c`** | Open an **approved** event whose Where is one `twitch.tv/…` address | **Spotlight this stream** beside the link; confirming adds the channel to the Go-live spotlight list until the event ends and the drawer shows the route's sentence. A pending event, or a Where that is anything else, shows no such button. |
 | **`ED-d`** | Open a marathon's event (Marathons ▸ a marathon ▸ Event ▸ **Open ↗**) | The event drawer with a **Marathon** card: *Marathon: {name} — N BaF run(s)* (or the *Marathon run* line) and **Open ↗**, which opens that marathon's drawer again. |
+| **`ED-e`** (branch `event-links`) | Open an **approved** event that was announced and has a Discord scheduled event; press each link in **The event** card: *announcement ↗*, *on the server's Events list ↗*, and the review room/post name ↗. Repeat for an event reviewed in a forum post | Each opens Discord at the right place: the announcement message in the announce channel, the event's page on the server's Events list, the review room (or the forum post's thread). ⚠️ If `events_announce_channel_id` was changed after that event was announced, *announcement ↗* lands on *message not found* — expected (the row does not store the channel). An event with no announcement / no scheduled event shows no such row.  |

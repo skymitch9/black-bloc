@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-25 — one section APPENDED, one row's text corrected, nothing re-keyed**: *An event's three Discord links* (branch `event-links`, off `main` `271ec7f8`, keyed against `ea781d6e`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *An event opens in a drawer* (branch `event-drawer`, off `main` `ac4e79e2`, keyed against `847874ed`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *A rehearsal home per feature, and a marathon notice with detail and control* (branch `shadow-home-per-feature`, off `main` `dd25f79d`, keyed against `6b698f18`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *A marathon opens on its people* (branch `marathon-people`, off `main` `def0c5ef`, keyed against `b72c32a8`). Before that:
@@ -8529,7 +8530,7 @@ Why in [`event-drawer-design.md`](event-drawer-design.md). Keyed against `847874
 | `site/public/assets/event-drawer.js:141` `eventMoves` | ONE copy of Approve / Deny… / Cancel… for the queue row and the Decide card; the caller says what happens after (`refresh` on the row, `landed` in the drawer). Rendered only where the status allows the move. |
 | `site/public/assets/event-drawer.js:187` `forumMove` | Same rule the row always used (an open room, review mode `forum`, a forum set); the row and the review fact share it. |
 | `site/public/assets/event-drawer.js:203` `deletePlace` | `room/delete` removes a room OR a post (`NO_PLACE`), so the label follows `review_kind`; the note field is the route's optional `note`. |
-| `site/public/assets/event-drawer.js:259` `eventCard` | A fact with no value is not drawn. Announced / Discord event are words, not links — the row has only booleans (Deviation 1). |
+| `site/public/assets/event-drawer.js:259` `eventCard` | A fact with no value is not drawn. Announced / Discord event / the review place are links since `event-links` (Deviation 1 closed); words only when the row has no URL. |
 | `site/public/assets/event-drawer.js:276` `decideCard` | The decision line AND whatever moves are still legal (an approved event keeps Cancel…) — Deviation 4. |
 | `site/public/assets/event-drawer.js:350` `changeFold` | The old editor, unchanged, inside a shut `foldout`; a settled event gets the sentence instead. Save refreshes the queue and redraws the drawer; a refusal stays under Save. |
 | `site/public/assets/event-drawer.js:430` | A redraw (a `message` is passed) keeps the old content until the fresh row lands, so a write never flashes *Getting the event…*. |
@@ -8539,3 +8540,16 @@ Why in [`event-drawer-design.md`](event-drawer-design.md). Keyed against `847874
 | `site/public/assets/page-events.js:58` `rowMoves` | The queue row: Open (the drawer), the shared moves, Move to the forum. The section and its rail row are gone. |
 | `site/mock/server.mjs:7708` `POST /api/events/:id/spotlight` | The mock's copy of the real route's refusal and success words; it does not add a Go-live row (Deviation 6). |
 | `site/public/assets/site.css:2710` `.ev-*` | The header line (badge · avatar · asked by · range), the fact rows at the UI-small size, the foot. |
+
+## An event's three Discord links (branch `event-links`, 2026-09-25)
+
+Why in [`event-drawer-design.md`](event-drawer-design.md) (the dated line at the top). Keyed against `ea781d6e`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/events.py:2823` `message_url` | `None` unless guild, channel AND message are all set — the drawer then keeps the old words instead of a dead link. |
+| `black_bloc/events.py:2831` `scheduled_event_url` | `discord.com/events/<guild>/<id>` opens the event on the server's Events list; no channel in it. |
+| `black_bloc/api/tools/events.py:94` `event_links` | ONE helper for the list and the detail route (both go through `shown` → `event_row`). The announcement's channel is not stored on the row, so `shown` passes the `events_announce_channel_id` setting at read time — a setting changed after the post makes the link stale. A forum post's `review_channel_id` is its thread, so the same `review_channel_url` shape opens it. |
+| `site/public/assets/event-drawer.js:266` `linkedFact` | Link when the row has the URL, the old sentence when it has only the boolean (no announce channel set). |
+| `site/public/assets/event-drawer.js:270` `placeNode` | The review name stays a `nameNode` (resolved like before) wrapped in the link, so **Delete this room/post** and **Move to the forum** still sit beside it outside the anchor. |
+| `site/mock/server.mjs:7558` `eventLinks` | The mock's copy of `event_links`, using `REVIEW_GUILD_ID` as the guild and the mock's own `events_announce_channel_id` setting. Event 5 gained an `announce_message_id` so all three show. |
