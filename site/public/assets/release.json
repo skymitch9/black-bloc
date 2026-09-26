@@ -1,10 +1,8 @@
 {
-  "release": "v167",
-  "commit": "1b296a60",
+  "release": "v168",
+  "commit": "a34acd82",
   "changed_features": [
     "core",
-    "guides",
-    "mod",
-    "rolemenu"
+    "guides"
   ]
 }
