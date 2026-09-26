@@ -714,15 +714,15 @@ async def test_the_card_draws_only_the_moves_that_change_something(bot, cog):
     assert "Resume" in labels and "Read it now" not in labels
 
 
-async def test_the_card_reads_schedule_runs_event_channel_posts_in_that_order(bot, cog):
+async def test_the_card_opens_on_the_two_header_lines_then_baf_then_posts(bot, cog):
     marathon = await added(bot, cog)
     embed, _ = await cogmod.build_card(bot, bot.guild, marathon["id"])
     lines = embed.description.splitlines()
-    heads = ["**Schedule:**", mt.CARD_RUNS, mt.CARD_EVENT, "**Channel:**", "**Posts:**"]
-    found = [next(at for at, one in enumerate(lines) if one.startswith(head)) for head in heads]
-    assert found == sorted(found) and found[0] == 1
-    assert "GDQ tracker" in lines[1] and "last read <t:" in lines[1]
-    assert "next read <t:" in lines[1] and "BaF" in lines[1]
+    assert "GDQ tracker" in lines[0] and "<t:" in lines[0]
+    assert "last read <t:" in lines[1] and "next read <t:" in lines[1] and "BaF" in lines[1]
+    assert lines[2] == "" and any("Super Metroid" in one for one in lines[3:])
+    assert lines[-1].startswith("**Posts:**")
+    assert not any(one in embed.description for one in ("**Schedule:**", "**Runs**", "**Event**"))
 
 
 async def test_pairing_from_the_panel_picks_a_schedule_name_then_the_member(bot, cog):
@@ -1341,7 +1341,7 @@ async def test_the_card_says_the_event_and_draws_unlink_or_make_one_now(bot, cog
     await cogmod.unlink_the_event(bot, bot.guild, FakeActor(), marathon)
     embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
     labels = [getattr(one, "label", None) for one in view.children]
-    assert mt.EVENT_NONE_LINE in embed.description
+    assert "Event **#" not in embed.description and mt.EVENT_NONE_LINE not in embed.description
     assert mt.MAKE_EVENT_MOVE.label in labels and mt.UNLINK_EVENT_MOVE.label not in labels
 
 
