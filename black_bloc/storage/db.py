@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 70
+SCHEMA_VERSION = 71
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1125,6 +1125,15 @@ CREATE TABLE IF NOT EXISTS marathon_spotlights (
     added_at     TEXT    NOT NULL,
     UNIQUE (marathon_id, login)
 );
+
+CREATE TABLE IF NOT EXISTS marathon_inbox (
+    guild_id   INTEGER NOT NULL,
+    home       TEXT    NOT NULL,
+    channel_id INTEGER NOT NULL,
+    thread_id  INTEGER NOT NULL,
+    made_at    TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, home)
+);
 """
 
 ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
@@ -1207,6 +1216,15 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("spotlight_channels", "marathons", "INTEGER NOT NULL DEFAULT 1"),
     ("marathons", "spotlight_mode", "TEXT"),
     ("spotlight_channels", "spotlit_by_marathon", "INTEGER"),
+    ("marathons", "inbox_message_id", "INTEGER"),
+    ("marathons", "inbox_home", "TEXT"),
+    ("marathons", "tracked_at", "TEXT"),
+    ("marathons", "tracked_by", "INTEGER"),
+    ("marathons", "thread_id", "INTEGER"),
+    ("marathons", "thread_home", "TEXT"),
+    ("marathons", "ignored_at", "TEXT"),
+    ("marathons", "ignored_by", "INTEGER"),
+    ("marathon_feeds", "auto_track", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

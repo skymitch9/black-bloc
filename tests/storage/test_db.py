@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 70
+        assert SCHEMA_VERSION == 71
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2825,7 +2825,7 @@ async def test_a_schema_69_file_gains_the_archive_tables_and_keeps_its_marathons
             cur = await again.conn.execute(f"SELECT COUNT(*) FROM {archive}")
             assert (await cur.fetchone())[0] == 0
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "70"
+        assert (await cur.fetchone())["value"] == "71"
     finally:
         await again.close()
 
@@ -2852,3 +2852,81 @@ async def test_a_schema_68_file_takes_69_and_70_on_one_boot(tmp_path):
         assert "spotlit_by_marathon" in await _columns(again, "spotlight_channels")
     finally:
         await again.close()
+
+
+INBOX_COLUMNS = (
+    "inbox_message_id",
+    "inbox_home",
+    "tracked_at",
+    "tracked_by",
+    "thread_id",
+    "thread_home",
+    "ignored_at",
+    "ignored_by",
+)
+
+
+async def test_a_schema_70_file_gains_the_inbox_and_every_marathon_and_feed_starts_untracked(
+    tmp_path,
+):
+    """Schema 71: the inbox table, the tracking columns (live and archive) and the feed's
+    auto-track switch; no marathon is tracked and no feed tracks by itself (owner D1, D3)."""
+    path = tmp_path / "old70.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE marathon_inbox")
+    for column in INBOX_COLUMNS:
+        await db.conn.execute(f"ALTER TABLE marathons DROP COLUMN {column}")
+        await db.conn.execute(f"ALTER TABLE marathons_archive DROP COLUMN {column}")
+    await db.conn.execute("ALTER TABLE marathon_feeds DROP COLUMN auto_track")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at, "
+        "board_channel_id, board_message_id) VALUES (1, 'SS4C', 'https://x', 'oengus', "
+        "'ss4lhs26', '2026-09-26', 10, 11)"
+    )
+    await db.conn.execute(
+        "INSERT INTO marathon_feeds(guild_id, source, feed_ref, spotlight_id, name, added_at) "
+        "VALUES (1, 'tracker', 'https://tracker.gamesdonequick.com/tracker', 3, 'GDQ', 'x')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '70')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        assert set(INBOX_COLUMNS) <= set(await _columns(again, "marathons"))
+        assert set(INBOX_COLUMNS) <= set(await _columns(again, "marathons_archive"))
+        assert await _columns(again, "marathon_inbox") == [
+            "guild_id",
+            "home",
+            "channel_id",
+            "thread_id",
+            "made_at",
+        ]
+        cur = await again.conn.execute("SELECT * FROM marathons")
+        row = await cur.fetchone()
+        assert row["name"] == "SS4C" and row["board_message_id"] == 11
+        assert all(row[column] is None for column in INBOX_COLUMNS)
+        cur = await again.conn.execute("SELECT auto_track FROM marathon_feeds")
+        assert (await cur.fetchone())["auto_track"] == 0
+    finally:
+        await again.close()
+
+
+async def test_an_inbox_is_one_row_per_guild_and_home(tmp_path):
+    db = Database(tmp_path / "inbox.sqlite3")
+    await db.connect()
+    try:
+        sql = (
+            "INSERT INTO marathon_inbox(guild_id, home, channel_id, thread_id, made_at) "
+            "VALUES (1, ?, 2, ?, 'x')"
+        )
+        await db.conn.execute(sql, ("on", 3))
+        await db.conn.execute(sql, ("shadow", 4))
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(sql, ("on", 5))
+    finally:
+        await db.close()
