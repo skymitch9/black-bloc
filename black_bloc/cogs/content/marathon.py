@@ -12,6 +12,7 @@ from discord.ext import commands, tasks
 
 from ... import marathon as mt
 from ... import marathon_events as me
+from ... import marathon_spotlight as ms
 from ... import pings
 from ... import shadow as shadow_home
 from ... import spotlight as spot
@@ -326,6 +327,7 @@ MARATHON_COLUMNS = {
     "feed_id",
     "event_mode",
     "held_by_channel",
+    "spotlight_mode",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -1468,6 +1470,7 @@ class Marathons(commands.Cog):
             await self.unpin_board(guild, marathon, because="over")
         if not marathon["active"]:
             return
+        await self.follow_spotlight(guild, marathon["id"])
         if mt.is_near(marathon, now, lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY))):
             await self.follow(guild, marathon)
         await self.maybe_suggest(guild, marathon["id"])
@@ -1741,6 +1744,7 @@ class Marathons(commands.Cog):
             return await self._failed(guild, marathon, ScheduleError(str(exc)[:200]), now)
         found = await self.apply(guild, marathon, runs, now)
         await self.sync_window(guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
+        await self.follow_spotlight(guild, marathon["id"])
         ours = len([one for one in await runs_of(self.bot.db, marathon["id"]) if mt.is_ours(one)])
         return Outcome(
             True,
@@ -2068,6 +2072,12 @@ class Marathons(commands.Cog):
                 "ends_at": ends,
             },
         )
+
+    async def follow_spotlight(self, guild: Any, marathon_id: Any) -> str | None:
+        from .marathon_spotlight import follow_spotlight
+
+        fresh = await get_marathon(self.bot.db, guild.id, marathon_id)
+        return await follow_spotlight(self.bot, guild, fresh, self.clock())
 
     async def drop_windows(self, guild: Any, marathon: Any) -> None:
         await self.sync_window(guild, {**dict(marathon), "active": 0})
@@ -2782,6 +2792,7 @@ async def card_header(bot: Any, guild: Any, row: Any, runs: list[Any]) -> list[s
     login = await channel_login(bot, row)
     if login:
         quiet.append(mt.CARD_CHANNEL.format(login=login))
+        quiet.append(ms.mode_line(row))
     return [
         mt.CARD_HEAD.format(
             phase=mt.PHASE_WORDS.get(phase, phase), dates=dates_of(row), source=source, url=url
@@ -2882,7 +2893,11 @@ async def build_card(
     if movable:
         view.add_item(RunPick(movable, words))
     view.add_item(EventModePick(me.mode_of(row)))
-    add_moves(view, mt.card_moves(row, has_unmatched=bool(unmatched), has_next=has_next))
+    add_moves(
+        view,
+        mt.card_moves(row, has_unmatched=bool(unmatched), has_next=has_next)
+        + ms.card_moves(row),
+    )
     return (embed, view)
 
 
@@ -3178,6 +3193,15 @@ class MarathonMoveButton(discord.ui.Button):
 
                 wanted = default_mode(interaction.client, interaction.guild.id)
                 await interaction.response.send_modal(AddMarathonModal(view, wanted))
+        elif action in ms.MOVE_MODES:
+            from .marathon_spotlight import set_spotlight_mode
+
+            wanted = ms.MOVE_MODES[action]
+            await run_move(
+                interaction,
+                view,
+                lambda bot, guild, actor, row: set_spotlight_mode(bot, guild, actor, row, wanted),
+            )
         elif action == mt.MAKE_EVENT:
             await run_move(interaction, view, make_event_now)
         elif action == mt.UNLINK_EVENT:

@@ -8,7 +8,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 68
+SCHEMA_VERSION = 69
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1204,6 +1204,8 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathon_feeds", "held_by_channel", "INTEGER NOT NULL DEFAULT 0"),
     ("marathon_feeds", "seen", "TEXT"),
     ("spotlight_channels", "marathons", "INTEGER NOT NULL DEFAULT 1"),
+    ("marathons", "spotlight_mode", "TEXT"),
+    ("spotlight_channels", "spotlit_by_marathon", "INTEGER"),
 )
 
 CARRIED_EVENT_WISH = (

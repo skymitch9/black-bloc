@@ -21,6 +21,7 @@ from ...cogs.content.golive import (
     unlink_channel,
 )
 from ...cogs.content.marathon_channels import set_marathons
+from ...cogs.content.marathon_spotlight import after_staff_dim
 from ...cogs.content.spotlight import (
     add_ping_window,
     bump_now,
@@ -43,8 +44,10 @@ from ...cogs.content.spotlight import recent_sessions as recent_spotlight_sessio
 from ...golive import optout_said
 from ...logkinds import VIA_WEBSITE
 from ...marathon_channels import takes_marathons
+from ...marathon_spotlight import is_marathon_channel
 from ...settings_store import (
     DEFAULT_TIMEZONE_KEY,
+    MARATHON_CHANNEL_PING_HELP_KEY,
     SPOTLIGHT_BAD_DATE_KEY,
     SPOTLIGHT_BUMP_HOURS_KEY,
     SPOTLIGHT_END_BEFORE_START_KEY,
@@ -176,6 +179,7 @@ def spotlight_row(
     said: dict[str, Any] | None = None,
     windows: list[Any] | None = None,
     pinged: dict[str, Any] | None = None,
+    marathon_help: str | None = None,
 ) -> dict[str, Any]:
     """A spotlight as the Go-live page reads it: a streamer row with no member behind it."""
     said = dict(said or {})
@@ -221,6 +225,7 @@ def spotlight_row(
         "pinging": spot.pings_now(row, windows),
         "ping_state": spot.ping_state_words(row, windows, None, tz_name, **pinged),
         "windows": [window_row(one, tz_name) for one in windows],
+        "ping_help": marathon_help if is_marathon_channel(row, windows) else None,
     }
 
 
@@ -229,6 +234,7 @@ async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
     held = await pings.spotlight_fan_roles(bot.db, guild.id)
     said = wording_for(bot, guild.id)
     pinged = ping_wording_for(bot, guild.id)
+    marathon_help = bot.store.get(guild.id, MARATHON_CHANNEL_PING_HELP_KEY)
     windows = await windows_in_guild(bot.db, guild.id)
     found = []
     for row in await channels_for(bot.db, guild.id):
@@ -243,6 +249,7 @@ async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
                 said,
                 [one for one in windows if int(one["spotlight_id"]) == int(row["id"])],
                 pinged,
+                marathon_help,
             )
         )
     return found
@@ -261,6 +268,7 @@ async def one_spotlight(bot: Any, guild: Any, spotlight_id: int) -> dict[str, An
         wording_for(bot, guild.id),
         await windows_for(bot.db, spotlight_id),
         ping_wording_for(bot, guild.id),
+        bot.store.get(guild.id, MARATHON_CHANNEL_PING_HELP_KEY),
     )
 
 
@@ -572,16 +580,22 @@ def build_router(bot: Any) -> APIRouter:
                 raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
             said = said or moded
         settled = None
+        stopped = ""
         if fields or said is None:
+            was = await channel_by_id(bot.db, spotlight_id)
             fresh, settled = await changed_spotlight(
                 bot, guild, who_acts, spotlight_id, via=VIA_WEBSITE, **fields
             )
+            if "spotlight" in fields:
+                stopped = await after_staff_dim(
+                    bot, guild, who_acts, was, fresh, via=VIA_WEBSITE
+                )
         if fresh is None:
             raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
         if said is None and "announce" in payload:
             said = spot.announce_said(fresh, settled)
         elif said is None and "spotlight" in payload:
-            said = spot.spotlight_said(fresh, settled)
+            said = " ".join(one for one in (spot.spotlight_said(fresh, settled), stopped) if one)
         elif said is None and ("starts_at" in fields or "expires_at" in fields):
             said = spot.dates_said(fresh, **wording_for(bot, guild.id))
         return await one_spotlight(bot, guild, spotlight_id) | {

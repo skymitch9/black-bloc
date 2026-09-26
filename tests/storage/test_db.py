@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 68
+        assert SCHEMA_VERSION == 69
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -1590,7 +1590,47 @@ async def test_a_schema_67_file_gains_marathon_feeds_seen_empty_and_its_rows_kep
         row = await cur.fetchone()
         assert (row["name"], row["ignored"], row["seen"]) == ("GDQ", '["74"]', None)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "68"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_68_file_gains_the_marathon_spotlight_columns_empty_and_keeps_its_rows(
+    tmp_path,
+):
+    """Schema 69: a marathon's spotlight_mode and a channel's spotlit_by_marathon, both NULL."""
+    path = tmp_path / "old68.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE marathons DROP COLUMN spotlight_mode")
+    await db.conn.execute("ALTER TABLE spotlight_channels DROP COLUMN spotlit_by_marathon")
+    await db.conn.execute(
+        "INSERT INTO spotlight_channels(guild_id, twitch_login, added_at, pin, spotlight) "
+        "VALUES (1, 'gamesdonequick', '2026-09-25', 1, 1)"
+    )
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
+        "added_at) VALUES (1, 'AGDQ 2027', 'https://x', 'gdq', '74', 1, '2026-09-25')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '68')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name, spotlight_mode FROM marathons")
+        row = await cur.fetchone()
+        assert (row["name"], row["spotlight_mode"]) == ("AGDQ 2027", None)
+        cur = await again.conn.execute(
+            "SELECT twitch_login, spotlight, expires_at, spotlit_by_marathon FROM spotlight_channels"
+        )
+        row = await cur.fetchone()
+        assert tuple(row) == ("gamesdonequick", 1, None, None)
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "69"
     finally:
         await again.close()
 
