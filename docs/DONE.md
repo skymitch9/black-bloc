@@ -41,6 +41,12 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-25 — v170: the marathon mode switch at the top of the Marathons section
+
+Deployed **22:07 Phoenix** (release commit `9b1f1a91`; gate 8,415 passed + 3 skipped; boot clean 05:07:38–41Z; `/health` 79 ms; the live asset carries the change). `ui.modeSwitch` for `marathon_mode` replaces the *Marathon posts are SHADOW.* sentence; the key stays in the settings foldout (one key, two doors). Seen on the mock before the deploy: the segment at the top, shadow lit. Nothing met Discord; no schema.
+
+- 🎚️ **The marathon mode switch at the top of the Marathons section (owner, 2026-09-25 22:0x Phoenix, verbatim: *"move the shadow on and off switch out of settings and into the top of marathon section"*).** The `marathon_mode` on / shadow / off segment (the site's `modeSwitch`, the same one the Go-live page's strip uses) replaces the *Marathon posts are SHADOW.* sentence at the top of the section; the key stays in the settings foldout too (one key, two doors — checklist 33). Status: ✅ **LIVE as v170 22:07** — verified on the mock: the label and the on / shadow / off segment sit at the top of the section, shadow lit; `check.mjs` 22 pages / 252 routes, 20 node tests.
+
 ## 2026-09-25 — v169: the marathon table's Event column says the mode, not a dash
 
 Owner, 22:0x, verbatim: *"on this page, in marathons, there are 7 columns. column 7 is event. its blank for every entry, why"* — every live marathon is in `none` mode (the default chosen at 14:4x), so the column was all dashes. Fixed on `main` by the conductor (`1c92ec00`, `marathons-section.js:eventCell`: the cell shows `row.event_mode_word` when there is no Events row), deployed **22:00 Phoenix** (release commit `a80be4e0`; gate 8,415 passed + 3 skipped; boot clean 05:00:38–43Z; `/health` 63 ms; the live asset carries the change). Seen on the mock: *No event* ×3, *#5 approved* on the seeded AGDQ 2027. Nothing met Discord; no schema, no snapshot.
