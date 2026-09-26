@@ -3,6 +3,7 @@
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-09-26 (branch `marathon-horaro-events`)** — ONE section APPENDED (`HE-a`…`HE-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-fastestfurs`)** — ONE section APPENDED (`FF-a`…`FF-d`, BUILT, NOT MERGED); nothing else touched. Before that,
+> **2026-09-26 (branch `marathon-ladyarcaders`)** — ONE section APPENDED (`LA-a`…`LA-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-feeds-oengus`)** — ONE section APPENDED (`MO-a`…`MO-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `hide-rolemenu`)** — ONE section APPENDED (`RM-a`, `RM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-links`)** — ONE row ADDED to the `ED-` section (`ED-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3404,3 +3405,21 @@ shadow).
 | **`FF-b`** | **Check now** on the Fastest Furs row (or the first boot's check) | *Fastest Furs Fall Fest 2026* appears on the Marathons list as *Fastest Furs · feed* on the Fastest Furs channel, schedule link `https://fastestfurs.com/schedule/21`; FWA 2026 and older events are **not** added; `marathon.feed_checked` found 1 / added 1; a second **Check now** adds nothing. |
 | **`FF-c`** | Watch the staff notice home after FF-b (or press **Read it now** on the marathon) | ONE staff notice (*Fastest Furs has a new event: **Fastest Furs Fall Fest 2026***, the embed, the three rows), `marathon.notice_posted` with `because: published`; the next read posts nothing. If the schedule were not out, the row would wait quietly with *fastestfurs.com has the event but has not published its schedule yet*. |
 | **`FF-d`** | Open *Fastest Furs Fall Fest 2026* ▸ its schedule / the board once posted | 55 runs from Thu 8 Oct 14:00 UTC (7:00 Phoenix), each timed from the one before; runners and hosts listed by NAME (no Twitch link); a race lists both runners; a BaF member whose Discord username is a runner's name (or who is paired) shows as ours. Compare two or three slot times with fastestfurs.com/schedule/21 — the times are computed (design Deviation 2). |
+
+## Rows `LA-a` … `LA-d` — Lady Arcaders, found by probing ladyarcaders.com (branch `marathon-ladyarcaders`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-ladyarcaders`, NOT merged, NOT deployed.** Owner, 2026-09-26: *"Build them all now"*.
+Design: [`../info/marathon-ladyarcaders-design.md`](../info/marathon-ladyarcaders-design.md). Rows lettered; the
+conductor numbers them. Local check first: `MOCK_PORT=8808 node site/mock/server.mjs` from the branch, then
+<http://localhost:8808/events.html> ▸ **Sources…**.
+
+⚠️ **Nothing seeds until staff add the `ladyarcaders` channel row** (Go-live ▸ add channel `ladyarcaders`, marathons
+on) — there is none live today. The first boot AFTER that seeds a *Lady Arcaders* feed and its first check probes
+events 25–27. Measured 2026-09-26 ~12:4x Phoenix: event 25's calendar answered empty, so nothing is added yet.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`LA-a`** | Events ▸ **Sources…** ▸ **Add a feed…** ▸ the `ladyarcaders` channel row ▸ *Read from* (it guesses **Lady Arcaders**) — or, after the first boot with the row, look for the seeded **Lady Arcaders** feed | The line under the pick says *Lady Arcaders' next events on ladyarcaders.com, found by trying the next event numbers — nothing to type*; no slug field. **Add the feed** answers *… now reads Lady Arcaders for **Lady Arcaders** …*; the Sources list shows the row with *Lady Arcaders* as its source, and its drawer says *Remembers what 3 Lady Arcaders event number(s) answered …*. |
+| **`LA-b`** | While marathon posts are in **shadow**: Events ▸ **Add a marathon** ▸ any name ▸ paste `https://ladyarcaders.com/events/24/schedule/` ▸ the Lady Arcaders channel | It is added (source *Lady Arcaders*) and its Runs list the 47 slots (2026-09-03 → 09-06, Toronto times shown in your zone), e.g. *SAROS — NG+ All Bosses (Modifiers)* by Nimelya; a race lists both performers; the *Welcome* / *Day N Begins!* segments list nobody. Remove it afterwards (it is over). A pasted `https://ladyarcaders.com/events/25/schedule/` is refused: *… no schedule published for event 25 yet*. |
+| **`LA-c`** | When Lady Arcaders publishes their next event (watch their Discord), press **Check now** on the Lady Arcaders feed — or wait: an empty number is asked again after four checks (24 h) | The new event appears on the Marathons list as *Lady Arcaders · feed* on the Lady Arcaders channel, named from its calendar; `marathon.feed_checked` counts it; the numbers that answered empty are not asked again inside 24 h (no second GET in the log / the drawer's count unchanged). |
+| **`LA-d`** | The same new event, right after it is added | ONE staff notice (*Lady Arcaders has a new event: **…***, the embed, the three rows), `marathon.notice_posted` with `because: published` — its calendar already had runs, so it notices on the add's own first read; the next read posts nothing. |

@@ -46,6 +46,7 @@ def test_the_seeds_are_the_two_tracker_channel_rows_and_ss4c_on_oengus_and_not_e
         ("speedstuff4charity", "oengus"),
         ("fastpacedevents", "horaro"),
         ("fastestfurs", "fastestfurs"),
+        ("ladyarcaders", "ladyarcaders"),
     ]
     ss4c = mf.SEEDS[2]
     assert (ss4c.source, ss4c.feed_ref, ss4c.name) == (
@@ -238,3 +239,27 @@ def test_a_horaro_events_feed_makes_horaro_marathons_and_reads_back_its_own_pick
     assert "finds this channel's events on horaro.net" in mf.PICK_WORDS["horaro_events"]
     fpe_seed = mf.Seed("fastpacedevents", mf.HORARO_EVENTS_FEED, "fastpacedevents", "Fast Pace")
     assert mf.SEEDS[3] == fpe_seed
+
+
+def ladyarcaders(**extra):
+    return feed(source=mf.LADYARCADERS_FEED, feed_ref="ladyarcaders", name="Lady Arcaders") | extra
+
+
+def test_the_lady_arcaders_seed_pick_and_words():
+    seed = next(one for one in mf.SEEDS if one.login == "ladyarcaders")
+    assert seed == mf.Seed("ladyarcaders", mf.LADYARCADERS_FEED, "ladyarcaders", "Lady Arcaders")
+    assert mf.marathon_source(seed._asdict()) == "ladyarcaders"
+    assert mf.pick_of(" LadyArcaders ") == (mf.LADYARCADERS_FEED, None)
+    assert mf.pick_for(ladyarcaders()) == "ladyarcaders"
+    assert mf.PICK_NAMES["ladyarcaders"] == "Lady Arcaders"
+    assert mf.PICK_WORDS["ladyarcaders"].startswith("Lady Arcaders")
+    assert "ladyarcaders.com" in mf.PICK_WORDS["ladyarcaders"]
+    assert mf.source_word(ladyarcaders()) == "Lady Arcaders"
+    assert mf.LADYARCADERS_FEED in mf.FEED_SOURCES
+
+
+def test_look_again_is_offered_on_a_lady_arcaders_feed_that_remembers_its_probes():
+    assert mf.FEED_LOOK not in [one.action for one in mf.feed_moves(ladyarcaders())]
+    probed = ladyarcaders(seen='[{"ref": "25", "empty_at": "2026-09-26T19:00:00+00:00"}]')
+    assert mf.FEED_LOOK in [one.action for one in mf.feed_moves(probed)]
+    assert mf.seen_of(probed) == [{"ref": "25", "twitch": ""}]

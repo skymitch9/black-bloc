@@ -181,12 +181,16 @@ const PICK_HELP = {
   horaro_events: 'Every horaro.net event that streams on this channel’s Twitch, found by searching '
     + 'event names for the Name below — Fast Paced Events’ are “Fast Pace for …”, so “Fast Pace”.',
   fastestfurs: 'Every event on Fastest Furs’ own list at fastestfurs.com — nothing to type.',
+  ladyarcaders: 'Lady Arcaders’ next events on ladyarcaders.com, found by trying the next event '
+    + 'numbers — nothing to type.',
 };
-const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus', fastpacedevents: 'horaro_events', fastestfurs: 'fastestfurs' };
+const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus', fastpacedevents: 'horaro_events', fastestfurs: 'fastestfurs', ladyarcaders: 'ladyarcaders' };
 const FEED_SEEN_NOTE = 'Remembers {count} Oengus marathon(s) it has already looked at, so each is '
   + 'read once. **Look again** reads them all once more.';
 const FEED_SEEN_NOTE_HORARO = 'Remembers {count} horaro.net event(s) it has already looked at, '
   + 'so each one’s schedules are read once. **Look again** reads them all once more.';
+const FEED_PROBE_NOTE = 'Remembers what {count} Lady Arcaders event number(s) answered; one with '
+  + 'no calendar yet is asked again after four checks. **Look again** asks them all now.';
 const FEED_NO_CHANNELS = 'Every channel-only row on the Go-live page has a feed already, or '
   + 'there is none. Add the channel there first.';
 const FEED_IGNORED_NOTE = 'A marathon this feed added and staff removed is never added again '
@@ -997,7 +1001,7 @@ function feedDrawer(feed, message) {
       : null,
     field('Event', mode, FEED_MODE_HELP),
     ...(feed.suggestions || []).map((one) => suggestionCard(feed, one, say, { inDrawer: true })),
-    feed.seen_count ? el('p', { class: 'field-help mx-line' }, boldParts(said(feed.source === 'horaro_events' ? FEED_SEEN_NOTE_HORARO : FEED_SEEN_NOTE, { count: feed.seen_count }))) : null,
+    feed.seen_count ? el('p', { class: 'field-help mx-line' }, boldParts(said({ horaro_events: FEED_SEEN_NOTE_HORARO, ladyarcaders: FEED_PROBE_NOTE }[feed.source] || FEED_SEEN_NOTE, { count: feed.seen_count }))) : null,
     line(FEED_IGNORED_NOTE),
     bar(moves),
   ];

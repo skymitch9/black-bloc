@@ -118,6 +118,7 @@ async def test_the_list_carries_feeds_and_the_channel_rows_a_feed_may_start_from
         "oengus",
         "horaro_events",
         "fastestfurs",
+        "ladyarcaders",
     ]
 
 

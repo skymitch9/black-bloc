@@ -13,12 +13,13 @@ from ... import marathon_events as me
 from ... import marathon_fastestfurs as ff
 from ... import marathon_feeds as mf
 from ... import marathon_horaro_events as hre
+from ... import marathon_ladyarcaders as la
 from ...actionlog import log_action
 from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...marathon_channels import takes_marathons
-from ...marathon_sources import HORARO_SLUG, ScheduleError
+from ...marathon_sources import HORARO_SLUG, LADYARCADERS, ScheduleError
 from ...panels import (
     KEEP_IT,
     Outcome,
@@ -316,6 +317,8 @@ async def candidates_of(bot: Any, guild: Any, feed: Any, now: Any) -> list[mf.Ca
         return await horaro_events_candidates_of(bot, feed, now, recent)
     if feed["source"] == mf.FASTESTFURS_FEED:
         return ff.candidates(await cog.client.fastestfurs_events(), now, recent)
+    if feed["source"] == mf.LADYARCADERS_FEED:
+        return await ladyarcaders_candidates_of(bot, guild, feed, now, recent)
     if source is None:
         raise ScheduleError(mf.UNKNOWN_PICK.format(given=str(feed["feed_ref"])[:60]))
     return mf.tracker_candidates(source, await cog.client.events(source), now, recent)
@@ -350,6 +353,20 @@ async def horaro_events_candidates_of(
     if seen is not None:
         await update_feed(bot.db, feed["id"], seen=json.dumps(seen))
     return found
+
+
+async def ladyarcaders_candidates_of(
+    bot: Any, guild: Any, feed: Any, now: Any, recent: int
+) -> list[mf.Candidate]:
+    """The next event numbers, probed; what each answered is remembered in `seen`."""
+    refs = [*await marathons_by_ref(bot.db, guild.id, LADYARCADERS), *mf.ignored_of(feed)]
+    seen = mf.list_of(feed["seen"])
+    numbers = la.to_probe(refs, seen, now, hours_of(bot, guild.id))
+    read = await la.probe(cog_of(bot).client, numbers, now) if numbers else []
+    if read:
+        seen = la.merged(seen, read)
+        await update_feed(bot.db, feed["id"], seen=json.dumps(seen))
+    return la.candidates(seen, now, recent)
 
 
 async def check_failed(
@@ -724,7 +741,7 @@ async def create_feed(
     source, feed_ref = picked
     if source == mf.OENGUS_FEED:
         feed_ref = str(channel["twitch_login"]).lower()
-    if source in (mf.HORARO_EVENTS_FEED, mf.FASTESTFURS_FEED):
+    if source in (mf.HORARO_EVENTS_FEED, mf.FASTESTFURS_FEED, mf.LADYARCADERS_FEED):
         feed_ref = str(channel["twitch_login"]).lower()
     if source == mf.HORARO_FEED:
         feed_ref = str(slug or "").strip().lower().strip("/")
@@ -876,7 +893,11 @@ async def set_feed(
             moved = {"spotlight_id": int(channel["id"])}
             if fresh["source"] == mf.OENGUS_FEED:
                 moved["feed_ref"] = str(channel["twitch_login"]).lower()
-            if fresh["source"] in (mf.HORARO_EVENTS_FEED, mf.FASTESTFURS_FEED):
+            if fresh["source"] in (
+                mf.HORARO_EVENTS_FEED,
+                mf.FASTESTFURS_FEED,
+                mf.LADYARCADERS_FEED,
+            ):
                 moved["feed_ref"] = str(channel["twitch_login"]).lower()
             try:
                 await update_feed(bot.db, fresh["id"], **moved)
@@ -970,7 +991,10 @@ async def look_again(
         )
     said = mf.FEED_LOOKED.format(name=fresh["name"], count=len(dropped))
     if reread:
-        again = hre.REREAD if fresh["source"] == mf.HORARO_EVENTS_FEED else mf.FEED_REREAD
+        again = {
+            mf.HORARO_EVENTS_FEED: hre.REREAD,
+            mf.LADYARCADERS_FEED: mf.FEED_REPROBE,
+        }.get(fresh["source"], mf.FEED_REREAD)
         said = f"{said} {again.format(count=reread)}"
     return Outcome(checked.ok, f"{said} {checked.message}", checked.code, checked.status)
 

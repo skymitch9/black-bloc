@@ -9,6 +9,7 @@ import pytest
 from black_bloc import marathon as mt
 from black_bloc import marathon_feeds as mf
 from black_bloc import marathon_horaro_events as hre
+from black_bloc import marathon_ladyarcaders as la
 from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content import marathon_feeds as feeds
 from black_bloc.cogs.content.marathon import (
@@ -64,6 +65,8 @@ class FeedClient:
         self.runs_by_ref = {}
         self.raises = None
         self.list_calls = []
+        self.calendars = {}
+        self.text_calls = []
 
     async def events(self, source="gdq"):
         self.list_calls.append(source)
@@ -99,6 +102,8 @@ class FeedClient:
             raise ScheduleError("oengus.io has not published it", unpublished=True)
         if source == "fastestfurs" and (source, str(ref)) not in self.runs_by_ref:
             raise ScheduleError("fastestfurs.com has not published it", unpublished=True)
+        if source == "ladyarcaders" and (source, str(ref)) not in self.runs_by_ref:
+            raise ScheduleError("ladyarcaders.com has not published it", unpublished=True)
         return list(self.runs_by_ref.get((source, str(ref)), []))
 
     async def fastestfurs_events(self):
@@ -109,6 +114,10 @@ class FeedClient:
 
     async def close(self):
         return None
+
+    async def text(self, url):
+        self.text_calls.append(url)
+        return self.calendars.get(url, (200, ""))
 
 
 @pytest.fixture
@@ -1271,3 +1280,173 @@ async def test_add_a_feed_with_the_fastestfurs_pick_keys_on_the_channel(bot, cog
     assert "now reads Fastest Furs for **Fastest Furs**" in made.message
     assert list(await by_ref(bot)) == [FALL_FEST]
     assert feeds.guess_pick("fastestfurs") == "fastestfurs"
+
+
+# --- Lady Arcaders (ladyarcaders.com, probed by event number) ---------------------------------
+
+LA_CALENDAR = "https://ladyarcaders.com/events/{n}/schedule/calendar/"
+
+
+def la_calendar(name="Lady Arcaders Microthon 2026 Schedule"):
+    lines = ["BEGIN:VCALENDAR", f"X-WR-CALNAME:{name}"]
+    for uid, day in (("501", "10"), ("502", "11")):
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{uid}",
+            f"DTSTART;TZID=America/Toronto:202610{day}T120000",
+            f"DTEND;TZID=America/Toronto:202610{day}T130000",
+            "SUMMARY:[LAM26] Celeste (Nimelya)",
+            "DESCRIPTION:Celeste (Any%) by Nimelya   Time Estimate: 01:00:00",
+            "END:VEVENT",
+        ]
+    return "\r\n".join([*lines, "END:VCALENDAR", ""])
+
+
+def asked(cog):
+    return [int(url.split("/events/")[1].split("/")[0]) for url in cog.client.text_calls]
+
+
+async def la_feed(bot, cog, when="published"):  # noqa: F811
+    await staff_room(bot)
+    await bot.store.set(GUILD, "marathon_feed_notice_when", when)
+    row = await a_channel(bot, "ladyarcaders", "Lady Arcaders")
+    await cog.tick_once()
+    feed = next(one for one in await all_feeds(bot) if one["source"] == mf.LADYARCADERS_FEED)
+    return row, feed
+
+
+async def test_the_seed_gives_the_lady_arcaders_row_its_feed_once(bot, cog):  # noqa: F811
+    row, feed = await la_feed(bot, cog)
+    assert (feed["name"], feed["feed_ref"], feed["spotlight_id"]) == (
+        "Lady Arcaders",
+        "ladyarcaders",
+        row,
+    )
+    await feeds.remove_feed(bot, bot.guild, FakeActor(), feed)
+    again = Marathons(bot)
+    again.client = FeedClient()
+    again.clock = lambda: SEPT
+    bot.cogs[cogmod.COG_NAME] = again
+    await again.tick_once()
+    assert await all_feeds(bot) == []
+
+
+async def test_a_check_probes_past_24_adds_the_one_that_answers_and_remembers_the_empty(
+    bot,  # noqa: F811
+    cog,
+):
+    cog.client.calendars[LA_CALENDAR.format(n=26)] = (200, la_calendar())
+    row, feed = await la_feed(bot, cog)
+    assert asked(cog) == [25, 26, 27]
+    made = await by_ref(bot)
+    assert list(made) == ["26"]
+    marathon = made["26"]
+    assert marathon["source"] == "ladyarcaders"
+    assert marathon["name"] == "Lady Arcaders Microthon 2026"
+    assert marathon["schedule_url"] == "https://ladyarcaders.com/events/26/schedule/"
+    assert marathon["spotlight_id"] == row and marathon["feed_id"] == feed["id"]
+    assert marathon["noticed_at"] is None and notices(bot) == []
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    remembered = {one["ref"]: one for one in mf.list_of(feed["seen"])}
+    assert remembered["25"] == {"ref": "25", "empty_at": SEPT.isoformat()}
+    assert remembered["27"] == {"ref": "27", "empty_at": SEPT.isoformat()}
+    assert remembered["26"]["starts_at"] == "2026-10-10T16:00:00+00:00"
+    checked = await checked_of(bot, "Lady Arcaders")
+    assert (checked["found"], checked["added"]) == (1, 1)
+    added = await logged(bot, "marathon.feed_added")
+    assert [(one["event"], one["source"]) for one in added] == [("26", "ladyarcaders")]
+
+
+async def test_a_second_check_within_the_gap_probes_only_what_is_due(bot, cog):  # noqa: F811
+    await la_feed(bot, cog)
+    assert asked(cog) == [25, 26, 27]
+    cog.client.text_calls.clear()
+    later(cog, 7)
+    await cog.tick_once()
+    assert asked(cog) == []
+    assert (await checked_of(bot, "Lady Arcaders"))["found"] == 0
+    later(cog, 6 * la.EMPTY_RETRY_CHECKS)
+    cog.client.calendars[LA_CALENDAR.format(n=25)] = (200, la_calendar())
+    await cog.tick_once()
+    assert asked(cog) == [25, 26, 27]
+    assert list(await by_ref(bot)) == ["25"]
+
+
+async def test_after_a_find_the_window_moves_and_nothing_is_added_twice(bot, cog):  # noqa: F811
+    cog.client.calendars[LA_CALENDAR.format(n=25)] = (200, la_calendar())
+    await la_feed(bot, cog)
+    cog.client.text_calls.clear()
+    later(cog, 7)
+    await cog.tick_once()
+    assert asked(cog) == [28]
+    assert list(await by_ref(bot)) == ["25"]
+
+
+async def test_a_404_stops_the_probe_for_this_check(bot, cog):  # noqa: F811
+    cog.client.calendars[LA_CALENDAR.format(n=26)] = (404, "")
+    await la_feed(bot, cog)
+    assert asked(cog) == [25, 26]
+
+
+async def test_a_staff_pasted_event_moves_the_probe_above_it(bot, cog):  # noqa: F811
+    await staff_room(bot)
+    await a_channel(bot, "ladyarcaders", "Lady Arcaders")
+    cog.client.runs_by_ref[("ladyarcaders", "30")] = two_runs()
+    made = await create_marathon(
+        bot,
+        bot.guild,
+        FakeActor(),
+        name="LA 30",
+        url="https://ladyarcaders.com/events/30/schedule/",
+    )
+    assert made.ok, made.message
+    await cog.tick_once()
+    assert asked(cog) == [31, 32, 33]
+
+
+async def test_its_notice_posts_once_when_the_calendar_yields_runs(bot, cog):  # noqa: F811
+    cog.client.calendars[LA_CALENDAR.format(n=25)] = (200, la_calendar())
+    await la_feed(bot, cog)
+    marathon = (await by_ref(bot))["25"]
+    unpublished = await refresh_marathon(bot, bot.guild, marathon)
+    assert not unpublished.ok and notices(bot) == []
+    cog.client.runs_by_ref[("ladyarcaders", "25")] = two_runs()
+    await refresh_marathon(bot, bot.guild, marathon)
+    await refresh_marathon(bot, bot.guild, marathon)
+    assert len(notices(bot)) == 1
+    assert "**Lady Arcaders Microthon 2026**" in notices(bot)[0].content
+    assert [row["because"] for row in await posted(bot)] == ["published"]
+
+
+async def test_look_again_forgets_the_probes_and_asks_again(bot, cog):  # noqa: F811
+    _row, feed = await la_feed(bot, cog)
+    cog.client.text_calls.clear()
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    looked = await feeds.look_again(bot, bot.guild, FakeActor(), feed)
+    assert looked.ok
+    assert mf.FEED_REPROBE.format(count=3) in looked.message
+    assert asked(cog) == [25, 26, 27]
+
+
+async def test_add_a_feed_with_the_lady_arcaders_pick_keys_on_the_channel(bot, cog):  # noqa: F811
+    await staff_room(bot)
+    other = await a_channel(bot, "LadyArcadersToo", "Somewhere Else")
+    made = await feeds.create_feed(
+        bot, bot.guild, FakeActor(), spotlight_id=other, pick="ladyarcaders"
+    )
+    assert made.ok, made.message
+    assert (made.value["source"], made.value["feed_ref"]) == ("ladyarcaders", "ladyarcaderstoo")
+    assert made.value["name"] == "Lady Arcaders"
+    assert "now reads Lady Arcaders for **Somewhere Else**" in made.message
+    assert asked(cog) == [25, 26, 27]
+
+
+async def test_a_failed_probe_is_a_failed_check_that_keeps_the_memory(bot, cog):  # noqa: F811
+    _row, feed = await la_feed(bot, cog)
+    later(cog, 6 * la.EMPTY_RETRY_CHECKS)
+    cog.client.calendars[LA_CALENDAR.format(n=25)] = (503, "")
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    failed = await feeds.check_now(bot, bot.guild, FakeActor(), feed)
+    assert not failed.ok and "ladyarcaders.com answered 503" in failed.message
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert len(mf.list_of(feed["seen"])) == 3 and feed["checks_failed"] == 1

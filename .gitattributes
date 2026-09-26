@@ -2,3 +2,4 @@
 # "LF will be replaced by CRLF" noise on every commit.
 * text=auto eol=lf
 *.ps1 text eol=crlf
+*.ics -text
