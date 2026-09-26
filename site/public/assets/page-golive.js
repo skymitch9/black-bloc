@@ -240,7 +240,6 @@ const SPOTLIGHT_ENDS_HELP = 'When the row is purged. Leave it blank to keep it f
 const SPOTLIGHT_SCHEDULED = 'scheduled';
 const SPOTLIGHT_SCHEDULED_STATE = 'Scheduled — its start has not arrived, so nothing of its '
   + 'is announced, pinned or reminded yet.';
-const NO_MEMBER = 'Nobody here \u2014 this is a channel Black Bloc watches by name.';
 // The owner's ask, 2026-09-25: "I want GDQ to always be spotlighted, but I only want it to ping
 // the marathon role during events". The state line itself is the bot's worded key.
 const PINGS_TITLE = 'Pings';
@@ -1099,11 +1098,6 @@ function marathonsSuffix(one) {
   return takesMarathons(one) ? '' : ` · ${NO_MARATHONS}`;
 }
 
-function channelAnnouncementsSaid(row) {
-  const said = announcedSaidFor(row);
-  if (takesMarathons(row.spotlight)) return said;
-  return el('span', {}, [said, el('span', { class: 'cell-quiet', text: ` ${MARATHONS_OFF_SAID}` })]);
-}
 
 function announcedSaidFor(row) {
   return el('span', {
@@ -1165,8 +1159,8 @@ async function rowPanel(row, say) {
       panelGroup('Twitch', twitchSaid, twitchMoves(row, say).slice(0, 1)),
       panelGroup('YouTube', channelYoutube, channelYoutubeMoves(row, say)),
       panelGroup('Ping role', roleSaid, await roleMoves(row, say)),
-      panelGroup('Announcements', channelAnnouncementsSaid(row), [...channelAnnounceMoves(row, say), ...channelMarathonsMoves(row, say)]),
-      panelGroup('Remove', el('span', { class: 'cell-quiet', text: NO_MEMBER }), channelRemoveMoves(row, say)),
+      card('Announcements', [el('div', { class: 'bar' }, [...channelAnnounceMoves(row, say), ...channelMarathonsMoves(row, say)])]),
+      card('Remove', [el('div', { class: 'bar' }, channelRemoveMoves(row, say))]),
       say,
     ];
   }
