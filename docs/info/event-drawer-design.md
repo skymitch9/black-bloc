@@ -115,8 +115,11 @@ Built on branch `event-drawer` (off `main` `ac4e79e2`), code commit `847874ed`. 
   drawer's Event **Open ↗** into #5 and back, and Close (the hash cleared).
 - **Not pressed:** Cancel… and Delete this room from the drawer, Deny… and Cancel… on the row after this change (they
   are the same `eventMoves` code), browser Back while a drawer is open.
-- **Never rendered:** *Move to the forum* in the drawer (the mock's review mode is not `forum`), an event reviewed in a
-  forum **post**, an event with *Now* (`moved_word`) or *Announced* set, a marathon-**run** event.
+- **Never rendered:** *Move to the forum* in the drawer (the mock's review mode is not `forum`), an event with *Now*
+  (`moved_word`) or *Announced* set, a marathon-**run** event. A forum **post** WAS rendered once (after `check.mjs`
+  moved #3 into the mock forum): *Review post* with the post's id (the mock cannot name it) and **Delete this post**.
+  The settled sentence was rendered as a dashed `sayNothing` box, then made a quiet help line — that last form was not
+  re-rendered.
 - **Mock quirks seen, not changed:** seed #4 ends before it starts (*0m*); Save moves the start by the zone offset
   because the mock reads `start` as UTC and ignores `tz` — the editor code is unchanged from before. #5's description
   shows a raw `<#…>` mention, as the section did.
