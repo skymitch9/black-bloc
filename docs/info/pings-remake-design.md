@@ -390,6 +390,12 @@ with fakes — see deviation 3.
     longer refuses. `PICKING_IS_OFF` was reworded to match. Three tests that asserted the old
     behaviour now assert the new one and say so in their docstrings.
 
+    **2026-09-25 — the console moved (owner, option "B").** `/mod` ▸ **Role grants…** now opens
+    the same Grants console (one implementation, `role_menus.open_grants_from`; Back returns to
+    `/mod`), so `rolemenu_mode` went back into `HIDDEN_WHEN_OFF` and `/rolemenu` hides while role
+    menus are off. Branch `hide-rolemenu`; why in `code-notes.md` ▸ *`/mod` ▸ Role grants… and
+    `/rolemenu` hiding again*.
+
 ### The guide
 
 17. ⚠️ **`guides.refresh_seed_text` updates ONLY `seed_do` / `seed_expect`.** The rewritten
