@@ -1625,7 +1625,8 @@ async def test_a_schema_68_file_gains_the_marathon_spotlight_columns_empty_and_k
         row = await cur.fetchone()
         assert (row["name"], row["spotlight_mode"]) == ("AGDQ 2027", None)
         cur = await again.conn.execute(
-            "SELECT twitch_login, spotlight, expires_at, spotlit_by_marathon FROM spotlight_channels"
+            "SELECT twitch_login, spotlight, expires_at, spotlit_by_marathon "
+            "FROM spotlight_channels"
         )
         row = await cur.fetchone()
         assert tuple(row) == ("gamesdonequick", 1, None, None)

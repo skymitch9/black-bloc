@@ -142,6 +142,11 @@ const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes 
   + 'review above, dated from the schedule. An event per ' + BAF + ' run is approved at once and '
   + 'follows the schedule as runs move — the events feature announces each one as it starts. '
   + 'Both does the two. marathon_event_mode_default decides where this starts.';
+const SPOTLIGHT_FIELD = 'Spotlight the channel while it runs';
+const SPOTLIGHT_CHOICES = [{ value: 'follow', label: 'On' }, { value: 'off', label: 'Off' }];
+const SPOTLIGHT_HELP = 'On: from marathon_spotlight_lead_minutes before its first run to the end of its '
+  + 'last, its channel is spotlit and the spotlight runs out at the end. A channel kept for ever '
+  + 'stays as it is. Staff turning the spotlight off on the Go-live page turns this off too.';
 const EVENT_SELECT_SHORT = 'Which Discord events this marathon makes; the setting explains the '
   + 'four choices.';
 const EVENT_NONE = 'No event.';
@@ -746,6 +751,8 @@ function pollWanted(given) {
 
 async function settingsFold(marathon, say) {
   const mode = modePicker(marathon.event_mode || 'none');
+  const spotlightNow = marathon.spotlight_mode === 'off' ? 'off' : 'follow';
+  const spotlight = segment(SPOTLIGHT_CHOICES, spotlightNow);
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
     class: 'input',
@@ -759,6 +766,7 @@ async function settingsFold(marathon, say) {
   const save = button(SAVE_SETTINGS, async () => {
     const body = {};
     if (mode.value !== (marathon.event_mode || 'none')) body.event_mode = mode.value;
+    if (spotlight.readValue() !== spotlightNow) body.spotlight_mode = spotlight.readValue();
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
     if (wanted !== (marathon.poll_minutes || null)) body.poll_minutes = wanted;
@@ -776,6 +784,7 @@ async function settingsFold(marathon, say) {
     eventState(marathon, say),
     marathon.channel_gone ? notice(CHANNEL_GONE, 'warn') : null,
     field('Airs on', picker, windowWords(marathon)),
+    field(SPOTLIGHT_FIELD, spotlight, SPOTLIGHT_HELP),
     field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
     bar([save]),
   ], { open: shown.settings });
