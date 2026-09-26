@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-26 (branch `marathon-fastestfurs`)** — ONE section APPENDED (`FF-a`…`FF-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-feeds-oengus`)** — ONE section APPENDED (`MO-a`…`MO-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `hide-rolemenu`)** — ONE section APPENDED (`RM-a`, `RM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-links`)** — ONE row ADDED to the `ED-` section (`ED-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3362,3 +3363,24 @@ with its schedule published — a deploy before 2026-09-29 adds it at once, and 
 | **`MO-b`** | **Check now** on the Speed Stuff 4 Charity row | Every SS4C marathon on oengus.io's home (`live` / `next` / `open`) appears on the Marathons list as *Oengus · feed* on the SS4C channel, **without** a staff notice while its schedule is unpublished; a marathon on the same home page that streams elsewhere (e.g. LSS26, `longspeedrunsummit`) is **not** added. `marathon.feed_checked` counts it. |
 | **`MO-c`** | Wait for (or press **Read it now** on) an SS4C marathon whose schedule was unpublished once Oengus publishes it | ONE staff notice (*Speed Stuff 4 Charity has a new event: **…***, the embed, the three rows), `marathon.notice_posted` with `because: published`; the next read posts nothing. The runs list the runners, a runner with a Twitch connection on Oengus by that login. |
 | **`MO-d`** | Open the Speed Stuff 4 Charity feed (its row) ▸ **Look again** | The drawer said *Remembers N Oengus marathon(s) it has already looked at*; after the press the answer ends *It read every Oengus marathon's record again (N remembered before).*, nothing already added is added twice, `marathon.feed_looked` carries `reread: N`. |
+
+## Rows `FF-a` … `FF-d` — the Fastest Furs feed (branch `marathon-fastestfurs`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-fastestfurs`, NOT merged, NOT deployed.** Owner, 2026-09-26: *"Build them all now"*.
+Design: [`../info/marathon-fastestfurs-design.md`](../info/marathon-fastestfurs-design.md). Rows lettered; the
+conductor numbers them. Local check first: `MOCK_PORT=8806 node site/mock/server.mjs` from the branch, then
+<http://localhost:8806/events.html> ▸ **Sources…**.
+
+⚠️ **Precondition: a Go-live channel row for `fastestfurs`** (twitch.tv/fastestfurs, channel-only, taking marathons).
+The live bot has none (2026-09-26). The seed makes the feed on the **first boot after** that row exists — or staff
+press **Add a feed… ▸ Fastest Furs** at once. Measured 2026-09-26: *Fastest Furs Fall Fest 2026* (id 21, 2026-10-08 →
+10-11) is on their list with its schedule published (55 runs), so the first check adds it and — the schedule being
+out — its first read posts the staff notice straight away (shadow → the rehearsal home while `marathon_mode` is
+shadow).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`FF-a`** | Events ▸ **Sources…** ▸ **Add a feed…** ▸ the **Fastest Furs** channel row ▸ *Read from* **Fastest Furs** (or look for the seeded row after the first boot) | The pick is guessed from the login; the line under it says *Every event on Fastest Furs' own list at fastestfurs.com — nothing to type*; no slug field. **Add the feed** answers *… now reads Fastest Furs for **Fastest Furs***; the Sources list shows the row with *Fastest Furs* as its source. |
+| **`FF-b`** | **Check now** on the Fastest Furs row (or the first boot's check) | *Fastest Furs Fall Fest 2026* appears on the Marathons list as *Fastest Furs · feed* on the Fastest Furs channel, schedule link `https://fastestfurs.com/schedule/21`; FWA 2026 and older events are **not** added; `marathon.feed_checked` found 1 / added 1; a second **Check now** adds nothing. |
+| **`FF-c`** | Watch the staff notice home after FF-b (or press **Read it now** on the marathon) | ONE staff notice (*Fastest Furs has a new event: **Fastest Furs Fall Fest 2026***, the embed, the three rows), `marathon.notice_posted` with `because: published`; the next read posts nothing. If the schedule were not out, the row would wait quietly with *fastestfurs.com has the event but has not published its schedule yet*. |
+| **`FF-d`** | Open *Fastest Furs Fall Fest 2026* ▸ its schedule / the board once posted | 55 runs from Thu 8 Oct 14:00 UTC (7:00 Phoenix), each timed from the one before; runners and hosts listed by NAME (no Twitch link); a race lists both runners; a BaF member whose Discord username is a runner's name (or who is paired) shows as ours. Compare two or three slot times with fastestfurs.com/schedule/21 — the times are computed (design Deviation 2). |
