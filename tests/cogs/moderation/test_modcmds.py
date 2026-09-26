@@ -3,6 +3,7 @@ from datetime import timedelta
 import discord
 import pytest
 
+from black_bloc import rolegrants
 from black_bloc.cogs.moderation.modcmds import ModCommands
 from black_bloc.config import load_settings
 from black_bloc.modcases import add_case
@@ -99,6 +100,9 @@ class FakeGuild:
 
     def get_member(self, user_id):
         return self.members.get(user_id)
+
+    def get_role(self, role_id):
+        return next((role for role in self.roles if role.id == role_id), None)
 
     async def kick(self, member, reason=None):
         if self.kick_raises is not None:
@@ -531,7 +535,7 @@ async def test_a_staff_role_holder_may_run_them(cog, bot, target):
 
 # --- the /mod panel ------------------------------------------------------------------------------
 
-SITE_ROOT_LABELS = ["Jump to case #…", "Refresh", "Logs", "Open on the site"]
+SITE_ROOT_LABELS = ["Jump to case #…", "Refresh", "Logs", "Role grants…", "Open on the site"]
 
 
 def rendered(interaction):
@@ -950,7 +954,7 @@ async def test_a_case_that_belongs_to_a_channel_says_there_is_nobody_to_tell(
 
 
 @pytest.mark.parametrize(
-    "label", ["Jump to case #…", "Refresh", "Logs"]
+    "label", ["Jump to case #…", "Refresh", "Logs", "Role grants…"]
 )
 async def test_a_staffer_demoted_mid_panel_moves_nothing_the_reads_included(
     cog, bot, lead, target, db, label
@@ -1038,3 +1042,73 @@ async def test_the_panel_says_the_database_is_down_rather_than_drawing_a_dead_on
 
     assert "database" in interaction.sent.lower()
     assert "view" not in interaction.response.messages[-1]
+
+
+# --- /mod ▸ Role grants… (owner, 2026-09-25 "B": the Grants console's door that never hides) -----
+
+GRANTS_TITLE = "Timed roles running right now"
+
+
+@pytest.mark.parametrize("mode", ["off", "on"])
+async def test_role_grants_opens_the_grants_console_whatever_the_role_menus_mode(
+    cog, bot, lead, target, db, mode
+):
+    await bot.store.set(GUILD, "rolemenu_mode", mode)
+    bot.guild.roles.append(FakeRole(777))
+    await rolegrants.add_grant(
+        db, GUILD, target.id, 777, rolegrants.MANUAL, granted_by=lead.id,
+        until="2099-01-01T00:00:00+00:00",
+    )
+    root = await open_panel(cog, bot, lead)
+
+    grants = await press(bot, lead, root, "Role grants…")
+
+    assert rendered(grants)["embed"].title == GRANTS_TITLE
+    assert f"<@{target.id}>" in rendered(grants)["embed"].description
+    assert labels(grants) == ["Give somebody a role…", "Back", "Refresh"]
+    assert view_of(root).replaced is True
+    assert await action_kinds(db) == []
+
+
+async def test_give_somebody_a_role_is_reachable_and_back_walks_home_to_mod(
+    cog, bot, lead, target, db
+):
+    for index in range(12):
+        await a_case(db, lead, reason=f"n{index}", user_id=target.id)
+    first = await open_panel(cog, bot, lead)
+    root = await press(bot, lead, first, "Older ›")
+    grants = await press(bot, lead, root, "Role grants…")
+
+    new = await press(bot, lead, grants, "Give somebody a role…")
+    assert rendered(new)["embed"].title == "Give somebody a role"
+    assert "Back" in labels(new)
+
+    again = await press(bot, lead, new, "Back")
+    assert rendered(again)["embed"].title == GRANTS_TITLE
+
+    home = await press(bot, lead, again, "Back")
+    said = rendered(home)
+    assert said["embed"].title == "What Black Bloc has done"
+    assert "page 2 of 2" in said["embed"].description
+    assert "Role grants…" in labels(home)
+
+
+async def test_role_grants_refuses_a_member_in_words_and_draws_nothing(cog, bot, lead, target):
+    root = await open_panel(cog, bot, lead)
+
+    pressed = await press(bot, target, root, "Role grants…")
+
+    assert "staff only" in pressed.sent
+    assert rendered(pressed) is None
+
+
+async def test_the_grants_console_opened_from_mod_refuses_a_demoted_staffer(
+    cog, bot, lead, target
+):
+    root = await open_panel(cog, bot, lead)
+    grants = await press(bot, lead, root, "Role grants…")
+
+    for label in ("Give somebody a role…", "Back", "Refresh"):
+        demoted = await press(bot, target, grants, label)
+        assert "staff only" in demoted.sent, label
+        assert rendered(demoted) is None, label

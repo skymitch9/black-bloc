@@ -11,6 +11,7 @@ from black_bloc.modcases import (
     EDIT_NOTE_MOVE,
     EDIT_REASON_MOVE,
     EVERYONE_MOVE,
+    GRANTS_MOVE,
     JUMP_MOVE,
     LINE_REASON_LIMIT,
     LOGS_MOVE,
@@ -402,29 +403,41 @@ async def test_the_card_row_never_offers_void_and_restore_at_once(db):
 @pytest.mark.parametrize(
     ("has_rows", "page", "pages", "filtered", "has_site", "wanted"),
     [
-        (False, 1, 1, False, False, (WHOSE_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE)),
+        (
+            False, 1, 1, False, False,
+            (WHOSE_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE, GRANTS_MOVE),
+        ),
         (
             True, 1, 1, False, True,
-            (PICK_CASE_MOVE, WHOSE_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE, SITE_MOVE),
+            (
+                PICK_CASE_MOVE, WHOSE_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE, GRANTS_MOVE,
+                SITE_MOVE,
+            ),
         ),
         (
             True, 1, 3, False, False,
-            (PICK_CASE_MOVE, WHOSE_MOVE, OLDER_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE),
+            (
+                PICK_CASE_MOVE, WHOSE_MOVE, OLDER_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE,
+                GRANTS_MOVE,
+            ),
         ),
         (
             True, 3, 3, False, False,
-            (PICK_CASE_MOVE, WHOSE_MOVE, NEWER_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE),
+            (
+                PICK_CASE_MOVE, WHOSE_MOVE, NEWER_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE,
+                GRANTS_MOVE,
+            ),
         ),
         (
             True, 2, 3, True, False,
             (
                 PICK_CASE_MOVE, WHOSE_MOVE, NEWER_MOVE, OLDER_MOVE, EVERYONE_MOVE, JUMP_MOVE,
-                ROOT_REFRESH_MOVE, LOGS_MOVE,
+                ROOT_REFRESH_MOVE, LOGS_MOVE, GRANTS_MOVE,
             ),
         ),
         (
             False, 1, 1, True, False,
-            (WHOSE_MOVE, EVERYONE_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE),
+            (WHOSE_MOVE, EVERYONE_MOVE, JUMP_MOVE, ROOT_REFRESH_MOVE, LOGS_MOVE, GRANTS_MOVE),
         ),
     ],
 )

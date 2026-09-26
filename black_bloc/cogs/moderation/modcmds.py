@@ -23,6 +23,7 @@ from ...modcases import (
     CASES_PER_PAGE,
     EDIT_REASON,
     EVERYONE,
+    GRANTS,
     JUMP,
     LINK,
     LOGS,
@@ -98,6 +99,7 @@ from ...panels import (
     still_staff,
 )
 from ...settings_store import DB_UNAVAILABLE, GUILD_ONLY, require_staff
+from ..community.role_menus import open_grants_from
 
 log = logging.getLogger(__name__)
 
@@ -1028,6 +1030,18 @@ async def navigate(interaction: discord.Interaction, action: str, view: Any) -> 
         await open_case(interaction, view.case_id, view)
 
 
+def home_of(previous: Any) -> Any:
+    """Back from the Grants console lands on the /mod page and filter it was opened from."""
+    page, user_id = previous.page, previous.user_id
+
+    async def home(interaction: discord.Interaction, view: Any) -> None:
+        if not await opened(interaction):
+            return
+        await render_root(interaction, page=page, user_id=user_id, previous=view)
+
+    return home
+
+
 async def run_move(interaction: discord.Interaction, move: Any, rest: Any, view: Any) -> None:
     """A refused move is answered and the card is NOT re-rendered, so it cannot read as a save."""
     if not await opened(interaction):
@@ -1057,6 +1071,9 @@ class MoveButton(discord.ui.Button):
             return
         if self.move.action == RESTORE:
             await run_move(interaction, restore_case, (), view)
+            return
+        if self.move.action == GRANTS:
+            await open_grants_from(interaction, view, home_of(view))
             return
         await navigate(interaction, self.move.action, view)
 
