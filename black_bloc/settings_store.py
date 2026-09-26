@@ -4352,6 +4352,9 @@ MARATHON_REMINDER_STALE_KEY = "marathon_reminder_stale_minutes"
 MARATHON_PIN_BOARD_KEY = "marathon_pin_board"
 MARATHON_EDIT_DONE_KEY = "marathon_edit_done"
 MARATHON_WINDOW_SLACK_KEY = "marathon_window_slack_hours"
+MARATHON_SPOTLIGHT_LEAD_KEY = "marathon_spotlight_lead_hours"
+MARATHON_SPOTLIGHT_SLACK_KEY = "marathon_spotlight_slack_hours"
+MARATHON_SPOTLIGHT_NOTE_KEY = "marathon_spotlight_note_template"
 MARATHON_BOARD_TEMPLATE_KEY = "marathon_board_template"
 MARATHON_BOARD_LINE_KEY = "marathon_board_line_template"
 MARATHON_BOARD_EMPTY_KEY = "marathon_board_empty_line"
@@ -4524,6 +4527,18 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         2,
         "hours either side of a marathon that its channel's ping window stays open, when the "
         "channel pings during events only. 2 by default",
+    ),
+    MARATHON_SPOTLIGHT_LEAD_KEY: (
+        "int",
+        2,
+        "hours before a runner's first run (or the one run it was spotlit from) that Spotlight… on "
+        "a marathon's People card starts their channel's spotlight. 2 by default",
+    ),
+    MARATHON_SPOTLIGHT_SLACK_KEY: (
+        "int",
+        2,
+        "hours after a runner's last run ends (or the one run it was spotlit from) that their "
+        "channel's spotlight from a marathon's People card runs out. 2 by default",
     ),
     MARATHON_SUGGEST_NEXT_KEY: (
         "bool",
@@ -4717,6 +4732,12 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("name",),
         "the name of the events-forum post a new-marathon notice becomes. It takes {name}",
     ),
+    MARATHON_SPOTLIGHT_NOTE_KEY: (
+        "{name} at {marathon}",
+        ("name", "marathon"),
+        "the note a runner's channel row carries on the Go-live page when Spotlight… on a "
+        "marathon's People card adds it. It takes {name} {marathon}",
+    ),
     MARATHON_EVENT_DESCRIPTION_KEY: (
         "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.",
         MARATHON_EVENT_FIELDS,
@@ -4733,6 +4754,8 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_PING_MINUTES_KEY: (0, 240),
     MARATHON_REMINDER_STALE_KEY: (1, 240),
     MARATHON_WINDOW_SLACK_KEY: (0, 24),
+    MARATHON_SPOTLIGHT_LEAD_KEY: (0, 48),
+    MARATHON_SPOTLIGHT_SLACK_KEY: (0, 48),
     MARATHON_FEED_HOURS_KEY: (1, 168),
     MARATHON_FEED_RECENT_KEY: (0, 30),
 }

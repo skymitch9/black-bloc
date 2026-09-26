@@ -192,7 +192,9 @@ async def test_a_check_adds_every_new_event_on_the_feeds_channel_with_one_notice
     words = [one.content for one in notices(bot)]
     assert any("GDQ has a new event: **Awesome Games Done Quick 2027**" in one for one in words)
     labels = [child.item.label for child in notices(bot)[0].kwargs["view"].children]
-    assert labels == ["Pause it", "Remove it"]
+    assert labels == ["Pause it", "Remove it", "People…"]
+    people = notices(bot)[0].kwargs["view"].children[2].item.custom_id
+    assert people in {f"marathon:people:{row['id']}" for row in made.values()}
     added = await details_of(bot.db, "marathon.feed_added")
     assert added["feed"] == "GDQ" and added["automatic"] is True
     assert (await details_of(bot.db, "marathon.added"))["feed_id"] == feed["id"]

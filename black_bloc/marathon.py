@@ -240,6 +240,7 @@ MARK_LIVE = "mark_live"
 MAKE_EVENT = "make_event"
 UNLINK_EVENT = "unlink_event"
 FEEDS = "feeds"
+PEOPLE = "people"
 
 
 class MarathonMove(NamedTuple):
@@ -274,6 +275,7 @@ MARK_LIVE_MOVE = MarathonMove(MARK_LIVE, "Mark it live", row=2)
 MAKE_EVENT_MOVE = MarathonMove(MAKE_EVENT, "Make an event now", row=3)
 UNLINK_EVENT_MOVE = MarathonMove(UNLINK_EVENT, "Unlink the event", row=3)
 FEEDS_MOVE = MarathonMove(FEEDS, "Feeds…", row=3)
+PEOPLE_MOVE = MarathonMove(PEOPLE, "People…", "primary", 4)
 
 
 def root_moves(*, staff: bool) -> tuple[MarathonMove, ...]:
@@ -299,6 +301,7 @@ def card_moves(
         found.append(NEXT_MOVE)
     found.append(POLL_MOVE)
     found.append(event_move(marathon))
+    found.append(PEOPLE_MOVE)
     found.append(BACK_MOVE)
     return tuple(found)
 
