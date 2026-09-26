@@ -87,16 +87,16 @@ async def rows(db, sql, *args):
 def test_the_shipped_seed_is_eighteen_guides_with_a_slug_each():
     entries = guides.seed_entries()
 
-    assert len(entries) == 19
-    assert len({one["slug"] for one in entries}) == 19
+    assert len(entries) == 27
+    assert len({one["slug"] for one in entries}) == 27
     assert {one["audience"] for one in entries} == {"member", "staff"}
 
 
 async def test_seeding_a_guild_writes_eighteen_guides_and_no_pictures(bot, db):
     made = await guides.seed_guides(db, GUILD)
 
-    assert made == 19
-    assert await guides.count_guides(db, GUILD) == 19
+    assert made == 27
+    assert await guides.count_guides(db, GUILD) == 27
     assert len(await rows(db, "SELECT * FROM guide_media")) == 0
     steps = await rows(db, "SELECT * FROM guide_steps")
     assert steps and all(row["seed_do"] == row["do_text"] for row in steps)
@@ -389,11 +389,12 @@ async def test_links_for_names_every_published_guide_by_its_command(bot, db):
     found = await guides.links_for(bot, GUILD)
 
     member_commands = {
-        one["command"] for one in guides.seed_entries() if one["audience"] == "member"
+        one["command"]
+        for one in guides.seed_entries()
+        if one["audience"] == "member" and one["command"]
     }
-    # Nine since `pings-follow` went `staff` with `pings_mode` at the pings remake.
-    assert len(found) == len(member_commands) == 10
-    assert "/pings" not in found, "the pings guide is staff-only until the mode goes back on"
+    assert len(found) == len(member_commands) == 11
+    assert found["/pings"] == "https://blackbloc.test/guides.html#pings-follow"
     assert found["/golive"] == "https://blackbloc.test/guides.html#golive-announce"
     assert "/settings" not in found, "a staff guide is not a link a member can follow"
 
@@ -439,8 +440,8 @@ async def test_two_guilds_keep_their_own_guides(bot, db):
     await guides.seed_guides(db, GUILD)
     await guides.seed_guides(db, OTHER_GUILD)
 
-    assert await guides.count_guides(db, GUILD) == 19
-    assert await guides.count_guides(db, OTHER_GUILD) == 19
+    assert await guides.count_guides(db, GUILD) == 27
+    assert await guides.count_guides(db, OTHER_GUILD) == 27
     assert (await guides.get_guide(db, OTHER_GUILD, "golive-announce"))["published"] == 1
 
 

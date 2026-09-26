@@ -11,7 +11,7 @@
       "sort": 5,
       "steps": [
         {
-          "do": "Type **/ask**, or find the message a Lead has posted in a channel and look at the three buttons on it.",
+          "do": "Type **/ask** — or, once the front door is on, find the message a Lead has posted in a channel and look at the three buttons on it.",
           "expect": "A window only you can see: a heading, one line, and **Ask staff privately**, **Request something** and **Propose an event**."
         },
         {
@@ -47,13 +47,13 @@
         {"do": "Type **/golive** in any channel.", "expect": "A panel only you can see, with **Link my Twitch channel** on it."},
         {"do": "Press **Link my Twitch channel** and type the part after twitch.tv/.", "expect": "The panel reads twitch.tv/your-name. A name somebody else holds is refused without naming them."},
         {"do": "Start your stream with Discord showing you as **Streaming** (Discord ▸ Settings ▸ Connections ▸ Twitch, Display on profile on).", "expect": "The announcement posts in the go-live channel with your fans pinged. In shadow, nothing posts and the bot logs what it would have said. A YouTube stream is announced the same way once you have linked that channel with /youtube — same post, same pings, same ending."},
-        {"do": "Stop your stream and wait a minute.", "expect": "The same post is rewritten in the past tense — nothing is posted twice, and nobody is pinged again. What it says is set under Announcement wording on the site."},
+        {"do": "Stop your stream and wait a minute.", "expect": "The same post is rewritten in the past tense — nothing is posted twice, and nobody is pinged again. What it says is set on the site's Go-live page, under The announcement ▸ The wording, on its Ending side."},
         {"do": "Press **Stop announcing my streams** to pause.", "expect": "The button becomes **Announce my streams again**. Your link is kept."},
         {"do": "If you also stream on YouTube, type **/youtube** and press **Link my channel**.", "expect": "Your live streams are announced here too. Black Bloc checks the channel every few minutes and a live stream comes out of this same feed, so there is nothing else to switch on. With no YouTube API key set the post's title reads Live now."}
       ],
       "faults": [
-        {"symptom": "The post still reads as if you are live", "answer": "Black Bloc always edits the post once the stream is over. What it says is the one Once the stream is over box on the Go-live page, right under the live wording, and the Wording card below both shows what the bot has stored before anybody streams."},
-        {"symptom": "Nothing posted", "answer": "Announcements are in shadow. The panel's Announcements line says so; a Lead flips it."},
+        {"symptom": "The post still reads as if you are live", "answer": "Black Bloc always edits the post once the stream is over. What it says is on the Go-live page's one card, The wording: switch it to Ending and the Once the stream is over box is there. The card shows what the bot has stored before anybody streams."},
+        {"symptom": "Nothing posted", "answer": "Announcements are in shadow. The panel's mode line says so — Go-live announcements are in shadow right now; a Lead flips it."},
         {"symptom": "Discord does not show you streaming", "answer": "Reconnect Twitch under Discord's Connections and turn Display on profile on. The bot reads Discord, not Twitch."},
         {"symptom": "You went live twice in a short time", "answer": "The second one waits for the cooldown shown above."},
         {"symptom": "Your game shows as \"something\"", "answer": "Twitch had no category set. Set one and go live again. A YouTube stream always reads something — YouTube has no category to read."},
@@ -71,15 +71,15 @@
       "slug": "pings-follow",
       "title": "Choose what pings you",
       "goal": "Turn on the pings you want, follow the streamers you care about, and take yourself off the streamer list if you would rather nobody followed you.",
-      "audience": "staff",
+      "audience": "member",
       "feature": "pings",
       "command": "/pings",
       "sort": 20,
       "steps": [
         {"do": "Type **/pings**.", "expect": "A panel titled Your pings, listing every ping you are on and every streamer you follow."},
-        {"do": "Press **Turn event pings on**.", "expect": "The Events role goes on and the line above says on. The same button now says Turn them off."},
+        {"do": "Press **Turn event pings on** — or, where go-live and event pings are separate roles, **Turn go-live pings on** and **Turn event pings on** one at a time.", "expect": "The role goes on and the line above says on. The same button now says Turn them off — or, with separate roles, Turn go-live pings off / Turn event pings off."},
         {"do": "Press **Turn raid-train pings on**.", "expect": "The Raid trains role goes on, so you are mentioned when a raid train moves to the next streamer."},
-        {"do": "Press **Follow a streamer…** and pick a name.", "expect": "Their ping role goes on — Black Bloc makes it on the spot if you are the first to follow them — and the panel lists them."},
+        {"do": "Press **Follow a streamer…** and pick a name.", "expect": "Their ping role goes on — Black Bloc makes it on the spot if you are the first to follow them — and the panel lists them. Channels Black Bloc watches by name can be followed the same way."},
         {"do": "Press **Stop following…** and pick the same name.", "expect": "The role comes off. This one works even while ping roles are turned off."},
         {"do": "If you stream and would rather nobody followed you: press **Take me off the streamer list**, then **Yes, take me off**.", "expect": "You leave the list, going live does not put you back, and your ping role goes too if nobody is wearing it. **Put me back on the list** undoes it."}
       ],
@@ -107,13 +107,13 @@
       "steps": [
         {"do": "Type **/event**, then press **My time zone** and pick yours.", "expect": "The panel shows your zone and the time it is there now. Do this once."},
         {"do": "Press **Propose an event**, then **Title & details**. Type a title and what it is.", "expect": "The draft shows your title. Nothing you type is ever thrown away."},
-        {"do": "Pick a **Day**, an **Hour** and a **Minute**.", "expect": "The When line reads the full date and time in your zone. **Submit** appears only once all three are set."},
+        {"do": "Pick a **Date**, a **Start time — hour** and a **Start time — minute**, and **How long?** if you know.", "expect": "The When line reads the full date and time in your zone. **Submit** appears only once the date, the hour and the minute are set."},
         {"do": "Press **Where** and pick a voice or text channel, or type a place or link.", "expect": "The Where line shows the channel or the words. Where is optional."},
-        {"do": "Press **Submit**.", "expect": "A review room named pending-you-title appears. Staff decide there and you are DMed the answer."}
+        {"do": "Press **Submit**.", "expect": "A post in the events forum under BlackMail, tagged pending — or, where events use review rooms, a room named pending-you-title. Staff decide there and you are DMed the answer."}
       ],
       "faults": [
         {"symptom": "The day you typed was refused", "answer": "Write it as YYYY-MM-DD. The box reopens with what you typed."},
-        {"symptom": "No Submit button", "answer": "A title and all three of Day, Hour and Minute are needed. The panel says which is missing."},
+        {"symptom": "No Submit button", "answer": "A title and all three of Date, Start time — hour and Start time — minute are needed. The panel says which is missing."},
         {"symptom": "Black Bloc says it hit an error", "answer": "Press **Try again** on that sentence — the card comes back with everything you had typed. Staff can read what broke on the dashboard’s Logs page under **Errors**."},
         {"symptom": "You want to withdraw it", "answer": "Press **Call one off…** on /event and confirm."}
       ],
@@ -181,14 +181,14 @@
       "sort": 60,
       "steps": [
         {"do": "To vote, press an answer on the poll message.", "expect": "Your vote counts once. On an anonymous poll nobody sees who chose what."},
-        {"do": "To make one, type **/poll** and press **Create**.", "expect": "A box with the question, the options one per line or split by |, the hours, and the kind."},
-        {"do": "Submit the box and check the preview. The **Where** dropdown starts on the server's poll channel — change it if this one belongs somewhere else — then press **Post it**.", "expect": "Nothing is written until Post it. The poll appears in the channel Where names, and stays pinned there until it closes."},
+        {"do": "To make one, type **/poll** and press **Create**.", "expect": "A box with the question, the answers separated by |, the hours, the kind, and the Anonymous and Hidden switches."},
+        {"do": "Submit the box and check the preview. The **Post it in…** dropdown starts on the server's poll channel — change it if this one belongs somewhere else — then press **Post it**.", "expect": "Nothing is written until Post it. The poll appears in the channel the preview's Where line names, and stays pinned there until it closes."},
         {"do": "To finish early, type **/poll**, pick your poll, press **End**.", "expect": "The result posts in the channel and the poll closes."}
       ],
       "faults": [
         {"symptom": "No Create button", "answer": "Creating is staff-only on this server. The panel says who may."},
         {"symptom": "Your poll is waiting on a decision", "answer": "Review is on. Staff approve it from /poll and you are DMed."},
-        {"symptom": "You want to finish later", "answer": "Press **Save the draft** on the preview. /poll offers **Resume the draft** next time. One draft per person."},
+        {"symptom": "You want to finish later", "answer": "Press **Save for later** on the preview — it reads Save (replaces your draft) when you already have one. /poll offers **Resume draft** next time. One draft per person."},
         {"symptom": "The poll went to the log channel, not the one you picked", "answer": "Polls are in **shadow**: every poll is posted for real, but into the log channel, with a line saying where it would have gone. It is a rehearsal — staff turn polls **on** when the server is ready."}
       ],
       "facts": [
@@ -312,15 +312,15 @@
       "command": "/event",
       "sort": 200,
       "steps": [
-        {"do": "Open the room named pending-name-title — or, in forum mode, the post in the events forum under BlackMail — or type **/event** and use **Pick an event…**.", "expect": "The review card: title, when in every reader's own clock, where, who asked."},
-        {"do": "Press **Approve**, or **Deny** and type a reason.", "expect": "The room renames to approved- or denied-, the requester is DMed, and an approved event lands on the server calendar."},
-        {"do": "To change something first, open the event on the website's Events page and press **Change it**.", "expect": "The room and card update. An announcement already posted keeps its text and the reply says so."},
-        {"do": "To take the room away, press **Delete this room** and type why.", "expect": "The room goes. An open event is cancelled and the requester is DMed the reason."}
+        {"do": "Open the event's post in the events forum under BlackMail — or, where events use review rooms, the room named pending-name-title — or type **/event** and use **Pick an event…**.", "expect": "The review card: title, when in every reader's own clock, where, who asked."},
+        {"do": "Press **Approve**, or **Deny** and type a reason.", "expect": "The post's tag changes to approved or denied (a review room renames to approved- or denied-), the requester is DMed, and an approved event lands on the server calendar."},
+        {"do": "To change something first, press **Open** on the event's row on the website's Events page, change it in the Change it card and press **Save**.", "expect": "The post and its card update. An announcement already posted keeps its text and the reply says so."},
+        {"do": "To take it away, press **Delete this post** (a review room's button reads Delete this room) and type why.", "expect": "The post goes. An open event is cancelled and the requester is DMed the reason."}
       ],
       "faults": [
         {"symptom": "You denied and changed your mind", "answer": "Open the card again and press **Approve after all** while the room exists."},
-        {"symptom": "The announcement landed in the spam channel", "answer": "Test mode is on. Every post goes to the test channel until it is lifted."},
-        {"symptom": "No scheduled event was made", "answer": "Test mode makes none. Or events_create_scheduled is off."},
+        {"symptom": "The announcement landed in the spam channel", "answer": "Only during a rehearsal: while events are in shadow, or test mode is switched on for a drill, posts go to the rehearsal channel. Test mode has been off since 2026-09-18."},
+        {"symptom": "No scheduled event was made", "answer": "events_create_scheduled is off — or it was a rehearsal: test mode, switched on for a drill, makes none."},
         {"symptom": "Somebody filed the wrong thing — this is not really an event", "answer": "Press **Not an event — make it a request** on the review card. A request is filed in the proposer's name from the event's own title and details, the event is cancelled with a link to it both ways, and their DM says staff filed it as a request instead."},
         {"symptom": "There is no review room — the event is a post in a forum", "answer": "events_review_mode is set to forum, so every new event is one post in the events forum under BlackMail instead of a channel of its own. The card and its buttons are the post's first message, the tag says where it has got to, and the button reads Delete this post. Events already open keep the room they were given."}
       ],
@@ -348,7 +348,7 @@
         {"do": "Press **Close…** and type a reason.", "expect": "The member is DMed, the transcript is filed, and the ticket is tidied away — a channel goes, a thread is archived, and in forum mode the post is tagged **closed** and archived."}
       ],
       "faults": [
-        {"symptom": "The card is in the spam channel, not the ticket", "answer": "Test mode redirects real tickets' cards there. The practice thread shows it in place."},
+        {"symptom": "The card is in the spam channel, not the ticket", "answer": "Only during a rehearsal: while test mode is switched on for a drill, real tickets' cards go there. The practice thread shows it in place."},
         {"symptom": "A typed message did not reach the member", "answer": "modmail_reply_style is buttons. Set it to typing or both under **Setup…** ▸ **Reply style…**."},
         {"symptom": "You want to block somebody", "answer": "**Blocked…** ▸ **Block someone…** ▸ pick them ▸ a reason. **Unblock them** reverses it."},
         {"symptom": "The ticket list scrolls for ever", "answer": "Press **Setup…** ▸ **Make the forum**, then **Setup…** ▸ **Mode…** ▸ forum. Every ticket is then a post of its own, tagged open while it runs and closed when it ends."},
@@ -377,7 +377,7 @@
       ],
       "faults": [
         {"symptom": "Voiding did not lift the timeout", "answer": "By design. Use **/untimeout** or **/unban** for the punishment itself."},
-        {"symptom": "The modlog card did not update", "answer": "Test mode is on and the modlog is not the test channel."},
+        {"symptom": "The modlog card did not update", "answer": "Only during a rehearsal: while test mode is switched on for a drill, a modlog that is not the test channel is not written. Otherwise check modlog_channel_id."},
         {"symptom": "A warn still counts toward automod", "answer": "Only a voided warn stops counting. Check the case reads voided."}
       ],
       "facts": [
@@ -404,7 +404,7 @@
       "faults": [
         {"symptom": "on is not offered", "answer": "The staff channel is still the test channel, or no staff role resolves. The panel says which to fix first."},
         {"symptom": "Somebody was caught who should not be", "answer": "**Exemptions…** ▸ add their role or the channel. Or void the case on /mod."},
-        {"symptom": "Nothing is caught in test mode", "answer": "The guard only watches the test channel, and on behaves like shadow there."}
+        {"symptom": "Nothing is caught in test mode", "answer": "Only during a rehearsal: while test mode is switched on for a drill, the guard watches only the test channel, and on behaves like shadow there. Test mode has been off since 2026-09-18."}
       ],
       "facts": [
         {"kind": "setting", "ref": "automod_mode"},
@@ -454,7 +454,7 @@
       ],
       "faults": [
         {"symptom": "A role was refused", "answer": "It sits above Black Bloc's role in Server Settings ▸ Roles. Move the bot's role up."},
-        {"symptom": "Any channel but the spam channel was refused", "answer": "Test mode. Post there until it is lifted."},
+        {"symptom": "Any channel but the spam channel was refused", "answer": "Only during a rehearsal: while test mode is switched on for a drill, only the test channel is allowed. Post there until it is lifted."},
         {"symptom": "You want the panel down", "answer": "**Take it down** on the card. Nobody loses a role they have."}
       ],
       "facts": [
@@ -474,7 +474,7 @@
       "steps": [
         {"do": "Type **/settings**.", "expect": "Every feature's mode on one panel, each line naming the command that changes it."},
         {"do": "Press **A setting group…**, pick the feature, pick its _mode key, choose the mode.", "expect": "off does nothing. shadow logs what it would do. on acts. One settings.set row."},
-        {"do": "Wait a minute and press Ctrl+R in Discord.", "expect": "A feature set to off loses its slash command. shadow keeps it."},
+        {"do": "Wait a minute and press Ctrl+R in Discord.", "expect": "A feature set to off loses its slash command while hide_commands_when_off is on — never /rolemenu, /help, /about, /ping or /settings. shadow keeps it."},
         {"do": "To bring one back, press **Turn a feature back on…** on /settings.", "expect": "The command returns within a minute. /settings itself can never hide."}
       ],
       "faults": [
@@ -521,7 +521,7 @@
       "faults": [
         {
           "symptom": "Start says meeting minutes are turned off",
-          "answer": "That is deliberate \u2014 this is a prototype and it ships off. A Lead sets minutes_mode to on, under events."
+          "answer": "That is deliberate \u2014 this is a prototype and it ships off, and while it is off /minutes is not in the picker at all. A Lead sets minutes_mode to on, under events."
         },
         {
           "symptom": "Start names somebody and refuses",
@@ -544,6 +544,164 @@
         {"kind": "setting", "ref": "minutes_mode"},
         {"kind": "setting", "ref": "minutes_opt_out_role_id"},
         {"kind": "setting", "ref": "minutes_keep_days"}
+      ]
+    },
+    {
+      "slug": "marathons-follow",
+      "title": "See when BaF runs at a marathon",
+      "goal": "Every BaF run on a schedule Black Bloc follows, soonest first, with reminders before each.",
+      "audience": "member",
+      "feature": "marathon",
+      "command": null,
+      "sort": 35,
+      "steps": [
+        {"do": "Type **/event** and press **Marathons…**.", "expect": "A panel headed BaF next: every BaF run on a schedule Black Bloc follows, soonest first."},
+        {"do": "Press **My runs**.", "expect": "Your own runs, if a schedule lists you. A runner is matched by their Twitch link."},
+        {"do": "Wait for the **reminders**.", "expect": "One two hours before a run and one fifteen minutes before; the fifteen-minute one pings."},
+        {"do": "Press **Back**.", "expect": "The /event panel again."}
+      ],
+      "faults": [
+        {"symptom": "No Marathons… button", "answer": "A Lead has marathon_mode off. Members see the button only while it is on or in shadow."}
+      ],
+      "facts": [
+        {"kind": "setting", "ref": "marathon_mode"}
+      ]
+    },
+    {
+      "slug": "marathons-manage",
+      "title": "Follow a marathon's schedule",
+      "goal": "Add a marathon, pair its runners, and keep one board post up to date.",
+      "audience": "staff",
+      "feature": "marathon",
+      "command": null,
+      "sort": 205,
+      "steps": [
+        {"do": "Type **/event**, press **Marathons…**, then **Add a marathon…** and paste the schedule link.", "expect": "The marathon is listed with its dates, its runs and how many are BaF."},
+        {"do": "Pick it from **Pick a marathon to manage…**.", "expect": "Its card: schedule, last read, runs, event, board."},
+        {"do": "Press **Pair a runner…** for a name the schedule has that Black Bloc could not match.", "expect": "That runner is BaF from now on."},
+        {"do": "Press **Post the board**.", "expect": "One board post, edited in place as the schedule moves."},
+        {"do": "Press **Feeds…** to watch GDQ and RPG Limit Break for new marathons.", "expect": "A new one arrives as a notice with Add it / Not this one."}
+      ],
+      "faults": [],
+      "facts": [
+        {"kind": "setting", "ref": "marathon_mode"}
+      ]
+    },
+    {
+      "slug": "golive-channels",
+      "title": "Watch a channel nobody here streams from",
+      "goal": "Announce a Twitch channel by name, spotlight it, and give it dates.",
+      "audience": "staff",
+      "feature": "golive",
+      "command": "/golive",
+      "sort": 212,
+      "steps": [
+        {"do": "Type **/golive** and press **Channels…**.", "expect": "Every channel watched by name, and whether it is spotlit."},
+        {"do": "Press **Add a channel…** and type the name after twitch.tv/.", "expect": "It is announced like any other stream."},
+        {"do": "Pick it from **A spotlighted channel…** and press **Spotlight on**.", "expect": "Its announcement is pinned while it streams, with a reminder every few hours."},
+        {"do": "Press **Set dates…** for a start and an end.", "expect": "Nothing is announced before the start; the spotlight ends at the end."},
+        {"do": "Use **Opt out of announcements**, **Give it a ping role**, **Marathons on/off** or **Link a YouTube channel** on the same card.", "expect": "Each changes only that channel."}
+      ],
+      "faults": [],
+      "facts": [
+        {"kind": "setting", "ref": "golive_mode"}
+      ]
+    },
+    {
+      "slug": "ping-windows",
+      "title": "Ping only during an event",
+      "goal": "A watched channel's announcements still post; they ping only inside a window.",
+      "audience": "staff",
+      "feature": "golive",
+      "command": null,
+      "sort": 214,
+      "steps": [
+        {"do": "On **/golive** ▸ **Channels…** pick the channel.", "expect": "Its Pings line: always, never or during events."},
+        {"do": "Press **Pings: during events**.", "expect": "Its announcements still post; they ping nobody outside a window."},
+        {"do": "Press **Add a ping window…**, type **Pings start**, **Pings stop** and what it is for.", "expect": "The window is listed under the channel."},
+        {"do": "Wait for a window to **open** while the channel is live.", "expect": "One pinged reminder."},
+        {"do": "Press **Remove a ping window…** to take one off.", "expect": "It is gone. A marathon's own window is changed on the marathon."}
+      ],
+      "faults": [],
+      "facts": [
+        {"kind": "setting", "ref": "golive_mode"}
+      ]
+    },
+    {
+      "slug": "chat-panel",
+      "title": "Teach Black Bloc what to say",
+      "goal": "Notes it reads before answering, what each channel is for, and the replies it was unsure of.",
+      "audience": "staff",
+      "feature": "chat",
+      "command": "/chat",
+      "sort": 216,
+      "steps": [
+        {"do": "Type **/chat**.", "expect": "How Black Bloc answers: whether it answers, whether the models are on, what it knows."},
+        {"do": "Press **Knowledge…** ▸ **Write one down…**.", "expect": "A note it reads before answering."},
+        {"do": "Press **Channel notes…**.", "expect": "What each channel is for, read before the Discord topic."},
+        {"do": "Press **Review queue…**.", "expect": "Replies it was unsure of, one at a time, with Approve, Write a fact… and Dismiss."},
+        {"do": "Press **Personality…** to set the voice.", "expect": "Its next answers use it."}
+      ],
+      "faults": [],
+      "facts": [
+        {"kind": "setting", "ref": "chat_mode"}
+      ]
+    },
+    {
+      "slug": "request-check",
+      "title": "Ask the requester to check the work",
+      "goal": "Ready to check, ask them, then accept or send it back.",
+      "audience": "staff",
+      "feature": "request",
+      "command": "/request",
+      "sort": 218,
+      "steps": [
+        {"do": "Press **Ready to check** on the request and say what was built.", "expect": "It moves to review."},
+        {"do": "Press **Ask them to check**.", "expect": "They are DMed what to try, or pinged in the channel if DMs are shut."},
+        {"do": "When they are happy press **Accept**.", "expect": "Done, and the requester is told. Nobody accepts their own request."},
+        {"do": "Not right yet: press **Send back** with why.", "expect": "In progress again."}
+      ],
+      "faults": [],
+      "facts": [
+        {"kind": "setting", "ref": "request_mode"}
+      ]
+    },
+    {
+      "slug": "apply-review",
+      "title": "Decide an application",
+      "goal": "Read the answers, approve or deny, and the applicant is DMed either way.",
+      "audience": "staff",
+      "feature": "applications",
+      "command": "/apply",
+      "sort": 219,
+      "steps": [
+        {"do": "Type **/apply** and use **Pick an application…**.", "expect": "The answers and who sent them."},
+        {"do": "Press **Approve**.", "expect": "They get the role, or go on the list, and are DMed."},
+        {"do": "Or press **Deny** with a reason.", "expect": "They are DMed it, with when they may apply again."},
+        {"do": "Changed your mind: press **Approve after all**.", "expect": "Approved, and DMed."}
+      ],
+      "faults": [],
+      "facts": [
+        {"kind": "setting", "ref": "applications_mode"}
+      ]
+    },
+    {
+      "slug": "posts-welcome",
+      "title": "Post and edit the welcome and rules",
+      "goal": "The server's standing posts: posted once, edited in place, every wording kept.",
+      "audience": "staff",
+      "feature": "posts",
+      "command": "/posts",
+      "sort": 275,
+      "steps": [
+        {"do": "Type **/posts** and pick one from **A post…**.", "expect": "Its card, with where it is posted."},
+        {"do": "Edit the words on the site's Posts page, then press **Post it**.", "expect": "Posted, or updated in place where it already is."},
+        {"do": "Press **Versions…** to bring an older wording back.", "expect": "That wording is the current one again."},
+        {"do": "Press **Take it down** to remove it.", "expect": "The post goes; every word is kept."}
+      ],
+      "faults": [],
+      "facts": [
+        {"kind": "setting", "ref": "posts_mode"}
       ]
     }
   ]

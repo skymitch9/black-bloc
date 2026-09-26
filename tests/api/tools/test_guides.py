@@ -135,16 +135,14 @@ async def test_a_member_sees_the_member_guides_and_no_staff_one(as_member):
     assert answered.status_code == 200
     body = answered.json()
     assert {one["audience"] for one in body["guides"]} == {"member"}
-    # Nine, not ten: `pings-follow` went `staff` at the pings remake, with the mode, and the
-    # owner flips both back together (owner, 2026-09-16: "make the guide staff only").
-    assert len(body["guides"]) == 10
+    assert len(body["guides"]) == 12
     assert body["audience"] == "member" and body["may_edit"] is False
 
 
 async def test_staff_see_every_guide_including_the_staff_ones(as_staff):
     body = as_staff.get("/api/guides").json()
 
-    assert len(body["guides"]) == 19
+    assert len(body["guides"]) == 27
     assert {one["audience"] for one in body["guides"]} == {"member", "staff"}
     assert body["may_edit"] is True
 
