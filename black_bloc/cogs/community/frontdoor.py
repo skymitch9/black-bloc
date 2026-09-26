@@ -36,6 +36,7 @@ from ...frontdoor import (
     LABEL_DEFAULTS,
     PANEL_TIMEOUT_FOOTER,
     REQUEST,
+    SHADOW_FEATURE,
     TICKET,
     custom_id,
     door_embed,
@@ -207,7 +208,7 @@ def shadow_words(bot: Any, guild: Any) -> str:
     store = bot.store
     if not door_rehearses(store, guild.id):
         return ""
-    home = shadow.channel_id(bot, guild)
+    home = shadow.channel_id(bot, guild, feature=SHADOW_FEATURE)
     if not home:
         return DOOR_SHADOW_LINE_HOMELESS
     wanted = store.get(guild.id, FRONTDOOR_CHANNEL)
@@ -295,7 +296,7 @@ async def hide_rehearsed_ticket_button(bot: Any, guild: Any) -> int | None:
     message_id = panel_rehearsal_copy(store, guild.id)
     if not message_id:
         return None
-    where, _ = await shadow.find_copy(bot, guild, message_id)
+    where, _ = await shadow.find_copy(bot, guild, message_id, feature=SHADOW_FEATURE)
     if where is not None and not await drop_message(
         bot, guild, where, message_id, would_kind=WOULD_HIDE_TICKET_BUTTON
     ):
@@ -369,7 +370,7 @@ async def drop_rehearsal(bot: Any, guild: Any, actor: Any = None, *, via: str = 
     message_id = rehearsal_copy(bot.store, guild.id)
     if not message_id:
         return None
-    where, _ = await shadow.find_copy(bot, guild, message_id)
+    where, _ = await shadow.find_copy(bot, guild, message_id, feature=SHADOW_FEATURE)
     if where is not None and not await drop_message(
         bot, guild, where, message_id, would_kind=WOULD_TAKE_DOWN
     ):
@@ -401,12 +402,12 @@ async def rehearse_door(
     store = bot.store
     guard = getattr(bot, "guard", None)
     rehearsing = door_rehearses(store, guild.id)
-    home_id = shadow.channel_id(bot, guild)
+    home_id = shadow.channel_id(bot, guild, feature=SHADOW_FEATURE)
     home = shadow.channel_of(bot, guild, home_id)
     if home is None or (guard is not None and not guard.allows_channel(home_id)):
         return refusal(DOOR_NO_HOME if rehearsing else DOOR_GUARDED, "test_mode", 409)
     copy_id = rehearsal_copy(store, guild.id)
-    where, message = await shadow.find_copy(bot, guild, copy_id)
+    where, message = await shadow.find_copy(bot, guild, copy_id, feature=SHADOW_FEATURE)
     here = message is not None and int(where.id) == int(home.id)
     overtaken = (
         await overtaken_by(bot, guild, home, copy_id, followed_slug(store, guild.id))
@@ -435,6 +436,7 @@ async def rehearse_door(
             actor=actor,
             details={
                 "channel_id": home.id,
+                "shadow_home": home.id,
                 "wanted_channel_id": getattr(wanted, "id", wanted),
                 "message_id": int(message.id),
                 "via": via,
@@ -470,6 +472,7 @@ async def rehearse_door(
         actor=actor,
         details={
             "channel_id": home.id,
+            "shadow_home": home.id,
             "wanted_channel_id": getattr(wanted, "id", wanted),
             "message_id": fresh.id,
             "via": via,
@@ -525,7 +528,11 @@ async def post_door(
                 guild,
                 kind_via(WOULD_POST, via),
                 actor=actor,
-                details={"channel_id": channel.id, "via": via},
+                details={
+                    "channel_id": channel.id,
+                    "shadow_home": shadow.channel_id(bot, guild, feature=SHADOW_FEATURE),
+                    "via": via,
+                },
             )
         return outcome
     old_channel, old_id = where_the_door_is(bot, guild)
@@ -685,7 +692,11 @@ class FrontDoor(commands.Cog):
                     bot,
                     guild,
                     WOULD_POST,
-                    details={"channel_id": channel.id, "reason": "reconcile"},
+                    details={
+                        "channel_id": channel.id,
+                        "shadow_home": shadow.channel_id(bot, guild, feature=SHADOW_FEATURE),
+                        "reason": "reconcile",
+                    },
                 )
             return
         await drop_rehearsal(bot, guild, None)

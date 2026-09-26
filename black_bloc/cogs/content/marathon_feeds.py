@@ -54,6 +54,7 @@ from .marathon import (
     open_root,
     opted_out_channel,
     opted_out_said,
+    rehearsal_details,
     remove_marathon,
     render,
     said_default,
@@ -406,7 +407,9 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
         bot,
         guild,
         "marathon.would_feed_add" if shadow else "marathon.feed_added",
-        details=details | {"marathon_id": marathon["id"], "starts_at": candidate.starts_at},
+        details=details
+        | {"marathon_id": marathon["id"], "starts_at": candidate.starts_at}
+        | rehearsal_details(bot, guild),
     )
     record = {"ref": candidate.ref, "name": candidate.name, "starts_at": candidate.starts_at}
     record["url"] = candidate.url
@@ -434,7 +437,7 @@ async def suggest(
         bot,
         guild,
         "marathon.would_feed_suggest" if shadow else "marathon.feed_suggested",
-        details=details,
+        details=details | rehearsal_details(bot, guild),
     )
     text = words(bot, guild, MARATHON_FEED_SUGGEST_TEMPLATE_KEY, await fields_of(bot, feed, record))
     view = notice_view(feed["id"], candidate.ref, (TAKE, DISMISS))

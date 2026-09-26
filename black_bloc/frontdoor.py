@@ -33,6 +33,7 @@ EVENT = "event"
 KINDS: tuple[str, ...] = (TICKET, REQUEST, EVENT)
 
 ON = "on"
+SHADOW_FEATURE = "frontdoor"
 OFF = "off"
 SHADOW = "shadow"
 MODES: tuple[str, ...] = (OFF, SHADOW, ON)
@@ -234,6 +235,7 @@ def door_hash(store: Any, guild_id: int, note: str = "") -> str:
 
 
 __all__ = [
+    "SHADOW_FEATURE",
     "CUSTOM_ID_HEAD",
     "CUSTOM_ID_TEMPLATE",
     "DOOR_COLOUR",

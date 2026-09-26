@@ -3082,14 +3082,12 @@ KEY_HELP.update(
 
 # A rehearsal home per feature: blank follows shadow_channel_id, set wins over it.
 SHADOW_HOME_WORDS = {
-    "frontdoor": "the front door's copy",
+    "frontdoor": "the front door's copy and the Open a ticket button it replaces",
     "posts": "posts such as the welcome post and the rules",
     "golive": "spotlight announcements",
     "marathon": "the marathon board, reminders, shoutouts and staff notices",
     "poll": "polls and their results",
     "birthday": "birthday wishes",
-    "modmail": "the Open a ticket button",
-    "minutes": "meeting notes",
 }
 SHADOW_HOME_KEYS = {feature: shadow_feature_key(feature) for feature in SHADOW_HOME_WORDS}
 KEY_TYPES.update({key: "channel" for key in SHADOW_HOME_KEYS.values()})
@@ -3201,7 +3199,6 @@ NAMESPACE_OVERRIDE = {
     "minutes_max_hours": "events",
     "minutes_keep_days": "events",
     "minutes_panel_minutes": "events",
-    SHADOW_HOME_KEYS["minutes"]: "events",
     log_level_key("minutes"): "events",
     SPOTLIGHT_MODE_KEY: "golive",
     SPOTLIGHT_POLL_MINUTES_KEY: "golive",

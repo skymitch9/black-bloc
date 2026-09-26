@@ -1481,9 +1481,10 @@ async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
         )
         return (None, missing)
     if not guard_allows(bot, channel):
-        await log_action(
-            bot, guild, "poll.would_open", details={"poll_id": row["id"], "reason": "test_mode"}
-        )
+        details = {"poll_id": row["id"], "reason": "test_mode"}
+        if rehearsing:
+            details["shadow_home"] = where
+        await log_action(bot, guild, "poll.would_open", details=details)
         return (None, "test_mode")
     options = await options_of(bot.db, row["id"])
     labels = [str(item["label"]) for item in options]
@@ -1540,6 +1541,7 @@ async def post_poll(bot: Any, guild: Any, row: Any) -> tuple[Any, str | None]:
     }
     if rehearsing:
         details["shadow_channel_id"] = channel.id
+        details["shadow_home"] = channel.id
     await log_action(
         bot,
         guild,

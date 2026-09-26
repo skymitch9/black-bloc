@@ -972,6 +972,34 @@ async def test_shadow_posts_the_copy_in_the_rehearsal_home_and_nothing_in_the_re
     assert POSTED not in await kinds_in(live.db)
 
 
+async def test_the_front_doors_own_home_wins_over_the_global_one(live, member):
+    """Owner, 2026-09-25: the door rehearses in #welcome-test, everything else in the log."""
+    welcome = live.guild.get_channel(777)
+    home = live.guild.get_channel(888)
+    await live.store.set(GUILD, SHADOW_CHANNEL, LOG_CHANNEL)
+    await live.store.set(GUILD, "frontdoor_shadow_channel_id", 888)
+    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
+
+    outcome = await post_door(live, live.guild, member, welcome)
+
+    assert outcome.ok and door_message(home) is not None
+    assert not live.guild.get_channel(LOG_CHANNEL).messages
+    cur = await live.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = ? ORDER BY id DESC", (POSTED_SHADOW,)
+    )
+    assert json.loads((await cur.fetchone())["details"])["shadow_home"] == 888
+
+
+async def test_a_blank_front_door_home_follows_the_global_one(live, member):
+    welcome = live.guild.get_channel(777)
+    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
+    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
+
+    await post_door(live, live.guild, member, welcome)
+
+    assert door_message(live.guild.get_channel(888)) is not None
+
+
 async def test_the_shadow_sentence_says_shadow_rather_than_test_mode(live, member):
     welcome = live.guild.get_channel(777)
     await live.store.set(GUILD, SHADOW_CHANNEL, 888)

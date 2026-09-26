@@ -14,8 +14,6 @@ export const LABELS = {
   marathon_shadow_channel_id: 'Where marathons rehearse',
   poll_shadow_channel_id: 'Where polls rehearse',
   birthday_shadow_channel_id: 'Where birthday wishes rehearse',
-  modmail_shadow_channel_id: 'Where the ticket button rehearses',
-  minutes_shadow_channel_id: 'Where meeting notes rehearse',
   staff_channel_id: 'Which channel decides who counts as staff',
   role_menu_channel_id: 'Where role menus are posted',
   core_log_level: 'How much of the dashboard’s own work is repeated into Discord',

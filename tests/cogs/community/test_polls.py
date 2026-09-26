@@ -2859,6 +2859,20 @@ async def test_a_rehearsal_is_logged_as_opened_shadow_with_both_channel_ids(cog,
     assert details["shadow_channel_id"] == TEST_CHANNEL
 
 
+async def test_a_poll_rehearses_in_its_own_home_when_one_is_set(cog, bot, lead, db):
+    await bot.store.set(GUILD, "poll_shadow_channel_id", LOG_CHANNEL)
+    bot.guard.own_channel(LOG_CHANNEL)
+
+    await shadow_poll(cog, bot, lead)
+
+    assert len(bot.guild.get_channel(LOG_CHANNEL).polls) == 1
+    assert bot.guild.get_channel(TEST_CHANNEL).polls == []
+    cur = await db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'poll.opened_shadow'"
+    )
+    assert json.loads((await cur.fetchone())["details"])["shadow_home"] == LOG_CHANNEL
+
+
 async def test_would_open_is_never_written_in_shadow_because_the_poll_really_opened(
     cog, bot, lead, db
 ):

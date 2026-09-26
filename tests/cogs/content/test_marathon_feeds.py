@@ -22,6 +22,7 @@ from black_bloc.marathon_sources import Person, Run, ScheduleError
 from tests.cogs.content.test_marathon import STAFF_ROOM, Member, bot  # noqa: F401
 from tests.cogs.content.test_spotlight import (
     GUILD,
+    LOG_CHANNEL,
     SHADOW_CHANNEL,
     FakeActor,
     FakeChannel,
@@ -396,6 +397,17 @@ async def test_shadow_adds_the_marathon_but_notices_the_shadow_home(bot, cog):  
     assert len(shadowed) == 4 and f"<#{STAFF_ROOM}>" in shadowed[0].content
     found = await kinds(bot.db)
     assert "marathon.would_feed_add" in found and "marathon.feed_added" not in found
+
+
+async def test_a_feed_notice_rehearses_in_the_marathon_home(bot, cog):  # noqa: F811
+    await seeded(bot, cog)
+    await bot.store.set(GUILD, "marathon_mode", "shadow")
+    await bot.store.set(GUILD, "marathon_shadow_channel_id", LOG_CHANNEL)
+    await cog.tick_once()
+
+    assert not [m for m in bot.guild.channels[SHADOW_CHANNEL].messages if "new event" in m.content]
+    assert [m for m in bot.guild.channels[LOG_CHANNEL].messages if "new event" in m.content]
+    assert (await details_of(bot.db, "marathon.would_feed_add"))["shadow_home"] == LOG_CHANNEL
 
 
 async def test_off_checks_nothing(bot, cog):  # noqa: F811

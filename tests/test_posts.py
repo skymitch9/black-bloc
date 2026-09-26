@@ -860,6 +860,19 @@ async def test_shadow_sends_to_the_shadow_channel_and_never_to_the_rows_own(bot,
     assert await kinds(bot.db) == ["post.shadow_posted", "post.pinned"]
 
 
+async def test_a_post_rehearses_in_its_own_home_over_the_global_one(bot, guild):
+    row = await shadow_post(bot, guild)
+    await bot.store.set(GUILD, "posts_shadow_channel_id", LOG_CHANNEL)
+    bot.guard = FakeGuard(allowed=LOG_CHANNEL)
+
+    found = await posts.publish_post(bot, guild, row, STAFF)
+
+    assert found.ok
+    assert bot.channels[TEST_CHANNEL].sent == []
+    assert [one.get("content") for one in bot.channels[LOG_CHANNEL].sent][0] == "Hello."
+    assert (await details_of(bot.db, "post.shadow_posted"))["shadow_home"] == LOG_CHANNEL
+
+
 async def test_a_second_shadow_press_edits_the_copy_and_never_sends_again(bot, guild):
     row = await shadow_post(bot, guild)
     await posts.publish_post(bot, guild, row, STAFF)

@@ -80,6 +80,7 @@ EMBED_KEY = "golive_embed"
 END_TEMPLATE_KEY = "golive_end_template"
 END_AUTHOR_KEY = "golive_end_author"
 MODE_ON = "on"
+SHADOW_FEATURE = "golive"
 MODE_OFF = "off"
 MODE_SHADOW = "shadow"
 SOURCE = "spotlight"
@@ -802,6 +803,8 @@ class Spotlight(commands.Cog):
         await set_announced(self.bot.db, session_id, message.id)
         details["message_id"] = str(message.id)
         details["channel_id"] = str(getattr(getattr(message, "channel", None), "id", "") or "")
+        if mode != MODE_ON:
+            details["shadow_home"] = details["channel_id"]
         await log_action(
             self.bot,
             guild,
@@ -1265,7 +1268,7 @@ class Spotlight(commands.Cog):
             return (None, NO_CHANNEL)
         said = ""
         if mode != MODE_ON:
-            where = shadow_home.channel_id(self.bot, guild)
+            where = shadow_home.channel_id(self.bot, guild, feature=SHADOW_FEATURE)
             if not where:
                 return (None, NO_CHANNEL)
             said = shadow_home.note_line(self.bot, guild, f"<#{int(channel_id)}>")
@@ -1297,7 +1300,7 @@ class Spotlight(commands.Cog):
         channel_id = (
             self.bot.store.get(guild.id, CHANNEL_KEY)
             if mode == MODE_ON
-            else shadow_home.channel_id(self.bot, guild)
+            else shadow_home.channel_id(self.bot, guild, feature=SHADOW_FEATURE)
         )
         return shadow_home.channel_of(self.bot, guild, channel_id)
 

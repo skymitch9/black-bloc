@@ -2474,8 +2474,6 @@ async def test_every_feature_that_rehearses_has_its_own_home_key_shipped_blank(s
         "marathon_shadow_channel_id": "marathon",
         "poll_shadow_channel_id": "poll",
         "birthday_shadow_channel_id": "birthday",
-        "modmail_shadow_channel_id": "modmail",
-        "minutes_shadow_channel_id": "events",
     }
 
     assert set(settings_store.SHADOW_HOME_KEYS.values()) == set(wanted)
@@ -2871,4 +2869,4 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 490
+    assert len(settings_store.KEY_TYPES) == 488

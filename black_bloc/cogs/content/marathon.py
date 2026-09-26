@@ -115,6 +115,7 @@ GOLIVE_CHANNEL_KEY = "golive_channel_id"
 STAFF_CHANNEL_KEY = "staff_channel_id"
 MODE_ON = "on"
 MODE_OFF = "off"
+SHADOW_FEATURE = "marathon"
 TICK_MINUTES = 1
 FAILURES_IMPORTANT = 3
 NO_CHANNEL = "no channel is set for marathon posts"
@@ -458,6 +459,17 @@ def mode_of(bot: Any, guild_id: int) -> str:
 def cog_of(bot: Any) -> Any:
     getter = getattr(bot, "get_cog", None)
     return getter(COG_NAME) if callable(getter) else None
+
+
+def rehearsal_home(bot: Any, guild: Any) -> int | None:
+    return shadow_home.channel_id(bot, guild, feature=SHADOW_FEATURE)
+
+
+def rehearsal_details(bot: Any, guild: Any) -> dict[str, Any]:
+    """The `shadow_home` a would-row carries: the home a rehearsal went to, empty when `on`."""
+    if mode_of(bot, guild.id) == MODE_ON:
+        return {}
+    return {"shadow_home": rehearsal_home(bot, guild)}
 
 
 async def channel_login(bot: Any, marathon: Any) -> str | None:
@@ -1521,7 +1533,7 @@ class Marathons(commands.Cog):
             guild,
             kind_via("marathon.would_suggest_next" if shadow else "marathon.next_suggested", via),
             actor=actor,
-            details=details,
+            details=details | rehearsal_details(self.bot, guild),
         )
         if not carried:
             await self.fold_notice(guild, marathon, before)
@@ -1608,7 +1620,7 @@ class Marathons(commands.Cog):
         home = self.bot.store.get(guild.id, STAFF_CHANNEL_KEY)
         if not home:
             return (None, None, NO_STAFF_CHANNEL)
-        channel_id = int(home) if mode == MODE_ON else shadow_home.channel_id(self.bot, guild)
+        channel_id = int(home) if mode == MODE_ON else rehearsal_home(self.bot, guild)
         if channel_id is None:
             return (None, None, NO_CHANNEL)
         guard = getattr(self.bot, "guard", None)
@@ -2206,7 +2218,7 @@ class Marathons(commands.Cog):
             self.bot,
             guild,
             "marathon.would_remind" if shadow else "marathon.reminded",
-            details=details,
+            details=details | rehearsal_details(self.bot, guild),
         )
 
     async def _ping_roles(self, guild: Any, marathon: Any, row: Any) -> list[int]:
@@ -2273,7 +2285,9 @@ class Marathons(commands.Cog):
             guild,
             kind_via("marathon.would_shout" if shadow else "marathon.shouted", via),
             actor=actor,
-            details=details | {"message_id": str(message.id), "channel_id": channel_id},
+            details=details
+            | {"message_id": str(message.id), "channel_id": channel_id}
+            | rehearsal_details(self.bot, guild),
         )
         return None
 
@@ -2379,7 +2393,8 @@ class Marathons(commands.Cog):
                     "marathon.would_refresh_board" if shadow else "marathon.board_refreshed", via
                 ),
                 actor=actor,
-                details={"marathon_id": marathon["id"], "message_id": str(message.id), "via": via},
+                details={"marathon_id": marathon["id"], "message_id": str(message.id), "via": via}
+                | rehearsal_details(self.bot, guild),
             )
             return None
         sent, channel_id, why = await self._send(guild, text, [], quiet=True)
@@ -2410,7 +2425,8 @@ class Marathons(commands.Cog):
                 "message_id": str(sent.id),
                 "channel_id": channel_id,
                 "via": via,
-            },
+            }
+            | rehearsal_details(self.bot, guild),
         )
         if (
             not shadow
@@ -2477,7 +2493,7 @@ class Marathons(commands.Cog):
     def _target(self, guild: Any) -> int | None:
         if mode_of(self.bot, guild.id) == MODE_ON:
             return self._home(guild)
-        return shadow_home.channel_id(self.bot, guild)
+        return rehearsal_home(self.bot, guild)
 
     def _shadowed(self, guild: Any, text: str) -> str:
         home = self._home(guild)

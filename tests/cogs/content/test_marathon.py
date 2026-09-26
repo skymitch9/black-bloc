@@ -523,6 +523,19 @@ async def test_shadow_posts_land_in_the_shadow_home_with_the_note_and_log_would(
     assert "marathon.shouted" not in found and "marathon.board_posted" not in found
 
 
+async def test_marathons_rehearse_in_their_own_home_over_the_global_one(bot, cog):
+    """Owner, 2026-09-25: only the front door rehearses in #welcome-test."""
+    await bot.store.set(GUILD, "marathon_mode", "shadow")
+    await bot.store.set(GUILD, "marathon_shadow_channel_id", LOG_CHANNEL)
+    marathon = await added(bot, cog)
+    cog.clock = lambda: NOW + timedelta(minutes=31)
+    await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+
+    assert posts(bot, SHADOW_CHANNEL) == []
+    assert posts(bot, LOG_CHANNEL)
+    assert (await details_of(bot.db, "marathon.would_post_board"))["shadow_home"] == LOG_CHANNEL
+
+
 async def test_off_reads_nothing_and_posts_nothing(bot, cog):
     marathon = await added(bot, cog)
     await bot.store.set(GUILD, "marathon_mode", "off")
