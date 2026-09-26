@@ -912,7 +912,8 @@ function pingsCard(row, say) {
     el('span', { class: 'cell-quiet', text: one.ping_state || '' }),
     mode,
     el('p', { class: 'field-help', text: PINGS_HELP }),
-  ];
+    one.ping_help ? el('p', { class: 'field-help', text: one.ping_help }) : null,
+  ].filter(Boolean);
   if (current === 'events') {
     const windows = one.windows || [];
     if (!windows.length) bits.push(muted(WINDOWS_NONE));

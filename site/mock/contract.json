@@ -51,6 +51,7 @@
       "marathon_poll_minutes": 10,
       "marathon_reminder_stale_minutes": 1,
       "marathon_spotlight_lead_hours": 0,
+      "marathon_spotlight_lead_minutes": 0,
       "marathon_spotlight_slack_hours": 0,
       "marathon_window_slack_hours": 0,
       "minutes_chunk_seconds": 30,
@@ -113,6 +114,7 @@
       "marathon_poll_minutes": 120,
       "marathon_reminder_stale_minutes": 240,
       "marathon_spotlight_lead_hours": 48,
+      "marathon_spotlight_lead_minutes": 240,
       "marathon_spotlight_slack_hours": 48,
       "marathon_window_slack_hours": 24,
       "minutes_chunk_seconds": 120,
@@ -1066,6 +1068,7 @@
         "ping_mode",
         "pinging",
         "ping_state",
+        "ping_help",
         "windows",
         "marathons"
       ]
@@ -1111,6 +1114,7 @@
         "ping_mode",
         "pinging",
         "ping_state",
+        "ping_help",
         "windows",
         "message"
       ]
@@ -1154,6 +1158,7 @@
         "ping_mode",
         "pinging",
         "ping_state",
+        "ping_help",
         "windows",
         "message"
       ]
@@ -1237,6 +1242,7 @@
         "ping_mode",
         "pinging",
         "ping_state",
+        "ping_help",
         "windows",
         "window",
         "message"
@@ -1278,6 +1284,7 @@
         "ping_mode",
         "pinging",
         "ping_state",
+        "ping_help",
         "windows",
         "removed",
         "window_id",
@@ -5095,7 +5102,8 @@
         "event",
         "feed_name",
         "event_mode",
-        "event_mode_word"
+        "event_mode_word",
+        "spotlight_mode"
       ],
       "rows": {
         "run_list": [
@@ -5162,6 +5170,22 @@
         "event_mode_word",
         "event",
         "run_list",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_bare_id}",
+      "body": {
+        "spotlight_mode": "off"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Settings foldout — Spotlight the channel while it runs"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "spotlight_mode",
         "message"
       ]
     },

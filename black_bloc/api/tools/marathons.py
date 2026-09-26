@@ -49,12 +49,14 @@ from ...cogs.content.marathon_people import (
     unspotlight_runner,
     zone_of,
 )
+from ...cogs.content.marathon_spotlight import set_spotlight_mode
 from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...logkinds import VIA_WEBSITE
 from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_sources import SOURCE_WORDS, schedule_page
+from ...marathon_spotlight import mode_of as spotlight_mode_of
 from ...settings_store import (
     MARATHON_FAR_POLL_HOURS_KEY,
     MARATHON_LEAD_DAYS_KEY,
@@ -298,6 +300,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "event": await event_of(bot, row),
         "event_mode": event_mode_of(row),
         "event_mode_word": MODE_WORDS[event_mode_of(row)],
+        "spotlight_mode": spotlight_mode_of(row),
     }
 
 
@@ -469,6 +472,18 @@ def build_router(bot: Any) -> APIRouter:
                     actor,
                     await wanted(guild, marathon_id),
                     payload["event_mode"],
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
+        if "spotlight_mode" in payload:
+            done = answered(
+                await set_spotlight_mode(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    payload["spotlight_mode"],
                     via=VIA_WEBSITE,
                 )
             )

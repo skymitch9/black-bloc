@@ -877,12 +877,12 @@ def next_window(windows: Any, now: datetime | None = None) -> Any:
 
 
 def pings_now(row: Any, windows: Any, now: datetime | None = None) -> bool:
-    """The one gate every post a channel row makes goes through: always, never, or in a window."""
+    """Every post a channel row makes goes through here: always, never, or spotlit in a window."""
     mode = ping_mode_of(row)
     if mode == PING_NEVER:
         return False
     if mode == PING_EVENTS:
-        return open_window(windows, now) is not None
+        return is_spotlit(row) and open_window(windows, now) is not None
     return True
 
 

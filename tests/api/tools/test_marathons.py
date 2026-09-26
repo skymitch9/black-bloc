@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from black_bloc.cogs.content.marathon import Marathons, get_marathon, runs_of
-from black_bloc.cogs.content.spotlight import add_channel
+from black_bloc.cogs.content.spotlight import add_channel, channel_by_id
 from black_bloc.marathon_sources import Person, Run, ScheduleError
 
 URL = "https://gamesdonequick.com/schedule/74"
@@ -617,3 +617,38 @@ async def test_spotlight_refuses_in_words_a_name_with_no_twitch_and_a_stranger(
         f"/api/marathons/{marathon_id}/people/skyruns/spotlight", json={"run_id": 9999}
     )
     assert bad_run.status_code == 404
+
+
+async def test_patch_spotlight_mode_switches_it_and_refuses_a_word_it_does_not_know(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    assert client.get(f"/api/marathons/{marathon_id}").json()["spotlight_mode"] == "follow"
+
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"spotlight_mode": "off"}).json()
+
+    assert body["spotlight_mode"] == "off"
+    assert "no longer spotlights its channel" in body["message"]
+    said = await web_row(wf, web, "web.marathon.spotlight_mode_set")
+    assert (said["from"], said["to"]) == ("follow", "off")
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"spotlight_mode": "often"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_spotlight_mode"
+
+
+async def test_following_again_spotlights_a_channel_whose_marathon_is_in_reach(
+    client, sign_in, web, cog, wf
+):
+    await web.store.set(wf.GUILD_ID, "marathon_spotlight_lead_minutes", 90)
+    spotlight_id = await add_channel(
+        web.db, wf.GUILD_ID, "rpglimitbreak", added_by=7, expires_at=None, pin=True, spotlight=False
+    )
+    sign_in(client)
+    marathon_id = add(client, spotlight_id=str(spotlight_id)).json()["id"]
+    row = await channel_by_id(web.db, spotlight_id)
+    assert row["spotlight"] == 1 and row["spotlit_by_marathon"] == marathon_id
+
+    client.patch(f"/api/marathons/{marathon_id}", json={"spotlight_mode": "off"})
+    assert (await channel_by_id(web.db, spotlight_id))["spotlight"] == 0
+    client.patch(f"/api/marathons/{marathon_id}", json={"spotlight_mode": "follow"})
+    assert (await channel_by_id(web.db, spotlight_id))["spotlight"] == 1

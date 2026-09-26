@@ -1,5 +1,7 @@
 # Marathon schedules — our people on a marathon stream, read off the posted schedule, re-read every half hour
 
+> 🔨 **2026-09-26 — branch `marathon-spotlight` (NOT merged): a marathon now spotlights its channel as well as setting its ping window** — from `marathon_spotlight_lead_minutes` before its first run to its last run's end, after every fetch and on the minute tick; staff turning the spotlight off stops it for that marathon. See [`marathon-spotlight-design.md`](marathon-spotlight-design.md).
+
 > 🔨 **2026-09-25 — the page and panel shapes moved, branch `marathon-ux` (NOT merged):** the marathon drawer now opens on a **Schedule** card (source, last read, next read, the Re-read-every field, Read it now), then Runs · Who is who · Event · The channel · Posts · Pause/Remove; the Events page is three sections; feeds sit in a *Where marathons come from* foldout whose rows open a feed drawer; *ours* reads **BaF**. Where this doc describes the old page or panel layout, [`marathon-ux-design.md`](marathon-ux-design.md) wins.
 
 > 🔨 **2026-09-25 — §E's parked Horaro paragraph is BUILT for ESA by `marathon-feeds` (NOT merged):** `read_url` learns `horaro.net/<event>/<schedule>` and the RPG Limit Break tracker, `parse_horaro` reads the `.json` export (columns by name, `hidden:ID`, linked players give a login) — see [`marathon-feeds-design.md`](marathon-feeds-design.md) Deviations 2–3 and 17–20. Oengus stays parked (its Deviation 25 records the lines endpoint it found).

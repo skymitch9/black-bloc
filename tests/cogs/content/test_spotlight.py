@@ -358,6 +358,7 @@ async def bot(db, monkeypatch):
     await store.set(GUILD, "golive_channel_id", CHANNEL)
     await store.set(GUILD, "shadow_channel_id", SHADOW_CHANNEL)
     await store.set(GUILD, SPOTLIGHT_MODE_KEY, "on")
+    await store.set(GUILD, "marathon_channel_ping_mode_default", "always")
     made = FakeBot(db, store, settings, FakeGuild())
     made.store.is_staff = lambda member: True
     return made
@@ -2246,7 +2247,7 @@ async def test_a_window_opening_on_a_live_channel_with_spotlight_off_posts_nothi
     await cog.poll_once()
     assert len(bot.guild.channel.messages) == 1
     session = await open_session(bot.db, row["id"])
-    assert session["pinging_last"] == 1
+    assert session["pinging_last"] == 0
 
 
 async def test_the_window_reminder_ignores_the_bump_pings_key_but_honours_its_own(bot, cog):

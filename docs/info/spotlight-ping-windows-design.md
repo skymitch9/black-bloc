@@ -1,5 +1,7 @@
 # A spotlight is split from its ping — a channel pings always, never, or only during events
 
+> 🔨 **2026-09-26 — branch `marathon-spotlight` (NOT merged): a `during events` row now pings only while it is ALSO spotlit** (`black_bloc/spotlight.py:pings_now`), a running marathon spotlights its channel, and a new seeded marathon channel row starts on `marathon_channel_ping_mode_default` (`events`). See [`marathon-spotlight-design.md`](marathon-spotlight-design.md).
+
 > ✅ **2026-09-25 — LIVE as v164 14:16** (release commit `7787b10c`, [`deploys.log`](../deploys.log)): boot log `database: added spotlight_channels.ping_mode` and `spotlight_sessions.pinging_last` at 21:15:56Z (this design's schema 59), `loaded cog spotlight`; `database ready`, `synced 33 app commands`, `logged in as Black_Bloc` 21:16:01Z, no Traceback; `/health` ready=true 67 ms. Nothing has met Discord by hand — the sweeps are the owner's; the live site was not opened in a browser.
 
 > **2026-09-25 — the `marathon` source of a window is LIVE in code** (branch `marathon-schedule`, not merged): each marathon with a channel keeps ONE `source='marathon'`, `source_id=<marathon id>` window from its first run's start − `marathon_window_slack_hours` to its last run's end + slack, note = its name; pause, remove and a lost channel drop it. See [`marathon-schedule-design.md`](marathon-schedule-design.md).
@@ -40,7 +42,7 @@ role — and the global one — is mentioned. It does not add a second role fiel
 
 **`spotlight_channels.ping_mode TEXT NOT NULL DEFAULT 'always'`** (`ADDED_COLUMNS`, schema 58 → **59**). Three values,
 constants in `black_bloc/spotlight.py`: `always` (today's behaviour, the default so every live row is unchanged),
-`never` (announce and remind with no role mention at all), `events` (mention roles only inside a ping window).
+`never` (announce and remind with no role mention at all), ~~`events` (mention roles only inside a ping window)~~ `events` (mention roles only inside a ping window **and while the row is spotlit** — 2026-09-26, branch `marathon-spotlight` `378c4ddf`: the owner's *"Ping marathon when a marathon is going, the channel is in spotlight…"*; before it an unspotlit `events` row still pinged on its announcement, see [`marathon-spotlight-design.md`](marathon-spotlight-design.md) Deviation 5).
 
 **A ping window** is a date range during which an `events` row pings. New table through the `SCHEMA` bootstrap:
 

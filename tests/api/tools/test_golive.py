@@ -1076,3 +1076,68 @@ async def test_a_window_on_another_row_or_gone_is_a_404_in_words(client, sign_in
 
     assert answer.status_code == 404
     assert "not there any more" in answer.json()["message"]
+
+
+# --- the marathon spotlight (owner, 2026-09-26) ---------------------------------------------
+
+
+async def a_running_marathon(web, wf, spotlight_id):
+    now = datetime.now(UTC)
+    cur = await web.db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
+        "starts_at, ends_at, added_at) "
+        "VALUES (?, 'AGDQ 2027', 'https://x', 'gdq', '74', ?, ?, ?, ?)",
+        (
+            wf.GUILD_ID,
+            spotlight_id,
+            (now - timedelta(hours=1)).isoformat(),
+            (now + timedelta(hours=5)).isoformat(),
+            now.isoformat(),
+        ),
+    )
+    await web.db.conn.commit()
+    return cur.lastrowid
+
+
+async def test_a_marathon_channel_row_carries_the_pings_help_line(client, sign_in, web, wf):
+    await a_spotlight(web, wf)
+    await a_spotlight(web, wf, "somestreamer")
+    await web.store.set(wf.GUILD_ID, "marathon_channel_ping_help", "Only while it runs.")
+    sign_in(client)
+
+    rows = {one["twitch_login"]: one for one in client.get("/api/golive/spotlight").json()}
+
+    assert rows["gamesdonequick"]["ping_help"] == "Only while it runs."
+    assert rows["somestreamer"]["ping_help"] is None
+
+
+async def test_adding_a_marathon_channel_starts_it_on_the_marathon_ping_default(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    furs = client.post("/api/golive/spotlight", json={"twitch_login": "fastestfurs", "keep": True})
+    someone = client.post("/api/golive/spotlight", json={"twitch_login": "somestreamer"})
+
+    assert furs.json()["ping_mode"] == "events"
+    assert someone.json()["ping_mode"] == "always"
+
+
+async def test_staff_turning_the_spotlight_off_during_a_marathon_stops_that_marathon(
+    client, sign_in, web, wf
+):
+    spotlight_id = await a_spotlight(web, wf, "rpglimitbreak")
+    marathon_id = await a_running_marathon(web, wf, spotlight_id)
+    sign_in(client)
+
+    answer = client.patch(f"/api/golive/spotlight/{spotlight_id}", json={"spotlight": False})
+
+    assert answer.status_code == 200, answer.text
+    assert "**AGDQ 2027** will not spotlight it again." in answer.json()["message"]
+    cur = await web.db.conn.execute(
+        "SELECT spotlight_mode FROM marathons WHERE id = ?", (marathon_id,)
+    )
+    assert (await cur.fetchone())["spotlight_mode"] == "off"
+    rows = dict(await wf.web_rows_in(web.db))
+    assert list(rows) == ["web.golive.spotlight_updated", "web.marathon.spotlight_mode_set"]
+    said = rows["web.marathon.spotlight_mode_set"]
+    assert said["because"] == "staff_turned_the_spotlight_off" and said["via"] == "website"

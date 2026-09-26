@@ -28,8 +28,14 @@ from ...golive import (
 )
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
-from ...marathon_channels import MARATHONS_OFF_BUTTON, MARATHONS_ON_BUTTON, takes_marathons
+from ...marathon_channels import (
+    MARATHONS_OFF_BUTTON,
+    MARATHONS_ON_BUTTON,
+    OPTED_OUT_SEEDS,
+    takes_marathons,
+)
 from ...marathon_channels import panel_line as marathons_line
+from ...marathon_spotlight import BECAUSE_MARATHON_OVER, held_by, new_row_ping_mode
 from ...panels import Panel, answer, opened, retire, still_staff
 from ...settings_store import (
     CHANNEL_OPTOUT_DELETE,
@@ -37,6 +43,7 @@ from ...settings_store import (
     CHANNEL_OPTOUT_POST_KEY,
     CHANNEL_SPOTLIGHT_DEFAULT_KEY,
     DEFAULT_TIMEZONE_KEY,
+    MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY,
     SPOTLIGHT_BAD_DATE_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
     SPOTLIGHT_BUMP_HOURS_KEY,
@@ -240,6 +247,7 @@ async def update_channel(db: Any, spotlight_id: int, **fields: Any) -> None:
         "youtube_handle",
         "ping_mode",
         "marathons",
+        "spotlit_by_marathon",
     )
     wanted = [(name, fields[name]) for name in allowed if name in fields]
     if not wanted:
@@ -623,6 +631,11 @@ class Spotlight(commands.Cog):
         """A row whose date has passed ends its open session first, then leaves the list."""
         for row in await channels_for(self.bot.db, guild.id):
             if not words.is_spotlit(row) or not words.is_expired(row):
+                continue
+            if held_by(row) is not None:
+                from .marathon_spotlight import lift
+
+                await lift(self.bot, guild, row, held_by(row), BECAUSE_MARATHON_OVER)
                 continue
             async with self._lock(row["id"]):
                 fresh = await channel_by_id(self.bot.db, row["id"])
@@ -1466,7 +1479,14 @@ async def spotlight_channel(
         )
     )
     wanted_pin = bool(store.get(guild.id, SPOTLIGHT_PIN_KEY) if pin is None else pin)
-    ping_mode = words.clean_ping_mode(store.get(guild.id, SPOTLIGHT_PING_MODE_DEFAULT_KEY))
+    ping_mode = words.clean_ping_mode(
+        new_row_ping_mode(
+            clean,
+            clean not in OPTED_OUT_SEEDS,
+            store.get(guild.id, MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY),
+            store.get(guild.id, SPOTLIGHT_PING_MODE_DEFAULT_KEY),
+        )
+    )
     spotlight_id = await add_channel(
         bot.db,
         guild.id,
@@ -1666,6 +1686,8 @@ async def changed_spotlight(
     row = await channel_by_id(bot.db, spotlight_id)
     if row is None or int(row["guild_id"]) != int(guild.id):
         return (None, None)
+    if "expires_at" in fields and held_by(row) is not None:
+        fields = {**fields, "spotlit_by_marathon": None}
     await update_channel(bot.db, spotlight_id, **fields)
     fresh = await channel_by_id(bot.db, spotlight_id)
     await log_action(
@@ -2228,10 +2250,14 @@ async def run_spotlight_move(
             return (said, True)
         return (words.EXPIRES_SAID.format(login=login, when=words.when_words(when)), True)
     if action in ("spotlight_on", "spotlight_off"):
+        from .marathon_spotlight import after_staff_dim
+
         fresh, settled = await set_spotlight(
             bot, guild, actor, spotlight_id, action == "spotlight_on"
         )
-        return (words.spotlight_said(fresh, settled), True)
+        stopped = await after_staff_dim(bot, guild, actor, row, fresh)
+        said = words.spotlight_said(fresh, settled)
+        return (" ".join(one for one in (said, stopped) if one), True)
     if action in ("marathons_on", "marathons_off"):
         from .marathon_channels import set_marathons
 

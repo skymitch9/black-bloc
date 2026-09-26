@@ -4382,6 +4382,10 @@ MARATHON_WINDOW_SLACK_KEY = "marathon_window_slack_hours"
 MARATHON_SPOTLIGHT_LEAD_KEY = "marathon_spotlight_lead_hours"
 MARATHON_SPOTLIGHT_SLACK_KEY = "marathon_spotlight_slack_hours"
 MARATHON_SPOTLIGHT_NOTE_KEY = "marathon_spotlight_note_template"
+MARATHON_SPOTLIGHT_FOLLOWS_KEY = "marathon_spotlight"
+MARATHON_SPOTLIGHT_LEAD_MINUTES_KEY = "marathon_spotlight_lead_minutes"
+MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY = "marathon_channel_ping_mode_default"
+MARATHON_CHANNEL_PING_HELP_KEY = "marathon_channel_ping_help"
 MARATHON_BOARD_TEMPLATE_KEY = "marathon_board_template"
 MARATHON_BOARD_LINE_KEY = "marathon_board_line_template"
 MARATHON_BOARD_EMPTY_KEY = "marathon_board_empty_line"
@@ -4652,6 +4656,29 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "goes live. off by default — the events feature announces that run as it starts, so the "
         "shoutout would say it twice. The reminders post either way",
     ),
+    MARATHON_SPOTLIGHT_FOLLOWS_KEY: (
+        "bool",
+        True,
+        "while a marathon on the list is running, its channel is spotlit and the spotlight "
+        "expires at the marathon's end. on by default; a channel already kept for ever (like "
+        "GamesDoneQuick) is never touched, a later expiry is never shortened, and each marathon's "
+        "own Spotlight the channel while it runs switch turns it off for that marathon",
+    ),
+    MARATHON_SPOTLIGHT_LEAD_MINUTES_KEY: (
+        "int",
+        15,
+        "minutes before a marathon's first run that marathon_spotlight turns its channel's "
+        "spotlight on. 15 by default, like marathon_ping_minutes",
+    ),
+    MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY: (
+        "enum",
+        PING_EVENTS,
+        "the pings a NEW channel row gets when it is a marathon channel (one a marathon feed is "
+        "seeded for) that takes marathons: events — the default — mentions roles only inside a "
+        "ping window, which its marathons set from their schedules; always and never as on the "
+        "Go-live page. Every other new row follows spotlight_ping_mode_default, and no existing "
+        "row is changed",
+    ),
     MARATHON_NOTICE_HOME_KEY: (
         "enum",
         "events",
@@ -4678,6 +4705,13 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "Nobody from BaF is on this schedule yet. Black Bloc keeps reading it.",
         (),
         "the board's only line while no BaF run has been found",
+    ),
+    MARATHON_CHANNEL_PING_HELP_KEY: (
+        "On a marathon channel, During events pings only while one of its marathons is running "
+        "— the marathon sets that window from its schedule, and the channel is spotlit for it.",
+        (),
+        "the help line under the Pings choice on a marathon channel's Go-live drawer, saying what "
+        "During events means there",
     ),
     MARATHON_REMINDER_TEMPLATE_KEY: (
         "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}",
@@ -4804,6 +4838,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_WINDOW_SLACK_KEY: (0, 24),
     MARATHON_SPOTLIGHT_LEAD_KEY: (0, 48),
     MARATHON_SPOTLIGHT_SLACK_KEY: (0, 48),
+    MARATHON_SPOTLIGHT_LEAD_MINUTES_KEY: (0, 240),
     MARATHON_FEED_HOURS_KEY: (1, 168),
     MARATHON_FEED_RECENT_KEY: (0, 30),
     MARATHON_LADYARCADERS_FLOOR_KEY: (1, 99999),
@@ -4861,6 +4896,7 @@ KEY_CHOICES[MARATHON_FEED_ACTION_KEY] = MARATHON_FEED_ACTIONS
 KEY_CHOICES[MARATHON_FEED_NOTICE_WHEN_KEY] = MARATHON_FEED_NOTICE_WHENS
 KEY_CHOICES[MARATHON_EVENT_MODE_DEFAULT_KEY] = MARATHON_EVENT_MODES
 KEY_CHOICES[MARATHON_NOTICE_HOME_KEY] = MARATHON_NOTICE_HOMES
+KEY_CHOICES[MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY] = PING_MODES
 KEY_MIN.update({key: floor for key, (floor, _) in MARATHON_RANGES.items()})
 KEY_MAX.update({key: ceiling for key, (_, ceiling) in MARATHON_RANGES.items()})
 TEXT_CHECKS[MARATHON_REMINDER_MINUTES_KEY] = checked_marks
