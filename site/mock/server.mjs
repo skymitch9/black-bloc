@@ -7705,6 +7705,22 @@ route('POST', '/api/events/:id/room/delete', async (context) => {
   return { event: eventRow(event), message: said };
 });
 
+route('POST', '/api/events/:id/spotlight', (context) => {
+  requireStaff(context.session);
+  const event = eventOf(context.params.id);
+  const found = /^(?:https?:\/\/)?(?:www\.|m\.)?twitch\.tv\/([A-Za-z0-9_]{1,25})\/?$/i.exec(String(event.location || '').trim());
+  if (event.status !== 'approved' || eventWhere(event).kind !== 'other' || !found) {
+    throw new Refused(409, 'not_spotlightable', `Event **#${event.id}** cannot be spotlighted: it has to be approved, and its **Where** has to be one twitch.tv address and nothing else. Change the Where to the channel's own address and try again.`);
+  }
+  const login = found[1].toLowerCase();
+  logAction('web.golive.spotlight_added', { target_id: login, details: { event_id: event.id, login } });
+  return {
+    event: eventRow(event),
+    twitch_login: login,
+    message: `**${login}** is spotlighted until the event ends — the go-live channel announces it, reminds people while it runs, and pins it for the duration.`,
+  };
+});
+
 route('POST', '/api/events/forum', (context) => {
   requireStaff(context.session);
   const known = state.settings.get('events_forum_channel_id');
