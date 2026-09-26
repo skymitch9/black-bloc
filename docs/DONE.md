@@ -41,6 +41,10 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-25 — v169: the marathon table's Event column says the mode, not a dash
+
+Owner, 22:0x, verbatim: *"on this page, in marathons, there are 7 columns. column 7 is event. its blank for every entry, why"* — every live marathon is in `none` mode (the default chosen at 14:4x), so the column was all dashes. Fixed on `main` by the conductor (`1c92ec00`, `marathons-section.js:eventCell`: the cell shows `row.event_mode_word` when there is no Events row), deployed **22:00 Phoenix** (release commit `a80be4e0`; gate 8,415 passed + 3 skipped; boot clean 05:00:38–43Z; `/health` 63 ms; the live asset carries the change). Seen on the mock: *No event* ×3, *#5 approved* on the seeded AGDQ 2027. Nothing met Discord; no schema, no snapshot.
+
 ## 2026-09-25 — v168: several guides per command; the marathon and ping-window guides get their commands
 
 One merge over v167, deployed **21:54 Phoenix** (release commit `a90bbe14`, `release.json` v168 at `a34acd82`; gate 8,415 passed + 3 skipped, ruff clean, check.mjs 22 pages / 252 routes, green on the first run; schema 65 → **66**: the partial unique index `guides_one_published_command` retired at boot through `RETIRED_INDEXES` + `DROP INDEX IF EXISTS`, a plain `guides_by_command` index instead). `published_for` returns a list; `/help` names each guide on the command's heading line; the editor's *command taken* refusal is gone; the seed sets `/event` on the two marathon guides and `/golive` on `ping-windows`; the boot seed refresh fills a NULL live command only, never wording. Pre-deploy snapshot `backup-2026-09-25-pre-v168.sqlite3` (3.69 MB, 21:52).
