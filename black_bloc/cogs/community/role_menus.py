@@ -1810,6 +1810,7 @@ class RoleMenuPanel(Panel):
         self.member_id: int | None = None
         self.role_id: int | None = None
         self.removing: bool | None = None
+        self.home: Any = None
 
 
 async def option_counts(db: Any, rows: Any) -> dict[int, int]:
@@ -2049,6 +2050,7 @@ def confirm_panel(bot: Any, guild: Any, previous: Any) -> RoleMenuPanel:
     view.menu_name = getattr(previous, "menu_name", "")
     view.grant_id = getattr(previous, "grant_id", None)
     view.member_id = getattr(previous, "member_id", None)
+    view.home = getattr(previous, "home", None)
     return view
 
 
@@ -2056,6 +2058,7 @@ def confirm_panel(bot: Any, guild: Any, previous: Any) -> RoleMenuPanel:
 
 
 async def render(interaction: discord.Interaction, embed: Any, view: Any, previous: Any) -> None:
+    view.home = view.home or getattr(previous, "home", None)
     retire(previous)
     view.message = await interaction.edit_original_response(
         embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
@@ -2180,6 +2183,15 @@ async def open_grants(interaction: discord.Interaction, member_id: Any, previous
     await render_grants(interaction, member_id, previous)
 
 
+async def open_grants_from(interaction: discord.Interaction, previous: Any, home: Any) -> None:
+    """Another panel's door onto the Grants console; `home` is what its Back presses."""
+    if not await opened(interaction):
+        return
+    embed, view = await build_grants(interaction.client, interaction.guild, None)
+    view.home = home
+    await render(interaction, embed, view, previous)
+
+
 async def open_new_grant(interaction: discord.Interaction, view: Any) -> None:
     if not await opened(interaction):
         return
@@ -2237,6 +2249,9 @@ async def refresh_where(interaction: discord.Interaction, view: Any) -> None:
 
 
 async def back_from(interaction: discord.Interaction, view: Any) -> None:
+    if view.where == GRANTS_VIEW and view.home is not None:
+        await view.home(interaction, view)
+        return
     if view.where in (ADD_VIEW, HAND_VIEW, WHERE_VIEW):
         await open_menu(interaction, view.menu_name, view)
         return

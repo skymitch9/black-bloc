@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-25 (branch `hide-rolemenu`)** — ONE section APPENDED (`RM-a`, `RM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-links`)** — ONE row ADDED to the `ED-` section (`ED-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `event-drawer`)** — ONE section APPENDED (`ED-a`…`ED-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-drawer-lite`)** — ONE section APPENDED (`ML-a`…`ML-d`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3317,3 +3318,15 @@ Rows lettered; the conductor numbers them. These rows replace what `MP-c` says a
 | **`ML-c`** | Below the days, **Settings for this marathon** (shut) ▸ change *Re-read every* ▸ **Save** | It opens to Event (select + the event's state and Unlink / Make an event now), Airs on (select + the ping window) and Re-read every, each with one short help line, and one **Save**. Save keeps the drawer AND the foldout open and says what changed; Save with nothing changed says so. |
 | **`ML-d`** | The foot of the drawer; then `/event` ▸ **Marathons…** ▸ pick the marathon | One Posts line (*Board pinned in #announcements · 2 reminders · 1 shoutout · Refresh the board*), then the moves bar **Read it now · Pause · Remove**, last. The panel card opens on the same two lines (state · dates · source link; read · next · counts · event · channel), then the BaF runs, then **Posts:**, buttons as before. |
 | **`ED-e`** (branch `event-links`) | Open an **approved** event that was announced and has a Discord scheduled event; press each link in **The event** card: *announcement ↗*, *on the server's Events list ↗*, and the review room/post name ↗. Repeat for an event reviewed in a forum post | Each opens Discord at the right place: the announcement message in the announce channel, the event's page on the server's Events list, the review room (or the forum post's thread). ⚠️ If `events_announce_channel_id` was changed after that event was announced, *announcement ↗* lands on *message not found* — expected (the row does not store the channel). An event with no announcement / no scheduled event shows no such row.  |
+
+## Rows `RM-a` … `RM-b` — `/mod` ▸ Role grants…, and `/rolemenu` hiding while role menus are off (branch `hide-rolemenu`, 2026-09-25)
+
+🔨 **BUILT on branch `hide-rolemenu`, NOT merged, NOT deployed.** Owner, 2026-09-25 20:1x, option **"B"**: move the
+role-grants console to `/mod`, then hide `/rolemenu` while `rolemenu_mode` is off. Why in
+[`../info/code-notes.md`](../info/code-notes.md) ▸ *`/mod` ▸ Role grants… and `/rolemenu` hiding again*. Rows lettered;
+the conductor numbers them. ⚠️ The command list re-syncs on boot, so the hide shows only after the deploy's sync.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`RM-a`** | With role menus **off** (the live posture since 2026-09-16) and `hide_commands_when_off` on: type `/` in the server and look for `/rolemenu`; then `/mod` ▸ **Role grants…** ▸ **Give somebody a role…** ▸ **Back** ▸ **Back** | `/rolemenu` is gone from the list (after the deploy's sync; `/settings` ▸ **Turn a feature back on…** now lists *Role menus*). `/mod`'s bottom row reads **Logs · Role grants… · Open on the site**; **Role grants…** opens *Timed roles running right now* (the same console `/rolemenu` ▸ **Grants…** opened: Whose roles?, the grant picker, **Give somebody a role…**, **Back**, **Refresh**); the first **Back** returns to the console, the second to the `/mod` page you left. A member never sees `/mod`; a staffer who lost staff mid-panel gets the staff-only sentence and nothing redraws. Turning role menus **on** brings `/rolemenu` back with its own **Grants…** — both doors work. |
+| **`RM-b`** | With role menus off, find a role request still **pending** in the approval channel (or make one with the mode on, then turn it off) and press **Approve** / **Deny…** on its card | The card's buttons still work exactly as before (they are not part of any panel and not hidden with the command): Approve hands the role over and DMs, Deny asks why and DMs the reason; the card is edited to say who decided. ⚠️ The **Waiting on staff (n)…** list and a menu's **Hand roles out…** live only on `/rolemenu`, so with the mode off they are reachable only by turning it on (or on the site's Role menus page). |

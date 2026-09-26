@@ -573,6 +573,7 @@ NEWER = "newer"
 OLDER = "older"
 EVERYONE = "everyone"
 JUMP = "jump"
+GRANTS = "grants"
 
 BUTTON = "button"
 LINK = "link"
@@ -611,6 +612,7 @@ EVERYONE_MOVE = CaseMove(EVERYONE, EVERYONE_LABEL, row=2)
 JUMP_MOVE = CaseMove(JUMP, "Jump to case #…", row=2, modal=True)
 ROOT_REFRESH_MOVE = CaseMove(REFRESH, "Refresh", row=2)
 LOGS_MOVE = CaseMove(LOGS, "Logs", row=3)
+GRANTS_MOVE = CaseMove(GRANTS, "Role grants…", row=3)
 SITE_MOVE = CaseMove(SITE, "Open on the site", "link", row=3, kind=LINK)
 
 CARD_MOVES = (
@@ -631,6 +633,7 @@ ROOT_MOVES = (
     JUMP_MOVE,
     ROOT_REFRESH_MOVE,
     LOGS_MOVE,
+    GRANTS_MOVE,
     SITE_MOVE,
 )
 
@@ -681,6 +684,7 @@ def root_buttons(
     found.append(JUMP_MOVE)
     found.append(ROOT_REFRESH_MOVE)
     found.append(LOGS_MOVE)
+    found.append(GRANTS_MOVE)
     if has_site:
         found.append(SITE_MOVE)
     return tuple(found)

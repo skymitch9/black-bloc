@@ -1841,6 +1841,51 @@ async def test_leaving_a_grant_alone_changes_nothing(bot, db, lead):
     assert (await grants.get_grant(db, grant_id))["removed_at"] is None
 
 
+async def test_back_from_grants_opened_on_rolemenu_still_lands_on_rolemenu(bot, db, lead):
+    interaction = await open_the_panel(bot, lead)
+    await press(interaction, "Grants…")
+    assert interaction.view.home is None
+
+    await press(interaction, "Back")
+
+    assert interaction.embed.title == menus.PANEL_TITLE
+
+
+async def test_a_door_from_another_panel_keeps_its_way_home_through_a_confirm(bot, db, lead):
+    """`/mod` ▸ Role grants… (owner, 2026-09-25 "B"): the same console, Back goes to its door."""
+    member = FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(1, 99))
+    grant_id = await grants.add_grant(db, GUILD, 900, 1, "staff", until=grants.expires_at(3))
+    came_home = []
+
+    async def home(pressed, view):
+        came_home.append(view.where)
+
+    interaction = FakeInteraction(bot, lead)
+    await cog_module.open_grants_from(interaction, None, home)
+    assert interaction.embed.title == menus.GRANTS_TITLE
+    await choose(interaction, menus.GRANT_PICK, [str(grant_id)])
+    await press(interaction, "End it now")
+    await press(interaction, "Yes, take it back")
+    await press(interaction, "Back")
+    assert came_home == []
+    assert interaction.embed.title == menus.GRANTS_TITLE
+
+    await press(interaction, "Back")
+
+    assert came_home == ["grants"]
+    assert member.edits == [[99]]
+
+
+async def test_the_other_door_refuses_a_member_in_words(bot, db, lead):
+    somebody = FakeMember(bot.guild, user_id=950, display_name="Di")
+    interaction = FakeInteraction(bot, somebody)
+
+    await cog_module.open_grants_from(interaction, None, None)
+
+    assert "staff only" in interaction.sent
+    assert interaction.view is None
+
+
 async def test_push_it_back_moves_the_end_date_from_the_one_it_had(bot, db, lead):
     FakeMember(bot.guild, user_id=900, display_name="Bo", roles=(1,))
     grant_id = await grants.add_grant(db, GUILD, 900, 1, "staff", until=grants.expires_at(3))
