@@ -25,7 +25,8 @@ from .timezones import unix
 TRACKER = "tracker"
 HORARO_FEED = "horaro"
 OENGUS_FEED = "oengus"
-FEED_SOURCES = (TRACKER, HORARO_FEED, OENGUS_FEED)
+HORARO_EVENTS_FEED = "horaro_events"
+FEED_SOURCES = (TRACKER, HORARO_FEED, OENGUS_FEED, HORARO_EVENTS_FEED)
 ADD = "add"
 SUGGEST = "suggest"
 ACTIONS = (ADD, SUGGEST)
@@ -50,17 +51,20 @@ SEEDS = (
     Seed("gamesdonequick", TRACKER, TRACKER_BASES[GDQ], "GDQ"),
     Seed("rpglimitbreak", TRACKER, TRACKER_BASES[RPGLB], "RPG Limit Break"),
     Seed("speedstuff4charity", OENGUS_FEED, "speedstuff4charity", "Speed Stuff 4 Charity"),
+    Seed("fastpacedevents", HORARO_EVENTS_FEED, "fastpacedevents", "Fast Pace"),
 )
 
 PICK_GDQ = "gdq"
 PICK_RPGLB = "rpglb"
 PICK_HORARO = "horaro"
 PICK_OENGUS = "oengus"
+PICK_HORARO_EVENTS = "horaro_events"
 PICKS = {
     PICK_GDQ: (TRACKER, TRACKER_BASES[GDQ]),
     PICK_RPGLB: (TRACKER, TRACKER_BASES[RPGLB]),
     PICK_HORARO: (HORARO_FEED, None),
     PICK_OENGUS: (OENGUS_FEED, None),
+    PICK_HORARO_EVENTS: (HORARO_EVENTS_FEED, None),
 }
 PICK_WORDS = {
     PICK_GDQ: "the GDQ tracker",
@@ -68,6 +72,10 @@ PICK_WORDS = {
     PICK_HORARO: "horaro.net — give the event's slug",
     PICK_OENGUS: (
         "Oengus — finds this channel's marathons on oengus.io (Speed Stuff 4 Charity's home)"
+    ),
+    PICK_HORARO_EVENTS: (
+        "horaro.net events — finds this channel's events on horaro.net, searching by the "
+        "feed's name (Fast Paced Events' home)"
     ),
 }
 PICK_NAMES = {PICK_GDQ: "GDQ", PICK_RPGLB: "RPG Limit Break"}
@@ -115,6 +123,7 @@ FEED_FORGOT = "**{name}** forgot {count} removed event(s); the next check may ad
 FEED_NOTHING_TO_FORGET = "**{name}** remembers no removed event, so there was nothing to forget."
 FEED_LOOKED = "**{name}** forgot {count} dismissed event(s) and looked again."
 FEED_REREAD = "It read every Oengus marathon's record again ({count} remembered before)."
+HORARO_EVENTS_WORD = "horaro.net events"
 SUGGESTION_GONE = "**{event}** is not waiting on **{name}** any more, so nothing was changed."
 SUGGESTION_DISMISSED = "**{event}** is dismissed — **{name}** will not suggest it again."
 SUGGESTION_ALREADY = "**{event}** is already on the list as **{marathon}**, so nothing was added."
@@ -220,10 +229,14 @@ def marathon_source(feed: Any) -> str | None:
         return HORARO
     if kind == OENGUS_FEED:
         return OENGUS
+    if kind == HORARO_EVENTS_FEED:
+        return HORARO
     return None
 
 
 def source_word(feed: Any) -> str:
+    if _cell(feed, "source") == HORARO_EVENTS_FEED:
+        return HORARO_EVENTS_WORD
     found = marathon_source(feed)
     if found == HORARO:
         return f"horaro.net/{_cell(feed, 'feed_ref')}"
@@ -237,6 +250,8 @@ def pick_of(given: Any) -> tuple[str, str | None] | None:
 
 
 def pick_for(feed: Any) -> str | None:
+    if _cell(feed, "source") == HORARO_EVENTS_FEED:
+        return PICK_HORARO_EVENTS
     source = marathon_source(feed)
     if source == HORARO:
         return PICK_HORARO
@@ -482,6 +497,7 @@ __all__ = [
     "ACTIONS",
     "ADD",
     "FEED_SOURCES",
+    "HORARO_EVENTS_FEED",
     "HORARO_FEED",
     "OENGUS_FEED",
     "SEEDS",

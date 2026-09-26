@@ -1,0 +1,73 @@
+{
+  "data": [
+    {
+      "id": "1b50792ekia6j7b40b",
+      "name": "Fast Pace for Friendspace 3",
+      "slug": "fpff3",
+      "link": "https://horaro.net/fpff3",
+      "description": null,
+      "website": "https://fastpacedevents.com/",
+      "twitter": "FastPacedEvents",
+      "bluesky": "fastpacedevents.bsky.social",
+      "twitch": "fastpacedevents",
+      "links": [
+        {
+          "rel": "self",
+          "uri": "https://horaro.net/-/api/v1/events/1b50792ekia6j7b40b"
+        },
+        {
+          "rel": "schedules",
+          "uri": "https://horaro.net/-/api/v1/events/1b50792ekia6j7b40b/schedules"
+        }
+      ]
+    },
+    {
+      "id": "07508t3f3e5202b4cc",
+      "name": "Fast Pace for Headspace 2023",
+      "slug": "fpfh2023",
+      "link": "https://horaro.net/fpfh2023",
+      "description": null,
+      "website": "https://oengus.io/marathon/FPFH2023",
+      "twitter": "FastPacedEvents",
+      "bluesky": null,
+      "twitch": "FastPacedEvents",
+      "links": [
+        {
+          "rel": "self",
+          "uri": "https://horaro.net/-/api/v1/events/07508t3f3e5202b4cc"
+        },
+        {
+          "rel": "schedules",
+          "uri": "https://horaro.net/-/api/v1/events/07508t3f3e5202b4cc/schedules"
+        }
+      ]
+    },
+    {
+      "id": "4b50c871fk1bxkb41c",
+      "name": "Fast Pace for Headspace",
+      "slug": "fpfh",
+      "link": "https://horaro.net/fpfh",
+      "description": null,
+      "website": "https://oengus.io/marathon/FPFH2021",
+      "twitter": "AmberCyprian",
+      "bluesky": null,
+      "twitch": "tgh_sr",
+      "links": [
+        {
+          "rel": "self",
+          "uri": "https://horaro.net/-/api/v1/events/4b50c871fk1bxkb41c"
+        },
+        {
+          "rel": "schedules",
+          "uri": "https://horaro.net/-/api/v1/events/4b50c871fk1bxkb41c/schedules"
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "offset": 0,
+    "max": 20,
+    "size": 3,
+    "links": []
+  }
+}

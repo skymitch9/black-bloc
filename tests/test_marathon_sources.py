@@ -387,6 +387,24 @@ async def test_the_horaro_client_reads_the_json_export_and_the_events_list():
     assert ms.schedule_page("horaro", "esa/2026-summer2") == "https://horaro.net/esa/2026-summer2"
 
 
+async def test_the_horaro_events_search_follows_its_next_link_and_never_lists_everything():
+    first = fixture("horaro_events_search.json")
+    nxt = {"rel": "next", "uri": "https://horaro.net/-/api/v1/events?name=Fast%20Pace&offset=100"}
+    request, seen = pages(
+        (200, first | {"pagination": {"links": [nxt]}}), (200, {"data": [], "pagination": {}})
+    )
+    found = await ms.ScheduleClient(request=request).horaro_events("Fast  Pace")
+    assert [one["slug"] for one in found] == ["fpff3", "fpfh2023", "fpfh"]
+    assert seen == ["https://horaro.net/-/api/v1/events?name=Fast%20Pace&max=100", nxt["uri"]]
+    request, seen = pages()
+    assert await ms.ScheduleClient(request=request).horaro_events(" ") == [] and seen == []
+    elsewhere = {"rel": "next", "uri": "https://x.y/"}
+    assert ms.horaro_next({"pagination": {"links": [elsewhere]}}) is None
+    request, _ = pages((503, None))
+    with pytest.raises(ms.ScheduleError, match="horaro.net answered 503"):
+        await ms.ScheduleClient(request=request).horaro_events("Fast Pace")
+
+
 async def test_a_horaro_slug_that_does_not_answer_is_refused_in_words():
     request, _ = pages((404, None))
     with pytest.raises(ms.ScheduleError, match="horaro.net has no event nope"):
