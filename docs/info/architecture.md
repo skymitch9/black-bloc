@@ -90,6 +90,8 @@
 > `SCHEMA_VERSION` is imported from `black_bloc/storage/db.py`, and the site figures come from
 > `node site/mock/check.mjs` against `site/mock/server.mjs`.
 >
+> **2026-09-25 (the feed notice waits for the schedule, branch `marathon-notice-when` off `main` `791b5543`; design `info/marathon-feeds-design.md` top line; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the migration has NOT run on the live database):** schema **66 → 67** (measured: `SCHEMA_VERSION`) — `marathons.noticed_at TEXT` through `ADDED_COLUMNS`, backfilled `= added_at` for rows with no `feed_id`. Registry keys **491 → 492** (measured: `len(settings_store.KEY_TYPES)`) — `marathon_feed_notice_when` (enum `published`/`added`, default `published`, Marathons group). Routes and pages unchanged (`check.mjs`: *22 pages, 252 routes*). ⚠️ Nothing else on this page was re-checked.
+>
 > **2026-09-25 (several guides per command, branch `guides-per-command` off `main` `582977f1`; design
 > `info/guides-design.md` ▸ Deviation 1 superseded; ⚠️ BUILT, NOT MERGED, NOT DEPLOYED, nothing has met Discord and the
 > migration has NOT run on the live database):** schema **65 → 66** (measured: `SCHEMA_VERSION`) — the partial unique
