@@ -1,5 +1,7 @@
 # Spotlight — Twitch channels that are not Discord members, announced, bumped every N hours, pinned for the duration, staff-curated with an expiry
 
+> ➕ **2026-09-25 (branch `marathon-people`, 🔨 BUILT, NOT MERGED): a marathon's People card spotlights a runner through `spotlight_channel`** — a channel-only row with the runner's run dates (lead/slack keys), remembered in `marathon_spotlights`; **Stop spotlighting** is `forget_spotlight`. No spotlight code changed. [`marathon-people-design.md`](marathon-people-design.md) §B.
+
 > ➕ **EXTENDED 2026-09-25 (branch `spotlight-ping-windows`, 🔨 BUILT, NOT MERGED, NOT DEPLOYED): a channel row's pin and reminders no longer decide its pings** — `always` (the default, today's behaviour), `never`, or `events` (only inside a ping window). Announce, pin and remind are untouched. Read [`spotlight-ping-windows-design.md`](spotlight-ping-windows-design.md).
 
 > 🔴 **SUPERSEDED IN PART, 2026-09-21 (branch `channel-streamers`): the spotlight row IS NOW THE CHANNEL RECORD.**

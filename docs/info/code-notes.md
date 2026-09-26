@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-25 — one section APPENDED, nothing re-keyed**: *A marathon opens on its people* (branch `marathon-people`, off `main` `def0c5ef`, keyed against `b72c32a8`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The Events page made plain — three sections, Schedule first, BaF* (branch `marathon-ux`, off `main` `5ed00717`, keyed against `33c4363d`). Before that:
 > Audience: anyone reading the source. Status: TRACKED (owner, 2026-08-31 — was local-only until then). Last verified: **2026-09-25 — one section APPENDED, nothing re-keyed**: *A marathon's event mode, and a channel that takes no marathons* (branch `marathon-event-modes`, off `main` `bababb65`, keyed against `20cfcf0c`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *Marathon feeds — the bot finds the next events itself* (branch `marathon-feeds`, off `main` `05fbd0e6`, keyed against `0f973d75`). Before that:
@@ -8456,3 +8457,31 @@ Why in [`marathon-ux-design.md`](marathon-ux-design.md). Keyed against `33c4363d
 | `site/public/assets/page-events.js:328` `id: 'queue'` | The section is titled *Events* now; the id keeps `sect-queue` so a remembered open/shut state and any old anchor still land. |
 | `site/public/assets/page-events.js:388` `machinerySection` | ONE *Settings and logs* section with id `settings` (keeps `#sect-settings`); the Marathons settings foldout carries `sect-marathon-settings`, the two log holders `sect-logs-events` / `sect-logs-marathon` — every id the two old sections and two log sections had. |
 | `site/public/assets/page-events.js:345` `unsectioned` | The page-posts / page-raidtrain / page-requests pattern (a shared block demoted out of the rail), plus a wrapper that keeps the old section id. |
+
+## A marathon opens on its people (branch `marathon-people`, 2026-09-25)
+
+Why in [`marathon-people-design.md`](marathon-people-design.md). Keyed against `b72c32a8`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/storage/db.py:1118` `marathon_spotlights` | The marathon's memory of the runners IT spotlit — nothing more. The channel row itself is an ordinary `spotlight_channels` row; `UNIQUE(marathon_id, login)` keeps one memory per runner; `delete_marathon` forgets them and leaves the Go-live rows alone. A memory is believed only while a channel row with that login still has that `spotlight_id` (`people_state`), so a row removed on the Go-live page is not shown as spotlit. |
+| `black_bloc/marathon_people.py:105` `group_people` | Everyone on a schedule ONCE: a member by their user id (across every name they run under), anyone else by Twitch login, else the normalised name. Dropped runs are not counted. Each entry keeps its runs as briefs with the name and part AS ON THAT RUN — that is how a slot's person maps back to its entry (`entry_for`, and `entryFor` on the site) without a second key rule. |
+| `black_bloc/marathon_people.py:162` `baf_order` | On now first, then the soonest next run, then people whose runs are all done (by their last end). |
+| `black_bloc/marathon_people.py:177` `matched_by` | Re-derives which of `match_people`'s three steps decided a member — the stored `people` JSON only keeps the `user_id`. A pairing counts only if it points at the SAME member (a pairing overridden by nothing else is the one that won). |
+| `black_bloc/marathon_people.py:215` `looks_like` | §B2.2's near miss, a suggestion only: same letters ignoring case/punctuation, one edit away (4+ letters), or the head of an underscored/dotted username. A name with no Twitch link that equals a username exactly is skipped — `match_people` already linked it. |
+| `black_bloc/marathon_people.py:241` `spotlight_span` | From the BaF block the whole span, from a slot that run (§B2.6), lead/slack from the two keys; the marathon's own dates only when the person has no run times. |
+| `black_bloc/marathon_people.py:280` `days_of` | The panel's day select. The site groups the same way in `marathon-words.js:daysOf` from `run_list` + the answer's `timezone` — both in the guild's `default_timezone`, never the reader's. |
+| `black_bloc/cogs/content/marathon_people.py:147` `spotlight_runner` | Under the marathon's lock: find the person, refuse in words (no login, bad login, already on the Go-live page, a run not theirs, runs over), then `spotlight_channel` — the ONE path the Go-live page uses, so its `golive.spotlight_added` row is written there — then remember it, then log `marathon.runner_spotlit`. A start already gone by is passed as NULL (spotlit now); pin follows `spotlight_pin`. |
+| `black_bloc/cogs/content/marathon_people.py:236` `unspotlight_runner` | `forget_spotlight` (the Go-live Remove, which closes an open session first) only when the remembered row still exists with that login; either way the memory goes. A row already gone is a success in words, not a refusal. |
+| `black_bloc/cogs/content/marathon_people.py:351` `build_people` | One builder for member and staff: a member gets the BaF lines and Back (§B2.4); staff get the day → slot → person path. The view carries `day` / `run_id` / `person` so every move redraws the same place (`reopen`). |
+| `black_bloc/cogs/content/marathon_people.py:634` `PeopleButton` | Persistent (KI-20), registered in `Marathons.cog_load`. Sends a NEW ephemeral message — the notice it sits on is a public post and must not be edited. |
+| `black_bloc/cogs/content/marathon_feeds.py:1506` `people_on` | The one line the feed-added notice gained. Kept as its own helper so the `shadow-home-per-feature` merge (which rebuilds that notice) can wrap its own view with it. |
+| `black_bloc/api/tools/marathons.py:161` `entry_row` | The site's person row. `channel_id` is ANY Go-live row for the login (shows *already on the Go-live page*); `spotlight_id` only when this marathon's memory still matches that row. |
+| `site/public/assets/marathon-words.js:222` `daysOf` | PURE, node-tested. `Intl.DateTimeFormat` with the guild's `timeZone`, `formatToParts` → a `YYYY-MM-DD` key; `Sept` is folded to `Sep` (newer ICU). Today open, past shut, future shut unless it holds a BaF run. |
+| `site/public/assets/marathons-section.js:582` `slotRow` | A slot is a native `<details>`: one click opens the people and the run's staff moves inline (Deviation 1). `shown.slots` remembers which are open across the redraw a move causes; `data-search` feeds the filter. |
+| `site/public/assets/marathons-section.js:622` `scheduleBlock` | The filter hides non-matching slots, opens every day with a hit, and puts each day back to its own open rule when cleared (`data-open`). |
+| `site/public/assets/marathons-section.js:656` `otherPairings` | Staff final say: a pairing whose name is not on this schedule would otherwise have no Unlink anywhere now that *Who is who* is gone. |
+| `site/public/assets/marathons-section.js:807` `shown.focus` | After a move from a slot the drawer is rebuilt; the slot it came from is reopened and scrolled back into view. |
+| `site/public/assets/marathons-section.js:819` `feedStep` | Inside the Sources drawer a move reopens that drawer with the outcome; from the page it parks the sentence for the reload as before. |
+| `site/public/assets/marathons-section.js:1070` `feedWaitingStrip` | The Sources drawer is shut until pressed, so a waiting feed suggestion also gets a line under the table — the same "never fold a decision away" rule `marathon-ux` Deviation 3 set for the old foldout. |
+| `site/mock/server.mjs:6605` `marathonPeopleOf` | The mock's copy of `group_people` / `matched_by` / `looks_like`; `marathonBoard` answers the same shape as `GET /api/marathons/{id}/people`. |

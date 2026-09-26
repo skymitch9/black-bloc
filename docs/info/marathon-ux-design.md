@@ -1,5 +1,7 @@
 # The Events page, made plain — three sections, one Schedule card first in the marathon drawer, one Next up, and "BaF" where it said "ours"
 
+> ➕ **2026-09-25 (branch `marathon-people`, 🔨 BUILT, NOT MERGED): the drawer is now Schedule · People · Event · The channel · Posts** — *Runs* and *Who is who* fold into **People** (BaF on top, the schedule by day and slot), the *Where marathons come from* foldout became a **Sources…** drawer and the table gained a **Source** column. [`marathon-people-design.md`](marathon-people-design.md).
+
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 16:3x Phoenix),
 > dispatched to Opus as branch `marathon-ux`** off `main` (v165 live 16:15). **Last verified: 2026-09-25 16:2x** — by
 > LOOKING, in Chrome against the local mock on `main` (`http://localhost:8797/events.html`, the AGDQ 2027 drawer

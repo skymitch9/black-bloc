@@ -1,5 +1,7 @@
 # The source is a column, and a marathon opens on its people — BaF first, then everyone, each one linkable or spotlightable
 
+> 🔨 **BUILT 2026-09-25 on branch `marathon-people` (worktree `C:/lcw/bb-marathon-people`), NOT MERGED, NOT DEPLOYED** — see *Deviations* and *What was NOT verified* at the foot.
+>
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 17:1x Phoenix)
 > — dispatches to Opus as branch `marathon-people` AFTER `shadow-home-per-feature` merges** (same files:
 > `marathons-section.js`, the marathon cog cards). **Last verified: 2026-09-25 17:0x** against `main` `b5427c62`
@@ -118,8 +120,91 @@ channel-only row on the Go-live page with the marathon's dates; f: `/event` ▸ 
 
 ## Deviations
 
-*(the build agent writes this)*
+*(build agent, branch `marathon-people`, 2026-09-25 — 🔨 BUILT, NOT MERGED, NOT DEPLOYED. Commits `3f270ed7` (Python:
+table, keys, the people answer, Spotlight, the panel's People…, the notice's People…) and `b72c32a8` (the site and the
+mock); docs in the commit after.)*
+
+1. **The slot view is an INLINE EXPANSION**, not a sub-view: each slot is a native `<details class="mx-slot">` inside its
+   day's `foldout()`. `openDrawer` has no view stack — a sub-view would replace the drawer body and lose the open day and
+   the scroll. Opening a slot lists each person on their own line (name · ✦BaF · part · twitch.tv/login · how they
+   matched · the moves), then the run's own staff moves (*Shout it now / Mark done / Mark it live / Mark it upcoming /
+   Make it now / the event*, the retired Runs card's `runTools`). Open slots survive the redraw a move causes
+   (`shown.slots`) and the slot a move came from is scrolled back into view (`shown.focus`).
+2. **Two new modules, not a longer `marathon.py`**: `black_bloc/marathon_people.py` (pure — grouping, the BaF order,
+   how a member matched, the near-miss rule, the spotlight span, days and slots, the words) and
+   `black_bloc/cogs/content/marathon_people.py` (the table, `people_state`, `spotlight_runner`, `unspotlight_runner`, the
+   panel's People views, the notice's `PeopleButton`). The tests mirror them (`tests/test_marathon_people.py`,
+   `tests/cogs/content/test_marathon_people.py`) rather than the §C file names; the §B2.3 race tests did land in
+   `tests/test_marathon.py` and `tests/cogs/content/test_marathon.py`.
+3. **The spotlight's dates** read §B with §B2.6: from the BaF block, first run − `marathon_spotlight_lead_hours` → last
+   run's end + `marathon_spotlight_slack_hours`; from a slot, that one run; the marathon's own dates only when the person
+   has no run times at all. A start already gone by is stored as NULL (spotlit now) rather than a date in the past, and
+   an end already gone by is **refused in words** (`runs_over`, 409) — a new refusal the design did not list.
+4. **Pin follows `spotlight_pin`** (`spotlight_channel(pin=None)`), announce and spotlight are forced ON — "exactly as
+   any spotlit channel". `spotlight_pin` defaults on, so the row IS pinned unless staff turned that setting off.
+5. **`GET /api/marathons/{id}/people` changed shape**: a list of pairings → `{marathon_id, timezone, pairings, baf[],
+   others[]}`. Nothing read the old list (the drawer reads `pairings` from `GET /{id}`). `timezone` (the guild's
+   `default_timezone`) is what the site groups days by. Each person carries, beyond §B's list: `key`, `member_name`,
+   `username`, `avatar_url`, `first_at`, `last_end`, `matched_by` / `matched_word`, `channel_id` (ANY Go-live row for
+   their login), `spotlight_starts`, `looks_like`. `spotlight_id` is set only when THIS marathon remembers the row and
+   the row still exists with that id — a row removed on the Go-live page is simply not shown as spotlit.
+6. **"Who is who" is retired on the site with nothing lost**: a pairing for a name on the schedule shows on that person
+   (*linked by staff · Unlink*); a pairing for a name NOT on the schedule (an every-schedule pairing, or a name the
+   schedule dropped) lands in a foldout *Links to names not on this schedule · N* with Unlink, so no stored decision
+   becomes unreachable (staff final say). The free-text *Pair a runner…* form is gone from the site — linking starts
+   from a person on a slot, pre-filled. The panel keeps its *Pair a runner…*.
+7. **Sources…**: the feed rows, *Add a feed…* and the open suggestions render inside a drawer titled with
+   `sourcesTitle` (*Where marathons come from · 2 sources · next check in …*). Because that drawer is shut until pressed,
+   a waiting suggestion also puts a strip line under the table — *1 new event from a source is waiting for staff:
+   Sources…* — the `marathon-ux` Deviation 3 rule (a decision for staff is never folded away). A move made inside the
+   drawer reopens it with the outcome.
+8. **Open on Go-live** links `golive.html#streamers` (the Streamers section). The Go-live page has no per-row deep link;
+   building one was out of scope.
+9. **Link to a member… is offered for everyone a staff link did not decide**, members matched by their Twitch link or
+   Discord name included (a staff link beats the automatic match — staff final say). The BaF block shows how each
+   member matched and **Unlink** only when a pairing decided it.
+10. **The panel**: members reach People… through a new root select *Who from BaF is on… pick a marathon* (a member had
+    no marathon pick before); staff through **People…** on the card (row 4, beside Back). Staff: the BaF lines, then a
+    day select (*Fri 25 Sep · 12 slot(s) · 4 BaF*) → a slot select (time · game, the people as the description; 25 a
+    day, and the card says so past that) → the slot view: a person select, then a `UserSelect` *Link to a member…* and
+    **Spotlight** / **Stop spotlighting** / **Unlink** / **Link @near-miss** buttons, drawn only when they apply. The
+    run moves are NOT repeated in the panel's slot view — the card's run pick keeps them.
+11. **The notice's People…** is one persistent `DynamicItem` (`marathon:people:<id>`, KI-20), added by one helper
+    `marathon_feeds.people_on` on the feed-ADDED notice only (a suggest notice has no marathon yet). It opens the People
+    view privately; a member who presses it gets the BaF-only view. It sits beside Pause it / Remove it on `main`; the
+    `shadow-home-per-feature` merge should keep `people_on(...)` around whatever view its §E builds.
+12. **Merge collisions to expect**: `SCHEMA_VERSION` 64 → **65**; `tests/test_settings_store.py` key count 482 → **485**
+    (three keys, the KI-36 shape); `Marathons.cog_load` registers `PeopleButton` beside `NextButton, FeedButton`; the
+    mock's AGDQ 2027 now ends ~2 days out (was +440 min) and carries five more runs (15–19), channel row 6
+    (`flyingludicolo`) and one `marathonSpotlights` row.
+13. **Near-miss rule, as built** (§B2.2): a person who is not a member, whose schedule name or Twitch login has the same
+    letters as a guild member's username ignoring case and punctuation, or is one edit from it (4+ letters), or is the
+    head of an underscored/dotted username (`gz` / `gz_hero`). The exact-username rule still links by itself (and still
+    only for a name with no Twitch link).
+14. **§B2.3 needed no code**: `run_fields` already joins every BaF mention and a run posts once. Two tests prove it.
+15. **Day folds** follow §B exactly (today open, past shut, future shut unless it holds BaF), plus: a day holding an open
+    slot stays open across a redraw.
+16. **Commit shape**: two build commits (Python; site + mock) and one docs commit, not the nine boundaries the brief
+    listed — the storage, the answer and the shared functions landed and went green together.
 
 ## What was NOT verified
 
-*(the build agent writes this)*
+- **Not against the real bot or Discord.** The panel's People views and the notice's People… button were checked only
+  by the test suite (embed text, the components drawn, the custom id round-trip); nothing was clicked in a Discord
+  client, and no notice was posted anywhere.
+- **Not every site move was pressed.** Rendered in `chrome-headless-shell` 149.0.7827.22 over raw CDP against this
+  worktree's mock on `MOCK_PORT=8801`, zero console errors on every render: `events.html` (the Source column,
+  *Sources…*), `events.html#marathon-1` (Schedule · People · Event · The channel · Posts; BaF · 3; *Fri 25 Sep · 12 slots
+  · 4 BaF* open, *Sat 26 Sep · 2 slots · 1 BaF* open, *Sun 27 Sep · 2 slots · 0 BaF* shut), the race slot opened (five
+  lines: Casey ✦BaF, TheKingsPride, QuietKid *looks like @quietkid — Link?*, Peas, Moth ✦BaF), the Sources drawer, and
+  the race at 390 px. **Pressed:** Spotlight… on a slot → confirm → *Spotlit until …* with Open on Go-live and Stop
+  spotlighting; the near-miss *Link?* → QuietKid became ✦BaF and joined the BaF block; Link to a member… OPENED
+  (pre-filled with @quietkid) but was not confirmed. **Not pressed:** Stop spotlighting, Unlink, Spotlight… from the
+  BaF block, typing in the schedule filter, any feed move inside the Sources drawer, the Open on Go-live link. The
+  routes behind them are exercised by `check.mjs` (mock) and the API tests (real routers).
+- **Light and other themes** were not rendered; only the default dark theme at 1400 px and 390 px.
+- **A browser in a zone other than the guild's** was not rendered: days and slot times use `default_timezone`, the
+  *Spotlit until* words use the browser's zone.
+- **A real GDQ-sized schedule** (≈150 runs, ≈250 people) was not timed: `people_state` reads every channel row once per
+  call and walks every guild member per stranger for the near-miss rule; the panel recomputes it on every press.
+- **The merge with `shadow-home-per-feature`** was not tried.
