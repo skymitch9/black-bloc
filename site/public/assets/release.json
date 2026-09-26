@@ -1,13 +1,10 @@
 {
-  "release": "v166",
-  "commit": "9b84b06e",
+  "release": "v167",
+  "commit": "1b296a60",
   "changed_features": [
-    "birthday",
-    "events",
-    "golive",
-    "marathon",
-    "modmail",
-    "poll",
-    "posts"
+    "core",
+    "guides",
+    "mod",
+    "rolemenu"
   ]
 }
