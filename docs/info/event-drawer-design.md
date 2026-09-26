@@ -67,8 +67,57 @@ stream; d: a linked marathon shows its line). NOT `TODO.md` / `DONE.md` / `deplo
 
 ## Deviations
 
-*(the build agent writes this)*
+Built on branch `event-drawer` (off `main` `ac4e79e2`), code commit `847874ed`. 🔨 **BUILT, NOT MERGED, NOT DEPLOYED.**
+
+1. **Announced, Discord event and a forum post show as words, not links.** The event row carries only `announced` /
+   `scheduled` booleans and the review place's id, and the site knows no guild id, so a message / event / post URL
+   needs a route change (§B forbids one). *Announced* reads *yes — the announcement is up*, *Discord event* reads
+   *made — it is on the server's Events list*, the review place is its name (`nameNode`) as the section showed it.
+2. **Delete this post as well as Delete this room.** `POST /{id}/room/delete` removes either kind (`NO_PLACE`), so the
+   button follows the kind (staff final say). Its confirm carries the route's optional `note` (*A line the host is sent
+   (if the event is still open)*, the Discord card's own label) and says an open event is called off with it.
+3. **Move to the forum sits beside the review channel**, not in Decide — it is a move of the room, not a decision. The
+   queue row keeps it too. The two share `event-drawer.js:forumMove`.
+4. **A decided event shows *Decided by …* AND the moves still allowed** (an approved event keeps **Cancel…**), not the
+   decision *instead of* buttons — dropping Cancel from the drawer would lose a move. *Why not* shows only when set.
+5. **Spotlight this stream is decided on the page** by a mirror of `spotlight_login` (approved, Where is *somewhere
+   else*, one `twitch.tv/<login>` address). The route still decides; a refusal shows its sentence.
+6. **The mock gained `POST /api/events/{id}/spotlight`** so the move can be pressed there; it answers in words and logs
+   `web.golive.spotlight_added` but does NOT add a Go-live row. `contract.json` has NO entry for it (the real router
+   would need the spotlight path faked — not attempted). The contract's `GET /api/events/{event_id}` nested list grew
+   by the eleven keys the drawer reads (all already in `event_row`); `read_by` labels moved to `event-drawer.js`.
+7. **Code shape:** the drawer is its own module, `site/public/assets/event-drawer.js` (the `marathons-section.js`
+   pattern); `whereControl` and the editor moved there unchanged. `page-events.js` went from 401 to 188 lines.
+8. **A settled event gets a quiet sentence** (*This one is settled…*) where Change it would be, not a foldout that
+   opens onto a refusal.
+9. **After Save the drawer redraws with Change it shut** — the fresh facts show the edit and the outcome sits at the
+   top of the drawer. A refused Save shows its sentence under Save, inside the fold, with every field as typed.
+10. **A redraw keeps the old content until the fresh row lands** (no *Getting the event…* flash); only a first open
+    shows it.
+11. **`openEvent` yields one task before drawing** (`event-drawer.js:tick`), so the marathon drawer's own `close`
+    handler runs first and forgets its id; otherwise *Open ↗* from an event back to the marathon it came from would be
+    ignored (its hash would equal the marathon section's stale `shown.id`). The round trip was pressed and works.
+12. **Where shows the channel and the typed place together** when both are set (a channel with a Twitch link beside
+    it), and a one-word address becomes a link (a loose mirror of `events.py:where_link`: `http(s)://…` or a bare
+    host).
+13. **Commit shape:** one code commit and one docs commit, not the four boundaries the brief listed — the cards, the
+    fold, the redraw and the deep links were built and rendered together.
 
 ## What was NOT verified
 
-*(the build agent writes this)*
+- **Nothing met the real bot or Discord.** Every press was against this worktree's mock (`MOCK_PORT=8803`, default
+  `MOCK_TEST_MODE`) in `chrome-headless-shell` 149.0.7827.22 over raw CDP.
+- **Pressed on the mock:** the row's Open (#4), `#detail=4` (rewritten to `#event-4`), `#event-5`, **Approve** on #4
+  (the drawer redrew as *approved* with *Decided by*, Cancel and Spotlight this stream; the queue's count fell under
+  it), **Deny** with a blank reason (the route's sentence shown in the drawer) and with a reason (*Why not* shown,
+  Change it replaced by the settled line), **Save** on #3 (title changed, drawer stayed open, queue updated),
+  **Spotlight this stream** on #5 (the route's words), the Marathon card's **Open ↗** (the AGDQ drawer), the marathon
+  drawer's Event **Open ↗** into #5 and back, and Close (the hash cleared).
+- **Not pressed:** Cancel… and Delete this room from the drawer, Deny… and Cancel… on the row after this change (they
+  are the same `eventMoves` code), browser Back while a drawer is open.
+- **Never rendered:** *Move to the forum* in the drawer (the mock's review mode is not `forum`), an event reviewed in a
+  forum **post**, an event with *Now* (`moved_word`) or *Announced* set, a marathon-**run** event.
+- **Mock quirks seen, not changed:** seed #4 ends before it starts (*0m*); Save moves the start by the zone offset
+  because the mock reads `start` as UTC and ignores `tz` — the editor code is unchanged from before. #5's description
+  shows a raw `<#…>` mention, as the section did.
+- Light theme, a browser zone other than America/Phoenix, and keyboard focus order inside the drawer were not checked.

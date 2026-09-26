@@ -1,5 +1,7 @@
 # Events as a forum under BlackMail — one post per event, like requests and modmail
 
+> ➕ **2026-09-25 (branch `event-drawer`, 🔨 BUILT, NOT MERGED): the website's event review is a drawer** — Approve / Deny… / Cancel… in its Decide card, the review room or post with **Delete this room/post** and **Move to the forum** beside it, **Spotlight this stream** on an approved Twitch event; the same routes, the row keeps its moves. [`event-drawer-design.md`](event-drawer-design.md).
+
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · ✅ **LIVE as v136** — merge `32f4827`, release `bb94a92`,
 > deployed **2026-09-17 22:07** Phoenix, `events_review_mode` ships **room**; sweeps **596–602** are the owner's; verified: boot log clean (logged in 22:07:41, no traceback — the schema-45 column applied silently as ADDED_COLUMNS does), /health ready; Make the forum pressed on the events page 22:08 → POST /api/events/forum 200 and the guild lists forum #events 1550372982566686802 under BlackMail with the six tags (pending, approved, denied, live, done, cancelled) read by token; the reply names test mode and the claim. NOT yet: a post — that needs a proposed event after the mode flip (rows 597–602). Was: BUILT on branch `events-forum` off `main` `a7399b0`. Read the `## Deviations`
 > foot BEFORE the sections above: **fifteen** things differ from what is written here, and deviations **1, 3, 5 and

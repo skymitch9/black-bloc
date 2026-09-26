@@ -1,5 +1,7 @@
 # The Events page, made plain — three sections, one Schedule card first in the marathon drawer, one Next up, and "BaF" where it said "ours"
 
+> ➕ **2026-09-25 (branch `event-drawer`, 🔨 BUILT, NOT MERGED): an event opens in a drawer too** — the queue's Open (and `#event-<id>` / `#detail=<id>`) opens a drawer like the marathon's; the inline *Event #N* section and its rail row are gone, so the page is back to *Events · Marathons · Settings and logs*. [`event-drawer-design.md`](event-drawer-design.md).
+
 > ➕ **2026-09-25 (branch `marathon-people`, 🔨 BUILT, NOT MERGED): the drawer is now Schedule · People · Event · The channel · Posts** — *Runs* and *Who is who* fold into **People** (BaF on top, the schedule by day and slot), the *Where marathons come from* foldout became a **Sources…** drawer and the table gained a **Source** column. [`marathon-people-design.md`](marathon-people-design.md).
 
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 16:3x Phoenix),
