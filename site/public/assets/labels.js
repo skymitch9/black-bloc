@@ -99,7 +99,7 @@ export const LABELS = {
   marathon_state_live: 'The board’s word for the run on now',
   marathon_state_done: 'The board’s word for a run that is over',
   marathon_state_dropped: 'The board’s word for a run the schedule dropped',
-  marathon_unknown_site: 'What staff hear when a link is not a GDQ schedule',
+  marathon_unknown_site: 'What staff hear when a link is from a site Black Bloc cannot read',
   marathon_already_added: 'What staff hear when a schedule is already followed',
   marathon_could_not_read: 'What staff hear when a schedule will not read',
   marathon_no_runs_yet: 'What the page says while a schedule is unpublished',

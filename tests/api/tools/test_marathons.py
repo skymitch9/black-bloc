@@ -135,7 +135,7 @@ async def test_an_unknown_site_a_duplicate_and_an_unreadable_link_are_refused_in
 ):
     sign_in(client)
     other = client.post(
-        "/api/marathons", json={"name": "ESA", "schedule_url": "https://oengus.io/marathon/LSS26/schedule"}
+        "/api/marathons", json={"name": "ESA", "schedule_url": "https://example.org/marathon/LSS26/schedule"}
     )
     assert other.status_code == 422
     assert other.json()["error"] == "unknown_site"

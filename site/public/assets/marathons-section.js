@@ -117,7 +117,7 @@ const WINDOW_PLAIN = 'Ping window {start} – {end}.';
 const NO_WINDOW = 'No ping window — the marathon has no channel, no dates yet, or is paused.';
 const CHANNEL_GONE = 'Its channel row is gone from the Go-live page, so it has no window and '
   + 'no live title. Pick another channel, or none.';
-const READ_FROM = 'Read from the ';
+const READ_FROM = 'Read from: ';
 const SOURCE_LINK = '{source} ↗';
 const FEED_WORD = 'feed';
 const EVENT_HEAD = 'Event #{id} {status}';
@@ -171,7 +171,17 @@ const FEEDS_OFF = 'Checks are off (marathon_feeds under **Marathons** in Setting
 const NO_FEEDS = 'No sources yet. **Add a feed…** starts from a channel on the Go-live page.';
 const FEED_ADD_NOTE = 'Pick the channel first — a feed belongs to a channel Black Bloc already '
   + 'watches, one feed per channel. Then what to read: the GDQ tracker, the RPG Limit Break '
-  + 'tracker, or a horaro.net event by its slug (ESA is `esa`).';
+  + 'tracker, a horaro.net event by its slug (ESA is `esa`), or Oengus, which finds the '
+  + 'channel’s own marathons on oengus.io by itself.';
+const PICK_HELP = {
+  gdq: 'Every event on the GDQ tracker that is still ahead.',
+  rpglb: 'Every event on the RPG Limit Break tracker that is still ahead.',
+  horaro: 'Every schedule of one horaro.net event — give its slug below.',
+  oengus: 'Every marathon on oengus.io that streams on this channel’s Twitch — nothing to type.',
+};
+const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus' };
+const FEED_SEEN_NOTE = 'Remembers {count} Oengus marathon(s) it has already looked at, so each is '
+  + 'read once. **Look again** reads them all once more.';
 const FEED_NO_CHANNELS = 'Every channel-only row on the Go-live page has a feed already, or '
   + 'there is none. Add the channel there first.';
 const FEED_IGNORED_NOTE = 'A marathon this feed added and staff removed is never added again '
@@ -944,7 +954,7 @@ function feedDrawer(feed, message) {
     feedDrawerStep(feed, say, () => send(base, 'PATCH', { event_mode: mode.value || null }));
   });
   const moves = [];
-  if ((feed.dismissed || []).length) {
+  if ((feed.dismissed || []).length || feed.seen_count) {
     moves.push(button('Look again', () => feedDrawerStep(feed, say, () => send(`${base}/look`, 'POST', {})), { tone: 'quiet' }));
   }
   if (feed.ignored_count) {
@@ -982,6 +992,7 @@ function feedDrawer(feed, message) {
       : null,
     field('Event', mode, FEED_MODE_HELP),
     ...(feed.suggestions || []).map((one) => suggestionCard(feed, one, say, { inDrawer: true })),
+    feed.seen_count ? el('p', { class: 'field-help mx-line' }, boldParts(said(FEED_SEEN_NOTE, { count: feed.seen_count }))) : null,
     line(FEED_IGNORED_NOTE),
     bar(moves),
   ];
@@ -1005,6 +1016,21 @@ async function addFeed(payload) {
   const slug = el('input', { class: 'input', type: 'text', placeholder: 'esa' });
   const name = el('input', { class: 'input', type: 'text', placeholder: 'the channel’s name' });
   const action = segment(ACTION_CHOICES, payload.action_default || 'add');
+  const pickHelp = el('p', { class: 'field-help' });
+  const slugField = field('horaro.net event slug', slug, 'The part after horaro.net/.');
+  const shownPick = () => {
+    pickHelp.textContent = PICK_HELP[source.value] || '';
+    slugField.style.display = source.value === 'horaro' ? '' : 'none';
+  };
+  const guessPick = () => {
+    const picked = free.find((one) => String(one.id) === channel.value);
+    const guess = picked ? PICK_GUESS[String(picked.login).toLowerCase()] : null;
+    if (guess && [...source.options].some((one) => one.value === guess)) source.value = guess;
+    shownPick();
+  };
+  channel.addEventListener('change', guessPick);
+  source.addEventListener('change', shownPick);
+  guessPick();
   let made = null;
   const sure = await askForm({
     title: 'Add a feed',
@@ -1012,7 +1038,8 @@ async function addFeed(payload) {
       el('p', { class: 'ask-body' }, boldParts(free.length ? FEED_ADD_NOTE : FEED_NO_CHANNELS)),
       field('Channel', channel),
       field('Read from', source),
-      field('horaro.net event slug', slug, 'Only for horaro.net — the part after horaro.net/.'),
+      pickHelp,
+      slugField,
       field('Name', name, 'Blank uses the channel’s name.'),
       field('New events', action),
     ],
@@ -1022,7 +1049,7 @@ async function addFeed(payload) {
       made = await send('/api/marathons/feeds', 'POST', {
         spotlight_id: channel.value || null,
         source: source.value,
-        slug: slug.value.trim() || null,
+        slug: source.value === 'horaro' ? slug.value.trim() || null : null,
         name: name.value.trim() || null,
         action: action.readValue(),
       });

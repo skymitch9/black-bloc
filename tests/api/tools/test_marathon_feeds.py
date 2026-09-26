@@ -111,7 +111,7 @@ async def test_the_list_carries_feeds_and_the_channel_rows_a_feed_may_start_from
     channels = {one["login"]: one for one in body["channels"]}
     assert channels["gamesdonequick"]["feed_name"] == "GDQ"
     assert channels["esamarathon"]["feed_name"] is None
-    assert [one["value"] for one in body["sources"]] == ["gdq", "rpglb", "horaro"]
+    assert [one["value"] for one in body["sources"]] == ["gdq", "rpglb", "horaro", "oengus"]
 
 
 async def test_adding_a_horaro_feed_checks_it_and_leaves_one_web_row(
@@ -137,7 +137,7 @@ async def test_add_a_feed_refuses_in_words(client, sign_in, web, wf, cog):
     sign_in(client)
     for given, status, code in (
         ({"spotlight_id": 9999, "source": "gdq"}, 404, "no_channel"),
-        ({"spotlight_id": esa, "source": "oengus"}, 422, "unknown_source"),
+        ({"spotlight_id": esa, "source": "kick"}, 422, "unknown_source"),
         ({"spotlight_id": esa, "source": "horaro"}, 422, "no_slug"),
         ({"spotlight_id": esa, "source": "horaro", "slug": "nope"}, 422, "slug_unreadable"),
     ):

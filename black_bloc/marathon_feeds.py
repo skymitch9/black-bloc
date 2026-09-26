@@ -10,11 +10,13 @@ from .marathon_sources import (
     GDQ,
     HORARO,
     HORARO_PAGE,
+    OENGUS,
     RPGLB,
     SOURCE_WORDS,
     TRACKER_BASES,
     event_url,
     horaro_span,
+    schedule_page,
     tracker_source,
     utc_iso,
 )
@@ -22,7 +24,8 @@ from .timezones import unix
 
 TRACKER = "tracker"
 HORARO_FEED = "horaro"
-FEED_SOURCES = (TRACKER, HORARO_FEED)
+OENGUS_FEED = "oengus"
+FEED_SOURCES = (TRACKER, HORARO_FEED, OENGUS_FEED)
 ADD = "add"
 SUGGEST = "suggest"
 ACTIONS = (ADD, SUGGEST)
@@ -32,6 +35,8 @@ BECAUSE_STAFF = "staff"
 BECAUSE_CHANNEL = "channel_removed"
 FAILURES_IMPORTANT = 3
 NAME_LIMIT = 60
+SEEN_LIMIT = 2000
+OENGUS_READS_PER_CHECK = 40
 
 
 class Seed(NamedTuple):
@@ -44,20 +49,26 @@ class Seed(NamedTuple):
 SEEDS = (
     Seed("gamesdonequick", TRACKER, TRACKER_BASES[GDQ], "GDQ"),
     Seed("rpglimitbreak", TRACKER, TRACKER_BASES[RPGLB], "RPG Limit Break"),
+    Seed("speedstuff4charity", OENGUS_FEED, "speedstuff4charity", "Speed Stuff 4 Charity"),
 )
 
 PICK_GDQ = "gdq"
 PICK_RPGLB = "rpglb"
 PICK_HORARO = "horaro"
+PICK_OENGUS = "oengus"
 PICKS = {
     PICK_GDQ: (TRACKER, TRACKER_BASES[GDQ]),
     PICK_RPGLB: (TRACKER, TRACKER_BASES[RPGLB]),
     PICK_HORARO: (HORARO_FEED, None),
+    PICK_OENGUS: (OENGUS_FEED, None),
 }
 PICK_WORDS = {
     PICK_GDQ: "the GDQ tracker",
     PICK_RPGLB: "the RPG Limit Break tracker",
     PICK_HORARO: "horaro.net — give the event's slug",
+    PICK_OENGUS: (
+        "Oengus — finds this channel's marathons on oengus.io (Speed Stuff 4 Charity's home)"
+    ),
 }
 PICK_NAMES = {PICK_GDQ: "GDQ", PICK_RPGLB: "RPG Limit Break"}
 
@@ -69,7 +80,7 @@ CHANNEL_HAS_FEED = (
 SAME_FEED = "**{name}** already reads that, so nothing was added."
 UNKNOWN_PICK = (
     "**{given}** is not something a feed can read, so nothing was added. Pick the GDQ tracker, "
-    "the RPG Limit Break tracker or horaro.net."
+    "the RPG Limit Break tracker, horaro.net or Oengus."
 )
 NO_SLUG = (
     "A horaro.net feed needs the event's slug — the part after horaro.net/, for example `esa` — "
@@ -103,6 +114,7 @@ FEED_CHECK_FAILED = "**{name}** could not be checked just now — {why}. Nothing
 FEED_FORGOT = "**{name}** forgot {count} removed event(s); the next check may add them again."
 FEED_NOTHING_TO_FORGET = "**{name}** remembers no removed event, so there was nothing to forget."
 FEED_LOOKED = "**{name}** forgot {count} dismissed event(s) and looked again."
+FEED_REREAD = "It read every Oengus marathon's record again ({count} remembered before)."
 SUGGESTION_GONE = "**{event}** is not waiting on **{name}** any more, so nothing was changed."
 SUGGESTION_DISMISSED = "**{event}** is dismissed — **{name}** will not suggest it again."
 SUGGESTION_ALREADY = "**{event}** is already on the list as **{marathon}**, so nothing was added."
@@ -144,7 +156,7 @@ PICK_FEED = "Pick a feed to manage…"
 PICK_CHANNEL = "Pick the channel the feed belongs to…"
 PICK_SUGGESTION = "Pick a waiting event…"
 ADD_FEED_TITLE = "Add a feed"
-ADD_FEED_SOURCE = "Read from — gdq, rpglb or horaro"
+ADD_FEED_SOURCE = "Read from — gdq, rpglb, horaro or oengus"
 ADD_FEED_SLUG = "horaro.net event slug — horaro only"
 ADD_FEED_SLUG_HINT = "esa"
 ADD_FEED_NAME = "Name — blank for the channel's"
@@ -206,6 +218,8 @@ def marathon_source(feed: Any) -> str | None:
         return tracker_source(_cell(feed, "feed_ref"))
     if kind == HORARO_FEED:
         return HORARO
+    if kind == OENGUS_FEED:
+        return OENGUS
     return None
 
 
@@ -213,6 +227,8 @@ def source_word(feed: Any) -> str:
     found = marathon_source(feed)
     if found == HORARO:
         return f"horaro.net/{_cell(feed, 'feed_ref')}"
+    if found == OENGUS:
+        return SOURCE_WORDS[OENGUS]
     return SOURCE_WORDS.get(str(found or ""), str(_cell(feed, "feed_ref") or ""))
 
 
@@ -224,6 +240,8 @@ def pick_for(feed: Any) -> str | None:
     source = marathon_source(feed)
     if source == HORARO:
         return PICK_HORARO
+    if source == OENGUS:
+        return PICK_OENGUS
     return {GDQ: PICK_GDQ, RPGLB: PICK_RPGLB}.get(str(source or ""))
 
 
@@ -251,6 +269,55 @@ def dismissed_of(feed: Any) -> list[dict[str, Any]]:
 
 def ignored_of(feed: Any) -> list[str]:
     return [str(one) for one in list_of(_cell(feed, "ignored")) if one not in (None, "")]
+
+
+def seen_of(feed: Any) -> list[dict[str, Any]]:
+    """What each Oengus marathon's v1 record said, read once: `{ref, twitch}`."""
+    found: list[dict[str, Any]] = []
+    for one in list_of(_cell(feed, "seen")):
+        if isinstance(one, dict) and one.get("ref"):
+            found.append({"ref": str(one["ref"]), "twitch": str(one.get("twitch") or "").lower()})
+        elif isinstance(one, str) and one:
+            found.append({"ref": one, "twitch": ""})
+    return found
+
+
+def seen_after(seen: list[dict[str, Any]], read: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The memory with this check's reads added, newest kept when it outgrows SEEN_LIMIT."""
+    return [*seen, *read][-SEEN_LIMIT:]
+
+
+def to_read(listed: Any, seen: list[dict[str, Any]]) -> list[str]:
+    """The `for-home` ids whose v1 record was never read, capped per check."""
+    known = {one["ref"] for one in seen}
+    found = [str(row["id"]) for row in listed or () if str(row.get("id")) not in known]
+    return found[:OENGUS_READS_PER_CHECK]
+
+
+def seen_record(ref: str, record: Any) -> dict[str, Any]:
+    twitch = record.get("twitch") if isinstance(record, dict) else None
+    return {"ref": str(ref), "twitch": str(twitch or "").strip().lower()}
+
+
+def oengus_candidates(
+    listed: Any, seen: list[dict[str, Any]], login: str, now: datetime, recent_days: int
+) -> list[Candidate]:
+    """Every listed marathon whose v1 `twitch` is the channel's login, ending ahead of now (or
+    within `recent_days`)."""
+    wanted = str(login or "").strip().lower()
+    ours = {one["ref"] for one in seen if wanted and one["twitch"] == wanted}
+    found: list[Candidate] = []
+    for row in listed or ():
+        ref = str(row.get("id") or "") if isinstance(row, dict) else ""
+        if ref not in ours:
+            continue
+        starts, ends = utc_iso(row.get("startDate")), utc_iso(row.get("endDate"))
+        if not _recent(ends or starts, now, recent_days):
+            continue
+        name = " ".join(str(row.get("name") or ref).split())
+        found.append(Candidate(ref, name[:100], starts, ends, schedule_page(OENGUS, ref)))
+    found.sort(key=lambda one: (one.starts_at or "", one.ref))
+    return found
 
 
 def check_due(feed: Any, now: datetime, hours: int) -> bool:
@@ -395,7 +462,7 @@ def feed_moves(feed: Any) -> tuple[MarathonMove, ...]:
     active = bool(_cell(feed, "active", 1))
     found = [FEED_CHECK_MOVE, FEED_PAUSE_MOVE if active else FEED_RESUME_MOVE]
     found.append(FEED_TO_SUGGEST_MOVE if _cell(feed, "action") == ADD else FEED_TO_ADD_MOVE)
-    if dismissed_of(feed):
+    if dismissed_of(feed) or seen_of(feed):
         found.append(FEED_LOOK_MOVE)
     if ignored_of(feed):
         found.append(FEED_FORGET_MOVE)
@@ -416,6 +483,7 @@ __all__ = [
     "ADD",
     "FEED_SOURCES",
     "HORARO_FEED",
+    "OENGUS_FEED",
     "SEEDS",
     "SUGGEST",
     "TRACKER",
@@ -428,8 +496,13 @@ __all__ = [
     "horaro_candidates",
     "ignored_of",
     "marathon_source",
+    "oengus_candidates",
     "open_suggestions",
+    "seen_after",
+    "seen_of",
+    "seen_record",
     "suggested_of",
     "suggestion_record",
+    "to_read",
     "tracker_candidates",
 ]

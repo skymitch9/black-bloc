@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *The Oengus feed for Speed Stuff 4 Charity* (branch `marathon-feeds-oengus`, off `main` `69750bd7`, keyed against `4eff650f`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The feed notice waits for the schedule* (branch `marathon-notice-when`, off `main` `791b5543`, keyed against `f518c143`). Before that:
 > **2026-09-25 — one section APPENDED, one row retired, nothing re-keyed**: *Several guides per command* (branch `guides-per-command`, off `main` `582977f1`, keyed against `2f86e8bb`). Before that:
 > **2026-09-25 — one section APPENDED, two rows rewritten, nothing re-keyed**: */mod ▸ Role grants… and `/rolemenu` hiding again* (branch `hide-rolemenu`, off `main` `dad277d2`, keyed against `27fe6c27`). Before that:
@@ -8635,3 +8636,33 @@ Owner, 2026-09-25 22:1x: *"we can pre load up any event we find but i only want 
 | `black_bloc/cogs/content/marathon_feeds.py:471` `notice_published` | Fires on any feed-made row with `noticed_at` NULL whatever the key says, so flipping `published` → `added` never strands a held notice. `off` returns before the claim (the notice waits); a row whose feed was deleted (`feed_id` NULL) never notices. |
 | `black_bloc/cogs/content/marathon_feeds.py:454` `send_added_notice` | The one builder both paths use — the sentence, `notice_embed`, `added_view` + `people_on` — so the held notice is the same notice, with real dates and counts. |
 | `black_bloc/cogs/content/marathon_feeds.py:550` `post_notice` — `because` | Rides into `what`, so `marathon.notice_posted` says why it posted (`published` / `added`); the suggest notice carries no `because` and its row is unchanged. |
+
+## The Oengus feed for Speed Stuff 4 Charity (branch `marathon-feeds-oengus`, 2026-09-26)
+
+Owner, 2026-09-25: *"can we scrape speed stuff for charity"*. Design `marathon-feeds-design.md` §H and its build
+Deviations. Keyed against `4eff650f`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_sources.py:78` `OENGUS_URL` · `:150` `read_url` | `oengus.io/marathon/<id>`, `…/schedule`, `…/schedule/<slug>`; a slug is kept as `<id>/<slug>` so a staff-pasted schedule is the one read. Nothing else on oengus.io (e.g. `/submit`) reads. |
+| `black_bloc/marathon_sources.py:209` `oengus_ref` | The one place `<id>/<slug>` is split; `schedule_page` and `oengus_runs` both go through it. |
+| `black_bloc/marathon_sources.py:215` `duration_seconds` | Oengus writes ISO-8601 durations (`PT57M`, `PT1H30M`, `PT0S`); anything else is None, never 0. |
+| `black_bloc/marathon_sources.py:374` `oengus_people` | One runner each; the first `TWITCH` connection's username, lower-cased, is the login; no connection or no profile = name only (the Discord-username / pairing steps still apply). Other connections are never read. |
+| `black_bloc/marathon_sources.py:394` `parse_oengus` | `setupBlock` lines are not runs. The end adds `setupTime` (the next line starts there, like the tracker's `endtime`); `run_seconds` is the estimate alone. `order` is `position + 1`. |
+| `black_bloc/marathon_sources.py:428` `oengus_home` | `live` + `next` + `open` flattened, each id once, ids checked before they reach a URL. |
+| `black_bloc/marathon_sources.py:575` `oengus_runs` | The pasted slug if published, else the first published; none published (or its lines 404) is `ScheduleError(unpublished=True)` — the GDQ-404 path, so runs are kept and nothing counts as a failure (Deviation H-2). |
+| `black_bloc/marathon_sources.py:556` `oengus_marathon` | The v1 record: `twitch` for the feed, `name` for a staff Add's `resolve` (`:656`). |
+| `black_bloc/marathon_feeds.py:49` `SEEDS` | SS4C's `feed_ref` is the LOGIN, not the site — `UNIQUE (guild_id, source, feed_ref)` would otherwise allow one Oengus feed per server (Deviation H-3). |
+| `black_bloc/marathon_feeds.py:274` `seen_of` · `:285` `seen_after` · `:297` `seen_record` | `seen` is `{ref, twitch}` per v1 record read, so a kept marathon stays a candidate without a second read; a bare id reads as "not ours"; the newest `SEEN_LIMIT` are kept. |
+| `black_bloc/marathon_feeds.py:290` `to_read` | Only ids never read, at most `OENGUS_READS_PER_CHECK` per check. |
+| `black_bloc/marathon_feeds.py:302` `oengus_candidates` | Kept = the record's `twitch` equals the channel login (case-insensitive); recent by END, like horaro.net. The URL is `schedule_page`, which `read_url` reads back. |
+| `black_bloc/marathon_feeds.py:465` `feed_moves` — `seen_of` | Look again is offered while an Oengus feed remembers records: it is the move that forces a re-read. |
+| `black_bloc/cogs/content/marathon_feeds.py:318` `oengus_candidates_of` | Runs under the feed lock (inside `run_check`). The memory is written BEFORE the candidates are judged, so a crash after it costs no re-read; a failed v1 read is not remembered and is retried. The login is the channel row's current one, `feed_ref` the fallback. |
+| `black_bloc/cogs/content/marathon_feeds.py:707` `create_feed` — `OENGUS_FEED` | No slug; the ref is the channel's login. |
+| `black_bloc/cogs/content/marathon_feeds.py:857` `set_feed` — move | An Oengus feed's ref follows the channel; an IntegrityError on it is refused in words. |
+| `black_bloc/cogs/content/marathon_feeds.py:920` `look_again` | Clears `seen` (to NULL) with the dismissals, then checks; `reread` rides on `marathon.feed_looked`. Forget ignored leaves `seen` alone (Deviation H-6). |
+| `black_bloc/storage/db.py:1205` `marathon_feeds.seen` | Schema 68, nullable, no backfill — NULL is "read nothing yet". |
+| `black_bloc/api/tools/marathon_feeds.py:82` `seen_count` | The drawer's remembered-records line and whether it offers Look again. |
+| `site/public/assets/marathons-section.js:176` `PICK_HELP` · `:182` `PICK_GUESS` · `:1021` `shownPick` | One line per pick saying what it reads; the pick guessed from the channel; the slug field only for horaro.net (an inline `display`, because `.field` is `display: grid` and beats `[hidden]`). |
+| `site/public/assets/marathons-section.js:120` `READ_FROM` | *Read from: …* — *Read from the* read wrong for Oengus and horaro.net/esa. |
+| `site/mock/server.mjs:1426` channel 7 · `:6092` feed 3 · `:5632` marathon 5 | The mock's SS4C row, its Oengus feed and the marathon it found, waiting on its schedule. `:6038` `MARATHON_OENGUS` mirrors `OENGUS_URL`. |

@@ -112,6 +112,7 @@ SELECT_CAP = 25
 MARATHONS_SHOWN = 10
 FEED_COLUMNS = {
     "name",
+    "feed_ref",
     "spotlight_id",
     "action",
     "active",
@@ -123,6 +124,7 @@ FEED_COLUMNS = {
     "ignored",
     "event_mode",
     "held_by_channel",
+    "seen",
 }
 
 
@@ -306,9 +308,30 @@ async def candidates_of(bot: Any, guild: Any, feed: Any, now: Any) -> list[mf.Ca
     if feed["source"] == mf.HORARO_FEED:
         rows = await cog.client.horaro_schedules(str(feed["feed_ref"]))
         return mf.horaro_candidates(str(feed["feed_ref"]), feed["name"], rows, now, recent)
+    if feed["source"] == mf.OENGUS_FEED:
+        return await oengus_candidates_of(bot, feed, now, recent)
     if source is None:
         raise ScheduleError(mf.UNKNOWN_PICK.format(given=str(feed["feed_ref"])[:60]))
     return mf.tracker_candidates(source, await cog.client.events(source), now, recent)
+
+
+async def oengus_candidates_of(bot: Any, feed: Any, now: Any, recent: int) -> list[mf.Candidate]:
+    """`for-home`, then v1 once for each marathon never read; the verdicts are remembered."""
+    client = cog_of(bot).client
+    listed = await client.oengus_home()
+    seen = mf.seen_of(feed)
+    read: list[dict[str, Any]] = []
+    for ref in mf.to_read(listed, seen):
+        try:
+            read.append(mf.seen_record(ref, await client.oengus_marathon(ref)))
+        except ScheduleError as exc:
+            log.info("marathon: Oengus %s could not be read (%s); next check", ref, exc)
+    if read:
+        seen = mf.seen_after(seen, read)
+        await update_feed(bot.db, feed["id"], seen=json.dumps(seen))
+    channel = await channel_of(bot.db, feed)
+    login = _cell(channel, "twitch_login") or feed["feed_ref"]
+    return mf.oengus_candidates(listed, seen, str(login), now, recent)
 
 
 async def check_failed(
@@ -681,6 +704,8 @@ async def create_feed(
     if picked is None:
         return refusal(mf.UNKNOWN_PICK.format(given=str(pick or "")[:40]), UNKNOWN_PICK_CODE, 422)
     source, feed_ref = picked
+    if source == mf.OENGUS_FEED:
+        feed_ref = str(channel["twitch_login"]).lower()
     if source == mf.HORARO_FEED:
         feed_ref = str(slug or "").strip().lower().strip("/")
         if not HORARO_SLUG.match(feed_ref):
@@ -828,7 +853,13 @@ async def set_feed(
                     CHANNEL_HAS_FEED_CODE,
                     409,
                 )
-            await update_feed(bot.db, fresh["id"], spotlight_id=int(channel["id"]))
+            moved = {"spotlight_id": int(channel["id"])}
+            if fresh["source"] == mf.OENGUS_FEED:
+                moved["feed_ref"] = str(channel["twitch_login"]).lower()
+            try:
+                await update_feed(bot.db, fresh["id"], **moved)
+            except sqlite3.IntegrityError:
+                return refusal(mf.SAME_FEED.format(name=fresh["name"]), DUPLICATE_FEED_CODE, 409)
             await log_action(
                 bot,
                 guild,
@@ -889,24 +920,35 @@ async def check_now(
 async def look_again(
     bot: Any, guild: Any, actor: Any, feed: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    """Dismissals are forgotten, then the feed checks at once."""
+    """Dismissals are forgotten, and an Oengus feed forgets every record it read, then the
+    feed checks at once."""
     async with cog_of(bot).feed_lock(feed["id"]):
         fresh = await get_feed(bot.db, guild.id, feed["id"])
         if fresh is None:
             return refusal(mf.NO_SUCH_FEED.format(given=feed["id"]), NO_SUCH_FEED_CODE, 404)
         dropped = mf.dismissed_of(fresh)
-        await update_feed(bot.db, fresh["id"], suggested=json.dumps(mf.open_suggestions(fresh)))
+        reread = len(mf.seen_of(fresh))
+        await update_feed(
+            bot.db,
+            fresh["id"],
+            suggested=json.dumps(mf.open_suggestions(fresh)),
+            seen=None if reread else fresh["seen"],
+        )
         await log_action(
             bot,
             guild,
             kind_via("marathon.feed_looked", via),
             actor=actor,
-            details=feed_details(fresh, via, forgot=[one.get("ref") for one in dropped]),
+            details=feed_details(
+                fresh, via, forgot=[one.get("ref") for one in dropped], reread=reread
+            ),
         )
         checked = await run_check(
             bot, guild, await get_feed(bot.db, guild.id, fresh["id"]), via=mf.VIA_FEED
         )
     said = mf.FEED_LOOKED.format(name=fresh["name"], count=len(dropped))
+    if reread:
+        said = f"{said} {mf.FEED_REREAD.format(count=reread)}"
     return Outcome(checked.ok, f"{said} {checked.message}", checked.code, checked.status)
 
 

@@ -1,0 +1,56 @@
+{
+  "live": [
+    {
+      "country": null,
+      "endDate": "2026-09-29T13:04:00Z",
+      "id": "LSS26",
+      "language": "ja",
+      "location": null,
+      "name": "Long Speedrun Summit 2026",
+      "onsite": false,
+      "private": false,
+      "startDate": "2026-09-18T10:00:00Z",
+      "submissionsEndDate": "2026-05-27T14:59:00Z"
+    },
+    {
+      "country": null,
+      "endDate": "2026-09-28T02:50:00Z",
+      "id": "ss4lhs26",
+      "language": "en",
+      "location": null,
+      "name": "Speed Stuff 4 LHS 2026",
+      "onsite": false,
+      "private": false,
+      "startDate": "2026-09-26T15:00:00Z",
+      "submissionsEndDate": null
+    }
+  ],
+  "next": [
+    {
+      "country": "GB",
+      "endDate": "2026-10-04T20:10:00Z",
+      "id": "uksgblue26",
+      "language": "en-GB",
+      "location": "Glasgow, Scotland",
+      "name": "UKSG BLUE 2026",
+      "onsite": true,
+      "private": false,
+      "startDate": "2026-10-03T09:00:00Z",
+      "submissionsEndDate": "2026-08-05T22:00:00Z"
+    }
+  ],
+  "open": [
+    {
+      "country": null,
+      "endDate": "2026-11-29T21:00:00Z",
+      "id": "NDS3",
+      "language": "fr",
+      "location": null,
+      "name": "Nitro Days for SPDA 2026",
+      "onsite": false,
+      "private": false,
+      "startDate": "2026-11-27T17:00:00Z",
+      "submissionsEndDate": "2026-09-27T21:59:00Z"
+    }
+  ]
+}

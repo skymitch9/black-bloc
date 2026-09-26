@@ -79,6 +79,7 @@ async def feed_row(bot: Any, guild: Any, feed: Any) -> dict[str, Any]:
         ),
         "ignored": ignored,
         "ignored_count": len(ignored),
+        "seen_count": len(mf.seen_of(feed)),
         "suggestions": [suggestion_row(one) for one in mf.open_suggestions(feed)],
         "dismissed": [suggestion_row(one) for one in mf.dismissed_of(feed)],
         "marathons": [

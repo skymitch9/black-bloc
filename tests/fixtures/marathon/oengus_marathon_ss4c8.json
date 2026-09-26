@@ -1,0 +1,19 @@
+{
+  "id": "ss4c8",
+  "name": "Speed Stuff 4 Charity 8",
+  "twitch": "speedstuff4charity",
+  "startDate": "2021-09-03T16:00:00Z",
+  "endDate": "2021-09-07T06:50:00Z",
+  "scheduleDone": true,
+  "selectionDone": true,
+  "submitsOpen": false,
+  "onsite": false,
+  "isPrivate": false,
+  "language": "en",
+  "defaultSetupTime": "PT7M",
+  "submissionsStartDate": "2021-06-20T19:00:00Z",
+  "submissionsEndDate": "2021-08-15T06:59:00Z",
+  "creator": {
+    "username": "deathline"
+  }
+}
