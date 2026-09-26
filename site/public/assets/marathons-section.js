@@ -3,6 +3,10 @@ import {
   BAF,
   CARD_PEOPLE,
   SETTINGS_FOLD,
+  archiveCounts,
+  archiveTitle,
+  archivedWhen,
+  archivedWho,
   datesWords,
   dayTitle,
   daysOf,
@@ -55,13 +59,13 @@ import {
   when,
 } from './ui.js';
 
-const shown = { id: null, slots: new Set(), people: new Set(), settings: false, focus: null, where: null };
+const shown = { id: null, slots: new Set(), people: new Set(), settings: false, focus: null, where: null, archived: false };
 const HASH = /^marathon-(\d+)$/;
 let refresh = async () => {};
 let showEvent = () => {};
 let eventModeDefault = 'none';
 let eventModes = [];
-let cadence = { near: null, far: null, lead: null, slack: null, modeSpec: null };
+let cadence = { near: null, far: null, lead: null, slack: null, archiveDays: null, modeSpec: null };
 let deepLinked = false;
 
 const LIST_NOTE = 'Every marathon schedule Black Bloc reads; a row opens where it is read from, '
@@ -81,6 +85,7 @@ const NO_CHANNEL = 'No channel — each run links its runner';
 const NO_RUNS = 'No runs on this schedule yet — it may not be published. Black Bloc keeps '
   + 'reading it.';
 const NO_BAF = `Nobody from ${BAF} is on this schedule yet — open a slot below and **Link to a member…**.`;
+const NO_BAF_ARCHIVED = `Nobody from ${BAF} was on this schedule.`;
 const SCHEDULE_HEAD = 'The schedule';
 const FILTER_PLACEHOLDER = 'name, Twitch or game';
 const NO_HIT = 'Nothing on this schedule matches that.';
@@ -111,8 +116,19 @@ const PART_WORDS = { runner: 'runner', host: 'host', commentator: 'on commentary
 const SOURCES_BUTTON = 'Sources…';
 const SOURCES_DRAWER = 'Where marathons come from';
 const GETTING_SOURCES = 'Reading the sources…';
-const REMOVE_BODY = 'Its runs and pairings go with it and its ping window closes. Posts already '
-  + 'made stay where they are.';
+const REMOVE_BODY = 'It moves to the archive with its runs and pairings, its ping window closes '
+  + 'and its events are called off; a feed will not add it again. Posts already made stay where '
+  + 'they are, and Restore in the archive brings it back.';
+const ARCHIVE_BODY = 'It stops being read and its ping window closes. Its runs, people and posts are '
+  + 'kept under Archive below the list, and Restore brings it back paused.';
+const RESTORE_BODY = 'It comes back to the list paused, with its runs and people — nothing is read '
+  + 'or posted until someone presses Resume.';
+const ARCHIVE_NOTE = 'Marathons that ended {days} day(s) ago or more, and any staff archived or '
+  + 'removed. Nothing is deleted: a row opens it read-only, with Restore.';
+const ARCHIVE_EMPTY = 'Nothing is archived yet. A marathon moves here {days} day(s) after its last run.';
+const ARCHIVE_FAILED = 'The archive could not be read just now. Reload to try again.';
+const ARCHIVE_MORE = 'Show {count} more';
+const ARCHIVED_NOTE = 'Archived — read-only. **Restore** puts it back on the list, paused.';
 const WINDOW_PLAIN = 'Ping window {start} – {end}.';
 const NO_WINDOW = 'No ping window — the marathon has no channel, no dates yet, or is paused.';
 const CHANNEL_GONE = 'Its channel row is gone from the Go-live page, so it has no window and '
@@ -373,6 +389,7 @@ function step(marathon, say, label, work, tone = 'quiet') {
 }
 
 function runTools(marathon, row, say) {
+  if (shown.archived) return null;
   const base = `/api/marathons/${marathon.id}/runs/${row.id}`;
   const tools = [];
   if (row.shoutable) tools.push(step(marathon, say, 'Shout it now', () => send(`${base}/shout`, 'POST', {}), 'warn'));
@@ -517,7 +534,7 @@ async function unspotlightPerson(marathon, say, entry, runId) {
 }
 
 function spotlightBits(marathon, say, entry, runId) {
-  if (!entry || !entry.login) return [];
+  if (shown.archived || !entry || !entry.login) return [];
   if (entry.spotlight_id) {
     return [
       el('span', { class: 'cell-quiet', text: entry.spotlight_until ? said(SPOTLIT_UNTIL, { when: whenWords(entry.spotlight_until) }) : SPOTLIT }),
@@ -531,6 +548,7 @@ function spotlightBits(marathon, say, entry, runId) {
 
 function matchBits(marathon, say, entry, person, runId, { inSlot = false } = {}) {
   const bits = [];
+  if (shown.archived) return entry && entry.member && entry.matched_word ? [el('span', { class: 'cell-quiet', text: entry.matched_word })] : bits;
   if (entry && entry.member && entry.matched_by === 'pairing' && entry.pairing_id) {
     bits.push(el('span', { class: 'cell-quiet', text: entry.matched_word }));
     bits.push(button('Unlink', async () => {
@@ -690,6 +708,7 @@ function scheduleBlock(marathon, say, board) {
 }
 
 function otherPairings(marathon, say, board) {
+  if (shown.archived) return null;
   const onSchedule = new Set([...(board.baf || []), ...(board.others || [])]
     .flatMap((entry) => (entry.runs || []).map((one) => String(one.name).trim().toLowerCase())));
   const rows = (board.pairings || []).filter((one) => !onSchedule.has(one.runner_name));
@@ -711,7 +730,7 @@ function peopleCard(marathon, board, say) {
   const baf = board.baf || [];
   return card(CARD_PEOPLE, [
     el('h4', { class: 'mx-block-head', text: `${BAF} · ${baf.length}` }),
-    baf.length ? el('div', { class: 'mx-people' }, baf.map((one) => bafLine(marathon, say, one, timeZone))) : line(NO_BAF),
+    baf.length ? el('div', { class: 'mx-people' }, baf.map((one) => bafLine(marathon, say, one, timeZone))) : line(shown.archived ? NO_BAF_ARCHIVED : NO_BAF),
     el('h4', { class: 'mx-block-head', text: SCHEDULE_HEAD }),
     ...scheduleBlock(marathon, say, board),
     otherPairings(marathon, say, board),
@@ -819,6 +838,15 @@ function moveBar(marathon, say) {
   return bar([
     marathon.active ? step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn') : null,
     step(marathon, say, marathon.active ? 'Pause' : 'Resume', () => send(`/api/marathons/${marathon.id}`, 'PATCH', { active: !marathon.active }), null),
+    button('Archive it', async () => {
+      const sure = await ask({ title: `Archive ${marathon.name}?`, body: [ARCHIVE_BODY], confirmLabel: 'Archive it' });
+      if (!sure) return;
+      const done = await run(say, () => send(`/api/marathons/${marathon.id}/archive`, 'POST', {}), (found) => found?.message);
+      if (!done.ok) return;
+      keepSaying('marathons', say);
+      closeDrawer();
+      await refresh();
+    }, { tone: 'quiet' }),
     button('Remove', async () => {
       const sure = await ask({ title: `Remove ${marathon.name}?`, body: [REMOVE_BODY], confirmLabel: 'Remove it' });
       if (!sure) return;
@@ -845,6 +873,47 @@ async function marathonDrawer(marathon, board, message) {
   ];
 }
 
+function archivedHeader(marathon, board) {
+  const timeZone = (board && board.timezone) || undefined;
+  return [
+    el('p', { class: 'mx-head' }, joined([
+      badge(marathon.phase_word || 'archived', null),
+      el('span', { text: datesWords(marathon, timeZone) }),
+      marathon.schedule_page
+        ? el('a', { class: 'say-nothing-do', href: marathon.schedule_page, text: said(SOURCE_LINK, { source: marathon.source_word }), rel: 'noreferrer', target: '_blank' })
+        : el('span', { text: marathon.source_word }),
+    ])),
+    el('p', { class: 'field-help mx-head-quiet' }, joined([
+      el('span', { text: marathon.archived_word }),
+      el('span', { text: archivedWho(marathon) }),
+      el('span', { text: headerCounts(marathon.run_list) }),
+      eventHead(marathon),
+    ])),
+  ];
+}
+
+async function restoreMarathon(marathon, say) {
+  const sure = await ask({ title: `Restore ${marathon.name}?`, body: [RESTORE_BODY], confirmLabel: 'Restore it' });
+  if (!sure) return;
+  const done = await run(say, () => send(`/api/marathons/${marathon.id}/restore`, 'POST', {}), (found) => found?.message);
+  if (!done.ok) return;
+  await refresh();
+  shown.archived = false;
+  await openMarathon(marathon.id, marathon.name, (done.found || {}).message || '');
+}
+
+async function archivedDrawer(marathon, board, message) {
+  const say = notice();
+  if (message) say.say(message, 'ok');
+  return [
+    say,
+    ...archivedHeader(marathon, board),
+    el('p', { class: 'field-help' }, boldParts(ARCHIVED_NOTE)),
+    peopleCard(marathon, board, say),
+    bar([button('Restore', () => restoreMarathon(marathon, say), { tone: 'warn' })]),
+  ];
+}
+
 async function openMarathon(marathonId, title, message = '') {
   if (shown.id !== String(marathonId)) {
     shown.slots = new Set();
@@ -862,7 +931,11 @@ async function openMarathon(marathonId, title, message = '') {
       api(`/api/marathons/${encodeURIComponent(marathonId)}`),
       api(`/api/marathons/${encodeURIComponent(marathonId)}/people`).catch((error) => ({ error: sentenceFor(error) })),
     ]);
-    openDrawer(marathon.name, await marathonDrawer(marathon, board, message), { onClose: forgetHash });
+    shown.archived = Boolean(marathon.archived);
+    const body = shown.archived
+      ? await archivedDrawer(marathon, board, message)
+      : await marathonDrawer(marathon, board, message);
+    openDrawer(marathon.name, body, { onClose: forgetHash });
     const focus = shown.focus ? document.getElementById(`slot-${shown.focus}`) : null;
     shown.focus = null;
     if (focus) {
@@ -1132,7 +1205,42 @@ function eventCell(row) {
 
 
 
-function listSection(payload, feeds, say) {
+function archiveLine(row) {
+  return el('p', { class: 'field-help mx-line mx-archived' }, joined([
+    textAction(row.name, () => openMarathon(row.id, row.name)),
+    el('span', { class: 'cell-quiet', text: sourceCell(row) }),
+    el('span', { text: datesWords(row) }),
+    el('span', { text: archiveCounts(row) }),
+    el('span', { class: 'cell-quiet', text: archivedWhen(row) }),
+  ]));
+}
+
+function archiveFold(archive) {
+  const days = cadence.archiveDays ?? 7;
+  if (!archive || archive.error) {
+    return foldout(archiveTitle(0), [notice(ARCHIVE_FAILED, 'warn')]);
+  }
+  const rows = archive.marathons || [];
+  const list = el('div', { class: 'mx-archive' }, rows.map(archiveLine));
+  const children = [line(said(ARCHIVE_NOTE, { days })), rows.length ? list : line(said(ARCHIVE_EMPTY, { days }))];
+  let loaded = rows.length;
+  if ((archive.total || 0) > loaded) {
+    const more = textAction(said(ARCHIVE_MORE, { count: Math.min(archive.limit || 50, archive.total - loaded) }), async () => {
+      const next = await api(`/api/marathons/archive?limit=${archive.limit || 50}&offset=${loaded}`).catch(() => null);
+      if (!next) return;
+      list.append(...(next.marathons || []).map(archiveLine));
+      loaded += (next.marathons || []).length;
+      if (loaded >= (next.total || 0)) more.remove();
+      else more.textContent = said(ARCHIVE_MORE, { count: Math.min(next.limit || 50, next.total - loaded) });
+    });
+    children.push(more);
+  }
+  const fold = foldout(archiveTitle(archive.total), children);
+  fold.classList.add('mx-archive-fold');
+  return fold;
+}
+
+function listSection(payload, feeds, say, archive) {
   const rows = payload.marathons || [];
   const list = section('Marathons', LIST_NOTE, { count: rows.length, id: 'marathons', open: true });
   const add = button('Add a marathon', () => addMarathon(), { tone: 'warn' });
@@ -1161,6 +1269,7 @@ function listSection(payload, feeds, say) {
     payload.mode === 'shadow' ? el('p', { class: 'field-help' }, boldParts(MODE_SHADOW)) : null,
     say,
     card(null, [grid, bar([add, sources])]),
+    archiveFold(archive),
   ].filter(Boolean));
   return full(list.node);
 }
@@ -1176,6 +1285,7 @@ async function readCadence() {
     far: held('marathon_far_poll_hours'),
     lead: held('marathon_spotlight_lead_hours'),
     slack: held('marathon_spotlight_slack_hours'),
+    archiveDays: held('marathon_archive_after_days'),
     modeSpec: specs.find((one) => one.key === 'marathon_mode') || null,
   };
 }
@@ -1184,16 +1294,17 @@ async function readCadence() {
 export async function marathonsSection({ reload, openEvent }) {
   refresh = reload;
   showEvent = openEvent;
-  const [payload, feeds, found] = await Promise.all([
+  const [payload, feeds, found, archive] = await Promise.all([
     api('/api/marathons'),
     api('/api/marathons/feeds').catch((error) => ({ error: sentenceFor(error) })),
     readCadence(),
+    api('/api/marathons/archive?limit=50&offset=0').catch((error) => ({ error: sentenceFor(error) })),
   ]);
   cadence = found;
   eventModeDefault = payload.event_mode_default || 'none';
   eventModes = Array.isArray(payload.event_modes) ? payload.event_modes : [];
   const say = sayAgain('marathons', notice());
-  const node = listSection(payload, feeds, say);
+  const node = listSection(payload, feeds, say, archive);
   const wanted = wantedId();
   if (wanted && !deepLinked) {
     deepLinked = true;

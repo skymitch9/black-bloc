@@ -5196,12 +5196,151 @@
       "method": "DELETE",
       "path": "/api/marathons/{marathon_id}",
       "read_by": [
-        "marathons-section.js (events.html) remove"
+        "marathons-section.js (events.html) Remove — the marathon moves to the archive"
       ],
       "shape": "object",
       "keys": [
         "removed",
+        "archived",
         "id",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/marathons/archive",
+      "read_by": [
+        "marathons-section.js (events.html) the Archive foldout under the Marathons table"
+      ],
+      "shape": "object",
+      "keys": [
+        "total",
+        "limit",
+        "offset",
+        "marathons"
+      ],
+      "rows": {
+        "marathons": [
+          "id",
+          "name",
+          "source_word",
+          "schedule_page",
+          "starts_at",
+          "ends_at",
+          "runs",
+          "ours",
+          "archived",
+          "archived_at",
+          "archived_by_name",
+          "archived_why",
+          "archived_why_word",
+          "archived_word"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/marathons/{marathon_archived_id}",
+      "read_by": [
+        "marathons-section.js (events.html) the read-only drawer of an archived marathon"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source_word",
+        "schedule_page",
+        "starts_at",
+        "ends_at",
+        "runs",
+        "ours",
+        "archived",
+        "archived_at",
+        "archived_by_name",
+        "archived_why",
+        "archived_why_word",
+        "archived_word",
+        "phase",
+        "phase_word",
+        "event",
+        "run_list",
+        "pairings",
+        "unmatched"
+      ],
+      "rows": {
+        "run_list": [
+          "id",
+          "game",
+          "category",
+          "people",
+          "scheduled_at",
+          "state",
+          "state_word",
+          "ours",
+          "event_id"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/marathons/{marathon_archived_id}/people",
+      "read_by": [
+        "marathons-section.js (events.html) the archived drawer's People card, read-only"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon_id",
+        "timezone",
+        "archived",
+        "pairings",
+        "baf",
+        "others"
+      ],
+      "rows": {
+        "baf": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "parts",
+          "runs",
+          "done",
+          "live",
+          "matched_by",
+          "matched_word"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_over_id}/archive",
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Archive it"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "archived",
+        "archived_why",
+        "archived_word",
+        "run_list",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_archived_id}/restore",
+      "read_by": [
+        "marathons-section.js (events.html) the archived drawer's Restore"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "archived",
+        "active",
+        "run_list",
         "message"
       ]
     },

@@ -1038,6 +1038,7 @@ function seedState() {
   raidTrains,
   raidSlots: seedRaidSlots(raidTrains),
   marathons: seedMarathons(),
+  marathonArchive: seedMarathonArchive(),
   marathonRuns: seedMarathonRuns(),
   marathonPeople: seedMarathonPeople(),
   marathonFeeds: seedMarathonFeeds(),
@@ -5661,6 +5662,12 @@ function seedMarathonRuns() {
     // Fastest Furs Fall Fest 2026: fastestfurs.com writes runners and hosts as names, never logins.
     run(31, 31, 1, 17280, 'Kena: Bridge of Spirits', 'Any% No Major Glitches', [marathonPerson('bouzny', null, 'runner'), marathonPerson('ClockworkOphelia', null, 'host')]),
     run(32, 31, 4, 17459, 'Racin\u2019 Ratz', 'Chris vs Betty Any% Race', [marathonPerson('karma_dragoness', null, 'runner'), marathonPerson('winnerbit', null, 'runner'), marathonPerson('ClockworkOphelia', null, 'host')]),
+    // Two archived marathons (marathon-archive-design.md §C4): SGDQ 2026 moved by the sweep a week
+    // after its last run, with Rivet as BaF; ESA Winter archived early by staff, nobody BaF on it.
+    run(40, 40, 1, -130000, 'Mega Man X', 'Any%', [marathonPerson('Rivet', 'rivetplays', 'runner', rivet)], { state: 'done' }),
+    run(41, 40, 2, -129900, 'Ocarina of Time', 'Glitchless', [marathonPerson('Gelly', 'gelly', 'runner')], { state: 'done' }),
+    run(42, 40, 3, -128400, 'Tunic', 'Any%', [marathonPerson('Peas', 'peasplays', 'runner')], { state: 'done' }),
+    run(43, 41, 1, -60000, 'Hades', 'Fresh File', [marathonPerson('Spooty', 'spootybiscuit', 'runner')], { state: 'done' }),
   ];
 }
 
@@ -5679,6 +5686,15 @@ function seedMarathons() {
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
   ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ...row }));
+}
+
+// The archive (marathon-archive-design.md §C): rows moved whole off the live list, newest first.
+function seedMarathonArchive() {
+  const base = { poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetch_ok: 1, last_error: null, fetch_failures: 0, suggested_next: null, event_id: null, event_wanted: false, feed_id: null, spotlight_id: null };
+  return [
+    { ...base, id: 40, name: 'SGDQ 2026', schedule_url: 'https://gamesdonequick.com/schedule/70', source: 'gdq', source_ref: '70', starts_at: minutesAgo(130000), ends_at: minutesAgo(128340), active: true, last_fetched_at: minutesAgo(128000), added_by: STAFF.id, added_at: minutesAgo(140000), archived_at: minutesAgo(118000), archived_by: null, archived_why: 'ended' },
+    { ...base, id: 41, name: 'ESA Winter 2026', schedule_url: 'https://horaro.net/esa/2026-winter1', source: 'horaro', source_ref: 'esa/2026-winter1', starts_at: minutesAgo(60000), ends_at: minutesAgo(59940), active: false, last_fetched_at: minutesAgo(59000), added_by: STAFF.id, added_at: minutesAgo(70000), archived_at: minutesAgo(50000), archived_by: STAFF.id, archived_why: 'staff' },
+  ];
 }
 
 // Flyingludicolo is spotlit FROM AGDQ 2027 (channel row 6 on the Go-live page), so the People
@@ -6266,7 +6282,8 @@ function feedCheck(feed) {
   if (feed.action === 'add' && feed.feed_ref === FEED_GDQ_BASE) {
     const event = marathonNextEvent();
     const ref = String(event.id);
-    const known = state.marathons.some((one) => one.source === 'gdq' && one.source_ref === ref);
+    const known = [...state.marathons, ...state.marathonArchive.filter((one) => one.archived_why !== 'removed')]
+      .some((one) => one.source === 'gdq' && one.source_ref === ref);
     if (!known && !feed.ignored.includes(ref)) {
       const found = marathonCreate(event.name, `${FEED_GDQ_BASE}/event/${ref}`, feed.spotlight_id);
       found.row.feed_id = feed.id;
@@ -6547,7 +6564,7 @@ function marathonCreate(name, scheduleUrl, spotlight) {
     throw new Refused(404, 'no_such_channel', `**${String(spotlight).slice(0, 40)}** is not one of the channels on the Go-live page, so nothing was changed. Add the channel there first, or leave it blank.`);
   }
   refuseOptedOutChannel(spotlightId);
-  const id = state.marathons.reduce((top, one) => Math.max(top, one.id), 0) + 1;
+  const id = [...state.marathons, ...state.marathonArchive].reduce((top, one) => Math.max(top, one.id), 0) + 1;
   const starts = new Date(Date.now() + 3 * 86400000);
   const row = { id, name, schedule_url: url, source: read.source, source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null };
   state.marathons.push(row);
@@ -6563,9 +6580,120 @@ function marathonCreate(name, scheduleUrl, spotlight) {
   return { row, message: `**${name}** is on the list. Its schedule has ${found.runs} run(s), ${found.ours} of them BaF.` };
 }
 
+// --- The archive (marathon-archive-design.md §C) --------------------------------------------
+// The mock's copy of cogs/content/marathon_archive.py: a row moves whole to state.marathonArchive;
+// its runs and pairings stay keyed by marathon_id, so the read-only drawer reads them as before.
+const MARATHON_WHY_WORDS = { ended: 'ended', staff: 'archived by staff', removed: 'removed by staff' };
+
+function marathonArchivedOf(id) {
+  return state.marathonArchive.find((one) => String(one.id) === String(id)) || null;
+}
+
+function marathonSaid(key, fields) {
+  return Object.entries(fields).reduce((text, [name, value]) => text.split(`{${name}}`).join(value), String(state.settings.get(key) || ''));
+}
+
+function marathonArchivedWord(row) {
+  const when = new Date(row.archived_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  return marathonSaid('marathon_archived_word', { when });
+}
+
+function marathonArchivedRow(row) {
+  const runs = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped');
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+  const live = marathonRow({ ...row, active: false });
+  return {
+    id: row.id,
+    name: row.name,
+    schedule_url: row.schedule_url,
+    schedule_page: live.schedule_page,
+    source: row.source,
+    source_word: live.source_word,
+    source_ref: row.source_ref,
+    spotlight_id: row.spotlight_id,
+    channel_login: channel ? channel.twitch_login : null,
+    starts_at: row.starts_at,
+    ends_at: row.ends_at,
+    active: false,
+    phase: 'archived',
+    phase_word: 'archived',
+    runs: runs.length,
+    ours: runs.filter(marathonOurs).length,
+    added_at: row.added_at,
+    added_by_name: row.added_by ? memberName(row.added_by) : null,
+    feed_id: row.feed_id || null,
+    feed_name: live.feed_name,
+    event: live.event,
+    event_mode: live.event_mode,
+    event_mode_word: live.event_mode_word,
+    archived: true,
+    archived_at: row.archived_at,
+    archived_by_name: row.archived_by ? memberName(row.archived_by) : null,
+    archived_why: row.archived_why,
+    archived_why_word: MARATHON_WHY_WORDS[row.archived_why] || row.archived_why,
+    archived_word: marathonArchivedWord(row),
+  };
+}
+
+function marathonArchivedDetail(row) {
+  return {
+    ...marathonArchivedRow(row),
+    run_list: marathonRunsOf(row.id).map(marathonRunRow),
+    pairings: state.marathonPeople.filter((one) => one.marathon_id === row.id).map(marathonPairingRow),
+    unmatched: [],
+  };
+}
+
+function marathonArchive(row, why, by) {
+  row.active = false;
+  marathonSyncWindow(row);
+  state.marathons = state.marathons.filter((one) => one !== row);
+  state.marathonSpotlights = state.marathonSpotlights.filter((one) => one.marathon_id !== row.id);
+  state.marathonArchive.unshift({ ...row, board_pinned: false, archived_at: new Date().toISOString(), archived_by: by, archived_why: why });
+  const runs = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped');
+  const details = { marathon_id: row.id, name: row.name, source: row.source, ref: row.source_ref, runs: runs.length, baf: runs.filter(marathonOurs).length, archived_why: why, via: 'website' };
+  logAction(why === 'removed' ? 'web.marathon.removed' : 'web.marathon.archived', { details });
+}
+
+function marathonDetailAny(id) {
+  const live = state.marathons.find((one) => String(one.id) === String(id));
+  if (live) return { ...marathonDetail(live), archived: false };
+  const gone = marathonArchivedOf(id);
+  if (gone) return marathonArchivedDetail(gone);
+  return marathonDetail(marathonOf(id));
+}
+
+route('GET', '/api/marathons/archive', (context) => {
+  requireStaff(context.session);
+  const limit = Math.min(Math.max(Number.parseInt(context.url.searchParams.get('limit') ?? '50', 10) || 50, 1), 200);
+  const offset = Math.max(Number.parseInt(context.url.searchParams.get('offset') ?? '0', 10) || 0, 0);
+  const rows = [...state.marathonArchive].sort((a, b) => String(b.archived_at).localeCompare(String(a.archived_at)) || b.id - a.id);
+  return { total: rows.length, limit, offset, marathons: rows.slice(offset, offset + limit).map(marathonArchivedRow) };
+});
+
+route('POST', '/api/marathons/:marathon_id/archive', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  marathonArchive(row, 'staff', STAFF.id);
+  return { ...marathonDetailAny(row.id), message: marathonSaid('marathon_archived_said', { name: row.name }) };
+});
+
+route('POST', '/api/marathons/:marathon_id/restore', (context) => {
+  requireStaff(context.session);
+  const row = marathonArchivedOf(context.params.marathon_id);
+  if (!row) throw new Refused(404, 'not_archived', marathonSaid('marathon_not_archived', { given: String(context.params.marathon_id).slice(0, 40) }));
+  const taken = state.marathons.find((one) => one.schedule_url === row.schedule_url);
+  if (taken) throw new Refused(409, 'restore_taken', marathonSaid('marathon_restore_taken', { name: row.name, other: taken.name }));
+  state.marathonArchive = state.marathonArchive.filter((one) => one !== row);
+  const { archived_at: archivedAt, archived_by: _by, archived_why: why, ...back } = row;
+  state.marathons.push({ ...back, active: false, board_pinned: false });
+  logAction('web.marathon.restored', { details: { marathon_id: row.id, name: row.name, archived_why: why, archived_at: archivedAt, via: 'website' } });
+  return { ...marathonDetailAny(row.id), message: marathonSaid('marathon_restored_said', { name: row.name }) };
+});
+
 route('GET', '/api/marathons/:marathon_id', (context) => {
   requireStaff(context.session);
-  return marathonDetail(marathonOf(context.params.marathon_id));
+  return marathonDetailAny(context.params.marathon_id);
 });
 
 route('PATCH', '/api/marathons/:marathon_id', async (context) => {
@@ -6650,15 +6778,9 @@ route('DELETE', '/api/marathons/:marathon_id', (context) => {
     logAction('web.marathon.event_cancelled', { details: { marathon_id: row.id, event_id: event.id, via: 'website' } });
   }
   for (const run of marathonRunsOf(row.id).filter((one) => one.event_id)) marathonRunEventCancel(row, run, 'marathon_removed');
-  row.active = false;
-  marathonSyncWindow(row);
+  marathonArchive(row, 'removed', STAFF.id);
   marathonFeedIgnore(row);
-  state.marathons = state.marathons.filter((one) => one !== row);
-  state.marathonRuns = state.marathonRuns.filter((one) => one.marathon_id !== row.id);
-  state.marathonPeople = state.marathonPeople.filter((one) => one.marathon_id !== row.id);
-  state.marathonSpotlights = state.marathonSpotlights.filter((one) => one.marathon_id !== row.id);
-  logAction('web.marathon.removed', { details: { marathon_id: row.id, name: row.name, via: 'website' } });
-  return { removed: true, id: row.id, message: `**${row.name}** is off the list, with its runs and pairings.` };
+  return { removed: true, archived: true, id: row.id, message: marathonSaid('marathon_removed_said', { name: row.name }) };
 });
 
 route('POST', '/api/marathons/:marathon_id/runs/:run_id/event', (context) => {
@@ -6714,6 +6836,12 @@ route('POST', '/api/marathons/:marathon_id/board', (context) => {
 
 route('GET', '/api/marathons/:marathon_id/people', (context) => {
   requireStaff(context.session);
+  const gone = state.marathons.some((one) => String(one.id) === String(context.params.marathon_id)) ? null : marathonArchivedOf(context.params.marathon_id);
+  if (gone) {
+    const board = marathonBoard(gone);
+    const quiet = (entry) => ({ ...entry, channel_id: null, spotlight_id: null, spotlight_starts: null, spotlight_until: null, looks_like: null });
+    return { ...board, archived: true, baf: board.baf.map(quiet), others: board.others.map(quiet) };
+  }
   return marathonBoard(marathonOf(context.params.marathon_id));
 });
 

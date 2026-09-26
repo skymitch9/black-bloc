@@ -286,3 +286,61 @@ export function slotMatches(run, query) {
   const words = [run.game, run.category, ...(run.people || []).flatMap((one) => [one.name, one.login, one.member_name])];
   return words.some((one) => String(one || '').toLowerCase().includes(wanted));
 }
+
+const ARCHIVE_TITLE = 'Archive';
+const ARCHIVE_TITLE_COUNT = 'Archive · {count}';
+const ARCHIVE_WHY = { ended: 'archived', staff: 'archived', removed: 'removed' };
+const ARCHIVED_AGO = '{why} {ago}';
+const ARCHIVED_AGO_BY = '{why} {ago} by {who}';
+const ARCHIVED_AFTER = '{ago}, {days} after its last run';
+const ARCHIVED_BY_SWEEP = 'moved here by the sweep {days} after its last run';
+const ARCHIVED_BY_STAFF = '{why} by {who}';
+const ARCHIVED_BY_NOBODY = '{why} by staff';
+const ARCHIVE_LINE_COUNTS = '{runs} run{s} · {baf} ' + BAF;
+const DAY = 86400;
+
+/** Whole days once it is two days or more, so an old row does not read `81 d 22 h`. */
+function roughly(seconds) {
+  const days = Math.round(seconds / DAY);
+  return seconds >= 2 * DAY ? `${days} days` : span(seconds);
+}
+
+function sinceEnd(row) {
+  const moved = stamp(row.archived_at);
+  const ended = stamp(row.ends_at);
+  return moved !== null && ended !== null && moved >= ended ? roughly((moved - ended) / 1000) : null;
+}
+
+/** The Archive foldout's title: the word alone while it is empty, then its count. */
+export function archiveTitle(total) {
+  const count = Number(total) || 0;
+  return count ? said(ARCHIVE_TITLE_COUNT, { count }) : ARCHIVE_TITLE;
+}
+
+/** One archive line's when: how long ago, and by whom when staff moved it. */
+export function archivedWhen(row, now = Date.now()) {
+  const at = stamp(row.archived_at);
+  const ago = at === null ? '—' : (now - at < 60000 ? 'just now' : `${roughly((now - at) / 1000)} ago`);
+  const why = ARCHIVE_WHY[row.archived_why] || 'archived';
+  if (row.archived_why === 'ended') {
+    const days = sinceEnd(row);
+    return said(ARCHIVED_AGO, { why, ago: days ? said(ARCHIVED_AFTER, { ago, days }) : ago });
+  }
+  return row.archived_by_name ? said(ARCHIVED_AGO_BY, { why, ago, who: row.archived_by_name }) : said(ARCHIVED_AGO, { why, ago });
+}
+
+/** The archived drawer's who: the sweep and its grace, or the staff member who moved it. */
+export function archivedWho(row) {
+  const why = ARCHIVE_WHY[row.archived_why] || 'archived';
+  if (row.archived_why === 'ended') {
+    const days = sinceEnd(row);
+    return days ? said(ARCHIVED_BY_SWEEP, { days }) : 'moved here by the sweep';
+  }
+  return row.archived_by_name ? said(ARCHIVED_BY_STAFF, { why, who: row.archived_by_name }) : said(ARCHIVED_BY_NOBODY, { why });
+}
+
+/** One archived marathon's counts, in the same words as the live header. */
+export function archiveCounts(row) {
+  const runs = Number(row.runs) || 0;
+  return said(ARCHIVE_LINE_COUNTS, { runs, s: runs === 1 ? '' : 's', baf: Number(row.ours) || 0 });
+}
