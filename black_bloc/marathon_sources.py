@@ -15,19 +15,22 @@ GDQ = "gdq"
 RPGLB = "rpglb"
 HORARO = "horaro"
 OENGUS = "oengus"
+LADYARCADERS = "ladyarcaders"
 TRACKER_SOURCES = (GDQ, RPGLB)
-SOURCES = (*TRACKER_SOURCES, HORARO, OENGUS)
+SOURCES = (*TRACKER_SOURCES, HORARO, OENGUS, LADYARCADERS)
 SOURCE_WORDS = {
     GDQ: "GDQ tracker",
     RPGLB: "RPG Limit Break tracker",
     HORARO: "horaro.net",
     OENGUS: "Oengus",
+    LADYARCADERS: "Lady Arcaders",
 }
 SITE_WORDS = {
     GDQ: "the GDQ tracker",
     RPGLB: "the RPG Limit Break tracker",
     HORARO: "horaro.net",
     OENGUS: "oengus.io",
+    LADYARCADERS: "ladyarcaders.com",
 }
 RUNNER = "runner"
 HOST = "host"
@@ -89,6 +92,14 @@ OENGUS_HOME = OENGUS_SITE + "/api/v2/marathons/for-home"
 OENGUS_LISTS = ("live", "next", "open")
 OENGUS_ID = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 OENGUS_TWITCH = "TWITCH"
+LADYARCADERS_URL = re.compile(
+    r"^https?://(?:www\.)?ladyarcaders\.com/events/(\d{1,6})"
+    r"(?:/schedule(?:/calendar)?|/calendar)?/?(?:[?#].*)?$",
+    re.IGNORECASE,
+)
+LADYARCADERS_SITE = "https://ladyarcaders.com"
+LADYARCADERS_PAGE = LADYARCADERS_SITE + "/events/{number}/schedule/"
+LADYARCADERS_CALENDAR = LADYARCADERS_SITE + "/events/{number}/schedule/calendar/"
 ISO_DURATION = re.compile(
     r"^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?"
     r"(?:(\d+(?:\.\d+)?)S)?)?$",
@@ -166,6 +177,9 @@ def read_url(url: Any) -> tuple[str, str] | None:
     found = OENGUS_URL.match(text)
     if found:
         return (OENGUS, "/".join(one for one in found.groups() if one))
+    found = LADYARCADERS_URL.match(text)
+    if found:
+        return (LADYARCADERS, str(int(found.group(1))))
     if GDQ_SHORT.match(text) and not text.isdigit() and "." not in text:
         return (GDQ, SHORT_PREFIX + text)
     return None
@@ -203,6 +217,8 @@ def schedule_page(source: str, ref: Any) -> str:
         marathon, slug = oengus_ref(ref)
         page = OENGUS_PAGE.format(id=marathon)
         return f"{page}/{slug}" if slug else page
+    if source == LADYARCADERS and str(ref or "").isdigit():
+        return LADYARCADERS_PAGE.format(number=ref)
     return ""
 
 
@@ -498,19 +514,25 @@ def event_from(payload: Any) -> dict[str, Any] | None:
 class ScheduleClient:
     """One GET per page through the bot's own agent; every failure is a ScheduleError."""
 
-    def __init__(self, *, request: Any = None) -> None:
+    def __init__(self, *, request: Any = None, text_request: Any = None) -> None:
         self._request = request or self._aiohttp_request
+        self._text_request = text_request or self._aiohttp_text
         self._session: Any = None
 
-    async def _aiohttp_request(self, url: str) -> tuple[int, Any]:
+    def _open(self) -> Any:
         import aiohttp
 
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
             )
+        return self._session
+
+    async def _aiohttp_request(self, url: str) -> tuple[int, Any]:
+        import aiohttp
+
         try:
-            async with self._session.get(url, headers={"User-Agent": BROWSER_AGENT}) as response:
+            async with self._open().get(url, headers={"User-Agent": BROWSER_AGENT}) as response:
                 if response.status != 200:
                     return (response.status, None)
                 try:
@@ -521,6 +543,24 @@ class ScheduleClient:
             raise ScheduleError(
                 UNREACHABLE.format(site=_site_of_url(url), why=type(exc).__name__)
             ) from exc
+
+    async def _aiohttp_text(self, url: str) -> tuple[int, str]:
+        import aiohttp
+
+        try:
+            async with self._open().get(url, headers={"User-Agent": BROWSER_AGENT}) as response:
+                if response.status != 200:
+                    return (response.status, "")
+                return (200, await response.text(errors="replace"))
+        except (TimeoutError, aiohttp.ClientError, OSError) as exc:
+            raise ScheduleError(
+                UNREACHABLE.format(site=_site_of_url(url), why=type(exc).__name__)
+            ) from exc
+
+    async def text(self, url: str) -> tuple[int, str]:
+        """One GET whose body is read as text (a calendar), not JSON."""
+        status, body = await self._text_request(url)
+        return (status, body if isinstance(body, str) else "")
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
@@ -608,6 +648,10 @@ class ScheduleClient:
             marathon, _slug = oengus_ref(ref)
             record = await self.oengus_marathon(marathon)
             return (ref, _text(record.get("name")) or marathon)
+        if source == LADYARCADERS:
+            from .marathon_ladyarcaders import calendar_resolve
+
+            return await calendar_resolve(self, ref)
         if source not in TRACKER_BASES:
             raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
         site = site_of(source)
@@ -655,6 +699,10 @@ class ScheduleClient:
             return parse_horaro(await self.horaro(ref))
         if source == OENGUS:
             return await self.oengus_runs(ref)
+        if source == LADYARCADERS:
+            from .marathon_ladyarcaders import calendar_runs
+
+            return await calendar_runs(self, ref)
         if source not in TRACKER_BASES:
             raise ScheduleError(UNKNOWN_SOURCE.format(source=source))
         site = site_of(source)
@@ -688,6 +736,7 @@ __all__ = [
     "GDQ",
     "HORARO",
     "HOST",
+    "LADYARCADERS",
     "OENGUS",
     "PARTS",
     "RPGLB",

@@ -40,12 +40,12 @@ def test_a_feed_names_the_marathon_source_it_makes():
 
 
 def test_the_seeds_are_the_two_tracker_channel_rows_and_ss4c_on_oengus_and_not_esa():
-    assert [(one.login, mf.marathon_source(one._asdict())) for one in mf.SEEDS] == [
+    assert [(one.login, mf.marathon_source(one._asdict())) for one in mf.SEEDS[:3]] == [
         ("gamesdonequick", "gdq"),
         ("rpglimitbreak", "rpglb"),
         ("speedstuff4charity", "oengus"),
     ]
-    ss4c = mf.SEEDS[-1]
+    ss4c = mf.SEEDS[2]
     assert (ss4c.source, ss4c.feed_ref, ss4c.name) == (
         mf.OENGUS_FEED,
         "speedstuff4charity",
@@ -205,3 +205,27 @@ def test_the_feed_line_says_what_it_reads_and_when_it_last_did():
     failed = feed(last_checked_at=SEPT.isoformat(), last_ok=0, last_error="boom", active=0)
     assert "could not be checked since" in mf.feed_line(failed, "x", 6)
     assert mf.feed_line(failed, "x", 6).endswith("· **paused**")
+
+
+def ladyarcaders(**extra):
+    return feed(source=mf.LADYARCADERS_FEED, feed_ref="ladyarcaders", name="Lady Arcaders") | extra
+
+
+def test_the_lady_arcaders_seed_pick_and_words():
+    seed = next(one for one in mf.SEEDS if one.login == "ladyarcaders")
+    assert seed == mf.Seed("ladyarcaders", mf.LADYARCADERS_FEED, "ladyarcaders", "Lady Arcaders")
+    assert mf.marathon_source(seed._asdict()) == "ladyarcaders"
+    assert mf.pick_of(" LadyArcaders ") == (mf.LADYARCADERS_FEED, None)
+    assert mf.pick_for(ladyarcaders()) == "ladyarcaders"
+    assert mf.PICK_NAMES["ladyarcaders"] == "Lady Arcaders"
+    assert mf.PICK_WORDS["ladyarcaders"].startswith("Lady Arcaders")
+    assert "ladyarcaders.com" in mf.PICK_WORDS["ladyarcaders"]
+    assert mf.source_word(ladyarcaders()) == "Lady Arcaders"
+    assert mf.LADYARCADERS_FEED in mf.FEED_SOURCES
+
+
+def test_look_again_is_offered_on_a_lady_arcaders_feed_that_remembers_its_probes():
+    assert mf.FEED_LOOK not in [one.action for one in mf.feed_moves(ladyarcaders())]
+    probed = ladyarcaders(seen='[{"ref": "25", "empty_at": "2026-09-26T19:00:00+00:00"}]')
+    assert mf.FEED_LOOK in [one.action for one in mf.feed_moves(probed)]
+    assert mf.seen_of(probed) == [{"ref": "25", "twitch": ""}]

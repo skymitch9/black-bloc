@@ -559,3 +559,57 @@ async def test_the_oengus_home_is_read_through_the_same_client():
     listed = await ms.ScheduleClient(request=request).oengus_home()
     assert [one["id"] for one in listed] == ["LSS26", "ss4lhs26", "uksgblue26", "NDS3"]
     assert seen == ["https://oengus.io/api/v2/marathons/for-home"]
+
+
+# --- ladyarcaders.com (the reader is marathon_ladyarcaders) ------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "wanted"),
+    [
+        ("https://ladyarcaders.com/events/24", ("ladyarcaders", "24")),
+        ("https://ladyarcaders.com/events/24/", ("ladyarcaders", "24")),
+        ("https://ladyarcaders.com/events/24/schedule/", ("ladyarcaders", "24")),
+        ("https://www.ladyarcaders.com/events/24/schedule", ("ladyarcaders", "24")),
+        ("https://ladyarcaders.com/events/24/calendar/", ("ladyarcaders", "24")),
+        ("https://ladyarcaders.com/events/024/schedule/calendar/", ("ladyarcaders", "24")),
+        ("http://LadyArcaders.com/events/24/schedule/?tz=1", ("ladyarcaders", "24")),
+    ],
+)
+def test_read_url_knows_every_lady_arcaders_form(url, wanted):
+    assert ms.read_url(url) == wanted
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://ladyarcaders.com/event/lass-2026/",
+        "https://ladyarcaders.com/events/",
+        "https://ladyarcaders.com/events/lass/schedule/",
+        "https://ladyarcaders.com/events/24/submit/",
+    ],
+)
+def test_read_url_refuses_the_other_lady_arcaders_pages(url):
+    assert ms.read_url(url) is None
+
+
+def test_a_lady_arcaders_event_has_a_schedule_page_and_its_words():
+    assert ms.schedule_page("ladyarcaders", "24") == "https://ladyarcaders.com/events/24/schedule/"
+    assert ms.schedule_page("ladyarcaders", "x") == ""
+    assert ms.read_url(ms.schedule_page("ladyarcaders", "25")) == ("ladyarcaders", "25")
+    assert ms.site_of("ladyarcaders") == "ladyarcaders.com"
+    assert ms.SOURCE_WORDS["ladyarcaders"] == "Lady Arcaders"
+    assert "ladyarcaders" in ms.SOURCES and "ladyarcaders" not in ms.TRACKER_SOURCES
+
+
+async def test_a_text_read_goes_through_its_own_request_and_a_non_text_body_is_empty():
+    asked = []
+
+    async def text(url):
+        asked.append(url)
+        return (200, None) if url.endswith("odd") else (200, "BEGIN:VCALENDAR")
+
+    client = ms.ScheduleClient(request=pages()[0], text_request=text)
+    assert await client.text("https://x/cal") == (200, "BEGIN:VCALENDAR")
+    assert await client.text("https://x/odd") == (200, "")
+    assert asked == ["https://x/cal", "https://x/odd"]

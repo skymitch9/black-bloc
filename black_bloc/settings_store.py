@@ -4608,8 +4608,8 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_FEED_RECENT_KEY: (
         "int",
         1,
-        "how many days after it started (a tracker event) or ended (a horaro.net schedule or an "
-        "Oengus marathon) an "
+        "how many days after it started (a tracker event) or ended (a horaro.net schedule, an "
+        "Oengus marathon or a Lady Arcaders event) an "
         "event still counts as new to a feed. 1 by default",
     ),
     MARATHON_EVENT_MODE_DEFAULT_KEY: (
@@ -4701,8 +4701,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{state} on the board for a run the schedule no longer lists",
     ),
     MARATHON_UNKNOWN_SITE_KEY: (
-        "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules and Oengus "
-        "marathons — that link is none of them.",
+        "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus "
+        "marathons and Lady Arcaders calendars — that link is none of them.",
         (),
         "what staff are told when a schedule link is from a site Black Bloc cannot read",
     ),

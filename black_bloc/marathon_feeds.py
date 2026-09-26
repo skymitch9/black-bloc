@@ -10,6 +10,7 @@ from .marathon_sources import (
     GDQ,
     HORARO,
     HORARO_PAGE,
+    LADYARCADERS,
     OENGUS,
     RPGLB,
     SOURCE_WORDS,
@@ -25,7 +26,8 @@ from .timezones import unix
 TRACKER = "tracker"
 HORARO_FEED = "horaro"
 OENGUS_FEED = "oengus"
-FEED_SOURCES = (TRACKER, HORARO_FEED, OENGUS_FEED)
+LADYARCADERS_FEED = "ladyarcaders"
+FEED_SOURCES = (TRACKER, HORARO_FEED, OENGUS_FEED, LADYARCADERS_FEED)
 ADD = "add"
 SUGGEST = "suggest"
 ACTIONS = (ADD, SUGGEST)
@@ -50,17 +52,20 @@ SEEDS = (
     Seed("gamesdonequick", TRACKER, TRACKER_BASES[GDQ], "GDQ"),
     Seed("rpglimitbreak", TRACKER, TRACKER_BASES[RPGLB], "RPG Limit Break"),
     Seed("speedstuff4charity", OENGUS_FEED, "speedstuff4charity", "Speed Stuff 4 Charity"),
+    Seed("ladyarcaders", LADYARCADERS_FEED, "ladyarcaders", "Lady Arcaders"),
 )
 
 PICK_GDQ = "gdq"
 PICK_RPGLB = "rpglb"
 PICK_HORARO = "horaro"
 PICK_OENGUS = "oengus"
+PICK_LADYARCADERS = "ladyarcaders"
 PICKS = {
     PICK_GDQ: (TRACKER, TRACKER_BASES[GDQ]),
     PICK_RPGLB: (TRACKER, TRACKER_BASES[RPGLB]),
     PICK_HORARO: (HORARO_FEED, None),
     PICK_OENGUS: (OENGUS_FEED, None),
+    PICK_LADYARCADERS: (LADYARCADERS_FEED, None),
 }
 PICK_WORDS = {
     PICK_GDQ: "the GDQ tracker",
@@ -69,8 +74,9 @@ PICK_WORDS = {
     PICK_OENGUS: (
         "Oengus — finds this channel's marathons on oengus.io (Speed Stuff 4 Charity's home)"
     ),
+    PICK_LADYARCADERS: "Lady Arcaders — looks for their next event's calendar on ladyarcaders.com",
 }
-PICK_NAMES = {PICK_GDQ: "GDQ", PICK_RPGLB: "RPG Limit Break"}
+PICK_NAMES = {PICK_GDQ: "GDQ", PICK_RPGLB: "RPG Limit Break", PICK_LADYARCADERS: "Lady Arcaders"}
 
 NO_CHANNEL = "A feed belongs to a channel Black Bloc already watches — add the channel first."
 CHANNEL_HAS_FEED = (
@@ -115,6 +121,7 @@ FEED_FORGOT = "**{name}** forgot {count} removed event(s); the next check may ad
 FEED_NOTHING_TO_FORGET = "**{name}** remembers no removed event, so there was nothing to forget."
 FEED_LOOKED = "**{name}** forgot {count} dismissed event(s) and looked again."
 FEED_REREAD = "It read every Oengus marathon's record again ({count} remembered before)."
+FEED_REPROBE = "It asked ladyarcaders.com about the next events again ({count} remembered before)."
 SUGGESTION_GONE = "**{event}** is not waiting on **{name}** any more, so nothing was changed."
 SUGGESTION_DISMISSED = "**{event}** is dismissed — **{name}** will not suggest it again."
 SUGGESTION_ALREADY = "**{event}** is already on the list as **{marathon}**, so nothing was added."
@@ -220,6 +227,8 @@ def marathon_source(feed: Any) -> str | None:
         return HORARO
     if kind == OENGUS_FEED:
         return OENGUS
+    if kind == LADYARCADERS_FEED:
+        return LADYARCADERS
     return None
 
 
@@ -242,6 +251,8 @@ def pick_for(feed: Any) -> str | None:
         return PICK_HORARO
     if source == OENGUS:
         return PICK_OENGUS
+    if source == LADYARCADERS:
+        return PICK_LADYARCADERS
     return {GDQ: PICK_GDQ, RPGLB: PICK_RPGLB}.get(str(source or ""))
 
 
@@ -483,6 +494,7 @@ __all__ = [
     "ADD",
     "FEED_SOURCES",
     "HORARO_FEED",
+    "LADYARCADERS_FEED",
     "OENGUS_FEED",
     "SEEDS",
     "SUGGEST",
