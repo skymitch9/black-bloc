@@ -1,5 +1,7 @@
 # A rehearsal home per feature, and a marathon notice with the detail and the control staff need
 
+> 🔨 **2026-09-25 — BUILT on branch `shadow-home-per-feature`, NOT merged, NOT deployed.** Six keys, not eleven (Deviation 1); §E covers the feed-added notice (Deviation 8). No live values set. See `## Deviations` and `## What was NOT verified` at the foot.
+
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 17:0x Phoenix),
 > dispatched to Opus as branch `shadow-home-per-feature`** off `main` `0374f5a5` (v165 live; `marathon-ux` merged, not
 > deployed — this rides with it as v166). **Last verified: 2026-09-25 17:0x** against that `main`: `black_bloc/shadow.py`
@@ -98,8 +100,66 @@ The feed's *added* notice (and the next-event / suggestion notices, same shape) 
 
 ## Deviations
 
-*(the build agent writes this)*
+*(the build agent, 2026-09-25, branch `shadow-home-per-feature`, commits `a1d33aaf` → `6b698f18` + docs)*
+
+1. **Six keys, not eleven.** Built: `frontdoor_shadow_channel_id` (namespace **modmail**), `posts_shadow_channel_id`
+   (**posts**), `golive_shadow_channel_id` (**golive**), `marathon_shadow_channel_id` (**marathon**),
+   `poll_shadow_channel_id` (**poll**), `birthday_shadow_channel_id` (**birthday**) — `channel`, default blank. NOT
+   built, because nothing would read them: **modmail** (the Open a ticket button has no mode of its own — *"in shadow
+   it follows the door's"*, `frontdoor.py:panel_follows_the_door` — so its rehearsal copy now lands in the FRONT DOOR's
+   home, keeping *one door per channel holds in the rehearsal home*); **minutes** (modes are `off`/`on` only; the home is
+   read solely by `minutes.landing` under the retired TEST_MODE guard, which would refuse any other channel anyway);
+   **tempvoice / honeypot / automod** (their shadow hides a lobby or writes log rows — none posts a copy anywhere).
+   A key that changes nothing would be a lying Settings row.
+2. **Check — the front door's namespace:** `frontdoor_*` is `NAMESPACE_OVERRIDE`'d onto **modmail**, so the new key is
+   too (`test_contract.py::test_the_mock_groups_a_key_the_way_the_registry_does` holds the mock to it). The key is
+   named by the FEATURE word (`frontdoor_`), not the namespace (`modmail_`): `shadow.feature_key(feature)`.
+3. **Check — go-live's own shadow path:** `cogs/content/golive.py` posts NOTHING in shadow (`PostResult(reason=
+   "shadow")`) and never read the home, so `golive_shadow_channel_id` serves **spotlights** only (its help says so).
+4. **Check — minutes:** see 1; no key, `minutes.py` untouched.
+5. **`note_line` takes no `feature`,** and `preview.py` is untouched: the note's words are the rehearsal note with the
+   REAL target — they never depended on the home. `channel_of` needed none either.
+6. **`shadow_home` rides only on rows where a home was actually used:** `frontdoor.posted_shadow` / `updated_shadow`
+   / `would_post` (both), `modmail.panel_posted_shadow` / `panel_updated_shadow` / `would_post_panel` (both),
+   `post.would_post` / `shadow_posted` / `shadow_updated` (shadow only), `poll.opened_shadow` / `poll.would_open`
+   (rehearsing only), `birthday.would_announce` (rehearsed only), `golive.would_spotlight_announce` /
+   `would_channel_announce`, `marathon.would_post_board` / `would_refresh_board` / `would_shout` / `would_remind` /
+   `would_suggest_next` / `would_feed_add` / `would_feed_suggest`. NOT on would-rows that post nothing
+   (`honeypot.would_ban`, `event.would_*`, `automod.would_*`, `golive.would_announce`, role rows) nor on take-down rows.
+7. **`guard.allows_channel` / `teach_guard` untouched** (as the design asked): only the GLOBAL key widens a TEST_MODE
+   guard, so under TEST_MODE a feature home that differs from `shadow_channel_id` is refused and the feature says so
+   in its existing words. Production runs with no guard (`TEST_MODE=false`).
+8. **§E covers the feed-ADDED notice only.** The feed SUGGEST notice and the marathon next-event notice keep their one
+   row (**Add it / Not this one**): they describe a candidate that is not a marathon yet, so Pause/Remove/Read/Event/
+   Manage… have no row to act on. Their rehearsals do follow `marathon_shadow_channel_id`.
+9. **The new button labels are constants** (`mf.NOTICE_READ_LABEL`, `NOTICE_MANAGE_LABEL`, `NOTICE_SITE_LABEL`, the
+   select's placeholder), like the shipped *Pause it* / *Remove it* — the brief made the embed's field LABELS constants;
+   under the every-word-editable rule these button words are a candidate follow-up, not settings keys yet.
+10. **Pause it still folds the notice** (a line, rows removed) exactly as before; the design said so only of Remove it.
+    Resume lives on Manage… / the site.
+11. **Manage…** is sent as an ephemeral FOLLOWUP (every notice press is deferred ephemeral first), with `view.message`
+    set, so its moves edit that card and never the notice.
+12. **The persistent select is `NoticeModePick`, not `FeedModePick`** — that name was already the feed card's
+    (ephemeral, per-feed) select. Registered beside `FeedButton` in `Marathons.cog_load`.
+13. **Commits:** the notice's embed, rows AND Manage… landed as one commit (`6b698f18`) — the view is one object.
+14. ⚠️ **For the conductor — "post" may mean the POSTS feature.** The owner's *"make post go to welcome test"* was read
+    (by the design) as the front door. The front door FOLLOWS the welcome post (`frontdoor_follows_post` = welcome) and
+    its rehearsal checks for that post's rehearsal copy IN THE DOOR'S HOME (`posted.overtaken_by`). If `posts_mode` is
+    shadow and posts rehearse in #blackbloc-logs while the door rehearses in #welcome-test, the "rules post, then the
+    door under it" pairing no longer shares one channel. Setting `posts_shadow_channel_id` → #welcome-test as well keeps
+    it. Not decided here — no live values were set.
 
 ## What was NOT verified
 
-*(the build agent writes this)*
+- **Nothing met live Discord.** No rehearsal was posted to a real channel; the notice's embed, its three rows, the
+  select and Manage… were exercised only through the test fakes. Discord's own rendering of `<t:…:f>`, a link button
+  beside Manage… on row 2, and an embed on a FORUM post (`open_notice_post(embed=)`) are unseen.
+- **A restart with a notice already up** — proved only as far as registration (`cog_load` adds `FeedButton` AND
+  `NoticeModePick`) and every custom id round-tripping through `from_custom_id`; no gateway re-dispatch was run.
+- **No browser rendered a page.** The Settings page drawers, the Posts page's four-key drawer, the Go-live page's
+  Spotlighted channels drawer and the Modmail page's door line were checked by the node fixture / mock `check.mjs`
+  only. `/settings`'s group picker was not opened in Discord — the keys' namespaces are asserted in
+  `tests/test_settings_store.py`.
+- **Read it now against the real GDQ tracker / horaro** — only the fake schedule client.
+- **TEST_MODE** (a guard installed) with a feature home set — reasoned (Deviation 7), one modmail test only.
+

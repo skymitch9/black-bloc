@@ -3253,3 +3253,17 @@ to look at"*, *"for marathon highlights don't say ours say BaF as the category"*
 | **`MX-d`** | The marathon table | Columns *Marathon · Dates · State · BaF runs · Schedule · Event* — no Next up column; when a marathon has a next event waiting, ONE strip under the table names it, and its drawer's Schedule card ends with *After this one: …* and **Add it · Not this one**. |
 | **`MX-e`** | Under the table ▸ **Where marathons come from · N sources · next check in …** | Shut unless a suggestion waits; open, each row shows Channel · Source · *every 6 h · last … · next in …* · Add/Suggest · **Check now** · **Pause**. The channel name opens **The … feed** drawer with the Event select, Look again / Forget ignored (N) when they apply, **Rename…**, **Move to channel…**, **Remove**. |
 | **`MX-f`** | Read the whole page with every fold open, a drawer, and `/event` ▸ **Marathons…** (member and staff) | Not one *ours*: the chip is **BaF**, the column **BaF runs**, the member view **BaF next**; Settings ▸ `marathon_board_template` default reads *— BaF on the schedule ({count})*. The picked marathon's card reads **Schedule:** first, then Runs, Event, Channel, Posts; its button is **Read it now**. |
+
+## Rows `SH-a` … `SH-c` — a rehearsal home per feature, and the marathon notice's detail and control (branch `shadow-home-per-feature`, 2026-09-25)
+
+🔨 **BUILT on branch `shadow-home-per-feature`, NOT merged, NOT deployed.** Owner, 2026-09-25: *"for now make post go to
+welcome test, and everything else go to logs channel"*, and of the notice: *"also pause it and remove it, thats not enough
+control over the schedule or enough detail"*. Design: [`../info/shadow-home-per-feature-design.md`](../info/shadow-home-per-feature-design.md).
+Rows lettered; the conductor numbers them.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`SH-a`** | <https://blackbloc.heygabi.ai/settings.html> ▸ core ▸ `shadow_channel_id` → **#blackbloc-logs**; ▸ modmail ▸ `frontdoor_shadow_channel_id` → **#welcome-test** (the conductor's post-deploy step) | The next front-door rehearsal (Modmail page ▸ Front door ▸ post, or the 5-minute sweep) lands in **#welcome-test**, its log row's `shadow_home` = #welcome-test's id; the next marathon rehearsal (board, reminder, feed notice) lands in **#blackbloc-logs** with `shadow_home` = its id. The Modmail page's door line names #welcome-test. |
+| **`SH-b`** | Blank `frontdoor_shadow_channel_id` ▸ Save; re-post the door | The door's rehearsal follows the global home (**#blackbloc-logs**); the old copy in #welcome-test is found and taken down (the hunt starts at the feature's home, then every older one). |
+| **`SH-c`** | A feed-added marathon notice in the rehearsal home (Events ▸ Marathons ▸ a feed ▸ **Check now**, or wait for the feed) | The sentence, then an embed titled with the marathon's name and six fields — **When · Read from · Channel · Schedule · Event · Found by** — and three rows: **Pause it · Remove it · Read it now** / **Event: none / marathon / runs / both** / **Manage… · Open on the site**. Read it now edits the Schedule field; the select changes Event; Manage… opens the marathon card only you can see; a member pressing anything is refused in words. Remove it strikes the title and takes the rows away. |
+
