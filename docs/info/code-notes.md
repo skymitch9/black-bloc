@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *The horaro.net events feed for Fast Paced Events* (branch `marathon-horaro-events`, off `main` `a3ac5132`, keyed against `87ddd4ba`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The Oengus feed for Speed Stuff 4 Charity* (branch `marathon-feeds-oengus`, off `main` `69750bd7`, keyed against `4eff650f`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The feed notice waits for the schedule* (branch `marathon-notice-when`, off `main` `791b5543`, keyed against `f518c143`). Before that:
 > **2026-09-25 — one section APPENDED, one row retired, nothing re-keyed**: *Several guides per command* (branch `guides-per-command`, off `main` `582977f1`, keyed against `2f86e8bb`). Before that:
@@ -8666,3 +8667,28 @@ Deviations. Keyed against `4eff650f`.
 | `site/public/assets/marathons-section.js:176` `PICK_HELP` · `:182` `PICK_GUESS` · `:1021` `shownPick` | One line per pick saying what it reads; the pick guessed from the channel; the slug field only for horaro.net (an inline `display`, because `.field` is `display: grid` and beats `[hidden]`). |
 | `site/public/assets/marathons-section.js:120` `READ_FROM` | *Read from: …* — *Read from the* read wrong for Oengus and horaro.net/esa. |
 | `site/mock/server.mjs:1426` channel 7 · `:6092` feed 3 · `:5632` marathon 5 | The mock's SS4C row, its Oengus feed and the marathon it found, waiting on its schedule. `:6038` `MARATHON_OENGUS` mirrors `OENGUS_URL`. |
+
+## The horaro.net events feed for Fast Paced Events (branch `marathon-horaro-events`, 2026-09-26)
+
+Owner, 2026-09-26 12:3x: *"Build them all now"* (after the marathon orgs research). Design
+`marathon-horaro-events-design.md`. Keyed against `87ddd4ba`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_horaro_events.py:21` `twitch_of` | horaro writes `twitch` as a bare login in either case (`FastPacedEvents` / `fastpacedevents`, measured); a `twitch.tv/` link or `@login` is read too, lower-cased. |
+| `black_bloc/marathon_horaro_events.py:31` `seen_of` | Its OWN reader of `marathon_feeds.seen`: keeps the extra fields a read event carries (`schedule`, `name`, `starts_at`, `ends_at`, `url`). `marathon_feeds.seen_of` would drop them (it serves the Oengus `{ref, twitch}` records and `seen_count`). |
+| `black_bloc/marathon_horaro_events.py:47` `to_read` | Only the channel's events, only those with no `schedule` remembered — an event created before its schedule is read again next check (Deviation 5). Capped at `READS_PER_CHECK` 20. |
+| `black_bloc/marathon_horaro_events.py:60` `read_record` | The FIRST listed schedule is the event's marathon (Deviation 4); an empty schedules list leaves a bare `{ref, twitch}` record. |
+| `black_bloc/marathon_horaro_events.py:78` `remembered` | A re-read replaces what the memory said about the same event; the cap is `marathon_feeds.seen_after`'s `SEEN_LIMIT`. |
+| ⚠️ `black_bloc/marathon_horaro_events.py:84` `candidates` | The ref is `<event>/<schedule>` — the `source_ref` `read_url` gives a pasted horaro.net link — so `known`, adoption and Remove's `ignored` compare equal strings (Deviation 2). The event must be in THIS search and remembered as the login's. "Recent" is by END. |
+| `black_bloc/marathon_horaro_events.py:105` `check` | The search is by the FEED'S NAME (Deviation 1); a blank name raises `NO_QUERY` (a failed check, in words). A failed schedules read is logged at info and not remembered. Returns the memory only when it changed, so an unchanged check writes nothing. |
+| `black_bloc/marathon_sources.py:78` `HORARO_EVENTS` · `:572` `horaro_events` | `name` is URL-quoted; `max=100`; at most `HORARO_EVENT_PAGES` 3 pages. A blank name returns `[]` without a request — an empty search would list all 3,600+ events. |
+| `black_bloc/marathon_sources.py:464` `horaro_next` | `pagination.links[rel=next]`, only when it stays on `https://horaro.net/` (a link is never followed off-site). |
+| `black_bloc/marathon_feeds.py:54` `SEEDS` — `fastpacedevents` | Named **Fast Pace** because the name IS the search, and FPE's events are *Fast Pace for …* (`Fast Paced Events` finds 0). Seeded at the first boot after staff add the row (the marker is only written when the row exists). |
+| `black_bloc/marathon_feeds.py:232` `marathon_source` · `:238` `source_word` · `:253` `pick_for` | The marathons are plain `horaro`; the feed's own word (*horaro.net events*) and pick are checked on the feed's `source` before the horaro branch, which would say `horaro.net/<login>`. |
+| `black_bloc/cogs/content/marathon_feeds.py:340` `horaro_events_candidates_of` | The Oengus shape: the channel row's CURRENT login (the ref is the fallback), `seen` written only when changed, under the feed lock `run_check` already holds. |
+| `black_bloc/cogs/content/marathon_feeds.py:724` · `:876` | Add a feed and Move to channel… key the ref on the login, as Oengus does (one feed per channel login under the table's UNIQUE). |
+| `black_bloc/cogs/content/marathon_feeds.py:970` `look_again` — `again` | The re-read sentence names horaro.net for this kind; the clear itself is the generic `seen = NULL`. |
+| `black_bloc/cogs/content/marathon_feeds.py:1787` `AddFeedModal.source` | `max_length` 20: `horaro_events` is 13 characters (Deviation 8). |
+| `site/public/assets/marathons-section.js:181` `PICK_HELP.horaro_events` · `:184` `PICK_GUESS` · `:187` `FEED_SEEN_NOTE_HORARO` · `:999` | The help line tells staff the Name is the search; the pick is guessed for `fastpacedevents`; the drawer's memory line names horaro.net events for this kind. |
+| `site/mock/server.mjs:1429` channel 12 · `:6103` feed 12 · `:6078` `FEED_SOURCES` | The mock's FPE row and its feed (two remembered events, no marathon — nothing announced today). Ids 12 keep clear of the sibling branches' likely 8–11. |
