@@ -44,11 +44,13 @@ from black_bloc.events import (
     list_lines,
     may_cancel,
     mentions,
+    message_url,
     option_label,
     parse_duration,
     pick_placeholder,
     read_where,
     review_channel_url,
+    scheduled_event_url,
     settings_lines,
     site_page_url,
     slugify,
@@ -1743,3 +1745,14 @@ async def test_an_approved_from_event_is_approved_at_once_with_no_review_place(d
     assert row["status"] == events.APPROVED and row["decided_by"] == 42
     assert row["review_channel_id"] is None and row["announce_message_id"] is None
     assert row["ends_at"] == (starts + timedelta(minutes=45)).isoformat()
+
+
+def test_a_message_link_needs_the_guild_the_channel_and_the_message():
+    assert message_url(7, 8, 9) == "https://discord.com/channels/7/8/9"
+    assert message_url(7, None, 9) is None
+    assert message_url(7, 8, None) is None
+
+
+def test_a_scheduled_event_links_to_the_servers_events_list():
+    assert scheduled_event_url(7, 66) == "https://discord.com/events/7/66"
+    assert scheduled_event_url(7, None) is None

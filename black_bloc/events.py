@@ -975,6 +975,8 @@ REVIEW_ROOM_BUTTON = "The review channel"
 REVIEW_POST_BUTTON = "The review post"
 PLACE_LINK_BUTTON: dict[str, str] = {ROOM: REVIEW_ROOM_BUTTON, POST: REVIEW_POST_BUTTON}
 CHANNEL_URL = "https://discord.com/channels/{guild_id}/{channel_id}"
+MESSAGE_URL = "https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
+SCHEDULED_EVENT_URL = "https://discord.com/events/{guild_id}/{event_id}"
 
 
 async def create_event(
@@ -2816,6 +2818,20 @@ def site_page_url(origin: Any) -> str | None:
 
 def review_channel_url(guild_id: Any, channel_id: Any) -> str:
     return CHANNEL_URL.format(guild_id=int(guild_id), channel_id=int(channel_id))
+
+
+def message_url(guild_id: Any, channel_id: Any, message_id: Any) -> str | None:
+    if not (guild_id and channel_id and message_id):
+        return None
+    return MESSAGE_URL.format(
+        guild_id=int(guild_id), channel_id=int(channel_id), message_id=int(message_id)
+    )
+
+
+def scheduled_event_url(guild_id: Any, event_id: Any) -> str | None:
+    if not (guild_id and event_id):
+        return None
+    return SCHEDULED_EVENT_URL.format(guild_id=int(guild_id), event_id=int(event_id))
 
 
 def panel_minutes(store: Any, guild_id: int) -> int:

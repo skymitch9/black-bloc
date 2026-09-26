@@ -1424,7 +1424,7 @@ function seedState() {
   },
   events: [
     // Marathon 1's own event (marathon-events-page §B): approved, dated from the schedule.
-    { id: 5, requester_id: STAFF.id, title: 'AGDQ 2027', description: 'AGDQ 2027 \u2014 read from the GDQ schedule. BaF runs are boarded in <#800000000000000006>.', location: 'https://twitch.tv/gamesdonequick', where_kind: 'other', where_channel_id: null, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 440 * 60000).toISOString(), status: 'approved', created_at: minutesAgo(9000), decided_by: STAFF.id, decided_at: minutesAgo(8990), deny_reason: null, review_channel_id: '800000000000000005', scheduled_event_id: '840000000000000005' },
+    { id: 5, requester_id: STAFF.id, title: 'AGDQ 2027', description: 'AGDQ 2027 \u2014 read from the GDQ schedule. BaF runs are boarded in <#800000000000000006>.', location: 'https://twitch.tv/gamesdonequick', where_kind: 'other', where_channel_id: null, starts_at: new Date(Date.now() - 300 * 60000).toISOString(), ends_at: new Date(Date.now() + 440 * 60000).toISOString(), status: 'approved', created_at: minutesAgo(9000), decided_by: STAFF.id, decided_at: minutesAgo(8990), deny_reason: null, review_channel_id: '800000000000000005', scheduled_event_id: '840000000000000005', announce_message_id: '830000000000000050' },
     { id: 4, requester_id: STAFF.id, title: 'Charity marathon', description: 'Twelve hours for the shelter.', location: 'https://twitch.tv/rivetplays', where_kind: 'other', where_channel_id: null, starts_at: minutesAgo(-10080), ends_at: minutesAgo(-9900), status: 'pending', created_at: minutesAgo(55), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' },
     { id: 3, requester_id: MEMBERS[3].id, title: 'Movie night', description: 'Bring snacks.', location: null, where_kind: 'voice', where_channel_id: '800000000000000010', starts_at: minutesAgo(-2880), ends_at: null, status: 'pending', created_at: minutesAgo(60), decided_by: null, decided_at: null, deny_reason: null, review_channel_id: '800000000000000005' },
     { id: 2, requester_id: MEMBERS[1].id, title: 'Speedrun race', description: null, location: 'Twitch', starts_at: minutesAgo(-10080), ends_at: null, status: 'approved', created_at: minutesAgo(4000), decided_by: STAFF.id, decided_at: minutesAgo(3900), deny_reason: null },
@@ -7555,6 +7555,23 @@ function movedWord(movedTo) {
     : '';
 }
 
+// api/tools/events.py:event_links — the announcement's channel is the setting at read time.
+function eventLinks(row) {
+  const guild = REVIEW_GUILD_ID;
+  const announceChannel = state.settings.get('events_announce_channel_id');
+  return {
+    announce_url: row.announce_message_id && announceChannel
+      ? `https://discord.com/channels/${guild}/${announceChannel}/${row.announce_message_id}`
+      : null,
+    scheduled_event_url: row.scheduled_event_id
+      ? `https://discord.com/events/${guild}/${row.scheduled_event_id}`
+      : null,
+    review_url: row.review_channel_id
+      ? `https://discord.com/channels/${guild}/${row.review_channel_id}`
+      : null,
+  };
+}
+
 function eventRow(row) {
   const minutes = eventMinutes(row);
   const where = eventWhere(row);
@@ -7586,6 +7603,7 @@ function eventRow(row) {
     review_kind: row.review_kind === 'post' ? 'post' : 'room',
     created_at: row.created_at,
     marathon: marathonOfEvent(row.id),
+    ...eventLinks(row),
   };
 }
 
