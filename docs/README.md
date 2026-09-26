@@ -111,6 +111,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-25 21:5x:** v168 live (one merge: several guides per command; the marathon and ping-window guides carry `/event` and `/golive`; see [`DONE.md`](DONE.md) 2026-09-25 v168). The mode table below was NOT re-read.
+
 **2026-09-25 20:2x:** v167 live (one merge: `/rolemenu` hides while role menus are off, the timed-grants console has a `/mod` ▸ Role grants… door; the guides seed sync rode along; see [`DONE.md`](DONE.md) 2026-09-25 v167). Earlier today v166 (19:30, six merges) and v165 (16:15, three merges). The mode table below was NOT re-read.
 
 **2026-09-25 19:3x:** v166 live (six merges: the Events page made plain — three sections, *BaF* where it said *ours*; a marathon opens on its People — BaF on top, the schedule by day and slot, link or spotlight a runner; an event opens in a drawer with its Announced, Discord event and review post as links; the marathon drawer lightened; a rehearsal home per feature — `shadow_channel_id` is now #blackbloc-logs and only the front door and posts rehearse in #welcome-test; plus the go-live drawer trim and the two marathon waiting strips gone; `marathon_mode` still shadow; schema 65, 491 keys; see [`DONE.md`](DONE.md) 2026-09-25 v166); the mode table below was NOT re-read beyond its `shadow` row.
