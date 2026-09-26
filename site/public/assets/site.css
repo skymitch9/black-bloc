@@ -2709,6 +2709,7 @@ body[data-show-was="1"] .preview-was { display: block; }
 .mx-head .badge { margin-right: 6px; }
 .mx-head-quiet { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
 .mx-dot { color: var(--et-muted); white-space: pre; }
+.mx-next { margin: 0 0 12px; }
 .mx-settings { margin-top: 12px; }
 .mx-settings .foldout-body { display: flex; flex-direction: column; gap: 10px; }
 .mx-posts { display: flex; flex-wrap: wrap; align-items: center; margin: 12px 0 10px; }

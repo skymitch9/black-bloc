@@ -369,14 +369,14 @@ function runTools(marathon, row, say) {
 function nextBlock(marathon, say) {
   if (!marathon.next) return [];
   const moves = nextMoves(marathon, say);
-  return [
+  return [el('div', { class: 'mx-next' }, [
     el('p', { class: 'field-help mx-line' }, [el('span', { class: 'cell-quiet', text: NEXT_WHEN_ENDS }), ...boldParts(nextSentence(marathon))]),
     marathon.next.state === 'open' ? line(NEXT_NOTE) : null,
     marathon.next.url && marathon.next.state !== 'none'
-      ? el('p', { class: 'field-help' }, [el('a', { href: marathon.next.url, text: 'the tracker ↗', rel: 'noreferrer', target: '_blank' })])
+      ? el('p', { class: 'field-help' }, [el('a', { class: 'say-nothing-do', href: marathon.next.url, text: 'the tracker ↗', rel: 'noreferrer', target: '_blank' })])
       : null,
     moves.length ? bar(moves) : null,
-  ];
+  ])];
 }
 
 function joined(parts) {
