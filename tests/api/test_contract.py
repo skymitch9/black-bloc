@@ -813,6 +813,41 @@ async def seed_world(client, web, guild, wf) -> dict:
         (guild_id, ended.isoformat()),
     )
     marathon_waiting_id = int(cur.lastrowid)
+    # The archive (marathon-archive §C): SGDQ 2026 moved by the sweep, one BaF run on it.
+    cur = await db.conn.execute(
+        "INSERT INTO marathons_archive(id, guild_id, name, schedule_url, source, source_ref, "
+        "starts_at, ends_at, active, added_at, archived_at, archived_why) VALUES (900, ?, "
+        "'SGDQ 2026', 'https://gamesdonequick.com/schedule/70', 'gdq', '70', ?, ?, 1, ?, ?, "
+        "'ended')",
+        (
+            guild_id,
+            (ended - timedelta(days=60)).isoformat(),
+            (ended - timedelta(days=59)).isoformat(),
+            ended.isoformat(),
+            ended.isoformat(),
+        ),
+    )
+    marathon_archived_id = 900
+    await db.conn.execute(
+        "INSERT INTO marathon_runs_archive(id, marathon_id, external_id, game, people, state, "
+        "scheduled_at, first_seen_at, last_seen_at) VALUES (9000, 900, '9000', 'Mega Man X', ?, "
+        "'done', ?, ?, ?)",
+        (
+            json.dumps(
+                [
+                    {
+                        "name": "Contract Runner",
+                        "login": "contractrunner",
+                        "part": "runner",
+                        "user_id": MEMBER_ID,
+                    }
+                ]
+            ),
+            (ended - timedelta(days=60)).isoformat(),
+            ended.isoformat(),
+            ended.isoformat(),
+        ),
+    )
     marathon_linked_run_id = next(
         row["id"] for row in await runs_of(db, marathon_id) if row["id"] != marathon_run_id
     )
@@ -937,6 +972,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_over_id": str(marathon_over_id),
         "marathon_bare_id": str(marathon_id),
         "marathon_waiting_id": str(marathon_waiting_id),
+        "marathon_archived_id": str(marathon_archived_id),
         "marathon_done_run_id": str(marathon_done_run_id),
         "marathon_linked_run_id": str(marathon_linked_run_id),
         "marathon_person": "somebody_runs",

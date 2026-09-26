@@ -2445,3 +2445,106 @@ async def test_the_remove_pick_takes_a_staff_window_off_and_refuses_a_marathon_o
     interaction = FakeInteraction(bot, FakeActor(), bot.guild)
     await pick.callback(interaction)
     assert [one["id"] for one in await windows_for(bot.db, row["id"])] == [marathon]
+
+
+# --- a marathon channel outlives its date (marathon-archive §B) -------------------------------
+
+
+async def a_feed_on(bot, row):
+    await bot.db.conn.execute(
+        "INSERT INTO marathon_feeds(guild_id, source, feed_ref, spotlight_id, name, added_at) "
+        "VALUES (?, 'oengus', 'ss4c', ?, 'SS4C', '2026-09-20')",
+        (GUILD, row["id"]),
+    )
+    await bot.db.conn.commit()
+
+
+async def a_marathon_on(bot, row):
+    await bot.db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
+        "added_at) VALUES (?, 'SS4C 2026', 'https://oengus.io/x', 'oengus', 'x', ?, '2026-09-20')",
+        (GUILD, row["id"]),
+    )
+    await bot.db.conn.commit()
+
+
+def passed():
+    return (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+
+
+async def test_an_expired_row_that_carries_a_feed_is_kept_with_its_feed_and_role(bot, cog):
+    row = await a_row(bot, login="speedstuff4charity")
+    await a_feed_on(bot, row)
+    helix_of(bot, twitch_stream(login="speedstuff4charity"))
+    await cog.poll_once()
+    announcement = bot.guild.channel.messages[0]
+    assert announcement.pinned is True
+
+    await update_channel(bot.db, row["id"], expires_at=passed(), starts_at=passed())
+    await cog.poll_once()
+
+    kept = await channel_by_id(bot.db, row["id"])
+    assert (kept["spotlight"], kept["expires_at"], kept["starts_at"]) == (0, None, None)
+    assert kept["spotlit_by_marathon"] is None
+    cur = await bot.db.conn.execute("SELECT COUNT(*) FROM marathon_feeds")
+    assert (await cur.fetchone())[0] == 1
+    assert announcement.pinned is False
+    assert len(await open_sessions(bot.db, GUILD)) == 1
+    said = await kinds(bot.db)
+    assert "golive.spotlight_expired" not in said and "golive.spotlight_ended" not in said
+    details = await details_of(bot.db, "golive.spotlight_kept")
+    assert details["because"] == "marathon_channel"
+    assert details["held_by"] == ["feed"]
+    assert details["login"] == "speedstuff4charity"
+
+
+async def test_an_expired_row_a_marathon_airs_on_is_kept_and_says_which_signal_held_it(bot, cog):
+    row = await a_row(bot, login="retrogaminglivetv")
+    await a_marathon_on(bot, row)
+    await update_channel(bot.db, row["id"], expires_at=passed())
+    await cog.poll_once()
+
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 0
+    assert (await details_of(bot.db, "golive.spotlight_kept"))["held_by"] == ["marathon"]
+    await cog.poll_once()
+    assert (await kinds(bot.db)).count("golive.spotlight_kept") == 1
+
+
+async def test_with_the_key_off_an_expired_marathon_channel_is_deleted_as_before(bot, cog):
+    await bot.store.set(GUILD, "golive_expiry_keeps_marathon_channels", False)
+    row = await a_row(bot, login="speedstuff4charity")
+    await a_feed_on(bot, row)
+    await update_channel(bot.db, row["id"], expires_at=passed())
+    await cog.poll_once()
+
+    assert await channels_for(bot.db, GUILD) == []
+    cur = await bot.db.conn.execute("SELECT COUNT(*) FROM marathon_feeds")
+    assert (await cur.fetchone())[0] == 0
+    assert "golive.spotlight_kept" not in await kinds(bot.db)
+
+
+async def test_an_expired_row_with_no_marathon_on_it_is_still_deleted(bot, cog):
+    row = await a_row(bot, login="somebody")
+    await update_channel(bot.db, row["id"], expires_at=passed())
+    await cog.poll_once()
+    assert await channels_for(bot.db, GUILD) == []
+    assert "golive.spotlight_expired" in await kinds(bot.db)
+
+
+async def test_a_cancelled_event_keeps_a_marathon_channel_too(bot, cog):
+    outcome, row = await spotlight_channel(
+        bot,
+        bot.guild,
+        FakeActor(),
+        "speedstuff4charity",
+        expires_at=(datetime.now(UTC) + timedelta(days=5)).isoformat(),
+        event_id=43,
+    )
+    assert outcome == "added"
+    await a_feed_on(bot, row)
+    assert await expire_for_event(bot, bot.guild, 43) is not None
+    assert [one["twitch_login"] for one in await channels_for(bot.db, GUILD)] == [
+        "speedstuff4charity"
+    ]
+    details = await details_of(bot.db, "golive.spotlight_kept")
+    assert details["expired_because"] == "event_cancelled"

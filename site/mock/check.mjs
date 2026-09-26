@@ -81,6 +81,9 @@ const IDS = {
   // The event link: GDQx 2026 (3) has no dates and no event, so Make an event now answers
   // "waiting for the schedule"; AGDQ 2027 (1) carries event 5, so Unlink reaches it.
   marathon_bare_id: '3',
+  // The archive: SGDQ 2026 (40) was moved by the sweep with Rivet as BaF, so the Archive list,
+  // the read-only drawer, its People card and Restore all reach it.
+  marathon_archived_id: '40',
   marathon_waiting_id: '1',
   // Feeds: 1 is GDQ (add mode, one removed event remembered, so Forget ignored reaches it);
   // 2 is RPG Limit Break (suggest mode) with event 22 waiting. The ESA row (2) is opted out of

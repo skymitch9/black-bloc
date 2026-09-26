@@ -34,6 +34,9 @@ ROUTES = [
     ("DELETE", "/api/marathons/1/event"),
     ("POST", "/api/marathons/1/runs/1/event"),
     ("DELETE", "/api/marathons/1/runs/1/event"),
+    ("GET", "/api/marathons/archive"),
+    ("POST", "/api/marathons/1/archive"),
+    ("POST", "/api/marathons/1/restore"),
 ]
 
 
@@ -249,10 +252,13 @@ async def test_removing_a_marathon_takes_its_runs_and_says_so(client, sign_in, w
     sign_in(client)
     marathon_id = add(client).json()["id"]
     gone = client.delete(f"/api/marathons/{marathon_id}").json()
-    assert gone["removed"] is True and "off the list" in gone["message"]
+    assert gone["removed"] is True and gone["archived"] is True
+    assert "off the list and in the archive" in gone["message"]
     assert await get_marathon(web.db, wf.GUILD_ID, marathon_id) is None
     assert await runs_of(web.db, marathon_id) == []
-    assert client.get(f"/api/marathons/{marathon_id}").status_code == 404
+    kept = client.get(f"/api/marathons/{marathon_id}").json()
+    assert kept["archived"] is True and kept["archived_why"] == "removed"
+    assert client.get("/api/marathons/99999").status_code == 404
     assert "web.marathon.removed" in await wf.kinds_in(web.db)
 
 
@@ -652,3 +658,49 @@ async def test_following_again_spotlights_a_channel_whose_marathon_is_in_reach(
     assert (await channel_by_id(web.db, spotlight_id))["spotlight"] == 0
     client.patch(f"/api/marathons/{marathon_id}", json={"spotlight_mode": "follow"})
     assert (await channel_by_id(web.db, spotlight_id))["spotlight"] == 1
+
+
+async def test_archive_it_moves_a_marathon_and_the_archive_lists_it_read_only(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    assert client.get("/api/marathons/archive").json()["total"] == 0
+
+    moved = client.post(f"/api/marathons/{marathon_id}/archive")
+    assert moved.status_code == 200
+    body = moved.json()
+    assert body["archived"] is True and body["archived_why"] == "staff"
+    assert "in the archive" in body["message"]
+    assert body["archived_word"].startswith("Archived ")
+    assert len(body["run_list"]) == 3 and body["archived_why_word"] == "archived by staff"
+    assert client.get("/api/marathons").json()["marathons"] == []
+
+    listed = client.get("/api/marathons/archive?limit=5&offset=0").json()
+    assert (listed["total"], listed["limit"], listed["offset"]) == (1, 5, 0)
+    assert [one["name"] for one in listed["marathons"]] == ["AGDQ 2027"]
+    assert listed["marathons"][0]["ours"] == 1
+    people = client.get(f"/api/marathons/{marathon_id}/people").json()
+    assert people["archived"] is True
+    assert [one["name"] for one in people["baf"]] == ["Sky"]
+    assert "web.marathon.archived" in await wf.kinds_in(web.db)
+    assert client.post(f"/api/marathons/{marathon_id}/refresh").status_code == 404
+
+
+async def test_restore_brings_it_back_paused_and_refuses_in_words_twice(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    client.post(f"/api/marathons/{marathon_id}/archive")
+
+    back = client.post(f"/api/marathons/{marathon_id}/restore")
+    assert back.status_code == 200
+    body = back.json()
+    assert body["archived"] is False and body["active"] is False
+    assert "back on the list, paused" in body["message"]
+    assert len(body["run_list"]) == 3
+    assert "web.marathon.restored" in await wf.kinds_in(web.db)
+
+    again = client.post(f"/api/marathons/{marathon_id}/restore")
+    assert again.status_code == 404 and "no archived marathon" in again.json()["message"]

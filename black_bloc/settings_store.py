@@ -1801,6 +1801,7 @@ SPOTLIGHT_BAD_DATE_KEY = "spotlight_bad_date"
 SPOTLIGHT_PING_MODE_DEFAULT_KEY = "spotlight_ping_mode_default"
 SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY = "spotlight_window_open_reminder"
 SPOTLIGHT_WINDOW_KEEP_DAYS_KEY = "spotlight_window_keep_days"
+GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY = "golive_expiry_keeps_marathon_channels"
 SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY = "spotlight_pings_always_words"
 SPOTLIGHT_PINGS_NEVER_WORDS_KEY = "spotlight_pings_never_words"
 SPOTLIGHT_PINGS_EVENTS_WORDS_KEY = "spotlight_pings_events_words"
@@ -1893,6 +1894,7 @@ KEY_TYPES.update(
         SPOTLIGHT_PING_MODE_DEFAULT_KEY: "enum",
         SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY: "bool",
         SPOTLIGHT_WINDOW_KEEP_DAYS_KEY: "int",
+        GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY: "bool",
         SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY: "text",
         SPOTLIGHT_PINGS_NEVER_WORDS_KEY: "text",
         SPOTLIGHT_PINGS_EVENTS_WORDS_KEY: "text",
@@ -2047,6 +2049,13 @@ KEY_HELP.update(
             "whether a channel that is ALREADY live when one of its ping windows opens gets one "
             "reminder that pings, so a marathon starting on a channel running reruns is not "
             "missed. on by default; the window closing posts nothing"
+        ),
+        GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY: (
+            "whether a spotlight whose date passes KEEPS its channel row when the row carries a "
+            "marathon — a marathon feed, a marathon on the list, or a spotlight a marathon turned "
+            "on. on by default: the row turns its spotlight off and is kept for ever, with its "
+            "ping role and its feed; off deletes it with its role and feed like any other row. A "
+            "row with no marathon on it is deleted either way"
         ),
         SPOTLIGHT_WINDOW_KEEP_DAYS_KEY: (
             "how many days a ping window is kept after it ends, as history on the channel's "
@@ -3222,6 +3231,7 @@ NAMESPACE_OVERRIDE = {
     SPOTLIGHT_PING_MODE_DEFAULT_KEY: "golive",
     SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY: "golive",
     SPOTLIGHT_WINDOW_KEEP_DAYS_KEY: "golive",
+    GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY: "golive",
     SPOTLIGHT_PINGS_ALWAYS_WORDS_KEY: "golive",
     SPOTLIGHT_PINGS_NEVER_WORDS_KEY: "golive",
     SPOTLIGHT_PINGS_EVENTS_WORDS_KEY: "golive",
@@ -4384,6 +4394,16 @@ MARATHON_SPOTLIGHT_SLACK_KEY = "marathon_spotlight_slack_hours"
 MARATHON_SPOTLIGHT_NOTE_KEY = "marathon_spotlight_note_template"
 MARATHON_SPOTLIGHT_FOLLOWS_KEY = "marathon_spotlight"
 MARATHON_SPOTLIGHT_LEAD_MINUTES_KEY = "marathon_spotlight_lead_minutes"
+MARATHON_ARCHIVE_AFTER_DAYS_KEY = "marathon_archive_after_days"
+MARATHON_ARCHIVED_WORD_KEY = "marathon_archived_word"
+MARATHON_ARCHIVE_QUESTION_KEY = "marathon_archive_question"
+MARATHON_ARCHIVED_SAID_KEY = "marathon_archived_said"
+MARATHON_REMOVE_QUESTION_KEY = "marathon_remove_question"
+MARATHON_REMOVED_SAID_KEY = "marathon_removed_said"
+MARATHON_RESTORE_QUESTION_KEY = "marathon_restore_question"
+MARATHON_RESTORED_SAID_KEY = "marathon_restored_said"
+MARATHON_RESTORE_TAKEN_KEY = "marathon_restore_taken"
+MARATHON_NOT_ARCHIVED_KEY = "marathon_not_archived"
 MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY = "marathon_channel_ping_mode_default"
 MARATHON_CHANNEL_PING_HELP_KEY = "marathon_channel_ping_help"
 MARATHON_BOARD_TEMPLATE_KEY = "marathon_board_template"
@@ -4670,6 +4690,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "minutes before a marathon's first run that marathon_spotlight turns its channel's "
         "spotlight on. 15 by default, like marathon_ping_minutes",
     ),
+    MARATHON_ARCHIVE_AFTER_DAYS_KEY: (
+        "int",
+        7,
+        "days after a marathon's last run ends that it moves to the archive, with its runs and "
+        "people — kept, browsable under Archive on the Events page, and Restore brings it back "
+        "paused. 7 by default; 0 moves it the same day. A marathon with no dates never moves "
+        "by itself",
+    ),
     MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY: (
         "enum",
         PING_EVENTS,
@@ -4689,6 +4717,62 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     ),
 }
 MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    MARATHON_ARCHIVED_WORD_KEY: (
+        "Archived {when} — runs, people and posts are kept.",
+        ("when",),
+        "the line an archived marathon carries where its message is — the archived drawer on "
+        "the Events page today, the marathon's inbox message once there is one. It takes {when}",
+    ),
+    MARATHON_ARCHIVE_QUESTION_KEY: (
+        "Archive **{name}**? It stops being read and its ping window closes; its runs, people "
+        "and posts are kept, and **Restore** brings it back paused.",
+        ("name",),
+        "what staff are asked before Archive it moves a marathon to the archive early. It takes "
+        "{name}",
+    ),
+    MARATHON_ARCHIVED_SAID_KEY: (
+        "**{name}** is in the archive — its runs, people and posts are kept. **Restore** brings "
+        "it back, paused.",
+        ("name",),
+        "what staff are told once Archive it has moved a marathon to the archive. It takes {name}",
+    ),
+    MARATHON_REMOVE_QUESTION_KEY: (
+        "Remove **{name}**? It moves to the archive with its runs and pairings, its ping window "
+        "closes and its events are called off; a feed will not add it again. Posts already made "
+        "stay where they are.",
+        ("name",),
+        "what staff are asked before Remove takes a marathon off the list — nothing is deleted, "
+        "it is archived. It takes {name}",
+    ),
+    MARATHON_REMOVED_SAID_KEY: (
+        "**{name}** is off the list and in the archive, with its runs and pairings; a feed will "
+        "not add it again.",
+        ("name",),
+        "what staff are told once Remove has archived a marathon. It takes {name}",
+    ),
+    MARATHON_RESTORE_QUESTION_KEY: (
+        "Restore **{name}**? It comes back to the list paused — nothing is read or posted until "
+        "someone presses **Resume**.",
+        ("name",),
+        "what staff are asked before Restore brings an archived marathon back. It takes {name}",
+    ),
+    MARATHON_RESTORED_SAID_KEY: (
+        "**{name}** is back on the list, paused — **Resume** reads it again.",
+        ("name",),
+        "what staff are told once Restore has brought a marathon back. It takes {name}",
+    ),
+    MARATHON_RESTORE_TAKEN_KEY: (
+        "**{name}** cannot come back while **{other}** is on the list with the same schedule "
+        "link — remove that one first, so nothing was changed.",
+        ("name", "other"),
+        "the refusal when Restore would put a second marathon on the list with the same "
+        "schedule link. It takes {name} {other}",
+    ),
+    MARATHON_NOT_ARCHIVED_KEY: (
+        "There is no archived marathon **{given}** here, so nothing was restored.",
+        ("given",),
+        "the refusal when Restore names a marathon that is not in the archive. It takes {given}",
+    ),
     MARATHON_BOARD_TEMPLATE_KEY: (
         "**{marathon}** — BaF on the schedule ({count}), {starts} to {ends}. {url}",
         MARATHON_BOARD_FIELDS,
@@ -4841,6 +4925,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_SPOTLIGHT_LEAD_MINUTES_KEY: (0, 240),
     MARATHON_FEED_HOURS_KEY: (1, 168),
     MARATHON_FEED_RECENT_KEY: (0, 30),
+    MARATHON_ARCHIVE_AFTER_DAYS_KEY: (0, 365),
     MARATHON_LADYARCADERS_FLOOR_KEY: (1, 99999),
 }
 
@@ -5231,6 +5316,8 @@ class SettingsStore:
         if key == SPOTLIGHT_PING_MODE_DEFAULT_KEY:
             return PING_ALWAYS
         if key == SPOTLIGHT_WINDOW_OPEN_REMINDER_KEY:
+            return True
+        if key == GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY:
             return True
         if key == SPOTLIGHT_WINDOW_KEEP_DAYS_KEY:
             return SPOTLIGHT_WINDOW_KEEP_DAYS

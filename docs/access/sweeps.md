@@ -3440,3 +3440,19 @@ the spotlight moves below are the bot's.
 | **`MSP-b`** | While MSP-a's marathon runs, Go-live ▸ the row ▸ **Spotlight off** (or `/golive` ▸ Channels… ▸ the row ▸ **Spotlight off**) | The answer ends *…**<marathon>** will not spotlight it again.*; the marathon's drawer ▸ Settings shows *Spotlight the channel while it runs* **Off**; `marathon.spotlight_mode_set` with `because: staff_turned_the_spotlight_off`; **Read it now** and the next ticks leave the spotlight off. Turning the drawer switch back **On** and **Save** spotlights it again at once |
 | **`MSP-c`** | While GDQ's marathon runs (GDQ is spotlight on and **kept**) | Nothing changes on the GDQ row — still **kept**, no expiry, no `marathon.spotlight_set` |
 | **`MSP-d`** | Go-live ▸ add a channel whose login a marathon feed is seeded for (`fastestfurs`, `fastpacedevents`, `ladyarcaders` — only when staff choose to, per the owner's 12:5x rule) | Its drawer's **Pings** reads *During events* and carries the help line *On a marathon channel, During events pings only while one of its marathons is running…*; a channel that is not a marathon one still starts on `spotlight_ping_mode_default` (*Always*) |
+
+## Rows `MA-a` … `MA-d` — marathons are archived, never deleted (branch `marathon-archive-local`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-archive-local`, NOT merged, NOT deployed.** Owner, 2026-09-26 14:1x: *"i think we move
+marathons to a archive table"*. Design: [`../info/marathon-archive-design.md`](../info/marathon-archive-design.md).
+Rows lettered; the conductor numbers them. Local check first: `MOCK_PORT=8811 node site/mock/server.mjs` from the
+branch, then <http://localhost:8811/events.html> ▸ Marathons ▸ **Archive · 2** (open it) and
+<http://localhost:8811/events.html#marathon-40> (an archived drawer). ⚠️ The mock has no tick, so nothing moves by itself
+there — MA-a is the bot's.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MA-a`** | Wait for a marathon on the list to be `marathon_archive_after_days` (7) past its last run — or set the key to 0 on a marathon that has just ended — and let a minute tick pass | It leaves the Marathons table and is the top line of **Archive**: name · source · dates · runs · BaF · *archived … , N days after its last run*; its drawer is read-only (People with the day folds, one **Restore**); ONE `marathon.archived` in `#blackbloc-logs` with `archived_why: ended`, runs and BaF counts. A second ended marathon moves on the NEXT tick, not the same one |
+| **`MA-b`** | On an archived marathon's drawer press **Restore** and confirm (or `/event` ▸ Marathons… ▸ **Archive…** ▸ pick it ▸ **Restore it**) | *…is back on the list, paused — Resume reads it again.*; it is in the table again as **paused** with its runs and people; `marathon.restored`; nothing is read or posted until **Resume** |
+| **`MA-c`** | A channel-only Go-live row a marathon feed is on (SS4C- or RGL-style) reaches its *until* date | The row STAYS on the Go-live page: spotlight **off**, *kept* (no date), its ping role and its feed still there; a live announcement is unpinned, not ended; ONE `golive.spotlight_kept` with `because: marathon_channel` and `held_by` naming the signals. A row with no marathon on it still leaves the list with `golive.spotlight_expired` |
+| **`MA-d`** | After MA-a, let the feed that found the archived marathon check again (or press **Check now** on its Sources row) | The archived event is NOT added again — *0 added*; a marathon staff REMOVED is also not re-added (the feed's ignore list), until **Forget ignored**, which lets the feed add it again as before |

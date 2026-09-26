@@ -36,6 +36,17 @@ from ...cogs.content.marathon import (
     unlink_the_event,
     unpair_runner,
 )
+from ...cogs.content.marathon_archive import (
+    archive_marathon,
+    archived_marathon,
+    archived_pairings,
+    archived_people_state,
+    archived_runs,
+    archived_word,
+    count_archived,
+    list_archived,
+    restore_marathon,
+)
 from ...cogs.content.marathon_events import (
     default_mode,
     make_run_event_now,
@@ -53,6 +64,7 @@ from ...cogs.content.marathon_spotlight import set_spotlight_mode
 from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...logkinds import VIA_WEBSITE
+from ...marathon_archive import STAFF, WHY_WORDS, page_of
 from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_sources import SOURCE_WORDS, schedule_page
@@ -87,6 +99,7 @@ NEVER_READ = "not read yet"
 BAD_ACTIVE = "Say true to read this marathon or false to pause it, so nothing was changed."
 BAD_DISMISS = "Say true to dismiss the suggested next event, so nothing was changed."
 BAD_MAKE_EVENT = "Say true or false for making it an event, so nothing was added."
+ARCHIVED = "archived"
 
 
 async def event_of(bot: Any, row: Any) -> dict[str, Any]:
@@ -301,6 +314,49 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "event_mode": event_mode_of(row),
         "event_mode_word": MODE_WORDS[event_mode_of(row)],
         "spotlight_mode": spotlight_mode_of(row),
+        "archived": False,
+    }
+
+
+async def archived_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict[str, Any]:
+    """An archived marathon, read-only: what it was, when it moved, who moved it and why."""
+    db = bot.db
+    rows = list(runs) if runs is not None else await archived_runs(db, row["id"])
+    channel = await channel_by_id(db, int(row["spotlight_id"])) if row["spotlight_id"] else None
+    feed = await get_feed(db, guild.id, row["feed_id"]) if row["feed_id"] else None
+    added_by = row["added_by"]
+    by = row["archived_by"]
+    why = str(row["archived_why"])
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_url": row["schedule_url"],
+        "schedule_page": schedule_page(row["source"], row["source_ref"]) or row["schedule_url"],
+        "source": row["source"],
+        "source_word": SOURCE_WORDS.get(row["source"], row["source"]),
+        "source_ref": row["source_ref"],
+        "spotlight_id": row["spotlight_id"],
+        "channel_login": channel["twitch_login"] if channel is not None else None,
+        "starts_at": row["starts_at"],
+        "ends_at": row["ends_at"],
+        "active": False,
+        "phase": ARCHIVED,
+        "phase_word": ARCHIVED,
+        "runs": len([one for one in rows if one["state"] != mt.DROPPED]),
+        "ours": len([one for one in rows if one["state"] != mt.DROPPED and mt.is_ours(one)]),
+        "added_at": row["added_at"],
+        "added_by_name": resolve_one(guild, added_by)["display_name"] if added_by else None,
+        "feed_id": row["feed_id"],
+        "feed_name": feed["name"] if feed is not None else None,
+        "event": await event_of(bot, row),
+        "event_mode": event_mode_of(row),
+        "event_mode_word": MODE_WORDS[event_mode_of(row)],
+        "archived": True,
+        "archived_at": row["archived_at"],
+        "archived_by_name": resolve_one(guild, by)["display_name"] if by else None,
+        "archived_why": why,
+        "archived_why_word": WHY_WORDS.get(why, why),
+        "archived_word": archived_word(bot, guild.id, row),
     }
 
 
@@ -337,7 +393,22 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(404, "no_such_run", mt.NO_SUCH_RUN.format(name=marathon["name"]))
         return row
 
+    async def archived_detail(guild: Any, marathon_id: Any) -> dict[str, Any]:
+        row = await archived_marathon(bot.db, guild.id, marathon_id)
+        if row is None:
+            raise Refused(404, "not_found", mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
+        runs = await archived_runs(bot.db, row["id"])
+        statuses = await event_statuses(bot, runs)
+        pairings = await archived_pairings(bot.db, row["id"])
+        return await archived_row(bot, guild, row, runs) | {
+            "run_list": [run_row(guild, one, statuses) for one in runs],
+            "pairings": [pairing_row(guild, one) for one in pairings],
+            "unmatched": [],
+        }
+
     async def detail(guild: Any, marathon_id: Any) -> dict[str, Any]:
+        if await get_marathon(bot.db, guild.id, marathon_id) is None:
+            return await archived_detail(guild, marathon_id)
         row = await wanted(guild, marathon_id)
         runs = await runs_of(bot.db, row["id"])
         pairings = [
@@ -382,6 +453,19 @@ def build_router(bot: Any) -> APIRouter:
             "next_waiting": len([one for one in rows if one["next_waiting"]]),
             "event_mode_default": default_mode(bot, guild.id),
             "event_modes": event_modes(),
+        }
+
+    @router.get("/archive")
+    async def marathon_archive(limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        guild = require_guild(bot)
+        require_db(bot)
+        wanted_limit, skip = page_of(limit, offset)
+        rows = await list_archived(bot.db, guild.id, wanted_limit, skip)
+        return {
+            "total": await count_archived(bot.db, guild.id),
+            "limit": wanted_limit,
+            "offset": skip,
+            "marathons": [await archived_row(bot, guild, row) for row in rows],
         }
 
     @router.post("")
@@ -514,7 +598,28 @@ def build_router(bot: Any) -> APIRouter:
         done = answered(
             await remove_marathon(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
         )
-        return {"removed": True, "id": marathon_id, "message": done.message}
+        return {"removed": True, "archived": True, "id": marathon_id, "message": done.message}
+
+    @router.post("/{marathon_id}/archive")
+    async def marathon_archive_one(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        actor = actor_for(bot, who, guild)
+        done = answered(await archive_marathon(bot, guild, actor, row, why=STAFF, via=VIA_WEBSITE))
+        return await detail(guild, marathon_id) | {"message": done.message}
+
+    @router.post("/{marathon_id}/restore")
+    async def marathon_restore(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        actor = actor_for(bot, who, guild)
+        done = answered(await restore_marathon(bot, guild, actor, marathon_id, via=VIA_WEBSITE))
+        return await detail(guild, marathon_id) | {"message": done.message}
 
     @router.post("/{marathon_id}/refresh")
     async def marathon_refresh(request: Request, marathon_id: int) -> dict[str, Any]:
@@ -580,10 +685,25 @@ def build_router(bot: Any) -> APIRouter:
         )
         return await detail(guild, marathon_id) | {"message": done.message}
 
+    async def archived_board(guild: Any, marathon: Any) -> dict[str, Any]:
+        state = await archived_people_state(bot, guild, marathon)
+        return {
+            "marathon_id": marathon["id"],
+            "timezone": zone_of(bot, guild),
+            "archived": True,
+            "pairings": [pairing_row(guild, one) for one in state["pairings"]],
+            "baf": [entry_row(guild, one) for one in state["baf"]],
+            "others": [entry_row(guild, one) for one in state["others"]],
+        }
+
     @router.get("/{marathon_id}/people")
     async def marathon_people(marathon_id: int) -> dict[str, Any]:
         guild = require_guild(bot)
         require_db(bot)
+        if await get_marathon(bot.db, guild.id, marathon_id) is None:
+            gone = await archived_marathon(bot.db, guild.id, marathon_id)
+            if gone is not None:
+                return await archived_board(guild, gone)
         return await board(guild, await wanted(guild, marathon_id))
 
     @router.post("/{marathon_id}/people/{person}/spotlight")

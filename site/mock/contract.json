@@ -52,6 +52,7 @@
       "marathon_reminder_stale_minutes": 1,
       "marathon_spotlight_lead_hours": 0,
       "marathon_spotlight_lead_minutes": 0,
+      "marathon_archive_after_days": 0,
       "marathon_spotlight_slack_hours": 0,
       "marathon_window_slack_hours": 0,
       "minutes_chunk_seconds": 30,
@@ -115,6 +116,7 @@
       "marathon_reminder_stale_minutes": 240,
       "marathon_spotlight_lead_hours": 48,
       "marathon_spotlight_lead_minutes": 240,
+      "marathon_archive_after_days": 365,
       "marathon_spotlight_slack_hours": 48,
       "marathon_window_slack_hours": 24,
       "minutes_chunk_seconds": 120,
@@ -211,6 +213,7 @@
       "spotlight_window_keep_days": "how many days a ping window is kept after it ends, as history on the channel's row, before the sweep purges it. 30 by default",
       "spotlight_window_next_words": "the {window} line while the next ping window is still ahead. It takes {start} and {end}, each like 12 Jan 15:00",
       "spotlight_window_none_words": "the {window} line when a channel pings only during events and has no window ahead of it, so nothing it posts mentions a role",
+      "golive_expiry_keeps_marathon_channels": "whether a spotlight whose date passes KEEPS its channel row when the row carries a marathon — a marathon feed, a marathon on the list, or a spotlight a marathon turned on. on by default: the row turns its spotlight off and is kept for ever, with its ping role and its feed; off deletes it with its role and feed like any other row. A row with no marathon on it is deleted either way",
       "spotlight_window_open_reminder": "whether a channel that is ALREADY live when one of its ping windows opens gets one reminder that pings, so a marathon starting on a channel running reruns is not missed. on by default; the window closing posts nothing",
       "spotlight_window_open_words": "the {window} line while a ping window is open. It takes {end}, the moment it closes, like 19 Jan 23:00",
       "youtube_live_end_misses": "how many probes in a row must read offline before a YouTube stream is treated as ended and its announcement rewritten. 2 by default, so one bad answer from YouTube does not end a stream that is still running",
@@ -5193,12 +5196,151 @@
       "method": "DELETE",
       "path": "/api/marathons/{marathon_id}",
       "read_by": [
-        "marathons-section.js (events.html) remove"
+        "marathons-section.js (events.html) Remove — the marathon moves to the archive"
       ],
       "shape": "object",
       "keys": [
         "removed",
+        "archived",
         "id",
+        "message"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/marathons/archive",
+      "read_by": [
+        "marathons-section.js (events.html) the Archive foldout under the Marathons table"
+      ],
+      "shape": "object",
+      "keys": [
+        "total",
+        "limit",
+        "offset",
+        "marathons"
+      ],
+      "rows": {
+        "marathons": [
+          "id",
+          "name",
+          "source_word",
+          "schedule_page",
+          "starts_at",
+          "ends_at",
+          "runs",
+          "ours",
+          "archived",
+          "archived_at",
+          "archived_by_name",
+          "archived_why",
+          "archived_why_word",
+          "archived_word"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/marathons/{marathon_archived_id}",
+      "read_by": [
+        "marathons-section.js (events.html) the read-only drawer of an archived marathon"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "source_word",
+        "schedule_page",
+        "starts_at",
+        "ends_at",
+        "runs",
+        "ours",
+        "archived",
+        "archived_at",
+        "archived_by_name",
+        "archived_why",
+        "archived_why_word",
+        "archived_word",
+        "phase",
+        "phase_word",
+        "event",
+        "run_list",
+        "pairings",
+        "unmatched"
+      ],
+      "rows": {
+        "run_list": [
+          "id",
+          "game",
+          "category",
+          "people",
+          "scheduled_at",
+          "state",
+          "state_word",
+          "ours",
+          "event_id"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/marathons/{marathon_archived_id}/people",
+      "read_by": [
+        "marathons-section.js (events.html) the archived drawer's People card, read-only"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon_id",
+        "timezone",
+        "archived",
+        "pairings",
+        "baf",
+        "others"
+      ],
+      "rows": {
+        "baf": [
+          "key",
+          "name",
+          "login",
+          "user_id",
+          "member",
+          "member_name",
+          "parts",
+          "runs",
+          "done",
+          "live",
+          "matched_by",
+          "matched_word"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_over_id}/archive",
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Archive it"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "archived",
+        "archived_why",
+        "archived_word",
+        "run_list",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_archived_id}/restore",
+      "read_by": [
+        "marathons-section.js (events.html) the archived drawer's Restore"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "archived",
+        "active",
+        "run_list",
         "message"
       ]
     },

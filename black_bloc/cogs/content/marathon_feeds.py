@@ -216,9 +216,14 @@ async def marathons_of_feed(db: Any, feed_id: int) -> list[Any]:
 
 
 async def marathons_by_ref(db: Any, guild_id: int, source: str) -> dict[str, Any]:
+    """Live and archived refs in one read, live first: a feed never re-adds an archived event.
+    A removed one is left to the feed's ignore list, which Forget ignored can clear."""
     cur = await db.conn.execute(
-        "SELECT * FROM marathons WHERE guild_id = ? AND source = ? ORDER BY id",
-        (int(guild_id), source),
+        "SELECT id, name, source_ref, feed_id, 0 AS archived FROM marathons "
+        "WHERE guild_id = ? AND source = ? "
+        "UNION ALL SELECT id, name, source_ref, feed_id, 1 AS archived FROM marathons_archive "
+        "WHERE guild_id = ? AND source = ? AND archived_why <> 'removed' ORDER BY archived, id",
+        (int(guild_id), source) * 2,
     )
     found: dict[str, Any] = {}
     for row in await cur.fetchall():
@@ -409,7 +414,7 @@ async def run_check(
     adopted = 0
     for candidate in candidates:
         row = known.get(candidate.ref)
-        if row is not None and row["feed_id"] is None:
+        if row is not None and row["feed_id"] is None and not row["archived"]:
             await update_marathon(bot.db, row["id"], feed_id=int(feed["id"]))
             adopted += 1
     records = mf.suggested_of(feed)

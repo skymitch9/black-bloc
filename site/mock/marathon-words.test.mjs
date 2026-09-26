@@ -153,3 +153,27 @@ test('a person on a slot finds their line in the People answer', () => {
   assert.equal(entryFor(board, 2, RUNS[1].people[2]).name, 'TheKing');
   assert.equal(entryFor(board, 3, RUNS[1].people[2]), null);
 });
+
+test('the Archive foldout says Archive alone while empty, then its count', async () => {
+  const { archiveTitle } = await import('../public/assets/marathon-words.js');
+  assert.equal(archiveTitle(0), 'Archive');
+  assert.equal(archiveTitle(undefined), 'Archive');
+  assert.equal(archiveTitle(2), 'Archive · 2');
+});
+
+test('an archived row says who moved it: the sweep by its grace, staff by name', async () => {
+  const { archivedWhen, archivedWho, archiveCounts } = await import('../public/assets/marathon-words.js');
+  const now = Date.parse('2026-10-10T12:00:00Z');
+  const swept = { archived_why: 'ended', archived_at: '2026-09-20T12:00:00Z', ends_at: '2026-09-13T08:00:00Z' };
+  assert.equal(archivedWhen(swept, now), 'archived 20 days ago, 7 days after its last run');
+  assert.equal(archivedWho(swept), 'moved here by the sweep 7 days after its last run');
+  const staff = { archived_why: 'staff', archived_at: '2026-10-10T09:00:00Z', archived_by_name: 'Sky' };
+  assert.equal(archivedWhen(staff, now), 'archived 3 h ago by Sky');
+  assert.equal(archivedWho(staff), 'archived by Sky');
+  const removed = { archived_why: 'removed', archived_at: '2026-10-10T11:59:30Z' };
+  assert.equal(archivedWhen(removed, now), 'removed just now');
+  assert.equal(archivedWho(removed), 'removed by staff');
+  assert.equal(archivedWho({ archived_why: 'ended', archived_at: null }), 'moved here by the sweep');
+  assert.equal(archiveCounts({ runs: 1, ours: 0 }), '1 run · 0 BaF');
+  assert.equal(archiveCounts({ runs: 3, ours: 1 }), '3 runs · 1 BaF');
+});

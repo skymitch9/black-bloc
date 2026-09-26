@@ -2713,6 +2713,9 @@ body[data-show-was="1"] .preview-was { display: block; }
 .mx-settings { margin-top: 12px; }
 .mx-settings .foldout-body { display: flex; flex-direction: column; gap: 10px; }
 .mx-posts { display: flex; flex-wrap: wrap; align-items: center; margin: 12px 0 10px; }
+.mx-archive { display: grid; gap: 8px; margin: 8px 0; }
+.mx-archive .mx-archived { margin: 0; padding-bottom: 8px; border-bottom: var(--et-hairline-w) solid var(--et-hairline); }
+.mx-archive .mx-archived:last-child { border-bottom: 0; padding-bottom: 0; }
 .mx-line[data-tone="warn"] { color: var(--et-warn); }
 .mx-line .btn { vertical-align: middle; }
 .ev-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
