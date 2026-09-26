@@ -111,6 +111,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-25 20:2x:** v167 live (one merge: `/rolemenu` hides while role menus are off, the timed-grants console has a `/mod` ▸ Role grants… door; the guides seed sync rode along; see [`DONE.md`](DONE.md) 2026-09-25 v167). Earlier today v166 (19:30, six merges) and v165 (16:15, three merges). The mode table below was NOT re-read.
+
 **2026-09-25 19:3x:** v166 live (six merges: the Events page made plain — three sections, *BaF* where it said *ours*; a marathon opens on its People — BaF on top, the schedule by day and slot, link or spotlight a runner; an event opens in a drawer with its Announced, Discord event and review post as links; the marathon drawer lightened; a rehearsal home per feature — `shadow_channel_id` is now #blackbloc-logs and only the front door and posts rehearse in #welcome-test; plus the go-live drawer trim and the two marathon waiting strips gone; `marathon_mode` still shadow; schema 65, 491 keys; see [`DONE.md`](DONE.md) 2026-09-25 v166); the mode table below was NOT re-read beyond its `shadow` row.
 
 **2026-09-25 16:2x:** v165 live (three merges: marathon feeds — the bot reads the GDQ and RPG Limit Break trackers itself every 6 h and added four GDQ marathons at first boot, each waiting for its schedule; a marathon's event mode none / marathon / runs / both, default none, the staff notice a post in Events; any channel row can opt out of marathons and ESA is out; CI green again after the Linux test hang was fixed; `marathon_mode` still shadow; schema 64, 482 keys; see [`DONE.md`](DONE.md) 2026-09-25 v165); the mode table below was NOT re-read.
