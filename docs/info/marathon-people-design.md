@@ -1,5 +1,7 @@
 # The source is a column, and a marathon opens on its people — BaF first, then everyone, each one linkable or spotlightable
 
+> ➕ **2026-09-25 (branch `marathon-drawer-lite`, 🔨 BUILT, NOT MERGED): the drawer is now two header lines · People · a shut *Settings for this marathon* · a Posts line · Read it now / Pause / Remove** — the Schedule, Event, The channel and Posts cards are gone. [`marathon-drawer-lite-design.md`](marathon-drawer-lite-design.md).
+
 > 🔨 **BUILT 2026-09-25 on branch `marathon-people` (worktree `C:/lcw/bb-marathon-people`), NOT MERGED, NOT DEPLOYED** — see *Deviations* and *What was NOT verified* at the foot.
 >
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 17:1x Phoenix)

@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-25 (branch `marathon-drawer-lite`)** — ONE section APPENDED (`ML-a`…`ML-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-people`)** — ONE section APPENDED (`MP-a`…`MP-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-event-modes`)** — ONE section APPENDED (`MV-a`…`MV-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-25 (branch `marathon-feeds`)** — ONE section APPENDED (`MF-a`…`MF-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3286,3 +3287,16 @@ spotlighting afterwards if it was only a test.
 | **`MP-d`** | In the schedule, click a race (several runners); then **Link to a member…** on a stranger in it | The race is ONE row with every runner as a chip (✦BaF on members, hosts/commentators dashed); opening it lists each person on their own line. Linking one: *… on this schedule is … from now on.*, the chip turns ✦BaF, the person joins the BaF block, the day's BaF count rises, and the board gains the line. A name one letter off a member's username shows *looks like @name — Link?* (one click). |
 | **`MP-e`** | A BaF person's **Spotlight…** (or one on a slot) ▸ **Spotlight them**; then <https://blackbloc.heygabi.ai/golive.html> ▸ Streamers | A channel-only row for that login with the note *Name at Marathon*, starting 2 h before their first run (or that slot) and running out 2 h after their last; the People line says *Spotlit until …* with **Open on Go-live ↗** and **Stop spotlighting**, which removes the row the way the Go-live page does. A runner already on the Go-live page shows *already on the Go-live page ↗* instead. |
 | **`MP-f`** | `/event` ▸ **Marathons…** as a member (pick a marathon in *Who from BaF is on…*) and as staff (a marathon ▸ **People…**) | Member: the BaF lines only, and Back. Staff: the same lines, then a day select → a slot select → the slot's people with a person select, **Link to a member…** (a member picker), **Spotlight**, **Unlink** / **Stop spotlighting** where they apply. A feed's *new marathon* notice carries **People…**, which opens the same view privately. |
+
+## Rows `ML-a` … `ML-d` — the marathon drawer, lightened (branch `marathon-drawer-lite`, 2026-09-25)
+
+🔨 **BUILT on branch `marathon-drawer-lite`, NOT merged, NOT deployed.** Owner, 2026-09-25: *"The whole modal for a
+marathon is a lot, can we rework it"*. Design: [`../info/marathon-drawer-lite-design.md`](../info/marathon-drawer-lite-design.md).
+Rows lettered; the conductor numbers them. These rows replace what `MP-c` says about the drawer's cards.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`ML-a`** | <https://blackbloc.heygabi.ai/events.html> ▸ Marathons ▸ AGDQ 2027 (or any marathon with runs) | Two lines under the title: *ON NOW · Fri 25 Sep 14:00 – Sun 27 Sep 23:00 · GDQ tracker ↗ · feed*, then quietly *read 16 min ago · next in 14 min · 16 runs · 5 BaF · Event #5 approved ↗ · gamesdonequick*. No Schedule card, no field, no help paragraphs. Then **People** straight away. A marathon whose read failed shows the warn reason in place of the reading words. |
+| **`ML-b`** | In **BaF · N**, click a person's line | Each person is ONE line (avatar · name · @discord · run chips · runner/host) and opens to twitch.tv/login · how they matched · **Unlink** (staff links) · **Spotlight…** or *Spotlit until … · Open on Go-live ↗ · Stop spotlighting*. After a move the line is still open. |
+| **`ML-c`** | Below the days, **Settings for this marathon** (shut) ▸ change *Re-read every* ▸ **Save** | It opens to Event (select + the event's state and Unlink / Make an event now), Airs on (select + the ping window) and Re-read every, each with one short help line, and one **Save**. Save keeps the drawer AND the foldout open and says what changed; Save with nothing changed says so. |
+| **`ML-d`** | The foot of the drawer; then `/event` ▸ **Marathons…** ▸ pick the marathon | One Posts line (*Board pinned in #announcements · 2 reminders · 1 shoutout · Refresh the board*), then the moves bar **Read it now · Pause · Remove**, last. The panel card opens on the same two lines (state · dates · source link; read · next · counts · event · channel), then the BaF runs, then **Posts:**, buttons as before. |
