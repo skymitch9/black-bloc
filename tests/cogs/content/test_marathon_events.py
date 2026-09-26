@@ -304,7 +304,7 @@ async def test_the_card_carries_the_mode_select_and_the_run_view_its_event(
     embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
     pick = next(one for one in view.children if isinstance(one, cogmod.EventModePick))
     assert [one.value for one in pick.options if one.default] == ["runs"]
-    assert "Event mode: **one event per BaF run" in embed.description
+    assert "Event mode:" not in embed.description
     metroid = (await runs(bot, marathon))["Super Metroid"]
     embed, run_view = await cogmod.build_run(bot, bot.guild, marathon["id"], metroid["id"])
     assert f"event **#{metroid['event_id']}** — approved" in embed.description

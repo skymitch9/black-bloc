@@ -1,18 +1,16 @@
 import { api, names, send, settings, settingsNamespace } from './api.js';
 import {
   BAF,
-  CARD_CHANNEL,
-  CARD_EVENT,
   CARD_PEOPLE,
-  CARD_POSTS,
-  CARD_SCHEDULE,
-  countsLine,
+  SETTINGS_FOLD,
+  datesWords,
   dayTitle,
   daysOf,
   entryFor,
   feedReading,
-  postsLines,
-  readingLine,
+  headerCounts,
+  headerReading,
+  postsLine,
   runChip,
   runLength,
   said,
@@ -56,7 +54,7 @@ import {
   when,
 } from './ui.js';
 
-const shown = { id: null, slots: new Set(), focus: null, where: null };
+const shown = { id: null, slots: new Set(), people: new Set(), settings: false, focus: null, where: null };
 const HASH = /^marathon-(\d+)$/;
 let refresh = async () => {};
 let showEvent = () => {};
@@ -81,8 +79,6 @@ const CHANNEL_HELP = 'The Twitch channel it airs on, from the Go-live page. With
 const NO_CHANNEL = 'No channel — each run links its runner';
 const NO_RUNS = 'No runs on this schedule yet — it may not be published. Black Bloc keeps '
   + 'reading it.';
-const PEOPLE_NOTE = `Everyone on the schedule, once. **${BAF}** on top, soonest first; below it the `
-  + 'schedule by day — open a slot to link a person to a member or spotlight their channel.';
 const NO_BAF = `Nobody from ${BAF} is on this schedule yet — open a slot below and **Link to a member…**.`;
 const SCHEDULE_HEAD = 'The schedule';
 const FILTER_PLACEHOLDER = 'name, Twitch or game';
@@ -116,17 +112,21 @@ const SOURCES_DRAWER = 'Where marathons come from';
 const GETTING_SOURCES = 'Reading the sources…';
 const REMOVE_BODY = 'Its runs and pairings go with it and its ping window closes. Posts already '
   + 'made stay where they are.';
-const WINDOW_LINE = 'Ping window on **{login}**: {start} – {end}.';
+const WINDOW_PLAIN = 'Ping window {start} – {end}.';
 const NO_WINDOW = 'No ping window — the marathon has no channel, no dates yet, or is paused.';
 const CHANNEL_GONE = 'Its channel row is gone from the Go-live page, so it has no window and '
   + 'no live title. Pick another channel, or none.';
 const READ_FROM = 'Read from the ';
-const SCHEDULE_LINK = 'the schedule ↗';
-const FOUND_BY = ' · found by the ';
-const FOUND_BY_FEED = '{feed} feed';
+const SOURCE_LINK = '{source} ↗';
+const FEED_WORD = 'feed';
+const EVENT_HEAD = 'Event #{id} {status}';
+const CHANNEL_GONE_SHORT = 'its channel is gone from Go-live';
+const SAVE_SETTINGS = 'Save';
+const SAVED = 'Saved.';
+const NOTHING_CHANGED = 'Nothing changed, so nothing was saved.';
 const POLL_LABEL = 'Re-read every';
 const POLL_UNIT = 'minutes';
-const POLL_HELP = 'Blank = the default ({minutes}). 10 to 120; used while it is near.';
+const POLL_HELP = 'While it is near, 10 to 120; blank = the default ({minutes}). Far off: every {far} h.';
 const NEXT_WHEN_ENDS = 'After this one: ';
 const NEXT_LINE = '{marathon} is over — the next GDQ event is **{next}**, {date} ({relative}).';
 const NEXT_ADDED = 'Added — see **{name}** on the list.';
@@ -366,67 +366,63 @@ function runTools(marathon, row, say) {
   return el('div', { class: 'bar' }, tools);
 }
 
-function pollField(marathon, say) {
-  const poll = el('input', {
-    class: 'input',
-    type: 'text',
-    inputmode: 'numeric',
-    size: 4,
-    placeholder: 'default',
-    value: marathon.poll_minutes ? String(marathon.poll_minutes) : '',
-    'aria-label': `${POLL_LABEL} N ${POLL_UNIT}`,
-  });
-  const save = button('Save', async () => {
-    const given = poll.value.trim();
-    const wanted = given === '' ? null : (/^\d+$/.test(given) ? Number(given) : given);
-    const done = await run(
-      say,
-      () => send(`/api/marathons/${marathon.id}`, 'PATCH', { poll_minutes: wanted }),
-      () => (wanted === null ? `**${marathon.name}** is re-read on the default gap again.` : `**${marathon.name}** is re-read every ${wanted} minutes while it is near.`),
-    );
-    await after(marathon, done);
-  }, { tone: 'quiet' });
-  const box = el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT }), save]);
-  return field(POLL_LABEL, box, said(POLL_HELP, { minutes: cadence.near ?? '—' }));
-}
-
 function nextBlock(marathon, say) {
   if (!marathon.next) return [];
   const moves = nextMoves(marathon, say);
-  return [
+  return [el('div', { class: 'mx-next' }, [
     el('p', { class: 'field-help mx-line' }, [el('span', { class: 'cell-quiet', text: NEXT_WHEN_ENDS }), ...boldParts(nextSentence(marathon))]),
     marathon.next.state === 'open' ? line(NEXT_NOTE) : null,
     marathon.next.url && marathon.next.state !== 'none'
-      ? el('p', { class: 'field-help' }, [el('a', { href: marathon.next.url, text: 'the tracker ↗', rel: 'noreferrer', target: '_blank' })])
+      ? el('p', { class: 'field-help' }, [el('a', { class: 'say-nothing-do', href: marathon.next.url, text: 'the tracker ↗', rel: 'noreferrer', target: '_blank' })])
       : null,
     moves.length ? bar(moves) : null,
-  ];
+  ])];
 }
 
-function scheduleCard(marathon, say) {
-  const reading = readingLine(marathon, cadence);
-  const source = el('p', { class: 'field-help mx-line' }, [
-    el('span', { text: READ_FROM }),
-    el('strong', { text: marathon.source_word }),
-    el('span', { text: ' — ' }),
-    el('a', { href: marathon.schedule_page, text: SCHEDULE_LINK, rel: 'noreferrer', target: '_blank' }),
-    marathon.feed_name ? el('span', { text: FOUND_BY }) : null,
-    marathon.feed_name && marathon.feed_id
-      ? textAction(said(FOUND_BY_FEED, { feed: marathon.feed_name }), () => openFeed(marathon.feed_id))
-      : null,
-  ]);
-  const moves = [];
-  if (marathon.active) {
-    moves.push(step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn'));
-  }
-  return card(CARD_SCHEDULE, [
-    source,
-    line(reading.text, reading.tone),
-    line(countsLine(marathon.run_list)),
-    pollField(marathon, say),
-    moves.length ? bar(moves) : null,
+function joined(parts) {
+  const kept = parts.filter(Boolean);
+  return kept.flatMap((one, index) => (index ? [el('span', { class: 'mx-dot', text: ' · ' }), one] : [one]));
+}
+
+function eventHead(marathon) {
+  const event = marathon.event || {};
+  if (!event.id) return null;
+  const words = said(EVENT_HEAD, { id: event.id, status: event.status || 'gone' });
+  if (event.status === 'gone') return el('span', { text: words });
+  const open = textAction(`${words} ↗`, () => {
+    closeDrawer();
+    showEvent(event.id);
+  });
+  open.dataset.tone = EVENT_TONE[event.status] || '';
+  return open;
+}
+
+function channelHead(marathon) {
+  if (marathon.channel_gone) return el('span', { class: 'mx-line', 'data-tone': 'warn', text: CHANNEL_GONE_SHORT });
+  if (!marathon.channel_login) return null;
+  return linkAction(marathon.channel_login, GOLIVE_HREF);
+}
+
+function headerBlock(marathon, board, say) {
+  const reading = headerReading(marathon);
+  const timeZone = (board && board.timezone) || undefined;
+  return [
+    el('p', { class: 'mx-head' }, joined([
+      badge(marathon.phase_word, PHASE_TONE[marathon.phase] || null),
+      el('span', { text: datesWords(marathon, timeZone) }),
+      marathon.schedule_page
+        ? el('a', { class: 'say-nothing-do', href: marathon.schedule_page, text: said(SOURCE_LINK, { source: marathon.source_word }), rel: 'noreferrer', target: '_blank' })
+        : el('span', { text: marathon.source_word }),
+      marathon.feed_name && marathon.feed_id ? textAction(FEED_WORD, () => openFeed(marathon.feed_id)) : null,
+    ])),
+    el('p', { class: 'field-help mx-head-quiet' }, joined([
+      el('span', { class: 'mx-line', 'data-tone': reading.tone || undefined, text: reading.text }),
+      el('span', { text: headerCounts(marathon.run_list) }),
+      eventHead(marathon),
+      channelHead(marathon),
+    ])),
     ...nextBlock(marathon, say),
-  ]);
+  ];
 }
 
 function partWords(parts) {
@@ -530,25 +526,40 @@ function matchBits(marathon, say, entry, person, runId, { inSlot = false } = {})
 }
 
 function bafLine(marathon, say, entry, timeZone) {
+  const key = String(entry.key || entry.login || entry.name);
   const chips = (entry.runs || []).map((one) => el('span', {
     class: 'mx-chip',
     'data-state': one.state,
     title: one.category || '',
     text: runChip(one, timeZone),
   }));
-  return el('div', { class: 'mx-person', 'data-live': entry.live ? 'true' : undefined }, [
-    avatar(entry.member_name || entry.name, entry.avatar_url),
-    el('div', { class: 'mx-person-main' }, [
-      el('div', { class: 'mx-person-who' }, [
+  const node = el('details', {
+    class: 'mx-person',
+    'data-live': entry.live ? 'true' : undefined,
+    open: shown.people.has(key) || undefined,
+  }, [
+    el('summary', { class: 'mx-person-head' }, [
+      avatar(entry.member_name || entry.name, entry.avatar_url),
+      el('span', { class: 'mx-person-who' }, [
         el('strong', { text: entry.member_name || entry.name }),
         entry.username ? el('span', { class: 'cell-quiet', text: ` @${entry.username}` }) : null,
-        entry.login ? el('a', { class: 'cell-quiet mono', href: `https://twitch.tv/${entry.login}`, rel: 'noreferrer', target: '_blank', text: ` twitch.tv/${entry.login}` }) : null,
-        el('span', { class: 'cell-quiet', text: ` · ${partWords(entry.parts)}` }),
       ]),
-      el('div', { class: 'mx-chips' }, chips),
-      el('div', { class: 'bar mx-person-moves' }, [...matchBits(marathon, say, entry, entry, null), ...spotlightBits(marathon, say, entry, null)]),
+      el('span', { class: 'mx-chips' }, chips),
+      el('span', { class: 'cell-quiet mx-person-part', text: partWords(entry.parts) }),
+    ]),
+    el('div', { class: 'bar mx-person-moves mx-person-body' }, [
+      entry.login
+        ? el('a', { class: 'cell-quiet mono', href: `https://twitch.tv/${entry.login}`, rel: 'noreferrer', target: '_blank', text: `twitch.tv/${entry.login}` })
+        : el('span', { class: 'cell-quiet', text: NO_TWITCH }),
+      ...matchBits(marathon, say, entry, entry, null),
+      ...spotlightBits(marathon, say, entry, null),
     ]),
   ]);
+  node.addEventListener('toggle', () => {
+    if (node.open) shown.people.add(key);
+    else shown.people.delete(key);
+  });
+  return node;
 }
 
 function slotChip(person) {
@@ -672,7 +683,6 @@ function peopleCard(marathon, board, say) {
   const timeZone = board.timezone || undefined;
   const baf = board.baf || [];
   return card(CARD_PEOPLE, [
-    el('p', { class: 'field-help' }, boldParts(PEOPLE_NOTE)),
     el('h4', { class: 'mx-block-head', text: `${BAF} · ${baf.length}` }),
     baf.length ? el('div', { class: 'mx-people' }, baf.map((one) => bafLine(marathon, say, one, timeZone))) : line(NO_BAF),
     el('h4', { class: 'mx-block-head', text: SCHEDULE_HEAD }),
@@ -681,7 +691,7 @@ function peopleCard(marathon, board, say) {
   ]);
 }
 
-function eventCard(marathon, say) {
+function eventState(marathon, say) {
   const event = marathon.event || {};
   const state = [];
   if (event.id) {
@@ -695,67 +705,88 @@ function eventCard(marathon, say) {
   } else {
     state.push(el('span', { text: event.wanted ? EVENT_WAITING : EVENT_NONE }));
   }
-  const moves = [];
-  if (event.id || event.wanted) {
-    moves.push(step(marathon, say, 'Unlink', () => send(`/api/marathons/${marathon.id}/event`, 'DELETE')));
-  } else {
-    moves.push(step(marathon, say, 'Make an event now', () => send(`/api/marathons/${marathon.id}/event`, 'POST', {}), 'warn'));
-  }
+  const move = event.id || event.wanted
+    ? step(marathon, say, 'Unlink', () => send(`/api/marathons/${marathon.id}/event`, 'DELETE'))
+    : step(marathon, say, 'Make an event now', () => send(`/api/marathons/${marathon.id}/event`, 'POST', {}), 'warn');
+  return el('p', { class: 'field-help mx-line' }, [...state, el('span', { text: ' ' }), move]);
+}
+
+function windowWords(marathon) {
+  if (!marathon.window || !marathon.channel_login) return NO_WINDOW;
+  return said(WINDOW_PLAIN, { start: when(marathon.window.starts_at), end: when(marathon.window.ends_at) });
+}
+
+function pollWanted(given) {
+  const text = given.trim();
+  if (text === '') return null;
+  return /^\d+$/.test(text) ? Number(text) : text;
+}
+
+async function settingsFold(marathon, say) {
   const mode = modePicker(marathon.event_mode || 'none');
-  mode.addEventListener('change', async () => {
-    const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'PATCH', { event_mode: mode.value }), (found) => found?.message);
-    if (!done.ok) {
-      mode.value = marathon.event_mode || 'none';
+  const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
+  const poll = el('input', {
+    class: 'input',
+    type: 'text',
+    inputmode: 'numeric',
+    size: 4,
+    placeholder: 'default',
+    value: marathon.poll_minutes ? String(marathon.poll_minutes) : '',
+    'aria-label': `${POLL_LABEL} N ${POLL_UNIT}`,
+  });
+  const save = button(SAVE_SETTINGS, async () => {
+    const body = {};
+    if (mode.value !== (marathon.event_mode || 'none')) body.event_mode = mode.value;
+    if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
+    const wanted = pollWanted(poll.value);
+    if (wanted !== (marathon.poll_minutes || null)) body.poll_minutes = wanted;
+    if (!Object.keys(body).length) {
+      say.say(NOTHING_CHANGED, null);
       return;
     }
+    const words = (found) => [found?.message, 'poll_minutes' in body ? pollSaid(marathon, wanted) : null].filter(Boolean).join(' ') || SAVED;
+    const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'PATCH', body), words);
+    if (done.ok) done.found = { ...(done.found || {}), message: words(done.found) };
     await after(marathon, done);
-  });
-  return card(CARD_EVENT, [
-    el('p', { class: 'field-help mx-line' }, [...state, el('span', { text: ' ' }), ...moves]),
+  }, { tone: 'warn' });
+  const fold = foldout(SETTINGS_FOLD, [
     field(EVENT_SELECT, mode, EVENT_SELECT_SHORT),
-  ]);
+    eventState(marathon, say),
+    marathon.channel_gone ? notice(CHANNEL_GONE, 'warn') : null,
+    field('Airs on', picker, windowWords(marathon)),
+    field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
+    bar([save]),
+  ], { open: shown.settings });
+  fold.classList.add('mx-settings');
+  fold.addEventListener('toggle', () => {
+    shown.settings = fold.open;
+  });
+  return fold;
 }
 
-async function channelCard(marathon, say) {
-  const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
-  const save = button('Save the channel', async () => {
-    const done = await run(say, () => send(`/api/marathons/${marathon.id}`, 'PATCH', { spotlight_id: picker.value || null }), () => 'Saved.');
+function pollSaid(marathon, wanted) {
+  return wanted === null
+    ? `**${marathon.name}** is re-read on the default gap again.`
+    : `**${marathon.name}** is re-read every ${wanted} minutes while it is near.`;
+}
+
+function postsRow(marathon, say) {
+  const posts = postsLine(marathon);
+  const where = posts.hasBoard && marathon.board_channel_id;
+  const move = textAction(posts.hasBoard ? 'Refresh the board' : 'Post the board', async () => {
+    const done = await run(say, () => send(`/api/marathons/${marathon.id}/board`, 'POST', {}), (found) => found?.message);
     await after(marathon, done);
   });
-  const windowLine = marathon.window && marathon.channel_login
-    ? said(WINDOW_LINE, { login: marathon.channel_login, start: when(marathon.window.starts_at), end: when(marathon.window.ends_at) })
-    : NO_WINDOW;
-  return card(CARD_CHANNEL, [
-    marathon.channel_gone ? notice(CHANNEL_GONE, 'warn') : null,
-    field('Airs on', picker, CHANNEL_HELP),
-    el('p', { class: 'field-help' }, boldParts(windowLine)),
-    bar([save]),
-  ]);
-}
-
-function postsCard(marathon, say) {
-  const posts = postsLines(marathon);
-  const board = step(
-    marathon,
-    say,
-    posts.hasBoard ? 'Refresh the board' : 'Post the board',
-    () => send(`/api/marathons/${marathon.id}/board`, 'POST', {}),
-  );
-  const where = posts.hasBoard && marathon.board_channel_id;
-  return card(CARD_POSTS, [
-    el('p', { class: 'field-help mx-line' }, [
-      el('span', { text: posts.board }),
-      where ? el('span', { text: ' ' }) : null,
-      where ? nameNode(marathon.board_channel_id) : null,
-      el('span', { text: ' ' }),
-      board,
-    ]),
-    line(posts.sent),
-  ]);
+  return el('p', { class: 'field-help mx-line mx-posts' }, joined([
+    el('span', {}, [el('span', { text: posts.board }), where ? el('span', { text: ' ' }) : null, where ? nameNode(marathon.board_channel_id) : null]),
+    posts.sent ? el('span', { text: posts.sent }) : null,
+    move,
+  ]));
 }
 
 function moveBar(marathon, say) {
   return bar([
+    marathon.active ? step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn') : null,
     step(marathon, say, marathon.active ? 'Pause' : 'Resume', () => send(`/api/marathons/${marathon.id}`, 'PATCH', { active: !marathon.active }), null),
     button('Remove', async () => {
       const sure = await ask({ title: `Remove ${marathon.name}?`, body: [REMOVE_BODY], confirmLabel: 'Remove it' });
@@ -766,7 +797,7 @@ function moveBar(marathon, say) {
       closeDrawer();
       await refresh();
     }, { tone: 'danger' }),
-  ]);
+  ].filter(Boolean));
 }
 
 async function marathonDrawer(marathon, board, message) {
@@ -775,21 +806,20 @@ async function marathonDrawer(marathon, board, message) {
   if (message) say.say(message, 'ok');
   return [
     say,
-    el('p', { class: 'field-help' }, [
-      badge(marathon.phase_word, PHASE_TONE[marathon.phase] || null),
-      el('span', { text: ` ${datesOf(marathon)}` }),
-    ]),
-    scheduleCard(marathon, say),
+    ...headerBlock(marathon, board, say),
     peopleCard(marathon, board, say),
-    eventCard(marathon, say),
-    await channelCard(marathon, say),
-    postsCard(marathon, say),
+    await settingsFold(marathon, say),
+    postsRow(marathon, say),
     moveBar(marathon, say),
   ];
 }
 
 async function openMarathon(marathonId, title, message = '') {
-  if (shown.id !== String(marathonId)) shown.slots = new Set();
+  if (shown.id !== String(marathonId)) {
+    shown.slots = new Set();
+    shown.people = new Set();
+    shown.settings = false;
+  }
   shown.id = String(marathonId);
   shown.where = 'marathon';
   if (wantedId() !== shown.id) {

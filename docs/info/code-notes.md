@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *An event opens in a drawer* (branch `event-drawer`, off `main` `ac4e79e2`, keyed against `847874ed`). Before that:
+> **2026-09-25 — one section APPENDED, nothing re-keyed**: *The marathon drawer, lightened* (branch `marathon-drawer-lite`, off `main` `b90725fc`, keyed against `9798ce99`); its section says which older marathon rows now point at retired functions. Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *A rehearsal home per feature, and a marathon notice with detail and control* (branch `shadow-home-per-feature`, off `main` `dd25f79d`, keyed against `6b698f18`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *A marathon opens on its people* (branch `marathon-people`, off `main` `def0c5ef`, keyed against `b72c32a8`). Before that:
 > **2026-09-25 — one section APPENDED, nothing re-keyed**: *The Events page made plain — three sections, Schedule first, BaF* (branch `marathon-ux`, off `main` `5ed00717`, keyed against `33c4363d`). Before that:
@@ -8539,3 +8540,24 @@ Why in [`event-drawer-design.md`](event-drawer-design.md). Keyed against `847874
 | `site/public/assets/page-events.js:58` `rowMoves` | The queue row: Open (the drawer), the shared moves, Move to the forum. The section and its rail row are gone. |
 | `site/mock/server.mjs:7708` `POST /api/events/:id/spotlight` | The mock's copy of the real route's refusal and success words; it does not add a Go-live row (Deviation 6). |
 | `site/public/assets/site.css:2710` `.ev-*` | The header line (badge · avatar · asked by · range), the fact rows at the UI-small size, the foot. |
+
+## The marathon drawer, lightened (branch `marathon-drawer-lite`, 2026-09-25)
+
+Why in [`marathon-drawer-lite-design.md`](marathon-drawer-lite-design.md). Keyed against `9798ce99`. ⚠️ Rows above that
+name `scheduleCard`, `eventCard`, `drawerCards`, `pollField`, `channelCard` or `postsCard` in `marathons-section.js` /
+`marathon-words.js` describe functions this build RETIRED — their jobs moved to the rows below; they were not re-keyed.
+
+| Where | Why |
+|---|---|
+| `site/public/assets/marathons-section.js:406` `headerBlock` | Replaces the Schedule card: line 1 is state · dates (guild zone) · the source as a link · *feed* (opens that feed's drawer); line 2 is the quiet reading · counts · the event · the channel. The next-event strip follows only when the marathon is over — a staff decision is never folded. |
+| `site/public/assets/marathons-section.js:382` `joined` | Puts the ` · ` between whichever parts exist, so a missing event or channel leaves no double dot. |
+| `site/public/assets/marathons-section.js:400` `channelHead` | Links `golive.html#streamers` — the Go-live page has no per-row anchor (the `marathon-people` Deviation 8 limit). A gone channel shows the warn words in its place. |
+| `site/public/assets/marathons-section.js:528` `bafLine` | A native `<details>`, like a slot: the summary is the one line, the body holds twitch.tv/login, how they matched, Unlink, Spotlight… / Stop spotlighting. `shown.people` keeps an opened line open across the redraw a move causes. |
+| `site/public/assets/marathons-section.js:725` `settingsFold` | One shut foldout, one Save for the three. Only the fields that CHANGED are sent (a PATCH carrying an untouched field would re-run its side effects); nothing changed says so instead of writing. The Event state line and its Unlink / Make an event now live here beside the mode select. `shown.settings` keeps it open after Save. |
+| `site/public/assets/marathons-section.js:749` `done.found = { … message }` | `after()` redraws with the ANSWER's message, and a PATCH of only `poll_minutes` answers with an empty one — so the composed sentence is put back on `found` before the redraw. |
+| `site/public/assets/marathons-section.js:773` `postsRow` | Posts as one line; the board move is a `textAction`, not a button, so the bar at the foot holds only the three marathon-wide moves. |
+| `site/public/assets/marathons-section.js:787` `moveBar` | Read it now moved here from the Schedule card (active only), then Pause/Resume, then Remove. |
+| `site/public/assets/marathon-words.js:118` `headerReading` | PURE, node-tested. The short reading; a failed read returns `readingLine`'s full warn sentence INSTEAD, so the reason is never shortened. The cadence words now live in the Settings foldout's Re-read help. |
+| `site/public/assets/marathon-words.js:170` `postsLine` | Zero reminders or shoutouts say nothing rather than *0 sent*. |
+| `site/public/assets/marathon-words.js:212` `datesWords` | Same zone as the day folds (the People answer's `timezone`); the browser's zone only when the People read failed. |
+| `black_bloc/cogs/content/marathon.py:2748` `card_header` | The panel card mirrors the drawer header: `phase · dates · [source](url)`, then read · next · counts · every N min (own gap only) · the event (only when linked or waiting) · twitch.tv/login. The Event-mode line went — the Event mode select shows the choice. |

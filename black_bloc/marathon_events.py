@@ -52,7 +52,6 @@ RUN_EVENT_UNLINKED = (
     "**{game}** no longer carries event **#{event_id}**. The event itself was not touched."
 )
 RUN_EVENT_NONE = "**{game}** carries no event, so there was nothing to unlink."
-EVENT_MODE_LINE = "Event mode: **{words}**"
 ADD_EVENT_LABEL = "Event: none / marathon / runs / both"
 MODE_PICK = "Event mode…"
 PICK_MODE = "Pick what this marathon makes…"

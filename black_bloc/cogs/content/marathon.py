@@ -2745,9 +2745,25 @@ def source_of(row: Any) -> tuple[str, str]:
     )
 
 
-def schedule_line(bot: Any, guild: Any, row: Any, runs: list[Any]) -> str:
+async def card_header(bot: Any, guild: Any, row: Any, runs: list[Any]) -> list[str]:
+    """The card's two header lines, mirroring the site drawer's header."""
     source, url = source_of(row)
-    return mt.CARD_SCHEDULE.format(source=source, url=url, **reading_of(bot, guild, row, runs))
+    phase = phase_of(bot, guild, row)
+    reading = reading_of(bot, guild, row, runs)
+    quiet = [reading["read"], reading["next"], reading["counts"]]
+    if row["poll_minutes"]:
+        quiet.append(mt.CARD_POLL.format(minutes=row["poll_minutes"]))
+    if row["event_id"] or mt.wants_its_event(row):
+        quiet.append(mt.event_line(row, await event_status_of(bot, row)))
+    login = await channel_login(bot, row)
+    if login:
+        quiet.append(mt.CARD_CHANNEL.format(login=login))
+    return [
+        mt.CARD_HEAD.format(
+            phase=mt.PHASE_WORDS.get(phase, phase), dates=dates_of(row), source=source, url=url
+        ),
+        " · ".join(quiet),
+    ]
 
 
 def add_moves(view: Any, moves: Any) -> None:
@@ -2809,19 +2825,12 @@ async def build_card(
         return (None, None)
     runs = await runs_of(bot.db, row["id"])
     words = words_for(bot, guild.id)
-    login = await channel_login(bot, row)
-    phase = phase_of(bot, guild, row)
-    lines = [
-        mt.CARD_HEAD.format(phase=mt.PHASE_WORDS.get(phase, phase), dates=dates_of(row)),
-        schedule_line(bot, guild, row, runs),
-    ]
-    if row["poll_minutes"]:
-        lines.append(mt.POLL_SAVED.format(name=row["name"], minutes=row["poll_minutes"]))
+    lines = await card_header(bot, guild, row, runs)
     has_next = mt.suggests(row) and mt.is_over(row, now_for(bot))
     if has_next:
         lines.append(next_line_of(bot, guild, row))
     ours = [one for one in runs if one["state"] != mt.DROPPED and mt.is_ours(one)]
-    lines += ["", mt.CARD_RUNS] + [next_line(one, row, words) for one in ours[:MINE_LIMIT]]
+    lines += [""] + [next_line(one, row, words) for one in ours[:MINE_LIMIT]]
     if not runs:
         lines.append(
             mt.render(
@@ -2835,15 +2844,7 @@ async def build_card(
         if row["board_message_id"] and row["board_channel_id"]
         else mt.CARD_BOARD_NONE
     )
-    lines += [
-        "",
-        mt.CARD_EVENT,
-        mt.event_line(row, await event_status_of(bot, row)),
-        me.EVENT_MODE_LINE.format(words=me.mode_words(me.mode_of(row))),
-        "",
-        mt.CARD_CHANNEL.format(channel=f"twitch.tv/{login}" if login else mt.CARD_NO_CHANNEL),
-        mt.CARD_POSTS.format(board=board),
-    ]
+    lines += ["", mt.CARD_POSTS.format(board=board)]
     unmatched = mt.unmatched_names(runs)
     embed = discord.Embed(title=row["name"], description=clamped(lines))
     view = MarathonPanel(minutes_for(bot, guild.id), PAIR_VIEW if pairing else CARD, row["id"])

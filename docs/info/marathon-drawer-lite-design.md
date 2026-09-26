@@ -1,5 +1,7 @@
 # The marathon drawer, lightened — a two-line header, People as the body, settings folded, one moves bar
 
+> 🔨 **BUILT 2026-09-25 on branch `marathon-drawer-lite` (worktree `C:/lcw/bb-marathon-drawer-lite`), NOT MERGED, NOT DEPLOYED** — see *Deviations* and *What was NOT verified* at the foot.
+
 > **Audience:** the build agent and reviewers. **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-25 18:1x Phoenix),
 > dispatched to Opus as branch `marathon-drawer-lite`** off `main` `ac4e79e2` (v165 live; v166 merged, undeployed;
 > `event-drawer` building in parallel on `page-events.js` — this build touches `marathons-section.js` and
@@ -70,8 +72,53 @@ line opens to its moves; c: Settings is shut and Save keeps the drawer open; d: 
 
 ## Deviations
 
-*(the build agent writes this)*
+*(build agent, branch `marathon-drawer-lite`, 2026-09-25 — 🔨 BUILT, NOT MERGED, NOT DEPLOYED; commits `d8a962a7` (site),
+`7e3108f5` (panel), `9798ce99` (the next strip's spacing), then docs.)*
+
+1. **Measured drawer height (`.drawer-body` scrollHeight, AGDQ 2027, mock, everything at its default fold):**
+   **1400 px: 2177 → 1290 px (−41 %)**; **390 px: 3438 → 2516 px (−27 %)**; visible text lines 123 → 107 (the day folds
+   are unchanged and are most of what is left). With one BaF line and Settings both opened: 1650 px at 1400.
+2. **One Save sends only what changed.** The Event select no longer saves on change (it did in the Event card); it waits
+   for the one Save with the channel and the interval. A PATCH carrying an unchanged field would re-run that field's
+   side effects, so unchanged fields are left out; with nothing changed Save says *Nothing changed, so nothing was
+   saved.* The route applies fields one after another — if a later field is refused, an earlier one has already landed
+   (the redraw shows the truth). No new route.
+3. **The event's state and its move sit inside Settings**, under the Event select: *APPROVED Event #5 Open ↗ · Unlink* /
+   *Waiting for the schedule… · Unlink* / *No event. · Make an event now*. The header shows the event only when one is
+   linked (per §A); the moves had to live somewhere, and Settings is where the event is decided.
+4. **Header dates** read `Fri 25 Sep 14:00 – Sun 27 Sep 23:00` in the guild's zone (the People answer's `timezone`, the
+   same one the day folds use) — new pure `datesWords`. The list table still uses the old `datesOf`.
+5. **Channel as a link** goes to `golive.html#streamers`, not its row (no per-row anchor exists). A channel gone from
+   Go-live puts *its channel is gone from Go-live* (warn) in that place; the full sentence stays inside Settings.
+6. **The next-event strip** (an over marathon's *After this one…* with Add it / Not this one / Look again) sits right
+   under the two header lines, not in Settings — a decision for staff is never folded (`marathon-ux` Deviation 3).
+7. **The People card keeps its *People* title and the *BaF · N* / *The schedule* heads**; only the intro sentence went.
+   The BaF line's part word (*runner*, *runner, host*, *on commentary*) sits at the right end. At 390 px a person with two
+   runs wraps to three lines (name, then the chips) — still one row that opens.
+8. **Words retired from `marathon-words.js`:** `countsLine`, `postsLines`, `drawerCards` and the `CARD_SCHEDULE / EVENT /
+   CHANNEL / POSTS` constants; `drawerParts`, `headerReading`, `headerCounts`, `postsLine`, `datesWords` added, all
+   node-tested. `readingLine` stays (the warn sentence).
+9. **CSS** in `site/public/assets/site.css`'s marathon block (`.mx-head`, `.mx-head-quiet`, `.mx-dot`, `.mx-next`,
+   `.mx-settings`, `.mx-posts`, the `details.mx-person` rules replacing the old flex card). The brief listed JS files
+   only; the look needed these. `event-drawer` may touch `site.css` too — expect a trivial merge.
+10. **Panel (§C):** `card_header` gives `phase · dates · [source](url)` then `last read · next read · N run(s), M BaF ·
+    every N min (own gap only) · Event #N — status (linked or waiting only) · twitch.tv/login`; then the BaF run lines
+    (the *Runs* head went); then `**Posts:** …`. Gone: the *Runs*/*Event*/*Channel* heads, the *Event mode:* line
+    (`marathon_events.EVENT_MODE_LINE` removed — the Event mode select shows the choice) and the POLL_SAVED sentence on
+    the card. Buttons unchanged. Three tests rewritten to the new shape.
+11. **Commit shape**: one site commit (header, BaF lines, Settings, posts, moves together — they share `marathonDrawer`),
+    one panel commit, one spacing fix, one docs commit — not the five boundaries the brief listed.
 
 ## What was NOT verified
 
-*(the build agent writes this)*
+- **Nothing met Discord.** The panel card was checked only by the test suite (embed text and the buttons drawn).
+- **Rendered** in `chrome-headless-shell` 149.0.7827.22 over raw CDP against this worktree's mock (`MOCK_PORT=8804`),
+  dark theme only, zero console errors on every render: `#marathon-1` before/after at 1400 and 390, `#marathon-2`
+  (over, with the next strip), `#marathon-3` (paused, failed read — the warn sentence in the header), `#marathon-4`.
+  **Pressed:** Save with the interval 45 and again blank (drawer and foldout stayed open; *AGDQ 2027 is re-read on the
+  default gap again.*); a BaF line's **Spotlight…** ▸ **Spotlight them** (the line stayed open and read *Spotlit until …
+  · Open on Go-live ↗ · Stop spotlighting*). **Not pressed:** Save with the Event select or the channel changed, Save
+  with nothing changed, Unlink / Make an event now in Settings, Refresh the board, Read it now, Pause, Remove, Stop
+  spotlighting, the *feed* and channel links. Their routes are unchanged and `check.mjs` still passes.
+- **Light theme, a browser zone other than the guild's, and a GDQ-sized schedule** were not rendered.
+- **The merge with `event-drawer`** (parallel, `page-events.js` + possibly `site.css`) was not tried.
