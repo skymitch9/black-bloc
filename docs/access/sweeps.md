@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-27 (branch `marathon-near-miss`)** — ONE section APPENDED (`MNM-a`…`MNM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-public-reminders`)** — ONE section APPENDED (`MPR-a`…`MPR-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-public-highlights`)** — ONE section APPENDED (`MPH-a`…`MPH-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-thread-controls`)** — ONE section APPENDED (`MTC-a`…`MTC-d`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3582,3 +3583,15 @@ lettered; the conductor numbers them. `marathon_mode` must be **on** for a real 
 |---|---|---|
 | **`MPR-a`** | Wait for champrul's next reminder in SS4C (15 min before the run, or 120) | The staff thread gets its reminder exactly as before AND #go-live gets one message — *<@champrul> runs **<game>** (<category>) on **SS4C** <in …> — <date>. <link>* — pinging champrul's role only if SS4C's *Ping the marathon role* is on (and only at the 15-minute mark). Logs `marathon.reminded` and `marathon.public_reminded`. Then Settings ▸ Marathons: set **Where a marathon's public reminders go** to another channel — the next reminder lands there, while the go-live spotlight post and **Where a BaF run's public highlight goes** stay where they were (three separate rows) |
 | **`MPR-b`** | On SS4C's pinned control message press **Ping the marathon role: off · turn on**; then turn it back off in the Events drawer ▸ Settings (Save) | The press answers *…pings again…*, the button turns green and reads *Ping the marathon role: on · turn off*, and the drawer shows On. After the drawer Save, the pinned button goes back to *…: off · turn on* by itself |
+
+## Rows `MNM-a` … `MNM-b` — near misses ask staff in the thread (branch `marathon-near-miss`, 2026-09-27)
+
+The owner, 2026-09-27 15:0x: *"Speed stuff had cassasaur on streaming doctor Mario and Tetris. Hype piece Cass is the
+discord visible name. We didn't catch that"*. Design: [`../info/marathon-near-miss-design.md`](../info/marathon-near-miss-design.md).
+Rows lettered; the conductor numbers them. `marathon_mode` must be **on** for a real post, and the runner must NOT
+already be linked (Cass is paired everywhere now, so pick another exact username match, or unpair and re-pair after).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MNM-a`** | On a tracked marathon whose schedule has a runner whose Twitch login (or schedule name) is exactly a member's Discord username and who is not linked, wait one tick | ONE post in the marathon's staff thread: *\*\*<runner>\*\* on the schedule looks like @member (<display name>) — link them?* — the member named, NOT pinged — with **Link (this marathon) · Link everywhere · Not them**. Another tick posts nothing more. Logs `marathon.near_miss_posted` |
+| **`MNM-b`** | Press **Link (this marathon)** (then, on another near miss, **Not them**) | Link: the post turns into *…is @member (…) on **<marathon>** — linked by @you.* with no buttons, the runner's own runner post appears in the thread, and People… lists them under BaF as *linked by staff*. Not them: *…is not @member (…) — @you said so…*, no buttons, nothing linked, and the thread never asks about that runner again on that marathon. A non-staff press is refused in words |

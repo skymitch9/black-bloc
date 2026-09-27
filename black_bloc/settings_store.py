@@ -4483,6 +4483,19 @@ MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY = "marathon_public_reminder_template"
 MARATHON_PUBLIC_CHANNEL_KEY = "marathon_public_channel_id"
 MARATHON_PUBLIC_DEFAULT_KEY = "marathon_public_highlight_default"
 MARATHON_PUBLIC_TEMPLATE_KEY = "marathon_public_template"
+MARATHON_NEAR_MISS_POSTS_KEY = "marathon_near_miss_posts"
+MARATHON_NEAR_MISS_POST_KEY = "marathon_near_miss_post"
+MARATHON_NEAR_MISS_HERE_KEY = "marathon_near_miss_link_here"
+MARATHON_NEAR_MISS_EVERYWHERE_KEY = "marathon_near_miss_link_everywhere"
+MARATHON_NEAR_MISS_NOT_KEY = "marathon_near_miss_not_them"
+MARATHON_NEAR_MISS_LINKED_KEY = "marathon_near_miss_linked"
+MARATHON_NEAR_MISS_LINKED_EVERYWHERE_KEY = "marathon_near_miss_linked_everywhere"
+MARATHON_NEAR_MISS_DISMISSED_KEY = "marathon_near_miss_dismissed"
+MARATHON_NEAR_MISS_DISMISSED_SAID_KEY = "marathon_near_miss_dismissed_said"
+MARATHON_NEAR_MISS_GONE_KEY = "marathon_near_miss_gone"
+MARATHON_NEAR_MISS_ANSWERED_KEY = "marathon_near_miss_answered"
+MARATHON_NEAR_MISS_FIELDS = ("runner", "member", "username", "display_name", "marathon")
+MARATHON_NEAR_MISS_DONE_FIELDS = (*MARATHON_NEAR_MISS_FIELDS, "staff")
 MARATHON_PUBLIC_REMOVED_KEY = "marathon_public_removed"
 MARATHON_PUBLIC_BUTTON_POST_KEY = "marathon_public_button_post"
 MARATHON_PUBLIC_BUTTON_REMOVE_KEY = "marathon_public_button_remove"
@@ -4859,6 +4872,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "minutes* posts members see; the staff thread keeps its own copy). Blank uses the "
         "go-live channel. Its own row: it never moves the go-live spotlight post or the public "
         "highlights",
+    ),
+    MARATHON_NEAR_MISS_POSTS_KEY: (
+        "bool",
+        True,
+        "whether a tracked marathon's thread gets one post per runner whose Twitch login or "
+        "schedule name is exactly a member's Discord username, with Link (this marathon), Link "
+        "everywhere and Not them buttons for staff. Nobody is linked until staff press. on by "
+        "default",
     ),
     MARATHON_PUBLIC_REMINDERS_KEY: (
         "bool",
@@ -5294,6 +5315,66 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the public copy of a reminder before a BaF run, posted in marathon_reminder_channel_id "
         "(the staff thread's copy is marathon_reminder_template). It takes {member} {game} "
         "{category} {in} {when} {url} {marathon} {part}",
+    ),
+    MARATHON_NEAR_MISS_POST_KEY: (
+        "**{runner}** on the schedule looks like {member} ({display_name}) — link them?",
+        MARATHON_NEAR_MISS_FIELDS,
+        "the near-miss post in a tracked marathon's thread: a runner nobody linked whose name is "
+        "a member's Discord username. It takes {runner} {member} {username} {display_name} "
+        "{marathon}; {member} names the member without pinging",
+    ),
+    MARATHON_NEAR_MISS_HERE_KEY: (
+        "Link (this marathon)",
+        (),
+        "the near-miss post's button that links the runner to the member on this marathon only",
+    ),
+    MARATHON_NEAR_MISS_EVERYWHERE_KEY: (
+        "Link everywhere",
+        (),
+        "the near-miss post's button that links the runner to the member on every marathon",
+    ),
+    MARATHON_NEAR_MISS_NOT_KEY: (
+        "Not them",
+        (),
+        "the near-miss post's button that says the runner is not that member",
+    ),
+    MARATHON_NEAR_MISS_LINKED_KEY: (
+        "**{runner}** is {member} ({display_name}) on **{marathon}** — linked by {staff}.",
+        MARATHON_NEAR_MISS_DONE_FIELDS,
+        "what a near-miss post becomes after Link (this marathon). It takes {runner} {member} "
+        "{username} {display_name} {marathon} {staff}",
+    ),
+    MARATHON_NEAR_MISS_LINKED_EVERYWHERE_KEY: (
+        "**{runner}** is {member} ({display_name}) on every marathon — linked by {staff}.",
+        MARATHON_NEAR_MISS_DONE_FIELDS,
+        "what a near-miss post becomes after Link everywhere. It takes {runner} {member} "
+        "{username} {display_name} {marathon} {staff}",
+    ),
+    MARATHON_NEAR_MISS_DISMISSED_KEY: (
+        "**{runner}** is not {member} ({display_name}) — {staff} said so, and **{marathon}** "
+        "will not ask again.",
+        MARATHON_NEAR_MISS_DONE_FIELDS,
+        "what a near-miss post becomes after Not them. It takes {runner} {member} {username} "
+        "{display_name} {marathon} {staff}",
+    ),
+    MARATHON_NEAR_MISS_DISMISSED_SAID_KEY: (
+        "Noted — **{runner}** stays unlinked on **{marathon}**. People… can still link them if "
+        "that changes.",
+        MARATHON_NEAR_MISS_FIELDS,
+        "the answer staff see after Not them on a near-miss post. It takes {runner} {member} "
+        "{username} {display_name} {marathon}",
+    ),
+    MARATHON_NEAR_MISS_GONE_KEY: (
+        "That near-miss post is no longer on record, so nothing was changed. People… on the "
+        "marathon can still link the runner.",
+        (),
+        "the refusal when a near-miss button is pressed on a post the bot has no record of",
+    ),
+    MARATHON_NEAR_MISS_ANSWERED_KEY: (
+        "Staff already answered this near miss for **{runner}**, so nothing was changed.",
+        MARATHON_NEAR_MISS_FIELDS,
+        "the answer when a near-miss button is pressed after staff already answered it. It takes "
+        "{runner} {member} {username} {display_name} {marathon}",
     ),
     MARATHON_PUBLIC_TEMPLATE_KEY: (
         "**{runner}** {part} **{game}** — {category} on **{marathon}** · {when} ({relative}) · "

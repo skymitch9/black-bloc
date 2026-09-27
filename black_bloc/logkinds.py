@@ -302,6 +302,8 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.runner_post_edited",
         "marathon.runner_post_pinned",
         "marathon.runner_post_unpinned",
+        "marathon.near_miss_posted",
+        "marathon.near_miss_resolved",
         "marathon.public_highlight_posted",
         "marathon.public_highlight_edited",
         "marathon.public_highlight_restored",

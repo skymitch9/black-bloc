@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-27 — one section APPENDED, nothing re-keyed**: *Marathon near misses ask staff in the thread* (branch `marathon-near-miss`, off `main` `7f7b99e7`, keyed against `78178b97`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public reminders + the ping button* (branch `marathon-public-reminders`, off `main` `59e71860`, keyed against `fe273193`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public highlights* (branch `marathon-public-highlights`, off `main` `f8494278`, keyed against `e43f8482`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon runner posts* (branch `marathon-runner-posts`, off `main` `997c0be2`, keyed against `6fc13f46`). Before that:
@@ -9015,3 +9016,20 @@ Design: [`marathon-public-highlights-design.md`](marathon-public-highlights-desi
 | `black_bloc/cogs/content/marathon_ping.py:57` · `:88` | `set_ping_role` calls `controls_changed` after the lock is released, so the drawer, PATCH and `/event` card re-render the pinned message. Import inside (thread controls import the ping module). |
 | `black_bloc/logkinds.py:311` | `public_reminded` / `public_reminder_skipped` routine; `would_remind_public` shadow by shape; `public_reminder_failed` IMPORTANT by suffix. |
 | `black_bloc/settings_store.py:3099` · `:4855` · `:5280` | The `marathon_public` home now covers public reminders (Deviation 4); the channel + switch rows; the two labels + public template. |
+
+## Marathon near misses ask staff in the thread (branch `marathon-near-miss`, 2026-09-27)
+
+Design: [`marathon-near-miss-design.md`](marathon-near-miss-design.md). Keyed against `78178b97`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_near_miss.py:44` `exact_match` | Pure. Case-insensitive equality of the username with the login or the schedule name, AND `marathon_people.looks_like` agreeing for that one username — so a post is always a subset of the People card's near miss. A member (`user_id`) is never one; a host-only person counts only while `marathon_match_hosts` is on (a host pairing does nothing otherwise). |
+| `black_bloc/marathon_near_miss.py:69` `seen_of` · `:84` `post_for` · `:94` `answered` | Read the action-log rows back: posted is `(runner_key, channel_id)` so a new post place (shadow → on, a moved thread) is asked once more; resolved is per runner, any place. Bad JSON is skipped, never raised. |
+| `black_bloc/cogs/content/marathon_near_miss.py:67` `rows_of` | The only store: `action_log` rows of the three kinds filtered by `json_extract(details, '$.marathon_id')` (selftest's pattern). Deviation 1. |
+| `black_bloc/cogs/content/marathon_near_miss.py:97` `sync_near_misses` | Runs inside `sync_board` after the runner posts, so under the marathon lock whoever called it. The key, mode not off and tracked are checked first; the log scan only runs when an exact match exists. |
+| `black_bloc/cogs/content/marathon_near_miss.py:128` `post_one` | Through `Marathons._send` with `quiet=True` (allowed_mentions none): the thread, or the rehearsal home with the shadow note. The logged row IS the once-only record, so it is written only after a successful send. |
+| `black_bloc/cogs/content/marathon_near_miss.py:175` `press` | Finds the post by the pressed message's id. An existing answer wins (re-edit, no second pairing). Links go through `pair_runner`, which takes the marathon lock itself — so `press` must NOT hold it (the lock is not re-entrant). The answer row is written after the pairing succeeds. |
+| `black_bloc/cogs/content/marathon_near_miss.py:234` `settle` | Fetches the post by its stored ids (never trusts `interaction.message`), edits it to the outcome with `view=None`; a shadow post keeps its note (`_shadowed`). A lost post is a `near_miss_failed` row, never an error to staff. |
+| `black_bloc/cogs/content/marathon_near_miss.py:274` `NearMissButton` | Persistent (`DynamicItem`, registered in `Marathons.cog_load`). Guard → `still_staff` → DB, the thread controls' order. The log kinds are string literals at every `log_action` call (test_logkinds reads them by AST); the constants in the pure module are for the lookups only. |
+| `black_bloc/cogs/content/marathon.py:2581` `sync_board` | `sync_near_misses` between `sync_posts` and `sync_highlights`. |
+| `black_bloc/settings_store.py:4486` · `:4876` · `:5319` | The eleven key names + field tuples; the switch; the ten word rows. |

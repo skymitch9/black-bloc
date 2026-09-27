@@ -1560,6 +1560,7 @@ class Marathons(commands.Cog):
     async def cog_load(self) -> None:
         from .marathon_feeds import FeedButton, NoticeModePick
         from .marathon_inbox import InboxButton
+        from .marathon_near_miss import NearMissButton
         from .marathon_people import PeopleButton
         from .marathon_public import HighlightButton
         from .marathon_thread_controls import ControlButton
@@ -1572,6 +1573,7 @@ class Marathons(commands.Cog):
             InboxButton,
             ControlButton,
             HighlightButton,
+            NearMissButton,
         )
         if not self.bot.db.is_connected:
             return
@@ -2575,7 +2577,8 @@ class Marathons(commands.Cog):
         actor: Any = None,
         via: str = VIA_DISCORD,
     ) -> str | None:
-        """The board, then each BaF run's own post under it, then its public highlights."""
+        """The board, each BaF run's own post under it, the near misses, the public highlights."""
+        from .marathon_near_miss import sync_near_misses
         from .marathon_public import sync_highlights
         from .marathon_runner_posts import sync_posts
 
@@ -2584,6 +2587,9 @@ class Marathons(commands.Cog):
         why = await self.sync_board_message(guild, marathon, force=force, actor=actor, via=via)
         if why is None:
             await sync_posts(self, guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
+            await sync_near_misses(
+                self, guild, await get_marathon(self.bot.db, guild.id, marathon["id"])
+            )
             await sync_highlights(
                 self, guild, await get_marathon(self.bot.db, guild.id, marathon["id"])
             )
