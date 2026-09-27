@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon runner posts* (branch `marathon-runner-posts`, off `main` `997c0be2`, keyed against `6fc13f46`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon thread controls* (branch `marathon-thread-controls`, off `main` `28ad1e1c`, keyed against `e66e3a32`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon threads follow their settings* (branch `marathon-thread-move`, off `main` `2ebdb7a6`, keyed against `53b12ed0`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The inbox message waits for the schedule; Change the schedule link…; Post it to the inbox now* (branch `marathon-inbox-when`, off `main` `15cea04a`, keyed against `d7e3a4fd`). Before that:
@@ -8947,3 +8948,23 @@ Design: [`marathon-thread-controls-design.md`](marathon-thread-controls-design.m
 | `black_bloc/cogs/content/marathon.py:1388` · `:1400` · `marathon_events.py:413` · `marathon_spotlight.py:102` · `:131` · `:210` · `:248` · `spotlight.py:1736` | The re-render hooks: `make_event_now`, `unlink_the_event`, `set_event_mode`, `follow_spotlight`, `lift`, `after_staff_dim`, `set_spotlight_mode`, `changed_spotlight`. The imports are inside the functions (the controls module imports all of them). |
 | `black_bloc/storage/db.py:1229` | `marathons.controls_message_id`, schema 73 (Deviation 1). |
 | `black_bloc/logkinds.py:298` | `marathon.controls_posted` and `marathon.controls_lost` are routine; `controls_failed` is IMPORTANT by suffix. |
+
+## Marathon runner posts (branch `marathon-runner-posts`, 2026-09-26)
+
+Design: [`marathon-runner-posts-design.md`](marathon-runner-posts-design.md). Keyed against `6fc13f46`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_runner_posts.py:35` `wanted` | Pure. Every run already posted (so its edit keeps happening whatever its state) plus every BaF run upcoming, live or done, in the board's schedule order (`marathon._when`) — the backfill order. A drop never posted is left out (Deviation 3). |
+| `black_bloc/marathon_runner_posts.py:55` `fields_of` · `:74` `post_text` | Built on `marathon.run_fields`, so `{part}` / `{state}` / the timestamps are the reminders' and the board's own words. `{mention}` is `<@id>` text: the send is `AllowedMentions.none()`, so it names and never pings. `{state}` becomes the unlisted word once nobody from BaF is on the run. |
+| `black_bloc/marathon_runner_posts.py:103` `unpin_because` · `:118` `pins_now` | The board's one-day grace (`marathon.AFTER_END`) applied per run: a done run from its scheduled end, a dropped run from `last_seen_at` (the last read that listed it). Unlisted comes off at once. `pins_now` stops a late backfill pinning a post that would be unpinned the next minute. |
+| `black_bloc/cogs/content/marathon.py:2544` `sync_board` · `:2563` `sync_board_message` | `sync_board` keeps its name and callers; the old body is `sync_board_message`, unchanged. The posts sync only when the board returned no reason (it exists or nothing of ours yet), and re-read the row so a board just posted is seen. |
+| `black_bloc/cogs/content/marathon.py:2541` | The board's lines are dropped by `board_text(lines=False)` when the posts key is on; the empty line still shows while nobody is found. |
+| `black_bloc/cogs/content/marathon_runner_posts.py:51` `sync_posts` · `:80` `sync_one` | Called under the marathon lock by every `sync_board` caller. A stored post in the post place is edited (cached text first, then one fetch and a content compare); a post elsewhere (a moved thread) or gone is posted fresh, only for a run that would be posted new. |
+| `black_bloc/cogs/content/marathon_runner_posts.py:137` `post_one` · `:171` `pin_one` | Stored, logged, THEN pinned: a refused pin never loses the post. Pinned only in mode on (the board's shadow rule). The cap (code 30003) is logged once per channel per boot (`cog.pin_capped`). |
+| `black_bloc/cogs/content/marathon_runner_posts.py:204` `unpin_one` · `:228` `unpin_posts` · `:247` `unpin_due` | `unpin_board`'s shape: the flag cleared first, the pin taken off only when the message carries one (checklist 3). `unpin_due` runs every tick for every marathon, mode off included, whatever the keys say (checklist 38); its only cost when nothing is pinned is one SELECT. |
+| `black_bloc/cogs/content/marathon.py:2694` `unpin_board` | Now takes the runner-post pins off first, so every board unpin (untrack, archive, over, moved) carries them. `runs=` lets the archive pass the rows it read before they moved to the archive table. |
+| `black_bloc/cogs/content/marathon_archive.py:282` · `:141` | The archive hands its pre-move rows to `unpin_board`; a restore clears `post_pinned` beside `board_pinned` (the archived copy was taken before the unpin). |
+| `black_bloc/cogs/content/marathon_inbox.py:766` | `move_thread` takes the old thread's post pins off before archiving it; the same tick's `sync_board` re-posts and re-pins in the new thread. |
+| `black_bloc/storage/db.py:1230` | `marathon_runs.post_message_id` / `post_channel_id` / `post_pinned`, schema 74 (Deviation 1). |
+| `black_bloc/logkinds.py:207` · `:301` | `runner_post_pin_capped` is IMPORTANT (staff can act: unpin something); the post/edit/pin/unpin rows are routine; the three `_failed` kinds are IMPORTANT by suffix. |
