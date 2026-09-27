@@ -10,11 +10,13 @@ from . import marathon_spotlight as ms
 EVENT = "event"
 RUNS = "runs"
 SPOTLIGHT = "spotlight"
-ACTIONS = (EVENT, RUNS, SPOTLIGHT)
+HIGHLIGHT = "highlight"
+ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT)
 ON = "on"
 OFF = "off"
 TEMPLATE = (
-    r"marathon:controls:(?P<marathon_id>[0-9]+):(?P<action>event|runs|spotlight):(?P<to>on|off)"
+    r"marathon:controls:(?P<marathon_id>[0-9]+):(?P<action>event|runs|spotlight|highlight)"
+    r":(?P<to>on|off)"
 )
 CUSTOM_ID = "marathon:controls:{marathon_id}:{action}:{to}"
 
@@ -76,7 +78,9 @@ def spot_word(state: Any) -> str:
     return SPOT_OF_STATE.get(str(state or ""), SPOT_OFF)
 
 
-def controls(mode: Any, spot_state: Any) -> tuple[Control, Control, Control]:
+def controls(
+    mode: Any, spot_state: Any, highlight: bool = False
+) -> tuple[Control, Control, Control, Control]:
     """Each button carries the move it makes, so a stale label can never do the opposite."""
     marathon_on, runs_on = halves(mode)
     spot = spot_word(spot_state)
@@ -89,6 +93,7 @@ def controls(mode: Any, spot_state: Any) -> tuple[Control, Control, Control]:
             spot,
             disabled=spot == SPOT_NONE,
         ),
+        Control(HIGHLIGHT, OFF if highlight else ON, ON if highlight else OFF),
     )
 
 

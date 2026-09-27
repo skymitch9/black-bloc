@@ -291,12 +291,13 @@ async def insert_marathon(
     event_mode: str = "none",
     noticed: bool = True,
     ping_role: int = 0,
+    public_highlight: int = 0,
 ) -> int:
     stamp = now_iso()
     cur = await db.conn.execute(
         "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
-        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at, ping_role) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at, ping_role, "
+        "public_highlight) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             int(guild_id),
             name,
@@ -312,6 +313,7 @@ async def insert_marathon(
             event_mode,
             stamp if noticed else None,
             1 if ping_role else 0,
+            1 if public_highlight else 0,
         ),
     )
     await db.conn.commit()
@@ -353,6 +355,7 @@ MARATHON_COLUMNS = {
     "ignored_by",
     "ping_role",
     "controls_message_id",
+    "public_highlight",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -379,6 +382,9 @@ RUN_COLUMNS = {
     "post_message_id",
     "post_channel_id",
     "post_pinned",
+    "public_message_id",
+    "public_channel_id",
+    "public_removed",
 }
 
 
@@ -561,6 +567,7 @@ async def create_marathon(
     from ...marathon_events import BAD_MODE, makes_marathon_event
     from .marathon_events import BAD_MODE_CODE, mode_for_new
     from .marathon_ping import default_for_new
+    from .marathon_public import default_for_new as public_default_for_new
 
     feed = None
     if feed_id is not None:
@@ -614,6 +621,7 @@ async def create_marathon(
         feed_id=feed_id,
         noticed=noticed,
         ping_role=default_for_new(bot, guild.id),
+        public_highlight=public_default_for_new(bot, guild.id),
     )
     await log_action(
         bot,
@@ -630,6 +638,7 @@ async def create_marathon(
             "feed_id": feed_id,
             "event_mode": wanted_mode,
             "ping_role": bool(default_for_new(bot, guild.id)),
+            "public_highlight": bool(public_default_for_new(bot, guild.id)),
             "via": via,
         },
     )
@@ -1525,6 +1534,7 @@ class Marathons(commands.Cog):
         self.inbox_moved.discard(key)
         self.thread_homes.pop(key, None)
         self.__dict__.get("controls_shown", {}).pop(key, None)
+        self.__dict__.get("public_sent", {}).pop(key, None)
 
     def lock(self, marathon_id: Any) -> asyncio.Lock:
         key = int(marathon_id)
@@ -1551,10 +1561,17 @@ class Marathons(commands.Cog):
         from .marathon_feeds import FeedButton, NoticeModePick
         from .marathon_inbox import InboxButton
         from .marathon_people import PeopleButton
+        from .marathon_public import HighlightButton
         from .marathon_thread_controls import ControlButton
 
         self.bot.add_dynamic_items(
-            NextButton, FeedButton, NoticeModePick, PeopleButton, InboxButton, ControlButton
+            NextButton,
+            FeedButton,
+            NoticeModePick,
+            PeopleButton,
+            InboxButton,
+            ControlButton,
+            HighlightButton,
         )
         if not self.bot.db.is_connected:
             return
@@ -2455,8 +2472,11 @@ class Marathons(commands.Cog):
         force: bool = False,
     ) -> str | None:
         """`force` is staff pressing Shout it now: it posts whatever the run's event says."""
+        from .marathon_public import auto_highlight
+
         if not force and not mi.is_tracked(marathon):
             return None
+        await auto_highlight(self, guild, marathon, row)
         if not force and await self.said_by_its_event(guild, marathon, row):
             return None
         words = words_for(self.bot, guild.id)
@@ -2550,7 +2570,8 @@ class Marathons(commands.Cog):
         actor: Any = None,
         via: str = VIA_DISCORD,
     ) -> str | None:
-        """The board, then each BaF run's own post under it."""
+        """The board, then each BaF run's own post under it, then its public highlights."""
+        from .marathon_public import sync_highlights
         from .marathon_runner_posts import sync_posts
 
         if marathon is None:
@@ -2558,6 +2579,9 @@ class Marathons(commands.Cog):
         why = await self.sync_board_message(guild, marathon, force=force, actor=actor, via=via)
         if why is None:
             await sync_posts(self, guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
+            await sync_highlights(
+                self, guild, await get_marathon(self.bot.db, guild.id, marathon["id"])
+            )
         return why
 
     async def sync_board_message(
@@ -2759,6 +2783,7 @@ class Marathons(commands.Cog):
         *,
         quiet: bool = False,
         marathon: Any = None,
+        view: Any = None,
     ) -> tuple[Any, int | None, str | None]:
         """A tracked marathon posts in its own thread (or the marathon channel when it has
         none); `shadow` makes those in the rehearsal home. Untracked posts nothing."""
@@ -2782,8 +2807,9 @@ class Marathons(commands.Cog):
                 everyone=False, users=False, roles=[discord.Object(one) for one in roles]
             )
         )
+        extra = {"view": view} if view is not None else {}
         try:
-            message = await channel.send(body, allowed_mentions=mentions)
+            message = await channel.send(body, allowed_mentions=mentions, **extra)
         except Exception as exc:
             return (None, channel_id, spot.reason_of(exc))
         return (message, channel_id, None)

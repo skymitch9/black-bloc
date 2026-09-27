@@ -10,6 +10,7 @@ import discord
 from ... import marathon as mt
 from ... import marathon_events as me
 from ... import marathon_inbox as mi
+from ... import marathon_public as mp
 from ... import marathon_spotlight as ms
 from ... import marathon_thread_controls as mtc
 from ... import spotlight as spot
@@ -24,6 +25,8 @@ from ...settings_store import (
     MARATHON_CONTROLS_EVENT_OFF_KEY,
     MARATHON_CONTROLS_EVENT_ON_KEY,
     MARATHON_CONTROLS_HELP_KEY,
+    MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY,
+    MARATHON_CONTROLS_HIGHLIGHT_ON_KEY,
     MARATHON_CONTROLS_KEPT_REFUSED_KEY,
     MARATHON_CONTROLS_NO_CHANNEL_KEY,
     MARATHON_CONTROLS_NO_END_KEY,
@@ -57,6 +60,8 @@ LABEL_KEYS = {
     (mtc.SPOTLIGHT, mtc.SPOT_OFF): MARATHON_CONTROLS_SPOTLIGHT_OFF_KEY,
     (mtc.SPOTLIGHT, mtc.SPOT_KEPT): MARATHON_CONTROLS_SPOTLIGHT_KEPT_KEY,
     (mtc.SPOTLIGHT, mtc.SPOT_NONE): MARATHON_CONTROLS_SPOTLIGHT_NONE_KEY,
+    (mtc.HIGHLIGHT, mtc.ON): MARATHON_CONTROLS_HIGHLIGHT_ON_KEY,
+    (mtc.HIGHLIGHT, mtc.OFF): MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY,
 }
 STYLES = {
     mtc.ON: discord.ButtonStyle.success,
@@ -80,7 +85,7 @@ def shown_cache(cog: Any) -> dict[int, Any]:
 async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tuple[str, ...]]:
     """`(content, controls, labels)` from the row, the channel row and the keys."""
     _row, state = await state_for(bot, guild, marathon)
-    controls = mtc.controls(me.mode_of(marathon), state["state"])
+    controls = mtc.controls(me.mode_of(marathon), state["state"], mp.highlights(marathon))
     labels = tuple(
         mtc.label(words(bot, guild.id, LABEL_KEYS[(one.action, one.word)])) for one in controls
     )
@@ -364,6 +369,10 @@ async def press(
     if action in (mtc.EVENT, mtc.RUNS):
         wanted = mtc.wanted_mode(me.mode_of(marathon), action, to)
         outcome = await set_event_mode(bot, guild, actor, marathon, wanted, via=via)
+    elif action == mtc.HIGHLIGHT:
+        from .marathon_public import set_public_highlight
+
+        outcome = await set_public_highlight(bot, guild, actor, marathon, to == mtc.ON, via=via)
     elif to == mtc.ON:
         outcome = await start_spotlight(bot, guild, actor, marathon, via=via)
     else:

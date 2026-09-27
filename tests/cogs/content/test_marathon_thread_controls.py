@@ -134,12 +134,14 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         "Marathon event: off · turn on",
         "BaF run events: off · turn on",
         "Spotlight: on · stop",
+        "Auto-highlight BaF runners when live: off · turn on",
     ]
     ids = [one.custom_id for one in buttons(message)]
     assert ids == [
         f"marathon:controls:{marathon['id']}:event:on",
         f"marathon:controls:{marathon['id']}:runs:on",
         f"marathon:controls:{marathon['id']}:spotlight:off",
+        f"marathon:controls:{marathon['id']}:highlight:on",
     ]
     assert message.kwargs["allowed_mentions"].users is False
     posted = await details_of(bot.db, "marathon.controls_posted")

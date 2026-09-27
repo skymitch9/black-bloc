@@ -183,6 +183,11 @@ const PING_CHOICES = [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off'
 const PING_HELP = 'On: its run reminders and shoutouts mention the runner’s ping role and its channel’s, '
   + 'and its channel gets a ping window while it runs. Off (the default): they still post, with no mention. '
   + 'marathon_ping_role_default decides where a new marathon starts.';
+const HIGHLIGHT_FIELD = 'Auto-highlight BaF runners when live';
+const HIGHLIGHT_HELP = 'On: the moment a BaF run goes live its highlight posts in the public channel '
+  + '(marathon_public_channel_id, blank = go-live) — the thread is staff-only, so this is what members see. '
+  + 'Off (the default): only the Highlight button on a run’s post in the thread does. A highlight staff took '
+  + 'down never comes back by itself. marathon_public_highlight_default decides where a new marathon starts.';
 const EVENT_SELECT_SHORT = 'Which Discord events this marathon makes; the setting explains the '
   + 'four choices.';
 const EVENT_NONE = 'No event.';
@@ -822,6 +827,8 @@ async function settingsFold(marathon, say) {
   const mode = modePicker(marathon.event_mode || 'none');
   const pingNow = marathon.ping_role ? 'on' : 'off';
   const ping = segment(PING_CHOICES, pingNow);
+  const highlightNow = marathon.public_highlight ? 'on' : 'off';
+  const highlight = segment(PING_CHOICES, highlightNow);
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
     class: 'input',
@@ -836,6 +843,7 @@ async function settingsFold(marathon, say) {
     const body = {};
     if (mode.value !== (marathon.event_mode || 'none')) body.event_mode = mode.value;
     if (ping.readValue() !== pingNow) body.ping_role = ping.readValue() === 'on';
+    if (highlight.readValue() !== highlightNow) body.public_highlight = highlight.readValue() === 'on';
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
     if (wanted !== (marathon.poll_minutes || null)) body.poll_minutes = wanted;
@@ -855,6 +863,7 @@ async function settingsFold(marathon, say) {
     marathon.channel_gone ? notice(CHANNEL_GONE, 'warn') : null,
     field('Airs on', picker, windowWords(marathon)),
     field(PING_FIELD, ping, PING_HELP),
+    field(HIGHLIGHT_FIELD, highlight, HIGHLIGHT_HELP),
     field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
     bar([save]),
   ], { open: shown.settings });
