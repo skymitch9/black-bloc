@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public highlights* (branch `marathon-public-highlights`, off `main` `f8494278`, keyed against `e43f8482`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon runner posts* (branch `marathon-runner-posts`, off `main` `997c0be2`, keyed against `6fc13f46`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon thread controls* (branch `marathon-thread-controls`, off `main` `28ad1e1c`, keyed against `e66e3a32`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon threads follow their settings* (branch `marathon-thread-move`, off `main` `2ebdb7a6`, keyed against `53b12ed0`). Before that:
@@ -8968,3 +8969,31 @@ Design: [`marathon-runner-posts-design.md`](marathon-runner-posts-design.md). Ke
 | `black_bloc/cogs/content/marathon_inbox.py:766` | `move_thread` takes the old thread's post pins off before archiving it; the same tick's `sync_board` re-posts and re-pins in the new thread. |
 | `black_bloc/storage/db.py:1230` | `marathon_runs.post_message_id` / `post_channel_id` / `post_pinned`, schema 74 (Deviation 1). |
 | `black_bloc/logkinds.py:207` · `:301` | `runner_post_pin_capped` is IMPORTANT (staff can act: unpin something); the post/edit/pin/unpin rows are routine; the three `_failed` kinds are IMPORTANT by suffix. |
+
+## Marathon public highlights (branch `marathon-public-highlights`, 2026-09-26)
+
+Design: [`marathon-public-highlights-design.md`](marathon-public-highlights-design.md). Keyed against `e43f8482`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_public.py:48` `is_up` · `:61` `auto_wanted` | Up = a stored message not taken down. The switch wants a run with NO message id at all, so a highlight staff took down (`public_removed`) or one a person deleted and that was forgotten is never put back by it (Deviations 1, 6). |
+| `black_bloc/marathon_public.py:83` `button_for` | Remove while up (always, even with no public channel — staff can always take it down); Highlight only for a BaF run upcoming/live/done with a channel; else no button (Deviation 8). |
+| `black_bloc/marathon_public.py:94` `shown_button` | Reads a fetched message's real components; `False` means it cannot tell (the suite's fakes carry none), and the runner post is then edited once (Deviation 11). |
+| `black_bloc/cogs/content/marathon_public.py:80` `public_channel` | The one resolver: `marathon_public_channel_id`, else `golive_channel_id`. |
+| `black_bloc/cogs/content/marathon_public.py:169` `send_public` | Not `cog._send`: that one aims at the thread. Mode off posts nothing; shadow goes to the `marathon_public` feature home with the note naming the real channel; the guard is checked. Only the pinged roles are allowed. |
+| `black_bloc/cogs/content/marathon_public.py:226` `post_highlight` | A taken-down highlight still in the channel a highlight would go to now is edited back (`_restored`) instead of posting a second (Deviation 3); otherwise a new post. Pings come from `Marathons._ping_roles`, which is empty unless the marathon's `ping_role` is on. |
+| `black_bloc/cogs/content/marathon_public.py:300` `remove_highlight` | The flag first, the cosmetic edit after (checklist 12). Not gated on the mode (Deviation 7). |
+| `black_bloc/cogs/content/marathon_public.py:332` `sync_highlights` | Called from `sync_board` after the runner posts. Cache `(channel, text)` per run; one fetch after a restart; NotFound forgets the highlight (`_lost`), a hiccup leaves it. Edits never mention anyone. |
+| `black_bloc/cogs/content/marathon_public.py:382` `auto_highlight` | Wrapped so a failure never breaks the shoutout it rides in. |
+| `black_bloc/cogs/content/marathon_public.py:404` `press` | Under the marathon lock (checklist 37); re-renders the runner post through `sync_posts` so its button flips in the same press. |
+| `black_bloc/cogs/content/marathon_public.py:485` `set_public_highlight` | The one writer of `marathons.public_highlight`: the thread button, the drawer and the PATCH. Calls the controls' `controls_changed` after the lock is released. |
+| `black_bloc/cogs/content/marathon.py:2475` `shout` | The auto hook, before the said-by-its-event skip (Deviation 5). The import is inside the function (the public module imports the cog). |
+| `black_bloc/cogs/content/marathon.py:2574` `sync_board` | Board, runner posts, then highlights; only when the board step returned no reason. |
+| `black_bloc/cogs/content/marathon.py:2786` `_send` | `view=` added for the runner post's button; omitted from the send when there is none. |
+| `black_bloc/cogs/content/marathon.py:624` `create_marathon` | Copies `marathon_public_highlight_default` onto a new row; existing rows default 0 by the column. |
+| `black_bloc/cogs/content/marathon_runner_posts.py:80` · `:113` `view_for` · `:134` | Each runner post carries `button_of`'s button; the cache is `(target, text, button)` so a label or state change edits the post; after a restart the fetched components are compared too. |
+| `black_bloc/marathon_thread_controls.py:96` · `black_bloc/cogs/content/marathon_thread_controls.py:88` · `:373` | The fourth control carries its target like the other three; a press goes to `set_public_highlight`. |
+| `black_bloc/api/tools/marathons.py:655` | `PATCH public_highlight` through the one writer with `via=VIA_WEBSITE` (checklist 34). |
+| `black_bloc/storage/db.py:1233` | `marathons.public_highlight`, `marathon_runs.public_message_id` / `public_channel_id` / `public_removed`, schema 75 (Deviation 1). |
+| `black_bloc/logkinds.py:305` | The six highlight kinds are routine; `public_highlight_failed` is IMPORTANT by suffix. |
+| `black_bloc/settings_store.py:3099` | `marathon_public` is its own rehearsal home (Deviation 10). |
