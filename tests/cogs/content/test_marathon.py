@@ -3,10 +3,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from black_bloc import logkinds
 from black_bloc import marathon as mt
 from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content.marathon import (
     Marathons,
+    change_link,
     claim_notice,
     create_marathon,
     get_marathon,
@@ -1114,7 +1116,7 @@ async def test_the_panel_card_offers_next_up_and_the_next_view_its_three_moves(b
     await cog.tick_once()
     embed, view = await cogmod.build_card(bot, bot.guild, over["id"])
     labels = [getattr(one, "label", None) for one in view.children]
-    assert "Next up…" in labels and "Re-read every…" in labels
+    assert "Next up…" in labels and "Schedule…" in labels and "Re-read every…" not in labels
     assert "Summer Games Done Quick 2027" in embed.description
     embed, view = await cogmod.build_next(bot, bot.guild, over["id"])
     labels = [getattr(one, "label", None) for one in view.children]
@@ -1539,3 +1541,87 @@ async def test_a_marathon_with_no_channel_draws_no_spotlight_door(bot, cog):
     _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
     assert "Spotlight…" not in [getattr(one, "label", None) for one in view.children]
     assert await cogmod.build_spot(bot, bot.guild, marathon["id"]) == (None, None)
+
+
+# --- marathon-inbox-when: Change the schedule link… ------------------------------------------
+
+HORARO = "https://horaro.net/esa/2026-summer1"
+
+
+async def test_changing_the_link_keeps_the_marathon_and_reads_the_new_schedule_at_once(bot, cog):
+    marathon = await added(bot, cog)
+    await bot.db.conn.execute(
+        "UPDATE marathons SET event_mode = 'runs', ping_role = 1, spotlight_mode = 'off', "
+        "thread_id = 4242, fetch_failures = 3, last_error = 'boom' WHERE id = ?",
+        (marathon["id"],),
+    )
+    await bot.db.conn.commit()
+    before = await fresh(bot, marathon)
+    calls = cog.client.calls
+
+    done = await change_link(bot, bot.guild, FakeActor(), before, f"  {HORARO} ")
+
+    assert done.ok and "reads its schedule from the new link now" in done.message
+    after = await fresh(bot, marathon)
+    assert after["id"] == before["id"] and after["schedule_url"] == HORARO
+    assert (after["source"], after["source_ref"]) == ("horaro", "74")
+    assert after["tracked_at"] == before["tracked_at"] and after["thread_id"] == 4242
+    assert (after["event_mode"], after["ping_role"], after["spotlight_mode"]) == ("runs", 1, "off")
+    assert after["fetch_failures"] == 0 and after["last_error"] is None
+    assert cog.client.calls == calls + 1 and after["last_fetch_ok"] == 1
+    logged = await details_of(bot.db, "marathon.link_changed")
+    assert logged["old"] == {"url": URL, "source": "gdq", "ref": "74"}
+    assert logged["new"] == {"url": HORARO, "source": "horaro", "ref": "74"}
+    assert "marathon.link_changed" in logkinds.IMPORTANT
+
+
+async def test_changing_the_link_refuses_in_words_and_changes_nothing(bot, cog):
+    marathon = await added(bot, cog)
+    other = await create_marathon(
+        bot, bot.guild, FakeActor(), name="ESA Summer", url="https://horaro.net/esa/2026-summer2"
+    )
+    assert other.ok
+
+    unknown = await change_link(bot, bot.guild, FakeActor(), marathon, "https://example.com/x")
+    assert unknown.code == "unknown_site" and "horaro.net schedules, Oengus" in unknown.message
+    taken = await change_link(
+        bot, bot.guild, FakeActor(), marathon, "https://horaro.net/esa/2026-summer2"
+    )
+    assert taken.code == "duplicate" and taken.status == 409
+    assert "**ESA Summer** already follows that schedule" in taken.message
+    same = await change_link(bot, bot.guild, FakeActor(), marathon, URL)
+    assert same.code == "same_link" and "already reads that link" in same.message
+    cog.client.raises = ScheduleError("horaro.net answered 404")
+    unreadable = await change_link(bot, bot.guild, FakeActor(), marathon, HORARO)
+    assert unreadable.code == "unreadable" and "horaro.net answered 404" in unreadable.message
+
+    assert (await fresh(bot, marathon))["schedule_url"] == URL
+    assert "marathon.link_changed" not in await kinds(bot.db)
+
+
+async def test_the_card_opens_the_schedule_view_and_its_modal_changes_the_link(bot, cog):
+    marathon = await added(bot, cog)
+    _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    assert all(len([one for one in view.children if one.row == row]) <= 5 for row in range(5))
+
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pressed(view, "Schedule…").callback(interaction)
+    assert interaction.view.where == cogmod.SCHEDULE_VIEW
+    assert URL in interaction.words
+    assert interaction.labels()[:2] == ["Change the schedule link…", "Re-read every…"]
+
+    opening = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pressed(interaction.view, "Change the schedule link…").callback(opening)
+    modal = opening.response.modals[-1]
+    assert modal.link.default == URL
+    modal.link._value = HORARO
+    submitted = FakeInteraction(bot, FakeActor(), bot.guild)
+    await modal.on_submit(submitted)
+
+    assert (await fresh(bot, marathon))["schedule_url"] == HORARO
+    assert submitted.view.where == cogmod.SCHEDULE_VIEW and HORARO in submitted.words
+    assert "reads its schedule from the new link now" in submitted.sent
+
+    back = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pressed(submitted.view, "Back").callback(back)
+    assert back.view.where == cogmod.CARD

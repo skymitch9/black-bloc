@@ -85,6 +85,9 @@ const IDS = {
   // the read-only drawer, its People card and Restore all reach it.
   marathon_archived_id: '40',
   marathon_waiting_id: '1',
+  // marathon-inbox-when: Speed Stuff 4 LHS 2026 (5) has no schedule and no inbox message yet,
+  // so Post it to the inbox now reaches it.
+  marathon_unposted_id: '5',
   // Feeds: 1 is GDQ (add mode, one removed event remembered, so Forget ignored reaches it);
   // 2 is RPG Limit Break (suggest mode) with event 22 waiting. The ESA row (2) is opted out of
   // marathons (event modes §A2), so Add a feed starts on Frost Fatales (3), which has no feed.

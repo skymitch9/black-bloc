@@ -583,5 +583,5 @@ def test_the_next_moves_offer_add_and_dismiss_only_while_the_suggestion_is_open(
     assert mt.next_moves(dismissed, over=True) == (mt.LOOK_AGAIN_MOVE, mt.BACK_MOVE)
     assert mt.next_moves(None, over=False) == (mt.BACK_MOVE,)
     card = mt.card_moves({"active": 1}, has_unmatched=False, has_next=True)
-    assert mt.NEXT_MOVE in card and mt.POLL_MOVE in card
+    assert mt.NEXT_MOVE in card and mt.SCHEDULE_MOVE in card and mt.POLL_MOVE not in card
     assert mt.NEXT_MOVE not in mt.card_moves({"active": 1}, has_unmatched=False)

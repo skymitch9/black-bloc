@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *The inbox message waits for the schedule; Change the schedule link…; Post it to the inbox now* (branch `marathon-inbox-when`, off `main` `15cea04a`, keyed against `d7e3a4fd`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon controls* (branch `marathon-controls`, off `main` `70edbad9`, keyed against `287032e0`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The marathon inbox* (branch `marathon-inbox`, off `main` `56056053`, keyed against `ad395616`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathons are archived, never deleted* (branch `marathon-archive-local`, off `main` `33b9838a`, keyed against `c19366d9`). Before that:
@@ -8890,3 +8891,22 @@ Design: [`marathon-controls-design.md`](marathon-controls-design.md). Keyed agai
 | `site/public/assets/page-golive.js:777` `redrawing` · `:793` `channelAnnounceMoves` | Go-live keeps its own afters: spotlight writes redraw the drawer, the announce switch closes it and refreshes, as before. The import is renamed `channelAnnounce` because the page's own `announceMoves` is the member opt-out (Deviation 18). |
 | `site/public/assets/marathons-section.js:866` `spotlightBlock` | The state first, the follow switch, the shared card, then Pings; no channel is one sentence. `after` re-opens the drawer, so every write redraws it. |
 | `site/mock/server.mjs:6267` `marathonSpotlightOf` · `:6035` `marathonFollowAtOnce` · `:6074` `marathonSetPingRole` | The mock's mirrors of `state_of`, the follow's switch side effects (no tick) and `set_ping_role`. |
+
+## The inbox message waits for the schedule; Change the schedule link…; Post it to the inbox now (branch `marathon-inbox-when`, 2026-09-26)
+
+Design: [`marathon-inbox-design.md`](marathon-inbox-design.md) ▸ *Follow-up — marathon-inbox-when*. Keyed against `d7e3a4fd`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/cogs/content/marathon_inbox.py:504` `posts_at_add` · `:508` `sync_inbox` | The FIRST post waits for runs on the schedule (dropped not counted) unless `marathon_feed_notice_when` is `added` or staff pressed Post it now (`early`); a message already up in this home is always edited. Runs, not `noticed_at`, because every pre-existing staff-made row is stamped (Deviation 3). |
+| `black_bloc/cogs/content/marathon_feeds.py:519` `notice_published` | The schedule-out moment for feed-made AND staff-made rows: claim first (checklist 12), then the log, then the forced sync that posts or edits, then the feed's auto-track. A row with no feed logs without the feed's fields. |
+| `black_bloc/cogs/content/marathon.py:542` `create_marathon` · `:642` | `noticed=False` for every add; a feed's add claims its moment in `add_candidate` after `marathon.feed_added`, every other add claims it here, so the log order of a feed add is unchanged. |
+| `black_bloc/cogs/content/marathon.py:736` `change_link` | Refusals before the lock (the site, the twin, the same link, the resolve), then under the marathon lock: the row, the log, the read, the follow, the moment, the inbox edit. `fetch_hash = NULL` makes the read write its plan even when the new schedule hashes like the old. |
+| `black_bloc/cogs/content/marathon.py:320` `MARATHON_COLUMNS` | `schedule_url` and `source` joined the writable set for `change_link`; nothing else writes them after insert. |
+| `black_bloc/marathon.py:296` `card_moves` · `black_bloc/marathon_inbox.py:140` `schedule_moves` | The card's five rows can all be full, so *Re-read every…* moved into the Schedule view (Deviation 5); Post it now is drawn only while there is no inbox message and never on an archived row. |
+| `black_bloc/cogs/content/marathon.py:3231` `schedule_lines` · `:3245` `build_schedule` · `:3699` `LinkModal` | The view says the link and whether the inbox message is up in THIS home; the modal and the poll modal return to the view they were opened from. |
+| `black_bloc/cogs/content/marathon_inbox.py:877` `post_now` | Off refuses before the lock; the "already up" check and the post are under the marathon lock so two presses make one message. `sync_inbox` returns nothing on failure, so the refusal points at `marathon.inbox_failed` for the reason. |
+| `black_bloc/api/tools/marathons.py:584` · `:724` | `schedule_url` is applied before the other PATCH fields, which re-read the row after it; `/inbox` answers the detail so the drawer redraws with `inbox_message_url`. |
+| `site/public/assets/marathons-section.js:905` `changeLink` · `:923` `linkLine` · `:963` | The modal keeps the server's refusal inside the dialog (`askForm`); the moves-bar button is drawn from `inbox_message_url` alone (Deviation 11). |
+| `site/mock/server.mjs:6002` `marathonChangeLink` · `:6928` | The mock's copies; it has no tick, so an early message is never edited there. Seed #5 carries no inbox message (no schedule). |
+| `tests/api/test_contract.py:281` `inbox_forum` | The fake text channel cannot take a thread's first message, so every `rewind` adds a forum as the inbox home for the `/inbox` entry. |

@@ -750,6 +750,14 @@ const SETTING_SPECS = [
   ["marathon_untracked_said", "text", "**{marathon}** is not tracked any more — it posts nothing; its thread is kept, archived.", "**{marathon}** is not tracked any more — it posts nothing; its thread is kept, archived.", "what staff are told once Untrack has stopped a marathon's posts. It takes {marathon}"],
   ["marathon_ignored_said", "text", "**{marathon}** is ignored — it stays on the list and is read, and posts nothing. **Track anyway** changes that.", "**{marathon}** is ignored — it stays on the list and is read, and posts nothing. **Track anyway** changes that.", "what staff are told once Ignore has quieted a marathon. It takes {marathon}"],
   ["marathon_unignored_said", "text", "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing until someone presses **Track**.", "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing until someone presses **Track**.", "what staff are told once an ignored marathon is put back to found. It takes {marathon}"],
+  ["marathon_link_changed_said", "text", "**{marathon}** reads its schedule from the new link now — its tracking, thread, event and switches are kept. {read}", "**{marathon}** reads its schedule from the new link now — its tracking, thread, event and switches are kept. {read}", "what staff are told once Change the schedule link… has moved a marathon to a new schedule. It takes {marathon} {read}"],
+  ["marathon_link_same", "text", "**{marathon}** already reads that link, so nothing was changed.", "**{marathon}** already reads that link, so nothing was changed.", "what staff are told when Change the schedule link… is given the link the marathon already reads. It takes {marathon}"],
+  ["marathon_link_taken", "text", "**{other}** already follows that schedule, so **{marathon}**'s link was not changed.", "**{other}** already follows that schedule, so **{marathon}**'s link was not changed.", "the refusal when Change the schedule link… is given a link another marathon on the list already follows. It takes {marathon} {other}"],
+  ["marathon_link_unreadable", "text", "Black Bloc could not read that schedule, so **{marathon}**'s link was not changed: {reason}", "Black Bloc could not read that schedule, so **{marathon}**'s link was not changed: {reason}", "the refusal when the new schedule link will not read. It takes {marathon} {reason}"],
+  ["marathon_inbox_posted_said", "text", "**{marathon}**'s inbox message is up — its Schedule line says it is not out yet, and the same message is edited when the runs arrive.", "**{marathon}**'s inbox message is up — its Schedule line says it is not out yet, and the same message is edited when the runs arrive.", "what staff are told once Post it to the inbox now has posted a marathon's inbox message before its schedule is out. It takes {marathon}"],
+  ["marathon_inbox_already", "text", "**{marathon}** already has its inbox message, so nothing was posted.", "**{marathon}** already has its inbox message, so nothing was posted.", "the refusal when Post it to the inbox now is pressed on a marathon whose inbox message is already up. It takes {marathon}"],
+  ["marathon_inbox_post_off", "text", "Marathon posts are off, so **{marathon}**'s inbox message was not posted — set marathon_mode to shadow or on first.", "Marathon posts are off, so **{marathon}**'s inbox message was not posted — set marathon_mode to shadow or on first.", "the refusal when Post it to the inbox now is pressed while marathon posts are off. It takes {marathon}"],
+  ["marathon_inbox_post_failed", "text", "**{marathon}**'s inbox message could not be posted just now — the Logs page says why (marathon.inbox_failed).", "**{marathon}**'s inbox message could not be posted just now — the Logs page says why (marathon.inbox_failed).", "the refusal when Post it to the inbox now could not reach the inbox thread. It takes {marathon}"],
   ["marathon_channel_ping_mode_default", "enum", "events", "events", "the pings a NEW channel row gets when it is a marathon channel (one a marathon feed is seeded for) that takes marathons: events — the default — mentions roles only inside a ping window, which its marathons set from their schedules; always and never as on the Go-live page. Every other new row follows spotlight_ping_mode_default, and no existing row is changed", ["always", "never", "events"]],
   ["marathon_channel_ping_help", "text", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "the help line under the Pings choice on a marathon channel's Go-live drawer, saying what During events means there"],
   ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a BaF run goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
@@ -762,7 +770,7 @@ const SETTING_SPECS = [
   ["marathon_feeds", "bool", true, true, "whether the marathon feeds check on their own — each feed reads the events list of one channel's marathons (the GDQ and RPG Limit Break trackers, a horaro.net event, horaro.net events found by name, Oengus, Fastest Furs' own list, Lady Arcaders' next event numbers) and adds or suggests every new event. on by default; off checks nothing, and Check now on a feed still works"],
   ["marathon_feed_hours", "int", 6, 6, "hours between two checks of one marathon feed. 6 by default", null, 168, 1],
   ["marathon_feed_action_default", "enum", "add", "add", "what a new feed does with an event it finds, until staff change that feed: add puts it on the marathon list at once with its message in the marathon inbox thread (Track and Ignore); suggest posts a notice there with Add it and Not this one. add by default", ["add", "suggest"]],
-  ["marathon_feed_notice_when", "enum", "published", "published", "retired 2026-09 — the inbox thread is the notice home: every marathon a feed finds gets its inbox message the moment it is added, and the message is edited once its schedule is out. Kept so old rows still read; nothing reads it any more", ["published", "added"]],
+  ["marathon_feed_notice_when", "enum", "published", "published", "when a marathon gets its message in the marathon inbox thread: published waits for the first read that finds runs on its schedule (a feed's find and a staff Add alike — Post it to the inbox now posts one early); added posts it the moment it is on the list. published by default", ["published", "added"]],
   ["marathon_feed_recent_days", "int", 1, 1, "how many days after it started (a tracker event) or ended (a horaro.net schedule, an Oengus marathon, a Fastest Furs event or a Lady Arcaders event) an event still counts as new to a feed. 1 by default", null, 30, 0],
   ["marathon_ladyarcaders_floor", "int", 24, 24, "the event number the Lady Arcaders feed probes upward from — it asks the next numbers above this or above the highest event it already knows, whichever is higher; staff raise it after a link is pasted. 24 by default", null, 99999, 1],
   ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the line above a feed-found marathon's message in the marathon inbox thread, where Track and Ignore are. It takes {feed} {event} {when} {relative} {url} {channel}"],
@@ -5723,7 +5731,7 @@ function seedMarathons() {
     { id: 2, name: 'Halo Fest', schedule_url: 'https://gamesdonequick.com/schedule/73', source: 'gdq', source_ref: '73', spotlight_id: null, starts_at: minutesAgo(30000), ends_at: minutesAgo(29840), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000299', board_pinned: false, last_fetched_at: minutesAgo(700), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(40000) },
     { id: 3, name: 'GDQx 2026', schedule_url: 'https://gamesdonequick.com/schedule/72', source: 'gdq', source_ref: '72', spotlight_id: null, starts_at: null, ends_at: null, active: false, poll_minutes: 60, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(1500), last_fetch_ok: 0, last_error: 'the GDQ tracker has the event but has not published its schedule yet (it answers 404 for the runs)', fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(2000) },
     // Found on oengus.io by the Speed Stuff 4 Charity feed; its schedule is not published yet,
-    // so it waits quietly and the staff notice posts once the first read finds runs.
+    // so it waits quietly with no inbox message until the first read finds runs.
     { id: 5, name: 'Speed Stuff 4 LHS 2026', schedule_url: 'https://oengus.io/marathon/ss4lhs26/schedule', source: 'oengus', source_ref: 'ss4lhs26', spotlight_id: 7, feed_id: 3, starts_at: null, ends_at: null, active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(40), last_fetch_ok: 0, last_error: 'oengus.io has the marathon but has not published its schedule yet', fetch_failures: 0, added_by: null, added_at: minutesAgo(40) },
     // Found on fastestfurs.com by the Fastest Furs feed; its schedule is out, so its runs are read.
     { id: 31, name: 'Fastest Furs Fall Fest 2026', schedule_url: 'https://fastestfurs.com/schedule/21', source: 'fastestfurs', source_ref: '21', spotlight_id: 31, feed_id: 31, starts_at: new Date(Date.now() + 17280 * 60000).toISOString(), ends_at: new Date(Date.now() + 22000 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(90), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(880) },
@@ -5731,7 +5739,7 @@ function seedMarathons() {
     // was added with its dates and is over now.
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
-  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, ...marathonInboxSeed()[row.id], inbox_message_id: String(861000000000000000 + row.id), ...row }));
+  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
 }
 
 // The inbox (marathon-inbox-design.md §B): AGDQ 2027 is tracked with its own thread (and its
@@ -5987,6 +5995,22 @@ function marathonTracking(row, archived = false) {
 
 function marathonTracked(row) {
   return Boolean(row.tracked_at) && !row.ignored_at;
+}
+
+// The mock's copy of cogs/content/marathon.py:change_link — the marathon keeps its id, tracking,
+// thread, event and switches; the source is re-read from the new link and the fetch state cleared.
+function marathonChangeLink(row, given) {
+  const url = String(given || '').trim();
+  const read = marathonReadAny(url);
+  if (read === null) throw new Refused(422, 'unknown_site', marathonWords('marathon_unknown_site'));
+  if (url === row.schedule_url) throw new Refused(409, 'same_link', marathonSaid('marathon_link_same', { marathon: row.name }));
+  const twin = state.marathons.find((one) => one.schedule_url === url && one.id !== row.id);
+  if (twin) throw new Refused(409, 'duplicate', marathonSaid('marathon_link_taken', { marathon: row.name, other: twin.name }));
+  const old = { url: row.schedule_url, source: row.source, ref: row.source_ref };
+  Object.assign(row, { schedule_url: url, source: read.source, source_ref: read.ref, fetch_failures: 0, last_error: null, last_fetch_ok: 1, last_fetched_at: new Date().toISOString() });
+  logAction('web.marathon.link_changed', { details: { marathon_id: row.id, name: row.name, old, new: { url, source: read.source, ref: read.ref }, via: 'website' } });
+  const found = marathonDetail(row);
+  return marathonSaid('marathon_link_changed_said', { marathon: row.name, read: `Its schedule has ${found.runs} run(s), ${found.ours} of them BaF.` });
 }
 
 function refuseUntracked(row) {
@@ -6899,6 +6923,19 @@ route('POST', '/api/marathons/:marathon_id/ignore', async (context) => {
   return { ...marathonDetailAny(row.id), message };
 });
 
+// The mock's copy of cogs/content/marathon_inbox.py:post_now — the inbox message goes up before the
+// schedule is out; the mock has no tick, so the edit when runs arrive is the bot's alone.
+route('POST', '/api/marathons/:marathon_id/inbox', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  if (state.settings.get('marathon_mode') === 'off') throw new Refused(409, 'mode_off', marathonSaid('marathon_inbox_post_off', { marathon: row.name }));
+  if (row.inbox_message_id) throw new Refused(409, 'already_posted', marathonSaid('marathon_inbox_already', { marathon: row.name }));
+  row.inbox_message_id = String(870000000000000000 + row.id);
+  row.inbox_home = state.settings.get('marathon_mode') === 'on' ? 'on' : 'shadow';
+  logAction('web.marathon.inbox_posted', { details: { marathon_id: row.id, name: row.name, home: row.inbox_home, message_id: row.inbox_message_id, state: marathonTracked(row) ? 'tracked' : 'found', early: true, via: 'website' } });
+  return { ...marathonDetailAny(row.id), message: marathonSaid('marathon_inbox_posted_said', { marathon: row.name }) };
+});
+
 route('POST', '/api/marathons/:marathon_id/restore', (context) => {
   requireStaff(context.session);
   const row = marathonArchivedOf(context.params.marathon_id);
@@ -6931,6 +6968,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
       said.push(body.active ? `**${row.name}** is being read again.` : `**${row.name}** is paused — nothing is read or posted until it is resumed.`);
     }
   }
+  if ('schedule_url' in body) said.push(marathonChangeLink(row, body.schedule_url));
   if ('spotlight_id' in body) {
     const wanted = body.spotlight_id ? Number(body.spotlight_id) : null;
     if (wanted && !state.golive.spotlights.find((one) => one.id === wanted)) {

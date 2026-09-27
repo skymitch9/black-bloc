@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import discord
 import pytest
 
 from black_bloc.cogs.content.marathon import Marathons, get_marathon, runs_of
@@ -39,6 +40,7 @@ ROUTES = [
     ("POST", "/api/marathons/1/restore"),
     ("POST", "/api/marathons/1/track"),
     ("POST", "/api/marathons/1/ignore"),
+    ("POST", "/api/marathons/1/inbox"),
 ]
 
 
@@ -821,3 +823,61 @@ async def test_the_detail_carries_the_channel_row_as_go_live_reads_it_and_its_st
     assert after["spotlight_state"]["state"] == "until"
     none = client.get(f"/api/marathons/{bare_id}").json()
     assert none["channel_spotlight"] is None and none["spotlight_state"]["state"] == "none"
+
+
+async def test_patch_schedule_url_moves_the_marathon_to_a_readable_link_and_keeps_its_id(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    track(client, marathon_id)
+    other = add(client, name="ESA Summer", schedule_url="https://horaro.net/esa/2026-summer2")
+    assert other.status_code == 200
+
+    body = client.patch(
+        f"/api/marathons/{marathon_id}",
+        json={"schedule_url": "https://oengus.io/marathon/ss4lhs26"},
+    ).json()
+
+    assert body["id"] == marathon_id and body["tracked"] is True
+    assert (body["source"], body["schedule_url"]) == (
+        "oengus",
+        "https://oengus.io/marathon/ss4lhs26",
+    )
+    assert "reads its schedule from the new link now" in body["message"] and body["runs"] == 3
+    said = await web_row(wf, web, "web.marathon.link_changed")
+    assert said["old"]["url"] == URL and said["new"]["source"] == "oengus"
+
+    unknown = client.patch(f"/api/marathons/{marathon_id}", json={"schedule_url": "https://example.com/x"})
+    assert unknown.status_code == 422 and unknown.json()["error"] == "unknown_site"
+    assert "Lady Arcaders calendars" in unknown.json()["message"]
+    taken = client.patch(
+        f"/api/marathons/{marathon_id}",
+        json={"schedule_url": "https://horaro.net/esa/2026-summer2"},
+    )
+    assert taken.status_code == 409 and taken.json()["error"] == "duplicate"
+    assert "**ESA Summer** already follows that schedule" in taken.json()["message"]
+
+
+async def test_post_it_to_the_inbox_now_is_a_route_that_posts_once_and_refuses_in_words(
+    client, sign_in, web, cog, wf
+):
+    forum = web.guild.get_channel(wf.OTHER_CHANNEL_ID)
+    forum.type = discord.ChannelType.forum
+    await web.store.set(wf.GUILD_ID, "marathon_inbox_channel_id", wf.OTHER_CHANNEL_ID)
+    sign_in(client)
+    cog.client.runs_given = []
+    marathon_id = add(client).json()["id"]
+    assert client.get(f"/api/marathons/{marathon_id}").json()["inbox_message_url"] is None
+
+    body = client.post(f"/api/marathons/{marathon_id}/inbox", json={}).json()
+
+    assert "inbox message is up" in body["message"]
+    assert body["inbox_message_url"].startswith("https://discord.com/channels/")
+    said = await web_row(wf, web, "web.marathon.inbox_posted")
+    assert said["early"] is True and said["marathon_id"] == marathon_id
+    again = client.post(f"/api/marathons/{marathon_id}/inbox", json={})
+    assert again.status_code == 409 and again.json()["error"] == "already_posted"
+    await web.store.set(wf.GUILD_ID, "marathon_mode", "off")
+    off = client.post(f"/api/marathons/{marathon_id}/inbox", json={})
+    assert off.status_code == 409 and "Marathon posts are off" in off.json()["message"]

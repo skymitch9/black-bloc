@@ -11,6 +11,7 @@ from ... import marathon_inbox as mi
 from ... import marathon_people as mt_people
 from ...cogs.content.marathon import (
     add_next,
+    change_link,
     create_marathon,
     dismiss_next,
     event_status_of,
@@ -56,7 +57,7 @@ from ...cogs.content.marathon_events import (
 )
 from ...cogs.content.marathon_feeds import get_feed
 from ...cogs.content.marathon_inbox import ignore as ignore_marathon
-from ...cogs.content.marathon_inbox import inbox_message_url
+from ...cogs.content.marathon_inbox import inbox_message_url, post_now
 from ...cogs.content.marathon_inbox import track as track_marathon
 from ...cogs.content.marathon_inbox import untrack as untrack_marathon
 from ...cogs.content.marathon_people import (
@@ -580,6 +581,18 @@ def build_router(bot: Any) -> APIRouter:
                     await set_active(bot, guild, actor, row, payload["active"], via=VIA_WEBSITE)
                 )
                 said.append(done.message)
+        if "schedule_url" in payload:
+            done = answered(
+                await change_link(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    payload["schedule_url"],
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
         if "spotlight_id" in payload:
             given = payload["spotlight_id"]
             wanted_channel = None if given in (None, "", 0, "0") else wanted_id(given)
@@ -706,6 +719,17 @@ def build_router(bot: Any) -> APIRouter:
         done = answered(
             await ignore_marathon(bot, guild, actor, row, wanted_on(payload), via=VIA_WEBSITE)
         )
+        return await detail(guild, marathon_id) | {"message": done.message}
+
+    @router.post("/{marathon_id}/inbox")
+    async def marathon_inbox_now(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        actor = actor_for(bot, who, guild)
+        done = answered(await post_now(bot, guild, actor, row, via=VIA_WEBSITE))
         return await detail(guild, marathon_id) | {"message": done.message}
 
     @router.post("/{marathon_id}/restore")

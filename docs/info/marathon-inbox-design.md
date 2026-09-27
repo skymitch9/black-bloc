@@ -74,11 +74,17 @@ pattern won for shape and the spec for behaviour.
    posting their board, reminders and shoutouts until staff press **Track** on their inbox message, the `/event` card or
    the drawer. A board already up from before is no longer edited; its pin still comes off a day after the end (the
    unpin is carried whatever the tracking says — checklist 38). Say it in the deploy line.
-2. **Every marathon's inbox message posts when it is added — feed or staff — and every marathon already on the list gets
+2. ~~**Every marathon's inbox message posts when it is added — feed or staff — and every marathon already on the list gets
    its message on the first tick after the deploy** (about nine messages into a new thread; in `shadow` that thread is in
    the shadow home). This retires `marathon_feed_notice_when` (v171's *published* = the notice waits for the schedule):
    the inbox message is there from the add, and the schedule-out moment is now an EDIT of it (`noticed_at` claimed first,
-   `marathon.inbox_published`, then the feed's auto-track). The key stays so old rows validate; its help says *retired*.
+   `marathon.inbox_published`, then the feed's auto-track). The key stays so old rows validate; its help says *retired*.~~
+   **REVERSED 2026-09-26 by `marathon-inbox-when`** — owner 17:5x, verbatim: *"i think we should only post when a
+   schedule is live, keep that part"*. Why: a found marathon with no schedule is nothing staff can act on yet, and nine
+   messages at once into a new thread buried the two that were real. Now `marathon_feed_notice_when` is live again:
+   `published` (default) posts a marathon's inbox message — feed-made AND staff-made — on the first read that finds runs,
+   `added` restores the post at add; the first tick after the deploy posts only marathons whose schedule has runs; staff
+   can post one early with **Post it to the inbox now**. See *Follow-up — marathon-inbox-when* below.
    The DECIDED bullet in `marathon-feeds-design.md` carries the dated line (checklist 35). The line above a feed-found
    marathon's message is still `marathon_feed_added_template`.
 3. **`marathon_notice_home` and `marathon_notice_title_template` are retired** (help says so, nothing reads them): every
@@ -148,3 +154,85 @@ pattern won for shape and the spec for behaviour.
   and the GDQ feed drawer with the Auto-track switch (switched On, the answer shown); zero console errors. NOT rendered:
   the light theme, the `/event` panel card (tests only), an archived drawer's new fields.
 
+
+## Follow-up — marathon-inbox-when (2026-09-26)
+
+Built by Opus 5.5, branch `marathon-inbox-when` off `main` `15cea04a` (the merged, undeployed `marathon-inbox` +
+`marathon-controls`), three commits: `2af2b565` (part 1), `2243ab01` (part 2), `d7e3a4fd` (part 3). **No schema step**
+(still **72**). Registry keys **552 → 560**; contract routes **262 → 264** (`check.mjs`: *22 pages, 264 routes*). Ships in
+v176 with the two merges.
+
+The asks, verbatim (owner, 2026-09-26): 17:5x *"i think we should only post when a schedule is live, keep that part"*;
+18:0x *"for marathons taht dont have a posted schedule do we have a way to give a link to the schedule or something or to
+on the website override it so it post?"*
+
+### What changed
+
+1. **The inbox message waits for the schedule** (reverses Deviation 2 above). `marathon_feed_notice_when` is live again
+   (`published` default / `added`): under `published` a marathon's inbox message — feed-made AND staff-made — posts on the
+   first read that finds runs, and `noticed_at` is claimed at that moment (`marathon.inbox_published`, then the feed's
+   auto-track); under `added` it posts at add as the inbox build did. The first tick after the deploy posts only marathons
+   whose schedule has runs (on the live list: #6 SS4C and #7 Fall Fest were the two expected — NOT measured). Code:
+   `sync_inbox`'s gate (`posts_at_add`), `notice_published` without the feed-only rule, `create_marathon`'s `noticed=False`
+   default and its own schedule-out call for every add that is not a feed's.
+2. **Change the schedule link…** — `PATCH /api/marathons/{id}` takes `schedule_url` (`change_link`): re-resolved through
+   `read_url` + the client's `resolve`; refused in words for an unreadable site (`marathon_unknown_site`), a link another
+   live marathon follows (409 `duplicate`, `marathon_link_taken`), the same link (409 `same_link`) and a schedule that will
+   not resolve (422, `marathon_link_unreadable`). The marathon keeps its id, tracking, thread, event, ping switch and
+   spotlight mode; `source`, `source_ref`, `schedule_url` move, the fetch hash / failures / error clear, it is re-read at once
+   under its lock, its inbox message (if up) is edited, and `marathon.link_changed` (IMPORTANT) logs `old` and `new`. Site:
+   the drawer's Settings foldout opens with *Reads from {link} · **Change the schedule link…*** (a modal); Discord: the
+   `/event` card's **Schedule…** view.
+3. **Post it to the inbox now** — `POST /api/marathons/{id}/inbox` (`post_now`): the inbox message goes up at once with
+   *Schedule · not out yet*; the first read with runs edits that SAME message (the normal path; `noticed_at` is claimed then,
+   so no second post). `marathon.inbox_posted` carries `early: true` and the staff actor (`web.` from the site). Refused in
+   words while marathon posts are off (`marathon_inbox_post_off`), when the message is already up (`marathon_inbox_already`)
+   and when the inbox cannot be reached (502, `marathon_inbox_post_failed`). Site: a drawer button drawn only while
+   `inbox_message_url` is empty; Discord: the **Schedule…** view, drawn only while the marathon has no inbox message.
+
+### Deviations
+
+1. **The *Schedule not out yet* sentence is the existing `marathon_inbox_schedule_none` key** (*not out yet*, under the
+   Schedule label) — one fact, one home; an early message and an `added` message read the same.
+2. **Staff-made marathons now have a schedule-out moment** (v171 stamped them at insert). Rows already on the list keep the
+   migration's `noticed_at = added_at`, so their first post comes through the tick's ordinary sync once runs exist, with no
+   `marathon.inbox_published` row. A suggestion's **Add it** (staff press, feed row) also gets the moment — and its feed's
+   auto-track, if on.
+3. **The gate is "the schedule has runs" (dropped runs not counted), not `noticed_at`** — every existing staff-made row is
+   already stamped, so a `noticed_at` gate would have posted all of them on the first tick.
+4. **Track on a marathon with no schedule makes its thread as before but posts no inbox message** under `published`; the
+   message appears (already reading *Tracked*) at the first read with runs or at **Post it to the inbox now**.
+5. **The `/event` card's rows were full (5 × 5 at worst), so *Re-read every…* moved into a new *Schedule…* view** beside
+   *Change the schedule link…* and *Post it to the inbox now*; the card shows **Schedule…** where *Re-read every…* was. The
+   poll modal returns to that view.
+6. **A same-link change is refused** (409 `same_link`, `marathon_link_same`) instead of a silent no-op, and a link whose
+   schedule will not resolve gets its own key (`marathon_link_unreadable`) because `marathon_could_not_read` says *nothing
+   was added*.
+7. **The old schedule's runs are kept**: the new read is the usual diff, so runs missing from the new schedule read *off the
+   schedule* (dropped, never deleted) and the dates stay the old ones until the new schedule has runs.
+8. **The early flag is not stored** (no schema step): after a home flip (`shadow` → `on`) an early-posted marathon with no
+   runs waits for runs again, or another press.
+9. **Eight keys**: `marathon_link_changed_said`, `marathon_link_same`, `marathon_link_taken`, `marathon_link_unreadable`,
+   `marathon_inbox_posted_said`, `marathon_inbox_already`, `marathon_inbox_post_off`, `marathon_inbox_post_failed`. Panel and
+   site button labels stay code constants like every other move. The four part-3 keys landed in the part-2 commit.
+10. **`marathon.inbox_posted` now carries `early` on every post** (`false` for the ordinary one).
+11. **The drawer's *Post it to the inbox now* is drawn whenever `inbox_message_url` is empty — also while marathon posts are
+    off**; the press then refuses in words rather than the button hiding (the drawer does not carry the mode).
+12. **Contract**: a new placeholder `marathon_unposted_id` (real: GDQx 2026, the waiting row; mock: *Speed Stuff 4 LHS 2026*
+    #5, whose seeded inbox message was removed — it has no schedule); the real seed's `rewind` adds a forum channel
+    (`INBOX_FORUM_ID`) as `marathon_inbox_channel_id`, because the fake text channel cannot take a thread's first message.
+
+### What was NOT verified
+
+- **Nothing met Discord**; the bot was not run. The Schedule… view, the link modal and the early post were exercised
+  against test fakes only.
+- **The live database was not read**: which live marathons have runs (so which get a message on the first tick after v176)
+  is reasoned, not measured. The live `marathon_feed_notice_when` value was not looked up (its registry default is
+  `published`; a stored `added` from before would restore post-at-add).
+- **No real schedule site was read** for a link change — the client is a fake in every test.
+- **Rendered** in `chrome-headless-shell` 149.0.7827.22 over raw CDP against this branch's mock (`MOCK_PORT=8814`): the
+  *Speed Stuff 4 LHS 2026* drawer at 1400 px with Settings open (*Reads from … · Change the schedule link…*, and **Post it
+  to the inbox now** in the moves bar), the link dialog refusing `https://example.com/nope` in words, a change to a horaro
+  link (drawer redrawn, *horaro.net ↗*, the answer shown), then **Post it to the inbox now** (the button gone, *inbox ↗* in
+  the header); *GDQx 2026* at 390 px — no horizontal scroll. Zero console errors (the one network log line is the
+  deliberate 422). NOT rendered: the light theme, the `/event` card (tests only).

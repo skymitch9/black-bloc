@@ -1,6 +1,7 @@
 import re
 from datetime import UTC, datetime, timedelta
 
+from black_bloc import marathon as mt
 from black_bloc import marathon_inbox as mi
 
 NOW = datetime(2026, 9, 26, 18, 0, tzinfo=UTC)
@@ -75,3 +76,16 @@ def test_a_posted_message_and_a_fresh_render_compare_by_what_they_show():
 
     assert mi.comparable("hi", [Embed()]) == ("hi", "SS4C", (("When", "soon"),))
     assert mi.comparable(None, []) == ("", "", ())
+
+
+def test_the_schedule_view_offers_post_it_now_only_while_no_inbox_message_is_up():
+    poll = mt.POLL_MOVE._replace(row=2)
+    assert mi.schedule_moves(row(inbox_message_id=None)) == (
+        mi.LINK_MOVE,
+        poll,
+        mi.POST_NOW_MOVE,
+        mt.BACK_MOVE,
+    )
+    assert mi.schedule_moves(row(inbox_message_id=9)) == (mi.LINK_MOVE, poll, mt.BACK_MOVE)
+    archived = row(inbox_message_id=None, archived_at="2026-09-26T00:00:00+00:00")
+    assert mi.POST_NOW_MOVE not in mi.schedule_moves(archived)

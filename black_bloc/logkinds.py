@@ -199,6 +199,7 @@ IMPORTANT: frozenset[str] = frozenset(
         "marathon.archived",
         "marathon.restored",
         "marathon.tracked",
+        "marathon.link_changed",
         "marathon.inbox_lost",
         "marathon.thread_lost",
         "youtube.probe_unreadable",
