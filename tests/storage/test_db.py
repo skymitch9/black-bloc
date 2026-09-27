@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 72
+        assert SCHEMA_VERSION == 73
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2825,7 +2825,7 @@ async def test_a_schema_69_file_gains_the_archive_tables_and_keeps_its_marathons
             cur = await again.conn.execute(f"SELECT COUNT(*) FROM {archive}")
             assert (await cur.fetchone())[0] == 0
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "72"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()
 
@@ -2958,6 +2958,37 @@ async def test_a_schema_71_file_gains_the_ping_switch_off_for_every_marathon(tmp
         row = await cur.fetchone()
         assert (row["name"], row["ping_role"]) == ("SS4C", 0)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "72"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_72_file_gains_the_thread_controls_message_id_empty(tmp_path):
+    """Schema 73: marathons.controls_message_id, live and archive; NULL until the tick posts."""
+    path = tmp_path / "old72.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE marathons DROP COLUMN controls_message_id")
+    await db.conn.execute("ALTER TABLE marathons_archive DROP COLUMN controls_message_id")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at) "
+        "VALUES (1, 'SS4C', 'https://x', 'oengus', 'ss4lhs26', '2026-09-26')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '72')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        assert "controls_message_id" in await _columns(again, "marathons")
+        assert "controls_message_id" in await _columns(again, "marathons_archive")
+        cur = await again.conn.execute("SELECT name, controls_message_id FROM marathons")
+        row = await cur.fetchone()
+        assert (row["name"], row["controls_message_id"]) == ("SS4C", None)
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "73"
     finally:
         await again.close()

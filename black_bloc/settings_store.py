@@ -4456,6 +4456,20 @@ MARATHON_INBOX_POSTED_SAID_KEY = "marathon_inbox_posted_said"
 MARATHON_INBOX_ALREADY_KEY = "marathon_inbox_already"
 MARATHON_INBOX_POST_OFF_KEY = "marathon_inbox_post_off"
 MARATHON_INBOX_POST_FAILED_KEY = "marathon_inbox_post_failed"
+MARATHON_CONTROLS_HELP_KEY = "marathon_controls_help"
+MARATHON_CONTROLS_EVENT_ON_KEY = "marathon_controls_event_on"
+MARATHON_CONTROLS_EVENT_OFF_KEY = "marathon_controls_event_off"
+MARATHON_CONTROLS_RUNS_ON_KEY = "marathon_controls_runs_on"
+MARATHON_CONTROLS_RUNS_OFF_KEY = "marathon_controls_runs_off"
+MARATHON_CONTROLS_SPOTLIGHT_ON_KEY = "marathon_controls_spotlight_on"
+MARATHON_CONTROLS_SPOTLIGHT_OFF_KEY = "marathon_controls_spotlight_off"
+MARATHON_CONTROLS_SPOTLIGHT_KEPT_KEY = "marathon_controls_spotlight_kept"
+MARATHON_CONTROLS_SPOTLIGHT_NONE_KEY = "marathon_controls_spotlight_none"
+MARATHON_CONTROLS_NO_CHANNEL_KEY = "marathon_controls_no_channel"
+MARATHON_CONTROLS_KEPT_REFUSED_KEY = "marathon_controls_kept_refused"
+MARATHON_CONTROLS_NO_END_KEY = "marathon_controls_no_end"
+MARATHON_CONTROLS_STARTED_KEY = "marathon_controls_started_said"
+MARATHON_CONTROLS_ALREADY_ON_KEY = "marathon_controls_already_on"
 MARATHON_THREAD_FIELDS = ("marathon", "channel", "when")
 MARATHON_OPENING_FIELDS = ("marathon", "who", "url", "channel", "when")
 MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY = "marathon_channel_ping_mode_default"
@@ -5074,6 +5088,88 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("marathon",),
         "the refusal when Post it to the inbox now could not reach the inbox thread. It takes "
         "{marathon}",
+    ),
+    MARATHON_CONTROLS_HELP_KEY: (
+        "Staff: these buttons set **{marathon}**'s events and its channel's spotlight at once. "
+        "Each one says what is on now and what a press does.",
+        ("marathon",),
+        "the line on the control message pinned in a tracked marathon's thread. It takes "
+        "{marathon}",
+    ),
+    MARATHON_CONTROLS_EVENT_ON_KEY: (
+        "Marathon event: on · turn off",
+        (),
+        "the thread controls' marathon-event button while the marathon makes its one event",
+    ),
+    MARATHON_CONTROLS_EVENT_OFF_KEY: (
+        "Marathon event: off · turn on",
+        (),
+        "the thread controls' marathon-event button while the marathon makes no event of its own",
+    ),
+    MARATHON_CONTROLS_RUNS_ON_KEY: (
+        "BaF run events: on · turn off",
+        (),
+        "the thread controls' run-events button while each BaF run gets its own event",
+    ),
+    MARATHON_CONTROLS_RUNS_OFF_KEY: (
+        "BaF run events: off · turn on",
+        (),
+        "the thread controls' run-events button while BaF runs get no event of their own",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_ON_KEY: (
+        "Spotlight: on · stop",
+        (),
+        "the thread controls' spotlight button while the marathon's channel is spotlit",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_OFF_KEY: (
+        "Spotlight: off · start",
+        (),
+        "the thread controls' spotlight button while the marathon's channel is not spotlit",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_KEPT_KEY: (
+        "Spotlight: kept (permanent)",
+        (),
+        "the thread controls' spotlight button while the channel's spotlight is kept for ever",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_NONE_KEY: (
+        "Spotlight: no channel",
+        (),
+        "the thread controls' spotlight button, greyed out, while the marathon has no channel",
+    ),
+    MARATHON_CONTROLS_NO_CHANNEL_KEY: (
+        "**{marathon}** has no channel yet, so there is no spotlight to start — pick the channel "
+        "it airs on, on the site or in /event, first.",
+        ("marathon",),
+        "the line under the thread controls, and the answer, while a marathon has no channel. It "
+        "takes {marathon}",
+    ),
+    MARATHON_CONTROLS_KEPT_REFUSED_KEY: (
+        "twitch.tv/{channel} is spotlit and kept for ever, so it was not turned off here — "
+        "change it on the Go-live page if that is really meant.",
+        ("channel",),
+        "the answer when the thread controls' spotlight button is pressed on a channel whose "
+        "spotlight is kept for ever. It takes {channel}",
+    ),
+    MARATHON_CONTROLS_NO_END_KEY: (
+        "**{marathon}** has no run times yet, or its last run is over, so there is no end to "
+        "hold the spotlight until — nothing was changed. Turn it on from the Go-live page "
+        "instead.",
+        ("marathon",),
+        "the refusal when Spotlight start is pressed on a marathon with no span still ahead. It "
+        "takes {marathon}",
+    ),
+    MARATHON_CONTROLS_STARTED_KEY: (
+        "twitch.tv/{channel} is spotlit for **{marathon}** until {until} — its last run plus "
+        "{tail} minutes, and it moves if the schedule does.",
+        ("channel", "marathon", "until", "tail"),
+        "the answer once the thread controls started a marathon's spotlight. It takes {channel} "
+        "{marathon} {until} {tail}",
+    ),
+    MARATHON_CONTROLS_ALREADY_ON_KEY: (
+        "twitch.tv/{channel} is already spotlit, so nothing was changed.",
+        ("channel",),
+        "the answer when Spotlight start is pressed on a channel that is already spotlit. It "
+        "takes {channel}",
     ),
     MARATHON_UNIGNORED_SAID_KEY: (
         "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing "

@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon thread controls* (branch `marathon-thread-controls`, off `main` `28ad1e1c`, keyed against `e66e3a32`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon threads follow their settings* (branch `marathon-thread-move`, off `main` `2ebdb7a6`, keyed against `53b12ed0`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The inbox message waits for the schedule; Change the schedule link…; Post it to the inbox now* (branch `marathon-inbox-when`, off `main` `15cea04a`, keyed against `d7e3a4fd`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon controls* (branch `marathon-controls`, off `main` `70edbad9`, keyed against `287032e0`). Before that:
@@ -8926,3 +8927,23 @@ Design: [`marathon-inbox-design.md`](marathon-inbox-design.md) ▸ *Follow-up �
 | `black_bloc/cogs/content/marathon_inbox.py:833` `follow_thread_home` | Settled once per (thread, wanted parent) in `cog.thread_homes`, so an unchanged thread costs no Discord call after the first check; a move calls `sync_board`, which posts fresh because `board_channel_id` is not the post place (Deviation 3). |
 | `black_bloc/cogs/content/marathon.py:1593` · `:1634` | The inbox check runs before the marathon loop so the re-posts land in the same tick; the thread check runs before the inbox sync for the same reason. |
 | `black_bloc/logkinds.py:205` | `marathon.inbox_moved` and `marathon.thread_moved` are IMPORTANT: a staff-visible thread changed channels. |
+
+## Marathon thread controls (branch `marathon-thread-controls`, 2026-09-26)
+
+Design: [`marathon-thread-controls-design.md`](marathon-thread-controls-design.md). Keyed against `e66e3a32`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_thread_controls.py:65` `wanted_mode` · `:79` `controls` | Pure. A press moves ONE half of the event mode and keeps the other; each button carries its target (`on`/`off`) in the custom id, so a stale label never does the opposite (Deviation 3). The spotlight button's word comes from `marathon_spotlight.state_of`'s state, the same one the drawer's Spotlight card reads. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:80` `rendered` | What the message shows is computed from the DB only (the row, the channel row, the keys) — the compare that follows costs no Discord call. The label keys are part of it, so a staff edit to a key re-renders on the next tick (every-word rule). |
+| `black_bloc/cogs/content/marathon_thread_controls.py:102` `post_controls` | Called with the marathon lock held (from `new_thread`, or the tick). Posted, the id stored, THEN pinned: a refused pin is `marathon.controls_failed` `step: pin` and the message is still the one edited in place. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:169` `refresh_controls` | Edit only, never posts, so any writer may call it with or without the marathon lock; its own per-marathon lock (`shown_lock`) and the in-memory `controls_shown` keep two hooks from editing twice. NotFound clears the id and logs `controls_lost`; the tick re-posts. An auto-archived tracked thread is re-opened first (Deviation 9). |
+| `black_bloc/cogs/content/marathon_thread_controls.py:213` `sync_controls` · `black_bloc/cogs/content/marathon.py:1652` | The tick's pass, under the marathon lock (checklist 37): the backfill for a tracked thread with no message is an id compare; a lost message is re-posted in the same tick. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:228` `controls_changed` · `:236` `row_changed` | The hooks the canonical writers call; a failure is a warning and never breaks the write. `row_changed` re-renders every marathon on a channel row. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:271` `start_spotlight` | Through `changed_spotlight` (the write `set_spotlight` and the Go-live PATCH reach), with the held fields in the same call so the one `golive.spotlight_updated` row carries them. A stale holder is cleared first, because `changed_spotlight` drops `spotlit_by_marathon` whenever the row already had one. Needs a span still ahead (Deviation 6). |
+| `black_bloc/cogs/content/marathon_thread_controls.py:325` `stop_spotlight` | `set_spotlight` + `after_staff_dim`, the pair `run_spotlight_move` calls — never a copy; then the marathon's own follow off (Deviation 4). A kept row is refused in words. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:375` `ControlButton` | Registered in `Marathons.cog_load` (`marathon.py:1549`), so it answers after a restart (KI-20). Staff-gated by `still_staff`; the guard check mirrors `InboxButton`. |
+| `black_bloc/cogs/content/marathon_inbox.py:737` | `new_thread` is the one maker of a marathon thread (Track, remade, moved), so the message follows every path from here. |
+| `black_bloc/cogs/content/marathon.py:1388` · `:1400` · `marathon_events.py:413` · `marathon_spotlight.py:102` · `:131` · `:210` · `:248` · `spotlight.py:1736` | The re-render hooks: `make_event_now`, `unlink_the_event`, `set_event_mode`, `follow_spotlight`, `lift`, `after_staff_dim`, `set_spotlight_mode`, `changed_spotlight`. The imports are inside the functions (the controls module imports all of them). |
+| `black_bloc/storage/db.py:1229` | `marathons.controls_message_id`, schema 73 (Deviation 1). |
+| `black_bloc/logkinds.py:298` | `marathon.controls_posted` and `marathon.controls_lost` are routine; `controls_failed` is IMPORTANT by suffix. |

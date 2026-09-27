@@ -734,6 +734,9 @@ async def new_thread(bot: Any, guild: Any, fresh: Any, home: str, parent: Any) -
         reason=mi.THREAD_REASON,
     )
     await update_marathon(bot.db, fresh["id"], thread_id=int(thread.id), thread_home=home)
+    from .marathon_thread_controls import post_controls
+
+    await post_controls(bot, guild, await get_marathon(bot.db, guild.id, fresh["id"]), thread)
     return thread
 
 

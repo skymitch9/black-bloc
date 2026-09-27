@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-26 (branch `marathon-thread-controls`)** — ONE section APPENDED (`MTC-a`…`MTC-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-thread-move`)** — ONE section APPENDED (`MTM-a`…`MTM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-inbox-when`)** — ONE section APPENDED (`MIW-a`…`MIW-c`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-horaro-events`)** — ONE section APPENDED (`HE-a`…`HE-d`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3522,3 +3523,18 @@ conductor numbers them. Nothing to see in the mock (it has no tick and no thread
 |---|---|---|
 | **`MTM-a`** | After the deploy (with `marathon_inbox_channel_id` already on the events forum), wait a minute, then open `# events · BlackMail` and #upcoming-events | A new forum post *Marathons — found and tracked* with its opening line and one FRESH message per marathon that had one (each with its buttons); the old inbox thread in #upcoming-events is archived, not deleted, its old messages still there. Logs: `marathon.inbox_moved` (important) naming from/to channel, old and new thread, `archived: true` and the count; one `marathon.inbox_posted` with `moved: true` per marathon. On a marathon's drawer, *inbox ↗* opens the new message |
 | **`MTM-b`** | Same minute: open each TRACKED marathon's thread | A new forum post per tracked marathon (its name, the *tracked by* opening), its board posted fresh and pinned there; the old thread archived with the old board unpinned. The marathon's inbox message **Open the thread** goes to the new post. Logs: `marathon.thread_moved` (important) per tracked marathon. A later minute makes nothing new (no second move row) |
+
+## Rows `MTC-a` … `MTC-d` — the controls pinned in a tracked marathon's thread (branch `marathon-thread-controls`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-thread-controls`, NOT merged, NOT deployed.** Owner, 2026-09-26 19:3x–19:4x: *"How do we
+make a marathon generate events for the whole marathon and for our runners? This should have separate controls in the
+spawned thread for generating those events"* and *"Also need a start spotlight button in that same thread"*. Design:
+[`../info/marathon-thread-controls-design.md`](../info/marathon-thread-controls-design.md). Rows lettered; the conductor
+numbers them. Nothing to see in the mock (no threads) — these are Discord-only.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MTC-a`** | After the deploy, wait a minute, then open each TRACKED marathon's thread | One new message pinned under the opening: the help line and three buttons — *Marathon event: … · turn …*, *BaF run events: … · turn …*, *Spotlight: …* (a marathon with no channel: the spotlight button greyed out and a line saying why). Logs: `marathon.controls_posted` with `pinned: true` per tracked marathon; a later minute posts nothing more |
+| **`MTC-b`** | Press **BaF run events: off · turn on**, then **Marathon event: off · turn on**, then both again | Each press answers privately (*…now makes one event per BaF run…* / *…one event for the marathon and one per BaF run…*) and the buttons flip; the drawer's Event select shows the same mode; Logs `marathon.event_mode_set` from → to per press. A non-staff member pressing gets the staff-only sentence and nothing changes |
+| **`MTC-c`** | On a marathon whose channel is spotlit by it (e.g. during SS4C), press **Spotlight: on · stop**; then **Spotlight: off · start** | Stop: the channel's spotlight goes off (Go-live shows it), the answer says the marathon will not spotlight it again, the drawer's *Follow the schedule* reads Off. Start: the channel is spotlit again until the last run plus 60 minutes (the answer names the time), *Follow the schedule* On, the button back to *on · stop*. On a GDQ-kept channel the button reads *Spotlight: kept (permanent)* and a press is refused in words |
+| **`MTC-d`** | Change the marathon's Event select on the site drawer, and turn the channel's spotlight off on Go-live | The pinned message's buttons change to match within a moment, without anyone pressing them |

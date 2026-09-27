@@ -351,6 +351,7 @@ MARATHON_COLUMNS = {
     "ignored_at",
     "ignored_by",
     "ping_role",
+    "controls_message_id",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -643,6 +644,12 @@ async def create_marathon(
             await notice_if_published(bot, guild, marathon_id, read)
     fresh = await get_marathon(bot.db, guild.id, marathon_id)
     return Outcome(True, said, value=fresh)
+
+
+async def controls_changed(bot: Any, guild: Any, marathon_id: Any) -> None:
+    from .marathon_thread_controls import controls_changed as changed
+
+    await changed(bot, guild, marathon_id)
 
 
 async def inbox_sync(bot: Any, guild: Any, marathon: Any, *, force: bool = False) -> None:
@@ -1377,7 +1384,9 @@ async def make_event_now(
             wanted = with_marathon_event(event_mode_of(fresh), True)
             await update_marathon(bot.db, fresh["id"], event_mode=wanted)
             fresh = await get_marathon(bot.db, guild.id, marathon["id"])
-        return await make_event_for(bot, guild, actor, fresh, via=via)
+        made = await make_event_for(bot, guild, actor, fresh, via=via)
+    await controls_changed(bot, guild, marathon["id"])
+    return made
 
 
 async def unlink_the_event(
@@ -1387,7 +1396,9 @@ async def unlink_the_event(
         fresh = await get_marathon(bot.db, guild.id, marathon["id"])
         if fresh is None:
             return refusal(mt.NO_SUCH_MARATHON.format(given=marathon["id"]), NO_SUCH, 404)
-        return await unlink_event(bot, guild, actor, fresh, via=via)
+        unlinked = await unlink_event(bot, guild, actor, fresh, via=via)
+    await controls_changed(bot, guild, marathon["id"])
+    return unlinked
 
 
 async def unlink_event(
@@ -1508,6 +1519,7 @@ class Marathons(commands.Cog):
         self.inbox_sent.pop(key, None)
         self.inbox_moved.discard(key)
         self.thread_homes.pop(key, None)
+        self.__dict__.get("controls_shown", {}).pop(key, None)
 
     def lock(self, marathon_id: Any) -> asyncio.Lock:
         key = int(marathon_id)
@@ -1534,9 +1546,10 @@ class Marathons(commands.Cog):
         from .marathon_feeds import FeedButton, NoticeModePick
         from .marathon_inbox import InboxButton
         from .marathon_people import PeopleButton
+        from .marathon_thread_controls import ControlButton
 
         self.bot.add_dynamic_items(
-            NextButton, FeedButton, NoticeModePick, PeopleButton, InboxButton
+            NextButton, FeedButton, NoticeModePick, PeopleButton, InboxButton, ControlButton
         )
         if not self.bot.db.is_connected:
             return
@@ -1620,6 +1633,7 @@ class Marathons(commands.Cog):
 
     async def tick_marathon(self, guild: Any, marathon: Any) -> None:
         from .marathon_inbox import follow_thread_home
+        from .marathon_thread_controls import sync_controls
 
         now = self.clock()
         store = self.bot.store
@@ -1634,6 +1648,8 @@ class Marathons(commands.Cog):
         if await follow_thread_home(self.bot, guild, marathon):
             marathon = await get_marathon(self.bot.db, guild.id, marathon["id"])
         await inbox_sync(self.bot, guild, marathon)
+        marathon = await get_marathon(self.bot.db, guild.id, marathon["id"])
+        await sync_controls(self.bot, guild, marathon)
         if not marathon["active"]:
             return
         await self.follow_spotlight(guild, marathon["id"])

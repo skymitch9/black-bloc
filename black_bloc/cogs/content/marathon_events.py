@@ -42,6 +42,7 @@ from .marathon import (
     cancel_linked_event,
     channel_login,
     cog_of,
+    controls_changed,
     get_marathon,
     make_event_for,
     mode_of,
@@ -409,6 +410,7 @@ async def set_event_mode(
         actor=actor,
         details={"marathon_id": fresh["id"], "from": was, "to": wanted, "via": via} | details,
     )
+    await controls_changed(bot, guild, fresh["id"])
     return Outcome(True, " ".join(said), value=await get_marathon(bot.db, guild.id, fresh["id"]))
 
 

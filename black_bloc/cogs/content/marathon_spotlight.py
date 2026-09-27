@@ -30,6 +30,18 @@ from .spotlight import channel_by_id, settle_open_session, update_channel
 BAD_MODE_CODE = "bad_spotlight_mode"
 
 
+async def controls_changed(bot: Any, guild: Any, marathon_id: Any) -> None:
+    from .marathon_thread_controls import controls_changed as changed
+
+    await changed(bot, guild, marathon_id)
+
+
+async def row_changed(bot: Any, guild: Any, spotlight_id: Any) -> None:
+    from .marathon_thread_controls import row_changed as changed
+
+    await changed(bot, guild, spotlight_id)
+
+
 def enabled(bot: Any, guild_id: int) -> bool:
     return bool(bot.store.get(guild_id, MARATHON_SPOTLIGHT_FOLLOWS_KEY))
 
@@ -87,6 +99,7 @@ async def follow_spotlight(
         return None
     await update_channel(bot.db, int(row["id"]), **fields)
     fresh = await channel_by_id(bot.db, int(row["id"]))
+    await row_changed(bot, guild, row["id"])
     turned_on = "spotlight" in fields
     if turned_on:
         await settle_open_session(bot, guild, row, fresh, {"spotlight": 1})
@@ -115,6 +128,7 @@ async def lift(bot: Any, guild: Any, row: Any, marathon_id: Any, because: str) -
     """A marathon's own spotlight given back: off, kept, and its pin off a live post."""
     await update_channel(bot.db, int(row["id"]), **ms.lifted_fields())
     fresh = await channel_by_id(bot.db, int(row["id"]))
+    await row_changed(bot, guild, row["id"])
     await settle_open_session(bot, guild, row, fresh, {"spotlight": 0})
     await log_action(
         bot,
@@ -193,6 +207,7 @@ async def after_staff_dim(
             },
         )
         said.append(ms.STAFF_OFF_CLAUSE.format(name=one["name"]))
+    await row_changed(bot, guild, fresh["id"])
     return " ".join(said)
 
 
@@ -230,6 +245,7 @@ async def set_spotlight_mode(
             "via": via,
         },
     )
+    await controls_changed(bot, guild, fresh["id"])
     said = ms.MODE_SAID[wanted].format(
         name=fresh["name"], lead=lead_of(bot, guild.id), tail=tail_of(bot, guild.id)
     )
