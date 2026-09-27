@@ -152,3 +152,127 @@ Because it matches event names only, the feed's name must be words the channel's
    **horaro.net events***, *Remembers 2 horaro.net event(s)…*, **Look again**), and Add a feed… with the horaro.net
    events pick (its help line; the slug field hidden) — **zero console errors**, one screenshot looked at. Nothing
    was submitted in a browser.
+
+## Follow-up — owner match + several words (2026-09-27)
+
+> **Status:** 🔨 **BUILT on branch `horaro-events-owner`** (off `main` `7f7b99e7`, v178 live; commits `99b31fae` code +
+> keys + tests, `9dea3428` site + mock, then the docs commit) — **NOT merged, NOT deployed, nothing has met Discord or
+> Fly.** **Last verified: 2026-09-27 ~15:3x Phoenix** — the API rows below were read live that afternoon from the build
+> machine (Python `urllib`, plain User-Agent `black-bloc-research/1.0`, one GET per URL, six GETs). Schema **75,
+> unchanged**; registry keys **602 → 615**; `check.mjs` **22 pages, 265 → 266 routes**.
+
+**The ask (owner, 2026-09-27 15:1x, through the conductor):** RGL's ~60 horaro.net events are owned by the horaro
+account **`RGLtvMarathons`**; a feed searching **RGL** finds 5 of their 10 2026 events and misses Retrothon (no *RGL* in
+its name, event-level `twitch` empty), Kessel Run, MEGAmorial, RPGLtv Gauntlet and NINJULYDEN
+([`marathon-orgs-research-2026-09-26.md`](marathon-orgs-research-2026-09-26.md) ▸ *Retro Gaming Live*). So: keep an
+event whose **owner** is the feed's owner, and let a feed search **several words**.
+
+### The API, as read 2026-09-27
+
+| GET | Answer |
+|---|---|
+| `…/-/api/v1/events?owner=RGLtvMarathons&max=100` | 200, 43,668 B, **100 events from many owners** (`AndreDK7`, `ArcadiaGamesBR`, …; first row `mshr`, owner `Player_Next_Level`) with a `next` link — the **`owner` parameter is ignored**; this is the unfiltered list. **The API cannot filter by owner.** |
+| `…/-/api/v1/users/RGLtvMarathons/events` | **404** — no per-user route. |
+| `…/events?name=Retrothon&max=100` | 200, **9 events, every one `owner: RGLtvMarathons`**: `retrothon2019`…`retrothon2025`, `retrothon26`, `rgltvretrothon`. Event-level `twitch` is **`null` on `retrothon26` and `retrothon2022`**, `RetroGamingLiveTV` (mixed case) on `retrothon2021`, `retrogaminglivetv` on the rest. |
+| `…/events?name=RGL&max=100` | 200, **49 events**, one page; owners `RGLtvMarathons`, `Germench`, `Kongcakes`, `LRock617` — the search still lists other people's events, which the match must drop. |
+| `…/events?name=RGLtv&max=100` | 200, **36 events, all `RGLtvMarathons`** (first row `rgltv10`, event-level `twitch: null`). Every one also contains *RGL*, so an `RGL` search already lists them (substring). |
+| `…/events/retrothon26/schedules` | 200, one schedule `schedule`, **schedule-level `twitch: retrogaminglivetv`**, `start` 2026-04-18T12:00-04:00, `America/New_York`, link `https://horaro.net/retrothon26/schedule`. |
+
+**`owner` is present on every event in the list payload** (all 194 rows read), as the research said. Because the API
+cannot filter by it, **the feed keeps the name search** and applies the owner as a MATCH, not a query.
+
+### As built
+
+- **Where the settings live — `marathon_feeds.seen`, no schema step.** A horaro.net events feed's search is ONE record
+  at the head of its `seen` JSON: `{"search": {"owner": "RGLtvMarathons", "words": ["RGL", "RGLtv", "Retrothon"]}}`.
+  It has no `ref`, so `marathon_feeds.seen_of` (the shared reader behind `seen_count`, Look again's offer and the
+  Oengus path) and this module's own `seen_of` both skip it. `feed_ref` stays the channel login; `name` stays the
+  feed's display name. `hre.search_of` reads it, `hre.search_with` rewrites it (dropped when owner and words are both
+  blank), `hre.search_kept` puts it back at the head of every memory the check writes, and `hre.forgotten` is Look
+  again's `seen` — every event forgotten, **the search kept**. Every writer runs under the per-feed lock, so a check
+  cannot write back an older search.
+- **Owner match** (`hre.is_ours`): an event is the channel's when its `twitch` is the login (as before) **or** its
+  `owner` equals the feed's owner, both case-insensitive. `to_read` and `candidates` take the owner; `candidates` no
+  longer re-checks the remembered `twitch` (an owner-kept event's memory says `twitch: ""`) — this check's own listing,
+  matched with the owner, decides.
+- **Several words** (`hre.words_of`, `hre.queries`, `hre.searched`): up to **5 words** (`WORDS_LIMIT`), each ≤ **40**
+  characters (`WORD_LENGTH`), split on commas or new lines, repeats dropped case-insensitively. Each word is ONE
+  `ScheduleClient.horaro_events` search (unchanged, ≤ 3 pages); the results are de-duplicated by slug. **No words →
+  the feed's name is the one search** (FPE's *Fast Pace* feed is unchanged). A failed search of any word fails the
+  check, as one failed search did before.
+- **Owner** (`hre.owner_clean`): whitespace collapsed, ≤ **60** characters (`OWNER_LENGTH`), blank clears it.
+- **One writer:** `cogs/content/marathon_feeds.set_feed(owner=, words=)` → `set_search` — refused in words on any
+  other kind of feed (409 `not_horaro_events`), too many / too long words (422 `bad_words`), too long an owner (422
+  `bad_owner`); one `marathon.feed_changed` row carrying `words` and/or `owner`; an unchanged value says nothing.
+- **Site:** `PATCH /api/marathons/feeds/{id}` takes `owner` (text) and `words` (text or list; anything else is 422
+  `bad_words`). Each feed row carries `owner`, `words` and `searches` (what is actually searched — the words, else the
+  name); all three are `null` for other kinds. The feed drawer draws **Search words** (placeholder: what it searches
+  today) and **Owner** under Auto-track, only for a horaro.net events feed (`marathon-words.js:feedSearchFields`);
+  each saves on change. The Add-a-feed pick's help line says the drawer takes them once added.
+- **Discord:** the `/event` ▸ Sources feed card of a horaro.net events feed shows *Searches horaro.net for **…**.* and
+  (with an owner) *Also keeps every event the horaro.net account **…** owns.*; a **Search words…** button (row 4)
+  opens a two-box modal (words, owner) prefilled with the current values.
+- **Every word a key** — 13 Marathons text keys: `marathon_feed_search_move`, `_search_title`, `_words_label`,
+  `_owner_label`, `_search_line`, `_owner_line`, `_words_said`, `_words_cleared`, `_owner_said`, `_owner_cleared`,
+  `_search_refused`, `_words_bad`, `_owner_bad` (registry `MARATHON_WORDS`, mock rows, `labels.js`).
+- **Mock:** feed 12 (*Fast Pace*) is unchanged (no search record — true to today); the PATCH, the row fields, the
+  keyed answers and refusals, `seen_count` without the search record and the horaro.net Look-again sentence are
+  mirrored. `check.mjs` gains one contract entry (`PATCH /api/marathons/feeds/{feed_horaro_events_id}` = 12).
+
+### Deviations
+
+1. **No owner query** — the API ignores `?owner=` (measured above), so the brief's "list by owner" branch does not
+   apply; the owner is a match on the name-search results. ⚠️ **An RGL event whose name shares none of the feed's
+   words is still missed**, owner or not. A whole-site walk remains the only complete version (rejected for cost).
+2. **The settings ride in `seen`, not a new column** (the brief's preference). Consequence: anything that ever writes
+   `seen` for this kind must keep the head record — today that is `hre.check` (via `search_kept`), Look again (via
+   `hre.forgotten`) and `set_search`. A future writer that forgets it would silently clear the search.
+3. **The site's field labels and help lines are site constants** (`FEED_WORDS_FIELD`, `FEED_OWNER_FIELD` and their
+   help in `marathon-words.js`), like every other drawer label on that page; the 13 keys cover what the BOT says
+   (Discord card, button, modal, answers, refusals — the site shows the bot's answers).
+4. **The API's malformed-body refusal** (`BAD_SEARCH`, a number or object given for `owner`/`words`) is an API constant
+   like `BAD_ACTIVE`, not a key.
+5. **`RGLtv` as a search word adds nothing** beyond `RGL` (every `RGLtv` event name contains `RGL`; measured 36 ⊂ 49).
+   It costs one extra GET per check and is harmless; the conductor's settings below keep it because the brief named
+   it. Words that WOULD add coverage (the research's misses): `Kessel`, `MEGAmorial`, `RPGLtv`, `NINJULYDEN` — the
+   limit is five words.
+6. **Owner-matched history is read ≤ 20 events per check** (`READS_PER_CHECK`, unchanged). With the owner set, RGL's
+   whole horaro history across the words (~55 events) counts as the channel's, so the first **three** checks read
+   schedules (20 + 20 + the rest) and an upcoming event may only become a candidate on the second or third. Search
+   order is horaro's, not by date.
+7. **`ruff format --check`** still fails on `api/tools/marathon_feeds.py`, `cogs/content/marathon_feeds.py`,
+   `settings_store.py` and the three feed test files — every flagged hunk is pre-existing (Deviation 11 above); none is
+   this build's.
+8. **Key-count merge hazard:** `tests/test_settings_store.py` asserts the exact registry size (now **615**); any
+   sibling branch adding keys edits the same line.
+
+### What was NOT verified
+
+1. ⚠️ **Nothing met Discord or Fly.** The card lines and the button ran through `feed_card` in the suite; the modal
+   class was never submitted by an interaction; the checks ran against fakes.
+2. ⚠️ **The bot's own `ScheduleClient` never searched these words** — the fixtures came from `urllib` on the build
+   machine (`horaro_rgl_search.json`: `retrothon2025`, `retrothon26`, and Germench's `interglitches24restream`;
+   `horaro_retrothon26_schedules.json`: 3 of its items). KI-30 is untested on this route from Fly.
+3. **No browser rendered the drawer** — the fields are proven through the pure `feedSearchFields` (node test) and
+   `node --check`; `check.mjs` drove the PATCH against the mock on port 8820.
+4. **Whether live row 7 already has a feed** was not read (the conductor checks before adding one — one feed per
+   channel).
+5. horaro.net's rate limits: not measured; the RGL settings below cost 3 searches per check (≤ 9 GETs) plus the
+   schedule reads in Deviation 6.
+
+### The RGL settings — for the conductor, AFTER the deploy (nothing here was applied)
+
+On the live site, Events ▸ **Sources…**:
+
+1. If channel row **7** (`retrogaminglivetv`) has **no feed**: **Add a feed…** ▸ the *RetroGamingLiveTV* row ▸ *Read
+   from* **horaro.net events**, Name **Retro Gaming Live** (the notices read *Retro Gaming Live has a new event…*; its
+   first check at add searches that name and finds 0 — harmless). API form: `POST /api/marathons/feeds`
+   `{"spotlight_id": 7, "source": "horaro_events", "name": "Retro Gaming Live"}`. If row 7 already has a feed of
+   another kind, remove it first (one feed per channel).
+2. Open the feed's drawer: **Search words** = `RGL, RGLtv, Retrothon`; **Owner** = `RGLtvMarathons`. API form:
+   `PATCH /api/marathons/feeds/<id>` `{"words": "RGL, RGLtv, Retrothon", "owner": "RGLtvMarathons"}`. Expected answer:
+   *…searches horaro.net for **RGL, RGLtv, Retrothon** now. …also keeps every event the horaro.net account
+   **RGLtvMarathons** owns now.* (Discord: the feed card ▸ **Search words…**.)
+3. Press **Check now** three times (Deviation 6), then confirm the drawer's *Remembers N horaro.net event(s)…* and
+   that `n6430th` (N64 30th, live until 09-29) is on the Marathons list — past events end outside
+   `marathon_feed_recent_days` and are not added.

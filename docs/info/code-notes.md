@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-27 — one section APPENDED, nothing re-keyed**: *horaro.net events — owner match + several words* (branch `horaro-events-owner`, off `main` `7f7b99e7`, keyed against `9dea3428`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public reminders + the ping button* (branch `marathon-public-reminders`, off `main` `59e71860`, keyed against `fe273193`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public highlights* (branch `marathon-public-highlights`, off `main` `f8494278`, keyed against `e43f8482`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon runner posts* (branch `marathon-runner-posts`, off `main` `997c0be2`, keyed against `6fc13f46`). Before that:
@@ -9015,3 +9016,24 @@ Design: [`marathon-public-highlights-design.md`](marathon-public-highlights-desi
 | `black_bloc/cogs/content/marathon_ping.py:57` · `:88` | `set_ping_role` calls `controls_changed` after the lock is released, so the drawer, PATCH and `/event` card re-render the pinned message. Import inside (thread controls import the ping module). |
 | `black_bloc/logkinds.py:311` | `public_reminded` / `public_reminder_skipped` routine; `would_remind_public` shadow by shape; `public_reminder_failed` IMPORTANT by suffix. |
 | `black_bloc/settings_store.py:3099` · `:4855` · `:5280` | The `marathon_public` home now covers public reminders (Deviation 4); the channel + switch rows; the two labels + public template. |
+
+## horaro.net events — owner match + several words (branch `horaro-events-owner`, 2026-09-27)
+
+Design: [`marathon-horaro-events-design.md`](marathon-horaro-events-design.md) ▸ *Follow-up — owner match + several words*. Keyed against `9dea3428`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_horaro_events.py:37` `words_of` · `:50` `owner_clean` | Up to 5 words of ≤ 40 characters, split on commas/new lines, repeats dropped case-insensitively; owner ≤ 60. `None` means refuse (the caller answers in words), `[]`/`""` means clear. |
+| ⚠️ `black_bloc/marathon_horaro_events.py:59` `search_of` · `:71` `search_with` · `:80` `search_kept` · `:86` `forgotten` | The feed's owner and words are ONE `{"search": {…}}` record at the head of `seen` (no schema step). It has no `ref`, so both `seen_of` readers skip it. Every writer of `seen` for this kind must keep it — the check (`search_kept`), Look again (`forgotten`), `set_search` (`search_with`). A new writer that forgets it clears the search silently (Deviation 2). |
+| `black_bloc/marathon_horaro_events.py:92` `queries` | The words, else the feed's name — FPE's *Fast Pace* feed has no words and searches exactly as before. |
+| `black_bloc/marathon_horaro_events.py:108` `is_ours` | Twitch equals the login OR owner equals the feed's owner, case-insensitive. The API cannot FILTER by owner (`?owner=` ignored, measured 2026-09-27), so it is a match on the search results. |
+| `black_bloc/marathon_horaro_events.py:162` `candidates` | No longer re-checks the remembered `twitch` — an owner-kept event (Retrothon 2026, event-level `twitch: null`) is remembered with `twitch: ""`; this check's listing, matched with the owner, decides. |
+| `black_bloc/marathon_horaro_events.py:214` `searched` | One `horaro_events` search per word, de-duplicated by lower-cased slug, first seen wins. Any word's failure fails the check. |
+| `black_bloc/cogs/content/marathon_feeds.py:874` · `:994` `set_search` | Runs FIRST inside `set_feed`'s lock so a refusal changes nothing else. Refused in words (keys) on another kind of feed (409), bad words / owner (422); one `marathon.feed_changed` row with `words`/`owner`. |
+| `black_bloc/cogs/content/marathon_feeds.py:1058` `search_lines` · `:1070` `search_move` | The card's two lines and the **Search words…** button, only for `horaro_events`; the button sits on row 4 beside Back (row 3 can already hold five). |
+| `black_bloc/cogs/content/marathon_feeds.py:1102` | Look again writes `hre.forgotten(fresh)` instead of `None`, so the search survives. |
+| `black_bloc/cogs/content/marathon_feeds.py:1909` `SearchFeedModal` | Title and labels are keys, clamped to Discord's 45 characters. |
+| `black_bloc/api/tools/marathon_feeds.py:37` · `:59` · `:184` | Row fields `owner`/`words`/`searches` are `null` for other kinds; the PATCH refuses a non-text/non-list body (`BAD_SEARCH`) before calling `set_feed`. |
+| `black_bloc/settings_store.py:5172` | The 13 `marathon_feed_*` search keys (Marathons words). |
+| `site/public/assets/marathon-words.js:164` `feedSearchFields` · `site/public/assets/marathons-section.js:1176` `feedSearchInput` | The pure field list (tested in node) and the drawer input that PATCHes one field on change. |
+| `site/mock/server.mjs:6537` `feedSearch` · `:6559` `feedSetSearch` | The mock's mirror of `search_of` / `set_search`. |
