@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon controls* (branch `marathon-controls`, off `main` `70edbad9`, keyed against `287032e0`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The marathon inbox* (branch `marathon-inbox`, off `main` `56056053`, keyed against `ad395616`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathons are archived, never deleted* (branch `marathon-archive-local`, off `main` `33b9838a`, keyed against `c19366d9`). Before that:
 > **2026-09-26 — the three marathon-source sections RE-KEYED at the merge, one section APPENDED**: *The horaro.net events feed*, *The Fastest Furs feed* and *Lady Arcaders* re-keyed against `fca7a18b` (branch `merge-marathon-sources`: the merges `e29563c6` + `b8a86dfe`, then the wording pass and the `marathon_ladyarcaders_floor` key); *The marathon-source merges — one wording pass and the floor key* appended. Before that:
@@ -8865,3 +8866,27 @@ Design: [`marathon-inbox-design.md`](marathon-inbox-design.md). Keyed against `a
 | `black_bloc/cogs/content/marathon.py:1685` `_send_staff` | Every staff notice goes to the inbox thread (or a tracked marathon's own thread); `marathon_notice_home` is retired (Deviation 3). |
 | `black_bloc/cogs/content/marathon_feeds.py:519` `notice_published` | The v171 once-guard is kept: `claim_notice` first, then the inbox edit, then auto-track. |
 | `black_bloc/cogs/content/marathon_archive.py:280` | The inbox message and the thread follow the row into the archive, after the move and the unpin. |
+
+## Marathon controls — the ping switch, the tail, the shared Spotlight card (branch `marathon-controls`, 2026-09-26)
+
+Design: [`marathon-controls-design.md`](marathon-controls-design.md). Keyed against `287032e0`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_ping.py:25` `pings_role` | NULL or a missing column reads as off — the owner's default, and what a dict built before schema 72 says. |
+| `black_bloc/marathon_ping.py:43` `card_move` | One button whose label is the next state; the labels come in from the keys so the pure module stays pure. |
+| `black_bloc/cogs/content/marathon_ping.py:52` `set_ping_role` | Under the marathon lock: re-read, write, `sync_window`, then the log — the window moves in the same breath as the switch. |
+| `black_bloc/cogs/content/marathon.py:603` `create_marathon` | The one door a staff-made and a feed-made marathon both come through copies `marathon_ping_role_default` into the row. |
+| `black_bloc/cogs/content/marathon.py:2025` `sync_window` | Off keeps no window: the existing one is dropped, so an `events` channel does not ping its go-live for this marathon. |
+| `black_bloc/cogs/content/marathon.py:2296` `_ping_roles` | The one gate for the reminder AND the shoutout: off answers no role at all (Deviation 1). |
+| `black_bloc/marathon_spotlight.py:80` `reach_end` · `:85` `in_reach` · `:112` `plan` | The tail is added in one place and read by all three, so the written end, the follow's reach and staff Off during the tail agree (Deviation 7). |
+| `black_bloc/cogs/content/marathon_spotlight.py:134` `settle_held` | The lift asks the CURRENT span: under the marathon lock it runs the follow first and lifts only when there is nothing to extend and the row is due by the cog's clock (Deviation 8). |
+| `black_bloc/cogs/content/spotlight.py:643` `sweep_expiries` | A held row goes to `settle_held`, never straight to the lift — the sweep reads a stored date, the marathon may have moved since. |
+| `black_bloc/marathon_spotlight.py:204` `state_of` · `:255` `discord_line` | One home for the words both doors show; `{until}` / `{starts}` are left for the reader's own clock (the site's local time, Discord's `<t:…:f>`). |
+| `black_bloc/cogs/content/marathon_spotlight.py:55` `state_for` | The keys' view of the follow (`marathon_spotlight` on and `marathon_mode` not off) decides *Not spotlit yet* vs *Not spotlit*. |
+| `black_bloc/api/tools/marathons.py:280` `spotlight_of` | `channel_spotlight` is `one_spotlight` — the Go-live row, same shape — so the shared component reads one kind of object on both pages. |
+| `black_bloc/cogs/content/marathon.py:3041` `build_spot` · `:3143` `open_channel_spotlight` | Row 2 of the card is full, so the follow switch lives in the Spotlight view; the channel's controls are the `/golive` Channels card itself (Deviation 15). |
+| `site/public/assets/spotlight-controls.js:70` `spotlightMoves` · `:105` `datesCard` · `:156` `pingsCard` | Moved whole from `page-golive.js`; the only change is `after(done)`, the page's redraw, handed in. |
+| `site/public/assets/page-golive.js:777` `redrawing` · `:793` `channelAnnounceMoves` | Go-live keeps its own afters: spotlight writes redraw the drawer, the announce switch closes it and refreshes, as before. The import is renamed `channelAnnounce` because the page's own `announceMoves` is the member opt-out (Deviation 18). |
+| `site/public/assets/marathons-section.js:866` `spotlightBlock` | The state first, the follow switch, the shared card, then Pings; no channel is one sentence. `after` re-opens the drawer, so every write redraws it. |
+| `site/mock/server.mjs:6267` `marathonSpotlightOf` · `:6035` `marathonFollowAtOnce` · `:6074` `marathonSetPingRole` | The mock's mirrors of `state_of`, the follow's switch side effects (no tick) and `set_ping_role`. |

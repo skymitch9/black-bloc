@@ -52,6 +52,7 @@
       "marathon_reminder_stale_minutes": 1,
       "marathon_spotlight_lead_hours": 0,
       "marathon_spotlight_lead_minutes": 0,
+      "marathon_spotlight_tail_minutes": 0,
       "marathon_archive_after_days": 0,
       "marathon_spotlight_slack_hours": 0,
       "marathon_window_slack_hours": 0,
@@ -116,6 +117,7 @@
       "marathon_reminder_stale_minutes": 240,
       "marathon_spotlight_lead_hours": 48,
       "marathon_spotlight_lead_minutes": 240,
+      "marathon_spotlight_tail_minutes": 720,
       "marathon_archive_after_days": 365,
       "marathon_spotlight_slack_hours": 48,
       "marathon_window_slack_hours": 24,
@@ -5094,7 +5096,8 @@
       "method": "GET",
       "path": "/api/marathons/{marathon_id}",
       "read_by": [
-        "marathons-section.js (events.html) marathon drawer"
+        "marathons-section.js (events.html) marathon drawer",
+        "marathons-section.js (events.html) the drawer's Spotlight card — spotlight-controls.js draws channel_spotlight as the Go-live drawer does"
       ],
       "shape": "object",
       "keys": [
@@ -5129,6 +5132,7 @@
         "event_mode",
         "event_mode_word",
         "spotlight_mode",
+        "ping_role",
         "tracked_state",
         "tracked",
         "tracked_at",
@@ -5136,7 +5140,9 @@
         "ignored_at",
         "ignored_by_name",
         "thread_url",
-        "inbox_message_url"
+        "inbox_message_url",
+        "channel_spotlight",
+        "spotlight_state"
       ],
       "rows": {
         "run_list": [
@@ -5165,6 +5171,36 @@
           "member_name",
           "everywhere",
           "user_id"
+        ]
+      },
+      "nested": {
+        "channel_spotlight": [
+          "id",
+          "spotlight",
+          "kept",
+          "pin",
+          "live",
+          "announce",
+          "starts_at",
+          "expires_at",
+          "scheduled",
+          "range",
+          "until",
+          "ping_mode",
+          "ping_state",
+          "ping_help",
+          "windows",
+          "note",
+          "event_id"
+        ],
+        "spotlight_state": [
+          "state",
+          "line",
+          "until",
+          "starts",
+          "held_by_this",
+          "follows",
+          "tail_minutes"
         ]
       }
     },
@@ -5219,6 +5255,23 @@
       "keys": [
         "id",
         "spotlight_mode",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_bare_id}",
+      "body": {
+        "ping_role": true
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Settings foldout — Ping the marathon role"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "ping_role",
+        "window",
         "message"
       ]
     },

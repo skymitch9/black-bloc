@@ -189,6 +189,7 @@ async def test_a_schedule_that_will_not_read_says_so_in_words(client, sign_in, w
 
 async def test_patch_pauses_resumes_renames_and_sets_the_channel(client, sign_in, web, cog, wf):
     sign_in(client)
+    await web.store.set(wf.GUILD_ID, "marathon_ping_role_default", True)
     marathon_id = add(client).json()["id"]
     spotlight_id = await add_channel(
         web.db, wf.GUILD_ID, "gamesdonequick", added_by=7, expires_at=None, pin=True
@@ -656,6 +657,29 @@ async def test_patch_spotlight_mode_switches_it_and_refuses_a_word_it_does_not_k
     assert bad.status_code == 422 and bad.json()["error"] == "bad_spotlight_mode"
 
 
+async def test_patch_ping_role_turns_it_on_and_off_and_refuses_a_word_it_does_not_know(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    spotlight_id = await add_channel(
+        web.db, wf.GUILD_ID, "gamesdonequick", added_by=7, expires_at=None, pin=True
+    )
+    marathon_id = add(client, spotlight_id=str(spotlight_id)).json()["id"]
+    first = client.get(f"/api/marathons/{marathon_id}").json()
+    assert first["ping_role"] is False and first["window"] is None
+
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": True}).json()
+
+    assert body["ping_role"] is True and body["window"]["starts_at"]
+    assert "pings again" in body["message"]
+    said = await web_row(wf, web, "web.marathon.ping_role_set")
+    assert (said["from"], said["to"], said["via"]) == (False, True, "website")
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": False}).json()
+    assert body["ping_role"] is False and body["window"] is None
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": "loud"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_ping_role"
+
+
 async def test_following_again_spotlights_a_channel_whose_marathon_is_in_reach(
     client, sign_in, web, cog, wf
 ):
@@ -765,3 +789,35 @@ async def test_track_refuses_in_words_when_the_channel_is_opted_out(
     assert refused.status_code == 409 and refused.json()["error"] == "channel_opted_out"
     assert "opted out of marathons" in refused.json()["message"]
     assert (await get_marathon(web.db, wf.GUILD_ID, marathon_id))["tracked_at"] is None
+
+
+async def test_the_detail_carries_the_channel_row_as_go_live_reads_it_and_its_state(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    spotlight_id = await add_channel(
+        web.db, wf.GUILD_ID, "rpglimitbreak", added_by=7, expires_at=None, pin=True, spotlight=False
+    )
+    marathon_id = add(client, spotlight_id=str(spotlight_id)).json()["id"]
+    bare_id = client.post(
+        "/api/marathons",
+        json={"name": "GDQx", "schedule_url": "https://gamesdonequick.com/schedule/75"},
+    ).json()["id"]
+
+    body = client.get(f"/api/marathons/{marathon_id}").json()
+    listed = next(
+        one for one in client.get("/api/golive/spotlight").json() if one["id"] == spotlight_id
+    )
+    assert body["channel_spotlight"] == listed | {"sessions": body["channel_spotlight"]["sessions"]}
+    assert body["spotlight_state"]["state"] in ("off", "waiting", "held")
+    assert body["spotlight_state"]["tail_minutes"] == 60
+
+    changed = client.patch(
+        f"/api/golive/spotlight/{spotlight_id}", json={"spotlight": True, "days": 7}
+    ).json()
+    after = client.get(f"/api/marathons/{marathon_id}").json()
+    assert after["channel_spotlight"]["spotlight"] is True
+    assert after["channel_spotlight"]["expires_at"] == changed["expires_at"]
+    assert after["spotlight_state"]["state"] == "until"
+    none = client.get(f"/api/marathons/{bare_id}").json()
+    assert none["channel_spotlight"] is None and none["spotlight_state"]["state"] == "none"

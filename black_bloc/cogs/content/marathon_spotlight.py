@@ -10,8 +10,9 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...settings_store import (
     MARATHON_SPOTLIGHT_FOLLOWS_KEY,
     MARATHON_SPOTLIGHT_LEAD_MINUTES_KEY,
+    MARATHON_SPOTLIGHT_TAIL_KEY,
 )
-from ...spotlight import is_spotlit
+from ...spotlight import is_expired, is_spotlit
 from .marathon import (
     MODE_OFF,
     NO_SUCH,
@@ -37,6 +38,10 @@ def lead_of(bot: Any, guild_id: int) -> int:
     return int(bot.store.get(guild_id, MARATHON_SPOTLIGHT_LEAD_MINUTES_KEY))
 
 
+def tail_of(bot: Any, guild_id: int) -> int:
+    return int(bot.store.get(guild_id, MARATHON_SPOTLIGHT_TAIL_KEY))
+
+
 async def _row_of(bot: Any, guild: Any, marathon: Any) -> Any:
     spotlight_id = marathon["spotlight_id"] if marathon is not None else None
     if not spotlight_id:
@@ -47,6 +52,20 @@ async def _row_of(bot: Any, guild: Any, marathon: Any) -> Any:
     return row
 
 
+async def state_for(bot: Any, guild: Any, marathon: Any) -> tuple[Any, dict[str, Any]]:
+    """The marathon's channel row, and whether it is spotlit and why."""
+    row = await _row_of(bot, guild, marathon)
+    state = ms.state_of(
+        row,
+        marathon,
+        now_for(bot),
+        enabled=enabled(bot, guild.id) and mode_of(bot, guild.id) != MODE_OFF,
+        lead_minutes=lead_of(bot, guild.id),
+        tail_minutes=tail_of(bot, guild.id),
+    )
+    return row, state | {"tail_minutes": tail_of(bot, guild.id)}
+
+
 async def follow_spotlight(
     bot: Any, guild: Any, marathon: Any, now: datetime | None = None
 ) -> str | None:
@@ -55,8 +74,14 @@ async def follow_spotlight(
         return None
     row = await _row_of(bot, guild, marathon)
     at = now or now_for(bot)
+    tail = tail_of(bot, guild.id)
     fields = ms.plan(
-        row, marathon, at, enabled=enabled(bot, guild.id), lead_minutes=lead_of(bot, guild.id)
+        row,
+        marathon,
+        at,
+        enabled=enabled(bot, guild.id),
+        lead_minutes=lead_of(bot, guild.id),
+        tail_minutes=tail,
     )
     if fields is None:
         return None
@@ -77,6 +102,8 @@ async def follow_spotlight(
             "login": row["twitch_login"],
             "span_starts_at": span[0].isoformat(),
             "span_ends_at": span[1].isoformat(),
+            "tail_minutes": tail,
+            "held": turned_on or ms.held_by(row) == int(marathon["id"]),
             "from_expires_at": row["expires_at"],
             "expires_at": fields["expires_at"],
         },
@@ -104,6 +131,27 @@ async def lift(bot: Any, guild: Any, row: Any, marathon_id: Any, because: str) -
     return fresh
 
 
+async def settle_held(bot: Any, guild: Any, row: Any) -> str:
+    """A held row whose date has passed: `extended` when its marathon's CURRENT span plus the
+    tail still reaches past now (the schedule moved), else the spotlight is given back."""
+    holder = ms.held_by(row)
+    cog = cog_of(bot)
+    if cog is not None and holder is not None:
+        async with locked(cog, holder):
+            marathon = await get_marathon(bot.db, guild.id, holder)
+            if await follow_spotlight(bot, guild, marathon) == "extended":
+                return "extended"
+            fresh = await channel_by_id(bot.db, int(row["id"]))
+            if fresh is None or not is_spotlit(fresh) or ms.held_by(fresh) != holder:
+                return "gone"
+            if not is_expired(fresh, now_for(bot)):
+                return "kept"
+            await lift(bot, guild, fresh, holder, ms.BECAUSE_MARATHON_OVER)
+            return "lifted"
+    await lift(bot, guild, row, holder, ms.BECAUSE_MARATHON_OVER)
+    return "lifted"
+
+
 async def after_staff_dim(
     bot: Any, guild: Any, actor: Any, was: Any, fresh: Any, *, via: str = VIA_DISCORD
 ) -> str:
@@ -119,6 +167,7 @@ async def after_staff_dim(
         now_for(bot),
         enabled=enabled(bot, guild.id),
         lead_minutes=lead_of(bot, guild.id),
+        tail_minutes=tail_of(bot, guild.id),
     )
     said: list[str] = []
     cog = cog_of(bot)
@@ -181,8 +230,18 @@ async def set_spotlight_mode(
             "via": via,
         },
     )
-    said = ms.MODE_SAID[wanted].format(name=fresh["name"], lead=lead_of(bot, guild.id))
+    said = ms.MODE_SAID[wanted].format(
+        name=fresh["name"], lead=lead_of(bot, guild.id), tail=tail_of(bot, guild.id)
+    )
     return Outcome(True, said, value=await get_marathon(bot.db, guild.id, fresh["id"]))
 
 
-__all__ = ["after_staff_dim", "follow_spotlight", "lift", "set_spotlight_mode"]
+__all__ = [
+    "after_staff_dim",
+    "follow_spotlight",
+    "lift",
+    "set_spotlight_mode",
+    "settle_held",
+    "state_for",
+    "tail_of",
+]

@@ -696,6 +696,15 @@ const SETTING_SPECS = [
   ["marathon_event_mode_default", "enum", "none", "none", "what a new marathon does about events, until staff change that marathon: none makes no event; marathon puts one event for the whole marathon into the events review, dated from the schedule; runs makes one event per BaF run, approved at once and re-dated as the schedule moves, and the events feature announces each one as it starts; both does the two. none by default — the Add form's Event select starts here, a feed's own mode wins for the marathons it adds, and each marathon's drawer changes its own", ["none", "marathon", "runs", "both"]],
   ["marathon_spotlight", "bool", true, true, "while a marathon on the list is running, its channel is spotlit and the spotlight expires at the marathon's end. on by default; a channel already kept for ever (like GamesDoneQuick) is never touched, a later expiry is never shortened, and each marathon's own Spotlight the channel while it runs switch turns it off for that marathon"],
   ["marathon_spotlight_lead_minutes", "int", 15, 15, "minutes before a marathon's first run that marathon_spotlight turns its channel's spotlight on. 15 by default, like marathon_ping_minutes", null, 240, 0],
+  ["marathon_spotlight_tail_minutes", "int", 60, 60, "minutes after a marathon's last run ends that the spotlight it follows stays on. 60 by default, so a schedule that runs over is still spotlit; 0 ends it with the last run. When the schedule is extended the end moves with it", null, 720, 0],
+  ["marathon_ping_role_default", "bool", false, false, "whether a NEW marathon pings roles — its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel gets a ping window. off by default; each marathon's own Ping the role switch changes it after, and marathons already on the list keep their own"],
+  ["marathon_ping_role_on_said", "text", "**{marathon}** pings again: its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel has a ping window while it runs.", "**{marathon}** pings again: its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel has a ping window while it runs.", "what staff are told once a marathon's Ping the role switch is turned on. It takes {marathon}"],
+  ["marathon_ping_role_off_said", "text", "**{marathon}** pings no role now: its reminders and shoutouts still post, with no mention, and its channel has no ping window for it.", "**{marathon}** pings no role now: its reminders and shoutouts still post, with no mention, and its channel has no ping window for it.", "what staff are told once a marathon's Ping the role switch is turned off. It takes {marathon}"],
+  ["marathon_ping_role_same_said", "text", "**{marathon}** already has that, so nothing was changed.", "**{marathon}** already has that, so nothing was changed.", "what staff are told when the Ping the role switch is already where they asked. It takes {marathon}"],
+  ["marathon_ping_role_button_on", "text", "Ping the role", "Ping the role", "the /event marathon card's button that turns a marathon's role pings on"],
+  ["marathon_ping_role_button_off", "text", "Stop pinging", "Stop pinging", "the /event marathon card's button that turns a marathon's role pings off"],
+  ["marathon_ping_role_line_on", "text", "Pings the role", "Pings the role", "the marathon card's line while its reminders and shoutouts mention roles"],
+  ["marathon_ping_role_line_off", "text", "Pings no role", "Pings no role", "the marathon card's line while its reminders and shoutouts mention no role"],
   ["marathon_archive_after_days", "int", 7, 7, "days after a marathon's last run ends that it moves to the archive, with its runs and people — kept, browsable under Archive on the Events page, and Restore brings it back paused. 7 by default; 0 moves it the same day. A marathon with no dates never moves by itself", null, 365, 0],
   ["marathon_archived_word", "text", "Archived {when} — runs, people and posts are kept.", "Archived {when} — runs, people and posts are kept.", "the line an archived marathon carries where its message is — the archived drawer on the Events page today, the marathon's inbox message once there is one. It takes {when}"],
   ["marathon_archive_question", "text", "Archive **{name}**? It stops being read and its ping window closes; its runs, people and posts are kept, and **Restore** brings it back paused.", "Archive **{name}**? It stops being read and its ping window closes; its runs, people and posts are kept, and **Restore** brings it back paused.", "what staff are asked before Archive it moves a marathon to the archive early. It takes {name}"],
@@ -4983,6 +4992,8 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   else if ('expires_at' in body) { row.expires_at = readEnd(body.expires_at, body.tz); dated = true; }
   else if (body.days !== undefined && body.days !== null) { row.expires_at = daysAhead(spotlightDays(body.days)); dated = true; }
   if (dated) refuseBackwards(row.starts_at, row.expires_at);
+  if (body.spotlight === false && row.spotlit_by_marathon && !dated) row.expires_at = null;
+  if (dated || body.spotlight === false) row.spotlit_by_marathon = null;
   if ('bump_hours' in body) row.bump_hours = body.bump_hours || null;
   if ('pin' in body) row.pin = Boolean(body.pin);
   if ('note' in body) row.note = body.note || null;
@@ -5720,7 +5731,7 @@ function seedMarathons() {
     // was added with its dates and is over now.
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
-  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ...marathonInboxSeed()[row.id], inbox_message_id: String(861000000000000000 + row.id), ...row }));
+  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, ...marathonInboxSeed()[row.id], inbox_message_id: String(861000000000000000 + row.id), ...row }));
 }
 
 // The inbox (marathon-inbox-design.md §B): AGDQ 2027 is tracked with its own thread (and its
@@ -5837,7 +5848,7 @@ function marathonWindowOf(id) {
 function marathonSyncWindow(row) {
   const windows = state.golive.spotlightWindows || (state.golive.spotlightWindows = []);
   const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
-  const keep = channel && row.active && row.starts_at;
+  const keep = channel && row.active && row.starts_at && Boolean(row.ping_role);
   const current = marathonWindowOf(row.id);
   if (!keep) {
     if (current) {
@@ -5951,6 +5962,7 @@ function marathonRow(row) {
     event_mode: marathonModeOf(row),
     event_mode_word: MARATHON_MODE_WORDS[marathonModeOf(row)],
     spotlight_mode: row.spotlight_mode === 'off' ? 'off' : 'follow',
+    ping_role: Boolean(row.ping_role),
     ...marathonTracking(row),
   };
 }
@@ -6018,7 +6030,31 @@ function wantedOn(body) {
   return on;
 }
 
-// The bot's cogs/content/marathon_spotlight.set_spotlight_mode, words only: the mock has no tick to spotlight a channel.
+// set_spotlight_mode's two side effects, the only follow the mock has (no tick): On spotlights
+// the channel at once while the marathon is in reach; Off gives back a spotlight it holds.
+function marathonFollowAtOnce(row, wanted) {
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+  if (!channel) return;
+  if (wanted === 'off') {
+    if (channel.spotlight !== false && channel.spotlit_by_marathon === row.id) {
+      Object.assign(channel, { spotlight: false, expires_at: null, spotlit_by_marathon: null });
+      logAction('marathon.spotlight_lifted', { actor_id: null, details: { marathon_id: row.id, spotlight_id: channel.id, because: 'mode_off' } });
+    }
+    return;
+  }
+  const lead = Number(state.settings.get('marathon_spotlight_lead_minutes') ?? 15);
+  const tail = Number(state.settings.get('marathon_spotlight_tail_minutes') ?? 60);
+  if (!row.active || !row.starts_at || !channelTakesMarathons(channel) || state.settings.get('marathon_spotlight') === false) return;
+  const now = Date.now();
+  const end = new Date(row.ends_at || row.starts_at).getTime() + tail * 60000;
+  if (now < new Date(row.starts_at).getTime() - lead * 60000 || now >= end) return;
+  if (channel.spotlight === false) {
+    Object.assign(channel, { spotlight: true, expires_at: new Date(end).toISOString(), spotlit_by_marathon: row.id });
+    logAction('marathon.spotlight_set', { actor_id: null, details: { marathon_id: row.id, spotlight_id: channel.id, expires_at: channel.expires_at } });
+  }
+}
+
+// The bot's cogs/content/marathon_spotlight.set_spotlight_mode, with marathonFollowAtOnce above.
 function marathonSetSpotlightMode(row, given) {
   const word = typeof given === 'boolean' ? (given ? 'follow' : 'off') : String(given ?? '').trim().toLowerCase();
   const wanted = ['follow', 'on', 'true', 'yes', '1'].includes(word) ? 'follow' : (['off', 'false', 'no', '0'].includes(word) ? 'off' : null);
@@ -6026,11 +6062,25 @@ function marathonSetSpotlightMode(row, given) {
   const was = row.spotlight_mode === 'off' ? 'off' : 'follow';
   if (wanted === was) return `**${row.name}** already has that, so nothing was changed.`;
   row.spotlight_mode = wanted;
+  marathonFollowAtOnce(row, wanted);
   logAction('web.marathon.spotlight_mode_set', { details: { marathon_id: row.id, name: row.name, from: was, to: wanted, via: 'website' } });
   const lead = Number(state.settings.get('marathon_spotlight_lead_minutes') ?? 15);
   return wanted === 'follow'
-    ? `**${row.name}** spotlights its channel while it runs again — from ${lead} minutes before its first run to the end of its last.`
+    ? `**${row.name}** spotlights its channel while it runs again — from ${lead} minutes before its first run to ${Number(state.settings.get('marathon_spotlight_tail_minutes') ?? 60)} minutes after its last ends.`
     : `**${row.name}** no longer spotlights its channel. A spotlight it had already turned on is turned off; one staff set stays as it is.`;
+}
+
+// The bot's cogs/content/marathon_ping.set_ping_role: off drops the marathon's ping window, on makes it again.
+function marathonSetPingRole(row, given) {
+  const word = typeof given === 'boolean' ? String(given) : String(given ?? '').trim().toLowerCase();
+  const wanted = ['true', 'on', 'yes', '1'].includes(word) ? true : (['false', 'off', 'no', '0'].includes(word) ? false : null);
+  if (wanted === null) throw new Refused(422, 'bad_ping_role', 'Say on or off for whether the marathon pings roles, so nothing was changed.');
+  const was = Boolean(row.ping_role);
+  if (wanted === was) return marathonSaid('marathon_ping_role_same_said', { marathon: row.name });
+  row.ping_role = wanted;
+  marathonSyncWindow(row);
+  logAction('web.marathon.ping_role_set', { details: { marathon_id: row.id, name: row.name, from: was, to: wanted, spotlight_id: row.spotlight_id, via: 'website' } });
+  return marathonSaid(wanted ? 'marathon_ping_role_on_said' : 'marathon_ping_role_off_said', { marathon: row.name });
 }
 
 const MARATHON_MODES = ['none', 'marathon', 'runs', 'both'];
@@ -6198,7 +6248,47 @@ function marathonDetail(row) {
     run_list: runs.map(marathonRunRow),
     pairings: marathonPairingsFor(row),
     unmatched: [...unmatched.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
+    ...marathonSpotlightOf(row),
   };
+}
+
+// The bot's black_bloc/marathon_spotlight.state_of and api/tools/marathons.spotlight_of: the
+// channel row exactly as the Go-live drawer reads it, and whether it is spotlit and why.
+const MARATHON_SPOT_LINES = {
+  held: 'Spotlit by this marathon until {until} — its last run plus {tail} minutes, and it moves if the schedule does.',
+  held_other: 'Spotlit by another marathon on this channel until {until}.',
+  kept: 'Spotlit and kept for ever — no marathon changes it.',
+  until: 'Spotlit until {until}, on staff dates. A marathon only ever carries that end later.',
+  scheduled: 'Scheduled — spotlit from {starts} until {until}.',
+  waiting: 'Not spotlit yet — it turns on {starts}, {lead} minutes before the first run.',
+  off: 'Not spotlit.',
+  none: 'No channel yet, so there is nothing to spotlight. Pick the channel it airs on under Settings.',
+};
+function marathonSpotlightOf(row) {
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) || null : null;
+  const lead = Number(state.settings.get('marathon_spotlight_lead_minutes') ?? 15);
+  const tail = Number(state.settings.get('marathon_spotlight_tail_minutes') ?? 60);
+  const follows = row.spotlight_mode !== 'off';
+  const found = { state: 'none', until: null, starts: null, held_by_this: false, follows, tail_minutes: tail };
+  if (!channel) return { channel_spotlight: null, spotlight_state: { ...found, line: MARATHON_SPOT_LINES.none } };
+  let line;
+  if (channel.spotlight !== false) {
+    const holder = channel.spotlit_by_marathon || null;
+    const starts = channel.starts_at && new Date(channel.starts_at) > new Date() ? channel.starts_at : null;
+    const kind = !channel.expires_at ? 'kept' : holder === row.id ? 'held' : holder ? 'held_other' : starts ? 'scheduled' : 'until';
+    Object.assign(found, { state: kind, until: channel.expires_at || null, starts: channel.starts_at || null, held_by_this: kind === 'held' });
+    line = MARATHON_SPOT_LINES[kind];
+  } else {
+    const opening = row.starts_at ? new Date(new Date(row.starts_at).getTime() - lead * 60000) : null;
+    const on = state.settings.get('marathon_spotlight') !== false && state.settings.get('marathon_mode') !== 'off';
+    const waits = on && follows && row.active && channelTakesMarathons(channel) && opening && new Date() < opening;
+    Object.assign(found, { state: waits ? 'waiting' : 'off', starts: waits ? opening.toISOString() : null });
+    line = MARATHON_SPOT_LINES[found.state];
+    if (!waits && !follows) line += ' Following is off, so this marathon leaves the channel to staff.';
+    else if (!waits && !channelTakesMarathons(channel)) line += ' This channel is off for marathons.';
+  }
+  line = line.split('{tail}').join(String(tail)).split('{lead}').join(String(lead));
+  return { channel_spotlight: spotlightRow(channel), spotlight_state: { ...found, line } };
 }
 
 function marathonRematch(row) {
@@ -6682,7 +6772,7 @@ function marathonCreate(name, scheduleUrl, spotlight) {
   refuseOptedOutChannel(spotlightId);
   const id = [...state.marathons, ...state.marathonArchive].reduce((top, one) => Math.max(top, one.id), 0) + 1;
   const starts = new Date(Date.now() + 3 * 86400000);
-  const row = { id, name, schedule_url: url, source: read.source, source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null };
+  const row = { id, name, schedule_url: url, source: read.source, source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null, ping_role: state.settings.get('marathon_ping_role_default') === true };
   state.marathons.push(row);
   const top = state.marathonRuns.reduce((most, one) => Math.max(most, one.id), 0);
   [['Celeste', 'Any%', 'Flyingludicolo', 'flyingludicolo'], ['Super Metroid', 'Any%', 'Casey', 'caseyfast'], ['Blaster Master', 'Any%', 'Interview Crew', null]].forEach(([game, category, runner, login], index) => {
@@ -6869,6 +6959,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   }
   if ('event_mode' in body) said.push(marathonSetMode(row, body.event_mode));
   if ('spotlight_mode' in body) said.push(marathonSetSpotlightMode(row, body.spotlight_mode));
+  if ('ping_role' in body) said.push(marathonSetPingRole(row, body.ping_role));
   if ('dismiss_next' in body) {
     if (body.dismiss_next !== true) throw new Refused(422, 'bad_dismiss', 'Say true to dismiss the suggested next event, so nothing was changed.');
     const record = marathonOpenSuggestion(row, body.event_id);

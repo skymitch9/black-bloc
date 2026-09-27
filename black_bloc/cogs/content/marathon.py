@@ -14,6 +14,7 @@ from ... import marathon as mt
 from ... import marathon_archive as ma
 from ... import marathon_events as me
 from ... import marathon_inbox as mi
+from ... import marathon_ping as mp
 from ... import marathon_spotlight as ms
 from ... import pings
 from ... import shadow as shadow_home
@@ -282,12 +283,13 @@ async def insert_marathon(
     feed_id: int | None = None,
     event_mode: str = "none",
     noticed: bool = True,
+    ping_role: int = 0,
 ) -> int:
     stamp = now_iso()
     cur = await db.conn.execute(
         "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
-        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at, ping_role) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             int(guild_id),
             name,
@@ -302,6 +304,7 @@ async def insert_marathon(
             feed_id,
             event_mode,
             stamp if noticed else None,
+            1 if ping_role else 0,
         ),
     )
     await db.conn.commit()
@@ -339,6 +342,7 @@ MARATHON_COLUMNS = {
     "thread_home",
     "ignored_at",
     "ignored_by",
+    "ping_role",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -543,6 +547,7 @@ async def create_marathon(
 ) -> Outcome:
     from ...marathon_events import BAD_MODE, makes_marathon_event
     from .marathon_events import BAD_MODE_CODE, mode_for_new
+    from .marathon_ping import default_for_new
 
     feed = None
     if feed_id is not None:
@@ -595,6 +600,7 @@ async def create_marathon(
         added_by=actor_id(actor),
         feed_id=feed_id,
         noticed=noticed,
+        ping_role=default_for_new(bot, guild.id),
     )
     await log_action(
         bot,
@@ -610,6 +616,7 @@ async def create_marathon(
             "spotlight_id": _cell(channel, "id"),
             "feed_id": feed_id,
             "event_mode": wanted_mode,
+            "ping_role": bool(default_for_new(bot, guild.id)),
             "via": via,
         },
     )
@@ -2011,7 +2018,12 @@ class Marathons(commands.Cog):
         bounds = mt.window_bounds(
             marathon, int(self.bot.store.get(guild.id, MARATHON_WINDOW_SLACK_KEY))
         )
-        keep = row is not None and bool(marathon["active"]) and bounds is not None
+        keep = (
+            row is not None
+            and bool(marathon["active"])
+            and bounds is not None
+            and mp.pings_role(marathon)
+        )
         existing = await marathon_windows(db, marathon["id"])
         stale = [one for one in existing if not keep or int(one["spotlight_id"]) != int(row["id"])]
         for window in stale:
@@ -2281,6 +2293,8 @@ class Marathons(commands.Cog):
     async def _ping_roles(self, guild: Any, marathon: Any, row: Any) -> list[int]:
         """The member's own ping role, and the channel's through the ping-windows gate — never
         the global go-live role: this is not a go-live."""
+        if not mp.pings_role(marathon):
+            return []
         found: list[int] = []
         for member_id in mt.member_ids(row):
             role_id = await pings.announced_fan_role(self.bot, guild, member_id)
@@ -2702,6 +2716,7 @@ ARCHIVE_VIEW = "archive"
 PAIR_VIEW = "pair"
 NEXT_VIEW = "next"
 RUN_VIEW = "run"
+SPOT_VIEW = "spot"
 STYLES = {
     "primary": discord.ButtonStyle.primary,
     "secondary": discord.ButtonStyle.secondary,
@@ -2833,7 +2848,8 @@ async def card_header(bot: Any, guild: Any, row: Any, runs: list[Any]) -> list[s
     login = await channel_login(bot, row)
     if login:
         quiet.append(mt.CARD_CHANNEL.format(login=login))
-        quiet.append(ms.mode_line(row))
+        quiet.append(await spotlight_line(bot, guild, row))
+    quiet.append(ping_card_line(bot, guild.id, row))
     quiet.append(await inbox_line(bot, guild, row))
     return [
         mt.CARD_HEAD.format(
@@ -2841,6 +2857,25 @@ async def card_header(bot: Any, guild: Any, row: Any, runs: list[Any]) -> list[s
         ),
         " · ".join(quiet),
     ]
+
+
+async def spotlight_line(bot: Any, guild: Any, row: Any) -> str:
+    from .marathon_spotlight import state_for
+
+    _, state = await state_for(bot, guild, row)
+    return ms.discord_line(state)
+
+
+def ping_card_line(bot: Any, guild_id: int, row: Any) -> str:
+    from .marathon_ping import card_line
+
+    return card_line(bot, guild_id, row)
+
+
+def ping_card_move(bot: Any, guild_id: int, row: Any) -> Any:
+    from .marathon_ping import card_move
+
+    return card_move(bot, guild_id, row)
 
 
 async def inbox_line(bot: Any, guild: Any, row: Any) -> str:
@@ -2949,6 +2984,7 @@ async def build_card(
         view,
         mt.card_moves(row, has_unmatched=bool(unmatched), has_next=has_next)
         + ms.card_moves(row)
+        + (ping_card_move(bot, guild.id, row),)
         + (ma.ARCHIVE_MOVE,)
         + mi.panel_moves(row),
     )
@@ -2999,6 +3035,17 @@ async def build_next(bot: Any, guild: Any, marathon_id: Any) -> tuple[Any, Any]:
     view = MarathonPanel(minutes_for(bot, guild.id), NEXT_VIEW, row["id"])
     over = mt.suggests(row) and mt.is_over(row, now_for(bot))
     add_moves(view, mt.next_moves(mt.suggestion_of(row), over=over))
+    return (embed, view)
+
+
+async def build_spot(bot: Any, guild: Any, marathon_id: Any) -> tuple[Any, Any]:
+    row = await get_marathon(bot.db, guild.id, marathon_id)
+    if row is None or not row["spotlight_id"]:
+        return (None, None)
+    lines = [await spotlight_line(bot, guild, row), ms.mode_line(row), ms.SPOT_SHARED]
+    embed = discord.Embed(title=row["name"], description=clamped(lines))
+    view = MarathonPanel(minutes_for(bot, guild.id), SPOT_VIEW, row["id"])
+    add_moves(view, ms.spot_moves(row) + (mt.BACK_MOVE,))
     return (embed, view)
 
 
@@ -3075,6 +3122,37 @@ async def open_next(interaction: discord.Interaction, marathon_id: Any, previous
     await render(interaction, embed, view, previous)
 
 
+async def open_spot(interaction: discord.Interaction, marathon_id: Any, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    embed, view = await build_spot(interaction.client, interaction.guild, marathon_id)
+    if view is None:
+        await open_card(interaction, marathon_id, previous)
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def back_to_spot(interaction: discord.Interaction, view: Any) -> None:
+    embed, fresh = await build_spot(interaction.client, interaction.guild, view.marathon_id)
+    if fresh is None:
+        await open_card(interaction, view.marathon_id, view)
+        return
+    await render(interaction, embed, fresh, view)
+
+
+async def open_channel_spotlight(interaction: discord.Interaction, view: Any) -> None:
+    """The Go-live Channels card itself, picked on this marathon's channel: one component."""
+    from .spotlight import render_spotlight
+
+    if not await opened(interaction):
+        return
+    row = await get_marathon(interaction.client.db, interaction.guild.id, view.marathon_id)
+    if row is None or not row["spotlight_id"]:
+        await open_card(interaction, view.marathon_id, view)
+        return
+    await render_spotlight(interaction, int(row["spotlight_id"]), view)
+
+
 async def open_run(
     interaction: discord.Interaction, marathon_id: Any, run_id: Any, previous: Any
 ) -> None:
@@ -3096,6 +3174,8 @@ async def reopen(interaction: discord.Interaction, previous: Any) -> None:
         await reopen_feeds(interaction, previous)
     elif where == NEXT_VIEW and getattr(previous, "marathon_id", None):
         await open_next(interaction, previous.marathon_id, previous)
+    elif where == SPOT_VIEW and getattr(previous, "marathon_id", None):
+        await open_spot(interaction, previous.marathon_id, previous)
     elif where == RUN_VIEW and getattr(previous, "run_id", None):
         await open_run(interaction, previous.marathon_id, previous.run_id, previous)
     elif where in (CARD, PAIR_VIEW) and getattr(previous, "marathon_id", None):
@@ -3228,7 +3308,7 @@ class MarathonMoveButton(discord.ui.Button):
         elif action == mt.MINE:
             await open_mine(interaction, view)
         elif action == mt.BACK:
-            if view.where in (PAIR_VIEW, NEXT_VIEW, RUN_VIEW):
+            if view.where in (PAIR_VIEW, NEXT_VIEW, RUN_VIEW, SPOT_VIEW):
                 await open_card(interaction, view.marathon_id, view)
             else:
                 await open_root(interaction, view)
@@ -3255,6 +3335,19 @@ class MarathonMoveButton(discord.ui.Button):
 
                 wanted = default_mode(interaction.client, interaction.guild.id)
                 await interaction.response.send_modal(AddMarathonModal(view, wanted))
+        elif action in mp.MOVE_WANTS:
+            from .marathon_ping import set_ping_role
+
+            wanted_ping = mp.MOVE_WANTS[action]
+            await run_move(
+                interaction,
+                view,
+                lambda bot, guild, actor, row: set_ping_role(bot, guild, actor, row, wanted_ping),
+            )
+        elif action == ms.CARD_ACTION:
+            await open_spot(interaction, view.marathon_id, view)
+        elif action == ms.CHANNEL_ACTION:
+            await open_channel_spotlight(interaction, view)
         elif action in ms.MOVE_MODES:
             from .marathon_spotlight import set_spotlight_mode
 
@@ -3263,6 +3356,7 @@ class MarathonMoveButton(discord.ui.Button):
                 interaction,
                 view,
                 lambda bot, guild, actor, row: set_spotlight_mode(bot, guild, actor, row, wanted),
+                back=back_to_spot if view.where == SPOT_VIEW else None,
             )
         elif action == mt.MAKE_EVENT:
             await run_move(interaction, view, make_event_now)

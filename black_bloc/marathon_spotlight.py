@@ -24,7 +24,7 @@ SPOTLIGHT_OFF_BUTTON = "Stop spotlighting it"
 MODE_SAID = {
     FOLLOW: (
         "**{name}** spotlights its channel while it runs again — from "
-        "{lead} minutes before its first run to the end of its last."
+        "{lead} minutes before its first run to {tail} minutes after its last ends."
     ),
     OFF: (
         "**{name}** no longer spotlights its channel. A spotlight it had already turned on is "
@@ -77,11 +77,23 @@ def span_of(marathon: Any) -> tuple[datetime, datetime] | None:
     return (starts, max(starts, ends))
 
 
-def in_reach(span: tuple[datetime, datetime] | None, now: datetime, lead_minutes: int) -> bool:
+def reach_end(span: tuple[datetime, datetime], tail_minutes: int = 0) -> datetime:
+    """The span's end plus the tail: when a spotlight the marathon holds is given back."""
+    return span[1] + timedelta(minutes=max(0, int(tail_minutes)))
+
+
+def in_reach(
+    span: tuple[datetime, datetime] | None,
+    now: datetime,
+    lead_minutes: int,
+    tail_minutes: int = 0,
+) -> bool:
     if span is None:
         return False
-    starts, ends = span
-    return starts - timedelta(minutes=max(0, int(lead_minutes))) <= now < ends
+    starts = span[0]
+    return (
+        starts - timedelta(minutes=max(0, int(lead_minutes))) <= now < reach_end(span, tail_minutes)
+    )
 
 
 def is_kept(row: Any) -> bool:
@@ -98,15 +110,21 @@ def follows(marathon: Any, *, enabled: bool) -> bool:
 
 
 def plan(
-    row: Any, marathon: Any, now: datetime, *, enabled: bool, lead_minutes: int
+    row: Any,
+    marathon: Any,
+    now: datetime,
+    *,
+    enabled: bool,
+    lead_minutes: int,
+    tail_minutes: int = 0,
 ) -> dict[str, Any] | None:
     """The fields a follow writes on the channel row, or None when it leaves it alone."""
     if row is None or not follows(marathon, enabled=enabled) or not takes_marathons(row):
         return None
     span = span_of(marathon)
-    if not in_reach(span, now, lead_minutes) or is_kept(row):
+    if not in_reach(span, now, lead_minutes, tail_minutes) or is_kept(row):
         return None
-    ends = span[1]
+    ends = reach_end(span, tail_minutes)
     if is_spotlit(row):
         current = parse_ts(_cell(row, "expires_at"))
         if current is None or current >= ends:
@@ -129,12 +147,14 @@ def held_by(row: Any) -> int | None:
     return int(found) if found not in (None, "", 0) else None
 
 
-def dimmed_during(marathons: Any, now: datetime, *, enabled: bool, lead_minutes: int) -> list[Any]:
+def dimmed_during(
+    marathons: Any, now: datetime, *, enabled: bool, lead_minutes: int, tail_minutes: int = 0
+) -> list[Any]:
     """The marathons on a channel that were spotlighting it when staff turned it off."""
     return [
         one
         for one in marathons or ()
-        if follows(one, enabled=enabled) and in_reach(span_of(one), now, lead_minutes)
+        if follows(one, enabled=enabled) and in_reach(span_of(one), now, lead_minutes, tail_minutes)
     ]
 
 
@@ -157,18 +177,122 @@ def new_row_ping_mode(login: Any, takes: bool, marathon_default: Any, general: A
     return general
 
 
+HELD = "held"
+HELD_OTHER = "held_other"
+KEPT = "kept"
+UNTIL = "until"
+SCHEDULED = "scheduled"
+WAITING = "waiting"
+DARK = "off"
+NO_CHANNEL = "none"
+STATE_LINES = {
+    HELD: "Spotlit by this marathon until {until} — its last run plus {tail} minutes, and it "
+    "moves if the schedule does.",
+    HELD_OTHER: "Spotlit by another marathon on this channel until {until}.",
+    KEPT: "Spotlit and kept for ever — no marathon changes it.",
+    UNTIL: "Spotlit until {until}, on staff dates. A marathon only ever carries that end later.",
+    SCHEDULED: "Scheduled — spotlit from {starts} until {until}.",
+    WAITING: "Not spotlit yet — it turns on {starts}, {lead} minutes before the first run.",
+    DARK: "Not spotlit.",
+    NO_CHANNEL: "No channel yet, so there is nothing to spotlight. Pick the channel it airs on "
+    "under Settings.",
+}
+FOLLOW_OFF_CLAUSE = " Following is off, so this marathon leaves the channel to staff."
+OPTED_OUT_CLAUSE = " This channel is off for marathons."
+
+
+def state_of(
+    row: Any,
+    marathon: Any,
+    now: datetime,
+    *,
+    enabled: bool,
+    lead_minutes: int,
+    tail_minutes: int,
+) -> dict[str, Any]:
+    """Whether the channel is spotlit and why, as one line; {until} and {starts} are left for
+    the reader's own clock, with their moments beside them."""
+    found = {"state": NO_CHANNEL, "until": None, "starts": None, "held_by_this": False}
+    if row is None:
+        return found | {"line": STATE_LINES[NO_CHANNEL]}
+    until = _cell(row, "expires_at")
+    holder = held_by(row)
+    if is_spotlit(row):
+        starts = parse_ts(_cell(row, "starts_at"))
+        if keeps_forever(row):
+            state = KEPT
+        elif holder is not None and holder == int(_cell(marathon, "id", 0) or 0):
+            state = HELD
+        elif holder is not None:
+            state = HELD_OTHER
+        elif starts is not None and starts > now:
+            state = SCHEDULED
+        else:
+            state = UNTIL
+        found |= {"state": state, "until": until, "starts": _cell(row, "starts_at")}
+        found["held_by_this"] = state == HELD
+        line = STATE_LINES[state]
+    else:
+        span = span_of(marathon)
+        opening = span[0] - timedelta(minutes=max(0, int(lead_minutes))) if span else None
+        waits = (
+            follows(marathon, enabled=enabled)
+            and takes_marathons(row)
+            and opening is not None
+            and now < opening
+        )
+        state = WAITING if waits else DARK
+        found |= {"state": state, "starts": opening.isoformat() if waits else None}
+        line = STATE_LINES[state]
+        if not waits and mode_of(marathon) == OFF:
+            line += FOLLOW_OFF_CLAUSE
+        elif not waits and not takes_marathons(row):
+            line += OPTED_OUT_CLAUSE
+    line = line.replace("{tail}", str(int(tail_minutes))).replace("{lead}", str(int(lead_minutes)))
+    return found | {"line": line, "follows": mode_of(marathon) == FOLLOW}
+
+
+def discord_line(state: dict[str, Any]) -> str:
+    """The state line with its moments as Discord timestamps, read in each viewer's zone."""
+    line = str(state.get("line") or "")
+    for name in ("until", "starts"):
+        when = parse_ts(state.get(name))
+        line = line.replace("{" + name + "}", f"<t:{int(when.timestamp())}:f>" if when else "—")
+    return line
+
+
 FOLLOW_ACTION = "spotlight_follow"
 OFF_ACTION = "spotlight_off"
+CARD_ACTION = "spotlight_card"
+CHANNEL_ACTION = "spotlight_channel"
 FOLLOW_MOVE = MarathonMove(FOLLOW_ACTION, SPOTLIGHT_ON_BUTTON, row=2)
 OFF_MOVE = MarathonMove(OFF_ACTION, SPOTLIGHT_OFF_BUTTON, row=2)
+CARD_MOVE = MarathonMove(CARD_ACTION, "Spotlight…", row=2)
+CHANNEL_MOVE = MarathonMove(CHANNEL_ACTION, "The channel's spotlight…", "primary", 3)
 MOVE_MODES = {FOLLOW_ACTION: FOLLOW, OFF_ACTION: OFF}
+SPOT_SHARED = (
+    "**The channel's spotlight…** opens the channel's own controls — on/off, dates, pin, bump, "
+    "announcements and pings — the same card as `/golive` ▸ Channels…, so a change there shows "
+    "on the Go-live page too."
+)
+
+
+def follow_move(marathon: Any) -> MarathonMove:
+    return OFF_MOVE if mode_of(marathon) == FOLLOW else FOLLOW_MOVE
 
 
 def card_moves(marathon: Any) -> tuple[MarathonMove, ...]:
-    """The one switch that changes something, and only on a marathon with a channel."""
+    """The Spotlight… door, and only on a marathon with a channel."""
     if not _cell(marathon, "spotlight_id"):
         return ()
-    return (OFF_MOVE,) if mode_of(marathon) == FOLLOW else (FOLLOW_MOVE,)
+    return (CARD_MOVE,)
+
+
+def spot_moves(marathon: Any) -> tuple[MarathonMove, ...]:
+    """The Spotlight view: the follow switch and the channel's own card."""
+    if not _cell(marathon, "spotlight_id"):
+        return ()
+    return (follow_move(marathon), CHANNEL_MOVE)
 
 
 def mode_line(marathon: Any) -> str:
@@ -179,6 +303,9 @@ __all__ = [
     "BAD_MODE",
     "MOVE_MODES",
     "card_moves",
+    "discord_line",
+    "follow_move",
+    "spot_moves",
     "FOLLOW",
     "MODES",
     "OFF",
@@ -194,5 +321,7 @@ __all__ = [
     "mode_of",
     "new_row_ping_mode",
     "plan",
+    "reach_end",
     "span_of",
+    "state_of",
 ]

@@ -28,6 +28,7 @@ import {
   trackedLine,
   whenWords,
 } from './marathon-words.js';
+import { announceMoves, announcedSaid, pingsCard, spotlightCard } from './spotlight-controls.js';
 import {
   ask,
   askForm,
@@ -161,11 +162,20 @@ const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes 
   + 'review above, dated from the schedule. An event per ' + BAF + ' run is approved at once and '
   + 'follows the schedule as runs move — the events feature announces each one as it starts. '
   + 'Both does the two. marathon_event_mode_default decides where this starts.';
-const SPOTLIGHT_FIELD = 'Spotlight the channel while it runs';
+const SPOTLIGHT_FIELD = 'Follow the schedule';
 const SPOTLIGHT_CHOICES = [{ value: 'follow', label: 'On' }, { value: 'off', label: 'Off' }];
-const SPOTLIGHT_HELP = 'On: from marathon_spotlight_lead_minutes before its first run to the end of its '
-  + 'last, its channel is spotlit and the spotlight runs out at the end. A channel kept for ever '
-  + 'stays as it is. Staff turning the spotlight off on the Go-live page turns this off too.';
+const SPOTLIGHT_HELP = 'On: the channel is spotlit from marathon_spotlight_lead_minutes before the first run '
+  + 'to marathon_spotlight_tail_minutes after the last, and the end moves when the schedule does. A channel '
+  + 'kept for ever stays as it is. Staff turning the spotlight off, or saving dates, takes it over.';
+const SPOTLIGHT_SHARED = 'These are the channel’s own controls — every change here shows on the Go-live page too.';
+const OPEN_ON_GOLIVE = 'Open on Go-live ↗';
+const SPOTLIT_WORDS = { held: 'spotlit', held_other: 'spotlit', kept: 'spotlit', until: 'spotlit', scheduled: 'scheduled' };
+const NOT_SPOTLIT = 'not spotlit';
+const PING_FIELD = 'Ping the marathon role';
+const PING_CHOICES = [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }];
+const PING_HELP = 'On: its run reminders and shoutouts mention the runner’s ping role and its channel’s, '
+  + 'and its channel gets a ping window while it runs. Off (the default): they still post, with no mention. '
+  + 'marathon_ping_role_default decides where a new marathon starts.';
 const EVENT_SELECT_SHORT = 'Which Discord events this marathon makes; the setting explains the '
   + 'four choices.';
 const EVENT_NONE = 'No event.';
@@ -802,8 +812,8 @@ function pollWanted(given) {
 
 async function settingsFold(marathon, say) {
   const mode = modePicker(marathon.event_mode || 'none');
-  const spotlightNow = marathon.spotlight_mode === 'off' ? 'off' : 'follow';
-  const spotlight = segment(SPOTLIGHT_CHOICES, spotlightNow);
+  const pingNow = marathon.ping_role ? 'on' : 'off';
+  const ping = segment(PING_CHOICES, pingNow);
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
     class: 'input',
@@ -817,7 +827,7 @@ async function settingsFold(marathon, say) {
   const save = button(SAVE_SETTINGS, async () => {
     const body = {};
     if (mode.value !== (marathon.event_mode || 'none')) body.event_mode = mode.value;
-    if (spotlight.readValue() !== spotlightNow) body.spotlight_mode = spotlight.readValue();
+    if (ping.readValue() !== pingNow) body.ping_role = ping.readValue() === 'on';
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
     if (wanted !== (marathon.poll_minutes || null)) body.poll_minutes = wanted;
@@ -835,7 +845,7 @@ async function settingsFold(marathon, say) {
     eventState(marathon, say),
     marathon.channel_gone ? notice(CHANNEL_GONE, 'warn') : null,
     field('Airs on', picker, windowWords(marathon)),
-    field(SPOTLIGHT_FIELD, spotlight, SPOTLIGHT_HELP),
+    field(PING_FIELD, ping, PING_HELP),
     field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
     bar([save]),
   ], { open: shown.settings });
@@ -844,6 +854,43 @@ async function settingsFold(marathon, say) {
     shown.settings = fold.open;
   });
   return fold;
+}
+
+function spotlightLine(state) {
+  return String(state.line || '')
+    .split('{until}').join(whenWords(state.until))
+    .split('{starts}').join(whenWords(state.starts));
+}
+
+/** The marathon's channel row, through the Go-live drawer's own controls. */
+function spotlightBlock(marathon, say) {
+  const state = marathon.spotlight_state || {};
+  const said = el('p', { class: 'mx-spot-state', 'data-state': state.state || '' }, [
+    badge(SPOTLIT_WORDS[state.state] || NOT_SPOTLIT, SPOTLIT_WORDS[state.state] ? 'ok' : null),
+    el('span', { text: ` ${spotlightLine(state)}` }),
+  ]);
+  const one = marathon.channel_spotlight;
+  if (!one) return [el('p', { class: 'field-help mx-line' }, [el('span', { text: spotlightLine(state) })])];
+  const redraw = (done) => after(marathon, done);
+  const followNow = marathon.spotlight_mode === 'off' ? 'off' : 'follow';
+  const follow = segment(SPOTLIGHT_CHOICES, followNow, {
+    onChange: async () => {
+      const wanted = follow.readValue();
+      if (wanted === followNow) return;
+      await redraw(await run(say, () => send(`/api/marathons/${marathon.id}`, 'PATCH', { spotlight_mode: wanted }), (found) => found?.message || SAVED));
+    },
+  });
+  return [
+    spotlightCard(one, say, redraw, {
+      head: [said, field(SPOTLIGHT_FIELD, follow, SPOTLIGHT_HELP)],
+      foot: [
+        announcedSaid(one),
+        el('div', { class: 'bar' }, announceMoves(one, say, redraw)),
+        el('p', { class: 'field-help' }, [el('span', { text: `${SPOTLIGHT_SHARED} ` }), linkAction(OPEN_ON_GOLIVE, GOLIVE_HREF)]),
+      ],
+    }),
+    pingsCard(one, say, redraw),
+  ];
 }
 
 function pollSaid(marathon, wanted) {
@@ -906,6 +953,7 @@ async function marathonDrawer(marathon, board, message) {
   return [
     say,
     ...headerBlock(marathon, board, say),
+    ...spotlightBlock(marathon, say),
     peopleCard(marathon, board, say),
     await settingsFold(marathon, say),
     postsRow(marathon, say),

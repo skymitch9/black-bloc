@@ -75,7 +75,9 @@ end) holds now or starts within the lead:
 | spotlight ON, no expiry (*kept* — GDQ) | nothing | nothing |
 | spotlight ON, expiry at or after the span end | nothing | nothing |
 | spotlight ON, expiry before the span end | `expires_at` = span end (not marked — staff's row) | `marathon.spotlight_extended` (routine) |
-| spotlight OFF | `spotlight = 1`, `expires_at` = span end, `spotlit_by_marathon` = the marathon; a live stream is pinned | `marathon.spotlight_set` (**important**) with the marathon and the span |
+| spotlight OFF | `spotlight = 1`, `expires_at` = span end (**+ `marathon_spotlight_tail_minutes`, 60, since `marathon-controls`**), `spotlit_by_marathon` = the marathon; a live stream is pinned | `marathon.spotlight_set` (**important**) with the marathon and the span |
+
+⚠️ **2026-09-26, `marathon-controls` (off `70edbad9`) changed this** — see [`marathon-controls-design.md`](marathon-controls-design.md): the sweep no longer lifts on the stored date alone: a held row goes through `settle_held`, which re-reads the marathon's CURRENT span and extends instead when span end + tail is still ahead.
 
 **The end.** The ONE expiry sweep (`cogs/content/spotlight.py:sweep_expiries`) lifts a held row — spotlight off,
 `expires_at` NULL, holder NULL, a live post unpinned, `marathon.spotlight_lifted` (`because: marathon_over`) — and
@@ -86,8 +88,8 @@ purges every other expired row as before.
   sets that marathon's `spotlight_mode = off` (`marathon.spotlight_mode_set`, `because:
   staff_turned_the_spotlight_off`) and the answer adds *"**AGDQ 2027** will not spotlight it again."* A row the
   marathon held also gives back its dates.
-- **The per-marathon switch** — the drawer's Settings foldout *Spotlight the channel while it runs* On/Off (rides
-  Save; `PATCH /api/marathons/{id}` `spotlight_mode`) and the `/event` ▸ Marathons… card's one button (*Stop
+- **The per-marathon switch** — ~~the drawer's Settings foldout *Spotlight the channel while it runs* On/Off (rides
+  Save;~~ ⚠️ **2026-09-26, `marathon-controls` (off `70edbad9`) changed this** — see [`marathon-controls-design.md`](marathon-controls-design.md): the drawer's **Spotlight** card, *Follow the schedule* On/Off, written at once (the owner asked for the channel's spotlight controls on the marathon); `PATCH /api/marathons/{id}` `spotlight_mode`) and ~~the `/event` ▸ Marathons… card's one button~~ the `/event` card's **Spotlight…** view (the card's row 2 is full) (*Stop
   spotlighting it* / *Spotlight while it runs*, plus a state line beside the channel). Off lifts a spotlight this
   marathon holds; On spotlights at once when in reach.
 - **Staff dates** on a held row (Dates, Keep, Let it expire, Extend) clear the holder: the row is theirs.
@@ -127,6 +129,7 @@ other row keeps `spotlight_ping_mode_default`. No existing row is changed by cod
 9. **An earlier expiry carried to the end logs `marathon.spotlight_extended`** (routine) and leaves the row unmarked
    — staff's row, so it is purged at the new date as staff's dates always were, just later.
 10. **The span is the run span, without the window's slack.** The window stays ± `marathon_window_slack_hours`.
+    ⚠️ **2026-09-26, `marathon-controls` (off `70edbad9`) changed this** — see [`marathon-controls-design.md`](marathon-controls-design.md): the spotlight now runs to span end + `marathon_spotlight_tail_minutes` (60) — owner 17:3x, *"if the events get extended make sure we extend the spotlight, maybe by like an extra hour"*. Still no window slack; the tail is its own key, and 0 restores this bullet exactly.
 11. **Staff turning off a held row clears its dates**, so a later **Spotlight on** is an ordinary kept spotlight,
     not a hidden purge date.
 12. **Removing, pausing or re-channelling a marathon mid-span leaves the spotlight it set** until the span end, when

@@ -38,7 +38,6 @@ from ...marathon_channels import (
 )
 from ...marathon_channels import panel_line as marathons_line
 from ...marathon_spotlight import (
-    BECAUSE_MARATHON_OVER,
     held_by,
     lifted_fields,
     new_row_ping_mode,
@@ -641,9 +640,9 @@ class Spotlight(commands.Cog):
             if not words.is_spotlit(row) or not words.is_expired(row):
                 continue
             if held_by(row) is not None:
-                from .marathon_spotlight import lift
+                from .marathon_spotlight import settle_held
 
-                await lift(self.bot, guild, row, held_by(row), BECAUSE_MARATHON_OVER)
+                await settle_held(self.bot, guild, row)
                 continue
             async with self._lock(row["id"]):
                 fresh = await channel_by_id(self.bot.db, row["id"])

@@ -434,6 +434,7 @@ async def test_the_two_hour_heads_up_posts_without_a_mention(bot, cog):
 async def test_the_fifteen_minute_reminder_pings_the_members_role_and_the_channels_in_a_window(
     bot, cog
 ):
+    await bot.store.set(GUILD, "marathon_ping_role_default", True)
     channel = await gdq_row(bot)
     await set_ping_mode(bot, bot.guild, FakeActor(), channel["id"], "events")
     cog.client.runs_given = [
@@ -454,6 +455,7 @@ async def test_the_fifteen_minute_reminder_pings_the_members_role_and_the_channe
 
 
 async def test_outside_a_window_an_events_channel_role_is_not_pinged(bot, cog):
+    await bot.store.set(GUILD, "marathon_ping_role_default", True)
     channel = await gdq_row(bot)
     await set_ping_mode(bot, bot.guild, FakeActor(), channel["id"], "events")
     cog.client.runs_given = [
@@ -662,6 +664,7 @@ async def test_off_reads_nothing_and_posts_nothing(bot, cog):
 
 
 async def test_a_marathon_with_a_channel_opens_one_window_for_its_dates(bot, cog):
+    await bot.store.set(GUILD, "marathon_ping_role_default", True)
     channel = await gdq_row(bot)
     marathon = await added(bot, cog, channel=channel)
     windows = await windows_for(bot.db, channel["id"])
@@ -675,6 +678,7 @@ async def test_a_marathon_with_a_channel_opens_one_window_for_its_dates(bot, cog
 
 
 async def test_pause_and_remove_close_the_window(bot, cog):
+    await bot.store.set(GUILD, "marathon_ping_role_default", True)
     channel = await gdq_row(bot)
     marathon = await added(bot, cog, channel=channel)
     await set_active(bot, bot.guild, FakeActor(), marathon, False)
@@ -1490,3 +1494,48 @@ async def test_the_add_modal_refuses_an_answer_that_is_not_yes_or_no(bot, cog, p
 
     assert await cogmod.list_marathons(bot.db, GUILD) == []
     assert interaction.sent == mt.BAD_ADD_EVENT
+
+
+# --- marathon-controls C: the card's Spotlight view ----------------------------------------
+
+
+def pressed(view, label):
+    return next(one for one in view.children if getattr(one, "label", None) == label)
+
+
+async def test_the_card_says_the_spotlight_and_opens_its_view_and_the_channels_own_card(bot, cog):
+    channel = await gdq_row(bot)
+    marathon = await added(bot, cog, channel=channel)
+    embed, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    assert "Spotlit and kept for ever" in embed.description
+    assert all(len([one for one in view.children if one.row == row]) <= 5 for row in range(5))
+
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pressed(view, "Spotlight…").callback(interaction)
+    assert interaction.view.where == cogmod.SPOT_VIEW
+    assert "Spotlight the channel while it runs: **on**" in interaction.words
+    assert "`/golive` ▸ Channels…" in interaction.words
+
+    spot = interaction.view
+    again = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pressed(spot, "Stop spotlighting it").callback(again)
+    assert again.view.where == cogmod.SPOT_VIEW
+    assert (await get_marathon(bot.db, GUILD, marathon["id"]))["spotlight_mode"] == "off"
+    assert "Spotlight while it runs" in [one.label for one in again.view.children]
+
+    channels = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pressed(again.view, "The channel's spotlight…").callback(channels)
+    labels = [getattr(one, "label", None) for one in channels.view.children]
+    assert "Spotlight off" in labels and "Keep for ever" not in labels
+    assert "gamesdonequick" in channels.words
+
+    back = FakeInteraction(bot, FakeActor(), bot.guild)
+    await pressed(spot, "Back").callback(back)
+    assert back.view.where == cogmod.CARD
+
+
+async def test_a_marathon_with_no_channel_draws_no_spotlight_door(bot, cog):
+    marathon = await added(bot, cog)
+    _, view = await cogmod.build_card(bot, bot.guild, marathon["id"])
+    assert "Spotlight…" not in [getattr(one, "label", None) for one in view.children]
+    assert await cogmod.build_spot(bot, bot.guild, marathon["id"]) == (None, None)

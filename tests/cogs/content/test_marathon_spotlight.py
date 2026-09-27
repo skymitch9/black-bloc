@@ -1,10 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
-from black_bloc.cogs.content.marathon import get_marathon, refresh_marathon
+from black_bloc.cogs.content.marathon import get_marathon, refresh_marathon, update_marathon
 from black_bloc.cogs.content.marathon_spotlight import (
     after_staff_dim,
     follow_spotlight,
     set_spotlight_mode,
+    settle_held,
+    state_for,
 )
 from black_bloc.cogs.content.spotlight import (
     Spotlight,
@@ -44,11 +46,12 @@ async def test_a_fetch_on_a_running_marathon_spotlights_its_channel_until_the_en
 
     fresh = await channel_by_id(bot.db, row["id"])
     assert fresh["spotlight"] == 1
-    assert fresh["expires_at"] == at(210)
+    assert fresh["expires_at"] == at(270)
     assert fresh["spotlit_by_marathon"] == marathon["id"]
     assert fresh["starts_at"] is None
     said = await details_of(bot.db, "marathon.spotlight_set")
     assert said["marathon_id"] == marathon["id"] and said["span_ends_at"] == at(210)
+    assert said["expires_at"] == at(270) and said["tail_minutes"] == 60
     assert said["span_starts_at"] == at(-120) and said["from_expires_at"] is None
 
     await refresh_marathon(bot, bot.guild, marathon)
@@ -81,7 +84,7 @@ async def test_a_later_expiry_stays_and_an_earlier_one_is_carried_to_the_end(bot
     await update_channel(bot.db, row["id"], expires_at=at(30))
     await refresh_marathon(bot, bot.guild, marathon)
     fresh = await channel_by_id(bot.db, row["id"])
-    assert fresh["expires_at"] == at(210) and fresh["spotlit_by_marathon"] is None
+    assert fresh["expires_at"] == at(270) and fresh["spotlit_by_marathon"] is None
     said = await details_of(bot.db, "marathon.spotlight_extended")
     assert said["from_expires_at"] == at(30) and said["marathon_id"] == marathon["id"]
     assert await count(bot, "marathon.spotlight_set") == 0
@@ -96,7 +99,7 @@ async def test_a_marathon_further_off_than_the_lead_waits_for_the_tick(bot, cog)
     cog.clock = lambda: NOW + timedelta(minutes=26)
     await cog.tick_marathon(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
     fresh = await channel_by_id(bot.db, row["id"])
-    assert fresh["spotlight"] == 1 and fresh["expires_at"] == at(160)
+    assert fresh["spotlight"] == 1 and fresh["expires_at"] == at(220)
 
 
 async def test_the_key_off_an_opted_out_channel_and_marathon_mode_off_leave_the_row(bot, cog):  # noqa: F811
@@ -161,6 +164,7 @@ async def test_the_expiry_sweep_gives_a_marathon_spotlight_back_and_purges_nothi
     marathon = await added(bot, cog, channel=row)
     gone = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
     await update_channel(bot.db, row["id"], expires_at=gone)
+    cog.clock = lambda: NOW + timedelta(minutes=271)
 
     await sweeper.sweep_expiries(bot.guild)
 
@@ -208,3 +212,98 @@ async def test_a_new_marathon_channel_row_pings_only_inside_windows_by_default(b
     assert (await quiet_row(bot, "somestreamer"))["ping_mode"] == "always"
     await bot.store.set(GUILD, "marathon_channel_ping_mode_default", "never")
     assert (await quiet_row(bot, "ladyarcaders"))["ping_mode"] == "never"
+
+
+# --- marathon-controls B: the spotlight follows the CURRENT span, plus a tail -----------------
+
+
+async def test_a_run_appended_past_the_end_keeps_it_spotlit_to_new_end_plus_60(bot, cog):  # noqa: F811
+    row = await quiet_row(bot)
+    marathon = await added(bot, cog, channel=row)
+    assert (await channel_by_id(bot.db, row["id"]))["expires_at"] == at(270)
+
+    cog.client.runs_given = [*cog.client.runs_given, a_run(6, 300)]
+    await refresh_marathon(bot, bot.guild, marathon)
+    await refresh_marathon(bot, bot.guild, marathon)
+
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert fresh["expires_at"] == at(420) and fresh["spotlit_by_marathon"] == marathon["id"]
+    assert await count(bot, "marathon.spotlight_extended") == 1
+    said = await details_of(bot.db, "marathon.spotlight_extended")
+    assert said["from_expires_at"] == at(270) and said["held"] is True
+    assert said["span_ends_at"] == at(360) and said["tail_minutes"] == 60
+
+    cog.clock = lambda: NOW + timedelta(minutes=365)
+    assert await settle_held(bot, bot.guild, fresh) == "kept"
+    cog.clock = lambda: NOW + timedelta(minutes=421)
+    assert await settle_held(bot, bot.guild, fresh) == "lifted"
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 0
+
+
+async def test_the_lift_fires_at_end_plus_tail_not_at_the_end(bot, cog):  # noqa: F811
+    row = await quiet_row(bot)
+    marathon = await added(bot, cog, channel=row)
+
+    cog.clock = lambda: NOW + timedelta(minutes=215)
+    await cog.tick_marathon(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert fresh["spotlight"] == 1 and fresh["expires_at"] == at(270)
+    assert await settle_held(bot, bot.guild, fresh) == "kept"
+    assert await count(bot, "marathon.spotlight_lifted") == 0
+
+    cog.clock = lambda: NOW + timedelta(minutes=270)
+    assert await settle_held(bot, bot.guild, fresh) == "lifted"
+    assert (await details_of(bot.db, "marathon.spotlight_lifted"))["because"] == "marathon_over"
+
+
+async def test_tail_zero_is_the_v174_end(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_spotlight_tail_minutes", 0)
+    row = await quiet_row(bot)
+    await added(bot, cog, channel=row)
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert fresh["expires_at"] == at(210)
+    cog.clock = lambda: NOW + timedelta(minutes=210)
+    assert await settle_held(bot, bot.guild, fresh) == "lifted"
+
+
+async def test_the_sweep_reads_the_current_span_and_extends_instead_of_lifting(bot, cog):  # noqa: F811
+    sweeper = Spotlight(bot)
+    bot.cogs["Spotlight"] = sweeper
+    row = await quiet_row(bot)
+    marathon = await added(bot, cog, channel=row)
+    await update_marathon(bot.db, marathon["id"], ends_at=at(400))
+    gone = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    await update_channel(bot.db, row["id"], expires_at=gone)
+    cog.clock = lambda: NOW + timedelta(minutes=280)
+
+    await sweeper.sweep_expiries(bot.guild)
+
+    fresh = await channel_by_id(bot.db, row["id"])
+    assert fresh["spotlight"] == 1 and fresh["expires_at"] == at(460)
+    assert fresh["spotlit_by_marathon"] == marathon["id"]
+    assert await count(bot, "marathon.spotlight_lifted") == 0
+    assert await count(bot, "marathon.spotlight_extended") == 1
+
+
+async def test_state_for_reads_the_row_the_marathon_holds_and_the_keys(bot, cog):  # noqa: F811
+    row = await quiet_row(bot)
+    marathon = await added(bot, cog, channel=row)
+    channel, state = await state_for(
+        bot, bot.guild, await get_marathon(bot.db, GUILD, marathon["id"])
+    )
+    assert channel["id"] == row["id"]
+    assert state["state"] == "held" and state["until"] == at(270) and state["tail_minutes"] == 60
+    await bot.store.set(GUILD, "marathon_spotlight_tail_minutes", 90)
+    _, state = await state_for(bot, bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert "plus 90 minutes" in state["line"]
+    bare = await added_bare(bot, cog)
+    assert (await state_for(bot, bot.guild, bare))[1]["state"] == "none"
+
+
+async def added_bare(bot, cog):  # noqa: F811
+    from black_bloc.cogs.content.marathon import create_marathon
+
+    made = await create_marathon(
+        bot, bot.guild, FakeActor(), name="GDQx", url="https://gamesdonequick.com/schedule/75"
+    )
+    return made.value

@@ -3441,6 +3441,24 @@ the spotlight moves below are the bot's.
 | **`MSP-c`** | While GDQ's marathon runs (GDQ is spotlight on and **kept**) | Nothing changes on the GDQ row — still **kept**, no expiry, no `marathon.spotlight_set` |
 | **`MSP-d`** | Go-live ▸ add a channel whose login a marathon feed is seeded for (`fastestfurs`, `fastpacedevents`, `ladyarcaders` — only when staff choose to, per the owner's 12:5x rule) | Its drawer's **Pings** reads *During events* and carries the help line *On a marathon channel, During events pings only while one of its marathons is running…*; a channel that is not a marathon one still starts on `spotlight_ping_mode_default` (*Always*) |
 
+## Rows `MC-a` … `MC-d` — marathon controls (branch `marathon-controls`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-controls`, NOT merged, NOT deployed** (ships with `marathon-inbox` as one deploy). Owner,
+2026-09-26 16:5x–17:3x: *"an option in each marathon to ping marathon role on or off"* (off by default), *"spotlight
+controls that match our existing spotlight controls for the channel"*, *"if the events get extended make sure we extend
+the spotlight, maybe by like an extra hour"*. Design: [`../info/marathon-controls-design.md`](../info/marathon-controls-design.md).
+Rows lettered; the conductor numbers them. Local check first: `MOCK_PORT=8813 node site/mock/server.mjs` from the
+branch, then <http://localhost:8813/events.html#marathon-1> (the **Spotlight** card under the header; Settings ▸ *Ping
+the marathon role*) and <http://localhost:8813/golive.html> ▸ GamesDoneQuick (unchanged). ⚠️ After the deploy every
+marathon pings **no role** until its switch is turned on.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MC-a`** | After the deploy, open a tracked marathon with a BaF run (SS4C #6) on the Events page and in `/event` ▸ Marathons… | Settings ▸ *Ping the marathon role* reads **Off**; the card's line reads *Pings no role* with a **Ping the role** button; its channel's Go-live ▸ Pings shows no window *from the marathon schedule*; the next 15-minute reminder in its thread mentions **no role** (`marathon.reminded` / `would_remind` with `pinged: false`) |
+| **`MC-b`** | Turn it **On** (Settings ▸ On ▸ **Save**, or the card's **Ping the role**) | The answer *…pings again…*; `web.marathon.ping_role_set` (or `marathon.ping_role_set`) with `from: false, to: true`; the channel's Pings card shows the marathon's window; the next reminder mentions the runner's role and (inside the window, spotlit) the channel's role. Off again drops the window (`marathon.window_dropped`) |
+| **`MC-c`** | While a marathon holds its channel's spotlight, let the schedule gain a run past its old end (or wait for its organiser to extend it) and press **Read it now** | The Spotlight card reads *Spotlit by this marathon until {new last run end + 60 min}*; one `marathon.spotlight_extended` with `held: true`, `tail_minutes: 60`; the row stays spotlit through the old end and is given back (`marathon.spotlight_lifted`, `because: marathon_over`) only at new end + 60 |
+| **`MC-d`** | On that marathon's Spotlight card press **Pin it while it streams**, **Extend a week**, **Save dates**, the Pings segment, **Opt out of announcements** — then open the same channel on Go-live | Each press keeps the marathon drawer open and redraws it with the same answer Go-live gives; the Go-live drawer shows exactly the same row (pin, dates, pings, announce); dates saved here make the row staff's (the state line changes to *…on staff dates*). `/event` ▸ the card ▸ **Spotlight…** ▸ **The channel's spotlight…** opens the `/golive` Channels card on that channel |
+
 ## Rows `MI-a` … `MI-f` — the marathon inbox (branch `marathon-inbox`, 2026-09-26)
 
 🔨 **BUILT on branch `marathon-inbox`, NOT merged, NOT deployed.** Owner, 2026-09-26 13:4x: *"when a marathon is detected
