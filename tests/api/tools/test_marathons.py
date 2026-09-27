@@ -37,6 +37,8 @@ ROUTES = [
     ("GET", "/api/marathons/archive"),
     ("POST", "/api/marathons/1/archive"),
     ("POST", "/api/marathons/1/restore"),
+    ("POST", "/api/marathons/1/track"),
+    ("POST", "/api/marathons/1/ignore"),
 ]
 
 
@@ -88,6 +90,7 @@ class FakeClient:
 async def cog(web, wf):
     await web.store.set(wf.GUILD_ID, "marathon_mode", "on")
     await web.store.set(wf.GUILD_ID, "marathon_channel_id", wf.TEST_CHANNEL_ID)
+    await web.store.set(wf.GUILD_ID, "marathon_track_makes_thread", False)
     await web.db.conn.execute(
         "INSERT OR REPLACE INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",
         (SKY, "skyruns", at(-9999)),
@@ -101,6 +104,12 @@ async def cog(web, wf):
 
 def add(client, **extra):
     return client.post("/api/marathons", json={"name": "AGDQ 2027", "schedule_url": URL, **extra})
+
+
+def track(client, marathon_id):
+    tracked = client.post(f"/api/marathons/{marathon_id}/track", json={})
+    assert tracked.status_code == 200, tracked.text
+    return tracked.json()
 
 
 @pytest.mark.parametrize(("method", "route"), ROUTES)
@@ -228,6 +237,10 @@ async def test_staff_post_the_board_shout_a_run_and_mark_it_done(client, sign_in
     marathon_id = body["id"]
     ours = next(one for one in body["run_list"] if one["ours"])
     theirs = next(one for one in body["run_list"] if not one["ours"])
+    untracked = client.post(f"/api/marathons/{marathon_id}/board")
+    assert untracked.status_code == 409 and untracked.json()["error"] == "not_tracked"
+    assert "is not tracked" in untracked.json()["message"]
+    track(client, marathon_id)
 
     board = client.post(f"/api/marathons/{marathon_id}/board")
     assert board.status_code == 200 and board.json()["board_message_id"]
@@ -366,6 +379,7 @@ async def test_a_done_run_can_be_marked_upcoming_and_then_live(client, sign_in, 
     body = add(client).json()
     marathon_id = body["id"]
     ours = next(one for one in body["run_list"] if one["ours"])
+    track(client, marathon_id)
     client.post(f"/api/marathons/{marathon_id}/runs/{ours['id']}/done")
 
     back = client.post(f"/api/marathons/{marathon_id}/runs/{ours['id']}/upcoming")
@@ -704,3 +718,50 @@ async def test_restore_brings_it_back_paused_and_refuses_in_words_twice(
 
     again = client.post(f"/api/marathons/{marathon_id}/restore")
     assert again.status_code == 404 and "no archived marathon" in again.json()["message"]
+
+
+async def test_track_ignore_and_back_are_routes_and_every_row_says_its_state(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    row = client.get(f"/api/marathons/{marathon_id}").json()
+    assert row["tracked_state"] == "found" and row["tracked"] is False
+    assert row["thread_url"] is None and row["tracked_at"] is None
+
+    tracked = track(client, marathon_id)
+    assert tracked["tracked_state"] == "tracked" and tracked["tracked_by_name"]
+    assert "is tracked" in tracked["message"]
+    ignored = client.post(f"/api/marathons/{marathon_id}/ignore", json={"on": True}).json()
+    assert ignored["tracked_state"] == "ignored" and ignored["tracked"] is False
+    assert ignored["ignored_at"] and "is ignored" in ignored["message"]
+    back = client.post(f"/api/marathons/{marathon_id}/ignore", json={"on": False}).json()
+    assert back["tracked_state"] == "found"
+    track(client, marathon_id)
+    off = client.post(f"/api/marathons/{marathon_id}/track", json={"on": False}).json()
+    assert off["tracked_state"] == "found" and "not tracked any more" in off["message"]
+    bad = client.post(f"/api/marathons/{marathon_id}/track", json={"on": "yes"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_on"
+    listed = client.get("/api/marathons").json()["marathons"][0]
+    assert listed["tracked_state"] == "found"
+    kinds = await wf.kinds_in(web.db)
+    for kind in ("tracked", "untracked", "ignored", "unignored"):
+        assert f"web.marathon.{kind}" in kinds
+
+
+async def test_track_refuses_in_words_when_the_channel_is_opted_out(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    row_id = await add_channel(
+        web.db, wf.GUILD_ID, "gamesdonequick", added_by=7, expires_at=None, pin=True
+    )
+    marathon_id = add(client, spotlight_id=row_id).json()["id"]
+    await web.db.conn.execute(
+        "UPDATE spotlight_channels SET marathons = 0 WHERE id = ?", (row_id,)
+    )
+    await web.db.conn.commit()
+    refused = client.post(f"/api/marathons/{marathon_id}/track", json={})
+    assert refused.status_code == 409 and refused.json()["error"] == "channel_opted_out"
+    assert "opted out of marathons" in refused.json()["message"]
+    assert (await get_marathon(web.db, wf.GUILD_ID, marathon_id))["tracked_at"] is None

@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import marathon_feeds as mf
+from ... import marathon_inbox as mi
 from ...cogs.content.marathon_events import default_mode
 from ...cogs.content.marathon_feeds import (
     channel_rows,
@@ -66,6 +67,7 @@ async def feed_row(bot: Any, guild: Any, feed: Any) -> dict[str, Any]:
             clean_mode(feed["event_mode"]) or default_mode(bot, guild.id)
         ],
         "held_by_channel": bool(feed["held_by_channel"]),
+        "auto_track": bool(feed["auto_track"]),
         "active": bool(feed["active"]),
         "hours": hours_of(bot, guild.id),
         "last_checked_at": feed["last_checked_at"],
@@ -167,7 +169,11 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(422, "bad_active", mf.BAD_ACTIVE)
         if "action" in payload and payload["action"] not in mf.ACTIONS:
             raise Refused(422, "bad_action", mf.BAD_ACTION)
-        if {"active", "action", "name", "spotlight_id", "event_mode"} & set(payload):
+        if "auto_track" in payload and not isinstance(payload["auto_track"], bool):
+            raise Refused(422, "bad_auto_track", mi.BAD_AUTO_TRACK)
+        if {"active", "action", "name", "spotlight_id", "event_mode", "auto_track"} & set(
+            payload
+        ):
             given = payload.get("spotlight_id")
             done = answered(
                 await set_feed(
@@ -180,6 +186,7 @@ def build_router(bot: Any) -> APIRouter:
                     name=payload.get("name") if "name" in payload else None,
                     spotlight_id=wanted_id(given) if given not in (None, "") else None,
                     event_mode=payload["event_mode"] or "" if "event_mode" in payload else None,
+                    auto_track=payload.get("auto_track"),
                     via=VIA_WEBSITE,
                 )
             )

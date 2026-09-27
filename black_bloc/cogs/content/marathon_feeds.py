@@ -13,6 +13,7 @@ from ... import marathon_events as me
 from ... import marathon_fastestfurs as ff
 from ... import marathon_feeds as mf
 from ... import marathon_horaro_events as hre
+from ... import marathon_inbox as mi
 from ... import marathon_ladyarcaders as la
 from ...actionlog import log_action
 from ...command_errors import AnswersErrors, SafeDynamicItem
@@ -34,10 +35,9 @@ from ...panels import (
 )
 from ...settings_store import (
     DB_UNAVAILABLE,
+    MARATHON_AUTO_TRACK_DEFAULT_KEY,
     MARATHON_FEED_ACTION_KEY,
-    MARATHON_FEED_ADDED_TEMPLATE_KEY,
     MARATHON_FEED_HOURS_KEY,
-    MARATHON_FEED_NOTICE_WHEN_KEY,
     MARATHON_FEED_RECENT_KEY,
     MARATHON_FEED_SUGGEST_TEMPLATE_KEY,
     MARATHON_FEEDS_KEY,
@@ -129,6 +129,7 @@ FEED_COLUMNS = {
     "event_mode",
     "held_by_channel",
     "seen",
+    "auto_track",
 }
 
 
@@ -180,11 +181,22 @@ async def insert_feed(
     name: str,
     action: str,
     added_by: int | None,
+    auto_track: bool = False,
 ) -> int:
     cur = await db.conn.execute(
         "INSERT INTO marathon_feeds(guild_id, source, feed_ref, spotlight_id, name, action, "
-        "added_by, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (int(guild_id), source, feed_ref, int(spotlight_id), name, action, added_by, now_iso()),
+        "added_by, added_at, auto_track) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            int(guild_id),
+            source,
+            feed_ref,
+            int(spotlight_id),
+            name,
+            action,
+            added_by,
+            now_iso(),
+            1 if auto_track else 0,
+        ),
     )
     await db.conn.commit()
     return int(cur.lastrowid)
@@ -465,17 +477,11 @@ async def run_check(
 
 
 NOTICE_PUBLISHED = "published"
-NOTICE_ADDED = "added"
-
-
-def notice_when(bot: Any, guild: Any) -> str:
-    return str(bot.store.get(guild.id, MARATHON_FEED_NOTICE_WHEN_KEY))
 
 
 async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate) -> bool:
-    """`add` mode: the marathon exactly as a staff Add makes it; ONE staff notice, now or at
-    the first read that finds runs."""
-    at_once = notice_when(bot, guild) == NOTICE_ADDED
+    """`add` mode: the marathon exactly as a staff Add makes it, with its inbox message; the
+    first read that finds runs is its schedule-out moment."""
     made = await create_marathon(
         bot,
         guild,
@@ -485,7 +491,7 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
         spotlight_id=feed["spotlight_id"],
         via=mf.VIA_FEED,
         feed_id=int(feed["id"]),
-        noticed=at_once,
+        noticed=False,
     )
     details = feed_details(feed, mf.VIA_FEED, event=candidate.ref, name=candidate.name)
     if not made.ok:
@@ -503,39 +509,19 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
         | {"marathon_id": marathon["id"], "starts_at": candidate.starts_at}
         | rehearsal_details(bot, guild),
     )
-    if not at_once:
-        async with cog_of(bot).lock(marathon["id"]):
-            await notice_published(
-                bot, guild, marathon["id"], len(await runs_of(bot.db, marathon["id"]))
-            )
-        return True
-    record = {"ref": candidate.ref, "name": candidate.name, "starts_at": candidate.starts_at}
-    record["url"] = candidate.url
-    marathon = await get_marathon(bot.db, guild.id, marathon["id"]) or marathon
-    await send_added_notice(bot, guild, feed, marathon, record, details, NOTICE_ADDED)
+    async with cog_of(bot).lock(marathon["id"]):
+        await notice_published(
+            bot, guild, marathon["id"], len(await runs_of(bot.db, marathon["id"]))
+        )
     return True
 
 
-async def send_added_notice(
-    bot: Any, guild: Any, feed: Any, marathon: Any, record: Any, details: Any, because: str
-) -> None:
-    text = words(bot, guild, MARATHON_FEED_ADDED_TEMPLATE_KEY, await fields_of(bot, feed, record))
-    embed = await notice_embed(bot, guild, marathon, feed)
-    view = people_on(added_view(bot, feed["id"], marathon), marathon["id"])
-    await post_notice(
-        bot,
-        guild,
-        feed,
-        text,
-        view,
-        details | {"marathon_id": marathon["id"], "because": because},
-        embed=embed,
-    )
-
-
 async def notice_published(bot: Any, guild: Any, marathon_id: Any, runs: int) -> bool:
-    """The held notice of a feed-made marathon, on the first read that finds runs; the
-    noticed_at claim is taken before the post (checklist 12)."""
+    """A feed-made marathon's schedule-out moment, on the first read that finds runs: the
+    noticed_at claim first (checklist 12), then the inbox message shows the runs, then the
+    feed's auto-track. Called with the marathon's lock held."""
+    from .marathon_inbox import auto_track, sync_inbox
+
     if runs < 1 or mode_of(bot, guild.id) == MODE_OFF:
         return False
     marathon = await get_marathon(bot.db, guild.id, marathon_id)
@@ -544,16 +530,22 @@ async def notice_published(bot: Any, guild: Any, marathon_id: Any, runs: int) ->
     feed = await get_feed(bot.db, guild.id, marathon["feed_id"])
     if feed is None or not await claim_notice(bot.db, marathon["id"]):
         return False
-    record = {
-        "ref": marathon["source_ref"],
-        "name": marathon["name"],
-        "starts_at": marathon["starts_at"],
-        "url": marathon["schedule_url"],
-    }
-    details = feed_details(
-        feed, mf.VIA_FEED, event=marathon["source_ref"], name=marathon["name"]
+    await log_action(
+        bot,
+        guild,
+        "marathon.inbox_published",
+        details=feed_details(
+            feed,
+            mf.VIA_FEED,
+            event=marathon["source_ref"],
+            name=marathon["name"],
+            marathon_id=marathon["id"],
+            runs=runs,
+            because=NOTICE_PUBLISHED,
+        ),
     )
-    await send_added_notice(bot, guild, feed, marathon, record, details, NOTICE_PUBLISHED)
+    await sync_inbox(bot, guild, await get_marathon(bot.db, guild.id, marathon_id), force=True)
+    await auto_track(bot, guild, marathon_id, feed)
     return True
 
 
@@ -698,6 +690,7 @@ async def seed_feeds(bot: Any, guild: Any) -> list[str]:
                     name=seed.name,
                     action=action if action in mf.ACTIONS else mf.ADD,
                     added_by=None,
+                    auto_track=bool(bot.store.get(guild.id, MARATHON_AUTO_TRACK_DEFAULT_KEY)),
                 )
                 made.append(seed.name)
             except sqlite3.IntegrityError:
@@ -780,6 +773,7 @@ async def create_feed(
             name=wanted_name,
             action=wanted_action,
             added_by=actor_id(actor),
+            auto_track=bool(bot.store.get(guild.id, MARATHON_AUTO_TRACK_DEFAULT_KEY)),
         )
     except sqlite3.IntegrityError:
         return refusal(mf.SAME_FEED.format(name=wanted_name), DUPLICATE_FEED_CODE, 409)
@@ -847,6 +841,7 @@ async def set_feed(
     name: Any = None,
     spotlight_id: Any = None,
     event_mode: Any = None,
+    auto_track: Any = None,
     via: str = VIA_DISCORD,
 ) -> Outcome:
     """PATCH in words: each field given is one change and one log row. An event mode of ""
@@ -937,6 +932,20 @@ async def set_feed(
                 said.append(
                     me.FEED_MODE_SET.format(name=fresh["name"], words=me.mode_words(shown))
                 )
+        if auto_track is not None and bool(auto_track) != bool(fresh["auto_track"]):
+            await update_feed(bot.db, fresh["id"], auto_track=1 if auto_track else 0)
+            await log_action(
+                bot,
+                guild,
+                kind_via("marathon.feed_changed", via),
+                actor=actor,
+                details=feed_details(fresh, via, auto_track=bool(auto_track)),
+            )
+            said.append(
+                mi.FEED_AUTO_SET.format(
+                    name=fresh["name"], state=mi.FEED_AUTO_WORDS[bool(auto_track)]
+                )
+            )
         if active is not None and bool(active) != bool(fresh["active"]):
             held = await opted_out_channel(bot.db, fresh["spotlight_id"]) if active else None
             if held is not None:
@@ -1442,6 +1451,7 @@ async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
         mf.head_line(feed, channel_word(channel)),
     ]
     lines.append(me.FEED_MODE_LINE.format(words=feed_mode_words(bot, guild, feed)))
+    lines.append(mi.FEED_AUTO_LINE.format(state=mi.FEED_AUTO_WORDS[bool(feed["auto_track"])]))
     ignored = mf.ignored_of(feed)
     if ignored:
         lines.append(mf.IGNORED_LINE.format(count=len(ignored)))
@@ -1458,7 +1468,8 @@ async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
         view.add_item(SuggestionPick(waiting))
     view.add_item(FeedModePick(me.clean_mode(feed["event_mode"])))
     moves = mf.feed_moves(feed)
-    add_moves(view, moves[:-2] + (me.FEED_RENAME_MOVE, me.FEED_MOVE_MOVE) + moves[-2:])
+    auto = mi.FEED_AUTO_OFF_MOVE if feed["auto_track"] else mi.FEED_AUTO_ON_MOVE
+    add_moves(view, moves[:-2] + (auto, me.FEED_RENAME_MOVE, me.FEED_MOVE_MOVE) + moves[-2:])
     return (embed, view)
 
 
@@ -1667,6 +1678,13 @@ async def feed_move(interaction: discord.Interaction, view: Any, action: str) ->
                 feed,
                 action=mf.SUGGEST if feed["action"] == mf.ADD else mf.ADD,
             ),
+        )
+    elif action in (mi.FEED_AUTO_ON, mi.FEED_AUTO_OFF):
+        wanted = action == mi.FEED_AUTO_ON
+        await feed_run(
+            interaction,
+            view,
+            lambda bot, guild, actor, feed: set_feed(bot, guild, actor, feed, auto_track=wanted),
         )
     elif action == mf.FEED_LOOK:
         await feed_run(interaction, view, look_again)

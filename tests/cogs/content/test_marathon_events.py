@@ -29,6 +29,7 @@ from tests.cogs.content.test_marathon import (  # noqa: F401
     gdq_row,
     posts,
     proposals,
+    tracked,
 )
 from tests.cogs.content.test_spotlight import (
     GUILD,
@@ -53,7 +54,7 @@ async def made(bot, mode=None, url=URL, **given):  # noqa: F811
         bot, bot.guild, FakeActor(), name="AGDQ 2027", url=url, event_mode=mode, **given
     )
     assert outcome.ok, outcome.message
-    return outcome.value
+    return await tracked(bot, outcome.value)
 
 
 async def runs(bot, marathon):  # noqa: F811
@@ -407,87 +408,63 @@ class Forum:
         return made
 
 
-async def forum_mode(bot):  # noqa: F811
+async def forum_inbox(bot):  # noqa: F811
+    """The inbox's channel is a forum: the inbox thread is one post, its opening its first
+    message (marathon-inbox §B1; this replaces the retired events-forum notice post)."""
     forum = Forum(FORUM, bot.guild)
+    forum.type = discord.ChannelType.forum
     bot.guild.channels[FORUM] = forum
-    bot.guild.channels[STAFF_ROOM] = FakeChannel(STAFF_ROOM)
-    await bot.store.set(GUILD, "staff_channel_id", STAFF_ROOM)
-    await bot.store.set(GUILD, "events_review_mode", "forum")
-    await bot.store.set(GUILD, "events_forum_channel_id", FORUM)
+    await bot.store.set(GUILD, "events_announce_channel_id", FORUM)
     return forum
 
 
-async def test_in_forum_mode_the_notice_is_a_tagged_post_in_the_events_forum(
-    bot, cog  # noqa: F811
-):
-    forum = await forum_mode(bot)
+async def test_a_notice_goes_into_the_inbox_thread_and_nowhere_else(bot, cog):  # noqa: F811
+    forum = await forum_inbox(bot)
     message, channel_id, why = await cog._send_staff(
         bot.guild, "GDQ has a new event", None, title="SGDQ 2027", what={"notice": "feed"}
     )
 
     assert why is None and len(forum.posts) == 1 and channel_id == forum.posts[0].id
     post = forum.posts[0]
-    assert post.name == "New marathon: SGDQ 2027"
-    assert [tag.name for tag in post.applied_tags] == ["marathon"]
-    assert posts(bot, STAFF_ROOM) == []
+    assert post.name == "Marathons — found and tracked"
+    assert "Every marathon Black Bloc finds" in post.messages[0].content
+    assert post.messages[-1] is message and message.content == "GDQ has a new event"
     posted = await details_of(bot.db, "marathon.notice_posted")
-    assert posted["home"] == "events" and posted["notice"] == "feed"
+    assert posted["home"] == "inbox" and posted["notice"] == "feed"
+    assert (await details_of(bot.db, "marathon.inbox_made"))["channel_id"] == FORUM
 
     await cog._send_staff(bot.guild, "again", None, title="AGDQ 2028")
-    assert len(forum.edits) == 1
+    assert len(forum.posts) == 1 and len(post.messages) == 3
 
 
-async def test_in_forum_mode_the_notice_carries_its_embed_and_rows(bot, cog):  # noqa: F811
-    forum = await forum_mode(bot)
-    seen = {}
-    made = forum.create_thread
-
-    async def recorded(name, **kwargs):
-        seen.update(kwargs)
-        return await made(name, **kwargs)
-
-    forum.create_thread = recorded
-    embed = discord.Embed(title="SGDQ 2027")
-    view = discord.ui.View(timeout=None)
-
-    await cog._send_staff(bot.guild, "text", view, title="SGDQ 2027", embed=embed)
-
-    assert seen["embed"] is embed and seen["view"] is view
-
-
-async def test_room_mode_and_the_staff_key_keep_the_notice_in_the_staff_channel(
-    bot, cog  # noqa: F811
-):
-    forum = await forum_mode(bot)
+async def test_the_retired_notice_home_key_changes_nothing(bot, cog):  # noqa: F811
+    forum = await forum_inbox(bot)
     await bot.store.set(GUILD, "marathon_notice_home", "staff")
     await cog._send_staff(bot.guild, "one", None, title="X")
-    await bot.store.set(GUILD, "marathon_notice_home", "events")
-    await bot.store.set(GUILD, "events_review_mode", "room")
-    await cog._send_staff(bot.guild, "two", None, title="Y")
-
-    assert forum.posts == [] and len(posts(bot, STAFF_ROOM)) == 2
-    assert {one["home"] for one in await rows_of(bot, "marathon.notice_posted")} == {"staff"}
+    assert len(forum.posts) == 1
+    assert {one["home"] for one in await rows_of(bot, "marathon.notice_posted")} == {"inbox"}
 
 
-async def test_shadow_still_rehearses_the_notice_in_the_shadow_home(bot, cog):  # noqa: F811
-    forum = await forum_mode(bot)
+async def test_shadow_rehearses_the_notice_in_an_inbox_in_the_shadow_home(bot, cog):  # noqa: F811
+    forum = await forum_inbox(bot)
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     await cog._send_staff(bot.guild, "rehearsed", None, title="X")
-    assert forum.posts == [] and len(posts(bot, SHADOW_CHANNEL)) == 1
+    shadow = bot.guild.channels[SHADOW_CHANNEL]
+    assert forum.posts == [] and len(shadow.threads) == 1
+    said = shadow.threads[0].messages[-1].content
+    assert said.endswith("rehearsed") and f"<#{FORUM}>" in said
     assert (await details_of(bot.db, "marathon.notice_posted"))["home"] == "shadow"
 
 
-async def test_a_forum_that_will_not_take_the_post_falls_back_to_the_staff_channel(
+async def test_a_forum_that_will_not_take_the_inbox_is_a_reason_not_a_crash(
     bot, cog  # noqa: F811
 ):
-    forum = await forum_mode(bot)
+    forum = await forum_inbox(bot)
 
     async def refuses(name, **kwargs):
         raise discord.HTTPException(type("R", (), {"status": 403, "reason": "no"})(), "no")
 
     forum.create_thread = refuses
     message, channel_id, why = await cog._send_staff(bot.guild, "text", None, title="X")
-    assert why is None and channel_id == STAFF_ROOM
-    assert (await details_of(bot.db, "marathon.notice_forum_failed"))["fallback"] == "staff"
+    assert message is None and "HTTPException" in why
     assert NOW
-

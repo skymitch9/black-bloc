@@ -4404,6 +4404,43 @@ MARATHON_RESTORE_QUESTION_KEY = "marathon_restore_question"
 MARATHON_RESTORED_SAID_KEY = "marathon_restored_said"
 MARATHON_RESTORE_TAKEN_KEY = "marathon_restore_taken"
 MARATHON_NOT_ARCHIVED_KEY = "marathon_not_archived"
+MARATHON_INBOX_CHANNEL_KEY = "marathon_inbox_channel_id"
+MARATHON_INBOX_THREAD_NAME_KEY = "marathon_inbox_thread_name"
+MARATHON_INBOX_OPENING_KEY = "marathon_inbox_opening"
+MARATHON_THREAD_CHANNEL_KEY = "marathon_thread_channel_id"
+MARATHON_THREAD_NAME_KEY = "marathon_thread_name_template"
+MARATHON_THREAD_OPENING_KEY = "marathon_thread_opening_template"
+MARATHON_TRACK_MAKES_THREAD_KEY = "marathon_track_makes_thread"
+MARATHON_AUTO_TRACK_DEFAULT_KEY = "marathon_auto_track_default"
+MARATHON_INBOX_LABEL_WHEN_KEY = "marathon_inbox_label_when"
+MARATHON_INBOX_LABEL_SOURCE_KEY = "marathon_inbox_label_source"
+MARATHON_INBOX_LABEL_CHANNEL_KEY = "marathon_inbox_label_channel"
+MARATHON_INBOX_LABEL_SCHEDULE_KEY = "marathon_inbox_label_schedule"
+MARATHON_INBOX_LABEL_EVENT_KEY = "marathon_inbox_label_event"
+MARATHON_INBOX_LABEL_STATE_KEY = "marathon_inbox_label_state"
+MARATHON_INBOX_STATE_FOUND_KEY = "marathon_inbox_state_found"
+MARATHON_INBOX_STATE_TRACKED_KEY = "marathon_inbox_state_tracked"
+MARATHON_INBOX_STATE_IGNORED_KEY = "marathon_inbox_state_ignored"
+MARATHON_INBOX_BUTTON_TRACK_KEY = "marathon_inbox_button_track"
+MARATHON_INBOX_BUTTON_IGNORE_KEY = "marathon_inbox_button_ignore"
+MARATHON_INBOX_BUTTON_UNTRACK_KEY = "marathon_inbox_button_untrack"
+MARATHON_INBOX_BUTTON_ANYWAY_KEY = "marathon_inbox_button_track_anyway"
+MARATHON_INBOX_BUTTON_SITE_KEY = "marathon_inbox_button_open_site"
+MARATHON_INBOX_BUTTON_THREAD_KEY = "marathon_inbox_button_open_thread"
+MARATHON_INBOX_NO_DATES_KEY = "marathon_inbox_no_dates"
+MARATHON_INBOX_NO_SCHEDULE_KEY = "marathon_inbox_schedule_none"
+MARATHON_INBOX_SCHEDULE_KEY = "marathon_inbox_schedule_runs"
+MARATHON_INBOX_NO_CHANNEL_KEY = "marathon_inbox_no_channel"
+MARATHON_INBOX_OPTED_OUT_KEY = "marathon_inbox_channel_opted_out"
+MARATHON_TRACK_REFUSED_KEY = "marathon_track_refused"
+MARATHON_NOT_TRACKED_KEY = "marathon_not_tracked"
+MARATHON_TRACKED_SAID_KEY = "marathon_tracked_said"
+MARATHON_UNTRACKED_SAID_KEY = "marathon_untracked_said"
+MARATHON_IGNORED_SAID_KEY = "marathon_ignored_said"
+MARATHON_UNIGNORED_SAID_KEY = "marathon_unignored_said"
+MARATHON_INBOX_AUTO_WHO_KEY = "marathon_inbox_auto_who"
+MARATHON_THREAD_FIELDS = ("marathon", "channel", "when")
+MARATHON_OPENING_FIELDS = ("marathon", "who", "url", "channel", "when")
 MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY = "marathon_channel_ping_mode_default"
 MARATHON_CHANNEL_PING_HELP_KEY = "marathon_channel_ping_help"
 MARATHON_BOARD_TEMPLATE_KEY = "marathon_board_template"
@@ -4620,16 +4657,15 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "enum",
         "add",
         "what a new feed does with an event it finds, until staff change that feed: add puts "
-        "it on the marathon list at once with a staff notice to pause or remove it; suggest "
-        "posts a staff notice with Add it and Not this one. add by default",
+        "it on the marathon list at once with its message in the marathon inbox thread (Track "
+        "and Ignore); suggest posts a notice there with Add it and Not this one. add by default",
     ),
     MARATHON_FEED_NOTICE_WHEN_KEY: (
         "enum",
         "published",
-        "when staff are told about a marathon a feed found: published — the default — adds it "
-        "to the list quietly and posts the staff notice once its schedule is posted (the first "
-        "read that finds runs); added posts the notice the moment it is found. Either way a "
-        "marathon is noticed once",
+        "retired 2026-09 — the inbox thread is the notice home: every marathon a feed finds gets "
+        "its inbox message the moment it is added, and the message is edited once its schedule "
+        "is out. Kept so old rows still read; nothing reads it any more",
     ),
     MARATHON_FEED_RECENT_KEY: (
         "int",
@@ -4710,10 +4746,35 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_NOTICE_HOME_KEY: (
         "enum",
         "events",
-        "where a new-marathon staff notice goes: events — the default — makes it a post in the "
-        "events forum (tagged marathon) while events are reviewed in a forum, else the staff "
-        "channel; staff always uses staff_channel_id. shadow still rehearses where "
-        "shadow_channel_id points",
+        "retired 2026-09 — the inbox thread is the notice home (marathon_inbox_channel_id). Kept "
+        "so old rows still read; nothing reads it any more",
+    ),
+    MARATHON_INBOX_CHANNEL_KEY: (
+        "channel",
+        None,
+        "where the marathon inbox thread is made — the one thread in which every marathon Black "
+        "Bloc finds gets a message with Track and Ignore. Blank uses events_announce_channel_id. "
+        "shadow makes it where marathon_shadow_channel_id or shadow_channel_id points",
+    ),
+    MARATHON_THREAD_CHANNEL_KEY: (
+        "channel",
+        None,
+        "where a tracked marathon's own thread is made — its board, reminders and shoutouts post "
+        "inside it. Blank uses the inbox's channel, beside the inbox thread",
+    ),
+    MARATHON_TRACK_MAKES_THREAD_KEY: (
+        "bool",
+        True,
+        "whether Track makes the marathon its own thread. on by default; off tracks it without "
+        "a thread and its posts go to marathon_channel_id as before. A marathon that already has "
+        "a thread keeps it",
+    ),
+    MARATHON_AUTO_TRACK_DEFAULT_KEY: (
+        "bool",
+        False,
+        "what a NEW marathon feed's auto-track switch starts at. off by default — Track is a "
+        "staff press; a feed with auto-track on tracks each marathon it adds the moment its "
+        "schedule is out. No existing feed is changed",
     ),
 }
 MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
@@ -4772,6 +4833,168 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "There is no archived marathon **{given}** here, so nothing was restored.",
         ("given",),
         "the refusal when Restore names a marathon that is not in the archive. It takes {given}",
+    ),
+    MARATHON_INBOX_THREAD_NAME_KEY: (
+        "Marathons — found and tracked",
+        (),
+        "what the marathon inbox thread is called when Black Bloc makes it",
+    ),
+    MARATHON_INBOX_OPENING_KEY: (
+        "Every marathon Black Bloc finds gets a message here. **Track** gives it its own thread "
+        "for its board, reminders and shoutouts; **Ignore** keeps it on the list and quiet.",
+        (),
+        "the first message in the marathon inbox thread, saying what the thread is for",
+    ),
+    MARATHON_THREAD_NAME_KEY: (
+        "{marathon}",
+        MARATHON_THREAD_FIELDS,
+        "what a tracked marathon's own thread is called. It takes {marathon} {channel} {when}",
+    ),
+    MARATHON_THREAD_OPENING_KEY: (
+        "{marathon} — tracked by {who}. The board, reminders and shoutouts for BaF runs post "
+        "here. Schedule: {url}",
+        MARATHON_OPENING_FIELDS,
+        "the first message in a tracked marathon's own thread. It takes {marathon} {who} {url} "
+        "{channel} {when}",
+    ),
+    MARATHON_INBOX_LABEL_WHEN_KEY: ("When", (), "the When label on a marathon's inbox message"),
+    MARATHON_INBOX_LABEL_SOURCE_KEY: (
+        "Source",
+        (),
+        "the Source label on a marathon's inbox message (the feed or the site it is read from)",
+    ),
+    MARATHON_INBOX_LABEL_CHANNEL_KEY: (
+        "Channel",
+        (),
+        "the Channel label on a marathon's inbox message (the Twitch channel it airs on)",
+    ),
+    MARATHON_INBOX_LABEL_SCHEDULE_KEY: (
+        "Schedule",
+        (),
+        "the Schedule label on a marathon's inbox message (its runs and BaF runs)",
+    ),
+    MARATHON_INBOX_LABEL_EVENT_KEY: (
+        "Event",
+        (),
+        "the Event label on a marathon's inbox message (none, marathon, runs or both)",
+    ),
+    MARATHON_INBOX_LABEL_STATE_KEY: (
+        "State",
+        (),
+        "the State label on a marathon's inbox message (found, tracked, ignored or archived)",
+    ),
+    MARATHON_INBOX_STATE_FOUND_KEY: (
+        "Found {when} · not tracked",
+        ("when",),
+        "the State line of a marathon nobody has tracked or ignored yet. It takes {when}",
+    ),
+    MARATHON_INBOX_STATE_TRACKED_KEY: (
+        "Tracked by {who} {when}",
+        ("who", "when"),
+        "the State line of a tracked marathon. {who} is the staff member, or the feed when it "
+        "tracked itself. It takes {who} {when}",
+    ),
+    MARATHON_INBOX_STATE_IGNORED_KEY: (
+        "Ignored by {who} {when}",
+        ("who", "when"),
+        "the State line of an ignored marathon — on the list, read, and posting nothing. It "
+        "takes {who} {when}",
+    ),
+    MARATHON_INBOX_AUTO_WHO_KEY: (
+        "the {feed} feed",
+        ("feed",),
+        "who a marathon was tracked by when its feed's auto-track tracked it — the {who} of the "
+        "State line and of its thread's first message. It takes {feed}",
+    ),
+    MARATHON_INBOX_BUTTON_TRACK_KEY: (
+        "Track",
+        (),
+        "the Track button on a marathon's inbox message",
+    ),
+    MARATHON_INBOX_BUTTON_IGNORE_KEY: (
+        "Ignore",
+        (),
+        "the Ignore button on a marathon's inbox message",
+    ),
+    MARATHON_INBOX_BUTTON_UNTRACK_KEY: (
+        "Untrack",
+        (),
+        "the Untrack button on a tracked marathon's inbox message",
+    ),
+    MARATHON_INBOX_BUTTON_ANYWAY_KEY: (
+        "Track anyway",
+        (),
+        "the button on an ignored marathon's inbox message that tracks it after all",
+    ),
+    MARATHON_INBOX_BUTTON_SITE_KEY: (
+        "Open on the site",
+        (),
+        "the link button on a marathon's inbox message that opens its drawer on the Events page",
+    ),
+    MARATHON_INBOX_BUTTON_THREAD_KEY: (
+        "Open the thread",
+        (),
+        "the link button on a tracked marathon's inbox message that opens its own thread",
+    ),
+    MARATHON_INBOX_NO_DATES_KEY: (
+        "dates not published yet",
+        (),
+        "the When line of a marathon whose schedule has no dates yet",
+    ),
+    MARATHON_INBOX_NO_SCHEDULE_KEY: (
+        "not out yet",
+        (),
+        "the Schedule line of a marathon whose schedule has no runs yet",
+    ),
+    MARATHON_INBOX_SCHEDULE_KEY: (
+        "{runs} runs · {baf} BaF",
+        ("runs", "baf"),
+        "the Schedule line of a marathon whose schedule is out. It takes {runs} {baf}",
+    ),
+    MARATHON_INBOX_NO_CHANNEL_KEY: (
+        "no channel row",
+        (),
+        "the Channel line of a marathon that airs on no channel Black Bloc watches",
+    ),
+    MARATHON_INBOX_OPTED_OUT_KEY: (
+        "opted out of marathons",
+        (),
+        "added to the Channel line when that channel row is opted out of marathons",
+    ),
+    MARATHON_TRACK_REFUSED_KEY: (
+        "{marathon}'s channel is opted out of marathons — opt it back in on Go-live first, so "
+        "nothing was tracked.",
+        ("marathon",),
+        "the refusal when Track is pressed on a marathon whose channel is opted out of "
+        "marathons. It takes {marathon}",
+    ),
+    MARATHON_NOT_TRACKED_KEY: (
+        "**{marathon}** is not tracked, so it posts nothing — press **Track** first.",
+        ("marathon",),
+        "the refusal when staff ask an untracked marathon to post (the board, a shoutout). It "
+        "takes {marathon}",
+    ),
+    MARATHON_TRACKED_SAID_KEY: (
+        "**{marathon}** is tracked — its board, reminders and shoutouts post in {where}.",
+        ("marathon", "where"),
+        "what staff are told once Track has tracked a marathon. It takes {marathon} {where}",
+    ),
+    MARATHON_UNTRACKED_SAID_KEY: (
+        "**{marathon}** is not tracked any more — it posts nothing; its thread is kept, archived.",
+        ("marathon",),
+        "what staff are told once Untrack has stopped a marathon's posts. It takes {marathon}",
+    ),
+    MARATHON_IGNORED_SAID_KEY: (
+        "**{marathon}** is ignored — it stays on the list and is read, and posts nothing. "
+        "**Track anyway** changes that.",
+        ("marathon",),
+        "what staff are told once Ignore has quieted a marathon. It takes {marathon}",
+    ),
+    MARATHON_UNIGNORED_SAID_KEY: (
+        "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing "
+        "until someone presses **Track**.",
+        ("marathon",),
+        "what staff are told once an ignored marathon is put back to found. It takes {marathon}",
     ),
     MARATHON_BOARD_TEMPLATE_KEY: (
         "**{marathon}** — BaF on the schedule ({count}), {starts} to {ends}. {url}",
@@ -4872,8 +5095,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_FEED_ADDED_TEMPLATE_KEY: (
         "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.",
         MARATHON_FEED_FIELDS,
-        "the staff notice when a feed adds a new event to the marathon list; it carries Pause "
-        "it and Remove it. It takes {feed} {event} {when} {relative} {url} {channel}",
+        "the line above a feed-found marathon's message in the marathon inbox thread, where "
+        "Track and Ignore are. It takes {feed} {event} {when} {relative} {url} {channel}",
     ),
     MARATHON_FEED_SUGGEST_TEMPLATE_KEY: (
         "{feed} has a new event: **{event}**, {when} ({relative}). Add it?",
@@ -4896,7 +5119,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_NOTICE_TITLE_KEY: (
         "New marathon: {name}",
         ("name",),
-        "the name of the events-forum post a new-marathon notice becomes. It takes {name}",
+        "retired 2026-09 — notices post in the marathon inbox thread, not as events-forum posts. "
+        "Kept so old rows still read; nothing reads it any more. It takes {name}",
     ),
     MARATHON_SPOTLIGHT_NOTE_KEY: (
         "{name} at {marathon}",
