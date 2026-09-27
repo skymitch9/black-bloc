@@ -3096,7 +3096,7 @@ SHADOW_HOME_WORDS = {
     "posts": "posts such as the welcome post and the rules",
     "golive": "spotlight announcements",
     "marathon": "the marathon board, reminders, shoutouts and staff notices",
-    "marathon_public": "a marathon's public highlights of BaF runners",
+    "marathon_public": "a marathon's public highlights of BaF runners and its public reminders",
     "poll": "polls and their results",
     "birthday": "birthday wishes",
 }
@@ -4475,6 +4475,11 @@ MARATHON_CONTROLS_STARTED_KEY = "marathon_controls_started_said"
 MARATHON_CONTROLS_ALREADY_ON_KEY = "marathon_controls_already_on"
 MARATHON_CONTROLS_HIGHLIGHT_ON_KEY = "marathon_controls_highlight_on"
 MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY = "marathon_controls_highlight_off"
+MARATHON_CONTROLS_PING_ON_KEY = "marathon_controls_ping_on"
+MARATHON_CONTROLS_PING_OFF_KEY = "marathon_controls_ping_off"
+MARATHON_REMINDER_CHANNEL_KEY = "marathon_reminder_channel_id"
+MARATHON_PUBLIC_REMINDERS_KEY = "marathon_public_reminders"
+MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY = "marathon_public_reminder_template"
 MARATHON_PUBLIC_CHANNEL_KEY = "marathon_public_channel_id"
 MARATHON_PUBLIC_DEFAULT_KEY = "marathon_public_highlight_default"
 MARATHON_PUBLIC_TEMPLATE_KEY = "marathon_public_template"
@@ -4846,6 +4851,21 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "whether a NEW marathon highlights each BaF run publicly the moment it goes live. off "
         "by default; each marathon's own Auto-highlight switch changes it after, and "
         "marathons already on the list keep their own",
+    ),
+    MARATHON_REMINDER_CHANNEL_KEY: (
+        "channel",
+        None,
+        "where the public copy of a tracked marathon's reminders goes (the *is up in 15 "
+        "minutes* posts members see; the staff thread keeps its own copy). Blank uses the "
+        "go-live channel. Its own row: it never moves the go-live spotlight post or the public "
+        "highlights",
+    ),
+    MARATHON_PUBLIC_REMINDERS_KEY: (
+        "bool",
+        True,
+        "whether every reminder of a tracked marathon also posts publicly, in "
+        "marathon_reminder_channel_id. on by default; off keeps reminders in the staff thread "
+        "only",
     ),
     MARATHON_ARCHIVE_AFTER_DAYS_KEY: (
         "int",
@@ -5256,6 +5276,24 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the thread controls' auto-highlight button while BaF runs are highlighted only when "
         "staff press Highlight",
+    ),
+    MARATHON_CONTROLS_PING_ON_KEY: (
+        "Ping the marathon role: on · turn off",
+        (),
+        "the thread controls' ping button while the marathon's reminders, shoutouts and public "
+        "posts mention the runner's and the channel's ping roles",
+    ),
+    MARATHON_CONTROLS_PING_OFF_KEY: (
+        "Ping the marathon role: off · turn on",
+        (),
+        "the thread controls' ping button while the marathon mentions no role",
+    ),
+    MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY: (
+        "{member} {part} **{game}** ({category}) on **{marathon}** {in} — {when}. {url}",
+        MARATHON_REMINDER_FIELDS,
+        "the public copy of a reminder before a BaF run, posted in marathon_reminder_channel_id "
+        "(the staff thread's copy is marathon_reminder_template). It takes {member} {game} "
+        "{category} {in} {when} {url} {marathon} {part}",
     ),
     MARATHON_PUBLIC_TEMPLATE_KEY: (
         "**{runner}** {part} **{game}** — {category} on **{marathon}** · {when} ({relative}) · "

@@ -52,7 +52,10 @@ def card_move(bot: Any, guild_id: int, marathon: Any) -> Any:
 async def set_ping_role(
     bot: Any, guild: Any, actor: Any, marathon: Any, given: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
-    """Off: no role in its reminders or shoutouts and no ping window; on: both come back."""
+    """Off: no role in its reminders or shoutouts and no ping window; on: both come back. The
+    thread controls re-render after, from any door."""
+    from .marathon_thread_controls import controls_changed
+
     wanted = mp.clean_ping_role(given)
     if wanted is None:
         return refusal(mp.BAD_PING_ROLE, mp.BAD_PING_ROLE_CODE, 422)
@@ -82,6 +85,7 @@ async def set_ping_role(
             "via": via,
         },
     )
+    await controls_changed(bot, guild, fresh["id"])
     key = MARATHON_PING_ROLE_ON_SAID_KEY if wanted else MARATHON_PING_ROLE_OFF_SAID_KEY
     return Outcome(
         True,

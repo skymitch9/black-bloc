@@ -135,6 +135,7 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         "BaF run events: off · turn on",
         "Spotlight: on · stop",
         "Auto-highlight BaF runners when live: off · turn on",
+        "Ping the marathon role: off · turn on",
     ]
     ids = [one.custom_id for one in buttons(message)]
     assert ids == [
@@ -142,6 +143,7 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         f"marathon:controls:{marathon['id']}:runs:on",
         f"marathon:controls:{marathon['id']}:spotlight:off",
         f"marathon:controls:{marathon['id']}:highlight:on",
+        f"marathon:controls:{marathon['id']}:ping:on",
     ]
     assert message.kwargs["allowed_mentions"].users is False
     posted = await details_of(bot.db, "marathon.controls_posted")
@@ -395,6 +397,65 @@ async def test_the_follow_switch_from_the_drawer_re_renders_the_message(bot, cog
     await set_spotlight_mode(bot, bot.guild, FakeActor(), marathon, "off", via="website")
 
     assert labels(message)[2] == "Spotlight: off · start"
+
+
+# --- the ping button ----------------------------------------------------------------------------
+
+
+async def test_the_fifth_button_flips_ping_role_through_its_writer_and_relabels(bot, cog):
+    marathon = await tracked_marathon(bot, cog)
+    message = controls_in(the_thread(bot))[0]
+    assert (await fresh(bot, marathon))["ping_role"] == 0
+
+    said = await pressed(bot, marathon, "ping", "on")
+
+    assert said.ok and "pings again" in said.message
+    assert (await fresh(bot, marathon))["ping_role"] == 1
+    assert labels(message)[4] == "Ping the marathon role: on · turn off"
+    assert buttons(message)[4].custom_id == f"marathon:controls:{marathon['id']}:ping:off"
+    logged = await details_of(bot.db, "marathon.ping_role_set")
+    assert (logged["from"], logged["to"]) == (False, True)
+
+    again = await pressed(bot, marathon, "ping", "off")
+    assert again.ok and (await fresh(bot, marathon))["ping_role"] == 0
+    assert labels(message)[4] == "Ping the marathon role: off · turn on"
+
+
+async def test_a_ping_change_from_the_drawer_re_renders_the_fifth_button(bot, cog):
+    from black_bloc.cogs.content.marathon_ping import set_ping_role
+
+    marathon = await tracked_marathon(bot, cog)
+    message = controls_in(the_thread(bot))[0]
+
+    await set_ping_role(bot, bot.guild, FakeActor(), marathon, "on", via="website")
+
+    assert labels(message)[4] == "Ping the marathon role: on · turn off"
+
+
+async def test_the_ping_labels_are_keys(bot, cog):
+    marathon = await tracked_marathon(bot, cog)
+    message = controls_in(the_thread(bot))[0]
+    await bot.store.set(GUILD, "marathon_controls_ping_off", "Role pings: off")
+
+    await controls.refresh_controls(bot, bot.guild, marathon["id"])
+
+    assert labels(message)[4] == "Role pings: off"
+
+
+async def test_the_ping_button_is_staff_only(bot, cog):
+    marathon = await tracked_marathon(bot, cog)
+    button = await controls.ControlButton.from_custom_id(
+        None, None, re.fullmatch(mtc.TEMPLATE, mtc.custom_id(marathon["id"], "ping", "on"))
+    )
+    bot.store.is_staff = lambda member: False
+    stranger = FakeInteraction(bot, Member(42), bot.guild)
+    await button.on_click(stranger)
+    assert "staff only" in stranger.sent and (await fresh(bot, marathon))["ping_role"] == 0
+
+    bot.store.is_staff = lambda member: True
+    lead = FakeInteraction(bot, FakeActor(), bot.guild)
+    await button.on_click(lead)
+    assert "pings again" in lead.sent and (await fresh(bot, marathon))["ping_role"] == 1
 
 
 # --- the buttons ---------------------------------------------------------------------------------

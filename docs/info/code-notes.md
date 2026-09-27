@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public reminders + the ping button* (branch `marathon-public-reminders`, off `main` `59e71860`, keyed against `fe273193`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public highlights* (branch `marathon-public-highlights`, off `main` `f8494278`, keyed against `e43f8482`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon runner posts* (branch `marathon-runner-posts`, off `main` `997c0be2`, keyed against `6fc13f46`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon thread controls* (branch `marathon-thread-controls`, off `main` `28ad1e1c`, keyed against `e66e3a32`). Before that:
@@ -8997,3 +8998,20 @@ Design: [`marathon-public-highlights-design.md`](marathon-public-highlights-desi
 | `black_bloc/storage/db.py:1233` | `marathons.public_highlight`, `marathon_runs.public_message_id` / `public_channel_id` / `public_removed`, schema 75 (Deviation 1). |
 | `black_bloc/logkinds.py:305` | The six highlight kinds are routine; `public_highlight_failed` is IMPORTANT by suffix. |
 | `black_bloc/settings_store.py:3099` | `marathon_public` is its own rehearsal home (Deviation 10). |
+
+## Marathon public reminders + the ping button (branch `marathon-public-reminders`, 2026-09-26)
+
+Design: [`marathon-public-highlights-design.md`](marathon-public-highlights-design.md) ▸ *Follow-up*. Keyed against `fe273193`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/cogs/content/marathon_public_reminders.py:24` `reminder_channel` | The one resolver: `marathon_reminder_channel_id`, else `golive_channel_id`. Never reads `marathon_public_channel_id` — the three keys are independent. |
+| `black_bloc/cogs/content/marathon_public_reminders.py:37` `staff_went_to` | The staff copy's REAL destination: `_send` puts a thread-less marathon's copy at `_target` (the marathon channel in mode on, a rehearsal home in shadow), which stands for `_home`. Equal to the reminder channel → the public copy is skipped (Deviation 3). |
+| `black_bloc/cogs/content/marathon_public_reminders.py:47` `post_public_reminder` | Wrapped: a failure is a log line and never breaks the staff copy. No message id stored — it rides `reminders_sent`, which `remind` writes before either send. |
+| `black_bloc/cogs/content/marathon.py:2424` `_post_reminder` | The public copy after the staff send, with the same `roles` (so pings follow `ping_role` via `_ping_roles` and the ping mark). Import inside the method (the module imports the cog). |
+| `black_bloc/cogs/content/marathon_public.py:114` `shadowed` · `:169` `send_public` | `home=` added so the reminder copy uses the same sender (guard, shadow home `marathon_public`, note naming the real channel); blank keeps the highlight's channel. |
+| `black_bloc/marathon_thread_controls.py:82` `switch` · `:86` `controls` | Highlight and ping are both on/off switches carrying their target; `ping` is the fifth. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:97` · `:386` | Rendered from `marathon_ping.pings_role`; a press goes to `set_ping_role` (the one writer). |
+| `black_bloc/cogs/content/marathon_ping.py:57` · `:88` | `set_ping_role` calls `controls_changed` after the lock is released, so the drawer, PATCH and `/event` card re-render the pinned message. Import inside (thread controls import the ping module). |
+| `black_bloc/logkinds.py:311` | `public_reminded` / `public_reminder_skipped` routine; `would_remind_public` shadow by shape; `public_reminder_failed` IMPORTANT by suffix. |
+| `black_bloc/settings_store.py:3099` · `:4855` · `:5280` | The `marathon_public` home now covers public reminders (Deviation 4); the channel + switch rows; the two labels + public template. |

@@ -180,7 +180,7 @@ const SPOTLIT_WORDS = { held: 'spotlit', held_other: 'spotlit', kept: 'spotlit',
 const NOT_SPOTLIT = 'not spotlit';
 const PING_FIELD = 'Ping the marathon role';
 const PING_CHOICES = [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }];
-const PING_HELP = 'On: its run reminders and shoutouts mention the runner’s ping role and its channel’s, '
+const PING_HELP = 'On: its run reminders (the thread’s and the public copy), shoutouts and public highlights mention the runner’s ping role and its channel’s, '
   + 'and its channel gets a ping window while it runs. Off (the default): they still post, with no mention. '
   + 'marathon_ping_role_default decides where a new marathon starts.';
 const HIGHLIGHT_FIELD = 'Auto-highlight BaF runners when live';

@@ -308,6 +308,8 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.public_highlight_removed",
         "marathon.public_highlight_lost",
         "marathon.public_highlight_set",
+        "marathon.public_reminded",
+        "marathon.public_reminder_skipped",
         "marathon.untracked",
         "marathon.ignored",
         "marathon.unignored",
