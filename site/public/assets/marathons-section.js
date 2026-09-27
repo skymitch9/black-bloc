@@ -11,6 +11,7 @@ import {
   dayTitle,
   daysOf,
   entryFor,
+  feedSearchFields,
   feedReading,
   headerCounts,
   headerReading,
@@ -226,7 +227,8 @@ const PICK_HELP = {
   horaro: 'Every schedule of one horaro.net event — give its slug below.',
   oengus: 'Every marathon on oengus.io that streams on this channel’s Twitch — nothing to type.',
   horaro_events: 'Every horaro.net event that streams on this channel’s Twitch, found by searching '
-    + 'event names for the Name below — Fast Paced Events’ are “Fast Pace for …”, so “Fast Pace”.',
+    + 'event names for the Name below — Fast Paced Events’ are “Fast Pace for …”, so “Fast Pace”. '
+    + 'Once added, its drawer takes several search words and the horaro.net account that owns the events.',
   fastestfurs: 'Every event on Fastest Furs’ own list at fastestfurs.com — nothing to type.',
   ladyarcaders: 'Lady Arcaders’ next events on ladyarcaders.com, found by trying the next event '
     + 'numbers — nothing to type.',
@@ -1171,6 +1173,15 @@ function suggestionCard(feed, record, say, { inDrawer = false } = {}) {
   ]);
 }
 
+function feedSearchInput(feed, say, one) {
+  const input = el('input', { class: 'input', type: 'text', value: one.value, placeholder: one.placeholder });
+  input.addEventListener('change', () => {
+    const wanted = input.value.trim();
+    if (wanted !== one.value) feedDrawerStep(feed, say, () => send(`/api/marathons/feeds/${feed.id}`, 'PATCH', { [one.key]: wanted }));
+  });
+  return field(one.label, input, one.help);
+}
+
 function feedDrawer(feed, message) {
   const say = notice();
   if (message) say.say(message, 'ok');
@@ -1225,6 +1236,7 @@ function feedDrawer(feed, message) {
       : null,
     field('Event', mode, FEED_MODE_HELP),
     field(AUTO_FIELD, auto, AUTO_HELP),
+    ...feedSearchFields(feed).map((one) => feedSearchInput(feed, say, one)),
     ...(feed.suggestions || []).map((one) => suggestionCard(feed, one, say, { inDrawer: true })),
     feed.seen_count ? el('p', { class: 'field-help mx-line' }, boldParts(said({ horaro_events: FEED_SEEN_NOTE_HORARO, ladyarcaders: FEED_PROBE_NOTE }[feed.source] || FEED_SEEN_NOTE, { count: feed.seen_count }))) : null,
     line(FEED_IGNORED_NOTE),

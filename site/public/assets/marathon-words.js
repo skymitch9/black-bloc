@@ -153,6 +153,22 @@ export function feedReading(feed, now = Date.now()) {
   return { text: bits.join(' · '), tone: null };
 }
 
+export const FEED_WORDS_FIELD = 'Search words';
+export const FEED_OWNER_FIELD = 'Owner';
+const FEED_WORDS_HELP = 'What horaro.net event names are searched for, commas between them — at most five. '
+  + 'Blank searches by the feed’s name.';
+const FEED_OWNER_HELP = 'The horaro.net account that makes the events. Every event it owns is kept, even '
+  + 'one that does not name this channel’s Twitch. Blank keeps only the ones that do.';
+
+/** A horaro.net events feed's two drawer fields, `{ key, label, value, placeholder, help }`; none for other kinds. */
+export function feedSearchFields(feed) {
+  if (!feed || feed.source !== 'horaro_events') return [];
+  return [
+    { key: 'words', label: FEED_WORDS_FIELD, value: (feed.words || []).join(', '), placeholder: (feed.searches || []).join(', '), help: FEED_WORDS_HELP },
+    { key: 'owner', label: FEED_OWNER_FIELD, value: feed.owner || '', placeholder: '', help: FEED_OWNER_HELP },
+  ];
+}
+
 export function sourcesTitle(feeds, { enabled = true } = {}, now = Date.now()) {
   const rows = feeds || [];
   const head = said(SOURCES_TITLE, { count: rows.length, s: rows.length === 1 ? '' : 's' });

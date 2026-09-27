@@ -13,6 +13,7 @@ import {
   datesWords,
   drawerParts,
   entryFor,
+  feedSearchFields,
   runChip,
   runLength,
   slotMatches,
@@ -192,4 +193,18 @@ test('the inbox state reads found, tracked or ignored, and draws only the valid 
   assert.deepEqual(trackMoves({ tracked_state: 'tracked' }), ['untrack']);
   assert.deepEqual(trackMoves({ tracked_state: 'ignored' }), ['anyway']);
   assert.deepEqual(trackMoves({ tracked_state: 'archived' }), []);
+});
+
+test('a horaro.net events feed draws an Owner and a Search words field; other feeds draw none', () => {
+  const rgl = { source: 'horaro_events', owner: 'RGLtvMarathons', words: ['RGL', 'RGLtv', 'Retrothon'], searches: ['RGL', 'RGLtv', 'Retrothon'] };
+  const fields = feedSearchFields(rgl);
+  assert.deepEqual(fields.map((one) => [one.key, one.label, one.value]), [
+    ['words', 'Search words', 'RGL, RGLtv, Retrothon'],
+    ['owner', 'Owner', 'RGLtvMarathons'],
+  ]);
+  assert.ok(fields.every((one) => one.help));
+  const blank = feedSearchFields({ source: 'horaro_events', owner: '', words: [], searches: ['Fast Pace'] });
+  assert.deepEqual(blank.map((one) => [one.value, one.placeholder]), [['', 'Fast Pace'], ['', '']]);
+  assert.deepEqual(feedSearchFields({ source: 'gdq', owner: null, words: null }), []);
+  assert.deepEqual(feedSearchFields(null), []);
 });

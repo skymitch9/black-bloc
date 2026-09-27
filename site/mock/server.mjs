@@ -6530,6 +6530,60 @@ function feedSuggestionRow(one) {
   return { ref: one.ref, name: one.name, starts_at: one.starts_at, url: one.url, found_at: one.found_at, dismissed_at: one.dismissed_at };
 }
 
+const FEED_WORDS_LIMIT = 5;
+const FEED_WORD_LENGTH = 40;
+const FEED_OWNER_LENGTH = 60;
+
+function feedSearch(feed) {
+  const found = (feed.seen || []).find((one) => one && typeof one === 'object' && one.search && typeof one.search === 'object');
+  return { owner: found ? String(found.search.owner || '') : '', words: found ? [...(found.search.words || [])] : [] };
+}
+
+function feedSearches(feed) {
+  const { words } = feedSearch(feed);
+  const name = String(feed.name || '').trim().replace(/\s+/g, ' ');
+  return words.length ? words : (name ? [name] : []);
+}
+
+function feedWordsOf(given) {
+  const raw = Array.isArray(given) ? given : String(given || '').split(/[,\n]/);
+  const found = new Map();
+  for (const one of raw) {
+    const word = String(one ?? '').trim().replace(/\s+/g, ' ');
+    if (word.length > FEED_WORD_LENGTH) return null;
+    if (word && !found.has(word.toLowerCase())) found.set(word.toLowerCase(), word);
+  }
+  return found.size <= FEED_WORDS_LIMIT ? [...found.values()] : null;
+}
+
+function feedSetSearch(feed, body, said) {
+  if (!('owner' in body) && !('words' in body)) return;
+  for (const key of ['owner', 'words']) {
+    const given = body[key];
+    if (given !== null && given !== undefined && typeof given !== 'string' && !Array.isArray(given)) throw new Refused(422, 'bad_words', 'Give the owner as words and the search words as words or a list, so nothing was changed.');
+  }
+  if (feed.source !== 'horaro_events') throw new Refused(409, 'not_horaro_events', marathonSaid('marathon_feed_search_refused', { feed: feed.name }));
+  const current = feedSearch(feed);
+  const changed = {};
+  if ('words' in body) {
+    const words = feedWordsOf(body.words);
+    if (words === null) throw new Refused(422, 'bad_words', marathonSaid('marathon_feed_words_bad', { feed: feed.name, most: FEED_WORDS_LIMIT, longest: FEED_WORD_LENGTH }));
+    if (words.join('\n') !== current.words.join('\n')) changed.words = words;
+  }
+  if ('owner' in body) {
+    const owner = String(body.owner || '').trim().replace(/\s+/g, ' ');
+    if (owner.length > FEED_OWNER_LENGTH) throw new Refused(422, 'bad_owner', marathonSaid('marathon_feed_owner_bad', { feed: feed.name, longest: FEED_OWNER_LENGTH }));
+    if (owner !== current.owner) changed.owner = owner;
+  }
+  if (!Object.keys(changed).length) return;
+  const search = { ...current, ...changed };
+  const kept = (feed.seen || []).filter((one) => !(one && typeof one === 'object' && one.search));
+  feed.seen = search.owner || search.words.length ? [{ search }, ...kept] : kept;
+  logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, ...changed, via: 'website' } });
+  if ('words' in changed) said.push(changed.words.length ? marathonSaid('marathon_feed_words_said', { feed: feed.name, words: changed.words.join(', ') }) : marathonSaid('marathon_feed_words_cleared', { feed: feed.name }));
+  if ('owner' in changed) said.push(changed.owner ? marathonSaid('marathon_feed_owner_said', { feed: feed.name, owner: changed.owner }) : marathonSaid('marathon_feed_owner_cleared', { feed: feed.name }));
+}
+
 function feedRow(feed) {
   const channel = state.golive.spotlights.find((one) => one.id === feed.spotlight_id);
   return {
@@ -6556,7 +6610,10 @@ function feedRow(feed) {
     trouble: feed.last_ok === 0 ? `could not be checked since ${feed.last_checked_at} \u2014 ${feed.last_error}` : null,
     ignored: [...feed.ignored],
     ignored_count: feed.ignored.length,
-    seen_count: (feed.seen || []).length,
+    seen_count: (feed.seen || []).filter((one) => typeof one === 'string' || (one && one.ref)).length,
+    owner: feed.source === 'horaro_events' ? feedSearch(feed).owner : null,
+    words: feed.source === 'horaro_events' ? feedSearch(feed).words : null,
+    searches: feed.source === 'horaro_events' ? feedSearches(feed) : null,
     suggestions: feed.suggested.filter((one) => !one.dismissed_at).map(feedSuggestionRow),
     dismissed: feed.suggested.filter((one) => one.dismissed_at).map(feedSuggestionRow),
     marathons: state.marathons.filter((one) => one.feed_id === feed.id).map((one) => ({ id: one.id, name: one.name, starts_at: one.starts_at })),
@@ -6649,6 +6706,7 @@ route('PATCH', '/api/marathons/feeds/:feed_id', async (context) => {
   if ('active' in body && typeof body.active !== 'boolean') throw new Refused(422, 'bad_active', 'Say true to check this feed or false to pause it, so nothing was changed.');
   if ('action' in body && !['add', 'suggest'].includes(body.action)) throw new Refused(422, 'bad_action', 'Say add or suggest for what a feed does with a new event, so nothing was changed.');
   if ('auto_track' in body && typeof body.auto_track !== 'boolean') throw new Refused(422, 'bad_auto_track', 'Say true or false for auto-track, so nothing was changed.');
+  feedSetSearch(feed, body, said);
   if ('auto_track' in body && body.auto_track !== Boolean(feed.auto_track)) {
     feed.auto_track = body.auto_track;
     logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, auto_track: body.auto_track, via: 'website' } });
@@ -6733,10 +6791,11 @@ route('POST', '/api/marathons/feeds/:feed_id/look', (context) => {
   const dropped = feed.suggested.filter((one) => one.dismissed_at);
   feed.suggested = feed.suggested.filter((one) => !one.dismissed_at);
   for (const one of dropped) feed.suggested.push({ ...one, dismissed_at: null, found_at: new Date().toISOString() });
-  const reread = (feed.seen || []).length;
+  const reread = (feed.seen || []).filter((one) => typeof one === 'string' || (one && one.ref)).length;
   feedCheck(feed);
   logAction('web.marathon.feed_looked', { details: { feed_id: feed.id, forgot: dropped.map((one) => one.ref), reread, via: 'website' } });
   let again = reread ? ` It read every Oengus marathon\u2019s record again (${reread} remembered before).` : '';
+  if (reread && feed.source === 'horaro_events') again = ` It read every horaro.net event it had looked at again (${reread} remembered before).`;
   if (reread && feed.source === 'ladyarcaders') again = ` It asked ladyarcaders.com about the next events again (${reread} remembered before).`;
   return { ...feedRow(feed), message: `**${feed.name}** forgot ${dropped.length} dismissed event(s) and looked again.${again}` };
 });
