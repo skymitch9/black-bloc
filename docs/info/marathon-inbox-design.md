@@ -1,5 +1,7 @@
 # The marathon inbox — one master thread in events where detected marathons are managed, and a thread per marathon once it is tracked
 
+> 🔨 **2026-09-26 — BUILT on branch `marathon-inbox` (off `main` `56056053`, schema 71, keys 543, routes 261), NOT merged, NOT deployed** — the numbered Deviations and *What was NOT verified* at the foot. ⚠️ **Live-behaviour change on deploy: an untracked marathon posts NOTHING** (board, reminders, shoutouts, next-event notice) — SS4C (live now, ends 2026-09-28) and Fall Fest (2026-10-08) go quiet until staff press **Track** (owner D1).
+
 > **Audience:** the build agent (a cloud agent under an Opus 5.5 conductor, per the owner 2026-09-26 14:3x) and reviewers.
 > **Status:** TRACKED · 📐 **DESIGN (Fable, 2026-09-26 14:3x Phoenix), NOT built** — queued for the Sunday 2026-09-27 16:00 weekly reset, AFTER `marathon-archive` (`marathon-archive-design.md`) since it reads the archive. Branch `marathon-inbox`, off the archive branch or the `main` that holds it. Schema **71** if the archive took 70.
 > **Last verified: 2026-09-26 14:3x** — by reading the code on `main` `76501919`: `black_bloc/cogs/content/marathon_feeds.py` (`add_candidate` `:410`, `send_added_notice` `:454`, `notice_published` `:471`, `post_notice` `:527` → `cog._send_staff`, `notice_view` `:1232`, the persistent `FeedButton` / `NoticeModePick` items, `claim_notice` and `marathons.noticed_at` from v171), `black_bloc/settings_store.py:4682` `marathon_notice_home` (*events* = a post in the events forum tagged marathon while events are reviewed in a forum, else the staff channel; *staff* = `staff_channel_id`; shadow rehearses in `shadow_channel_id`), `:4469` `marathon_channel_id` (the board, reminders and shoutouts; blank = the go-live channel), `black_bloc/cogs/content/marathon.py` (the board `board_channel_id` / `board_message_id` / `board_pinned` on the row, `refresh_marathon`, `tick_marathon`, `sync_window`, the reminders and shoutouts), `black_bloc/marathon_events.py` + `marathon-event-modes-design.md` (event modes none / marathon / runs / both), the thread precedents `cogs/moderation/modmail.py:1626` (`parent.create_thread`) and `cogs/community/requests.py:412` (`forum.create_thread`), `black_bloc/shadow.py` (the per-feature shadow home). ⚠️ NOT verified: nothing was run; no Discord surface was opened. Secret NAMES only.
@@ -64,8 +66,85 @@ See `marathon-archive-design.md` §E (cloud agents ran locally on 2026-09-26; bu
 
 ## Deviations
 
-*(the build agent writes these)*
+Written by the build (Opus 5.5, branch `marathon-inbox`, 2026-09-26). Where the spec and the code disagreed, the code's
+pattern won for shape and the spec for behaviour.
+
+1. ⚠️ **LIVE BEHAVIOUR CHANGE — every marathon starts untracked and posts nothing (owner D1, no backfill).** After the
+   deploy SS4C (*Speed Stuff 4 LHS 2026*, running until 2026-09-28) and *Fastest Furs Fall Fest 2026* (2026-10-08) stop
+   posting their board, reminders and shoutouts until staff press **Track** on their inbox message, the `/event` card or
+   the drawer. A board already up from before is no longer edited; its pin still comes off a day after the end (the
+   unpin is carried whatever the tracking says — checklist 38). Say it in the deploy line.
+2. **Every marathon's inbox message posts when it is added — feed or staff — and every marathon already on the list gets
+   its message on the first tick after the deploy** (about nine messages into a new thread; in `shadow` that thread is in
+   the shadow home). This retires `marathon_feed_notice_when` (v171's *published* = the notice waits for the schedule):
+   the inbox message is there from the add, and the schedule-out moment is now an EDIT of it (`noticed_at` claimed first,
+   `marathon.inbox_published`, then the feed's auto-track). The key stays so old rows validate; its help says *retired*.
+   The DECIDED bullet in `marathon-feeds-design.md` carries the dated line (checklist 35). The line above a feed-found
+   marathon's message is still `marathon_feed_added_template`.
+3. **`marathon_notice_home` and `marathon_notice_title_template` are retired** (help says so, nothing reads them): every
+   staff notice — a suggest-mode feed's *Add it / Not this one*, a GDQ marathon's next-event suggestion — goes into the
+   inbox thread; a next-event notice of a TRACKED marathon that has a thread goes into that thread instead. An untracked
+   marathon's next-event notice still posts (in the inbox): it is about a new marathon, not about this one's posts.
+   `events.open_notice_post` has no caller any more and was left in place.
+4. **Two columns the design did not name: `marathons.inbox_home` and `marathons.thread_home`** (`on` / `shadow`), beside
+   the design's `(guild_id, home)` key on `marathon_inbox`. A mode flip then makes a FRESH real inbox message and a fresh
+   real thread (`marathon.thread_made` carries `replaced`) instead of editing the rehearsal copies.
+5. **The inbox's channel is `marathon_inbox_channel_id`, blank = `events_announce_channel_id`**, whose registry default is
+   the live-now channel when unset. A forum parent is supported (the inbox is then one post whose first message is the
+   opening line); a text channel gets a public thread and the opening as its first message. A new key
+   `marathon_inbox_opening` carries that line (every-word rule).
+6. **Thirty-five keys, not the design's list.** The design's eight + six labels + three State words + six buttons + the
+   refusal, plus: `marathon_auto_track_default` (D3), `marathon_inbox_opening`, `marathon_inbox_auto_who` (*the {feed}
+   feed*), five value words (`_no_dates`, `_schedule_none`, `_schedule_runs`, `_no_channel`, `_channel_opted_out`),
+   `marathon_not_tracked` (the refusal when staff ask an untracked marathon to post), and four answers
+   (`marathon_tracked_said`, `_untracked_said`, `_ignored_said`, `_unignored_said`). The *Archived* State word is
+   `marathon_archived_word` — one fact, one home — not a fourth State key. Panel button labels stay code constants like
+   every other panel move.
+7. **`POST /ignore {on: false}` puts an ignored marathon back to *found*** (`marathon.unignored`) — the reverse the
+   design's `{on: true|false}` implied; *Track anyway* is Track. `POST /track {on: false}` is Untrack.
+8. **Track refuses only an opted-out channel** (`marathon_track_refused`, 409 `channel_opted_out`). A marathon with no
+   channel row at all can be tracked — it posted before this build, and its board links the schedule instead.
+9. **Staff moves that post are refused in words on an untracked marathon** — *Post the board* and *Shout it now* answer
+   409 `not_tracked` (`marathon_not_tracked`), and the site does not draw them until it is tracked. *Mark it live* still
+   moves the run and shouts only when tracked.
+10. **Untrack unpins the board and archives the thread** (kept, not deleted; Track again re-opens the SAME thread).
+    Ignoring a tracked marathon does both too. Ignore never touches the feed's ignore list.
+11. **Not moved into the thread, because they are not the marathon's posts:** there is no separate *schedule changed*
+    post (it is a log row), and the Discord event's announce line belongs to the events feature.
+12. **The inbox message is edited only when what it shows changes**, compared in memory, and re-read at most every
+    `RECHECK_MINUTES` (60) — so a person deleting the inbox thread is noticed within the hour (`marathon.inbox_lost`
+    IMPORTANT, then a new thread), not within the minute, without a fetch per marathon per tick.
+13. **An ignored marathon is read on the far cadence only** (`marathon_far_poll_hours` since the last read), so its dates
+    stay right; its run states still move, and nothing posts.
+14. **Auto-track** runs inside the schedule-out moment, after `noticed_at` is claimed, so it fires once; `tracked_by` NULL,
+    `marathon.tracked` with `automatic: true` and the `feed_id` (the log's `via` word normalises `feed` to Discord, as
+    every feed row already does). A seeded feed copies `marathon_auto_track_default` like a staff-made one. An Untrack
+    after an auto-track sticks.
+15. **The tracked answer says where in words** (*its own thread, beside the inbox* / *the marathon channel*), not a `<#id>`
+    mention, because the same sentence is shown on the site.
+16. **Off** tracks the row but makes and edits nothing; the thread is made at the first post once the mode is `shadow` or
+    `on`.
+17. **The v171–v175 added-notice buttons (Pause it / Remove it / Read it now / the Event select / Manage…) stay
+    registered** so notices already posted keep answering; nothing posts new ones. Their tests now build such a notice.
+18. **One commit for §C's middle boundaries** (the inbox message, Track and the thread, Ignore / Untrack): they share the
+    same functions in `marathon.py`, `marathon_feeds.py` and the new `marathon_inbox.py`, and splitting them would have
+    left a half-built middle. Schema, site and docs are their own commits.
+19. **The mock** has no tick and no threads: Track gives a fake thread id, the inbox message link points at a fake inbox
+    thread; AGDQ 2027 is seeded tracked, Flame Fatales ignored, the rest found.
 
 ## What was NOT verified
 
-*(the build agent writes these)*
+- **Nothing met Discord.** The bot was not run. Thread creation, the forum-parent path, un-archiving, `guild.fetch_channel`
+  for archived threads, the persistent Inbox buttons in a real client and the link buttons were exercised against test
+  fakes only. Discord's own limits (thread-name length is clamped to 100; `auto_archive_duration` 10080 needs no boost
+  today) were not re-checked against the API.
+- **The live database was not read and schema 71 has NOT run on it** — proved on a fresh file and a downgraded 70 file in
+  tests only. The live `events_announce_channel_id` value (the inbox's home) was not looked up.
+- **The first-tick burst** (one inbox message per marathon already on the list) was reasoned about and covered by the
+  tick tests, not watched.
+- **Rendered** in `chrome-headless-shell` 149.0.7827.22 over raw CDP against this branch's mock (`MOCK_PORT=8812`): the
+  Marathons table with the Tracked column (1400 px), the drawer tracked (AGDQ 2027, 1400 and 390 px — no horizontal
+  scroll), ignored (Flame Fatales 2026) and found (GDQx 2026, then **Track** clicked — the drawer re-rendered tracked),
+  and the GDQ feed drawer with the Auto-track switch (switched On, the answer shown); zero console errors. NOT rendered:
+  the light theme, the `/event` panel card (tests only), an archived drawer's new fields.
+

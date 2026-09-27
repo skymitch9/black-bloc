@@ -177,3 +177,19 @@ test('an archived row says who moved it: the sweep by its grace, staff by name',
   assert.equal(archiveCounts({ runs: 1, ours: 0 }), '1 run · 0 BaF');
   assert.equal(archiveCounts({ runs: 3, ours: 1 }), '3 runs · 1 BaF');
 });
+
+test('the inbox state reads found, tracked or ignored, and draws only the valid moves', async () => {
+  const { trackedCell, trackedLine, trackMoves } = await import('../public/assets/marathon-words.js');
+  assert.deepEqual(trackedCell({ tracked_state: 'tracked' }), { text: 'tracked', tone: 'ok' });
+  assert.deepEqual(trackedCell({ tracked_state: 'found' }), { text: 'found', tone: 'warn' });
+  assert.deepEqual(trackedCell({ tracked_state: 'ignored' }), { text: 'ignored', tone: null });
+  assert.deepEqual(trackedCell({}), { text: 'found', tone: 'warn' });
+  assert.equal(trackedLine({ tracked_state: 'tracked', tracked_by_name: 'A Lead' }), 'tracked by A Lead');
+  assert.equal(trackedLine({ tracked_state: 'tracked', tracked_by_name: null }), 'tracked by its feed');
+  assert.equal(trackedLine({ tracked_state: 'ignored', ignored_by_name: 'Sky' }), 'ignored by Sky');
+  assert.equal(trackedLine({ tracked_state: 'found' }), 'found · not tracked');
+  assert.deepEqual(trackMoves({ tracked_state: 'found' }), ['track', 'ignore']);
+  assert.deepEqual(trackMoves({ tracked_state: 'tracked' }), ['untrack']);
+  assert.deepEqual(trackMoves({ tracked_state: 'ignored' }), ['anyway']);
+  assert.deepEqual(trackMoves({ tracked_state: 'archived' }), []);
+});

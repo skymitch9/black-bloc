@@ -706,22 +706,57 @@ const SETTING_SPECS = [
   ["marathon_restored_said", "text", "**{name}** is back on the list, paused — **Resume** reads it again.", "**{name}** is back on the list, paused — **Resume** reads it again.", "what staff are told once Restore has brought a marathon back. It takes {name}"],
   ["marathon_restore_taken", "text", "**{name}** cannot come back while **{other}** is on the list with the same schedule link — remove that one first, so nothing was changed.", "**{name}** cannot come back while **{other}** is on the list with the same schedule link — remove that one first, so nothing was changed.", "the refusal when Restore would put a second marathon on the list with the same schedule link. It takes {name} {other}"],
   ["marathon_not_archived", "text", "There is no archived marathon **{given}** here, so nothing was restored.", "There is no archived marathon **{given}** here, so nothing was restored.", "the refusal when Restore names a marathon that is not in the archive. It takes {given}"],
+  ["marathon_inbox_channel_id", "channel", null, null, "where the marathon inbox thread is made — the one thread in which every marathon Black Bloc finds gets a message with Track and Ignore. Blank uses events_announce_channel_id. shadow makes it where marathon_shadow_channel_id or shadow_channel_id points"],
+  ["marathon_thread_channel_id", "channel", null, null, "where a tracked marathon's own thread is made — its board, reminders and shoutouts post inside it. Blank uses the inbox's channel, beside the inbox thread"],
+  ["marathon_track_makes_thread", "bool", true, true, "whether Track makes the marathon its own thread. on by default; off tracks it without a thread and its posts go to marathon_channel_id as before. A marathon that already has a thread keeps it"],
+  ["marathon_auto_track_default", "bool", false, false, "what a NEW marathon feed's auto-track switch starts at. off by default — Track is a staff press; a feed with auto-track on tracks each marathon it adds the moment its schedule is out. No existing feed is changed"],
+  ["marathon_inbox_thread_name", "text", "Marathons — found and tracked", "Marathons — found and tracked", "what the marathon inbox thread is called when Black Bloc makes it"],
+  ["marathon_inbox_opening", "text", "Every marathon Black Bloc finds gets a message here. **Track** gives it its own thread for its board, reminders and shoutouts; **Ignore** keeps it on the list and quiet.", "Every marathon Black Bloc finds gets a message here. **Track** gives it its own thread for its board, reminders and shoutouts; **Ignore** keeps it on the list and quiet.", "the first message in the marathon inbox thread, saying what the thread is for"],
+  ["marathon_thread_name_template", "text", "{marathon}", "{marathon}", "what a tracked marathon's own thread is called. It takes {marathon} {channel} {when}"],
+  ["marathon_thread_opening_template", "text", "{marathon} — tracked by {who}. The board, reminders and shoutouts for BaF runs post here. Schedule: {url}", "{marathon} — tracked by {who}. The board, reminders and shoutouts for BaF runs post here. Schedule: {url}", "the first message in a tracked marathon's own thread. It takes {marathon} {who} {url} {channel} {when}"],
+  ["marathon_inbox_label_when", "text", "When", "When", "the When label on a marathon's inbox message"],
+  ["marathon_inbox_label_source", "text", "Source", "Source", "the Source label on a marathon's inbox message (the feed or the site it is read from)"],
+  ["marathon_inbox_label_channel", "text", "Channel", "Channel", "the Channel label on a marathon's inbox message (the Twitch channel it airs on)"],
+  ["marathon_inbox_label_schedule", "text", "Schedule", "Schedule", "the Schedule label on a marathon's inbox message (its runs and BaF runs)"],
+  ["marathon_inbox_label_event", "text", "Event", "Event", "the Event label on a marathon's inbox message (none, marathon, runs or both)"],
+  ["marathon_inbox_label_state", "text", "State", "State", "the State label on a marathon's inbox message (found, tracked, ignored or archived)"],
+  ["marathon_inbox_state_found", "text", "Found {when} · not tracked", "Found {when} · not tracked", "the State line of a marathon nobody has tracked or ignored yet. It takes {when}"],
+  ["marathon_inbox_state_tracked", "text", "Tracked by {who} {when}", "Tracked by {who} {when}", "the State line of a tracked marathon. {who} is the staff member, or the feed when it tracked itself. It takes {who} {when}"],
+  ["marathon_inbox_state_ignored", "text", "Ignored by {who} {when}", "Ignored by {who} {when}", "the State line of an ignored marathon — on the list, read, and posting nothing. It takes {who} {when}"],
+  ["marathon_inbox_auto_who", "text", "the {feed} feed", "the {feed} feed", "who a marathon was tracked by when its feed's auto-track tracked it — the {who} of the State line and of its thread's first message. It takes {feed}"],
+  ["marathon_inbox_button_track", "text", "Track", "Track", "the Track button on a marathon's inbox message"],
+  ["marathon_inbox_button_ignore", "text", "Ignore", "Ignore", "the Ignore button on a marathon's inbox message"],
+  ["marathon_inbox_button_untrack", "text", "Untrack", "Untrack", "the Untrack button on a tracked marathon's inbox message"],
+  ["marathon_inbox_button_track_anyway", "text", "Track anyway", "Track anyway", "the button on an ignored marathon's inbox message that tracks it after all"],
+  ["marathon_inbox_button_open_site", "text", "Open on the site", "Open on the site", "the link button on a marathon's inbox message that opens its drawer on the Events page"],
+  ["marathon_inbox_button_open_thread", "text", "Open the thread", "Open the thread", "the link button on a tracked marathon's inbox message that opens its own thread"],
+  ["marathon_inbox_no_dates", "text", "dates not published yet", "dates not published yet", "the When line of a marathon whose schedule has no dates yet"],
+  ["marathon_inbox_schedule_none", "text", "not out yet", "not out yet", "the Schedule line of a marathon whose schedule has no runs yet"],
+  ["marathon_inbox_schedule_runs", "text", "{runs} runs · {baf} BaF", "{runs} runs · {baf} BaF", "the Schedule line of a marathon whose schedule is out. It takes {runs} {baf}"],
+  ["marathon_inbox_no_channel", "text", "no channel row", "no channel row", "the Channel line of a marathon that airs on no channel Black Bloc watches"],
+  ["marathon_inbox_channel_opted_out", "text", "opted out of marathons", "opted out of marathons", "added to the Channel line when that channel row is opted out of marathons"],
+  ["marathon_track_refused", "text", "{marathon}'s channel is opted out of marathons — opt it back in on Go-live first, so nothing was tracked.", "{marathon}'s channel is opted out of marathons — opt it back in on Go-live first, so nothing was tracked.", "the refusal when Track is pressed on a marathon whose channel is opted out of marathons. It takes {marathon}"],
+  ["marathon_not_tracked", "text", "**{marathon}** is not tracked, so it posts nothing — press **Track** first.", "**{marathon}** is not tracked, so it posts nothing — press **Track** first.", "the refusal when staff ask an untracked marathon to post (the board, a shoutout). It takes {marathon}"],
+  ["marathon_tracked_said", "text", "**{marathon}** is tracked — its board, reminders and shoutouts post in {where}.", "**{marathon}** is tracked — its board, reminders and shoutouts post in {where}.", "what staff are told once Track has tracked a marathon. It takes {marathon} {where}"],
+  ["marathon_untracked_said", "text", "**{marathon}** is not tracked any more — it posts nothing; its thread is kept, archived.", "**{marathon}** is not tracked any more — it posts nothing; its thread is kept, archived.", "what staff are told once Untrack has stopped a marathon's posts. It takes {marathon}"],
+  ["marathon_ignored_said", "text", "**{marathon}** is ignored — it stays on the list and is read, and posts nothing. **Track anyway** changes that.", "**{marathon}** is ignored — it stays on the list and is read, and posts nothing. **Track anyway** changes that.", "what staff are told once Ignore has quieted a marathon. It takes {marathon}"],
+  ["marathon_unignored_said", "text", "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing until someone presses **Track**.", "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing until someone presses **Track**.", "what staff are told once an ignored marathon is put back to found. It takes {marathon}"],
   ["marathon_channel_ping_mode_default", "enum", "events", "events", "the pings a NEW channel row gets when it is a marathon channel (one a marathon feed is seeded for) that takes marathons: events — the default — mentions roles only inside a ping window, which its marathons set from their schedules; always and never as on the Go-live page. Every other new row follows spotlight_ping_mode_default, and no existing row is changed", ["always", "never", "events"]],
   ["marathon_channel_ping_help", "text", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "the help line under the Pings choice on a marathon channel's Go-live drawer, saying what During events means there"],
   ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a BaF run goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
   ["marathon_run_event_cancel_on_leave", "bool", true, true, "whether a marathon's events are called off when staff change its event mode away from them (reason mode_changed). on by default; off leaves them on the calendar as ordinary events the marathon no longer keeps in step"],
   ["marathon_shout_when_run_has_event", "bool", false, false, "whether a BaF run that has its own event still gets the marathon shoutout when it goes live. off by default — the events feature announces that run as it starts, so the shoutout would say it twice. The reminders post either way"],
-  ["marathon_notice_home", "enum", "events", "events", "where a new-marathon staff notice goes: events — the default — makes it a post in the events forum (tagged marathon) while events are reviewed in a forum, else the staff channel; staff always uses staff_channel_id. shadow still rehearses where shadow_channel_id points", ["events", "staff"]],
+  ["marathon_notice_home", "enum", "events", "events", "retired 2026-09 — the inbox thread is the notice home (marathon_inbox_channel_id). Kept so old rows still read; nothing reads it any more", ["events", "staff"]],
   ["marathon_run_event_title_template", "text", "{member} runs {game} at {marathon}", "{member} runs {game} at {marathon}", "what an event made for one BaF run is called. {member} is every BaF member on the run, their names joined. It takes {member} {game} {category} {marathon}"],
   ["marathon_run_event_description_template", "text", "{category} · {marathon} · read from the schedule; times follow it.", "{category} · {marathon} · read from the schedule; times follow it.", "what an event made for one BaF run says about itself. It takes {member} {game} {category} {marathon}"],
-  ["marathon_notice_title_template", "text", "New marathon: {name}", "New marathon: {name}", "the name of the events-forum post a new-marathon notice becomes. It takes {name}"],
+  ["marathon_notice_title_template", "text", "New marathon: {name}", "New marathon: {name}", "retired 2026-09 — notices post in the marathon inbox thread, not as events-forum posts. Kept so old rows still read; nothing reads it any more. It takes {name}"],
   ["marathon_feeds", "bool", true, true, "whether the marathon feeds check on their own — each feed reads the events list of one channel's marathons (the GDQ and RPG Limit Break trackers, a horaro.net event, horaro.net events found by name, Oengus, Fastest Furs' own list, Lady Arcaders' next event numbers) and adds or suggests every new event. on by default; off checks nothing, and Check now on a feed still works"],
   ["marathon_feed_hours", "int", 6, 6, "hours between two checks of one marathon feed. 6 by default", null, 168, 1],
-  ["marathon_feed_action_default", "enum", "add", "add", "what a new feed does with an event it finds, until staff change that feed: add puts it on the marathon list at once with a staff notice to pause or remove it; suggest posts a staff notice with Add it and Not this one. add by default", ["add", "suggest"]],
-  ["marathon_feed_notice_when", "enum", "published", "published", "when staff are told about a marathon a feed found: published — the default — adds it to the list quietly and posts the staff notice once its schedule is posted (the first read that finds runs); added posts the notice the moment it is found. Either way a marathon is noticed once", ["published", "added"]],
+  ["marathon_feed_action_default", "enum", "add", "add", "what a new feed does with an event it finds, until staff change that feed: add puts it on the marathon list at once with its message in the marathon inbox thread (Track and Ignore); suggest posts a notice there with Add it and Not this one. add by default", ["add", "suggest"]],
+  ["marathon_feed_notice_when", "enum", "published", "published", "retired 2026-09 — the inbox thread is the notice home: every marathon a feed finds gets its inbox message the moment it is added, and the message is edited once its schedule is out. Kept so old rows still read; nothing reads it any more", ["published", "added"]],
   ["marathon_feed_recent_days", "int", 1, 1, "how many days after it started (a tracker event) or ended (a horaro.net schedule, an Oengus marathon, a Fastest Furs event or a Lady Arcaders event) an event still counts as new to a feed. 1 by default", null, 30, 0],
   ["marathon_ladyarcaders_floor", "int", 24, 24, "the event number the Lady Arcaders feed probes upward from — it asks the next numbers above this or above the highest event it already knows, whichever is higher; staff raise it after a link is pasted. 24 by default", null, 99999, 1],
-  ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the staff notice when a feed adds a new event to the marathon list; it carries Pause it and Remove it. It takes {feed} {event} {when} {relative} {url} {channel}"],
+  ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the line above a feed-found marathon's message in the marathon inbox thread, where Track and Ignore are. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_feed_suggest_template", "text", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "the staff notice when a feed in suggest mode finds a new event; it carries Add it and Not this one. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_event_description_template", "text", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "what a marathon's event says about itself in the events review, the announcement and the Discord scheduled event. It takes {marathon} {channel}"],
   ['rolemenu_panel_minutes', 'int', 10, 10, "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -5685,7 +5720,17 @@ function seedMarathons() {
     // was added with its dates and is over now.
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
-  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ...row }));
+  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ...marathonInboxSeed()[row.id], inbox_message_id: String(861000000000000000 + row.id), ...row }));
+}
+
+// The inbox (marathon-inbox-design.md §B): AGDQ 2027 is tracked with its own thread (and its
+// board inside it), Flame Fatales is ignored, every other marathon is found and posts nothing.
+const MARATHON_INBOX_THREAD = '860000000000000000';
+function marathonInboxSeed() {
+  return {
+    1: { tracked_at: minutesAgo(8800), tracked_by: STAFF.id, thread_id: '860000000000000001', board_channel_id: '860000000000000001' },
+    4: { ignored_at: minutesAgo(20000), ignored_by: STAFF.id },
+  };
 }
 
 // The archive (marathon-archive-design.md §C): rows moved whole off the live list, newest first.
@@ -5906,7 +5951,71 @@ function marathonRow(row) {
     event_mode: marathonModeOf(row),
     event_mode_word: MARATHON_MODE_WORDS[marathonModeOf(row)],
     spotlight_mode: row.spotlight_mode === 'off' ? 'off' : 'follow',
+    ...marathonTracking(row),
   };
+}
+
+// The bot's api/tools/marathons.tracking_of: the inbox's state for a row and its two links.
+function marathonTracking(row, archived = false) {
+  const ignored = Boolean(row.ignored_at);
+  const tracked = Boolean(row.tracked_at) && !ignored;
+  const discord = (channel, message) => (channel ? `https://discord.com/channels/${REVIEW_GUILD_ID}/${channel}${message ? `/${message}` : ''}` : null);
+  return {
+    tracked_state: archived ? 'archived' : ignored ? 'ignored' : tracked ? 'tracked' : 'found',
+    tracked,
+    tracked_at: row.tracked_at || null,
+    tracked_by_name: row.tracked_by ? memberName(row.tracked_by) : null,
+    ignored_at: row.ignored_at || null,
+    ignored_by_name: row.ignored_by ? memberName(row.ignored_by) : null,
+    thread_id: row.thread_id || null,
+    thread_url: discord(row.thread_id),
+    inbox_message_url: row.inbox_message_id ? discord(MARATHON_INBOX_THREAD, row.inbox_message_id) : null,
+  };
+}
+
+function marathonTracked(row) {
+  return Boolean(row.tracked_at) && !row.ignored_at;
+}
+
+function refuseUntracked(row) {
+  if (!marathonTracked(row)) throw new Refused(409, 'not_tracked', marathonSaid('marathon_not_tracked', { marathon: row.name }));
+}
+
+function marathonTrack(row, on) {
+  if (on) {
+    const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+    if (channel && !channelTakesMarathons(channel)) throw new Refused(409, 'channel_opted_out', marathonSaid('marathon_track_refused', { marathon: row.name }));
+    if (!marathonTracked(row)) {
+      Object.assign(row, { tracked_at: new Date().toISOString(), tracked_by: STAFF.id, ignored_at: null, ignored_by: null });
+      if (!row.thread_id && state.settings.get('marathon_track_makes_thread') !== false) row.thread_id = String(860000000000000100 + row.id);
+      logAction('web.marathon.tracked', { details: { marathon_id: row.id, name: row.name, automatic: false, via: 'website' } });
+    }
+    const where = row.thread_id ? 'its own thread, beside the inbox' : 'the marathon channel';
+    return marathonSaid('marathon_tracked_said', { marathon: row.name, where });
+  }
+  if (row.tracked_at) {
+    Object.assign(row, { tracked_at: null, tracked_by: null, board_pinned: false });
+    logAction('web.marathon.untracked', { details: { marathon_id: row.id, name: row.name, via: 'website' } });
+  }
+  return marathonSaid('marathon_untracked_said', { marathon: row.name });
+}
+
+function marathonIgnore(row, on) {
+  if (on && !row.ignored_at) {
+    const wasTracked = Boolean(row.tracked_at);
+    Object.assign(row, { ignored_at: new Date().toISOString(), ignored_by: STAFF.id, tracked_at: null, tracked_by: null, board_pinned: wasTracked ? false : row.board_pinned });
+    logAction('web.marathon.ignored', { details: { marathon_id: row.id, name: row.name, was_tracked: wasTracked, via: 'website' } });
+  } else if (!on && row.ignored_at) {
+    Object.assign(row, { ignored_at: null, ignored_by: null });
+    logAction('web.marathon.unignored', { details: { marathon_id: row.id, name: row.name, via: 'website' } });
+  }
+  return marathonSaid(on ? 'marathon_ignored_said' : 'marathon_unignored_said', { marathon: row.name });
+}
+
+function wantedOn(body) {
+  const on = body && 'on' in body ? body.on : true;
+  if (typeof on !== 'boolean') throw new Refused(422, 'bad_on', 'Say true or false, so nothing was changed.');
+  return on;
 }
 
 // The bot's cogs/content/marathon_spotlight.set_spotlight_mode, words only: the mock has no tick to spotlight a channel.
@@ -6254,6 +6363,7 @@ function feedRow(feed) {
     event_mode_effective: MARATHON_MODES.includes(feed.event_mode) ? feed.event_mode : (MARATHON_MODES.includes(state.settings.get('marathon_event_mode_default')) ? state.settings.get('marathon_event_mode_default') : 'none'),
     event_mode_word: MARATHON_MODE_WORDS[MARATHON_MODES.includes(feed.event_mode) ? feed.event_mode : (MARATHON_MODES.includes(state.settings.get('marathon_event_mode_default')) ? state.settings.get('marathon_event_mode_default') : 'none')],
     held_by_channel: Boolean(feed.held_by_channel),
+    auto_track: Boolean(feed.auto_track),
     active: Boolean(feed.active),
     hours: Number(state.settings.get('marathon_feed_hours')),
     last_checked_at: feed.last_checked_at,
@@ -6341,7 +6451,7 @@ route('POST', '/api/marathons/feeds', async (context) => {
   if (!['add', 'suggest'].includes(action)) throw new Refused(422, 'bad_action', 'Say add or suggest for what a feed does with a new event, so nothing was changed.');
   const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 60) || { gdq: 'GDQ', rpglb: 'RPG Limit Break', ladyarcaders: 'Lady Arcaders' }[pick] || feedChannelName(spotlightId);
   const id = state.marathonFeeds.reduce((top, one) => Math.max(top, one.id), 0) + 1;
-  const feed = { id, source: ['horaro', 'oengus', 'horaro_events', 'fastestfurs', 'ladyarcaders'].includes(pick) ? pick : 'tracker', feed_ref: ref, seen: [], spotlight_id: spotlightId, name, action, active: true, last_checked_at: null, last_ok: null, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: STAFF.id, added_at: new Date().toISOString() };
+  const feed = { id, source: ['horaro', 'oengus', 'horaro_events', 'fastestfurs', 'ladyarcaders'].includes(pick) ? pick : 'tracker', feed_ref: ref, seen: [], spotlight_id: spotlightId, name, action, active: true, last_checked_at: null, last_ok: null, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: STAFF.id, added_at: new Date().toISOString(), auto_track: state.settings.get('marathon_auto_track_default') === true };
   state.marathonFeeds.push(feed);
   logAction('web.marathon.feed_created', { details: { feed_id: id, feed: name, source: pick, via: 'website' } });
   const added = feedCheck(feed);
@@ -6355,6 +6465,12 @@ route('PATCH', '/api/marathons/feeds/:feed_id', async (context) => {
   const said = [];
   if ('active' in body && typeof body.active !== 'boolean') throw new Refused(422, 'bad_active', 'Say true to check this feed or false to pause it, so nothing was changed.');
   if ('action' in body && !['add', 'suggest'].includes(body.action)) throw new Refused(422, 'bad_action', 'Say add or suggest for what a feed does with a new event, so nothing was changed.');
+  if ('auto_track' in body && typeof body.auto_track !== 'boolean') throw new Refused(422, 'bad_auto_track', 'Say true or false for auto-track, so nothing was changed.');
+  if ('auto_track' in body && body.auto_track !== Boolean(feed.auto_track)) {
+    feed.auto_track = body.auto_track;
+    logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, auto_track: body.auto_track, via: 'website' } });
+    said.push(`**${feed.name}** auto-track is ${body.auto_track ? 'on — each marathon it adds is tracked when its schedule is out' : 'off — staff press Track'}.`);
+  }
   if ('action' in body && body.action !== feed.action) {
     feed.action = body.action;
     logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, action: body.action, via: 'website' } });
@@ -6632,6 +6748,7 @@ function marathonArchivedRow(row) {
     archived_why: row.archived_why,
     archived_why_word: MARATHON_WHY_WORDS[row.archived_why] || row.archived_why,
     archived_word: marathonArchivedWord(row),
+    ...marathonTracking(row, true),
   };
 }
 
@@ -6676,6 +6793,20 @@ route('POST', '/api/marathons/:marathon_id/archive', (context) => {
   const row = marathonOf(context.params.marathon_id);
   marathonArchive(row, 'staff', STAFF.id);
   return { ...marathonDetailAny(row.id), message: marathonSaid('marathon_archived_said', { name: row.name }) };
+});
+
+route('POST', '/api/marathons/:marathon_id/track', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const message = marathonTrack(row, wantedOn(await context.body()));
+  return { ...marathonDetailAny(row.id), message };
+});
+
+route('POST', '/api/marathons/:marathon_id/ignore', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const message = marathonIgnore(row, wantedOn(await context.body()));
+  return { ...marathonDetailAny(row.id), message };
 });
 
 route('POST', '/api/marathons/:marathon_id/restore', (context) => {
@@ -6824,11 +6955,12 @@ route('POST', '/api/marathons/:marathon_id/refresh', (context) => {
 route('POST', '/api/marathons/:marathon_id/board', (context) => {
   requireStaff(context.session);
   const row = marathonOf(context.params.marathon_id);
+  refuseUntracked(row);
   const shadow = state.settings.get('marathon_mode') !== 'on';
   const kind = row.board_message_id ? (shadow ? 'web.marathon.would_refresh_board' : 'web.marathon.board_refreshed') : (shadow ? 'web.marathon.would_post_board' : 'web.marathon.board_posted');
   if (!row.board_message_id) {
     row.board_message_id = String(830000000000000400 + row.id);
-    row.board_channel_id = '800000000000000006';
+    row.board_channel_id = row.thread_id || '800000000000000006';
   }
   logAction(kind, { details: { marathon_id: row.id, via: 'website' } });
   return { ...marathonDetail(row), message: `The board for **${row.name}** is up to date.` };
@@ -7066,6 +7198,7 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/shout', (context) => {
   const row = marathonOf(context.params.marathon_id);
   const run = marathonRunOf(row, context.params.run_id);
   if (!marathonOurs(run)) throw new Refused(409, 'not_ours', `Nobody from BaF is on **${run.game}**, so there is nobody to shout. Pair a name first.`);
+  refuseUntracked(row);
   if (!['upcoming', 'live'].includes(run.state) || run.shout_message_id) {
     throw new Refused(409, 'not_shoutable', `**${run.game}** is ${run.state} or has its shoutout already, so nothing was posted. Only a BaF run that is coming up or on now without a shoutout can be shouted by hand.`);
   }
@@ -7094,7 +7227,7 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/live', (context) => {
   const from = run.state;
   Object.assign(run, { state: 'live', live_because: 'staff' });
   logAction('web.marathon.run_live', { details: { marathon_id: row.id, run_id: run.id, from, because: 'staff', via: 'website' } });
-  if (marathonOurs(run) && !run.shout_message_id) {
+  if (marathonOurs(run) && !run.shout_message_id && marathonTracked(row)) {
     run.shout_message_id = String(830000000000000500 + run.id);
     logAction(state.settings.get('marathon_mode') === 'on' ? 'web.marathon.shouted' : 'web.marathon.would_shout', { details: { marathon_id: row.id, run_id: run.id, via: 'website' } });
   }

@@ -253,6 +253,7 @@ async def archive_held(
     from .marathon import runs_of
     from .marathon_events import cancel_every_run_event
     from .marathon_feeds import ignore_removed
+    from .marathon_inbox import archived_inbox
 
     cog = cog_of(bot)
     runs = await runs_of(bot.db, marathon["id"])
@@ -261,9 +262,8 @@ async def archive_held(
         await cancel_every_run_event(bot, guild, marathon, actor=actor)
     await cog.drop_windows(guild, marathon)
     await _lift_held(bot, guild, marathon)
-    moved = await archive_rows(
-        bot.db, marathon["id"], why=why, by=actor_id(actor), at=cog.clock().isoformat()
-    )
+    at = cog.clock().isoformat()
+    moved = await archive_rows(bot.db, marathon["id"], why=why, by=actor_id(actor), at=at)
     if not moved:
         return False
     cog.forget(marathon["id"])
@@ -277,6 +277,7 @@ async def archive_held(
     if why == ma.REMOVED:
         await ignore_removed(bot, guild, actor, marathon, via=VIA_FEED)
     await cog.unpin_board(guild, marathon, because=ma.UNPIN_BECAUSE)
+    await archived_inbox(bot, guild, marathon, at)
     return True
 
 
@@ -297,6 +298,8 @@ async def restore_marathon(
     bot: Any, guild: Any, actor: Any, marathon_id: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """Staff final say: one move puts an archived marathon back on the list, paused."""
+    from .marathon_inbox import sync_inbox
+
     row = await archived_marathon(bot.db, guild.id, marathon_id)
     if row is None:
         return refusal(
@@ -331,7 +334,9 @@ async def restore_marathon(
         details=details_of(row, runs, str(row["archived_why"]), via)
         | {"archived_at": row["archived_at"]},
     )
-    fresh = await get_marathon(bot.db, guild.id, row["id"])
+    async with cog_of(bot).lock(row["id"]):
+        fresh = await get_marathon(bot.db, guild.id, row["id"])
+        await sync_inbox(bot, guild, fresh, force=True)
     return Outcome(
         True, words(bot, guild.id, MARATHON_RESTORED_SAID_KEY, name=row["name"]), value=fresh
     )

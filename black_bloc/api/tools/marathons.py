@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import marathon as mt
+from ... import marathon_inbox as mi
 from ... import marathon_people as mt_people
 from ...cogs.content.marathon import (
     add_next,
@@ -54,6 +55,10 @@ from ...cogs.content.marathon_events import (
     unlink_run_event,
 )
 from ...cogs.content.marathon_feeds import get_feed
+from ...cogs.content.marathon_inbox import ignore as ignore_marathon
+from ...cogs.content.marathon_inbox import inbox_message_url
+from ...cogs.content.marathon_inbox import track as track_marathon
+from ...cogs.content.marathon_inbox import untrack as untrack_marathon
 from ...cogs.content.marathon_people import (
     people_state,
     spotlight_runner,
@@ -243,6 +248,31 @@ def pairing_row(guild: Any, row: Any) -> dict[str, Any]:
     }
 
 
+async def tracking_of(bot: Any, guild: Any, row: Any, *, archived: bool = False) -> dict:
+    """The inbox's words for the row: found, tracked or ignored (archived for the archive),
+    who and when, and the two Discord links."""
+    tracked_by = _cell(row, "tracked_by")
+    ignored_by = _cell(row, "ignored_by")
+    return {
+        "tracked_state": mi.state_of(row, archived=archived),
+        "tracked": mi.is_tracked(row),
+        "tracked_at": _cell(row, "tracked_at"),
+        "tracked_by_name": resolve_one(guild, tracked_by)["display_name"] if tracked_by else None,
+        "ignored_at": _cell(row, "ignored_at"),
+        "ignored_by_name": resolve_one(guild, ignored_by)["display_name"] if ignored_by else None,
+        "thread_id": _id(_cell(row, "thread_id")),
+        "thread_url": mi.channel_url(guild.id, _cell(row, "thread_id")),
+        "inbox_message_url": await inbox_message_url(bot, guild, row),
+    }
+
+
+def _cell(row: Any, key: str) -> Any:
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return None
+
+
 def trouble_of(row: Any) -> str | None:
     if row["last_fetch_ok"] is None or int(row["last_fetch_ok"]):
         return None
@@ -315,7 +345,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "event_mode_word": MODE_WORDS[event_mode_of(row)],
         "spotlight_mode": spotlight_mode_of(row),
         "archived": False,
-    }
+    } | await tracking_of(bot, guild, row)
 
 
 async def archived_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict[str, Any]:
@@ -357,7 +387,7 @@ async def archived_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "archived_why": why,
         "archived_why_word": WHY_WORDS.get(why, why),
         "archived_word": archived_word(bot, guild.id, row),
-    }
+    } | await tracking_of(bot, guild, row, archived=True)
 
 
 async def event_statuses(bot: Any, runs: Any) -> dict[int, str]:
@@ -609,6 +639,41 @@ def build_router(bot: Any) -> APIRouter:
         row = await wanted(guild, marathon_id)
         actor = actor_for(bot, who, guild)
         done = answered(await archive_marathon(bot, guild, actor, row, why=STAFF, via=VIA_WEBSITE))
+        return await detail(guild, marathon_id) | {"message": done.message}
+
+    def wanted_on(payload: Any) -> bool:
+        on = (payload or {}).get("on", True)
+        if not isinstance(on, bool):
+            raise Refused(422, "bad_on", mi.BAD_ON)
+        return on
+
+    @router.post("/{marathon_id}/track")
+    async def marathon_track(
+        request: Request, marathon_id: int, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        actor = actor_for(bot, who, guild)
+        move = track_marathon if wanted_on(payload) else untrack_marathon
+        done = answered(await move(bot, guild, actor, row, via=VIA_WEBSITE))
+        return await detail(guild, marathon_id) | {"message": done.message}
+
+    @router.post("/{marathon_id}/ignore")
+    async def marathon_ignore(
+        request: Request, marathon_id: int, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        actor = actor_for(bot, who, guild)
+        done = answered(
+            await ignore_marathon(bot, guild, actor, row, wanted_on(payload), via=VIA_WEBSITE)
+        )
         return await detail(guild, marathon_id) | {"message": done.message}
 
     @router.post("/{marathon_id}/restore")

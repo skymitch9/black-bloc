@@ -81,6 +81,66 @@ SCHEDULE = [
 ]
 
 
+class FakeThread(FakeChannel):
+    def __init__(self, thread_id, parent, name, kwargs):
+        super().__init__(thread_id)
+        self.parent = parent
+        self.parent_id = parent.id
+        self.name = name
+        self.kwargs = kwargs
+        self.archived = False
+        self.thread_edits = []
+
+    async def edit(self, **kwargs):
+        self.thread_edits.append(kwargs)
+        if "archived" in kwargs:
+            self.archived = bool(kwargs["archived"])
+
+
+class ThreadParent(FakeChannel):
+    """A text channel that takes threads; each thread joins the guild's channels."""
+
+    made = 700000
+
+    def __init__(self, channel_id, guild):
+        super().__init__(channel_id)
+        self.guild = guild
+        self.threads = []
+        self.create_raises = None
+
+    async def create_thread(self, *, name, **kwargs):
+        if self.create_raises is not None:
+            raise self.create_raises
+        ThreadParent.made += 1
+        thread = FakeThread(ThreadParent.made, self, name, kwargs)
+        self.threads.append(thread)
+        self.guild.channels[thread.id] = thread
+        return thread
+
+
+def threading(bot, channel_id):
+    made = ThreadParent(channel_id, bot.guild)
+    bot.guild.channels[channel_id] = made
+    return made
+
+
+def inbox_thread(bot, channel_id):
+    found = bot.guild.channels[channel_id]
+    return found.threads[0] if getattr(found, "threads", None) else None
+
+
+def notices_in(bot, channel_id):
+    """What went into the inbox thread besides its opening line and the marathons' own
+    inbox messages (those carry an embed)."""
+    thread = inbox_thread(bot, channel_id)
+    return [one for one in thread.messages[1:] if not one.embeds] if thread is not None else []
+
+
+def inbox_messages(bot, channel_id):
+    thread = inbox_thread(bot, channel_id)
+    return [one for one in thread.messages if one.embeds] if thread is not None else []
+
+
 class FakeClient:
     def __init__(self, runs=None, raises=None):
         self.runs_given = list(runs if runs is not None else SCHEDULE)
@@ -114,6 +174,7 @@ async def bot(db, monkeypatch):
     await store.set(GUILD, "golive_ping_role_id", GOLIVE_ROLE)
     await store.set(GUILD, "marathon_mode", "on")
     await store.set(GUILD, "marathon_event_mode_default", "none")
+    await store.set(GUILD, "marathon_track_makes_thread", False)
     await store.set(GUILD, "spotlight_mode", "on")
     await db.conn.execute(
         "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",
@@ -121,6 +182,7 @@ async def bot(db, monkeypatch):
     )
     await db.conn.commit()
     made = FakeBot(db, store, settings, FakeGuild())
+    made.guild.channels[SHADOW_CHANNEL] = ThreadParent(SHADOW_CHANNEL, made.guild)
     made.store.is_staff = lambda member: True
 
     async def fan_role(bot, guild, user_id, *, notice=True):
@@ -161,7 +223,17 @@ async def added(bot, cog, *, channel=None):
         spotlight_id=channel["id"] if channel is not None else None,
     )
     assert outcome.ok, outcome.message
-    return outcome.value
+    return await tracked(bot, outcome.value)
+
+
+async def tracked(bot, marathon):
+    """These tests are about what a TRACKED marathon posts, in the marathon channel as before
+    (marathon_track_makes_thread off); the inbox and the threads are test_marathon_inbox.py's."""
+    await bot.db.conn.execute(
+        "UPDATE marathons SET tracked_at = ? WHERE id = ?", (at(-9999), marathon["id"])
+    )
+    await bot.db.conn.commit()
+    return await get_marathon(bot.db, GUILD, marathon["id"])
 
 
 async def runs_by_game(bot, marathon):
@@ -808,8 +880,13 @@ class EventsClient(FakeClient):
 
 
 async def staff_room(bot):
-    bot.guild.channels[STAFF_ROOM] = FakeChannel(STAFF_ROOM)
-    await bot.store.set(GUILD, "staff_channel_id", STAFF_ROOM)
+    """Notices go into the marathon inbox thread, made in the events channel."""
+    threading(bot, STAFF_ROOM)
+    await bot.store.set(GUILD, "events_announce_channel_id", STAFF_ROOM)
+
+
+def notices(bot, channel_id=STAFF_ROOM):
+    return notices_in(bot, channel_id)
 
 
 def booted_cog(bot, client=None):
@@ -844,12 +921,12 @@ async def test_an_over_gdq_marathon_suggests_the_next_event_once_with_one_notice
     record = await record_now(bot, over)
     assert record["event_id"] == "75" and record["name"] == "Summer Games Done Quick 2027"
     assert record["url"] == "https://tracker.gamesdonequick.com/tracker/event/75"
-    notices = posts(bot, STAFF_ROOM)
-    assert len(notices) == 1 and cog.client.event_calls == 1
-    assert "AGDQ 2027 is over" in notices[0].content
-    assert "**Summer Games Done Quick 2027**" in notices[0].content
-    assert record["notice_message_id"] == notices[0].id
-    view = notices[0].kwargs["view"]
+    found = notices(bot)
+    assert len(found) == 1 and cog.client.event_calls == 1
+    assert "AGDQ 2027 is over" in found[0].content
+    assert "**Summer Games Done Quick 2027**" in found[0].content
+    assert record["notice_message_id"] == found[0].id
+    view = found[0].kwargs["view"]
     assert [one.item.custom_id for one in view.children] == [
         f"marathon:{over['id']}:next:75:add",
         f"marathon:{over['id']}:next:75:dismiss",
@@ -868,7 +945,7 @@ async def test_a_marathon_that_is_not_over_is_never_looked_up(bot, cog, over):
 async def test_the_switch_off_suggests_nothing(bot, cog, over):
     await bot.store.set(GUILD, "marathon_suggest_next", False)
     await cog.tick_once()
-    assert cog.client.event_calls == 0 and posts(bot, STAFF_ROOM) == []
+    assert cog.client.event_calls == 0 and notices(bot) == []
 
 
 async def test_a_failed_lookup_leaves_null_and_only_the_next_boot_tries_again(bot, cog, over):
@@ -882,7 +959,7 @@ async def test_a_failed_lookup_leaves_null_and_only_the_next_boot_tries_again(bo
     booted = booted_cog(bot)
     await booted.tick_once()
     assert (await record_now(bot, over))["event_id"] == "75"
-    assert len(posts(bot, STAFF_ROOM)) == 1
+    assert len(notices(bot)) == 1
 
 
 async def test_nothing_ahead_is_a_none_record_and_is_not_asked_again(bot, cog, over):
@@ -891,7 +968,7 @@ async def test_nothing_ahead_is_a_none_record_and_is_not_asked_again(bot, cog, o
     record = await record_now(bot, over)
     assert record["event_id"] is None and mt.next_state(record) == mt.NEXT_NONE
     assert "marathon.next_none" in await kinds(bot.db)
-    assert posts(bot, STAFF_ROOM) == []
+    assert notices(bot) == []
     again = booted_cog(bot)
     await again.tick_once()
     assert again.client.event_calls == 0
@@ -913,7 +990,7 @@ async def test_not_this_one_dismisses_folds_the_notice_and_is_never_re_suggested
     done = await cogmod.dismiss_next(bot, bot.guild, FakeActor(), await fresh(bot, over))
     assert done.ok and "dismissed" in done.message
     assert mt.next_state(await record_now(bot, over)) == mt.NEXT_DISMISSED
-    notice = posts(bot, STAFF_ROOM)[0]
+    notice = notices(bot)[0]
     assert notice.content.startswith("~~") and notice.content.endswith("~~")
     assert all(one.item.disabled for one in notice.edits[-1]["view"].children)
     booted = booted_cog(bot)
@@ -930,7 +1007,7 @@ async def test_look_again_after_a_dismissal_suggests_again_without_a_new_notice(
     assert looked.ok and "Summer Games Done Quick 2027" in looked.message
     record = await record_now(bot, over)
     assert mt.next_state(record) == mt.NEXT_OPEN and record.get("dismissed_at") is None
-    assert len(posts(bot, STAFF_ROOM)) == 1
+    assert len(notices(bot)) == 1
 
 
 async def test_look_again_refuses_in_words_before_the_marathon_is_over(bot, cog, over):
@@ -959,7 +1036,7 @@ async def test_add_it_makes_the_next_marathon_on_the_same_channel_and_links_it(b
     assert record["added_marathon_id"] == made["id"] and record["added_by"] == FakeActor.id
     found = await details_of(bot.db, "marathon.next_added")
     assert found["marathon_id"] == made["id"] and found["by"] == FakeActor.id
-    notice = posts(bot, STAFF_ROOM)[0]
+    notice = notices(bot)[0]
     assert notice.content.startswith("Added **Summer Games Done Quick 2027**")
     twice = await cogmod.add_next(bot, bot.guild, FakeActor(), await fresh(bot, parent))
     assert twice.code == "nothing_suggested"
@@ -983,30 +1060,34 @@ async def test_an_event_already_on_the_list_is_linked_not_posted(bot, cog, over)
     await bot.db.conn.commit()
     await cog.tick_once()
     record = await record_now(bot, over)
-    assert mt.next_state(record) == mt.NEXT_ADDED and posts(bot, STAFF_ROOM) == []
+    assert mt.next_state(record) == mt.NEXT_ADDED and notices(bot) == []
 
 
 async def test_shadow_sends_the_notice_to_the_shadow_home_as_would_suggest(bot, cog, over):
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     await cog.tick_once()
-    assert posts(bot, STAFF_ROOM) == []
-    shadowed = [one for one in posts(bot, SHADOW_CHANNEL) if "is over" in one.content]
+    assert notices(bot) == []
+    shadowed = [one for one in notices(bot, SHADOW_CHANNEL) if "is over" in one.content]
     assert len(shadowed) == 1 and f"<#{STAFF_ROOM}>" in shadowed[0].content
     found = await kinds(bot.db)
     assert "marathon.would_suggest_next" in found and "marathon.next_suggested" not in found
 
 
-async def test_no_staff_channel_is_a_failed_notice_row_and_the_record_stays(bot, cog, over):
-    await bot.store.clear(GUILD, "staff_channel_id")
+async def test_an_inbox_it_cannot_make_is_a_failed_notice_row_and_the_record_stays(
+    bot, cog, over
+):
+    await bot.store.set(GUILD, "marathon_inbox_channel_id", 31337)
+    await bot.db.conn.execute("DELETE FROM marathon_inbox")
+    await bot.db.conn.commit()
     await cog.tick_once()
     assert mt.next_state(await record_now(bot, over)) == mt.NEXT_OPEN
     failed = await details_of(bot.db, "marathon.next_notice_failed")
-    assert "staff_channel_id" in failed["reason"]
+    assert failed["reason"] == cogmod.NOT_VISIBLE
 
 
 async def test_the_notice_buttons_are_staff_only_and_rebuild_from_their_custom_id(bot, cog, over):
     await cog.tick_once()
-    notice = posts(bot, STAFF_ROOM)[0]
+    notice = notices(bot)[0]
     custom = notice.kwargs["view"].children[0].item.custom_id
     match = cogmod.re.fullmatch(cogmod.NEXT_TEMPLATE, custom)
     button = await cogmod.NextButton.from_custom_id(None, None, match)

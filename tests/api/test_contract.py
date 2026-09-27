@@ -760,6 +760,14 @@ async def seed_world(client, web, guild, wf) -> dict:
         make_event=False,
     )
     marathon_id = int(made.value["id"])
+    # The inbox (marathon-inbox §B2): the bare marathon is tracked without a thread, so the
+    # board and a shoutout post in the marathon channel as before; the over one stays found.
+    await web.store.set(guild_id, "marathon_track_makes_thread", False, by=7)
+    await db.conn.execute(
+        "UPDATE marathons SET tracked_at = ?, tracked_by = 7 WHERE id = ?",
+        (datetime.now(UTC).isoformat(), marathon_id),
+    )
+    await db.conn.commit()
     marathon_pairing_id = await upsert_pairing(
         db, guild_id, marathon_id, "Contract Runner", MEMBER_ID, 7
     )

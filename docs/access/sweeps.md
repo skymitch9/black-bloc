@@ -3441,6 +3441,24 @@ the spotlight moves below are the bot's.
 | **`MSP-c`** | While GDQ's marathon runs (GDQ is spotlight on and **kept**) | Nothing changes on the GDQ row — still **kept**, no expiry, no `marathon.spotlight_set` |
 | **`MSP-d`** | Go-live ▸ add a channel whose login a marathon feed is seeded for (`fastestfurs`, `fastpacedevents`, `ladyarcaders` — only when staff choose to, per the owner's 12:5x rule) | Its drawer's **Pings** reads *During events* and carries the help line *On a marathon channel, During events pings only while one of its marathons is running…*; a channel that is not a marathon one still starts on `spotlight_ping_mode_default` (*Always*) |
 
+## Rows `MI-a` … `MI-f` — the marathon inbox (branch `marathon-inbox`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-inbox`, NOT merged, NOT deployed.** Owner, 2026-09-26 13:4x: *"when a marathon is detected
+we should have a master point to manage them and then once managed they spawn a thread"*. Design:
+[`../info/marathon-inbox-design.md`](../info/marathon-inbox-design.md). Rows lettered; the conductor numbers them. Local
+check first: `MOCK_PORT=8812 node site/mock/server.mjs` from the branch, then <http://localhost:8812/events.html> ▸
+Marathons (the **Tracked** column) and <http://localhost:8812/events.html#marathon-3> (a found marathon: press **Track**).
+⚠️ After the deploy every marathon is **untracked** and posts nothing until someone presses Track (owner D1).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MI-a`** | After the deploy, open the events channel (or the marathon shadow home while `marathon_mode` is shadow) | ONE thread *Marathons — found and tracked*, its first message saying what it is for, then one message per marathon on the list: an embed (When · Source · Channel · Schedule · Event · State *Found … · not tracked*) with **Track** · **Ignore** · **Open on the site**; no board, reminder or shoutout anywhere |
+| **`MI-b`** | Press **Track** on SS4C's inbox message | A thread named after the marathon appears beside the inbox, first message *… — tracked by @you …*; the inbox message now reads *Tracked by @you* with **Untrack** · **Open the thread**; the board (if a BaF run is on it) posts INSIDE that thread; one `marathon.tracked` in `#blackbloc-logs` |
+| **`MI-c`** | Press **Ignore** on another marathon | The message reads *Ignored by @you* with one **Track anyway**; the marathon stays on the Events page with *ignored* in the Tracked column; nothing posts for it |
+| **`MI-d`** | Let a feed-found marathon's schedule publish (or press Read it now on one whose schedule is out) | Its inbox message is EDITED in place — Schedule *N runs · M BaF*, When the dates — and no new message appears; one `marathon.inbox_published` |
+| **`MI-e`** | Press **Untrack** on the marathon from MI-b | Its thread is archived (still there), the board's pin comes off, posts stop; the inbox message is back to **Track** / **Ignore** |
+| **`MI-f`** | On the Events page, open Sources ▸ a feed, set **Auto-track** On; wait for that feed to add a marathon and its schedule to come out | The marathon is tracked by itself: *Tracked by the {feed} feed*, its thread made; `marathon.tracked` with `automatic: true` |
+
 ## Rows `MA-a` … `MA-d` — marathons are archived, never deleted (branch `marathon-archive-local`, 2026-09-26)
 
 🔨 **BUILT on branch `marathon-archive-local`, NOT merged, NOT deployed.** Owner, 2026-09-26 14:1x: *"i think we move

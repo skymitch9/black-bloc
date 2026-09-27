@@ -13,6 +13,7 @@ from discord.ext import commands, tasks
 from ... import marathon as mt
 from ... import marathon_archive as ma
 from ... import marathon_events as me
+from ... import marathon_inbox as mi
 from ... import marathon_spotlight as ms
 from ... import pings
 from ... import shadow as shadow_home
@@ -90,8 +91,7 @@ from ...settings_store import (
     MARATHON_NEXT_ADDED_TEMPLATE_KEY,
     MARATHON_NEXT_NONE_TEMPLATE_KEY,
     MARATHON_NEXT_TEMPLATE_KEY,
-    MARATHON_NOTICE_HOME_KEY,
-    MARATHON_NOTICE_TITLE_KEY,
+    MARATHON_NOT_TRACKED_KEY,
     MARATHON_PIN_BOARD_KEY,
     MARATHON_PING_MINUTES_KEY,
     MARATHON_POLL_MINUTES_KEY,
@@ -115,14 +115,12 @@ log = logging.getLogger(__name__)
 COG_NAME = "Marathons"
 FEATURE = "marathon"
 GOLIVE_CHANNEL_KEY = "golive_channel_id"
-STAFF_CHANNEL_KEY = "staff_channel_id"
 MODE_ON = "on"
 MODE_OFF = "off"
 SHADOW_FEATURE = "marathon"
 TICK_MINUTES = 1
 FAILURES_IMPORTANT = 3
 NO_CHANNEL = "no channel is set for marathon posts"
-NO_STAFF_CHANNEL = "no staff channel is set (staff_channel_id)"
 NOT_VISIBLE = "the marathon channel is not one Black Bloc can see"
 TEST_MODE = "test mode keeps Black Bloc out of that channel"
 MODE_IS_OFF = "marathon posts are off"
@@ -149,6 +147,7 @@ NOTHING_SUGGESTED_CODE = "nothing_suggested"
 SUGGESTION_MOVED_CODE = "suggestion_moved"
 NOT_RESETTABLE_CODE = "not_resettable"
 NOT_LIVEABLE_CODE = "not_liveable"
+NOT_TRACKED_CODE = "not_tracked"
 NEXT_TEMPLATE = (
     r"marathon:(?P<marathon_id>[0-9]+):next:(?P<event_id>[0-9]+):(?P<action>add|dismiss)"
 )
@@ -163,8 +162,7 @@ NO_EVENT_CODE = "no_event"
 MARATHON_REMOVED = "marathon_removed"
 EVENT_KEPT_IN_STEP = (EVENT_PENDING, EVENT_APPROVED)
 EVENT_ANNOUNCED = (EVENT_APPROVED, "live")
-NOTICE_EVENTS = "events"
-NOTICE_STAFF = "staff"
+NOTICE_INBOX = "inbox"
 NOTICE_SHADOW = "shadow"
 OPTED_OUT_CODE = "channel_opted_out"
 HELD_CODE = "held_by_channel"
@@ -333,6 +331,14 @@ MARATHON_COLUMNS = {
     "event_mode",
     "held_by_channel",
     "spotlight_mode",
+    "inbox_message_id",
+    "inbox_home",
+    "tracked_at",
+    "tracked_by",
+    "thread_id",
+    "thread_home",
+    "ignored_at",
+    "ignored_by",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -512,6 +518,12 @@ def refused_with(
     return refusal(rendered.text, code, status)
 
 
+def not_tracked(bot: Any, guild: Any, marathon: Any) -> Outcome:
+    return refused_with(
+        bot, guild.id, MARATHON_NOT_TRACKED_KEY, NOT_TRACKED_CODE, 409, marathon=marathon["name"]
+    )
+
+
 # --- the shared moves: the routes and the panel both come in by these -------------------------
 
 
@@ -611,8 +623,15 @@ async def create_marathon(
             made = await make_event_for(bot, guild, actor, fresh, via=via)
             said = f"{said} {made.message}"
         await sync_runs(bot, guild, fresh, actor=actor)
+        await inbox_sync(bot, guild, await get_marathon(bot.db, guild.id, marathon_id))
     fresh = await get_marathon(bot.db, guild.id, marathon_id)
     return Outcome(True, said, value=fresh)
+
+
+async def inbox_sync(bot: Any, guild: Any, marathon: Any, *, force: bool = False) -> None:
+    from .marathon_inbox import sync_inbox
+
+    await sync_inbox(bot, guild, marathon, force=force)
 
 
 async def refresh_marathon(bot: Any, guild: Any, marathon: Any) -> Outcome:
@@ -827,6 +846,8 @@ async def post_board(
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
         fresh = await get_marathon(bot.db, guild.id, marathon["id"])
+        if fresh is not None and not mi.is_tracked(fresh):
+            return not_tracked(bot, guild, fresh)
         why = await cog.sync_board(guild, fresh, force=True, actor=actor, via=via)
     if why:
         return refusal(mt.BOARD_NOT_POSTED.format(name=marathon["name"], why=why), POST_FAILED, 409)
@@ -843,6 +864,9 @@ async def shout_now(
             return refusal(mt.NO_SUCH_RUN.format(name=marathon["name"]), NO_SUCH_RUN_CODE, 404)
         if not mt.is_ours(row):
             return refusal(mt.NOT_OURS.format(game=row["game"]), NOT_OURS_CODE, 409)
+        fresh = await get_marathon(bot.db, guild.id, marathon["id"])
+        if fresh is not None and not mi.is_tracked(fresh):
+            return not_tracked(bot, guild, fresh)
         if row["state"] not in (mt.UPCOMING, mt.LIVE) or row["shout_message_id"]:
             return refusal(
                 mt.NOT_SHOUTABLE.format(game=row["game"], state=row["state"]),
@@ -1360,6 +1384,9 @@ class Marathons(commands.Cog):
         self._board_sent: dict[int, tuple[Any, str]] = {}
         self._next_tried: set[int] = set()
         self._feed_locks: dict[int, asyncio.Lock] = {}
+        self._inbox_locks: dict[int, asyncio.Lock] = {}
+        self.inbox_sent: dict[int, Any] = {}
+        self.inbox_failures: set[tuple[int, str]] = set()
         self.feeds_seeded: set[int] = set()
         self.last_tick_ok_at: str | None = None
         self.last_tick_error: str | None = None
@@ -1373,12 +1400,20 @@ class Marathons(commands.Cog):
         key = int(marathon_id)
         self._next_tried.discard(key)
         self._board_sent.pop(key, None)
+        self.inbox_sent.pop(key, None)
 
     def lock(self, marathon_id: Any) -> asyncio.Lock:
         key = int(marathon_id)
         found = self._locks.get(key)
         if found is None:
             found = self._locks[key] = asyncio.Lock()
+        return found
+
+    def inbox_lock(self, guild_id: Any) -> asyncio.Lock:
+        key = int(guild_id)
+        found = self._inbox_locks.get(key)
+        if found is None:
+            found = self._inbox_locks[key] = asyncio.Lock()
         return found
 
     def feed_lock(self, feed_id: Any) -> asyncio.Lock:
@@ -1390,9 +1425,12 @@ class Marathons(commands.Cog):
 
     async def cog_load(self) -> None:
         from .marathon_feeds import FeedButton, NoticeModePick
+        from .marathon_inbox import InboxButton
         from .marathon_people import PeopleButton
 
-        self.bot.add_dynamic_items(NextButton, FeedButton, NoticeModePick, PeopleButton)
+        self.bot.add_dynamic_items(
+            NextButton, FeedButton, NoticeModePick, PeopleButton, InboxButton
+        )
         if not self.bot.db.is_connected:
             return
         self.ticker.start()
@@ -1458,16 +1496,23 @@ class Marathons(commands.Cog):
         self.last_tick_ok_at = now_iso()
         self.last_tick_error = None
 
-    async def tick_marathon(self, guild: Any, marathon: Any) -> None:
-        now = self.clock()
+    def read_due(self, guild: Any, marathon: Any, now: datetime) -> bool:
         store = self.bot.store
-        if mt.fetch_due(
+        far_hours = int(store.get(guild.id, MARATHON_FAR_POLL_HOURS_KEY))
+        if mi.is_ignored(marathon):
+            return mi.ignored_read_due(marathon, now, far_hours)
+        return mt.fetch_due(
             marathon,
             now,
             poll_minutes=int(store.get(guild.id, MARATHON_POLL_MINUTES_KEY)),
-            far_hours=int(store.get(guild.id, MARATHON_FAR_POLL_HOURS_KEY)),
+            far_hours=far_hours,
             lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY)),
-        ):
+        )
+
+    async def tick_marathon(self, guild: Any, marathon: Any) -> None:
+        now = self.clock()
+        store = self.bot.store
+        if self.read_due(guild, marathon, now):
             read = await self.refresh(guild, marathon)
             await notice_if_published(self.bot, guild, marathon["id"], read)
             marathon = await get_marathon(self.bot.db, guild.id, marathon["id"])
@@ -1475,6 +1520,7 @@ class Marathons(commands.Cog):
             return
         if marathon["board_pinned"] and mt.board_due_off(marathon, now):
             await self.unpin_board(guild, marathon, because="over")
+        await inbox_sync(self.bot, guild, marathon)
         if not marathon["active"]:
             return
         await self.follow_spotlight(guild, marathon["id"])
@@ -1586,6 +1632,7 @@ class Marathons(commands.Cog):
             view,
             title=record.get("name"),
             what={"marathon_id": marathon["id"], "event": record["event_id"], "notice": "next"},
+            marathon=marathon,
         )
         if message is None:
             await log_action(
@@ -1617,14 +1664,7 @@ class Marathons(commands.Cog):
         else:
             text = "~~" + self.next_words(guild, marathon, {**record, "added_marathon_id": None})
             text += "~~"
-        home = record.get("notice_home")
-        shadowed = (
-            home == NOTICE_SHADOW
-            if home is not None
-            else str(record.get("notice_channel_id"))
-            != str(self.bot.store.get(guild.id, STAFF_CHANNEL_KEY))
-        )
-        if shadowed:
+        if record.get("notice_home") == NOTICE_SHADOW:
             text = self._staff_shadowed(guild, text)
         try:
             await message.edit(
@@ -1636,7 +1676,9 @@ class Marathons(commands.Cog):
             log.warning("marathon: could not fold a next-event notice — %s", spot.reason_of(exc))
 
     def _staff_shadowed(self, guild: Any, text: str) -> str:
-        home = self.bot.store.get(guild.id, STAFF_CHANNEL_KEY)
+        from .marathon_inbox import real_inbox_parent
+
+        home = real_inbox_parent(self.bot, guild)
         said = shadow_home.note_line(self.bot, guild, f"<#{home}>" if home else "#?")
         return f"{said}\n{text}" if said else text
 
@@ -1649,79 +1691,35 @@ class Marathons(commands.Cog):
         title: Any = None,
         what: Any = None,
         embed: Any = None,
+        marathon: Any = None,
     ) -> tuple[Any, int | None, str | None]:
-        """`on` posts where marathon_notice_home says — a post in the events forum while events
-        are reviewed there, else staff_channel_id; `shadow` rehearses where shadow_channel_id
-        says. Every notice that goes up leaves one marathon.notice_posted row."""
+        """A notice goes into the marathon inbox thread — or into the marathon's own thread
+        when it is tracked and has one. Every notice leaves one marathon.notice_posted row."""
+        from .marathon_inbox import ensure_inbox, ensure_thread
+
         mode = mode_of(self.bot, guild.id)
         if mode == MODE_OFF:
             return (None, None, MODE_IS_OFF)
-        if mode == MODE_ON and self.notice_in_forum(guild):
-            found = await self._post_in_forum(
-                guild, text, view, title=title, what=what, embed=embed
-            )
-            if found is not None:
-                return found
-        home = self.bot.store.get(guild.id, STAFF_CHANNEL_KEY)
-        if not home:
-            return (None, None, NO_STAFF_CHANNEL)
-        channel_id = int(home) if mode == MODE_ON else rehearsal_home(self.bot, guild)
-        if channel_id is None:
-            return (None, None, NO_CHANNEL)
-        guard = getattr(self.bot, "guard", None)
-        if guard is not None and not guard.allows_channel(channel_id):
-            return (None, None, TEST_MODE)
-        channel = shadow_home.channel_of(self.bot, guild, channel_id)
-        if channel is None:
-            return (None, None, NOT_VISIBLE)
+        place, why = None, None
+        if marathon is not None and mi.is_tracked(marathon):
+            place, why = await ensure_thread(self.bot, guild, marathon)
+        if place is None:
+            place, why = await ensure_inbox(self.bot, guild)
+        if place is None:
+            return (None, None, why)
         body = text if mode == MODE_ON else self._staff_shadowed(guild, text)
         try:
-            message = await channel.send(
+            message = await place.send(
                 body,
                 view=view,
                 allowed_mentions=discord.AllowedMentions.none(),
                 **({"embed": embed} if embed is not None else {}),
             )
         except Exception as exc:
-            return (None, channel_id, spot.reason_of(exc))
-        home_word = NOTICE_STAFF if mode == MODE_ON else NOTICE_SHADOW
-        await self._notice_posted(guild, home_word, channel_id, message, what)
-        return (message, channel_id, None)
-
-    def notice_in_forum(self, guild: Any) -> bool:
-        from ...events import forum_channel_id, reviews_in_forum
-
-        store = self.bot.store
-        return (
-            str(store.get(guild.id, MARATHON_NOTICE_HOME_KEY)) == NOTICE_EVENTS
-            and reviews_in_forum(store, guild.id)
-            and forum_channel_id(store, guild.id) is not None
-        )
-
-    async def _post_in_forum(
-        self, guild: Any, text: str, view: Any, *, title: Any, what: Any, embed: Any = None
-    ) -> tuple[Any, int | None, str | None] | None:
-        """None falls back to the staff channel, with the reason logged."""
-        from ...events import MARATHON_TAG, open_notice_post
-
-        name = mt.render(
-            self.bot.store.get(guild.id, MARATHON_NOTICE_TITLE_KEY),
-            said_default(MARATHON_NOTICE_TITLE_KEY),
-            name=str(title or "").strip() or "?",
-        ).text
-        post, message, why = await open_notice_post(
-            self.bot, guild, name, text, view, tag=MARATHON_TAG, embed=embed
-        )
-        if post is None or message is None:
-            await log_action(
-                self.bot,
-                guild,
-                "marathon.notice_forum_failed",
-                details=dict(what or {}) | {"reason": why, "fallback": NOTICE_STAFF},
-            )
-            return None
-        await self._notice_posted(guild, NOTICE_EVENTS, int(post.id), message, what)
-        return (message, int(post.id), None)
+            return (None, int(place.id), spot.reason_of(exc))
+        home_word = NOTICE_INBOX if mode == MODE_ON else NOTICE_SHADOW
+        await self._notice_posted(guild, home_word, int(place.id), message, what)
+        return (message, int(place.id), None)
 
     async def _notice_posted(
         self, guild: Any, home: str, channel_id: Any, message: Any, what: Any
@@ -2217,6 +2215,8 @@ class Marathons(commands.Cog):
     # --- reminders --------------------------------------------------------------------------
 
     async def remind(self, guild: Any, marathon: Any, now: datetime) -> None:
+        if not mi.is_tracked(marathon):
+            return
         store = self.bot.store
         ping_mark = int(store.get(guild.id, MARATHON_PING_MINUTES_KEY))
         marks = mt.reminder_marks(store.get(guild.id, MARATHON_REMINDER_MINUTES_KEY), ping_mark)
@@ -2255,7 +2255,9 @@ class Marathons(commands.Cog):
         roles: list[int] = []
         if pinging and self.bot.store.get(guild.id, MARATHON_REMINDER_PINGS_KEY):
             roles = await self._ping_roles(guild, marathon, row)
-        message, channel_id, why = await self._send(guild, ping_prefix(*roles) + text, roles)
+        message, channel_id, why = await self._send(
+            guild, ping_prefix(*roles) + text, roles, marathon=marathon
+        )
         details = self.run_details(marathon, row) | {
             "mark": mark,
             "pinged": bool(roles),
@@ -2307,6 +2309,8 @@ class Marathons(commands.Cog):
         force: bool = False,
     ) -> str | None:
         """`force` is staff pressing Shout it now: it posts whatever the run's event says."""
+        if not force and not mi.is_tracked(marathon):
+            return None
         if not force and await self.said_by_its_event(guild, marathon, row):
             return None
         words = words_for(self.bot, guild.id)
@@ -2320,7 +2324,9 @@ class Marathons(commands.Cog):
         roles: list[int] = []
         if self.bot.store.get(guild.id, MARATHON_LIVE_PINGS_KEY):
             roles = await self._ping_roles(guild, marathon, row)
-        message, channel_id, why = await self._send(guild, ping_prefix(*roles) + text, roles)
+        message, channel_id, why = await self._send(
+            guild, ping_prefix(*roles) + text, roles, marathon=marathon
+        )
         details = self.run_details(marathon, row) | {"pinged": bool(roles), "via": via}
         if message is None:
             await log_action(
@@ -2406,9 +2412,20 @@ class Marathons(commands.Cog):
         rows = await runs_of(self.bot.db, marathon["id"])
         if not force and not marathon["board_message_id"] and not any(map(mt.is_ours, rows)):
             return None
+        if not mi.is_tracked(marathon):
+            return mi.NOT_TRACKED
         text = await self.board_words(guild, marathon)
         shadow = mode != MODE_ON
-        target = self._target(guild)
+        target, why = await self._place(guild, marathon)
+        if target is None:
+            await log_action(
+                self.bot,
+                guild,
+                kind_via("marathon.board_failed", via),
+                actor=actor,
+                details={"marathon_id": marathon["id"], "reason": why, "via": via},
+            )
+            return why
         key = int(marathon["id"])
         if (
             not force
@@ -2452,7 +2469,7 @@ class Marathons(commands.Cog):
                 | rehearsal_details(self.bot, guild),
             )
             return None
-        sent, channel_id, why = await self._send(guild, text, [], quiet=True)
+        sent, channel_id, why = await self._send(guild, text, [], quiet=True, marathon=marathon)
         if sent is None:
             await log_action(
                 self.bot,
@@ -2555,18 +2572,32 @@ class Marathons(commands.Cog):
         said = shadow_home.note_line(self.bot, guild, f"<#{home}>" if home else "#?")
         return f"{said}\n{text}" if said else text
 
+    async def _place(self, guild: Any, marathon: Any) -> tuple[int | None, str | None]:
+        from .marathon_inbox import post_place
+
+        if marathon is None:
+            if self._home(guild) is None:
+                return (None, NO_CHANNEL)
+            return (self._target(guild), None)
+        return await post_place(self.bot, guild, marathon)
+
     async def _send(
-        self, guild: Any, text: str, roles: list[int], *, quiet: bool = False
+        self,
+        guild: Any,
+        text: str,
+        roles: list[int],
+        *,
+        quiet: bool = False,
+        marathon: Any = None,
     ) -> tuple[Any, int | None, str | None]:
-        """`on` posts in the marathon channel; `shadow` rehearses where shadow_channel_id says."""
+        """A tracked marathon posts in its own thread (or the marathon channel when it has
+        none); `shadow` makes those in the rehearsal home. Untracked posts nothing."""
         mode = mode_of(self.bot, guild.id)
         if mode == MODE_OFF:
             return (None, None, MODE_IS_OFF)
-        if self._home(guild) is None:
-            return (None, None, NO_CHANNEL)
-        channel_id = self._target(guild)
+        channel_id, why = await self._place(guild, marathon)
         if channel_id is None:
-            return (None, None, NO_CHANNEL)
+            return (None, None, why or NO_CHANNEL)
         guard = getattr(self.bot, "guard", None)
         if guard is not None and not guard.allows_channel(channel_id):
             return (None, None, TEST_MODE)
@@ -2588,9 +2619,11 @@ class Marathons(commands.Cog):
         return (message, channel_id, None)
 
     async def _fetch(self, guild: Any, channel_id: Any, message_id: Any) -> Any:
+        from .marathon_inbox import find_channel
+
         if not channel_id or not message_id:
             return None
-        channel = shadow_home.channel_of(self.bot, guild, channel_id)
+        channel, _lost = await find_channel(self.bot, guild, channel_id)
         if channel is None:
             return None
         try:
@@ -2801,12 +2834,23 @@ async def card_header(bot: Any, guild: Any, row: Any, runs: list[Any]) -> list[s
     if login:
         quiet.append(mt.CARD_CHANNEL.format(login=login))
         quiet.append(ms.mode_line(row))
+    quiet.append(await inbox_line(bot, guild, row))
     return [
         mt.CARD_HEAD.format(
             phase=mt.PHASE_WORDS.get(phase, phase), dates=dates_of(row), source=source, url=url
         ),
         " · ".join(quiet),
     ]
+
+
+async def inbox_line(bot: Any, guild: Any, row: Any) -> str:
+    """The card's state, as the inbox message says it, with the thread's link when tracked."""
+    from .marathon_inbox import feed_of, state_words
+
+    state = mi.state_of(row)
+    said = state_words(bot, guild, row, state, await feed_of(bot, guild, row))
+    url = mi.channel_url(guild.id, _cell(row, "thread_id"))
+    return mi.CARD_THREAD.format(state=said, url=url) if url and mi.is_tracked(row) else said
 
 
 def add_moves(view: Any, moves: Any) -> None:
@@ -2905,7 +2949,8 @@ async def build_card(
         view,
         mt.card_moves(row, has_unmatched=bool(unmatched), has_next=has_next)
         + ms.card_moves(row)
-        + (ma.ARCHIVE_MOVE,),
+        + (ma.ARCHIVE_MOVE,)
+        + mi.panel_moves(row),
     )
     return (embed, view)
 
@@ -3251,6 +3296,14 @@ class MarathonMoveButton(discord.ui.Button):
             from .marathon_archive import open_archive
 
             await open_archive(interaction, view)
+        elif action in mi.ACTIONS:
+            from .marathon_inbox import run_action
+
+            await run_move(
+                interaction,
+                view,
+                lambda bot, guild, actor, row: run_action(bot, guild, actor, row, action),
+            )
         elif action == mt.PAIR:
             await open_card(interaction, view.marathon_id, view, pairing=True)
         elif action == mt.PEOPLE:

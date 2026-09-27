@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *The marathon inbox* (branch `marathon-inbox`, off `main` `56056053`, keyed against `ad395616`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathons are archived, never deleted* (branch `marathon-archive-local`, off `main` `33b9838a`, keyed against `c19366d9`). Before that:
 > **2026-09-26 — the three marathon-source sections RE-KEYED at the merge, one section APPENDED**: *The horaro.net events feed*, *The Fastest Furs feed* and *Lady Arcaders* re-keyed against `fca7a18b` (branch `merge-marathon-sources`: the merges `e29563c6` + `b8a86dfe`, then the wording pass and the `marathon_ladyarcaders_floor` key); *The marathon-source merges — one wording pass and the floor key* appended. Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The horaro.net events feed for Fast Paced Events* (branch `marathon-horaro-events`, off `main` `a3ac5132`, keyed against `87ddd4ba`). Before that:
@@ -8839,3 +8840,28 @@ Design: [`marathon-archive-design.md`](marathon-archive-design.md). Keyed agains
 | `site/public/assets/marathons-section.js:1208` `archiveLine` · `:1218` `archiveFold` | Shut by default; 50 at a time with **Show N more**. |
 | `site/public/assets/marathon-words.js:303` `roughly` | Whole days once it is two days or more, so an old row reads *82 days ago*, not *81 d 22 h ago*. |
 | `site/mock/server.mjs:5692` · `:6647` · `:6285` | The mock keeps archived runs and pairings in the same arrays keyed by `marathon_id` (only the row moves), and its feed check skips archived refs except removed ones, as the bot does. |
+
+## The marathon inbox (branch `marathon-inbox`, 2026-09-26)
+
+Design: [`marathon-inbox-design.md`](marathon-inbox-design.md). Keyed against `ad395616`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_inbox.py:98` `is_tracked` · `:102` `state_of` | Ignoring wins over tracking: a row with both stamps is ignored and posts nothing. `archived_at` on the row (the archive twin, or the dict `archived_inbox` builds) makes it archived. |
+| `black_bloc/marathon_inbox.py:155` `ignored_read_due` | An ignored marathon is read every `marathon_far_poll_hours`, never on the near cadence, so its dates stay right and it costs nothing (Deviation 13). |
+| `black_bloc/marathon_inbox.py:163` `comparable` | What a posted message and a fresh render share — content, title, field names and values — so a boot does not edit every inbox message it has not changed. |
+| `black_bloc/cogs/content/marathon_inbox.py:178` `find_channel` | An archived thread is not in the cache, so it is fetched; `lost` only on NotFound — a network hiccup must never remake an inbox. |
+| `black_bloc/cogs/content/marathon_inbox.py:207` `make_thread` | A forum takes the first message WITH the thread; a text channel gets a public thread and the message after it. The guard is told it owns the thread, as modmail does. |
+| `black_bloc/cogs/content/marathon_inbox.py:253` `ensure_inbox` | Checklist 37: the per-guild inbox lock, and the stored thread id re-read INSIDE it, so three boot passes make one thread. Lock order is marathon → inbox, never the reverse. |
+| `black_bloc/cogs/content/marathon_inbox.py:310` `inbox_failed` | Once per reason per boot: a missing channel must not write a row every minute. |
+| `black_bloc/cogs/content/marathon_inbox.py:475` `fresh_enough` · `:493` `sync_inbox` | Post once, then edit in place only when what it shows changed, re-read at most hourly (Deviation 12). A home change (`inbox_home`) posts a fresh message rather than edit the rehearsal one; an archived marathon is only ever edited, never posted. |
+| `black_bloc/cogs/content/marathon_inbox.py:589` `ensure_thread` | Re-reads the row (the caller holds the marathon lock), re-opens an archived thread, and makes a new one when a person deleted it or the home changed (`replaced` in the log). |
+| `black_bloc/cogs/content/marathon_inbox.py:657` `post_place` | The ONE answer to *where does this marathon's post go*: nowhere untracked, its thread, or the marathon channel when it was tracked without one. `Marathons._send` and `sync_board` both ask it. |
+| `black_bloc/cogs/content/marathon_inbox.py:712` `track_held` | The row first, the log second, the thread and the inbox edit last (checklist 12); tracking twice logs once. |
+| `black_bloc/cogs/content/marathon_inbox.py:770` `stop_posting` | Untrack and Ignore end the in-flight effects themselves — the board's pin, the thread (archived) — rather than leave them to a sweep that now skips the row (checklist 38). |
+| `black_bloc/cogs/content/marathon_inbox.py:843` `auto_track` | Runs inside the schedule-out moment after `noticed_at` is claimed, so a feed's auto-track fires once per marathon and a staff Untrack sticks. |
+| `black_bloc/cogs/content/marathon.py:1499` `read_due` | The ignored cadence lives here so the tick has one question to ask. |
+| `black_bloc/cogs/content/marathon.py:2218` `remind` · `:2415` `sync_board` | The gate is at the START of each post (checklist 38); `finish`'s past-tense edit and the board's unpin are not gated, so an effect already out is still carried to its end. |
+| `black_bloc/cogs/content/marathon.py:1685` `_send_staff` | Every staff notice goes to the inbox thread (or a tracked marathon's own thread); `marathon_notice_home` is retired (Deviation 3). |
+| `black_bloc/cogs/content/marathon_feeds.py:519` `notice_published` | The v171 once-guard is kept: `claim_notice` first, then the inbox edit, then auto-track. |
+| `black_bloc/cogs/content/marathon_archive.py:280` | The inbox message and the thread follow the row into the archive, after the move and the unpin. |
