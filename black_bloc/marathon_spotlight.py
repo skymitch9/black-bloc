@@ -24,7 +24,7 @@ SPOTLIGHT_OFF_BUTTON = "Stop spotlighting it"
 MODE_SAID = {
     FOLLOW: (
         "**{name}** spotlights its channel while it runs again — from "
-        "{lead} minutes before its first run to the end of its last."
+        "{lead} minutes before its first run to {tail} minutes after its last ends."
     ),
     OFF: (
         "**{name}** no longer spotlights its channel. A spotlight it had already turned on is "
@@ -77,11 +77,23 @@ def span_of(marathon: Any) -> tuple[datetime, datetime] | None:
     return (starts, max(starts, ends))
 
 
-def in_reach(span: tuple[datetime, datetime] | None, now: datetime, lead_minutes: int) -> bool:
+def reach_end(span: tuple[datetime, datetime], tail_minutes: int = 0) -> datetime:
+    """The span's end plus the tail: when a spotlight the marathon holds is given back."""
+    return span[1] + timedelta(minutes=max(0, int(tail_minutes)))
+
+
+def in_reach(
+    span: tuple[datetime, datetime] | None,
+    now: datetime,
+    lead_minutes: int,
+    tail_minutes: int = 0,
+) -> bool:
     if span is None:
         return False
-    starts, ends = span
-    return starts - timedelta(minutes=max(0, int(lead_minutes))) <= now < ends
+    starts = span[0]
+    return (
+        starts - timedelta(minutes=max(0, int(lead_minutes))) <= now < reach_end(span, tail_minutes)
+    )
 
 
 def is_kept(row: Any) -> bool:
@@ -98,15 +110,21 @@ def follows(marathon: Any, *, enabled: bool) -> bool:
 
 
 def plan(
-    row: Any, marathon: Any, now: datetime, *, enabled: bool, lead_minutes: int
+    row: Any,
+    marathon: Any,
+    now: datetime,
+    *,
+    enabled: bool,
+    lead_minutes: int,
+    tail_minutes: int = 0,
 ) -> dict[str, Any] | None:
     """The fields a follow writes on the channel row, or None when it leaves it alone."""
     if row is None or not follows(marathon, enabled=enabled) or not takes_marathons(row):
         return None
     span = span_of(marathon)
-    if not in_reach(span, now, lead_minutes) or is_kept(row):
+    if not in_reach(span, now, lead_minutes, tail_minutes) or is_kept(row):
         return None
-    ends = span[1]
+    ends = reach_end(span, tail_minutes)
     if is_spotlit(row):
         current = parse_ts(_cell(row, "expires_at"))
         if current is None or current >= ends:
@@ -129,12 +147,14 @@ def held_by(row: Any) -> int | None:
     return int(found) if found not in (None, "", 0) else None
 
 
-def dimmed_during(marathons: Any, now: datetime, *, enabled: bool, lead_minutes: int) -> list[Any]:
+def dimmed_during(
+    marathons: Any, now: datetime, *, enabled: bool, lead_minutes: int, tail_minutes: int = 0
+) -> list[Any]:
     """The marathons on a channel that were spotlighting it when staff turned it off."""
     return [
         one
         for one in marathons or ()
-        if follows(one, enabled=enabled) and in_reach(span_of(one), now, lead_minutes)
+        if follows(one, enabled=enabled) and in_reach(span_of(one), now, lead_minutes, tail_minutes)
     ]
 
 
@@ -194,5 +214,6 @@ __all__ = [
     "mode_of",
     "new_row_ping_mode",
     "plan",
+    "reach_end",
     "span_of",
 ]

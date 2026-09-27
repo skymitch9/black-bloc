@@ -6039,7 +6039,7 @@ function marathonSetSpotlightMode(row, given) {
   logAction('web.marathon.spotlight_mode_set', { details: { marathon_id: row.id, name: row.name, from: was, to: wanted, via: 'website' } });
   const lead = Number(state.settings.get('marathon_spotlight_lead_minutes') ?? 15);
   return wanted === 'follow'
-    ? `**${row.name}** spotlights its channel while it runs again — from ${lead} minutes before its first run to the end of its last.`
+    ? `**${row.name}** spotlights its channel while it runs again — from ${lead} minutes before its first run to ${Number(state.settings.get('marathon_spotlight_tail_minutes') ?? 60)} minutes after its last ends.`
     : `**${row.name}** no longer spotlights its channel. A spotlight it had already turned on is turned off; one staff set stays as it is.`;
 }
 

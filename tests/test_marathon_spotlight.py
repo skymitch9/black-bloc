@@ -140,3 +140,29 @@ def test_the_card_draws_the_one_switch_that_changes_something():
     assert ms.card_moves(a_marathon(spotlight_mode="off")) == (ms.FOLLOW_MOVE,)
     assert ms.card_moves(a_marathon(spotlight_id=None)) == ()
     assert ms.mode_line(a_marathon(spotlight_mode="off")).endswith("**off**")
+
+
+def test_the_tail_carries_the_spotlight_past_the_last_run_and_zero_is_the_old_end():
+    tailed = ms.plan(a_row(), a_marathon(), NOW, enabled=True, lead_minutes=15, tail_minutes=60)
+    assert tailed["expires_at"] == at(300)
+    assert ms.in_reach(ms.span_of(a_marathon()), NOW + timedelta(minutes=250), 15, 60)
+    assert not ms.in_reach(ms.span_of(a_marathon()), NOW + timedelta(minutes=300), 15, 60)
+    assert not ms.in_reach(ms.span_of(a_marathon()), NOW + timedelta(minutes=250), 15, 0)
+    assert planned()["expires_at"] == at(240)
+
+
+def test_a_later_end_moves_a_held_expiry_and_an_unmoved_one_is_left():
+    held = a_row(spotlight=1, expires_at=at(300), spotlit_by_marathon=7)
+    later = a_marathon(end=400)
+    moved = ms.plan(held, later, NOW, enabled=True, lead_minutes=15, tail_minutes=60)
+    assert moved == {"expires_at": at(460)}
+    same = ms.plan(held, a_marathon(), NOW, enabled=True, lead_minutes=15, tail_minutes=60)
+    assert same is None
+    assert ms.reach_end(ms.span_of(later), 60) == datetime.fromisoformat(at(460))
+
+
+def test_dimmed_during_counts_the_tail_as_the_marathon_still_holding_it():
+    after_end = NOW + timedelta(minutes=260)
+    ones = [a_marathon()]
+    assert ms.dimmed_during(ones, after_end, enabled=True, lead_minutes=15, tail_minutes=60)
+    assert not ms.dimmed_during(ones, after_end, enabled=True, lead_minutes=15, tail_minutes=0)
