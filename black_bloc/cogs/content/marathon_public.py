@@ -111,8 +111,8 @@ def rehearsal_of(bot: Any, guild: Any) -> dict[str, Any]:
     return {"shadow_home": shadow_home.channel_id(bot, guild, feature=mp.SHADOW_FEATURE)}
 
 
-def shadowed(bot: Any, guild: Any, text: str) -> str:
-    home = public_channel(bot, guild.id)
+def shadowed(bot: Any, guild: Any, text: str, home: int | None = None) -> str:
+    home = home if home is not None else public_channel(bot, guild.id)
     said = shadow_home.note_line(bot, guild, f"<#{home}>" if home else "#?")
     return f"{said}\n{text}" if said else text
 
@@ -167,13 +167,13 @@ def mentions_for(roles: list[int]) -> discord.AllowedMentions:
 
 
 async def send_public(
-    bot: Any, guild: Any, text: str, roles: list[int]
+    bot: Any, guild: Any, text: str, roles: list[int], *, home: int | None = None
 ) -> tuple[Any, int | None, str | None]:
-    """On: the public channel. Shadow: its rehearsal home, with the note naming it."""
+    """On: the public channel (or `home`). Shadow: its rehearsal home, with the note naming it."""
     mode = mode_of(bot, guild.id)
     if mode == MODE_OFF:
         return (None, None, MODE_IS_OFF)
-    home = public_channel(bot, guild.id)
+    home = home if home is not None else public_channel(bot, guild.id)
     if home is None:
         return (None, None, NO_CHANNEL)
     channel_id = (
@@ -187,7 +187,7 @@ async def send_public(
     channel = shadow_home.channel_of(bot, guild, channel_id)
     if channel is None:
         return (None, None, NOT_VISIBLE)
-    body = text if mode == MODE_ON else shadowed(bot, guild, text)
+    body = text if mode == MODE_ON else shadowed(bot, guild, text, home)
     try:
         message = await channel.send(body, allowed_mentions=mentions_for(roles))
     except Exception as exc:
@@ -579,6 +579,7 @@ __all__ = [
     "post_highlight",
     "press",
     "public_channel",
+    "send_public",
     "remove_highlight",
     "set_public_highlight",
     "sync_highlights",

@@ -2405,6 +2405,8 @@ class Marathons(commands.Cog):
     async def _post_reminder(
         self, guild: Any, marathon: Any, row: Any, mark: int, *, pinging: bool
     ) -> None:
+        from .marathon_public_reminders import post_public_reminder
+
         words = words_for(self.bot, guild.id)
         login = await channel_login(self.bot, marathon)
         url = mt.run_url(row, login, marathon["schedule_url"])
@@ -2418,6 +2420,9 @@ class Marathons(commands.Cog):
             roles = await self._ping_roles(guild, marathon, row)
         message, channel_id, why = await self._send(
             guild, ping_prefix(*roles) + text, roles, marathon=marathon
+        )
+        await post_public_reminder(
+            self, guild, marathon, row, mark, roles, url=url, staff_channel_id=channel_id
         )
         details = self.run_details(marathon, row) | {
             "mark": mark,
