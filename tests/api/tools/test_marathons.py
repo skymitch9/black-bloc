@@ -682,6 +682,25 @@ async def test_patch_ping_role_turns_it_on_and_off_and_refuses_a_word_it_does_no
     assert bad.status_code == 422 and bad.json()["error"] == "bad_ping_role"
 
 
+async def test_patch_public_highlight_turns_the_auto_switch_on_and_off_and_refuses_a_bad_word(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    assert client.get(f"/api/marathons/{marathon_id}").json()["public_highlight"] is False
+
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": True}).json()
+
+    assert body["public_highlight"] is True
+    assert "the moment it goes live" in body["message"]
+    said = await web_row(wf, web, "web.marathon.public_highlight_set")
+    assert (said["from"], said["to"], said["via"]) == (False, True, "website")
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": False}).json()
+    assert body["public_highlight"] is False
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"public_highlight": "loud"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_public_highlight"
+
+
 async def test_following_again_spotlights_a_channel_whose_marathon_is_in_reach(
     client, sign_in, web, cog, wf
 ):

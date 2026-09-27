@@ -281,7 +281,11 @@ async def post_highlight(
         bot,
         guild,
         kind_via(
-            "marathon.would_post_public_highlight" if shadow else "marathon.public_highlight_posted",
+            (
+                "marathon.would_post_public_highlight"
+                if shadow
+                else "marathon.public_highlight_posted"
+            ),
             via,
         ),
         actor=actor,
