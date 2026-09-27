@@ -63,6 +63,9 @@ UNTRACK_BECAUSE = "untracked"
 THREAD_ARCHIVE_REASON = "Black Bloc: the marathon is not tracked any more"
 INBOX_REASON = "Black Bloc: the marathon inbox"
 THREAD_REASON = "Black Bloc: a tracked marathon"
+INBOX_MOVED_REASON = "Black Bloc: the marathon inbox moved to another channel"
+THREAD_MOVED_REASON = "Black Bloc: the marathon's thread moved to another channel"
+MOVED_BECAUSE = "moved"
 
 TRACK_MOVE = MarathonMove(TRACK, "Track", "primary", 4)
 IGNORE_MOVE = MarathonMove(IGNORE, "Ignore", row=4)

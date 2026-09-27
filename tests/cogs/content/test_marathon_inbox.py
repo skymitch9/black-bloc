@@ -685,3 +685,155 @@ async def test_the_schedule_view_offers_post_it_now_only_until_the_message_is_up
     assert interaction.view.where == cogmod.SCHEDULE_VIEW
     assert "Post it to the inbox now" not in interaction.labels()
     assert "[posted](https://discord.com/channels/" in interaction.words
+
+
+# --- marathon-thread-move: a changed parent moves the threads ---------------------------------
+
+
+def writes(bot):
+    """Every Discord write the fakes record, so a quiet tick can be proved quiet."""
+    seen = []
+    for channel in list(bot.guild.channels.values()):
+        seen.append((channel.id, len(channel.messages), len(getattr(channel, "thread_edits", ()))))
+        seen.append((channel.id, len(getattr(channel, "threads", ()))))
+        for message in channel.messages:
+            seen.append((channel.id, message.id, len(message.edits), message.pinned))
+    return seen
+
+
+async def test_a_changed_inbox_parent_moves_the_inbox_and_every_posted_marathon_posts_again(
+    bot, cog
+):
+    with_runs = await found(bot, cog)
+    early = await unpublished(bot, cog)
+    await inbox.post_now(bot, bot.guild, FakeActor(), early)
+    old = the_inbox(bot)
+    assert len(inbox_messages(bot, EVENTS)) == 2
+    threading(bot, THREADS)
+    await bot.store.set(GUILD, "marathon_inbox_channel_id", THREADS)
+    cog.client.raises = ScheduleError("not published", unpublished=True)
+
+    await cog.tick_once()
+
+    assert old.archived and old.thread_edits[-1]["reason"] == mi.INBOX_MOVED_REASON
+    assert len(old.messages) == 3
+    new = the_inbox(bot, THREADS)
+    row = await inbox.inbox_row(bot.db, GUILD, "on")
+    assert (row["channel_id"], row["thread_id"]) == (THREADS, new.id)
+    moved = await details_of(bot.db, "marathon.inbox_moved")
+    assert moved == {
+        "home": "on",
+        "from_channel": EVENTS,
+        "to_channel": THREADS,
+        "thread_id": old.id,
+        "new_thread_id": new.id,
+        "archived": True,
+        "marathons": 2,
+        "via": "discord",
+    }
+    messages = inbox_messages(bot, THREADS)
+    assert [one.embeds[0].title for one in messages] == ["AGDQ 2027", "SGDQ 2027"]
+    assert (await fresh(bot, with_runs))["inbox_message_id"] == messages[0].id
+    assert (await fresh(bot, early))["inbox_message_id"] == messages[1].id
+    assert fields_of(messages[1])["Schedule"] == "not out yet"
+    reposts = [one for one in await logged(bot, "marathon.inbox_posted") if one["moved"]]
+    assert len(reposts) == 2 and not cog.inbox_moved
+
+    before = writes(bot)
+    await cog.tick_once()
+    assert writes(bot) == before
+    assert len(await logged(bot, "marathon.inbox_moved")) == 1
+
+
+async def test_a_changed_thread_parent_moves_a_tracked_marathons_thread_and_its_board(bot, cog):
+    marathon = await found(bot, cog)
+    await inbox.track(bot, bot.guild, FakeActor(), marathon)
+    await cog.follow(bot.guild, await fresh(bot, marathon))
+    old = marathon_thread(bot)
+    board = next(one for one in old.messages if "BaF on the schedule" in one.content)
+    assert board.pinned
+    threading(bot, THREADS)
+    await bot.store.set(GUILD, "marathon_thread_channel_id", THREADS)
+
+    await cog.tick_once()
+
+    assert old.archived and old.thread_edits[-1]["reason"] == mi.THREAD_MOVED_REASON
+    assert board.pinned is False and board.unpins
+    new = room(bot, THREADS).threads[0]
+    row = await fresh(bot, marathon)
+    assert row["thread_id"] == new.id and row["thread_home"] == "on"
+    assert new.messages[0].content.startswith("AGDQ 2027 — tracked by")
+    boards = [one for one in new.messages if "BaF on the schedule" in one.content]
+    assert len(boards) == 1 and boards[0].pinned
+    assert (row["board_channel_id"], row["board_message_id"]) == (new.id, boards[0].id)
+    moved = await details_of(bot.db, "marathon.thread_moved")
+    assert moved["from_channel"] == EVENTS and moved["to_channel"] == THREADS
+    assert (moved["thread_id"], moved["new_thread_id"], moved["archived"]) == (
+        old.id,
+        new.id,
+        True,
+    )
+    assert len(room(bot).threads) == 2 and the_inbox(bot).archived is False
+    link = inbox_messages(bot, EVENTS)[0].edits[-1]["view"].children
+    assert any(str(new.id) in (getattr(one, "url", None) or "") for one in link)
+
+    before = writes(bot)
+    await cog.tick_once()
+    assert writes(bot) == before
+    assert len(await logged(bot, "marathon.thread_moved")) == 1
+
+
+async def test_nothing_changed_means_no_discord_writes_and_no_move_rows(bot, cog):
+    marathon = await found(bot, cog)
+    await inbox.track(bot, bot.guild, FakeActor(), marathon)
+    await cog.follow(bot.guild, await fresh(bot, marathon))
+    await cog.tick_once()
+    before = writes(bot)
+
+    await cog.tick_once()
+    await cog.tick_once()
+
+    assert writes(bot) == before
+    assert cog.thread_homes[int(marathon["id"])] == (marathon_thread(bot).id, EVENTS)
+    assert "marathon.inbox_moved" not in await kinds(bot.db)
+    assert "marathon.thread_moved" not in await kinds(bot.db)
+
+
+async def test_an_archive_that_fails_still_moves_both_threads_and_says_so(bot, cog):
+    marathon = await found(bot, cog)
+    await inbox.track(bot, bot.guild, FakeActor(), marathon)
+    old_inbox, old_thread = the_inbox(bot), marathon_thread(bot)
+
+    async def refused(**kwargs):
+        raise RuntimeError("Missing Permissions")
+
+    old_inbox.edit = refused
+    old_thread.edit = refused
+    threading(bot, THREADS)
+    await bot.store.set(GUILD, "marathon_inbox_channel_id", THREADS)
+
+    await cog.tick_once()
+
+    assert (await details_of(bot.db, "marathon.inbox_moved"))["archived"] is False
+    assert (await details_of(bot.db, "marathon.thread_moved"))["archived"] is False
+    threads = room(bot, THREADS).threads
+    assert len(threads) == 2
+    assert (await inbox.inbox_row(bot.db, GUILD, "on"))["thread_id"] == threads[0].id
+    assert (await fresh(bot, marathon))["thread_id"] == threads[1].id
+    assert len(inbox_messages(bot, THREADS)) == 1
+
+
+async def test_a_parent_that_cannot_take_threads_keeps_the_old_ones_and_logs_once(bot, cog):
+    marathon = await found(bot, cog)
+    await inbox.track(bot, bot.guild, FakeActor(), marathon)
+    old_inbox, old_thread = the_inbox(bot), marathon_thread(bot)
+    await bot.store.set(GUILD, "marathon_inbox_channel_id", CHANNEL)
+
+    await cog.tick_once()
+    await cog.tick_once()
+
+    assert not old_inbox.archived and not old_thread.archived
+    assert (await inbox.inbox_row(bot.db, GUILD, "on"))["thread_id"] == old_inbox.id
+    assert (await fresh(bot, marathon))["thread_id"] == old_thread.id
+    failed = await logged(bot, "marathon.inbox_failed")
+    assert [one["reason"] for one in failed] == [mi.CANNOT_THREAD]

@@ -202,6 +202,8 @@ IMPORTANT: frozenset[str] = frozenset(
         "marathon.link_changed",
         "marathon.inbox_lost",
         "marathon.thread_lost",
+        "marathon.inbox_moved",
+        "marathon.thread_moved",
         "youtube.probe_unreadable",
         "mod.untimed_out",
         "mod.unbanned",
