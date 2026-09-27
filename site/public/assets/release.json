@@ -1,7 +1,8 @@
 {
-  "release": "v175",
-  "commit": "2ad8e43d",
+  "release": "v176",
+  "commit": "72d0ba5d",
   "changed_features": [
+    "golive",
     "marathon"
   ]
 }
