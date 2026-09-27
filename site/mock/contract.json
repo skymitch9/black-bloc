@@ -5276,6 +5276,26 @@
       ]
     },
     {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_over_id}",
+      "body": {
+        "schedule_url": "https://gamesdonequick.com/schedule/76"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Settings foldout — Change the schedule link… (marathon-inbox-when)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "schedule_url",
+        "schedule_page",
+        "source",
+        "source_word",
+        "runs",
+        "message"
+      ]
+    },
+    {
       "method": "DELETE",
       "path": "/api/marathons/{marathon_id}",
       "read_by": [
@@ -7952,6 +7972,7 @@
     "web.marathon.feed_looked",
     "web.marathon.feed_forgot",
     "web.marathon.feed_dismissed",
-    "web.marathon.feed_taken"
+    "web.marathon.feed_taken",
+    "web.marathon.link_changed"
   ]
 }

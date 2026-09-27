@@ -85,6 +85,10 @@ from ...settings_store import (
     MARATHON_FAR_POLL_HOURS_KEY,
     MARATHON_LATE_GRACE_KEY,
     MARATHON_LEAD_DAYS_KEY,
+    MARATHON_LINK_CHANGED_SAID_KEY,
+    MARATHON_LINK_SAME_KEY,
+    MARATHON_LINK_TAKEN_KEY,
+    MARATHON_LINK_UNREADABLE_KEY,
     MARATHON_LIVE_PINGS_KEY,
     MARATHON_LIVE_TEMPLATE_KEY,
     MARATHON_MATCH_HOSTS_KEY,
@@ -130,6 +134,7 @@ PIN_REASON = "Black Bloc: the marathon board"
 UNPIN_REASON = "Black Bloc: the marathon is over"
 
 UNKNOWN_SITE = "unknown_site"
+LINK_SAME_CODE = "same_link"
 DUPLICATE = "duplicate"
 UNREADABLE = "unreadable"
 NO_NAME_CODE = "no_name"
@@ -314,6 +319,8 @@ async def insert_marathon(
 
 MARATHON_COLUMNS = {
     "name",
+    "schedule_url",
+    "source",
     "spotlight_id",
     "starts_at",
     "ends_at",
@@ -724,6 +731,91 @@ async def set_channel(
         },
     )
     return Outcome(True, "", value=fresh)
+
+
+async def change_link(
+    bot: Any, guild: Any, actor: Any, marathon: Any, url: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """A new schedule for the same marathon: its id, tracking, thread, event and switches stay;
+    the source is re-resolved, the fetch state cleared and the new schedule read at once."""
+    name = marathon["name"]
+    wanted_url = str(url or "").strip()
+    found = read_url(wanted_url)
+    if found is None:
+        return refused_with(bot, guild.id, MARATHON_UNKNOWN_SITE_KEY, UNKNOWN_SITE, 422)
+    if wanted_url == marathon["schedule_url"]:
+        return refused_with(
+            bot, guild.id, MARATHON_LINK_SAME_KEY, LINK_SAME_CODE, 409, marathon=name
+        )
+    other = await marathon_by_url(bot.db, guild.id, wanted_url)
+    if other is not None and int(other["id"]) != int(marathon["id"]):
+        return refused_with(
+            bot,
+            guild.id,
+            MARATHON_LINK_TAKEN_KEY,
+            DUPLICATE,
+            409,
+            marathon=name,
+            other=other["name"],
+        )
+    cog = cog_of(bot)
+    source, ref = found
+    try:
+        ref, _event_name = await cog.client.resolve(source, ref)
+    except ScheduleError as exc:
+        return refused_with(
+            bot,
+            guild.id,
+            MARATHON_LINK_UNREADABLE_KEY,
+            UNREADABLE,
+            422,
+            marathon=name,
+            reason=str(exc),
+        )
+    async with cog.lock(marathon["id"]):
+        before = await get_marathon(bot.db, guild.id, marathon["id"])
+        if before is None:
+            return refusal(mt.NO_SUCH_MARATHON.format(given=marathon["id"]), NO_SUCH, 404)
+        await update_marathon(
+            bot.db,
+            before["id"],
+            schedule_url=wanted_url,
+            source=source,
+            source_ref=ref,
+            fetch_hash=None,
+            fetch_failures=0,
+            last_error=None,
+        )
+        await log_action(
+            bot,
+            guild,
+            kind_via("marathon.link_changed", via),
+            actor=actor,
+            details={
+                "marathon_id": before["id"],
+                "name": before["name"],
+                "old": {
+                    "url": before["schedule_url"],
+                    "source": before["source"],
+                    "ref": before["source_ref"],
+                },
+                "new": {"url": wanted_url, "source": source, "ref": ref},
+                "via": via,
+            },
+        )
+        read = await cog.refresh(guild, await get_marathon(bot.db, guild.id, before["id"]))
+        if read.ok:
+            await cog.follow(guild, await get_marathon(bot.db, guild.id, before["id"]))
+            await notice_if_published(bot, guild, before["id"], read)
+        await inbox_sync(bot, guild, await get_marathon(bot.db, guild.id, before["id"]), force=True)
+    fresh = await get_marathon(bot.db, guild.id, before["id"])
+    said = mt.render(
+        bot.store.get(guild.id, MARATHON_LINK_CHANGED_SAID_KEY),
+        said_default(MARATHON_LINK_CHANGED_SAID_KEY),
+        marathon=name,
+        read=read.message,
+    ).text
+    return Outcome(True, said, value=fresh)
 
 
 async def rename_marathon(
@@ -2720,6 +2812,7 @@ PAIR_VIEW = "pair"
 NEXT_VIEW = "next"
 RUN_VIEW = "run"
 SPOT_VIEW = "spot"
+SCHEDULE_VIEW = "schedule"
 STYLES = {
     "primary": discord.ButtonStyle.primary,
     "secondary": discord.ButtonStyle.secondary,
@@ -3135,6 +3228,50 @@ async def open_spot(interaction: discord.Interaction, marathon_id: Any, previous
     await render(interaction, embed, view, previous)
 
 
+async def schedule_lines(bot: Any, guild: Any, row: Any) -> list[str]:
+    from .marathon_inbox import home_now, inbox_message_url
+
+    lines = [mi.SCHEDULE_LINE.format(url=row["schedule_url"])]
+    url = await inbox_message_url(bot, guild, row)
+    if url and _cell(row, "inbox_home") == home_now(bot, guild):
+        lines.append(mi.INBOX_UP.format(url=url))
+    elif home_now(bot, guild) is None:
+        lines.append(mi.INBOX_NOT_HERE)
+    else:
+        lines.append(mi.INBOX_WAITING)
+    return lines
+
+
+async def build_schedule(bot: Any, guild: Any, marathon_id: Any) -> tuple[Any, Any]:
+    row = await get_marathon(bot.db, guild.id, marathon_id)
+    if row is None:
+        return (None, None)
+    embed = discord.Embed(
+        title=row["name"], description=clamped(await schedule_lines(bot, guild, row))
+    )
+    view = MarathonPanel(minutes_for(bot, guild.id), SCHEDULE_VIEW, row["id"])
+    add_moves(view, mi.schedule_moves(row))
+    return (embed, view)
+
+
+async def open_schedule(interaction: discord.Interaction, marathon_id: Any, previous: Any) -> None:
+    if not await opened(interaction):
+        return
+    embed, view = await build_schedule(interaction.client, interaction.guild, marathon_id)
+    if view is None:
+        await open_card(interaction, marathon_id, previous)
+        return
+    await render(interaction, embed, view, previous)
+
+
+async def back_to_schedule(interaction: discord.Interaction, view: Any) -> None:
+    embed, fresh = await build_schedule(interaction.client, interaction.guild, view.marathon_id)
+    if fresh is None:
+        await open_card(interaction, view.marathon_id, view)
+        return
+    await render(interaction, embed, fresh, view)
+
+
 async def back_to_spot(interaction: discord.Interaction, view: Any) -> None:
     embed, fresh = await build_spot(interaction.client, interaction.guild, view.marathon_id)
     if fresh is None:
@@ -3179,6 +3316,8 @@ async def reopen(interaction: discord.Interaction, previous: Any) -> None:
         await open_next(interaction, previous.marathon_id, previous)
     elif where == SPOT_VIEW and getattr(previous, "marathon_id", None):
         await open_spot(interaction, previous.marathon_id, previous)
+    elif where == SCHEDULE_VIEW and getattr(previous, "marathon_id", None):
+        await open_schedule(interaction, previous.marathon_id, previous)
     elif where == RUN_VIEW and getattr(previous, "run_id", None):
         await open_run(interaction, previous.marathon_id, previous.run_id, previous)
     elif where in (CARD, PAIR_VIEW) and getattr(previous, "marathon_id", None):
@@ -3311,12 +3450,21 @@ class MarathonMoveButton(discord.ui.Button):
         elif action == mt.MINE:
             await open_mine(interaction, view)
         elif action == mt.BACK:
-            if view.where in (PAIR_VIEW, NEXT_VIEW, RUN_VIEW, SPOT_VIEW):
+            if view.where in (PAIR_VIEW, NEXT_VIEW, RUN_VIEW, SPOT_VIEW, SCHEDULE_VIEW):
                 await open_card(interaction, view.marathon_id, view)
             else:
                 await open_root(interaction, view)
         elif action == mt.NEXT:
             await open_next(interaction, view.marathon_id, view)
+        elif action == mt.SCHEDULE:
+            await open_schedule(interaction, view.marathon_id, view)
+        elif action == mi.LINK:
+            if await still_staff(interaction):
+                row = await get_marathon(
+                    interaction.client.db, interaction.guild.id, view.marathon_id
+                )
+                current = row["schedule_url"] if row is not None else None
+                await interaction.response.send_modal(LinkModal(view, current))
         elif action == mt.POLL:
             if await still_staff(interaction):
                 row = await get_marathon(
@@ -3544,6 +3692,32 @@ class EventModePick(discord.ui.Select):
         )
 
 
+class LinkModal(AnswersErrors, discord.ui.Modal, title=mi.LINK_TITLE):
+    link = discord.ui.TextInput(label=mi.LINK_LABEL, placeholder=mi.LINK_HINT, max_length=300)
+
+    def __init__(self, previous: Any = None, current: Any = None) -> None:
+        super().__init__()
+        self.previous = previous
+        self.link.default = str(current) if current else None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await opened(interaction):
+            return
+        bot, guild = interaction.client, interaction.guild
+        marathon_id = getattr(self.previous, "marathon_id", None)
+        row = await get_marathon(bot.db, guild.id, marathon_id)
+        if row is None:
+            await open_root(interaction, self.previous)
+            await answer(interaction, mt.NO_SUCH_MARATHON.format(given=str(marathon_id)[:40]))
+            return
+        outcome = await change_link(bot, guild, interaction.user, row, str(self.link))
+        if getattr(self.previous, "where", None) == SCHEDULE_VIEW:
+            await back_to_schedule(interaction, self.previous)
+        else:
+            await open_card(interaction, row["id"], self.previous)
+        await answer(interaction, outcome.message)
+
+
 class PollModal(AnswersErrors, discord.ui.Modal, title=mt.POLL_TITLE):
     minutes = discord.ui.TextInput(
         label=mt.POLL_LABEL, placeholder=mt.POLL_HINT, required=False, max_length=4
@@ -3567,7 +3741,10 @@ class PollModal(AnswersErrors, discord.ui.Modal, title=mt.POLL_TITLE):
         given = str(self.minutes).strip()
         wanted: Any = "" if not given else (int(given) if given.isdigit() else given)
         outcome = await rename_marathon(bot, guild, interaction.user, row, None, wanted)
-        await open_card(interaction, row["id"], self.previous)
+        if getattr(self.previous, "where", None) == SCHEDULE_VIEW:
+            await back_to_schedule(interaction, self.previous)
+        else:
+            await open_card(interaction, row["id"], self.previous)
         if not outcome.ok:
             await answer(interaction, outcome.message)
         elif wanted == "":

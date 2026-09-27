@@ -11,6 +11,7 @@ from ... import marathon_inbox as mi
 from ... import marathon_people as mt_people
 from ...cogs.content.marathon import (
     add_next,
+    change_link,
     create_marathon,
     dismiss_next,
     event_status_of,
@@ -580,6 +581,18 @@ def build_router(bot: Any) -> APIRouter:
                     await set_active(bot, guild, actor, row, payload["active"], via=VIA_WEBSITE)
                 )
                 said.append(done.message)
+        if "schedule_url" in payload:
+            done = answered(
+                await change_link(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    payload["schedule_url"],
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
         if "spotlight_id" in payload:
             given = payload["spotlight_id"]
             wanted_channel = None if given in (None, "", 0, "0") else wanted_id(given)

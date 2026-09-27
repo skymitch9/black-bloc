@@ -821,3 +821,34 @@ async def test_the_detail_carries_the_channel_row_as_go_live_reads_it_and_its_st
     assert after["spotlight_state"]["state"] == "until"
     none = client.get(f"/api/marathons/{bare_id}").json()
     assert none["channel_spotlight"] is None and none["spotlight_state"]["state"] == "none"
+
+
+async def test_patch_schedule_url_moves_the_marathon_to_a_readable_link_and_keeps_its_id(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    track(client, marathon_id)
+    other = add(client, name="ESA Summer", schedule_url="https://horaro.net/esa/2026-summer2")
+    assert other.status_code == 200
+
+    body = client.patch(
+        f"/api/marathons/{marathon_id}",
+        json={"schedule_url": "https://oengus.io/marathon/ss4lhs26"},
+    ).json()
+
+    assert body["id"] == marathon_id and body["tracked"] is True
+    assert (body["source"], body["schedule_url"]) == ("oengus", "https://oengus.io/marathon/ss4lhs26")
+    assert "reads its schedule from the new link now" in body["message"] and body["runs"] == 3
+    said = await web_row(wf, web, "web.marathon.link_changed")
+    assert said["old"]["url"] == URL and said["new"]["source"] == "oengus"
+
+    unknown = client.patch(f"/api/marathons/{marathon_id}", json={"schedule_url": "https://example.com/x"})
+    assert unknown.status_code == 422 and unknown.json()["error"] == "unknown_site"
+    assert "Lady Arcaders calendars" in unknown.json()["message"]
+    taken = client.patch(
+        f"/api/marathons/{marathon_id}",
+        json={"schedule_url": "https://horaro.net/esa/2026-summer2"},
+    )
+    assert taken.status_code == 409 and taken.json()["error"] == "duplicate"
+    assert "**ESA Summer** already follows that schedule" in taken.json()["message"]

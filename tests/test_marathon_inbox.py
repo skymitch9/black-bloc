@@ -1,6 +1,7 @@
 import re
 from datetime import UTC, datetime, timedelta
 
+from black_bloc import marathon as mt
 from black_bloc import marathon_inbox as mi
 
 NOW = datetime(2026, 9, 26, 18, 0, tzinfo=UTC)
@@ -75,3 +76,11 @@ def test_a_posted_message_and_a_fresh_render_compare_by_what_they_show():
 
     assert mi.comparable("hi", [Embed()]) == ("hi", "SS4C", (("When", "soon"),))
     assert mi.comparable(None, []) == ("", "", ())
+
+
+def test_the_schedule_view_offers_the_link_the_read_gap_and_back():
+    assert mi.schedule_moves({"inbox_message_id": None}) == (
+        mi.LINK_MOVE,
+        mt.POLL_MOVE._replace(row=2),
+        mt.BACK_MOVE,
+    )

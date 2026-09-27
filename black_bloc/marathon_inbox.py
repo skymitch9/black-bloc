@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .golive import parse_ts
-from .marathon import MarathonMove
+from .marathon import BACK_MOVE, POLL_MOVE, MarathonMove
 
 FOUND = "found"
 TRACKED = "tracked"
@@ -71,6 +71,21 @@ ANYWAY_MOVE = MarathonMove(ANYWAY, "Track anyway", "primary", 4)
 MOVE_OF = {TRACK: TRACK_MOVE, IGNORE: IGNORE_MOVE, UNTRACK: UNTRACK_MOVE, ANYWAY: ANYWAY_MOVE}
 PANEL_ACTIONS = tuple(f"inbox_{one}" for one in ACTIONS)
 
+LINK = "change_link"
+POST_NOW = "inbox_now"
+LINK_MOVE = MarathonMove(LINK, "Change the schedule link…", "primary", 2)
+POST_NOW_MOVE = MarathonMove(POST_NOW, "Post it to the inbox now", row=2)
+LINK_TITLE = "Change the schedule link"
+LINK_LABEL = "The new schedule link"
+LINK_HINT = "https://oengus.io/marathon/…"
+SCHEDULE_LINE = "**Schedule:** {url}"
+INBOX_UP = "**Inbox message:** [posted]({url})"
+INBOX_WAITING = (
+    "**Inbox message:** not posted yet — it posts on the first read that finds runs. **Post it "
+    "to the inbox now** posts it early; its Schedule line says it is not out yet until then."
+)
+INBOX_NOT_HERE = "**Inbox message:** not posted yet."
+
 FEED_AUTO_ON = "feed_auto_on"
 FEED_AUTO_OFF = "feed_auto_off"
 FEED_AUTO_ON_MOVE = MarathonMove(FEED_AUTO_ON, "Auto-track on", row=2)
@@ -116,6 +131,15 @@ def moves_of(row: Any, *, archived: bool = False) -> tuple[str, ...]:
 
 def panel_moves(row: Any) -> tuple[MarathonMove, ...]:
     return tuple(MOVE_OF[one] for one in moves_of(row))
+
+
+def has_message(row: Any) -> bool:
+    return bool(_cell(row, "inbox_message_id"))
+
+
+def schedule_moves(row: Any) -> tuple[MarathonMove, ...]:
+    """The Schedule view: the link, the read gap, and the early post while no message is up."""
+    return (LINK_MOVE, POLL_MOVE._replace(row=2), BACK_MOVE)
 
 
 def custom_id(marathon_id: Any, action: str) -> str:

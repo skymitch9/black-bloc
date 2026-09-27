@@ -145,6 +145,13 @@ const CHANNEL_GONE_SHORT = 'its channel is gone from Go-live';
 const SAVE_SETTINGS = 'Save';
 const SAVED = 'Saved.';
 const NOTHING_CHANGED = 'Nothing changed, so nothing was saved.';
+const SCHEDULE_LINK_ACTION = 'Change the schedule link…';
+const SCHEDULE_LINK_TITLE = 'Change the schedule link for {name}';
+const SCHEDULE_LINK_FIELD = 'The new schedule link';
+const SCHEDULE_LINK_NOTE = 'Any schedule Black Bloc reads: a GDQ or RPG Limit Break tracker, horaro.net, Oengus, '
+  + 'Fastest Furs or Lady Arcaders. It keeps its tracking, thread, event and switches, and reads the new '
+  + 'schedule at once.';
+const SCHEDULE_LINK_NOW = 'Reads from ';
 const POLL_LABEL = 'Re-read every';
 const POLL_UNIT = 'minutes';
 const POLL_HELP = 'While it is near, 10 to 120; blank = the default ({minutes}). Far off: every {far} h.';
@@ -841,6 +848,7 @@ async function settingsFold(marathon, say) {
     await after(marathon, done);
   }, { tone: 'warn' });
   const fold = foldout(SETTINGS_FOLD, [
+    linkLine(marathon),
     field(EVENT_SELECT, mode, EVENT_SELECT_SHORT),
     eventState(marathon, say),
     marathon.channel_gone ? notice(CHANNEL_GONE, 'warn') : null,
@@ -891,6 +899,34 @@ function spotlightBlock(marathon, say) {
     }),
     pingsCard(one, say, redraw),
   ];
+}
+
+async function changeLink(marathon) {
+  const url = el('input', { class: 'input', type: 'url', value: marathon.schedule_url || '', 'aria-label': SCHEDULE_LINK_FIELD });
+  let done = null;
+  const sure = await askForm({
+    title: said(SCHEDULE_LINK_TITLE, { name: marathon.name }),
+    body: [el('p', { class: 'ask-body', text: SCHEDULE_LINK_NOTE }), field(SCHEDULE_LINK_FIELD, url)],
+    confirmLabel: 'Change it',
+    tone: 'warn',
+    onConfirm: async () => {
+      done = await send(`/api/marathons/${marathon.id}`, 'PATCH', { schedule_url: url.value.trim() });
+      return null;
+    },
+  });
+  if (!sure || !done) return;
+  shown.settings = true;
+  await after(marathon, { ok: true, found: done });
+}
+
+function linkLine(marathon) {
+  return el('p', { class: 'field-help mx-line mx-link' }, joined([
+    el('span', {}, [
+      el('span', { text: SCHEDULE_LINK_NOW }),
+      el('a', { class: 'say-nothing-do', href: marathon.schedule_url, text: marathon.schedule_url, rel: 'noreferrer', target: '_blank' }),
+    ]),
+    textAction(SCHEDULE_LINK_ACTION, () => changeLink(marathon)),
+  ]));
 }
 
 function pollSaid(marathon, wanted) {

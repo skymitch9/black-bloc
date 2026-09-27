@@ -222,6 +222,7 @@ EVENTS = "events"
 MINE = "mine"
 NEXT = "next"
 POLL = "poll"
+SCHEDULE = "schedule"
 ADD_NEXT = "add_next"
 DISMISS_NEXT = "dismiss_next"
 LOOK_AGAIN = "look_again"
@@ -257,6 +258,7 @@ BACK_MOVE = MarathonMove(BACK, "Back", row=4)
 EVENTS_MOVE = MarathonMove(EVENTS, "Back", row=4)
 NEXT_MOVE = MarathonMove(NEXT, "Next up…", row=3)
 POLL_MOVE = MarathonMove(POLL, POLL_TITLE, row=3)
+SCHEDULE_MOVE = MarathonMove(SCHEDULE, "Schedule…", row=3)
 ADD_NEXT_MOVE = MarathonMove(ADD_NEXT, NEXT_BUTTON_ADD, "primary", 2)
 DISMISS_NEXT_MOVE = MarathonMove(DISMISS_NEXT, NEXT_BUTTON_DISMISS, row=2)
 LOOK_AGAIN_MOVE = MarathonMove(LOOK_AGAIN, NEXT_BUTTON_LOOK, row=2)
@@ -291,7 +293,7 @@ def card_moves(
         found.append(PAIR_MOVE)
     if has_next:
         found.append(NEXT_MOVE)
-    found.append(POLL_MOVE)
+    found.append(SCHEDULE_MOVE)
     found.append(event_move(marathon))
     found.append(PEOPLE_MOVE)
     found.append(BACK_MOVE)

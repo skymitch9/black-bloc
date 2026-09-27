@@ -4448,6 +4448,14 @@ MARATHON_UNTRACKED_SAID_KEY = "marathon_untracked_said"
 MARATHON_IGNORED_SAID_KEY = "marathon_ignored_said"
 MARATHON_UNIGNORED_SAID_KEY = "marathon_unignored_said"
 MARATHON_INBOX_AUTO_WHO_KEY = "marathon_inbox_auto_who"
+MARATHON_LINK_CHANGED_SAID_KEY = "marathon_link_changed_said"
+MARATHON_LINK_SAME_KEY = "marathon_link_same"
+MARATHON_LINK_TAKEN_KEY = "marathon_link_taken"
+MARATHON_LINK_UNREADABLE_KEY = "marathon_link_unreadable"
+MARATHON_INBOX_POSTED_SAID_KEY = "marathon_inbox_posted_said"
+MARATHON_INBOX_ALREADY_KEY = "marathon_inbox_already"
+MARATHON_INBOX_POST_OFF_KEY = "marathon_inbox_post_off"
+MARATHON_INBOX_POST_FAILED_KEY = "marathon_inbox_post_failed"
 MARATHON_THREAD_FIELDS = ("marathon", "channel", "when")
 MARATHON_OPENING_FIELDS = ("marathon", "who", "url", "channel", "when")
 MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY = "marathon_channel_ping_mode_default"
@@ -5014,6 +5022,58 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "**Track anyway** changes that.",
         ("marathon",),
         "what staff are told once Ignore has quieted a marathon. It takes {marathon}",
+    ),
+    MARATHON_LINK_CHANGED_SAID_KEY: (
+        "**{marathon}** reads its schedule from the new link now — its tracking, thread, event and "
+        "switches are kept. {read}",
+        ("marathon", "read"),
+        "what staff are told once Change the schedule link… has moved a marathon to a new "
+        "schedule. It takes {marathon} {read}",
+    ),
+    MARATHON_LINK_SAME_KEY: (
+        "**{marathon}** already reads that link, so nothing was changed.",
+        ("marathon",),
+        "what staff are told when Change the schedule link… is given the link the marathon already "
+        "reads. It takes {marathon}",
+    ),
+    MARATHON_LINK_TAKEN_KEY: (
+        "**{other}** already follows that schedule, so **{marathon}**'s link was not changed.",
+        ("marathon", "other"),
+        "the refusal when Change the schedule link… is given a link another marathon on the list "
+        "already follows. It takes {marathon} {other}",
+    ),
+    MARATHON_LINK_UNREADABLE_KEY: (
+        "Black Bloc could not read that schedule, so **{marathon}**'s link was not changed: "
+        "{reason}",
+        ("marathon", "reason"),
+        "the refusal when the new schedule link will not read. It takes {marathon} {reason}",
+    ),
+    MARATHON_INBOX_POSTED_SAID_KEY: (
+        "**{marathon}**'s inbox message is up — its Schedule line says it is not out yet, and the "
+        "same message is edited when the runs arrive.",
+        ("marathon",),
+        "what staff are told once Post it to the inbox now has posted a marathon's inbox message "
+        "before its schedule is out. It takes {marathon}",
+    ),
+    MARATHON_INBOX_ALREADY_KEY: (
+        "**{marathon}** already has its inbox message, so nothing was posted.",
+        ("marathon",),
+        "the refusal when Post it to the inbox now is pressed on a marathon whose inbox message is "
+        "already up. It takes {marathon}",
+    ),
+    MARATHON_INBOX_POST_OFF_KEY: (
+        "Marathon posts are off, so **{marathon}**'s inbox message was not posted — set "
+        "marathon_mode to shadow or on first.",
+        ("marathon",),
+        "the refusal when Post it to the inbox now is pressed while marathon posts are off. It "
+        "takes {marathon}",
+    ),
+    MARATHON_INBOX_POST_FAILED_KEY: (
+        "**{marathon}**'s inbox message could not be posted just now — the Logs page says why "
+        "(marathon.inbox_failed).",
+        ("marathon",),
+        "the refusal when Post it to the inbox now could not reach the inbox thread. It takes "
+        "{marathon}",
     ),
     MARATHON_UNIGNORED_SAID_KEY: (
         "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing "

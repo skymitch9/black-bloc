@@ -750,6 +750,14 @@ const SETTING_SPECS = [
   ["marathon_untracked_said", "text", "**{marathon}** is not tracked any more — it posts nothing; its thread is kept, archived.", "**{marathon}** is not tracked any more — it posts nothing; its thread is kept, archived.", "what staff are told once Untrack has stopped a marathon's posts. It takes {marathon}"],
   ["marathon_ignored_said", "text", "**{marathon}** is ignored — it stays on the list and is read, and posts nothing. **Track anyway** changes that.", "**{marathon}** is ignored — it stays on the list and is read, and posts nothing. **Track anyway** changes that.", "what staff are told once Ignore has quieted a marathon. It takes {marathon}"],
   ["marathon_unignored_said", "text", "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing until someone presses **Track**.", "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing until someone presses **Track**.", "what staff are told once an ignored marathon is put back to found. It takes {marathon}"],
+  ["marathon_link_changed_said", "text", "**{marathon}** reads its schedule from the new link now — its tracking, thread, event and switches are kept. {read}", "**{marathon}** reads its schedule from the new link now — its tracking, thread, event and switches are kept. {read}", "what staff are told once Change the schedule link… has moved a marathon to a new schedule. It takes {marathon} {read}"],
+  ["marathon_link_same", "text", "**{marathon}** already reads that link, so nothing was changed.", "**{marathon}** already reads that link, so nothing was changed.", "what staff are told when Change the schedule link… is given the link the marathon already reads. It takes {marathon}"],
+  ["marathon_link_taken", "text", "**{other}** already follows that schedule, so **{marathon}**'s link was not changed.", "**{other}** already follows that schedule, so **{marathon}**'s link was not changed.", "the refusal when Change the schedule link… is given a link another marathon on the list already follows. It takes {marathon} {other}"],
+  ["marathon_link_unreadable", "text", "Black Bloc could not read that schedule, so **{marathon}**'s link was not changed: {reason}", "Black Bloc could not read that schedule, so **{marathon}**'s link was not changed: {reason}", "the refusal when the new schedule link will not read. It takes {marathon} {reason}"],
+  ["marathon_inbox_posted_said", "text", "**{marathon}**'s inbox message is up — its Schedule line says it is not out yet, and the same message is edited when the runs arrive.", "**{marathon}**'s inbox message is up — its Schedule line says it is not out yet, and the same message is edited when the runs arrive.", "what staff are told once Post it to the inbox now has posted a marathon's inbox message before its schedule is out. It takes {marathon}"],
+  ["marathon_inbox_already", "text", "**{marathon}** already has its inbox message, so nothing was posted.", "**{marathon}** already has its inbox message, so nothing was posted.", "the refusal when Post it to the inbox now is pressed on a marathon whose inbox message is already up. It takes {marathon}"],
+  ["marathon_inbox_post_off", "text", "Marathon posts are off, so **{marathon}**'s inbox message was not posted — set marathon_mode to shadow or on first.", "Marathon posts are off, so **{marathon}**'s inbox message was not posted — set marathon_mode to shadow or on first.", "the refusal when Post it to the inbox now is pressed while marathon posts are off. It takes {marathon}"],
+  ["marathon_inbox_post_failed", "text", "**{marathon}**'s inbox message could not be posted just now — the Logs page says why (marathon.inbox_failed).", "**{marathon}**'s inbox message could not be posted just now — the Logs page says why (marathon.inbox_failed).", "the refusal when Post it to the inbox now could not reach the inbox thread. It takes {marathon}"],
   ["marathon_channel_ping_mode_default", "enum", "events", "events", "the pings a NEW channel row gets when it is a marathon channel (one a marathon feed is seeded for) that takes marathons: events — the default — mentions roles only inside a ping window, which its marathons set from their schedules; always and never as on the Go-live page. Every other new row follows spotlight_ping_mode_default, and no existing row is changed", ["always", "never", "events"]],
   ["marathon_channel_ping_help", "text", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "the help line under the Pings choice on a marathon channel's Go-live drawer, saying what During events means there"],
   ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a BaF run goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
@@ -5989,6 +5997,22 @@ function marathonTracked(row) {
   return Boolean(row.tracked_at) && !row.ignored_at;
 }
 
+// The mock's copy of cogs/content/marathon.py:change_link — the marathon keeps its id, tracking,
+// thread, event and switches; the source is re-read from the new link and the fetch state cleared.
+function marathonChangeLink(row, given) {
+  const url = String(given || '').trim();
+  const read = marathonReadAny(url);
+  if (read === null) throw new Refused(422, 'unknown_site', marathonWords('marathon_unknown_site'));
+  if (url === row.schedule_url) throw new Refused(409, 'same_link', marathonSaid('marathon_link_same', { marathon: row.name }));
+  const twin = state.marathons.find((one) => one.schedule_url === url && one.id !== row.id);
+  if (twin) throw new Refused(409, 'duplicate', marathonSaid('marathon_link_taken', { marathon: row.name, other: twin.name }));
+  const old = { url: row.schedule_url, source: row.source, ref: row.source_ref };
+  Object.assign(row, { schedule_url: url, source: read.source, source_ref: read.ref, fetch_failures: 0, last_error: null, last_fetch_ok: 1, last_fetched_at: new Date().toISOString() });
+  logAction('web.marathon.link_changed', { details: { marathon_id: row.id, name: row.name, old, new: { url, source: read.source, ref: read.ref }, via: 'website' } });
+  const found = marathonDetail(row);
+  return marathonSaid('marathon_link_changed_said', { marathon: row.name, read: `Its schedule has ${found.runs} run(s), ${found.ours} of them BaF.` });
+}
+
 function refuseUntracked(row) {
   if (!marathonTracked(row)) throw new Refused(409, 'not_tracked', marathonSaid('marathon_not_tracked', { marathon: row.name }));
 }
@@ -6931,6 +6955,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
       said.push(body.active ? `**${row.name}** is being read again.` : `**${row.name}** is paused — nothing is read or posted until it is resumed.`);
     }
   }
+  if ('schedule_url' in body) said.push(marathonChangeLink(row, body.schedule_url));
   if ('spotlight_id' in body) {
     const wanted = body.spotlight_id ? Number(body.spotlight_id) : null;
     if (wanted && !state.golive.spotlights.find((one) => one.id === wanted)) {
