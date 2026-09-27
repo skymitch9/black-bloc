@@ -930,6 +930,19 @@ async def seed_world(client, web, guild, wf) -> dict:
             feed_suggest_id,
         ),
     )
+    fpe_spotlight_id = await add_spotlight(
+        db, guild_id, "fastpacedevents", added_by=7, expires_at=None, pin=False
+    )
+    feed_horaro_events_id = await insert_feed(
+        db,
+        guild_id,
+        source="horaro_events",
+        feed_ref="fastpacedevents",
+        spotlight_id=fpe_spotlight_id,
+        name="Fast Pace",
+        action="add",
+        added_by=7,
+    )
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
     await db.conn.execute(
         "INSERT OR IGNORE INTO channel_drafts(guild_id, channel_id, draft) VALUES (?, ?, ?)",
@@ -1000,6 +1013,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_spotlit_person": "contractrunner",
         "feed_id": str(feed_id),
         "feed_suggest_id": str(feed_suggest_id),
+        "feed_horaro_events_id": str(feed_horaro_events_id),
         "feed_event_ref": "22",
         "feedless_spotlight_id": str(role_spotlight_id),
         "recording_meeting_id": str(recording_meeting_id),
