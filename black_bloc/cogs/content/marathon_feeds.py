@@ -517,32 +517,31 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
 
 
 async def notice_published(bot: Any, guild: Any, marathon_id: Any, runs: int) -> bool:
-    """A feed-made marathon's schedule-out moment, on the first read that finds runs: the
-    noticed_at claim first (checklist 12), then the inbox message shows the runs, then the
-    feed's auto-track. Called with the marathon's lock held."""
+    """A marathon's schedule-out moment, feed-made or staff-made, on the first read that finds
+    runs: the noticed_at claim first (checklist 12), then the inbox message posts or shows the
+    runs, then the feed's auto-track. Called with the marathon's lock held."""
     from .marathon_inbox import auto_track, sync_inbox
 
     if runs < 1 or mode_of(bot, guild.id) == MODE_OFF:
         return False
     marathon = await get_marathon(bot.db, guild.id, marathon_id)
-    if marathon is None or marathon["noticed_at"] or not marathon["feed_id"]:
+    if marathon is None or marathon["noticed_at"]:
         return False
-    feed = await get_feed(bot.db, guild.id, marathon["feed_id"])
-    if feed is None or not await claim_notice(bot.db, marathon["id"]):
+    feed = await get_feed(bot.db, guild.id, marathon["feed_id"]) if marathon["feed_id"] else None
+    if not await claim_notice(bot.db, marathon["id"]):
         return False
+    said = {
+        "event": marathon["source_ref"],
+        "name": marathon["name"],
+        "marathon_id": marathon["id"],
+        "runs": runs,
+        "because": NOTICE_PUBLISHED,
+    }
     await log_action(
         bot,
         guild,
         "marathon.inbox_published",
-        details=feed_details(
-            feed,
-            mf.VIA_FEED,
-            event=marathon["source_ref"],
-            name=marathon["name"],
-            marathon_id=marathon["id"],
-            runs=runs,
-            because=NOTICE_PUBLISHED,
-        ),
+        details=feed_details(feed, mf.VIA_FEED, **said) if feed is not None else said,
     )
     await sync_inbox(bot, guild, await get_marathon(bot.db, guild.id, marathon_id), force=True)
     await auto_track(bot, guild, marathon_id, feed)

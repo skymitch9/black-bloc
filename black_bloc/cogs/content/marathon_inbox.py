@@ -22,6 +22,7 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     MARATHON_ARCHIVED_WORD_KEY,
     MARATHON_FEED_ADDED_TEMPLATE_KEY,
+    MARATHON_FEED_NOTICE_WHEN_KEY,
     MARATHON_IGNORED_SAID_KEY,
     MARATHON_INBOX_AUTO_WHO_KEY,
     MARATHON_INBOX_BUTTON_ANYWAY_KEY,
@@ -396,8 +397,11 @@ async def event_words(bot: Any, marathon: Any) -> str:
     return f"{said}\n{mt.event_line(marathon, await event_status_of(bot, marathon))}"
 
 
-async def inbox_embed(bot: Any, guild: Any, marathon: Any, state: str, feed: Any) -> Any:
-    runs = await runs_of(bot.db, marathon["id"]) if state != mi.ARCHIVED else []
+async def inbox_embed(
+    bot: Any, guild: Any, marathon: Any, state: str, feed: Any, runs: Any = None
+) -> Any:
+    if runs is None:
+        runs = await runs_of(bot.db, marathon["id"]) if state != mi.ARCHIVED else []
     total, baf = counts_of(runs)
     source, url = source_of(marathon)
     source = str(_cell(feed, "name") or source)
@@ -490,26 +494,43 @@ async def find_message(channel: Any, message_id: Any) -> tuple[Any, bool]:
         return (None, False)
 
 
-async def sync_inbox(bot: Any, guild: Any, marathon: Any, *, force: bool = False) -> Any:
-    """Post the marathon's inbox message once, then edit it in place whenever what it shows
-    changes. `off` posts and edits nothing. Called with the marathon's lock held."""
+def posts_at_add(bot: Any, guild: Any) -> bool:
+    return bot.store.get(guild.id, MARATHON_FEED_NOTICE_WHEN_KEY) == mi.WHEN_ADDED
+
+
+async def sync_inbox(
+    bot: Any,
+    guild: Any,
+    marathon: Any,
+    *,
+    force: bool = False,
+    early: bool = False,
+    actor: Any = None,
+    via: str = VIA_DISCORD,
+) -> Any:
+    """Post the marathon's inbox message once its schedule has runs (at once under `added`, or
+    `early` at a staff press), then edit it in place whenever what it shows changes. `off`
+    posts and edits nothing. Called with the marathon's lock held."""
     home = home_now(bot, guild)
     if marathon is None or home is None:
         return None
     cog = cog_of(bot)
     state = mi.state_of(marathon)
     archived = state == mi.ARCHIVED
-    feed = await feed_of(bot, guild, marathon)
-    embed = await inbox_embed(bot, guild, marathon, state, feed)
-    content = await inbox_content(bot, guild, marathon, home, feed)
-    shown = (home, mi.comparable(content, [embed]), state, _cell(marathon, "thread_id"))
     key = int(marathon["id"])
     posted = _cell(marathon, "inbox_message_id")
     here = posted and _cell(marathon, "inbox_home") == home
+    if archived and not here:
+        return None
+    runs = await runs_of(bot.db, key) if not archived else []
+    if not here and not early and not posts_at_add(bot, guild) and not counts_of(runs)[0]:
+        return None
+    feed = await feed_of(bot, guild, marathon)
+    embed = await inbox_embed(bot, guild, marathon, state, feed, runs)
+    content = await inbox_content(bot, guild, marathon, home, feed)
+    shown = (home, mi.comparable(content, [embed]), state, _cell(marathon, "thread_id"))
     now = cog.clock()
     if not force and here and fresh_enough(cog.inbox_sent.get(key), shown, now):
-        return None
-    if archived and not here:
         return None
     thread, why = await ensure_inbox(bot, guild)
     if thread is None:
@@ -554,7 +575,8 @@ async def sync_inbox(bot: Any, guild: Any, marathon: Any, *, force: bool = False
     await log_action(
         bot,
         guild,
-        "marathon.inbox_posted",
+        kind_via("marathon.inbox_posted", via),
+        actor=actor,
         details={
             "marathon_id": key,
             "name": marathon["name"],
@@ -562,6 +584,7 @@ async def sync_inbox(bot: Any, guild: Any, marathon: Any, *, force: bool = False
             "thread_id": int(thread.id),
             "message_id": str(message.id),
             "state": state,
+            "early": early,
         },
     )
     return message

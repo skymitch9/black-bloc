@@ -4672,9 +4672,10 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_FEED_NOTICE_WHEN_KEY: (
         "enum",
         "published",
-        "retired 2026-09 — the inbox thread is the notice home: every marathon a feed finds gets "
-        "its inbox message the moment it is added, and the message is edited once its schedule "
-        "is out. Kept so old rows still read; nothing reads it any more",
+        "when a marathon gets its message in the marathon inbox thread: published waits for the "
+        "first read that finds runs on its schedule (a feed's find and a staff Add alike — Post it "
+        "to the inbox now posts one early); added posts it the moment it is on the list. "
+        "published by default",
     ),
     MARATHON_FEED_RECENT_KEY: (
         "int",

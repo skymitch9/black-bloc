@@ -13,6 +13,7 @@ from discord.ext import commands, tasks
 from ... import marathon as mt
 from ... import marathon_archive as ma
 from ... import marathon_events as me
+from ... import marathon_feeds as mfeeds
 from ... import marathon_inbox as mi
 from ... import marathon_ping as mp
 from ... import marathon_spotlight as ms
@@ -543,7 +544,7 @@ async def create_marathon(
     event_mode: Any = None,
     via: str = VIA_DISCORD,
     feed_id: int | None = None,
-    noticed: bool = True,
+    noticed: bool = False,
 ) -> Outcome:
     from ...marathon_events import BAD_MODE, makes_marathon_event
     from .marathon_events import BAD_MODE_CODE, mode_for_new
@@ -631,6 +632,8 @@ async def create_marathon(
             said = f"{said} {made.message}"
         await sync_runs(bot, guild, fresh, actor=actor)
         await inbox_sync(bot, guild, await get_marathon(bot.db, guild.id, marathon_id))
+        if via != mfeeds.VIA_FEED:
+            await notice_if_published(bot, guild, marathon_id, read)
     fresh = await get_marathon(bot.db, guild.id, marathon_id)
     return Outcome(True, said, value=fresh)
 

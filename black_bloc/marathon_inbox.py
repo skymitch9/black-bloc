@@ -14,6 +14,9 @@ IGNORED = "ignored"
 ARCHIVED = "archived"
 STATES = (FOUND, TRACKED, IGNORED, ARCHIVED)
 
+WHEN_PUBLISHED = "published"
+WHEN_ADDED = "added"
+
 HOME_ON = "on"
 HOME_SHADOW = "shadow"
 

@@ -74,11 +74,17 @@ pattern won for shape and the spec for behaviour.
    posting their board, reminders and shoutouts until staff press **Track** on their inbox message, the `/event` card or
    the drawer. A board already up from before is no longer edited; its pin still comes off a day after the end (the
    unpin is carried whatever the tracking says — checklist 38). Say it in the deploy line.
-2. **Every marathon's inbox message posts when it is added — feed or staff — and every marathon already on the list gets
+2. ~~**Every marathon's inbox message posts when it is added — feed or staff — and every marathon already on the list gets
    its message on the first tick after the deploy** (about nine messages into a new thread; in `shadow` that thread is in
    the shadow home). This retires `marathon_feed_notice_when` (v171's *published* = the notice waits for the schedule):
    the inbox message is there from the add, and the schedule-out moment is now an EDIT of it (`noticed_at` claimed first,
-   `marathon.inbox_published`, then the feed's auto-track). The key stays so old rows validate; its help says *retired*.
+   `marathon.inbox_published`, then the feed's auto-track). The key stays so old rows validate; its help says *retired*.~~
+   **REVERSED 2026-09-26 by `marathon-inbox-when`** — owner 17:5x, verbatim: *"i think we should only post when a
+   schedule is live, keep that part"*. Why: a found marathon with no schedule is nothing staff can act on yet, and nine
+   messages at once into a new thread buried the two that were real. Now `marathon_feed_notice_when` is live again:
+   `published` (default) posts a marathon's inbox message — feed-made AND staff-made — on the first read that finds runs,
+   `added` restores the post at add; the first tick after the deploy posts only marathons whose schedule has runs; staff
+   can post one early with **Post it to the inbox now**. See *Follow-up — marathon-inbox-when* below.
    The DECIDED bullet in `marathon-feeds-design.md` carries the dated line (checklist 35). The line above a feed-found
    marathon's message is still `marathon_feed_added_template`.
 3. **`marathon_notice_home` and `marathon_notice_title_template` are retired** (help says so, nothing reads them): every

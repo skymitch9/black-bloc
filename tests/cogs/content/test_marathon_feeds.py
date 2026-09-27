@@ -818,23 +818,24 @@ async def publish(bot, cog, ref=AGDQ):  # noqa: F811
     return await refresh_marathon(bot, bot.guild, (await by_ref(bot))[ref])
 
 
-async def test_published_mode_adds_quietly_and_notices_once_on_the_first_read_with_runs(
+async def test_published_mode_adds_quietly_and_posts_the_inbox_message_on_the_first_read_with_runs(
     bot,  # noqa: F811
     cog,
 ):
     await seeded(bot, cog, "published")
     await cog.tick_once()
     made = await by_ref(bot)
-    assert sorted(made) == ["71", "72", "73", "74"] and len(inbox(bot)) == 4
+    assert sorted(made) == ["71", "72", "73", "74"] and inbox(bot) == []
     assert {row["noticed_at"] for row in made.values()} == {None}
-    assert all(field_map(one.embeds[0])["Schedule"] == "not out yet" for one in inbox(bot))
+    assert {row["inbox_message_id"] for row in made.values()} == {None}
     assert "marathon.feed_added" in await kinds(bot.db)
     await refresh_marathon(bot, bot.guild, made[AGDQ])
-    assert await posted(bot) == []
+    assert await posted(bot) == [] and inbox(bot) == []
 
     await publish(bot, cog)
 
-    assert len(inbox(bot)) == 4 and notices(bot) == []
+    made = await by_ref(bot)
+    assert len(inbox(bot)) == 1 and notices(bot) == []
     message = next(one for one in inbox(bot) if one.id == made[AGDQ]["inbox_message_id"])
     assert "**Awesome Games Done Quick 2027**" in message.content
     fields = field_map(message.embeds[0])
@@ -848,10 +849,13 @@ async def test_published_mode_adds_quietly_and_notices_once_on_the_first_read_wi
     await publish(bot, cog)
     later(cog, 48)
     await cog.tick_once()
-    assert len(inbox(bot)) == 4 and len(await posted(bot)) == 1
+    assert len(inbox(bot)) == 1 and len(await posted(bot)) == 1
 
 
-async def test_the_retired_notice_when_key_changes_nothing(bot, cog):  # noqa: F811
+async def test_added_mode_posts_every_marathon_at_add_and_the_schedule_out_edits_it(
+    bot,  # noqa: F811
+    cog,
+):
     await seeded(bot, cog, "added")
     await cog.tick_once()
     assert len(inbox(bot)) == 4 and notices(bot) == []
@@ -876,10 +880,11 @@ async def test_a_schedule_already_published_at_discovery_notices_on_its_first_re
     kinds_seen = await kinds(bot.db)
     assert kinds_seen.index("marathon.feed_added") < kinds_seen.index("marathon.inbox_published")
 
+    assert len(inbox(bot)) == 1
     cog.client.runs_by_ref[("gdq", "73")] = two_runs()
     later(cog, 48)
     await cog.tick_once()
-    assert len(inbox(bot)) == 4
+    assert len(inbox(bot)) == 2
     assert [row["because"] for row in await posted(bot)] == ["published", "published"]
 
 
@@ -887,19 +892,20 @@ async def test_the_schedule_out_edit_rehearses_in_the_shadow_inbox(bot, cog):  #
     await seeded(bot, cog, "published")
     await bot.store.set(GUILD, "marathon_mode", "shadow")
     await cog.tick_once()
-    shadowed = inbox(bot, SHADOW_CHANNEL)
-    assert len(shadowed) == 4 and inbox(bot) == []
-    assert f"<#{STAFF_ROOM}>" in shadowed[0].content
+    assert inbox(bot, SHADOW_CHANNEL) == [] and inbox(bot) == []
 
     await publish(bot, cog)
 
+    shadowed = inbox(bot, SHADOW_CHANNEL)
+    assert len(shadowed) == 1 and inbox(bot) == []
+    assert f"<#{STAFF_ROOM}>" in shadowed[0].content
     agdq = (await by_ref(bot))[AGDQ]
     message = next(one for one in shadowed if one.id == agdq["inbox_message_id"])
     assert field_map(message.embeds[0])["Schedule"] == "2 runs · 0 BaF"
     assert agdq["inbox_home"] == "shadow" and len(await posted(bot)) == 1
 
 
-async def test_off_holds_the_notice_unclaimed_and_a_feedless_marathon_never_notices(
+async def test_off_holds_the_notice_unclaimed_and_a_feedless_marathon_has_its_moment_too(
     bot,  # noqa: F811
     cog,
 ):
@@ -914,7 +920,9 @@ async def test_off_holds_the_notice_unclaimed_and_a_feedless_marathon_never_noti
     await publish(bot, cog)
     await publish(bot, cog, "73")
 
-    assert len(await posted(bot)) == 1 and (await by_ref(bot))["73"]["noticed_at"] is None
+    assert len(await posted(bot)) == 2 and (await by_ref(bot))["73"]["noticed_at"]
+    assert (await posted(bot))[1]["marathon_id"] == (await by_ref(bot))["73"]["id"]
+    assert "feed_id" not in (await posted(bot))[1] and len(inbox(bot)) == 2
 
 
 # --- Oengus (Speed Stuff 4 Charity) ------------------------------------------------------------

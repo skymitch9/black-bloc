@@ -177,7 +177,7 @@ export const LABELS = {
   marathon_feeds: 'Whether the marathon feeds check on their own',
   marathon_feed_hours: 'Hours between two checks of a feed',
   marathon_feed_action_default: 'What a new feed does with an event it finds',
-  marathon_feed_notice_when: 'When staff were told about a found marathon (retired)',
+  marathon_feed_notice_when: 'When a marathon gets its inbox message',
   marathon_feed_recent_days: 'Days an event that already began still counts as new',
   marathon_ladyarcaders_floor: 'Lady Arcaders event number the probe starts above',
   marathon_feed_added_template: 'The line above a feed-found marathon in the inbox',
