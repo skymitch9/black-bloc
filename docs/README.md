@@ -114,6 +114,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-26 21:2x:** v178 live (each BaF runner gets their own pinned post in the staff thread; public highlights and reminders go to their own channel settings, go-live for now; the ping switch is on the thread; schema 75, 602 keys). The marathon threads are the STAFF control room; see [`DONE.md`](DONE.md) 2026-09-26 v178.
+
 **2026-09-26 20:0x:** v177 live (marathon threads follow the channel setting; a pinned control message in each tracked thread — marathon event, BaF run events, spotlight start/stop; schema 73, 574 keys). The marathon inbox and threads live in **# events · BlackMail**; see [`DONE.md`](DONE.md) 2026-09-26 v177.
 
 **2026-09-26 19:0x:** v176 live (three merges: the marathon inbox — a master thread in events and a thread per tracked marathon; per-marathon ping switch (off) and Spotlight card; the inbox waits for a live schedule; schema 72, 560 keys). **Marathon posts are ON** since 19:02, SS4C tracked; see [`DONE.md`](DONE.md) 2026-09-26 v176. The mode table below was NOT re-read.
