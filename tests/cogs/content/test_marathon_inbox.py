@@ -162,7 +162,7 @@ async def test_track_makes_the_thread_beside_the_inbox_and_the_board_lands_insid
     assert row["tracked_at"] and row["tracked_by"] == FakeActor.id and row["thread_home"] == "on"
     thread = marathon_thread(bot)
     assert row["thread_id"] == thread.id and thread.name == "AGDQ 2027"
-    assert f"<#{thread.id}>" in done.message
+    assert "post in its own thread, beside the inbox" in done.message
     opening = thread.messages[0].content
     assert (
         opening.startswith(f"AGDQ 2027 — tracked by <@{FakeActor.id}>") and "Schedule:" in opening
@@ -201,7 +201,7 @@ async def test_with_the_thread_key_off_track_posts_in_the_marathon_channel_as_be
     await bot.store.set(GUILD, "marathon_track_makes_thread", False)
     marathon = await found(bot, cog)
     done = await inbox.track(bot, bot.guild, FakeActor(), marathon)
-    assert done.ok and f"<#{CHANNEL}>" in done.message
+    assert done.ok and "post in the marathon channel" in done.message
     await cog.follow(bot.guild, await fresh(bot, marathon))
     assert [one for one in room(bot, CHANNEL).messages if "BaF on the schedule" in one.content]
     assert len(room(bot).threads) == 1 and (await fresh(bot, marathon))["thread_id"] is None

@@ -344,3 +344,37 @@ export function archiveCounts(row) {
   const runs = Number(row.runs) || 0;
   return said(ARCHIVE_LINE_COUNTS, { runs, s: runs === 1 ? '' : 's', baf: Number(row.ours) || 0 });
 }
+
+const TRACKED_WORDS = { tracked: 'tracked', ignored: 'ignored', found: 'found', archived: 'archived' };
+const TRACKED_TONES = { tracked: 'ok', ignored: null, found: 'warn', archived: null };
+const TRACKED_BY = 'tracked by {who}';
+const TRACKED_SELF = 'tracked by its feed';
+const IGNORED_BY = 'ignored by {who}';
+const FOUND_LINE = 'found · not tracked';
+
+/** The Tracked column and the drawer's state: found, tracked or ignored, with its tone. */
+export function trackedCell(row) {
+  const state = TRACKED_WORDS[row.tracked_state] ? row.tracked_state : 'found';
+  return { text: TRACKED_WORDS[state], tone: TRACKED_TONES[state] };
+}
+
+/** The drawer header's state line, in the words the inbox message uses. */
+export function trackedLine(row) {
+  if (row.tracked_state === 'tracked') {
+    return row.tracked_by_name ? said(TRACKED_BY, { who: row.tracked_by_name }) : TRACKED_SELF;
+  }
+  if (row.tracked_state === 'ignored') {
+    return row.ignored_by_name ? said(IGNORED_BY, { who: row.ignored_by_name }) : 'ignored';
+  }
+  if (row.tracked_state === 'archived') return 'archived';
+  return FOUND_LINE;
+}
+
+/** Only the moves that change something: Track and Ignore, Untrack, or Track anyway. */
+export function trackMoves(row) {
+  return {
+    found: ['track', 'ignore'],
+    tracked: ['untrack'],
+    ignored: ['anyway'],
+  }[row.tracked_state] || [];
+}

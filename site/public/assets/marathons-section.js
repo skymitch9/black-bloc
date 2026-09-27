@@ -23,6 +23,9 @@ import {
   slotTime,
   sourceCell,
   sourcesTitle,
+  trackMoves,
+  trackedCell,
+  trackedLine,
   whenWords,
 } from './marathon-words.js';
 import {
@@ -225,6 +228,20 @@ const SUGGESTION_NOTE = 'Staff decide: nothing is added until someone presses **
 const FEED_REMOVE_BODY = 'It stops checking. The marathons it added stay on the list.';
 const FEED_GONE = 'That feed is gone — the list below is current.';
 const ACTION_CHOICES = [{ value: 'add', label: 'Add' }, { value: 'suggest', label: 'Suggest' }];
+const AUTO_CHOICES = [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }];
+const AUTO_FIELD = 'Auto-track';
+const AUTO_HELP = 'On: each marathon this feed adds is tracked the moment its schedule is out — its '
+  + 'thread is made and its posts begin. Off (the default): it waits in the inbox for staff to press Track.';
+const THREAD_LINK = 'thread ↗';
+const INBOX_LINK = 'inbox ↗';
+const TRACK_MOVES = {
+  track: { label: 'Track', path: 'track', body: { on: true }, tone: 'warn' },
+  anyway: { label: 'Track anyway', path: 'track', body: { on: true }, tone: 'warn' },
+  untrack: { label: 'Untrack', path: 'track', body: { on: false }, tone: 'quiet' },
+  ignore: { label: 'Ignore', path: 'ignore', body: { on: true }, tone: 'quiet' },
+};
+const FOUND_NOTE = 'Found, not tracked: it is read and kept current, and posts nothing. **Track** gives it '
+  + 'its own thread beside the inbox for its board, reminders and shoutouts; **Ignore** keeps it quiet on the list.';
 
 function full(node) {
   node.setAttribute('data-span', 'full');
@@ -392,11 +409,11 @@ function runTools(marathon, row, say) {
   if (shown.archived) return null;
   const base = `/api/marathons/${marathon.id}/runs/${row.id}`;
   const tools = [];
-  if (row.shoutable) tools.push(step(marathon, say, 'Shout it now', () => send(`${base}/shout`, 'POST', {}), 'warn'));
+  if (row.shoutable && marathon.tracked) tools.push(step(marathon, say, 'Shout it now', () => send(`${base}/shout`, 'POST', {}), 'warn'));
   if (row.can_mark_done && (row.ours || row.state === 'live')) {
     tools.push(step(marathon, say, 'Mark done', () => send(`${base}/done`, 'POST', {})));
   }
-  if (row.can_mark_live && !row.shoutable) tools.push(step(marathon, say, 'Mark it live', () => send(`${base}/live`, 'POST', {})));
+  if (row.can_mark_live && !(row.shoutable && marathon.tracked)) tools.push(step(marathon, say, 'Mark it live', () => send(`${base}/live`, 'POST', {})));
   if (row.event_id) {
     tools.push(textAction(`event #${row.event_id}${row.event_status ? ` · ${row.event_status}` : ''}`, () => {
       closeDrawer();
@@ -447,6 +464,19 @@ function channelHead(marathon) {
   return linkAction(marathon.channel_login, GOLIVE_HREF);
 }
 
+function trackedHead(marathon) {
+  const state = trackedCell(marathon);
+  return el('span', { class: 'mx-tracked' }, joined([
+    el('span', { class: 'mx-line', 'data-tone': state.tone || undefined, text: trackedLine(marathon) }),
+    marathon.thread_url && marathon.tracked
+      ? el('a', { class: 'say-nothing-do', href: marathon.thread_url, text: THREAD_LINK, rel: 'noreferrer', target: '_blank' })
+      : null,
+    marathon.inbox_message_url
+      ? el('a', { class: 'say-nothing-do', href: marathon.inbox_message_url, text: INBOX_LINK, rel: 'noreferrer', target: '_blank' })
+      : null,
+  ]));
+}
+
 function headerBlock(marathon, board, say) {
   const reading = headerReading(marathon);
   const timeZone = (board && board.timezone) || undefined;
@@ -464,9 +494,11 @@ function headerBlock(marathon, board, say) {
       el('span', { text: headerCounts(marathon.run_list) }),
       eventHead(marathon),
       channelHead(marathon),
+      trackedHead(marathon),
     ])),
+    marathon.tracked_state === 'found' ? el('p', { class: 'field-help' }, boldParts(FOUND_NOTE)) : null,
     ...nextBlock(marathon, say),
-  ];
+  ].filter(Boolean);
 }
 
 function partWords(parts) {
@@ -823,10 +855,10 @@ function pollSaid(marathon, wanted) {
 function postsRow(marathon, say) {
   const posts = postsLine(marathon);
   const where = posts.hasBoard && marathon.board_channel_id;
-  const move = textAction(posts.hasBoard ? 'Refresh the board' : 'Post the board', async () => {
+  const move = marathon.tracked ? textAction(posts.hasBoard ? 'Refresh the board' : 'Post the board', async () => {
     const done = await run(say, () => send(`/api/marathons/${marathon.id}/board`, 'POST', {}), (found) => found?.message);
     await after(marathon, done);
-  });
+  }) : null;
   return el('p', { class: 'field-help mx-line mx-posts' }, joined([
     el('span', {}, [el('span', { text: posts.board }), where ? el('span', { text: ' ' }) : null, where ? nameNode(marathon.board_channel_id) : null]),
     posts.sent ? el('span', { text: posts.sent }) : null,
@@ -834,8 +866,16 @@ function postsRow(marathon, say) {
   ]));
 }
 
+function trackButtons(marathon, say) {
+  return trackMoves(marathon).map((key) => {
+    const move = TRACK_MOVES[key];
+    return step(marathon, say, move.label, () => send(`/api/marathons/${marathon.id}/${move.path}`, 'POST', move.body), move.tone);
+  });
+}
+
 function moveBar(marathon, say) {
   return bar([
+    ...trackButtons(marathon, say),
     marathon.active ? step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn') : null,
     step(marathon, say, marathon.active ? 'Pause' : 'Resume', () => send(`/api/marathons/${marathon.id}`, 'PATCH', { active: !marathon.active }), null),
     button('Archive it', async () => {
@@ -1045,6 +1085,12 @@ function feedDrawer(feed, message) {
   mode.addEventListener('change', () => {
     feedDrawerStep(feed, say, () => send(base, 'PATCH', { event_mode: mode.value || null }));
   });
+  const auto = segment(AUTO_CHOICES, feed.auto_track ? 'on' : 'off', {
+    onChange: () => {
+      const wanted = auto.readValue() === 'on';
+      if (wanted !== Boolean(feed.auto_track)) feedDrawerStep(feed, say, () => send(base, 'PATCH', { auto_track: wanted }));
+    },
+  });
   const moves = [];
   if ((feed.dismissed || []).length || feed.seen_count) {
     moves.push(button('Look again', () => feedDrawerStep(feed, say, () => send(`${base}/look`, 'POST', {})), { tone: 'quiet' }));
@@ -1083,6 +1129,7 @@ function feedDrawer(feed, message) {
       ])
       : null,
     field('Event', mode, FEED_MODE_HELP),
+    field(AUTO_FIELD, auto, AUTO_HELP),
     ...(feed.suggestions || []).map((one) => suggestionCard(feed, one, say, { inDrawer: true })),
     feed.seen_count ? el('p', { class: 'field-help mx-line' }, boldParts(said({ horaro_events: FEED_SEEN_NOTE_HORARO, ladyarcaders: FEED_PROBE_NOTE }[feed.source] || FEED_SEEN_NOTE, { count: feed.seen_count }))) : null,
     line(FEED_IGNORED_NOTE),
@@ -1250,6 +1297,10 @@ function listSection(payload, feeds, say, archive) {
     { label: 'Source', cell: (row) => el('span', { class: 'cell-quiet', text: sourceCell(row) }) },
     { label: 'Dates', cell: (row) => datesOf(row) },
     { label: 'State', cell: (row) => badge(row.phase_word, PHASE_TONE[row.phase] || null) },
+    { label: 'Tracked', cell: (row) => {
+      const state = trackedCell(row);
+      return badge(state.text, state.tone);
+    } },
     { label: `${BAF} runs`, cell: (row) => `${row.ours} of ${row.runs}` },
     { label: 'Schedule', cell: (row) => el('span', {
       class: 'cell-quiet mx-line',

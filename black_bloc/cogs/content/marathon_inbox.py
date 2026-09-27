@@ -687,8 +687,11 @@ async def archive_thread(bot: Any, guild: Any, marathon: Any) -> bool:
     return True
 
 
-def where_words(bot: Any, guild: Any, marathon: Any, channel_id: Any) -> str:
-    return f"<#{int(channel_id)}>" if channel_id else mi.NOWHERE
+def where_words(marathon: Any, channel_id: Any) -> str:
+    """Words, not a mention: the same sentence answers on Discord and on the site."""
+    if not channel_id:
+        return mi.NOWHERE
+    return mi.WHERE_THREAD if _cell(marathon, "thread_id") else mi.WHERE_CHANNEL
 
 
 # --- the moves: the inbox buttons, the panel and the site all come in by these ----------------
@@ -751,7 +754,7 @@ async def track_held(
             guild.id,
             MARATHON_TRACKED_SAID_KEY,
             marathon=fresh["name"],
-            where=where_words(bot, guild, fresh, where),
+            where=where_words(fresh, where),
         ),
         value=fresh,
     )

@@ -5720,7 +5720,17 @@ function seedMarathons() {
     // was added with its dates and is over now.
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
-  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ...row }));
+  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ...marathonInboxSeed()[row.id], inbox_message_id: String(861000000000000000 + row.id), ...row }));
+}
+
+// The inbox (marathon-inbox-design.md §B): AGDQ 2027 is tracked with its own thread (and its
+// board inside it), Flame Fatales is ignored, every other marathon is found and posts nothing.
+const MARATHON_INBOX_THREAD = '860000000000000000';
+function marathonInboxSeed() {
+  return {
+    1: { tracked_at: minutesAgo(8800), tracked_by: STAFF.id, thread_id: '860000000000000001', board_channel_id: '860000000000000001' },
+    4: { ignored_at: minutesAgo(20000), ignored_by: STAFF.id },
+  };
 }
 
 // The archive (marathon-archive-design.md §C): rows moved whole off the live list, newest first.
@@ -5941,7 +5951,71 @@ function marathonRow(row) {
     event_mode: marathonModeOf(row),
     event_mode_word: MARATHON_MODE_WORDS[marathonModeOf(row)],
     spotlight_mode: row.spotlight_mode === 'off' ? 'off' : 'follow',
+    ...marathonTracking(row),
   };
+}
+
+// The bot's api/tools/marathons.tracking_of: the inbox's state for a row and its two links.
+function marathonTracking(row, archived = false) {
+  const ignored = Boolean(row.ignored_at);
+  const tracked = Boolean(row.tracked_at) && !ignored;
+  const discord = (channel, message) => (channel ? `https://discord.com/channels/${REVIEW_GUILD_ID}/${channel}${message ? `/${message}` : ''}` : null);
+  return {
+    tracked_state: archived ? 'archived' : ignored ? 'ignored' : tracked ? 'tracked' : 'found',
+    tracked,
+    tracked_at: row.tracked_at || null,
+    tracked_by_name: row.tracked_by ? memberName(row.tracked_by) : null,
+    ignored_at: row.ignored_at || null,
+    ignored_by_name: row.ignored_by ? memberName(row.ignored_by) : null,
+    thread_id: row.thread_id || null,
+    thread_url: discord(row.thread_id),
+    inbox_message_url: row.inbox_message_id ? discord(MARATHON_INBOX_THREAD, row.inbox_message_id) : null,
+  };
+}
+
+function marathonTracked(row) {
+  return Boolean(row.tracked_at) && !row.ignored_at;
+}
+
+function refuseUntracked(row) {
+  if (!marathonTracked(row)) throw new Refused(409, 'not_tracked', marathonSaid('marathon_not_tracked', { marathon: row.name }));
+}
+
+function marathonTrack(row, on) {
+  if (on) {
+    const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+    if (channel && !channelTakesMarathons(channel)) throw new Refused(409, 'channel_opted_out', marathonSaid('marathon_track_refused', { marathon: row.name }));
+    if (!marathonTracked(row)) {
+      Object.assign(row, { tracked_at: new Date().toISOString(), tracked_by: STAFF.id, ignored_at: null, ignored_by: null });
+      if (!row.thread_id && state.settings.get('marathon_track_makes_thread') !== false) row.thread_id = String(860000000000000100 + row.id);
+      logAction('web.marathon.tracked', { details: { marathon_id: row.id, name: row.name, automatic: false, via: 'website' } });
+    }
+    const where = row.thread_id ? 'its own thread, beside the inbox' : 'the marathon channel';
+    return marathonSaid('marathon_tracked_said', { marathon: row.name, where });
+  }
+  if (row.tracked_at) {
+    Object.assign(row, { tracked_at: null, tracked_by: null, board_pinned: false });
+    logAction('web.marathon.untracked', { details: { marathon_id: row.id, name: row.name, via: 'website' } });
+  }
+  return marathonSaid('marathon_untracked_said', { marathon: row.name });
+}
+
+function marathonIgnore(row, on) {
+  if (on && !row.ignored_at) {
+    const wasTracked = Boolean(row.tracked_at);
+    Object.assign(row, { ignored_at: new Date().toISOString(), ignored_by: STAFF.id, tracked_at: null, tracked_by: null, board_pinned: wasTracked ? false : row.board_pinned });
+    logAction('web.marathon.ignored', { details: { marathon_id: row.id, name: row.name, was_tracked: wasTracked, via: 'website' } });
+  } else if (!on && row.ignored_at) {
+    Object.assign(row, { ignored_at: null, ignored_by: null });
+    logAction('web.marathon.unignored', { details: { marathon_id: row.id, name: row.name, via: 'website' } });
+  }
+  return marathonSaid(on ? 'marathon_ignored_said' : 'marathon_unignored_said', { marathon: row.name });
+}
+
+function wantedOn(body) {
+  const on = body && 'on' in body ? body.on : true;
+  if (typeof on !== 'boolean') throw new Refused(422, 'bad_on', 'Say true or false, so nothing was changed.');
+  return on;
 }
 
 // The bot's cogs/content/marathon_spotlight.set_spotlight_mode, words only: the mock has no tick to spotlight a channel.
@@ -6289,6 +6363,7 @@ function feedRow(feed) {
     event_mode_effective: MARATHON_MODES.includes(feed.event_mode) ? feed.event_mode : (MARATHON_MODES.includes(state.settings.get('marathon_event_mode_default')) ? state.settings.get('marathon_event_mode_default') : 'none'),
     event_mode_word: MARATHON_MODE_WORDS[MARATHON_MODES.includes(feed.event_mode) ? feed.event_mode : (MARATHON_MODES.includes(state.settings.get('marathon_event_mode_default')) ? state.settings.get('marathon_event_mode_default') : 'none')],
     held_by_channel: Boolean(feed.held_by_channel),
+    auto_track: Boolean(feed.auto_track),
     active: Boolean(feed.active),
     hours: Number(state.settings.get('marathon_feed_hours')),
     last_checked_at: feed.last_checked_at,
@@ -6376,7 +6451,7 @@ route('POST', '/api/marathons/feeds', async (context) => {
   if (!['add', 'suggest'].includes(action)) throw new Refused(422, 'bad_action', 'Say add or suggest for what a feed does with a new event, so nothing was changed.');
   const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 60) || { gdq: 'GDQ', rpglb: 'RPG Limit Break', ladyarcaders: 'Lady Arcaders' }[pick] || feedChannelName(spotlightId);
   const id = state.marathonFeeds.reduce((top, one) => Math.max(top, one.id), 0) + 1;
-  const feed = { id, source: ['horaro', 'oengus', 'horaro_events', 'fastestfurs', 'ladyarcaders'].includes(pick) ? pick : 'tracker', feed_ref: ref, seen: [], spotlight_id: spotlightId, name, action, active: true, last_checked_at: null, last_ok: null, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: STAFF.id, added_at: new Date().toISOString() };
+  const feed = { id, source: ['horaro', 'oengus', 'horaro_events', 'fastestfurs', 'ladyarcaders'].includes(pick) ? pick : 'tracker', feed_ref: ref, seen: [], spotlight_id: spotlightId, name, action, active: true, last_checked_at: null, last_ok: null, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: STAFF.id, added_at: new Date().toISOString(), auto_track: state.settings.get('marathon_auto_track_default') === true };
   state.marathonFeeds.push(feed);
   logAction('web.marathon.feed_created', { details: { feed_id: id, feed: name, source: pick, via: 'website' } });
   const added = feedCheck(feed);
@@ -6390,6 +6465,12 @@ route('PATCH', '/api/marathons/feeds/:feed_id', async (context) => {
   const said = [];
   if ('active' in body && typeof body.active !== 'boolean') throw new Refused(422, 'bad_active', 'Say true to check this feed or false to pause it, so nothing was changed.');
   if ('action' in body && !['add', 'suggest'].includes(body.action)) throw new Refused(422, 'bad_action', 'Say add or suggest for what a feed does with a new event, so nothing was changed.');
+  if ('auto_track' in body && typeof body.auto_track !== 'boolean') throw new Refused(422, 'bad_auto_track', 'Say true or false for auto-track, so nothing was changed.');
+  if ('auto_track' in body && body.auto_track !== Boolean(feed.auto_track)) {
+    feed.auto_track = body.auto_track;
+    logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, auto_track: body.auto_track, via: 'website' } });
+    said.push(`**${feed.name}** auto-track is ${body.auto_track ? 'on — each marathon it adds is tracked when its schedule is out' : 'off — staff press Track'}.`);
+  }
   if ('action' in body && body.action !== feed.action) {
     feed.action = body.action;
     logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, action: body.action, via: 'website' } });
@@ -6667,6 +6748,7 @@ function marathonArchivedRow(row) {
     archived_why: row.archived_why,
     archived_why_word: MARATHON_WHY_WORDS[row.archived_why] || row.archived_why,
     archived_word: marathonArchivedWord(row),
+    ...marathonTracking(row, true),
   };
 }
 
@@ -6711,6 +6793,20 @@ route('POST', '/api/marathons/:marathon_id/archive', (context) => {
   const row = marathonOf(context.params.marathon_id);
   marathonArchive(row, 'staff', STAFF.id);
   return { ...marathonDetailAny(row.id), message: marathonSaid('marathon_archived_said', { name: row.name }) };
+});
+
+route('POST', '/api/marathons/:marathon_id/track', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const message = marathonTrack(row, wantedOn(await context.body()));
+  return { ...marathonDetailAny(row.id), message };
+});
+
+route('POST', '/api/marathons/:marathon_id/ignore', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const message = marathonIgnore(row, wantedOn(await context.body()));
+  return { ...marathonDetailAny(row.id), message };
 });
 
 route('POST', '/api/marathons/:marathon_id/restore', (context) => {
@@ -6859,11 +6955,12 @@ route('POST', '/api/marathons/:marathon_id/refresh', (context) => {
 route('POST', '/api/marathons/:marathon_id/board', (context) => {
   requireStaff(context.session);
   const row = marathonOf(context.params.marathon_id);
+  refuseUntracked(row);
   const shadow = state.settings.get('marathon_mode') !== 'on';
   const kind = row.board_message_id ? (shadow ? 'web.marathon.would_refresh_board' : 'web.marathon.board_refreshed') : (shadow ? 'web.marathon.would_post_board' : 'web.marathon.board_posted');
   if (!row.board_message_id) {
     row.board_message_id = String(830000000000000400 + row.id);
-    row.board_channel_id = '800000000000000006';
+    row.board_channel_id = row.thread_id || '800000000000000006';
   }
   logAction(kind, { details: { marathon_id: row.id, via: 'website' } });
   return { ...marathonDetail(row), message: `The board for **${row.name}** is up to date.` };
@@ -7101,6 +7198,7 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/shout', (context) => {
   const row = marathonOf(context.params.marathon_id);
   const run = marathonRunOf(row, context.params.run_id);
   if (!marathonOurs(run)) throw new Refused(409, 'not_ours', `Nobody from BaF is on **${run.game}**, so there is nobody to shout. Pair a name first.`);
+  refuseUntracked(row);
   if (!['upcoming', 'live'].includes(run.state) || run.shout_message_id) {
     throw new Refused(409, 'not_shoutable', `**${run.game}** is ${run.state} or has its shoutout already, so nothing was posted. Only a BaF run that is coming up or on now without a shoutout can be shouted by hand.`);
   }
@@ -7129,7 +7227,7 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/live', (context) => {
   const from = run.state;
   Object.assign(run, { state: 'live', live_because: 'staff' });
   logAction('web.marathon.run_live', { details: { marathon_id: row.id, run_id: run.id, from, because: 'staff', via: 'website' } });
-  if (marathonOurs(run) && !run.shout_message_id) {
+  if (marathonOurs(run) && !run.shout_message_id && marathonTracked(row)) {
     run.shout_message_id = String(830000000000000500 + run.id);
     logAction(state.settings.get('marathon_mode') === 'on' ? 'web.marathon.shouted' : 'web.marathon.would_shout', { details: { marathon_id: row.id, run_id: run.id, via: 'website' } });
   }

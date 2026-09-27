@@ -4737,7 +4737,8 @@
           "marathons",
           "event_mode",
           "event_mode_effective",
-          "event_mode_word"
+          "event_mode_word",
+          "auto_track"
         ],
         "channels": [
           "id",
@@ -4872,6 +4873,23 @@
         "event_mode",
         "event_mode_effective",
         "event_mode_word",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/feeds/{feed_id}",
+      "body": {
+        "auto_track": true
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the feed drawer's Auto-track switch (marathon-inbox §D3)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "auto_track",
         "message"
       ]
     },
@@ -5041,7 +5059,11 @@
           "next_waiting",
           "event",
           "feed_name",
-          "event_mode"
+          "event_mode",
+          "tracked_state",
+          "tracked",
+          "thread_url",
+          "inbox_message_url"
         ]
       }
     },
@@ -5106,7 +5128,15 @@
         "feed_name",
         "event_mode",
         "event_mode_word",
-        "spotlight_mode"
+        "spotlight_mode",
+        "tracked_state",
+        "tracked",
+        "tracked_at",
+        "tracked_by_name",
+        "ignored_at",
+        "ignored_by_name",
+        "thread_url",
+        "inbox_message_url"
       ],
       "rows": {
         "run_list": [
@@ -5265,7 +5295,10 @@
         "event",
         "run_list",
         "pairings",
-        "unmatched"
+        "unmatched",
+        "tracked_state",
+        "thread_url",
+        "inbox_message_url"
       ],
       "rows": {
         "run_list": [
@@ -5341,6 +5374,43 @@
         "archived",
         "active",
         "run_list",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_over_id}/track",
+      "body": {},
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Track / Track anyway (marathon-inbox §B2)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "tracked_state",
+        "tracked",
+        "tracked_by_name",
+        "thread_url",
+        "inbox_message_url",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_over_id}/ignore",
+      "body": {
+        "on": true
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Ignore (marathon-inbox §B2)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "tracked_state",
+        "tracked",
+        "ignored_at",
+        "ignored_by_name",
         "message"
       ]
     },
