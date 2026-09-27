@@ -137,6 +137,9 @@ async def restore_rows(db: Any, marathon_id: int) -> bool:
         await db.conn.execute(
             "UPDATE marathons SET active = 0, board_pinned = 0 WHERE id = ?", wanted
         )
+        await db.conn.execute(
+            "UPDATE marathon_runs SET post_pinned = 0 WHERE marathon_id = ?", wanted
+        )
         for table in ARCHIVED_TABLES.values():
             key = "id" if table == ARCHIVED_TABLES[MARATHONS] else "marathon_id"
             await db.conn.execute(f"DELETE FROM {table} WHERE {key} = ?", wanted)
@@ -276,7 +279,7 @@ async def archive_held(
     )
     if why == ma.REMOVED:
         await ignore_removed(bot, guild, actor, marathon, via=VIA_FEED)
-    await cog.unpin_board(guild, marathon, because=ma.UNPIN_BECAUSE)
+    await cog.unpin_board(guild, marathon, because=ma.UNPIN_BECAUSE, runs=runs)
     await archived_inbox(bot, guild, marathon, at)
     return True
 

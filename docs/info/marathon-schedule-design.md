@@ -1,5 +1,7 @@
 # Marathon schedules — our people on a marathon stream, read off the posted schedule, re-read every half hour
 
+> 🔨 **2026-09-26 — §D's board changed shape (branch `marathon-runner-posts`, BUILT, NOT merged; checklist 35):** with `marathon_runner_posts` on (default) the board is its head alone — no per-run lines — and each BaF run gets its OWN post under it, pinned (`marathon_runner_posts_pinned`), edited in place as the run moves, goes live, ends or is dropped, unpinned a day after its run is over and with every board unpin; off = the board with lines as below. Owner: *"When we highlight a BaF runner have it be a separate post and not part of the original post"*. See [`marathon-runner-posts-design.md`](marathon-runner-posts-design.md).
+
 > 🔨 **2026-09-26 — §D's posts move into the marathon's own thread** (branch `marathon-inbox`, BUILT, NOT merged): the board, the reminders and the shoutouts of a TRACKED marathon post inside its thread (beside the inbox in the events channel); an untracked marathon posts none of them; `marathon_track_makes_thread` off keeps `marathon_channel_id`. [`marathon-inbox-design.md`](marathon-inbox-design.md) §B2.
 
 > 🔨 **2026-09-26 — branch `marathon-spotlight` (NOT merged): a marathon now spotlights its channel as well as setting its ping window** — from `marathon_spotlight_lead_minutes` before its first run to its last run's end, after every fetch and on the minute tick; staff turning the spotlight off stops it for that marathon. See [`marathon-spotlight-design.md`](marathon-spotlight-design.md).

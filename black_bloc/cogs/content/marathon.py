@@ -106,6 +106,7 @@ from ...settings_store import (
     MARATHON_REMINDER_STALE_KEY,
     MARATHON_REMINDER_TEMPLATE_KEY,
     MARATHON_REMOVE_QUESTION_KEY,
+    MARATHON_RUNNER_POSTS_KEY,
     MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY,
     MARATHON_SUGGEST_NEXT_KEY,
     MARATHON_TITLE_CONFIRMS_KEY,
@@ -375,6 +376,9 @@ RUN_COLUMNS = {
     "reminders_sent",
     "last_seen_at",
     "event_id",
+    "post_message_id",
+    "post_channel_id",
+    "post_pinned",
 }
 
 
@@ -1516,6 +1520,7 @@ class Marathons(commands.Cog):
         key = int(marathon_id)
         self._next_tried.discard(key)
         self._board_sent.pop(key, None)
+        self.__dict__.get("posts_sent", {}).pop(key, None)
         self.inbox_sent.pop(key, None)
         self.inbox_moved.discard(key)
         self.thread_homes.pop(key, None)
@@ -1596,6 +1601,7 @@ class Marathons(commands.Cog):
         from .marathon_archive import archive_one
         from .marathon_feeds import tick_feeds
         from .marathon_inbox import follow_inbox_home
+        from .marathon_runner_posts import unpin_due
 
         if not self.bot.db.is_connected:
             return
@@ -1612,8 +1618,10 @@ class Marathons(commands.Cog):
                         continue
                     if not off:
                         await self.tick_marathon(guild, fresh)
-                    elif fresh["board_pinned"] and mt.board_due_off(fresh, self.clock()):
+                        continue
+                    if fresh["board_pinned"] and mt.board_due_off(fresh, self.clock()):
                         await self.unpin_board(guild, fresh, because="over")
+                    await unpin_due(self, guild, fresh)
             await archive_one(self, guild, rows)
         self.last_tick_ok_at = now_iso()
         self.last_tick_error = None
@@ -1633,6 +1641,7 @@ class Marathons(commands.Cog):
 
     async def tick_marathon(self, guild: Any, marathon: Any) -> None:
         from .marathon_inbox import follow_thread_home
+        from .marathon_runner_posts import unpin_due
         from .marathon_thread_controls import sync_controls
 
         now = self.clock()
@@ -1645,6 +1654,7 @@ class Marathons(commands.Cog):
             return
         if marathon["board_pinned"] and mt.board_due_off(marathon, now):
             await self.unpin_board(guild, marathon, because="over")
+        await unpin_due(self, guild, marathon)
         if await follow_thread_home(self.bot, guild, marathon):
             marathon = await get_marathon(self.bot.db, guild.id, marathon["id"])
         await inbox_sync(self.bot, guild, marathon)
@@ -2528,6 +2538,7 @@ class Marathons(commands.Cog):
             line_default=said_default(MARATHON_BOARD_LINE_KEY),
             empty=words[MARATHON_BOARD_EMPTY_KEY],
             url=url,
+            lines=not self.bot.store.get(guild.id, MARATHON_RUNNER_POSTS_KEY),
         ).text
 
     async def sync_board(
@@ -2539,9 +2550,26 @@ class Marathons(commands.Cog):
         actor: Any = None,
         via: str = VIA_DISCORD,
     ) -> str | None:
-        """Posted once the first run of ours is found (or when staff ask), then edited in place."""
+        """The board, then each BaF run's own post under it."""
+        from .marathon_runner_posts import sync_posts
+
         if marathon is None:
             return None
+        why = await self.sync_board_message(guild, marathon, force=force, actor=actor, via=via)
+        if why is None:
+            await sync_posts(self, guild, await get_marathon(self.bot.db, guild.id, marathon["id"]))
+        return why
+
+    async def sync_board_message(
+        self,
+        guild: Any,
+        marathon: Any,
+        *,
+        force: bool = False,
+        actor: Any = None,
+        via: str = VIA_DISCORD,
+    ) -> str | None:
+        """Posted once the first run of ours is found (or when staff ask), then edited in place."""
         mode = mode_of(self.bot, guild.id)
         if mode == MODE_OFF:
             return MODE_IS_OFF
@@ -2663,8 +2691,14 @@ class Marathons(commands.Cog):
             details={"marathon_id": marathon["id"], "message_id": str(message.id)},
         )
 
-    async def unpin_board(self, guild: Any, marathon: Any, *, because: str) -> None:
-        """Checklist 3: the pin comes off because the MESSAGE carries one, whatever the keys say."""
+    async def unpin_board(
+        self, guild: Any, marathon: Any, *, because: str, runs: Any = None
+    ) -> None:
+        """Checklist 3: the pin comes off because the MESSAGE carries one, whatever the keys say.
+        The runner posts' pins come off with it."""
+        from .marathon_runner_posts import unpin_posts
+
+        await unpin_posts(self, guild, marathon, because=because, runs=runs)
         if not marathon["board_message_id"]:
             return
         await update_marathon(self.bot.db, marathon["id"], board_pinned=0)

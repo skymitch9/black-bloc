@@ -3538,3 +3538,18 @@ numbers them. Nothing to see in the mock (no threads) — these are Discord-only
 | **`MTC-b`** | Press **BaF run events: off · turn on**, then **Marathon event: off · turn on**, then both again | Each press answers privately (*…now makes one event per BaF run…* / *…one event for the marathon and one per BaF run…*) and the buttons flip; the drawer's Event select shows the same mode; Logs `marathon.event_mode_set` from → to per press. A non-staff member pressing gets the staff-only sentence and nothing changes |
 | **`MTC-c`** | On a marathon whose channel is spotlit by it (e.g. during SS4C), press **Spotlight: on · stop**; then **Spotlight: off · start** | Stop: the channel's spotlight goes off (Go-live shows it), the answer says the marathon will not spotlight it again, the drawer's *Follow the schedule* reads Off. Start: the channel is spotlit again until the last run plus 60 minutes (the answer names the time), *Follow the schedule* On, the button back to *on · stop*. On a GDQ-kept channel the button reads *Spotlight: kept (permanent)* and a press is refused in words |
 | **`MTC-d`** | Change the marathon's Event select on the site drawer, and turn the channel's spotlight off on Go-live | The pinned message's buttons change to match within a moment, without anyone pressing them |
+
+## Rows `MRP-a` … `MRP-d` — each BaF run its own pinned post in the marathon's thread (branch `marathon-runner-posts`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-runner-posts`, NOT merged, NOT deployed.** Owner, 2026-09-26 20:1x–20:2x: *"When we highlight
+a BaF runner have it be a separate post and not part of the original post"*, *"Sorry in the marathon thread for today's event
+Champrul was mentioned in the thread post"*, *"Perfect and we can then pin those messages"*. Design:
+[`../info/marathon-runner-posts-design.md`](../info/marathon-runner-posts-design.md). Rows lettered; the conductor numbers
+them. The mock shows only the four new Settings rows — the rest is Discord-only.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MRP-a`** | After the deploy, wait a minute, then open SS4C's thread | The pinned board at the top now reads as one line — *SS4C — BaF on the schedule (N), <start> to <end>. <link>* — with no run lines (edited in place, same message). Under the thread's latest message, one NEW post: ***champrul** (@champrul) runs **<game>** — <category> · <date> (<in …>) · <state> · <link>*, pinned, and the pinned list shows it beside the board and the controls. champrul got NO notification. Logs: `marathon.board_refreshed`, `marathon.runner_post_posted`, `marathon.runner_post_pinned`; a later minute adds nothing |
+| **`MRP-b`** | When SS4C's schedule moves champrul's run, or it goes live, or ends | The SAME post changes — the time, then *on now*, then *done*; the shoutout still posts as its own message when it goes live. A day after the run ends the post's pin comes off (Logs `marathon.runner_post_unpinned` `because: run_over`); the post stays |
+| **`MRP-c`** | Settings ▸ Marathons: turn **Whether each BaF run's own post is pinned** off, then turn **Whether each BaF run gets its own post in the thread** off | Pinned off: a new BaF run's post lands unpinned (posts already pinned stay until their day is up). Posts off: within a minute the board is edited back to the list with one line per BaF run; no new runner posts. Turn both back on |
+| **`MRP-d`** | Edit **What a BaF run's own post says** on the Settings page (e.g. drop `({mention})`) | Within a minute every runner post of a tracked marathon is rewritten in place with the new words; nobody is pinged |

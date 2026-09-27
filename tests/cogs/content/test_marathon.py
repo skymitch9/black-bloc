@@ -374,7 +374,8 @@ async def test_a_far_marathon_waits_the_far_gap(bot, cog):
 # --- the board ------------------------------------------------------------------------------
 
 
-async def test_the_board_posts_once_pinned_then_edits_in_place(bot, cog):
+async def test_with_runner_posts_off_the_board_lists_every_run_pinned_and_edits_in_place(bot, cog):
+    await bot.store.set(GUILD, "marathon_runner_posts", False)
     marathon = await added(bot, cog)
     await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
     board = [one for one in posts(bot) if "BaF on the schedule" in one.content]
@@ -416,7 +417,7 @@ async def reminders(bot):
     return [
         one
         for one in posts(bot)
-        if "BaF on the schedule" not in one.content and "right now" not in one.content
+        if not one.content.startswith("**") and "right now" not in one.content
     ]
 
 

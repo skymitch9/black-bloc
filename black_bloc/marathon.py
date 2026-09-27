@@ -888,6 +888,7 @@ def board_text(
     line_default: str,
     empty: str,
     url: str,
+    lines: bool = True,
 ) -> Rendered:
     mine = sorted((one for one in rows or () if is_ours(one)), key=_when)
     top = render(
@@ -900,16 +901,16 @@ def board_text(
         url=url,
     )
     fell_back = top.fell_back
-    lines = [top.text]
-    for row in mine:
+    said = [top.text]
+    for row in mine if lines else ():
         one = render(line, line_default, **run_fields(row, marathon, words, url=url))
         fell_back = fell_back or one.fell_back
-        lines.append(one.text)
+        said.append(one.text)
     if not mine:
-        lines.append(empty)
+        said.append(empty)
     kept: list[str] = []
     spent = 0
-    for text in lines:
+    for text in said:
         if spent + len(text) + 1 > MESSAGE_LIMIT:
             break
         kept.append(text)
