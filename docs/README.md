@@ -114,6 +114,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-26 19:0x:** v176 live (three merges: the marathon inbox — a master thread in events and a thread per tracked marathon; per-marathon ping switch (off) and Spotlight card; the inbox waits for a live schedule; schema 72, 560 keys). **Marathon posts are ON** since 19:02, SS4C tracked; see [`DONE.md`](DONE.md) 2026-09-26 v176. The mode table below was NOT re-read.
+
 **2026-09-26 16:4x:** v175 live (one merge: ended marathons move to an archive table; an expired row that carries a marathon or a feed is kept, not deleted; schema 70, 508 keys; see [`DONE.md`](DONE.md) 2026-09-26 v175). The mode table below was NOT re-read.
 
 **2026-09-26 15:5x:** v174 live (one merge: the spotlight follows a running marathon and is lifted at its end; `events` ping mode needs the spotlight; schema 69, 497 keys; see [`DONE.md`](DONE.md) 2026-09-26 v174). The mode table below was NOT re-read.
