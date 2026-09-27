@@ -5133,6 +5133,7 @@
         "event_mode_word",
         "spotlight_mode",
         "ping_role",
+        "public_highlight",
         "tracked_state",
         "tracked",
         "tracked_at",
@@ -5262,6 +5263,22 @@
       "method": "PATCH",
       "path": "/api/marathons/{marathon_bare_id}",
       "body": {
+        "public_highlight": true
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Settings foldout — Auto-highlight BaF runners when live"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "public_highlight",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_bare_id}",
+      "body": {
         "ping_role": true
       },
       "read_by": [
@@ -5271,6 +5288,7 @@
       "keys": [
         "id",
         "ping_role",
+        "public_highlight",
         "window",
         "message"
       ]

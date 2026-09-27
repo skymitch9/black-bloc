@@ -357,6 +357,7 @@ const SETTING_SPECS = [
   ["posts_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (posts such as the welcome post and the rules); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["golive_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (spotlight announcements); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["marathon_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (the marathon board, reminders, shoutouts and staff notices); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
+  ["marathon_public_shadow_channel_id", "channel", null, null, "where this feature's rehearsals land while it is in shadow (a marathon's public highlights of BaF runners); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["poll_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (polls and their results); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ["birthday_shadow_channel_id", 'channel', null, null, "where this feature's rehearsals land while it is in shadow (birthday wishes); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else"],
   ['staff_channel_id', 'channel', '800000000000000005', null, 'the channel whose viewers count as staff'],
@@ -702,6 +703,8 @@ const SETTING_SPECS = [
   ["marathon_spotlight_lead_minutes", "int", 15, 15, "minutes before a marathon's first run that marathon_spotlight turns its channel's spotlight on. 15 by default, like marathon_ping_minutes", null, 240, 0],
   ["marathon_spotlight_tail_minutes", "int", 60, 60, "minutes after a marathon's last run ends that the spotlight it follows stays on. 60 by default, so a schedule that runs over is still spotlit; 0 ends it with the last run. When the schedule is extended the end moves with it", null, 720, 0],
   ["marathon_ping_role_default", "bool", false, false, "whether a NEW marathon pings roles — its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel gets a ping window. off by default; each marathon's own Ping the role switch changes it after, and marathons already on the list keep their own"],
+  ["marathon_public_channel_id", "channel", null, null, "where a BaF run's public highlight goes — the post members see, since a marathon's own thread is for staff. Blank uses the go-live channel. Changing it moves the next highlight; one already up stays where it is and keeps being updated"],
+  ["marathon_public_highlight_default", "bool", false, false, "whether a NEW marathon highlights each BaF run publicly the moment it goes live. off by default; each marathon's own Auto-highlight switch changes it after, and marathons already on the list keep their own"],
   ["marathon_ping_role_on_said", "text", "**{marathon}** pings again: its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel has a ping window while it runs.", "**{marathon}** pings again: its run reminders and shoutouts mention the runner's and the channel's ping roles, and its channel has a ping window while it runs.", "what staff are told once a marathon's Ping the role switch is turned on. It takes {marathon}"],
   ["marathon_ping_role_off_said", "text", "**{marathon}** pings no role now: its reminders and shoutouts still post, with no mention, and its channel has no ping window for it.", "**{marathon}** pings no role now: its reminders and shoutouts still post, with no mention, and its channel has no ping window for it.", "what staff are told once a marathon's Ping the role switch is turned off. It takes {marathon}"],
   ["marathon_ping_role_same_said", "text", "**{marathon}** already has that, so nothing was changed.", "**{marathon}** already has that, so nothing was changed.", "what staff are told when the Ping the role switch is already where they asked. It takes {marathon}"],
@@ -776,6 +779,22 @@ const SETTING_SPECS = [
   ["marathon_controls_no_end", "text", "**{marathon}** has no run times yet, or its last run is over, so there is no end to hold the spotlight until — nothing was changed. Turn it on from the Go-live page instead.", "**{marathon}** has no run times yet, or its last run is over, so there is no end to hold the spotlight until — nothing was changed. Turn it on from the Go-live page instead.", "the refusal when Spotlight start is pressed on a marathon with no span still ahead. It takes {marathon}"],
   ["marathon_controls_started_said", "text", "twitch.tv/{channel} is spotlit for **{marathon}** until {until} — its last run plus {tail} minutes, and it moves if the schedule does.", "twitch.tv/{channel} is spotlit for **{marathon}** until {until} — its last run plus {tail} minutes, and it moves if the schedule does.", "the answer once the thread controls started a marathon's spotlight. It takes {channel} {marathon} {until} {tail}"],
   ["marathon_controls_already_on", "text", "twitch.tv/{channel} is already spotlit, so nothing was changed.", "twitch.tv/{channel} is already spotlit, so nothing was changed.", "the answer when Spotlight start is pressed on a channel that is already spotlit. It takes {channel}"],
+  ["marathon_controls_highlight_on", "text", "Auto-highlight BaF runners when live: on · turn off", "Auto-highlight BaF runners when live: on · turn off", "the thread controls' auto-highlight button while each BaF run is highlighted publicly the moment it goes live"],
+  ["marathon_controls_highlight_off", "text", "Auto-highlight BaF runners when live: off · turn on", "Auto-highlight BaF runners when live: off · turn on", "the thread controls' auto-highlight button while BaF runs are highlighted only when staff press Highlight"],
+  ["marathon_public_template", "text", "**{runner}** {part} **{game}** — {category} on **{marathon}** · {when} ({relative}) · {state} · {url}", "**{runner}** {part} **{game}** — {category} on **{marathon}** · {when} ({relative}) · {state} · {url}", "a BaF run's public highlight, edited in place as its slot moves, it goes live and it ends. It takes {runner} {mention} {game} {category} {part} {when} {relative} {url} {marathon} {state}; {mention} names the member without pinging"],
+  ["marathon_public_removed", "text", "Staff took down the highlight for **{runner}** on **{marathon}**.", "Staff took down the highlight for **{runner}** on **{marathon}**.", "what a public highlight is edited to when staff press Remove the highlight; it is not updated after. It takes the same words as marathon_public_template"],
+  ["marathon_public_button_post", "text", "Highlight in #{channel}", "Highlight in #{channel}", "the button on a BaF run's own post in the staff thread that posts its public highlight. It takes {channel}, the public channel's name"],
+  ["marathon_public_button_remove", "text", "Remove the highlight", "Remove the highlight", "the same button once the highlight is up"],
+  ["marathon_public_posted_said", "text", "**{runner}**'s highlight is up in {channel}, and it follows the run from here.", "**{runner}**'s highlight is up in {channel}, and it follows the run from here.", "what staff are told once a highlight is posted. It takes {runner} {channel}"],
+  ["marathon_public_removed_said", "text", "**{runner}**'s highlight in {channel} is taken down — it says so now and is not updated any more. Highlight puts it back.", "**{runner}**'s highlight in {channel} is taken down — it says so now and is not updated any more. Highlight puts it back.", "what staff are told once a highlight is taken down. It takes {runner} {channel}"],
+  ["marathon_public_already_up", "text", "**{runner}**'s highlight is already up in {channel}, so nothing was changed.", "**{runner}**'s highlight is already up in {channel}, so nothing was changed.", "the answer when Highlight is pressed on a run whose highlight is up. It takes {runner} {channel}"],
+  ["marathon_public_not_up", "text", "**{runner}** has no highlight up, so there was nothing to take down.", "**{runner}** has no highlight up, so there was nothing to take down.", "the answer when Remove the highlight is pressed on a run with none up. It takes {runner}"],
+  ["marathon_public_no_channel", "text", "There is no public channel to highlight in — set marathon_public_channel_id or golive_channel_id on the Settings page first.", "There is no public channel to highlight in — set marathon_public_channel_id or golive_channel_id on the Settings page first.", "the refusal when Highlight is pressed while neither the public channel nor the go-live channel is set"],
+  ["marathon_public_failed", "text", "Black Bloc could not post **{runner}**'s highlight: {reason}", "Black Bloc could not post **{runner}**'s highlight: {reason}", "the answer when a highlight could not be posted or edited. It takes {runner} {reason}"],
+  ["marathon_public_not_postable", "text", "**{game}** is off the schedule or nobody from BaF is on it any more, so it was not highlighted.", "**{game}** is off the schedule or nobody from BaF is on it any more, so it was not highlighted.", "the refusal when Highlight is pressed on a run that was dropped or unlinked. It takes {runner} {game}"],
+  ["marathon_public_auto_on_said", "text", "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.", "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.", "what staff are told once a marathon's auto-highlight is turned on. It takes {marathon} {channel}"],
+  ["marathon_public_auto_off_said", "text", "**{marathon}** no longer highlights BaF runs by itself — Highlight on a run's post still does. Highlights already up stay up.", "**{marathon}** no longer highlights BaF runs by itself — Highlight on a run's post still does. Highlights already up stay up.", "what staff are told once a marathon's auto-highlight is turned off. It takes {marathon}"],
+  ["marathon_public_auto_same_said", "text", "**{marathon}** already works that way, so nothing was changed.", "**{marathon}** already works that way, so nothing was changed.", "the answer when the auto-highlight switch is set to what it already is. It takes {marathon}"],
   ["marathon_channel_ping_mode_default", "enum", "events", "events", "the pings a NEW channel row gets when it is a marathon channel (one a marathon feed is seeded for) that takes marathons: events — the default — mentions roles only inside a ping window, which its marathons set from their schedules; always and never as on the Go-live page. Every other new row follows spotlight_ping_mode_default, and no existing row is changed", ["always", "never", "events"]],
   ["marathon_channel_ping_help", "text", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "On a marathon channel, During events pings only while one of its marathons is running — the marathon sets that window from its schedule, and the channel is spotlit for it.", "the help line under the Pings choice on a marathon channel's Go-live drawer, saying what During events means there"],
   ["marathon_run_events_reviewed", "bool", false, false, "whether an event made for a BaF run goes through the events review like any proposal. off by default — staff already chose the mode, so a run's event is approved at once and the events feature announces it when it starts"],
@@ -5757,7 +5776,7 @@ function seedMarathons() {
     // was added with its dates and is over now.
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
-  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
+  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, public_highlight: false, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
 }
 
 // The inbox (marathon-inbox-design.md §B): AGDQ 2027 is tracked with its own thread (and its
@@ -5989,6 +6008,7 @@ function marathonRow(row) {
     event_mode_word: MARATHON_MODE_WORDS[marathonModeOf(row)],
     spotlight_mode: row.spotlight_mode === 'off' ? 'off' : 'follow',
     ping_role: Boolean(row.ping_role),
+    public_highlight: Boolean(row.public_highlight),
     ...marathonTracking(row),
   };
 }
@@ -6123,6 +6143,19 @@ function marathonSetPingRole(row, given) {
   marathonSyncWindow(row);
   logAction('web.marathon.ping_role_set', { details: { marathon_id: row.id, name: row.name, from: was, to: wanted, spotlight_id: row.spotlight_id, via: 'website' } });
   return marathonSaid(wanted ? 'marathon_ping_role_on_said' : 'marathon_ping_role_off_said', { marathon: row.name });
+}
+
+// The bot's cogs/content/marathon_public.set_public_highlight: the marathon's auto-highlight switch.
+function marathonSetPublicHighlight(row, given) {
+  const word = typeof given === 'boolean' ? String(given) : String(given ?? '').trim().toLowerCase();
+  const wanted = ['true', 'on', 'yes', '1'].includes(word) ? true : (['false', 'off', 'no', '0'].includes(word) ? false : null);
+  if (wanted === null) throw new Refused(422, 'bad_public_highlight', 'Say on or off for whether the marathon highlights BaF runs by itself, so nothing was changed.');
+  const was = Boolean(row.public_highlight);
+  if (wanted === was) return marathonSaid('marathon_public_auto_same_said', { marathon: row.name });
+  row.public_highlight = wanted;
+  logAction('web.marathon.public_highlight_set', { details: { marathon_id: row.id, name: row.name, from: was, to: wanted, via: 'website' } });
+  const channel = state.settings.get('marathon_public_channel_id') || state.settings.get('golive_channel_id');
+  return marathonSaid(wanted ? 'marathon_public_auto_on_said' : 'marathon_public_auto_off_said', { marathon: row.name, channel: channel ? `<#${channel}>` : '#?' });
 }
 
 const MARATHON_MODES = ['none', 'marathon', 'runs', 'both'];
@@ -6814,7 +6847,7 @@ function marathonCreate(name, scheduleUrl, spotlight) {
   refuseOptedOutChannel(spotlightId);
   const id = [...state.marathons, ...state.marathonArchive].reduce((top, one) => Math.max(top, one.id), 0) + 1;
   const starts = new Date(Date.now() + 3 * 86400000);
-  const row = { id, name, schedule_url: url, source: read.source, source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null, ping_role: state.settings.get('marathon_ping_role_default') === true };
+  const row = { id, name, schedule_url: url, source: read.source, source_ref: ref, spotlight_id: spotlightId, starts_at: starts.toISOString(), ends_at: new Date(starts.getTime() + 180 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: new Date().toISOString(), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: new Date().toISOString(), suggested_next: null, ping_role: state.settings.get('marathon_ping_role_default') === true, public_highlight: state.settings.get('marathon_public_highlight_default') === true };
   state.marathons.push(row);
   const top = state.marathonRuns.reduce((most, one) => Math.max(most, one.id), 0);
   [['Celeste', 'Any%', 'Flyingludicolo', 'flyingludicolo'], ['Super Metroid', 'Any%', 'Casey', 'caseyfast'], ['Blaster Master', 'Any%', 'Interview Crew', null]].forEach(([game, category, runner, login], index) => {
@@ -7016,6 +7049,7 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   if ('event_mode' in body) said.push(marathonSetMode(row, body.event_mode));
   if ('spotlight_mode' in body) said.push(marathonSetSpotlightMode(row, body.spotlight_mode));
   if ('ping_role' in body) said.push(marathonSetPingRole(row, body.ping_role));
+  if ('public_highlight' in body) said.push(marathonSetPublicHighlight(row, body.public_highlight));
   if ('dismiss_next' in body) {
     if (body.dismiss_next !== true) throw new Refused(422, 'bad_dismiss', 'Say true to dismiss the suggested next event, so nothing was changed.');
     const record = marathonOpenSuggestion(row, body.event_id);

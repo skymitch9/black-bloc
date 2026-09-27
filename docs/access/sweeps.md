@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-26 (branch `marathon-public-highlights`)** — ONE section APPENDED (`MPH-a`…`MPH-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-thread-controls`)** — ONE section APPENDED (`MTC-a`…`MTC-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-thread-move`)** — ONE section APPENDED (`MTM-a`…`MTM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-inbox-when`)** — ONE section APPENDED (`MIW-a`…`MIW-c`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3553,3 +3554,18 @@ them. The mock shows only the four new Settings rows — the rest is Discord-onl
 | **`MRP-b`** | When SS4C's schedule moves champrul's run, or it goes live, or ends | The SAME post changes — the time, then *on now*, then *done*; the shoutout still posts as its own message when it goes live. A day after the run ends the post's pin comes off (Logs `marathon.runner_post_unpinned` `because: run_over`); the post stays |
 | **`MRP-c`** | Settings ▸ Marathons: turn **Whether each BaF run's own post is pinned** off, then turn **Whether each BaF run gets its own post in the thread** off | Pinned off: a new BaF run's post lands unpinned (posts already pinned stay until their day is up). Posts off: within a minute the board is edited back to the list with one line per BaF run; no new runner posts. Turn both back on |
 | **`MRP-d`** | Edit **What a BaF run's own post says** on the Settings page (e.g. drop `({mention})`) | Within a minute every runner post of a tracked marathon is rewritten in place with the new words; nobody is pinged |
+
+## Rows `MPH-a` … `MPH-d` — each BaF runner highlighted where members can see it (branch `marathon-public-highlights`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-public-highlights`, NOT merged, NOT deployed.** Owner, 2026-09-26 20:4x: *"To give context
+nobody can see the events thread except staff, we use it to control events. We need a way to highlight each [runner] in go
+live if we want to. Or somewhere else. Have that channel be changeable. Go live for now."* Design:
+[`../info/marathon-public-highlights-design.md`](../info/marathon-public-highlights-design.md). Rows lettered; the
+conductor numbers them. `marathon_mode` must be **on** for a real post (shadow sends it to the rehearsal home).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MPH-a`** | In SS4C's staff thread, on champrul's own post, press **Highlight in #go-live** | A private answer *…highlight is up in #go-live…*; one new message in #go-live — ***champrul** runs **<game>** — <category> on **SS4C** · <date> (<in …>) · <state> · <link>* — seen by members, nobody pinged (SS4C's *Ping the marathon role* is off). The button on champrul's post now reads **Remove the highlight**. Logs `marathon.public_highlight_posted` |
+| **`MPH-b`** | Leave it; when the run moves, goes live, ends. Then press **Remove the highlight** | The SAME #go-live message changes with it (*on now*, then *done*). Remove: the message becomes *Staff took down the highlight for **champrul** on **SS4C**.* — not deleted — and never changes again; the button goes back to **Highlight in #go-live**, and pressing it puts the same message back |
+| **`MPH-c`** | On the thread's pinned control message press **Auto-highlight BaF runners when live: off · turn on** (or turn it on in the Events drawer ▸ Settings and Save) | The button turns green and reads *…: on · turn off*; the drawer shows On. The next BaF run to go live gets its #go-live highlight at the moment its shoutout posts, by itself. A run whose highlight staff took down is not put back |
+| **`MPH-d`** | Settings ▸ Marathons: set **Where a BaF run's public highlight goes** to another channel (the picker reads `# name · Category`) | Within a minute every runner post's button reads **Highlight in #<new channel>**; the next highlight lands there; one already up stays where it was and keeps updating |

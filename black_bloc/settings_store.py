@@ -3096,6 +3096,7 @@ SHADOW_HOME_WORDS = {
     "posts": "posts such as the welcome post and the rules",
     "golive": "spotlight announcements",
     "marathon": "the marathon board, reminders, shoutouts and staff notices",
+    "marathon_public": "a marathon's public highlights of BaF runners",
     "poll": "polls and their results",
     "birthday": "birthday wishes",
 }
@@ -4472,6 +4473,36 @@ MARATHON_CONTROLS_KEPT_REFUSED_KEY = "marathon_controls_kept_refused"
 MARATHON_CONTROLS_NO_END_KEY = "marathon_controls_no_end"
 MARATHON_CONTROLS_STARTED_KEY = "marathon_controls_started_said"
 MARATHON_CONTROLS_ALREADY_ON_KEY = "marathon_controls_already_on"
+MARATHON_CONTROLS_HIGHLIGHT_ON_KEY = "marathon_controls_highlight_on"
+MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY = "marathon_controls_highlight_off"
+MARATHON_PUBLIC_CHANNEL_KEY = "marathon_public_channel_id"
+MARATHON_PUBLIC_DEFAULT_KEY = "marathon_public_highlight_default"
+MARATHON_PUBLIC_TEMPLATE_KEY = "marathon_public_template"
+MARATHON_PUBLIC_REMOVED_KEY = "marathon_public_removed"
+MARATHON_PUBLIC_BUTTON_POST_KEY = "marathon_public_button_post"
+MARATHON_PUBLIC_BUTTON_REMOVE_KEY = "marathon_public_button_remove"
+MARATHON_PUBLIC_POSTED_SAID_KEY = "marathon_public_posted_said"
+MARATHON_PUBLIC_REMOVED_SAID_KEY = "marathon_public_removed_said"
+MARATHON_PUBLIC_ALREADY_KEY = "marathon_public_already_up"
+MARATHON_PUBLIC_NOT_UP_KEY = "marathon_public_not_up"
+MARATHON_PUBLIC_NO_CHANNEL_KEY = "marathon_public_no_channel"
+MARATHON_PUBLIC_FAILED_KEY = "marathon_public_failed"
+MARATHON_PUBLIC_NOT_POSTABLE_KEY = "marathon_public_not_postable"
+MARATHON_PUBLIC_AUTO_ON_SAID_KEY = "marathon_public_auto_on_said"
+MARATHON_PUBLIC_AUTO_OFF_SAID_KEY = "marathon_public_auto_off_said"
+MARATHON_PUBLIC_AUTO_SAME_KEY = "marathon_public_auto_same_said"
+MARATHON_PUBLIC_FIELDS = (
+    "runner",
+    "mention",
+    "game",
+    "category",
+    "part",
+    "when",
+    "relative",
+    "url",
+    "marathon",
+    "state",
+)
 MARATHON_THREAD_FIELDS = ("marathon", "channel", "when")
 MARATHON_OPENING_FIELDS = ("marathon", "who", "url", "channel", "when")
 MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY = "marathon_channel_ping_mode_default"
@@ -4801,6 +4832,20 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "runner's and the channel's ping roles, and its channel gets a ping window. off by "
         "default; each marathon's own Ping the role switch changes it after, and marathons "
         "already on the list keep their own",
+    ),
+    MARATHON_PUBLIC_CHANNEL_KEY: (
+        "channel",
+        None,
+        "where a BaF run's public highlight goes — the post members see, since a marathon's "
+        "own thread is for staff. Blank uses the go-live channel. Changing it moves the next "
+        "highlight; one already up stays where it is and keeps being updated",
+    ),
+    MARATHON_PUBLIC_DEFAULT_KEY: (
+        "bool",
+        False,
+        "whether a NEW marathon highlights each BaF run publicly the moment it goes live. off "
+        "by default; each marathon's own Auto-highlight switch changes it after, and "
+        "marathons already on the list keep their own",
     ),
     MARATHON_ARCHIVE_AFTER_DAYS_KEY: (
         "int",
@@ -5199,6 +5244,102 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("channel",),
         "the answer when Spotlight start is pressed on a channel that is already spotlit. It "
         "takes {channel}",
+    ),
+    MARATHON_CONTROLS_HIGHLIGHT_ON_KEY: (
+        "Auto-highlight BaF runners when live: on · turn off",
+        (),
+        "the thread controls' auto-highlight button while each BaF run is highlighted publicly "
+        "the moment it goes live",
+    ),
+    MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY: (
+        "Auto-highlight BaF runners when live: off · turn on",
+        (),
+        "the thread controls' auto-highlight button while BaF runs are highlighted only when "
+        "staff press Highlight",
+    ),
+    MARATHON_PUBLIC_TEMPLATE_KEY: (
+        "**{runner}** {part} **{game}** — {category} on **{marathon}** · {when} ({relative}) · "
+        "{state} · {url}",
+        MARATHON_PUBLIC_FIELDS,
+        "a BaF run's public highlight, edited in place as its slot moves, it goes live and it "
+        "ends. It takes {runner} {mention} {game} {category} {part} {when} {relative} {url} "
+        "{marathon} {state}; {mention} names the member without pinging",
+    ),
+    MARATHON_PUBLIC_REMOVED_KEY: (
+        "Staff took down the highlight for **{runner}** on **{marathon}**.",
+        MARATHON_PUBLIC_FIELDS,
+        "what a public highlight is edited to when staff press Remove the highlight; it is not "
+        "updated after. It takes the same words as marathon_public_template",
+    ),
+    MARATHON_PUBLIC_BUTTON_POST_KEY: (
+        "Highlight in #{channel}",
+        ("channel",),
+        "the button on a BaF run's own post in the staff thread that posts its public "
+        "highlight. It takes {channel}, the public channel's name",
+    ),
+    MARATHON_PUBLIC_BUTTON_REMOVE_KEY: (
+        "Remove the highlight",
+        (),
+        "the same button once the highlight is up",
+    ),
+    MARATHON_PUBLIC_POSTED_SAID_KEY: (
+        "**{runner}**'s highlight is up in {channel}, and it follows the run from here.",
+        ("runner", "channel"),
+        "what staff are told once a highlight is posted. It takes {runner} {channel}",
+    ),
+    MARATHON_PUBLIC_REMOVED_SAID_KEY: (
+        "**{runner}**'s highlight in {channel} is taken down — it says so now and is not "
+        "updated any more. Highlight puts it back.",
+        ("runner", "channel"),
+        "what staff are told once a highlight is taken down. It takes {runner} {channel}",
+    ),
+    MARATHON_PUBLIC_ALREADY_KEY: (
+        "**{runner}**'s highlight is already up in {channel}, so nothing was changed.",
+        ("runner", "channel"),
+        "the answer when Highlight is pressed on a run whose highlight is up. It takes {runner} "
+        "{channel}",
+    ),
+    MARATHON_PUBLIC_NOT_UP_KEY: (
+        "**{runner}** has no highlight up, so there was nothing to take down.",
+        ("runner",),
+        "the answer when Remove the highlight is pressed on a run with none up. It takes {runner}",
+    ),
+    MARATHON_PUBLIC_NO_CHANNEL_KEY: (
+        "There is no public channel to highlight in — set marathon_public_channel_id or "
+        "golive_channel_id on the Settings page first.",
+        (),
+        "the refusal when Highlight is pressed while neither the public channel nor the go-live "
+        "channel is set",
+    ),
+    MARATHON_PUBLIC_FAILED_KEY: (
+        "Black Bloc could not post **{runner}**'s highlight: {reason}",
+        ("runner", "reason"),
+        "the answer when a highlight could not be posted or edited. It takes {runner} {reason}",
+    ),
+    MARATHON_PUBLIC_NOT_POSTABLE_KEY: (
+        "**{game}** is off the schedule or nobody from BaF is on it any more, so it was not "
+        "highlighted.",
+        ("runner", "game"),
+        "the refusal when Highlight is pressed on a run that was dropped or unlinked. It takes "
+        "{runner} {game}",
+    ),
+    MARATHON_PUBLIC_AUTO_ON_SAID_KEY: (
+        "**{marathon}** now highlights each BaF run in {channel} the moment it goes live.",
+        ("marathon", "channel"),
+        "what staff are told once a marathon's auto-highlight is turned on. It takes {marathon} "
+        "{channel}",
+    ),
+    MARATHON_PUBLIC_AUTO_OFF_SAID_KEY: (
+        "**{marathon}** no longer highlights BaF runs by itself — Highlight on a run's post "
+        "still does. Highlights already up stay up.",
+        ("marathon",),
+        "what staff are told once a marathon's auto-highlight is turned off. It takes {marathon}",
+    ),
+    MARATHON_PUBLIC_AUTO_SAME_KEY: (
+        "**{marathon}** already works that way, so nothing was changed.",
+        ("marathon",),
+        "the answer when the auto-highlight switch is set to what it already is. It takes "
+        "{marathon}",
     ),
     MARATHON_UNIGNORED_SAID_KEY: (
         "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing "

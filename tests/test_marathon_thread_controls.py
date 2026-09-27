@@ -37,10 +37,12 @@ def test_a_press_moves_one_half_and_keeps_the_other(mode, action, to, wanted):
 
 
 def test_each_button_carries_the_move_it_makes():
-    event, runs, spot = mtc.controls("marathon", ms.DARK)
+    event, runs, spot, highlight = mtc.controls("marathon", ms.DARK)
     assert (event.to, event.word) == ("off", "on")
     assert (runs.to, runs.word) == ("on", "off")
     assert (spot.to, spot.word, spot.disabled) == ("on", "off", False)
+    assert (highlight.action, highlight.to, highlight.word) == ("highlight", "on", "off")
+    assert mtc.controls("none", ms.DARK, True)[3][1:3] == ("off", "on")
 
 
 @pytest.mark.parametrize(
@@ -69,6 +71,11 @@ def test_the_custom_id_matches_the_template():
         "off",
     )
     assert len(mtc.custom_id(10**18, "spotlight", "off")) <= 100
+
+
+def test_the_highlight_custom_id_matches_the_template():
+    found = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, "highlight", "on"))
+    assert found and (found["action"], found["to"]) == ("highlight", "on")
 
 
 def test_a_label_is_clamped_and_never_empty():

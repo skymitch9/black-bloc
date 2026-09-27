@@ -8,6 +8,7 @@ import discord
 
 from ... import marathon as mt
 from ... import marathon_inbox as mi
+from ... import marathon_public as mp
 from ... import marathon_runner_posts as mrp
 from ...actionlog import log_action
 from ...settings_store import (
@@ -30,7 +31,7 @@ from .marathon import (
 )
 
 
-def sent_cache(cog: Any, marathon_id: Any) -> dict[int, tuple[int, str]]:
+def sent_cache(cog: Any, marathon_id: Any) -> dict[int, tuple[int, str, Any]]:
     found = cog.__dict__.setdefault("posts_sent", {})
     return found.setdefault(int(marathon_id), {})
 
@@ -62,6 +63,8 @@ async def sync_posts(cog: Any, guild: Any, marathon: Any) -> None:
     target, _why = await cog._place(guild, marathon)
     if target is None:
         return
+    from .marathon_public import button_of
+
     words = words_for(bot, guild.id)
     login = await channel_login(bot, marathon)
     for row in rows:
@@ -74,24 +77,43 @@ async def sync_posts(cog: Any, guild: Any, marathon: Any) -> None:
             url=mt.run_url(row, login, marathon["schedule_url"]),
             unlisted=words[MARATHON_RUNNER_POST_UNLISTED_KEY],
         ).text
-        await sync_one(cog, guild, marathon, row, int(target), text, shadow=mode != MODE_ON)
+        button = button_of(bot, guild, marathon["id"], row)
+        await sync_one(
+            cog, guild, marathon, row, int(target), text, shadow=mode != MODE_ON, button=button
+        )
 
 
 async def sync_one(
-    cog: Any, guild: Any, marathon: Any, row: Any, target: int, text: str, *, shadow: bool
+    cog: Any,
+    guild: Any,
+    marathon: Any,
+    row: Any,
+    target: int,
+    text: str,
+    *,
+    shadow: bool,
+    button: Any = None,
 ) -> None:
     cache = sent_cache(cog, marathon["id"])
     key = int(row["id"])
     if mrp.post_id(row) and mrp.post_channel(row) == target:
-        if cache.get(key) == (target, text):
+        if cache.get(key) == (target, text, button):
             return
         message = await cog._fetch(guild, target, mrp.post_id(row))
         if message is not None:
-            await edit_one(cog, guild, marathon, row, message, target, text, shadow=shadow)
+            await edit_one(
+                cog, guild, marathon, row, message, target, text, shadow=shadow, button=button
+            )
             return
     if not mt.is_ours(row) or mt._cell(row, "state") not in mrp.POSTABLE:
         return
-    await post_one(cog, guild, marathon, row, target, text, shadow=shadow)
+    await post_one(cog, guild, marathon, row, target, text, shadow=shadow, button=button)
+
+
+def view_for(marathon: Any, row: Any, button: Any) -> Any:
+    from .marathon_public import view_of
+
+    return view_of(button, marathon["id"], row["id"])
 
 
 async def edit_one(
@@ -104,15 +126,18 @@ async def edit_one(
     text: str,
     *,
     shadow: bool,
+    button: Any = None,
 ) -> None:
     cache = sent_cache(cog, marathon["id"])
     key = int(row["id"])
-    if (getattr(message, "content", None) or "").endswith(text):
-        cache[key] = (target, text)
+    same_words = (getattr(message, "content", None) or "").endswith(text)
+    if same_words and mp.shown_button(message) == button:
+        cache[key] = (target, text, button)
         return
     try:
         await message.edit(
             content=cog._shadowed(guild, text) if shadow else text,
+            view=view_for(marathon, row, button),
             allowed_mentions=discord.AllowedMentions.none(),
         )
     except Exception as exc:
@@ -123,7 +148,7 @@ async def edit_one(
             details=details_of(marathon, row) | {"step": "edit", "reason": reason_of(exc)},
         )
         return
-    cache[key] = (target, text)
+    cache[key] = (target, text, button)
     await log_action(
         cog.bot,
         guild,
@@ -135,10 +160,20 @@ async def edit_one(
 
 
 async def post_one(
-    cog: Any, guild: Any, marathon: Any, row: Any, target: int, text: str, *, shadow: bool
+    cog: Any,
+    guild: Any,
+    marathon: Any,
+    row: Any,
+    target: int,
+    text: str,
+    *,
+    shadow: bool,
+    button: Any = None,
 ) -> None:
     bot = cog.bot
-    sent, channel_id, why = await cog._send(guild, text, [], quiet=True, marathon=marathon)
+    sent, channel_id, why = await cog._send(
+        guild, text, [], quiet=True, marathon=marathon, view=view_for(marathon, row, button)
+    )
     if sent is None:
         await log_action(
             bot,
@@ -150,7 +185,7 @@ async def post_one(
     await update_run(
         bot.db, row["id"], post_message_id=int(sent.id), post_channel_id=channel_id, post_pinned=0
     )
-    sent_cache(cog, marathon["id"])[int(row["id"])] = (target, text)
+    sent_cache(cog, marathon["id"])[int(row["id"])] = (target, text, button)
     await log_action(
         bot,
         guild,

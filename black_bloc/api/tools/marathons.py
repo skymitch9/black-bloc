@@ -67,6 +67,7 @@ from ...cogs.content.marathon_people import (
     zone_of,
 )
 from ...cogs.content.marathon_ping import set_ping_role
+from ...cogs.content.marathon_public import set_public_highlight
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
 from ...cogs.content.marathon_spotlight import state_for as spotlight_state_for
 from ...cogs.content.spotlight import channel_by_id
@@ -76,6 +77,7 @@ from ...marathon_archive import STAFF, WHY_WORDS, page_of
 from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_ping import pings_role
+from ...marathon_public import highlights
 from ...marathon_sources import SOURCE_WORDS, schedule_page
 from ...marathon_spotlight import mode_of as spotlight_mode_of
 from ...settings_store import (
@@ -361,6 +363,7 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "event_mode_word": MODE_WORDS[event_mode_of(row)],
         "spotlight_mode": spotlight_mode_of(row),
         "ping_role": pings_role(row),
+        "public_highlight": highlights(row),
         "archived": False,
     } | await tracking_of(bot, guild, row)
 
@@ -643,6 +646,18 @@ def build_router(bot: Any) -> APIRouter:
                     actor,
                     await wanted(guild, marathon_id),
                     payload["ping_role"],
+                    via=VIA_WEBSITE,
+                )
+            )
+            said.append(done.message)
+        if "public_highlight" in payload:
+            done = answered(
+                await set_public_highlight(
+                    bot,
+                    guild,
+                    actor,
+                    await wanted(guild, marathon_id),
+                    payload["public_highlight"],
                     via=VIA_WEBSITE,
                 )
             )
