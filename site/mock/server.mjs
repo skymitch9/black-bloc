@@ -4992,6 +4992,8 @@ route('PATCH', '/api/golive/spotlight/:spotlight_id', async (context) => {
   else if ('expires_at' in body) { row.expires_at = readEnd(body.expires_at, body.tz); dated = true; }
   else if (body.days !== undefined && body.days !== null) { row.expires_at = daysAhead(spotlightDays(body.days)); dated = true; }
   if (dated) refuseBackwards(row.starts_at, row.expires_at);
+  if (body.spotlight === false && row.spotlit_by_marathon && !dated) row.expires_at = null;
+  if (dated || body.spotlight === false) row.spotlit_by_marathon = null;
   if ('bump_hours' in body) row.bump_hours = body.bump_hours || null;
   if ('pin' in body) row.pin = Boolean(body.pin);
   if ('note' in body) row.note = body.note || null;
@@ -6028,7 +6030,31 @@ function wantedOn(body) {
   return on;
 }
 
-// The bot's cogs/content/marathon_spotlight.set_spotlight_mode, words only: the mock has no tick to spotlight a channel.
+// set_spotlight_mode's two side effects, the only follow the mock has (no tick): On spotlights
+// the channel at once while the marathon is in reach; Off gives back a spotlight it holds.
+function marathonFollowAtOnce(row, wanted) {
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+  if (!channel) return;
+  if (wanted === 'off') {
+    if (channel.spotlight !== false && channel.spotlit_by_marathon === row.id) {
+      Object.assign(channel, { spotlight: false, expires_at: null, spotlit_by_marathon: null });
+      logAction('marathon.spotlight_lifted', { actor_id: null, details: { marathon_id: row.id, spotlight_id: channel.id, because: 'mode_off' } });
+    }
+    return;
+  }
+  const lead = Number(state.settings.get('marathon_spotlight_lead_minutes') ?? 15);
+  const tail = Number(state.settings.get('marathon_spotlight_tail_minutes') ?? 60);
+  if (!row.active || !row.starts_at || !channelTakesMarathons(channel) || state.settings.get('marathon_spotlight') === false) return;
+  const now = Date.now();
+  const end = new Date(row.ends_at || row.starts_at).getTime() + tail * 60000;
+  if (now < new Date(row.starts_at).getTime() - lead * 60000 || now >= end) return;
+  if (channel.spotlight === false) {
+    Object.assign(channel, { spotlight: true, expires_at: new Date(end).toISOString(), spotlit_by_marathon: row.id });
+    logAction('marathon.spotlight_set', { actor_id: null, details: { marathon_id: row.id, spotlight_id: channel.id, expires_at: channel.expires_at } });
+  }
+}
+
+// The bot's cogs/content/marathon_spotlight.set_spotlight_mode, with marathonFollowAtOnce above.
 function marathonSetSpotlightMode(row, given) {
   const word = typeof given === 'boolean' ? (given ? 'follow' : 'off') : String(given ?? '').trim().toLowerCase();
   const wanted = ['follow', 'on', 'true', 'yes', '1'].includes(word) ? 'follow' : (['off', 'false', 'no', '0'].includes(word) ? 'off' : null);
@@ -6036,6 +6062,7 @@ function marathonSetSpotlightMode(row, given) {
   const was = row.spotlight_mode === 'off' ? 'off' : 'follow';
   if (wanted === was) return `**${row.name}** already has that, so nothing was changed.`;
   row.spotlight_mode = wanted;
+  marathonFollowAtOnce(row, wanted);
   logAction('web.marathon.spotlight_mode_set', { details: { marathon_id: row.id, name: row.name, from: was, to: wanted, via: 'website' } });
   const lead = Number(state.settings.get('marathon_spotlight_lead_minutes') ?? 15);
   return wanted === 'follow'
@@ -6221,7 +6248,47 @@ function marathonDetail(row) {
     run_list: runs.map(marathonRunRow),
     pairings: marathonPairingsFor(row),
     unmatched: [...unmatched.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
+    ...marathonSpotlightOf(row),
   };
+}
+
+// The bot's black_bloc/marathon_spotlight.state_of and api/tools/marathons.spotlight_of: the
+// channel row exactly as the Go-live drawer reads it, and whether it is spotlit and why.
+const MARATHON_SPOT_LINES = {
+  held: 'Spotlit by this marathon until {until} — its last run plus {tail} minutes, and it moves if the schedule does.',
+  held_other: 'Spotlit by another marathon on this channel until {until}.',
+  kept: 'Spotlit and kept for ever — no marathon changes it.',
+  until: 'Spotlit until {until}, on staff dates. A marathon only ever carries that end later.',
+  scheduled: 'Scheduled — spotlit from {starts} until {until}.',
+  waiting: 'Not spotlit yet — it turns on {starts}, {lead} minutes before the first run.',
+  off: 'Not spotlit.',
+  none: 'No channel yet, so there is nothing to spotlight. Pick the channel it airs on under Settings.',
+};
+function marathonSpotlightOf(row) {
+  const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) || null : null;
+  const lead = Number(state.settings.get('marathon_spotlight_lead_minutes') ?? 15);
+  const tail = Number(state.settings.get('marathon_spotlight_tail_minutes') ?? 60);
+  const follows = row.spotlight_mode !== 'off';
+  const found = { state: 'none', until: null, starts: null, held_by_this: false, follows, tail_minutes: tail };
+  if (!channel) return { channel_spotlight: null, spotlight_state: { ...found, line: MARATHON_SPOT_LINES.none } };
+  let line;
+  if (channel.spotlight !== false) {
+    const holder = channel.spotlit_by_marathon || null;
+    const starts = channel.starts_at && new Date(channel.starts_at) > new Date() ? channel.starts_at : null;
+    const kind = !channel.expires_at ? 'kept' : holder === row.id ? 'held' : holder ? 'held_other' : starts ? 'scheduled' : 'until';
+    Object.assign(found, { state: kind, until: channel.expires_at || null, starts: channel.starts_at || null, held_by_this: kind === 'held' });
+    line = MARATHON_SPOT_LINES[kind];
+  } else {
+    const opening = row.starts_at ? new Date(new Date(row.starts_at).getTime() - lead * 60000) : null;
+    const on = state.settings.get('marathon_spotlight') !== false && state.settings.get('marathon_mode') !== 'off';
+    const waits = on && follows && row.active && channelTakesMarathons(channel) && opening && new Date() < opening;
+    Object.assign(found, { state: waits ? 'waiting' : 'off', starts: waits ? opening.toISOString() : null });
+    line = MARATHON_SPOT_LINES[found.state];
+    if (!waits && !follows) line += ' Following is off, so this marathon leaves the channel to staff.';
+    else if (!waits && !channelTakesMarathons(channel)) line += ' This channel is off for marathons.';
+  }
+  line = line.split('{tail}').join(String(tail)).split('{lead}').join(String(lead));
+  return { channel_spotlight: spotlightRow(channel), spotlight_state: { ...found, line } };
 }
 
 function marathonRematch(row) {

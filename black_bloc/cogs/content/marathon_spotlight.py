@@ -52,6 +52,20 @@ async def _row_of(bot: Any, guild: Any, marathon: Any) -> Any:
     return row
 
 
+async def state_for(bot: Any, guild: Any, marathon: Any) -> tuple[Any, dict[str, Any]]:
+    """The marathon's channel row, and whether it is spotlit and why."""
+    row = await _row_of(bot, guild, marathon)
+    state = ms.state_of(
+        row,
+        marathon,
+        now_for(bot),
+        enabled=enabled(bot, guild.id) and mode_of(bot, guild.id) != MODE_OFF,
+        lead_minutes=lead_of(bot, guild.id),
+        tail_minutes=tail_of(bot, guild.id),
+    )
+    return row, state | {"tail_minutes": tail_of(bot, guild.id)}
+
+
 async def follow_spotlight(
     bot: Any, guild: Any, marathon: Any, now: datetime | None = None
 ) -> str | None:
@@ -228,5 +242,6 @@ __all__ = [
     "lift",
     "set_spotlight_mode",
     "settle_held",
+    "state_for",
     "tail_of",
 ]

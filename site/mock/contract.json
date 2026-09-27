@@ -5096,7 +5096,8 @@
       "method": "GET",
       "path": "/api/marathons/{marathon_id}",
       "read_by": [
-        "marathons-section.js (events.html) marathon drawer"
+        "marathons-section.js (events.html) marathon drawer",
+        "marathons-section.js (events.html) the drawer's Spotlight card — spotlight-controls.js draws channel_spotlight as the Go-live drawer does"
       ],
       "shape": "object",
       "keys": [
@@ -5139,7 +5140,9 @@
         "ignored_at",
         "ignored_by_name",
         "thread_url",
-        "inbox_message_url"
+        "inbox_message_url",
+        "channel_spotlight",
+        "spotlight_state"
       ],
       "rows": {
         "run_list": [
@@ -5168,6 +5171,36 @@
           "member_name",
           "everywhere",
           "user_id"
+        ]
+      },
+      "nested": {
+        "channel_spotlight": [
+          "id",
+          "spotlight",
+          "kept",
+          "pin",
+          "live",
+          "announce",
+          "starts_at",
+          "expires_at",
+          "scheduled",
+          "range",
+          "until",
+          "ping_mode",
+          "ping_state",
+          "ping_help",
+          "windows",
+          "note",
+          "event_id"
+        ],
+        "spotlight_state": [
+          "state",
+          "line",
+          "until",
+          "starts",
+          "held_by_this",
+          "follows",
+          "tail_minutes"
         ]
       }
     },

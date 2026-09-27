@@ -177,18 +177,122 @@ def new_row_ping_mode(login: Any, takes: bool, marathon_default: Any, general: A
     return general
 
 
+HELD = "held"
+HELD_OTHER = "held_other"
+KEPT = "kept"
+UNTIL = "until"
+SCHEDULED = "scheduled"
+WAITING = "waiting"
+DARK = "off"
+NO_CHANNEL = "none"
+STATE_LINES = {
+    HELD: "Spotlit by this marathon until {until} — its last run plus {tail} minutes, and it "
+    "moves if the schedule does.",
+    HELD_OTHER: "Spotlit by another marathon on this channel until {until}.",
+    KEPT: "Spotlit and kept for ever — no marathon changes it.",
+    UNTIL: "Spotlit until {until}, on staff dates. A marathon only ever carries that end later.",
+    SCHEDULED: "Scheduled — spotlit from {starts} until {until}.",
+    WAITING: "Not spotlit yet — it turns on {starts}, {lead} minutes before the first run.",
+    DARK: "Not spotlit.",
+    NO_CHANNEL: "No channel yet, so there is nothing to spotlight. Pick the channel it airs on "
+    "under Settings.",
+}
+FOLLOW_OFF_CLAUSE = " Following is off, so this marathon leaves the channel to staff."
+OPTED_OUT_CLAUSE = " This channel is off for marathons."
+
+
+def state_of(
+    row: Any,
+    marathon: Any,
+    now: datetime,
+    *,
+    enabled: bool,
+    lead_minutes: int,
+    tail_minutes: int,
+) -> dict[str, Any]:
+    """Whether the channel is spotlit and why, as one line; {until} and {starts} are left for
+    the reader's own clock, with their moments beside them."""
+    found = {"state": NO_CHANNEL, "until": None, "starts": None, "held_by_this": False}
+    if row is None:
+        return found | {"line": STATE_LINES[NO_CHANNEL]}
+    until = _cell(row, "expires_at")
+    holder = held_by(row)
+    if is_spotlit(row):
+        starts = parse_ts(_cell(row, "starts_at"))
+        if keeps_forever(row):
+            state = KEPT
+        elif holder is not None and holder == int(_cell(marathon, "id", 0) or 0):
+            state = HELD
+        elif holder is not None:
+            state = HELD_OTHER
+        elif starts is not None and starts > now:
+            state = SCHEDULED
+        else:
+            state = UNTIL
+        found |= {"state": state, "until": until, "starts": _cell(row, "starts_at")}
+        found["held_by_this"] = state == HELD
+        line = STATE_LINES[state]
+    else:
+        span = span_of(marathon)
+        opening = span[0] - timedelta(minutes=max(0, int(lead_minutes))) if span else None
+        waits = (
+            follows(marathon, enabled=enabled)
+            and takes_marathons(row)
+            and opening is not None
+            and now < opening
+        )
+        state = WAITING if waits else DARK
+        found |= {"state": state, "starts": opening.isoformat() if waits else None}
+        line = STATE_LINES[state]
+        if not waits and mode_of(marathon) == OFF:
+            line += FOLLOW_OFF_CLAUSE
+        elif not waits and not takes_marathons(row):
+            line += OPTED_OUT_CLAUSE
+    line = line.replace("{tail}", str(int(tail_minutes))).replace("{lead}", str(int(lead_minutes)))
+    return found | {"line": line, "follows": mode_of(marathon) == FOLLOW}
+
+
+def discord_line(state: dict[str, Any]) -> str:
+    """The state line with its moments as Discord timestamps, read in each viewer's zone."""
+    line = str(state.get("line") or "")
+    for name in ("until", "starts"):
+        when = parse_ts(state.get(name))
+        line = line.replace("{" + name + "}", f"<t:{int(when.timestamp())}:f>" if when else "—")
+    return line
+
+
 FOLLOW_ACTION = "spotlight_follow"
 OFF_ACTION = "spotlight_off"
+CARD_ACTION = "spotlight_card"
+CHANNEL_ACTION = "spotlight_channel"
 FOLLOW_MOVE = MarathonMove(FOLLOW_ACTION, SPOTLIGHT_ON_BUTTON, row=2)
 OFF_MOVE = MarathonMove(OFF_ACTION, SPOTLIGHT_OFF_BUTTON, row=2)
+CARD_MOVE = MarathonMove(CARD_ACTION, "Spotlight…", row=2)
+CHANNEL_MOVE = MarathonMove(CHANNEL_ACTION, "The channel's spotlight…", "primary", 3)
 MOVE_MODES = {FOLLOW_ACTION: FOLLOW, OFF_ACTION: OFF}
+SPOT_SHARED = (
+    "**The channel's spotlight…** opens the channel's own controls — on/off, dates, pin, bump, "
+    "announcements and pings — the same card as `/golive` ▸ Channels…, so a change there shows "
+    "on the Go-live page too."
+)
+
+
+def follow_move(marathon: Any) -> MarathonMove:
+    return OFF_MOVE if mode_of(marathon) == FOLLOW else FOLLOW_MOVE
 
 
 def card_moves(marathon: Any) -> tuple[MarathonMove, ...]:
-    """The one switch that changes something, and only on a marathon with a channel."""
+    """The Spotlight… door, and only on a marathon with a channel."""
     if not _cell(marathon, "spotlight_id"):
         return ()
-    return (OFF_MOVE,) if mode_of(marathon) == FOLLOW else (FOLLOW_MOVE,)
+    return (CARD_MOVE,)
+
+
+def spot_moves(marathon: Any) -> tuple[MarathonMove, ...]:
+    """The Spotlight view: the follow switch and the channel's own card."""
+    if not _cell(marathon, "spotlight_id"):
+        return ()
+    return (follow_move(marathon), CHANNEL_MOVE)
 
 
 def mode_line(marathon: Any) -> str:
@@ -199,6 +303,9 @@ __all__ = [
     "BAD_MODE",
     "MOVE_MODES",
     "card_moves",
+    "discord_line",
+    "follow_move",
+    "spot_moves",
     "FOLLOW",
     "MODES",
     "OFF",
@@ -216,4 +323,5 @@ __all__ = [
     "plan",
     "reach_end",
     "span_of",
+    "state_of",
 ]

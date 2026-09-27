@@ -135,10 +135,12 @@ def test_a_marathon_channel_is_a_seeded_login_or_a_row_with_a_marathon_window():
     assert ms.is_marathon_channel(streamer, [{"source": "marathon"}])
 
 
-def test_the_card_draws_the_one_switch_that_changes_something():
-    assert ms.card_moves(a_marathon()) == (ms.OFF_MOVE,)
-    assert ms.card_moves(a_marathon(spotlight_mode="off")) == (ms.FOLLOW_MOVE,)
+def test_the_card_draws_the_spotlight_door_and_its_view_the_one_switch_that_changes_something():
+    assert ms.card_moves(a_marathon()) == (ms.CARD_MOVE,)
     assert ms.card_moves(a_marathon(spotlight_id=None)) == ()
+    assert ms.spot_moves(a_marathon()) == (ms.OFF_MOVE, ms.CHANNEL_MOVE)
+    assert ms.spot_moves(a_marathon(spotlight_mode="off")) == (ms.FOLLOW_MOVE, ms.CHANNEL_MOVE)
+    assert ms.spot_moves(a_marathon(spotlight_id=None)) == ()
     assert ms.mode_line(a_marathon(spotlight_mode="off")).endswith("**off**")
 
 
@@ -166,3 +168,46 @@ def test_dimmed_during_counts_the_tail_as_the_marathon_still_holding_it():
     ones = [a_marathon()]
     assert ms.dimmed_during(ones, after_end, enabled=True, lead_minutes=15, tail_minutes=60)
     assert not ms.dimmed_during(ones, after_end, enabled=True, lead_minutes=15, tail_minutes=0)
+
+
+def stated(row, marathon=None, *, now=NOW, enabled=True):
+    return ms.state_of(
+        row,
+        a_marathon() if marathon is None else marathon,
+        now,
+        enabled=enabled,
+        lead_minutes=15,
+        tail_minutes=60,
+    )
+
+
+def test_the_state_says_whether_the_channel_is_spotlit_and_why():
+    held = stated(a_row(spotlight=1, expires_at=at(300), spotlit_by_marathon=7))
+    assert held["state"] == ms.HELD and held["held_by_this"] and held["until"] == at(300)
+    assert "by this marathon until {until}" in held["line"] and "plus 60 minutes" in held["line"]
+    other = stated(a_row(spotlight=1, expires_at=at(300), spotlit_by_marathon=8))
+    assert other["state"] == ms.HELD_OTHER and not other["held_by_this"]
+    assert stated(a_row(spotlight=1))["state"] == ms.KEPT
+    dated = stated(a_row(spotlight=1, expires_at=at(5000)))
+    assert dated["state"] == ms.UNTIL and "staff dates" in dated["line"]
+    later = stated(a_row(spotlight=1, starts_at=at(60), expires_at=at(5000)))
+    assert later["state"] == ms.SCHEDULED and later["starts"] == at(60)
+    assert stated(None)["state"] == ms.NO_CHANNEL and "No channel yet" in stated(None)["line"]
+
+
+def test_an_unspotlit_channel_says_when_the_follow_turns_it_on_or_why_it_will_not():
+    waits = stated(a_row(), a_marathon(start=120, end=400))
+    assert waits["state"] == ms.WAITING and waits["starts"] == at(105)
+    assert "15 minutes before the first run" in waits["line"]
+    assert stated(a_row(), a_marathon(start=120, end=400), enabled=False)["state"] == ms.DARK
+    off = stated(a_row(), a_marathon(start=120, end=400, spotlight_mode="off"))
+    assert off["state"] == ms.DARK and "Following is off" in off["line"] and not off["follows"]
+    out = stated(a_row(marathons=0), a_marathon(start=120, end=400))
+    assert out["state"] == ms.DARK and "off for marathons" in out["line"]
+
+
+def test_the_discord_line_turns_the_moments_into_timestamps():
+    held = stated(a_row(spotlight=1, expires_at=at(300), spotlit_by_marathon=7))
+    unix = int(datetime.fromisoformat(at(300)).timestamp())
+    assert f"until <t:{unix}:f>" in ms.discord_line(held)
+    assert "{" not in ms.discord_line(stated(a_row(), a_marathon(start=120, end=400)))

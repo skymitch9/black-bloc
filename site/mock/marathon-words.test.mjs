@@ -33,7 +33,7 @@ const at = (minutes) => new Date(NOW + minutes * 60000).toISOString();
 const CADENCE = { near: 30, far: 24 };
 
 test('the drawer is five parts: the header, People, the shut Settings, the posts line, the moves', () => {
-  assert.deepEqual(drawerParts(), ['the header', 'People', 'Settings for this marathon', 'the posts line', 'the moves']);
+  assert.deepEqual(drawerParts(), ['the header', 'Spotlight', 'Pings', 'People', 'Settings for this marathon', 'the posts line', 'the moves']);
 });
 
 test('the header reads short: when it was read, when next, and the counts', () => {

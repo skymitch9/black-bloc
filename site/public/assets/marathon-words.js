@@ -6,7 +6,7 @@ export const BAF = 'BaF';
 
 export const CARD_PEOPLE = 'People';
 export const SETTINGS_FOLD = 'Settings for this marathon';
-export const DRAWER_PARTS = ['the header', CARD_PEOPLE, SETTINGS_FOLD, 'the posts line', 'the moves'];
+export const DRAWER_PARTS = ['the header', 'Spotlight', 'Pings', CARD_PEOPLE, SETTINGS_FOLD, 'the posts line', 'the moves'];
 
 const LAST_READ = 'Last read {ago}';
 const NOT_READ = 'Not read yet';
@@ -161,7 +161,7 @@ export function sourcesTitle(feeds, { enabled = true } = {}, now = Date.now()) {
   return soonest ? `${head} · ${said(SOURCES_NEXT, { in: inWords(soonest, now) })}` : head;
 }
 
-/** The drawer's five parts, top to bottom. */
+/** The drawer's seven parts, top to bottom (Spotlight and Pings only with a channel). */
 export function drawerParts() {
   return [...DRAWER_PARTS];
 }

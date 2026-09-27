@@ -6,6 +6,7 @@ from black_bloc.cogs.content.marathon_spotlight import (
     follow_spotlight,
     set_spotlight_mode,
     settle_held,
+    state_for,
 )
 from black_bloc.cogs.content.spotlight import (
     Spotlight,
@@ -282,3 +283,27 @@ async def test_the_sweep_reads_the_current_span_and_extends_instead_of_lifting(b
     assert fresh["spotlit_by_marathon"] == marathon["id"]
     assert await count(bot, "marathon.spotlight_lifted") == 0
     assert await count(bot, "marathon.spotlight_extended") == 1
+
+
+async def test_state_for_reads_the_row_the_marathon_holds_and_the_keys(bot, cog):  # noqa: F811
+    row = await quiet_row(bot)
+    marathon = await added(bot, cog, channel=row)
+    channel, state = await state_for(
+        bot, bot.guild, await get_marathon(bot.db, GUILD, marathon["id"])
+    )
+    assert channel["id"] == row["id"]
+    assert state["state"] == "held" and state["until"] == at(270) and state["tail_minutes"] == 60
+    await bot.store.set(GUILD, "marathon_spotlight_tail_minutes", 90)
+    _, state = await state_for(bot, bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert "plus 90 minutes" in state["line"]
+    bare = await added_bare(bot, cog)
+    assert (await state_for(bot, bot.guild, bare))[1]["state"] == "none"
+
+
+async def added_bare(bot, cog):  # noqa: F811
+    from black_bloc.cogs.content.marathon import create_marathon
+
+    made = await create_marathon(
+        bot, bot.guild, FakeActor(), name="GDQx", url="https://gamesdonequick.com/schedule/75"
+    )
+    return made.value

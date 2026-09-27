@@ -67,6 +67,7 @@ from ...cogs.content.marathon_people import (
 )
 from ...cogs.content.marathon_ping import set_ping_role
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
+from ...cogs.content.marathon_spotlight import state_for as spotlight_state_for
 from ...cogs.content.spotlight import channel_by_id
 from ...events import get_event
 from ...logkinds import VIA_WEBSITE
@@ -85,6 +86,7 @@ from ...settings_store import (
 from ..auth import Refused, staff_dependency
 from ..names import member_row, resolve_one
 from ..writes import actor_for, require_cog, require_db, require_guild, wanted_id, writer_dependency
+from .golive import one_spotlight
 
 log = logging.getLogger(__name__)
 
@@ -275,6 +277,17 @@ def _cell(row: Any, key: str) -> Any:
         return None
 
 
+async def spotlight_of(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
+    """The channel row as the Go-live drawer reads it, and whether it is spotlit and why."""
+    channel, state = await spotlight_state_for(bot, guild, row)
+    return {
+        "channel_spotlight": (
+            await one_spotlight(bot, guild, int(channel["id"])) if channel is not None else None
+        ),
+        "spotlight_state": state,
+    }
+
+
 def trouble_of(row: Any) -> str | None:
     if row["last_fetch_ok"] is None or int(row["last_fetch_ok"]):
         return None
@@ -450,11 +463,15 @@ def build_router(bot: Any) -> APIRouter:
             if one["marathon_id"] in (None, row["id"])
         ]
         statuses = await event_statuses(bot, runs)
-        return await marathon_row(bot, guild, row, runs) | {
-            "run_list": [run_row(guild, one, statuses) for one in runs],
-            "pairings": pairings,
-            "unmatched": mt.unmatched_names(runs),
-        }
+        return (
+            await marathon_row(bot, guild, row, runs)
+            | {
+                "run_list": [run_row(guild, one, statuses) for one in runs],
+                "pairings": pairings,
+                "unmatched": mt.unmatched_names(runs),
+            }
+            | await spotlight_of(bot, guild, row)
+        )
 
     async def people(guild: Any, marathon: Any) -> list[dict[str, Any]]:
         return [
