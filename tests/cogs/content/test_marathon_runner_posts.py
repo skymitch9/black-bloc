@@ -209,7 +209,8 @@ async def test_backfill_posts_every_matched_run_in_schedule_order_on_the_first_t
     await restarted.tick_once()
 
     games = [one.content.split("**")[3] for one in runner_posts(the_thread(bot))]
-    assert games == ["Celeste", "Super Metroid", "Kirby Air Riders"]
+    assert games == ["Halo", "Celeste", "Super Metroid", "Kirby Air Riders"]
+    assert "· done ·" in runner_posts(the_thread(bot))[0].content
     assert "Super Metroid" not in board.content
     assert all(one.pinned for one in runner_posts(the_thread(bot)))
 

@@ -51,7 +51,7 @@ def text(row):
     ).text
 
 
-def test_wanted_is_every_posted_run_and_every_baf_run_still_ahead_in_schedule_order():
+def test_wanted_is_every_posted_run_and_every_baf_run_but_a_never_posted_drop_in_order():
     rows = [
         run(3, 90),
         run(1, 30),
@@ -60,7 +60,7 @@ def test_wanted_is_every_posted_run_and_every_baf_run_still_ahead_in_schedule_or
         run(5, -400, state=mt.DROPPED, post_message_id=9),
         run(6, 0, state=mt.LIVE),
     ]
-    assert [one["id"] for one in mrp.wanted(rows)] == [5, 6, 1, 3]
+    assert [one["id"] for one in mrp.wanted(rows)] == [5, 2, 6, 1, 3]
 
 
 def test_the_post_names_the_runner_with_the_mention_as_text_and_the_state_word():
@@ -112,3 +112,9 @@ def test_only_the_pin_cap_code_counts_as_the_cap():
 
     assert mrp.is_pin_cap(Capped()) and not mrp.is_pin_cap(Other())
     assert not mrp.is_pin_cap(RuntimeError())
+
+
+def test_a_done_run_is_posted_but_pinned_only_inside_the_days_grace():
+    assert mrp.pins_now(run(1, -120, state=mt.DONE), NOW)
+    assert not mrp.pins_now(run(1, -120, state=mt.DONE), NOW + timedelta(days=2))
+    assert mrp.pins_now(run(2, 30), NOW + timedelta(days=9))

@@ -163,6 +163,7 @@ async def post_one(
         not shadow
         and bot.store.get(guild.id, MARATHON_RUNNER_POSTS_PINNED_KEY)
         and not mt.board_due_off(marathon, cog.clock())
+        and mrp.pins_now(row, cog.clock())
     ):
         await pin_one(cog, guild, marathon, row, sent, int(channel_id or target))
 

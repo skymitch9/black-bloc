@@ -8,7 +8,7 @@ from typing import Any
 from . import marathon as mt
 from .golive import parse_ts
 
-POSTABLE = (mt.UPCOMING, mt.LIVE)
+POSTABLE = (mt.UPCOMING, mt.LIVE, mt.DONE)
 UNPIN_STATES = (mt.DONE, mt.DROPPED)
 PIN_CAP_CODE = 30003
 PIN_REASON = "Black Bloc: a BaF run on the marathon"
@@ -33,8 +33,8 @@ def is_pinned(row: Any) -> bool:
 
 
 def wanted(rows: Any) -> list[Any]:
-    """Runs that get a post: every BaF run already posted, and new ones still ahead or on,
-    in schedule order."""
+    """Runs that get a post, in schedule order: every run already posted, and every BaF run the
+    board lists except one that was dropped before it was ever posted."""
     return sorted(
         (
             one
@@ -113,6 +113,11 @@ def unpin_because(row: Any, now: datetime) -> str | None:
     if ended is None or now > ended + mt.AFTER_END:
         return BECAUSE_OVER
     return None
+
+
+def pins_now(row: Any, now: datetime) -> bool:
+    """A post made for a run whose pin would already be due off is not pinned at all."""
+    return unpin_because({**dict(row), "post_pinned": 1}, now) is None
 
 
 def is_pin_cap(exc: BaseException) -> bool:
