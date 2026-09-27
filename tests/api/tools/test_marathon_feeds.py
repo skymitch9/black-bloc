@@ -254,3 +254,49 @@ async def test_patch_sets_the_feeds_event_mode_renames_and_moves_it(client, sign
 
     moved = client.patch(f"/api/marathons/feeds/{feed_id}", json={"spotlight_id": other}).json()
     assert moved["spotlight_id"] == other and "Speed Stuff 4 Charity" in moved["message"]
+
+
+async def test_patch_sets_a_horaro_events_feeds_owner_and_search_words(
+    client, sign_in, web, wf, cog
+):
+    rgl = await channel(web, wf, "retrogaminglivetv", "RetroGamingLiveTV")
+    feed_id = await insert_feed(
+        web.db,
+        wf.GUILD_ID,
+        source="horaro_events",
+        feed_ref="retrogaminglivetv",
+        spotlight_id=rgl,
+        name="Retro Gaming Live",
+        action="add",
+        added_by=7,
+    )
+    gdq_id = await gdq_feed(web, wf)
+    sign_in(client)
+    row = client.get("/api/marathons/feeds").json()["feeds"]
+    rows = {one["id"]: one for one in row}
+    assert rows[feed_id]["owner"] == "" and rows[feed_id]["words"] == []
+    assert rows[feed_id]["searches"] == ["Retro Gaming Live"]
+    assert rows[gdq_id]["owner"] is None and rows[gdq_id]["searches"] is None
+
+    response = client.patch(
+        f"/api/marathons/feeds/{feed_id}",
+        json={"owner": "RGLtvMarathons", "words": "RGL, RGLtv, Retrothon"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["owner"] == "RGLtvMarathons"
+    assert body["words"] == body["searches"] == ["RGL", "RGLtv", "Retrothon"]
+    assert "searches horaro.net for **RGL, RGLtv, Retrothon** now" in body["message"]
+    assert "**RGLtvMarathons** owns now" in body["message"]
+    assert body["feed_ref"] == "retrogaminglivetv" and body["seen_count"] == 0
+    logged = await wf.one_web_row(web.db, "web.marathon.feed_changed")
+    assert logged["owner"] == "RGLtvMarathons"
+
+    listed = client.patch(f"/api/marathons/feeds/{feed_id}", json={"words": ["RGL"]}).json()
+    assert listed["words"] == ["RGL"] and listed["owner"] == "RGLtvMarathons"
+    bad = client.patch(f"/api/marathons/feeds/{feed_id}", json={"words": 5})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_words"
+    many = client.patch(f"/api/marathons/feeds/{feed_id}", json={"words": "a,b,c,d,e,f"})
+    assert many.status_code == 422 and many.json()["error"] == "bad_words"
+    refused = client.patch(f"/api/marathons/feeds/{gdq_id}", json={"owner": "someone"})
+    assert refused.status_code == 409 and refused.json()["error"] == "not_horaro_events"

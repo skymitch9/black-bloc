@@ -1,0 +1,72 @@
+{
+ "data": [
+  {
+   "id": "6c50qib4rt8d5ub492",
+   "name": "Retrothon 2025",
+   "slug": "retrothon2025",
+   "link": "https://horaro.net/retrothon2025",
+   "description": null,
+   "owner": "RGLtvMarathons",
+   "website": "http://www.twitch.tv/retrogaminglivetv",
+   "twitter": "retrogaminglive",
+   "bluesky": null,
+   "twitch": "retrogaminglivetv",
+   "links": [
+    {
+     "rel": "self",
+     "uri": "https://horaro.net/-/api/v1/events/6c50qib4rt8d5ub492"
+    },
+    {
+     "rel": "schedules",
+     "uri": "https://horaro.net/-/api/v1/events/6c50qib4rt8d5ub492/schedules"
+    }
+   ]
+  },
+  {
+   "id": "2d50poe8hka0qcb489",
+   "name": "Retrothon 2026",
+   "slug": "retrothon26",
+   "link": "https://horaro.net/retrothon26",
+   "description": "Retrothon 2026! RGLtv's annual retro speedrun marathon!\r\n\r\nEvent runs from April 18th to April 26th - 24 hours a day, 8 days a week!\r\n\r\nWatch live:\r\n\r\nhttps://twitch.tv/retrogaminglivetv",
+   "owner": "RGLtvMarathons",
+   "website": "https://twitch.tv/retrogaminglivetv",
+   "twitter": null,
+   "bluesky": "rgltv.bsky.social",
+   "twitch": null,
+   "links": [
+    {
+     "rel": "self",
+     "uri": "https://horaro.net/-/api/v1/events/2d50poe8hka0qcb489"
+    },
+    {
+     "rel": "schedules",
+     "uri": "https://horaro.net/-/api/v1/events/2d50poe8hka0qcb489/schedules"
+    }
+   ]
+  },
+  {
+   "id": "3c500928ywcdogb464",
+   "name": "Interglitches 2024 Restream",
+   "slug": "interglitches24restream",
+   "link": "https://horaro.net/interglitches24restream",
+   "description": null,
+   "owner": "Germench",
+   "website": "https://www.germench.de",
+   "twitter": "GermenchTweets",
+   "bluesky": null,
+   "twitch": "germench",
+   "links": [
+    {
+     "rel": "self",
+     "uri": "https://horaro.net/-/api/v1/events/3c500928ywcdogb464"
+    }
+   ]
+  }
+ ],
+ "pagination": {
+  "offset": 0,
+  "max": 100,
+  "size": 3,
+  "links": []
+ }
+}

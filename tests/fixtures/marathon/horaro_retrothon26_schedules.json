@@ -1,0 +1,75 @@
+{
+ "data": [
+  {
+   "id": "1a11f073w7a5c77acf",
+   "name": "Retrothon 2026",
+   "slug": "schedule",
+   "timezone": "America/New_York",
+   "start": "2026-04-18T12:00:00-04:00",
+   "start_t": 1776528000,
+   "website": "https://twitch.tv/retrogaminglivetv",
+   "twitter": null,
+   "twitch": "retrogaminglivetv",
+   "bluesky": "rgltv.bsky.social",
+   "description": null,
+   "setup": "PT05M",
+   "setup_t": 300,
+   "updated": "2026-04-27T02:33:47Z",
+   "link": "https://horaro.net/retrothon26/schedule",
+   "columns": [
+    "Runner",
+    "Game",
+    "Category"
+   ],
+   "items": [
+    {
+     "length": "PT05M",
+     "length_t": 300,
+     "scheduled": "2026-04-18T12:00:00-04:00",
+     "scheduled_t": 1776528000,
+     "data": [
+      "RGLtv Staff",
+      "Intro",
+      "na"
+     ]
+    },
+    {
+     "length": "PT1H10M",
+     "length_t": 4200,
+     "scheduled": "2026-04-18T12:10:00-04:00",
+     "scheduled_t": 1776528600,
+     "data": [
+      "Mooware (he/him)",
+      "I Will: The Story of London",
+      "Ufo%"
+     ]
+    },
+    {
+     "length": "PT20M",
+     "length_t": 1200,
+     "scheduled": "2026-04-18T13:25:00-04:00",
+     "scheduled_t": 1776533100,
+     "data": [
+      "Mechalink (he/any)",
+      "The Running Man",
+      "Any%"
+     ]
+    }
+   ],
+   "links": [
+    {
+     "rel": "self",
+     "uri": "https://horaro.net/-/api/v1/schedules/1a11f073w7a5c77acf"
+    },
+    {
+     "rel": "event",
+     "uri": "https://horaro.net/-/api/v1/events/2d50poe8hka0qcb489"
+    },
+    {
+     "rel": "ticker",
+     "uri": "https://horaro.net/-/api/v1/schedules/1a11f073w7a5c77acf/ticker"
+    }
+   ]
+  }
+ ]
+}

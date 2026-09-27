@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import marathon_feeds as mf
+from ... import marathon_horaro_events as hre
 from ... import marathon_inbox as mi
 from ...cogs.content.marathon_events import default_mode
 from ...cogs.content.marathon_feeds import (
@@ -33,6 +34,10 @@ from ..writes import actor_for, require_cog, require_db, require_guild, wanted_i
 from .marathons import COG, FEATURE, answered
 
 TROUBLE = "could not be checked since {when} — {why}"
+SEARCH_FIELDS = ("owner", "words")
+BAD_SEARCH = (
+    "Give the owner as words and the search words as words or a list, so nothing was changed."
+)
 
 
 def suggestion_row(record: dict[str, Any]) -> dict[str, Any]:
@@ -51,6 +56,8 @@ async def feed_row(bot: Any, guild: Any, feed: Any) -> dict[str, Any]:
     made = await marathons_of_feed(bot.db, feed["id"])
     ignored = mf.ignored_of(feed)
     failed = feed["last_ok"] is not None and not int(feed["last_ok"])
+    search = hre.search_of(feed)
+    finds = feed["source"] == mf.HORARO_EVENTS_FEED
     return {
         "id": feed["id"],
         "name": feed["name"],
@@ -82,6 +89,9 @@ async def feed_row(bot: Any, guild: Any, feed: Any) -> dict[str, Any]:
         "ignored": ignored,
         "ignored_count": len(ignored),
         "seen_count": len(mf.seen_of(feed)),
+        "owner": search["owner"] if finds else None,
+        "words": search["words"] if finds else None,
+        "searches": hre.queries(feed) if finds else None,
         "suggestions": [suggestion_row(one) for one in mf.open_suggestions(feed)],
         "dismissed": [suggestion_row(one) for one in mf.dismissed_of(feed)],
         "marathons": [
@@ -171,9 +181,11 @@ def build_router(bot: Any) -> APIRouter:
             raise Refused(422, "bad_action", mf.BAD_ACTION)
         if "auto_track" in payload and not isinstance(payload["auto_track"], bool):
             raise Refused(422, "bad_auto_track", mi.BAD_AUTO_TRACK)
+        if not all(isinstance(payload.get(key) or "", (str, list)) for key in SEARCH_FIELDS):
+            raise Refused(422, "bad_words", BAD_SEARCH)
         if {"active", "action", "name", "spotlight_id", "event_mode", "auto_track"} & set(
             payload
-        ):
+        ) or set(SEARCH_FIELDS) & set(payload):
             given = payload.get("spotlight_id")
             done = answered(
                 await set_feed(
@@ -187,6 +199,8 @@ def build_router(bot: Any) -> APIRouter:
                     spotlight_id=wanted_id(given) if given not in (None, "") else None,
                     event_mode=payload["event_mode"] or "" if "event_mode" in payload else None,
                     auto_track=payload.get("auto_track"),
+                    owner=payload.get("owner") or "" if "owner" in payload else None,
+                    words=payload.get("words") or "" if "words" in payload else None,
                     via=VIA_WEBSITE,
                 )
             )

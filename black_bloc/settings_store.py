@@ -4455,6 +4455,19 @@ MARATHON_LINK_CHANGED_SAID_KEY = "marathon_link_changed_said"
 MARATHON_LINK_SAME_KEY = "marathon_link_same"
 MARATHON_LINK_TAKEN_KEY = "marathon_link_taken"
 MARATHON_LINK_UNREADABLE_KEY = "marathon_link_unreadable"
+MARATHON_FEED_SEARCH_MOVE_KEY = "marathon_feed_search_move"
+MARATHON_FEED_SEARCH_TITLE_KEY = "marathon_feed_search_title"
+MARATHON_FEED_WORDS_LABEL_KEY = "marathon_feed_words_label"
+MARATHON_FEED_OWNER_LABEL_KEY = "marathon_feed_owner_label"
+MARATHON_FEED_SEARCH_LINE_KEY = "marathon_feed_search_line"
+MARATHON_FEED_OWNER_LINE_KEY = "marathon_feed_owner_line"
+MARATHON_FEED_WORDS_SAID_KEY = "marathon_feed_words_said"
+MARATHON_FEED_WORDS_CLEARED_KEY = "marathon_feed_words_cleared"
+MARATHON_FEED_OWNER_SAID_KEY = "marathon_feed_owner_said"
+MARATHON_FEED_OWNER_CLEARED_KEY = "marathon_feed_owner_cleared"
+MARATHON_FEED_SEARCH_REFUSED_KEY = "marathon_feed_search_refused"
+MARATHON_FEED_WORDS_BAD_KEY = "marathon_feed_words_bad"
+MARATHON_FEED_OWNER_BAD_KEY = "marathon_feed_owner_bad"
 MARATHON_INBOX_POSTED_SAID_KEY = "marathon_inbox_posted_said"
 MARATHON_INBOX_ALREADY_KEY = "marathon_inbox_already"
 MARATHON_INBOX_POST_OFF_KEY = "marathon_inbox_post_off"
@@ -5155,6 +5168,80 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "{reason}",
         ("marathon", "reason"),
         "the refusal when the new schedule link will not read. It takes {marathon} {reason}",
+    ),
+    MARATHON_FEED_SEARCH_MOVE_KEY: (
+        "Search words…",
+        (),
+        "the button on a horaro.net events feed's card in /event ▸ Sources that "
+        "opens its search words and owner",
+    ),
+    MARATHON_FEED_SEARCH_TITLE_KEY: (
+        "What this feed searches horaro.net for",
+        (),
+        "the title of the Search words… window on a horaro.net events feed "
+        "(Discord cuts it at 45 characters)",
+    ),
+    MARATHON_FEED_WORDS_LABEL_KEY: (
+        "Search words — commas between them",
+        (),
+        "the Search words box in that window (Discord cuts it at 45 characters)",
+    ),
+    MARATHON_FEED_OWNER_LABEL_KEY: (
+        "Owner — the horaro.net account, if any",
+        (),
+        "the Owner box in that window (Discord cuts it at 45 characters)",
+    ),
+    MARATHON_FEED_SEARCH_LINE_KEY: (
+        "Searches horaro.net for **{words}**.",
+        ("words",),
+        "the line on a horaro.net events feed's card naming what it searches for. It takes {words}",
+    ),
+    MARATHON_FEED_OWNER_LINE_KEY: (
+        "Also keeps every event the horaro.net account **{owner}** owns.",
+        ("owner",),
+        "the line on a horaro.net events feed's card when it has an owner. It takes {owner}",
+    ),
+    MARATHON_FEED_WORDS_SAID_KEY: (
+        "**{feed}** searches horaro.net for **{words}** now.",
+        ("feed", "words"),
+        "what staff are told once a horaro.net events feed's search words change. "
+        "It takes {feed} {words}",
+    ),
+    MARATHON_FEED_WORDS_CLEARED_KEY: (
+        "**{feed}** searches horaro.net by its name again.",
+        ("feed",),
+        "what staff are told once a horaro.net events feed's search words are "
+        "cleared. It takes {feed}",
+    ),
+    MARATHON_FEED_OWNER_SAID_KEY: (
+        "**{feed}** also keeps every event the horaro.net account **{owner}** owns now.",
+        ("feed", "owner"),
+        "what staff are told once a horaro.net events feed's owner is set. It takes {feed} {owner}",
+    ),
+    MARATHON_FEED_OWNER_CLEARED_KEY: (
+        "**{feed}** keeps only the events that name the channel's Twitch again.",
+        ("feed",),
+        "what staff are told once a horaro.net events feed's owner is cleared. It takes {feed}",
+    ),
+    MARATHON_FEED_SEARCH_REFUSED_KEY: (
+        "Only a horaro.net events feed has search words and an owner, so "
+        "**{feed}** was not changed.",
+        ("feed",),
+        "the refusal when search words or an owner are given to a feed of another "
+        "kind. It takes {feed}",
+    ),
+    MARATHON_FEED_WORDS_BAD_KEY: (
+        "A feed takes at most {most} search words of {longest} characters or "
+        "fewer each, so **{feed}** was not changed.",
+        ("feed", "most", "longest"),
+        "the refusal when there are too many search words or one is too long. It "
+        "takes {feed} {most} {longest}",
+    ),
+    MARATHON_FEED_OWNER_BAD_KEY: (
+        "A horaro.net account name is {longest} characters or fewer, so "
+        "**{feed}** was not changed.",
+        ("feed", "longest"),
+        "the refusal when the owner given is too long. It takes {feed} {longest}",
     ),
     MARATHON_INBOX_POSTED_SAID_KEY: (
         "**{marathon}**'s inbox message is up — its Schedule line says it is not out yet, and the "
