@@ -4387,6 +4387,8 @@ MARATHON_REMINDER_PINGS_KEY = "marathon_reminder_pings"
 MARATHON_LIVE_PINGS_KEY = "marathon_live_pings"
 MARATHON_REMINDER_STALE_KEY = "marathon_reminder_stale_minutes"
 MARATHON_PIN_BOARD_KEY = "marathon_pin_board"
+MARATHON_RUNNER_POSTS_KEY = "marathon_runner_posts"
+MARATHON_RUNNER_POSTS_PINNED_KEY = "marathon_runner_posts_pinned"
 MARATHON_EDIT_DONE_KEY = "marathon_edit_done"
 MARATHON_WINDOW_SLACK_KEY = "marathon_window_slack_hours"
 MARATHON_SPOTLIGHT_LEAD_KEY = "marathon_spotlight_lead_hours"
@@ -4477,6 +4479,8 @@ MARATHON_CHANNEL_PING_HELP_KEY = "marathon_channel_ping_help"
 MARATHON_BOARD_TEMPLATE_KEY = "marathon_board_template"
 MARATHON_BOARD_LINE_KEY = "marathon_board_line_template"
 MARATHON_BOARD_EMPTY_KEY = "marathon_board_empty_line"
+MARATHON_RUNNER_POST_TEMPLATE_KEY = "marathon_runner_post_template"
+MARATHON_RUNNER_POST_UNLISTED_KEY = "marathon_runner_post_unlisted"
 MARATHON_REMINDER_TEMPLATE_KEY = "marathon_reminder_template"
 MARATHON_LIVE_TEMPLATE_KEY = "marathon_live_template"
 MARATHON_DONE_TEMPLATE_KEY = "marathon_done_template"
@@ -4525,6 +4529,18 @@ MARATHON_MARKS_MAX = 6
 MARATHON_MARK_MAX_MINUTES = 1440
 MARATHON_BOARD_FIELDS = ("marathon", "count", "starts", "ends", "url")
 MARATHON_LINE_FIELDS = ("member", "game", "category", "when", "relative", "part", "state")
+MARATHON_RUNNER_POST_FIELDS = (
+    "runner",
+    "mention",
+    "game",
+    "category",
+    "part",
+    "when",
+    "relative",
+    "url",
+    "marathon",
+    "state",
+)
 MARATHON_REMINDER_FIELDS = (
     "member",
     "game",
@@ -4643,6 +4659,19 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "bool",
         True,
         "whether a shoutout is rewritten in the past tense when the run is over. on by default",
+    ),
+    MARATHON_RUNNER_POSTS_KEY: (
+        "bool",
+        True,
+        "whether each BaF run gets its own post in the marathon's thread, edited in place as its "
+        "slot moves, goes live, ends or is dropped, and the board is only its head. off = the "
+        "board lists every BaF run as before. on by default",
+    ),
+    MARATHON_RUNNER_POSTS_PINNED_KEY: (
+        "bool",
+        True,
+        "whether each BaF run's own post is pinned; its pin comes off a day after the run is "
+        "over or dropped, and with the board's. on by default",
     ),
     MARATHON_WINDOW_SLACK_KEY: (
         "int",
@@ -5186,8 +5215,23 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_BOARD_LINE_KEY: (
         "{when} ({relative}) · **{game}** — {category} · {member} {part} · {state}",
         MARATHON_LINE_FIELDS,
-        "one line of the board per BaF run. It takes {member} {game} {category} {when} "
+        "one line of the board per BaF run, used only while marathon_runner_posts is off "
+        "(on, each run has its own post instead). It takes {member} {game} {category} {when} "
         "{relative} {part} {state}; {when} and {relative} show in each reader's own time zone",
+    ),
+    MARATHON_RUNNER_POST_TEMPLATE_KEY: (
+        "**{runner}** ({mention}) {part} **{game}** — {category} · {when} ({relative}) · "
+        "{state} · <{url}>",
+        MARATHON_RUNNER_POST_FIELDS,
+        "a BaF run's own post in the marathon's thread, pinned and edited in place; it names "
+        "the member and never pings. It takes {runner} {mention} {game} {category} {part} "
+        "{when} {relative} {url} {marathon} {state}",
+    ),
+    MARATHON_RUNNER_POST_UNLISTED_KEY: (
+        "no longer counted as BaF",
+        (),
+        "{state} on a BaF run's own post once staff unlink its runner, so nobody from BaF is "
+        "on it any more",
     ),
     MARATHON_BOARD_EMPTY_KEY: (
         "Nobody from BaF is on this schedule yet. Black Bloc keeps reading it.",
@@ -5263,13 +5307,25 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     MARATHON_PART_RUNNER_KEY: ("runs", (), "{part} for a runner"),
     MARATHON_PART_HOST_KEY: ("hosts", (), "{part} for a host"),
     MARATHON_PART_COMMENTATOR_KEY: ("is on commentary", (), "{part} for a commentator"),
-    MARATHON_STATE_UPCOMING_KEY: ("coming up", (), "{state} on the board for a run not yet on"),
-    MARATHON_STATE_LIVE_KEY: ("on now", (), "{state} on the board for the run on now"),
-    MARATHON_STATE_DONE_KEY: ("done", (), "{state} on the board for a run that is over"),
+    MARATHON_STATE_UPCOMING_KEY: (
+        "coming up",
+        (),
+        "{state} on the board and a run's own post for a run not yet on",
+    ),
+    MARATHON_STATE_LIVE_KEY: (
+        "on now",
+        (),
+        "{state} on the board and a run's own post for the run on now",
+    ),
+    MARATHON_STATE_DONE_KEY: (
+        "done",
+        (),
+        "{state} on the board and a run's own post for a run that is over",
+    ),
     MARATHON_STATE_DROPPED_KEY: (
         "off the schedule",
         (),
-        "{state} on the board for a run the schedule no longer lists",
+        "{state} on the board and a run's own post for a run the schedule no longer lists",
     ),
     MARATHON_UNKNOWN_SITE_KEY: (
         "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus "

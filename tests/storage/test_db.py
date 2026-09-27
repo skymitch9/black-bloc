@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 73
+        assert SCHEMA_VERSION == 74
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -2989,6 +2989,46 @@ async def test_a_schema_72_file_gains_the_thread_controls_message_id_empty(tmp_p
         row = await cur.fetchone()
         assert (row["name"], row["controls_message_id"]) == ("SS4C", None)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "73"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_73_file_gains_the_runner_post_columns_empty(tmp_path):
+    """Schema 74: marathon_runs.post_message_id / post_channel_id / post_pinned, live and
+    archive; empty until the tick posts."""
+    path = tmp_path / "old73.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for column in ("post_message_id", "post_channel_id", "post_pinned"):
+        await db.conn.execute(f"ALTER TABLE marathon_runs DROP COLUMN {column}")
+        await db.conn.execute(f"ALTER TABLE marathon_runs_archive DROP COLUMN {column}")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at) "
+        "VALUES (1, 'SS4C', 'https://x', 'oengus', 'ss4lhs26', '2026-09-26')"
+    )
+    await db.conn.execute(
+        "INSERT INTO marathon_runs(marathon_id, external_id, order_no, game, first_seen_at, "
+        "last_seen_at) VALUES (1, '6', 6, 'Super Mario Sunshine', '2026-09-26', '2026-09-26')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '73')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        for column in ("post_message_id", "post_channel_id", "post_pinned"):
+            assert column in await _columns(again, "marathon_runs")
+            assert column in await _columns(again, "marathon_runs_archive")
+        cur = await again.conn.execute(
+            "SELECT game, post_message_id, post_channel_id, post_pinned FROM marathon_runs"
+        )
+        row = await cur.fetchone()
+        assert tuple(row) == ("Super Mario Sunshine", None, None, 0)
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "74"
     finally:
         await again.close()

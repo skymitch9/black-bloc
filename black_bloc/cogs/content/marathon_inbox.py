@@ -760,7 +760,10 @@ async def move_thread(bot: Any, guild: Any, fresh: Any, home: str, old: Any) -> 
     except Exception as exc:
         await inbox_failed(bot, guild, reason_of(exc), fresh)
         return None
+    from .marathon_runner_posts import unpin_posts
+
     cog = cog_of(bot)
+    await unpin_posts(cog, guild, fresh, because=mi.MOVED_BECAUSE, channel_id=int(old.id))
     board = _cell(fresh, "board_message_id")
     if board and _cell(fresh, "board_channel_id") == int(old.id):
         await cog.unpin_board(guild, fresh, because=mi.MOVED_BECAUSE)

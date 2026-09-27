@@ -417,6 +417,22 @@ def test_the_board_lists_only_runs_of_ours_in_schedule_order():
     assert "coming up" in lines[1]
 
 
+def test_with_runner_posts_the_board_is_its_head_alone_and_still_says_when_nobody_is_found():
+    rows = [row(1, at=0, game="First", people=OURS), row(2, at=60, game="Second", people=OURS)]
+    kwargs = dict(
+        head=WORDS[MARATHON_BOARD_TEMPLATE_KEY],
+        head_default=WORDS[MARATHON_BOARD_TEMPLATE_KEY],
+        line=WORDS[MARATHON_BOARD_LINE_KEY],
+        line_default=WORDS[MARATHON_BOARD_LINE_KEY],
+        empty="nobody yet",
+        url="",
+        lines=False,
+    )
+    said = mt.board_text(M, rows, WORDS, **kwargs).text
+    assert "(2)" in said and len(said.splitlines()) == 1 and "First" not in said
+    assert mt.board_text(M, [], WORDS, **kwargs).text.splitlines()[1] == "nobody yet"
+
+
 def test_an_empty_board_says_so_and_a_long_one_stays_inside_one_message():
     empty = mt.board_text(
         M,
