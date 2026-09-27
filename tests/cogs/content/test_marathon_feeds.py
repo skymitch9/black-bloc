@@ -1210,6 +1210,85 @@ async def test_add_a_feed_with_the_horaro_events_pick_needs_no_slug_and_keys_on_
     assert (made.value["source"], made.value["feed_ref"]) == ("horaro_events", "ladyarcaders")
     assert "now reads horaro.net events for **Lady Arcaders**" in made.message
     assert list(await by_ref(bot)) == [FPFF3]
+
+
+async def test_a_horaro_events_feed_takes_search_words_and_an_owner_and_searches_each(
+    bot,  # noqa: F811
+    cog,
+):
+    _row, feed = await fpe_feed(bot, cog)
+    done = await feeds.set_feed(
+        bot, bot.guild, FakeActor(), feed, words="Fast Pace, fast pace,Friendspace", owner=" FPE "
+    )
+    assert done.ok, done.message
+    assert "searches horaro.net for **Fast Pace, Friendspace** now" in done.message
+    assert "the horaro.net account **FPE** owns now" in done.message
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert hre.search_of(feed) == {"owner": "FPE", "words": ["Fast Pace", "Friendspace"]}
+    assert len(mf.seen_of(feed)) == 3
+    changed = await logged(bot, "marathon.feed_changed")
+    assert changed[-1]["words"] == ["Fast Pace", "Friendspace"] and changed[-1]["owner"] == "FPE"
+    cog.client.searched.clear()
+    await feeds.check_now(bot, bot.guild, FakeActor(), feed)
+    assert cog.client.searched == ["Fast Pace", "Friendspace"]
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert hre.search_of(feed)["owner"] == "FPE"
+    embed, view = await feeds.feed_card(bot, bot.guild, feed["id"])
+    assert "Searches horaro.net for **Fast Pace, Friendspace**." in embed.description
+    assert "horaro.net account **FPE** owns." in embed.description
+    labels = [one.label for one in view.children if isinstance(one, cogmod.MarathonMoveButton)]
+    assert "Search words…" in labels
+    same = await feeds.set_feed(bot, bot.guild, FakeActor(), feed, words="Fast Pace, Friendspace")
+    assert same.ok and same.message == ""
+    cleared = await feeds.set_feed(bot, bot.guild, FakeActor(), feed, words="", owner="")
+    assert "by its name again" in cleared.message and "Twitch again" in cleared.message
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert hre.search_of(feed) == {"owner": "", "words": []}
+    assert all("search" not in one for one in mf.list_of(feed["seen"]))
+
+
+async def test_look_again_forgets_the_events_and_keeps_the_search(bot, cog):  # noqa: F811
+    _row, feed = await fpe_feed(bot, cog)
+    await feeds.set_feed(bot, bot.guild, FakeActor(), feed, owner="FastPacedEvents")
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    looked = await feeds.look_again(bot, bot.guild, FakeActor(), feed)
+    assert looked.ok and hre.REREAD.format(count=3) in looked.message
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert hre.search_of(feed)["owner"] == "FastPacedEvents"
+    assert len(mf.seen_of(feed)) == 3
+
+
+async def test_search_words_are_refused_in_words_off_a_horaro_events_feed_or_too_many(
+    bot,  # noqa: F811
+    cog,
+):
+    _row, feed = await fpe_feed(bot, cog)
+    many = ", ".join(f"word{n}" for n in range(hre.WORDS_LIMIT + 1))
+    bad = await feeds.set_feed(bot, bot.guild, FakeActor(), feed, words=many)
+    assert not bad.ok and bad.code == "bad_words" and bad.status == 422
+    assert f"at most {hre.WORDS_LIMIT} search words" in bad.message
+    long = await feeds.set_feed(bot, bot.guild, FakeActor(), feed, owner="x" * 61)
+    assert not long.ok and long.code == "bad_owner"
+    other = await a_channel(bot, "LadyArcaders", "Lady Arcaders")
+    gdq_id = await feeds.insert_feed(
+        bot.db,
+        GUILD,
+        source="tracker",
+        feed_ref="https://tracker.gamesdonequick.com/tracker",
+        spotlight_id=other,
+        name="GDQ",
+        action="add",
+        added_by=7,
+    )
+    gdq = await feeds.get_feed(bot.db, GUILD, gdq_id)
+    refused = await feeds.set_feed(bot, bot.guild, FakeActor(), gdq, owner="someone")
+    assert not refused.ok and refused.code == "not_horaro_events" and refused.status == 409
+    assert "Only a horaro.net events feed" in refused.message
+    embed, view = await feeds.feed_card(bot, bot.guild, gdq_id)
+    labels = [one.label for one in view.children if isinstance(one, cogmod.MarathonMoveButton)]
+    assert "Search words…" not in labels and "Searches horaro.net" not in embed.description
+
+
 # --- Fastest Furs -----------------------------------------------------------------------------
 
 FALL_FEST = "21"

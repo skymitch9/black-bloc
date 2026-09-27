@@ -135,3 +135,97 @@ async def test_a_schedules_read_that_fails_is_not_remembered_and_a_blank_name_is
     assert found == [] and "fpff3" not in [one["ref"] for one in seen]
     with pytest.raises(ScheduleError, match="searches horaro.net by its name"):
         await hre.check(client, feed(name="  "), LOGIN, BEFORE_FPFF3, 1)
+
+
+# --- owner match + several words (2026-09-27) --------------------------------------------------
+
+RGL = "retrogaminglivetv"
+RGL_OWNER = "RGLtvMarathons"
+BEFORE_RETROTHON = datetime(2026, 4, 1, 12, 0, tzinfo=UTC)
+
+
+def rgl_events():
+    return fixture("horaro_rgl_search.json")["data"]
+
+
+def rgl_feed(owner="", words=(), seen=()):
+    search = [{"search": {"owner": owner, "words": list(words)}}] if owner or words else []
+    return feed(feed_ref=RGL, name="Retro Gaming Live", seen=json.dumps([*search, *seen]))
+
+
+class WordsClient(Client):
+    def __init__(self, by_word):
+        super().__init__(
+            listed=[],
+            by_slug={
+                "retrothon26": fixture("horaro_retrothon26_schedules.json")["data"],
+                "retrothon2025": [],
+            },
+        )
+        self.by_word = by_word
+
+    async def horaro_events(self, name):
+        self.searched.append(name)
+        return list(self.by_word.get(name, []))
+
+
+def test_the_owner_keeps_an_event_whose_twitch_is_empty_and_drops_anothers():
+    retrothon2025, retrothon26, other = rgl_events()
+    assert retrothon26["twitch"] is None and retrothon26["owner"] == RGL_OWNER
+    assert [one["slug"] for one in hre.ours(rgl_events(), RGL)] == ["retrothon2025"]
+    kept = hre.ours(rgl_events(), RGL, "rgltvmarathons")
+    assert [one["slug"] for one in kept] == ["retrothon2025", "retrothon26"]
+    assert not hre.is_ours(other, RGL, RGL_OWNER)
+    assert not hre.is_ours(retrothon26, "", "")
+
+
+def test_words_are_split_trimmed_deduped_and_capped():
+    assert hre.words_of(" RGL, RGLtv ,rgl,\nRetrothon, ") == ["RGL", "RGLtv", "Retrothon"]
+    assert hre.words_of(["RGL", "  "]) == ["RGL"]
+    assert hre.words_of("") == []
+    assert hre.words_of(",".join(f"w{n}" for n in range(hre.WORDS_LIMIT + 1))) is None
+    assert hre.words_of("x" * (hre.WORD_LENGTH + 1)) is None
+    assert hre.owner_clean("  RGLtv   Marathons ") == "RGLtv Marathons"
+    assert hre.owner_clean("x" * (hre.OWNER_LENGTH + 1)) is None
+
+
+def test_the_search_lives_in_seen_beside_the_events_and_survives_look_again():
+    row = rgl_feed(RGL_OWNER, ["RGL"], [{"ref": "shmup26", "twitch": RGL}])
+    assert hre.search_of(row) == {"owner": RGL_OWNER, "words": ["RGL"]}
+    assert hre.seen_of(row) == [{"ref": "shmup26", "twitch": RGL}]
+    assert mf.seen_of(row) == [{"ref": "shmup26", "twitch": RGL}]
+    assert hre.queries(row) == ["RGL"]
+    assert hre.queries(rgl_feed()) == ["Retro Gaming Live"]
+    assert json.loads(hre.forgotten(row)) == [{"search": {"owner": RGL_OWNER, "words": ["RGL"]}}]
+    assert hre.forgotten(rgl_feed(seen=[{"ref": "x", "twitch": ""}])) is None
+    changed = hre.search_with(row, words=["RGL", "Retrothon"])
+    assert changed[0] == {"search": {"owner": RGL_OWNER, "words": ["RGL", "Retrothon"]}}
+    assert changed[1:] == [{"ref": "shmup26", "twitch": RGL}]
+    assert hre.search_with(row, words=[], owner="") == [{"ref": "shmup26", "twitch": RGL}]
+
+
+async def test_several_words_are_each_searched_and_an_event_found_twice_is_read_once():
+    retrothon2025, retrothon26, other = rgl_events()
+    client = WordsClient({"RGL": [other, retrothon26], "Retrothon": [retrothon26, retrothon2025]})
+    row = rgl_feed(RGL_OWNER, ["RGL", "Retrothon"])
+    found, seen = await hre.check(client, row, RGL, BEFORE_RETROTHON, 1)
+    assert client.searched == ["RGL", "Retrothon"]
+    assert client.read.count("retrothon26") == 1
+    assert sorted(client.read) == ["retrothon2025", "retrothon26"]
+    assert [(one.ref, one.url) for one in found] == [
+        ("retrothon26/schedule", "https://horaro.net/retrothon26/schedule")
+    ]
+    assert seen[0] == {"search": {"owner": RGL_OWNER, "words": ["RGL", "Retrothon"]}}
+    assert sorted(one["ref"] for one in seen[1:]) == [
+        "interglitches24restream",
+        "retrothon2025",
+        "retrothon26",
+    ]
+    assert "interglitches24restream" not in client.read
+
+
+async def test_without_the_owner_the_empty_twitch_event_is_not_a_candidate():
+    retrothon2025, retrothon26, other = rgl_events()
+    client = WordsClient({"Retrothon": [retrothon26, retrothon2025, other]})
+    found, _seen = await hre.check(client, rgl_feed(words=["Retrothon"]), RGL, BEFORE_RETROTHON, 1)
+    assert found == [] and client.read == ["retrothon2025"]

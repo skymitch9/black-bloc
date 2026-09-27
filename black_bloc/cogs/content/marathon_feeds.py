@@ -38,8 +38,21 @@ from ...settings_store import (
     MARATHON_AUTO_TRACK_DEFAULT_KEY,
     MARATHON_FEED_ACTION_KEY,
     MARATHON_FEED_HOURS_KEY,
+    MARATHON_FEED_OWNER_BAD_KEY,
+    MARATHON_FEED_OWNER_CLEARED_KEY,
+    MARATHON_FEED_OWNER_LABEL_KEY,
+    MARATHON_FEED_OWNER_LINE_KEY,
+    MARATHON_FEED_OWNER_SAID_KEY,
     MARATHON_FEED_RECENT_KEY,
+    MARATHON_FEED_SEARCH_LINE_KEY,
+    MARATHON_FEED_SEARCH_MOVE_KEY,
+    MARATHON_FEED_SEARCH_REFUSED_KEY,
+    MARATHON_FEED_SEARCH_TITLE_KEY,
     MARATHON_FEED_SUGGEST_TEMPLATE_KEY,
+    MARATHON_FEED_WORDS_BAD_KEY,
+    MARATHON_FEED_WORDS_CLEARED_KEY,
+    MARATHON_FEED_WORDS_LABEL_KEY,
+    MARATHON_FEED_WORDS_SAID_KEY,
     MARATHON_FEEDS_KEY,
     MARATHON_LADYARCADERS_FLOOR_KEY,
 )
@@ -68,6 +81,7 @@ from .marathon import (
     opted_out_said,
     reading_of,
     refresh_marathon,
+    refused_with,
     rehearsal_details,
     remove_marathon,
     render,
@@ -93,6 +107,11 @@ BAD_ACTION_CODE = "bad_action"
 BAD_NAME_CODE = "bad_name"
 SUGGESTION_GONE_CODE = "suggestion_gone"
 NOTHING_IGNORED_CODE = "nothing_ignored"
+SEARCH_REFUSED_CODE = "not_horaro_events"
+BAD_WORDS_CODE = "bad_words"
+BAD_OWNER_CODE = "bad_owner"
+FEED_SEARCH = "feed_search"
+MODAL_TEXT_LIMIT = 45
 FEED_TEMPLATE = (
     r"marathon:feed:(?P<feed_id>[0-9]+):(?P<ref>[A-Za-z0-9_./-]{1,60}):"
     r"(?P<action>pause|remove|add|dismiss|read|manage)"
@@ -841,6 +860,8 @@ async def set_feed(
     spotlight_id: Any = None,
     event_mode: Any = None,
     auto_track: Any = None,
+    owner: Any = None,
+    words: Any = None,
     via: str = VIA_DISCORD,
 ) -> Outcome:
     """PATCH in words: each field given is one change and one log row. An event mode of ""
@@ -850,6 +871,11 @@ async def set_feed(
         fresh = await get_feed(bot.db, guild.id, feed["id"])
         if fresh is None:
             return refusal(mf.NO_SUCH_FEED.format(given=feed["id"]), NO_SUCH_FEED_CODE, 404)
+        if owner is not None or words is not None:
+            searched = await set_search(bot, guild, actor, fresh, owner, words, via)
+            if isinstance(searched, Outcome):
+                return searched
+            said += searched
         if action is not None and action != fresh["action"]:
             if action not in mf.ACTIONS:
                 return refusal(mf.BAD_ACTION, BAD_ACTION_CODE, 422)
@@ -965,6 +991,89 @@ async def set_feed(
     return Outcome(True, " ".join(said), value=await get_feed(bot.db, guild.id, feed["id"]))
 
 
+async def set_search(
+    bot: Any, guild: Any, actor: Any, fresh: Any, owner: Any, words: Any, via: str
+) -> Any:
+    """A horaro.net events feed's search words and owner, kept in `seen`; the sentences said."""
+    name = fresh["name"]
+    if fresh["source"] != mf.HORARO_EVENTS_FEED:
+        return refused_with(
+            bot, guild.id, MARATHON_FEED_SEARCH_REFUSED_KEY, SEARCH_REFUSED_CODE, 409, feed=name
+        )
+    current = hre.search_of(fresh)
+    changed: dict[str, Any] = {}
+    if words is not None:
+        wanted_words = hre.words_of(words)
+        if wanted_words is None:
+            return refused_with(
+                bot,
+                guild.id,
+                MARATHON_FEED_WORDS_BAD_KEY,
+                BAD_WORDS_CODE,
+                422,
+                feed=name,
+                most=hre.WORDS_LIMIT,
+                longest=hre.WORD_LENGTH,
+            )
+        if wanted_words != current["words"]:
+            changed["words"] = wanted_words
+    if owner is not None:
+        wanted_owner = hre.owner_clean(owner)
+        if wanted_owner is None:
+            return refused_with(
+                bot,
+                guild.id,
+                MARATHON_FEED_OWNER_BAD_KEY,
+                BAD_OWNER_CODE,
+                422,
+                feed=name,
+                longest=hre.OWNER_LENGTH,
+            )
+        if wanted_owner != current["owner"]:
+            changed["owner"] = wanted_owner
+    if not changed:
+        return []
+    await update_feed(bot.db, fresh["id"], seen=json.dumps(hre.search_with(fresh, **changed)))
+    await log_action(
+        bot,
+        guild,
+        kind_via("marathon.feed_changed", via),
+        actor=actor,
+        details=feed_details(fresh, via, **changed),
+    )
+    said: list[str] = []
+    if "words" in changed:
+        key = MARATHON_FEED_WORDS_SAID_KEY if changed["words"] else MARATHON_FEED_WORDS_CLEARED_KEY
+        said.append(words_of(bot, guild, key, feed=name, words=", ".join(changed["words"])))
+    if "owner" in changed:
+        key = MARATHON_FEED_OWNER_SAID_KEY if changed["owner"] else MARATHON_FEED_OWNER_CLEARED_KEY
+        said.append(words_of(bot, guild, key, feed=name, owner=changed["owner"]))
+    return said
+
+
+def words_of(bot: Any, guild: Any, key: str, **fields: Any) -> str:
+    return mt.render(bot.store.get(guild.id, key), said_default(key), **fields).text
+
+
+def search_lines(bot: Any, guild: Any, feed: Any) -> list[str]:
+    """A horaro.net events feed's card: what it searches for, and whose events it keeps."""
+    if feed["source"] != mf.HORARO_EVENTS_FEED:
+        return []
+    search = hre.search_of(feed)
+    shown = ", ".join(hre.queries(feed))
+    lines = [words_of(bot, guild, MARATHON_FEED_SEARCH_LINE_KEY, words=shown)] if shown else []
+    if search["owner"]:
+        lines.append(words_of(bot, guild, MARATHON_FEED_OWNER_LINE_KEY, owner=search["owner"]))
+    return lines
+
+
+def search_move(bot: Any, guild: Any, feed: Any) -> tuple[Any, ...]:
+    if feed["source"] != mf.HORARO_EVENTS_FEED:
+        return ()
+    label = words_of(bot, guild, MARATHON_FEED_SEARCH_MOVE_KEY)[:80]
+    return (mt.MarathonMove(FEED_SEARCH, label, row=4),)
+
+
 async def check_now(
     bot: Any, guild: Any, actor: Any, feed: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
@@ -990,7 +1099,7 @@ async def look_again(
             bot.db,
             fresh["id"],
             suggested=json.dumps(mf.open_suggestions(fresh)),
-            seen=None if reread else fresh["seen"],
+            seen=hre.forgotten(fresh) if reread else fresh["seen"],
         )
         await log_action(
             bot,
@@ -1451,6 +1560,7 @@ async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
     ]
     lines.append(me.FEED_MODE_LINE.format(words=feed_mode_words(bot, guild, feed)))
     lines.append(mi.FEED_AUTO_LINE.format(state=mi.FEED_AUTO_WORDS[bool(feed["auto_track"])]))
+    lines += search_lines(bot, guild, feed)
     ignored = mf.ignored_of(feed)
     if ignored:
         lines.append(mf.IGNORED_LINE.format(count=len(ignored)))
@@ -1468,7 +1578,13 @@ async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
     view.add_item(FeedModePick(me.clean_mode(feed["event_mode"])))
     moves = mf.feed_moves(feed)
     auto = mi.FEED_AUTO_OFF_MOVE if feed["auto_track"] else mi.FEED_AUTO_ON_MOVE
-    add_moves(view, moves[:-2] + (auto, me.FEED_RENAME_MOVE, me.FEED_MOVE_MOVE) + moves[-2:])
+    add_moves(
+        view,
+        moves[:-2]
+        + (auto, me.FEED_RENAME_MOVE, me.FEED_MOVE_MOVE)
+        + moves[-2:]
+        + search_move(bot, guild, feed),
+    )
     return (embed, view)
 
 
@@ -1650,6 +1766,11 @@ async def feed_move(interaction: discord.Interaction, view: Any, action: str) ->
             )
     elif action == me.FEED_MOVE_CHANNEL:
         await open_move(interaction, view.feed_id, view)
+    elif action == FEED_SEARCH:
+        if await still_staff(interaction):
+            bot, guild = interaction.client, interaction.guild
+            feed = await get_feed(bot.db, guild.id, view.feed_id)
+            await interaction.response.send_modal(SearchFeedModal(view, bot, guild, feed))
     elif action == mf.FEED_BACK:
         if where in (SUGGESTION_VIEW, MOVE_VIEW):
             await open_feed(interaction, view.feed_id, view)
@@ -1782,6 +1903,38 @@ class RenameFeedModal(AnswersErrors, discord.ui.Modal, title=me.RENAME_TITLE):
             interaction,
             self.previous,
             lambda bot, guild, actor, feed: set_feed(bot, guild, actor, feed, name=given),
+        )
+
+
+class SearchFeedModal(AnswersErrors, discord.ui.Modal):
+    def __init__(self, previous: Any, bot: Any, guild: Any, feed: Any) -> None:
+        title = words_of(bot, guild, MARATHON_FEED_SEARCH_TITLE_KEY)[:MODAL_TEXT_LIMIT]
+        super().__init__(title=title)
+        self.previous = previous
+        search = hre.search_of(feed) if feed is not None else {"owner": "", "words": []}
+        self.words = discord.ui.TextInput(
+            label=words_of(bot, guild, MARATHON_FEED_WORDS_LABEL_KEY)[:MODAL_TEXT_LIMIT],
+            default=", ".join(search["words"]) or None,
+            required=False,
+            max_length=hre.WORDS_LIMIT * (hre.WORD_LENGTH + 2),
+        )
+        self.owner = discord.ui.TextInput(
+            label=words_of(bot, guild, MARATHON_FEED_OWNER_LABEL_KEY)[:MODAL_TEXT_LIMIT],
+            default=search["owner"] or None,
+            required=False,
+            max_length=hre.OWNER_LENGTH,
+        )
+        self.add_item(self.words)
+        self.add_item(self.owner)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        words, owner = str(self.words), str(self.owner)
+        await feed_run(
+            interaction,
+            self.previous,
+            lambda bot, guild, actor, feed: set_feed(
+                bot, guild, actor, feed, words=words, owner=owner
+            ),
         )
 
 

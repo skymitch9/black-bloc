@@ -2,6 +2,7 @@
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-09-27 (branch `marathon-near-miss`)** — ONE section APPENDED (`MNM-a`…`MNM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
+> **2026-09-27 (branch `horaro-events-owner`)** — ONE section APPENDED (`HEO-a`…`HEO-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-public-reminders`)** — ONE section APPENDED (`MPR-a`…`MPR-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-public-highlights`)** — ONE section APPENDED (`MPH-a`…`MPH-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-thread-controls`)** — ONE section APPENDED (`MTC-a`…`MTC-d`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3595,3 +3596,16 @@ already be linked (Cass is paired everywhere now, so pick another exact username
 |---|---|---|
 | **`MNM-a`** | On a tracked marathon whose schedule has a runner whose Twitch login (or schedule name) is exactly a member's Discord username and who is not linked, wait one tick | ONE post in the marathon's staff thread: *\*\*<runner>\*\* on the schedule looks like @member (<display name>) — link them?* — the member named, NOT pinged — with **Link (this marathon) · Link everywhere · Not them**. Another tick posts nothing more. Logs `marathon.near_miss_posted` |
 | **`MNM-b`** | Press **Link (this marathon)** (then, on another near miss, **Not them**) | Link: the post turns into *…is @member (…) on **<marathon>** — linked by @you.* with no buttons, the runner's own runner post appears in the thread, and People… lists them under BaF as *linked by staff*. Not them: *…is not @member (…) — @you said so…*, no buttons, nothing linked, and the thread never asks about that runner again on that marathon. A non-staff press is refused in words |
+
+## Rows `HEO-a` … `HEO-b` — horaro.net events: owner match + several search words, set up for Retro Gaming Live (branch `horaro-events-owner`, 2026-09-27)
+
+🔨 **BUILT on branch `horaro-events-owner`, NOT merged, NOT deployed.** The owner, 2026-09-27 15:1x (through the
+conductor): RGL's horaro.net events are owned by `RGLtvMarathons`; a feed searching *RGL* misses half of them. Design:
+[`../info/marathon-horaro-events-design.md`](../info/marathon-horaro-events-design.md) ▸ *Follow-up — owner match +
+several words*. Rows lettered; the conductor numbers them. Needs the conductor's RGL set-up (that doc's last section)
+applied after the deploy.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`HEO-a`** | Events ▸ **Sources…** ▸ the **Retro Gaming Live** feed (row 7, RetroGamingLiveTV) — its drawer | Under Auto-track, **Search words** reads `RGL, RGLtv, Retrothon` and **Owner** reads `RGLtvMarathons`. Change a word and click away: the drawer reopens saying *…searches horaro.net for **…** now.* In Discord, `/event` ▸ Sources ▸ the same feed: the card says *Searches horaro.net for **RGL, RGLtv, Retrothon**.* and *Also keeps every event the horaro.net account **RGLtvMarathons** owns.*, and **Search words…** opens a window with both boxes filled. The Fast Pace feed's drawer shows the same two fields EMPTY (the placeholder says *Fast Pace*). |
+| **`HEO-b`** | Once RGL publishes its next horaro.net schedule (A Fistful of Brawlers, Oct 17, or Halloween Horror, Oct 30 — the slugs are unknown until then): **Check now** on the feed (or wait ≤ 6 h) | That event appears on the Marathons list as a plain *horaro.net* marathon on the RetroGamingLiveTV channel — even if its name has no *RGL* in it as long as one of the words finds it, and even if its event-level Twitch is blank (the owner keeps it). Nothing from another owner that the *RGL* search lists (Germench, Kongcakes, LRock617) is added. **Look again** keeps both fields. |

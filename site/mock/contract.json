@@ -4740,7 +4740,10 @@
           "event_mode",
           "event_mode_effective",
           "event_mode_word",
-          "auto_track"
+          "auto_track",
+          "owner",
+          "words",
+          "searches"
         ],
         "channels": [
           "id",
@@ -4892,6 +4895,26 @@
         "id",
         "name",
         "auto_track",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/feeds/{feed_horaro_events_id}",
+      "body": {
+        "owner": "FastPacedEvents",
+        "words": "Fast Pace, Friendspace"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) a horaro.net events feed drawer's Owner and Search words fields (marathon-horaro-events-design.md ▸ Follow-up 2026-09-27)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "name",
+        "owner",
+        "words",
+        "searches",
         "message"
       ]
     },

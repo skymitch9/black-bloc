@@ -761,6 +761,19 @@ const SETTING_SPECS = [
   ["marathon_ignored_said", "text", "**{marathon}** is ignored — it stays on the list and is read, and posts nothing. **Track anyway** changes that.", "**{marathon}** is ignored — it stays on the list and is read, and posts nothing. **Track anyway** changes that.", "what staff are told once Ignore has quieted a marathon. It takes {marathon}"],
   ["marathon_unignored_said", "text", "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing until someone presses **Track**.", "**{marathon}** is not ignored any more — it is found, not tracked, and posts nothing until someone presses **Track**.", "what staff are told once an ignored marathon is put back to found. It takes {marathon}"],
   ["marathon_link_changed_said", "text", "**{marathon}** reads its schedule from the new link now — its tracking, thread, event and switches are kept. {read}", "**{marathon}** reads its schedule from the new link now — its tracking, thread, event and switches are kept. {read}", "what staff are told once Change the schedule link… has moved a marathon to a new schedule. It takes {marathon} {read}"],
+  ["marathon_feed_search_move", "text", "Search words…", "Search words…", "the button on a horaro.net events feed's card in /event ▸ Sources that opens its search words and owner"],
+  ["marathon_feed_search_title", "text", "What this feed searches horaro.net for", "What this feed searches horaro.net for", "the title of the Search words… window on a horaro.net events feed (Discord cuts it at 45 characters)"],
+  ["marathon_feed_words_label", "text", "Search words — commas between them", "Search words — commas between them", "the Search words box in that window (Discord cuts it at 45 characters)"],
+  ["marathon_feed_owner_label", "text", "Owner — the horaro.net account, if any", "Owner — the horaro.net account, if any", "the Owner box in that window (Discord cuts it at 45 characters)"],
+  ["marathon_feed_search_line", "text", "Searches horaro.net for **{words}**.", "Searches horaro.net for **{words}**.", "the line on a horaro.net events feed's card naming what it searches for. It takes {words}"],
+  ["marathon_feed_owner_line", "text", "Also keeps every event the horaro.net account **{owner}** owns.", "Also keeps every event the horaro.net account **{owner}** owns.", "the line on a horaro.net events feed's card when it has an owner. It takes {owner}"],
+  ["marathon_feed_words_said", "text", "**{feed}** searches horaro.net for **{words}** now.", "**{feed}** searches horaro.net for **{words}** now.", "what staff are told once a horaro.net events feed's search words change. It takes {feed} {words}"],
+  ["marathon_feed_words_cleared", "text", "**{feed}** searches horaro.net by its name again.", "**{feed}** searches horaro.net by its name again.", "what staff are told once a horaro.net events feed's search words are cleared. It takes {feed}"],
+  ["marathon_feed_owner_said", "text", "**{feed}** also keeps every event the horaro.net account **{owner}** owns now.", "**{feed}** also keeps every event the horaro.net account **{owner}** owns now.", "what staff are told once a horaro.net events feed's owner is set. It takes {feed} {owner}"],
+  ["marathon_feed_owner_cleared", "text", "**{feed}** keeps only the events that name the channel's Twitch again.", "**{feed}** keeps only the events that name the channel's Twitch again.", "what staff are told once a horaro.net events feed's owner is cleared. It takes {feed}"],
+  ["marathon_feed_search_refused", "text", "Only a horaro.net events feed has search words and an owner, so **{feed}** was not changed.", "Only a horaro.net events feed has search words and an owner, so **{feed}** was not changed.", "the refusal when search words or an owner are given to a feed of another kind. It takes {feed}"],
+  ["marathon_feed_words_bad", "text", "A feed takes at most {most} search words of {longest} characters or fewer each, so **{feed}** was not changed.", "A feed takes at most {most} search words of {longest} characters or fewer each, so **{feed}** was not changed.", "the refusal when there are too many search words or one is too long. It takes {feed} {most} {longest}"],
+  ["marathon_feed_owner_bad", "text", "A horaro.net account name is {longest} characters or fewer, so **{feed}** was not changed.", "A horaro.net account name is {longest} characters or fewer, so **{feed}** was not changed.", "the refusal when the owner given is too long. It takes {feed} {longest}"],
   ["marathon_link_same", "text", "**{marathon}** already reads that link, so nothing was changed.", "**{marathon}** already reads that link, so nothing was changed.", "what staff are told when Change the schedule link… is given the link the marathon already reads. It takes {marathon}"],
   ["marathon_link_taken", "text", "**{other}** already follows that schedule, so **{marathon}**'s link was not changed.", "**{other}** already follows that schedule, so **{marathon}**'s link was not changed.", "the refusal when Change the schedule link… is given a link another marathon on the list already follows. It takes {marathon} {other}"],
   ["marathon_link_unreadable", "text", "Black Bloc could not read that schedule, so **{marathon}**'s link was not changed: {reason}", "Black Bloc could not read that schedule, so **{marathon}**'s link was not changed: {reason}", "the refusal when the new schedule link will not read. It takes {marathon} {reason}"],
@@ -6528,6 +6541,60 @@ function feedSuggestionRow(one) {
   return { ref: one.ref, name: one.name, starts_at: one.starts_at, url: one.url, found_at: one.found_at, dismissed_at: one.dismissed_at };
 }
 
+const FEED_WORDS_LIMIT = 5;
+const FEED_WORD_LENGTH = 40;
+const FEED_OWNER_LENGTH = 60;
+
+function feedSearch(feed) {
+  const found = (feed.seen || []).find((one) => one && typeof one === 'object' && one.search && typeof one.search === 'object');
+  return { owner: found ? String(found.search.owner || '') : '', words: found ? [...(found.search.words || [])] : [] };
+}
+
+function feedSearches(feed) {
+  const { words } = feedSearch(feed);
+  const name = String(feed.name || '').trim().replace(/\s+/g, ' ');
+  return words.length ? words : (name ? [name] : []);
+}
+
+function feedWordsOf(given) {
+  const raw = Array.isArray(given) ? given : String(given || '').split(/[,\n]/);
+  const found = new Map();
+  for (const one of raw) {
+    const word = String(one ?? '').trim().replace(/\s+/g, ' ');
+    if (word.length > FEED_WORD_LENGTH) return null;
+    if (word && !found.has(word.toLowerCase())) found.set(word.toLowerCase(), word);
+  }
+  return found.size <= FEED_WORDS_LIMIT ? [...found.values()] : null;
+}
+
+function feedSetSearch(feed, body, said) {
+  if (!('owner' in body) && !('words' in body)) return;
+  for (const key of ['owner', 'words']) {
+    const given = body[key];
+    if (given !== null && given !== undefined && typeof given !== 'string' && !Array.isArray(given)) throw new Refused(422, 'bad_words', 'Give the owner as words and the search words as words or a list, so nothing was changed.');
+  }
+  if (feed.source !== 'horaro_events') throw new Refused(409, 'not_horaro_events', marathonSaid('marathon_feed_search_refused', { feed: feed.name }));
+  const current = feedSearch(feed);
+  const changed = {};
+  if ('words' in body) {
+    const words = feedWordsOf(body.words);
+    if (words === null) throw new Refused(422, 'bad_words', marathonSaid('marathon_feed_words_bad', { feed: feed.name, most: FEED_WORDS_LIMIT, longest: FEED_WORD_LENGTH }));
+    if (words.join('\n') !== current.words.join('\n')) changed.words = words;
+  }
+  if ('owner' in body) {
+    const owner = String(body.owner || '').trim().replace(/\s+/g, ' ');
+    if (owner.length > FEED_OWNER_LENGTH) throw new Refused(422, 'bad_owner', marathonSaid('marathon_feed_owner_bad', { feed: feed.name, longest: FEED_OWNER_LENGTH }));
+    if (owner !== current.owner) changed.owner = owner;
+  }
+  if (!Object.keys(changed).length) return;
+  const search = { ...current, ...changed };
+  const kept = (feed.seen || []).filter((one) => !(one && typeof one === 'object' && one.search));
+  feed.seen = search.owner || search.words.length ? [{ search }, ...kept] : kept;
+  logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, ...changed, via: 'website' } });
+  if ('words' in changed) said.push(changed.words.length ? marathonSaid('marathon_feed_words_said', { feed: feed.name, words: changed.words.join(', ') }) : marathonSaid('marathon_feed_words_cleared', { feed: feed.name }));
+  if ('owner' in changed) said.push(changed.owner ? marathonSaid('marathon_feed_owner_said', { feed: feed.name, owner: changed.owner }) : marathonSaid('marathon_feed_owner_cleared', { feed: feed.name }));
+}
+
 function feedRow(feed) {
   const channel = state.golive.spotlights.find((one) => one.id === feed.spotlight_id);
   return {
@@ -6554,7 +6621,10 @@ function feedRow(feed) {
     trouble: feed.last_ok === 0 ? `could not be checked since ${feed.last_checked_at} \u2014 ${feed.last_error}` : null,
     ignored: [...feed.ignored],
     ignored_count: feed.ignored.length,
-    seen_count: (feed.seen || []).length,
+    seen_count: (feed.seen || []).filter((one) => typeof one === 'string' || (one && one.ref)).length,
+    owner: feed.source === 'horaro_events' ? feedSearch(feed).owner : null,
+    words: feed.source === 'horaro_events' ? feedSearch(feed).words : null,
+    searches: feed.source === 'horaro_events' ? feedSearches(feed) : null,
     suggestions: feed.suggested.filter((one) => !one.dismissed_at).map(feedSuggestionRow),
     dismissed: feed.suggested.filter((one) => one.dismissed_at).map(feedSuggestionRow),
     marathons: state.marathons.filter((one) => one.feed_id === feed.id).map((one) => ({ id: one.id, name: one.name, starts_at: one.starts_at })),
@@ -6647,6 +6717,7 @@ route('PATCH', '/api/marathons/feeds/:feed_id', async (context) => {
   if ('active' in body && typeof body.active !== 'boolean') throw new Refused(422, 'bad_active', 'Say true to check this feed or false to pause it, so nothing was changed.');
   if ('action' in body && !['add', 'suggest'].includes(body.action)) throw new Refused(422, 'bad_action', 'Say add or suggest for what a feed does with a new event, so nothing was changed.');
   if ('auto_track' in body && typeof body.auto_track !== 'boolean') throw new Refused(422, 'bad_auto_track', 'Say true or false for auto-track, so nothing was changed.');
+  feedSetSearch(feed, body, said);
   if ('auto_track' in body && body.auto_track !== Boolean(feed.auto_track)) {
     feed.auto_track = body.auto_track;
     logAction('web.marathon.feed_changed', { details: { feed_id: feed.id, auto_track: body.auto_track, via: 'website' } });
@@ -6731,10 +6802,11 @@ route('POST', '/api/marathons/feeds/:feed_id/look', (context) => {
   const dropped = feed.suggested.filter((one) => one.dismissed_at);
   feed.suggested = feed.suggested.filter((one) => !one.dismissed_at);
   for (const one of dropped) feed.suggested.push({ ...one, dismissed_at: null, found_at: new Date().toISOString() });
-  const reread = (feed.seen || []).length;
+  const reread = (feed.seen || []).filter((one) => typeof one === 'string' || (one && one.ref)).length;
   feedCheck(feed);
   logAction('web.marathon.feed_looked', { details: { feed_id: feed.id, forgot: dropped.map((one) => one.ref), reread, via: 'website' } });
   let again = reread ? ` It read every Oengus marathon\u2019s record again (${reread} remembered before).` : '';
+  if (reread && feed.source === 'horaro_events') again = ` It read every horaro.net event it had looked at again (${reread} remembered before).`;
   if (reread && feed.source === 'ladyarcaders') again = ` It asked ladyarcaders.com about the next events again (${reread} remembered before).`;
   return { ...feedRow(feed), message: `**${feed.name}** forgot ${dropped.length} dismissed event(s) and looked again.${again}` };
 });
