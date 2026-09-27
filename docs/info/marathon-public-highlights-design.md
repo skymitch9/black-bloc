@@ -154,3 +154,82 @@ is a module constant, as the ping switch's is (it is a site answer, not a posted
   words were checked by the tests.
 - **Open question left for the owner** (recorded in the TODO item, not built): reminders (*X is up in 15 min*) still post
   only in the staff thread.
+
+## Follow-up — public reminders + ping button (2026-09-26)
+
+> **Status:** 🔨 **BUILT on branch `marathon-public-reminders` (off `main` `59e71860`: v177 live, runner-posts +
+> public-highlights merged and undeployed), NOT merged, NOT deployed** — meant to ship with them as v178. Schema
+> **unchanged at 75** (no migration). Registry keys **597 → 602** (measured: `len(settings_store.KEY_TYPES)`). API routes
+> and the contract unchanged (`check.mjs`: *22 pages, 265 routes*). **Last verified: 2026-09-26** by the tests
+> (`tests/cogs/content/test_marathon_public_reminders.py`, the fifth-button tests in both `test_marathon_thread_controls.py`),
+> the whole suite, and `check.mjs` on a worktree mock (`MOCK_PORT=8819`). ⚠️ Nothing met Discord; no browser rendered the
+> new Settings rows.
+
+**The asks, verbatim.** Owner 20:5x: *"Champ is up in 15 minutes will go in go live for now but we may move it. Make sure
+where the shoutouts post to is a separate key in settings so I can set it to a different channel from the spotlight post.
+So champ is up can be post separate channel from the marathon channel post in go live"*. Owner 21:0x, *"Yes perfect"*, to a
+fifth button on the pinned thread control message: **Ping the marathon role: on / off**.
+
+### As built
+
+**(1) Public reminders.** Three destination keys, three Settings rows (Marathons group), each blank → `golive_channel_id`:
+
+| Key | What goes there | Resolver |
+|---|---|---|
+| `golive_channel_id` | the go-live spotlight / stream post (unchanged; read directly by `cogs/content/golive.py`) | — |
+| `marathon_public_channel_id` | runner highlights (the previous build) | `marathon_public.public_channel` |
+| `marathon_reminder_channel_id` (**new**, channel) | the public copy of every reminder (*X is up in N min*) | `marathon_public_reminders.reminder_channel` |
+
+The fallback chain is the only link: each resolver reads its own key, then go-live; setting one never changes what the
+others resolve to (tested). Every reminder of a TRACKED marathon (`Marathons.remind` returns early for any other) now
+calls `post_public_reminder` right after the staff-thread copy in `_post_reminder`; the staff copy is exactly as before.
+
+- **Words:** `marathon_public_reminder_template` (new; default identical to `marathon_reminder_template`, the same fields),
+  so the public copy can be worded apart from the staff one.
+- **Switch:** `marathon_public_reminders` (bool, **on**) — off keeps reminders in the staff thread only (the
+  configurable-both-ways rule: the decided default is a key).
+- **Pings:** the public copy carries exactly the staff copy's roles — the `marathon_ping_minutes` mark, with
+  `marathon_reminder_pings` on, through `Marathons._ping_roles`, which is empty unless that marathon's `ping_role` is on.
+  With roles, only those roles are allowed; otherwise `AllowedMentions.none()`.
+- **Shadow:** reuses the **`marathon_public`** rehearsal home (`marathon_public_shadow_channel_id`, blank =
+  `shadow_channel_id`) — no new home key; the home's description now reads *public highlights … and its public
+  reminders*. The note names the real reminder channel. Mode off posts nothing.
+- **No double post on restart:** no message id is stored. The reminder's existing sent-marker (`marathon_runs.reminders_sent`)
+  is written BEFORE either copy is sent, and the public copy is sent in the same call, so a restart never re-sends it.
+- **Logs:** routine `marathon.public_reminded`, `marathon.public_reminder_skipped`; shadow `marathon.would_remind_public`;
+  `marathon.public_reminder_failed` IMPORTANT by suffix (also for *no channel at all*).
+
+**(2) The fifth control button — Ping the marathon role.** `marathon:controls:{id}:ping:{on|off}` (`mtc.PING`, the
+template grew `ping`), labels `marathon_controls_ping_on` / `_off` (*Ping the marathon role: on · turn off* / *…: off ·
+turn on*), green when on, grey when off, carrying its target like the other four. A press goes to
+`marathon_ping.set_ping_role` — the controls build's one writer, so the drawer, the `/event` card and the thread agree —
+staff-gated by `still_staff` (the standing refusal), answered with the writer's own `marathon_ping_role_*_said` words.
+`set_ping_role` now calls `controls_changed` after it writes, so a change from ANY door (drawer/PATCH, `/event` card,
+the button) re-renders the pinned message.
+
+### Deviations
+
+1. **A fifth key beyond the brief: `marathon_public_reminders`** (bool, on) — a way to stop the public copy without
+   blanking go-live. Keys: channel + switch + template + two labels = **5**.
+2. **A separate public template** (`marathon_public_reminder_template`) rather than re-using the staff one, so the public
+   words can differ; its default is the staff template's text.
+3. **Same-channel skip.** A tracked marathon with no thread posts its staff copy in the marathon channel, which is itself
+   blank → go-live; the public copy would land beside it word for word. When the staff copy's real destination (its
+   thread, or the marathon channel it stands for — `staff_went_to`) IS the reminder channel, the public copy is skipped and
+   logged `marathon.public_reminder_skipped` `because: same_channel`. This also kept every existing reminder test green.
+4. **Shadow home reused** (`marathon_public`), not a new `marathon_reminder` home.
+5. **No new PATCH field or drawer control**: `ping_role` already had both; the fifth button is the Discord door.
+6. **The drawer's ping help line** (`PING_HELP` in `marathons-section.js`, a site string) now says the public reminder copy
+   and public highlights follow the switch too.
+7. **A public-copy failure never touches the staff copy** — it is wrapped and logged; the staff log line is written as
+   before.
+
+### What was NOT verified
+
+- ⚠️ **Nothing met Discord**: a real public reminder in go-live, a role ping there, the fifth button on a real pinned
+  message (five buttons fit one action row; not seen rendered), a restart with real components.
+- **The Settings page rows were not rendered in a browser** — `check.mjs` confirms the keys are present in the mock; the
+  `# name · Category` picker is the shared `channelLabel` every channel row uses, not re-checked by eye for these rows.
+- **The go-live channel's own behaviour** (slow mode, auto-publish) with reminders added — not read.
+- **Volume:** with the default marks (`120, 15`) every BaF run adds two public posts; not measured against a real
+  marathon's run count.

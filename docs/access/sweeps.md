@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-26 (branch `marathon-public-reminders`)** — ONE section APPENDED (`MPR-a`…`MPR-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-public-highlights`)** — ONE section APPENDED (`MPH-a`…`MPH-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-thread-controls`)** — ONE section APPENDED (`MTC-a`…`MTC-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-thread-move`)** — ONE section APPENDED (`MTM-a`…`MTM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3569,3 +3570,15 @@ conductor numbers them. `marathon_mode` must be **on** for a real post (shadow s
 | **`MPH-b`** | Leave it; when the run moves, goes live, ends. Then press **Remove the highlight** | The SAME #go-live message changes with it (*on now*, then *done*). Remove: the message becomes *Staff took down the highlight for **champrul** on **SS4C**.* — not deleted — and never changes again; the button goes back to **Highlight in #go-live**, and pressing it puts the same message back |
 | **`MPH-c`** | On the thread's pinned control message press **Auto-highlight BaF runners when live: off · turn on** (or turn it on in the Events drawer ▸ Settings and Save) | The button turns green and reads *…: on · turn off*; the drawer shows On. The next BaF run to go live gets its #go-live highlight at the moment its shoutout posts, by itself. A run whose highlight staff took down is not put back |
 | **`MPH-d`** | Settings ▸ Marathons: set **Where a BaF run's public highlight goes** to another channel (the picker reads `# name · Category`) | Within a minute every runner post's button reads **Highlight in #<new channel>**; the next highlight lands there; one already up stays where it was and keeps updating |
+
+## Rows `MPR-a` … `MPR-b` — public reminders and the ping button (branch `marathon-public-reminders`, 2026-09-26)
+
+The owner, 20:5x: *"Champ is up in 15 minutes will go in go live for now but we may move it. Make sure where the
+shoutouts post to is a separate key in settings…"*; 21:0x *"Yes perfect"* to the fifth button. Design:
+[`../info/marathon-public-highlights-design.md`](../info/marathon-public-highlights-design.md) ▸ *Follow-up*. Rows
+lettered; the conductor numbers them. `marathon_mode` must be **on** for a real post.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MPR-a`** | Wait for champrul's next reminder in SS4C (15 min before the run, or 120) | The staff thread gets its reminder exactly as before AND #go-live gets one message — *<@champrul> runs **<game>** (<category>) on **SS4C** <in …> — <date>. <link>* — pinging champrul's role only if SS4C's *Ping the marathon role* is on (and only at the 15-minute mark). Logs `marathon.reminded` and `marathon.public_reminded`. Then Settings ▸ Marathons: set **Where a marathon's public reminders go** to another channel — the next reminder lands there, while the go-live spotlight post and **Where a BaF run's public highlight goes** stay where they were (three separate rows) |
+| **`MPR-b`** | On SS4C's pinned control message press **Ping the marathon role: off · turn on**; then turn it back off in the Events drawer ▸ Settings (Save) | The press answers *…pings again…*, the button turns green and reads *Ping the marathon role: on · turn off*, and the drawer shows On. After the drawer Save, the pinned button goes back to *…: off · turn on* by itself |
