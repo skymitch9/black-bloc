@@ -434,6 +434,7 @@ async def test_the_two_hour_heads_up_posts_without_a_mention(bot, cog):
 async def test_the_fifteen_minute_reminder_pings_the_members_role_and_the_channels_in_a_window(
     bot, cog
 ):
+    await bot.store.set(GUILD, "marathon_ping_role_default", True)
     channel = await gdq_row(bot)
     await set_ping_mode(bot, bot.guild, FakeActor(), channel["id"], "events")
     cog.client.runs_given = [
@@ -454,6 +455,7 @@ async def test_the_fifteen_minute_reminder_pings_the_members_role_and_the_channe
 
 
 async def test_outside_a_window_an_events_channel_role_is_not_pinged(bot, cog):
+    await bot.store.set(GUILD, "marathon_ping_role_default", True)
     channel = await gdq_row(bot)
     await set_ping_mode(bot, bot.guild, FakeActor(), channel["id"], "events")
     cog.client.runs_given = [
@@ -662,6 +664,7 @@ async def test_off_reads_nothing_and_posts_nothing(bot, cog):
 
 
 async def test_a_marathon_with_a_channel_opens_one_window_for_its_dates(bot, cog):
+    await bot.store.set(GUILD, "marathon_ping_role_default", True)
     channel = await gdq_row(bot)
     marathon = await added(bot, cog, channel=channel)
     windows = await windows_for(bot.db, channel["id"])
@@ -675,6 +678,7 @@ async def test_a_marathon_with_a_channel_opens_one_window_for_its_dates(bot, cog
 
 
 async def test_pause_and_remove_close_the_window(bot, cog):
+    await bot.store.set(GUILD, "marathon_ping_role_default", True)
     channel = await gdq_row(bot)
     marathon = await added(bot, cog, channel=channel)
     await set_active(bot, bot.guild, FakeActor(), marathon, False)

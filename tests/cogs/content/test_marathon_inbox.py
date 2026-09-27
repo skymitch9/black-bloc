@@ -131,6 +131,7 @@ async def test_an_untracked_marathon_reads_matches_and_sets_its_window_but_posts
     bot,
     cog,
 ):
+    await bot.store.set(GUILD, "marathon_ping_role_default", True)
     channel = await gdq_row(bot)
     marathon = await found(bot, cog, channel=channel)
     await cog.follow(bot.guild, await fresh(bot, marathon))

@@ -52,6 +52,7 @@
       "marathon_reminder_stale_minutes": 1,
       "marathon_spotlight_lead_hours": 0,
       "marathon_spotlight_lead_minutes": 0,
+      "marathon_spotlight_tail_minutes": 0,
       "marathon_archive_after_days": 0,
       "marathon_spotlight_slack_hours": 0,
       "marathon_window_slack_hours": 0,
@@ -116,6 +117,7 @@
       "marathon_reminder_stale_minutes": 240,
       "marathon_spotlight_lead_hours": 48,
       "marathon_spotlight_lead_minutes": 240,
+      "marathon_spotlight_tail_minutes": 720,
       "marathon_archive_after_days": 365,
       "marathon_spotlight_slack_hours": 48,
       "marathon_window_slack_hours": 24,
@@ -5129,6 +5131,7 @@
         "event_mode",
         "event_mode_word",
         "spotlight_mode",
+        "ping_role",
         "tracked_state",
         "tracked",
         "tracked_at",
@@ -5219,6 +5222,23 @@
       "keys": [
         "id",
         "spotlight_mode",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_bare_id}",
+      "body": {
+        "ping_role": true
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Settings foldout — Ping the marathon role"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "ping_role",
+        "window",
         "message"
       ]
     },

@@ -305,6 +305,7 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.spotlight_extended",
         "marathon.spotlight_lifted",
         "marathon.spotlight_mode_set",
+        "marathon.ping_role_set",
         "birthday.add_role",
         "handoff.asked",
         "handoff.refused",

@@ -4394,6 +4394,15 @@ MARATHON_SPOTLIGHT_SLACK_KEY = "marathon_spotlight_slack_hours"
 MARATHON_SPOTLIGHT_NOTE_KEY = "marathon_spotlight_note_template"
 MARATHON_SPOTLIGHT_FOLLOWS_KEY = "marathon_spotlight"
 MARATHON_SPOTLIGHT_LEAD_MINUTES_KEY = "marathon_spotlight_lead_minutes"
+MARATHON_SPOTLIGHT_TAIL_KEY = "marathon_spotlight_tail_minutes"
+MARATHON_PING_ROLE_DEFAULT_KEY = "marathon_ping_role_default"
+MARATHON_PING_ROLE_ON_SAID_KEY = "marathon_ping_role_on_said"
+MARATHON_PING_ROLE_OFF_SAID_KEY = "marathon_ping_role_off_said"
+MARATHON_PING_ROLE_SAME_KEY = "marathon_ping_role_same_said"
+MARATHON_PING_ROLE_BUTTON_ON_KEY = "marathon_ping_role_button_on"
+MARATHON_PING_ROLE_BUTTON_OFF_KEY = "marathon_ping_role_button_off"
+MARATHON_PING_ROLE_LINE_ON_KEY = "marathon_ping_role_line_on"
+MARATHON_PING_ROLE_LINE_OFF_KEY = "marathon_ping_role_line_off"
 MARATHON_ARCHIVE_AFTER_DAYS_KEY = "marathon_archive_after_days"
 MARATHON_ARCHIVED_WORD_KEY = "marathon_archived_word"
 MARATHON_ARCHIVE_QUESTION_KEY = "marathon_archive_question"
@@ -4726,6 +4735,21 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "minutes before a marathon's first run that marathon_spotlight turns its channel's "
         "spotlight on. 15 by default, like marathon_ping_minutes",
     ),
+    MARATHON_SPOTLIGHT_TAIL_KEY: (
+        "int",
+        60,
+        "minutes after a marathon's last run ends that the spotlight it follows stays on. 60 by "
+        "default, so a schedule that runs over is still spotlit; 0 ends it with the last run. "
+        "When the schedule is extended the end moves with it",
+    ),
+    MARATHON_PING_ROLE_DEFAULT_KEY: (
+        "bool",
+        False,
+        "whether a NEW marathon pings roles — its run reminders and shoutouts mention the "
+        "runner's and the channel's ping roles, and its channel gets a ping window. off by "
+        "default; each marathon's own Ping the role switch changes it after, and marathons "
+        "already on the list keep their own",
+    ),
     MARATHON_ARCHIVE_AFTER_DAYS_KEY: (
         "int",
         7,
@@ -5013,6 +5037,46 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         (),
         "the board's only line while no BaF run has been found",
     ),
+    MARATHON_PING_ROLE_ON_SAID_KEY: (
+        "**{marathon}** pings again: its run reminders and shoutouts mention the runner's and "
+        "the channel's ping roles, and its channel has a ping window while it runs.",
+        ("marathon",),
+        "what staff are told once a marathon's Ping the role switch is turned on. It takes "
+        "{marathon}",
+    ),
+    MARATHON_PING_ROLE_OFF_SAID_KEY: (
+        "**{marathon}** pings no role now: its reminders and shoutouts still post, with no "
+        "mention, and its channel has no ping window for it.",
+        ("marathon",),
+        "what staff are told once a marathon's Ping the role switch is turned off. It takes "
+        "{marathon}",
+    ),
+    MARATHON_PING_ROLE_SAME_KEY: (
+        "**{marathon}** already has that, so nothing was changed.",
+        ("marathon",),
+        "what staff are told when the Ping the role switch is already where they asked. It "
+        "takes {marathon}",
+    ),
+    MARATHON_PING_ROLE_BUTTON_ON_KEY: (
+        "Ping the role",
+        (),
+        "the /event marathon card's button that turns a marathon's role pings on",
+    ),
+    MARATHON_PING_ROLE_BUTTON_OFF_KEY: (
+        "Stop pinging",
+        (),
+        "the /event marathon card's button that turns a marathon's role pings off",
+    ),
+    MARATHON_PING_ROLE_LINE_ON_KEY: (
+        "Pings the role",
+        (),
+        "the marathon card's line while its reminders and shoutouts mention roles",
+    ),
+    MARATHON_PING_ROLE_LINE_OFF_KEY: (
+        "Pings no role",
+        (),
+        "the marathon card's line while its reminders and shoutouts mention no role",
+    ),
     MARATHON_CHANNEL_PING_HELP_KEY: (
         "On a marathon channel, During events pings only while one of its marathons is running "
         "— the marathon sets that window from its schedule, and the channel is spotlit for it.",
@@ -5147,6 +5211,7 @@ MARATHON_RANGES: dict[str, tuple[int, int]] = {
     MARATHON_SPOTLIGHT_LEAD_KEY: (0, 48),
     MARATHON_SPOTLIGHT_SLACK_KEY: (0, 48),
     MARATHON_SPOTLIGHT_LEAD_MINUTES_KEY: (0, 240),
+    MARATHON_SPOTLIGHT_TAIL_KEY: (0, 720),
     MARATHON_FEED_HOURS_KEY: (1, 168),
     MARATHON_FEED_RECENT_KEY: (0, 30),
     MARATHON_ARCHIVE_AFTER_DAYS_KEY: (0, 365),

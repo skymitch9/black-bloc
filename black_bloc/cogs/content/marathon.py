@@ -14,6 +14,7 @@ from ... import marathon as mt
 from ... import marathon_archive as ma
 from ... import marathon_events as me
 from ... import marathon_inbox as mi
+from ... import marathon_ping as mp
 from ... import marathon_spotlight as ms
 from ... import pings
 from ... import shadow as shadow_home
@@ -282,12 +283,13 @@ async def insert_marathon(
     feed_id: int | None = None,
     event_mode: str = "none",
     noticed: bool = True,
+    ping_role: int = 0,
 ) -> int:
     stamp = now_iso()
     cur = await db.conn.execute(
         "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
-        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "starts_at, ends_at, added_by, added_at, feed_id, event_mode, noticed_at, ping_role) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             int(guild_id),
             name,
@@ -302,6 +304,7 @@ async def insert_marathon(
             feed_id,
             event_mode,
             stamp if noticed else None,
+            1 if ping_role else 0,
         ),
     )
     await db.conn.commit()
@@ -339,6 +342,7 @@ MARATHON_COLUMNS = {
     "thread_home",
     "ignored_at",
     "ignored_by",
+    "ping_role",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -543,6 +547,7 @@ async def create_marathon(
 ) -> Outcome:
     from ...marathon_events import BAD_MODE, makes_marathon_event
     from .marathon_events import BAD_MODE_CODE, mode_for_new
+    from .marathon_ping import default_for_new
 
     feed = None
     if feed_id is not None:
@@ -595,6 +600,7 @@ async def create_marathon(
         added_by=actor_id(actor),
         feed_id=feed_id,
         noticed=noticed,
+        ping_role=default_for_new(bot, guild.id),
     )
     await log_action(
         bot,
@@ -610,6 +616,7 @@ async def create_marathon(
             "spotlight_id": _cell(channel, "id"),
             "feed_id": feed_id,
             "event_mode": wanted_mode,
+            "ping_role": bool(default_for_new(bot, guild.id)),
             "via": via,
         },
     )
@@ -2011,7 +2018,12 @@ class Marathons(commands.Cog):
         bounds = mt.window_bounds(
             marathon, int(self.bot.store.get(guild.id, MARATHON_WINDOW_SLACK_KEY))
         )
-        keep = row is not None and bool(marathon["active"]) and bounds is not None
+        keep = (
+            row is not None
+            and bool(marathon["active"])
+            and bounds is not None
+            and mp.pings_role(marathon)
+        )
         existing = await marathon_windows(db, marathon["id"])
         stale = [one for one in existing if not keep or int(one["spotlight_id"]) != int(row["id"])]
         for window in stale:
@@ -2281,6 +2293,8 @@ class Marathons(commands.Cog):
     async def _ping_roles(self, guild: Any, marathon: Any, row: Any) -> list[int]:
         """The member's own ping role, and the channel's through the ping-windows gate — never
         the global go-live role: this is not a go-live."""
+        if not mp.pings_role(marathon):
+            return []
         found: list[int] = []
         for member_id in mt.member_ids(row):
             role_id = await pings.announced_fan_role(self.bot, guild, member_id)
@@ -2834,6 +2848,7 @@ async def card_header(bot: Any, guild: Any, row: Any, runs: list[Any]) -> list[s
     if login:
         quiet.append(mt.CARD_CHANNEL.format(login=login))
         quiet.append(ms.mode_line(row))
+    quiet.append(ping_card_line(bot, guild.id, row))
     quiet.append(await inbox_line(bot, guild, row))
     return [
         mt.CARD_HEAD.format(
@@ -2841,6 +2856,18 @@ async def card_header(bot: Any, guild: Any, row: Any, runs: list[Any]) -> list[s
         ),
         " · ".join(quiet),
     ]
+
+
+def ping_card_line(bot: Any, guild_id: int, row: Any) -> str:
+    from .marathon_ping import card_line
+
+    return card_line(bot, guild_id, row)
+
+
+def ping_card_move(bot: Any, guild_id: int, row: Any) -> Any:
+    from .marathon_ping import card_move
+
+    return card_move(bot, guild_id, row)
 
 
 async def inbox_line(bot: Any, guild: Any, row: Any) -> str:
@@ -2949,6 +2976,7 @@ async def build_card(
         view,
         mt.card_moves(row, has_unmatched=bool(unmatched), has_next=has_next)
         + ms.card_moves(row)
+        + (ping_card_move(bot, guild.id, row),)
         + (ma.ARCHIVE_MOVE,)
         + mi.panel_moves(row),
     )
@@ -3255,6 +3283,15 @@ class MarathonMoveButton(discord.ui.Button):
 
                 wanted = default_mode(interaction.client, interaction.guild.id)
                 await interaction.response.send_modal(AddMarathonModal(view, wanted))
+        elif action in mp.MOVE_WANTS:
+            from .marathon_ping import set_ping_role
+
+            wanted_ping = mp.MOVE_WANTS[action]
+            await run_move(
+                interaction,
+                view,
+                lambda bot, guild, actor, row: set_ping_role(bot, guild, actor, row, wanted_ping),
+            )
         elif action in ms.MOVE_MODES:
             from .marathon_spotlight import set_spotlight_mode
 

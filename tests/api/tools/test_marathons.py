@@ -189,6 +189,7 @@ async def test_a_schedule_that_will_not_read_says_so_in_words(client, sign_in, w
 
 async def test_patch_pauses_resumes_renames_and_sets_the_channel(client, sign_in, web, cog, wf):
     sign_in(client)
+    await web.store.set(wf.GUILD_ID, "marathon_ping_role_default", True)
     marathon_id = add(client).json()["id"]
     spotlight_id = await add_channel(
         web.db, wf.GUILD_ID, "gamesdonequick", added_by=7, expires_at=None, pin=True
@@ -654,6 +655,29 @@ async def test_patch_spotlight_mode_switches_it_and_refuses_a_word_it_does_not_k
     assert (said["from"], said["to"]) == ("follow", "off")
     bad = client.patch(f"/api/marathons/{marathon_id}", json={"spotlight_mode": "often"})
     assert bad.status_code == 422 and bad.json()["error"] == "bad_spotlight_mode"
+
+
+async def test_patch_ping_role_turns_it_on_and_off_and_refuses_a_word_it_does_not_know(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    spotlight_id = await add_channel(
+        web.db, wf.GUILD_ID, "gamesdonequick", added_by=7, expires_at=None, pin=True
+    )
+    marathon_id = add(client, spotlight_id=str(spotlight_id)).json()["id"]
+    first = client.get(f"/api/marathons/{marathon_id}").json()
+    assert first["ping_role"] is False and first["window"] is None
+
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": True}).json()
+
+    assert body["ping_role"] is True and body["window"]["starts_at"]
+    assert "pings again" in body["message"]
+    said = await web_row(wf, web, "web.marathon.ping_role_set")
+    assert (said["from"], said["to"], said["via"]) == (False, True, "website")
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": False}).json()
+    assert body["ping_role"] is False and body["window"] is None
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": "loud"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_ping_role"
 
 
 async def test_following_again_spotlights_a_channel_whose_marathon_is_in_reach(
