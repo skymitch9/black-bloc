@@ -5731,7 +5731,7 @@ function seedMarathons() {
     { id: 2, name: 'Halo Fest', schedule_url: 'https://gamesdonequick.com/schedule/73', source: 'gdq', source_ref: '73', spotlight_id: null, starts_at: minutesAgo(30000), ends_at: minutesAgo(29840), active: true, poll_minutes: null, board_channel_id: '800000000000000006', board_message_id: '830000000000000299', board_pinned: false, last_fetched_at: minutesAgo(700), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(40000) },
     { id: 3, name: 'GDQx 2026', schedule_url: 'https://gamesdonequick.com/schedule/72', source: 'gdq', source_ref: '72', spotlight_id: null, starts_at: null, ends_at: null, active: false, poll_minutes: 60, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(1500), last_fetch_ok: 0, last_error: 'the GDQ tracker has the event but has not published its schedule yet (it answers 404 for the runs)', fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(2000) },
     // Found on oengus.io by the Speed Stuff 4 Charity feed; its schedule is not published yet,
-    // so it waits quietly and the staff notice posts once the first read finds runs.
+    // so it waits quietly with no inbox message until the first read finds runs.
     { id: 5, name: 'Speed Stuff 4 LHS 2026', schedule_url: 'https://oengus.io/marathon/ss4lhs26/schedule', source: 'oengus', source_ref: 'ss4lhs26', spotlight_id: 7, feed_id: 3, starts_at: null, ends_at: null, active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(40), last_fetch_ok: 0, last_error: 'oengus.io has the marathon but has not published its schedule yet', fetch_failures: 0, added_by: null, added_at: minutesAgo(40) },
     // Found on fastestfurs.com by the Fastest Furs feed; its schedule is out, so its runs are read.
     { id: 31, name: 'Fastest Furs Fall Fest 2026', schedule_url: 'https://fastestfurs.com/schedule/21', source: 'fastestfurs', source_ref: '21', spotlight_id: 31, feed_id: 31, starts_at: new Date(Date.now() + 17280 * 60000).toISOString(), ends_at: new Date(Date.now() + 22000 * 60000).toISOString(), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(90), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(880) },
@@ -5739,7 +5739,7 @@ function seedMarathons() {
     // was added with its dates and is over now.
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
-  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, ...marathonInboxSeed()[row.id], inbox_message_id: String(861000000000000000 + row.id), ...row }));
+  ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
 }
 
 // The inbox (marathon-inbox-design.md §B): AGDQ 2027 is tracked with its own thread (and its
@@ -6921,6 +6921,19 @@ route('POST', '/api/marathons/:marathon_id/ignore', async (context) => {
   const row = marathonOf(context.params.marathon_id);
   const message = marathonIgnore(row, wantedOn(await context.body()));
   return { ...marathonDetailAny(row.id), message };
+});
+
+// The mock's copy of cogs/content/marathon_inbox.py:post_now — the inbox message goes up before the
+// schedule is out; the mock has no tick, so the edit when runs arrive is the bot's alone.
+route('POST', '/api/marathons/:marathon_id/inbox', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  if (state.settings.get('marathon_mode') === 'off') throw new Refused(409, 'mode_off', marathonSaid('marathon_inbox_post_off', { marathon: row.name }));
+  if (row.inbox_message_id) throw new Refused(409, 'already_posted', marathonSaid('marathon_inbox_already', { marathon: row.name }));
+  row.inbox_message_id = String(870000000000000000 + row.id);
+  row.inbox_home = state.settings.get('marathon_mode') === 'on' ? 'on' : 'shadow';
+  logAction('web.marathon.inbox_posted', { details: { marathon_id: row.id, name: row.name, home: row.inbox_home, message_id: row.inbox_message_id, state: marathonTracked(row) ? 'tracked' : 'found', early: true, via: 'website' } });
+  return { ...marathonDetailAny(row.id), message: marathonSaid('marathon_inbox_posted_said', { marathon: row.name }) };
 });
 
 route('POST', '/api/marathons/:marathon_id/restore', (context) => {

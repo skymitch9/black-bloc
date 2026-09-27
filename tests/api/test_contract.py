@@ -6,6 +6,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import discord
 import pytest
 import pytest_asyncio
 from discord.ext import tasks
@@ -62,6 +63,7 @@ CONTRACT = Path(__file__).resolve().parents[2] / "site" / "mock" / "contract.jso
 MEMBER_ID = 21
 YT_CHANNEL = "UCsXVk37bltHxD1rDPwtNM8Q"
 PING_MEMBER_ID = 22
+INBOX_FORUM_ID = 424_242
 
 
 class FakeClient:
@@ -274,6 +276,13 @@ async def sign_in_staff(client, db, wf, uid: int = 7) -> None:
             },
         ),
     )
+
+
+def inbox_forum(guild, wf):
+    room = wf.Channel(INBOX_FORUM_ID, "marathons", position=9)
+    room.type = discord.ChannelType.forum
+    room.guild = guild
+    guild.channels.append(room)
 
 
 def seed_members(guild, wf) -> None:
@@ -821,6 +830,9 @@ async def seed_world(client, web, guild, wf) -> dict:
         (guild_id, ended.isoformat()),
     )
     marathon_waiting_id = int(cur.lastrowid)
+    # marathon-inbox-when: GDQx 2026 has no inbox message yet, so Post it to the inbox now
+    # reaches it; the inbox lives in a forum `rewind` adds, which takes its first message.
+    await web.store.set(guild_id, "marathon_inbox_channel_id", INBOX_FORUM_ID, by=7)
     # The archive (marathon-archive §C): SGDQ 2026 moved by the sweep, one BaF run on it.
     cur = await db.conn.execute(
         "INSERT INTO marathons_archive(id, guild_id, name, schedule_url, source, source_ref, "
@@ -980,6 +992,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_over_id": str(marathon_over_id),
         "marathon_bare_id": str(marathon_id),
         "marathon_waiting_id": str(marathon_waiting_id),
+        "marathon_unposted_id": str(marathon_waiting_id),
         "marathon_archived_id": str(marathon_archived_id),
         "marathon_done_run_id": str(marathon_done_run_id),
         "marathon_linked_run_id": str(marathon_linked_run_id),
@@ -1011,6 +1024,7 @@ class Seed:
         guild = self.wf.Guild()
         self.wf.reset_bot(self.web, guild)
         seed_members(guild, self.wf)
+        inbox_forum(guild, self.wf)
         for kwargs in self.sent:
             await guild.get_channel(self.wf.TEST_CHANNEL_ID).send(**kwargs)
         self.web.cogs.update(self.cogs)

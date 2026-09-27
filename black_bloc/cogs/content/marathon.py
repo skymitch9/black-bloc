@@ -3458,6 +3458,10 @@ class MarathonMoveButton(discord.ui.Button):
             await open_next(interaction, view.marathon_id, view)
         elif action == mt.SCHEDULE:
             await open_schedule(interaction, view.marathon_id, view)
+        elif action == mi.POST_NOW:
+            from .marathon_inbox import post_now
+
+            await run_move(interaction, view, post_now, back=back_to_schedule)
         elif action == mi.LINK:
             if await still_staff(interaction):
                 row = await get_marathon(

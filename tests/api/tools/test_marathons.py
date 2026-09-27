@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import discord
 import pytest
 
 from black_bloc.cogs.content.marathon import Marathons, get_marathon, runs_of
@@ -39,6 +40,7 @@ ROUTES = [
     ("POST", "/api/marathons/1/restore"),
     ("POST", "/api/marathons/1/track"),
     ("POST", "/api/marathons/1/ignore"),
+    ("POST", "/api/marathons/1/inbox"),
 ]
 
 
@@ -838,7 +840,10 @@ async def test_patch_schedule_url_moves_the_marathon_to_a_readable_link_and_keep
     ).json()
 
     assert body["id"] == marathon_id and body["tracked"] is True
-    assert (body["source"], body["schedule_url"]) == ("oengus", "https://oengus.io/marathon/ss4lhs26")
+    assert (body["source"], body["schedule_url"]) == (
+        "oengus",
+        "https://oengus.io/marathon/ss4lhs26",
+    )
     assert "reads its schedule from the new link now" in body["message"] and body["runs"] == 3
     said = await web_row(wf, web, "web.marathon.link_changed")
     assert said["old"]["url"] == URL and said["new"]["source"] == "oengus"
@@ -852,3 +857,27 @@ async def test_patch_schedule_url_moves_the_marathon_to_a_readable_link_and_keep
     )
     assert taken.status_code == 409 and taken.json()["error"] == "duplicate"
     assert "**ESA Summer** already follows that schedule" in taken.json()["message"]
+
+
+async def test_post_it_to_the_inbox_now_is_a_route_that_posts_once_and_refuses_in_words(
+    client, sign_in, web, cog, wf
+):
+    forum = web.guild.get_channel(wf.OTHER_CHANNEL_ID)
+    forum.type = discord.ChannelType.forum
+    await web.store.set(wf.GUILD_ID, "marathon_inbox_channel_id", wf.OTHER_CHANNEL_ID)
+    sign_in(client)
+    cog.client.runs_given = []
+    marathon_id = add(client).json()["id"]
+    assert client.get(f"/api/marathons/{marathon_id}").json()["inbox_message_url"] is None
+
+    body = client.post(f"/api/marathons/{marathon_id}/inbox", json={}).json()
+
+    assert "inbox message is up" in body["message"]
+    assert body["inbox_message_url"].startswith("https://discord.com/channels/")
+    said = await web_row(wf, web, "web.marathon.inbox_posted")
+    assert said["early"] is True and said["marathon_id"] == marathon_id
+    again = client.post(f"/api/marathons/{marathon_id}/inbox", json={})
+    assert again.status_code == 409 and again.json()["error"] == "already_posted"
+    await web.store.set(wf.GUILD_ID, "marathon_mode", "off")
+    off = client.post(f"/api/marathons/{marathon_id}/inbox", json={})
+    assert off.status_code == 409 and "Marathon posts are off" in off.json()["message"]

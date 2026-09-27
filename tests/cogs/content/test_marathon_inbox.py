@@ -615,3 +615,73 @@ async def test_the_first_tick_after_the_deploy_posts_only_marathons_whose_schedu
     assert [one["marathon_id"] for one in await logged(bot, "marathon.inbox_posted")] == [
         with_runs["id"]
     ]
+
+
+# --- marathon-inbox-when: Post it to the inbox now --------------------------------------------
+
+
+async def test_post_it_now_puts_the_message_up_early_and_the_runs_edit_that_same_message(bot, cog):
+    marathon = await unpublished(bot, cog)
+    lead = FakeActor()
+
+    done = await inbox.post_now(bot, bot.guild, lead, marathon)
+
+    assert done.ok and "inbox message is up" in done.message
+    messages = inbox_messages(bot, EVENTS)
+    assert len(messages) == 1 and fields_of(messages[0])["Schedule"] == "not out yet"
+    posted = await logged(bot, "marathon.inbox_posted")
+    assert len(posted) == 1 and posted[0]["early"] is True
+    assert (await fresh(bot, marathon))["noticed_at"] is None
+
+    await refresh_marathon(bot, bot.guild, await fresh(bot, marathon))
+
+    assert len(inbox_messages(bot, EVENTS)) == 1
+    assert fields_of(inbox_messages(bot, EVENTS)[0])["Schedule"] == "5 runs · 1 BaF"
+    assert (await fresh(bot, marathon))["noticed_at"]
+    assert len(await logged(bot, "marathon.inbox_published")) == 1
+    assert len(await logged(bot, "marathon.inbox_posted")) == 1
+
+
+async def test_post_it_now_refuses_in_words_twice_while_off_and_with_nowhere_to_post(bot, cog):
+    marathon = await unpublished(bot, cog)
+    await inbox.post_now(bot, bot.guild, FakeActor(), marathon)
+    again = await inbox.post_now(bot, bot.guild, FakeActor(), await fresh(bot, marathon))
+    assert again.code == "already_posted" and "already has its inbox message" in again.message
+
+    other = await unpublished(
+        bot, cog, name="GDQx 2027", url="https://gamesdonequick.com/schedule/76"
+    )
+    await bot.store.set(GUILD, "marathon_mode", "off")
+    off = await inbox.post_now(bot, bot.guild, FakeActor(), other)
+    assert off.code == "mode_off" and "Marathon posts are off" in off.message
+
+    await bot.store.set(GUILD, "marathon_mode", "on")
+    await bot.db.conn.execute("DELETE FROM marathon_inbox")
+    await bot.db.conn.commit()
+    await bot.store.set(GUILD, "marathon_inbox_channel_id", 424242)
+    failed = await inbox.post_now(bot, bot.guild, FakeActor(), other)
+    assert failed.code == "post_failed" and failed.status == 502
+    assert "the Logs page says why" in failed.message
+    assert (await fresh(bot, other))["inbox_message_id"] is None
+
+
+async def test_the_schedule_view_offers_post_it_now_only_until_the_message_is_up(bot, cog):
+    from black_bloc.cogs.content import marathon as cogmod
+
+    marathon = await unpublished(bot, cog)
+    _, view = await cogmod.build_schedule(bot, bot.guild, marathon["id"])
+    assert labels_of(view) == [
+        "Change the schedule link…",
+        "Re-read every…",
+        "Post it to the inbox now",
+        "Back",
+    ]
+
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    button = next(one for one in view.children if one.label == "Post it to the inbox now")
+    await button.callback(interaction)
+
+    assert len(inbox_messages(bot, EVENTS)) == 1 and "inbox message is up" in interaction.sent
+    assert interaction.view.where == cogmod.SCHEDULE_VIEW
+    assert "Post it to the inbox now" not in interaction.labels()
+    assert "[posted](https://discord.com/channels/" in interaction.words

@@ -250,6 +250,7 @@ const AUTO_FIELD = 'Auto-track';
 const AUTO_HELP = 'On: each marathon this feed adds is tracked the moment its schedule is out — its '
   + 'thread is made and its posts begin. Off (the default): it waits in the inbox for staff to press Track.';
 const THREAD_LINK = 'thread ↗';
+const POST_NOW = 'Post it to the inbox now';
 const INBOX_LINK = 'inbox ↗';
 const TRACK_MOVES = {
   track: { label: 'Track', path: 'track', body: { on: true }, tone: 'warn' },
@@ -959,6 +960,7 @@ function trackButtons(marathon, say) {
 function moveBar(marathon, say) {
   return bar([
     ...trackButtons(marathon, say),
+    marathon.inbox_message_url ? null : step(marathon, say, POST_NOW, () => send(`/api/marathons/${marathon.id}/inbox`, 'POST', {}), 'quiet'),
     marathon.active ? step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn') : null,
     step(marathon, say, marathon.active ? 'Pause' : 'Resume', () => send(`/api/marathons/${marathon.id}`, 'PATCH', { active: !marathon.active }), null),
     button('Archive it', async () => {

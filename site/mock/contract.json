@@ -5489,6 +5489,21 @@
     },
     {
       "method": "POST",
+      "path": "/api/marathons/{marathon_unposted_id}/inbox",
+      "body": {},
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Post it to the inbox now (marathon-inbox-when)"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "inbox_message_url",
+        "tracked_state",
+        "message"
+      ]
+    },
+    {
+      "method": "POST",
       "path": "/api/marathons/{marathon_id}/refresh",
       "read_by": [
         "marathons-section.js (events.html) refresh now"
@@ -7973,6 +7988,7 @@
     "web.marathon.feed_forgot",
     "web.marathon.feed_dismissed",
     "web.marathon.feed_taken",
-    "web.marathon.link_changed"
+    "web.marathon.link_changed",
+    "web.marathon.inbox_posted"
   ]
 }

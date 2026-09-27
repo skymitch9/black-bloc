@@ -57,7 +57,7 @@ from ...cogs.content.marathon_events import (
 )
 from ...cogs.content.marathon_feeds import get_feed
 from ...cogs.content.marathon_inbox import ignore as ignore_marathon
-from ...cogs.content.marathon_inbox import inbox_message_url
+from ...cogs.content.marathon_inbox import inbox_message_url, post_now
 from ...cogs.content.marathon_inbox import track as track_marathon
 from ...cogs.content.marathon_inbox import untrack as untrack_marathon
 from ...cogs.content.marathon_people import (
@@ -719,6 +719,17 @@ def build_router(bot: Any) -> APIRouter:
         done = answered(
             await ignore_marathon(bot, guild, actor, row, wanted_on(payload), via=VIA_WEBSITE)
         )
+        return await detail(guild, marathon_id) | {"message": done.message}
+
+    @router.post("/{marathon_id}/inbox")
+    async def marathon_inbox_now(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        actor = actor_for(bot, who, guild)
+        done = answered(await post_now(bot, guild, actor, row, via=VIA_WEBSITE))
         return await detail(guild, marathon_id) | {"message": done.message}
 
     @router.post("/{marathon_id}/restore")
