@@ -236,3 +236,83 @@ on the website override it so it post?"*
   link (drawer redrawn, *horaro.net ↗*, the answer shown), then **Post it to the inbox now** (the button gone, *inbox ↗* in
   the header); *GDQx 2026* at 390 px — no horizontal scroll. Zero console errors (the one network log line is the
   deliberate 422). NOT rendered: the light theme, the `/event` card (tests only).
+
+
+## Follow-up — thread-move (2026-09-26)
+
+Built by Opus 5.5, branch `marathon-thread-move` off `main` `2ebdb7a6` (v176 live), code commit `53b12ed0`. **No schema
+step** (still **72**), **no new registry keys** (still **560**), **no routes** (still **264**), no site or mock change.
+
+The ask, verbatim (owner, 2026-09-26 19:2x): *"now that we're on move the master thread and all other threads to
+events"* — then *"do both now"*: the conductor pointed `marathon_inbox_channel_id` and `marathon_thread_channel_id` at the
+events forum (`# events · BlackMail`), and this build makes the bot move the threads itself when the configured parent
+changes. Before it, a thread was only remade when the stored one was GONE, so the live threads stayed in
+#upcoming-events.
+
+### What changed
+
+1. **The inbox moves.** `ensure_inbox` (under the inbox lock, the row re-read there — checklist 37) finds the stored
+   thread, and when the row's `channel_id` is not the parent the settings now want for that home (`inbox_parent`), calls
+   `move_inbox`: the new inbox thread is made in the new parent (same name/opening keys as a first make), the row
+   re-pointed, the old thread archived (`edit(archived=True)`, never deleted; a refused archive is a warning log and
+   `archived: false` in the row), then `marathon.inbox_moved` (IMPORTANT) with `home`, `from_channel`, `to_channel`,
+   `thread_id` (the old one), `new_thread_id`, `archived` and `marathons` (how many had a message in that home). Every
+   marathon with an inbox message in that home is marked in the cog's `inbox_moved` set; its next `sync_inbox` posts a
+   FRESH message into the new thread (no fetch against the old id), re-points `inbox_message_id`, and logs
+   `marathon.inbox_posted` with `moved: true`.
+2. **A tracked marathon's thread moves.** `ensure_thread` finds the stored thread, and when its `parent_id` is not
+   `thread_parent` for that home, calls `move_thread`: the new thread is made (same name/opening keys), the board's pin
+   comes off (`unpin_board(because="moved")`, only when the board is in the old thread), the old thread is archived
+   (same failure rule), `marathon.thread_moved` (IMPORTANT) logs `marathon_id`, `name`, `home`, `from_channel`,
+   `to_channel`, `thread_id`, `new_thread_id`, `archived`, and the inbox message is force-synced so its **Open the
+   thread** link points at the new thread. The board then posts FRESH in the new thread (and pins, under the usual pin
+   rule) because `sync_board` sees its stored `board_channel_id` is not the post place.
+3. **The trigger is the minute tick** (`Marathons.tick_once`, `TICK_MINUTES`), not the hourly re-read — the cheaper honest
+   one, because the check is an id comparison. Per guild, while marathon posts are not off, `follow_inbox_home` compares
+   the inbox row's `channel_id` with `inbox_parent` (settings + DB only, **zero Discord calls** when equal) before the
+   marathon loop, so the re-posts land in the same tick. Per tracked marathon, under its lock, `follow_thread_home`
+   compares the thread with `thread_parent`: the first check after a boot or a settings change costs at most one Discord
+   read (none when the thread is cached; one `fetch_channel` for an archived, uncached thread), then `(thread_id,
+   wanted_parent)` is remembered in `cog.thread_homes` and later ticks make **no Discord call** until either id changes.
+   A move after a settings change therefore lands within about a minute (the next tick), with no other activity needed.
+
+### Deviations
+
+1. **The new thread is made BEFORE the old one is archived** (the brief said archive, forget, log, make). A parent that
+   cannot take threads (not visible, a channel without threads, blocked by the guard) or a make that fails leaves the old
+   thread in use, un-archived, and logs `marathon.inbox_failed` once per reason per boot — the inbox never goes without a
+   home because a setting pointed somewhere unusable.
+2. **The stored `inbox_message_id` is not cleared; it is REPLACED at the re-post.** Clearing it would have sent the
+   marathon back through the inbox-when gate, and the early flag is not stored (inbox-when Deviation 8), so a message
+   posted early on a marathon with no runs would never have come back. Every marathon that HAD a message gets a fresh one
+   — which is exactly the set that qualified (schedule live, or posted early). The mark is the cog's in-memory
+   `inbox_moved`; if the bot restarts between the move and the re-post (the same tick, normally), the edit path fetches the
+   old id in the new thread, Discord answers NotFound, and the ordinary "message gone" path posts fresh — slower (one
+   fetch per marathon), same result.
+3. **The board message id is not cleared either**: `sync_board` already posts fresh when `board_channel_id` is not the post
+   place, and clearing the id would have stopped a board that staff posted by hand (no run of ours yet) from coming back.
+   The old pin comes off first (best-effort, `marathon.board_unpin_failed` on a refusal, as always).
+4. **A failed move is retried by activity, not by the tick**: the tick tries a given (old thread, new parent) once per boot
+   (`cog.inbox_moves_tried`, `cog.thread_homes`), so a parent the bot cannot post in does not cost a Discord call every
+   minute; any post that goes through `ensure_inbox` / `ensure_thread` tries again.
+5. **No new settings keys.** The move posts no new words: the new threads use the existing name/opening keys, and the
+   archive's audit-log reasons (`INBOX_MOVED_REASON`, `THREAD_MOVED_REASON` in `black_bloc/marathon_inbox.py`) are code
+   constants like the existing `THREAD_ARCHIVE_REASON` — they show in Discord's audit log, not in a channel.
+6. **Old inbox messages stay in the archived thread with their buttons.** The buttons answer by marathon id, so a press
+   there still works; the sync that follows edits the NEW message.
+7. **Archived marathons are not moved** — they live in `marathons_archive` and the tick does not see them; their stored
+   inbox message link (`inbox_message_url`) now pairs the new inbox thread with the old message id, so it will not open.
+8. **Also moved by the fallback**: with `marathon_thread_channel_id` blank, tracked threads follow `marathon_inbox_channel_id`
+   (the existing `real_thread_parent` fallback), so changing only the inbox key moves both.
+
+### What was NOT verified
+
+- **Nothing met Discord**; the bot was not run. Thread creation in a FORUM parent (a forum post per thread), archiving an
+  already-auto-archived thread, unpinning in a thread that is about to be archived and `guild.fetch_channel` returning a
+  `Thread` with `parent_id` were exercised against test fakes only.
+- **The live settings and threads were not read**: that `marathon_inbox_channel_id` / `marathon_thread_channel_id` now hold
+  `1550372982566686802`, how many marathons have an inbox message (so how many re-posts the first tick after the deploy
+  makes), and whether the bot can create posts in that forum, are the conductor's statements, not measured here.
+- **The restart-between-move-and-repost path** (Deviation 2) is reasoned, not tested: the fakes number messages per
+  channel, so an old id can collide with a new thread's message in a test where on Discord it cannot.
+- No site or mock change, so nothing was rendered.

@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon threads follow their settings* (branch `marathon-thread-move`, off `main` `2ebdb7a6`, keyed against `53b12ed0`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The inbox message waits for the schedule; Change the schedule link…; Post it to the inbox now* (branch `marathon-inbox-when`, off `main` `15cea04a`, keyed against `d7e3a4fd`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon controls* (branch `marathon-controls`, off `main` `70edbad9`, keyed against `287032e0`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *The marathon inbox* (branch `marathon-inbox`, off `main` `56056053`, keyed against `ad395616`). Before that:
@@ -8910,3 +8911,18 @@ Design: [`marathon-inbox-design.md`](marathon-inbox-design.md) ▸ *Follow-up �
 | `site/public/assets/marathons-section.js:905` `changeLink` · `:923` `linkLine` · `:963` | The modal keeps the server's refusal inside the dialog (`askForm`); the moves-bar button is drawn from `inbox_message_url` alone (Deviation 11). |
 | `site/mock/server.mjs:6002` `marathonChangeLink` · `:6928` | The mock's copies; it has no tick, so an early message is never edited there. Seed #5 carries no inbox message (no schedule). |
 | `tests/api/test_contract.py:281` `inbox_forum` | The fake text channel cannot take a thread's first message, so every `rewind` adds a forum as the inbox home for the `/inbox` entry. |
+
+## Marathon threads follow their settings (branch `marathon-thread-move`, 2026-09-26)
+
+Design: [`marathon-inbox-design.md`](marathon-inbox-design.md) ▸ *Follow-up — thread-move*. Keyed against `53b12ed0`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/cogs/content/marathon_inbox.py:301` `move_inbox` · `:339` `ensure_inbox` | Runs under the inbox lock with the row re-read there (checklist 37). The new thread first, then the archive, so an unusable parent keeps the old inbox (Deviation 1). |
+| `black_bloc/cogs/content/marathon_inbox.py:280` `archive_moved` | Kept, not deleted; a refusal is a warning and `archived: false` in the move row, never a stop. An already-archived thread costs no call. |
+| `black_bloc/cogs/content/marathon_inbox.py:292` `marathons_in_inbox` · `:635` `sync_inbox` | The moved marathons are marked in `cog.inbox_moved`, so their next sync posts fresh without fetching the old id in the new thread; the id is replaced, not cleared, so posted-early rows keep their message (Deviation 2). |
+| `black_bloc/cogs/content/marathon_inbox.py:384` `follow_inbox_home` | The tick's check: settings and DB only when nothing changed; one try per (old thread, new parent) per boot (Deviation 4). |
+| `black_bloc/cogs/content/marathon_inbox.py:744` `move_thread` · `:785` `ensure_thread` | The pin comes off before the archive (an archived thread's messages cannot be changed); the forced inbox sync re-points the Open the thread link, which the content comparison alone would not notice. |
+| `black_bloc/cogs/content/marathon_inbox.py:833` `follow_thread_home` | Settled once per (thread, wanted parent) in `cog.thread_homes`, so an unchanged thread costs no Discord call after the first check; a move calls `sync_board`, which posts fresh because `board_channel_id` is not the post place (Deviation 3). |
+| `black_bloc/cogs/content/marathon.py:1593` · `:1634` | The inbox check runs before the marathon loop so the re-posts land in the same tick; the thread check runs before the inbox sync for the same reason. |
+| `black_bloc/logkinds.py:205` | `marathon.inbox_moved` and `marathon.thread_moved` are IMPORTANT: a staff-visible thread changed channels. |

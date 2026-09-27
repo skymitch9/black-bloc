@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-26 (branch `marathon-thread-move`)** — ONE section APPENDED (`MTM-a`…`MTM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-inbox-when`)** — ONE section APPENDED (`MIW-a`…`MIW-c`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-horaro-events`)** — ONE section APPENDED (`HE-a`…`HE-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-fastestfurs`)** — ONE section APPENDED (`FF-a`…`FF-d`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3509,3 +3510,15 @@ in the moves bar).
 | **`MIW-a`** | After the deploy, open the marathon inbox thread in the events channel (or the shadow home) | Only marathons whose schedule has runs have a message (SS4C #6, Fall Fest #7 expected); a found marathon with no schedule (an unpublished GDQ event) has none. When one of those schedules publishes, its message appears once, showing *N runs · M BaF* — `marathon.inbox_published`, and no second `marathon.inbox_posted` for it |
 | **`MIW-b`** | On a marathon's drawer open Settings ▸ **Change the schedule link…**, paste `https://example.com/x`, press **Change it**; then paste a real horaro / Oengus / GDQ link and press **Change it** (or `/event` ▸ Marathons… ▸ pick it ▸ **Schedule…** ▸ **Change the schedule link…**) | The first is refused inside the dialog naming the readable sites, nothing changes; the second closes the dialog, the drawer reads *Reads from {new link}* and the answer *…reads its schedule from the new link now…*; its tracking, thread, Event, Ping and Spotlight settings are as before; Logs show `web.marathon.link_changed` (important) with old and new. A link another marathon already follows is refused *…already follows that schedule…* |
 | **`MIW-c`** | On a marathon with no schedule yet and no inbox message, press **Post it to the inbox now** (drawer, or `/event` ▸ **Schedule…**) | *…inbox message is up…*; the inbox thread gains its message with **Schedule · not out yet**; the button is gone and the header shows *inbox ↗*; `web.marathon.inbox_posted` with `early: true`. When its schedule publishes, the SAME message is edited to *N runs · M BaF* — no second message. With marathon posts **off** the press is refused in words |
+
+## Rows `MTM-a` … `MTM-b` — the threads follow their channel settings (branch `marathon-thread-move`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-thread-move`, NOT merged, NOT deployed.** Owner, 2026-09-26 19:2x: *"now that we're on move
+the master thread and all other threads to events"*, then *"do both now"*. Design:
+[`../info/marathon-inbox-design.md`](../info/marathon-inbox-design.md) ▸ *Follow-up — thread-move*. Rows lettered; the
+conductor numbers them. Nothing to see in the mock (it has no tick and no threads) — these are Discord-only.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MTM-a`** | After the deploy (with `marathon_inbox_channel_id` already on the events forum), wait a minute, then open `# events · BlackMail` and #upcoming-events | A new forum post *Marathons — found and tracked* with its opening line and one FRESH message per marathon that had one (each with its buttons); the old inbox thread in #upcoming-events is archived, not deleted, its old messages still there. Logs: `marathon.inbox_moved` (important) naming from/to channel, old and new thread, `archived: true` and the count; one `marathon.inbox_posted` with `moved: true` per marathon. On a marathon's drawer, *inbox ↗* opens the new message |
+| **`MTM-b`** | Same minute: open each TRACKED marathon's thread | A new forum post per tracked marathon (its name, the *tracked by* opening), its board posted fresh and pinned there; the old thread archived with the old board unpinned. The marathon's inbox message **Open the thread** goes to the new post. Logs: `marathon.thread_moved` (important) per tracked marathon. A later minute makes nothing new (no second move row) |
