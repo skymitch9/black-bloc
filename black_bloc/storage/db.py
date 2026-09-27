@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 72
+SCHEMA_VERSION = 73
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1226,6 +1226,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "ignored_by", "INTEGER"),
     ("marathon_feeds", "auto_track", "INTEGER NOT NULL DEFAULT 0"),
     ("marathons", "ping_role", "INTEGER NOT NULL DEFAULT 0"),
+    ("marathons", "controls_message_id", "INTEGER"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

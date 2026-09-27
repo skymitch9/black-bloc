@@ -1732,7 +1732,11 @@ async def changed_spotlight(
         details={"spotlight_id": spotlight_id, "login": row["twitch_login"], "via": via}
         | {name: fields[name] for name in sorted(fields)},
     )
-    return (fresh, await settle_open_session(bot, guild, row, fresh, fields))
+    settled = await settle_open_session(bot, guild, row, fresh, fields)
+    from .marathon_thread_controls import row_changed
+
+    await row_changed(bot, guild, spotlight_id)
+    return (fresh, settled)
 
 
 async def settle_open_session(

@@ -295,6 +295,8 @@ ROUTINE: frozenset[str] = frozenset(
         "marathon.inbox_posted",
         "marathon.inbox_published",
         "marathon.thread_made",
+        "marathon.controls_posted",
+        "marathon.controls_lost",
         "marathon.untracked",
         "marathon.ignored",
         "marathon.unignored",
