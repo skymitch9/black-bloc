@@ -258,9 +258,88 @@ async def parent_of(bot: Any, guild: Any, channel_id: int | None, missing: str) 
 # --- the inbox thread -------------------------------------------------------------------------
 
 
+async def new_inbox(bot: Any, guild: Any, home: str, parent: Any) -> Any:
+    opening = note_for(
+        bot,
+        guild,
+        home,
+        real_inbox_parent(bot, guild),
+        words(bot, guild.id, MARATHON_INBOX_OPENING_KEY),
+    )
+    thread, _first = await make_thread(
+        bot,
+        parent,
+        words(bot, guild.id, MARATHON_INBOX_THREAD_NAME_KEY),
+        opening,
+        reason=mi.INBOX_REASON,
+    )
+    await save_inbox(bot.db, guild.id, home, int(parent.id), int(thread.id))
+    return thread
+
+
+async def archive_moved(thread: Any, reason: str) -> bool:
+    """Kept, not deleted; a failure is logged and the move goes on."""
+    if getattr(thread, "archived", False):
+        return True
+    try:
+        await thread.edit(archived=True, reason=reason)
+    except Exception as exc:
+        log.warning("marathon: could not archive moved thread %s — %s", thread.id, reason_of(exc))
+        return False
+    return True
+
+
+async def marathons_in_inbox(db: Any, guild_id: int, home: str) -> list[int]:
+    cur = await db.conn.execute(
+        "SELECT id FROM marathons WHERE guild_id = ? AND inbox_home = ? "
+        "AND inbox_message_id IS NOT NULL",
+        (int(guild_id), home),
+    )
+    return [int(row["id"]) for row in await cur.fetchall()]
+
+
+async def move_inbox(bot: Any, guild: Any, home: str, row: Any, old: Any) -> Any:
+    """The settings point the inbox somewhere else: the new thread first, then the old one is
+    archived, and every marathon with a message here posts a fresh one at its next sync."""
+    wanted = inbox_parent(bot, guild, home)
+    if wanted is None or int(row["channel_id"]) == wanted:
+        return None
+    parent, why = await parent_of(bot, guild, wanted, mi.NO_INBOX_CHANNEL)
+    if parent is None:
+        await inbox_failed(bot, guild, why)
+        return None
+    try:
+        thread = await new_inbox(bot, guild, home, parent)
+    except Exception as exc:
+        await inbox_failed(bot, guild, reason_of(exc))
+        return None
+    archived = await archive_moved(old, mi.INBOX_MOVED_REASON)
+    cog = cog_of(bot)
+    moved = await marathons_in_inbox(bot.db, guild.id, home)
+    for key in moved:
+        cog.inbox_moved.add(key)
+        cog.inbox_sent.pop(key, None)
+    await log_action(
+        bot,
+        guild,
+        "marathon.inbox_moved",
+        details={
+            "home": home,
+            "from_channel": int(row["channel_id"]),
+            "to_channel": int(parent.id),
+            "thread_id": int(row["thread_id"]),
+            "new_thread_id": int(thread.id),
+            "archived": archived,
+            "marathons": len(moved),
+        },
+    )
+    return thread
+
+
 async def ensure_inbox(bot: Any, guild: Any) -> tuple[Any, str | None]:
-    """The one inbox thread for this home, made once and re-opened when Discord archived it;
-    the stored id is re-read under the lock (checklist 37)."""
+    """The one inbox thread for this home, made once, re-opened when Discord archived it and
+    moved when the settings point elsewhere; the stored id is re-read under the lock
+    (checklist 37)."""
     home = home_now(bot, guild)
     if home is None:
         return (None, MODE_IS_OFF)
@@ -270,7 +349,8 @@ async def ensure_inbox(bot: Any, guild: Any) -> tuple[Any, str | None]:
         if row is not None:
             thread, lost = await find_channel(bot, guild, row["thread_id"])
             if thread is not None:
-                return (await reopened(thread), None)
+                moved = await move_inbox(bot, guild, home, row, thread)
+                return (moved or await reopened(thread), None)
             if not lost:
                 return (None, mi.NOT_READ)
             await forget_inbox(bot.db, guild.id, home)
@@ -288,24 +368,10 @@ async def ensure_inbox(bot: Any, guild: Any) -> tuple[Any, str | None]:
         parent, why = await parent_of(bot, guild, wanted, mi.NO_INBOX_CHANNEL)
         if parent is None:
             return (None, why)
-        opening = note_for(
-            bot,
-            guild,
-            home,
-            real_inbox_parent(bot, guild),
-            words(bot, guild.id, MARATHON_INBOX_OPENING_KEY),
-        )
         try:
-            thread, _first = await make_thread(
-                bot,
-                parent,
-                words(bot, guild.id, MARATHON_INBOX_THREAD_NAME_KEY),
-                opening,
-                reason=mi.INBOX_REASON,
-            )
+            thread = await new_inbox(bot, guild, home, parent)
         except Exception as exc:
             return (None, reason_of(exc))
-        await save_inbox(bot.db, guild.id, home, int(parent.id), int(thread.id))
         await log_action(
             bot,
             guild,
@@ -313,6 +379,29 @@ async def ensure_inbox(bot: Any, guild: Any) -> tuple[Any, str | None]:
             details={"home": home, "channel_id": int(parent.id), "thread_id": int(thread.id)},
         )
         return (thread, None)
+
+
+async def follow_inbox_home(bot: Any, guild: Any) -> None:
+    """The tick's check: ids compared with the settings, no Discord call unless they differ."""
+    home = home_now(bot, guild)
+    if home is None:
+        return
+    row = await inbox_row(bot.db, guild.id, home)
+    wanted = inbox_parent(bot, guild, home)
+    if row is None or wanted is None or int(row["channel_id"]) == wanted:
+        return
+    cog = cog_of(bot)
+    tried = (int(guild.id), home, int(row["thread_id"]), wanted)
+    if tried in cog.inbox_moves_tried:
+        return
+    parent, why = await parent_of(bot, guild, wanted, mi.NO_INBOX_CHANNEL)
+    if parent is None:
+        await inbox_failed(bot, guild, why)
+        return
+    cog.inbox_moves_tried.add(tried)
+    thread, why = await ensure_inbox(bot, guild)
+    if thread is None:
+        await inbox_failed(bot, guild, why)
 
 
 async def inbox_failed(bot: Any, guild: Any, why: Any, marathon: Any = None) -> None:
@@ -543,8 +632,11 @@ async def sync_inbox(
     if thread is None:
         await inbox_failed(bot, guild, why, marathon)
         return None
+    moved = here and key in cog.inbox_moved
+    if moved and archived:
+        return None
     view = inbox_view(bot, guild, marathon, state)
-    if here:
+    if here and not moved:
         message, gone = await find_message(thread, posted)
         if message is None and not gone:
             return None
@@ -579,6 +671,7 @@ async def sync_inbox(
         return None
     await update_marathon(bot.db, key, inbox_message_id=int(message.id), inbox_home=home)
     cog.inbox_sent[key] = (shown, now)
+    cog.inbox_moved.discard(key)
     await log_action(
         bot,
         guild,
@@ -592,6 +685,7 @@ async def sync_inbox(
             "message_id": str(message.id),
             "state": state,
             "early": early,
+            "moved": bool(moved),
         },
     )
     return message
@@ -616,32 +710,7 @@ def wants_thread(bot: Any, guild: Any, marathon: Any) -> bool:
     )
 
 
-async def ensure_thread(bot: Any, guild: Any, marathon: Any) -> tuple[Any, str | None]:
-    """The tracked marathon's thread in this home, re-read from the row (the caller holds the
-    marathon's lock), re-opened when archived, made again when a person deleted it."""
-    home = home_now(bot, guild)
-    if home is None:
-        return (None, MODE_IS_OFF)
-    fresh = await get_marathon(bot.db, guild.id, marathon["id"]) or marathon
-    if not wants_thread(bot, guild, fresh):
-        return (None, mi.NO_THREAD_WANTED)
-    stored = _cell(fresh, "thread_id")
-    if stored and _cell(fresh, "thread_home") == home:
-        thread, lost = await find_channel(bot, guild, stored)
-        if thread is not None:
-            return (await reopened(thread), None)
-        if not lost:
-            return (None, mi.NOT_READ)
-        await log_action(
-            bot,
-            guild,
-            "marathon.thread_lost",
-            details={"marathon_id": fresh["id"], "thread_id": stored, "home": home},
-        )
-    wanted = thread_parent(bot, guild, home)
-    parent, why = await parent_of(bot, guild, wanted, mi.NO_THREAD_CHANNEL)
-    if parent is None:
-        return (None, why)
+async def new_thread(bot: Any, guild: Any, fresh: Any, home: str, parent: Any) -> Any:
     login = await channel_login(bot, fresh) or ""
     feed = await feed_of(bot, guild, fresh)
     fields = {
@@ -657,17 +726,94 @@ async def ensure_thread(bot: Any, guild: Any, marathon: Any) -> tuple[Any, str |
         who=who_word(bot, guild, _cell(fresh, "tracked_by"), feed),
         url=source_of(fresh)[1],
     )
+    thread, _first = await make_thread(
+        bot,
+        parent,
+        words(bot, guild.id, MARATHON_THREAD_NAME_KEY, **fields),
+        note_for(bot, guild, home, real_thread_parent(bot, guild), opening),
+        reason=mi.THREAD_REASON,
+    )
+    await update_marathon(bot.db, fresh["id"], thread_id=int(thread.id), thread_home=home)
+    return thread
+
+
+def parent_id_of(thread: Any) -> int | None:
+    return _as_id(getattr(thread, "parent_id", None))
+
+
+async def move_thread(bot: Any, guild: Any, fresh: Any, home: str, old: Any) -> Any:
+    """The settings point the marathon's threads elsewhere: a new thread first, the board's pin
+    off, then the old thread archived; the board posts fresh at its next sync."""
+    wanted = thread_parent(bot, guild, home)
+    was = parent_id_of(old)
+    if wanted is None or was is None or was == wanted:
+        return None
+    parent, why = await parent_of(bot, guild, wanted, mi.NO_THREAD_CHANNEL)
+    if parent is None:
+        await inbox_failed(bot, guild, why, fresh)
+        return None
     try:
-        thread, _first = await make_thread(
+        thread = await new_thread(bot, guild, fresh, home, parent)
+    except Exception as exc:
+        await inbox_failed(bot, guild, reason_of(exc), fresh)
+        return None
+    cog = cog_of(bot)
+    board = _cell(fresh, "board_message_id")
+    if board and _cell(fresh, "board_channel_id") == int(old.id):
+        await cog.unpin_board(guild, fresh, because=mi.MOVED_BECAUSE)
+    archived = await archive_moved(old, mi.THREAD_MOVED_REASON)
+    cog.thread_homes[int(fresh["id"])] = (int(thread.id), int(parent.id))
+    await log_action(
+        bot,
+        guild,
+        "marathon.thread_moved",
+        details={
+            "marathon_id": fresh["id"],
+            "name": fresh["name"],
+            "home": home,
+            "from_channel": was,
+            "to_channel": int(parent.id),
+            "thread_id": int(old.id),
+            "new_thread_id": int(thread.id),
+            "archived": archived,
+        },
+    )
+    await sync_inbox(bot, guild, await get_marathon(bot.db, guild.id, fresh["id"]), force=True)
+    return thread
+
+
+async def ensure_thread(bot: Any, guild: Any, marathon: Any) -> tuple[Any, str | None]:
+    """The tracked marathon's thread in this home, re-read from the row (the caller holds the
+    marathon's lock), re-opened when archived, moved when the settings point elsewhere, made
+    again when a person deleted it."""
+    home = home_now(bot, guild)
+    if home is None:
+        return (None, MODE_IS_OFF)
+    fresh = await get_marathon(bot.db, guild.id, marathon["id"]) or marathon
+    if not wants_thread(bot, guild, fresh):
+        return (None, mi.NO_THREAD_WANTED)
+    stored = _cell(fresh, "thread_id")
+    if stored and _cell(fresh, "thread_home") == home:
+        thread, lost = await find_channel(bot, guild, stored)
+        if thread is not None:
+            moved = await move_thread(bot, guild, fresh, home, thread)
+            return (moved or await reopened(thread), None)
+        if not lost:
+            return (None, mi.NOT_READ)
+        await log_action(
             bot,
-            parent,
-            words(bot, guild.id, MARATHON_THREAD_NAME_KEY, **fields),
-            note_for(bot, guild, home, real_thread_parent(bot, guild), opening),
-            reason=mi.THREAD_REASON,
+            guild,
+            "marathon.thread_lost",
+            details={"marathon_id": fresh["id"], "thread_id": stored, "home": home},
         )
+    wanted = thread_parent(bot, guild, home)
+    parent, why = await parent_of(bot, guild, wanted, mi.NO_THREAD_CHANNEL)
+    if parent is None:
+        return (None, why)
+    try:
+        thread = await new_thread(bot, guild, fresh, home, parent)
     except Exception as exc:
         return (None, reason_of(exc))
-    await update_marathon(bot.db, fresh["id"], thread_id=int(thread.id), thread_home=home)
     await log_action(
         bot,
         guild,
@@ -682,6 +828,40 @@ async def ensure_thread(bot: Any, guild: Any, marathon: Any) -> tuple[Any, str |
         },
     )
     return (thread, None)
+
+
+async def follow_thread_home(bot: Any, guild: Any, marathon: Any) -> bool:
+    """The tick's check for a tracked marathon's thread (its lock held): settled once per thread
+    and parent, so an unchanged thread costs no Discord call; a move re-posts the board."""
+    home = home_now(bot, guild)
+    stored = _as_id(_cell(marathon, "thread_id"))
+    if home is None or not stored or _cell(marathon, "thread_home") != home:
+        return False
+    if not mi.is_tracked(marathon):
+        return False
+    wanted = thread_parent(bot, guild, home)
+    if wanted is None:
+        return False
+    cog = cog_of(bot)
+    key = int(marathon["id"])
+    if cog.thread_homes.get(key) == (stored, wanted):
+        return False
+    parent, _why = await parent_of(bot, guild, wanted, mi.NO_THREAD_CHANNEL)
+    if parent is None:
+        return False
+    thread, _lost = await find_channel(bot, guild, stored)
+    if thread is None:
+        return False
+    cog.thread_homes[key] = (stored, wanted)
+    if parent_id_of(thread) == wanted:
+        return False
+    moved = await move_thread(bot, guild, marathon, home, thread)
+    if moved is None:
+        return False
+    fresh = await get_marathon(bot.db, guild.id, key)
+    if _cell(fresh, "board_message_id"):
+        await cog.sync_board(guild, fresh)
+    return True
 
 
 async def post_place(bot: Any, guild: Any, marathon: Any) -> tuple[int | None, str | None]:
@@ -978,6 +1158,8 @@ __all__ = [
     "auto_track",
     "ensure_inbox",
     "ensure_thread",
+    "follow_inbox_home",
+    "follow_thread_home",
     "ignore",
     "inbox_message_url",
     "post_now",

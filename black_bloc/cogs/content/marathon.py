@@ -1488,6 +1488,9 @@ class Marathons(commands.Cog):
         self._feed_locks: dict[int, asyncio.Lock] = {}
         self._inbox_locks: dict[int, asyncio.Lock] = {}
         self.inbox_sent: dict[int, Any] = {}
+        self.inbox_moved: set[int] = set()
+        self.inbox_moves_tried: set[tuple[int, str, int, int]] = set()
+        self.thread_homes: dict[int, tuple[int, int]] = {}
         self.inbox_failures: set[tuple[int, str]] = set()
         self.feeds_seeded: set[int] = set()
         self.last_tick_ok_at: str | None = None
@@ -1503,6 +1506,8 @@ class Marathons(commands.Cog):
         self._next_tried.discard(key)
         self._board_sent.pop(key, None)
         self.inbox_sent.pop(key, None)
+        self.inbox_moved.discard(key)
+        self.thread_homes.pop(key, None)
 
     def lock(self, marathon_id: Any) -> asyncio.Lock:
         key = int(marathon_id)
@@ -1577,6 +1582,7 @@ class Marathons(commands.Cog):
     async def tick_once(self) -> None:
         from .marathon_archive import archive_one
         from .marathon_feeds import tick_feeds
+        from .marathon_inbox import follow_inbox_home
 
         if not self.bot.db.is_connected:
             return
@@ -1584,6 +1590,7 @@ class Marathons(commands.Cog):
             off = mode_of(self.bot, guild.id) == MODE_OFF
             if not off:
                 await tick_feeds(self, guild)
+                await follow_inbox_home(self.bot, guild)
             rows = await list_marathons(self.bot.db, guild.id)
             for row in rows:
                 async with self.lock(row["id"]):
@@ -1612,6 +1619,8 @@ class Marathons(commands.Cog):
         )
 
     async def tick_marathon(self, guild: Any, marathon: Any) -> None:
+        from .marathon_inbox import follow_thread_home
+
         now = self.clock()
         store = self.bot.store
         if self.read_due(guild, marathon, now):
@@ -1622,6 +1631,8 @@ class Marathons(commands.Cog):
             return
         if marathon["board_pinned"] and mt.board_due_off(marathon, now):
             await self.unpin_board(guild, marathon, because="over")
+        if await follow_thread_home(self.bot, guild, marathon):
+            marathon = await get_marathon(self.bot.db, guild.id, marathon["id"])
         await inbox_sync(self.bot, guild, marathon)
         if not marathon["active"]:
             return
