@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-26 (branch `marathon-inbox-when`)** — ONE section APPENDED (`MIW-a`…`MIW-c`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-horaro-events`)** — ONE section APPENDED (`HE-a`…`HE-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-fastestfurs`)** — ONE section APPENDED (`FF-a`…`FF-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-ladyarcaders`)** — ONE section APPENDED (`LA-a`…`LA-d`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3492,3 +3493,19 @@ there — MA-a is the bot's.
 | **`MA-b`** | On an archived marathon's drawer press **Restore** and confirm (or `/event` ▸ Marathons… ▸ **Archive…** ▸ pick it ▸ **Restore it**) | *…is back on the list, paused — Resume reads it again.*; it is in the table again as **paused** with its runs and people; `marathon.restored`; nothing is read or posted until **Resume** |
 | **`MA-c`** | A channel-only Go-live row a marathon feed is on (SS4C- or RGL-style) reaches its *until* date | The row STAYS on the Go-live page: spotlight **off**, *kept* (no date), its ping role and its feed still there; a live announcement is unpinned, not ended; ONE `golive.spotlight_kept` with `because: marathon_channel` and `held_by` naming the signals. A row with no marathon on it still leaves the list with `golive.spotlight_expired` |
 | **`MA-d`** | After MA-a, let the feed that found the archived marathon check again (or press **Check now** on its Sources row) | The archived event is NOT added again — *0 added*; a marathon staff REMOVED is also not re-added (the feed's ignore list), until **Forget ignored**, which lets the feed add it again as before |
+
+## Rows `MIW-a` … `MIW-c` — the inbox message waits for the schedule, a new link, an early post (branch `marathon-inbox-when`, 2026-09-26)
+
+🔨 **BUILT on branch `marathon-inbox-when`, NOT merged, NOT deployed** (ships in v176 with `marathon-inbox` and
+`marathon-controls`). Owner, 2026-09-26 17:5x: *"i think we should only post when a schedule is live, keep that part"*;
+18:0x: *"…do we have a way to give a link to the schedule or something or to on the website override it so it post?"*
+Design: [`../info/marathon-inbox-design.md`](../info/marathon-inbox-design.md) ▸ *Follow-up — marathon-inbox-when*.
+Rows lettered; the conductor numbers them. Local check first: `MOCK_PORT=8814 node site/mock/server.mjs` from the branch,
+then <http://localhost:8814/events.html#marathon-5> (Settings ▸ *Change the schedule link…*; **Post it to the inbox now**
+in the moves bar).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`MIW-a`** | After the deploy, open the marathon inbox thread in the events channel (or the shadow home) | Only marathons whose schedule has runs have a message (SS4C #6, Fall Fest #7 expected); a found marathon with no schedule (an unpublished GDQ event) has none. When one of those schedules publishes, its message appears once, showing *N runs · M BaF* — `marathon.inbox_published`, and no second `marathon.inbox_posted` for it |
+| **`MIW-b`** | On a marathon's drawer open Settings ▸ **Change the schedule link…**, paste `https://example.com/x`, press **Change it**; then paste a real horaro / Oengus / GDQ link and press **Change it** (or `/event` ▸ Marathons… ▸ pick it ▸ **Schedule…** ▸ **Change the schedule link…**) | The first is refused inside the dialog naming the readable sites, nothing changes; the second closes the dialog, the drawer reads *Reads from {new link}* and the answer *…reads its schedule from the new link now…*; its tracking, thread, Event, Ping and Spotlight settings are as before; Logs show `web.marathon.link_changed` (important) with old and new. A link another marathon already follows is refused *…already follows that schedule…* |
+| **`MIW-c`** | On a marathon with no schedule yet and no inbox message, press **Post it to the inbox now** (drawer, or `/event` ▸ **Schedule…**) | *…inbox message is up…*; the inbox thread gains its message with **Schedule · not out yet**; the button is gone and the header shows *inbox ↗*; `web.marathon.inbox_posted` with `early: true`. When its schedule publishes, the SAME message is edited to *N runs · M BaF* — no second message. With marathon posts **off** the press is refused in words |
