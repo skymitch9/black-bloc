@@ -374,6 +374,7 @@ async def test_a_marathon_is_read_again_only_once_its_gap_is_up(bot, cog, starts
 
 async def test_with_runner_posts_off_the_board_lists_every_run_pinned_and_edits_in_place(bot, cog):
     await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
+    await bot.store.set(GUILD, "marathon_hosts_count_as_ours", True)
     await bot.store.set(GUILD, "marathon_runner_posts", False)
     marathon = await added(bot, cog)
     await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
@@ -736,6 +737,7 @@ async def test_a_pairing_wins_and_unpairing_gives_the_automatic_match_back(bot, 
 
 async def test_hosts_count_only_while_the_key_says_so(bot, cog):
     await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
+    await bot.store.set(GUILD, "marathon_hosts_count_as_ours", True)
     await bot.db.conn.execute(
         "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",
         (55, "hostlogin", at(0)),
@@ -825,6 +827,7 @@ async def test_the_card_opens_on_the_two_header_lines_then_baf_then_posts(bot, c
 
 async def test_pairing_from_the_panel_picks_a_schedule_name_then_the_member(bot, cog):
     await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
+    await bot.store.set(GUILD, "marathon_hosts_count_as_ours", True)
     marathon = await added(bot, cog)
     _, view = await cogmod.build_card(
         bot, bot.guild, marathon["id"], pairing=True, runner="Interview Crew"
@@ -1630,6 +1633,7 @@ async def test_the_card_opens_the_schedule_view_and_its_modal_changes_the_link(b
 
 
 async def test_hosts_are_not_scanned_until_host_scanning_is_on(bot, cog):
+    await bot.store.set(GUILD, "marathon_hosts_count_as_ours", True)
     await bot.db.conn.execute(
         "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",
         (55, "hostlogin", at(0)),

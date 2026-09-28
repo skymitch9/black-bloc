@@ -97,6 +97,7 @@ export const LABELS = {
   marathon_late_grace_minutes: 'How long a late run waits before the schedule calls it live',
   marathon_match_hosts: 'Whether hosts and commentators count as BaF',
   marathon_scan_hosts_default: 'Whether hosts are scanned for BaF people',
+  marathon_hosts_count_as_ours: 'Whether a BaF host makes a run a BaF run',
   marathon_host_events_default: "Whether a marathon makes an event for each BaF host",
   marathon_spotlight_host_note_template: "The note a spotlit host’s channel row carries",
   marathon_host_event_title_template: "What an event made for one BaF host is called",

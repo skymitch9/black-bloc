@@ -78,6 +78,30 @@ def test_a_host_is_matched_only_while_hosts_are_scanned_and_a_commentator_is_not
     assert [one["user_id"] for one in on] == [5, 6]
 
 
+def test_a_scanned_host_is_matched_but_makes_the_run_ours_only_while_hosts_count():
+    people = [Person("Pilot", None, "runner"), Person("anarchy", None, "host")]
+    pairings = [{"marathon_id": None, "runner_name": "anarchy", "user_id": 5}]
+    shown = mt.match_people(people, {}, pairings, scan_hosts=True, hosts_count=False)
+    assert [one["user_id"] for one in shown] == [None, 5]
+    assert shown[1]["counts"] is False and "counts" not in shown[0]
+    assert mt.ours(shown) == [] and not mt.is_ours({"people": json.dumps(shown)})
+    counted = mt.match_people(people, {}, pairings, scan_hosts=True, hosts_count=True)
+    assert "counts" not in counted[1]
+    assert [one["user_id"] for one in mt.ours(counted)] == [5]
+
+
+def test_a_runner_counts_whatever_hosts_count_says():
+    people = [Person("Sky", None, "runner"), Person("anarchy", None, "host")]
+    pairings = [
+        {"marathon_id": None, "runner_name": "sky", "user_id": 4},
+        {"marathon_id": None, "runner_name": "anarchy", "user_id": 5},
+    ]
+    for count in (False, True):
+        found = mt.match_people(people, {}, pairings, scan_hosts=True, hosts_count=count)
+        assert mt.ours(found)[0]["user_id"] == 4
+        assert [one["user_id"] for one in mt.ours(found)] == ([4, 5] if count else [4])
+
+
 def test_a_pairing_wins_over_the_automatic_match_and_this_marathons_wins_over_everywhere():
     people = [Person("Sky", "sky", "runner")]
     pairings = [

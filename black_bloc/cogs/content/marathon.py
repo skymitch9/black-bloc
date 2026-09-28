@@ -85,6 +85,7 @@ from ...settings_store import (
     MARATHON_EDIT_DONE_KEY,
     MARATHON_EVENT_DESCRIPTION_KEY,
     MARATHON_FAR_POLL_HOURS_KEY,
+    MARATHON_HOSTS_COUNT_AS_OURS_KEY,
     MARATHON_LATE_GRACE_KEY,
     MARATHON_LEAD_DAYS_KEY,
     MARATHON_LINK_CHANGED_SAID_KEY,
@@ -2248,6 +2249,7 @@ class Marathons(commands.Cog):
             await get_marathon(db, guild.id, marathon["id"]) or marathon,
             self.bot.store.get(guild.id, MARATHON_SCAN_HOSTS_DEFAULT_KEY),
         )
+        count = bool(self.bot.store.get(guild.id, MARATHON_HOSTS_COUNT_AS_OURS_KEY))
         usernames = usernames_of(guild)
         newly = 0
         for row in await runs_of(db, marathon["id"]):
@@ -2260,6 +2262,7 @@ class Marathons(commands.Cog):
                 match_hosts=hosts,
                 usernames=usernames,
                 scan_hosts=scan,
+                hosts_count=count,
             )
             if after == before:
                 continue
@@ -4010,8 +4013,15 @@ def _raw_people(run: Any) -> list[dict[str, Any]]:
 
 def _merged_people(row: Any, run: Any) -> list[dict[str, Any]]:
     """The fresh names with yesterday's matches kept, so rematch can say who is NEWLY ours."""
-    before = {(one.get("name"), one.get("part")): one.get("user_id") for one in mt.people_of(row)}
-    return [one | {"user_id": before.get((one["name"], one["part"]))} for one in _raw_people(run)]
+    before = {(one.get("name"), one.get("part")): one for one in mt.people_of(row)}
+    kept = [
+        one | {"user_id": before.get((one["name"], one["part"]), {}).get("user_id")}
+        for one in _raw_people(run)
+    ]
+    for one in kept:
+        if before.get((one["name"], one["part"]), {}).get("counts") is False:
+            one["counts"] = False
+    return kept
 
 
 def _runners_text(run: Any) -> str:

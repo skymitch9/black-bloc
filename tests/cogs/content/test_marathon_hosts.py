@@ -6,8 +6,10 @@ import pytest
 
 from black_bloc import marathon as mt
 from black_bloc import marathon_hosts as mh
+from black_bloc import marathon_public as mp
 from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content import marathon_hosts as hosts
+from black_bloc.cogs.content import marathon_inbox as inbox
 from black_bloc.cogs.content import marathon_people as people
 from black_bloc.cogs.content.marathon import (
     create_marathon,
@@ -21,15 +23,17 @@ from black_bloc.cogs.content.spotlight import channel_by_login
 from black_bloc.events import get_event
 from tests.cogs.content.test_marathon import (  # noqa: F401
     NOW,
+    SKY,
     URL,
     FakeClient,
     a_run,
     at,
     bot,
     proposals,
+    threading,
     tracked,
 )
-from tests.cogs.content.test_spotlight import GUILD, FakeActor, details_of, kinds
+from tests.cogs.content.test_spotlight import CHANNEL, GUILD, FakeActor, details_of, kinds
 
 ANARCHY = 8101
 HIDDEN_HEROES = [
@@ -250,6 +254,7 @@ async def test_runner_events_are_unchanged_and_a_host_only_run_gets_none(
     cog,
     proposals,  # noqa: F811
 ):
+    await bot.store.set(GUILD, "marathon_hosts_count_as_ours", True)
     marathon = await hidden_heroes(bot)
     await scan_on(bot, marathon)
     await set_event_mode(bot, bot.guild, FakeActor(), marathon, "runs")
@@ -280,3 +285,125 @@ async def test_two_switch_presses_at_once_leave_one_event_under_the_marathon_loc
     )
     assert (await kinds(bot.db)).count("marathon.host_event_made") == 1
     assert len(mh.event_ids(await get_marathon(bot.db, GUILD, marathon["id"]))) == 1
+
+
+SHOW_ROOM = 557
+HOSTED_ONLY = [
+    a_run(
+        1,
+        30,
+        game="Titanfall 2",
+        people=(("Pilot", "pilotruns", "runner"), ("anarchy", "anarchyasf", "host")),
+    ),
+    a_run(
+        2,
+        90,
+        game="VHOLUME",
+        people=(("Vee", "veeruns", "runner"), ("anarchy", "anarchyasf", "host")),
+    ),
+    a_run(
+        3,
+        150,
+        game="SPRAWL zero",
+        people=(("Spry", "spryruns", "runner"), ("anarchy", "anarchyasf", "host")),
+    ),
+]
+HOSTED_GAMES = ("Titanfall 2", "VHOLUME", "SPRAWL zero")
+SKY_SLOT = a_run(4, 210, game="Super Metroid", people=(("Sky", "skyruns", "runner"),))
+
+
+async def hosted_show(bot, cog, runs, *, count):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_hosts_count_as_ours", count)
+    threading(bot, SHOW_ROOM)
+    await bot.store.set(GUILD, "events_announce_channel_id", SHOW_ROOM)
+    await bot.store.set(GUILD, "marathon_track_makes_thread", True)
+    cog.client.runs_given = list(runs)
+    made = await create_marathon(bot, bot.guild, FakeActor(), name="Hidden Heroes", url=URL)
+    assert made.ok, made.message
+    paired = await pair_runner(
+        bot, bot.guild, FakeActor(), made.value, "anarchy", ANARCHY, everywhere=True
+    )
+    assert paired.ok, paired.message
+    done = await inbox.track(bot, bot.guild, FakeActor(), made.value)
+    assert done.ok, done.message
+    marathon = await get_marathon(bot.db, GUILD, made.value["id"])
+    await scan_on(bot, marathon)
+    cog.clock = lambda: NOW + timedelta(minutes=15)
+    await cog.follow(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    return await get_marathon(bot.db, GUILD, marathon["id"])
+
+
+def said_about(bot, game):  # noqa: F811
+    places = [bot.guild.channels[SHOW_ROOM].threads[-1], bot.guild.channels[CHANNEL]]
+    return [one for place in places for one in place.messages if f"**{game}**" in one.content]
+
+
+async def test_a_scanned_host_is_shown_and_spotlit_but_makes_no_run_ours(bot, cog):  # noqa: F811
+    marathon = await hosted_show(bot, cog, HOSTED_ONLY, count=False)
+    anarchy = named((await board(bot, marathon))["baf"], "anarchy")
+    assert anarchy["user_id"] == ANARCHY and anarchy["parts"] == [mt.HOST]
+    rows = await runs_of(bot.db, marathon["id"])
+    assert cogmod.counts_of(rows) == (3, 0)
+    for row in rows:
+        assert not mt.is_ours(row) and mt.member_ids(row) == []
+        assert mt.SHOUT_MOVE not in mt.run_moves(row)
+        assert not mp.postable(row)
+    for game in HOSTED_GAMES:
+        assert said_about(bot, game) == []
+    assert "marathon.run_matched" not in await kinds(bot.db)
+    assert "marathon.reminded" not in await kinds(bot.db)
+    outcome = await people.spotlight_runner(bot, bot.guild, FakeActor(), marathon, "anarchy")
+    assert outcome.ok, outcome.message
+    assert (await channel_by_login(bot.db, GUILD, "anarchyasf"))["note"] == (
+        "anarchy hosting Hidden Heroes"
+    )
+
+
+async def test_with_the_key_on_a_host_makes_the_run_ours_again(bot, cog):  # noqa: F811
+    marathon = await hosted_show(bot, cog, HOSTED_ONLY, count=True)
+    rows = await runs_of(bot.db, marathon["id"])
+    assert cogmod.counts_of(rows) == (3, 3)
+    assert all(mt.member_ids(row) == [ANARCHY] for row in rows)
+    assert all(mp.postable(row) for row in rows)
+    assert said_about(bot, "Titanfall 2")
+    assert "marathon.reminded" in await kinds(bot.db)
+
+
+async def test_turning_the_key_off_takes_the_runs_back_at_the_next_rematch(bot, cog):  # noqa: F811
+    marathon = await hosted_show(bot, cog, HOSTED_ONLY, count=True)
+    await bot.store.set(GUILD, "marathon_hosts_count_as_ours", False)
+    await cog.rematch(bot.guild, marathon)
+    rows = await runs_of(bot.db, marathon["id"])
+    assert cogmod.counts_of(rows) == (3, 0)
+    assert all(
+        one["user_id"] == ANARCHY
+        for row in rows
+        for one in mt.people_of(row)
+        if one["part"] == mt.HOST
+    )
+
+
+@pytest.mark.parametrize("count", [False, True])
+async def test_a_baf_runners_run_is_the_same_either_way(bot, cog, count):  # noqa: F811
+    marathon = await hosted_show(bot, cog, [*HOSTED_ONLY, SKY_SLOT], count=count)
+    rows = {row["game"]: row for row in await runs_of(bot.db, marathon["id"])}
+    assert mt.member_ids(rows["Super Metroid"]) == [SKY]
+    assert mp.postable(rows["Super Metroid"])
+    assert said_about(bot, "Super Metroid")
+    assert cogmod.counts_of(list(rows.values())) == (4, 4 if count else 1)
+
+
+@pytest.mark.parametrize("count", [False, True])
+async def test_host_events_follow_their_switch_whatever_the_key(
+    bot,
+    cog,
+    proposals,  # noqa: F811
+    count,
+):
+    marathon = await hosted_show(bot, cog, HOSTED_ONLY, count=count)
+    assert mh.event_ids(await get_marathon(bot.db, GUILD, marathon["id"])) == {}
+    await hosts.set_switch(bot, bot.guild, FakeActor(), marathon, mh.EVENTS, True)
+    ids = mh.event_ids(await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert list(ids) == [ANARCHY]
+    event = await get_event(bot.db, ids[ANARCHY])
+    assert event["starts_at"] == at(30) and event["ends_at"] == at(210)
