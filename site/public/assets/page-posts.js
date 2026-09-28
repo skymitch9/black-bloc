@@ -1,6 +1,6 @@
 import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
-import { htmlToDiscordMarkdown } from './clipmd.js';
+import { htmlToDiscordMarkdown, mentionChannels } from './clipmd.js';
 import { blockPreview } from './blockpreview.js';
 import { BLOCK_EDITORS } from './blockwords.js';
 import { BLOCK_FILTERS, blockText } from './listfilter.js';
@@ -357,13 +357,16 @@ function markdownFromPaste(event) {
   return made && made !== plain ? made : '';
 }
 
-/** The one conversion of a fetched export — the paste path's own function, nothing else. */
-function markdownOfDoc(found) {
+/** The one conversion of a fetched export: the paste path's converter, then `#name` → `<#id>`. */
+async function markdownOfDoc(found) {
+  let made = '';
   try {
-    return htmlToDiscordMarkdown((found && found.html) || '');
+    made = htmlToDiscordMarkdown((found && found.html) || '');
   } catch (error) {
     return '';
   }
+  const known = await refs().catch(() => ({ channels: [] }));
+  return mentionChannels(made, known.channels);
 }
 
 function capFor(styles, style) {
@@ -586,7 +589,7 @@ async function postDrawer(payload, known, history) {
       importButton.disabled = false;
     }
     if (!done.ok) return;
-    const made = markdownOfDoc(done.found);
+    const made = await markdownOfDoc(done.found);
     if (!made.trim()) {
       importSay.say(IMPORT_EMPTY, 'warn');
       return;
@@ -1018,7 +1021,7 @@ function newPostDrawer(index) {
     }
     if (!done.ok) return;
     const named = done.found.title || IMPORT_UNTITLED;
-    const body = markdownOfDoc(done.found);
+    const body = await markdownOfDoc(done.found);
     if (!body.trim()) {
       say.say(IMPORT_EMPTY, 'warn');
       return;
