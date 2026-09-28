@@ -1674,6 +1674,115 @@ async def test_pinned_the_panel_s_set_button_opens_the_date_modal_for_the_member
     assert modal.mine is True and modal.member is birthday_person
 
 
+class SpyResponse(FakeResponse):
+    def __init__(self):
+        super().__init__()
+        self.defers = []
+        self.message_edits = []
+
+    async def defer(self, ephemeral=False, **kwargs):
+        self.defers.append({"ephemeral": ephemeral, **kwargs})
+        await super().defer(ephemeral=ephemeral, **kwargs)
+
+    async def edit_message(self, **kwargs):
+        self.done = True
+        self.message_edits.append(kwargs)
+
+
+class SpyInteraction(FakeInteraction):
+    """A press or a submit that remembers the post it came from and every way it was answered."""
+
+    def __init__(self, bot, user, **kwargs):
+        super().__init__(bot, user, **kwargs)
+        self.response = SpyResponse()
+        self.followup = FakeFollowup(self.response)
+        self.post = FakeMessage(4242, content="the public post")
+        self.post_edits = []
+        self.original_edits = []
+
+        async def edit_post(**changes):
+            self.post_edits.append(changes)
+
+        self.post.edit = edit_post
+
+    async def edit_original_response(self, **kwargs):
+        self.original_edits.append(kwargs)
+        return await super().edit_original_response(**kwargs)
+
+
+def fill(modal, typed):
+    modal.typed._value = typed
+    return modal
+
+
+async def test_pinned_the_panel_s_set_modal_saves_and_re_renders_the_panel(
+    cog, bot, birthday_person
+):
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    press = find_item(view, "Set my birthday")
+    pressed = FakeInteraction(bot, birthday_person)
+    await press.callback(pressed)
+    modal = fill(pressed.response.modals[0], "08-10-1987")
+    submitted = SpyInteraction(bot, birthday_person)
+
+    await modal.on_submit(submitted)
+
+    row = await get_birthday(bot.db, USER)
+    assert (row["month"], row["day"], row["year"], row["source"]) == (8, 10, 1987, "self")
+    assert modal.previous is view and view.is_finished()
+    assert submitted.response.defers == [{"ephemeral": False}]
+    (render,) = submitted.original_edits
+    assert isinstance(render["view"], BirthdayView)
+    assert "August 10" in render["embed"].description
+    said = submitted.response.messages[-1]
+    assert said["ephemeral"] is True and "August 10" in said["content"]
+    assert await action_kinds(bot.db) == ["birthday.set"]
+
+
+async def test_pinned_the_panel_s_set_modal_refuses_in_words_and_still_re_renders(
+    cog, bot, birthday_person
+):
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    pressed = FakeInteraction(bot, birthday_person)
+    await find_item(view, "Set my birthday").callback(pressed)
+    submitted = SpyInteraction(bot, birthday_person)
+
+    await fill(pressed.response.modals[0], "next tuesday").on_submit(submitted)
+
+    assert await get_birthday(bot.db, USER) is None
+    assert len(submitted.original_edits) == 1
+    assert submitted.sent.startswith("Black Bloc could not read that as a date.")
+    assert submitted.response.messages[-1]["ephemeral"] is True
+
+
+async def test_pinned_staff_set_their_modal_saves_and_re_renders_the_card(
+    cog, bot, birthday_person
+):
+    give_staff(bot, birthday_person)
+    other = FakeMember(bot.guild, user_id=901, display_name="Other")
+    card = await open_card_for(bot, birthday_person, other)
+    pressed = FakeInteraction(bot, birthday_person)
+    await find_item(card, "Set their birthday").callback(pressed)
+    modal = fill(pressed.response.modals[0], "01-02")
+    submitted = SpyInteraction(bot, birthday_person)
+
+    await modal.on_submit(submitted)
+
+    row = await get_birthday(bot.db, 901)
+    assert (row["month"], row["day"], row["source"]) == (1, 2, "staff")
+    (render,) = submitted.original_edits
+    assert render["embed"].title == "Other — birthday"
+    assert submitted.response.messages[-1]["ephemeral"] is True
+
+
+async def open_card_for(bot, who, member):
+    from black_bloc.cogs.community.birthdays import open_card
+
+    interaction = FakeInteraction(bot, who)
+    await open_card(interaction, member)
+    return card_view(interaction)
+
+
 # --- the birthday block (blocks-buttons): a second door onto the same /birthday panel ----------
 
 
