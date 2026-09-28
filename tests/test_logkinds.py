@@ -205,6 +205,7 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.guide.reset",
         "web.guide.shots_stale",
         "web.guide.unpublished",
+        "web.post.imported",
         "web.request.comment",
         "web.request.filed",
         "web.request.updated",

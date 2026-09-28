@@ -70,6 +70,11 @@ def no_test_ever_opens_a_link(monkeypatch):
 
     monkeypatch.setattr("black_bloc.linkcheck.aiohttp_status", refuse)
 
+    async def refuse_hop(url, *, seconds, limit):
+        pytest.fail(f"a test asked Google for {url}; pass `get` or patch aiohttp_hop")
+
+    monkeypatch.setattr("black_bloc.doc_import.aiohttp_hop", refuse_hop)
+
 
 @pytest.fixture
 def settings(tmp_path):
