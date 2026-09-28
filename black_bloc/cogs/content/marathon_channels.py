@@ -65,11 +65,12 @@ async def set_marathons(
 
 
 async def hold(bot: Any, guild: Any, channel: Any) -> int:
-    """Opted out: its feed and every active marathon on it pause, marked as held by the channel."""
-    from .marathon_feeds import feed_by_channel, feed_details, update_feed
+    """Opted out: its feeds and every active marathon on it pause, marked as held by the channel."""
+    from .marathon_feeds import feed_details, feeds_of_channel, update_feed
 
-    feed = await feed_by_channel(bot.db, guild.id, channel["id"])
-    if feed is not None and feed["active"]:
+    for feed in await feeds_of_channel(bot.db, guild.id, channel["id"]):
+        if not feed["active"]:
+            continue
         await update_feed(bot.db, feed["id"], active=0, held_by_channel=1)
         await log_action(
             bot,
@@ -103,10 +104,11 @@ async def hold(bot: Any, guild: Any, channel: Any) -> int:
 
 async def release(bot: Any, guild: Any, channel: Any) -> int:
     """Back on: only what the opt-out paused comes back; a pause staff made stays."""
-    from .marathon_feeds import feed_by_channel, feed_details, update_feed
+    from .marathon_feeds import feed_details, feeds_of_channel, update_feed
 
-    feed = await feed_by_channel(bot.db, guild.id, channel["id"])
-    if feed is not None and feed["held_by_channel"]:
+    for feed in await feeds_of_channel(bot.db, guild.id, channel["id"]):
+        if not feed["held_by_channel"]:
+            continue
         await update_feed(bot.db, feed["id"], active=1, held_by_channel=0)
         await log_action(
             bot,

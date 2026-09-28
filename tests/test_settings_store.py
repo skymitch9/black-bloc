@@ -2295,7 +2295,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 694
+    assert len(settings_store.KEY_TYPES) == 695
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2465,3 +2465,15 @@ async def test_a_decided_switch_is_a_bool_key_both_doors_reach_until_a_lead_says
 def test_a_feature_mode_is_read_as_a_feature_switch_on_the_health_page(key):
     assert key in mode_keys()
 
+
+
+def test_the_hotfix_shows_are_a_list_of_names_each_once_and_never_empty():
+    key = settings_store.MARATHON_HOTFIX_SHOWS_KEY
+    assert settings_store.KEY_TYPES[key] == "text"
+    assert settings_store.MARATHON_DEFAULTS[key] == "GDQueer"
+    assert settings_store.coerce_value(key, " GDQueer, gdqueer ,Fast  Travel") == (
+        "GDQueer, Fast Travel"
+    )
+    for bad in (" , ", ",".join(f"s{n}" for n in range(21)), "x" * 61):
+        with pytest.raises(settings_store.SettingError, match="names no Hotfix show"):
+            settings_store.coerce_value(key, bad)

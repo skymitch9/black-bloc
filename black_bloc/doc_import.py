@@ -152,7 +152,9 @@ def export_url(found_id: str) -> str:
     return EXPORT_URL.format(id=found_id)
 
 
-def hop_allowed(url: str) -> bool:
+def hop_allowed(
+    url: str, hosts: tuple[str, ...] = (DOCS_HOST,), tails: tuple[str, ...] = (CONTENT_HOST_TAIL,)
+) -> bool:
     try:
         parts = urlsplit(url)
         port = parts.port
@@ -163,7 +165,7 @@ def hop_allowed(url: str) -> bool:
         return False
     if parts.username is not None or parts.password is not None:
         return False
-    return host == DOCS_HOST or host.endswith(CONTENT_HOST_TAIL)
+    return host in hosts or any(host.endswith(tail) for tail in tails)
 
 
 def is_sign_in(url: str) -> bool:
@@ -183,7 +185,9 @@ def title_of(page: str) -> str:
     return " ".join(said.split())[:TITLE_MAX]
 
 
-async def aiohttp_hop(url: str, *, seconds: float, limit: int) -> Hop:
+async def aiohttp_hop(
+    url: str, *, seconds: float, limit: int, agent: str = USER_AGENT
+) -> Hop:
     """One GET, redirects NOT followed, the body read up to one byte past the cap."""
     import aiohttp
 
@@ -192,7 +196,7 @@ async def aiohttp_hop(url: str, *, seconds: float, limit: int) -> Hop:
             timeout=aiohttp.ClientTimeout(total=seconds)
         ) as session:
             async with session.get(
-                url, allow_redirects=False, headers={"User-Agent": USER_AGENT}
+                url, allow_redirects=False, headers={"User-Agent": agent}
             ) as response:
                 location = response.headers.get("Location")
                 kind = response.headers.get("Content-Type", "")

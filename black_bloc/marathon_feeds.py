@@ -9,6 +9,7 @@ from .marathon import MarathonMove, stamp_of
 from .marathon_sources import (
     FASTESTFURS,
     GDQ,
+    GDQ_HOTFIX,
     HORARO,
     HORARO_PAGE,
     LADYARCADERS,
@@ -30,6 +31,8 @@ OENGUS_FEED = "oengus"
 HORARO_EVENTS_FEED = "horaro_events"
 FASTESTFURS_FEED = "fastestfurs"
 LADYARCADERS_FEED = "ladyarcaders"
+HOTFIX_FEED = "gdq_hotfix"
+HOTFIX_PAGE = "https://gamesdonequick.com/hotfix/schedule"
 FEED_SOURCES = (
     TRACKER,
     HORARO_FEED,
@@ -37,6 +40,7 @@ FEED_SOURCES = (
     HORARO_EVENTS_FEED,
     FASTESTFURS_FEED,
     LADYARCADERS_FEED,
+    HOTFIX_FEED,
 )
 ADD = "add"
 SUGGEST = "suggest"
@@ -65,7 +69,16 @@ SEEDS = (
     Seed("fastpacedevents", HORARO_EVENTS_FEED, "fastpacedevents", "Fast Pace"),
     Seed("fastestfurs", FASTESTFURS_FEED, "fastestfurs", "Fastest Furs"),
     Seed("ladyarcaders", LADYARCADERS_FEED, "ladyarcaders", "Lady Arcaders"),
+    Seed("gamesdonequick", HOTFIX_FEED, HOTFIX_PAGE, "GDQ Hotfix"),
 )
+
+
+def seed_marker(seed: Seed) -> str:
+    """A login's first seed marks the login itself (every marker written before a channel had
+    two seeds); a later one marks `login/source`."""
+    first = next(one for one in SEEDS if one.login == seed.login)
+    return seed.login if first == seed else f"{seed.login}/{seed.source}"
+
 
 PICK_GDQ = "gdq"
 PICK_RPGLB = "rpglb"
@@ -74,6 +87,7 @@ PICK_OENGUS = "oengus"
 PICK_HORARO_EVENTS = "horaro_events"
 PICK_FASTESTFURS = "fastestfurs"
 PICK_LADYARCADERS = "ladyarcaders"
+PICK_HOTFIX = "gdq_hotfix"
 PICKS = {
     PICK_GDQ: (TRACKER, TRACKER_BASES[GDQ]),
     PICK_RPGLB: (TRACKER, TRACKER_BASES[RPGLB]),
@@ -82,6 +96,7 @@ PICKS = {
     PICK_HORARO_EVENTS: (HORARO_EVENTS_FEED, None),
     PICK_FASTESTFURS: (FASTESTFURS_FEED, None),
     PICK_LADYARCADERS: (LADYARCADERS_FEED, None),
+    PICK_HOTFIX: (HOTFIX_FEED, HOTFIX_PAGE),
 }
 PICK_WORDS = {
     PICK_GDQ: "the GDQ tracker",
@@ -96,18 +111,27 @@ PICK_WORDS = {
     ),
     PICK_FASTESTFURS: "Fastest Furs — every event on the org's own list at fastestfurs.com",
     PICK_LADYARCADERS: "Lady Arcaders — looks for their next event's calendar on ladyarcaders.com",
+    PICK_HOTFIX: (
+        "GDQ Hotfix — the shows named in marathon_hotfix_shows, from the schedule sheet on "
+        "gamesdonequick.com/hotfix/schedule"
+    ),
 }
-PICK_NAMES = {PICK_GDQ: "GDQ", PICK_RPGLB: "RPG Limit Break", PICK_LADYARCADERS: "Lady Arcaders"}
+PICK_NAMES = {
+    PICK_GDQ: "GDQ",
+    PICK_RPGLB: "RPG Limit Break",
+    PICK_LADYARCADERS: "Lady Arcaders",
+    PICK_HOTFIX: "GDQ Hotfix",
+}
 
 NO_CHANNEL = "A feed belongs to a channel Black Bloc already watches — add the channel first."
 CHANNEL_HAS_FEED = (
-    "**{channel}** already has a feed, **{name}**, so nothing was added. One channel, one feed — "
-    "remove that one first."
+    "**{channel}** already has a feed that reads {source}, **{name}**, so nothing was added. A "
+    "channel has one feed per source — remove that one first."
 )
 SAME_FEED = "**{name}** already reads that, so nothing was added."
 UNKNOWN_PICK = (
     "**{given}** is not something a feed can read, so nothing was added. Pick one of gdq, "
-    "rpglb, horaro, horaro_events, oengus, fastestfurs or ladyarcaders."
+    "rpglb, horaro, horaro_events, oengus, fastestfurs, ladyarcaders or gdq_hotfix."
 )
 NO_SLUG = (
     "A horaro.net feed needs the event's slug — the part after horaro.net/, for example `esa` — "
@@ -143,6 +167,8 @@ FEED_NOTHING_TO_FORGET = "**{name}** remembers no removed event, so there was no
 FEED_LOOKED = "**{name}** forgot {count} dismissed event(s) and looked again."
 FEED_REREAD = "It read every Oengus marathon's record again ({count} remembered before)."
 HORARO_EVENTS_WORD = "horaro.net events"
+HOTFIX_SHOWS_LINE = "**Shows:** {shows} — marathon_hotfix_shows in Settings changes them"
+HOTFIX_NO_SHOWS = "nothing yet"
 FEED_REPROBE = "It asked ladyarcaders.com about the next events again ({count} remembered before)."
 SUGGESTION_GONE = "**{event}** is not waiting on **{name}** any more, so nothing was changed."
 SUGGESTION_DISMISSED = "**{event}** is dismissed — **{name}** will not suggest it again."
@@ -186,7 +212,9 @@ PICK_CHANNEL = "Pick the channel the feed belongs to…"
 PICK_SUGGESTION = "Pick a waiting event…"
 ADD_FEED_TITLE = "Add a feed"
 ADD_FEED_SOURCE = "Source — a pick; clear the box to list all"
-ADD_FEED_SOURCE_HINT = "gdq, rpglb, horaro, horaro_events, oengus, fastestfurs or ladyarcaders"
+ADD_FEED_SOURCE_HINT = (
+    "gdq, rpglb, horaro, horaro_events, oengus, fastestfurs, ladyarcaders or gdq_hotfix"
+)
 ADD_FEED_SOURCE_LIMIT = 20
 ADD_FEED_SLUG = "horaro.net event slug — horaro only"
 ADD_FEED_SLUG_HINT = "esa"
@@ -257,6 +285,8 @@ def marathon_source(feed: Any) -> str | None:
         return FASTESTFURS
     if kind == LADYARCADERS_FEED:
         return LADYARCADERS
+    if kind == HOTFIX_FEED:
+        return GDQ_HOTFIX
     return None
 
 
@@ -287,6 +317,8 @@ def pick_for(feed: Any) -> str | None:
         return PICK_FASTESTFURS
     if source == LADYARCADERS:
         return PICK_LADYARCADERS
+    if source == GDQ_HOTFIX:
+        return PICK_HOTFIX
     return {GDQ: PICK_GDQ, RPGLB: PICK_RPGLB}.get(str(source or ""))
 
 
@@ -530,6 +562,7 @@ __all__ = [
     "FEED_SOURCES",
     "HORARO_EVENTS_FEED",
     "HORARO_FEED",
+    "HOTFIX_FEED",
     "LADYARCADERS_FEED",
     "OENGUS_FEED",
     "SEEDS",

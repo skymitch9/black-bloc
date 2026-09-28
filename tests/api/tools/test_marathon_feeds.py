@@ -153,7 +153,7 @@ async def test_add_a_feed_refuses_in_words(client, sign_in, web, wf, cog):
     twice = client.post(
         "/api/marathons/feeds", json={"spotlight_id": other["spotlight_id"], "source": "gdq"}
     )
-    assert twice.status_code == 409 and "One channel, one feed" in twice.json()["message"]
+    assert twice.status_code == 409 and "one feed per source" in twice.json()["message"]
 
 
 async def test_check_now_adds_the_events_ahead_and_the_marathon_row_names_its_feed(

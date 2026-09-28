@@ -8,6 +8,7 @@ import pytest
 from black_bloc import marathon as mt
 from black_bloc import marathon_feeds as mf
 from black_bloc import marathon_horaro_events as hre
+from black_bloc import marathon_hotfix as hf
 from black_bloc import marathon_ladyarcaders as la
 from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content import marathon_feeds as feeds
@@ -43,6 +44,15 @@ from tests.cogs.content.test_spotlight import (
 )
 
 FIXTURES = pathlib.Path(__file__).parents[2] / "fixtures" / "marathon"
+HOTFIX_PAGE = "https://gamesdonequick.com/hotfix/schedule"
+HOTFIX_CSV = (
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxkh22kZxarTgwzgy3xn-g9xqmDYWfpawKBRHv4vBHf"
+    "rA81gKx9jCqb8FILZ-riUO1hu0d77s3MDNV/pub?gid=728340068&single=true&output=csv"
+)
+EMPTY_SHEET = (
+    "Show Date,Show Start (Eastern),Show,Host,Description,,,,\n"
+    ",,,,Game,Category,Estimate,Runners,\n"
+)
 SEPT = datetime(2026, 9, 25, 18, 0, tzinfo=UTC)
 GDQ_BASE = "https://tracker.gamesdonequick.com/tracker"
 ESA_MEMBER = 4242
@@ -73,6 +83,8 @@ class FeedClient:
         self.list_calls = []
         self.calendars = {}
         self.text_calls = []
+        self.sheet = EMPTY_SHEET
+        self.sheet_calls = []
 
     async def events(self, source="gdq"):
         self.list_calls.append(source)
@@ -110,6 +122,9 @@ class FeedClient:
             raise ScheduleError("fastestfurs.com has not published it", unpublished=True)
         if source == "ladyarcaders" and (source, str(ref)) not in self.runs_by_ref:
             raise ScheduleError("ladyarcaders.com has not published it", unpublished=True)
+        if source == "gdq_hotfix":
+            blocks = hf.blocks_of((await self.hotfix_sheet())[0])
+            return list(hf.block_for(blocks, ref, datetime.now(UTC)).runs)
         return list(self.runs_by_ref.get((source, str(ref)), []))
 
     async def fastestfurs_events(self):
@@ -120,6 +135,12 @@ class FeedClient:
 
     async def close(self):
         return None
+
+    async def hotfix_sheet(self, page_url=None, fallback=None):
+        self.sheet_calls.append((page_url, fallback))
+        if self.raises is not None:
+            raise self.raises
+        return (self.sheet, HOTFIX_CSV)
 
     async def text(self, url):
         self.text_calls.append(url)
@@ -205,6 +226,7 @@ async def test_the_seed_makes_the_gdq_and_rpglb_feeds_once_and_never_esa(bot, co
     assert [(one["name"], one["source"], one["feed_ref"]) for one in rows] == [
         ("GDQ", "tracker", GDQ_BASE),
         ("RPG Limit Break", "tracker", "https://tracker.rpglimitbreak.com"),
+        ("GDQ Hotfix", "gdq_hotfix", HOTFIX_PAGE),
     ]
     assert all(one["action"] == "add" for one in rows)
     assert (await kinds(bot.db)).count("marathon.feed_seeded") == 1
@@ -220,7 +242,7 @@ async def test_a_seeded_feed_staff_remove_is_not_seeded_again_on_the_next_boot(b
     again.clock = lambda: SEPT
     bot.cogs[cogmod.COG_NAME] = again
     await again.tick_once()
-    assert [one["name"] for one in await all_feeds(bot)] == ["RPG Limit Break"]
+    assert [one["name"] for one in await all_feeds(bot)] == ["RPG Limit Break", "GDQ Hotfix"]
 
 
 async def test_the_seed_waits_for_a_channel_row_and_the_switch(bot, cog):  # noqa: F811
@@ -232,7 +254,7 @@ async def test_the_seed_waits_for_a_channel_row_and_the_switch(bot, cog):  # noq
     await bot.store.set(GUILD, "marathon_feeds", True)
     cog.feeds_seeded.clear()
     await cog.tick_once()
-    assert [one["name"] for one in await all_feeds(bot)] == ["GDQ"]
+    assert [one["name"] for one in await all_feeds(bot)] == ["GDQ", "GDQ Hotfix"]
 
 
 # --- add mode ---------------------------------------------------------------------------------
@@ -427,7 +449,7 @@ async def test_a_failed_check_counts_and_the_third_is_important(bot, cog):  # no
     feed = (await all_feeds(bot))[0]
     assert feed["checks_failed"] == 3 and feed["last_ok"] == 0
     assert "answered 503" in feed["last_error"]
-    assert (await kinds(bot.db)).count("marathon.feed_stale") == 2
+    assert (await kinds(bot.db)).count("marathon.feed_stale") == 3
     cog.client.raises = None
     later(cog, 21)
     await cog.tick_once()
@@ -482,7 +504,7 @@ async def test_off_checks_nothing(bot, cog):  # noqa: F811
 # --- staff doors ------------------------------------------------------------------------------
 
 
-async def test_add_a_feed_refuses_in_words_and_one_channel_has_one_feed(bot, cog):  # noqa: F811
+async def test_add_a_feed_refuses_in_words_and_a_channel_has_one_feed_per_source(bot, cog):  # noqa: F811
     await staff_room(bot)
     esa = await a_channel(bot, "esamarathon", "ESAMarathon")
     nowhere = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=999, pick="gdq")
@@ -503,21 +525,32 @@ async def test_add_a_feed_refuses_in_words_and_one_channel_has_one_feed(bot, cog
     assert made.ok, made.message
     assert made.value["feed_ref"] == "esa" and made.value["name"] == "ESAMarathon"
     assert "horaro.net/esa" in made.message
-    twice = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=esa, pick="gdq")
+    twice = await feeds.create_feed(
+        bot, bot.guild, FakeActor(), spotlight_id=esa, pick="horaro", slug="esa"
+    )
     assert not twice.ok and twice.code == "channel_has_feed"
+    assert "reads horaro.net/esa" in twice.message and "one feed per source" in twice.message
     assert (await details_of(bot.db, "marathon.feed_created"))["source"] == "horaro"
 
 
 async def test_removing_a_channel_removes_its_feed_and_keeps_its_marathons(bot, cog):  # noqa: F811
     gdq = await seeded(bot, cog)
     await cog.tick_once()
-    feed = (await all_feeds(bot))[0]
+    on_gdq = [one for one in await all_feeds(bot) if one["spotlight_id"] == gdq]
+    assert [one["name"] for one in on_gdq] == ["GDQ", "GDQ Hotfix"]
     await forget_spotlight(bot, bot.guild, FakeActor(), gdq)
-    assert feed["id"] not in {one["id"] for one in await all_feeds(bot)}
+    left = {one["id"] for one in await all_feeds(bot)}
+    assert not left & {one["id"] for one in on_gdq}
     rows = await list_marathons(bot.db, GUILD)
     assert len(rows) == 4 and all(one["feed_id"] is None for one in rows)
-    gone = await details_of(bot.db, "marathon.feed_removed")
-    assert gone["because"] == "channel_removed" and gone["marathons"] == 4
+    cur = await bot.db.conn.execute(
+        "SELECT details FROM action_log WHERE kind = 'marathon.feed_removed' ORDER BY id"
+    )
+    gone = [json.loads(row["details"]) for row in await cur.fetchall()]
+    assert [(one["feed"], one["because"], one["marathons"]) for one in gone] == [
+        ("GDQ", "channel_removed", 4),
+        ("GDQ Hotfix", "channel_removed", 0),
+    ]
 
 
 async def test_an_esa_schedule_matches_by_discord_username_and_pairing_never_by_link(
@@ -1516,3 +1549,115 @@ async def test_a_failed_probe_is_a_failed_check_that_keeps_the_memory(bot, cog):
     assert not failed.ok and "ladyarcaders.com answered 503" in failed.message
     feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
     assert len(mf.list_of(feed["seen"])) == 3 and feed["checks_failed"] == 1
+
+
+# --- GDQ Hotfix (the schedule sheet on gamesdonequick.com/hotfix/schedule) --------------------
+
+
+def hotfix_sheet():
+    return (FIXTURES / "gdq_hotfix_sheet.csv").read_text(encoding="utf-8")
+
+
+async def hotfix_feed(bot, cog, when="published"):  # noqa: F811
+    await staff_room(bot)
+    await bot.store.set(GUILD, "marathon_feed_notice_when", when)
+    cog.client.sheet = hotfix_sheet()
+    row = await a_channel(bot, "gamesdonequick", "GamesDoneQuick")
+    await cog.tick_once()
+    feed = next(one for one in await all_feeds(bot) if one["source"] == mf.HOTFIX_FEED)
+    return row, feed
+
+
+async def test_the_hotfix_seed_sits_beside_a_gdq_channel_that_was_seeded_before(bot, cog):  # noqa: F811
+    await staff_room(bot)
+    gdq = await a_channel(bot, "gamesdonequick", "GamesDoneQuick")
+    made = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=gdq, pick="gdq")
+    assert made.ok, made.message
+    await feeds.mark_seeded(bot.db, GUILD, "gamesdonequick")
+    await cog.tick_once()
+    rows = [one for one in await all_feeds(bot) if one["spotlight_id"] == gdq]
+    assert [(one["name"], one["source"], one["feed_ref"]) for one in rows] == [
+        ("GDQ", "tracker", GDQ_BASE),
+        ("GDQ Hotfix", "gdq_hotfix", HOTFIX_PAGE),
+    ]
+    assert await feeds.is_seeded(bot.db, GUILD, "gamesdonequick/gdq_hotfix")
+    await feeds.remove_feed(bot, bot.guild, FakeActor(), rows[1])
+    cog.feeds_seeded.clear()
+    await cog.tick_once()
+    assert [one["name"] for one in await all_feeds(bot)] == ["GDQ"]
+
+
+async def test_a_hotfix_check_adds_gdqueer_once_with_its_24_runs_from_the_sheet(bot, cog):  # noqa: F811
+    row, feed = await hotfix_feed(bot, cog)
+    assert cog.client.sheet_calls[0] == (HOTFIX_PAGE, None)
+    assert (await feeds.get_feed(bot.db, GUILD, feed["id"]))["sheet_url"] == HOTFIX_CSV
+    made = await by_ref(bot)
+    marathon = made["gdqueer/2026-10-03"]
+    assert (marathon["name"], marathon["source"]) == ("GDQueer", "gdq_hotfix")
+    assert marathon["schedule_url"] == f"{HOTFIX_PAGE}#gdqueer/2026-10-03"
+    assert marathon["spotlight_id"] == row and marathon["feed_id"] == feed["id"]
+    runs = await runs_of(bot.db, marathon["id"])
+    assert len(runs) == 24
+    assert (runs[0]["game"], runs[0]["scheduled_at"]) == (
+        "Spyro Reignited Trilogy",
+        "2026-10-03T17:00:00+00:00",
+    )
+    assert runs[1]["scheduled_at"] == "2026-10-03T18:08:00+00:00"
+    assert (await checked_of(bot, "GDQ Hotfix"))["added"] == 1
+    later(cog, 7)
+    await cog.tick_once()
+    assert cog.client.sheet_calls[-1] == (HOTFIX_PAGE, HOTFIX_CSV)
+    assert (await checked_of(bot, "GDQ Hotfix"))["added"] == 0
+    assert [one["event"] for one in await logged(bot, "marathon.feed_added")].count(
+        "gdqueer/2026-10-03"
+    ) == 1
+
+
+async def test_the_shows_setting_decides_which_shows_become_marathons(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_hotfix_shows", "Fast Travel, Hidden Heroes")
+    await hotfix_feed(bot, cog)
+    made = [ref for ref, row in (await by_ref(bot)).items() if row["source"] == "gdq_hotfix"]
+    assert sorted(made) == ["fast-travel/2026-09-25", "hidden-heroes/2026-10-02"]
+
+
+async def test_a_moved_run_in_the_sheet_flows_through_the_schedule_read(bot, cog):  # noqa: F811
+    await hotfix_feed(bot, cog)
+    marathon = (await by_ref(bot))["gdqueer/2026-10-03"]
+    cog.client.sheet = hotfix_sheet().replace(
+        "Spyro the Dragon: 80 Dragons NBS,1:08:00", ("Spyro the Dragon: 80 Dragons NBS,1:38:00")
+    )
+    read = await refresh_marathon(bot, bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
+    assert read.ok, read.message
+    runs = await runs_of(bot.db, marathon["id"])
+    assert runs[1]["scheduled_at"] == "2026-10-03T18:38:00+00:00"
+
+
+async def test_a_hotfix_page_without_its_sheet_is_a_failed_check_in_words(bot, cog):  # noqa: F811
+    _row, feed = await hotfix_feed(bot, cog)
+    cog.client.raises = ScheduleError(hf.NO_SHEET)
+    failed = await feeds.check_now(bot, bot.guild, FakeActor(), feed)
+    assert not failed.ok and "no longer embeds a schedule sheet" in failed.message
+    feed = await feeds.get_feed(bot.db, GUILD, feed["id"])
+    assert feed["checks_failed"] == 1 and feed["sheet_url"] == HOTFIX_CSV
+
+
+async def test_add_a_feed_with_the_hotfix_pick_on_the_gdq_channel_and_never_two(bot, cog):  # noqa: F811
+    await staff_room(bot)
+    await bot.store.set(GUILD, "marathon_feeds", False)
+    gdq = await a_channel(bot, "gamesdonequick", "GamesDoneQuick")
+    tracker = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=gdq, pick="gdq")
+    made = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=gdq, pick="gdq_hotfix")
+    assert tracker.ok and made.ok, made.message
+    assert (made.value["source"], made.value["feed_ref"], made.value["name"]) == (
+        "gdq_hotfix",
+        HOTFIX_PAGE,
+        "GDQ Hotfix",
+    )
+    assert "now reads GDQ Hotfix for **GamesDoneQuick**" in made.message
+    twice = await feeds.create_feed(
+        bot, bot.guild, FakeActor(), spotlight_id=gdq, pick="gdq_hotfix"
+    )
+    assert not twice.ok and twice.code == "channel_has_feed"
+    assert "reads GDQ Hotfix, **GDQ Hotfix**" in twice.message
+    embed, _view = await feeds.feed_card(bot, bot.guild, made.value["id"])
+    assert "**Shows:** GDQueer" in embed.description

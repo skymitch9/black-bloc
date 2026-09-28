@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 79
+        assert SCHEMA_VERSION == 80
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -1497,6 +1497,54 @@ async def test_a_schema_34_file_gains_the_six_guides_tables_and_keeps_its_rows(t
         await again.close()
 
 
+async def test_a_schema_79_file_gives_a_channel_one_feed_per_source_and_gains_sheet_url(tmp_path):
+    """Schema 80: the GDQ row keeps its tracker feed and may take a Hotfix feed beside it."""
+    path = tmp_path / "old79.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP INDEX marathon_feeds_one_per_channel_source")
+    await db.conn.execute("ALTER TABLE marathon_feeds DROP COLUMN sheet_url")
+    await db.conn.execute(
+        "CREATE UNIQUE INDEX marathon_feeds_one_per_channel ON marathon_feeds(guild_id, "
+        "spotlight_id)"
+    )
+    await db.conn.execute(
+        "INSERT INTO marathon_feeds(guild_id, source, feed_ref, spotlight_id, name, added_at) "
+        "VALUES (1, 'tracker', 'https://x', 3, 'GDQ', '2026-09-25')"
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        await db.conn.execute(
+            "INSERT INTO marathon_feeds(guild_id, source, feed_ref, spotlight_id, name, "
+            "added_at) VALUES (1, 'gdq_hotfix', 'https://h', 3, 'GDQ Hotfix', '2026-09-28')"
+        )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '79')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
+        names = {row["name"] for row in await cur.fetchall()}
+        assert "marathon_feeds_one_per_channel" not in names
+        assert "marathon_feeds_one_per_channel_source" in names
+        insert = (
+            "INSERT INTO marathon_feeds(guild_id, source, feed_ref, spotlight_id, name, "
+            "added_at) VALUES (1, ?, ?, 3, 'x', '2026-09-28')"
+        )
+        await again.conn.execute(insert, ("gdq_hotfix", "https://h"))
+        with pytest.raises(sqlite3.IntegrityError):
+            await again.conn.execute(insert, ("tracker", "https://y"))
+        cur = await again.conn.execute("SELECT name, sheet_url FROM marathon_feeds ORDER BY id")
+        assert [tuple(row) for row in await cur.fetchall()] == [("GDQ", None), ("x", None)]
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
 async def test_a_schema_65_file_loses_the_one_published_guide_index(tmp_path):
     """Schema 66: several published guides may share a command; the rows are kept."""
     path = tmp_path / "old65.sqlite3"
@@ -2645,7 +2693,7 @@ async def test_schema_63_adds_the_feeds_and_a_marathons_feed_and_keeps_its_rows(
         await again.close()
 
 
-async def test_a_feed_needs_a_channel_and_a_channel_has_one_feed(tmp_path):
+async def test_a_feed_needs_a_channel_and_a_channel_has_one_feed_per_source(tmp_path):
     db = Database(tmp_path / "t.sqlite3")
     await db.connect()
     try:
@@ -2656,8 +2704,9 @@ async def test_a_feed_needs_a_channel_and_a_channel_has_one_feed(tmp_path):
         with pytest.raises(sqlite3.IntegrityError):
             await db.conn.execute(insert, ("tracker", "https://a", None))
         await db.conn.execute(insert, ("tracker", "https://a", 3))
+        await db.conn.execute(insert, ("horaro", "esa", 3))
         with pytest.raises(sqlite3.IntegrityError):
-            await db.conn.execute(insert, ("horaro", "esa", 3))
+            await db.conn.execute(insert, ("tracker", "https://b", 3))
         with pytest.raises(sqlite3.IntegrityError):
             await db.conn.execute(insert, ("tracker", "https://a", 4))
     finally:
@@ -3171,7 +3220,7 @@ async def test_a_schema_77_post_carrying_the_door_gains_a_front_door_block(tmp_p
         cur = await again.conn.execute("SELECT slug, carries_door FROM posts ORDER BY id")
         assert [tuple(row) for row in await cur.fetchall()] == [("welcome", 1), ("hours", 0)]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "79"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "80"
         await again.conn.execute("DELETE FROM post_blocks")
         await again.conn.commit()
     finally:
@@ -3249,7 +3298,7 @@ async def test_a_schema_78_file_gains_drawn_hash_with_the_door_s_stamp_carried_o
             ("hours", 0, None),
         ]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "79"
+        assert (await cur.fetchone())["value"] == "80"
     finally:
         await again.close()
 

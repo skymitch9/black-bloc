@@ -655,3 +655,13 @@ async def test_a_text_read_goes_through_its_own_request_and_a_non_text_body_is_e
     assert await client.text("https://x/cal") == (200, "BEGIN:VCALENDAR")
     assert await client.text("https://x/odd") == (200, "")
     assert asked == ["https://x/cal", "https://x/odd"]
+
+
+def test_the_gdq_hotfix_page_reads_as_its_own_source_with_the_show_after_the_hash():
+    page = "https://gamesdonequick.com/hotfix/schedule"
+    assert ms.read_url(f"{page}#GDQueer") == ("gdq_hotfix", "gdqueer")
+    assert ms.read_url(f"{page}#gdqueer/2026-10-03") == ("gdq_hotfix", "gdqueer/2026-10-03")
+    assert ms.read_url(page) == ("gdq_hotfix", "")
+    assert ms.read_url("https://gamesdonequick.com/schedule/74") == ("gdq", "74")
+    assert ms.schedule_page("gdq_hotfix", "gdqueer/2026-10-03") == f"{page}#gdqueer/2026-10-03"
+    assert ms.SOURCE_WORDS["gdq_hotfix"] == "GDQ Hotfix" and "gdq_hotfix" in ms.SOURCES

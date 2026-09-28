@@ -1,4 +1,4 @@
-import { api, names, send, settings, settingsNamespace } from './api.js';
+import { api, names, saveSetting, send, settings, settingsNamespace } from './api.js';
 import {
   BAF,
   CARD_PEOPLE,
@@ -205,8 +205,8 @@ const MODES_FALLBACK = [
 const FEED_MODE_FOLLOW = 'Whatever the setting says';
 const FEED_MODE_HELP = 'What a marathon this feed adds does about events; the first choice '
   + 'follows marathon_event_mode_default.';
-const FEED_MOVE_NOTE = 'Only a channel-only row with no feed of its own, and one that takes '
-  + 'marathons, can be picked.';
+const FEED_MOVE_NOTE = 'Only a channel-only row that takes marathons and has no feed reading '
+  + 'the same source can be picked.';
 const NO_MARATHONS_CHANNEL = 'opted out of marathons';
 const EVENT_TONE = { pending: 'warn', approved: 'ok', denied: 'danger', cancelled: null, gone: null };
 const PHASE_TONE = { far: null, near: 'warn', live: 'ok', over: null, paused: null };
@@ -218,10 +218,17 @@ const FEEDS_OFF = 'Checks are off (marathon_feeds under **Marathons** in Setting
   + 'nothing checks on its own. **Check now** still works.';
 const NO_FEEDS = 'No sources yet. **Add a feed…** starts from a channel on the Go-live page.';
 const FEED_ADD_NOTE = 'Pick the channel first — a feed belongs to a channel Black Bloc already '
-  + 'watches, one feed per channel. Then what to read: the GDQ tracker, the RPG Limit Break '
-  + 'tracker, a horaro.net event by its slug (ESA is `esa`), horaro.net events found by name '
+  + 'watches, one feed per source on a channel. Then what to read: the GDQ tracker, the RPG Limit '
+  + 'Break tracker, a horaro.net event by its slug (ESA is `esa`), horaro.net events found by name '
   + '(Fast Paced Events), Oengus, which finds the channel’s own marathons on oengus.io by '
-  + 'itself, Fastest Furs’ own event list, or Lady Arcaders’ next events on ladyarcaders.com.';
+  + 'itself, Fastest Furs’ own event list, Lady Arcaders’ next events on ladyarcaders.com, or '
+  + 'the GDQ Hotfix shows on the Hotfix schedule sheet.';
+const HOTFIX_SHOWS_FIELD = 'Shows';
+const HOTFIX_SHOWS_HELP = 'The Hotfix shows that become marathons, separated by commas and '
+  + 'spelled as the sheet’s Show column spells them — each run of days a show airs is one '
+  + 'marathon. This is marathon_hotfix_shows in Settings; changing it here changes it there.';
+const HOTFIX_SHOWS_SAVED = 'The Hotfix feed now reads {shows}. The next check uses them.';
+const HOTFIX_SHEET_LINE = 'Reads the sheet the Hotfix page embeds: ';
 const PICK_HELP = {
   gdq: 'Every event on the GDQ tracker that is still ahead.',
   rpglb: 'Every event on the RPG Limit Break tracker that is still ahead.',
@@ -233,7 +240,12 @@ const PICK_HELP = {
   fastestfurs: 'Every event on Fastest Furs’ own list at fastestfurs.com — nothing to type.',
   ladyarcaders: 'Lady Arcaders’ next events on ladyarcaders.com, found by trying the next event '
     + 'numbers — nothing to type.',
+  gdq_hotfix: 'The GDQ Hotfix shows named in marathon_hotfix_shows (GDQueer by default), from the '
+    + 'schedule sheet on gamesdonequick.com/hotfix/schedule — each run of days a show airs is one '
+    + 'marathon. Nothing to type.',
 };
+const TRACKER_PICKS = ['gdq', 'rpglb'];
+const sourceKind = (pick) => (TRACKER_PICKS.includes(pick) ? 'tracker' : pick);
 const PICK_GUESS = { gamesdonequick: 'gdq', rpglimitbreak: 'rpglb', esamarathon: 'horaro', speedstuff4charity: 'oengus', fastpacedevents: 'horaro_events', fastestfurs: 'fastestfurs', ladyarcaders: 'ladyarcaders' };
 const FEED_SEEN_NOTE = 'Remembers {count} Oengus marathon(s) it has already looked at, so each is '
   + 'read once. **Look again** reads them all once more.';
@@ -241,8 +253,8 @@ const FEED_SEEN_NOTE_HORARO = 'Remembers {count} horaro.net event(s) it has alre
   + 'so each one’s schedules are read once. **Look again** reads them all once more.';
 const FEED_PROBE_NOTE = 'Remembers what {count} Lady Arcaders event number(s) answered; one with '
   + 'no calendar yet is asked again after four checks. **Look again** asks them all now.';
-const FEED_NO_CHANNELS = 'Every channel-only row on the Go-live page has a feed already, or '
-  + 'there is none. Add the channel there first.';
+const FEED_NO_CHANNELS = 'There is no channel-only row on the Go-live page that takes '
+  + 'marathons. Add the channel there first.';
 const FEED_IGNORED_NOTE = 'A marathon this feed added and staff removed is never added again '
   + 'until **Forget ignored**.';
 const FEED_ADDED = 'Added by this feed: ';
@@ -1122,7 +1134,8 @@ async function renameFeed(feed) {
 
 async function moveFeed(feed) {
   const payload = await api('/api/marathons/feeds').catch(() => ({ channels: [] }));
-  const free = (payload.channels || []).filter((one) => !one.feed_name && one.marathons !== false);
+  const free = (payload.channels || []).filter((one) => one.marathons !== false
+    && !(one.feed_sources || []).some((pick) => sourceKind(pick) === sourceKind(feed.source)));
   const channel = el('select', { class: 'input' }, free.map((one) => el('option', { value: String(one.id), text: `${one.name} · twitch.tv/${one.login}` })));
   let done = null;
   const sure = await askForm({
@@ -1182,6 +1195,28 @@ function feedSearchInput(feed, say, one) {
   return field(one.label, input, one.help);
 }
 
+function hotfixFields(feed, say) {
+  if (feed.source !== 'gdq_hotfix') return [];
+  const shown = (feed.shows || []).join(', ');
+  const input = el('input', { class: 'input', type: 'text', value: shown, placeholder: 'GDQueer' });
+  input.addEventListener('change', () => {
+    const wanted = input.value.trim();
+    if (wanted === shown) return;
+    feedDrawerStep(feed, say, async () => {
+      const stored = await saveSetting('marathon_hotfix_shows', wanted);
+      const value = stored && typeof stored === 'object' && 'value' in stored ? stored.value : wanted;
+      return { message: said(HOTFIX_SHOWS_SAVED, { shows: value }) };
+    });
+  });
+  return [
+    field(HOTFIX_SHOWS_FIELD, input, HOTFIX_SHOWS_HELP),
+    feed.sheet_url ? el('p', { class: 'field-help mx-line' }, [
+      el('span', { text: HOTFIX_SHEET_LINE }),
+      el('a', { href: feed.sheet_url, text: 'the sheet ↗', rel: 'noreferrer', target: '_blank' }),
+    ]) : null,
+  ];
+}
+
 function feedDrawer(feed, message) {
   const say = notice();
   if (message) say.say(message, 'ok');
@@ -1237,6 +1272,7 @@ function feedDrawer(feed, message) {
     field('Event', mode, FEED_MODE_HELP),
     field(AUTO_FIELD, auto, AUTO_HELP),
     ...feedSearchFields(feed).map((one) => feedSearchInput(feed, say, one)),
+    ...hotfixFields(feed, say),
     ...(feed.suggestions || []).map((one) => suggestionCard(feed, one, say, { inDrawer: true })),
     feed.seen_count ? el('p', { class: 'field-help mx-line' }, boldParts(said({ horaro_events: FEED_SEEN_NOTE_HORARO, ladyarcaders: FEED_PROBE_NOTE }[feed.source] || FEED_SEEN_NOTE, { count: feed.seen_count }))) : null,
     line(FEED_IGNORED_NOTE),
@@ -1256,7 +1292,7 @@ async function openFeed(feedId, message = '') {
 }
 
 async function addFeed(payload) {
-  const free = (payload.channels || []).filter((one) => !one.feed_name);
+  const free = (payload.channels || []).filter((one) => one.marathons !== false);
   const channel = el('select', { class: 'input' }, free.map((one) => el('option', { value: String(one.id), text: `${one.name} · twitch.tv/${one.login}` })));
   const source = el('select', { class: 'input' }, (payload.sources || []).map((one) => el('option', { value: one.value, text: one.label })));
   const slug = el('input', { class: 'input', type: 'text', placeholder: 'esa' });

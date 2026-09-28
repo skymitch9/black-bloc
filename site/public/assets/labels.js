@@ -275,6 +275,7 @@ export const LABELS = {
   marathon_feed_notice_when: 'When a marathon gets its inbox message',
   marathon_feed_recent_days: 'Days an event that already began still counts as new',
   marathon_ladyarcaders_floor: 'Lady Arcaders event number the probe starts above',
+  marathon_hotfix_shows: 'GDQ Hotfix shows that become marathons',
   marathon_feed_added_template: 'The line above a feed-found marathon in the inbox',
   marathon_feed_suggest_template: 'What staff are told when a feed suggests an event',
   marathon_event_description_template: 'What a marathon’s event says about itself',

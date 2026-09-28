@@ -728,7 +728,7 @@ const SETTING_SPECS = [
   ["marathon_state_live", "text", "on now", "on now", "{state} on the board and a run's own post for the run on now"],
   ["marathon_state_done", "text", "done", "done", "{state} on the board and a run's own post for a run that is over"],
   ["marathon_state_dropped", "text", "off the schedule", "off the schedule", "{state} on the board and a run's own post for a run the schedule no longer lists"],
-  ["marathon_unknown_site", "text", "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus marathons, Fastest Furs schedules and Lady Arcaders calendars — that link is none of them.", "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus marathons, Fastest Furs schedules and Lady Arcaders calendars — that link is none of them.", "what staff are told when a schedule link is from a site Black Bloc cannot read"],
+  ["marathon_unknown_site", "text", "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus marathons, Fastest Furs schedules, Lady Arcaders calendars and the GDQ Hotfix schedule — that link is none of them.", "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus marathons, Fastest Furs schedules, Lady Arcaders calendars and the GDQ Hotfix schedule — that link is none of them.", "what staff are told when a schedule link is from a site Black Bloc cannot read"],
   ["marathon_already_added", "text", "**{name}** already follows that schedule, so nothing was added.", "**{name}** already follows that schedule, so nothing was added.", "what staff are told when a schedule link is already on the list. It takes {name}"],
   ["marathon_could_not_read", "text", "Black Bloc could not read that schedule, so nothing was added: {reason}", "Black Bloc could not read that schedule, so nothing was added: {reason}", "what staff are told when a schedule link will not read. It takes {reason}"],
   ["marathon_no_runs_yet", "text", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "**{marathon}** has no runs published yet — Black Bloc keeps checking and fills the list the moment the schedule goes up.", "what the page and the panel say about a marathon whose schedule is not published yet. It takes {marathon}"],
@@ -881,6 +881,7 @@ const SETTING_SPECS = [
   ["marathon_feed_notice_when", "enum", "published", "published", "when a marathon gets its message in the marathon inbox thread: published waits for the first read that finds runs on its schedule (a feed's find and a staff Add alike — Post it to the inbox now posts one early); added posts it the moment it is on the list. published by default", ["published", "added"]],
   ["marathon_feed_recent_days", "int", 1, 1, "how many days after it started (a tracker event) or ended (a horaro.net schedule, an Oengus marathon, a Fastest Furs event or a Lady Arcaders event) an event still counts as new to a feed. 1 by default", null, 30, 0],
   ["marathon_ladyarcaders_floor", "int", 24, 24, "the event number the Lady Arcaders feed probes upward from — it asks the next numbers above this or above the highest event it already knows, whichever is higher; staff raise it after a link is pasted. 24 by default", null, 99999, 1],
+  ["marathon_hotfix_shows", "text", "GDQueer", "GDQueer", "the GDQ Hotfix shows the Hotfix feed turns into marathons, separated by commas and spelled as the sheet's Show column spells them (capitals do not matter); each run of days a show airs becomes one marathon. `GDQueer` by default"],
   ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the line above a feed-found marathon's message in the marathon inbox thread, where Track and Ignore are. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_feed_suggest_template", "text", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "the staff notice when a feed in suggest mode finds a new event; it carries Add it and Not this one. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_event_description_template", "text", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "what a marathon's event says about itself in the events review, the announcement and the Discord scheduled event. It takes {marathon} {channel}"],
@@ -2257,7 +2258,22 @@ function validate(key, value) {
   }
   if (type === 'bool') return Boolean(value);
   if (key === 'posts_block_links_rows') return checkedLinks(value);
+  if (key === 'marathon_hotfix_shows') return checkedShows(value);
   return value;
+}
+
+// The twin of settings_store.checked_shows: one to twenty show names, each once.
+function checkedShows(value) {
+  const text = String(value ?? '').trim();
+  const found = [];
+  for (const part of text.split(',')) {
+    const name = part.trim().replace(/\s+/g, ' ');
+    if (name && !found.some((one) => one.toLowerCase() === name.toLowerCase())) found.push(name);
+  }
+  if (!found.length || found.length > 20 || found.some((one) => one.length > 60)) {
+    throw new Refused(400, 'bad_value', `**${text.slice(0, 40) || 'Nothing'}** names no Hotfix show, so nothing was changed. Write one to 20 show names as the Show column spells them, up to 60 characters each, separated by commas — for example \`GDQueer\`. To stop the Hotfix feed, pause it instead.`);
+  }
+  return found.join(', ');
 }
 
 // The twin of settings_store.checked_links: a bad row is refused in words, never dropped.
@@ -5537,15 +5553,16 @@ function channelMarathonsSet(row, on) {
   row.marathons = on;
   logAction('web.golive.channel_marathons_set', { details: { spotlight_id: row.id, login: row.twitch_login, from: was, to: on, via: 'website' } });
   let count = 0;
-  const feed = state.marathonFeeds.find((one) => one.spotlight_id === row.id);
-  if (feed && !on && feed.active) {
-    feed.active = false;
-    feed.held_by_channel = true;
-    logAction('marathon.feed_paused', { details: { feed_id: feed.id, because: 'channel_opted_out', automatic: true } });
-  } else if (feed && on && feed.held_by_channel) {
-    feed.active = true;
-    feed.held_by_channel = false;
-    logAction('marathon.feed_resumed', { details: { feed_id: feed.id, because: 'channel_opted_in', automatic: true } });
+  for (const feed of state.marathonFeeds.filter((one) => one.spotlight_id === row.id)) {
+    if (!on && feed.active) {
+      feed.active = false;
+      feed.held_by_channel = true;
+      logAction('marathon.feed_paused', { details: { feed_id: feed.id, because: 'channel_opted_out', automatic: true } });
+    } else if (on && feed.held_by_channel) {
+      feed.active = true;
+      feed.held_by_channel = false;
+      logAction('marathon.feed_resumed', { details: { feed_id: feed.id, because: 'channel_opted_in', automatic: true } });
+    }
   }
   for (const one of state.marathons.filter((m) => m.spotlight_id === row.id)) {
     if (!on && one.active) {
@@ -6542,6 +6559,8 @@ function seedMarathons() {
     // Found by the Lady Arcaders feed on ladyarcaders.com (event 24); the calendar had runs, so it
     // was added with its dates and is over now.
     { id: 20, name: 'Lady Arcaders Super Showcase 2026', schedule_url: 'https://ladyarcaders.com/events/24/schedule/', source: 'ladyarcaders', source_ref: '24', spotlight_id: 20, feed_id: 20, starts_at: minutesAgo(33000), ends_at: minutesAgo(28500), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(300), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(34000) },
+    // Found by the GDQ Hotfix feed on the Hotfix sheet: GDQueer's two days are one marathon.
+    { id: 50, name: 'GDQueer', schedule_url: 'https://gamesdonequick.com/hotfix/schedule#gdqueer/2026-10-03', source: 'gdq_hotfix', source_ref: 'gdqueer/2026-10-03', spotlight_id: 1, feed_id: 40, starts_at: '2026-10-03T17:00:00+00:00', ends_at: '2026-10-05T03:09:00+00:00', active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(25), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: null, added_at: minutesAgo(25) },
     { id: 4, name: 'Flame Fatales 2026', schedule_url: 'https://gamesdonequick.com/schedule/69', source: 'gdq', source_ref: '69', spotlight_id: null, starts_at: minutesAgo(19000), ends_at: minutesAgo(9000), active: true, poll_minutes: null, board_channel_id: null, board_message_id: null, board_pinned: false, last_fetched_at: minutesAgo(8000), last_fetch_ok: 1, last_error: null, fetch_failures: 0, added_by: STAFF.id, added_at: minutesAgo(30000), suggested_next: marathonSuggestion({ found_at: minutesAgo(7600), dismissed_at: minutesAgo(7000) }) },
   ].map((row) => ({ suggested_next: row.id === 2 ? marathonSuggestion() : null, event_id: row.id === 1 ? 5 : null, event_wanted: row.id === 1, feed_id: [1, 3].includes(row.id) ? 1 : null, ping_role: row.id === 1, public_highlight: false, ...marathonInboxSeed()[row.id], inbox_message_id: row.id === 5 ? null : String(861000000000000000 + row.id), ...row }));
 }
@@ -6741,7 +6760,7 @@ function marathonRow(row) {
     schedule_url: row.schedule_url,
     schedule_page: row.source === 'gdq' && /^\d+$/.test(row.source_ref) ? `https://gamesdonequick.com/schedule/${row.source_ref}` : row.schedule_url,
     source: row.source,
-    source_word: { gdq: 'GDQ tracker', rpglb: 'RPG Limit Break tracker', horaro: 'horaro.net', oengus: 'Oengus', fastestfurs: 'Fastest Furs', ladyarcaders: 'Lady Arcaders' }[row.source] || row.source,
+    source_word: { gdq: 'GDQ tracker', rpglb: 'RPG Limit Break tracker', horaro: 'horaro.net', oengus: 'Oengus', fastestfurs: 'Fastest Furs', ladyarcaders: 'Lady Arcaders', gdq_hotfix: 'GDQ Hotfix' }[row.source] || row.source,
     source_ref: row.source_ref,
     spotlight_id: row.spotlight_id,
     channel_login: channel ? channel.twitch_login : null,
@@ -7157,6 +7176,7 @@ function marathonWords(key) {
 const MARATHON_RPGLB = /^https?:\/\/tracker\.rpglimitbreak\.com\/(?:event|runs|index)\/(\d+)\/?(?:[?#].*)?$/i;
 const MARATHON_OENGUS = /^https?:\/\/(?:www\.)?oengus\.io\/marathon\/([A-Za-z0-9_-]{1,40})(?:\/schedule(?:\/([A-Za-z0-9_-]{1,40}))?)?\/?(?:[?#].*)?$/i;
 const MARATHON_FASTESTFURS = /^https?:\/\/(?:(?:www\.)?fastestfurs\.com\/schedule|cheetah\.fastestfurs\.com\/api\/public\/schedules\/event)\/(\d{1,9})\/?(?:[?#].*)?$/i;
+const MARATHON_HOTFIX = /^https?:\/\/(?:www\.)?gamesdonequick\.com\/hotfix(?:\/schedule)?\/?(?:\?[^#]*)?(?:#(.*))?$/i;
 const MARATHON_LADYARCADERS = /^https?:\/\/(?:www\.)?ladyarcaders\.com\/events\/(\d{1,6})(?:\/schedule(?:\/calendar)?|\/calendar)?\/?(?:[?#].*)?$/i;
 const MARATHON_HORARO = /^https?:\/\/(?:www\.)?horaro\.net\/([A-Za-z0-9][A-Za-z0-9_-]*)\/([A-Za-z0-9][A-Za-z0-9_-]*?)(?:\.json)?\/?(?:[?#].*)?$/i;
 
@@ -7172,8 +7192,22 @@ function marathonReadAny(url) {
   if (found) return { source: 'fastestfurs', ref: found[1] };
   found = MARATHON_LADYARCADERS.exec(text);
   if (found) return { source: 'ladyarcaders', ref: String(Number(found[1])) };
+  found = MARATHON_HOTFIX.exec(text);
+  if (found) return { source: 'gdq_hotfix', ref: hotfixRef(found[1]) };
   const ref = marathonRead(text);
   return ref === null ? null : { source: 'gdq', ref };
+}
+
+// The bot's marathon_hotfix.ref_of: `GDQueer` -> `gdqueer`; `gdqueer/2026-10-03` stays itself.
+function hotfixRef(fragment) {
+  let given = String(fragment || '');
+  try { given = decodeURIComponent(given); } catch { /* kept as typed */ }
+  given = given.trim();
+  const key = (text) => text.toLowerCase().split(/\s+/).filter(Boolean).join('-');
+  const cut = given.lastIndexOf('/');
+  const day = cut >= 0 ? given.slice(cut + 1).trim() : '';
+  if (cut > 0 && /^\d{4}-\d{2}-\d{2}$/.test(day)) return `${key(given.slice(0, cut))}/${day}`;
+  return key(given);
 }
 
 function marathonRead(url) {
@@ -7202,7 +7236,10 @@ const FEED_SOURCES = [
   { value: 'horaro_events', label: 'horaro.net events \u2014 finds this channel\u2019s events on horaro.net, searching by the feed\u2019s name (Fast Paced Events\u2019 home)' },
   { value: 'fastestfurs', label: 'Fastest Furs \u2014 every event on the org\u2019s own list at fastestfurs.com' },
   { value: 'ladyarcaders', label: 'Lady Arcaders \u2014 looks for their next event\u2019s calendar on ladyarcaders.com' },
+  { value: 'gdq_hotfix', label: 'GDQ Hotfix \u2014 the shows named in marathon_hotfix_shows, from the schedule sheet on gamesdonequick.com/hotfix/schedule' },
 ];
+const FEED_HOTFIX_PAGE = 'https://gamesdonequick.com/hotfix/schedule';
+const FEED_HOTFIX_SHEET = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSxkh22kZxarTgwzgy3xn-g9xqmDYWfpawKBRHv4vBHfrA81gKx9jCqb8FILZ-riUO1hu0d77s3MDNV/pub?gid=728340068&single=true&output=csv';
 const FEED_ACTION_WORDS = { add: 'adds', suggest: 'suggests' };
 
 // Literal URLs: seedState runs at load, before the FEED_* constants below exist.
@@ -7243,6 +7280,9 @@ function seedMarathonFeeds() {
         { ref: '27', empty_at: minutesAgo(40) },
       ],
     },
+    // GDQ Hotfix: a second feed on the GDQ row (one feed per source on a channel), reading the
+    // shows in marathon_hotfix_shows off the sheet the Hotfix page embeds; it made GDQueer.
+    { id: 40, source: 'gdq_hotfix', feed_ref: 'https://gamesdonequick.com/hotfix/schedule', sheet_url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSxkh22kZxarTgwzgy3xn-g9xqmDYWfpawKBRHv4vBHfrA81gKx9jCqb8FILZ-riUO1hu0d77s3MDNV/pub?gid=728340068&single=true&output=csv', spotlight_id: 1, name: 'GDQ Hotfix', action: 'add', active: true, last_checked_at: minutesAgo(25), last_ok: 1, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: null, added_at: minutesAgo(25) },
   ];
 }
 
@@ -7258,6 +7298,7 @@ function feedPick(feed) {
   if (feed.source === 'horaro_events') return 'horaro_events';
   if (feed.source === 'fastestfurs') return 'fastestfurs';
   if (feed.source === 'ladyarcaders') return 'ladyarcaders';
+  if (feed.source === 'gdq_hotfix') return 'gdq_hotfix';
   return feed.feed_ref === FEED_RPGLB_BASE ? 'rpglb' : 'gdq';
 }
 
@@ -7267,7 +7308,27 @@ function feedSourceWord(feed) {
   if (feed.source === 'horaro_events') return 'horaro.net events';
   if (feed.source === 'fastestfurs') return 'Fastest Furs';
   if (feed.source === 'ladyarcaders') return 'Lady Arcaders';
+  if (feed.source === 'gdq_hotfix') return 'GDQ Hotfix';
   return feed.feed_ref === FEED_RPGLB_BASE ? 'RPG Limit Break tracker' : 'GDQ tracker';
+}
+
+// The bot's marathon_hotfix.shows_of: the settings key as a list, each show once.
+function hotfixShows() {
+  const found = [];
+  for (const part of String(state.settings.get('marathon_hotfix_shows') || '').split(',')) {
+    const name = part.trim().replace(/\s+/g, ' ');
+    if (name && !found.some((one) => one.toLowerCase() === name.toLowerCase())) found.push(name);
+  }
+  return found;
+}
+
+// The bot stores a pick's source: gdq and rpglb are both `tracker`, the rest are themselves.
+function feedSourceOf(feed) {
+  return ['gdq', 'rpglb', 'tracker'].includes(feed.source) ? 'tracker' : feed.source;
+}
+
+function feedChannelHas(channelId, feed) {
+  return `**${feedChannelName(channelId)}** already has a feed that reads ${feedSourceWord(feed)}, **${feed.name}**, so nothing was added. A channel has one feed per source \u2014 remove that one first.`;
 }
 
 function feedChannelName(id) {
@@ -7363,6 +7424,8 @@ function feedRow(feed) {
     owner: feed.source === 'horaro_events' ? feedSearch(feed).owner : null,
     words: feed.source === 'horaro_events' ? feedSearch(feed).words : null,
     searches: feed.source === 'horaro_events' ? feedSearches(feed) : null,
+    shows: feed.source === 'gdq_hotfix' ? hotfixShows() : null,
+    sheet_url: feed.source === 'gdq_hotfix' ? feed.sheet_url || null : null,
     suggestions: feed.suggested.filter((one) => !one.dismissed_at).map(feedSuggestionRow),
     dismissed: feed.suggested.filter((one) => one.dismissed_at).map(feedSuggestionRow),
     marathons: state.marathons.filter((one) => one.feed_id === feed.id).map((one) => ({ id: one.id, name: one.name, starts_at: one.starts_at })),
@@ -7402,7 +7465,7 @@ function feedCheck(feed) {
 
 route('GET', '/api/marathons/feeds', (context) => {
   requireStaff(context.session);
-  const taken = new Map(state.marathonFeeds.map((one) => [one.spotlight_id, one.name]));
+  const taken = (id) => state.marathonFeeds.filter((one) => one.spotlight_id === id);
   const linked = new Set(state.golive.links.map((one) => String(one.twitch_login).toLowerCase()));
   return {
     enabled: Boolean(state.settings.get('marathon_feeds')),
@@ -7411,7 +7474,7 @@ route('GET', '/api/marathons/feeds', (context) => {
     feeds: state.marathonFeeds.map(feedRow),
     channels: state.golive.spotlights
       .filter((one) => !linked.has(String(one.twitch_login).toLowerCase()))
-      .map((one) => ({ id: one.id, login: one.twitch_login, name: one.display_name || one.twitch_login, feed_name: taken.get(one.id) || null, marathons: channelTakesMarathons(one) })),
+      .map((one) => ({ id: one.id, login: one.twitch_login, name: one.display_name || one.twitch_login, feed_name: taken(one.id).map((feed) => feed.name).join(', ') || null, feed_sources: taken(one.id).map(feedPick), marathons: channelTakesMarathons(one) })),
     sources: FEED_SOURCES,
   };
 });
@@ -7423,24 +7486,26 @@ route('POST', '/api/marathons/feeds', async (context) => {
   const channel = state.golive.spotlights.find((one) => one.id === spotlightId);
   if (!channel) throw new Refused(404, 'no_channel', 'A feed belongs to a channel Black Bloc already watches \u2014 add the channel first.');
   refuseOptedOutChannel(spotlightId);
-  const existing = state.marathonFeeds.find((one) => one.spotlight_id === spotlightId);
-  if (existing) throw new Refused(409, 'channel_has_feed', `**${feedChannelName(spotlightId)}** already has a feed, **${existing.name}**, so nothing was added. One channel, one feed \u2014 remove that one first.`);
   const pick = String(body.source || '').trim().toLowerCase();
-  if (!['gdq', 'rpglb', 'horaro', 'oengus', 'horaro_events', 'fastestfurs', 'ladyarcaders'].includes(pick)) throw new Refused(422, 'unknown_source', `**${String(body.source || '').slice(0, 40)}** is not something a feed can read, so nothing was added. Pick one of gdq, rpglb, horaro, horaro_events, oengus, fastestfurs or ladyarcaders.`);
+  if (!['gdq', 'rpglb', 'horaro', 'oengus', 'horaro_events', 'fastestfurs', 'ladyarcaders', 'gdq_hotfix'].includes(pick)) throw new Refused(422, 'unknown_source', `**${String(body.source || '').slice(0, 40)}** is not something a feed can read, so nothing was added. Pick one of gdq, rpglb, horaro, horaro_events, oengus, fastestfurs, ladyarcaders or gdq_hotfix.`);
+  const existing = state.marathonFeeds.find((one) => one.spotlight_id === spotlightId && feedSourceOf(one) === feedSourceOf({ source: pick }));
+  if (existing) throw new Refused(409, 'channel_has_feed', feedChannelHas(spotlightId, existing));
   let ref = pick === 'rpglb' ? FEED_RPGLB_BASE : FEED_GDQ_BASE;
   if (pick === 'oengus') ref = String(channel.twitch_login).toLowerCase();
   if (pick === 'horaro_events') ref = String(channel.twitch_login).toLowerCase();
   if (pick === 'fastestfurs') ref = String(channel.twitch_login).toLowerCase();
   if (pick === 'ladyarcaders') ref = String(channel.twitch_login).toLowerCase();
+  if (pick === 'gdq_hotfix') ref = FEED_HOTFIX_PAGE;
   if (pick === 'horaro') {
     ref = String(body.slug || '').trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9_-]{0,60}$/.test(ref)) throw new Refused(422, 'no_slug', 'A horaro.net feed needs the event\u2019s slug \u2014 the part after horaro.net/, for example `esa` \u2014 so nothing was added.');
   }
   const action = body.action || state.settings.get('marathon_feed_action_default');
   if (!['add', 'suggest'].includes(action)) throw new Refused(422, 'bad_action', 'Say add or suggest for what a feed does with a new event, so nothing was changed.');
-  const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 60) || { gdq: 'GDQ', rpglb: 'RPG Limit Break', ladyarcaders: 'Lady Arcaders' }[pick] || feedChannelName(spotlightId);
+  const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 60) || { gdq: 'GDQ', rpglb: 'RPG Limit Break', ladyarcaders: 'Lady Arcaders', gdq_hotfix: 'GDQ Hotfix' }[pick] || feedChannelName(spotlightId);
+  if (state.marathonFeeds.some((one) => feedSourceOf(one) === feedSourceOf({ source: pick }) && one.feed_ref === ref)) throw new Refused(409, 'duplicate_feed', `**${name}** already reads that, so nothing was added.`);
   const id = state.marathonFeeds.reduce((top, one) => Math.max(top, one.id), 0) + 1;
-  const feed = { id, source: ['horaro', 'oengus', 'horaro_events', 'fastestfurs', 'ladyarcaders'].includes(pick) ? pick : 'tracker', feed_ref: ref, seen: [], spotlight_id: spotlightId, name, action, active: true, last_checked_at: null, last_ok: null, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: STAFF.id, added_at: new Date().toISOString(), auto_track: state.settings.get('marathon_auto_track_default') === true };
+  const feed = { id, source: feedSourceOf({ source: pick }), feed_ref: ref, sheet_url: pick === 'gdq_hotfix' ? FEED_HOTFIX_SHEET : null, seen: [], spotlight_id: spotlightId, name, action, active: true, last_checked_at: null, last_ok: null, last_error: null, checks_failed: 0, suggested: [], ignored: [], added_by: STAFF.id, added_at: new Date().toISOString(), auto_track: state.settings.get('marathon_auto_track_default') === true };
   state.marathonFeeds.push(feed);
   logAction('web.marathon.feed_created', { details: { feed_id: id, feed: name, source: pick, via: 'website' } });
   const added = feedCheck(feed);
@@ -7486,8 +7551,8 @@ route('PATCH', '/api/marathons/feeds/:feed_id', async (context) => {
     const target = state.golive.spotlights.find((one) => one.id === Number(body.spotlight_id));
     if (!target) throw new Refused(404, 'no_channel', 'A feed belongs to a channel Black Bloc already watches — add the channel first.');
     refuseOptedOutChannel(target.id);
-    const other = state.marathonFeeds.find((one) => one.spotlight_id === target.id);
-    if (other) throw new Refused(409, 'channel_has_feed', `**${feedChannelName(target.id)}** already has a feed, **${other.name}**, so nothing was added. One channel, one feed — remove that one first.`);
+    const other = state.marathonFeeds.find((one) => one.spotlight_id === target.id && one.source === feed.source);
+    if (other) throw new Refused(409, 'channel_has_feed', feedChannelHas(target.id, other));
     feed.spotlight_id = target.id;
     if (feed.source === 'oengus') feed.feed_ref = String(target.twitch_login).toLowerCase();
     if (feed.source === 'horaro_events') feed.feed_ref = String(target.twitch_login).toLowerCase();

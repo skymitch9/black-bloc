@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ... import marathon_feeds as mf
 from ... import marathon_horaro_events as hre
+from ... import marathon_hotfix as hf
 from ... import marathon_inbox as mi
 from ...cogs.content.marathon_events import default_mode
 from ...cogs.content.marathon_feeds import (
@@ -28,7 +29,11 @@ from ...cogs.content.spotlight import channel_by_id
 from ...logkinds import VIA_WEBSITE
 from ...marathon_channels import takes_marathons
 from ...marathon_events import MODE_WORDS, clean_mode
-from ...settings_store import MARATHON_FEED_ACTION_KEY, MARATHON_FEEDS_KEY
+from ...settings_store import (
+    MARATHON_FEED_ACTION_KEY,
+    MARATHON_FEEDS_KEY,
+    MARATHON_HOTFIX_SHOWS_KEY,
+)
 from ..auth import Refused, staff_dependency
 from ..writes import actor_for, require_cog, require_db, require_guild, wanted_id, writer_dependency
 from .marathons import COG, FEATURE, answered
@@ -58,6 +63,8 @@ async def feed_row(bot: Any, guild: Any, feed: Any) -> dict[str, Any]:
     failed = feed["last_ok"] is not None and not int(feed["last_ok"])
     search = hre.search_of(feed)
     finds = feed["source"] == mf.HORARO_EVENTS_FEED
+    hotfix = feed["source"] == mf.HOTFIX_FEED
+    shows = hf.shows_of(bot.store.get(guild.id, MARATHON_HOTFIX_SHOWS_KEY)) if hotfix else None
     return {
         "id": feed["id"],
         "name": feed["name"],
@@ -92,6 +99,8 @@ async def feed_row(bot: Any, guild: Any, feed: Any) -> dict[str, Any]:
         "owner": search["owner"] if finds else None,
         "words": search["words"] if finds else None,
         "searches": hre.queries(feed) if finds else None,
+        "shows": shows,
+        "sheet_url": feed["sheet_url"] if hotfix else None,
         "suggestions": [suggestion_row(one) for one in mf.open_suggestions(feed)],
         "dismissed": [suggestion_row(one) for one in mf.dismissed_of(feed)],
         "marathons": [
@@ -128,7 +137,9 @@ def build_router(bot: Any) -> APIRouter:
         guild = require_guild(bot)
         require_db(bot)
         rows = await list_feeds(bot.db, guild.id)
-        taken = {int(one["spotlight_id"]): one["name"] for one in rows}
+        taken: dict[int, list[Any]] = {}
+        for one in rows:
+            taken.setdefault(int(one["spotlight_id"]), []).append(one)
         return {
             "enabled": bool(bot.store.get(guild.id, MARATHON_FEEDS_KEY)),
             "hours": hours_of(bot, guild.id),
@@ -139,7 +150,11 @@ def build_router(bot: Any) -> APIRouter:
                     "id": one["id"],
                     "login": one["twitch_login"],
                     "name": channel_word(one),
-                    "feed_name": taken.get(int(one["id"])),
+                    "feed_name": ", ".join(
+                        str(feed["name"]) for feed in taken.get(int(one["id"]), [])
+                    )
+                    or None,
+                    "feed_sources": [mf.pick_for(feed) for feed in taken.get(int(one["id"]), [])],
                     "marathons": takes_marathons(one),
                 }
                 for one in await channel_rows(bot.db, guild.id)

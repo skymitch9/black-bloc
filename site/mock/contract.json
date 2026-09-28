@@ -4766,13 +4766,16 @@
           "auto_track",
           "owner",
           "words",
-          "searches"
+          "searches",
+          "shows",
+          "sheet_url"
         ],
         "channels": [
           "id",
           "login",
           "name",
           "feed_name",
+          "feed_sources",
           "marathons"
         ],
         "sources": [

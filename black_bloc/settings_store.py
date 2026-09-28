@@ -4917,6 +4917,10 @@ MARATHON_FEED_HOURS_KEY = "marathon_feed_hours"
 MARATHON_FEED_ACTION_KEY = "marathon_feed_action_default"
 MARATHON_FEED_RECENT_KEY = "marathon_feed_recent_days"
 MARATHON_LADYARCADERS_FLOOR_KEY = "marathon_ladyarcaders_floor"
+MARATHON_HOTFIX_SHOWS_KEY = "marathon_hotfix_shows"
+MARATHON_HOTFIX_SHOWS = "GDQueer"
+MARATHON_HOTFIX_SHOWS_MAX = 20
+MARATHON_HOTFIX_SHOW_LENGTH = 60
 MARATHON_FEED_ADDED_TEMPLATE_KEY = "marathon_feed_added_template"
 MARATHON_FEED_SUGGEST_TEMPLATE_KEY = "marathon_feed_suggest_template"
 MARATHON_FEED_ACTIONS = ("add", "suggest")
@@ -4956,6 +4960,11 @@ MARATHON_LIVE_FIELDS = ("member", "game", "category", "url", "marathon", "part")
 MARATHON_UNKNOWN_FIELD = (
     "`{{{found}}}` is not something Black Bloc can fill in, so nothing was changed. This "
     "marathon post may stand in for {allowed}; write any other braces out as words."
+)
+MARATHON_BAD_SHOWS = (
+    "**{given}** names no Hotfix show, so nothing was changed. Write one to {most} show names "
+    "as the Show column spells them, up to {longest} characters each, separated by commas — for "
+    "example `GDQueer`. To stop the Hotfix feed, pause it instead."
 )
 MARATHON_BAD_MARKS = (
     "**{given}** is not a list Black Bloc can remind on, so nothing was changed. Write one to "
@@ -5142,6 +5151,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "the event number the Lady Arcaders feed probes upward from — it asks the next numbers "
         "above this or above the highest event it already knows, whichever is higher; staff raise "
         "it after a link is pasted. 24 by default",
+    ),
+    MARATHON_HOTFIX_SHOWS_KEY: (
+        "text",
+        MARATHON_HOTFIX_SHOWS,
+        "the GDQ Hotfix shows the Hotfix feed turns into marathons, separated by commas and "
+        "spelled as the sheet's Show column spells them (capitals do not matter); each run of "
+        "days a show airs becomes one marathon. `GDQueer` by default",
     ),
     MARATHON_EVENT_MODE_DEFAULT_KEY: (
         "enum",
@@ -6046,8 +6062,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     MARATHON_UNKNOWN_SITE_KEY: (
         "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus "
-        "marathons, Fastest Furs schedules and Lady Arcaders calendars — that link is none of "
-        "them.",
+        "marathons, Fastest Furs schedules, Lady Arcaders calendars and the GDQ Hotfix schedule "
+        "— that link is none of them.",
         (),
         "what staff are told when a schedule link is from a site Black Bloc cannot read",
     ),
@@ -6172,6 +6188,27 @@ def checked_marks(given: Any) -> str:
     return ", ".join(str(one) for one in sorted(set(found), reverse=True))
 
 
+def checked_shows(given: Any) -> str:
+    """One to twenty show names, each once whatever its capitals, trimmed."""
+    text = str(given or "").strip()
+    found: list[str] = []
+    for part in text.split(","):
+        name = " ".join(part.split())
+        if name and name.lower() not in {one.lower() for one in found}:
+            found.append(name)
+    if not found or len(found) > MARATHON_HOTFIX_SHOWS_MAX or any(
+        len(one) > MARATHON_HOTFIX_SHOW_LENGTH for one in found
+    ):
+        raise SettingError(
+            MARATHON_BAD_SHOWS.format(
+                given=text[:40] or "Nothing",
+                most=MARATHON_HOTFIX_SHOWS_MAX,
+                longest=MARATHON_HOTFIX_SHOW_LENGTH,
+            )
+        )
+    return ", ".join(found)
+
+
 def checked_marathon(fields: tuple[str, ...]) -> Any:
     def check(given: Any) -> str:
         text = str(given or "").strip()
@@ -6204,6 +6241,7 @@ KEY_CHOICES[MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY] = PING_MODES
 KEY_MIN.update({key: floor for key, (floor, _) in MARATHON_RANGES.items()})
 KEY_MAX.update({key: ceiling for key, (_, ceiling) in MARATHON_RANGES.items()})
 TEXT_CHECKS[MARATHON_REMINDER_MINUTES_KEY] = checked_marks
+TEXT_CHECKS[MARATHON_HOTFIX_SHOWS_KEY] = checked_shows
 TEXT_CHECKS.update(
     {key: checked_marathon(fields) for key, (_, fields, _) in MARATHON_WORDS.items()}
 )

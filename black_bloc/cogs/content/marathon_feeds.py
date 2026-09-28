@@ -13,6 +13,7 @@ from ... import marathon_events as me
 from ... import marathon_fastestfurs as ff
 from ... import marathon_feeds as mf
 from ... import marathon_horaro_events as hre
+from ... import marathon_hotfix as hf
 from ... import marathon_inbox as mi
 from ... import marathon_ladyarcaders as la
 from ...actionlog import log_action
@@ -20,7 +21,7 @@ from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...marathon_channels import takes_marathons
-from ...marathon_sources import HORARO_SLUG, LADYARCADERS, ScheduleError
+from ...marathon_sources import GDQ_HOTFIX, HORARO_SLUG, LADYARCADERS, ScheduleError
 from ...panels import (
     KEEP_IT,
     Outcome,
@@ -54,6 +55,7 @@ from ...settings_store import (
     MARATHON_FEED_WORDS_LABEL_KEY,
     MARATHON_FEED_WORDS_SAID_KEY,
     MARATHON_FEEDS_KEY,
+    MARATHON_HOTFIX_SHOWS_KEY,
     MARATHON_LADYARCADERS_FLOOR_KEY,
 )
 from ...timezones import unix
@@ -149,6 +151,7 @@ FEED_COLUMNS = {
     "held_by_channel",
     "seen",
     "auto_track",
+    "sheet_url",
 }
 
 
@@ -182,10 +185,19 @@ async def get_feed(db: Any, guild_id: int, feed_id: Any) -> Any:
     return await cur.fetchone()
 
 
-async def feed_by_channel(db: Any, guild_id: int, spotlight_id: Any) -> Any:
+async def feeds_of_channel(db: Any, guild_id: int, spotlight_id: Any) -> list[Any]:
     cur = await db.conn.execute(
-        "SELECT * FROM marathon_feeds WHERE guild_id = ? AND spotlight_id = ?",
+        "SELECT * FROM marathon_feeds WHERE guild_id = ? AND spotlight_id = ? ORDER BY id",
         (int(guild_id), int(spotlight_id)),
+    )
+    return list(await cur.fetchall())
+
+
+async def feed_by_channel(db: Any, guild_id: int, spotlight_id: Any, source: str) -> Any:
+    """The channel's feed of one source: a channel has one feed per source."""
+    cur = await db.conn.execute(
+        "SELECT * FROM marathon_feeds WHERE guild_id = ? AND spotlight_id = ? AND source = ?",
+        (int(guild_id), int(spotlight_id), source),
     )
     return await cur.fetchone()
 
@@ -356,6 +368,8 @@ async def candidates_of(bot: Any, guild: Any, feed: Any, now: Any) -> list[mf.Ca
         return ff.candidates(await cog.client.fastestfurs_events(), now, recent)
     if feed["source"] == mf.LADYARCADERS_FEED:
         return await ladyarcaders_candidates_of(bot, guild, feed, now, recent)
+    if feed["source"] == mf.HOTFIX_FEED:
+        return await hotfix_candidates_of(bot, guild, feed, now, recent)
     if source is None:
         raise ScheduleError(mf.UNKNOWN_PICK.format(given=str(feed["feed_ref"])[:60]))
     return mf.tracker_candidates(source, await cog.client.events(source), now, recent)
@@ -405,6 +419,21 @@ async def ladyarcaders_candidates_of(
         seen = la.merged(seen, read)
         await update_feed(bot.db, feed["id"], seen=json.dumps(seen))
     return la.candidates(seen, now, recent)
+
+
+async def hotfix_candidates_of(
+    bot: Any, guild: Any, feed: Any, now: Any, recent: int
+) -> list[mf.Candidate]:
+    """The Hotfix page's sheet, one block per run of days a listed show airs; the sheet's URL
+    is remembered so a page hiccup can fall back to it."""
+    before = _cell(feed, "sheet_url")
+    text, url = await cog_of(bot).client.hotfix_sheet(feed["feed_ref"], before)
+    if url != before:
+        await update_feed(bot.db, feed["id"], sheet_url=url)
+    shows = hf.shows_of(bot.store.get(guild.id, MARATHON_HOTFIX_SHOWS_KEY))
+    known = await marathons_by_ref(bot.db, guild.id, GDQ_HOTFIX)
+    taken = {str(row["name"]).lower() for row in known.values()}
+    return hf.candidates(hf.parse_hotfix(text, shows), now, recent, taken)
 
 
 async def check_failed(
@@ -688,16 +717,17 @@ async def tick_feeds(cog: Any, guild: Any) -> None:
 
 
 async def seed_feeds(bot: Any, guild: Any) -> list[str]:
-    """Once per channel, ever: a seeded feed staff remove stays removed."""
+    """Once per seed, ever: a seeded feed staff remove stays removed."""
     made: list[str] = []
     action = str(bot.store.get(guild.id, MARATHON_FEED_ACTION_KEY))
     for seed in mf.SEEDS:
-        if await is_seeded(bot.db, guild.id, seed.login):
+        marker = mf.seed_marker(seed)
+        if await is_seeded(bot.db, guild.id, marker):
             continue
         channel = await channel_by_login_in(bot.db, guild.id, seed.login)
         if channel is None or not takes_marathons(channel):
             continue
-        if await feed_by_channel(bot.db, guild.id, channel["id"]) is None:
+        if await feed_by_channel(bot.db, guild.id, channel["id"], seed.source) is None:
             try:
                 await insert_feed(
                     bot.db,
@@ -713,7 +743,7 @@ async def seed_feeds(bot: Any, guild: Any) -> list[str]:
                 made.append(seed.name)
             except sqlite3.IntegrityError:
                 log.info("marathon: %s already has a feed; not seeding it", seed.login)
-        await mark_seeded(bot.db, guild.id, seed.login)
+        await mark_seeded(bot.db, guild.id, marker)
     if made:
         await log_action(
             bot, guild, "marathon.feed_seeded", details={"feeds": made, "action": action}
@@ -746,17 +776,13 @@ async def create_feed(
         return refusal(mf.NO_CHANNEL, NO_CHANNEL_CODE, 404)
     if not takes_marathons(channel):
         return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
-    existing = await feed_by_channel(bot.db, guild.id, channel["id"])
-    if existing is not None:
-        return refusal(
-            mf.CHANNEL_HAS_FEED.format(channel=channel_word(channel), name=existing["name"]),
-            CHANNEL_HAS_FEED_CODE,
-            409,
-        )
     picked = mf.pick_of(pick)
     if picked is None:
         return refusal(mf.UNKNOWN_PICK.format(given=str(pick or "")[:40]), UNKNOWN_PICK_CODE, 422)
     source, feed_ref = picked
+    existing = await feed_by_channel(bot.db, guild.id, channel["id"], source)
+    if existing is not None:
+        return refusal(has_feed(channel, existing), CHANNEL_HAS_FEED_CODE, 409)
     if source == mf.OENGUS_FEED:
         feed_ref = str(channel["twitch_login"]).lower()
     if source in (mf.HORARO_EVENTS_FEED, mf.FASTESTFURS_FEED, mf.LADYARCADERS_FEED):
@@ -815,6 +841,12 @@ async def create_feed(
     return Outcome(True, said, value=await get_feed(bot.db, guild.id, feed_id))
 
 
+def has_feed(channel: Any, feed: Any) -> str:
+    return mf.CHANNEL_HAS_FEED.format(
+        channel=channel_word(channel), source=mf.source_word(feed), name=feed["name"]
+    )
+
+
 async def remove_feed(
     bot: Any,
     guild: Any,
@@ -838,14 +870,13 @@ async def remove_feed(
 
 
 async def drop_feeds_of_channel(bot: Any, guild: Any, spotlight_id: Any, actor: Any = None) -> int:
-    """A channel row that goes takes its feed with it; the marathons stay, as history."""
+    """A channel row that goes takes its feeds with it; the marathons stay, as history."""
     if not getattr(getattr(bot, "db", None), "is_connected", False) or cog_of(bot) is None:
         return 0
-    feed = await feed_by_channel(bot.db, guild.id, spotlight_id)
-    if feed is None:
-        return 0
-    await remove_feed(bot, guild, actor, feed, because=mf.BECAUSE_CHANNEL)
-    return 1
+    feeds = await feeds_of_channel(bot.db, guild.id, spotlight_id)
+    for feed in feeds:
+        await remove_feed(bot, guild, actor, feed, because=mf.BECAUSE_CHANNEL)
+    return len(feeds)
 
 
 async def set_feed(
@@ -910,13 +941,9 @@ async def set_feed(
                 return refusal(mf.NO_CHANNEL, NO_CHANNEL_CODE, 404)
             if not takes_marathons(channel):
                 return refusal(opted_out_said(channel), OPTED_OUT_CODE, 409)
-            other = await feed_by_channel(bot.db, guild.id, channel["id"])
+            other = await feed_by_channel(bot.db, guild.id, channel["id"], fresh["source"])
             if other is not None:
-                return refusal(
-                    mf.CHANNEL_HAS_FEED.format(channel=channel_word(channel), name=other["name"]),
-                    CHANNEL_HAS_FEED_CODE,
-                    409,
-                )
+                return refusal(has_feed(channel, other), CHANNEL_HAS_FEED_CODE, 409)
             moved = {"spotlight_id": int(channel["id"])}
             if fresh["source"] == mf.OENGUS_FEED:
                 moved["feed_ref"] = str(channel["twitch_login"]).lower()
@@ -1065,6 +1092,13 @@ def search_lines(bot: Any, guild: Any, feed: Any) -> list[str]:
     if search["owner"]:
         lines.append(words_of(bot, guild, MARATHON_FEED_OWNER_LINE_KEY, owner=search["owner"]))
     return lines
+
+
+def shows_lines(bot: Any, guild: Any, feed: Any) -> list[str]:
+    if feed["source"] != mf.HOTFIX_FEED:
+        return []
+    shows = hf.shows_of(bot.store.get(guild.id, MARATHON_HOTFIX_SHOWS_KEY))
+    return [mf.HOTFIX_SHOWS_LINE.format(shows=", ".join(shows) or mf.HOTFIX_NO_SHOWS)]
 
 
 def search_move(bot: Any, guild: Any, feed: Any) -> tuple[Any, ...]:
@@ -1540,8 +1574,10 @@ async def feeds_card(bot: Any, guild: Any) -> tuple[Any, Any]:
     return (embed, view)
 
 
-async def free_channels(bot: Any, guild: Any) -> list[Any]:
-    taken = {int(one["spotlight_id"]) for one in await list_feeds(bot.db, guild.id)}
+async def free_channels(bot: Any, guild: Any, source: str | None = None) -> list[Any]:
+    """Any channel that takes marathons; for a move, one with no feed of that source yet."""
+    feeds = await list_feeds(bot.db, guild.id)
+    taken = {int(one["spotlight_id"]) for one in feeds if one["source"] == source}
     return [
         row
         for row in await channel_rows(bot.db, guild.id)
@@ -1560,7 +1596,7 @@ async def feed_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
     ]
     lines.append(me.FEED_MODE_LINE.format(words=feed_mode_words(bot, guild, feed)))
     lines.append(mi.FEED_AUTO_LINE.format(state=mi.FEED_AUTO_WORDS[bool(feed["auto_track"])]))
-    lines += search_lines(bot, guild, feed)
+    lines += search_lines(bot, guild, feed) + shows_lines(bot, guild, feed)
     ignored = mf.ignored_of(feed)
     if ignored:
         lines.append(mf.IGNORED_LINE.format(count=len(ignored)))
@@ -1599,7 +1635,7 @@ async def move_card(bot: Any, guild: Any, feed_id: Any) -> tuple[Any, Any]:
     feed = await get_feed(bot.db, guild.id, feed_id)
     if feed is None:
         return (None, None)
-    rows = await free_channels(bot, guild)
+    rows = await free_channels(bot, guild, feed["source"])
     embed = discord.Embed(
         title=feed["name"], description=me.PICK_FEED_CHANNEL if rows else mf.NO_CHANNELS
     )

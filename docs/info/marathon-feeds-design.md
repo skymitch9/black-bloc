@@ -1,5 +1,7 @@
 # Marathon feeds — the bot polls GDQ (and ESA on horaro.net) for events itself, so staff never paste a schedule URL
 
+> 🔨 **2026-09-28 — a seventh source, the GDQ Hotfix sheet** (branch `marathon-hotfix`, BUILT, NOT merged): feed kind `gdq_hotfix` on the GDQ row, `marathon_hotfix_shows`, and ⚠️ **one feed per source on a channel** (Deviation 5 reversed, schema 80). [`marathon-hotfix-design.md`](marathon-hotfix-design.md).
+
 > 🔨 **2026-09-26 — the staff notice is replaced by the marathon inbox** (branch `marathon-inbox`, BUILT, NOT merged): ~~a feed-found marathon gets its message in the inbox thread the moment it is added (Track / Ignore), and the schedule-out moment EDITS that message. `marathon_feed_notice_when` and `marathon_notice_home` are retired.~~ **REVERSED 2026-09-26 18:xx by `marathon-inbox-when`** (owner 17:5x, verbatim: *"i think we should only post when a schedule is live, keep that part"*): the inbox message posts on the first read that finds runs — the v171 rule, now for feed-made AND staff-made marathons — and `marathon_feed_notice_when` is live again (`published` default / `added` = post at add); staff can post one early with **Post it to the inbox now**. `marathon_notice_home` stays retired. [`marathon-inbox-design.md`](marathon-inbox-design.md) ▸ Deviations 2–3 and *Follow-up — marathon-inbox-when*.
 
 > ✅ **2026-09-26 13:4x — three more sources LIVE as v173 13:35** (release commit `5a66acd2`, fast-forward to `282ce0ee`): `horaro_events`, `fastestfurs`, `ladyarcaders`, each with its own design doc — [`marathon-horaro-events-design.md`](marathon-horaro-events-design.md), [`marathon-fastestfurs-design.md`](marathon-fastestfurs-design.md), [`marathon-ladyarcaders-design.md`](marathon-ladyarcaders-design.md). Feeds 5/6/7 added after the deploy; Fastest Furs' first check added marathon #7 (*Fall Fest 2026*, 55 runs, two BaF runners).
@@ -140,7 +142,7 @@ title match (§C of the schedule design) uses whichever marathon's run the title
 source · channel · *checks every 6 h · last checked 12 min ago* · action segment **Add / Suggest** · **Pause** /
 **Resume** · **Check now** · **Look again** (suggest mode, clears dismissals) · **Forget ignored** with the count ·
 **Remove**), **Add a feed…** (FIRST the channel-row picker — only channel-only rows are offered — then the source
-select GDQ / Horaro and, for Horaro, the event slug; a channel that already has a feed is refused in words), and, in suggest mode, the open suggestions as Next-up cards (reuse
+select GDQ / Horaro and, for Horaro, the event slug; a channel that already has a feed is refused in words — ~~one feed per channel~~ one feed per source on a channel since 2026-09-28, `marathon-hotfix`), and, in suggest mode, the open suggestions as Next-up cards (reuse
 `nextCard`). A marathon row made by a feed shows *from the GDQ feed* in its drawer's Event card line. Routes:
 `GET / POST /api/marathons/feeds`, `PATCH /api/marathons/feeds/{id}` (`action`, `active`, `spotlight_id`, `name`),
 `DELETE …/feeds/{id}`, `POST …/feeds/{id}/check`, `POST …/feeds/{id}/look` (clear dismissals + check), `POST
@@ -334,8 +336,11 @@ pages, top-level commands and log features unchanged. **Sources shipped: tracker
    say). A marker per channel login is written whether a feed was made or one already existed; a channel row that
    appears later is seeded on the next boot. Seeding runs inside the tick (under the `Reconciler`), once per process,
    and only while `marathon_feeds` is on and `marathon_mode` is not `off`.
-5. **One feed per channel is a DB constraint too** — `UNIQUE INDEX marathon_feeds_one_per_channel (guild_id,
-   spotlight_id)` behind the refusal in words (checklist 6).
+5. ~~**One feed per channel is a DB constraint too** — `UNIQUE INDEX marathon_feeds_one_per_channel (guild_id,
+   spotlight_id)` behind the refusal in words (checklist 6).~~ **REVERSED 2026-09-28 by `marathon-hotfix`**
+   (commit `7ea399b2`, schema 80): **one feed per SOURCE on a channel** — `marathon_feeds_one_per_channel_source
+   (guild_id, spotlight_id, source)`; the old index is retired. The GDQ row keeps its tracker feed and takes the GDQ
+   Hotfix feed beside it. [`marathon-hotfix-design.md`](marathon-hotfix-design.md) ▸ *Seed*.
 6. **Six keys, not five: `marathon_feed_suggest_template`** (*{feed} has a new event: **{event}**, {when}
    ({relative}). Add it?*). §D reused `marathon_next_template`, whose default reads *"{marathon} is over — the next GDQ
    event is …"* — wrong words for a feed, and every posted word is a key. Both feed templates take `{feed} {event}
