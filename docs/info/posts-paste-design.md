@@ -84,15 +84,16 @@ The module is three passes:
 | `<h4>`–`<h6>` | `### ` (Discord has only three) |
 | A `<p>`/`<div>` whose **every** word is ≥20pt / ≥16pt / ≥13.5pt | `# ` / `## ` / `### ` |
 | `class="…Title…"` / `…Subtitle…` / `…Heading2…`, `role="heading" aria-level="N"` | `# ` / `## ` / `### ` |
+| **Added 2026-09-28 (`doc-import-fidelity`)**: any heading row above whose every visible run has a resolved size under 14pt; a heading inside a list item | a plain paragraph; list text |
 | `<ul><li>` | `- ` |
 | `<ol><li>`, honouring `start=` | `1. `, `2. `, … |
-| A list nested inside a list item | two spaces of indent per level |
+| A list nested inside a list item | ~~two spaces of indent per level~~ **changed 2026-09-28 (`doc-import-fidelity`)**: the parent's content column, 3 under `1. `, 4 under `10. `, 2 under `- ` ([posts-doc-import-design.md § Fidelity](posts-doc-import-design.md), rule 3) |
 | `<a href="https://…">words</a>` | `[words](https://…)` |
 | `<a href="https://…">the same address</a>` | the bare URL |
 | `<a href="javascript:…">words</a>` | `words` — the href is dropped |
 | `<a>` with no words (an image link) | nothing |
 | `<br>` | one newline inside the block |
-| `<p>`, `<div>`, `<tr>`, `<blockquote>`, a block boundary | a blank line between blocks |
+| `<p>`, `<div>`, `<tr>`, `<blockquote>`, a block boundary | a blank line between blocks (**except HTML from Google Docs, 2026-09-28, `doc-import-fidelity`**: one newline between blocks, a blank line only for the Doc's own empty paragraphs, a clipboard `<br>` between blocks, or where a list ends; § Fidelity rule 5) |
 | `&nbsp;`, `&amp;`, `&#8212;`, `&#x2014;`, … | the character itself |
 | `<script>`, `<style>`, `<head>`, `<iframe>`, `<svg>`, `<template>` | dropped **with their contents** |
 | `<img>`, `<input>`, `<button>`, `<select>` | dropped |
@@ -110,7 +111,7 @@ The module is three passes:
    *inside* the `<a>`. Taken literally, every pasted link becomes `__[words](url)__`. **Inside an
    anchor the underline mark is forced off** — that underline is the editor drawing a link, not
    the author underlining a word.
-3. ⚠️ **Docs wraps each `<li>`'s words in a `<p>`.** A block inside an *empty* list item or
+3. ⚠️ **Docs wraps each `<li>`'s words in a `<p>`** (and the export can wrap them in an `<h1 style="display:inline">`, which since 2026-09-28 is treated the same way). A block inside an *empty* list item or
    heading does not start a new block; it fills the one already open. Without this every bullet
    would arrive as a bare paragraph and the list would vanish.
 4. ⚠️ **Docs often has no `<h1>` at all** — a heading can be a `<p>` whose span is `font-size:20pt`.
