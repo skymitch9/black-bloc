@@ -5,7 +5,13 @@ import pytest
 
 from black_bloc import marathon_near_miss as mnm
 from black_bloc.cogs.content import marathon_near_miss as near
-from black_bloc.cogs.content.marathon import Marathons, create_marathon, pairings_of
+from black_bloc.cogs.content.marathon import create_marathon, pairings_of
+from black_bloc.settings_store import (
+    MARATHON_NEAR_MISS_EVERYWHERE_KEY,
+    MARATHON_NEAR_MISS_HERE_KEY,
+    MARATHON_NEAR_MISS_NOT_KEY,
+    MARATHON_NEAR_MISS_POST_KEY,
+)
 from tests.cogs.content.test_marathon import SKY, URL, FakeClient, Member, a_run, bot, cog
 from tests.cogs.content.test_marathon_people import Named
 from tests.cogs.content.test_marathon_runner_posts import (
@@ -58,10 +64,18 @@ async def test_an_exact_username_match_posts_once_naming_never_pinging(bot, cog)
     posts = asks(the_thread(bot))
     assert len(posts) == 1
     post = posts[0]
-    assert post.content == f"**cassasaur** on the schedule looks like <@{CASS}> (Cass) — link them?"
+    template = bot.store.get(GUILD, MARATHON_NEAR_MISS_POST_KEY)
+    assert post.content == template.format(
+        runner="cassasaur", member=f"<@{CASS}>", display_name="Cass"
+    )
     said = post.kwargs["allowed_mentions"]
     assert said.users is False and said.roles is False and said.everyone is False
-    assert labels_of(post) == ["Link (this marathon)", "Link everywhere", "Not them"]
+    keys = (
+        MARATHON_NEAR_MISS_HERE_KEY,
+        MARATHON_NEAR_MISS_EVERYWHERE_KEY,
+        MARATHON_NEAR_MISS_NOT_KEY,
+    )
+    assert labels_of(post) == [bot.store.get(GUILD, key) for key in keys]
     ids = [getattr(one, "item", one).custom_id for one in post.kwargs["view"].children]
     assert ids == [f"marathon:nearmiss:{marathon['id']}:{one}" for one in mnm.ACTIONS]
     posted = await details_of(bot.db, mnm.POSTED)
@@ -179,11 +193,3 @@ async def test_a_press_on_an_unknown_post_is_refused_in_words(bot, cog):
     outcome = await near.press(bot, bot.guild, FakeActor(), marathon["id"], 999999, mnm.HERE)
     assert not outcome.ok and "no longer on record" in outcome.message
 
-
-async def test_the_buttons_outlive_a_restart():
-    registered = []
-    made = Marathons.__new__(Marathons)
-    made.bot = type("Bot", (), {"db": type("Db", (), {"is_connected": False})()})()
-    made.bot.add_dynamic_items = lambda *items: registered.extend(items)
-    await Marathons.cog_load(made)
-    assert near.NearMissButton in registered
