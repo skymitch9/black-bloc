@@ -9209,3 +9209,27 @@ Design: [`blocks-convert-design.md`](blocks-convert-design.md). Keyed against `2
 | `site/public/assets/page-posts.js:367` · `:475` · `:891` `blockLook` | The drawer, a version, and each Blocks card (lazy, `always`). |
 | `site/public/assets/blockwords.js:167` `voiceLobbyWords` · `:240` `BLOCK_EDITORS` | The temp voice editor; saves each key through `saveSetting`, then `POST /api/post-blocks/tempvoice/redraw`. |
 | `site/mock/server.mjs:2797` · `:5736` `block_tempvoice` · `:5782` `PREVIEW_BLOCK_DRAWS` | The mock's twins. |
+
+## Blocks buttons (branch `blocks-buttons`, 2026-09-28)
+
+Design: [`blocks-buttons-design.md`](blocks-buttons-design.md). Keyed against `91d834be`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/button_block.py:40` `look` · `:60` `parts` · `:67` `said` | The shape the four one-button blocks share: saved words else shipped, clamped 256 / 4000 / 80; one card + one item in a `View(timeout=None)`; `said` falls back to the shipped template with a log line when a staff wording will not `format` (checklist 17). Behaviour is never here — each feature's cog owns its button. |
+| `black_bloc/button_block.py:48` `custom_id` · `:52` `template` | `<head>:<guild_id>`; the template `re.escape`s the head so `marathonrole:toggle` can never be read by a `marathon:` template. |
+| `black_bloc/pings.py:1950` · `birthdays.py:499` · `events.py:3067` `BLOCK_HEAD` / `block_drawn` / `block_look` | Each feature's own look, called by its cog AND by `preview.py`, so the preview is the bot's own words. Pings draws only while `pings_mode` is `on`; birthday and events draw unless `off` (their commands open in shadow too). |
+| `black_bloc/marathon_role.py:30` `STAFF_PERMISSIONS` · `:50` `unsafe` · `:58` `usable_role` | A role a member can self-serve must not carry `Permissions.elevated()` or `mention_everyone`, nor be managed / `@everyone`. `usable_role` answers why not (`unset` / `gone` / `unsafe`) so the cog can log the last two. |
+| `black_bloc/cogs/content/marathon_role.py:21` `toggle_marathon_role` | Guild → guard (checklist 1) → role → defer → change → log → answer (checklist 12). `discord.HTTPException` (Forbidden included) → `marathon.role_failed` + pings' `FORBIDDEN` sentence. Every answer goes through `panels.answer` (`AllowedMentions.none()`). |
+| `black_bloc/cogs/content/marathon.py:1578` | `MarathonRoleButton` registered LAST in `cog_load`, after the eight existing items (pinned by `test_pinned_the_marathon_cog_registers_its_eight_buttons_before_the_role_block`). |
+| `black_bloc/cogs/content/pings.py:1270` `open_pings_panel` · `:1293` `OpenPingsButton` · `:1334` | `/pings`'s body, moved; the command and the block's button both call it. Registered in `cog_load` before the sweep starts. |
+| `black_bloc/cogs/community/birthdays.py:980` `birthday_ready` · `:991` `open_birthday_panel` · `:1057` | `_ready` and `/birthday` moved into module functions (both still called by the cog). The button opens the PANEL, not the modal: a modal raised from a posted message would `edit_original_response` the post itself on submit. Registered before the database check. |
+| `black_bloc/cogs/community/events.py:2070` `open_propose` · `:2131` | Gates on `events_mode` with events' own `EVENTS_OFF`, then the front door's `open_the_event` (lazy import — frontdoor imports this module). A second `add_dynamic_items` call so `DecisionButton`'s stays as it was. |
+| `black_bloc/post_blocks.py:171` `marathon_role_parts` … · `:245` `KINDS` | Four entries appended after `tempvoice`, the temp voice pattern: not exclusive, no cache column, `footprint=(1, 1, 1)`, `blocks_turned` / `blocks_redraw`. |
+| `black_bloc/preview.py:470` `button_parts` · `:474` `button_block_draw` · `:493` `BUTTON_BLOCKS` · `:729` | One draw and one renderer factory for the four; `block_<kind>` claims only the three card keys (the private answers are not in the message). |
+| `black_bloc/settings_store.py:3024` · `:3048` `BUTTON_BLOCK_DEFAULTS` · `:6830` | Twenty keys, filed by prefix; `marathon_role_id` defaults to `None`. |
+| `black_bloc/logkinds.py:660` | `marathon.role_joined` / `_left` routine; `_failed` important by suffix. |
+| `site/public/assets/blockwords.js:239` `BUTTON_BLOCKS` · `:286` `buttonBlockWords` · `:368` | One editor factory; the Marathon role shape adds `role` (a `roleSelect`, *not set* → `clearSetting`) and `said`. |
+| `site/public/assets/golive-join.js:437` | The `pingsblock` drawer sits BEFORE `pings` so `findIndex` places the three keys there and *Ping roles* keeps its ten. |
+| `site/mock/server.mjs:2824` · `:5838` `previewButtonBlock` · `:5858` | The mock's twins; `previewButtonBlock` reads shipped words from `SETTING_SPECS`. |
+
