@@ -83,7 +83,13 @@ async def logged(db):
 def test_the_front_door_is_the_first_kind_and_goes_on_one_post_at_a_time():
     found = post_blocks.KINDS["frontdoor"]
 
-    assert list(post_blocks.KINDS) == ["frontdoor", "tempvoice"]
+    assert list(post_blocks.KINDS) == [
+        "frontdoor",
+        "tempvoice",
+        "livenow",
+        "upcoming",
+        "links",
+    ]
     assert found.exclusive and found.cache_column == "carries_door"
     assert found.parts is post_blocks.door_parts
     assert {"frontdoor_title", "frontdoor_text", "frontdoor_ticket_label", "rehearsal_note"} <= set(

@@ -459,7 +459,7 @@ def merged_view(views: list[Any]) -> Any:
 def with_blocks(base: dict[str, Any], drawn: list[Any]) -> dict[str, Any]:
     """The post's own message, then each block's card in order, and every block's buttons."""
     embeds = [base["embed"]] if base.get("embed") is not None else []
-    embeds.extend(parts[0] for parts in drawn)
+    embeds.extend(parts[0] for parts in drawn if parts[0] is not None)
     views = [parts[1] for parts in drawn if parts[1] is not None]
     view = views[0] if len(views) == 1 else None
     if len(views) > 1:
@@ -1322,9 +1322,11 @@ async def publish_post(
         return refusal(
             POST_FAILED_SAID.format(title=title, reason=CHANNEL_GONE), "post_failed", 409
         )
-    from .post_blocks import FRONTDOOR, kinds_on, set_drawn
+    from .post_blocks import FRONTDOOR, kinds_on, load_kinds, set_drawn
 
-    drawn, stamps = message_parts(bot, guild, row, await kinds_on(bot.db, int(row["id"])))
+    carried = await kinds_on(bot.db, int(row["id"]))
+    await load_kinds(bot, guild, carried)
+    drawn, stamps = message_parts(bot, guild, row, carried)
     stamp = stamps.get(FRONTDOOR)
     payload = drawn | {"allowed_mentions": allowed_mentions_for(guild, body, actor)}
     message = await _existing_message(bot, guild, row, channel, actor, via, shadow=shadow)

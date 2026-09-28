@@ -10,6 +10,7 @@ from typing import Any, NamedTuple
 
 import discord
 
+from . import block_look as look
 from .actionlog import log_action
 from .command_errors import NETWORK_ERRORS
 from .forums import AUTO_ARCHIVE_MINUTES, forum_overwrites, parent_id_of, tag_named
@@ -23,6 +24,10 @@ from .panels import site_page_url as library_site_page_url
 from .settings_store import (
     DEFAULT_TIMEZONE_KEY,
     EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_BLOCK_EMPTY,
+    EVENTS_BLOCK_LINE,
+    EVENTS_BLOCK_MAX,
+    EVENTS_BLOCK_TITLE,
     EVENTS_FORUM_CHANNEL_KEY,
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_MOVED_LINE,
@@ -3056,3 +3061,54 @@ async def write_settings(
         else:
             changed[key] = await store.set(guild_id, key, value, by=actor_id)
     return changed
+
+
+class UpcomingLine(NamedTuple):
+    title: str
+    starts_at: str
+    url: str | None = None
+
+
+def scheduled_url(guild_id: Any, row: Any) -> str | None:
+    found = cell(row, "scheduled_event_id")
+    if not found:
+        return None
+    return SCHEDULED_EVENT_URL.format(guild_id=int(guild_id), event_id=int(found))
+
+
+def upcoming_of(guild_id: Any, rows: Any, now: datetime, limit: int) -> list[UpcomingLine]:
+    """Approved events still ahead, soonest first; a row with no readable start is skipped."""
+    found: list[tuple[datetime, UpcomingLine]] = []
+    for row in rows or ():
+        starts = parse_ts(cell(row, "starts_at"))
+        if starts is None or starts <= now:
+            continue
+        line = UpcomingLine(str(cell(row, "title") or ""), starts.isoformat(), None)
+        found.append((starts, line._replace(url=scheduled_url(guild_id, row))))
+    found.sort(key=lambda pair: pair[0])
+    return [line for _, line in found[: max(int(limit), 0)]]
+
+
+def upcoming_line(template: str, one: UpcomingLine) -> str | None:
+    starts = parse_ts(one.starts_at)
+    if starts is None:
+        return None
+    stamp = int(starts.timestamp())
+    title = look.linked(look.plain(clamp(one.title, TITLE_LIMIT)), one.url)
+    said = (
+        template.replace("{title}", title)
+        .replace("{when}", f"<t:{stamp}:F>")
+        .replace("{relative}", f"<t:{stamp}:R>")
+    )
+    return " ".join(said.split())
+
+
+def upcoming_block_look(store: Any, guild_id: int, events: Any) -> Any:
+    """The next events, one line each with Discord's own timestamps, or the empty line."""
+    template = look.word(store, guild_id, EVENTS_BLOCK_LINE)
+    wanted = list(events or ())[: look.number(store, guild_id, EVENTS_BLOCK_MAX)]
+    lines = [line for one in wanted if (line := upcoming_line(template, one))]
+    return look.Look(
+        look.word(store, guild_id, EVENTS_BLOCK_TITLE, look.TITLE_MAX),
+        look.lines_within(lines) or look.word(store, guild_id, EVENTS_BLOCK_EMPTY),
+    )

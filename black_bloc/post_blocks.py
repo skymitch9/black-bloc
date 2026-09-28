@@ -14,6 +14,10 @@ from .events import clamp
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
 from .settings_store import (
+    EVENTS_BLOCK_EMPTY,
+    EVENTS_BLOCK_LINE,
+    EVENTS_BLOCK_MAX,
+    EVENTS_BLOCK_TITLE,
     FRONTDOOR_EVENT_LABEL,
     FRONTDOOR_REQUEST_LABEL,
     FRONTDOOR_SHOW_EVENT,
@@ -22,10 +26,26 @@ from .settings_store import (
     FRONTDOOR_TEXT,
     FRONTDOOR_TICKET_LABEL,
     FRONTDOOR_TITLE,
+    GOLIVE_BLOCK_EMPTY,
+    GOLIVE_BLOCK_LINE,
+    GOLIVE_BLOCK_MAX,
+    GOLIVE_BLOCK_TITLE,
+    GOLIVE_BLOCK_TITLE_CHARS,
+    GOLIVE_BLOCK_UNTITLED,
     POSTS_BLOCK_FRONTDOOR_NAME,
     POSTS_BLOCK_FRONTDOOR_NAME_DEFAULT,
+    POSTS_BLOCK_LINKS_CARD,
+    POSTS_BLOCK_LINKS_NAME,
+    POSTS_BLOCK_LINKS_NAME_DEFAULT,
+    POSTS_BLOCK_LINKS_ROWS,
+    POSTS_BLOCK_LINKS_TEXT,
+    POSTS_BLOCK_LINKS_TITLE,
+    POSTS_BLOCK_LIVENOW_NAME,
+    POSTS_BLOCK_LIVENOW_NAME_DEFAULT,
     POSTS_BLOCK_TEMPVOICE_NAME,
     POSTS_BLOCK_TEMPVOICE_NAME_DEFAULT,
+    POSTS_BLOCK_UPCOMING_NAME,
+    POSTS_BLOCK_UPCOMING_NAME_DEFAULT,
     REHEARSAL_NOTE,
     TEMPVOICE_BLOCK_CONTROLS_LABEL,
     TEMPVOICE_BLOCK_LOBBY_LABEL,
@@ -38,6 +58,10 @@ log = logging.getLogger(__name__)
 
 FRONTDOOR = "frontdoor"
 TEMPVOICE = "tempvoice"
+LIVENOW = "livenow"
+UPCOMING = "upcoming"
+LINKS = "links"
+LIVE_KINDS = (LIVENOW, UPCOMING)
 NAME_MAX = 80
 MAX_EMBEDS = 10
 MAX_ROWS = 5
@@ -97,6 +121,7 @@ class BlockKind:
     turned: Callable[..., Awaitable[tuple[Any, str]]]
     redraw: Callable[[Any, Any], Awaitable[bool]]
     footprint: tuple[int, int, int] = (1, 1, 5)
+    load: Callable[[Any, Any], Awaitable[Any]] | None = None
 
 
 def door_parts(bot: Any, guild: Any, row: Any) -> Any:
@@ -138,6 +163,51 @@ def voice_parts(bot: Any, guild: Any, row: Any) -> Any:
     from .cogs.community.tempvoice import block_parts
 
     return block_parts(bot, guild, row)
+
+
+LOADED: dict[tuple[str, int], Any] = {}
+
+
+def loaded(kind: str, guild_id: Any) -> Any:
+    return LOADED.get((kind, int(guild_id)))
+
+
+async def load_kinds(bot: Any, guild: Any, kinds: list[str]) -> None:
+    """A live block's list is read here, before its sync draw; the others read nothing."""
+    for kind in kinds:
+        found = KINDS.get(kind)
+        if found is not None and found.load is not None:
+            LOADED[(kind, int(guild.id))] = await found.load(bot, guild)
+
+
+def live_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .cogs.content.golive import block_parts
+
+    return block_parts(bot, guild, loaded(LIVENOW, guild.id))
+
+
+async def live_load(bot: Any, guild: Any) -> Any:
+    from .cogs.content.golive import block_streams
+
+    return await block_streams(bot, guild)
+
+
+def upcoming_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .cogs.community.events import block_parts
+
+    return block_parts(bot, guild, loaded(UPCOMING, guild.id))
+
+
+async def upcoming_load(bot: Any, guild: Any) -> Any:
+    from .cogs.community.events import block_events
+
+    return await block_events(bot, guild)
+
+
+def links_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .link_buttons import links_parts as drawn
+
+    return drawn(bot, guild, row)
 
 
 async def blocks_redraw(bot: Any, guild: Any) -> bool:
@@ -189,6 +259,56 @@ KINDS: dict[str, BlockKind] = {
         turned=blocks_turned,
         redraw=blocks_redraw,
         footprint=(1, 1, 5),
+    ),
+    LIVENOW: BlockKind(
+        key=LIVENOW,
+        name_key=POSTS_BLOCK_LIVENOW_NAME,
+        name_default=POSTS_BLOCK_LIVENOW_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(
+            GOLIVE_BLOCK_TITLE,
+            GOLIVE_BLOCK_LINE,
+            GOLIVE_BLOCK_UNTITLED,
+            GOLIVE_BLOCK_EMPTY,
+            GOLIVE_BLOCK_MAX,
+            GOLIVE_BLOCK_TITLE_CHARS,
+        ),
+        parts=live_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 0, 0),
+        load=live_load,
+    ),
+    UPCOMING: BlockKind(
+        key=UPCOMING,
+        name_key=POSTS_BLOCK_UPCOMING_NAME,
+        name_default=POSTS_BLOCK_UPCOMING_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(EVENTS_BLOCK_TITLE, EVENTS_BLOCK_LINE, EVENTS_BLOCK_EMPTY, EVENTS_BLOCK_MAX),
+        parts=upcoming_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 0, 0),
+        load=upcoming_load,
+    ),
+    LINKS: BlockKind(
+        key=LINKS,
+        name_key=POSTS_BLOCK_LINKS_NAME,
+        name_default=POSTS_BLOCK_LINKS_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(
+            POSTS_BLOCK_LINKS_ROWS,
+            POSTS_BLOCK_LINKS_TITLE,
+            POSTS_BLOCK_LINKS_TEXT,
+            POSTS_BLOCK_LINKS_CARD,
+        ),
+        parts=links_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 2, 10),
     ),
 }
 
@@ -534,6 +654,7 @@ async def redraw_post(
     """The message already up is rebuilt: the post's part as posted, then every block, fresh."""
     post_id = int(row["id"])
     kinds = await kinds_on(bot.db, post_id)
+    await load_kinds(bot, guild, kinds)
     drawn = parts_of(bot, guild, row, kinds)
     stamps = {kind: parts[2] for kind, parts in drawn.items()}
     if not force and not await needs_redraw(bot, row, kinds, stamps):
@@ -584,18 +705,24 @@ async def redraw_post(
     return True
 
 
-async def keep_drawn(bot: Any, guild: Any) -> int:
+async def keep_drawn(bot: Any, guild: Any, kinds: Any = None) -> int:
     """The sweep's half for every carrier the door does not ride: changed words are redrawn."""
+    only = tuple(kinds or ())
+    marks = f" AND post_blocks.kind IN ({', '.join('?' for _ in only)})" if only else ""
     cur = await bot.db.conn.execute(
         "SELECT DISTINCT posts.* FROM posts JOIN post_blocks ON post_blocks.post_id = posts.id "
-        "WHERE posts.guild_id = ? AND posts.carries_door = 0 ORDER BY posts.id",
-        (int(guild.id),),
+        f"WHERE posts.guild_id = ? AND posts.carries_door = 0{marks} ORDER BY posts.id",
+        (int(guild.id), *only),
     )
     redrawn = 0
     for row in list(await cur.fetchall()):
         if posts.is_posted(row) and await redraw_post(bot, guild, row):
             redrawn += 1
     return redrawn
+
+
+async def carries_live(db: Any, post_id: int) -> bool:
+    return any(kind in LIVE_KINDS for kind in await kinds_on(db, int(post_id)))
 
 
 # --- what the pages read ----------------------------------------------------------------------
@@ -693,4 +820,17 @@ __all__ = [
     "remove_block",
     "reorder",
     "set_carried",
+    "LINKS",
+    "LIVENOW",
+    "LIVE_KINDS",
+    "LOADED",
+    "UPCOMING",
+    "carries_live",
+    "links_parts",
+    "live_load",
+    "live_parts",
+    "load_kinds",
+    "loaded",
+    "upcoming_load",
+    "upcoming_parts",
 ]

@@ -11,14 +11,35 @@ from typing import Any
 
 import discord
 
-from . import birthdays, frontdoor, minutes, modmail, polls, posts, shadow, spotlight
+from . import (
+    birthdays,
+    block_look,
+    frontdoor,
+    link_buttons,
+    minutes,
+    modmail,
+    polls,
+    posts,
+    shadow,
+    spotlight,
+)
 from . import events as ev
 from . import golive as gl
 from . import requests as reqs
 from . import tempvoice as voice
 from .settings_store import (
+    EVENTS_BLOCK_EMPTY,
+    EVENTS_BLOCK_LINE,
+    EVENTS_BLOCK_TITLE,
+    GOLIVE_BLOCK_EMPTY,
+    GOLIVE_BLOCK_LINE,
+    GOLIVE_BLOCK_TITLE,
+    GOLIVE_BLOCK_UNTITLED,
     GOLIVE_COSTREAM_AUTHOR_KEY,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
+    POSTS_BLOCK_LINKS_ROWS,
+    POSTS_BLOCK_LINKS_TEXT,
+    POSTS_BLOCK_LINKS_TITLE,
     SPOTLIGHT_BUMP_TEMPLATE_KEY,
 )
 
@@ -455,9 +476,89 @@ def voice_lobby(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Ren
     return made(guild, embeds=embeds, components=rows)
 
 
+LIVE_SAMPLE = (
+    gl.LiveLine("Casey", "https://www.twitch.tv/casey", "late night runs"),
+    gl.LiveLine("Robin", "https://www.youtube.com/@robin/live", "Speedrun practice, any%"),
+)
+UPCOMING_SAMPLE = (
+    ("Movie night — Paprika", 2, 424242424242424242),
+    ("Community game night", 5, None),
+)
+NONE_SAMPLE = "none"
+
+
+def look_drawn(found: Any) -> Drawn:
+    embed = block_look.embed_of(found)
+    rows: list[list[dict[str, Any]]] = []
+    for at, (label, url) in enumerate(found.buttons):
+        if at % ROW_CAP == 0:
+            rows.append([])
+        rows[-1].append(button(label, "secondary", url=url))
+    return [embed] if embed is not None else [], rows
+
+
+def live_drawn(store: Any, guild: Any, sample: dict[str, Any]) -> Drawn:
+    streams = () if str(sample.get("live") or "") == NONE_SAMPLE else LIVE_SAMPLE
+    return look_drawn(gl.live_block_look(store, guild.id, streams))
+
+
+def upcoming_drawn(store: Any, guild: Any, sample: dict[str, Any]) -> Drawn:
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    events = [] if str(sample.get("events") or "") == NONE_SAMPLE else [
+        ev.UpcomingLine(
+            title,
+            (now + timedelta(days=days, hours=20 - now.hour)).isoformat(),
+            ev.SCHEDULED_EVENT_URL.format(guild_id=guild.id, event_id=made_id) if made_id else None,
+        )
+        for title, days, made_id in UPCOMING_SAMPLE
+    ]
+    return look_drawn(ev.upcoming_block_look(store, guild.id, events))
+
+
+def live_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool) -> Any:
+    from .cogs.content.golive import block_is_on
+
+    if not always and not block_is_on(store, guild.id):
+        return None
+    return live_drawn(store, guild, sample)
+
+
+def upcoming_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool) -> Any:
+    if not always and store.get(guild.id, "events_mode") == "off":
+        return None
+    return upcoming_drawn(store, guild, sample)
+
+
+def links_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool) -> Any:
+    found = link_buttons.links_look(store, guild.id)
+    if not found.buttons:
+        found = link_buttons.links_look(store, guild.id, link_buttons.SAMPLE_ROWS)
+    return look_drawn(found)
+
+
+def live_now(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
+    embeds, rows = live_drawn(store, guild, sample)
+    return made(guild, embeds=embeds, components=rows)
+
+
+def upcoming_events(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
+    embeds, rows = upcoming_drawn(store, guild, sample)
+    return made(guild, embeds=embeds, components=rows)
+
+
+def link_row(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
+    embeds, rows = look_drawn(
+        link_buttons.links_look(store, guild.id, card=sample.get("card"))
+    )
+    return made(guild, embeds=embeds, components=rows)
+
+
 BLOCK_DRAWS: dict[str, Callable[..., Drawn | None]] = {
     "frontdoor": door_block,
     "tempvoice": voice_block,
+    "livenow": live_block,
+    "upcoming": upcoming_block,
+    "links": links_block,
 }
 
 
@@ -680,6 +781,35 @@ RENDERERS: dict[str, Renderer] = {
             minutes_notes,
             keys=(minutes.START_TEXT_KEY, minutes.NOTES_TITLE_KEY),
             sample={"notes": ""},
+        ),
+        Renderer(
+            "block_livenow",
+            "The who's-live-now block",
+            "posts.html",
+            live_now,
+            keys=(
+                GOLIVE_BLOCK_TITLE,
+                GOLIVE_BLOCK_LINE,
+                GOLIVE_BLOCK_UNTITLED,
+                GOLIVE_BLOCK_EMPTY,
+            ),
+            sample={"live": ""},
+        ),
+        Renderer(
+            "block_upcoming",
+            "The upcoming-events block",
+            "posts.html",
+            upcoming_events,
+            keys=(EVENTS_BLOCK_TITLE, EVENTS_BLOCK_LINE, EVENTS_BLOCK_EMPTY),
+            sample={"events": ""},
+        ),
+        Renderer(
+            "block_links",
+            "The link-buttons block",
+            "posts.html",
+            link_row,
+            keys=(POSTS_BLOCK_LINKS_ROWS, POSTS_BLOCK_LINKS_TITLE, POSTS_BLOCK_LINKS_TEXT),
+            sample={"card": ""},
         ),
     )
 }

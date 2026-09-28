@@ -1,4 +1,4 @@
-import { saveSetting, send, settings } from './api.js';
+import { clearSetting, saveSetting, send, settings } from './api.js';
 import { blockPreview } from './blockpreview.js';
 import { bar, button, el, field, notice, run } from './ui.js';
 
@@ -236,8 +236,265 @@ export async function voiceLobbyWords({ onSaved = null, say = null } = {}) {
   ]);
 }
 
+const BLANK_RESTORES = 'Leave a line blank to put the shipped words back.';
+const EMPTY_TICK = 'Show it as it looks when the list is empty';
+
+/** A saved word, or the key cleared back to its shipped words when the field is blank. */
+async function keep(key, value) {
+  if (typeof value === 'string' && !value.trim()) return clearSetting(key);
+  return saveSetting(key, value);
+}
+
+function numberOf(spec) {
+  const value = spec ? (spec.value ?? spec.default) : '';
+  return value === null || value === undefined ? '' : String(value);
+}
+
+/**
+ * A live list block's words: heading, line template, the empty line and its numbers.
+ * `spec.words` are [label, key, help]; `spec.numbers` are [label, key, help, low, high];
+ * `spec.sample` names the preview sample that draws the list empty.
+ */
+function liveListWords(spec) {
+  return async ({ onSaved = null, say = null } = {}) => {
+    const specs = specsByKey(await settings(true));
+    const was = {};
+    const inputs = {};
+    for (const [, key] of spec.words) {
+      was[key] = textOf(specs[key]);
+      inputs[key] = key.endsWith('_line') || key.endsWith('_empty')
+        ? el('textarea', { class: 'input area', rows: '2', id: `lw-${key}` })
+        : el('input', { class: 'input', type: 'text', id: `lw-${key}`, maxlength: '256' });
+      inputs[key].value = was[key];
+    }
+    for (const [, key, , low, high] of spec.numbers) {
+      was[key] = numberOf(specs[key]);
+      inputs[key] = el('input', {
+        class: 'input', type: 'number', id: `lw-${key}`, min: String(low), max: String(high),
+      });
+      inputs[key].value = was[key];
+    }
+    const empty = el('input', { class: 'input switch', type: 'checkbox', id: `lw-${spec.kind}-empty` });
+    const voice = say || notice();
+    const mock = blockPreview({
+      feature: spec.feature,
+      draft: () => Object.fromEntries(spec.words.map(([, key]) => [key, inputs[key].value])),
+      sample: () => ({ [spec.sample]: empty.checked ? 'none' : '' }),
+    });
+    for (const node of [...Object.values(inputs), empty]) {
+      node.addEventListener(node.type === 'checkbox' ? 'change' : 'input', () => mock.repaint());
+    }
+    const changed = () => Object.keys(inputs)
+      .filter((key) => inputs[key].value !== was[key])
+      .map((key) => [key, inputs[key].type === 'number' ? Number(inputs[key].value) : inputs[key].value]);
+    const save = button(SAVE_IT, async () => {
+      const wanted = changed();
+      if (!wanted.length) {
+        voice.say(NOTHING_CHANGED, 'warn');
+        return;
+      }
+      const done = await run(voice, async () => {
+        for (const [key, value] of wanted) {
+          await keep(key, value);
+          was[key] = inputs[key].value;
+        }
+        return send(`/api/post-blocks/${spec.kind}/redraw`, 'POST', {});
+      }, (found) => found?.message || SAVED_FALLBACK);
+      if (done.ok && onSaved) onSaved(done.found);
+    }, { tone: 'warn', small: false });
+    return el('div', { class: 'blockwords' }, [
+      el('div', { class: 'formrow' }, spec.words.map(([label, key, help]) => field(label, inputs[key], help))),
+      el('div', { class: 'formrow' }, spec.numbers.map(([label, key, help]) => field(label, inputs[key], help))),
+      el('p', { class: 'field-help', text: BLANK_RESTORES }),
+      el('label', { class: 'switchline' }, [empty, el('span', { class: 'field-label', text: EMPTY_TICK })]),
+      el('div', { class: 'blockwords-preview' }, [mock.node, mock.say]),
+      el('p', { class: 'field-help', text: spec.previewHelp }),
+      bar([save]),
+      voice,
+    ]);
+  };
+}
+
+/** The who's-live-now block's words and numbers. */
+export const liveNowWords = liveListWords({
+  kind: 'livenow',
+  feature: 'block_livenow',
+  sample: 'live',
+  words: [
+    ['Heading', 'golive_block_title', null],
+    ['Each stream’s line', 'golive_block_line', '{name} is who is live; {title} is the stream’s title, linked to the stream.'],
+    ['Link words for a stream with no title', 'golive_block_untitled', null],
+    ['While nobody is live', 'golive_block_empty', null],
+  ],
+  numbers: [
+    ['Streams listed at most', 'golive_block_max', '1 to 25.', 1, 25],
+    ['Characters of a title shown', 'golive_block_title_chars', '10 to 200; a longer title is cut with an ellipsis.', 10, 200],
+  ],
+  previewHelp: 'The streams drawn here are samples. On a post, the card lists the go-live and '
+    + 'spotlight streams announced right now, and updates itself within a minute or so of one '
+    + 'starting or ending.',
+});
+
+/** The upcoming-events block's words and number. */
+export const upcomingWords = liveListWords({
+  kind: 'upcoming',
+  feature: 'block_upcoming',
+  sample: 'events',
+  words: [
+    ['Heading', 'events_block_title', null],
+    ['Each event’s line', 'events_block_line', '{title} is the event, linked to it in Discord; {when} is its start in each reader’s own time; {relative} is how long until then.'],
+    ['While nothing is coming up', 'events_block_empty', null],
+  ],
+  numbers: [
+    ['Events listed at most', 'events_block_max', '1 to 20.', 1, 20],
+  ],
+  previewHelp: 'The events drawn here are samples. On a post, the card lists the approved events '
+    + 'still ahead, soonest first, and drops one once it has started.',
+});
+
+const LINK_WORDS = { title: 'posts_block_links_title', text: 'posts_block_links_text' };
+const LINK_ROWS = 'posts_block_links_rows';
+const LINK_CARD = 'posts_block_links_card';
+const LINKS_MAX = 10;
+const ADD_LINK = 'Add a link';
+const REMOVE_LINK = 'Remove';
+const LINKS_FULL = 'That is ten links, the most one block carries (two rows of five).';
+const LINKS_HELP = 'Each button opens its address in the browser. The label is at most 80 '
+  + 'characters and the address must start with https://. A row that does not check is refused '
+  + 'with its number, and nothing is saved.';
+const CARD_HELP = 'Off leaves the buttons alone under the post, with no heading or line above them.';
+
+function linkRowsOf(spec) {
+  try {
+    const found = JSON.parse(textOf(spec) || '[]');
+    return Array.isArray(found)
+      ? found.map((one) => ({ label: String(one.label || ''), url: String(one.url || '') }))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The link buttons block: rows of label and address, added, removed and moved here. */
+export async function linkButtonsWords({ onSaved = null, say = null } = {}) {
+  const specs = specsByKey(await settings(true));
+  const rows = linkRowsOf(specs[LINK_ROWS]);
+  const drafted = () => JSON.stringify(rows.map((one) => ({ label: one.label, url: one.url })));
+  const was = {
+    [LINK_ROWS]: drafted(),
+    [LINK_WORDS.title]: textOf(specs[LINK_WORDS.title]),
+    [LINK_WORDS.text]: textOf(specs[LINK_WORDS.text]),
+    [LINK_CARD]: isOn(specs[LINK_CARD]),
+  };
+  const title = el('input', { class: 'input', type: 'text', id: 'lb-title', maxlength: '256' });
+  title.value = was[LINK_WORDS.title];
+  const text = el('textarea', { class: 'input area', rows: '2', id: 'lb-text' });
+  text.value = was[LINK_WORDS.text];
+  const card = el('input', { class: 'input switch', type: 'checkbox', id: 'lb-card' });
+  card.checked = was[LINK_CARD];
+  const list = el('div', { class: 'linkrows' });
+  const full = el('p', { class: 'field-help', 'data-tone': 'warn', text: LINKS_FULL, hidden: true });
+  const voice = say || notice();
+  const mock = blockPreview({
+    feature: 'block_links',
+    draft: () => ({
+      [LINK_ROWS]: drafted(),
+      [LINK_WORDS.title]: title.value,
+      [LINK_WORDS.text]: text.value,
+    }),
+    sample: () => ({ card: card.checked ? 'on' : 'off' }),
+  });
+  let paint = () => {};
+  const add = button(ADD_LINK, () => {
+    rows.push({ label: '', url: 'https://' });
+    paint();
+  }, { tone: 'quiet' });
+  const move = (at, by) => {
+    const to = at + by;
+    if (to < 0 || to >= rows.length) return;
+    [rows[at], rows[to]] = [rows[to], rows[at]];
+    paint();
+  };
+  const rowOf = (one, at) => {
+    const label = el('input', { class: 'input', type: 'text', maxlength: '80', placeholder: 'Label', 'aria-label': `Link ${at + 1} label` });
+    label.value = one.label;
+    label.addEventListener('input', () => { one.label = label.value; mock.repaint(); });
+    const url = el('input', { class: 'input', type: 'url', placeholder: 'https://', 'aria-label': `Link ${at + 1} address` });
+    url.value = one.url;
+    url.addEventListener('input', () => { one.url = url.value; mock.repaint(); });
+    return el('div', { class: 'formrow' }, [
+      label,
+      url,
+      bar([
+        at > 0 ? button('↑', () => move(at, -1), { tone: 'quiet' }) : null,
+        at < rows.length - 1 ? button('↓', () => move(at, 1), { tone: 'quiet' }) : null,
+        button(REMOVE_LINK, () => { rows.splice(at, 1); paint(); }, { tone: 'quiet' }),
+      ].filter(Boolean)),
+    ]);
+  };
+  paint = () => {
+    list.replaceChildren(...rows.map(rowOf));
+    add.hidden = rows.length >= LINKS_MAX;
+    full.hidden = rows.length < LINKS_MAX;
+    mock.repaint();
+  };
+  for (const node of [title, text, card]) {
+    node.addEventListener(node.type === 'checkbox' ? 'change' : 'input', () => mock.repaint());
+  }
+
+  const changed = () => [
+    ...(drafted() !== was[LINK_ROWS] ? [[LINK_ROWS, rows.length ? drafted() : '']] : []),
+    ...(title.value !== was[LINK_WORDS.title] ? [[LINK_WORDS.title, title.value]] : []),
+    ...(text.value !== was[LINK_WORDS.text] ? [[LINK_WORDS.text, text.value]] : []),
+    ...(card.checked !== was[LINK_CARD] ? [[LINK_CARD, card.checked]] : []),
+  ];
+
+  const save = button(SAVE_IT, async () => {
+    const wanted = changed();
+    if (!wanted.length) {
+      voice.say(NOTHING_CHANGED, 'warn');
+      return;
+    }
+    const done = await run(voice, async () => {
+      for (const [key, value] of wanted) {
+        if (key === LINK_ROWS) await saveSetting(key, value);
+        else await keep(key, value);
+        was[key] = key === LINK_ROWS ? drafted() : value;
+      }
+      return send('/api/post-blocks/links/redraw', 'POST', {});
+    }, (found) => found?.message || SAVED_FALLBACK);
+    if (done.ok && onSaved) onSaved(done.found);
+  }, { tone: 'warn', small: false });
+
+  paint();
+  return el('div', { class: 'blockwords' }, [
+    el('div', { class: 'field' }, [
+      el('span', { class: 'field-label', text: 'Buttons' }),
+      list,
+      bar([add]),
+      full,
+      el('p', { class: 'field-help', text: LINKS_HELP }),
+    ]),
+    el('div', { class: 'field' }, [
+      el('label', { class: 'switchline' }, [card, el('span', { class: 'field-label', text: 'Put a card above the buttons' })]),
+      el('p', { class: 'field-help', text: CARD_HELP }),
+    ]),
+    el('div', { class: 'formrow' }, [
+      field('Heading', title),
+      field('Line under it', text),
+    ]),
+    el('p', { class: 'field-help', text: BLANK_RESTORES }),
+    el('div', { class: 'blockwords-preview' }, [mock.node, mock.say]),
+    bar([save]),
+    voice,
+  ]);
+}
+
 /** Each block kind's editor, by the kind's key; a new kind adds its editor here. */
 export const BLOCK_EDITORS = {
   frontdoor: frontDoorWords,
   tempvoice: voiceLobbyWords,
+  livenow: liveNowWords,
+  upcoming: upcomingWords,
+  links: linkButtonsWords,
 };
