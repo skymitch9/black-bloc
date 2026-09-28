@@ -10,6 +10,7 @@ from . import pings
 from .actionlog import log_action
 from .cogs.community.role_menus import get_menu
 from .logkinds import VIA_DISCORD, kind_via
+from .settings_store import PINGS_ONBOARDING_TITLE
 
 log = logging.getLogger(__name__)
 
@@ -120,7 +121,7 @@ def managed(bot: Any, guild_id: int) -> bool:
 
 def prompt_title(bot: Any, guild_id: int) -> str:
     given = str(bot.store.get(guild_id, pings.ONBOARDING_TITLE_KEY) or "").strip()
-    return (given or "What should ping you?")[:PROMPT_TITLE_LIMIT]
+    return (given or PINGS_ONBOARDING_TITLE)[:PROMPT_TITLE_LIMIT]
 
 
 def option_cap(bot: Any, guild_id: int) -> int:
