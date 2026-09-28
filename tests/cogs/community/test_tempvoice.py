@@ -2829,3 +2829,86 @@ def test_every_view_and_modal_answers_its_own_errors(cog):
     """Checklist 8 and 30: components never reach `tree.on_error`."""
     for shape in (VoicePanel, RenameModal, LimitModal, BitrateModal, SetupModal, TempVoicePanel):
         assert issubclass(shape, AnswersErrors), shape.__name__
+
+
+# --- blocks-convert (2026-09-28): the temp voice block is ADDITIVE ONLY -------------------------
+# The owner asked "Will this take functionality away from temp voice in the chat?" and was told
+# no. These pin today's flow so the block can only ever add a second surface over it.
+
+PINNED_PANEL_IDS = [
+    "tempvoice:rename",
+    "tempvoice:limit",
+    "tempvoice:lock",
+    "tempvoice:hide",
+    "tempvoice:kick",
+    "tempvoice:ban",
+    "tempvoice:unban",
+    "tempvoice:permit",
+    "tempvoice:unpermit",
+    "tempvoice:transfer",
+    "tempvoice:claim",
+]
+PINNED_KEYS = {
+    "tempvoice_mode": "enum",
+    "tempvoice_creator_ids": "channels",
+    "tempvoice_name_template": "text",
+    "tempvoice_creator_name": "text",
+    "tempvoice_allowed_role_id": "role",
+    "tempvoice_room_overwrites": "enum",
+    "tempvoice_log_level": "enum",
+    "voice_panel_minutes": "int",
+}
+
+
+def test_pinned_the_in_channel_controls_keep_every_custom_id():
+    view = TempVoicePanel()
+
+    assert [item.custom_id for item in view.children] == PINNED_PANEL_IDS
+    assert view.timeout is None and view.is_persistent()
+
+
+async def test_pinned_joining_the_lobby_makes_a_room_moves_the_member_and_posts_its_controls(
+    cog, bot, creator, member, db
+):
+    await cog._maybe_create(member, creator)
+
+    assert len(bot.guild.created) == 1
+    room = bot.guild.created[0]
+    assert member.moves == [room]
+    row = await get_row(db, room.id)
+    assert row["owner_id"] == member.id and row["creator_id"] == CREATOR
+    assert len(room.messages) == 1
+    panel = room.messages[0]
+    assert row["panel_message_id"] == panel.id
+    assert [item.custom_id for item in panel.kwargs["view"].children] == PINNED_PANEL_IDS
+    assert "tempvoice.create" in await action_kinds(db)
+
+
+def test_pinned_voice_is_still_the_one_command_and_its_settings_are_unchanged(cog):
+    from black_bloc.settings_store import KEY_TYPES
+
+    assert [one.name for one in cog.get_app_commands()] == ["voice"]
+    existing = {
+        key: kind
+        for key, kind in KEY_TYPES.items()
+        if (key.startswith("tempvoice_") and not key.startswith("tempvoice_block_"))
+        or key == "voice_panel_minutes"
+    }
+    assert existing == PINNED_KEYS
+
+
+def test_pinned_the_site_routes_are_unchanged(bot):
+    from black_bloc.api.tools.tempvoice import build_router
+
+    router = build_router(bot)
+    found = sorted((sorted(route.methods)[0], route.path) for route in router.routes)
+
+    assert found == [
+        ("GET", "/api/tempvoice/channels"),
+        ("POST", "/api/tempvoice/forget"),
+        ("POST", "/api/tempvoice/rooms/{channel_id}/hide"),
+        ("POST", "/api/tempvoice/rooms/{channel_id}/limit"),
+        ("POST", "/api/tempvoice/rooms/{channel_id}/lock"),
+        ("POST", "/api/tempvoice/rooms/{channel_id}/rename"),
+        ("POST", "/api/tempvoice/setup"),
+    ]
