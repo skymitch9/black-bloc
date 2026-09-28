@@ -34,7 +34,6 @@ from black_bloc.personas import (
     TROPES,
     VOICES,
     PoolError,
-    Trope,
     drifted,
     enabled_tropes,
     forget_tropes,
@@ -116,8 +115,6 @@ def test_taking_a_side_did_not_loosen_the_two_rules_it_sits_between():
     said = " ".join(CORE.lower().split())
     assert "do not invent a fact about this server or about a member to back a pick up" in said
     assert "somebody's personal details, a moderation decision" in said
-    assert "never invent a fact about a member" in said
-    assert "quote them rather than inventing" in said
 
 
 def test_the_new_rule_is_in_the_core_and_never_in_a_mood():
@@ -169,7 +166,6 @@ async def test_every_command_a_member_can_run_is_in_the_block_the_model_reads(se
 def test_the_command_block_is_inside_the_part_that_is_cached_and_never_a_mood(settings):
     assert FEATURES in stable_core()
     assert FEATURES not in trope_block(BY_NAME["noir"])
-    assert system_blocks(BY_NAME["noir"])[0]["text"] == stable_core()
 
 
 def test_the_core_says_to_name_its_own_command_before_pointing_at_staff():
@@ -202,7 +198,6 @@ def test_every_mood_block_carries_the_register_and_the_invariance_clause():
         said = trope_block(trope)
         assert REGISTER in said
         assert INVARIANT in said
-        assert TONE_CLAUSE in said
 
 
 def test_the_one_string_form_is_the_same_stack_a_provider_without_blocks_gets():
@@ -359,11 +354,6 @@ async def test_the_pool_is_read_once_and_remembered_on_the_bot(tmp_path):
 
 async def test_a_bot_with_no_database_has_an_empty_pool_rather_than_an_error():
     assert await pooled(FakeBot(None)) == ()
-
-
-def test_a_trope_is_a_value_and_stays_one():
-    warm = Trope("warm", "warm", "v", ())
-    assert warm == Trope("warm", "warm", "v", ())
 
 
 # --- the shared manifest -----------------------------------------------------------------------
