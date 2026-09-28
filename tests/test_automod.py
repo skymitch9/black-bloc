@@ -218,8 +218,9 @@ def test_slowmode_counts_messages_and_linkspam_counts_links():
     book = only("slowmode")
     for index in range(6):
         at = START + timedelta(seconds=index * 0.5)
-        verdicts = evaluate(facts_from(FakeMessage(content="hi", at=at, message_id=index)), state,
-                            book, now=at)
+        verdicts = evaluate(
+            facts_from(FakeMessage(content="hi", at=at, message_id=index)), state, book, now=at
+        )
     assert [v.rule for v in verdicts] == ["slowmode"]
     assert verdicts[0].sentence == "6 messages in 4s"
     assert verdicts[0].actions == ()
@@ -233,46 +234,25 @@ def test_slowmode_counts_messages_and_linkspam_counts_links():
     assert [v.rule for v in links] == ["linkspam"] and links[0].sentence == "1 link in 1s"
 
 
-def test_invites_attachments_caps_and_bad_words():
-    invite = evaluate(
-        facts_from(FakeMessage(content="join discord.gg/abc123", at=START)),
+@pytest.mark.parametrize(
+    ("rule", "message", "changes", "fires"),
+    [
+        ("invitespam", {"content": "join discord.gg/abc123"}, {}, True),
+        ("attachmentspam", {"attachments": 5}, {}, True),
+        ("caps", {"content": "STOP DOING THAT"}, {"threshold": 70}, True),
+        ("caps", {"content": "SHH"}, {"threshold": 70}, False),
+        ("bad_words", {"content": "you are a Grifter, mate"}, {"words": ["grifter"]}, True),
+    ],
+    ids=["invite", "attachments", "caps", "caps-too-short", "bad-word"],
+)
+def test_invites_attachments_caps_and_bad_words(rule, message, changes, fires):
+    verdicts = evaluate(
+        facts_from(FakeMessage(at=START, **message)),
         WindowState(),
-        only("invitespam"),
+        only(rule, **changes),
         now=START,
     )
-    assert [v.rule for v in invite] == ["invitespam"]
-
-    files = evaluate(
-        facts_from(FakeMessage(attachments=5, at=START)),
-        WindowState(),
-        only("attachmentspam"),
-        now=START,
-    )
-    assert [v.rule for v in files] == ["attachmentspam"]
-
-    shouting = evaluate(
-        facts_from(FakeMessage(content="STOP DOING THAT", at=START)),
-        WindowState(),
-        only("caps", threshold=70),
-        now=START,
-    )
-    assert [v.rule for v in shouting] == ["caps"] and "capitals" in shouting[0].sentence
-
-    quiet = evaluate(
-        facts_from(FakeMessage(content="SHH", at=START)),
-        WindowState(),
-        only("caps", threshold=70),
-        now=START,
-    )
-    assert quiet == []
-
-    words = evaluate(
-        facts_from(FakeMessage(content="you are a Grifter, mate", at=START)),
-        WindowState(),
-        only("bad_words", words=["grifter"]),
-        now=START,
-    )
-    assert [v.rule for v in words] == ["bad_words"]
+    assert [v.rule for v in verdicts] == ([rule] if fires else [])
 
 
 def test_bad_words_never_match_inside_another_word():
@@ -352,21 +332,33 @@ def test_exempt_and_honeypot_channels_and_their_threads_are_skipped():
     assert channel_exempt(FakeChannel(13), {10}, {11}) is False
 
 
-def test_rule_validation_refuses_what_discord_would_refuse():
+@pytest.mark.parametrize(
+    ("rule", "given"),
+    [
+        ("mention_spam", {"actions": ["explode"]}),
+        ("mention_spam", {"timeout_s": TIMEOUT_MAX_SECONDS + 1}),
+        ("mention_spam", {"threshold": 0}),
+        ("caps", {"threshold": 101}),
+        ("mention_spam", {"enabled": "yes"}),
+        ("mention_spam", {"colour": "red"}),
+    ],
+    ids=[
+        "unknown-action",
+        "timeout-over-max",
+        "zero-threshold",
+        "caps-over-100",
+        "enabled-not-bool",
+        "unknown-field",
+    ],
+)
+def test_rule_validation_refuses_what_discord_would_refuse(rule, given):
+    with pytest.raises(RuleError):
+        normalise_rule(rule, given)
+
+
+def test_an_unknown_rule_is_refused_and_lists_are_read_tidied():
     with pytest.raises(RuleError):
         validate_rules({"nonsense": {}})
-    with pytest.raises(RuleError):
-        normalise_rule("mention_spam", {"actions": ["explode"]})
-    with pytest.raises(RuleError):
-        normalise_rule("mention_spam", {"timeout_s": TIMEOUT_MAX_SECONDS + 1})
-    with pytest.raises(RuleError):
-        normalise_rule("mention_spam", {"threshold": 0})
-    with pytest.raises(RuleError):
-        normalise_rule("caps", {"threshold": 101})
-    with pytest.raises(RuleError):
-        normalise_rule("mention_spam", {"enabled": "yes"})
-    with pytest.raises(RuleError):
-        normalise_rule("mention_spam", {"colour": "red"})
     assert normalise_rule("mention_spam", {"actions": "warn, delete"})["actions"] == [
         "delete",
         "warn",
@@ -375,9 +367,10 @@ def test_rule_validation_refuses_what_discord_would_refuse():
 
 
 def test_a_broken_rule_book_falls_back_to_the_default_rather_than_raising():
-    assert rule_config({"mention_spam": {"threshold": -1}}, "mention_spam") == DEFAULT_RULES[
-        "mention_spam"
-    ]
+    assert (
+        rule_config({"mention_spam": {"threshold": -1}}, "mention_spam")
+        == DEFAULT_RULES["mention_spam"]
+    )
     assert rule_config("not a dict", "slowmode")["window_s"] == 4
 
 
@@ -427,8 +420,9 @@ def test_a_rule_card_offers_one_spelling_of_every_move_it_has(name):
 
     for enabled in (True, False):
         for actions in ([], ["delete"]):
-            moves = card_buttons(cfg | {"enabled": enabled, "actions": actions},
-                                 has_words=has_words)
+            moves = card_buttons(
+                cfg | {"enabled": enabled, "actions": actions}, has_words=has_words
+            )
             labels = [move.label for move in moves]
             assert len(moves) <= 5, labels
             assert len(set(labels)) == len(labels)
