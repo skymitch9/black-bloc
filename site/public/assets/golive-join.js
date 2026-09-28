@@ -434,6 +434,13 @@ export const DRAWERS = [
     ],
   },
   {
+    id: 'pingsblock',
+    title: 'The ping block on a post',
+    note: 'What the ping me when they go live block says when a post carries it — its heading, '
+      + 'its line and its button. The block itself is added on the Posts page.',
+    keys: ['pings_block_title', 'pings_block_text', 'pings_block_label'],
+  },
+  {
     id: 'pings',
     title: 'Ping roles',
     note: 'The shared Events role, a streamer’s own role that only their followers wear, and '

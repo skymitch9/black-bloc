@@ -7,6 +7,8 @@ from typing import Any, NamedTuple
 
 from . import rolemenu_panels as panels
 from .actionlog import log_action
+from .button_block import ButtonLook, Words
+from .button_block import look as button_look
 from .cogs.community.role_menus import (
     OPTIONS_MAX,
     add_option,
@@ -22,7 +24,15 @@ from .logkinds import VIA_DISCORD, kind_via
 from .panels import KEEP_IT as KEEP_IT
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
-from .settings_store import PINGS_FAN_ROLE_TEMPLATE, SettingError, coerce_value
+from .settings_store import (
+    BUTTON_BLOCK_DEFAULTS,
+    PINGS_BLOCK_LABEL,
+    PINGS_BLOCK_TEXT,
+    PINGS_BLOCK_TITLE,
+    PINGS_FAN_ROLE_TEMPLATE,
+    SettingError,
+    coerce_value,
+)
 
 log = logging.getLogger(__name__)
 
@@ -1935,3 +1945,16 @@ RAIDTRAIN_REUSED = (
     "opt in with **Ping me for raid trains** on `/pings`."
 )
 RAIDTRAIN_UNCHANGED = "Raid-train pings already pointed at **{role}**, so nothing was changed."
+
+
+BLOCK_HEAD = "pingsblock:open"
+BLOCK_WORDS = Words(PINGS_BLOCK_TITLE, PINGS_BLOCK_TEXT, PINGS_BLOCK_LABEL)
+
+
+def block_drawn(store: Any, guild_id: int) -> bool:
+    """The ping block is drawn only while members can choose pings at all."""
+    return store.get(guild_id, MODE_KEY) == "on"
+
+
+def block_look(store: Any, guild_id: int) -> ButtonLook:
+    return button_look(store, guild_id, BLOCK_WORDS, BUTTON_BLOCK_DEFAULTS)

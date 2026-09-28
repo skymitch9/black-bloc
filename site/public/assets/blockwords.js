@@ -1,6 +1,6 @@
-import { saveSetting, send, settings } from './api.js';
+import { clearSetting, saveSetting, send, settings } from './api.js';
 import { blockPreview } from './blockpreview.js';
-import { bar, button, el, field, notice, run } from './ui.js';
+import { bar, button, el, field, notice, readSelect, roleSelect, run } from './ui.js';
 
 // The one editor of a block's words, shared by the Posts page's Blocks section and the Modmail
 // page's Front door card. Every field is a settings key the Settings page also reaches.
@@ -236,8 +236,140 @@ export async function voiceLobbyWords({ onSaved = null, say = null } = {}) {
   ]);
 }
 
+const BUTTON_BLOCKS = {
+  marathonrole: {
+    feature: 'block_marathonrole',
+    words: { title: 'marathon_block_title', text: 'marathon_block_text', label: 'marathon_block_label' },
+    labelName: 'Button',
+    labelHelp: 'Gives the member who presses it the Marathon role, or takes it back if they have it. '
+      + 'It pings nobody. At most 80 characters.',
+    role: 'marathon_role_id',
+    said: [
+      ['marathon_block_added_said', 'When it gives the role', '{role} is the role\'s name.'],
+      ['marathon_block_removed_said', 'When it takes the role back', '{role} is the role\'s name.'],
+      ['marathon_block_unset_said', 'While no role is picked', 'Also said if the role is gone '
+        + 'from the server or carries a staff permission.'],
+    ],
+  },
+  pingsfollow: {
+    feature: 'block_pingsfollow',
+    words: { title: 'pings_block_title', text: 'pings_block_text', label: 'pings_block_label' },
+    labelName: 'Button',
+    labelHelp: 'Opens the same /pings panel a member gets by typing /pings, with its Follow a '
+      + 'streamer… picker — every rule it has still applies. At most 80 characters.',
+    previewHelp: 'Nothing is drawn on a post while pings are off (Settings ▸ pings).',
+  },
+  birthday: {
+    feature: 'block_birthday',
+    words: { title: 'birthday_block_title', text: 'birthday_block_text', label: 'birthday_block_label' },
+    labelName: 'Button',
+    labelHelp: 'Opens the same /birthday panel, privately; its Set my birthday button asks for the '
+      + 'date. At most 80 characters.',
+    previewHelp: 'Nothing is drawn on a post while birthdays are off (Settings ▸ birthday).',
+  },
+  proposeevent: {
+    feature: 'block_proposeevent',
+    words: { title: 'events_block_title', text: 'events_block_text', label: 'events_block_label' },
+    labelName: 'Button',
+    labelHelp: 'Opens the same private card the front door\'s event button opens; its Propose '
+      + 'button starts the /event form. At most 80 characters.',
+    previewHelp: 'Nothing is drawn on a post while event proposals are off (Settings ▸ events).',
+  },
+};
+const NO_ROLE_YET = 'No Marathon role is picked yet, so a press says staff have not set it up. '
+  + 'Pick it here or on the Settings page (marathon_role_id).';
+const ROLE_HELP = 'The role the button hands out. A role with a staff permission (kick, ban, '
+  + 'manage anything, mention everyone) is never handed out — the press says it is not set up, '
+  + 'and the Logs get a marathon.role_failed row.';
+
+/** One editor for every one-button block: heading, line, the button, and a kind's extras. */
+function buttonBlockWords(kind) {
+  const shape = BUTTON_BLOCKS[kind];
+  return async ({ onSaved = null, say = null } = {}) => {
+    const specs = specsByKey(await settings(true));
+    const was = {};
+    const inputs = {};
+    for (const [name, key] of Object.entries(shape.words)) {
+      was[key] = textOf(specs[key]);
+      inputs[key] = name === 'text'
+        ? el('textarea', { class: 'input area', rows: '3', id: `${kind}-${name}` })
+        : el('input', { class: 'input', type: 'text', id: `${kind}-${name}`, maxlength: name === 'title' ? '256' : '80' });
+      inputs[key].value = was[key];
+    }
+    for (const [key] of shape.said || []) {
+      was[key] = textOf(specs[key]);
+      inputs[key] = el('textarea', { class: 'input area', rows: '2', id: `${kind}-${key}` });
+      inputs[key].value = was[key];
+    }
+    let role = null;
+    if (shape.role) {
+      was[shape.role] = specs[shape.role]?.value ? String(specs[shape.role].value) : null;
+      role = await roleSelect(was[shape.role], { id: `${kind}-role` });
+    }
+
+    const voice = say || notice();
+    const warn = el('p', { class: 'field-help', 'data-tone': 'warn', text: NO_ROLE_YET, hidden: true });
+    const mock = blockPreview({
+      feature: shape.feature,
+      draft: () => Object.fromEntries(Object.values(shape.words).map((key) => [key, inputs[key].value])),
+    });
+    const paint = () => {
+      if (role) warn.hidden = Boolean(readSelect(role, false));
+      mock.repaint();
+    };
+    for (const node of [...Object.values(inputs), ...(role ? [role] : [])]) {
+      node.addEventListener(node.tagName === 'SELECT' ? 'change' : 'input', paint);
+    }
+
+    const changed = () => [
+      ...Object.keys(inputs)
+        .filter((key) => inputs[key].value !== was[key])
+        .map((key) => [key, inputs[key].value]),
+      ...(role && readSelect(role, false) !== was[shape.role]
+        ? [[shape.role, readSelect(role, false)]]
+        : []),
+    ];
+
+    const save = button(SAVE_IT, async () => {
+      const wanted = changed();
+      if (!wanted.length) {
+        voice.say(NOTHING_CHANGED, 'warn');
+        return;
+      }
+      const done = await run(voice, async () => {
+        for (const [key, value] of wanted) {
+          if (value === null) await clearSetting(key);
+          else await saveSetting(key, value);
+          was[key] = value;
+        }
+        return send(`/api/post-blocks/${kind}/redraw`, 'POST', {});
+      }, (found) => found?.message || SAVED_FALLBACK);
+      if (done.ok && onSaved) onSaved(done.found);
+    }, { tone: 'warn', small: false });
+
+    paint();
+    return el('div', { class: 'blockwords' }, [
+      el('div', { class: 'formrow' }, [
+        field('Heading', inputs[shape.words.title]),
+        field('Line under it', inputs[shape.words.text]),
+      ]),
+      field(shape.labelName, inputs[shape.words.label], shape.labelHelp),
+      ...(role ? [field('The Marathon role', role, ROLE_HELP), warn] : []),
+      ...(shape.said || []).map(([key, name, help]) => field(name, inputs[key], help)),
+      el('div', { class: 'blockwords-preview' }, [mock.node, mock.say]),
+      shape.previewHelp ? el('p', { class: 'field-help', text: shape.previewHelp }) : null,
+      bar([save]),
+      voice,
+    ]);
+  };
+}
+
 /** Each block kind's editor, by the kind's key; a new kind adds its editor here. */
 export const BLOCK_EDITORS = {
   frontdoor: frontDoorWords,
   tempvoice: voiceLobbyWords,
+  marathonrole: buttonBlockWords('marathonrole'),
+  pingsfollow: buttonBlockWords('pingsfollow'),
+  birthday: buttonBlockWords('birthday'),
+  proposeevent: buttonBlockWords('proposeevent'),
 };

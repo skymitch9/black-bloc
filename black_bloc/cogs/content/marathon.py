@@ -1563,6 +1563,7 @@ class Marathons(commands.Cog):
         from .marathon_near_miss import NearMissButton
         from .marathon_people import PeopleButton
         from .marathon_public import HighlightButton
+        from .marathon_role import MarathonRoleButton
         from .marathon_thread_controls import ControlButton
 
         self.bot.add_dynamic_items(
@@ -1574,6 +1575,7 @@ class Marathons(commands.Cog):
             ControlButton,
             HighlightButton,
             NearMissButton,
+            MarathonRoleButton,
         )
         if not self.bot.db.is_connected:
             return

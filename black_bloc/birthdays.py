@@ -8,8 +8,13 @@ from datetime import UTC, date, datetime, time, timedelta, timezone
 from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
+from .button_block import ButtonLook, Words
+from .button_block import look as button_look
 from .panels import panel_minutes as library_panel_minutes
 from .settings_store import (
+    BIRTHDAY_BLOCK_LABEL,
+    BIRTHDAY_BLOCK_TEXT,
+    BIRTHDAY_BLOCK_TITLE,
     BIRTHDAY_COLOR,
     BIRTHDAY_POST_FAILED_KEY,
     BIRTHDAY_POST_MISSING_KEY,
@@ -21,6 +26,7 @@ from .settings_store import (
     BIRTHDAY_POST_WORDS,
     BIRTHDAY_TEMPLATE,
     BIRTHDAY_TZ,
+    BUTTON_BLOCK_DEFAULTS,
     HEX_COLOR,
 )
 
@@ -488,3 +494,16 @@ async def member_zone_name(db: Any, user_id: int) -> str:
         return BIRTHDAY_TZ
     stored = row["tz"] if row is not None else None
     return str(stored) if stored else BIRTHDAY_TZ
+
+
+BLOCK_HEAD = "bdayblock:open"
+BLOCK_WORDS = Words(BIRTHDAY_BLOCK_TITLE, BIRTHDAY_BLOCK_TEXT, BIRTHDAY_BLOCK_LABEL)
+
+
+def block_drawn(store: Any, guild_id: int) -> bool:
+    """Not drawn while birthdays are off; /birthday itself still opens then."""
+    return str(store.get(guild_id, "birthday_mode") or "off") != "off"
+
+
+def block_look(store: Any, guild_id: int) -> ButtonLook:
+    return button_look(store, guild_id, BLOCK_WORDS, BUTTON_BLOCK_DEFAULTS)

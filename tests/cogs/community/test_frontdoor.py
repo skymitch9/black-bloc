@@ -1845,3 +1845,20 @@ async def test_the_door_and_a_second_block_share_one_message_and_redraw_together
     assert outcome.ok
     assert [one.title for one in message.embeds] == ["Sign in here"]
     assert [item.custom_id for item in message.view.children] == ["sign:press"]
+
+
+# --- pinned before the propose block (blocks-buttons): the door's event opener ------------------
+
+
+async def test_pinned_the_event_opener_answers_a_private_handoff_card(guarded, member):
+    from black_bloc.cogs.community.frontdoor import open_the_event
+
+    interaction = FakeInteraction(guarded, member)
+
+    await open_the_event(interaction)
+
+    sent = interaction.response.messages[-1]
+    assert sent["ephemeral"] is True
+    assert isinstance(sent["view"], EventHandoff)
+    assert [type(one) for one in sent["view"].children] == [EventDoor]
+    assert not interaction.edits

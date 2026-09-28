@@ -11,9 +11,21 @@ from typing import Any
 
 import discord
 
-from . import birthdays, frontdoor, minutes, modmail, polls, posts, shadow, spotlight
+from . import (
+    birthdays,
+    button_block,
+    frontdoor,
+    marathon_role,
+    minutes,
+    modmail,
+    polls,
+    posts,
+    shadow,
+    spotlight,
+)
 from . import events as ev
 from . import golive as gl
+from . import pings as ping_words
 from . import requests as reqs
 from . import tempvoice as voice
 from .settings_store import (
@@ -455,9 +467,40 @@ def voice_lobby(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Ren
     return made(guild, embeds=embeds, components=rows)
 
 
+def button_parts(found: button_block.ButtonLook) -> Drawn:
+    return [button_block.embed_of(found)], [[button(found.label, "primary")]]
+
+
+def button_block_draw(words: Any) -> Callable[..., Drawn | None]:
+    """A one-button block, drawn by its feature's own look; nothing while the feature is off."""
+
+    def draw(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool) -> Any:
+        if not always and not words.block_drawn(store, guild.id):
+            return None
+        return button_parts(words.block_look(store, guild.id))
+
+    return draw
+
+
+def button_block_render(words: Any) -> Callable[..., Rendered]:
+    def build(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
+        embeds, rows = button_parts(words.block_look(store, guild.id))
+        return made(guild, embeds=embeds, components=rows)
+
+    return build
+
+
+BUTTON_BLOCKS: dict[str, Any] = {
+    "marathonrole": marathon_role,
+    "pingsfollow": ping_words,
+    "birthday": birthdays,
+    "proposeevent": ev,
+}
+
 BLOCK_DRAWS: dict[str, Callable[..., Drawn | None]] = {
     "frontdoor": door_block,
     "tempvoice": voice_block,
+    **{kind: button_block_draw(words) for kind, words in BUTTON_BLOCKS.items()},
 }
 
 
@@ -680,6 +723,21 @@ RENDERERS: dict[str, Renderer] = {
             minutes_notes,
             keys=(minutes.START_TEXT_KEY, minutes.NOTES_TITLE_KEY),
             sample={"notes": ""},
+        ),
+        *(
+            Renderer(
+                f"block_{kind}",
+                title,
+                "posts.html",
+                button_block_render(BUTTON_BLOCKS[kind]),
+                keys=tuple(BUTTON_BLOCKS[kind].BLOCK_WORDS),
+            )
+            for kind, title in (
+                ("marathonrole", "The Marathon role block"),
+                ("pingsfollow", "The ping me when they go live block"),
+                ("birthday", "The set your birthday block"),
+                ("proposeevent", "The propose an event block"),
+            )
         ),
     )
 }

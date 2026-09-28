@@ -268,3 +268,47 @@ def test_an_unknown_block_in_the_sample_draws_nothing_rather_than_failing(bot, g
     found = preview.render(bot, guild, "post", None, {"body": "Hi", "blocks": "nope,frontdoor"})
 
     assert found.content == "Hi" and len(found.embeds) == 1
+
+
+# --- the four one-button blocks (blocks-buttons) ------------------------------------------------
+
+
+def test_each_button_block_s_editor_draws_one_card_and_one_button_from_its_draft(bot, guild):
+    for kind, label_key in (
+        ("marathonrole", "marathon_block_label"),
+        ("pingsfollow", "pings_block_label"),
+        ("birthday", "birthday_block_label"),
+        ("proposeevent", "events_block_label"),
+    ):
+        found = preview.render(bot, guild, f"block_{kind}", {label_key: "Press me"}).to_dict()
+
+        assert len(found["embeds"]) == 1 and found["embeds"][0]["title"]
+        assert [one["label"] for one in found["components"][0]] == ["Press me"]
+        assert found["components"][0][0]["style"] == "primary"
+
+
+def test_the_post_preview_draws_a_button_block_with_its_own_renderer(bot, guild):
+    carried = preview.render(bot, guild, "post", None, {"body": "", "blocks": "proposeevent"})
+    alone = preview.render(bot, guild, "block_proposeevent")
+
+    assert carried.embeds == alone.embeds and carried.components == alone.components
+
+
+def test_a_button_block_whose_feature_is_off_is_drawn_only_when_asked_for_always(store, guild):
+    off = SimpleNamespace(
+        store=preview.PreviewStore(store, guild.id, {"pings_mode": "off"}), guild=guild
+    )
+
+    on_a_post = preview.render(off, guild, "post", None, {"blocks": "pingsfollow"})
+    in_the_section = preview.render(
+        off, guild, "post", None, {"blocks": "pingsfollow", "always": "true"}
+    )
+
+    assert on_a_post.embeds == ()
+    assert len(in_the_section.embeds) == 1 and len(in_the_section.components) == 1
+
+
+def test_the_marathon_role_block_is_drawn_with_no_role_picked(bot, guild):
+    found = preview.render(bot, guild, "post", None, {"body": "", "blocks": "marathonrole"})
+
+    assert found.embeds[0]["title"] == "The Marathon role"

@@ -189,6 +189,9 @@
       "golive_require_role_id": "when this is set, only people wearing that role are ever announced. Blank — the default — announces anybody the bot sees streaming",
       "golive_shadow_channel_id": "where this feature's rehearsals land while it is in shadow (spotlight announcements); blank means shadow_channel_id. Set it to send only this feature's rehearsals somewhere else",
       "golive_template": "the sentence a go-live announcement is made of. It takes {name} {game} {title} {url} {platform}, and {platform} fills itself in as Twitch or YouTube so one wording serves both platforms",
+      "pings_block_label": "what the ping me when they go live block's button says, at most 80 characters; the button opens the same /pings panel and its picker. Blank restores the shipped wording",
+      "pings_block_text": "the line under that heading on the ping me when they go live block; blank restores the shipped wording",
+      "pings_block_title": "the heading on the ping me when they go live block, when a post carries it; blank restores the shipped wording",
       "pings_empty_role_days": "how many days a streamer's follower role that NOBODY wears survives before Black Bloc deletes it, so the server's role count tracks who is actually followed. 30 by default; a role somebody wears is never deleted by this",
       "pings_events_role_name": "what **Set up the Events role** on `/pings` calls the one shared opt-in role for go-live and event pings when it has to make it. *Events* by default; a role of that name that already exists is reused rather than duplicated",
       "pings_fan_role_creation": "who can bring a streamer's own follower role into being. follow — the default — makes it the first time somebody follows them on `/pings`, so a role exists only where somebody wants one; self lets the streamer make their own with **Start my own ping role**; staff means only an Auntie or Uncle can, from `/pings` ▸ **Streamers…**; auto makes one the moment a Twitch channel is linked. Staff can always do it for anybody, whichever this says",
@@ -7702,6 +7705,110 @@
       "body": {},
       "read_by": [
         "blockwords.js Save the words (Posts ▸ Blocks ▸ Temp voice lobby)"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "redrawn",
+        "message",
+        "kinds"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/post-blocks/marathonrole/redraw",
+      "body": {},
+      "read_by": [
+        "blockwords.js Save the words (Posts ▸ Blocks ▸ Marathon role)"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "redrawn",
+        "message",
+        "kinds"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/post-blocks/pingsfollow/redraw",
+      "body": {},
+      "read_by": [
+        "blockwords.js Save the words (Posts ▸ Blocks ▸ Ping me when they go live)"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "redrawn",
+        "message",
+        "kinds"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/post-blocks/birthday/redraw",
+      "body": {},
+      "read_by": [
+        "blockwords.js Save the words (Posts ▸ Blocks ▸ Set your birthday)"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "redrawn",
+        "message",
+        "kinds"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/post-blocks/proposeevent/redraw",
+      "body": {},
+      "read_by": [
+        "blockwords.js Save the words (Posts ▸ Blocks ▸ Propose an event)"
       ],
       "shape": "object",
       "keys": [

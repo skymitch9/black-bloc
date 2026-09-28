@@ -7,10 +7,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from ... import pings
+from ... import button_block, pings
 from ... import pings_onboarding as onboarding
 from ...actionlog import send_logs
-from ...command_errors import AnswersErrors
+from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso
 from ...loops import wait_ready
 from ...panels import (
@@ -27,8 +27,10 @@ from ...panels import (
     still_staff,
 )
 from ...settings_store import (
+    BUTTON_BLOCK_DEFAULTS,
     DB_UNAVAILABLE,
     GUILD_ONLY,
+    PINGS_BLOCK_LABEL,
     PINGS_CREATORS,
     PINGS_MODES,
     PINGS_ON_UNLINK,
@@ -1265,6 +1267,63 @@ class NumbersModal(AnswersErrors, discord.ui.Modal):
         await run_settings(interaction, wanted, self.previous)
 
 
+async def open_pings_panel(interaction: discord.Interaction) -> None:
+    """The /pings panel, opened by the command or by the ping block's button."""
+    if interaction.guild is None:
+        await answer(interaction, GUILD_ONLY)
+        return
+    bot = interaction.client
+    if not bot.db.is_connected:
+        log.warning("pings: refused the panel — the database is not connected")
+        await answer(interaction, DB_UNAVAILABLE)
+        return
+    embed, view = await build_panel(bot, interaction.guild, interaction.user)
+    await interaction.response.send_message(
+        embed=embed,
+        view=view,
+        ephemeral=True,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+    view.message = await interaction.original_response()
+
+
+BLOCK_LABEL_DEFAULT = str(BUTTON_BLOCK_DEFAULTS[PINGS_BLOCK_LABEL])
+
+
+class OpenPingsButton(
+    SafeDynamicItem,
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=button_block.template(pings.BLOCK_HEAD),
+):
+    """The ping block's button: the same /pings panel, ephemeral, with every gate it has."""
+
+    def __init__(self, guild_id: Any, label: str | None = None) -> None:
+        self.guild_id = int(guild_id)
+        super().__init__(
+            discord.ui.Button(
+                label=label or BLOCK_LABEL_DEFAULT,
+                style=discord.ButtonStyle.primary,
+                custom_id=button_block.custom_id(pings.BLOCK_HEAD, guild_id),
+                row=0,
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: Any):
+        return cls(int(match["guild_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        await open_pings_panel(interaction)
+
+
+def block_parts(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Any, str] | None:
+    """The ping block a post carries: nothing while members cannot choose pings."""
+    if not pings.block_drawn(bot.store, guild.id):
+        return None
+    look = pings.block_look(bot.store, guild.id)
+    return button_block.parts(look, OpenPingsButton(guild.id, look.label))
+
+
 class Pings(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -1272,6 +1331,7 @@ class Pings(commands.Cog):
         self.last_error: str = ""
 
     async def cog_load(self) -> None:
+        self.bot.add_dynamic_items(OpenPingsButton)
         self.sweep.start()
 
     async def cog_unload(self) -> None:
@@ -1279,21 +1339,7 @@ class Pings(commands.Cog):
 
     @app_commands.command(name="pings", description="Choose which pings you get")
     async def pings_panel(self, interaction: discord.Interaction) -> None:
-        if interaction.guild is None:
-            await answer(interaction, GUILD_ONLY)
-            return
-        if not self.bot.db.is_connected:
-            log.warning("pings: refused the panel — the database is not connected")
-            await answer(interaction, DB_UNAVAILABLE)
-            return
-        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        view.message = await interaction.original_response()
+        await open_pings_panel(interaction)
 
     @tasks.loop(minutes=SWEEP_MINUTES)
     async def sweep(self) -> None:

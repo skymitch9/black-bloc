@@ -657,6 +657,8 @@ ROUTINE: frozenset[str] = frozenset(
         "minutes.deleted",
         "minutes.purged",
         "minutes.mode",
+        "marathon.role_joined",
+        "marathon.role_left",
     }
 )
 

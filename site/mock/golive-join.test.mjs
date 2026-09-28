@@ -542,6 +542,7 @@ const NAMESPACE_KEYS = Object.keys(CONTRACT.settings.help);
   same(`${where} — what a spotlight's dates say`, home('dates'), sorted(drawerOf('dates').keys));
   same(`${where} — when a channel pings`, home('pingwindows'), sorted(drawerOf('pingwindows').keys));
   same(`${where} — slash panels and log lines`, home('panels'), sorted(drawerOf('panels').keys));
+  same(`${where} — the ping block on a post`, home('pingsblock'), sorted(drawerOf('pingsblock').keys));
   is(`${where} — ping roles holds every pings_* but the mode, the log level and the panel`, home('pings').length, 10);
   for (const key of ['pings_mode', 'pings_log_level', 'pings_panel_minutes']) {
     ok(`${where} — ${key} is not in the Ping roles drawer`, !home('pings').includes(key), `${key} is in the Ping roles drawer`);
