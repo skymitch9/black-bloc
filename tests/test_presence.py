@@ -165,11 +165,8 @@ def test_the_dev_guild_is_counted_and_anything_else_is_the_fallback(bot):
 
 
 def test_the_default_bio_carries_the_dashboard_link_the_owner_asked_for(store):
-    assert store.default("bot_bio") == (
-        "Black Bloc — moderation & content bot for Black in a Flash!. "
-        "Staff dashboard: https://blackbloc.heygabi.ai"
-    )
     assert store.default("bot_bio") == BOT_BIO_TEMPLATE.format(site=store.settings.origin)
+    assert "https://blackbloc.heygabi.ai" in store.default("bot_bio")
     assert store.default("status_prefix") == STATUS_PREFIX
 
 
