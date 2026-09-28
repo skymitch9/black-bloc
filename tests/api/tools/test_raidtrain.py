@@ -6,7 +6,17 @@ import pytest
 
 from black_bloc.api.tools.raidtrain import slot_row, train_row
 from black_bloc.cogs.content.raidtrain import create_train, get_train, slots_for
-from black_bloc.raidtrain import CANCELLED, DONE, LOCKED, OPEN
+from black_bloc.raidtrain import (
+    CANCELLED,
+    DONE,
+    LOCKED,
+    OPEN,
+    SLOT_COUNT_MAX,
+    SLOT_COUNT_MIN,
+    SLOT_MINUTES_MAX,
+    SLOT_MINUTES_MIN,
+    STATUS_WORDS,
+)
 
 GUILD = 4242
 ALICE = 21
@@ -116,7 +126,7 @@ async def test_the_list_carries_the_counts_the_table_draws(client, sign_in, web)
     assert rows[0]["title"] == "Saturday train"
     assert rows[0]["filled"] == 0 and rows[0]["slots_total"] == 3
     assert rows[0]["status"] == OPEN
-    assert rows[0]["status_word"] == "open for sign-ups"
+    assert rows[0]["status_word"] == STATUS_WORDS[OPEN]
     assert rows[0]["editable"] is True
 
 
@@ -178,7 +188,7 @@ async def test_the_status_route_reports_the_sweeps_own_health(client, sign_in, w
     assert body["last_ok_at"] == "2026-09-02T00:00:00+00:00"
     assert body["last_error"] is None
     assert body["upcoming"] == 1 and body["slots"] == 3 and body["claimed"] == 0
-    assert body["every_minutes"] == 5
+    assert body["every_minutes"] == web.store.default("raidtrain_poll_minutes")
 
 
 async def test_creating_a_train_writes_its_slots_and_posts_the_lineup(
@@ -215,11 +225,11 @@ async def test_creating_a_train_writes_its_slots_and_posts_the_lineup(
         ({"title": "T", "start": "2020-01-01 10:00"}, "already gone by"),
         (
             {"title": "T", "start": "2099-09-14 19:30", "slot_minutes": 5, "slot_count": 3},
-            "15 to 720 minutes",
+            f"{SLOT_MINUTES_MIN} to {SLOT_MINUTES_MAX} minutes",
         ),
         (
             {"title": "T", "start": "2099-09-14 19:30", "slot_minutes": 60, "slot_count": 99},
-            "1 to 24 slots",
+            f"{SLOT_COUNT_MIN} to {SLOT_COUNT_MAX} slots",
         ),
     ],
 )
@@ -232,7 +242,6 @@ async def test_a_train_nobody_could_run_is_refused_in_words(
 
     assert response.status_code == 400
     assert said in response.json()["message"]
-    assert await web.db.conn.execute("SELECT * FROM raid_trains")
     assert client.get("/api/raidtrains?scope=all").json() == []
 
 
