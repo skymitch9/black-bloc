@@ -6957,7 +6957,8 @@
         "guard",
         "notes",
         "checked_at",
-        "shadow"
+        "shadow",
+        "block_kinds"
       ],
       "nested": {
         "guard": [
@@ -6998,12 +6999,22 @@
           "posted_where",
           "shadow_message_id",
           "carries_door",
-          "door_drawn"
+          "door_drawn",
+          "blocks"
         ],
         "styles": [
           "style",
           "cap",
           "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
         ]
       }
     },
@@ -7021,7 +7032,8 @@
         "notes",
         "read_at",
         "mode",
-        "shadow"
+        "shadow",
+        "block_kinds"
       ],
       "nested": {
         "post": [
@@ -7051,7 +7063,8 @@
           "posted_where",
           "shadow_message_id",
           "carries_door",
-          "door_drawn"
+          "door_drawn",
+          "blocks"
         ],
         "guard": [
           "test_mode",
@@ -7068,6 +7081,15 @@
           "style",
           "cap",
           "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
         ]
       }
     },
@@ -7089,7 +7111,8 @@
         "read_at",
         "message",
         "mode",
-        "shadow"
+        "shadow",
+        "block_kinds"
       ],
       "nested": {
         "post": [
@@ -7119,7 +7142,8 @@
           "posted_where",
           "shadow_message_id",
           "carries_door",
-          "door_drawn"
+          "door_drawn",
+          "blocks"
         ],
         "guard": [
           "test_mode",
@@ -7136,6 +7160,15 @@
           "style",
           "cap",
           "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
         ]
       }
     },
@@ -7161,7 +7194,8 @@
         "read_at",
         "message",
         "mode",
-        "shadow"
+        "shadow",
+        "block_kinds"
       ],
       "nested": {
         "post": [
@@ -7191,7 +7225,8 @@
           "posted_where",
           "shadow_message_id",
           "carries_door",
-          "door_drawn"
+          "door_drawn",
+          "blocks"
         ],
         "guard": [
           "test_mode",
@@ -7208,6 +7243,15 @@
           "style",
           "cap",
           "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
         ]
       }
     },
@@ -7227,7 +7271,8 @@
         "read_at",
         "message",
         "mode",
-        "shadow"
+        "shadow",
+        "block_kinds"
       ],
       "nested": {
         "post": [
@@ -7257,7 +7302,8 @@
           "posted_where",
           "shadow_message_id",
           "carries_door",
-          "door_drawn"
+          "door_drawn",
+          "blocks"
         ],
         "guard": [
           "test_mode",
@@ -7274,6 +7320,15 @@
           "style",
           "cap",
           "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
         ]
       }
     },
@@ -7293,7 +7348,8 @@
         "read_at",
         "message",
         "mode",
-        "shadow"
+        "shadow",
+        "block_kinds"
       ],
       "nested": {
         "post": [
@@ -7323,7 +7379,8 @@
           "posted_where",
           "shadow_message_id",
           "carries_door",
-          "door_drawn"
+          "door_drawn",
+          "blocks"
         ],
         "guard": [
           "test_mode",
@@ -7340,6 +7397,302 @@
           "style",
           "cap",
           "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "_": "Blocks (post-blocks, 2026-09-27). {post_slug} is the welcome post, which ships carrying the front door block, so Add answers \"already on it\" (200) and Remove takes it off; an exclusive kind added to a second post is a 409 in words, which is a refusal, not a shape, so it is not an entry here.",
+      "method": "POST",
+      "path": "/api/posts/{post_slug}/blocks",
+      "body": {
+        "kind": "frontdoor"
+      },
+      "read_by": [
+        "page-posts.js row drawer ▸ Blocks ▸ Add a block…"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at",
+        "message",
+        "mode",
+        "shadow",
+        "block_kinds"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn",
+          "blocks"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/posts/{post_slug}/blocks",
+      "body": {
+        "order": [
+          "frontdoor"
+        ]
+      },
+      "read_by": [
+        "page-posts.js row drawer ▸ Blocks ▸ ↑ / ↓"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at",
+        "message",
+        "mode",
+        "shadow",
+        "block_kinds"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn",
+          "blocks"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/posts/{post_slug}/blocks/frontdoor",
+      "read_by": [
+        "page-posts.js row drawer ▸ Blocks ▸ Remove"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at",
+        "message",
+        "mode",
+        "shadow",
+        "block_kinds"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn",
+          "blocks"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/post-blocks",
+      "read_by": [
+        "page-posts.js Blocks section",
+        "blockwords.js"
+      ],
+      "shape": "object",
+      "keys": [
+        "kinds",
+        "read_at"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/post-blocks/frontdoor/redraw",
+      "body": {},
+      "read_by": [
+        "blockwords.js Save the words (Posts ▸ Blocks, Modmail ▸ Front door)"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "redrawn",
+        "message",
+        "kinds"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
         ]
       }
     },
@@ -7436,7 +7789,8 @@
         "mode",
         "shadow",
         "from_version",
-        "versions"
+        "versions",
+        "block_kinds"
       ],
       "nested": {
         "post": [
@@ -7466,7 +7820,8 @@
           "posted_where",
           "shadow_message_id",
           "carries_door",
-          "door_drawn"
+          "door_drawn",
+          "blocks"
         ],
         "guard": [
           "test_mode",
@@ -7500,6 +7855,15 @@
           "because_said",
           "shipped",
           "current"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
         ]
       }
     },
@@ -7915,6 +8279,8 @@
     "web.frontdoor.moved",
     "web.frontdoor.taken_down",
     "web.frontdoor.would_post",
+    "web.frontdoor.rides_post",
+    "web.frontdoor.redrawn_on_post",
     "web.role.approved",
     "web.role.denied",
     "web.role.granted",

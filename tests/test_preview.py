@@ -228,3 +228,12 @@ def test_a_post_that_carries_the_door_previews_the_door_under_its_own_words(bot,
     assert [one["label"] for one in carried.components[0]] == list(
         door.labels(store, guild.id).values()
     )
+
+
+def test_a_post_whose_blocks_name_the_front_door_previews_it_like_carries_door(bot, guild):
+    by_block = preview.render(bot, guild, "post", None, {"body": "Rules.", "blocks": "frontdoor"})
+    by_flag = preview.render(bot, guild, "post", None, {"body": "Rules.", "carries_door": True})
+    none = preview.render(bot, guild, "post", None, {"body": "Rules.", "blocks": ""})
+
+    assert by_block.embeds == by_flag.embeds and by_block.components == by_flag.components
+    assert none.embeds == () and none.components == ()

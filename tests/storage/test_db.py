@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 77
+        assert SCHEMA_VERSION == 78
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3137,6 +3137,72 @@ async def test_a_schema_76_file_gains_the_replay_columns_empty(tmp_path):
         )
         assert tuple(await cur.fetchone()) == ("AGDQ", None, None, None)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "77"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
     finally:
         await again.close()
+
+
+async def test_a_schema_77_post_carrying_the_door_gains_a_front_door_block(tmp_path):
+    """Schema 78: every post with carries_door = 1 gets one `frontdoor` block row, once; the
+    column stays and still reads 1, so nothing live loses its door."""
+    path = tmp_path / "old77.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE post_blocks")
+    await db.conn.execute(
+        "INSERT INTO posts(guild_id, slug, title, body, pin, carries_door, updated_at, "
+        "updated_by) VALUES (1, 'welcome', 'Welcome and rules', 'be nice', 0, 1, "
+        "'2026-09-27', 42), (1, 'hours', 'Hours', '', 1, 0, '2026-09-27', NULL)"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '77')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT posts.slug, kind, position, exclusive, added_by FROM post_blocks "
+            "JOIN posts ON posts.id = post_blocks.post_id"
+        )
+        assert [tuple(row) for row in await cur.fetchall()] == [("welcome", "frontdoor", 0, 1, 42)]
+        cur = await again.conn.execute("SELECT slug, carries_door FROM posts ORDER BY id")
+        assert [tuple(row) for row in await cur.fetchall()] == [("welcome", 1), ("hours", 0)]
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "78"
+        await again.conn.execute("DELETE FROM post_blocks")
+        await again.conn.commit()
+    finally:
+        await again.close()
+
+    third = Database(path)
+    await third.connect()
+    try:
+        cur = await third.conn.execute("SELECT COUNT(*) AS n FROM post_blocks")
+        assert (await cur.fetchone())["n"] == 0, "the backfill runs once, at 77 -> 78, never again"
+    finally:
+        await third.close()
+
+
+async def test_one_exclusive_block_per_guild_is_held_by_the_database_too(tmp_path):
+    db = Database(tmp_path / "blocks.sqlite3")
+    await db.connect()
+    try:
+        for slug in ("one", "two"):
+            await db.conn.execute(
+                "INSERT INTO posts(guild_id, slug, title, updated_at) VALUES (1, ?, ?, 'now')",
+                (slug, slug),
+            )
+        await db.conn.execute(
+            "INSERT INTO post_blocks(guild_id, post_id, kind, exclusive, added_at) "
+            "VALUES (1, 1, 'frontdoor', 1, 'now')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await db.conn.execute(
+                "INSERT INTO post_blocks(guild_id, post_id, kind, exclusive, added_at) "
+                "VALUES (1, 2, 'frontdoor', 1, 'now')"
+            )
+    finally:
+        await db.close()

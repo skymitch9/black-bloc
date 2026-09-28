@@ -153,8 +153,8 @@ SLUG_NEEDED = (
 )
 TITLE_NEEDED = "A post needs a title, so nothing was saved. Fill it in and save again."
 DOOR_CARRIED_ELSEWHERE = (
-    "**{other}** already carries the front door, so **{title}** was not changed. Turn **Carry "
-    "the front door** off on **{other}** first — one message holds the door."
+    "**{other}** already carries the front door, so **{title}** was not changed. Remove the "
+    "front door block from **{other}** first — one message holds the door."
 )
 
 SHADOW_LINE = "shadow — this goes to {shadow}, not {where}, until posts are on."
@@ -218,8 +218,12 @@ VIEW_IT = "View"
 USE_THIS_VERSION = "Use this version"
 PIN_IT = "Pin it"
 DO_NOT_PIN_IT = "Do not pin it"
-CARRY_THE_DOOR = "Carry the front door"
-DO_NOT_CARRY_THE_DOOR = "Do not carry the front door"
+ADD_A_BLOCK = "Add a block…"
+BLOCKS_LINE = "Blocks: {names}"
+REMOVE_BLOCK = "Remove {name}"
+BLOCK_OPTION_HELD = "On {title} — one post at a time; adding it here is refused"
+BLOCK_OPTION_FREE = "Rides under this post, in the same message"
+BLOCK_OPTION_SHARED = "Can go on any number of posts"
 
 BECAUSE_WORDS: dict[str, str] = {
     BECAUSE_SAVED: "saved",
@@ -434,16 +438,22 @@ def render_message(row: Any) -> dict[str, Any]:
     return {"content": body, "embed": None}
 
 
-def with_door(base: dict[str, Any], parts: Any) -> dict[str, Any]:
-    """The post's own message with the door's card as its last embed and the door's buttons."""
+def with_blocks(base: dict[str, Any], drawn: list[Any]) -> dict[str, Any]:
+    """The post's own message, then each block's card in order, and every block's buttons."""
     embeds = [base["embed"]] if base.get("embed") is not None else []
-    if parts is not None:
-        embeds.append(parts[0])
-    return {
-        "content": base.get("content"),
-        "embeds": embeds,
-        "view": parts[1] if parts is not None else None,
-    }
+    embeds.extend(parts[0] for parts in drawn)
+    views = [parts[1] for parts in drawn if parts[1] is not None]
+    view = views[0] if len(views) == 1 else None
+    if len(views) > 1:
+        view = discord.ui.View(timeout=None)
+        for one in views:
+            for item in list(one.children):
+                view.add_item(item)
+    return {"content": base.get("content"), "embeds": embeds, "view": view}
+
+
+def with_door(base: dict[str, Any], parts: Any) -> dict[str, Any]:
+    return with_blocks(base, [parts] if parts is not None else [])
 
 
 def door_parts(bot: Any, guild: Any, row: Any) -> Any:
@@ -455,13 +465,19 @@ def door_parts(bot: Any, guild: Any, row: Any) -> Any:
     return carried_parts(bot, guild, row)
 
 
-def message_payload(bot: Any, guild: Any, row: Any) -> tuple[dict[str, Any], Any]:
-    """What a publish sends: the post alone, or the post carrying the door, and the door's stamp."""
+def message_payload(
+    bot: Any, guild: Any, row: Any, kinds: Any = None
+) -> tuple[dict[str, Any], Any]:
+    """What a publish sends: the post alone, or the post and its blocks, and the door's stamp."""
+    from .post_blocks import FRONTDOOR, attached_by_cache, parts_of
+
     base = render_message(row)
-    parts = door_parts(bot, guild, row)
-    if parts is None and not carries_door(row) and not door_drawn(row):
+    wanted = attached_by_cache(row) if kinds is None else list(kinds)
+    drawn = parts_of(bot, guild, row, wanted)
+    if not drawn and not wanted and not door_drawn(row):
         return base, None
-    return with_door(base, parts), (parts[2] if parts is not None else None)
+    door = drawn.get(FRONTDOOR)
+    return with_blocks(base, list(drawn.values())), (door[2] if door is not None else None)
 
 
 def allowed_mentions_for(guild: Any, body: Any, actor: Any) -> discord.AllowedMentions:
@@ -531,11 +547,11 @@ async def set_door_drawn(db: Any, post_id: int, stamp: Any) -> None:
     await db.conn.commit()
 
 
-async def set_carries_door(db: Any, post_id: int, wanted: bool) -> None:
-    await db.conn.execute(
-        "UPDATE posts SET carries_door = ? WHERE id = ?", (1 if wanted else 0, int(post_id))
-    )
-    await db.conn.commit()
+async def set_carries_door(db: Any, post_id: int, wanted: bool, *, by: Any = None) -> bool:
+    """The front door as a block; the column follows the table (`post_blocks.keep_cache`)."""
+    from .post_blocks import FRONTDOOR, set_carried
+
+    return await set_carried(db, int(post_id), FRONTDOOR, wanted, by=by)
 
 
 async def get_post_by_id(db: Any, post_id: int) -> Any:
@@ -871,6 +887,11 @@ async def seed_posts(bot: Any, guild: Any) -> int:
             pin=bool(entry.get("pin", True)),
             seed_hash=seed_hash(entry),
         )
+        if entry.get("blocks"):
+            from .post_blocks import attach_seeded
+
+            fresh = await get_post(bot.db, guild.id, entry["slug"])
+            await attach_seeded(bot.db, fresh, entry.get("blocks"))
         made += 1
     return made
 
@@ -1044,9 +1065,11 @@ async def save_post(
         channel_id=kept_channel,
         style=kept_style,
         pin=1 if kept_pin else 0,
-        carries_door=1 if kept_carrying else 0,
     )
+    if kept_carrying != was_carrying:
+        await set_carries_door(bot.db, int(row["id"]), kept_carrying, by=actor_id(actor))
     fresh = await get_post_by_id(bot.db, int(row["id"]))
+    kept_carrying = carries_door(fresh)
     made = await record_version(bot, guild, fresh, actor, via=via, because=BECAUSE_SAVED)
     await note(
         bot,
@@ -1266,7 +1289,9 @@ async def publish_post(
         return refusal(
             POST_FAILED_SAID.format(title=title, reason=CHANNEL_GONE), "post_failed", 409
         )
-    drawn, stamp = message_payload(bot, guild, row)
+    from .post_blocks import kinds_on
+
+    drawn, stamp = message_payload(bot, guild, row, await kinds_on(bot.db, int(row["id"])))
     payload = drawn | {"allowed_mentions": allowed_mentions_for(guild, body, actor)}
     message = await _existing_message(bot, guild, row, channel, actor, via, shadow=shadow)
     try:
@@ -1546,9 +1571,14 @@ __all__ = [
     "carries_door",
     "TAKEN_DOWN_WITH_DOOR_SAID",
     "STATUS_CARRIES_DOOR",
-    "DO_NOT_CARRY_THE_DOOR",
+    "ADD_A_BLOCK",
+    "BLOCKS_LINE",
+    "REMOVE_BLOCK",
+    "BLOCK_OPTION_HELD",
+    "BLOCK_OPTION_FREE",
+    "BLOCK_OPTION_SHARED",
+    "with_blocks",
     "DOOR_CARRIED_ELSEWHERE",
-    "CARRY_THE_DOOR",
     "CARRYING_STOPPED_SAID",
     "CARRYING_NOW_SAID",
     "CARRYING_LATER_SAID",

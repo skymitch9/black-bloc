@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import discord
 import pytest
 
-from black_bloc import posts
+from black_bloc import post_blocks, posts
 from black_bloc.cogs.community import posts as cog
 from black_bloc.config import load_settings
 from black_bloc.settings_store import SettingsStore
@@ -269,7 +269,7 @@ async def test_the_card_says_where_a_shadow_press_would_actually_go(bot, staff):
     row = await a_post(bot, slug="welcome-here", channel_id=WELCOME_CHANNEL)
     await bot.store.set(GUILD, posts.MODE_KEY, "shadow")
 
-    embed, _ = cog.build_card(bot, bot.guild, row)
+    embed, _ = await cog.build_card(bot, bot.guild, row)
 
     assert (
         "shadow — this goes to #blackbloc-logs, not #welcome, until posts are on."
@@ -283,10 +283,10 @@ async def test_the_card_says_where_a_shadow_press_would_actually_go(bot, staff):
 async def test_the_card_offers_post_it_before_it_is_posted_and_update_after(bot, staff):
     row = await a_post(bot)
 
-    _, before = cog.build_card(bot, bot.guild, row)
+    _, before = await cog.build_card(bot, bot.guild, row)
     await posts.set_posted(bot.db, int(row["id"]), 500, posts.hash_of(row))
     after_row = await posts.get_post_by_id(bot.db, int(row["id"]))
-    _, after = cog.build_card(bot, bot.guild, after_row)
+    _, after = await cog.build_card(bot, bot.guild, after_row)
 
     assert "Post it" in labels(before) and "Update the post" not in labels(before)
     assert "Update the post" in labels(after) and "Post it" not in labels(after)
@@ -298,8 +298,8 @@ async def test_the_pin_button_is_labelled_with_the_move_it_makes(bot, staff):
     pinned = await a_post(bot, slug="one", pin=True)
     loose = await a_post(bot, slug="two", pin=False)
 
-    _, one = cog.build_card(bot, bot.guild, pinned)
-    _, two = cog.build_card(bot, bot.guild, loose)
+    _, one = await cog.build_card(bot, bot.guild, pinned)
+    _, two = await cog.build_card(bot, bot.guild, loose)
 
     assert "Do not pin it" in labels(one) and "Pin it" not in labels(one)
     assert "Pin it" in labels(two) and "Do not pin it" not in labels(two)
@@ -310,8 +310,8 @@ async def test_the_shipped_post_cannot_be_deleted_and_a_written_one_can(bot, sta
     seeded = await posts.get_post(bot.db, GUILD, "welcome")
     mine = await a_post(bot)
 
-    _, one = cog.build_card(bot, bot.guild, seeded)
-    _, two = cog.build_card(bot, bot.guild, mine)
+    _, one = await cog.build_card(bot, bot.guild, seeded)
+    _, two = await cog.build_card(bot, bot.guild, mine)
 
     assert "Delete this post" not in labels(one)
     assert "Delete this post" in labels(two)
@@ -366,7 +366,7 @@ async def test_a_post_with_no_history_says_so_rather_than_drawing_an_empty_list(
 async def test_the_card_shows_the_first_of_the_words_and_never_the_whole_post(bot, staff):
     row = await a_post(bot, body="x" * 900)
 
-    embed, _ = cog.build_card(bot, bot.guild, row)
+    embed, _ = await cog.build_card(bot, bot.guild, row)
 
     assert len(embed.description) < 900
     assert embed.description.endswith("…")
@@ -375,9 +375,9 @@ async def test_the_card_shows_the_first_of_the_words_and_never_the_whole_post(bo
 async def test_a_card_and_a_panel_are_both_built_with_the_two_select_rows(bot, staff):
     row = await a_post(bot)
 
-    _, view = cog.build_card(bot, bot.guild, row)
+    _, view = await cog.build_card(bot, bot.guild, row)
 
-    assert placeholders(view) == ["Channel…", "Style…"]
+    assert placeholders(view) == ["Channel…", "Style…", posts.ADD_A_BLOCK]
     assert len(view.children) <= 25
 
 
@@ -576,28 +576,78 @@ async def test_the_command_says_so_when_the_database_is_not_there(bot, staff):
     assert "database" in interaction.said.lower()
 
 
-# --- carry the front door (post-carries-door, 2026-09-27) --------------------------------------
+# --- blocks (post-blocks, 2026-09-27; replaces the carry button) ------------------------------
 
 
-async def test_the_carry_button_is_labelled_with_the_move_it_makes(bot, staff):
+def block_pick(view):
+    return next((one for one in view.children if isinstance(one, cog.BlockPick)), None)
+
+
+async def test_the_card_offers_add_a_block_and_a_remove_for_each_block_it_has(bot, staff):
     loose = await a_post(bot, slug="one")
     carrying = await a_post(bot, slug="two")
     await posts.set_carries_door(bot.db, int(carrying["id"]), True)
     carrying = await posts.get_post_by_id(bot.db, int(carrying["id"]))
 
-    _, one = cog.build_card(bot, bot.guild, loose)
-    _, two = cog.build_card(bot, bot.guild, carrying)
+    embed_one, one = await cog.build_card(bot, bot.guild, loose)
+    embed_two, two = await cog.build_card(bot, bot.guild, carrying)
 
-    assert posts.CARRY_THE_DOOR in labels(one) and posts.DO_NOT_CARRY_THE_DOOR not in labels(one)
-    assert posts.DO_NOT_CARRY_THE_DOOR in labels(two) and posts.CARRY_THE_DOOR not in labels(two)
+    assert posts.ADD_A_BLOCK in placeholders(one) and "Remove Front door" not in labels(one)
+    assert "Remove Front door" in labels(two) and block_pick(two) is None
+    assert "Blocks: Front door" in embed_two.description
+    assert "Blocks:" not in embed_one.description
+    assert all(
+        len([c for c in view.children if getattr(c, "row", None) == row]) <= 5
+        for view in (one, two)
+        for row in range(5)
+    )
 
 
-async def test_the_carry_button_saves_through_the_one_shared_path(bot, staff):
+async def test_the_block_select_names_the_post_that_already_holds_an_exclusive_block(bot, staff):
+    holder = await a_post(bot, slug="holder")
+    await posts.set_carries_door(bot.db, int(holder["id"]), True)
+    other = await a_post(bot, slug="other")
+
+    _, view = await cog.build_card(bot, bot.guild, other)
+
+    option = block_pick(view).options[0]
+    assert option.value == "frontdoor" and option.label == "Front door"
+    assert "On A notice" in option.description
+
+
+async def test_the_block_name_is_a_key_the_card_reads(bot, staff):
+    await bot.store.set(GUILD, "posts_block_frontdoor_name", "Need-something box")
+    row = await a_post(bot)
+
+    _, view = await cog.build_card(bot, bot.guild, row)
+
+    assert block_pick(view).options[0].label == "Need-something box"
+
+
+async def test_adding_and_removing_a_block_from_the_card_is_one_row_each(bot, staff):
     row = await a_post(bot)
     interaction = FakeInteraction(bot, staff)
-
-    await cog.run_move(interaction, "notice", posts.save_post, carries=True)
+    await cog.run_move(interaction, "notice", post_blocks.add_block, kind="frontdoor")
 
     fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
     assert posts.carries_door(fresh)
+    assert await post_blocks.kinds_on(bot.db, int(row["id"])) == ["frontdoor"]
     assert await kinds(bot.db) == ["post.saved"], "one press, one row"
+
+    await cog.run_move(interaction, "notice", post_blocks.remove_block, kind="frontdoor")
+
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert not posts.carries_door(fresh)
+    assert await post_blocks.kinds_on(bot.db, int(row["id"])) == []
+    assert await kinds(bot.db) == ["post.saved", "post.saved"]
+
+
+async def test_a_second_post_is_refused_the_front_door_in_words_from_the_card(bot, staff):
+    first = await a_post(bot, slug="first")
+    await posts.set_carries_door(bot.db, int(first["id"]), True)
+    second = await a_post(bot, slug="second")
+    interaction = FakeInteraction(bot, staff)
+    await cog.run_move(interaction, "second", post_blocks.add_block, kind="frontdoor")
+
+    assert "one post at a time" in interaction.said
+    assert await post_blocks.kinds_on(bot.db, int(second["id"])) == []

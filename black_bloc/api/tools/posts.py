@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from ... import posts
+from ... import post_blocks, posts
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused
 from ..names import resolve_one
@@ -47,7 +47,7 @@ def person(guild: Any, user_id: Any) -> str | None:
     return resolve_one(guild, user_id)["display_name"] or str(user_id)
 
 
-def post_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
+def post_row(bot: Any, guild: Any, row: Any, blocks: Any = None) -> dict[str, Any]:
     channel_id = posts.row_value(row, "channel_id")
     style = posts.wanted_style(posts.row_value(row, "style", posts.PLAIN))
     return {
@@ -60,6 +60,7 @@ def post_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
         "title_cap": posts.TITLE_MAX,
         "pin": bool(posts.row_value(row, "pin")),
         "carries_door": posts.carries_door(row),
+        "blocks": list(blocks or []),
         "door_drawn": posts.door_drawn(row),
         "channel_id": str(channel_id) if channel_id else None,
         "channel_name": posts.channel_name(guild, channel_id),
@@ -180,9 +181,18 @@ def build_router(bot: Any) -> APIRouter:
             return [NO_SHADOW_CHANNEL_NOTE]
         return [POSTS_ARE_SHADOW.format(where=posts.where_words(guild, where))]
 
-    def _whole(guild: Any, row: Any, said: str | None = None) -> dict[str, Any]:
+    async def _blocks_by_post(guild: Any) -> tuple[dict[int, list[Any]], list[Any]]:
+        rows = await post_blocks.blocks_in(bot.db, guild.id)
+        found: dict[int, list[Any]] = {}
+        for one in rows:
+            found.setdefault(int(one["post_id"]), []).append(post_blocks.block_row(bot, guild, one))
+        return found, await post_blocks.kinds_shape(bot, guild)
+
+    async def _whole(guild: Any, row: Any, said: str | None = None) -> dict[str, Any]:
+        by_post, kinds = await _blocks_by_post(guild)
         found = {
-            "post": post_row(bot, guild, row),
+            "post": post_row(bot, guild, row, by_post.get(int(row["id"]))),
+            "block_kinds": kinds,
             "styles": styles(),
             "guard": guard_line(bot, guild),
             "mode": posts.mode_of(bot.store, guild.id),
@@ -202,14 +212,16 @@ def build_router(bot: Any) -> APIRouter:
         if not found.ok:
             refused(found)
         fresh = found.value if found.value is not None else row
-        return _whole(guild, fresh, found.message)
+        return await _whole(guild, fresh, found.message)
 
     @router.get("")
     async def posts_index(request: Request) -> dict[str, Any]:
         guild = await _staff(request)
         rows = await posts.list_posts(bot.db, guild.id)
+        by_post, kinds = await _blocks_by_post(guild)
         return {
-            "posts": [post_row(bot, guild, row) for row in rows],
+            "posts": [post_row(bot, guild, row, by_post.get(int(row["id"]))) for row in rows],
+            "block_kinds": kinds,
             "mode": posts.mode_of(bot.store, guild.id),
             "may_edit": True,
             "styles": styles(),
@@ -232,12 +244,12 @@ def build_router(bot: Any) -> APIRouter:
         )
         if not found.ok:
             refused(found)
-        return _whole(guild, found.value, found.message)
+        return await _whole(guild, found.value, found.message)
 
     @router.get("/{slug}")
     async def post_one(request: Request, slug: str) -> dict[str, Any]:
         guild = await _staff(request)
-        return _whole(guild, await _wanted(guild, slug))
+        return await _whole(guild, await _wanted(guild, slug))
 
     @router.put("/{slug}")
     async def post_save(request: Request, slug: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -260,6 +272,22 @@ def build_router(bot: Any) -> APIRouter:
     @router.post("/{slug}/takedown")
     async def post_takedown(request: Request, slug: str) -> dict[str, Any]:
         return await _move(request, slug, posts.take_down_post)
+
+    @router.post("/{slug}/blocks")
+    async def post_block_add(
+        request: Request, slug: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await _move(request, slug, post_blocks.add_block, kind=payload.get("kind"))
+
+    @router.put("/{slug}/blocks")
+    async def post_block_order(
+        request: Request, slug: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await _move(request, slug, post_blocks.order_blocks, order=payload.get("order"))
+
+    @router.delete("/{slug}/blocks/{kind}")
+    async def post_block_remove(request: Request, slug: str, kind: str) -> dict[str, Any]:
+        return await _move(request, slug, post_blocks.remove_block, kind=kind)
 
     async def _versions(guild: Any, row: Any) -> list[dict[str, Any]]:
         rows = await posts.list_versions(bot.db, int(row["id"]))
@@ -331,7 +359,7 @@ def build_router(bot: Any) -> APIRouter:
         if not found.ok:
             refused(found)
         fresh = found.value if found.value is not None else row
-        return _whole(guild, fresh, found.message) | {
+        return await _whole(guild, fresh, found.message) | {
             "from_version": int(n),
             "versions": await _versions(guild, fresh),
         }
@@ -350,7 +378,39 @@ def build_router(bot: Any) -> APIRouter:
     return router
 
 
+def build_blocks_router(bot: Any) -> APIRouter:
+    """The Blocks section: every kind, where it rides, and its words redrawn on save."""
+    reader = reader_dependency(bot)
+    writer = writer_dependency(bot)
+    router = APIRouter(prefix="/api/post-blocks", tags=["posts"])
+
+    @router.get("")
+    async def blocks_index(request: Request) -> dict[str, Any]:
+        await reader(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        return {"kinds": await post_blocks.kinds_shape(bot, guild), "read_at": now()}
+
+    @router.post("/{kind}/redraw")
+    async def blocks_redraw(request: Request, kind: str) -> dict[str, Any]:
+        await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        found = await post_blocks.redraw_kind(bot, guild, kind)
+        if not found.ok:
+            refused(found)
+        return {
+            "kind": post_blocks.kind_of(kind).key,
+            "redrawn": bool(found.value),
+            "message": found.message,
+            "kinds": await post_blocks.kinds_shape(bot, guild),
+        }
+
+    return router
+
+
 __all__ = [
+    "build_blocks_router",
     "build_router",
     "guard_line",
     "post_row",

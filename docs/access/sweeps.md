@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-27 (branch `post-blocks`)** — ONE section APPENDED (`PB-a`…`PB-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `golive-replays`)** — ONE section APPENDED (`GR-a`…`GR-c`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `thread-spotlight-start`)** — ONE row APPENDED to the `MTC` section (`MTC-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `marathon-near-miss`)** — ONE section APPENDED (`MNM-a`…`MNM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3660,3 +3661,16 @@ posting replays of it's fuzzy. Wouldn't want to miss"* — and *"It's usually on
 | **`GR-a`** | Wait for GDQ or ESA to run a replay with no marathon on (or watch the Logs page for the next `golive.replay_detected`) | The go-live channel gets ONE plain line — *GamesDoneQuick is showing a replay — [REPLAY] …* — with no role mention, no card, and it is NOT pinned; no reminders follow. The Go-live page ▸ the channel's drawer shows **Replay detected (the title says “replay”)**. The Logs page (Go-live) has a routine `golive.replay_detected` naming the reason. If Twitch's title did NOT give it away, the row is live as before — tell the conductor the title so the words can be widened (Settings ▸ Go-live ▸ Replays). |
 | **`GR-b`** | On that replay, press **Treat as live** (the drawer, or `/golive` ▸ Channels ▸ the channel) | A normal announcement goes out — the role mention (by the channel's ping mode), the card, pinned — and the plain replay line disappears. The drawer no longer says Replay detected; Bump now is back. The Logs page shows `golive.replay_treated_live` (`web.` from the site). A second press says it is not showing a replay. |
 | **`GR-c`** | Settings ▸ Go-live ▸ Replays: set **What a replay gets** to *skip*, change the words or the sentence | *skip*: the next replay posts nothing (only the log row and the drawer's line). Words: a title with your new word is read as a replay next time. *live*: replays are announced as before. Put it back to *plain* after. |
+
+## Rows `PB-a` … `PB-d` — a post attaches blocks; the front door is the first (branch `post-blocks`, 2026-09-27)
+
+🔨 **BUILT on branch `post-blocks`, NOT merged, NOT deployed.** The owner, 2026-09-27 23:4x: *"… have an append
+menu button and in that append menu we have some sort of ui selector … also … a way to edit the finer points
+of the menus"* — then *"lets do blocks"*. Design: [`../info/post-blocks-design.md`](../info/post-blocks-design.md).
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PB-a`** | Posts ▸ **Welcome and rules** | The drawer's **Blocks** lists *Front door* with **Remove**; the preview shows the card and buttons under the rules. #welcome still holds ONE message (rules, card, three buttons), not pinned — exactly as before the upgrade. |
+| **`PB-b`** | Posts ▸ **When staff are around** ▸ **Add a block…** | *Front door — on Welcome and rules* is greyed out, with a line saying it goes on one post at a time and to remove it there first. |
+| **`PB-c`** | Posts ▸ **Blocks** ▸ Front door ▸ **Edit the Front door block** ▸ change the heading, untick one button ▸ **Save the words** (then put both back) | The preview changes as you type; the sentence says every post carrying it is redrawn; the Welcome message's card changes IN PLACE within seconds (no second message, the rules untouched) and the unticked button is gone. The Modmail page ▸ Front door ▸ **Edit its words** shows the same editor with the new words. |
+| **`PB-d`** | `/posts` ▸ Welcome and rules; then another post | The card lists **Blocks: Front door** and a **Remove Front door** button; another post's card has an **Add a block…** select whose Front door option says it is on Welcome and rules, and picking it is refused in words. |

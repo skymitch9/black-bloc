@@ -1,6 +1,7 @@
 import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { htmlToDiscordMarkdown } from './clipmd.js';
+import { BLOCK_EDITORS } from './blockwords.js';
 import { logsSection } from './logs.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
 import {
@@ -63,10 +64,27 @@ const WILL_SHADOW_SAME = 'shadow — this goes to {shadow}, which is where it wa
 const NO_SHADOW_CHANNEL = 'no shadow channel yet';
 const SHADOW = 'shadow';
 const PIN_WORDS = { true: 'pins it', false: 'leaves it unpinned' };
-const CARRY_IT = 'Carry the front door';
-const CARRY_HELP = 'The front door — the Need something? card and its ticket, request and event '
-  + 'buttons — rides under this post, in the same message. One post at a time can carry it.';
-const WILL_CARRY = ' The front door rides under it, in the same message.';
+// Blocks (owner, 2026-09-27: "lets do blocks"). A block rides under a post in the same message.
+const BLOCKS_LABEL = 'Blocks';
+const BLOCKS_HELP = 'What rides under this post, in the same message. A block is added or '
+  + 'removed at once — it is not part of Save Changes.';
+const NO_BLOCKS = 'No blocks — the message is only the post.';
+const ADD_A_BLOCK = 'Add a block…';
+const PICK_A_BLOCK = 'Pick a block…';
+const HELD_ON = '{name} — on {title}';
+const HELD_LINE = '{name} goes on one post at a time and is on {title}. Remove it there first.';
+const REMOVE_IT = 'Remove';
+const MOVE_UP = '↑';
+const MOVE_DOWN = '↓';
+const WILL_CARRY = ' Its blocks ride under it, in the same message: {names}.';
+const BLOCKS_SECTION_NOTE = 'A block rides under a post, in the same message. Each kind is '
+  + 'listed with the post it is on, and its words are edited here — saving redraws every post '
+  + 'carrying it at once.';
+const ONE_AT_A_TIME = 'one post at a time';
+const ANY_NUMBER = 'any number of posts';
+const EDIT_BLOCK = 'Edit the {name} block';
+const OPEN_IT = 'Open {title}';
+const ON_NO_POST = 'On no post yet — open a post and use Add a block….';
 const STYLE_WORDS = { plain: 'a plain message', embed: 'an embed' };
 // Site words, not posted words: the "every word the bot posts is editable on the site" rule
 // is about what Discord shows. These are the dashboard talking to staff.
@@ -217,14 +235,13 @@ function draftOf(post) {
     body: post.body || '',
     style: post.style,
     pin: Boolean(post.pin),
-    carries_door: Boolean(post.carries_door),
     channel_id: post.channel_id || '',
     channel_name: post.channel_name || '',
   };
 }
 
 function changeCount(now, was) {
-  return ['title', 'body', 'style', 'pin', 'carries_door', 'channel_id']
+  return ['title', 'body', 'style', 'pin', 'channel_id']
     .filter((key) => String(now[key]) !== String(was[key])).length;
 }
 
@@ -332,12 +349,7 @@ async function postDrawer(payload, known, history) {
     pin,
     el('span', { class: 'field-label', text: 'Pin it' }),
   ]);
-  const carry = el('input', { class: 'input switch', type: 'checkbox', id: 'post-carries-door' });
-  carry.checked = draft.carries_door;
-  const carryLine = el('label', { class: 'switchline', title: CARRY_HELP }, [
-    carry,
-    el('span', { class: 'field-label', text: CARRY_IT }),
-  ]);
+  const blocksBox = el('div', { class: 'postblocks', id: 'post-blocks' });
 
   const box = el('textarea', { class: 'input area postbox', id: 'post-body', rows: '14', spellcheck: 'true' });
   box.value = draft.body;
@@ -356,7 +368,7 @@ async function postDrawer(payload, known, history) {
       style: draft.style,
       title: draft.title,
       body: draft.body,
-      carries_door: draft.carries_door,
+      blocks: (post.blocks || []).map((one) => one.kind).join(','),
     }),
   });
   const preview = el('div', { class: 'preview', id: 'post-preview' }, [mock.node, mock.say]);
@@ -366,8 +378,9 @@ async function postDrawer(payload, known, history) {
   const paintPreview = () => {
     mock.repaint();
     counter.paint(draft.body.length, capOf());
+    const names = (post.blocks || []).map((one) => one.name).join(', ');
     howLine.textContent = willPost(draft, post, payload, Boolean(changeCount(draft, was)))
-      + (draft.carries_door ? WILL_CARRY : '');
+      + (names ? WILL_CARRY.replace('{names}', names) : '');
   };
   const schedule = paintPreview;
 
@@ -410,11 +423,6 @@ async function postDrawer(payload, known, history) {
     refreshBar();
     paintPreview();
   });
-  carry.addEventListener('change', () => {
-    draft.carries_door = carry.checked;
-    refreshBar();
-    paintPreview();
-  });
   channel.addEventListener('change', () => {
     draft.channel_id = readSelect(channel, false) || '';
     const picked = known.channels.find((one) => String(one.id) === String(draft.channel_id));
@@ -429,7 +437,6 @@ async function postDrawer(payload, known, history) {
     box.value = draft.body;
     style.value = draft.style;
     pin.checked = draft.pin;
-    carry.checked = draft.carries_door;
     channel.value = draft.channel_id;
     say.say('');
     refreshBar();
@@ -441,7 +448,6 @@ async function postDrawer(payload, known, history) {
     body: draft.body,
     style: draft.style,
     pin: draft.pin,
-    carries_door: draft.carries_door,
     channel_id: draft.channel_id || null,
   });
 
@@ -449,6 +455,8 @@ async function postDrawer(payload, known, history) {
     Object.assign(post, found.post);
     payload.mode = found.mode;
     payload.shadow = found.shadow;
+    if (found.block_kinds) payload.block_kinds = found.block_kinds;
+    paintBlocks();
     Object.assign(was, draftOf(post));
     marks.replaceChildren(...statusPills(post));
     whereLine.textContent = postedLine(post, payload.shadow);
@@ -499,6 +507,72 @@ async function postDrawer(payload, known, history) {
     if (!done.ok) return;
     await andClose();
   };
+
+  /** A block move acts at once, like Post it: the post's own draft is left exactly as it is. */
+  const blockMove = async (work) => {
+    const done = await run(say, work, (found) => found?.message || 'Done.');
+    if (!done.ok) return;
+    const kept = { ...draft };
+    settle(done.found);
+    Object.assign(draft, kept);
+    refreshBar();
+    paintPreview();
+    refresh();
+  };
+
+  const blockRow = (block, index, count) => el('div', { class: 'postblock', 'data-kind': block.kind }, [
+    el('span', { class: 'postblock-name', text: block.name }),
+    count > 1 ? button(MOVE_UP, () => blockMove(() => send(where(post.slug, '/blocks'), 'PUT', {
+      order: moved(post.blocks, index, -1),
+    })), { tone: 'quiet', disabled: index === 0 }) : null,
+    count > 1 ? button(MOVE_DOWN, () => blockMove(() => send(where(post.slug, '/blocks'), 'PUT', {
+      order: moved(post.blocks, index, 1),
+    })), { tone: 'quiet', disabled: index === count - 1 }) : null,
+    button(REMOVE_IT, () => blockMove(
+      () => api(where(post.slug, `/blocks/${encodeURIComponent(block.kind)}`), { method: 'DELETE' }),
+    ), { tone: 'quiet' }),
+  ]);
+
+  const paintBlocks = () => {
+    const mine = post.blocks || [];
+    const offered = (payload.block_kinds || []).filter((kind) => !mine.some((one) => one.kind === kind.kind));
+    const held = offered.filter((kind) => kind.exclusive && (kind.on || []).length);
+    const pick = el('select', { class: 'input', id: 'post-add-block', hidden: true }, [
+      el('option', { value: '', text: PICK_A_BLOCK }),
+      ...offered.map((kind) => {
+        const holder = kind.exclusive && (kind.on || [])[0];
+        return el('option', {
+          value: kind.kind,
+          disabled: holder ? true : undefined,
+          text: holder ? HELD_ON.replace('{name}', kind.name).replace('{title}', holder.title) : kind.name,
+        });
+      }),
+    ]);
+    pick.addEventListener('change', () => {
+      if (!pick.value) return;
+      const kind = pick.value;
+      blockMove(() => send(where(post.slug, '/blocks'), 'POST', { kind }));
+    });
+    const add = button(ADD_A_BLOCK, () => {
+      pick.hidden = !pick.hidden;
+      if (!pick.hidden) pick.focus();
+    }, { tone: 'quiet' });
+    blocksBox.replaceChildren(...[
+      el('div', { class: 'postboxhead' }, [
+        el('span', { class: 'field-label', text: BLOCKS_LABEL }),
+      ]),
+      mine.length
+        ? el('div', { class: 'postblock-list' }, mine.map((block, index) => blockRow(block, index, mine.length)))
+        : el('p', { class: 'field-help', text: NO_BLOCKS }),
+      offered.length ? bar([add, pick]) : null,
+      ...held.map((kind) => el('p', {
+        class: 'field-help',
+        text: HELD_LINE.replace('{name}', kind.name).replace('{title}', kind.on[0].title),
+      })),
+      el('p', { class: 'field-help', text: BLOCKS_HELP }),
+    ].filter(Boolean));
+  };
+  paintBlocks();
 
   const paintVersions = (found) => {
     seen = found;
@@ -606,13 +680,21 @@ async function postDrawer(payload, known, history) {
         preview,
       ]),
     ]),
+    blocksBox,
     howLine,
     pending,
-    bar([pinLine, carryLine, ...moves]),
+    bar([pinLine, ...moves]),
     say,
     versionsBox,
     versionView,
   ];
+}
+
+function moved(blocks, index, step) {
+  const order = blocks.map((one) => one.kind);
+  const [one] = order.splice(index, 1);
+  order.splice(index + step, 0, one);
+  return order;
 }
 
 async function openPost(slug, title) {
@@ -779,6 +861,34 @@ function postsSection(payload, say) {
   return full(list.node);
 }
 
+async function blocksSection(payload) {
+  const kinds = payload.block_kinds || [];
+  const one = section('Blocks', BLOCKS_SECTION_NOTE, { id: 'blocks', count: kinds.length });
+  const cards = [];
+  for (const kind of kinds) {
+    const editor = BLOCK_EDITORS[kind.kind];
+    const on = kind.on || [];
+    cards.push(card(kind.name, [
+      el('div', { class: 'postmarks' }, [
+        badge(kind.exclusive ? ONE_AT_A_TIME : ANY_NUMBER, null),
+        badge(kind.where, on.length ? 'info' : null),
+      ]),
+      on.length
+        ? bar(on.map((holder) => button(
+          OPEN_IT.replace('{title}', holder.title),
+          () => openPost(holder.slug, holder.title),
+          { tone: 'quiet' },
+        )))
+        : sayNothing(ON_NO_POST),
+      editor
+        ? foldout(EDIT_BLOCK.replace('{name}', kind.name), [await editor()])
+        : null,
+    ]));
+  }
+  one.body.append(...cards);
+  return full(one.node);
+}
+
 /** A shared block demoted out of the "On this page" rail so a fold is not a place. */
 function unsectioned(node) {
   const inner = node.querySelector('.sect-inner');
@@ -807,6 +917,7 @@ async function load() {
 
   document.getElementById('dash').replaceChildren(
     postsSection(payload, say),
+    await blocksSection(payload),
     await machinerySection(specs),
   );
 

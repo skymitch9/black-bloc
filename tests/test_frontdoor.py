@@ -14,6 +14,7 @@ from black_bloc.frontdoor import (
     TICKET,
     custom_id,
     door_embed,
+    door_hash,
     door_is_on,
     door_mode,
     door_rehearses,
@@ -26,6 +27,8 @@ from black_bloc.frontdoor import (
     labels,
     panel_follows_the_door,
     replaces_ticket_button,
+    shown_kinds,
+    shows,
 )
 from black_bloc.settings_store import (
     FRONTDOOR_CHANNEL,
@@ -212,3 +215,15 @@ def test_replacing_the_ticket_button_is_on_by_default_and_is_a_real_bool():
     assert replaces_ticket_button(store(**{FRONTDOOR_REPLACES_TICKET_BUTTON: False}), GUILD) is (
         False
     )
+
+
+def test_every_button_shows_until_its_key_says_otherwise():
+    assert shown_kinds(store(), 1) == KINDS
+    assert shown_kinds(store(frontdoor_show_request=False), 1) == (TICKET, EVENT)
+    assert shows(store(frontdoor_show_ticket=None), 1, TICKET)
+
+
+def test_the_stamp_is_unchanged_while_every_button_shows_and_moves_when_one_hides():
+    """A deploy that adds the show keys must not re-edit every door message once."""
+    assert door_hash(store(), 1) == door_hash(store(frontdoor_show_event=True), 1)
+    assert door_hash(store(), 1) != door_hash(store(frontdoor_show_event=False), 1)

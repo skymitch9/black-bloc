@@ -1,5 +1,14 @@
 # A post carries the front door — the rules and the "Need something?" box as ONE message
 
+> ⚠️ **2026-09-27 — SUPERSEDED IN PART by [`post-blocks-design.md`](post-blocks-design.md) (branch
+> `post-blocks`, BUILT, NOT MERGED).** ~~One switch per post: *Carry the front door*~~ → the front door is
+> now the first **block** a post attaches (**Add a block…** / **Remove**, a `post_blocks` row, schema 78);
+> `carries_door` stays as a column DERIVED from that row, so every door path below still reads true. The
+> `/posts` card's *Carry the front door* button and the editor's switch are gone; ~~Deviation 5 (a re-word
+> reaches the carrier on the next sweep)~~ still holds for a word changed on the Settings page, but saving
+> from the Blocks editor redraws the carrier at once. Everything else here — the door riding the post's
+> message, the mirrored keys, the refusals, the shadow table — is unchanged.
+
 > **Audience:** the conductor, reviewers, and the next build that touches Posts or the front door.
 > **Status:** TRACKED · 🔨 **BUILT on branch `post-carries-door`** (off `main` `91d1daa7`, v179 live),
 > NOT merged, NOT deployed, the migration has NOT run on the live database. **Last verified:
