@@ -62,7 +62,11 @@ from black_bloc.events import (
 )
 from black_bloc.linkcheck import LINK_MISSING, LINK_OK, LINK_UNREACHABLE
 from black_bloc.settings_store import (
+    BLOCKS_LIVE_DEFAULTS,
+    BUTTON_BLOCK_DEFAULTS,
     EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_BLOCK_LABEL,
+    EVENTS_BLOCK_TITLE,
     EVENTS_FORUM_CHANNEL_KEY,
     EVENTS_MOVED_LINE,
     EVENTS_MOVED_LINE_KEY,
@@ -70,6 +74,7 @@ from black_bloc.settings_store import (
     EVENTS_REVIEW_MODE_KEY,
     EVENTS_ROOM_DELETE_KEY,
     EVENTS_ROOM_NOTICE_KEY,
+    EVENTS_SCHEDULED_NAME_TEMPLATE,
     EVENTS_TEST_RETENTION_KEY,
     POSTS_ANNOUNCE,
     POSTS_BOTH,
@@ -694,13 +699,15 @@ def test_a_template_that_will_not_render_falls_back_rather_than_losing_the_event
     """Checklist 17: staff-editable text is caught, not trusted, however it got stored."""
     made = events.scheduled_name("{title} on {date}", "Cookout")
 
-    assert made == "Cookout Feat. BaF"
+    assert made == EVENTS_SCHEDULED_NAME_TEMPLATE.format(title="Cookout")
 
 
 def test_a_caller_may_name_its_own_fallback_so_a_raid_train_keeps_the_plain_title():
     """The default is untouched, so `/event` still falls back to the Feat. BaF wording."""
     assert events.scheduled_name("{title} on {date}", "Cookout", fallback="{title}") == "Cookout"
-    assert events.scheduled_name("{title} on {date}", "Cookout") == "Cookout Feat. BaF"
+    assert events.scheduled_name("{title} on {date}", "Cookout") == (
+        EVENTS_SCHEDULED_NAME_TEMPLATE.format(title="Cookout")
+    )
 
 
 def test_a_template_that_is_not_text_at_all_still_produces_a_name():
@@ -1624,9 +1631,7 @@ def test_room_mode_or_a_blank_forum_hides_the_move_even_on_an_open_room():
 def test_the_moved_line_is_the_default_until_staff_change_it():
     store = a_forum_store()
 
-    assert events.moved_line(store, 7, 99) == (
-        "This event now lives in its own post: <#99>. This room is being removed."
-    )
+    assert events.moved_line(store, 7, 99) == EVENTS_MOVED_LINE.format(post="<#99>")
     store.values[EVENTS_MOVED_LINE_KEY] = "We are over in {post} now."
     assert events.moved_line(store, 7, 99) == "We are over in <#99> now."
 
@@ -1783,8 +1788,8 @@ def test_the_propose_block_says_its_shipped_words_until_staff_change_them():
     shipped = found.block_look(BlockStore(), 7)
     changed = found.block_look(BlockStore(events_block_label="Press me"), 7)
 
-    assert shipped.title == "Propose an event"
-    assert shipped.label == "Propose an event"
+    assert shipped.title == BUTTON_BLOCK_DEFAULTS[EVENTS_BLOCK_TITLE]
+    assert shipped.label == BUTTON_BLOCK_DEFAULTS[EVENTS_BLOCK_LABEL]
     assert changed.label == "Press me" and changed.stamp() != shipped.stamp()
     assert found.BLOCK_HEAD == "eventblock:propose"
 
@@ -1826,8 +1831,10 @@ def test_each_upcoming_line_carries_discord_s_own_timestamps():
 
     look = events.upcoming_block_look(UpcomingStore(), 7, [one])
 
-    assert look.title == "Coming up"
+    assert look.title == BLOCKS_LIVE_DEFAULTS["events_upcoming_title"]
     assert look.text == (
         f"**[Movie night](https://discord.com/events/7/9)** — <t:{stamp}:F> (<t:{stamp}:R>)"
     )
-    assert events.upcoming_block_look(UpcomingStore(), 7, []).text.startswith("Nothing is on")
+    assert events.upcoming_block_look(UpcomingStore(), 7, []).text == (
+        BLOCKS_LIVE_DEFAULTS["events_upcoming_empty"]
+    )
