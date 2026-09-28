@@ -4,6 +4,7 @@ import time
 import pytest
 
 from black_bloc import guides as pure
+from black_bloc.api.tools.guides import SAVED_SAID
 
 LEAD = 7
 READER = 21
@@ -12,6 +13,8 @@ ADMIN = 23
 
 GOLIVE_SEED = next(one for one in pure.seed_entries() if one["slug"] == "golive-announce")
 SEED_STEPS = len(GOLIVE_SEED["steps"])
+SEEDED = pure.seed_entries()
+MEMBER_GUIDES = sum(1 for one in SEEDED if one["audience"] == "member")
 
 
 def png(width: int = 800, height: int = 600, pad: int = 64) -> bytes:
@@ -135,14 +138,14 @@ async def test_a_member_sees_the_member_guides_and_no_staff_one(as_member):
     assert answered.status_code == 200
     body = answered.json()
     assert {one["audience"] for one in body["guides"]} == {"member"}
-    assert len(body["guides"]) == 12
+    assert len(body["guides"]) == MEMBER_GUIDES
     assert body["audience"] == "member" and body["may_edit"] is False
 
 
 async def test_staff_see_every_guide_including_the_staff_ones(as_staff):
     body = as_staff.get("/api/guides").json()
 
-    assert len(body["guides"]) == 27
+    assert len(body["guides"]) == len(SEEDED)
     assert {one["audience"] for one in body["guides"]} == {"member", "staff"}
     assert body["may_edit"] is True
 
@@ -190,9 +193,9 @@ async def test_the_read_bucket_still_says_slow_down_when_it_is_empty(as_member, 
     from black_bloc.api.writes import member_read_bucket_for
 
     bucket = member_read_bucket_for(web)
+    later = time.time() + bucket.window
     for _ in range(bucket.limit + 1):
-        bucket.take(str(READER))
-    bucket._seen[str(READER)] = (0.0, time.time() + bucket.window)
+        bucket.take(str(READER), now=later)
 
     answered = as_member.get("/api/guides")
 
@@ -253,7 +256,7 @@ async def test_a_step_carries_the_linter_s_warnings_and_what_put_the_original_ba
 
     assert step["warnings"] and any("Simply" in one for one in step["warnings"])
     assert step["can_restore"] is True
-    assert step["seed_do"].startswith("Type **/golive**")
+    assert step["seed_do"] == GOLIVE_SEED["steps"][0]["do"]
 
 
 # --- writing ----------------------------------------------------------------------------------
@@ -277,7 +280,7 @@ async def test_staff_save_the_whole_guide_and_leave_one_row_with_the_diff(as_sta
     answered = save(as_staff, "golive-announce", payload)
 
     assert answered.status_code == 200
-    assert answered.json()["message"] == "**Get your stream announced in #live-now** is saved."
+    assert answered.json()["message"] == SAVED_SAID.format(title=GOLIVE_SEED["title"])
     saved = answered.json()
     assert saved["steps"][0]["do_text"] == "Simply press the thing"
     assert saved["steps"][0]["warnings"], "the linter warns and the save still happened"
@@ -715,11 +718,12 @@ async def test_this_guide_was_right_leaves_one_routine_row_and_says_thank_you(
     assert kinds.count("web.guide.confirmed") == 1
 
 
-async def test_a_member_cannot_confirm_a_staff_guide_or_one_that_is_not_published(as_member):
+async def test_a_member_confirming_a_staff_guide_is_told_there_is_no_such_guide(as_member):
     hidden = as_member.post("/api/guides/event-review/confirmed", json={})
 
     assert hidden.status_code == 404
-    assert "no_such_guide" == hidden.json()["error"]
+    assert hidden.json()["error"] == "no_such_guide"
+    assert "There is no guide called" in hidden.json()["message"]
 
 
 async def test_confirming_is_refused_in_words_when_guides_are_off(client, sign_in, people, web, wf):
