@@ -14,6 +14,7 @@ import {
   field,
   icon,
   idsIn,
+  listFilter,
   memberPicker,
   modeSwitch,
   openDrawer,
@@ -22,7 +23,6 @@ import {
   pager,
   run,
   sayNothing,
-  searchField,
   section,
   settingsPanel,
   shortWhen,
@@ -44,6 +44,12 @@ const FILTERS = [
   ['ban', 'Bans', ['ban', 'unban']],
   ['note', 'Notes', ['note']],
 ];
+
+const CASE_FILTERS = FILTERS.map(([key, label, kinds]) => [
+  key,
+  label,
+  kinds === null ? null : (row) => kinds.includes(String(row.kind)),
+]);
 
 const STATS = [
   ['Cases', null],
@@ -141,11 +147,14 @@ function cell(value, className) {
   return el('span', { class: className, text: String(value) });
 }
 
+function caseText(row) {
+  return `${row.id} ${row.kind} ${row.user_name || row.user_id || ''} ${row.reason || ''} ${row.moderator_name || ''}`;
+}
+
 function caseRow(row) {
   return el('button', {
     class: 'grid-row',
     type: 'button',
-    'data-search': `${row.id} ${row.kind} ${row.user_name || row.user_id || ''} ${row.reason || ''} ${row.moderator_name || ''}`.toLowerCase(),
     on: { click: () => showCase(row.id) },
   }, [
     el('span', { class: 'cell-id', text: `#${row.id}` }),
@@ -165,34 +174,6 @@ function caseRow(row) {
   ]);
 }
 
-function toolbar(onPaint) {
-  const chips = FILTERS.map(([key, label]) => el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'data-kind': key,
-    'aria-pressed': state.kind === key ? 'true' : 'false',
-    text: label,
-    on: {
-      click: (event) => {
-        state.kind = key;
-        for (const chip of event.currentTarget.parentElement.children) {
-          chip.setAttribute('aria-pressed', chip.getAttribute('data-kind') === key ? 'true' : 'false');
-        }
-        onPaint();
-      },
-    },
-  }));
-  const search = searchField({
-    label: 'Search cases',
-    placeholder: 'Search cases…',
-    onQuery: (query) => {
-      state.query = query;
-      onPaint();
-    },
-  });
-  return el('div', { class: 'card-head' }, [search, el('div', { class: 'chipbar' }, chips)]);
-}
-
 function casesCard(payload, rows) {
   const head = el('div', { class: 'grid-row head' }, COLUMNS.map(([label, help]) => el('span', {
     title: help || undefined,
@@ -204,24 +185,25 @@ function casesCard(payload, rows) {
   const total = payload && typeof payload.total === 'number' ? payload.total : rows.length;
   const perPage = payload && payload.per_page ? Number(payload.per_page) : rows.length;
   const from = (state.page - 1) * (perPage || rows.length) + 1;
-  const paint = () => {
-    const wanted = FILTERS.find(([key]) => key === state.kind);
-    const kinds = wanted ? wanted[2] : null;
-    let shown = 0;
-    lines.forEach((line, at) => {
-      const row = rows[at];
-      const kindHit = kinds === null || kinds.includes(String(row.kind));
-      const textHit = state.query === '' || (line.getAttribute('data-search') || '').includes(state.query);
-      const hit = kindHit && textHit;
-      line.hidden = !hit;
-      if (hit) shown += 1;
-    });
-    foot.textContent = shown === rows.length
-      ? `Showing ${from}–${from + rows.length - 1} of ${total} case${total === 1 ? '' : 's'}`
-      : `Showing ${shown} of the ${rows.length} case${rows.length === 1 ? '' : 's'} on this page`;
-  };
-  const tools = toolbar(paint);
-  paint();
+  const filter = listFilter({
+    items: rows.map((row, at) => ({ row, node: lines[at] })),
+    value: (one) => one.row,
+    text: caseText,
+    filters: CASE_FILTERS,
+    filter: state.kind,
+    query: state.query,
+    label: 'Search cases',
+    placeholder: 'Search cases…',
+    onChange: ({ query, filter: key, shown }) => {
+      state.query = query;
+      state.kind = key;
+      foot.textContent = shown === rows.length
+        ? `Showing ${from}–${from + rows.length - 1} of ${total} case${total === 1 ? '' : 's'}`
+        : `Showing ${shown} of the ${rows.length} case${rows.length === 1 ? '' : 's'} on this page`;
+    },
+  });
+  const tools = el('div', { class: 'card-head' }, filter.parts);
+  filter.apply();
 
   const hasMore = payload && payload.pages ? state.page < payload.pages : rows.length >= 10;
   return el('div', { class: 'card' }, [
