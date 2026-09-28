@@ -30,9 +30,11 @@ import {
   closeDrawer,
   el,
   field,
+  filterChip,
   icon,
   idsIn,
   keepSaying,
+  listFilter,
   localWhen,
   memberPicker,
   modeSwitch,
@@ -44,7 +46,6 @@ import {
   run,
   sayAgain,
   sayNothing,
-  searchField,
   section,
   segment,
   sentenceFor,
@@ -257,16 +258,6 @@ function platformPill(platform) {
 
 function muted(text) {
   return el('span', { class: 'muted', text });
-}
-
-function chipButton(label, pressed, onPick) {
-  return el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'aria-pressed': pressed ? 'true' : 'false',
-    text: label,
-    on: { click: onPick },
-  });
 }
 
 function drawer(title, children, { open = false, note = null } = {}) {
@@ -1085,8 +1076,6 @@ function streamerRow(row) {
     class: 'grid-row',
     type: 'button',
     style: STREAMER_GRID,
-    'data-search': (`${row.name || ''} ${row.user_id} ${row.twitch || ''} `
-      + `${row.youtube || ''} ${row.role || ''}`).toLowerCase(),
     on: { click: () => showStreamer(row) },
   }, [
     memberCell(row),
@@ -1114,56 +1103,31 @@ function streamersSection(rows, say) {
   ]);
   const lines = rows.map(streamerRow);
   const foot = el('div', { class: 'grid-foot' });
-  const none = sayNothing(NOTHING_MATCHES);
-  none.hidden = true;
-
-  const state = { filter: 'all', query: '' };
-  const paint = () => {
-    const found = FILTERS.find((one) => one.id === state.filter) || FILTERS[0];
-    let shown = 0;
-    lines.forEach((line, at) => {
-      const hit = found.keep(rows[at])
-        && (state.query === '' || (line.getAttribute('data-search') || '').includes(state.query));
-      line.hidden = !hit;
-      if (hit) shown += 1;
-    });
-    foot.textContent = shown === rows.length
-      ? `${rows.length} ${rows.length === 1 ? 'person' : 'people'}`
-      : `${shown} of the ${rows.length} ${rows.length === 1 ? 'person' : 'people'} here`;
-    none.hidden = shown > 0;
-    group.count(shown);
-  };
-
-  const chips = el('div', { class: 'chipbar' });
-  const paintChips = () => {
-    chips.replaceChildren(...FILTERS.map((one) => chipButton(one.label, state.filter === one.id, () => {
-      state.filter = one.id;
-      paintChips();
-      paint();
-    })));
-  };
-  paintChips();
+  const filter = listFilter({
+    items: rows.map((row, at) => ({ row, node: lines[at] })),
+    value: (one) => one.row,
+    text: (row) => `${row.name || ''} ${row.user_id} ${row.twitch || ''} ${row.youtube || ''} ${row.role || ''}`,
+    filters: FILTERS.map((one) => [one.id, one.label, one.keep]),
+    label: 'Find a streamer',
+    placeholder: 'Find a person, a handle, a channel…',
+    empty: NOTHING_MATCHES,
+    onChange: ({ shown }) => {
+      foot.textContent = shown === rows.length
+        ? `${rows.length} ${rows.length === 1 ? 'person' : 'people'}`
+        : `${shown} of the ${rows.length} ${rows.length === 1 ? 'person' : 'people'} here`;
+      group.count(shown);
+    },
+  });
 
   group.body.append(
-    el('div', { class: 'table-tools' }, [
-      searchField({
-        label: 'Find a streamer',
-        placeholder: 'Find a person, a handle, a channel…',
-        onQuery: (query) => {
-          state.query = query;
-          paint();
-        },
-      }),
-      chips,
-      streamerDoors(),
-    ]),
+    el('div', { class: 'table-tools' }, [...filter.parts, streamerDoors()]),
     el('div', { class: 'table-scroll' }, [
       el('div', { class: 'grid-table streamers' }, [head, ...lines, foot]),
     ]),
-    none,
+    filter.none,
     voice,
   );
-  paint();
+  filter.apply();
   return group.node;
 }
 
@@ -1318,7 +1282,7 @@ async function announcementSection(specs, wordingSpecs) {
 
   const chips = el('div', { class: 'chipbar' });
   const paintChips = () => {
-    chips.replaceChildren(...[TWITCH, YOUTUBE].map((which) => chipButton(
+    chips.replaceChildren(...[TWITCH, YOUTUBE].map((which) => filterChip(
       `Preview as ${PLATFORM_WORDS[which]}`,
       shape.which === which,
       () => {
@@ -1559,7 +1523,7 @@ async function logDrawer() {
   const chips = el('div', { class: 'chipbar' });
   const state = { pick: 'all' };
   const paint = () => {
-    chips.replaceChildren(...LOG_CHIPS.map((one) => chipButton(one.label, state.pick === one.id, () => {
+    chips.replaceChildren(...LOG_CHIPS.map((one) => filterChip(one.label, state.pick === one.id, () => {
       state.pick = one.id;
       paint();
     })));
