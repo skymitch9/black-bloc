@@ -44,6 +44,12 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-27 — v182: replays by title get a plain post, not the spotlight
+
+Deployed **22:51 Phoenix** (release `a7a805a5`; merge `555d749e`; gate 9,151 passed + 3 skipped; boot clean 05:51:47–51Z; snapshot `backup-2026-09-27-pre-v182.sqlite3` 3.83 MB). Schema **77**, keys **641**. Design: `info/golive-replays-design.md`.
+
+- 📼 **Don't spotlight replays; when fuzzy, treat as live (owner, 2026-09-27 22:1x — corrected from a mis-stated 21:2x; the clock read 22:23 at the correction — verbatim: *"Looks like GDQ is running a replay. I know esam does that too. We can write code to try and not spotlight replays? Error on the side of posting replays of it's fuzzy. Wouldn't want to miss"*).** Build `golive-replays` (🔨 BUILDING 22:1x): replay = Twitch rerun type, or a title word (`golive_replay_words`) outside any marathon span; fuzzy → live; replay gets a plain post with no pin/ping/bump/reminders (`golive_replay_action` plain|skip, default plain); Treat as live override; mid-stream flip upgrades. ✅ **LIVE as v182 22:51.** GDQ's replay session that was open at deploy is not re-judged; the next session is.
+
 ## 2026-09-27 — v181: a formatting toolbar on the Posts editor
 
 Deployed **21:00 Phoenix** (release `c8f4e0e3`; merge `035f08c1`; gate 9,074 passed + 3 skipped, 25 node test files; boot clean 04:00:31–35Z). Site only — no schema, no keys. Design: `info/posts-toolbar-design.md`.

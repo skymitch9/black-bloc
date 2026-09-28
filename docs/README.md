@@ -114,6 +114,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-27 22:5x:** v182 live (a replay by stream title gets a plain post with no spotlight treatment; fuzzy counts as live; schema 77, 641 keys); see [`DONE.md`](DONE.md) 2026-09-27 v182.
+
 **2026-09-27 21:0x:** v181 live (a formatting toolbar above the Posts editor); see [`DONE.md`](DONE.md) 2026-09-27 v181.
 
 **2026-09-27 20:5x:** v180 live (the welcome rules post carries the front door in one message; the bot deletes its own pin notices; the thread Spotlight start waits for the marathon; schema 76, 631 keys); see [`DONE.md`](DONE.md) 2026-09-27 v180.
