@@ -6970,7 +6970,8 @@
         "checked_at",
         "shadow",
         "block_kinds",
-        "import_style"
+        "import_style",
+        "untitled_title"
       ],
       "nested": {
         "guard": [
@@ -7046,7 +7047,8 @@
         "mode",
         "shadow",
         "block_kinds",
-        "import_style"
+        "import_style",
+        "untitled_title"
       ],
       "nested": {
         "post": [
@@ -7126,7 +7128,8 @@
         "mode",
         "shadow",
         "block_kinds",
-        "import_style"
+        "import_style",
+        "untitled_title"
       ],
       "nested": {
         "post": [
@@ -7209,7 +7212,93 @@
         "mode",
         "shadow",
         "block_kinds",
-        "import_style"
+        "import_style",
+        "untitled_title"
+      ],
+      "nested": {
+        "post": [
+          "id",
+          "slug",
+          "title",
+          "body",
+          "style",
+          "cap",
+          "title_cap",
+          "pin",
+          "channel_id",
+          "channel_name",
+          "posted",
+          "pinned",
+          "changes_pending",
+          "status",
+          "move",
+          "message_id",
+          "posted_at",
+          "posted_by",
+          "posted_by_name",
+          "seeded",
+          "updated_at",
+          "updated_by",
+          "updated_by_name",
+          "posted_where",
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn",
+          "blocks"
+        ],
+        "guard": [
+          "test_mode",
+          "test_channel",
+          "said"
+        ],
+        "shadow": [
+          "channel_id",
+          "channel_name"
+        ]
+      },
+      "rows": {
+        "styles": [
+          "style",
+          "cap",
+          "label"
+        ],
+        "block_kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "_": "A post born from a Google Doc with no title of its own: New post ▸ Import a Google Doc sends title_from: doc with the title clipmd's docTitle found, or posts_untitled_title when it found none; the SERVER numbers a taken import title (Untitled, Untitled-1, Untitled-2 …), never a typed one.",
+      "method": "POST",
+      "path": "/api/posts",
+      "body": {
+        "title": "Untitled",
+        "body": "Words with no title.",
+        "style": "embed",
+        "title_from": "doc"
+      },
+      "read_by": [
+        "page-posts.js New post ▸ Import a Google Doc"
+      ],
+      "shape": "object",
+      "keys": [
+        "post",
+        "styles",
+        "guard",
+        "notes",
+        "read_at",
+        "message",
+        "mode",
+        "shadow",
+        "block_kinds",
+        "import_style",
+        "untitled_title"
       ],
       "nested": {
         "post": [

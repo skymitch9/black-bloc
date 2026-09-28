@@ -747,6 +747,120 @@ async def test_two_posts_cannot_share_a_slug_and_a_title_with_no_letters_is_refu
     assert blank.code == "no_title"
 
 
+async def titles(db):
+    cur = await db.conn.execute("SELECT title, slug FROM posts ORDER BY id")
+    return [(one[0], one[1]) for one in await cur.fetchall()]
+
+
+async def test_an_imported_title_already_taken_is_numbered_first_plain_then_dash_one(bot, guild):
+    for _ in range(3):
+        made = await posts.make_post(bot, guild, STAFF, title="Untitled", number=True)
+        assert made.ok
+
+    assert await titles(bot.db) == [
+        ("Untitled", "untitled"),
+        ("Untitled-1", "untitled-1"),
+        ("Untitled-2", "untitled-2"),
+    ]
+    assert made.message == posts.CREATED_SAID.format(title="Untitled-2")
+    assert await kinds(bot.db) == ["post.created"] * 3
+
+
+async def test_a_numbered_import_fills_the_first_gap(bot, guild):
+    for title in ("Rules", "Rules-2"):
+        await posts.make_post(bot, guild, STAFF, title=title)
+
+    made = await posts.make_post(bot, guild, STAFF, title="Rules", number=True)
+
+    assert made.ok and made.value["title"] == "Rules-1" and made.value["slug"] == "rules-1"
+
+
+async def test_a_typed_title_already_taken_is_still_refused_never_numbered(bot, guild):
+    await posts.make_post(bot, guild, STAFF, title="Untitled", number=True)
+
+    typed = await posts.make_post(bot, guild, STAFF, title="Untitled")
+
+    assert typed.code == "slug_taken"
+    assert await titles(bot.db) == [("Untitled", "untitled")]
+
+
+async def test_an_import_with_no_title_takes_the_untitled_key(bot, guild):
+    first = await posts.make_post(bot, guild, STAFF, title="  ", number=True)
+    await bot.store.set(GUILD, posts.UNTITLED_KEY, "Draft")
+    second = await posts.make_post(bot, guild, STAFF, title="", number=True)
+    third = await posts.make_post(bot, guild, STAFF, title=None, number=True)
+
+    assert first.value["title"] == "Untitled"
+    assert second.value["title"] == "Draft" and third.value["title"] == "Draft-1"
+
+
+async def test_the_untitled_title_is_untitled_until_staff_change_it(bot, guild):
+    from black_bloc import settings_store
+
+    assert posts.untitled_title(bot.store, GUILD) == "Untitled"
+    assert settings_store.KEY_TYPES[posts.UNTITLED_KEY] == "text"
+    assert settings_store.namespace_of(posts.UNTITLED_KEY) == "posts"
+    assert posts.UNTITLED_KEY in settings_store.KEY_HELP
+
+    await bot.store.set(GUILD, posts.UNTITLED_KEY, "Nameless")
+
+    assert posts.untitled_title(bot.store, GUILD) == "Nameless"
+
+
+async def test_two_imports_at_once_never_share_a_name(bot, guild):
+    import asyncio
+
+    made = await asyncio.gather(
+        *(posts.make_post(bot, guild, STAFF, title="Untitled", number=True) for _ in range(4))
+    )
+
+    assert all(one.ok for one in made)
+    assert sorted(title for title, _ in await titles(bot.db)) == [
+        "Untitled",
+        "Untitled-1",
+        "Untitled-2",
+        "Untitled-3",
+    ]
+
+
+async def test_a_stale_view_of_the_taken_names_is_caught_by_the_unique_slug(
+    bot, guild, monkeypatch
+):
+    """The race itself: both creates read the names before either writes."""
+    await posts.make_post(bot, guild, STAFF, title="Untitled", number=True)
+
+    async def nothing_taken(db, guild_id, slug):
+        return set()
+
+    monkeypatch.setattr(posts, "taken_slugs", nothing_taken)
+    made = await posts.make_post(bot, guild, STAFF, title="Untitled", number=True)
+
+    assert made.ok and made.value["title"] == "Untitled-1"
+
+
+async def test_a_typed_create_losing_the_race_is_refused_in_words_not_an_error(
+    bot, guild, monkeypatch
+):
+    await posts.make_post(bot, guild, STAFF, title="Rules")
+
+    async def nobody(db, guild_id, slug):
+        return None
+
+    monkeypatch.setattr(posts, "get_post", nobody)
+    typed = await posts.make_post(bot, guild, STAFF, title="Rules")
+
+    assert typed.code == "slug_taken"
+
+
+async def test_a_numbered_long_title_keeps_its_number_in_the_slug(bot, guild):
+    long = "word " * 20
+    for _ in range(2):
+        made = await posts.make_post(bot, guild, STAFF, title=long, number=True)
+
+    assert made.value["slug"].endswith("-1") and len(made.value["slug"]) <= posts.SLUG_MAX
+    assert made.value["title"] == f"{long.strip()}-1"
+
+
 async def test_the_shipped_post_cannot_be_deleted_and_a_posted_one_is_taken_down_first(bot, guild):
     bot.guard = FakeGuard()
     await posts.seed_posts(bot, guild)

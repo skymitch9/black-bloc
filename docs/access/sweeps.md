@@ -3794,3 +3794,17 @@ Changes or Post it. Lettered; the conductor numbers it.
 | **`DI-j`** | Posts ▸ **New post** ▸ **Import a Google Doc**, paste `https://docs.google.com/document/d/1NYgkvHOxIi7b8Erve1fOQKxQ7ge8IcMGdu6FWYBEAkE/edit`, press **Read the doc**, then **Create the post** | The new draft's box, from the line after *# Suggestions for Revamped Rules* to the line before *# General Comments/Notes*, reads exactly like the live welcome post: the *Welcome to **Black in a Flash**…* paragraph (not a `# ` heading), a blank line, rules `1.`–`6.` each `**bold**` with sub-items at 3 spaces (the level-2 item under rule 5 at 6), rule 6's sub-line under it (not a heading), a blank line, `__**Banworthy Offenses**__` (the Doc's underline; the live post drops it, owner-settled), the six `- ` lines directly under it. `#off-topic` and `#recipes-and-food-pics` are `<#…>` mentions and the preview NAMES them. Delete the scratch post afterwards |
 | **`DI-k`** | In that draft's preview (the Discord mock), and if you like in a real Discord test message with the same text | Sub-items are drawn NESTED under their numbers (3 spaces), the level-2 item nested one step further; *Banworthy Offenses* is its own line, not folded into rule 6's last item |
 | **`DI-l`** | Open a Google Doc of plain paragraphs with no empty lines between them, copy all, paste into a post box | One newline between paragraphs (no blank lines added); add an empty line in the Doc and paste again: that one blank line appears. Paste from an ordinary web page: paragraphs still get a blank line each |
+
+## Rows `DI-m` … `DI-o` — an imported post's title, or Untitled-N (branch `doc-import-title`, 2026-09-28)
+
+🔨 **BUILT on branch `doc-import-title`, NOT merged, NOT deployed.** The owner, 2026-09-28: *"leave it
+untitled if no title is on the google doc and no title header is used in the doc. then add -1 -2 -3 etc
+if there are multiple untitleds"*. Design: [`../info/posts-doc-import-design.md`](../info/posts-doc-import-design.md)
+§ *Titles*. Nothing here posts to Discord; delete the drafts you make afterwards. Lettered; the conductor
+numbers it.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`DI-m`** | Posts ▸ **New post** ▸ **Import a Google Doc**, paste the rules Doc link (`DI-j`), press **Read the doc** | The title box fills with *Current Rules (Do Not Edit this page is reference)* (the Doc's first real heading — not the long *Welcome to Black in a Flash…* line). Press **Create the post**: the post is made with that title. Read it again and Create again without touching the title: the second is *Current Rules (Do Not Edit this page is reference)-1* |
+| **`DI-n`** | Make a public Doc with only plain paragraphs (no title, no Title line, no headings); import it twice, Create each time without touching the title | The box says *Untitled*; the posts are *Untitled* then *Untitled-1*; a third is *Untitled-2*. Delete *Untitled-1* and import again: it fills that gap (*Untitled-1*) |
+| **`DI-o`** | Import that Doc once more but type *Untitled* in the title box yourself; then Settings fold ▸ set **posts_untitled_title** to *Draft* and import it again | The typed one is refused in words (*There is already a post at untitled…*) and nothing is made. After the change the box says *Draft* and the post is *Draft*. `/settings` ▸ Posts reaches the same key. Set it back to *Untitled* (or blank) |

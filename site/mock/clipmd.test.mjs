@@ -8,7 +8,8 @@
 // Exits 0 when every fixture matched, 1 with a list of what did not.
 // scripts/deploy.ps1 and .github/workflows/ci.yml run it beside check.mjs.
 
-import { htmlToDiscordMarkdown, mentionChannels } from '../public/assets/clipmd.js';
+import { readFileSync } from 'node:fs';
+import { docTitle, htmlToDiscordMarkdown, mentionChannels } from '../public/assets/clipmd.js';
 
 const failures = [];
 const fail = (where, said) => failures.push(`${where}: ${said}`);
@@ -378,6 +379,39 @@ const FID = (body) => `<html><head>${FID_SHEET}</head><body class="doc-content">
   is(where, htmlToDiscordMarkdown(
     `<p><a href="${GURL('https://example.com/x')}">https://example.com/x</a></p>`,
   ), 'https://example.com/x');
+}
+
+// docTitle: the export's <title>, else the first Title line, else the first real h1-h3, else ''.
+{
+  const where = 'docTitle';
+  const RULES = readFileSync(new URL('./fixtures/rules-export.html', import.meta.url), 'utf8');
+  const shell = (head, body) => `<html><head>${head}<style>.c1{font-size:11pt}.c2{font-size:20pt}</style>`
+    + `</head><body class="doc-content">${body}</body></html>`;
+  is(`${where} (the rules export: no title, its first real heading)`, docTitle(RULES),
+    'Current Rules (Do Not Edit this page is reference)');
+  is(`${where} (the export's own title wins)`, docTitle(shell(
+    '<title> Server &amp; Rules </title>',
+    '<p class="title"><span>A Title line</span></p><h1><span class="c2">A heading</span></h1>',
+  )), 'Server & Rules');
+  is(`${where} (an empty title, then the Title line before an earlier heading)`, docTitle(shell(
+    '<title></title>',
+    '<h1><span class="c2">A heading</span></h1><p class="c4 title"><span class="c1">The   Title</span></p>',
+  )), 'The Title');
+  is(`${where} (a body-sized heading is not a title)`, docTitle(shell(
+    '<title></title>',
+    '<h1><span class="c1">Body words set as a heading</span></h1><p><span>x</span></p>'
+      + '<h2><span class="c2">The real one</span></h2>',
+  )), 'The real one');
+  is(`${where} (a subtitle and an h4 are not titles)`, docTitle(shell(
+    '',
+    '<p class="subtitle"><span class="c2">Sub</span></p><h4><span class="c2">Four</span></h4>',
+  )), '');
+  is(`${where} (no title and no heading)`, docTitle(shell(
+    '<title>  </title>',
+    '<p class="c5"><span class="c1"></span></p><p><span class="c1">Just words.</span></p>',
+  )), '');
+  is(`${where} (nothing at all)`, docTitle(''), '');
+  is(`${where} (null)`, docTitle(null), '');
 }
 
 process.stdout.write('clipmd: the paste converter against its fixtures\n');

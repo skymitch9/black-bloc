@@ -1,6 +1,6 @@
 import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
-import { htmlToDiscordMarkdown, mentionChannels } from './clipmd.js';
+import { docTitle as titleInDoc, htmlToDiscordMarkdown, mentionChannels } from './clipmd.js';
 import { blockPreview } from './blockpreview.js';
 import { BLOCK_EDITORS } from './blockwords.js';
 import { BLOCK_FILTERS, blockText } from './listfilter.js';
@@ -39,11 +39,13 @@ import {
 
 const MODE_KEY = 'posts_mode';
 const SETTING_KEYS = [
-  MODE_KEY, 'posts_shadow_channel_id', 'posts_panel_minutes', 'posts_import_style', 'posts_log_level',
+  MODE_KEY, 'posts_shadow_channel_id', 'posts_panel_minutes', 'posts_import_style', 'posts_untitled_title',
+  'posts_log_level',
 ];
 const SETTINGS_NOTE = 'Whether staff may post at all, where a rehearsal lands, how long the /posts panel stays live, '
-  + 'what style a Google Doc import lands in, and how much of it is repeated into the Discord log.';
-const MACHINERY_NOTE = 'The reference half of the page: five keys, and everything posts has '
+  + 'what style a Google Doc import lands in, what an import with no title is called, and how much of it '
+  + 'is repeated into the Discord log.';
+const MACHINERY_NOTE = 'The reference half of the page: six keys, and everything posts has '
   + 'done. Both are shut until you want them.';
 const LIST_NOTE = 'One message per post. Black Bloc sends it once and edits that same message '
   + 'every time after — it never posts a second copy.';
@@ -132,7 +134,7 @@ const NEW_TITLE_HELP = 'The title staff see here, and the embed title if you set
 const NEW_DOC_LINK = 'The Google Doc’s link';
 const NEW_DOC_HELP = 'Shared Anyone with the link → Viewer. Nothing is posted to Discord — the new post '
   + 'opens for you to check first.';
-const NEW_DOC_TITLE_HELP = 'Fills with the doc’s own title once it is read; change it if you like.';
+const NEW_DOC_TITLE_HELP = 'Fills with the doc’s own title, else its title line or first heading, once it is read — or “{untitled}” when it has none, numbered {untitled}-1, {untitled}-2 if that is taken. Change it if you like; a title you type is never numbered.';
 const NEW_READ_IT = 'Read the doc';
 const NEW_READ = 'Read “{title}” — {count} characters, as {box}. Check the title, then press Create the post.';
 const NEW_OVER = '“{title}” is {count} characters and {style} holds {cap}, so nothing was made. Shorten '
@@ -355,6 +357,17 @@ function markdownFromPaste(event) {
   }
   const plain = String(data.getData('text/plain') || '').replace(/\r\n/g, '\n').trim();
   return made && made !== plain ? made : '';
+}
+
+/** The doc's title: the export's own, else clipmd's first Title line or real heading, else ''. */
+function titleOfDoc(found) {
+  const said = String((found && found.title) || '').trim();
+  if (said) return said;
+  try {
+    return titleInDoc((found && found.html) || '');
+  } catch (error) {
+    return '';
+  }
 }
 
 /** The one conversion of a fetched export: the paste path's converter, then `#name` → `<#id>`. */
@@ -937,6 +950,7 @@ function headRow() {
 function newPostDrawer(index) {
   const say = notice();
   const importStyle = index.import_style || 'embed';
+  const untitled = String(index.untitled_title || '').trim() || 'Untitled';
   const cap = capFor(index.styles, importStyle);
 
   const opened = async (done) => {
@@ -992,6 +1006,7 @@ function newPostDrawer(index) {
         title: docTitle.value.trim(),
         body: fetched.body,
         style: importStyle,
+        ...(typed ? {} : { title_from: 'doc' }),
       }),
       (found) => found?.message || 'Made.',
     );
@@ -1020,7 +1035,8 @@ function newPostDrawer(index) {
       readIt.disabled = false;
     }
     if (!done.ok) return;
-    const named = done.found.title || IMPORT_UNTITLED;
+    const titled = titleOfDoc(done.found);
+    const named = titled || IMPORT_UNTITLED;
     const body = await markdownOfDoc(done.found);
     if (!body.trim()) {
       say.say(IMPORT_EMPTY, 'warn');
@@ -1035,7 +1051,7 @@ function newPostDrawer(index) {
       return;
     }
     if (!typed || !docTitle.value.trim()) {
-      docTitle.value = done.found.title || '';
+      docTitle.value = titled || untitled;
       typed = false;
     }
     fetched = { url, body };
@@ -1052,7 +1068,7 @@ function newPostDrawer(index) {
   });
   const fromDoc = el('div', { class: 'newpost-pane', id: 'new-import' }, [
     field(NEW_DOC_LINK, el('div', { class: 'docimport' }, [link, readIt]), NEW_DOC_HELP),
-    field('What is it called?', docTitle, NEW_DOC_TITLE_HELP),
+    field('What is it called?', docTitle, NEW_DOC_TITLE_HELP.split('{untitled}').join(untitled)),
     bar([createIt]),
   ]);
   fromDoc.hidden = true;

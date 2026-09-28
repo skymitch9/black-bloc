@@ -2962,6 +2962,21 @@ KEY_HELP.update(
     }
 )
 
+# Posts — the title an import with no title of its own gets (owner, 2026-09-28: "leave it
+# untitled if no title is on the google doc and no title header is used in the doc").
+POSTS_UNTITLED_TITLE = "posts_untitled_title"
+POSTS_UNTITLED_TITLE_DEFAULT = "Untitled"
+KEY_TYPES.update({POSTS_UNTITLED_TITLE: "text"})
+KEY_HELP.update(
+    {
+        POSTS_UNTITLED_TITLE: (
+            "the title a post made with Import a Google Doc gets when the doc has no title of its "
+            "own and no title line or heading; blank restores Untitled. A second one is numbered "
+            "Untitled-1, then Untitled-2. It can become the embed's title members see"
+        ),
+    }
+)
+
 # Posts — blocks (owner, 2026-09-27: "lets do blocks"). A block is something a post's message
 # carries under its own words; each kind's name is what staff see in the Add a block list.
 POSTS_BLOCK_FRONTDOOR_NAME = "posts_block_frontdoor_name"
@@ -7321,6 +7336,8 @@ class SettingsStore:
             return POSTS_VERSIONS_SUMMARY_CHARS_DEFAULT
         if key == POSTS_IMPORT_STYLE:
             return POSTS_IMPORT_STYLE_DEFAULT
+        if key == POSTS_UNTITLED_TITLE:
+            return POSTS_UNTITLED_TITLE_DEFAULT
         if key == "guides_mode":
             return GUIDES_MODE_DEFAULT
         if key == "guides_who_edits":

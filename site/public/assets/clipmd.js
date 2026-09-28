@@ -245,6 +245,10 @@ function headingFromAttrs(attrs) {
   return /(^|[\s_-])heading/.test(klass) ? 2 : 0;
 }
 
+function titledOf(attrs) {
+  return /(^|[\s_-])title([\s_-]|$)/.test(String(attrs.class || '').toLowerCase());
+}
+
 function bodySized(runs) {
   return runs.every((one) => one.pt !== null && one.pt !== undefined && one.pt < BODY_BELOW_PT);
 }
@@ -338,14 +342,8 @@ function blank() {
   return { b: false, i: false, u: false, s: false, code: false };
 }
 
-/**
- * A rich-clipboard HTML fragment as the markdown Discord draws.
- * Anything with no markdown of its own — colour, size, alignment, images, tables' shape —
- * is stripped rather than approximated.
- */
-export function htmlToDiscordMarkdown(html) {
+function blocksOf(html) {
   const rules = classRules(html);
-  const fromDocs = DOCS_SOURCE.test(String(html === null || html === undefined ? '' : html));
   const blocks = [];
   let open = null;
 
@@ -443,7 +441,7 @@ export function htmlToDiscordMarkdown(html) {
         continue;
       }
       if (HEADINGS[tag]) {
-        start('h', { level: HEADINGS[tag] });
+        start('h', { level: HEADINGS[tag], tag, titled: titledOf(node.attrs) });
         walk(node.children, next);
         shut();
         continue;
@@ -454,7 +452,7 @@ export function htmlToDiscordMarkdown(html) {
         continue;
       }
       if (BLOCKS.has(tag)) {
-        start('p', { heading: headingFromAttrs(node.attrs) });
+        start('p', { heading: headingFromAttrs(node.attrs), titled: titledOf(node.attrs) });
         walk(node.children, next);
         shut();
         continue;
@@ -467,6 +465,17 @@ export function htmlToDiscordMarkdown(html) {
     marks: blank(), pt: null, href: null, pre: false, lists: [],
   });
   shut();
+  return blocks;
+}
+
+/**
+ * A rich-clipboard HTML fragment as the markdown Discord draws.
+ * Anything with no markdown of its own — colour, size, alignment, images, tables' shape —
+ * is stripped rather than approximated.
+ */
+export function htmlToDiscordMarkdown(html) {
+  const fromDocs = DOCS_SOURCE.test(String(html === null || html === undefined ? '' : html));
+  const blocks = blocksOf(html);
 
   let out = '';
   let before = null;
@@ -501,6 +510,26 @@ export function htmlToDiscordMarkdown(html) {
     gap = false;
   }
   return out.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+const TITLE_TAG = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i;
+const TOP_HEADINGS = new Set(['h1', 'h2', 'h3']);
+
+function plainOf(block) {
+  return block.runs.map((one) => (one.br ? ' ' : one.text || '')).join('').replace(/\s+/g, ' ').trim();
+}
+
+/** The doc's own title, else its first Title line, else its first real heading, else ''. */
+export function docTitle(html) {
+  const source = String(html === null || html === undefined ? '' : html);
+  const named = TITLE_TAG.exec(source);
+  const said = named ? decode(named[1]).replace(/\s+/g, ' ').trim() : '';
+  if (said) return said;
+  const blocks = blocksOf(source).filter((one) => one.kind !== 'gap' && plainOf(one));
+  const titled = blocks.find((one) => one.titled && one.kind !== 'li');
+  if (titled) return plainOf(titled);
+  const heading = blocks.find((one) => one.kind === 'h' && TOP_HEADINGS.has(one.tag));
+  return heading ? plainOf(heading) : '';
 }
 
 const CODE_SPANS = /(```[\s\S]*?```|`[^`\n]*`)/;
