@@ -37,10 +37,12 @@ import {
 } from './ui.js';
 
 const MODE_KEY = 'posts_mode';
-const SETTING_KEYS = [MODE_KEY, 'posts_shadow_channel_id', 'posts_panel_minutes', 'posts_log_level'];
-const SETTINGS_NOTE = 'Whether staff may post at all, where a rehearsal lands, how long the /posts panel stays live, and '
-  + 'how much of it is repeated into the Discord log.';
-const MACHINERY_NOTE = 'The reference half of the page: four keys, and everything posts has '
+const SETTING_KEYS = [
+  MODE_KEY, 'posts_shadow_channel_id', 'posts_panel_minutes', 'posts_import_style', 'posts_log_level',
+];
+const SETTINGS_NOTE = 'Whether staff may post at all, where a rehearsal lands, how long the /posts panel stays live, '
+  + 'what style a Google Doc import lands in, and how much of it is repeated into the Discord log.';
+const MACHINERY_NOTE = 'The reference half of the page: five keys, and everything posts has '
   + 'done. Both are shut until you want them.';
 const LIST_NOTE = 'One message per post. Black Bloc sends it once and edits that same message '
   + 'every time after — it never posts a second copy.';
@@ -121,6 +123,20 @@ const IMPORT_DONE = 'Imported from “{title}” — the box is an unsaved draft
 const IMPORT_OVER = ' It runs past this style’s limit, so the counter is red and Save refuses until '
   + 'it is shorter.';
 const IMPORT_UNTITLED = 'the Google Doc';
+const BOX_WORDS = { embed: 'the embed box, like Welcome and rules', plain: 'a plain message' };
+const IMPORT_RESTYLED = ' The style is set to {box} too — also unsaved.';
+const NEW_SCRATCH = 'Start from scratch';
+const NEW_IMPORT = 'Import a Google Doc';
+const NEW_TITLE_HELP = 'The title staff see here, and the embed title if you set the style to an embed.';
+const NEW_DOC_LINK = 'The Google Doc’s link';
+const NEW_DOC_HELP = 'Shared Anyone with the link → Viewer. Nothing is posted to Discord — the new post '
+  + 'opens for you to check first.';
+const NEW_DOC_TITLE_HELP = 'Fills with the doc’s own title once it is read; change it if you like.';
+const NEW_READ_IT = 'Read the doc';
+const NEW_READ = 'Read “{title}” — {count} characters, as {box}. Check the title, then press Create the post.';
+const NEW_OVER = '“{title}” is {count} characters and {style} holds {cap}, so nothing was made. Shorten '
+  + 'the doc, or set the import style to the embed on the Settings fold below.';
+const NEW_STALE = 'The link changed since the doc was read — press Read the doc again.';
 const IMPORT_PUT_BACK = 'Put back what was there';
 const IMPORT_PUT_BACK_DONE = 'Put back — the box holds what it had before the import.';
 const DELETE_QUESTION = 'Every word goes with it. Nothing puts it back.';
@@ -340,6 +356,19 @@ function markdownFromPaste(event) {
   return made && made !== plain ? made : '';
 }
 
+/** The one conversion of a fetched export — the paste path's own function, nothing else. */
+function markdownOfDoc(found) {
+  try {
+    return htmlToDiscordMarkdown((found && found.html) || '');
+  } catch (error) {
+    return '';
+  }
+}
+
+function capFor(styles, style) {
+  return ((styles || []).find((one) => one.style === style) || { cap: 2000 }).cap;
+}
+
 async function versionsOf(slug) {
   try {
     return await api(where(slug, '/versions'));
@@ -400,7 +429,7 @@ async function postDrawer(payload, known, history) {
   });
   const preview = el('div', { class: 'preview', id: 'post-preview' }, [mock.node, mock.say]);
 
-  const capOf = () => (payload.styles.find((one) => one.style === draft.style) || { cap: 2000 }).cap;
+  const capOf = () => capFor(payload.styles, draft.style);
 
   const paintPreview = () => {
     mock.repaint();
@@ -500,16 +529,23 @@ async function postDrawer(payload, known, history) {
     paintPreview();
   };
 
+  const setStyle = (wanted) => {
+    draft.style = wanted;
+    style.value = wanted;
+  };
+
   const putBack = () => {
     if (beforeImport === null) return;
-    replaceBody(beforeImport);
+    setStyle(beforeImport.style);
+    replaceBody(beforeImport.body);
     forgetImport();
     importSay.say(IMPORT_PUT_BACK_DONE, 'ok');
   };
 
-  const paintImportNote = (named, over) => {
+  const paintImportNote = (named, over, restyled) => {
+    const box = restyled ? IMPORT_RESTYLED.replace('{box}', BOX_WORDS[draft.style] || draft.style) : '';
     importNote.replaceChildren(
-      el('span', { text: IMPORT_DONE.replace('{title}', named) + (over ? IMPORT_OVER : '') }),
+      el('span', { text: IMPORT_DONE.replace('{title}', named) + box + (over ? IMPORT_OVER : '') }),
       ' ',
       button(IMPORT_PUT_BACK, putBack, { tone: 'quiet' }),
       el('button', {
@@ -549,21 +585,19 @@ async function postDrawer(payload, known, history) {
       importButton.disabled = false;
     }
     if (!done.ok) return;
-    let made = '';
-    try {
-      made = htmlToDiscordMarkdown(done.found.html || '');
-    } catch (error) {
-      made = '';
-    }
+    const made = markdownOfDoc(done.found);
     if (!made.trim()) {
       importSay.say(IMPORT_EMPTY, 'warn');
       return;
     }
-    const kept = draft.body;
+    const kept = { body: draft.body, style: draft.style };
+    const wanted = payload.import_style || draft.style;
+    const restyled = wanted !== draft.style;
+    if (restyled) setStyle(wanted);
     replaceBody(made);
     beforeImport = kept;
     pasteNote.hidden = true;
-    paintImportNote(done.found.title || IMPORT_UNTITLED, draft.body.length > capOf());
+    paintImportNote(done.found.title || IMPORT_UNTITLED, draft.body.length > capOf(), restyled);
   };
 
   const importButton = button(IMPORT_IT, () => importDoc(), { tone: 'quiet' });
@@ -892,9 +926,20 @@ function headRow() {
   ]);
 }
 
-function newPostDrawer() {
+/** Two ways in: a bare title, or a Google Doc born in posts_import_style in one call. */
+function newPostDrawer(index) {
   const say = notice();
-  const title = el('input', { class: 'input', type: 'text', placeholder: 'Welcome and rules' });
+  const importStyle = index.import_style || 'embed';
+  const cap = capFor(index.styles, importStyle);
+
+  const opened = async (done) => {
+    keepSaying('posts', say);
+    closeDrawer();
+    await refresh();
+    openPost(done.found.post.slug, done.found.post.title);
+  };
+
+  const title = el('input', { class: 'input', type: 'text', id: 'new-title', placeholder: 'Welcome and rules' });
   const make = button('Create the post', async () => {
     if (!title.value.trim()) {
       say.say(NEED_A_TITLE, 'warn');
@@ -905,20 +950,126 @@ function newPostDrawer() {
       () => send('/api/posts', 'POST', { title: title.value.trim() }),
       (found) => found?.message || 'Made.',
     );
-    if (!done.ok) return;
-    keepSaying('posts', say);
-    closeDrawer();
-    await refresh();
-    openPost(done.found.post.slug, done.found.post.title);
+    if (done.ok) await opened(done);
   }, { tone: 'warn', small: false });
-  return [
-    el('div', { class: 'formrow' }, [
-      field('What is it called?', title, 'The title staff see here, and the embed title if you '
-        + 'set the style to an embed.'),
-    ]),
+  const scratch = el('div', { class: 'newpost-pane', id: 'new-scratch' }, [
+    el('div', { class: 'formrow' }, [field('What is it called?', title, NEW_TITLE_HELP)]),
     bar([make]),
-    say,
-  ];
+  ]);
+
+  const link = el('input', {
+    class: 'input',
+    type: 'url',
+    id: 'new-import-url',
+    placeholder: IMPORT_PLACEHOLDER,
+    spellcheck: 'false',
+    autocomplete: 'off',
+  });
+  const docTitle = el('input', { class: 'input', type: 'text', id: 'new-import-title' });
+  let fetched = null;
+  let typed = false;
+  docTitle.addEventListener('input', () => { typed = true; });
+
+  const createIt = button('Create the post', async () => {
+    if (!fetched || fetched.url !== link.value.trim()) {
+      say.say(NEW_STALE, 'warn');
+      return;
+    }
+    if (!docTitle.value.trim()) {
+      say.say(NEED_A_TITLE, 'warn');
+      return;
+    }
+    const done = await run(
+      say,
+      () => send('/api/posts', 'POST', {
+        title: docTitle.value.trim(),
+        body: fetched.body,
+        style: importStyle,
+      }),
+      (found) => found?.message || 'Made.',
+    );
+    if (done.ok) await opened(done);
+  }, { tone: 'warn', small: false });
+  createIt.hidden = true;
+
+  const forget = () => {
+    fetched = null;
+    createIt.hidden = true;
+  };
+  link.addEventListener('input', forget);
+
+  const readIt = button(NEW_READ_IT, async () => {
+    forget();
+    const url = link.value.trim();
+    if (!url) {
+      say.say(IMPORT_NO_LINK, 'warn');
+      return;
+    }
+    readIt.disabled = true;
+    let done = null;
+    try {
+      done = await run(say, () => send('/api/posts/import-doc', 'POST', { url }), () => '');
+    } finally {
+      readIt.disabled = false;
+    }
+    if (!done.ok) return;
+    const named = done.found.title || IMPORT_UNTITLED;
+    const body = markdownOfDoc(done.found);
+    if (!body.trim()) {
+      say.say(IMPORT_EMPTY, 'warn');
+      return;
+    }
+    if (body.length > cap) {
+      say.say(NEW_OVER
+        .replace('{title}', named)
+        .replace('{count}', body.length.toLocaleString())
+        .replace('{style}', STYLE_WORDS[importStyle] || importStyle)
+        .replace('{cap}', cap.toLocaleString()), 'danger');
+      return;
+    }
+    if (!typed || !docTitle.value.trim()) {
+      docTitle.value = done.found.title || '';
+      typed = false;
+    }
+    fetched = { url, body };
+    createIt.hidden = false;
+    say.say(NEW_READ
+      .replace('{title}', named)
+      .replace('{count}', body.length.toLocaleString())
+      .replace('{box}', BOX_WORDS[importStyle] || importStyle), 'ok');
+  }, { tone: 'quiet', small: false });
+  link.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    readIt.click();
+  });
+  const fromDoc = el('div', { class: 'newpost-pane', id: 'new-import' }, [
+    field(NEW_DOC_LINK, el('div', { class: 'docimport' }, [link, readIt]), NEW_DOC_HELP),
+    field('What is it called?', docTitle, NEW_DOC_TITLE_HELP),
+    bar([createIt]),
+  ]);
+  fromDoc.hidden = true;
+
+  const panes = { scratch, doc: fromDoc };
+  const chips = el('div', { class: 'chipbar newpost-choice', role: 'group' });
+  const choose = (key) => {
+    for (const chip of chips.children) {
+      chip.setAttribute('aria-pressed', chip.getAttribute('data-kind') === key ? 'true' : 'false');
+    }
+    for (const [name, pane] of Object.entries(panes)) pane.hidden = name !== key;
+    say.say('');
+    (key === 'doc' ? link : title).focus();
+  };
+  chips.replaceChildren(...[['scratch', NEW_SCRATCH], ['doc', NEW_IMPORT]].map(([key, label]) => el('button', {
+    class: 'chip-filter',
+    type: 'button',
+    'data-kind': key,
+    'aria-pressed': key === 'scratch' ? 'true' : 'false',
+    text: label,
+    on: { click: () => choose(key) },
+  })));
+
+  return [chips, scratch, fromDoc, say];
 }
 
 function postsSection(payload, say) {
@@ -974,7 +1125,7 @@ function postsSection(payload, say) {
     },
   });
 
-  const newPost = button('New post', () => openDrawer('A new post', newPostDrawer()), { tone: 'warn' });
+  const newPost = button('New post', () => openDrawer('A new post', newPostDrawer(payload)), { tone: 'warn' });
   newPost.style.marginLeft = 'auto';
   paint();
 

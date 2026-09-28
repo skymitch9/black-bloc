@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import — the embed box and New post choices* (branch `posts-doc-import-2`, off `main` `d1d5807a`, keyed against `959bc310`); the *Import from a Google Doc* rows for `page-posts.js` `forgetImport` / `replaceBody` / `importDoc` / `importFold` hold in substance but their line numbers moved (~+30). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Import from a Google Doc* (branch `posts-doc-import`, off `main` `05a8fc0c`, keyed against `f91e014c`); the *posts-paste* rows for `clipmd.js` still hold (the inline path is unchanged; classes and the link unwrap are added). Before that:
 > **2026-09-28 — RE-KEYED against `f4ba0f2b`** (after the six test-audit merges): 769 anchors moved, 556 unchanged, 24 ambiguous (nearest taken), 36 fuzzy, 31 not found, 2251 bare line numbers left as they are, 0 rows naming a missing file. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Birthday block goes straight to the form* (branch `birthday-block-modal`, off `main` `c9ee1f46`, keyed against `8c1cb907`); the *Blocks buttons* row for `open_birthday_panel` ("The button opens the PANEL") describes code this branch changed. Before that:
@@ -9316,3 +9317,20 @@ Design: [`blocks-convert-design.md`](blocks-convert-design.md#blocks-section-fol
 | `site/public/assets/page-posts.js` `blockCard` · `readBlockFold` · `writeBlockFold` · `blockFoldMap` | Each Blocks card is a native `<details class="block-card">`; folding it is what stops `blockLook`'s already-`lazy` `IntersectionObserver` preview from painting — a closed `<details>`'s children have no box, so the observer cannot fire until the card is opened. Fold state is one object at `layout.js`'s `remembered`/`remember` key `bb_blocks_fold` (`{kind: folded}`), not new storage code. |
 | `site/public/assets/page-posts.js` `setAllBlockFolds` | Sets `.open` on every card's `<details>`; relies on the browser firing `toggle` on a programmatic `.open` set (it does, per spec) so `blockCard`'s own `toggle` listener is the only place fold state is written. |
 | `site/public/assets/site.css` `.block-card-head` | The `<summary>`'s chevron rotation and marker-hiding, copied from `.foldout-head`'s existing rule shape; `.card-head`'s flex/padding/border is reused as-is (the summary carries both classes). |
+
+## Doc import — the embed box and New post choices (branch `posts-doc-import-2`, 2026-09-28)
+
+Design: [`posts-doc-import-design.md`](posts-doc-import-design.md) § *Follow-up*. Keyed against `959bc310`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/settings_store.py:2948` `POSTS_IMPORT_STYLE` | The choices are a tuple here, not `posts.STYLES`: `posts` → `actionlog` → `settings_store` would be an import cycle. `tests/test_posts.py` pins the two equal. |
+| `black_bloc/posts.py:773` `import_style` | The one reading of the key; anything unknown is the embed (the owner's "like welcome does"). |
+| `black_bloc/posts.py:1015` `make_post` · `:1035` · `:1053` | Both caps are checked against the CHOSEN style before the insert, so a refusal makes nothing. A born body goes through `record_version` (`because=saved`) like Save; the one `post.created` row carries `style` + `version` — no `post.saved` beside it (checklist 34). No body → the old behaviour exactly. |
+| `black_bloc/api/tools/posts.py:206` · `:235` | `import_style` on every post-shaped answer and the index, so neither drawer reads settings. |
+| `site/public/assets/page-posts.js:350` `markdownOfDoc` | The ONE conversion of a fetched export for both drawers — `clipmd.js`'s `htmlToDiscordMarkdown`, the paste path's function; a throw is an empty result (the caller says *no words*). |
+| `site/public/assets/page-posts.js:522` `setStyle` · `:584` | The import switches the draft AND the select, only when different; Put back (`:527`) restores style before body so the counter paints against the old cap. |
+| `site/public/assets/page-posts.js:920` `newPostDrawer` | Takes the index payload for `import_style` and the caps. Two chips (`aria-pressed`, the filter chips' own class) show one pane each. |
+| `site/public/assets/page-posts.js:960` `typed` | The doc's title fills the box only if staff have not typed one (or it is empty). |
+| `site/public/assets/page-posts.js:963` `createIt` · `:991` `readIt` | *Create the post* renders only after a good read and hides again when the link changes; it re-checks the link so a stale read cannot create the wrong doc. The over-cap refusal happens at read time, before anything exists; the server refuses again on its own. |
+| `site/mock/server.mjs:3118` `postImportStyle` · `:3270` | The mock's twin: the key's value, and `POST /api/posts` with `body`/`style`, the cap refusal, version 1, one `web.post.created` row. |

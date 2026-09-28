@@ -3745,3 +3745,18 @@ rows saves or posts anything unless you press Save Changes / Post it; do not. Le
 | **`DI-c`** | Upload a .docx or a PDF to Drive (do NOT convert it), share it Anyone with the link, and import its Drive link (`drive.google.com/file/d/…`) | Nothing in the box changes; the notice says it is a file in Drive that is not a Google Doc, only Google Docs convert, and **File → Save as Google Docs**. ⚠️ If it instead says *no doc at that link* or *could not fetch*, report which — that is Google's answer shape, which this build guessed |
 | **`DI-d`** | Import `https://example.com/doc`, then an empty box | Each refuses in words (*That is not a Google Docs link…* / *Paste a Google Doc's link…*) without asking anything; nothing changes |
 | **`DI-e`** | After a `DI-a` import, press **Put back what was there**; import again and press **Ctrl+Z** in the box instead | Put back: the box is exactly what it was before the import, the note goes, a line says it was put back. Ctrl+Z: the imported text comes out and the old text returns. Neither saved anything — **Discard** still reverts to the saved post |
+
+## Rows `DI-f` … `DI-i` — the embed box and New post choices (branch `posts-doc-import-2`, 2026-09-28)
+
+🔨 **BUILT on branch `posts-doc-import-2`, NOT merged, NOT deployed.** The owner, 2026-09-28: *"Make sure it
+post in a format style box like welcome does"* and *"on make new post have a start from scratch or import
+drive link options"*. Design: [`../info/posts-doc-import-design.md`](../info/posts-doc-import-design.md)
+§ *Follow-up*. Use the PUBLIC doc from `DI-a`. Nothing here posts to Discord; do not press Post it.
+Lettered; the conductor numbers it.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`DI-f`** | Open a scratch post whose **Style** is *plain*, import the `DI-a` doc | The box fills as in `DI-a`, the **Style** select now reads the embed, the preview draws the embed box like *Welcome and rules*, and the note adds *The style is set to the embed box, like Welcome and rules too — also unsaved.* Press **Put back what was there**: the box AND the style go back to what they were. Then **Discard** |
+| **`DI-g`** | Posts ▸ **New post** | Two chips: **Start from scratch** (pressed) with the title box and **Create the post** — make one and it opens as before; and **Import a Google Doc** |
+| **`DI-h`** | **New post** ▸ **Import a Google Doc**, paste the `DI-a` link, press **Read the doc** | The title box fills with the doc's name (type over it if you like); a line says *Read "<name>" — N characters, as the embed box…*; **Create the post** appears. Press it: the new post's drawer opens with the doc's words, style embed, **not posted**; its Versions list shows v1. Logs ▸ posts: one `web.post.imported` and one `web.post.created` row. Change the link after reading and Create says to read it again. Delete the scratch post afterwards |
+| **`DI-i`** | **New post** ▸ **Import a Google Doc** with the `DI-b` private doc, then a non-Google link, then an empty box; then Settings fold ▸ set **posts_import_style** to *plain* and read a doc over 2000 characters | Each refuses in words and **no post appears** in the list. The long doc under *plain* says it is N characters and a plain message holds 2,000, so nothing was made. `/settings` ▸ Posts reaches the same key (checklist 33). Set it back to *embed* |

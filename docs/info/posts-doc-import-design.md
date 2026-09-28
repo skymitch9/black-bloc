@@ -166,3 +166,85 @@ The mock copies the server's sentences, like every other mock route.
 Sweep rows **`DI-a` … `DI-e`** in [`../access/sweeps.md`](../access/sweeps.md): one PUBLIC doc
 (Anyone with the link → Viewer), one PRIVATE doc (Restricted), one non-Doc Drive file (an uploaded .docx
 or PDF), a non-Google link, and Put back.
+
+## Follow-up: the embed box and New post choices
+
+> 🔨 **BUILT on branch `posts-doc-import-2`** (off `main` at `d1d5807a`) — **NOT merged, NOT deployed,
+> and still NO real Google export has ever been fetched.** Last verified: 2026-09-28 — see the gate
+> figures in the branch report; nothing below was seen in a browser.
+
+The owner, 2026-09-28 08:3x, verbatim:
+
+> *"Make sure it post in a format style box like welcome does"*
+> *"Also on make new post have a start from scratch or import drive link options"*
+
+"Format style box" is the **embed** style (`posts.EMBED`, 4096 characters) that the shipped *Welcome and
+rules* post uses.
+
+### As built
+
+- **`posts_import_style`** — a new registry key (enum `plain | embed`, default **`embed`**), filed under
+  `posts` by prefix, with help, a mock row and a label. It is on the Posts page's **Settings** fold
+  (`SETTING_KEYS`, which now lists five keys) and reachable from `/settings` like every posts key
+  (checklist 33). `posts.import_style(store, guild_id)` is the one reading; an unknown value reads as the
+  embed. The choices are a tuple in `settings_store.py` (it cannot import `posts.py` — `posts` →
+  `actionlog` → `settings_store` is a cycle); `tests/test_posts.py::test_the_import_style_choices_are_the_post_styles`
+  pins them equal to `posts.STYLES`.
+- **Every posts payload says it**: `GET /api/posts` and every post-shaped answer (`_whole`) carry
+  `import_style`, so both drawers know it without reading settings.
+- **Import into an existing post** (the post drawer): after a successful import the UNSAVED draft's style
+  also switches to `import_style` when it differs, the style select follows, and the note adds *The style
+  is set to the embed box, like Welcome and rules too — also unsaved.* (`BOX_WORDS` / `IMPORT_RESTYLED`,
+  page constants — staff chrome). The cap check (*runs past this style's limit*) uses the NEW style.
+  **Put back what was there** restores the previous body AND style. Discard already reset both.
+- **New post** opens with two chips — **Start from scratch** (selected; today's title → **Create the
+  post**, unchanged) and **Import a Google Doc**: a link box with **Read the doc** (Enter presses it) and
+  a title box. Reading calls `POST /api/posts/import-doc` `{url}` (no slug — there is no post yet),
+  converts with `markdownOfDoc` — the drawer's own call of `clipmd.js`'s `htmlToDiscordMarkdown`, now one
+  page function both drawers use — fills the title with the doc's title unless staff typed their own, and
+  only then shows **Create the post**. That press sends `POST /api/posts` `{title, body, style:
+  import_style}` — ONE call — and opens the new post's drawer. Nothing is posted to Discord.
+- **Refusals in words, nothing created**: empty link, not a Google link, not public, not a Doc, fetch
+  problems (the route's own sentences); a doc that converts to nothing; a doc longer than the import
+  style's cap (*"X" is N characters and an embed holds 4,096, so nothing was made…*); a link edited after
+  it was read (*press Read the doc again*); no title; a taken slug (the server's sentence).
+- **`make_post` can bear words** (`body=`, `style=`): the title and body are checked against the chosen
+  style's caps BEFORE anything is written (`body_too_long` 400, nothing made); the row is created with
+  its body and style; a non-empty body is written as **version 1** through `record_version`
+  (`because=saved`, the way Save does); and the ONE log row is still `post.created` / `web.post.created`,
+  now with `style` and `version` in its details (checklist 34 — one write, one row). With no body the
+  function behaves exactly as before (plain, empty, no version).
+- Mock mirrors all of it (`postImportStyle`, `import_style` on both shapes, `POST /api/posts` with
+  `body`/`style`, the cap refusal, version 1). Contract: `import_style` required on `GET /api/posts`,
+  `GET /api/posts/{post_slug}`, `POST /api/posts`; a second `POST /api/posts` entry born with a body
+  and `style: embed`.
+- CSS: `.newpost-choice`, `.newpost-pane` (a column, `min-width: 0`); the link row reuses `.docimport`,
+  which wraps.
+
+### Deviations
+
+1. **Two presses on the import path, not one** — *Read the doc* then *Create the post*. The brief's title
+   box "fills with the doc's own title once fetched and stays editable", which needs a moment between the
+   fetch and the create; the read also lets the over-cap refusal land before anything exists.
+2. **The client sends the style**; the server does not default a born body to `posts_import_style`. A
+   body with no `style` is born plain, like every other post. The page always sends `import_style`.
+3. **The import logs `web.post.imported` with no slug** on the New post path (the post does not exist
+   yet); the create's `web.post.created` row names it a moment later.
+4. **The note names "Welcome and rules"** in `BOX_WORDS.embed`, as the brief worded it — a page constant,
+   so a renamed welcome post leaves it stale.
+5. **A doc title longer than 256 characters** is put in the title box as is; Create is then refused by
+   the server in words (the title cap). Not clipped silently.
+
+### What was NOT verified
+
+- 🔴 **No browser ran either drawer** — the chips, the hidden panes, focus moving, the note's new
+  sentence, Put back restoring the style select, and the 390 px layout are reasoned, not seen.
+- **No real Google export** (unchanged from the first build).
+- The mock path was exercised by hand with curl (born post: style embed, version count 1; a 2001-character
+  plain body refused and nothing made) and the mock's canned export was converted by `clipmd.js` in node
+  (190 characters); the page code that joins those was not run.
+- Nothing met Discord.
+
+### Live check steps
+
+Sweep rows **`DI-f` … `DI-i`** in [`../access/sweeps.md`](../access/sweeps.md).

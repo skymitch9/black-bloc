@@ -2943,6 +2943,25 @@ KEY_HELP.update(
     }
 )
 
+# Posts — the style a Google Doc import lands in (owner, 2026-09-28: "Make sure it post in a
+# format style box like welcome does"). The choices are posts.STYLES; a test pins the two equal.
+POSTS_IMPORT_STYLE = "posts_import_style"
+POSTS_IMPORT_STYLES = ("plain", "embed")
+POSTS_IMPORT_STYLE_DEFAULT = "embed"
+KEY_TYPES.update({POSTS_IMPORT_STYLE: "enum"})
+KEY_CHOICES.update({POSTS_IMPORT_STYLE: POSTS_IMPORT_STYLES})
+KEY_HELP.update(
+    {
+        POSTS_IMPORT_STYLE: (
+            "the style a post takes when its words come from a Google Doc — on a new post made "
+            "with Import a Google Doc, and on an existing post's draft when Import replaces its "
+            "message. embed (the default) is the box Welcome and rules is drawn in and holds "
+            "4096 characters; plain is an ordinary message of up to 2000. Staff can still change "
+            "the style of any post afterwards"
+        ),
+    }
+)
+
 # Posts — blocks (owner, 2026-09-27: "lets do blocks"). A block is something a post's message
 # carries under its own words; each kind's name is what staff see in the Add a block list.
 POSTS_BLOCK_FRONTDOOR_NAME = "posts_block_frontdoor_name"
@@ -7300,6 +7319,8 @@ class SettingsStore:
             return POSTS_VERSIONS_KEEP_DEFAULT
         if key == "posts_versions_summary_chars":
             return POSTS_VERSIONS_SUMMARY_CHARS_DEFAULT
+        if key == POSTS_IMPORT_STYLE:
+            return POSTS_IMPORT_STYLE_DEFAULT
         if key == "guides_mode":
             return GUIDES_MODE_DEFAULT
         if key == "guides_who_edits":
