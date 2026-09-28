@@ -417,6 +417,9 @@ const SETTING_SPECS = [
   ['honeypot_purge_days', 'int', 1, 1, 'days of the banned account’s messages to delete with it, 0 to 7', null, 7],
   ['honeypot_exempt_role_ids', 'roles', ['900000000000000001'], [], 'roles the trap ignores; staff are always ignored too'],
   ['events_mode', 'enum', 'on', 'off', 'off, shadow (no public announcement) or on (announce approved events)', ['off', 'shadow', 'on']],
+  ["events_block_title", "text", "Propose an event", "Propose an event", "the heading on the propose an event block, when a post carries it; blank restores the shipped wording"],
+  ["events_block_text", "text", "Got an idea for a movie night, a game session or a watch party? Propose it here and staff take it from there. /event opens the same form.", "Got an idea for a movie night, a game session or a watch party? Propose it here and staff take it from there. /event opens the same form.", "the line under that heading on the propose an event block; blank restores the shipped wording"],
+  ["events_block_label", "text", "Propose an event", "Propose an event", "what the propose an event block's button says, at most 80 characters; the button opens the same private proposal card the front door opens. Blank restores the shipped wording"],
   ['events_category_id', 'channel', '800000000000000008', null, 'the category review channels are made in'],
   ['events_announce_channel_id', 'channel', '800000000000000006', null, 'where an approved event is announced'],
   ['events_ping_role_id', 'role', null, null, 'role mentioned when an event is announced and when it starts'],
@@ -452,6 +455,9 @@ const SETTING_SPECS = [
   ['birthday_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (post birthday wishes)', ['off', 'shadow', 'on']],
   ['birthday_channel_id', 'channel', '800000000000000002', null, 'where birthday wishes are posted'],
   ['birthday_template', 'text', 'Happy birthday {name}!', 'Happy birthday {name}!', 'the birthday wording; {name} and {age}'],
+  ["birthday_block_title", "text", "Your birthday", "Your birthday", "the heading on the set your birthday block, when a post carries it; blank restores the shipped wording"],
+  ["birthday_block_text", "text", "Tell Black Bloc your birthday and the server can celebrate you on the day. Change or remove it any time; /birthday opens the same choices.", "Tell Black Bloc your birthday and the server can celebrate you on the day. Change or remove it any time; /birthday opens the same choices.", "the line under that heading on the set your birthday block; blank restores the shipped wording"],
+  ["birthday_block_label", "text", "Set my birthday", "Set my birthday", "what the set your birthday block's button says, at most 80 characters; the button opens the same /birthday panel. Blank restores the shipped wording"],
   ['birthday_color', 'color', '#4eefff', '#4eefff', 'the birthday embed’s colour, as a hex code like #4eefff'],
   ['birthday_role_id', 'role', '900000000000000004', null, 'role given for the day and taken back the next'],
   ['birthday_show_age', 'bool', false, false, 'true to put {age} in reach for people who stored a birth year'],
@@ -631,6 +637,9 @@ const SETTING_SPECS = [
   ['memory_panel_minutes', 'int', 10, 10, "minutes the /memory panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['youtube_panel_minutes', 'int', 10, 10, "minutes the /youtube panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['pings_panel_minutes', 'int', 10, 10, "minutes the /pings panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
+  ["pings_block_title", "text", "Get pinged when someone goes live", "Get pinged when someone goes live", "the heading on the ping me when they go live block, when a post carries it; blank restores the shipped wording"],
+  ["pings_block_text", "text", "Pick the streamers and channels you want a ping for when they go live. Nothing pings you until you choose it, and you can stop any time. /pings opens the same choices.", "Pick the streamers and channels you want a ping for when they go live. Nothing pings you until you choose it, and you can stop any time. /pings opens the same choices.", "the line under that heading on the ping me when they go live block; blank restores the shipped wording"],
+  ["pings_block_label", "text", "Choose my pings", "Choose my pings", "what the ping me when they go live block's button says, at most 80 characters; the button opens the same /pings panel and its picker. Blank restores the shipped wording"],
   ['voice_panel_minutes', 'int', 10, 10, "minutes the /voice panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['chat_panel_minutes', 'int', 10, 10, "minutes the /chat panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['youtube_unlink_dms_them', 'bool', true, true, 'whether a member is told why their YouTube channel was forgotten. on — the default — DMs them the reason when STAFF do it; somebody unlinking their own channel is never DMed'],
@@ -673,6 +682,13 @@ const SETTING_SPECS = [
   ['raidtrain_panel_minutes', 'int', 10, 10, "minutes the /raidtrain panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['raidtrain_event_default', 'bool', false, false, 'whether **Also make an event** starts ticked when somebody begins a raid train, on the Raid trains page and on the /raidtrain draft panel alike; off by default. Ticking it sends the train through the same events review a proposal goes through, so a Lead still approves or denies it. This is only the starting position of a tick box — whoever starts the train can always set it the other way'],
   ["marathon_mode", "enum", "shadow", "shadow", "whether marathon schedules post at all. off reads nothing and posts nothing; shadow — the default — posts the board, the reminders and the shoutouts where shadow_channel_id points with the rehearsal note; on posts them in marathon_channel_id", ["off", "shadow", "on"]],
+  ["marathon_role_id", "role", null, null, "the Marathon role: the one the Marathon role block hands to a member who presses its button and takes back on the next press. Blank until staff pick it, and the button then says staff have not set it up yet. A role with staff permissions is never handed out. Picking it pings nobody"],
+  ["marathon_block_title", "text", "The Marathon role", "The Marathon role", "the heading on the Marathon role block, when a post carries it; blank restores the shipped wording"],
+  ["marathon_block_text", "text", "Here for the marathons? Press the button to take the Marathon role, and press it again any time to hand it back.", "Here for the marathons? Press the button to take the Marathon role, and press it again any time to hand it back.", "the line under that heading on the Marathon role block; blank restores the shipped wording"],
+  ["marathon_block_label", "text", "Get or drop the Marathon role", "Get or drop the Marathon role", "what the Marathon role block's button says, at most 80 characters; the button gives the member the Marathon role, or takes it back. Blank restores the shipped wording"],
+  ["marathon_block_added_said", "text", "You have the **{role}** role now. Press the button again any time to hand it back.", "You have the **{role}** role now. Press the button again any time to hand it back.", "what a member is told, privately, once the Marathon role block's button gave them the role; {role} is its name"],
+  ["marathon_block_removed_said", "text", "The **{role}** role is off you now. Press the button again any time to take it back.", "The **{role}** role is off you now. Press the button again any time to take it back.", "what a member is told, privately, once the Marathon role block's button took the role back; {role} is its name"],
+  ["marathon_block_unset_said", "text", "Staff have not set up the Marathon role yet, so nothing was changed. Try again later, or ask an Auntie/Uncle.", "Staff have not set up the Marathon role yet, so nothing was changed. Try again later, or ask an Auntie/Uncle.", "what a member is told, privately, when they press the Marathon role block's button and no usable Marathon role is picked (marathon_role_id)"],
   ["marathon_channel_id", "channel", null, null, "where the marathon board, the reminders and the shoutouts go. Blank uses the go-live channel"],
   ["marathon_poll_minutes", "int", 30, 30, "minutes between reads of a marathon's schedule while it is near — from marathon_lead_days before it starts until a day after it ends. 30 by default; a marathon's own row can say otherwise", null, 120, 10],
   ["marathon_far_poll_hours", "int", 24, 24, "hours between reads of a schedule that is still weeks away. 24 by default", null, 168, 1],
@@ -930,6 +946,10 @@ const SETTING_SPECS = [
   ['posts_versions_keep', 'int', 0, 0, 'how many saved versions of a post are kept; 0 (the default) keeps every one of them, and 1 to 500 trims the oldest after each save. History is cheap and a lost version is not, so raise it rather than lower it. The only remaining version is never trimmed, whatever the number says', null, 500, 0],
   ['posts_versions_summary_chars', 'int', 80, 80, 'how many characters of a version’s message are shown on its row in the Versions list, 20 to 300; 80 by default. It is one line beside View and Use this version — the whole message is in View', null, 300, 20],
   ['posts_block_tempvoice_name', 'text', 'Temp voice lobby', 'Temp voice lobby', "what the temp voice lobby block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Temp voice lobby. Members never see it"],
+  ["posts_block_marathonrole_name", "text", "Marathon role", "Marathon role", "what the Marathon role block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Marathon role. Members never see it"],
+  ["posts_block_pingsfollow_name", "text", "Ping me when they go live", "Ping me when they go live", "what the ping me when they go live block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Ping me when they go live. Members never see it"],
+  ["posts_block_birthday_name", "text", "Set your birthday", "Set your birthday", "what the set your birthday block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Set your birthday. Members never see it"],
+  ["posts_block_proposeevent_name", "text", "Propose an event", "Propose an event", "what the propose an event block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Propose an event. Members never see it"],
   ['posts_block_frontdoor_name', 'text', 'Front door', 'Front door', "what the front-door block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Front door. Members never see it"],
   // Guides (G1) — black_bloc/settings_store.py owns them; these are the mock's copy.
   ['guides_mode', 'enum', 'on', 'on', 'on to give members the Guides page and to put a guide link beside a command in /help; off hides both. Staff can still open a guide\u2019s web address while it is off, and the page says so. There is no slash command to hide either way', ['off', 'on']],
@@ -2799,6 +2819,34 @@ const BLOCK_KINDS = [
     name_default: 'Temp voice lobby',
     exclusive: false,
     keys: ['tempvoice_block_title', 'tempvoice_block_text', 'tempvoice_block_lobby_label', 'tempvoice_block_controls_label', 'tempvoice_block_show_controls'],
+  },
+  {
+    kind: 'marathonrole',
+    name_key: 'posts_block_marathonrole_name',
+    name_default: 'Marathon role',
+    exclusive: false,
+    keys: ['marathon_block_title', 'marathon_block_text', 'marathon_block_label', 'marathon_block_added_said', 'marathon_block_removed_said', 'marathon_block_unset_said', 'marathon_role_id'],
+  },
+  {
+    kind: 'pingsfollow',
+    name_key: 'posts_block_pingsfollow_name',
+    name_default: 'Ping me when they go live',
+    exclusive: false,
+    keys: ['pings_block_title', 'pings_block_text', 'pings_block_label'],
+  },
+  {
+    kind: 'birthday',
+    name_key: 'posts_block_birthday_name',
+    name_default: 'Set your birthday',
+    exclusive: false,
+    keys: ['birthday_block_title', 'birthday_block_text', 'birthday_block_label'],
+  },
+  {
+    kind: 'proposeevent',
+    name_key: 'posts_block_proposeevent_name',
+    name_default: 'Propose an event',
+    exclusive: false,
+    keys: ['events_block_title', 'events_block_text', 'events_block_label'],
   },
 ];
 const BLOCK_UNKNOWN = 'There is no block called **{kind}**, so nothing was changed. Pick one from the **Add a block…** list.';
@@ -5523,6 +5571,10 @@ const PREVIEW_FEATURES = [
   ['birthday', 'A birthday announcement', 'birthdays.html', ['birthday_template']],
   ['poll_card', 'A poll, and the line its rehearsal copy carries', 'polls.html', ['poll_shadow_note']],
   ['minutes_notes', 'What minutes post when a meeting starts and ends', 'minutes.html', ['minutes_start_text', 'minutes_notes_title']],
+  ['block_marathonrole', 'The Marathon role block', 'posts.html', ['marathon_block_title', 'marathon_block_text', 'marathon_block_label']],
+  ['block_pingsfollow', 'The ping me when they go live block', 'posts.html', ['pings_block_title', 'pings_block_text', 'pings_block_label']],
+  ['block_birthday', 'The set your birthday block', 'posts.html', ['birthday_block_title', 'birthday_block_text', 'birthday_block_label']],
+  ['block_proposeevent', 'The propose an event block', 'posts.html', ['events_block_title', 'events_block_text', 'events_block_label']],
 ];
 
 const PREVIEW_SAMPLES = {
@@ -5776,7 +5828,22 @@ const PREVIEW_DRAW = {
       fields: [{ name: 'Where', value: 'nowhere yet', inline: true }],
     }]);
   },
+  block_marathonrole: (read) => previewButtonBlock(read, 'marathon_block'),
+  block_pingsfollow: (read) => previewButtonBlock(read, 'pings_block'),
+  block_birthday: (read) => previewButtonBlock(read, 'birthday_block'),
+  block_proposeevent: (read) => previewButtonBlock(read, 'events_block'),
 };
+
+// The twin of black_bloc/button_block.py:look — a one-button block: heading, line, one button.
+function previewButtonBlock(read, head) {
+  const shipped = Object.fromEntries(SETTING_SPECS.map((spec) => [spec[0], spec[3]]));
+  const word = (key, cap) => (String(read(key) || '').trim() || String(shipped[key] || '')).slice(0, cap);
+  return previewMade('', [{
+    title: word(`${head}_title`, 256),
+    description: word(`${head}_text`, 4000),
+    fields: [],
+  }], [[previewButton(word(`${head}_label`, 80), 'primary')]]);
+}
 
 // The twin of black_bloc/preview.py:BLOCK_DRAWS — each block drawn by its own feature's draw.
 const PREVIEW_BLOCK_DRAWS = {
@@ -5787,6 +5854,21 @@ const PREVIEW_BLOCK_DRAWS = {
   tempvoice(read, sample, always) {
     if (!always && String(read('tempvoice_mode') || 'off') === 'off') return null;
     return PREVIEW_DRAW.block_tempvoice(read);
+  },
+  marathonrole(read) {
+    return PREVIEW_DRAW.block_marathonrole(read);
+  },
+  pingsfollow(read, sample, always) {
+    if (!always && String(read('pings_mode') || 'off') !== 'on') return null;
+    return PREVIEW_DRAW.block_pingsfollow(read);
+  },
+  birthday(read, sample, always) {
+    if (!always && String(read('birthday_mode') || 'off') === 'off') return null;
+    return PREVIEW_DRAW.block_birthday(read);
+  },
+  proposeevent(read, sample, always) {
+    if (!always && String(read('events_mode') || 'off') === 'off') return null;
+    return PREVIEW_DRAW.block_proposeevent(read);
   },
 };
 
