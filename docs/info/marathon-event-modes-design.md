@@ -45,6 +45,10 @@ same thing a second time. §C settles it with a key.
   whatever `marathon_event_mode_default` says, until staff change it on the feed's row; every marathon it makes
   inherits that. ESA still gets its board, reminders and shoutouts for our runners — only the Events rows are off. `marathon_makes_event` (bool) is retired in favour of
   **`marathon_event_mode_default`** (enum, **`none`**).
+- ➕ **2026-09-28, branch `marathon-host-spotlight` (🔨 BUILT, NOT MERGED):** "a run IS ours" for MAKING a run event
+  now means a BaF runner or commentator is on it — a run whose only BaF person is a scanned HOST gets no run event on
+  its own (hosts have their own switch, one event per host over their hosted runs); the cancel rule and *Make it now*
+  are unchanged. [`marathon-host-spotlight-design.md`](marathon-host-spotlight-design.md) ▸ Deviation 5.
 - **`marathon_runs.event_id INTEGER`** (nullable): the run's own event in `runs` / `both` mode. Made when a run IS ours
   (on the first fetch that matches a person, on a pairing that makes it ours, and on a mode change to `runs`/`both`
   for every run of ours already there), title from `marathon_run_event_title_template` (*{member} runs {game} at

@@ -1,5 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Marathon hosts and the pairing's Twitch fix* (branch `marathon-host-spotlight`, off `main` `aba4ca00`, keyed against `7511e9b6`); the *GDQ Hotfix — show picker* row for `match_people` still holds, and the function now also swaps in a pairing's Twitch login. Before that:
+
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *GDQ Hotfix — show picker and runner/host tracker* (branch `hotfix-picker`, off `main` `9e708194`, keyed against `2fc24074`); the *GDQ Hotfix* row for `marathons-section.js` `hotfixFields` now describes a picker, not a text field, and `marathon.py`'s `match_people` gained `scan_hosts`. Before that:
 
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Marathon category track* (branch `marathon-category-track`, off `main` `97f0f1bd`, keyed against `f42cb3cb`); the *Marathon schedules* rows for `mt.title_hit` / `mt.advance` still hold, except that the cog now calls `title_hit` with no game (the category is Signal 3) and `advance` takes `because`. Before that:
@@ -9478,3 +9480,27 @@ Design: [`marathon-category-track-design.md`](marathon-category-track-design.md)
 | `black_bloc/storage/db.py:1313` `RUNS_ON_THE_SHEET` | Backfills run once, when the column is added: an old row's sheet time is the time it had. |
 | `site/public/assets/marathons-section.js:722` | *sheet said HH:MM* only for a re-timed run; `moved from` stays the sheet's own move. |
 | `site/mock/server.mjs:6782` `marathonRetime` | The mock's twin of `retimed`, run on staff moves only (the mock has no stream). |
+
+## Marathon hosts and the pairing's Twitch fix (branch `marathon-host-spotlight`, 2026-09-28)
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon.py:402` `match_people` | The pairing is looked up by name before the part test, so a Twitch fix applies to a host even while hosts are not matched. The sheet's login is read from `sheet_login` first, so a stored (already fixed) run re-matches to the same answer and a cleared fix gives the sheet's back. `sheet_login` is written only when the fix differs. |
+| `black_bloc/marathon.py:453` `pairing_login` | Lower-cased and stripped here, so the stored value and the comparison agree whatever the route was given. |
+| `black_bloc/marathon_hosts.py:38` `clean_switch` | `None` is a real answer (follow the setting), not a refusal; a bare int other than 0/1 is refused. |
+| `black_bloc/marathon_hosts.py:102` `is_runner_run` | The make-a-run-event test only; `mt.is_ours` stays the cancel test, so a staff-made event on a hosted run is never called off by this. |
+| `black_bloc/marathon_hosts.py:107` `hosted` | Dropped runs leave the span; done runs stay in it, so a host event is re-dated, not re-made, as the day goes on. |
+| `black_bloc/cogs/content/marathon_hosts.py:67` `set_switch` | One writer for both switches; `scan_hosts` rematches (which also syncs run and host events and the board), `host_events` only syncs host events. |
+| `black_bloc/cogs/content/marathon_hosts.py:164` `sync_host_events` | Called under the marathon lock by `sync_runs`. A pointer to an event staff cancelled is KEPT while the person still hosts — dropping it would re-make the event on the next read. |
+| `black_bloc/cogs/content/marathon.py:447` `upsert_pairing` | `KEEP` carries the old fix across a re-link (the delete-then-insert would otherwise drop it). |
+| `black_bloc/cogs/content/marathon.py:1013` `set_pairing_login` | An everywhere pairing re-matches every ACTIVE marathon, each under its own lock, after the one it was set from. |
+| `black_bloc/cogs/content/marathon.py:2247` `rematch` | Reads the marathon row fresh for `scan_hosts`, because the caller's copy may predate a switch. |
+| `black_bloc/cogs/content/marathon_people.py:204` | The host note only when every run in the window has the person as host (a runner who also hosts keeps the runner note). |
+| `black_bloc/cogs/content/marathon_people.py:264` | Stop spotlighting falls back to the sheet login a row was remembered under before the fix. |
+| `black_bloc/cogs/content/marathon_events.py:151` `event_from` | The run events' own make-an-event door, shared with host events so both follow `marathon_run_events_reviewed` and the posts mode the same way. |
+| `black_bloc/marathon_thread_controls.py:98` `controls` | Seven buttons; Discord places them five a row. |
+| `black_bloc/api/tools/marathons.py:679` | Both switches go through `set_switch`, one sentence each in `message`. |
+| `site/public/assets/marathons-section.js:591` `switchPicker` | *Follow the setting* names what the setting says now, so staff see what "follow" means before saving. |
+| `site/public/assets/marathons-section.js:616` `fixTwitch` | Pre-filled only when a fix exists (`sheet_login` set); the fix itself is the entry's `login` then. |
+| `site/mock/server.mjs:7356` `marathonRematch` | The mock's twin of the fix and the per-marathon scan. |
+| `site/mock/server.mjs:7083` `marathonSyncHostEvents` | The mock's twin; dates are written, no Discord move is modelled. |

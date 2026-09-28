@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `marathon-host-spotlight`)** — ONE section APPENDED (`HS-a`…`HS-f`, BUILT, NOT MERGED, NOT verified against a browser or Discord); nothing else touched. Before that,
 > **2026-09-28 (branch `hotfix-picker`)** — ONE section APPENDED (`HF-e`…`HF-i`, BUILT, NOT MERGED, NOT verified against a browser or a live fetch); `HF-c`'s *type into Shows* is superseded by `HF-f` (the field is a picker now). Before that,
 
 > **2026-09-28 (branch `marathon-category-track`)** — ONE section APPENDED (`CT-a`…`CT-e`, BUILT, NOT MERGED, NOT verified against a browser or live Twitch); nothing else touched. Before that,
@@ -3865,3 +3866,21 @@ site/mock/server.mjs` from the branch, then <http://localhost:8907/events.html> 
 | **`CT-c`** | Sat, when Spyro actually starts: Events ▸ Marathons ▸ **GDQueer** | Spyro **on now** (because *the stream's Twitch category*, or the **certain** badge when the title names it too); Hamtaro's time is Spyro's real start + 1:08 with *· sheet said 11:08*; later runs follow. `marathon.retimed` in the log. Nothing pinged anyone. |
 | **`CT-d`** | Through the day | Each hand-over moves the clock; a game with no Twitch category is the run on now while the channel is in *Retro*; any `marathon.signals_disagree` row names both runs and which was trusted. Sunday's first run still starts 10:00. |
 | **`CT-e`** | The drawer ▸ **Back to the sheet's times** (or `/event` ▸ Marathons ▸ GDQueer ▸ **Schedule…** ▸ the same button) | Every run back on the sheet's times; the button disappears; `web.marathon.sheet_times` (or `marathon.sheet_times`). The next run the stream shows starting re-times from there. **Mark it live** on a run also moves every later run. |
+
+## Rows `HS-a` … `HS-f` — marathon hosts: scan per marathon, host spotlight, host events; a pairing's Twitch fix (branch `marathon-host-spotlight`, 2026-09-28)
+
+🔨 **BUILT on branch `marathon-host-spotlight`, NOT merged, NOT deployed, NOT verified in a browser or Discord.** Owner,
+2026-09-28: *"basically a clone of the runner spotlight but its a host spotlight too. make it optional to scan and
+spotlight for"* and *"for gdqueer JR is a Baf member … https://www.twitch.tv/junior_sm is twitch"*. Design:
+[`../info/marathon-host-spotlight-design.md`](../info/marathon-host-spotlight-design.md). Local check first:
+`MOCK_PORT=8911 node site/mock/server.mjs` from the branch, then <http://localhost:8911/events.html#marathon-1>.
+⚠️ Read the design's Deviation 6 before `HS-a` on a live marathon: scanning a host makes every run they host a BaF run.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`HS-a`** | Events ▸ **Hidden Heroes** ▸ *Settings for this marathon* ▸ **Scan hosts** *On* ▸ Save (or the thread's **Scan hosts: off · turn on**) | *"**Hidden Heroes** scans its hosts now…"*; People ▸ BaF gains **anarchy** marked *host*; the thread button reads **Scan hosts: on · turn off**. *Follow the setting* puts it back on `marathon_scan_hosts_default`. |
+| **`HS-b`** | People ▸ anarchy ▸ **Spotlight…** | A channel-only Go-live row for anarchy's login, note *anarchy hosting Hidden Heroes*, until 2 h after the last hosted run; the row reads *Spotlit until …*; **Stop spotlighting** takes it off. |
+| **`HS-c`** | *Settings* ▸ **BaF host events** *On* ▸ Save (or the thread's seventh button) | One event *anarchy hosts Hidden Heroes* from the first hosted run to the end of the last (approved, or in the review while `marathon_run_events_reviewed` is on); Logs ▸ `marathon.host_event_made`. **Off** calls it off (`marathon_run_event_cancel_on_leave` on). No per-run event for the hosted runs. |
+| **`HS-d`** | Events ▸ **GDQueer** ▸ People ▸ **Jr** ▸ **Twitch name…** ▸ `junior_sm` ▸ Save | *"**jr** is **twitch.tv/junior_sm** everywhere…"*; the row reads **twitch.tv/junior_sm (fixed from twitch.tv/Jr)**; **Spotlight…** makes a `junior_sm` row, never `jr`. |
+| **`HS-e`** | Same, type `junior sm!` | Refused in words (*is not a Twitch channel name*), nothing changes. Then a blank ▸ Save → *back to the schedule's Twitch channel*, the row reads `twitch.tv/Jr` again. Put `junior_sm` back after. |
+| **`HS-f`** | Discord: `/event` ▸ Marathons ▸ GDQueer ▸ **People…** ▸ the Spyro day ▸ Spyro ▸ Jr | **Twitch name…** beside **Unlink**; the modal is pre-filled `junior_sm`; the slot line reads `twitch.tv/junior_sm`. |
