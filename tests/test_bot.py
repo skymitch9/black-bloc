@@ -10,17 +10,6 @@ from black_bloc.logkinds import FEATURES
 
 TOP_LEVEL_MAX = 100
 CHILDREN_MAX = 25
-TOP_LEVEL_NOW = 33
-RETIRED_GROUPS = (
-    "chat",
-    "mod",
-    "modmail",
-    "presence",
-    "raidtrains",
-    "rolemenu",
-    "settings",
-    "snippet",
-)
 
 
 STAFF_COMMANDS = {
@@ -87,9 +76,7 @@ async def test_a_command_only_staff_can_run_is_only_shown_to_staff(settings):
     assert locked == STAFF_COMMANDS
     assert visible == MEMBER_COMMANDS
     assert all(
-        one.default_permissions == STAFF_ONLY
-        for one in top
-        if one.default_permissions is not None
+        one.default_permissions == STAFF_ONLY for one in top if one.default_permissions is not None
     )
     await bot.close()
 
@@ -139,7 +126,7 @@ async def test_the_mode_off_is_the_older_behaviour_of_simply_appearing(settings,
     bot = BlackBlocBot(settings)
 
     assert bot.activity is None
-    assert bot._connection._status is None
+    assert bot.status is discord.Status.online
     await bot.close()
 
 
@@ -296,7 +283,6 @@ async def test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hol
     from black_bloc.logkinds import FEATURES_WITHOUT_A_COMMAND
 
     assert groups == []
-    assert not [name for name in RETIRED_GROUPS if name in groups]
     # F-G1: guides are edited on the website only, so the one feature with no Discord door
     # has no panel and therefore no Logs button to find.
     assert logged == set(FEATURES) - set(FEATURES_WITHOUT_A_COMMAND)
@@ -309,14 +295,14 @@ async def test_every_features_logs_is_a_panel_button_and_no_group_is_left_to_hol
 
 
 async def test_the_command_tree_stays_inside_discords_limits(settings):
-    """30 top-level slots and ZERO groups — the panels program's finish line, measured."""
+    """Every top-level command is a staff or member one, and ZERO groups."""
     bot = BlackBlocBot(settings)
     for name in COGS:
         await bot.load_extension(name)
 
     top = bot.tree.get_commands()
     assert len(top) <= TOP_LEVEL_MAX
-    assert len(top) == TOP_LEVEL_NOW
+    assert len(top) == len(STAFF_COMMANDS | MEMBER_COMMANDS)
     assert [one.name for one in top if isinstance(one, app_commands.Group)] == []
     await bot.close()
 
