@@ -6,7 +6,12 @@ import pytest
 from black_bloc import pings
 from black_bloc.cogs.community.role_menus import get_menu, get_options, list_menus
 from black_bloc.config import load_settings
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import (
+    BUTTON_BLOCK_DEFAULTS,
+    PINGS_BLOCK_LABEL,
+    PINGS_BLOCK_TITLE,
+    SettingsStore,
+)
 
 GUILD = 7
 LOG_CHANNEL = 222
@@ -1624,19 +1629,15 @@ class BlockStore:
 
 
 def test_the_ping_block_is_drawn_only_while_pings_are_on():
-    from black_bloc import pings as found
-
-    assert found.block_drawn(BlockStore(pings_mode="on"), 7)
-    assert not found.block_drawn(BlockStore(pings_mode="off"), 7)
+    assert pings.block_drawn(BlockStore(pings_mode="on"), 7)
+    assert not pings.block_drawn(BlockStore(pings_mode="off"), 7)
 
 
 def test_the_ping_block_says_its_shipped_words_until_staff_change_them():
-    from black_bloc import pings as found
+    shipped = pings.block_look(BlockStore(), 7)
+    changed = pings.block_look(BlockStore(pings_block_label="Press me"), 7)
 
-    shipped = found.block_look(BlockStore(), 7)
-    changed = found.block_look(BlockStore(pings_block_label="Press me"), 7)
-
-    assert shipped.title == "Get pinged when someone goes live"
-    assert shipped.label == "Choose my pings"
+    assert shipped.title == BUTTON_BLOCK_DEFAULTS[PINGS_BLOCK_TITLE]
+    assert shipped.label == BUTTON_BLOCK_DEFAULTS[PINGS_BLOCK_LABEL]
     assert changed.label == "Press me" and changed.stamp() != shipped.stamp()
-    assert found.BLOCK_HEAD == "pingsblock:open"
+    assert pings.BLOCK_HEAD == "pingsblock:open"
