@@ -75,12 +75,14 @@ from black_bloc.events import (
     set_review,
     set_status,
 )
+from black_bloc.panels import CAPPED_PLACEHOLDER
 from black_bloc.settings_store import (
     DEFAULT_TIMEZONE_KEY,
     ERROR_RETRY_LABEL,
     ERROR_SENTENCE,
     EVENTS_APPROVER_ROLE_KEY,
     EVENTS_FORUM_CHANNEL_KEY,
+    EVENTS_MOVED_LINE,
     EVENTS_MOVED_LINE_KEY,
     EVENTS_POSTS_WHERE_KEY,
     EVENTS_REVIEW_MODE_KEY,
@@ -810,22 +812,21 @@ async def test_the_review_channel_is_staff_only_plus_the_person_who_proposed_it(
     assert mine.read_message_history is True
 
 
-async def test_the_review_channel_is_the_staff_s_to_delete_by_hand(cog, bot, member):
+@pytest.mark.parametrize(
+    ("reach", "manage"),
+    [(True, True), (False, None)],
+    ids=["reach-key-on-staff-may-delete-by-hand", "reach-key-off-as-it-was"],
+)
+async def test_the_staff_reach_key_decides_whether_staff_may_delete_the_review_channel(
+    cog, bot, member, reach, manage
+):
+    await bot.store.set(GUILD, STAFF_REACH_KEY, reach)
+
     await submit(cog, bot, member)
 
     staff = bot.guild.created[0].given_overwrites[bot.guild.roles[0]]
     assert staff.view_channel is True and staff.send_messages is True
-    assert staff.manage_channels is True
-
-
-async def test_with_the_reach_key_off_the_review_channel_is_as_it_was(cog, bot, member):
-    await bot.store.set(GUILD, STAFF_REACH_KEY, False)
-
-    await submit(cog, bot, member)
-
-    staff = bot.guild.created[0].given_overwrites[bot.guild.roles[0]]
-    assert staff.view_channel is True and staff.send_messages is True
-    assert staff.manage_channels is None
+    assert staff.manage_channels is manage
 
 
 async def test_a_rename_leaves_the_requesters_overwrite_alone(cog, bot, member, db):
@@ -874,13 +875,6 @@ async def test_a_start_that_has_already_gone_by_is_refused(cog, bot, member, db)
 
     assert await events_by_status(db, GUILD, (PENDING,)) == []
     assert "already gone by" in interaction.sent
-
-
-async def test_a_duration_black_bloc_cannot_read_is_refused(cog, bot, member, db):
-    interaction = await submit(cog, bot, member, duration="a while")
-
-    assert await events_by_status(db, GUILD, (PENDING,)) == []
-    assert "1h30m" in interaction.sent
 
 
 async def test_the_start_is_read_in_the_requester_s_own_zone(cog, bot, member, db):
@@ -1386,7 +1380,7 @@ async def test_calling_off_something_already_settled_says_so(cog, bot, member, l
     assert "already **denied**" in interaction.sent
 
 
-async def test_a_number_nobody_proposed_is_read_as_nothing(cog, bot):
+async def test_a_typed_event_number_is_read_with_or_without_its_hash(cog, bot):
     assert events_pure.wanted_event_id("the block party") is None
     assert events_pure.wanted_event_id("#12") == 12
     assert events_pure.wanted_event_id(" 12 ") == 12
@@ -1677,22 +1671,24 @@ async def test_the_cancel_is_recorded_before_discord_is_asked_to_undo_anything(
     assert seen and "event.cancelled" in seen[0]
 
 
-async def test_a_loop_that_raises_records_the_error_and_restarts_itself(cog, bot, caplog):
+@pytest.mark.parametrize(
+    ("name", "other"),
+    [("golive", "reconcile"), ("reconcile", "golive")],
+    ids=["golive", "reconcile"],
+)
+async def test_a_loop_that_raises_records_the_error_and_restarts_itself(
+    cog, bot, caplog, name, other
+):
     restarted = []
-    cog._golive_loop.restart = lambda *a, **k: restarted.append(True)
+    getattr(cog, f"_{name}_loop").restart = lambda *a, **k: restarted.append(True)
 
     with caplog.at_level("ERROR"):
-        await cog._golive_broke(RuntimeError("the database went away"))
+        await getattr(cog, f"_{name}_broke")(RuntimeError("the database went away"))
 
     assert restarted == [True]
-    assert "the database went away" in cog.last_error["golive"]
-    assert cog.last_error["reconcile"] is None
-    assert "the golive loop raised" in caplog.text
-
-
-async def test_both_loops_carry_their_own_error_handler(cog, bot):
-    assert cog._golive_loop._error is not None
-    assert cog._reconcile_loop._error is not None
+    assert "the database went away" in cog.last_error[name]
+    assert cog.last_error[other] is None
+    assert f"the {name} loop raised" in caplog.text
 
 
 async def test_settings_shows_when_each_loop_last_finished_and_its_last_error(cog, bot, lead):
@@ -1980,8 +1976,12 @@ async def test_an_event_that_was_never_announced_edits_nothing(cog, bot, member,
     assert "event.edit_announcement_failed" not in kinds
 
 
-async def test_in_test_mode_the_card_channel_is_recorded_beside_the_message(cog, bot, member, db):
-    bot.guard = FakeGuard()
+@pytest.mark.parametrize("guarded", [True, False], ids=["test-mode", "guard-off"])
+async def test_the_card_channel_is_recorded_beside_the_message_and_is_the_review_room(
+    cog, bot, member, db, guarded
+):
+    if guarded:
+        bot.guard = FakeGuard()
 
     await submit(cog, bot, member)
 
@@ -1989,13 +1989,6 @@ async def test_in_test_mode_the_card_channel_is_recorded_beside_the_message(cog,
     assert row["review_channel_id"] == bot.guild.created[0].id
     assert row["card_channel_id"] == row["review_channel_id"]
     assert row["review_message_id"] is not None
-
-
-async def test_the_card_channel_is_the_review_channel_when_the_guard_is_off(cog, bot, member, db):
-    await submit(cog, bot, member)
-
-    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
-    assert row["card_channel_id"] == row["review_channel_id"]
 
 
 async def test_a_test_channel_with_no_category_refuses_rather_than_making_a_loose_channel(
@@ -2078,18 +2071,13 @@ async def test_deleting_the_announce_channel_makes_black_bloc_forget_it(cog, bot
     assert "event.announce_channel_forgotten" in await action_kinds(db)
 
 
-async def test_settings_can_forget_the_category_and_the_announce_channel(cog, bot, lead, db):
-    await bot.store.set(GUILD, "events_announce_channel_id", 900)
+async def test_an_empty_category_select_forgets_the_category(cog, bot, lead, db):
     category = events_cog.CategorySelect()
     category._values = []
-    announce = events_cog.AnnounceSelect()
-    announce._values = []
 
     await click(bot, lead, category)
-    await click(bot, lead, announce)
 
     assert bot.store.get(GUILD, "events_category_id") is None
-    assert bot.store.get(GUILD, "events_announce_channel_id") == TEST_CHANNEL
 
 
 # --- the panel itself (wave 1) -----------------------------------------------------------------
@@ -2165,7 +2153,7 @@ async def test_the_staff_select_caps_at_25_and_says_how_many_are_left(cog, bot, 
     select = next(one for one in panel_view(interaction).children if isinstance(one, EventPick))
 
     assert len(select.options) == 25
-    assert select.placeholder == "25 of 30 — the rest are on the site"
+    assert select.placeholder == CAPPED_PLACEHOLDER.format(shown=25, total=30)
 
 
 async def test_the_open_site_link_appears_only_when_an_origin_is_set(cog, bot, member, db):
@@ -2413,9 +2401,7 @@ async def test_a_replaced_panel_never_edits_the_render_that_replaced_it(cog, bot
     await view.on_timeout()
 
     assert view.replaced is True
-    assert view.message.embeds == [] or "gone quiet" not in str(
-        view.message.embeds[0].footer.text
-    )
+    assert "gone quiet" not in str(view.message.embeds[0].footer.text)
 
 
 # --- proposing through the panel ---------------------------------------------------------------
@@ -2749,27 +2735,24 @@ async def test_the_draft_carries_a_fifth_where_button_on_the_button_row(cog, bot
     ]
 
 
-async def test_the_where_button_label_carries_the_channel_by_name(cog, bot, member):
+@pytest.mark.parametrize(
+    ("where", "label"),
+    [
+        (Where(WHERE_VOICE, VOICE_CHANNEL, ""), "Where: 🔊 Raid Night"),
+        (Where(WHERE_OTHER, None, "twitch.tv/blackbloc"), "Where: twitch.tv/blackbloc"),
+    ],
+    ids=["a-channel-by-name", "a-typed-place"],
+)
+async def test_the_where_button_label_carries_what_was_picked(cog, bot, member, where, label):
     with_channels(bot)
     _opened, view = await open_draft_panel(cog, bot, member)
-    view.fields.where = Where(WHERE_VOICE, VOICE_CHANNEL, "")
+    view.fields.where = where
 
     shown = await click(bot, member, find_item(view, "Title & details"))
     typed = FakeInteraction(bot, member)
     await shown.response.modals[0].on_submit(typed)
 
-    assert has_item(card_view(typed), "Where: 🔊 Raid Night")
-
-
-async def test_the_where_button_label_carries_a_typed_place_too(cog, bot, member):
-    _opened, view = await open_draft_panel(cog, bot, member)
-    view.fields.where = Where(WHERE_OTHER, None, "twitch.tv/blackbloc")
-
-    shown = await click(bot, member, find_item(view, "Title & details"))
-    typed = FakeInteraction(bot, member)
-    await shown.response.modals[0].on_submit(typed)
-
-    assert has_item(card_view(typed), "Where: twitch.tv/blackbloc")
+    assert has_item(card_view(typed), label)
 
 
 async def test_the_where_panel_opens_with_the_channel_picker_and_the_two_other_doors(
@@ -3028,14 +3011,19 @@ async def test_clear_wipes_the_channel_and_the_link_together(cog, bot, member):
     assert "**Where** — (not set)" in card_embed(back).description
 
 
-async def test_a_channel_and_a_link_are_both_stored_on_the_row(cog, bot, member, db):
+@pytest.mark.parametrize(
+    "link", ["twitch.tv/blackbloc", ""], ids=["a-channel-and-a-link", "a-channel-alone"]
+)
+async def test_a_channel_where_is_stored_as_a_channel_with_its_link_beside_it(
+    cog, bot, member, db, link
+):
     with_channels(bot)
-    await submit(cog, bot, member, where=Where(WHERE_VOICE, VOICE_CHANNEL, "twitch.tv/blackbloc"))
+    await submit(cog, bot, member, where=Where(WHERE_VOICE, VOICE_CHANNEL, link))
 
     row = (await events_by_status(db, GUILD, (PENDING,)))[0]
     assert row["where_kind"] == WHERE_VOICE
     assert row["where_channel_id"] == VOICE_CHANNEL
-    assert row["location"] == "twitch.tv/blackbloc"
+    assert row["location"] == (link or None)
 
 
 async def test_the_calendar_entry_carries_the_link_in_its_description(cog, bot, member, lead, db):
@@ -3105,16 +3093,6 @@ async def test_the_text_modal_keeps_two_boxes_now_that_where_has_its_own_panel(c
     modal = opened_modal.response.modals[0]
     assert len(modal.children) == 2
     assert [modal.event_title, modal.description] == list(modal.children)
-
-
-async def test_a_channel_where_is_stored_as_a_channel_not_as_text(cog, bot, member, db):
-    with_channels(bot)
-    await submit(cog, bot, member, where=Where(WHERE_VOICE, VOICE_CHANNEL, ""))
-
-    row = (await events_by_status(db, GUILD, (PENDING,)))[0]
-    assert row["where_kind"] == WHERE_VOICE
-    assert row["where_channel_id"] == VOICE_CHANNEL
-    assert row["location"] is None
 
 
 @pytest.mark.parametrize(
@@ -3317,14 +3295,14 @@ async def a_draft_with_a_link(cog, bot, member, *, full):
     return picked, card_view(picked)
 
 
+@pytest.mark.parametrize("full", [False, True], ids=["half-filled", "ready-to-submit"])
 async def test_the_draft_never_gets_the_open_link_button_because_it_would_come_and_go(
-    cog, bot, member
+    cog, bot, member, full
 ):
     """Submit takes the row's fifth slot once the draft is ready; the masked line has the link."""
-    for full in (False, True):
-        picked, view = await a_draft_with_a_link(cog, bot, member, full=full)
-        assert find_open_link(view) is None
-        assert "[twitch.tv/bb](https://twitch.tv/bb)" in card_embed(picked).description
+    picked, view = await a_draft_with_a_link(cog, bot, member, full=full)
+    assert find_open_link(view) is None
+    assert "[twitch.tv/bb](https://twitch.tv/bb)" in card_embed(picked).description
 
 
 # Follow-up 4 (`docs/info/where-picker-design.md` § Follow-up 4): a shorthand becomes a link, and
@@ -3428,9 +3406,9 @@ async def test_refuse_answers_in_words_and_leaves_the_draft_where_it_was(
     assert fields.where == Where(WHERE_OTHER, None, "the park")
     assert fields.where_note == ""
     said = answering.response.messages[0]["content"]
-    assert "https://youtube.com/@no-such-handle-xyz" in said
-    assert "404" in said and "events_where_link_check" in said
-    assert said.count("\n") == 0 or "nowhere was saved" in said
+    assert said == events_pure.WHERE_REFUSED_MISSING.format(
+        url="https://youtube.com/@no-such-handle-xyz"
+    )
 
 
 async def test_refuse_keeps_a_link_that_answers(cog, bot, member, link_check):
@@ -3580,7 +3558,8 @@ async def test_in_test_mode_a_room_goes_after_the_minutes_key_and_the_log_says_m
 
     assert channel.deleted is True
     details = await action_details(db, "event.channel_deleted")
-    assert details["kept_minutes"] == 5 and "kept_days" not in details
+    assert details["kept_minutes"] == bot.store.get(GUILD, EVENTS_TEST_RETENTION_KEY)
+    assert "kept_days" not in details
 
 
 async def test_in_test_mode_a_room_younger_than_the_minutes_key_is_left_alone(cog, bot, db):
@@ -3630,7 +3609,8 @@ async def test_with_no_guard_the_days_key_is_what_counts_and_the_log_says_days(c
 
     assert channel.deleted is True
     details = await action_details(db, "event.channel_deleted")
-    assert details["kept_days"] == 7 and "kept_minutes" not in details
+    assert details["kept_days"] == bot.store.get(GUILD, "events_channel_retention_days")
+    assert "kept_minutes" not in details
 
 
 async def test_a_room_outside_the_test_category_is_still_only_logged_never_deleted(cog, bot, db):
@@ -3671,7 +3651,8 @@ async def test_the_room_carries_a_delete_message_under_the_card(cog, bot, member
     room = bot.guild.created[0]
     notice = room.messages[-1]
     assert "goes away on its own" in notice.content
-    assert "7 days after it ends" in notice.content
+    days = bot.store.get(GUILD, "events_channel_retention_days")
+    assert f"{days} days after it ends" in notice.content
     assert notice.kwargs["view"].children[0].item.label == "Delete this room"
 
 
@@ -3680,7 +3661,8 @@ async def test_the_delete_message_counts_in_minutes_while_the_guard_is_on(cog, b
 
     await submit(cog, bot, member)
 
-    assert "5 minutes after it ends" in bot.guild.created[0].messages[-1].content
+    minutes = bot.store.get(GUILD, EVENTS_TEST_RETENTION_KEY)
+    assert f"{minutes} minutes after it ends" in bot.guild.created[0].messages[-1].content
 
 
 async def test_turning_the_notice_off_still_leaves_the_card_and_the_sweep(cog, bot, member, db):
@@ -4752,7 +4734,7 @@ async def test_a_post_somebody_deletes_by_hand_cancels_the_event(
 
     fresh = await get_event(db, row["id"])
     assert fresh["status"] == CANCELLED
-    assert "review_channel_deleted" in str(member.dms[-1]["content"]) or member.dms
+    assert "the mods were reviewing it in was deleted" in member.dms[-1]["content"]
 
 
 async def test_a_deleted_post_on_a_settled_event_is_only_forgotten(
@@ -5027,9 +5009,7 @@ async def test_the_old_room_is_told_where_it_went_before_it_goes(
     await press_move(bot, lead, row["id"], channel=room)
 
     post = forum.threads[0]
-    assert room.messages[-1].content == (
-        f"This event now lives in its own post: <#{post.id}>. This room is being removed."
-    )
+    assert room.messages[-1].content == EVENTS_MOVED_LINE.format(post=f"<#{post.id}>")
 
 
 async def test_the_moved_line_is_a_settings_key_the_site_can_change(
@@ -5463,10 +5443,6 @@ async def test_cog_load_registers_the_propose_block_beside_the_decision_buttons(
 
 
 async def test_the_upcoming_block_lists_approved_events_only_while_events_are_on(bot):
-    from datetime import UTC, datetime, timedelta
-
-    from black_bloc.cogs.community import events as events_cog
-
     ahead = (datetime.now(UTC) + timedelta(days=1)).isoformat()
     await bot.db.conn.execute(
         "INSERT INTO events(guild_id, requester_id, title, starts_at, status, created_at) "

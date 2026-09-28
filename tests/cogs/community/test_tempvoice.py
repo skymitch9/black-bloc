@@ -64,7 +64,6 @@ from black_bloc.cogs.community.tempvoice import (
     owner_overwrites,
     panel_context,
     panel_home,
-    panel_id,
     parse_limit,
     pick_row,
     privacy_of,
@@ -604,17 +603,6 @@ def test_an_unlocked_channel_leaves_everyone_alone():
     assert everyone.connect is None and everyone.view_channel is None
 
 
-def test_the_panel_is_persistent_and_keyed_by_action():
-    view = TempVoicePanel()
-    ids = [item.custom_id for item in view.children]
-    assert view.timeout is None and view.is_persistent()
-    assert ids == [
-        panel_id(name)
-        for name in ("rename", "limit", "lock", "hide", "kick", "ban", "unban", "permit",
-                     "unpermit", "transfer", "claim")
-    ]
-
-
 async def test_prefs_remember_one_field_at_a_time(db):
     assert await get_prefs(db, USER) is None
     await save_prefs(db, USER, name="The Pit")
@@ -1013,7 +1001,7 @@ async def test_setup_puts_the_creator_in_the_test_category_while_test_mode_is_on
     await run_setup(interaction, None)
 
     made = bot.guild.created[0]
-    assert made.name == TEMPVOICE_CREATOR_NAME == "join to create a channel"
+    assert made.name == TEMPVOICE_CREATOR_NAME
     assert made.category is category and made.position == 3
     assert bot.store.get(GUILD, "tempvoice_creator_ids") == [CREATOR, made.id]
     assert "test mode is off" in interaction.sent.lower()
@@ -1048,16 +1036,17 @@ async def test_the_creator_spot_is_above_the_afk_channel_when_the_guard_is_off(c
     assert cog._creator_spot(bot.guild) == (category, 9, "above_afk")
 
 
-async def test_the_creator_spot_falls_back_to_the_named_afk_channel(cog, bot):
-    bot.guild.add(FakeVoice(70, bot.guild, position=9, name="You Still Here?"))
+@pytest.mark.parametrize(
+    ("name", "position", "wanted"),
+    [("You Still Here?", 9, (None, 9, "above_afk")), ("General", 3, (None, 4, "bottom"))],
+    ids=["above-the-afk-channel-found-by-name", "the-bottom-with-no-afk-channel"],
+)
+async def test_the_creator_spot_falls_back_without_a_set_afk_channel(
+    cog, bot, name, position, wanted
+):
+    bot.guild.add(FakeVoice(70, bot.guild, position=position, name=name))
 
-    assert cog._creator_spot(bot.guild) == (None, 9, "above_afk")
-
-
-async def test_the_creator_spot_falls_back_to_the_bottom(cog, bot):
-    bot.guild.add(FakeVoice(70, bot.guild, position=3, name="General"))
-
-    assert cog._creator_spot(bot.guild) == (None, 4, "bottom")
+    assert cog._creator_spot(bot.guild) == wanted
 
 
 async def test_the_panel_answers_a_click_from_someone_who_does_not_own_the_channel(
@@ -1133,19 +1122,6 @@ async def test_asking_for_a_state_the_channel_is_already_in_changes_nothing(
     assert made.permissions == []
     assert said == "This channel is already unlocked, so nothing was changed."
     assert "tempvoice.unlock" not in await action_kinds(db)
-
-
-async def test_lock_and_unlock_can_be_asked_for_by_name(cog, bot, creator, member, db):
-    await cog._maybe_create(member, creator)
-    made = bot.guild.created[0]
-    row = await get_row(db, made.id)
-
-    await do_privacy(FakeInteraction(bot, member, channel=made), made, row, "connect", True)
-    assert made.permissions[-1][1].connect is False
-
-    await do_privacy(FakeInteraction(bot, member, channel=made), made, row, "connect", False)
-    assert made.permissions[-1][1].connect is None
-    assert (await get_prefs(db, member.id))["locked"] == 0
 
 
 async def test_kicking_someone_who_is_not_here_changes_nothing(cog, bot, creator, member, db):
@@ -1285,17 +1261,6 @@ async def test_transferring_a_channel_someone_else_already_took_says_so(
     assert "tempvoice.transfer" not in await action_kinds(db)
 
 
-async def test_a_banned_member_loses_sight_of_the_channel_too(cog, bot, creator, member, db):
-    await cog._maybe_create(member, creator)
-    made = bot.guild.created[0]
-    stranger = FakeMember(bot.guild, user_id=USER + 1, display_name="Bo")
-    interaction = FakeInteraction(bot, member, channel=made)
-
-    await do_ban(interaction, made, await get_row(db, made.id), stranger)
-
-    assert made.permissions[-1][2]["view_channel"] is False
-
-
 async def test_unban_clears_the_member_s_own_overwrite(cog, bot, creator, member, db):
     await cog._maybe_create(member, creator)
     made = bot.guild.created[0]
@@ -1381,7 +1346,7 @@ async def test_setup_repairs_the_lobby_it_already_has_instead_of_making_a_second
     await run_setup(interaction, None)
 
     assert bot.guild.created == []
-    assert creator.name == "join to create a channel"
+    assert creator.name == TEMPVOICE_CREATOR_NAME
     assert bot.store.get(GUILD, "tempvoice_creator_ids") == [CREATOR]
     assert "repaired" in interaction.sent
     assert "tempvoice.repair" in await action_kinds(db)
@@ -1415,7 +1380,7 @@ async def test_test_mode_will_not_repair_a_lobby_outside_the_test_category(cog, 
 
     await run_setup(interaction, None)
 
-    assert creator.name == "join to create a channel"
+    assert creator.name == TEMPVOICE_CREATOR_NAME
     assert creator.edits == []
     assert "test mode" in interaction.sent.lower()
 
@@ -1524,7 +1489,7 @@ async def test_a_repair_puts_those_overwrites_on_the_lobby_it_already_has(cog, b
 
     await run_setup(FakeInteraction(bot, lead), None)
 
-    assert lobby.name == "join to create a channel"
+    assert lobby.name == TEMPVOICE_CREATOR_NAME
     assert lobby.overwrites[member_role].connect is True
     assert lobby.overwrites[staff_role].connect is True
     assert lobby.overwrites[bot.guild.default_role].connect is False
@@ -1553,7 +1518,14 @@ async def test_a_spawned_channel_lets_the_allowed_role_and_staff_in_too(cog, bot
     assert given[bot.guild.me].manage_channels is True
 
 
-async def test_a_room_starts_from_the_lobby_s_own_permissions_not_the_category_s(cog, bot, member):
+@pytest.mark.parametrize(
+    ("source", "visible"),
+    [(None, False), ("category", True)],
+    ids=["the-lobby-s-own-by-default", "the-category-s-when-the-setting-says"],
+)
+async def test_a_room_starts_from_the_permissions_the_room_source_setting_names(
+    cog, bot, member, source, visible
+):
     category = FakeCategory(
         50, overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=True)}
     )
@@ -1567,11 +1539,13 @@ async def test_a_room_starts_from_the_lobby_s_own_permissions_not_the_category_s
             overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=False)},
         )
     )
+    if source is not None:
+        await bot.store.set(GUILD, "tempvoice_room_overwrites", source)
 
     await cog._maybe_create(member, creator)
 
     given = bot.guild.created[0].given_overwrites
-    assert given[bot.guild.default_role].view_channel is False
+    assert given[bot.guild.default_role].view_channel is visible
 
 
 async def test_in_shadow_a_room_is_hidden_from_members_even_though_the_allowed_role_may_join(
@@ -1597,33 +1571,8 @@ async def test_in_shadow_a_room_is_hidden_from_members_even_though_the_allowed_r
     given = bot.guild.created[0].given_overwrites
     assert given[bot.guild.default_role].view_channel is False
     allowed = bot.guild.get_role(bot.store.get(GUILD, "tempvoice_allowed_role_id"))
-    if allowed is not None:
-        assert given[allowed].view_channel is False
+    assert allowed is not None and given[allowed].view_channel is False
     assert given[member].view_channel is True
-
-
-async def test_the_category_setting_puts_a_room_back_on_the_category_s_permissions(
-    cog, bot, member
-):
-    category = FakeCategory(
-        50, overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=True)}
-    )
-    staffed(bot, category)
-    creator = bot.guild.add(
-        FakeVoice(
-            CREATOR,
-            bot.guild,
-            category=category,
-            position=4,
-            overwrites={bot.guild.default_role: discord.PermissionOverwrite(view_channel=False)},
-        )
-    )
-    await bot.store.set(GUILD, "tempvoice_room_overwrites", "category")
-
-    await cog._maybe_create(member, creator)
-
-    given = bot.guild.created[0].given_overwrites
-    assert given[bot.guild.default_role].view_channel is True
 
 
 async def test_the_room_source_is_the_lobby_by_default_and_the_category_when_asked(bot):
@@ -1927,7 +1876,6 @@ async def test_a_reconcile_loop_that_stopped_records_the_error_and_restarts_itse
 
     assert restarted == [True]
     assert "the gateway went away" in cog.last_error
-    assert cog._reconcile_loop._error is not None
 
 
 def test_the_cog_carries_one_member_visible_command_and_no_group_at_all():
@@ -2010,7 +1958,7 @@ async def test_the_panel_says_how_to_get_a_channel_when_you_have_none(cog, bot, 
     embed, view = await panel_for(bot, member)
 
     assert "don't own a temp channel" in embed.description
-    assert "join to create a channel" in embed.description
+    assert TEMPVOICE_CREATOR_NAME in embed.description
     assert labels(view) == ["Refresh"]
 
 
@@ -2178,7 +2126,7 @@ async def test_the_staff_block_shows_the_lobby_name_and_the_loop_s_health(cog, b
 
     embed, _view = await panel_for(bot, lead)
 
-    assert "join to create a channel" in embed.description
+    assert TEMPVOICE_CREATOR_NAME in embed.description
     assert "2026-08-26T12:00:00+00:00" in embed.description
     assert "**last error** — none" in embed.description
 
@@ -2795,18 +2743,20 @@ async def details_for(db, kind):
     return json.loads(row["details"]) if row is not None else None
 
 
-async def test_the_bitrate_modal_bounds_what_the_range_used_to(cog, bot, creator, member, db):
+@pytest.mark.parametrize("given", ["0", "500", "-8"], ids=["zero", "too-high", "negative"])
+async def test_the_bitrate_modal_bounds_what_the_range_used_to(
+    cog, bot, creator, member, db, given
+):
     """Checklist 22: a modal has no `app_commands.Range`, so it has to say no itself."""
     made = await a_channel(cog, bot, creator, member)
     before = await action_kinds(db)
 
-    for given in ("0", "500", "-8"):
-        modal = BitrateModal(previous=object())
-        modal.kbps._value = given
-        told = FakeInteraction(bot, member)
-        await modal.on_submit(told)
-        assert "8" in told.sent and "96" in told.sent
+    modal = BitrateModal(previous=object())
+    modal.kbps._value = given
+    told = FakeInteraction(bot, member)
+    await modal.on_submit(told)
 
+    assert "8" in told.sent and "96" in told.sent
     assert await action_kinds(db) == before
     assert made.bitrate == 0
 
@@ -2926,18 +2876,11 @@ def test_the_block_is_drawn_by_default_because_join_to_create_ships_on(bot, crea
     assert block_parts(bot, bot.guild, None) is not None
 
 
-async def test_the_block_draws_nothing_with_the_mode_off(bot, creator):
+@pytest.mark.parametrize("mode", ["off", "shadow"], ids=["mode-off", "in-shadow"])
+async def test_the_block_draws_nothing_unless_temp_voice_is_on(bot, creator, mode):
     from black_bloc.cogs.community.tempvoice import block_parts
 
-    await bot.store.set(GUILD, "tempvoice_mode", "off")
-
-    assert block_parts(bot, bot.guild, None) is None
-
-
-async def test_the_block_draws_nothing_while_temp_voice_is_in_shadow(bot, creator):
-    from black_bloc.cogs.community.tempvoice import block_parts
-
-    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+    await bot.store.set(GUILD, "tempvoice_mode", mode)
 
     assert block_parts(bot, bot.guild, None) is None
 

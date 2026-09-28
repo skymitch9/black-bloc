@@ -349,30 +349,25 @@ async def test_saying_stop_notes_in_the_meetings_chat_ends_it(bot, staff):
     assert cog.running_in(bot, GUILD) is None
 
 
-async def test_the_same_words_somewhere_else_are_ignored(bot, staff):
+@pytest.mark.parametrize(
+    ("bot_author", "channel_id"),
+    [(False, NOTES_CHANNEL), (True, VOICE_CHANNEL)],
+    ids=["said-in-another-channel", "said-by-the-bot-itself"],
+)
+async def test_stop_notes_is_ignored_unless_a_person_says_it_in_the_meetings_chat(
+    bot, staff, bot_author, channel_id
+):
     await cog.start_meeting(bot, bot.guild, staff)
     message = SimpleNamespace(
         guild=bot.guild,
-        author=staff,
+        author=SimpleNamespace(bot=True) if bot_author else staff,
         content="stop notes",
-        channel=SimpleNamespace(id=NOTES_CHANNEL),
+        channel=SimpleNamespace(id=channel_id),
     )
     await cog.Minutes(bot).on_message(message)
     assert cog.running_in(bot, GUILD) is not None
     await cog.stop_meeting(bot, bot.guild, mins.BY_HAND)
 
-
-async def test_the_bots_own_message_never_stops_a_meeting(bot, staff):
-    await cog.start_meeting(bot, bot.guild, staff)
-    message = SimpleNamespace(
-        guild=bot.guild,
-        author=SimpleNamespace(bot=True),
-        content="stop notes",
-        channel=SimpleNamespace(id=VOICE_CHANNEL),
-    )
-    await cog.Minutes(bot).on_message(message)
-    assert cog.running_in(bot, GUILD) is not None
-    await cog.stop_meeting(bot, bot.guild, mins.BY_HAND)
 
 
 async def test_the_sweep_ends_a_meeting_that_ran_past_max_hours(bot, staff):

@@ -224,15 +224,15 @@ async def test_the_panel_writes_a_line_per_post_and_offers_the_way_in(bot, staff
     said = embed.description
     assert "**A notice** · #blackbloc-logs · not posted" in said
     assert "no channel yet" in said
-    assert labels(view) == ["New post…", "Logs", "Open on the site"]
-    assert placeholders(view) == ["Posts are: off / shadow / on", "A post…"]
+    assert labels(view) == [cog.NEW_POST, cog.LOGS, posts.SITE_BUTTON]
+    assert placeholders(view) == [cog.MODE_PICK, cog.PICK_A_POST]
 
 
 async def test_an_empty_panel_says_so_rather_than_showing_nothing(bot, staff):
     embed, view = await cog.build_panel(bot, bot.guild, staff)
 
     assert posts.PANEL_EMPTY in embed.description
-    assert placeholders(view) == ["Posts are: off / shadow / on"]
+    assert placeholders(view) == [cog.MODE_PICK]
 
 
 async def test_the_panel_says_in_words_when_posts_are_off(bot, staff):
@@ -258,9 +258,7 @@ async def test_the_panel_says_where_shadow_puts_it_and_the_select_shows_the_thir
     mode = next(one for one in view.children if getattr(one, "placeholder", None) == cog.MODE_PICK)
     assert [one.value for one in mode.options] == ["off", "shadow", "on"]
     assert [one.label for one in mode.options] == [
-        "Posts are: off",
-        "Posts are: shadow",
-        "Posts are: on",
+        cog.MODE_OPTION.format(mode=one) for one in ("off", "shadow", "on")
     ]
     assert picked(view) == "shadow"
 
@@ -271,10 +269,7 @@ async def test_the_card_says_where_a_shadow_press_would_actually_go(bot, staff):
 
     embed, _ = await cog.build_card(bot, bot.guild, row)
 
-    assert (
-        "shadow — this goes to #blackbloc-logs, not #welcome, until posts are on."
-        in embed.description
-    )
+    assert posts.SHADOW_LINE.format(shadow="#blackbloc-logs", where="#welcome") in embed.description
 
 
 # --- the card ---------------------------------------------------------------------------------
@@ -595,14 +590,7 @@ async def test_the_card_offers_add_a_block_and_a_remove_for_each_block_it_has(bo
     assert posts.ADD_A_BLOCK in placeholders(one) and "Remove Front door" not in labels(one)
     assert "Remove Front door" in labels(two)
     assert [option.value for option in block_pick(two).options] == [
-        "tempvoice",
-        "marathonrole",
-        "pingsfollow",
-        "birthday",
-        "proposeevent",
-        "livenow",
-        "upcoming",
-        "links",
+        kind for kind in post_blocks.KINDS if kind != post_blocks.FRONTDOOR
     ]
     assert "Blocks: Front door" in embed_two.description
     assert "Blocks:" not in embed_one.description

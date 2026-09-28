@@ -21,12 +21,10 @@ from black_bloc.cogs.community.role_menus import (
     ROLE_MENUS_OFF,
     SEED,
     TITLE_MAX,
-    UNSET,
     AssignPick,
     MenuLimitError,
     RequestApproveModal,
     RequestButton,
-    RequestDenyModal,
     RoleMenus,
     RoleMenuView,
     add_option,
@@ -59,7 +57,7 @@ from black_bloc.cogs.community.role_menus import (
     update_menu,
 )
 from black_bloc.config import load_settings
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import DB_UNAVAILABLE, SettingsStore
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -555,19 +553,21 @@ class _Refused:
         self.reason = "refused"
 
 
-def test_role_diff_only_touches_menu_roles():
-    to_add, to_remove = role_diff({1, 2, 99}, [1, 2, 3], [2, 3])
-    assert to_add == {3}
-    assert to_remove == {1}
-
-
-def test_role_diff_ignores_selections_outside_the_menu():
-    to_add, to_remove = role_diff({1}, [1], [42])
-    assert to_add == set() and to_remove == {1}
-
-
-def test_role_diff_empty_selection_removes_everything_the_menu_owns():
-    assert role_diff({1, 2, 99}, [1, 2], []) == (set(), {1, 2})
+@pytest.mark.parametrize(
+    ("held", "menu", "picked", "wanted"),
+    [
+        ({1, 2, 99}, [1, 2, 3], [2, 3], ({3}, {1})),
+        ({1}, [1], [42], (set(), {1})),
+        ({1, 2, 99}, [1, 2], [], (set(), {1, 2})),
+    ],
+    ids=[
+        "only-menu-roles-move",
+        "a-pick-outside-the-menu-is-ignored",
+        "an-empty-pick-removes-everything-the-menu-owns",
+    ],
+)
+def test_role_diff_moves_only_the_roles_the_menu_owns(held, menu, picked, wanted):
+    assert role_diff(held, menu, picked) == wanted
 
 
 def test_single_mode_limits_the_picker():
@@ -1117,7 +1117,6 @@ async def test_an_update_leaves_the_columns_it_was_not_given(db):
     menu = await get_menu(db, GUILD, "m")
     assert menu["title"] == "Menu"
     assert needs_approval(menu) and expires_days_of(menu) == 7 and retry_days_of(menu) == 14
-    assert UNSET is not None
 
 
 async def test_a_grant_that_is_due_comes_off_and_the_member_is_told(bot, db):
@@ -1298,8 +1297,6 @@ def test_the_request_buttons_survive_a_restart_by_their_custom_id():
     match = button.template.fullmatch("rolereq:12:deny")
     assert match["request_id"] == "12" and match["action"] == "deny"
     assert re.fullmatch(button.template, "rolereq:12:maybe") is None
-    assert issubclass(RequestDenyModal, discord.ui.Modal)
-    assert issubclass(RequestApproveModal, discord.ui.Modal)
 
 
 def test_the_expiry_loop_reports_its_own_health(bot):
@@ -2074,7 +2071,7 @@ async def test_a_click_after_the_database_goes_away_answers_a_sentence(bot, db, 
 
     await press(interaction, "Grants…")
 
-    assert "database" in interaction.sent.lower() or "unavailable" in interaction.sent.lower()
+    assert interaction.sent == DB_UNAVAILABLE
     assert interaction.response.deferred is True
 
 

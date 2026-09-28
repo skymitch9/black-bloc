@@ -482,7 +482,7 @@ async def test_submitting_stores_the_answers_with_their_labels_and_cards_them(bo
         {"label": "Why the Team", "answer": "the vibes"},
     ]
     assert "Sent to staff" in said
-    assert row["card_channel_id"] == STAFF_CHANNEL or row["card_channel_id"] == TEST_CHANNEL
+    assert row["card_channel_id"] == STAFF_CHANNEL
     assert "application.submitted" in await action_kinds(db)
     assert member.dms and "with staff now" in member.dms[0]
 
@@ -797,7 +797,7 @@ async def test_approving_on_a_list_form_hands_nothing_over_and_still_tells_them(
     assert "application.granted" not in kinds and "application.grant_failed" not in kinds
     details = await action_details(db, "application.approved")
     assert details["granted"] is None and details["role_id"] is None
-    assert any("on the Stream Team list" in one for one in member.dms) or member.dms
+    assert any("**Stream Team**" in one and "approved" in one for one in member.dms)
     assert "is on the **Stream Team** list now" in said
     assert "Discord refused" not in said
     card = bot.guild.get_channel(STAFF_CHANNEL).messages[0]
@@ -1013,23 +1013,31 @@ async def test_the_take_it_back_confirm_card_silences_mentions(bot, db, lead):
 
 
 @pytest.mark.parametrize(
-    "status,expected",
+    "status,has_role,may_decide,expected",
     [
-        (grants.PENDING, ["Approve", "Deny"]),
-        (grants.APPROVED, ["Take off the list"]),
-        (grants.DENIED, ["Approve after all"]),
-        (grants.WITHDRAWN, []),
-        (forms.REMOVED, ["Put them back on the list"]),
+        (grants.PENDING, False, True, ["Approve", "Deny"]),
+        (grants.APPROVED, False, True, ["Take off the list"]),
+        (grants.DENIED, False, True, ["Approve after all"]),
+        (grants.WITHDRAWN, False, True, []),
+        (forms.REMOVED, False, True, ["Put them back on the list"]),
+        (grants.APPROVED, True, True, []),
+        (grants.PENDING, False, False, []),
+    ],
+    ids=[
+        "pending",
+        "approved-list",
+        "denied",
+        "withdrawn",
+        "removed",
+        "approved-role-form-offers-nothing",
+        "a-stranger-is-offered-nothing",
     ],
 )
-def test_every_status_renders_exactly_its_row_of_the_button_table(status, expected):
-    moves = forms.card_buttons(status, has_role=False, may_decide=True)
+def test_every_status_renders_exactly_its_row_of_the_button_table(
+    status, has_role, may_decide, expected
+):
+    moves = forms.card_buttons(status, has_role=has_role, may_decide=may_decide)
     assert [one.label for one in moves] == expected
-
-
-def test_an_approved_role_form_offers_nothing_and_a_stranger_offers_nothing_either():
-    assert forms.card_buttons(grants.APPROVED, has_role=True, may_decide=True) == ()
-    assert forms.card_buttons(grants.PENDING, has_role=False, may_decide=False) == ()
 
 
 async def test_the_card_says_where_an_approved_role_application_can_go_instead(bot, db, lead):
@@ -1146,7 +1154,7 @@ async def test_somebody_taken_off_a_list_can_be_put_back_on_it(bot, db, lead):
     said, fresh = await reinstate(bot, bot.guild, row["id"], lead)
 
     assert fresh["status"] == grants.APPROVED
-    assert "on the **Stream Team** list" in said or f"#{row['id']}" in said
+    assert said == forms.REINSTATED_SAID.format(application_id=row["id"])
 
 
 async def test_a_pending_or_withdrawn_application_is_not_something_to_put_back(bot, db, lead):
@@ -1362,7 +1370,7 @@ async def test_the_roster_lists_the_approved_with_their_twitch_logins(bot, db, l
     assert "Take somebody off…" in interaction.placeholders()
 
 
-async def test_the_settings_sub_panel_writes_every_value_it_shows(bot, db, lead):
+async def test_the_settings_sub_panel_shows_each_value_beside_its_select(bot, db, lead):
     interaction = FakeInteraction(bot, lead)
 
     await render_settings(interaction)
@@ -1372,7 +1380,7 @@ async def test_the_settings_sub_panel_writes_every_value_it_shows(bot, db, lead)
     assert "Mode…" in interaction.placeholders()
 
 
-async def test_the_logs_button_answers_a_new_message_and_still_refuses_a_stranger(bot, db):
+async def test_the_logs_button_refuses_a_stranger_in_words(bot, db):
     stranger = FakeMember(bot.guild, user_id=907, display_name="Nobody")
     interaction = FakeInteraction(bot, stranger)
 
