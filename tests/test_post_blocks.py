@@ -579,3 +579,147 @@ async def test_the_shipped_seed_attaches_the_lobby_block_to_nothing(bot, guild):
 
     assert "tempvoice" not in [str(one["kind"]) for one in rows]
     assert all("tempvoice" not in entry.get("blocks", []) for entry in posts.seed_entries())
+
+
+# --- blocks-live: who's live now, upcoming events, link buttons ---------------------------------
+
+
+def test_the_three_live_kinds_go_on_any_number_of_posts_and_the_live_pair_loads_first():
+    for key in ("livenow", "upcoming", "links"):
+        found = post_blocks.KINDS[key]
+        assert not found.exclusive and found.cache_column == ""
+        assert found.name_key == f"posts_block_{key}_name"
+    assert post_blocks.KINDS["livenow"].load is post_blocks.live_load
+    assert post_blocks.KINDS["upcoming"].load is post_blocks.upcoming_load
+    assert post_blocks.KINDS["links"].load is None
+    assert post_blocks.KINDS["frontdoor"].load is None
+    assert post_blocks.KINDS["tempvoice"].load is None
+    assert post_blocks.LIVE_KINDS == ("livenow", "upcoming")
+    assert post_blocks.KINDS["links"].footprint == (1, 2, 10)
+
+
+async def a_live_stream(bot, user_id=77, title="late night runs"):
+    from black_bloc.cogs.content.golive import start_session
+    from black_bloc.golive import StreamInfo
+
+    info = StreamInfo(url=f"https://www.twitch.tv/u{user_id}", title=title)
+    return await start_session(bot.db, GUILD, user_id, "presence", info, "on")
+
+
+async def test_the_live_block_is_edited_only_when_who_is_live_changes(bot, guild, room):
+    await bot.store.set(GUILD, "golive_mode", "on")
+    row = await a_room_post(bot)
+    assert (await post_blocks.add_block(bot, guild, row, STAFF, "livenow")).ok
+    await posts.publish_post(bot, guild, await fresh_row(bot, row), STAFF)
+    message = room.messages[0]
+    assert message.embeds[0].description.startswith("Nobody is live")
+
+    assert await post_blocks.keep_drawn(bot, guild, post_blocks.LIVE_KINDS) == 0
+    assert message.edits == []
+    await a_live_stream(bot)
+    assert await post_blocks.keep_drawn(bot, guild, post_blocks.LIVE_KINDS) == 1
+    assert await post_blocks.keep_drawn(bot, guild, post_blocks.LIVE_KINDS) == 0
+
+    assert len(message.edits) == 1
+    assert message.embeds[0].description == (
+        "**<@77>** — [late night runs](https://www.twitch.tv/u77)"
+    )
+    assert message.content == "Hello."
+
+
+async def test_a_shadow_session_is_not_listed_as_live(bot, guild, room):
+    from black_bloc.cogs.content.golive import start_session
+    from black_bloc.golive import StreamInfo
+
+    await bot.store.set(GUILD, "golive_mode", "shadow")
+    await start_session(bot.db, GUILD, 5, "presence", StreamInfo(url="https://x.tv/a"), "shadow")
+
+    await post_blocks.load_kinds(bot, guild, ["livenow"])
+
+    assert post_blocks.loaded("livenow", GUILD) == []
+
+
+async def test_the_live_cadence_leaves_a_carrier_of_no_live_block_alone(bot, guild, room):
+    await bot.store.set(
+        GUILD, "posts_block_links_rows", '[{"label": "Site", "url": "https://example.org"}]'
+    )
+    row = await a_room_post(bot)
+    assert (await post_blocks.add_block(bot, guild, row, STAFF, "links")).ok
+    await posts.publish_post(bot, guild, await fresh_row(bot, row), STAFF)
+    message = room.messages[0]
+    await bot.store.set(GUILD, "posts_block_links_title", "Places")
+
+    assert await post_blocks.keep_drawn(bot, guild, post_blocks.LIVE_KINDS) == 0
+    assert await post_blocks.keep_drawn(bot, guild) == 1
+
+    assert message.embeds[0].title == "Places"
+
+
+async def test_link_buttons_with_the_card_off_go_out_as_buttons_alone(bot, guild, room):
+    await bot.store.set(
+        GUILD,
+        "posts_block_links_rows",
+        '[{"label": "Site", "url": "https://example.org"}, '
+        '{"label": "Map", "url": "https://example.org/map"}]',
+    )
+    await bot.store.set(GUILD, "posts_block_links_card", False)
+    row = await a_room_post(bot)
+    assert (await post_blocks.add_block(bot, guild, row, STAFF, "links")).ok
+
+    await posts.publish_post(bot, guild, await fresh_row(bot, row), STAFF)
+
+    sent = room.messages[0]
+    assert sent.content == "Hello." and sent.embeds == []
+    assert [(one.label, one.url) for one in sent.view.children] == [
+        ("Site", "https://example.org"),
+        ("Map", "https://example.org/map"),
+    ]
+    assert (await post_blocks.drawn_of(bot.db, int(row["id"])))["links"]
+
+
+async def test_the_upcoming_block_lists_approved_events_still_ahead(bot, guild, room):
+    from datetime import UTC, datetime, timedelta
+
+    await bot.store.set(GUILD, "events_mode", "on")
+    ahead = (datetime.now(UTC) + timedelta(days=2)).replace(microsecond=0)
+    for title, status, starts in (
+        ("Movie night", "approved", ahead),
+        ("Not yet approved", "pending", ahead),
+        ("Already over", "approved", ahead - timedelta(days=5)),
+    ):
+        await bot.db.conn.execute(
+            "INSERT INTO events(guild_id, requester_id, title, starts_at, status, created_at, "
+            "scheduled_event_id) VALUES (?, 1, ?, ?, ?, ?, 99)",
+            (GUILD, title, starts.isoformat(), status, ahead.isoformat()),
+        )
+    await bot.db.conn.commit()
+    row = await a_room_post(bot)
+    assert (await post_blocks.add_block(bot, guild, row, STAFF, "upcoming")).ok
+
+    await posts.publish_post(bot, guild, await fresh_row(bot, row), STAFF)
+
+    stamp = int(ahead.timestamp())
+    assert room.messages[0].embeds[0].description == (
+        f"**[Movie night](https://discord.com/events/{GUILD}/99)** — <t:{stamp}:F> (<t:{stamp}:R>)"
+    )
+
+
+async def test_the_live_pair_draws_nothing_while_its_features_are_off(bot, guild):
+    await bot.store.set(GUILD, "golive_mode", "off")
+    await bot.store.set(GUILD, "spotlight_mode", "off")
+    await bot.store.set(GUILD, "events_mode", "off")
+    await post_blocks.load_kinds(bot, guild, ["livenow", "upcoming"])
+
+    assert post_blocks.parts_of(bot, guild, None, ["livenow", "upcoming"]) == {}
+
+
+async def test_the_shipped_seed_attaches_none_of_the_live_blocks(bot, guild):
+    await posts.seed_posts(bot, guild)
+
+    kinds = [str(one["kind"]) for one in await post_blocks.blocks_in(bot.db, GUILD)]
+
+    assert not {"livenow", "upcoming", "links"} & set(kinds)
+    assert all(
+        not {"livenow", "upcoming", "links"} & set(entry.get("blocks", []))
+        for entry in posts.seed_entries()
+    )

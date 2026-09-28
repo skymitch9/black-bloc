@@ -1756,3 +1756,47 @@ def test_a_message_link_needs_the_guild_the_channel_and_the_message():
 def test_a_scheduled_event_links_to_the_servers_events_list():
     assert scheduled_event_url(7, 66) == "https://discord.com/events/7/66"
     assert scheduled_event_url(7, None) is None
+
+
+# --- the upcoming-events block (blocks-live) ---------------------------------------------------
+
+
+class BlockStore:
+    def __init__(self, **saved):
+        self.saved = saved
+
+    def get(self, guild_id, key):
+        return self.saved.get(key)
+
+
+def test_upcoming_keeps_only_events_still_ahead_soonest_first_with_their_discord_link():
+    now = datetime(2026, 9, 28, 12, tzinfo=UTC)
+    rows = [
+        {"title": "Later", "starts_at": (now + timedelta(days=3)).isoformat(),
+         "scheduled_event_id": None},
+        {"title": "Gone", "starts_at": (now - timedelta(hours=1)).isoformat(),
+         "scheduled_event_id": 5},
+        {"title": "Soon", "starts_at": (now + timedelta(hours=2)).isoformat(),
+         "scheduled_event_id": 9},
+        {"title": "Broken", "starts_at": "not a time", "scheduled_event_id": None},
+    ]
+
+    found = events.upcoming_of(7, rows, now, 5)
+
+    assert [one.title for one in found] == ["Soon", "Later"]
+    assert found[0].url == "https://discord.com/events/7/9" and found[1].url is None
+    assert events.upcoming_of(7, rows, now, 1) == found[:1]
+
+
+def test_each_upcoming_line_carries_discord_s_own_timestamps():
+    starts = datetime(2026, 10, 1, 20, tzinfo=UTC)
+    one = events.UpcomingLine("Movie night", starts.isoformat(), "https://discord.com/events/7/9")
+    stamp = int(starts.timestamp())
+
+    look = events.upcoming_block_look(BlockStore(), 7, [one])
+
+    assert look.title == "Coming up"
+    assert look.text == (
+        f"**[Movie night](https://discord.com/events/7/9)** — <t:{stamp}:F> (<t:{stamp}:R>)"
+    )
+    assert events.upcoming_block_look(BlockStore(), 7, []).text.startswith("Nothing is on")

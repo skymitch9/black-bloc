@@ -3260,3 +3260,51 @@ async def test_a_go_live_with_no_youtube_cog_at_all_is_simply_unread(bot, db):
     found = await cog_module.link_from_history(bot, bot.guild, staff)
 
     assert found["unreadable"] == [f"Moth → {VIDEO_URL}"]
+
+
+# --- blocks-live: who's live now reads the sessions the features keep ----------------------------
+
+
+async def test_the_live_block_lists_announced_go_live_and_spotlight_streams_once_each(bot, db):
+    from types import SimpleNamespace
+
+    from black_bloc.cogs.content import spotlight as spot
+
+    guild = SimpleNamespace(id=GUILD, get_member=lambda user_id: None)
+    await cog_module.start_session(
+        db, GUILD, 1, "presence", StreamInfo(url="https://www.twitch.tv/alice", title="A"), "on"
+    )
+    await cog_module.start_session(
+        db, GUILD, 2, "presence", StreamInfo(url="https://www.twitch.tv/bob", title="B"), "shadow"
+    )
+    shown = await spot.add_channel(
+        db, GUILD, "carol", added_by=None, expires_at=None, pin=False, display_name="Carol"
+    )
+    rerun = await spot.add_channel(db, GUILD, "dave", added_by=None, expires_at=None, pin=False)
+    same = await spot.add_channel(db, GUILD, "alice", added_by=None, expires_at=None, pin=False)
+    await spot.start_session(db, GUILD, shown, StreamInfo(title="C"), "on")
+    await spot.start_session(db, GUILD, rerun, StreamInfo(title="D"), "on", replay_reason="type")
+    await spot.start_session(
+        db, GUILD, same, StreamInfo(url="https://www.twitch.tv/alice/", title="A again"), "on"
+    )
+
+    streams = await cog_module.block_streams(bot, guild)
+
+    assert [(one.user_id, one.name, one.url, one.title) for one in streams] == [
+        (1, "", "https://www.twitch.tv/alice", "A"),
+        (None, "Carol", "https://www.twitch.tv/carol", "C"),
+    ]
+
+
+async def test_the_live_block_draws_nothing_while_go_live_and_spotlight_are_both_off(bot):
+    from types import SimpleNamespace
+
+    guild = SimpleNamespace(id=GUILD)
+    await bot.store.set(GUILD, "golive_mode", "off")
+    await bot.store.set(GUILD, "spotlight_mode", "off")
+    assert cog_module.block_parts(bot, guild, []) is None
+
+    await bot.store.set(GUILD, "spotlight_mode", "shadow")
+    embed, view, stamp = cog_module.block_parts(bot, guild, [])
+
+    assert embed.title == "Live now" and view is None and stamp

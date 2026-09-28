@@ -5394,3 +5394,28 @@ async def test_an_events_card_with_no_marathon_says_nothing_about_one(cog, bot, 
     interaction = FakeInteraction(bot, lead)
     await events_cog.open_card(interaction, event_id)
     assert "Marathon:" not in (card_embed(interaction).description or "")
+
+
+# --- blocks-live: the upcoming-events block reads the events feature's own store ----------------
+
+
+async def test_the_upcoming_block_lists_approved_events_only_while_events_are_on(bot):
+    from datetime import UTC, datetime, timedelta
+
+    from black_bloc.cogs.community import events as events_cog
+
+    ahead = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    await bot.db.conn.execute(
+        "INSERT INTO events(guild_id, requester_id, title, starts_at, status, created_at) "
+        "VALUES (?, 1, 'Games', ?, 'approved', ?)",
+        (GUILD, ahead, ahead),
+    )
+    await bot.db.conn.commit()
+
+    await bot.store.set(GUILD, "events_mode", "on")
+    assert [one.title for one in await events_cog.block_events(bot, bot.guild)] == ["Games"]
+    await bot.store.set(GUILD, "events_mode", "shadow")
+    assert await events_cog.block_events(bot, bot.guild) == []
+    assert events_cog.block_parts(bot, bot.guild, [])[0].description.startswith("Nothing is on")
+    await bot.store.set(GUILD, "events_mode", "off")
+    assert events_cog.block_parts(bot, bot.guild, []) is None

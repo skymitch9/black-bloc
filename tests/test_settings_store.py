@@ -2884,3 +2884,51 @@ async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_publis
     assert store.get(1, key) == "added"
     with pytest.raises(settings_store.SettingError):
         await store.set(1, key, "never")
+
+
+# --- blocks-live keys ----------------------------------------------------------------------------
+
+
+def test_link_buttons_are_stored_as_one_checked_list():
+    stored = settings_store.coerce_value(
+        "posts_block_links_rows", '[{"label": " Site ", "url": "https://example.org/a?b=1"}]'
+    )
+
+    assert json.loads(stored) == [{"label": "Site", "url": "https://example.org/a?b=1"}]
+    assert settings_store.coerce_value("posts_block_links_rows", "  ") == ""
+
+
+@pytest.mark.parametrize(
+    ("given", "said"),
+    [
+        ("not json", "is not one"),
+        ('{"label": "x"}', "it is not a list"),
+        ('[{"label": "x", "url": "http://example.org"}]', "must start with `https://`"),
+        ('[{"label": "x", "url": "https://nohost"}]', "must start with `https://`"),
+        ('[{"label": "x", "url": "https://a.b/has space"}]', "must start with `https://`"),
+        ('[{"label": "", "url": "https://a.b"}]', "has no label"),
+        ('[{"label": "' + "x" * 81 + '", "url": "https://a.b"}]', "81 characters"),
+        ('[{"label": "x", "url": "https://a.b", "emoji": "y"}]', "exactly a `label`"),
+        ("[" + ",".join(['{"label": "x", "url": "https://a.b"}'] * 11) + "]", "at most 10"),
+    ],
+)
+def test_a_bad_link_button_is_refused_in_words_and_never_stripped(given, said):
+    with pytest.raises(settings_store.SettingError) as refused:
+        settings_store.coerce_value("posts_block_links_rows", given)
+
+    assert said in str(refused.value)
+
+
+def test_the_live_block_lines_accept_only_their_own_placeholders():
+    assert settings_store.coerce_value("golive_block_line", "{name} · {title}")
+    assert settings_store.coerce_value("events_block_line", "{title} {when} {relative}")
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value("golive_block_line", "{name} {game}")
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value("golive_block_max", 26)
+
+
+def test_the_live_words_sit_with_the_posts_and_the_upcoming_words_with_events():
+    assert settings_store.namespace_of("golive_block_title") == "posts"
+    assert settings_store.namespace_of("events_block_title") == "events"
+    assert settings_store.namespace_of("posts_block_links_rows") == "posts"

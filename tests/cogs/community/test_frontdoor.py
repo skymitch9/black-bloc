@@ -1845,3 +1845,55 @@ async def test_the_door_and_a_second_block_share_one_message_and_redraw_together
     assert outcome.ok
     assert [one.title for one in message.embeds] == ["Sign in here"]
     assert [item.custom_id for item in message.view.children] == ["sign:press"]
+
+
+# --- blocks-live: the live cadence borrows the door's lock ----------------------------------------
+
+
+async def test_the_live_cadence_waits_for_the_one_reconcile_lock(bot, cog, monkeypatch):
+    import black_bloc.cogs.community.frontdoor as door_cog
+
+    ran = []
+
+    async def kept(bot_, guild, kinds=None):
+        ran.append(kinds)
+        return 0
+
+    monkeypatch.setattr(door_cog, "keep_drawn", kept)
+    async with cog._reconciles._lock:
+        task = asyncio.create_task(cog.keep_live_now(bot.guild))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert ran == [] and not task.done()
+    assert await task is True
+
+    assert ran == [post_blocks.LIVE_KINDS]
+
+
+async def test_the_live_cadence_rides_the_door_carrier_only_when_it_carries_a_live_block(
+    bot, cog, monkeypatch
+):
+    import black_bloc.cogs.community.frontdoor as door_cog
+
+    post_id = await posts.create_post(
+        bot.db, GUILD, slug="welcome", title="Welcome", body="Rules.", channel_id=TEST_CHANNEL
+    )
+    row = await posts.get_post_by_id(bot.db, post_id)
+    await post_blocks.attach(bot.db, row, "frontdoor")
+    rides = []
+
+    async def carrier(bot_, guild):
+        return row
+
+    async def ride(bot_, guild, found, actor=None, *, via="discord"):
+        rides.append(int(found["id"]))
+
+    monkeypatch.setattr(door_cog, "carrier_up", carrier)
+    monkeypatch.setattr(door_cog, "keep_the_ride", ride)
+
+    await cog.keep_live_now(bot.guild)
+    assert rides == []
+    await post_blocks.attach(bot.db, row, "livenow")
+    await cog.keep_live_now(bot.guild)
+
+    assert rides == [post_id]

@@ -268,3 +268,50 @@ def test_an_unknown_block_in_the_sample_draws_nothing_rather_than_failing(bot, g
     found = preview.render(bot, guild, "post", None, {"body": "Hi", "blocks": "nope,frontdoor"})
 
     assert found.content == "Hi" and len(found.embeds) == 1
+
+
+# --- blocks-live: the three new block kinds ----------------------------------------------------
+
+
+def test_the_live_block_preview_draws_sample_streams_and_its_empty_line(bot, guild):
+    some = preview.render(bot, guild, "block_livenow", {"golive_block_title": "On air"})
+    none = preview.render(bot, guild, "block_livenow", None, {"live": "none"})
+
+    assert some.embeds[0]["title"] == "On air"
+    assert "[late night runs](https://www.twitch.tv/casey)" in some.embeds[0]["description"]
+    assert none.embeds[0]["description"].startswith("Nobody is live")
+
+
+def test_the_upcoming_block_preview_draws_discord_timestamps(bot, guild):
+    found = preview.render(bot, guild, "block_upcoming")
+
+    lines = found.embeds[0]["description"].splitlines()
+    assert len(lines) == 2 and all("<t:" in line and ":R>)" in line for line in lines)
+    assert "https://discord.com/events/" in lines[0]
+
+
+def test_the_link_editor_draws_its_draft_rows_and_the_card_tick(bot, guild):
+    rows = '[{"label": "Site", "url": "https://example.org"}]'
+
+    draft = {"posts_block_links_rows": rows}
+    found = preview.render(bot, guild, "block_links", draft)
+    bare = preview.render(bot, guild, "block_links", draft, {"card": "off"})
+
+    assert found.embeds[0]["title"] == "Links"
+    assert [(one["label"], one["url"], one["style"]) for one in found.components[0]] == [
+        ("Site", "https://example.org", "link")
+    ]
+    assert bare.embeds == () and bare.components == found.components
+
+
+def test_the_blocks_section_draws_sample_links_until_staff_set_their_own(bot, guild):
+    found = preview.render(bot, guild, "post", None, {"blocks": "links", "always": "true"})
+
+    assert [one["label"] for one in found.components[0]] == ["Our website", "Schedule"]
+
+
+def test_each_new_block_kind_draws_through_its_own_feature(bot, guild):
+    assert list(preview.BLOCK_DRAWS)[2:] == ["livenow", "upcoming", "links"]
+    for kind in ("livenow", "upcoming"):
+        found = preview.render(bot, guild, "post", None, {"blocks": kind, "always": "true"})
+        assert len(found.embeds) == 1 and found.components == ()
