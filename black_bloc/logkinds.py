@@ -642,6 +642,7 @@ ROUTINE: frozenset[str] = frozenset(
         "post.message_gone",
         "post.mode",
         "post.pinned",
+        "post.redrawn",
         "post.saved",
         "post.versions_trimmed",
         "post.shadow_message_gone",

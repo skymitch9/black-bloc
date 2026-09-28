@@ -1688,8 +1688,16 @@ async def test_the_welcome_post_carried_as_a_block_goes_out_exactly_as_v180_sent
     assert message.content == RULES
     assert [one.title for one in message.embeds] == [live.store.get(GUILD, FRONTDOOR_TITLE)]
     assert door_ids(message) == [custom_id(kind, GUILD) for kind in KINDS]
+    assert [item.row for item in message.view.children] == [0, 0, 0]
     assert not message.pinned, "the welcome post's pin is off, and the block changes nothing"
     assert live.store.get(GUILD, FRONTDOOR_MESSAGE) == str(message.id)
+    row = await posts.get_post_by_id(live.db, post_id)
+    drawn = await post_blocks.drawn_of(live.db, post_id)
+    assert drawn == {"frontdoor": row["door_hash"]} and posts.door_drawn(row)
+
+    cog = FrontDoor(live)
+    await cog.reconcile()
+    assert message.edits == [], "blocks-convert: the live welcome post is never re-edited"
 
 
 async def test_adding_the_block_to_a_post_already_up_adds_the_door_to_its_message(live, member):
@@ -1766,3 +1774,74 @@ async def test_a_hidden_button_is_left_off_the_door_the_carrier_and_ask(live, co
     await cog.reconcile()
 
     assert door_ids(message) == [custom_id(kind, GUILD) for kind in KINDS]
+
+
+# --- several blocks (blocks-convert, 2026-09-28): the door shares its message -------------------
+
+
+def a_sign_kind(words):
+    def parts(bot, guild, row):
+        view = discord.ui.View(timeout=None)
+        view.add_item(discord.ui.Button(label=words["label"], custom_id="sign:press"))
+        return discord.Embed(title=words["title"]), view, f"sign:{words['title']}"
+
+    return post_blocks.BlockKind(
+        key="sign",
+        name_key="posts_block_frontdoor_name",
+        name_default="Sign",
+        exclusive=False,
+        cache_column="",
+        keys=(),
+        parts=parts,
+        turned=post_blocks.blocks_turned,
+        redraw=post_blocks.blocks_redraw,
+    )
+
+
+async def test_the_door_and_a_second_block_share_one_message_and_redraw_together(
+    live, cog, member, monkeypatch
+):
+    words = {"title": "Sign in", "label": "Sign"}
+    monkeypatch.setitem(post_blocks.KINDS, "sign", a_sign_kind(words))
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    row = await a_carrier(live)
+    await live.db.conn.execute(
+        "INSERT INTO post_blocks(guild_id, post_id, kind, position, exclusive, added_at) "
+        "VALUES (?, ?, 'sign', 1, 0, 'now')",
+        (GUILD, int(row["id"])),
+    )
+    await live.db.conn.commit()
+
+    await published(live, row, member)
+    message = welcome.messages[0]
+
+    assert message.content == RULES
+    assert [one.title for one in message.embeds] == [
+        live.store.get(GUILD, FRONTDOOR_TITLE),
+        "Sign in",
+    ]
+    assert [(item.custom_id, item.row) for item in message.view.children] == [
+        *[(custom_id(kind, GUILD), 0) for kind in KINDS],
+        ("sign:press", 1),
+    ]
+
+    await live.store.set(GUILD, FRONTDOOR_TITLE, "Need a hand?")
+    await cog.reconcile()
+
+    last = message.edits[-1]
+    assert "content" not in last
+    assert [one.title for one in last["embeds"]] == ["Need a hand?", "Sign in"]
+    assert [item.custom_id for item in last["view"].children][-1] == "sign:press"
+
+    words["title"] = "Sign in here"
+    await cog.reconcile()
+
+    assert [one.title for one in message.embeds] == ["Need a hand?", "Sign in here"]
+    assert welcome.messages == [message], "edited in place every time, never a second message"
+
+    outcome = await take_door_down(live, live.guild, member)
+
+    assert outcome.ok
+    assert [one.title for one in message.embeds] == ["Sign in here"]
+    assert [item.custom_id for item in message.view.children] == ["sign:press"]
