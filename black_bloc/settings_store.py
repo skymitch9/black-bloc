@@ -3000,7 +3000,8 @@ KEY_HELP.update(
         ),
         TEMPVOICE_BLOCK_LOBBY_LABEL: (
             "what each lobby's button on the block says, at most 80 characters; {lobby} is the "
-            "lobby's name. The button opens that lobby in Discord. Blank restores the speaker and the name"
+            "lobby's name. The button opens that lobby in Discord. "
+            "Blank restores the speaker and the name"
         ),
         TEMPVOICE_BLOCK_CONTROLS_LABEL: (
             "what the block's button that opens the /voice panel says, at most 80 characters; "
