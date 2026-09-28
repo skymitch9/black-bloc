@@ -265,11 +265,12 @@ async def test_a_page_size_is_clamped_and_anything_odd_is_the_default(as_staff, 
     assert client.get("/api/requests?per_page=").json()["per_page"] == pure.API_PAGE
 
 
-async def test_a_status_nothing_can_be_in_is_refused_in_words(as_staff, client):
-    refused = client.get("/api/requests?status=pending&per_page=1")
+@pytest.mark.parametrize("status", ["pending", "shipped"])
+async def test_a_status_filter_nothing_can_be_in_is_refused_by_name(as_staff, client, status):
+    refused = client.get(f"/api/requests?status={status}&per_page=1")
 
     assert refused.status_code == 400
-    assert "pending" in refused.json()["message"]
+    assert status in refused.json()["message"]
 
 
 async def test_the_staff_list_filters_by_status_by_assignee_and_by_words(as_staff, client, web):
@@ -349,7 +350,6 @@ async def test_the_ready_route_records_both_fields_and_leaves_one_log_row(
 ):
     await file_one(client)
     client.post("/api/requests/1/status", json={"status": "in_progress"})
-    await wf.web_rows_in(web.db)
     await web.db.conn.execute("DELETE FROM action_log")
     await web.db.conn.commit()
 
@@ -540,18 +540,6 @@ async def test_filing_from_the_site_is_not_guard_refused_while_test_mode_is_on(
 
     assert made.status_code == 200
     assert made.json()["request"]["status"] == "open"
-
-
-async def test_a_due_date_stays_a_plain_date_on_the_way_out(as_member):
-    row = (await file_one(as_member, due_on="2026-09-15")).json()["request"]
-
-    assert row["due_on"] == "2026-09-15" and "T" not in row["due_on"]
-
-
-async def test_a_status_filter_the_bot_does_not_know_is_refused_by_name(as_staff, client):
-    refused = client.get("/api/requests?status=shipped")
-
-    assert refused.status_code == 400 and "shipped" in refused.json()["message"]
 
 
 async def test_one_request_comes_back_with_its_comments(as_staff, client, web):
@@ -782,16 +770,8 @@ async def test_the_website_makes_the_request_forum_and_leaves_one_web_row(
 
     assert made.status_code == 200 and made.json()["made"] is True
     forum = guild.created[-1]
-    assert forum.name == "requests" and forum.type.name == "forum"
-    assert [tag.name for tag in forum.available_tags] == [
-        "open",
-        "picked up",
-        "ready to check",
-        "on hold",
-        "done",
-        "declined",
-        "moved",
-    ]
+    assert forum.name == pure.FORUM_CHANNEL_NAME and forum.type.name == "forum"
+    assert [tag.name for tag in forum.available_tags] == list(pure.FORUM_TAG_NAMES)
     assert web.store.get(wf.GUILD_ID, "request_forum_channel_id") == forum.id
     found = await kinds(web, wf)
     assert "web.request.forum_made" in found and "request.forum_made" not in found

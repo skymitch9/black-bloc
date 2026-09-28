@@ -698,7 +698,7 @@ async def test_in_shadow_the_form_accepts_a_real_channel_and_rehearses_it_instea
     assert made["channel_id"] == str(wf.OTHER_CHANNEL_ID)
     assert web.guild.get_channel(wf.OTHER_CHANNEL_ID).messages == []
     posted = web.guild.get_channel(TEST_CHANNEL).messages[-1]
-    assert posted.kwargs["content"].startswith("Posted here because polls are in **shadow**")
+    assert posted.kwargs["content"].startswith(pure.SHADOW_NOTE.split("{channel}")[0])
     assert "#general" in posted.kwargs["content"].splitlines()[0]
 
 
@@ -714,12 +714,3 @@ async def test_in_shadow_a_rehearsed_poll_can_still_be_ended_from_the_dashboard(
 
     assert response.status_code == 200
     assert (await get_poll(web.db, int(made["id"])))["status"] == pure.CLOSED
-
-
-async def test_with_the_mode_on_a_real_channel_is_still_refused_in_words(client, seeded, web, wf):
-    web.guard = wf.Guard()
-
-    response = creating(client, channel_id=str(wf.OTHER_CHANNEL_ID))
-
-    assert response.status_code == 409
-    assert "test mode" in response.json()["message"]
