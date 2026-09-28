@@ -1,13 +1,7 @@
 {
-  "release": "v186",
-  "commit": "ad9381b2",
+  "release": "v187",
+  "commit": "e47070c7",
   "changed_features": [
-    "events",
-    "golive",
-    "guides",
-    "marathon",
-    "mod",
-    "posts",
-    "request"
+    "posts"
   ]
 }
