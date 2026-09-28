@@ -6,7 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from black_bloc import selftest
-from black_bloc.api.selftest_api import NOTHING_TO_PURGE, RUNS_LIMIT
+from black_bloc.api import selftest_api
+from black_bloc.api.selftest_api import NOTHING_TO_PURGE
 from black_bloc.api.server import create_app
 
 
@@ -233,5 +234,12 @@ def test_every_self_test_route_needs_a_staff_session(client):
         assert response.json()["message"], path
 
 
-def test_the_list_is_capped_so_one_page_never_grows_without_bound():
-    assert RUNS_LIMIT == 20
+async def test_the_list_is_capped_so_one_page_never_grows_without_bound(
+    client, sign_in, monkeypatch
+):
+    monkeypatch.setattr(selftest_api, "RUNS_LIMIT", 1)
+    sign_in(client)
+    for _ in range(2):
+        finished(client, client.post("/api/selftest", json={}).json()["run_id"])
+
+    assert len(client.get("/api/selftest").json()["runs"]) == 1

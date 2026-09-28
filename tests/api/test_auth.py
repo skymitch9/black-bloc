@@ -436,12 +436,12 @@ def test_a_flood_of_spoofed_keys_evicts_the_oldest_not_the_one_in_use():
     assert bucket.take("mine", now=0)
     for n in range(BUCKET_MAX_KEYS - 1):
         bucket.take(f"spoofed-{n}", now=0)
-    bucket.take("mine", now=0)
-    for n in range(BUCKET_MAX_KEYS):
-        bucket.take(f"more-{n}", now=0)
+    assert not bucket.take("mine", now=0)
 
-    assert len(bucket._seen) == BUCKET_MAX_KEYS
-    assert "spoofed-0" not in bucket._seen
+    bucket.take("one-more", now=0)
+
+    assert not bucket.take("mine", now=0)
+    assert bucket.take("spoofed-0", now=0)
 
 
 def test_a_forged_forwarded_header_cannot_mint_a_new_bucket(bot):
