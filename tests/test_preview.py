@@ -237,3 +237,34 @@ def test_a_post_whose_blocks_name_the_front_door_previews_it_like_carries_door(b
 
     assert by_block.embeds == by_flag.embeds and by_block.components == by_flag.components
     assert none.embeds == () and none.components == ()
+
+
+# --- the block preview (blocks-convert, 2026-09-28): one drawing per kind, shared --------------
+
+
+def test_the_post_preview_draws_each_block_with_the_block_s_own_renderer(bot, guild):
+    carried = preview.render(bot, guild, "post", None, {"body": "", "blocks": "frontdoor"})
+    alone = preview.render(bot, guild, "frontdoor")
+
+    assert carried.content == ""
+    assert carried.embeds == alone.embeds and carried.components == alone.components
+
+
+def test_a_block_whose_feature_is_off_is_drawn_only_when_asked_for_always(store, guild):
+    off = SimpleNamespace(
+        store=preview.PreviewStore(store, guild.id, {"frontdoor_mode": "off"}), guild=guild
+    )
+
+    on_a_post = preview.render(off, guild, "post", None, {"blocks": "frontdoor"})
+    in_the_section = preview.render(
+        off, guild, "post", None, {"blocks": "frontdoor", "always": "true"}
+    )
+
+    assert on_a_post.embeds == () and on_a_post.components == ()
+    assert len(in_the_section.embeds) == 1 and len(in_the_section.components) == 1
+
+
+def test_an_unknown_block_in_the_sample_draws_nothing_rather_than_failing(bot, guild):
+    found = preview.render(bot, guild, "post", None, {"body": "Hi", "blocks": "nope,frontdoor"})
+
+    assert found.content == "Hi" and len(found.embeds) == 1

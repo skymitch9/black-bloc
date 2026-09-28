@@ -1,6 +1,7 @@
 import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
 import { htmlToDiscordMarkdown } from './clipmd.js';
+import { blockPreview } from './blockpreview.js';
 import { BLOCK_EDITORS } from './blockwords.js';
 import { logsSection } from './logs.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
@@ -14,7 +15,6 @@ import {
   card,
   channelSelect,
   closeDrawer,
-  discordMock,
   el,
   field,
   foldout,
@@ -45,7 +45,6 @@ const LIST_NOTE = 'One message per post. Black Bloc sends it once and edits that
 const NOTHING_YET = 'There are no posts yet.';
 const NO_CHANNEL = 'no channel yet';
 const AMBER_AT = 0.9;
-const POST_FEATURE = 'post';
 const NEED_A_TITLE = 'A post needs a title. Type one and press Create the post again.';
 const POSTED_HERE = 'Posted in {where}.';
 const POSTED_IN_SHADOW = 'The shadow copy is in {where}.';
@@ -85,6 +84,9 @@ const ANY_NUMBER = 'any number of posts';
 const EDIT_BLOCK = 'Edit the {name} block';
 const OPEN_IT = 'Open {title}';
 const ON_NO_POST = 'On no post yet — open a post and use Add a block….';
+const LOOKS_LIKE = 'What it looks like in Discord';
+const LOOKS_LIKE_HELP = 'Drawn by the bot from the saved words, alone — on a post it rides under '
+  + 'the post\'s own message. A list that changes by itself is drawn with sample entries.';
 const STYLE_WORDS = { plain: 'a plain message', embed: 'an embed' };
 // Site words, not posted words: the "every word the bot posts is editable on the site" rule
 // is about what Discord shows. These are the dashboard talking to staff.
@@ -362,14 +364,9 @@ async function postDrawer(payload, known, history) {
 
   // The BOT decides what a post becomes — plain or embed, and where the title is clamped —
   // so the pane asks it rather than rendering a second opinion here. See code-notes.
-  const mock = discordMock({
-    feature: POST_FEATURE,
-    sample: () => ({
-      style: draft.style,
-      title: draft.title,
-      body: draft.body,
-      blocks: (post.blocks || []).map((one) => one.kind).join(','),
-    }),
+  const mock = blockPreview({
+    post: () => ({ style: draft.style, title: draft.title, body: draft.body }),
+    blocks: () => (post.blocks || []).map((one) => one.kind),
   });
   const preview = el('div', { class: 'preview', id: 'post-preview' }, [mock.node, mock.say]);
 
@@ -475,7 +472,7 @@ async function postDrawer(payload, known, history) {
     const found = await run(say, () => api(where(post.slug, `/versions/${version.n}`)), () => '');
     if (!found.ok) return;
     const older = found.found.preview;
-    const back = discordMock({ feature: POST_FEATURE, sample: () => ({ ...older }) });
+    const back = blockPreview({ post: () => ({ ...older }), sample: () => ({ ...older }) });
     const drawn = el('div', { class: 'preview' }, [back.node, back.say]);
     versionView.replaceChildren(
       el('div', { class: 'postboxhead' }, [
@@ -880,6 +877,7 @@ async function blocksSection(payload) {
           { tone: 'quiet' },
         )))
         : sayNothing(ON_NO_POST),
+      blockLook(kind),
       editor
         ? foldout(EDIT_BLOCK.replace('{name}', kind.name), [await editor()])
         : null,
@@ -887,6 +885,16 @@ async function blocksSection(payload) {
   }
   one.body.append(...cards);
   return full(one.node);
+}
+
+/** The block alone, as Discord draws it from its saved words, under its card. */
+function blockLook(kind) {
+  const mock = blockPreview({ blocks: [kind.kind], always: true, lazy: true });
+  return el('div', { class: 'field blocklook', 'data-kind': kind.kind }, [
+    el('span', { class: 'field-label', text: LOOKS_LIKE }),
+    el('div', { class: 'preview' }, [mock.node, mock.say]),
+    el('p', { class: 'field-help', text: LOOKS_LIKE_HELP }),
+  ]);
 }
 
 /** A shared block demoted out of the "On this page" rail so a fold is not a place. */

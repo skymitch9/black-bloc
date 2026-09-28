@@ -1,5 +1,6 @@
 import { saveSetting, send, settings } from './api.js';
-import { bar, button, discordMock, el, field, notice, run } from './ui.js';
+import { blockPreview } from './blockpreview.js';
+import { bar, button, el, field, notice, run } from './ui.js';
 
 // The one editor of a block's words, shared by the Posts page's Blocks section and the Modmail
 // page's Front door card. Every field is a settings key the Settings page also reaches.
@@ -75,7 +76,7 @@ export async function frontDoorWords({ onSaved = null, say = null } = {}) {
   const voice = say || notice();
   const warn = el('p', { class: 'field-help', 'data-tone': 'warn', text: NO_BUTTONS, hidden: true });
   const shows = () => Object.entries(SHOW_KEYS).filter(([, key]) => ticks[key].checked).map(([kind]) => kind);
-  const mock = discordMock({
+  const mock = blockPreview({
     feature: 'frontdoor',
     draft: () => ({
       frontdoor_title: inputs.frontdoor_title.value,

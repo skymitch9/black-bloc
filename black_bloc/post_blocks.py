@@ -89,7 +89,6 @@ class BlockKind:
     turned: Callable[..., Awaitable[tuple[Any, str]]]
     redraw: Callable[[Any, Any], Awaitable[bool]]
     footprint: tuple[int, int, int] = (1, 1, 5)
-    preview: str = ""
 
 
 def door_parts(bot: Any, guild: Any, row: Any) -> Any:
@@ -158,7 +157,6 @@ KINDS: dict[str, BlockKind] = {
         turned=door_turned,
         redraw=door_redraw,
         footprint=(1, 1, 3),
-        preview="frontdoor",
     ),
 }
 
@@ -599,7 +597,6 @@ async def kinds_shape(bot: Any, guild: Any) -> list[dict[str, Any]]:
                 "name_key": found.name_key,
                 "exclusive": found.exclusive,
                 "keys": list(found.keys),
-                "preview": found.preview or key,
                 "on": on,
                 "where": HELD_BY.format(title=on[0]["title"]) if on else HELD_BY_NOBODY,
             }

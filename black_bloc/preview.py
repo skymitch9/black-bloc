@@ -408,6 +408,47 @@ def modmail_relay(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> R
     return made(guild, embeds=[embed])
 
 
+def said_yes(value: Any) -> bool:
+    return str(value or "").strip().lower() in ("true", "1", "on")
+
+
+Drawn = tuple[list[Any], list[list[dict[str, Any]]]]
+
+
+def door_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool) -> Any:
+    if not always and not frontdoor.door_is_on(store, guild.id):
+        return None
+    door, row_of_buttons = door_parts(store, guild)
+    return [door], [row_of_buttons] if row_of_buttons else []
+
+
+BLOCK_DRAWS: dict[str, Callable[..., Drawn | None]] = {
+    "frontdoor": door_block,
+}
+
+
+def block_kinds(sample: dict[str, Any]) -> list[str]:
+    wanted = [one.strip() for one in str(sample.get("blocks") or "").split(",") if one.strip()]
+    if said_yes(sample.get("carries_door")) and "frontdoor" not in wanted:
+        wanted.append("frontdoor")
+    return list(dict.fromkeys(wanted))
+
+
+def drawn_blocks(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Drawn:
+    """Every block under the post, in order, each kind drawn by its own feature's code."""
+    always = said_yes(sample.get("always"))
+    embeds: list[Any] = []
+    rows: list[list[dict[str, Any]]] = []
+    for kind in block_kinds(sample):
+        draw = BLOCK_DRAWS.get(kind)
+        found = draw(bot, guild, store, sample, always) if draw is not None else None
+        if found is None:
+            continue
+        embeds.extend(found[0])
+        rows.extend(found[1])
+    return embeds, rows
+
+
 def post_message(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
     row = {
         "style": str(sample.get("style") or posts.PLAIN),
@@ -417,18 +458,10 @@ def post_message(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Re
     found = posts.render_message(row)
     embed = found.get("embed")
     embeds = [embed] if embed is not None else []
-    rows = []
-    blocks = [one.strip() for one in str(sample.get("blocks") or "").split(",") if one.strip()]
-    carrying = "frontdoor" in blocks or str(sample.get("carries_door") or "").strip().lower() in (
-        "true",
-        "1",
-        "on",
+    blocks, rows = drawn_blocks(bot, guild, store, sample)
+    return made(
+        guild, content=found.get("content") or "", embeds=embeds + blocks, components=rows
     )
-    if carrying and frontdoor.door_is_on(store, guild.id):
-        door, row_of_buttons = door_parts(store, guild)
-        embeds.append(door)
-        rows.append(row_of_buttons)
-    return made(guild, content=found.get("content") or "", embeds=embeds, components=rows)
 
 
 def birthday(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
@@ -574,6 +607,7 @@ RENDERERS: dict[str, Renderer] = {
                 "body": "**Welcome!** Start with the pinned guide, then say hello.",
                 "carries_door": False,
                 "blocks": "",
+                "always": "",
             },
         ),
         Renderer(

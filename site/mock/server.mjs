@@ -5521,7 +5521,7 @@ const PREVIEW_SAMPLES = {
   request_card: { what: '', why: '' },
   event_card: { title: '', description: '' },
   modmail_relay: { name: '', text: '' },
-  post: { style: 'plain', title: '', body: '', carries_door: false, blocks: '' },
+  post: { style: 'plain', title: '', body: '', carries_door: false, blocks: '', always: '' },
   birthday: { name: 'Casey', age: '' },
   poll_card: { question: '', channel: '#announcements' },
   minutes_notes: { notes: '' },
@@ -5705,13 +5705,18 @@ const PREVIEW_DRAW = {
       ? [{ title: sample.title || '', description: sample.body || '', fields: [] }]
       : [];
     const content = String(sample.style) === 'embed' ? '' : (sample.body || '');
-    const carrying = ['true', '1', 'on'].includes(String(sample.carries_door).toLowerCase())
-      || String(sample.blocks || '').split(',').map((one) => one.trim()).includes('frontdoor');
-    if (!carrying || String(read('frontdoor_mode') || 'off') === 'off') {
-      return embeds.length ? previewMade(content, embeds) : previewMade(content);
+    const yes = (value) => ['true', '1', 'on'].includes(String(value).toLowerCase());
+    const kinds = String(sample.blocks || '').split(',').map((one) => one.trim()).filter(Boolean);
+    if (yes(sample.carries_door) && !kinds.includes('frontdoor')) kinds.push('frontdoor');
+    const cards = [...embeds];
+    const rows = [];
+    for (const kind of [...new Set(kinds)]) {
+      const drawn = PREVIEW_BLOCK_DRAWS[kind] ? PREVIEW_BLOCK_DRAWS[kind](read, sample, yes(sample.always)) : null;
+      if (!drawn) continue;
+      cards.push(...drawn.embeds);
+      rows.push(...drawn.components);
     }
-    const door = PREVIEW_DRAW.frontdoor(read);
-    return previewMade(content, [...embeds, ...door.embeds], door.components);
+    return previewMade(content, cards, rows);
   },
   birthday(read, sample) {
     const text = String(read('birthday_template') || '')
@@ -5737,6 +5742,14 @@ const PREVIEW_DRAW = {
       description: sample.notes || 'Agreed to ship the guide index on Friday.',
       fields: [{ name: 'Where', value: 'nowhere yet', inline: true }],
     }]);
+  },
+};
+
+// The twin of black_bloc/preview.py:BLOCK_DRAWS — each block drawn by its own feature's draw.
+const PREVIEW_BLOCK_DRAWS = {
+  frontdoor(read, sample, always) {
+    if (!always && String(read('frontdoor_mode') || 'off') === 'off') return null;
+    return PREVIEW_DRAW.frontdoor(read);
   },
 };
 
