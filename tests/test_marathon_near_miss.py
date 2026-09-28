@@ -1,6 +1,8 @@
 import json
 import re
 
+import pytest
+
 from black_bloc import marathon_near_miss as mnm
 
 USERS = {"cassasaur": 1, "peasplays": 2, "gz_hero": 3, "bobbeigh": 4}
@@ -10,12 +12,15 @@ def person(name, login=None, parts=("runner",), user_id=None):
     return {"name": name, "login": login, "parts": list(parts), "user_id": user_id}
 
 
-def test_an_exact_login_matches_whatever_the_case():
-    assert mnm.exact_match(person("Cass", "CassaSaur"), USERS) == ("cassasaur", 1)
-
-
-def test_an_exact_schedule_name_matches():
-    assert mnm.exact_match(person("Bobbeigh", "bobbeightv"), USERS) == ("bobbeigh", 4)
+@pytest.mark.parametrize(
+    ("who", "wanted"),
+    [
+        pytest.param(person("Cass", "CassaSaur"), ("cassasaur", 1), id="login-any-case"),
+        pytest.param(person("Bobbeigh", "bobbeightv"), ("bobbeigh", 4), id="schedule-name"),
+    ],
+)
+def test_an_exact_login_or_schedule_name_matches(who, wanted):
+    assert mnm.exact_match(who, USERS) == wanted
 
 
 def test_fuzzy_near_misses_do_not_match():

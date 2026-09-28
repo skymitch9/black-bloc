@@ -432,13 +432,24 @@ def test_read_url_knows_every_oengus_form(url, wanted):
     assert ms.read_url(url) == wanted
 
 
-def test_an_oengus_marathon_has_a_schedule_page_and_a_site_word():
+@pytest.mark.parametrize(
+    ("source", "site", "word"),
+    [
+        ("oengus", "oengus.io", "Oengus"),
+        ("fastestfurs", "fastestfurs.com", "Fastest Furs"),
+        ("ladyarcaders", "ladyarcaders.com", "Lady Arcaders"),
+    ],
+)
+def test_a_non_tracker_source_names_its_site_and_its_word(source, site, word):
+    assert ms.site_of(source) == site
+    assert ms.SOURCE_WORDS[source] == word
+    assert source in ms.SOURCES and source not in ms.TRACKER_SOURCES
+
+
+def test_an_oengus_marathon_has_a_schedule_page():
     assert ms.schedule_page("oengus", "ss4c8") == "https://oengus.io/marathon/ss4c8/schedule"
     assert ms.schedule_page("oengus", "ss4c8/2") == "https://oengus.io/marathon/ss4c8/schedule/2"
     assert ms.read_url(ms.schedule_page("oengus", "ss4lhs26")) == ("oengus", "ss4lhs26")
-    assert ms.site_of("oengus") == "oengus.io"
-    assert ms.SOURCE_WORDS["oengus"] == "Oengus"
-    assert "oengus" in ms.SOURCES and "oengus" not in ms.TRACKER_SOURCES
 
 
 @pytest.mark.parametrize(
@@ -452,12 +463,9 @@ def test_read_url_knows_the_fastestfurs_forms(url, wanted):
     assert ms.read_url(url) == wanted
 
 
-def test_a_fastestfurs_event_has_a_schedule_page_and_a_site_word():
+def test_a_fastestfurs_event_has_a_schedule_page():
     assert ms.schedule_page("fastestfurs", "21") == "https://fastestfurs.com/schedule/21"
     assert ms.read_url(ms.schedule_page("fastestfurs", "21")) == ("fastestfurs", "21")
-    assert ms.site_of("fastestfurs") == "fastestfurs.com"
-    assert ms.SOURCE_WORDS["fastestfurs"] == "Fastest Furs"
-    assert "fastestfurs" in ms.SOURCES and "fastestfurs" not in ms.TRACKER_SOURCES
 
 
 @pytest.mark.parametrize(
@@ -630,13 +638,10 @@ def test_read_url_refuses_the_other_lady_arcaders_pages(url):
     assert ms.read_url(url) is None
 
 
-def test_a_lady_arcaders_event_has_a_schedule_page_and_its_words():
+def test_a_lady_arcaders_event_has_a_schedule_page():
     assert ms.schedule_page("ladyarcaders", "24") == "https://ladyarcaders.com/events/24/schedule/"
     assert ms.schedule_page("ladyarcaders", "x") == ""
     assert ms.read_url(ms.schedule_page("ladyarcaders", "25")) == ("ladyarcaders", "25")
-    assert ms.site_of("ladyarcaders") == "ladyarcaders.com"
-    assert ms.SOURCE_WORDS["ladyarcaders"] == "Lady Arcaders"
-    assert "ladyarcaders" in ms.SOURCES and "ladyarcaders" not in ms.TRACKER_SOURCES
 
 
 async def test_a_text_read_goes_through_its_own_request_and_a_non_text_body_is_empty():
