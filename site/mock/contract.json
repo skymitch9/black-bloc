@@ -5075,6 +5075,44 @@
     },
     {
       "method": "GET",
+      "path": "/api/marathons/feeds/{feed_hotfix_id}/hotfix-shows",
+      "read_by": [
+        "marathons-section.js (events.html) the GDQ Hotfix feed's drawer — the show picker"
+      ],
+      "shape": "object",
+      "keys": [
+        "feed_id",
+        "shows",
+        "missing",
+        "track_people",
+        "timezone",
+        "sheet_url",
+        "read_at",
+        "stale",
+        "trouble",
+        "blocks"
+      ],
+      "rows": {
+        "blocks": [
+          "ref",
+          "show",
+          "key",
+          "first",
+          "last",
+          "starts_at",
+          "ends_at",
+          "starts_local",
+          "days",
+          "hosts",
+          "runs",
+          "listed",
+          "tracked",
+          "because"
+        ]
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/marathons",
       "read_by": [
         "marathons-section.js (events.html) marathon list"

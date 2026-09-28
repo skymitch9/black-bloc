@@ -1782,10 +1782,10 @@ async def test_the_picker_answers_every_block_and_why_each_is_tracked(bot, cog):
     assert len(value["blocks"]) == 11
     tracked = {one["show"]: one["because"] for one in value["blocks"] if one["tracked"]}
     assert tracked == {
-        "Hidden Heroes": [{"kind": "hosts", "name": "anarchy", "user_id": ANARCHY}],
+        "Hidden Heroes": [{"kind": "hosts", "name": "anarchy", "user_id": str(ANARCHY)}],
         "GDQueer": [
             {"kind": "listed"},
-            {"kind": "runs", "name": "The_Mathcat", "user_id": MATHCAT},
+            {"kind": "runs", "name": "The_Mathcat", "user_id": str(MATHCAT)},
         ],
     }
 

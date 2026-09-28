@@ -98,6 +98,7 @@ const IDS = {
   // horaro-events-owner: 12 is Fast Pace, the horaro.net events feed, so its Owner and Search
   // words PATCH reaches a feed that takes them (any other kind answers 409 in words).
   feed_horaro_events_id: '12',
+  feed_hotfix_id: '40',
   // Event modes: AGDQ 2027 makes both; runs 5 and 7 carry their own events, so Unlink reaches
   // 7 and Make it now reaches run 9 (ours through the pairing, no event of its own yet).
   marathon_linked_run_id: '7',

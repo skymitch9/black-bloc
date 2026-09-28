@@ -504,7 +504,10 @@ def picker_rows(
                 "runs": len(one.runs),
                 "listed": one.key in wanted,
                 "tracked": bool(why),
-                "because": why,
+                "because": [
+                    one | {"user_id": str(one["user_id"])} if "user_id" in one else one
+                    for one in why
+                ],
             }
         )
     return rows
