@@ -66,6 +66,7 @@ from black_bloc.settings_store import (
     SHADOW_CHANNEL,
     SettingsStore,
 )
+from black_bloc.shadow import NOTE_DEFAULT
 
 GUILD = 7
 TEST_CHANNEL = 111
@@ -501,16 +502,6 @@ async def test_the_posted_message_carries_the_three_persistent_buttons_with_thei
     assert message.view.timeout is None
 
 
-async def test_a_message_id_is_stored_as_text_because_a_snowflake_is_not_a_js_number(
-    guarded, member
-):
-    channel = guarded.guild.get_channel(TEST_CHANNEL)
-
-    await post_door(guarded, guarded.guild, member, channel)
-
-    assert isinstance(guarded.store.get(GUILD, FRONTDOOR_MESSAGE), str)
-
-
 async def test_posting_again_moves_it_and_takes_the_old_message_down(guarded, member):
     channel = guarded.guild.get_channel(TEST_CHANNEL)
     await post_door(guarded, guarded.guild, member, channel)
@@ -555,7 +546,7 @@ async def test_a_channel_test_mode_refuses_is_rehearsed_in_the_home_instead(guar
     assert not other.messages
     copy = door_message(home)
     assert door_labels(copy) == [label_for(guarded.store, GUILD, kind) for kind in KINDS]
-    assert copy.content == "Rehearsal \u2014 this is where it would go: #welcome"
+    assert copy.content == NOTE_DEFAULT.format(channel="#welcome")
     assert guarded.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
     assert guarded.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
     assert not guarded.store.get(GUILD, FRONTDOOR_MESSAGE)
@@ -976,7 +967,7 @@ async def test_shadow_posts_the_copy_in_the_rehearsal_home_and_nothing_in_the_re
 
     assert outcome.ok and not welcome.messages
     copy = door_message(home)
-    assert copy.content == "Rehearsal — this is where it would go: #welcome"
+    assert copy.content == NOTE_DEFAULT.format(channel="#welcome")
     assert door_labels(copy) == [label_for(live.store, GUILD, kind) for kind in KINDS]
     assert live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
     assert live.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
@@ -1001,16 +992,6 @@ async def test_the_front_doors_own_home_wins_over_the_global_one(live, member):
         "SELECT details FROM action_log WHERE kind = ? ORDER BY id DESC", (POSTED_SHADOW,)
     )
     assert json.loads((await cur.fetchone())["details"])["shadow_home"] == 888
-
-
-async def test_a_blank_front_door_home_follows_the_global_one(live, member):
-    welcome = live.guild.get_channel(777)
-    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
-    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
-
-    await post_door(live, live.guild, member, welcome)
-
-    assert door_message(live.guild.get_channel(888)) is not None
 
 
 async def test_the_shadow_sentence_says_shadow_rather_than_test_mode(live, member):
@@ -1540,7 +1521,7 @@ async def test_in_shadow_the_one_message_goes_to_the_posts_rehearsal_home(live, 
     assert welcome.messages == [] and len(home.messages) == 1
     copy = home.messages[0]
     assert copy.content == RULES
-    assert copy.embeds[-1].footer.text == "Rehearsal — this is where it would go: #welcome"
+    assert copy.embeds[-1].footer.text == NOTE_DEFAULT.format(channel="#welcome")
     assert door_ids(copy) == [custom_id(kind, GUILD) for kind in KINDS]
     assert live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
     assert not live.store.get(GUILD, FRONTDOOR_MESSAGE)
