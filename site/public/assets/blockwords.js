@@ -148,7 +148,96 @@ export async function frontDoorWords({ onSaved = null, say = null } = {}) {
   ]);
 }
 
+const VOICE_WORDS = {
+  title: 'tempvoice_block_title',
+  text: 'tempvoice_block_text',
+  lobby: 'tempvoice_block_lobby_label',
+  controls: 'tempvoice_block_controls_label',
+};
+const VOICE_SHOW = 'tempvoice_block_show_controls';
+const VOICE_REDRAW = '/api/post-blocks/tempvoice/redraw';
+const LOBBY_HELP = 'One button per join-to-create lobby (at most four); {lobby} is the lobby\'s '
+  + 'name, and the button opens that lobby in Discord. At most 80 characters.';
+const CONTROLS_HELP = 'Opens the same /voice panel a member gets by typing /voice — every rule '
+  + 'it has still applies. Join-to-create and the controls in each room are unchanged.';
+const VOICE_PREVIEW_HELP = 'The lobbies are the ones set up on the Temp voice page; with none '
+  + 'set up yet, a sample lobby is drawn.';
+
+/** The temp voice lobby block's words: heading, line, the lobby and controls labels. */
+export async function voiceLobbyWords({ onSaved = null, say = null } = {}) {
+  const specs = specsByKey(await settings(true));
+  const was = {};
+  const inputs = {};
+  for (const [name, key] of Object.entries(VOICE_WORDS)) {
+    was[key] = textOf(specs[key]);
+    inputs[key] = name === 'text'
+      ? el('textarea', { class: 'input area', rows: '3', id: `vw-${name}` })
+      : el('input', { class: 'input', type: 'text', id: `vw-${name}`, maxlength: name === 'title' ? '256' : '80' });
+    inputs[key].value = was[key];
+  }
+  inputs[VOICE_WORDS.lobby].removeAttribute('maxlength');
+  was[VOICE_SHOW] = isOn(specs[VOICE_SHOW]);
+  const tick = el('input', { class: 'input switch', type: 'checkbox', id: 'vw-show-controls' });
+  tick.checked = was[VOICE_SHOW];
+
+  const voice = say || notice();
+  const mock = blockPreview({
+    feature: 'block_tempvoice',
+    draft: () => Object.fromEntries(Object.values(VOICE_WORDS).map((key) => [key, inputs[key].value])),
+    sample: () => ({ controls: tick.checked ? 'on' : 'off' }),
+  });
+  for (const node of [...Object.values(inputs), tick]) {
+    node.addEventListener(node.type === 'checkbox' ? 'change' : 'input', () => mock.repaint());
+  }
+
+  const changed = () => [
+    ...Object.values(VOICE_WORDS)
+      .filter((key) => inputs[key].value !== was[key])
+      .map((key) => [key, inputs[key].value]),
+    ...(tick.checked !== was[VOICE_SHOW] ? [[VOICE_SHOW, tick.checked]] : []),
+  ];
+
+  const save = button(SAVE_IT, async () => {
+    const wanted = changed();
+    if (!wanted.length) {
+      voice.say(NOTHING_CHANGED, 'warn');
+      return;
+    }
+    const done = await run(voice, async () => {
+      for (const [key, value] of wanted) {
+        await saveSetting(key, value);
+        was[key] = value;
+      }
+      return send(VOICE_REDRAW, 'POST', {});
+    }, (found) => found?.message || SAVED_FALLBACK);
+    if (done.ok && onSaved) onSaved(done.found);
+  }, { tone: 'warn', small: false });
+
+  return el('div', { class: 'blockwords' }, [
+    el('div', { class: 'formrow' }, [
+      field('Heading', inputs[VOICE_WORDS.title]),
+      field('Line under it', inputs[VOICE_WORDS.text]),
+    ]),
+    el('div', { class: 'formrow' }, [
+      field('Lobby button', inputs[VOICE_WORDS.lobby], LOBBY_HELP),
+      field('Voice controls button', inputs[VOICE_WORDS.controls]),
+    ]),
+    el('div', { class: 'field' }, [
+      el('label', { class: 'switchline' }, [
+        tick,
+        el('span', { class: 'field-label', text: 'Carry the voice controls button' }),
+      ]),
+      el('p', { class: 'field-help', text: CONTROLS_HELP }),
+    ]),
+    el('div', { class: 'blockwords-preview' }, [mock.node, mock.say]),
+    el('p', { class: 'field-help', text: VOICE_PREVIEW_HELP }),
+    bar([save]),
+    voice,
+  ]);
+}
+
 /** Each block kind's editor, by the kind's key; a new kind adds its editor here. */
 export const BLOCK_EDITORS = {
   frontdoor: frontDoorWords,
+  tempvoice: voiceLobbyWords,
 };

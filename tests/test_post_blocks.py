@@ -83,7 +83,7 @@ async def logged(db):
 def test_the_front_door_is_the_first_kind_and_goes_on_one_post_at_a_time():
     found = post_blocks.KINDS["frontdoor"]
 
-    assert list(post_blocks.KINDS) == ["frontdoor"]
+    assert list(post_blocks.KINDS) == ["frontdoor", "tempvoice"]
     assert found.exclusive and found.cache_column == "carries_door"
     assert found.parts is post_blocks.door_parts
     assert {"frontdoor_title", "frontdoor_text", "frontdoor_ticket_label", "rehearsal_note"} <= set(
@@ -534,3 +534,42 @@ async def test_the_sweep_redraws_a_carrier_the_door_does_not_ride(bot, guild, tw
     assert await post_blocks.keep_drawn(bot, guild) == 1
 
     assert message.embeds[0].title == "Sign in, please"
+
+
+# --- the temp voice lobby block (blocks-convert) ------------------------------------------------
+
+
+def test_the_temp_voice_lobby_is_a_kind_any_number_of_posts_may_carry():
+    found = post_blocks.KINDS["tempvoice"]
+
+    assert not found.exclusive and found.cache_column == ""
+    assert found.name_key == "posts_block_tempvoice_name"
+    assert found.parts is post_blocks.voice_parts
+    assert "tempvoice_block_title" in found.keys and "tempvoice_block_show_controls" in found.keys
+
+
+async def test_a_post_carrying_the_lobby_block_goes_out_with_the_temp_voice_card(
+    bot, guild, room
+):
+    row = await a_room_post(bot)
+    await bot.store.set(GUILD, "tempvoice_mode", "on")
+    outcome = await post_blocks.add_block(bot, guild, row, STAFF, "tempvoice")
+    assert outcome.ok, outcome.message
+
+    await posts.publish_post(bot, guild, await fresh_row(bot, row), STAFF)
+
+    sent = room.messages[0]
+    assert sent.content == "Hello."
+    assert [one.title for one in sent.embeds] == ["A voice channel of your own"]
+    assert [one.custom_id for one in sent.view.children] == [f"tvblock:open:{GUILD}"]
+    assert (await post_blocks.drawn_of(bot.db, int(row["id"])))["tempvoice"]
+    assert not posts.carries_door(await fresh_row(bot, row))
+
+
+async def test_the_shipped_seed_attaches_the_lobby_block_to_nothing(bot, guild):
+    await posts.seed_posts(bot, guild)
+
+    rows = await post_blocks.blocks_in(bot.db, GUILD)
+
+    assert "tempvoice" not in [str(one["kind"]) for one in rows]
+    assert all("tempvoice" not in entry.get("blocks", []) for entry in posts.seed_entries())

@@ -15,6 +15,7 @@ from . import birthdays, frontdoor, minutes, modmail, polls, posts, shadow, spot
 from . import events as ev
 from . import golive as gl
 from . import requests as reqs
+from . import tempvoice as voice
 from .settings_store import (
     GOLIVE_COSTREAM_AUTHOR_KEY,
     GOLIVE_COSTREAM_TEMPLATE_KEY,
@@ -422,8 +423,41 @@ def door_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always:
     return [door], [row_of_buttons] if row_of_buttons else []
 
 
+SAMPLE_LOBBY_ID = 424242424242424242
+
+
+def voice_lobbies(bot: Any, guild: Any, store: Any) -> list[tuple[int, str]]:
+    """The lobbies the block would link, or one sample lobby while none is set up."""
+    from .cogs.community.tempvoice import block_lobbies
+
+    found = block_lobbies(PreviewBot(bot, store), guild)
+    if found:
+        return found
+    name = str(store.get(guild.id, "tempvoice_creator_name") or "") or "join to create"
+    return [(SAMPLE_LOBBY_ID, name)]
+
+
+def voice_parts(bot: Any, guild: Any, store: Any, controls: Any = "") -> Drawn:
+    look = voice.block_look(store, guild.id, voice_lobbies(bot, guild, store), controls=controls)
+    embed = discord.Embed(title=look.title, description=look.text)
+    row = [button(label, "primary", url=url) for label, url in look.buttons]
+    return [embed], [row] if row else []
+
+
+def voice_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool) -> Any:
+    if not always and not voice.makes_rooms(store.get(guild.id, "tempvoice_mode")):
+        return None
+    return voice_parts(bot, guild, store)
+
+
+def voice_lobby(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
+    embeds, rows = voice_parts(bot, guild, store, sample.get("controls"))
+    return made(guild, embeds=embeds, components=rows)
+
+
 BLOCK_DRAWS: dict[str, Callable[..., Drawn | None]] = {
     "frontdoor": door_block,
+    "tempvoice": voice_block,
 }
 
 
@@ -609,6 +643,19 @@ RENDERERS: dict[str, Renderer] = {
                 "blocks": "",
                 "always": "",
             },
+        ),
+        Renderer(
+            "block_tempvoice",
+            "The temp voice lobby block",
+            "posts.html",
+            voice_lobby,
+            keys=(
+                voice.TEMPVOICE_BLOCK_TITLE,
+                voice.TEMPVOICE_BLOCK_TEXT,
+                voice.TEMPVOICE_BLOCK_LOBBY_LABEL,
+                voice.TEMPVOICE_BLOCK_CONTROLS_LABEL,
+            ),
+            sample={"controls": ""},
         ),
         Renderer(
             "birthday",

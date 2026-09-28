@@ -579,7 +579,8 @@ async def test_the_blocks_section_lists_every_kind_and_the_redraw_answers_in_wor
     redraw = client.post("/api/post-blocks/frontdoor/redraw", json={})
     unknown = client.post("/api/post-blocks/jukebox/redraw", json={})
 
-    assert [one["kind"] for one in index["kinds"]] == ["frontdoor"]
+    assert [one["kind"] for one in index["kinds"]] == ["frontdoor", "tempvoice"]
+    assert index["kinds"][1]["where"] == "on no post yet"
     assert index["kinds"][0]["where"] == "on A notice"
     assert redraw.status_code == 200 and redraw.json()["kind"] == "frontdoor"
     assert "Front door" in redraw.json()["message"]

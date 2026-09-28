@@ -593,7 +593,8 @@ async def test_the_card_offers_add_a_block_and_a_remove_for_each_block_it_has(bo
     embed_two, two = await cog.build_card(bot, bot.guild, carrying)
 
     assert posts.ADD_A_BLOCK in placeholders(one) and "Remove Front door" not in labels(one)
-    assert "Remove Front door" in labels(two) and block_pick(two) is None
+    assert "Remove Front door" in labels(two)
+    assert [option.value for option in block_pick(two).options] == ["tempvoice"]
     assert "Blocks: Front door" in embed_two.description
     assert "Blocks:" not in embed_one.description
     assert all(

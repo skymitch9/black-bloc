@@ -24,12 +24,20 @@ from .settings_store import (
     FRONTDOOR_TITLE,
     POSTS_BLOCK_FRONTDOOR_NAME,
     POSTS_BLOCK_FRONTDOOR_NAME_DEFAULT,
+    POSTS_BLOCK_TEMPVOICE_NAME,
+    POSTS_BLOCK_TEMPVOICE_NAME_DEFAULT,
     REHEARSAL_NOTE,
+    TEMPVOICE_BLOCK_CONTROLS_LABEL,
+    TEMPVOICE_BLOCK_LOBBY_LABEL,
+    TEMPVOICE_BLOCK_SHOW_CONTROLS,
+    TEMPVOICE_BLOCK_TEXT,
+    TEMPVOICE_BLOCK_TITLE,
 )
 
 log = logging.getLogger(__name__)
 
 FRONTDOOR = "frontdoor"
+TEMPVOICE = "tempvoice"
 NAME_MAX = 80
 MAX_EMBEDS = 10
 MAX_ROWS = 5
@@ -126,6 +134,12 @@ async def blocks_turned(
     return fresh, DRAWN_NOW_SAID if wanted else DRAWN_OFF_SAID
 
 
+def voice_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .cogs.community.tempvoice import block_parts
+
+    return block_parts(bot, guild, row)
+
+
 async def blocks_redraw(bot: Any, guild: Any) -> bool:
     finder = getattr(bot, "get_cog", None)
     cog = finder("FrontDoor") if finder is not None else None
@@ -157,6 +171,24 @@ KINDS: dict[str, BlockKind] = {
         turned=door_turned,
         redraw=door_redraw,
         footprint=(1, 1, 3),
+    ),
+    TEMPVOICE: BlockKind(
+        key=TEMPVOICE,
+        name_key=POSTS_BLOCK_TEMPVOICE_NAME,
+        name_default=POSTS_BLOCK_TEMPVOICE_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(
+            TEMPVOICE_BLOCK_TITLE,
+            TEMPVOICE_BLOCK_TEXT,
+            TEMPVOICE_BLOCK_LOBBY_LABEL,
+            TEMPVOICE_BLOCK_CONTROLS_LABEL,
+            TEMPVOICE_BLOCK_SHOW_CONTROLS,
+        ),
+        parts=voice_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 1, 5),
     ),
 }
 
@@ -624,6 +656,7 @@ __all__ = [
     "needs_redraw",
     "redraw_post",
     "set_drawn",
+    "voice_parts",
     "too_big",
     "BLOCK_ADDED_SAID",
     "BLOCK_ALREADY_SAID",
@@ -631,6 +664,7 @@ __all__ = [
     "BLOCK_NOT_ON",
     "BLOCK_REMOVED_SAID",
     "FRONTDOOR",
+    "TEMPVOICE",
     "KINDS",
     "ORDERED_LATER_SAID",
     "ORDERED_SAID",

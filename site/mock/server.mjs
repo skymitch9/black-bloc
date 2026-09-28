@@ -406,6 +406,11 @@ const SETTING_SPECS = [
   ['tempvoice_name_template', 'text', "{user}'s room", "{user}'s room", 'what a spawned channel is called; {user} is the member'],
   ['tempvoice_creator_name', 'text', 'join to create a channel', 'join to create a channel', 'what the join-to-create channel is called'],
   ['tempvoice_allowed_role_id', 'role', null, null, 'only members with this role get a temporary channel'],
+  ['tempvoice_block_title', 'text', 'A voice channel of your own', 'A voice channel of your own', 'the heading on the temp voice lobby block, when a post carries it; blank restores the shipped wording'],
+  ['tempvoice_block_text', 'text', "Join a lobby below and Black Bloc makes you a voice channel of your own and moves you in. Its controls are posted in that channel's chat, and it goes away once everyone has left. Type /voice any time for the same controls.", "Join a lobby below and Black Bloc makes you a voice channel of your own and moves you in. Its controls are posted in that channel's chat, and it goes away once everyone has left. Type /voice any time for the same controls.", 'the line under that heading, explaining join-to-create; blank restores the shipped wording'],
+  ['tempvoice_block_lobby_label', 'text', '🔊 {lobby}', '🔊 {lobby}', "what each lobby's button on the block says, at most 80 characters; {lobby} is the lobby's name. The button opens that lobby in Discord. Blank restores the speaker and the name"],
+  ['tempvoice_block_controls_label', 'text', 'My voice channel', 'My voice channel', "what the block's button that opens the /voice panel says, at most 80 characters; blank restores the shipped wording"],
+  ['tempvoice_block_show_controls', 'bool', true, true, 'true puts the button that opens the /voice panel on the block, beside the lobby buttons; false leaves only the lobbies. /voice itself always works'],
   ['tempvoice_room_overwrites', 'enum', 'lobby', 'lobby', "what a new room's permissions start from: lobby (the join-to-create channel's own — a staff-only lobby makes staff-only rooms) or category (the category's, as before)", ['lobby', 'category']],
   ['honeypot_mode', 'enum', 'shadow', 'off', 'off, shadow (log only) or on (ban whoever posts in the trap)', ['off', 'shadow', 'on']],
   ['honeypot_channel_ids', 'channels', ['800000000000000007'], [], 'the trap channels; Setup… on /honeypot fills this in'],
@@ -924,6 +929,7 @@ const SETTING_SPECS = [
   ['posts_panel_minutes', 'int', 10, 10, "minutes the /posts panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440, 1],
   ['posts_versions_keep', 'int', 0, 0, 'how many saved versions of a post are kept; 0 (the default) keeps every one of them, and 1 to 500 trims the oldest after each save. History is cheap and a lost version is not, so raise it rather than lower it. The only remaining version is never trimmed, whatever the number says', null, 500, 0],
   ['posts_versions_summary_chars', 'int', 80, 80, 'how many characters of a version’s message are shown on its row in the Versions list, 20 to 300; 80 by default. It is one line beside View and Use this version — the whole message is in View', null, 300, 20],
+  ['posts_block_tempvoice_name', 'text', 'Temp voice lobby', 'Temp voice lobby', "what the temp voice lobby block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Temp voice lobby. Members never see it"],
   ['posts_block_frontdoor_name', 'text', 'Front door', 'Front door', "what the front-door block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Front door. Members never see it"],
   // Guides (G1) — black_bloc/settings_store.py owns them; these are the mock's copy.
   ['guides_mode', 'enum', 'on', 'on', 'on to give members the Guides page and to put a guide link beside a command in /help; off hides both. Staff can still open a guide\u2019s web address while it is off, and the page says so. There is no slash command to hide either way', ['off', 'on']],
@@ -2786,6 +2792,13 @@ const BLOCK_KINDS = [
     name_default: 'Front door',
     exclusive: true,
     keys: ['frontdoor_title', 'frontdoor_text', 'frontdoor_ticket_label', 'frontdoor_request_label', 'frontdoor_event_label', 'frontdoor_show_ticket', 'frontdoor_show_request', 'frontdoor_show_event', 'rehearsal_note'],
+  },
+  {
+    kind: 'tempvoice',
+    name_key: 'posts_block_tempvoice_name',
+    name_default: 'Temp voice lobby',
+    exclusive: false,
+    keys: ['tempvoice_block_title', 'tempvoice_block_text', 'tempvoice_block_lobby_label', 'tempvoice_block_controls_label', 'tempvoice_block_show_controls'],
   },
 ];
 const BLOCK_UNKNOWN = 'There is no block called **{kind}**, so nothing was changed. Pick one from the **Add a block…** list.';
@@ -5506,6 +5519,7 @@ const PREVIEW_FEATURES = [
   ['event_card', "An event's card", 'events.html', []],
   ['modmail_relay', 'A relayed modmail message', 'modmail.html', []],
   ['post', 'A post', 'posts.html', []],
+  ['block_tempvoice', 'The temp voice lobby block', 'posts.html', ['tempvoice_block_title', 'tempvoice_block_text', 'tempvoice_block_lobby_label', 'tempvoice_block_controls_label']],
   ['birthday', 'A birthday announcement', 'birthdays.html', ['birthday_template']],
   ['poll_card', 'A poll, and the line its rehearsal copy carries', 'polls.html', ['poll_shadow_note']],
   ['minutes_notes', 'What minutes post when a meeting starts and ends', 'minutes.html', ['minutes_start_text', 'minutes_notes_title']],
@@ -5526,6 +5540,7 @@ const PREVIEW_SAMPLES = {
   poll_card: { question: '', channel: '#announcements' },
   minutes_notes: { notes: '' },
   frontdoor: { shows: '' },
+  block_tempvoice: { controls: '' },
   ticket_button: {},
 };
 
@@ -5718,6 +5733,24 @@ const PREVIEW_DRAW = {
     }
     return previewMade(content, cards, rows);
   },
+  block_tempvoice(read, sample = {}) {
+    const word = (key, fallback) => String(read(key) || '').trim() || fallback;
+    const ids = (read('tempvoice_creator_ids') || []).map(String);
+    const lobbies = ids.map((id) => CHANNELS.find((one) => one.id === id)).filter(Boolean).slice(0, 4);
+    const shown = lobbies.length ? lobbies : [{ id: '424242424242424242', name: word('tempvoice_creator_name', 'join to create') }];
+    const label = word('tempvoice_block_lobby_label', '🔊 {lobby}');
+    const row = shown.map((one) => previewButton(label.split('{lobby}').join(one.name).slice(0, 80), 'primary', `https://discord.com/channels/${REVIEW_GUILD_ID}/${one.id}`));
+    const tick = String(sample.controls || '').trim().toLowerCase();
+    const stored = !['false', '0', 'off', 'no'].includes(String(read('tempvoice_block_show_controls')).trim().toLowerCase());
+    if (tick ? ['on', 'true', '1'].includes(tick) : stored) {
+      row.push(previewButton(word('tempvoice_block_controls_label', 'My voice channel').slice(0, 80), 'primary'));
+    }
+    return previewMade('', [{
+      title: word('tempvoice_block_title', 'A voice channel of your own'),
+      description: word('tempvoice_block_text', ''),
+      fields: [],
+    }], [row]);
+  },
   birthday(read, sample) {
     const text = String(read('birthday_template') || '')
       .replace('{name}', sample.name || 'Casey')
@@ -5750,6 +5783,10 @@ const PREVIEW_BLOCK_DRAWS = {
   frontdoor(read, sample, always) {
     if (!always && String(read('frontdoor_mode') || 'off') === 'off') return null;
     return PREVIEW_DRAW.frontdoor(read);
+  },
+  tempvoice(read, sample, always) {
+    if (!always && String(read('tempvoice_mode') || 'off') === 'off') return null;
+    return PREVIEW_DRAW.block_tempvoice(read);
   },
 };
 

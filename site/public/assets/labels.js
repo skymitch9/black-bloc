@@ -340,6 +340,11 @@ export const LABELS = {
   tempvoice_allowed_role_id: 'Who is allowed a room of their own',
   tempvoice_room_overwrites: 'What a new room’s permissions are copied from',
   tempvoice_log_level: 'How much of temp voice is repeated into Discord',
+  tempvoice_block_title: 'The lobby block’s heading',
+  tempvoice_block_text: 'The lobby block’s line under the heading',
+  tempvoice_block_lobby_label: 'What each lobby’s button on the block says',
+  tempvoice_block_controls_label: 'What the block’s voice-controls button says',
+  tempvoice_block_show_controls: 'Whether the block carries the voice-controls button',
 
   honeypot_mode: 'Whether the trap is armed',
   honeypot_channel_ids: 'Which channels are traps',
@@ -653,6 +658,7 @@ export const LABELS = {
   posts_log_level: 'How much of the posts is repeated into Discord',
   posts_versions_keep: 'How many saved versions of a post are kept',
   posts_block_frontdoor_name: 'What the front door block is called',
+  posts_block_tempvoice_name: 'What the temp voice lobby block is called',
   posts_versions_summary_chars: 'How much of a version is shown on its row',
 
   guides_mode: 'Whether members can read the guides',
