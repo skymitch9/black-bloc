@@ -114,6 +114,8 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-27 20:5x:** v180 live (the welcome rules post carries the front door in one message; the bot deletes its own pin notices; the thread Spotlight start waits for the marathon; schema 76, 631 keys); see [`DONE.md`](DONE.md) 2026-09-27 v180.
+
 **2026-09-27 15:4x:** v179 live (near-miss prompts in the staff thread; a horaro events feed matches by owner and several words — RGL's N64 marathon found as #8; 626 keys); see [`DONE.md`](DONE.md) 2026-09-27 v179.
 
 **2026-09-26 21:2x:** v178 live (each BaF runner gets their own pinned post in the staff thread; public highlights and reminders go to their own channel settings, go-live for now; the ping switch is on the thread; schema 75, 602 keys). The marathon threads are the STAFF control room; see [`DONE.md`](DONE.md) 2026-09-26 v178.
