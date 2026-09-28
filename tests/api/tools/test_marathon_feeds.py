@@ -5,10 +5,12 @@ import pathlib
 
 import pytest
 
+from black_bloc import marathon_feeds as mf
 from black_bloc.cogs.content.marathon import Marathons, get_marathon
 from black_bloc.cogs.content.marathon_feeds import get_feed, insert_feed
 from black_bloc.cogs.content.spotlight import add_channel
 from black_bloc.marathon_sources import ScheduleError
+from black_bloc.settings_store import MARATHON_FEED_ACTION_KEY, MARATHON_FEED_HOURS_KEY
 
 FIXTURES = pathlib.Path(__file__).parents[2] / "fixtures" / "marathon"
 GDQ_BASE = "https://tracker.gamesdonequick.com/tracker"
@@ -103,7 +105,9 @@ async def test_the_list_carries_feeds_and_the_channel_rows_a_feed_may_start_from
     await channel(web, wf, "esamarathon", "ESAMarathon")
     sign_in(client)
     body = client.get("/api/marathons/feeds").json()
-    assert body["enabled"] is True and body["hours"] == 6 and body["action_default"] == "add"
+    assert body["enabled"] is True
+    assert body["hours"] == web.store.default(MARATHON_FEED_HOURS_KEY)
+    assert body["action_default"] == web.store.default(MARATHON_FEED_ACTION_KEY)
     assert [one["id"] for one in body["feeds"]] == [feed_id]
     gdq = body["feeds"][0]
     assert gdq["source"] == "gdq" and gdq["source_word"] == "GDQ tracker"
@@ -111,15 +115,7 @@ async def test_the_list_carries_feeds_and_the_channel_rows_a_feed_may_start_from
     channels = {one["login"]: one for one in body["channels"]}
     assert channels["gamesdonequick"]["feed_name"] == "GDQ"
     assert channels["esamarathon"]["feed_name"] is None
-    assert [one["value"] for one in body["sources"]] == [
-        "gdq",
-        "rpglb",
-        "horaro",
-        "oengus",
-        "horaro_events",
-        "fastestfurs",
-        "ladyarcaders",
-    ]
+    assert [one["value"] for one in body["sources"]] == list(mf.PICKS)
 
 
 async def test_adding_a_horaro_feed_checks_it_and_leaves_one_web_row(
