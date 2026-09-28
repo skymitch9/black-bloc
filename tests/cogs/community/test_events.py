@@ -1380,6 +1380,12 @@ async def test_calling_off_something_already_settled_says_so(cog, bot, member, l
     assert "already **denied**" in interaction.sent
 
 
+async def test_a_typed_event_number_is_read_with_or_without_its_hash(cog, bot):
+    assert events_pure.wanted_event_id("the block party") is None
+    assert events_pure.wanted_event_id("#12") == 12
+    assert events_pure.wanted_event_id(" 12 ") == 12
+
+
 async def test_the_staff_panel_names_the_staff_who_may_approve_and_what_is_waiting(
     cog, bot, member, lead, db
 ):
