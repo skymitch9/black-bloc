@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-27 — one section APPENDED, nothing re-keyed**: *Post blocks* (branch `post-blocks`, off `main` `d90c9e8c`, keyed against `68040560`); the *A post carries the front door* rows for `CarryButton` and the editor's switch describe code this branch removed. Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Go-live replays* (branch `golive-replays`, off `main` `49aeb2c2`, keyed against `69b32836`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Posts formatting toolbar* (branch `posts-toolbar`, off `main` `6f829602`, keyed against `f34b257c`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Quiet pins* (branch `quiet-pins`, off `main` `6f1b9f9e`, keyed against `f64c74c3`). Before that:
@@ -9156,3 +9157,27 @@ Design: [`golive-replays-design.md`](golive-replays-design.md). Keyed against `6
 | `site/public/assets/spotlight-controls.js:87` · `:101` · `:118` | The drawer: no Bump while it is a replay, the Treat as live button, and the replay line above the moves. |
 | `site/public/assets/golive-join.js:419` | The Replays settings drawer; `site/mock/golive-join.test.mjs` pins its keys. |
 | `site/mock/server.mjs:4672` `replayState` · `:5296` | The mock's twin of `replay_state` and the treat-live route; the Frost Fatales fixture is a live replay. |
+
+## Post blocks (branch `post-blocks`, 2026-09-27)
+
+Design: [`post-blocks-design.md`](post-blocks-design.md). Keyed against `68040560`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/post_blocks.py:90` `KINDS` | One `BlockKind` per kind. The front door's `parts` / `turned` / `redraw` are the door's existing functions (lazy imports — the door cog imports `posts` at module level). A new kind is one entry here + its renderer + `blockwords.js:BLOCK_EDITORS`. |
+| `black_bloc/post_blocks.py:177` `keep_cache` | The ONLY writer of each kind's `cache_column` (`posts.carries_door`): rewritten from the table after every block write, so the synchronous door paths keep reading the column. |
+| `black_bloc/post_blocks.py:188` `attach` | `INSERT OR IGNORE` against `UNIQUE(post_id, kind)` and the partial index `post_blocks_one_holder`: a race past the word check leaves one row and answers False, never an exception on the shared connection. |
+| `black_bloc/post_blocks.py:245` `attach_seeded` | A seed entry's `blocks` land only when the seed MAKES the post, and an exclusive kind already held is left where staff put it. |
+| `black_bloc/post_blocks.py:259` `add_block` · `:294` `held_elsewhere` · `:339` `order_blocks` | One `post.saved` row per press (`block_added` / `block_removed` / `blocks_order`, plus the cache column for the door); already on → ok with words, not a refusal. Reorder never edits a message already up. |
+| `black_bloc/post_blocks.py:81` `door_redraw` · `:359` `redraw_kind` | Finds the door cog and calls `redraw_now`; without the cog it says the sweep will carry it. |
+| `black_bloc/posts.py:441` `with_blocks` · `:468` `message_payload` | Each attached kind's parts in the order given; `kinds=None` reads the cache columns (the preview and older callers); the second value is still the DOOR's stamp for `door_hash`. `publish_post` (`:1294`) reads the kinds from the table. |
+| `black_bloc/posts.py:550` `set_carries_door` | Kept for the door paths; now writes the block row through `post_blocks.set_carried`. |
+| `black_bloc/storage/db.py:863` · `:1309` · `:1492` `_backfill_post_blocks` | Schema 78: the table, the partial unique index, and the once-only backfill (stored schema read at `:1365`, before `SCHEMA` runs). |
+| `black_bloc/frontdoor.py:179` `shows` · `:267` | A preview draft arrives as text, so `"false"` reads false. The stamp gains `hidden:` only when something is hidden — no re-edit of every door at deploy. |
+| `black_bloc/cogs/community/frontdoor.py:220` · `:253` · `:954` `redraw_now` | `door_view` and `/ask` draw `shown_kinds`; `redraw_now` runs `_redoor` for one guild under the sweep's `Reconciler` with `stamp=False` (checklist 37). |
+| `black_bloc/cogs/community/posts.py:177` `block_state` · `:191` `build_card` · `:496` · `:512` | `build_card` is async now (it reads the table). Remove buttons share row 1 with Versions and Back (at most three); `BlockPick` is row 4. Discord cannot disable one select option, so a held kind is described and refused in words. |
+| `black_bloc/api/tools/posts.py:184` `_blocks_by_post` · `:276`…`:288` · `:381` `build_blocks_router` | `_whole` is async so every posts payload carries `blocks` + `block_kinds`; the kind-level routes live under `/api/post-blocks` so no post slug can collide with them. |
+| `black_bloc/preview.py:318` `door_parts` · `:421` | `shows` sample (`"ticket,event"`, `"none"`) draws the editor's unsaved ticks; `blocks` sample (`"frontdoor"`) is the post's twin of `carries_door`. |
+| `site/public/assets/blockwords.js:55` `frontDoorWords` · `:97` · `:151` | The one editor, used by Posts ▸ Blocks and Modmail ▸ Front door (`page-modmail.js:358`). Saves each changed key through `saveSetting` (the Settings page's own path), then the redraw route. |
+| `site/public/assets/page-posts.js:512` `blockMove` · `:536` `paintBlocks` · `:693` `moved` · `:864` `blocksSection` | A block move acts at once and keeps the unsaved draft (`kept`); the dropdown is hidden until Add a block… is pressed; `replaceChildren` gets `.filter(Boolean)` — it does not skip `null` the way `el` does. |
+| `site/mock/server.mjs:2829` `postSetCarried` · `:2840` `blockKindsShape` · `:3312`… | The mock's twins; the mock seeds `welcome` with the block. |
