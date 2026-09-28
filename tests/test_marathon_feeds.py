@@ -47,6 +47,7 @@ def test_the_seeds_are_the_two_tracker_channel_rows_and_ss4c_on_oengus_and_not_e
         ("fastpacedevents", "horaro"),
         ("fastestfurs", "fastestfurs"),
         ("ladyarcaders", "ladyarcaders"),
+        ("gamesdonequick", "gdq_hotfix"),
     ]
     ss4c = mf.SEEDS[2]
     assert (ss4c.source, ss4c.feed_ref, ss4c.name) == (

@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 79
+SCHEMA_VERSION = 80
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -1127,8 +1127,8 @@ CREATE TABLE IF NOT EXISTS marathon_feeds (
     UNIQUE (guild_id, source, feed_ref)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS marathon_feeds_one_per_channel
-    ON marathon_feeds(guild_id, spotlight_id);
+CREATE UNIQUE INDEX IF NOT EXISTS marathon_feeds_one_per_channel_source
+    ON marathon_feeds(guild_id, spotlight_id, source);
 
 CREATE TABLE IF NOT EXISTS marathon_feed_seeds (
     guild_id     INTEGER NOT NULL,
@@ -1247,6 +1247,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathons", "ignored_at", "TEXT"),
     ("marathons", "ignored_by", "INTEGER"),
     ("marathon_feeds", "auto_track", "INTEGER NOT NULL DEFAULT 0"),
+    ("marathon_feeds", "sheet_url", "TEXT"),
     ("marathons", "ping_role", "INTEGER NOT NULL DEFAULT 0"),
     ("marathons", "controls_message_id", "INTEGER"),
     ("marathon_runs", "post_message_id", "INTEGER"),
@@ -1329,7 +1330,7 @@ MOD_CASES_OLD = "mod_cases_before_null_user"
 
 FAN_ROLES_OLD = "golive_fan_roles_before_spotlights"
 FAN_ROLES_INDEXES = ("golive_fan_roles_one_member", "golive_fan_roles_one_spotlight")
-RETIRED_INDEXES = ("guides_one_published_command",)
+RETIRED_INDEXES = ("guides_one_published_command", "marathon_feeds_one_per_channel")
 
 CLOSE_DUPLICATE_OPEN_SESSIONS = """
 UPDATE golive_sessions SET ended_at = ?
