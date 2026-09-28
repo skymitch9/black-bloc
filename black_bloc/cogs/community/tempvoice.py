@@ -12,7 +12,7 @@ from discord.ext import commands, tasks
 
 from ... import tempvoice as helpers
 from ...actionlog import log_action, send_logs
-from ...command_errors import AnswersErrors
+from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
@@ -2525,6 +2525,72 @@ class TempVoicePanel(AnswersErrors, discord.ui.View):
         )
 
 
+async def open_voice_panel(interaction: discord.Interaction) -> None:
+    """The /voice panel, opened by the command or by the lobby block's button."""
+    if not await voice_gate(interaction):
+        return
+    bot = interaction.client
+    embed, view = await build_panel(bot, interaction.guild, interaction.user)
+    await interaction.response.send_message(
+        embed=embed,
+        view=view,
+        ephemeral=True,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+    view.message = await interaction.original_response()
+
+
+class OpenVoiceButton(
+    SafeDynamicItem,
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=helpers.BLOCK_CUSTOM_ID_TEMPLATE,
+):
+    """The lobby block's button: the same /voice panel, ephemeral, with every gate it has."""
+
+    def __init__(self, guild_id: Any, label: str | None = None) -> None:
+        self.guild_id = int(guild_id)
+        super().__init__(
+            discord.ui.Button(
+                label=label or helpers.CONTROLS_LABEL_DEFAULT,
+                style=discord.ButtonStyle.primary,
+                custom_id=helpers.block_custom_id(guild_id),
+                row=0,
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: Any):
+        return cls(int(match["guild_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        await open_voice_panel(interaction)
+
+
+def block_lobbies(bot: Any, guild: Any) -> list[tuple[int, str]]:
+    return [(int(channel.id), str(channel.name)) for channel in live_lobbies(bot, guild)]
+
+
+def block_view(guild: Any, look: helpers.BlockLook) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    for label, url in look.buttons:
+        if url:
+            view.add_item(
+                discord.ui.Button(style=discord.ButtonStyle.link, label=label, url=url, row=0)
+            )
+        else:
+            view.add_item(OpenVoiceButton(guild.id, label))
+    return view
+
+
+def block_parts(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Any, str] | None:
+    """The lobby block a post carries: nothing while join-to-create is off."""
+    if not helpers.makes_rooms(bot.store.get(guild.id, "tempvoice_mode")):
+        return None
+    look = helpers.block_look(bot.store, guild.id, block_lobbies(bot, guild))
+    embed = discord.Embed(title=look.title, description=look.text)
+    return embed, block_view(guild, look), look.stamp()
+
+
 class TempVoice(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -2539,6 +2605,7 @@ class TempVoice(commands.Cog):
 
     async def cog_load(self) -> None:
         self.bot.add_view(TempVoicePanel())
+        self.bot.add_dynamic_items(OpenVoiceButton)
         install_mode_hook(self.bot)
         if not self.bot.db.is_connected:
             return
@@ -2844,16 +2911,7 @@ class TempVoice(commands.Cog):
         name="voice", description="Your temporary voice channel, and everything you can change"
     )
     async def voice_panel(self, interaction: discord.Interaction) -> None:
-        if not await voice_gate(interaction):
-            return
-        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        view.message = await interaction.original_response()
+        await open_voice_panel(interaction)
 
 
 async def setup(bot: commands.Bot) -> None:

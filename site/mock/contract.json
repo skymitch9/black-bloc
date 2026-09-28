@@ -7697,6 +7697,32 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/api/post-blocks/tempvoice/redraw",
+      "body": {},
+      "read_by": [
+        "blockwords.js Save the words (Posts ▸ Blocks ▸ Temp voice lobby)"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "redrawn",
+        "message",
+        "kinds"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
       "_": "Posts version history. A version is written only by a press of Save changes or Post it that CHANGED something, and by Use this version; the migration backfills one per post that predates the table, which is the `shipped` row on {post_slug}. Nothing ever edits or removes a version except the posts_versions_keep trim.",
       "method": "GET",
       "path": "/api/posts/{post_slug}/versions",

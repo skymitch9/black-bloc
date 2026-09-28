@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Blocks convert* (branch `blocks-convert`, off `main` `4a0e572d`, keyed against `2b2e3e32`); the *Post blocks* rows for `redraw_carrier`, `message_payload` and "Reorder never edits a message already up" describe code this branch changed. Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Post blocks* (branch `post-blocks`, off `main` `d90c9e8c`, keyed against `68040560`); the *A post carries the front door* rows for `CarryButton` and the editor's switch describe code this branch removed. Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Go-live replays* (branch `golive-replays`, off `main` `49aeb2c2`, keyed against `69b32836`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Posts formatting toolbar* (branch `posts-toolbar`, off `main` `6f829602`, keyed against `f34b257c`). Before that:
@@ -9181,3 +9182,30 @@ Design: [`post-blocks-design.md`](post-blocks-design.md). Keyed against `6804056
 | `site/public/assets/blockwords.js:55` `frontDoorWords` · `:97` · `:151` | The one editor, used by Posts ▸ Blocks and Modmail ▸ Front door (`page-modmail.js:358`). Saves each changed key through `saveSetting` (the Settings page's own path), then the redraw route. |
 | `site/public/assets/page-posts.js:512` `blockMove` · `:536` `paintBlocks` · `:693` `moved` · `:864` `blocksSection` | A block move acts at once and keeps the unsaved draft (`kept`); the dropdown is hidden until Add a block… is pressed; `replaceChildren` gets `.filter(Boolean)` — it does not skip `null` the way `el` does. |
 | `site/mock/server.mjs:2829` `postSetCarried` · `:2840` `blockKindsShape` · `:3312`… | The mock's twins; the mock seeds `welcome` with the block. |
+
+## Blocks convert (branch `blocks-convert`, 2026-09-28)
+
+Design: [`blocks-convert-design.md`](blocks-convert-design.md). Keyed against `2b2e3e32`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/post_blocks.py:152` `KINDS` | Two kinds now. `footprint` is each kind's MOST (embeds, rows, components), checked at Add by `too_big` (`:239`) against Discord's 10 / 5 / 25; `cache_column` is optional (`""` for temp voice) and `keep_cache` / `attached_by_cache` skip a kind without one. |
+| `black_bloc/post_blocks.py:287` `drawn_of` · `:292` `set_drawn` | Per-block stamps (schema 79). `set_drawn` also mirrors the door's stamp into `posts.door_hash`, which every door path still reads. |
+| `black_bloc/post_blocks.py:511` `kept_part` · `:516` `needs_redraw` · `:523` `redraw_post` | The in-place rebuild. The post's own part is kept AS POSTED (re-rendering the row would publish a pending edit); every block is redrawn fresh. `door_hash` is the door's tombstone, so a removed door is still seen; a removed non-door kind is not (its row and stamp are gone) — hence the forced redraw in `blocks_turned` (`:123`). |
+| `black_bloc/post_blocks.py:587` `keep_drawn` | Skips `carries_door = 1` rows — `keep_the_ride` owns those. Called from the door cog's `_sweep` so it shares the `Reconciler` lock (checklist 37). |
+| `black_bloc/post_blocks.py:475` `order_blocks` | Reorder edits a message already up now (`force=True`, the stamps do not change on a reorder). |
+| `black_bloc/post_blocks.py:137` `voice_parts` · `:143` `blocks_redraw` | Lazy import of the temp voice cog, like the door's; `blocks_redraw` goes through `FrontDoor.redraw_blocks_now` for the lock. |
+| `black_bloc/posts.py:446` `merged_view` · `:459` `with_blocks` · `:483` `message_parts` | One view → returned as is (the welcome post's bytes). Two or more → items re-rowed so each block starts on its own row. `message_payload` (`:498`) keeps the old `(payload, door_stamp)` shape. |
+| `black_bloc/posts.py:686` `forget_drawn` | No message up → no block drawn; called by `forget_message` and `clear_posted`. |
+| `black_bloc/cogs/community/frontdoor.py:550` `redraw_carrier` · `:916` `redraw_blocks_now` · `:934` | `redraw_carrier` is one call to `redraw_post` with the door's log kinds; the sweep adds `keep_drawn` per guild. |
+| `black_bloc/storage/db.py:859` · `:1261` · `:1292` `DOOR_STAMP_ONTO_ITS_BLOCK` · `:1318` | Schema 79: the column, its `ADDED_COLUMNS` entry, the backfill that runs when the column is added, and the 77 → 78 backfill now carrying `door_hash` too. |
+| `black_bloc/preview.py:458` `BLOCK_DRAWS` · `:471` `drawn_blocks` · `:486` `post_message` | One draw per kind; `always` draws a block whose feature is off. Unknown kinds draw nothing. |
+| `black_bloc/preview.py:429` `voice_lobbies` · `:453` `voice_lobby` | The lobbies that are set up, else ONE sample lobby. `block_tempvoice` claims only the four text keys; the controls tick rides the `controls` sample (bools cannot be overrides). |
+| `black_bloc/tempvoice.py:339` `BlockLook` · `:348` `block_look` · `:322` `lobby_label` | Pure: the block's words, its buttons (label, url or None) and its stamp. `{lobby}` is a plain replace, so no staff wording can raise. Labels are clamped to 80. |
+| `black_bloc/cogs/community/tempvoice.py:2528` `open_voice_panel` · `:2914` | `/voice`'s body, moved so the block's button opens the SAME panel; `/voice` calls it. |
+| `black_bloc/cogs/community/tempvoice.py:2543` `OpenVoiceButton` · `:2608` | `tvblock:open:<guild>` — deliberately not under `tempvoice:` (the in-room controls' persistent view). Registered in `cog_load`. |
+| `black_bloc/cogs/community/tempvoice.py:2585` `block_parts` | Nothing while `tempvoice_mode` is off; draws in shadow (a conductor question in the design). |
+| `site/public/assets/blockpreview.js:15` `blockPreview` | The one client preview. `post` → the post renderer with its blocks; no `post` → the blocks alone; `feature` + `draft` → an editor on its kind's own renderer. |
+| `site/public/assets/page-posts.js:367` · `:475` · `:891` `blockLook` | The drawer, a version, and each Blocks card (lazy, `always`). |
+| `site/public/assets/blockwords.js:167` `voiceLobbyWords` · `:240` `BLOCK_EDITORS` | The temp voice editor; saves each key through `saveSetting`, then `POST /api/post-blocks/tempvoice/redraw`. |
+| `site/mock/server.mjs:2797` · `:5736` `block_tempvoice` · `:5782` `PREVIEW_BLOCK_DRAWS` | The mock's twins. |

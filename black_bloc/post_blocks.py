@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+import discord
+
 from . import posts
+from .actionlog import log_action
 from .events import clamp
-from .logkinds import VIA_DISCORD
+from .logkinds import VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
 from .settings_store import (
     FRONTDOOR_EVENT_LABEL,
@@ -20,11 +24,25 @@ from .settings_store import (
     FRONTDOOR_TITLE,
     POSTS_BLOCK_FRONTDOOR_NAME,
     POSTS_BLOCK_FRONTDOOR_NAME_DEFAULT,
+    POSTS_BLOCK_TEMPVOICE_NAME,
+    POSTS_BLOCK_TEMPVOICE_NAME_DEFAULT,
     REHEARSAL_NOTE,
+    TEMPVOICE_BLOCK_CONTROLS_LABEL,
+    TEMPVOICE_BLOCK_LOBBY_LABEL,
+    TEMPVOICE_BLOCK_SHOW_CONTROLS,
+    TEMPVOICE_BLOCK_TEXT,
+    TEMPVOICE_BLOCK_TITLE,
 )
 
+log = logging.getLogger(__name__)
+
 FRONTDOOR = "frontdoor"
+TEMPVOICE = "tempvoice"
 NAME_MAX = 80
+MAX_EMBEDS = 10
+MAX_ROWS = 5
+MAX_COMPONENTS = 25
+REDRAWN = "post.redrawn"
 
 UNKNOWN_BLOCK = (
     "There is no block called **{kind}**, so nothing was changed. Pick one from the **Add a "
@@ -49,6 +67,20 @@ REDRAWN_LATER_SAID = (
     "The **{name}** block's words are saved. Posts carrying it pick them up on the next sweep, "
     "within five minutes."
 )
+BLOCK_TOO_BIG = (
+    "The **{name}** block does not fit on **{title}**: Discord allows one message {limit}, and "
+    "with it this one would need {need}. Nothing was changed. Remove a block first, or put "
+    "this one on another post."
+)
+LIMIT_WORDS = {
+    "embeds": ("at most 10 cards", "{n} cards"),
+    "rows": ("at most 5 rows of buttons", "{n} rows"),
+    "components": ("at most 25 buttons and menus", "{n} buttons and menus"),
+}
+ORDERED_NOW_SAID = " The message shows the new order now."
+DRAWN_NOW_SAID = " The message already up shows it now."
+DRAWN_LATER_SAID = " The message shows it the next time you press **Update the post**."
+DRAWN_OFF_SAID = " The message already up no longer shows it."
 HELD_BY = "on {title}"
 HELD_BY_NOBODY = "on no post yet"
 
@@ -64,6 +96,7 @@ class BlockKind:
     parts: Callable[[Any, Any, Any], Any]
     turned: Callable[..., Awaitable[tuple[Any, str]]]
     redraw: Callable[[Any, Any], Awaitable[bool]]
+    footprint: tuple[int, int, int] = (1, 1, 5)
 
 
 def door_parts(bot: Any, guild: Any, row: Any) -> Any:
@@ -82,6 +115,35 @@ async def door_redraw(bot: Any, guild: Any) -> bool:
     finder = getattr(bot, "get_cog", None)
     cog = finder("FrontDoor") if finder is not None else None
     redraw = getattr(cog, "redraw_now", None)
+    if redraw is None:
+        return False
+    return bool(await redraw(guild))
+
+
+async def blocks_turned(
+    bot: Any, guild: Any, row: Any, actor: Any, wanted: bool, *, via: str = VIA_DISCORD
+) -> tuple[Any, str]:
+    """A block with no feature-side keys of its own: the message already up is redrawn whole."""
+    post_id = int(row["id"])
+    if not posts.is_posted(row):
+        return row, ""
+    drew = await redraw_post(bot, guild, row, actor, via=via, force=True)
+    fresh = await posts.get_post_by_id(bot.db, post_id)
+    if not drew:
+        return fresh, DRAWN_LATER_SAID
+    return fresh, DRAWN_NOW_SAID if wanted else DRAWN_OFF_SAID
+
+
+def voice_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .cogs.community.tempvoice import block_parts
+
+    return block_parts(bot, guild, row)
+
+
+async def blocks_redraw(bot: Any, guild: Any) -> bool:
+    finder = getattr(bot, "get_cog", None)
+    cog = finder("FrontDoor") if finder is not None else None
+    redraw = getattr(cog, "redraw_blocks_now", None)
     if redraw is None:
         return False
     return bool(await redraw(guild))
@@ -108,6 +170,25 @@ KINDS: dict[str, BlockKind] = {
         parts=door_parts,
         turned=door_turned,
         redraw=door_redraw,
+        footprint=(1, 1, 3),
+    ),
+    TEMPVOICE: BlockKind(
+        key=TEMPVOICE,
+        name_key=POSTS_BLOCK_TEMPVOICE_NAME,
+        name_default=POSTS_BLOCK_TEMPVOICE_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(
+            TEMPVOICE_BLOCK_TITLE,
+            TEMPVOICE_BLOCK_TEXT,
+            TEMPVOICE_BLOCK_LOBBY_LABEL,
+            TEMPVOICE_BLOCK_CONTROLS_LABEL,
+            TEMPVOICE_BLOCK_SHOW_CONTROLS,
+        ),
+        parts=voice_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 1, 5),
     ),
 }
 
@@ -122,7 +203,11 @@ def name_of(store: Any, guild_id: int, found: BlockKind) -> str:
 
 def attached_by_cache(row: Any) -> list[str]:
     """What the row's own columns say it carries, for the paths that cannot read the table."""
-    return [key for key, found in KINDS.items() if posts.row_value(row, found.cache_column)]
+    return [
+        key
+        for key, found in KINDS.items()
+        if found.cache_column and posts.row_value(row, found.cache_column)
+    ]
 
 
 def parts_of(bot: Any, guild: Any, row: Any, kinds: list[str]) -> dict[str, Any]:
@@ -134,6 +219,31 @@ def parts_of(bot: Any, guild: Any, row: Any, kinds: list[str]) -> dict[str, Any]
         if parts is not None:
             drawn[kind] = parts
     return drawn
+
+
+def footprint_of(row: Any, kinds: list[str]) -> dict[str, int]:
+    """The most a message with these blocks can hold, whatever each feature draws today."""
+    style = posts.wanted_style(posts.row_value(row, "style", posts.PLAIN))
+    found = {"embeds": 1 if style == posts.EMBED else 0, "rows": 0, "components": 0}
+    for kind in kinds:
+        one = KINDS.get(kind)
+        if one is None:
+            continue
+        embeds, rows, components = one.footprint
+        found["embeds"] += embeds
+        found["rows"] += rows
+        found["components"] += components
+    return found
+
+
+def too_big(row: Any, kinds: list[str]) -> tuple[str, str] | None:
+    """Discord's own caps on one message: 10 cards, 5 rows, 25 buttons and menus."""
+    need = footprint_of(row, kinds)
+    for part, cap in (("embeds", MAX_EMBEDS), ("rows", MAX_ROWS), ("components", MAX_COMPONENTS)):
+        if need[part] > cap:
+            limit, words = LIMIT_WORDS[part]
+            return limit, words.format(n=need[part])
+    return None
 
 
 # --- the rows ---------------------------------------------------------------------------------
@@ -174,10 +284,29 @@ async def holder_of(db: Any, guild_id: int, kind: str, *, but: Any = None) -> An
     return await cur.fetchone()
 
 
+async def drawn_of(db: Any, post_id: int) -> dict[str, Any]:
+    """Each attached block's stamp as the message in Discord shows it (None: not drawn)."""
+    return {str(row["kind"]): row["drawn_hash"] for row in await blocks_of(db, post_id)}
+
+
+async def set_drawn(db: Any, post_id: int, stamps: dict[str, Any]) -> None:
+    """Every attached block's stamp after a send or an edit; the door's is mirrored on posts."""
+    for kind in await kinds_on(db, post_id):
+        stamp = stamps.get(kind)
+        await db.conn.execute(
+            "UPDATE post_blocks SET drawn_hash = ? WHERE post_id = ? AND kind = ?",
+            (str(stamp) if stamp else None, int(post_id), kind),
+        )
+    await db.conn.commit()
+    await posts.set_door_drawn(db, int(post_id), stamps.get(FRONTDOOR))
+
+
 async def keep_cache(db: Any, post_id: int) -> None:
     """Each kind's column on the post says what the table says, and nothing else writes it."""
     have = set(await kinds_on(db, post_id))
     for key, found in KINDS.items():
+        if not found.cache_column:
+            continue
         await db.conn.execute(
             f"UPDATE posts SET {found.cache_column} = ? WHERE id = ?",
             (1 if key in have else 0, int(post_id)),
@@ -270,6 +399,13 @@ async def add_block(
     held = await held_elsewhere(bot, guild, found, post_id, title)
     if held is not None:
         return held
+    over = too_big(row, [*await kinds_on(bot.db, post_id), found.key])
+    if over is not None:
+        return refusal(
+            BLOCK_TOO_BIG.format(name=name, title=title, limit=over[0], need=over[1]),
+            "block_too_big",
+            409,
+        )
     if not await attach(bot.db, row, found.key, by=posts.actor_id(actor)):
         return await held_elsewhere(bot, guild, found, post_id, title) or refusal(
             BLOCK_HELD_ELSEWHERE.format(name=name, other="another post", title=title),
@@ -285,7 +421,7 @@ async def add_block(
         actor,
         via=via,
         block_added=found.key,
-        **{found.cache_column: True},
+        **({found.cache_column: True} if found.cache_column else {}),
     )
     fresh, more = await found.turned(bot, guild, fresh, actor, True, via=via)
     return Outcome(True, BLOCK_ADDED_SAID.format(name=name, title=title) + more, value=fresh)
@@ -330,7 +466,7 @@ async def remove_block(
         actor,
         via=via,
         block_removed=found.key,
-        **{found.cache_column: False},
+        **({found.cache_column: False} if found.cache_column else {}),
     )
     fresh, more = await found.turned(bot, guild, fresh, actor, False, via=via)
     return Outcome(True, BLOCK_REMOVED_SAID.format(name=name, title=title) + more, value=fresh)
@@ -352,7 +488,9 @@ async def order_blocks(
     await posts.note(bot, guild, fresh, posts.SAVED, actor, via=via, blocks_order=wanted)
     said = ORDERED_SAID.format(title=title)
     if posts.is_posted(fresh):
-        said += ORDERED_LATER_SAID
+        drew = await redraw_post(bot, guild, fresh, actor, via=via, force=True)
+        said += ORDERED_NOW_SAID if drew else ORDERED_LATER_SAID
+        fresh = await posts.get_post_by_id(bot.db, post_id)
     return Outcome(True, said, value=fresh)
 
 
@@ -365,6 +503,99 @@ async def redraw_kind(bot: Any, guild: Any, kind: Any) -> Outcome:
     ran = await found.redraw(bot, guild)
     said = REDRAWN_SAID if ran else REDRAWN_LATER_SAID
     return Outcome(True, said.format(name=name), value=ran)
+
+
+# --- the message already up -------------------------------------------------------------------
+
+
+def kept_part(message: Any) -> list[Any]:
+    """The post's own card as it was posted; a plain post's words ride as content, untouched."""
+    return [] if getattr(message, "content", "") else list(getattr(message, "embeds", [])[:1])
+
+
+async def needs_redraw(bot: Any, row: Any, kinds: list[str], stamps: dict[str, Any]) -> bool:
+    have = await drawn_of(bot.db, int(row["id"]))
+    if any((stamps.get(kind) or None) != (have.get(kind) or None) for kind in kinds):
+        return True
+    return (stamps.get(FRONTDOOR) or None) != (posts.row_value(row, "door_hash") or None)
+
+
+async def redraw_post(
+    bot: Any,
+    guild: Any,
+    row: Any,
+    actor: Any = None,
+    *,
+    via: str = VIA_DISCORD,
+    force: bool = False,
+    done_kind: str = REDRAWN,
+    failed_kind: str = posts.POST_FAILED,
+) -> bool:
+    """The message already up is rebuilt: the post's part as posted, then every block, fresh."""
+    post_id = int(row["id"])
+    kinds = await kinds_on(bot.db, post_id)
+    drawn = parts_of(bot, guild, row, kinds)
+    stamps = {kind: parts[2] for kind, parts in drawn.items()}
+    if not force and not await needs_redraw(bot, row, kinds, stamps):
+        return False
+    if posts.row_value(row, "message_id") and not posts.guard_allows(
+        bot, posts.row_value(row, "channel_id")
+    ):
+        return False
+    message = await posts.posted_message(bot, guild, row)
+    if message is None:
+        return False
+    made = posts.with_blocks({"content": None, "embed": None}, list(drawn.values()))
+    try:
+        await message.edit(
+            embeds=kept_part(message) + made["embeds"],
+            view=made["view"],
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except discord.HTTPException as exc:
+        log.warning("post blocks: could not redraw %s: %s", posts.row_value(row, "slug"), exc)
+        await log_action(
+            bot,
+            guild,
+            failed_kind,
+            actor=actor,
+            details={
+                "slug": posts.row_value(row, "slug"),
+                "message_id": int(message.id),
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        return False
+    await set_drawn(bot.db, post_id, stamps)
+    await log_action(
+        bot,
+        guild,
+        kind_via(done_kind, via),
+        actor=actor,
+        details={
+            "slug": posts.row_value(row, "slug"),
+            "post_id": post_id,
+            "message_id": int(message.id),
+            "drawn": stamps.get(FRONTDOOR) is not None,
+            "blocks": list(stamps),
+            "via": via,
+        },
+    )
+    return True
+
+
+async def keep_drawn(bot: Any, guild: Any) -> int:
+    """The sweep's half for every carrier the door does not ride: changed words are redrawn."""
+    cur = await bot.db.conn.execute(
+        "SELECT DISTINCT posts.* FROM posts JOIN post_blocks ON post_blocks.post_id = posts.id "
+        "WHERE posts.guild_id = ? AND posts.carries_door = 0 ORDER BY posts.id",
+        (int(guild.id),),
+    )
+    redrawn = 0
+    for row in list(await cur.fetchall()):
+        if posts.is_posted(row) and await redraw_post(bot, guild, row):
+            redrawn += 1
+    return redrawn
 
 
 # --- what the pages read ----------------------------------------------------------------------
@@ -407,12 +638,33 @@ async def kinds_shape(bot: Any, guild: Any) -> list[dict[str, Any]]:
 
 __all__ = [
     "BAD_ORDER",
+    "BLOCK_TOO_BIG",
+    "DRAWN_LATER_SAID",
+    "DRAWN_NOW_SAID",
+    "DRAWN_OFF_SAID",
+    "MAX_COMPONENTS",
+    "MAX_EMBEDS",
+    "MAX_ROWS",
+    "ORDERED_NOW_SAID",
+    "REDRAWN",
+    "blocks_redraw",
+    "blocks_turned",
+    "drawn_of",
+    "footprint_of",
+    "keep_drawn",
+    "kept_part",
+    "needs_redraw",
+    "redraw_post",
+    "set_drawn",
+    "voice_parts",
+    "too_big",
     "BLOCK_ADDED_SAID",
     "BLOCK_ALREADY_SAID",
     "BLOCK_HELD_ELSEWHERE",
     "BLOCK_NOT_ON",
     "BLOCK_REMOVED_SAID",
     "FRONTDOOR",
+    "TEMPVOICE",
     "KINDS",
     "ORDERED_LATER_SAID",
     "ORDERED_SAID",

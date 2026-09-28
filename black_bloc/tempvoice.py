@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, NamedTuple
 
 from .panels import KEEP_IT
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
+from .settings_store import (
+    TEMPVOICE_BLOCK_CONTROLS_LABEL,
+    TEMPVOICE_BLOCK_DEFAULTS,
+    TEMPVOICE_BLOCK_LOBBY_LABEL,
+    TEMPVOICE_BLOCK_SHOW_CONTROLS,
+    TEMPVOICE_BLOCK_TEXT,
+    TEMPVOICE_BLOCK_TITLE,
+)
 
 AUTO_REGION = "auto"
 VOICE_REGIONS = (
@@ -35,6 +45,16 @@ VOICE_REGIONS = (
     "us-west",
     "warsaw",
 )
+
+BLOCK_CUSTOM_ID_HEAD = "tvblock:open"
+BLOCK_CUSTOM_ID_TEMPLATE = r"tvblock:open:(?P<guild_id>[0-9]+)"
+BLOCK_LOBBIES_MAX = 4
+BLOCK_LABEL_MAX = 80
+BLOCK_TITLE_MAX = 256
+BLOCK_TEXT_MAX = 4000
+LOBBY_TOKEN = "{lobby}"
+LOBBY_URL = "https://discord.com/channels/{guild_id}/{channel_id}"
+CONTROLS_LABEL_DEFAULT = str(TEMPVOICE_BLOCK_DEFAULTS[TEMPVOICE_BLOCK_CONTROLS_LABEL])
 
 PANEL_MINUTES_KEY = "voice_panel_minutes"
 SITE_FEATURE = "tempvoice"
@@ -285,6 +305,65 @@ def site_page_url(origin: Any) -> str | None:
     return library_site_page_url(origin, SITE_FEATURE)
 
 
+def block_word(store: Any, guild_id: int, key: str, limit: int) -> str:
+    """A block word as saved, or the shipped one while it is blank."""
+    text = str(store.get(guild_id, key) or "").strip()
+    return (text or str(TEMPVOICE_BLOCK_DEFAULTS[key]))[:limit]
+
+
+def block_custom_id(guild_id: Any) -> str:
+    return f"{BLOCK_CUSTOM_ID_HEAD}:{int(guild_id)}"
+
+
+def lobby_url(guild_id: Any, channel_id: Any) -> str:
+    return LOBBY_URL.format(guild_id=int(guild_id), channel_id=int(channel_id))
+
+
+def lobby_label(store: Any, guild_id: int, name: Any) -> str:
+    template = block_word(store, guild_id, TEMPVOICE_BLOCK_LOBBY_LABEL, BLOCK_TEXT_MAX)
+    said = template.replace(LOBBY_TOKEN, str(name or "")).strip()
+    return said[:BLOCK_LABEL_MAX] or str(name or "")[:BLOCK_LABEL_MAX]
+
+
+def shows_controls(store: Any, guild_id: int, wanted: Any = "") -> bool:
+    """`wanted` is an editor's unsaved tick ("on" / "off"); blank reads the key."""
+    said = str(wanted or "").strip().lower()
+    if said in ("on", "true", "1"):
+        return True
+    if said in ("off", "false", "0"):
+        return False
+    found = store.get(guild_id, TEMPVOICE_BLOCK_SHOW_CONTROLS)
+    return True if found is None else bool(found)
+
+
+class BlockLook(NamedTuple):
+    title: str
+    text: str
+    buttons: tuple[tuple[str, str | None], ...]
+
+    def stamp(self) -> str:
+        return hashlib.sha256(json.dumps(list(self), ensure_ascii=False).encode()).hexdigest()
+
+
+def block_look(
+    store: Any, guild_id: int, lobbies: Any, *, controls: Any = ""
+) -> BlockLook:
+    """What the lobby block says and links to: one button per lobby, then /voice's own panel."""
+    buttons = [
+        (lobby_label(store, guild_id, name), lobby_url(guild_id, channel_id))
+        for channel_id, name in list(lobbies or ())[:BLOCK_LOBBIES_MAX]
+    ]
+    if shows_controls(store, guild_id, controls):
+        buttons.append(
+            (block_word(store, guild_id, TEMPVOICE_BLOCK_CONTROLS_LABEL, BLOCK_LABEL_MAX), None)
+        )
+    return BlockLook(
+        block_word(store, guild_id, TEMPVOICE_BLOCK_TITLE, BLOCK_TITLE_MAX),
+        block_word(store, guild_id, TEMPVOICE_BLOCK_TEXT, BLOCK_TEXT_MAX),
+        tuple(buttons),
+    )
+
+
 __all__ = [
     "AUTOMATIC",
     "AUTOMATIC_MOVE",
@@ -294,6 +373,17 @@ __all__ = [
     "BAN_PICK",
     "BITRATE",
     "BLOCKED",
+    "BLOCK_CUSTOM_ID_HEAD",
+    "BLOCK_CUSTOM_ID_TEMPLATE",
+    "BLOCK_LOBBIES_MAX",
+    "BlockLook",
+    "CONTROLS_LABEL_DEFAULT",
+    "block_custom_id",
+    "block_look",
+    "block_word",
+    "lobby_label",
+    "lobby_url",
+    "shows_controls",
     "CARD_BUTTONS",
     "CLAIM",
     "FORGET_PREFS",

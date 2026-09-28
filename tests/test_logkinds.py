@@ -137,10 +137,13 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "frontdoor.rides_post",
         "web.frontdoor.rides_post",
     ),
-    "black_bloc/cogs/community/frontdoor.py::REDRAWN_ON_POST": (
+    "black_bloc/post_blocks.py::done_kind": (
+        "post.redrawn",
+        "web.post.redrawn",
         "frontdoor.redrawn_on_post",
         "web.frontdoor.redrawn_on_post",
     ),
+    "black_bloc/post_blocks.py::failed_kind": ("post.post_failed", "frontdoor.post_failed"),
     "black_bloc/cogs/community/frontdoor.py::POST_FAILED": ("frontdoor.post_failed",),
     "black_bloc/cogs/community/frontdoor.py::TICKET_BUTTON_HIDDEN": (
         "frontdoor.ticket_button_hidden",

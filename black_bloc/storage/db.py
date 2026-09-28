@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 78
+SCHEMA_VERSION = 79
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -856,6 +856,7 @@ CREATE TABLE IF NOT EXISTS post_blocks (
     exclusive INTEGER NOT NULL DEFAULT 0,
     added_at  TEXT    NOT NULL,
     added_by  INTEGER,
+    drawn_hash TEXT,
     UNIQUE (post_id, kind)
 );
 
@@ -1257,6 +1258,7 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathon_runs", "public_removed", "INTEGER NOT NULL DEFAULT 0"),
     ("posts", "carries_door", "INTEGER NOT NULL DEFAULT 0"),
     ("posts", "door_hash", "TEXT"),
+    ("post_blocks", "drawn_hash", "TEXT"),
     ("spotlight_sessions", "replay_reason", "TEXT"),
     ("spotlight_sessions", "replay_action", "TEXT"),
     ("spotlight_sessions", "replay_cleared", "TEXT"),
@@ -1287,9 +1289,14 @@ CARRIED_EVENT_WISH = (
     "WHERE event_id IS NOT NULL OR event_wanted = 1"
 )
 STAFF_MADE_NOTICED = "UPDATE marathons SET noticed_at = added_at WHERE feed_id IS NULL"
+DOOR_STAMP_ONTO_ITS_BLOCK = (
+    "UPDATE post_blocks SET drawn_hash = (SELECT door_hash FROM posts "
+    "WHERE posts.id = post_blocks.post_id) WHERE kind = 'frontdoor'"
+)
 BACKFILLS: dict[tuple[str, str], str] = {
     ("marathons", "event_mode"): CARRIED_EVENT_WISH,
     ("marathons", "noticed_at"): STAFF_MADE_NOTICED,
+    ("post_blocks", "drawn_hash"): DOOR_STAMP_ONTO_ITS_BLOCK,
 }
 
 RETIRED_REQUEST_STATUSES = ("pending", "approved", "planned")
@@ -1308,9 +1315,9 @@ BACKFILL_POST_VERSIONS = (
 
 BACKFILL_POST_BLOCKS = (
     "INSERT OR IGNORE INTO post_blocks(guild_id, post_id, kind, position, exclusive, added_at, "
-    "added_by) SELECT guild_id, id, 'frontdoor', 0, 1, COALESCE(updated_at, ?), updated_by "
-    "FROM posts WHERE carries_door = 1 AND NOT EXISTS (SELECT 1 FROM post_blocks "
-    "WHERE post_blocks.post_id = posts.id AND post_blocks.kind = 'frontdoor')"
+    "added_by, drawn_hash) SELECT guild_id, id, 'frontdoor', 0, 1, COALESCE(updated_at, ?), "
+    "updated_by, door_hash FROM posts WHERE carries_door = 1 AND NOT EXISTS (SELECT 1 FROM "
+    "post_blocks WHERE post_blocks.post_id = posts.id AND post_blocks.kind = 'frontdoor')"
 )
 BLOCKS_SINCE = 78
 

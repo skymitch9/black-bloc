@@ -159,3 +159,64 @@ def test_the_panel_minutes_key_reads_the_registry_and_the_site_page_is_the_share
     assert panel_minutes(FakeStore(12), 7) == 12
     assert site_page_url("https://x.test/") == "https://x.test/tempvoice.html"
     assert site_page_url("") is None
+
+
+# --- the lobby block's words (blocks-convert, 2026-09-28) --------------------------------------
+
+
+class WordStore:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+
+def test_the_block_says_the_shipped_words_while_its_keys_are_blank():
+    look = helpers.block_look(WordStore(), 7, [(333, "join to create a channel")])
+
+    assert look.title == helpers.TEMPVOICE_BLOCK_DEFAULTS[helpers.TEMPVOICE_BLOCK_TITLE]
+    assert look.text == helpers.TEMPVOICE_BLOCK_DEFAULTS[helpers.TEMPVOICE_BLOCK_TEXT]
+    assert look.buttons == (
+        ("🔊 join to create a channel", "https://discord.com/channels/7/333"),
+        (helpers.CONTROLS_LABEL_DEFAULT, None),
+    )
+
+
+def test_each_lobby_gets_its_own_button_from_the_label_template_capped_at_four():
+    store = WordStore(tempvoice_block_lobby_label="Hop into {lobby}!")
+    lobbies = [(n, f"lobby {n}") for n in range(1, 7)]
+
+    look = helpers.block_look(store, 7, lobbies)
+
+    wanted = [f"Hop into lobby {n}!" for n in range(1, 5)]
+    assert [label for label, _ in look.buttons[:-1]] == wanted
+    assert len(look.buttons) == helpers.BLOCK_LOBBIES_MAX + 1
+    assert all(len(label) <= 80 for label, _ in look.buttons)
+
+
+def test_the_controls_button_follows_its_key_and_an_editor_s_unsaved_tick():
+    off = WordStore(tempvoice_block_show_controls=False)
+
+    assert helpers.block_look(off, 7, []).buttons == ()
+    assert helpers.block_look(off, 7, [], controls="on").buttons[-1][1] is None
+    assert helpers.block_look(WordStore(), 7, [], controls="off").buttons == ()
+
+
+def test_the_stamp_moves_when_any_word_or_lobby_moves():
+    one = helpers.block_look(WordStore(), 7, [(1, "a")]).stamp()
+
+    assert one == helpers.block_look(WordStore(), 7, [(1, "a")]).stamp()
+    assert one != helpers.block_look(WordStore(tempvoice_block_title="Hi"), 7, [(1, "a")]).stamp()
+    assert one != helpers.block_look(WordStore(), 7, [(1, "b")]).stamp()
+
+
+def test_the_block_s_button_never_shares_a_custom_id_with_the_in_channel_controls():
+    assert helpers.block_custom_id(7) == "tvblock:open:7"
+    assert not helpers.block_custom_id(7).startswith(helpers_panel_prefix())
+
+
+def helpers_panel_prefix():
+    from black_bloc.cogs.community.tempvoice import PANEL_PREFIX
+
+    return f"{PANEL_PREFIX}:"

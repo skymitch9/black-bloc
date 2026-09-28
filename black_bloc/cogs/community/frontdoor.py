@@ -59,18 +59,16 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
 from ...modmail import panel_rehearsal_copy
 from ...panels import Outcome, Panel, answer, panel_minutes, refusal
+from ...post_blocks import keep_drawn, redraw_post
 from ...posted import drop_message, duplicates_near, message_is_there, overtaken_by
 from ...posts import (
     carries_door,
     door_carrier,
     door_drawn,
     get_post_by_id,
-    guard_allows,
     is_posted,
-    posted_message,
     row_value,
     set_carries_door,
-    set_door_drawn,
     shadow_channel_id,
     shadow_id,
     where_words,
@@ -552,52 +550,10 @@ async def carrier_up(bot: Any, guild: Any) -> Any:
 async def redraw_carrier(
     bot: Any, guild: Any, row: Any, actor: Any = None, *, via: str = VIA_DISCORD
 ) -> bool:
-    """Only the door's part of the message changes; the post's words stay as they were posted."""
-    parts = carried_parts(bot, guild, row) if carries_door(row) else None
-    stamp = parts[2] if parts is not None else None
-    if (stamp or None) == (row_value(row, "door_hash") or None):
-        return False
-    if row_value(row, "message_id") and not guard_allows(bot, row_value(row, "channel_id")):
-        return False
-    message = await posted_message(bot, guild, row)
-    if message is None:
-        return False
-    kept = [] if getattr(message, "content", "") else list(getattr(message, "embeds", [])[:1])
-    try:
-        await message.edit(
-            embeds=kept + ([parts[0]] if parts is not None else []),
-            view=parts[1] if parts is not None else None,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-    except discord.HTTPException as exc:
-        log.warning("frontdoor: could not redraw the door on its post: %s", exc)
-        await log_action(
-            bot,
-            guild,
-            POST_FAILED,
-            actor=actor,
-            details={
-                "slug": row_value(row, "slug"),
-                "message_id": int(message.id),
-                "reason": f"{type(exc).__name__}: {exc}",
-            },
-        )
-        return False
-    await set_door_drawn(bot.db, int(row["id"]), stamp)
-    await log_action(
-        bot,
-        guild,
-        kind_via(REDRAWN_ON_POST, via),
-        actor=actor,
-        details={
-            "slug": row_value(row, "slug"),
-            "post_id": int(row["id"]),
-            "message_id": int(message.id),
-            "drawn": stamp is not None,
-            "via": via,
-        },
+    """Rebuilt whole when any block's stamp moved; the post's own words stay as posted."""
+    return await redraw_post(
+        bot, guild, row, actor, via=via, done_kind=REDRAWN_ON_POST, failed_kind=POST_FAILED
     )
-    return True
 
 
 async def drop_the_doors_own(bot: Any, guild: Any, row: Any) -> None:
@@ -957,6 +913,16 @@ class FrontDoor(commands.Cog):
             return False
         return await self._reconciles.run(lambda: self._redoor(guild), stamp=False)
 
+    async def redraw_blocks_now(self, guild: Any) -> bool:
+        """Any other block's words were saved: every carrier is redrawn under the same lock."""
+        if not self.bot.db.is_connected:
+            return False
+        return await self._reconciles.run(lambda: self._redraw_all(guild), stamp=False)
+
+    async def _redraw_all(self, guild: Any) -> None:
+        await self._redoor(guild)
+        await keep_drawn(self.bot, guild)
+
     async def reconcile(self, *, skip_if_recent: bool = False) -> bool:
         return await self._reconciles.run(self._sweep, skip_if_recent=skip_if_recent)
 
@@ -965,6 +931,7 @@ class FrontDoor(commands.Cog):
             if getattr(guild, "unavailable", False):
                 continue
             await self._redoor(guild)
+            await keep_drawn(self.bot, guild)
         self.last_ok_at = now_iso()
 
     async def _redoor(self, guild: Any) -> None:

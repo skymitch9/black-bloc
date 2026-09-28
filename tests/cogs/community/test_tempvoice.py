@@ -365,6 +365,9 @@ class FakeBot:
     def add_view(self, view, **kwargs):
         self.views.append(view)
 
+    def add_dynamic_items(self, *items):
+        self.dynamic_items = [*getattr(self, "dynamic_items", []), *items]
+
     async def wait_until_ready(self):
         return None
 
@@ -2829,3 +2832,154 @@ def test_every_view_and_modal_answers_its_own_errors(cog):
     """Checklist 8 and 30: components never reach `tree.on_error`."""
     for shape in (VoicePanel, RenameModal, LimitModal, BitrateModal, SetupModal, TempVoicePanel):
         assert issubclass(shape, AnswersErrors), shape.__name__
+
+
+# --- blocks-convert (2026-09-28): the temp voice block is ADDITIVE ONLY -------------------------
+# The owner asked "Will this take functionality away from temp voice in the chat?" and was told
+# no. These pin today's flow so the block can only ever add a second surface over it.
+
+PINNED_PANEL_IDS = [
+    "tempvoice:rename",
+    "tempvoice:limit",
+    "tempvoice:lock",
+    "tempvoice:hide",
+    "tempvoice:kick",
+    "tempvoice:ban",
+    "tempvoice:unban",
+    "tempvoice:permit",
+    "tempvoice:unpermit",
+    "tempvoice:transfer",
+    "tempvoice:claim",
+]
+PINNED_KEYS = {
+    "tempvoice_mode": "enum",
+    "tempvoice_creator_ids": "channels",
+    "tempvoice_name_template": "text",
+    "tempvoice_creator_name": "text",
+    "tempvoice_allowed_role_id": "role",
+    "tempvoice_room_overwrites": "enum",
+    "tempvoice_log_level": "enum",
+    "voice_panel_minutes": "int",
+}
+
+
+def test_pinned_the_in_channel_controls_keep_every_custom_id():
+    view = TempVoicePanel()
+
+    assert [item.custom_id for item in view.children] == PINNED_PANEL_IDS
+    assert view.timeout is None and view.is_persistent()
+
+
+async def test_pinned_joining_the_lobby_makes_a_room_moves_the_member_and_posts_its_controls(
+    cog, bot, creator, member, db
+):
+    await cog._maybe_create(member, creator)
+
+    assert len(bot.guild.created) == 1
+    room = bot.guild.created[0]
+    assert member.moves == [room]
+    row = await get_row(db, room.id)
+    assert row["owner_id"] == member.id and row["creator_id"] == CREATOR
+    assert len(room.messages) == 1
+    panel = room.messages[0]
+    assert row["panel_message_id"] == panel.id
+    assert [item.custom_id for item in panel.kwargs["view"].children] == PINNED_PANEL_IDS
+    assert "tempvoice.create" in await action_kinds(db)
+
+
+def test_pinned_voice_is_still_the_one_command_and_its_settings_are_unchanged(cog):
+    from black_bloc.settings_store import KEY_TYPES
+
+    assert [one.name for one in cog.get_app_commands()] == ["voice"]
+    existing = {
+        key: kind
+        for key, kind in KEY_TYPES.items()
+        if (key.startswith("tempvoice_") and not key.startswith("tempvoice_block_"))
+        or key == "voice_panel_minutes"
+    }
+    assert existing == PINNED_KEYS
+
+
+def test_pinned_the_site_routes_are_unchanged(bot):
+    from black_bloc.api.tools.tempvoice import build_router
+
+    router = build_router(bot)
+    found = sorted((sorted(route.methods)[0], route.path) for route in router.routes)
+
+    assert found == [
+        ("GET", "/api/tempvoice/channels"),
+        ("POST", "/api/tempvoice/forget"),
+        ("POST", "/api/tempvoice/rooms/{channel_id}/hide"),
+        ("POST", "/api/tempvoice/rooms/{channel_id}/limit"),
+        ("POST", "/api/tempvoice/rooms/{channel_id}/lock"),
+        ("POST", "/api/tempvoice/rooms/{channel_id}/rename"),
+        ("POST", "/api/tempvoice/setup"),
+    ]
+
+
+# --- the lobby block (blocks-convert): a second surface over the same code ----------------------
+
+
+def test_the_block_is_drawn_by_default_because_join_to_create_ships_on(bot, creator):
+    from black_bloc.cogs.community.tempvoice import block_parts
+
+    assert block_parts(bot, bot.guild, None) is not None
+
+
+async def test_the_block_draws_nothing_with_the_mode_off(bot, creator):
+    from black_bloc.cogs.community.tempvoice import block_parts
+
+    await bot.store.set(GUILD, "tempvoice_mode", "off")
+
+    assert block_parts(bot, bot.guild, None) is None
+
+
+async def test_the_block_links_each_lobby_and_carries_the_voice_button(bot, creator):
+    from black_bloc.cogs.community.tempvoice import OpenVoiceButton, block_parts
+
+    await bot.store.set(GUILD, "tempvoice_mode", "on")
+
+    embed, view, stamp = block_parts(bot, bot.guild, None)
+
+    assert embed.title == voice.TEMPVOICE_BLOCK_DEFAULTS[voice.TEMPVOICE_BLOCK_TITLE]
+    link, press = view.children
+    assert link.url == f"https://discord.com/channels/{GUILD}/{CREATOR}"
+    assert link.label == f"🔊 {TEMPVOICE_CREATOR_NAME}"
+    assert isinstance(press, OpenVoiceButton) and press.custom_id == f"tvblock:open:{GUILD}"
+    assert press.custom_id not in PINNED_PANEL_IDS
+    assert view.timeout is None and stamp
+
+
+async def test_pressing_the_block_s_button_opens_exactly_the_voice_panel(cog, bot, member):
+    from black_bloc.cogs.community.tempvoice import OpenVoiceButton
+
+    by_command = FakeInteraction(bot, member)
+    by_block = FakeInteraction(bot, member)
+
+    await cog.voice_panel.callback(cog, by_command)
+    await OpenVoiceButton(GUILD).callback(by_block)
+
+    command, block = by_command.response.messages[0], by_block.response.messages[0]
+    assert block["ephemeral"] is True and command["ephemeral"] is True
+    assert block["embed"].title == command["embed"].title == voice.PANEL_TITLE
+    assert block["embed"].description == command["embed"].description
+    assert labels(block["view"]) == labels(command["view"])
+
+
+async def test_the_block_s_button_keeps_the_panel_s_own_refusals(bot, member):
+    from black_bloc.cogs.community.tempvoice import OpenVoiceButton
+
+    outside = FakeInteraction(bot, member, guild=False)
+    await OpenVoiceButton(GUILD).callback(outside)
+
+    assert "server" in outside.sent
+
+
+async def test_cog_load_registers_the_block_button_beside_the_controls(cog, bot, monkeypatch):
+    from black_bloc.cogs.community.tempvoice import OpenVoiceButton
+
+    monkeypatch.setattr(type(bot.db), "is_connected", property(lambda self: False))
+    await cog.cog_load()
+
+    assert [type(one) for one in bot.views] == [TempVoicePanel]
+    assert bot.dynamic_items == [OpenVoiceButton]

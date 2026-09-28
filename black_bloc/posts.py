@@ -438,6 +438,24 @@ def render_message(row: Any) -> dict[str, Any]:
     return {"content": body, "embed": None}
 
 
+def rows_used(view: Any) -> int:
+    rows = [int(getattr(item, "row", None) or 0) for item in list(view.children)]
+    return max(rows) + 1 if rows else 0
+
+
+def merged_view(views: list[Any]) -> Any:
+    """Each block's buttons start on a row of their own, in the blocks' order."""
+    view = discord.ui.View(timeout=None)
+    offset = 0
+    for one in views:
+        used = rows_used(one)
+        for item in list(one.children):
+            item.row = offset + int(getattr(item, "row", None) or 0)
+            view.add_item(item)
+        offset += used
+    return view
+
+
 def with_blocks(base: dict[str, Any], drawn: list[Any]) -> dict[str, Any]:
     """The post's own message, then each block's card in order, and every block's buttons."""
     embeds = [base["embed"]] if base.get("embed") is not None else []
@@ -445,10 +463,7 @@ def with_blocks(base: dict[str, Any], drawn: list[Any]) -> dict[str, Any]:
     views = [parts[1] for parts in drawn if parts[1] is not None]
     view = views[0] if len(views) == 1 else None
     if len(views) > 1:
-        view = discord.ui.View(timeout=None)
-        for one in views:
-            for item in list(one.children):
-                view.add_item(item)
+        view = merged_view(views)
     return {"content": base.get("content"), "embeds": embeds, "view": view}
 
 
@@ -465,19 +480,29 @@ def door_parts(bot: Any, guild: Any, row: Any) -> Any:
     return carried_parts(bot, guild, row)
 
 
-def message_payload(
+def message_parts(
     bot: Any, guild: Any, row: Any, kinds: Any = None
-) -> tuple[dict[str, Any], Any]:
-    """What a publish sends: the post alone, or the post and its blocks, and the door's stamp."""
-    from .post_blocks import FRONTDOOR, attached_by_cache, parts_of
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """What a publish sends, and each drawn block's stamp by kind."""
+    from .post_blocks import attached_by_cache, parts_of
 
     base = render_message(row)
     wanted = attached_by_cache(row) if kinds is None else list(kinds)
     drawn = parts_of(bot, guild, row, wanted)
     if not drawn and not wanted and not door_drawn(row):
-        return base, None
-    door = drawn.get(FRONTDOOR)
-    return with_blocks(base, list(drawn.values())), (door[2] if door is not None else None)
+        return base, {}
+    stamps = {kind: parts[2] for kind, parts in drawn.items()}
+    return with_blocks(base, list(drawn.values())), stamps
+
+
+def message_payload(
+    bot: Any, guild: Any, row: Any, kinds: Any = None
+) -> tuple[dict[str, Any], Any]:
+    """What a publish sends: the post alone, or the post and its blocks, and the door's stamp."""
+    from .post_blocks import FRONTDOOR
+
+    payload, stamps = message_parts(bot, guild, row, kinds)
+    return payload, stamps.get(FRONTDOOR)
 
 
 def allowed_mentions_for(guild: Any, body: Any, actor: Any) -> discord.AllowedMentions:
@@ -646,7 +671,7 @@ async def forget_message(db: Any, post_id: int, *, shadow: bool = False) -> None
         "door_hash = NULL WHERE id = ?",
         (int(post_id),),
     )
-    await db.conn.commit()
+    await forget_drawn(db, int(post_id))
 
 
 async def clear_posted(db: Any, post_id: int) -> None:
@@ -654,6 +679,14 @@ async def clear_posted(db: Any, post_id: int) -> None:
         "UPDATE posts SET message_id = NULL, shadow_message_id = NULL, posted_hash = NULL, "
         "posted_at = NULL, posted_by = NULL, door_hash = NULL WHERE id = ?",
         (int(post_id),),
+    )
+    await forget_drawn(db, int(post_id))
+
+
+async def forget_drawn(db: Any, post_id: int) -> None:
+    """No message is up, so no block is drawn anywhere."""
+    await db.conn.execute(
+        "UPDATE post_blocks SET drawn_hash = NULL WHERE post_id = ?", (int(post_id),)
     )
     await db.conn.commit()
 
@@ -1289,9 +1322,10 @@ async def publish_post(
         return refusal(
             POST_FAILED_SAID.format(title=title, reason=CHANNEL_GONE), "post_failed", 409
         )
-    from .post_blocks import kinds_on
+    from .post_blocks import FRONTDOOR, kinds_on, set_drawn
 
-    drawn, stamp = message_payload(bot, guild, row, await kinds_on(bot.db, int(row["id"])))
+    drawn, stamps = message_parts(bot, guild, row, await kinds_on(bot.db, int(row["id"])))
+    stamp = stamps.get(FRONTDOOR)
     payload = drawn | {"allowed_mentions": allowed_mentions_for(guild, body, actor)}
     message = await _existing_message(bot, guild, row, channel, actor, via, shadow=shadow)
     try:
@@ -1310,7 +1344,7 @@ async def publish_post(
         )
     write = set_shadow_posted if shadow else set_posted
     await write(bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor))
-    await set_door_drawn(bot.db, int(row["id"]), stamp)
+    await set_drawn(bot.db, int(row["id"]), stamps)
     made = await record_version(bot, guild, row, actor, via=via, because=BECAUSE_POSTED)
     await note(
         bot,
@@ -1564,7 +1598,10 @@ __all__ = [
     "set_door_drawn",
     "set_carries_door",
     "posted_message",
+    "message_parts",
     "message_payload",
+    "merged_view",
+    "forget_drawn",
     "door_parts",
     "door_drawn",
     "door_carrier",

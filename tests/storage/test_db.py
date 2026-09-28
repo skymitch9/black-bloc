@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 78
+        assert SCHEMA_VERSION == 79
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3171,7 +3171,7 @@ async def test_a_schema_77_post_carrying_the_door_gains_a_front_door_block(tmp_p
         cur = await again.conn.execute("SELECT slug, carries_door FROM posts ORDER BY id")
         assert [tuple(row) for row in await cur.fetchall()] == [("welcome", 1), ("hours", 0)]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "78"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "79"
         await again.conn.execute("DELETE FROM post_blocks")
         await again.conn.commit()
     finally:
@@ -3184,6 +3184,74 @@ async def test_a_schema_77_post_carrying_the_door_gains_a_front_door_block(tmp_p
         assert (await cur.fetchone())["n"] == 0, "the backfill runs once, at 77 -> 78, never again"
     finally:
         await third.close()
+
+
+async def test_a_schema_77_door_stamp_lands_on_its_new_block_row_too(tmp_path):
+    path = tmp_path / "old77stamp.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE post_blocks")
+    await db.conn.execute(
+        "INSERT INTO posts(guild_id, slug, title, carries_door, door_hash, updated_at) "
+        "VALUES (1, 'welcome', 'Welcome and rules', 1, 'door-stamp', '2026-09-27')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '77')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT kind, drawn_hash FROM post_blocks")
+        assert [tuple(row) for row in await cur.fetchall()] == [("frontdoor", "door-stamp")]
+    finally:
+        await again.close()
+
+
+async def test_a_schema_78_file_gains_drawn_hash_with_the_door_s_stamp_carried_over(tmp_path):
+    """Schema 79: each block row keeps its own drawn stamp; the front door's starts as the
+    stamp posts.door_hash already held, so the welcome post is not re-edited on upgrade."""
+    path = tmp_path / "old78.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("DROP TABLE post_blocks")
+    await db.conn.execute(
+        "CREATE TABLE post_blocks (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT "
+        "NULL, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE, kind TEXT NOT "
+        "NULL, position INTEGER NOT NULL DEFAULT 0, exclusive INTEGER NOT NULL DEFAULT 0, "
+        "added_at TEXT NOT NULL, added_by INTEGER, UNIQUE (post_id, kind))"
+    )
+    await db.conn.execute(
+        "INSERT INTO posts(guild_id, slug, title, carries_door, door_hash, updated_at) VALUES "
+        "(1, 'welcome', 'Welcome and rules', 1, 'door-stamp', '2026-09-27'), "
+        "(1, 'hours', 'Hours', 0, NULL, '2026-09-27')"
+    )
+    await db.conn.execute(
+        "INSERT INTO post_blocks(guild_id, post_id, kind, position, exclusive, added_at) "
+        "VALUES (1, 1, 'frontdoor', 0, 1, '2026-09-27')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '78')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute("SELECT post_id, kind, drawn_hash FROM post_blocks")
+        assert [tuple(row) for row in await cur.fetchall()] == [(1, "frontdoor", "door-stamp")]
+        cur = await again.conn.execute("SELECT slug, carries_door, door_hash FROM posts")
+        assert [tuple(row) for row in await cur.fetchall()] == [
+            ("welcome", 1, "door-stamp"),
+            ("hours", 0, None),
+        ]
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "79"
+    finally:
+        await again.close()
 
 
 async def test_one_exclusive_block_per_guild_is_held_by_the_database_too(tmp_path):

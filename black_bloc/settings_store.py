@@ -2957,6 +2957,67 @@ KEY_HELP.update(
     }
 )
 
+# Temp voice lobby block (blocks-convert, 2026-09-28) — a second surface over temp voice, drawn
+# by the temp voice cog; every word it posts is one of these. Filed under tempvoice by prefix.
+TEMPVOICE_BLOCK_TITLE = "tempvoice_block_title"
+TEMPVOICE_BLOCK_TEXT = "tempvoice_block_text"
+TEMPVOICE_BLOCK_LOBBY_LABEL = "tempvoice_block_lobby_label"
+TEMPVOICE_BLOCK_CONTROLS_LABEL = "tempvoice_block_controls_label"
+TEMPVOICE_BLOCK_SHOW_CONTROLS = "tempvoice_block_show_controls"
+POSTS_BLOCK_TEMPVOICE_NAME = "posts_block_tempvoice_name"
+POSTS_BLOCK_TEMPVOICE_NAME_DEFAULT = "Temp voice lobby"
+TEMPVOICE_BLOCK_DEFAULTS: dict[str, Any] = {
+    TEMPVOICE_BLOCK_TITLE: "A voice channel of your own",
+    TEMPVOICE_BLOCK_TEXT: (
+        "Join a lobby below and Black Bloc makes you a voice channel of your own and moves you "
+        "in. Its controls are posted in that channel's chat, and it goes away once everyone has "
+        "left. Type /voice any time for the same controls."
+    ),
+    TEMPVOICE_BLOCK_LOBBY_LABEL: "🔊 {lobby}",
+    TEMPVOICE_BLOCK_CONTROLS_LABEL: "My voice channel",
+    TEMPVOICE_BLOCK_SHOW_CONTROLS: True,
+    POSTS_BLOCK_TEMPVOICE_NAME: POSTS_BLOCK_TEMPVOICE_NAME_DEFAULT,
+}
+KEY_TYPES.update(
+    {
+        TEMPVOICE_BLOCK_TITLE: "text",
+        TEMPVOICE_BLOCK_TEXT: "text",
+        TEMPVOICE_BLOCK_LOBBY_LABEL: "text",
+        TEMPVOICE_BLOCK_CONTROLS_LABEL: "text",
+        TEMPVOICE_BLOCK_SHOW_CONTROLS: "bool",
+        POSTS_BLOCK_TEMPVOICE_NAME: "text",
+    }
+)
+KEY_HELP.update(
+    {
+        TEMPVOICE_BLOCK_TITLE: (
+            "the heading on the temp voice lobby block, when a post carries it; blank restores "
+            "the shipped wording"
+        ),
+        TEMPVOICE_BLOCK_TEXT: (
+            "the line under that heading, explaining join-to-create; blank restores the shipped "
+            "wording"
+        ),
+        TEMPVOICE_BLOCK_LOBBY_LABEL: (
+            "what each lobby's button on the block says, at most 80 characters; {lobby} is the "
+            "lobby's name. The button opens that lobby in Discord. Blank restores the speaker and the name"
+        ),
+        TEMPVOICE_BLOCK_CONTROLS_LABEL: (
+            "what the block's button that opens the /voice panel says, at most 80 characters; "
+            "blank restores the shipped wording"
+        ),
+        TEMPVOICE_BLOCK_SHOW_CONTROLS: (
+            "true puts the button that opens the /voice panel on the block, beside the lobby "
+            "buttons; false leaves only the lobbies. /voice itself always works"
+        ),
+        POSTS_BLOCK_TEMPVOICE_NAME: (
+            "what the temp voice lobby block is called in the Posts page's Add a block list, its "
+            "Blocks section and the /posts card; blank restores Temp voice lobby. Members never "
+            "see it"
+        ),
+    }
+)
+
 # Meeting minutes (prototype) — filed under `events` in NAMESPACE_OVERRIDE below, because the
 # `/settings` group select is at its cap of 25 and a meeting is an event's cousin.
 MINUTES_MODES = ("off", "on")
@@ -6602,6 +6663,8 @@ class SettingsStore:
             return MARATHON_DEFAULTS[key]
         if key in GOLIVE_REPLAY_DEFAULTS:
             return GOLIVE_REPLAY_DEFAULTS[key]
+        if key in TEMPVOICE_BLOCK_DEFAULTS:
+            return TEMPVOICE_BLOCK_DEFAULTS[key]
         if key in REVIEW_SETTINGS:
             return REVIEW_SETTINGS[key][1]
         if key in REVIEW_WORDS:
