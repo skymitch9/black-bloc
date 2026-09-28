@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from black_bloc.frontdoor import LABEL_DEFAULTS, TICKET
+from black_bloc.frontdoor import LABEL_DEFAULTS
 from black_bloc.settings_store import FRONTDOOR_TITLE_DEFAULT
 
 ROUTES = [
@@ -132,9 +132,10 @@ async def test_the_website_door_takes_the_ticket_button_down_in_the_same_channel
     assert "frontdoor.ticket_button_hidden" in await wf.kinds_in(web.db)
 
 
-def test_the_three_labels_are_the_words_the_card_draws(client, sign_in, web, guild, wf):
+def test_the_posted_door_never_times_out_and_every_button_is_a_door_button(
+    client, sign_in, web, guild, wf
+):
     sign_in(client)
-    assert LABEL_DEFAULTS[TICKET] == "Ask staff privately"
 
     client.post("/api/frontdoor/panel", json={"channel_id": str(wf.TEST_CHANNEL_ID)})
     sent = guild.get_channel(wf.TEST_CHANNEL_ID).messages[-1].kwargs

@@ -1,14 +1,16 @@
 import pytest
 
 from black_bloc import knowledge
+from black_bloc.channel_notes import NOTE_CHARS
 from black_bloc.chat import BUILTIN_ORDER, UNKNOWN, loaded_intents, seed_defaults
+from black_bloc.directory import DIRECTORY_BYTES
 from black_bloc.llm import ANTHROPIC, IMPORTANT, MODEL, Usage, record
+from black_bloc.personas import TROPES
 from black_bloc.settings_store import (
-    CHANNEL_NOTE_WORDS,
-    PROMPT_WORDS,
-    REVIEW_SETTINGS,
+    KEY_TYPES,
+    REVIEW_REASON_REASK_KEY,
+    REVIEW_SUGGEST_PHRASE_KEY,
     REVIEW_WORDS,
-    VOICE_WORDS,
 )
 
 
@@ -67,39 +69,7 @@ async def test_each_intent_carries_the_tokens_the_page_offers_as_chips(seeded, c
 async def test_the_page_gets_the_chat_settings_in_the_shape_settings_uses(seeded, client):
     rows = client.get("/api/chat/intents").json()["settings"]
 
-    assert {row["key"] for row in rows} == {
-        "chat_mode",
-        "chat_cooldown_seconds",
-        "chat_ignore_channels",
-        "chat_ignore_categories",
-        "chat_home_channel_id",
-        "chat_visibility_role_id",
-        "chat_staff_can_ping_roles",
-        "chat_escalation_names",
-        "chat_greeting_reaction",
-        "chat_greeting_via_model",
-        "chat_reply_in_threads",
-        "chat_route_ping_staff",
-        "chat_llm_mode",
-        "chat_simple_model",
-        "chat_personality",
-        "chat_person_hourly_turns",
-        "chat_daily_turns",
-        "chat_monthly_cap_usd",
-        "chat_status_admin_only",
-        "chat_panel_minutes",
-        "chat_log_level",
-        "chat_memory_mode",
-        "chat_memory_consent",
-        "chat_memory_retention_days",
-        "chat_memory_dm_scope",
-        "chat_memory_staff_view",
-        "chat_memory_notes_max",
-        "chat_memory_threads_max",
-        "chat_memory_model",
-    } | set(CHANNEL_NOTE_WORDS) | set(PROMPT_WORDS) | set(VOICE_WORDS) | set(REVIEW_SETTINGS) | set(
-        REVIEW_WORDS
-    )
+    assert {row["key"] for row in rows} == {key for key in KEY_TYPES if key.startswith("chat_")}
     for row in rows:
         assert {"key", "type", "value", "default", "help"} <= set(row)
     mode = next(row for row in rows if row["key"] == "chat_mode")
@@ -361,7 +331,7 @@ async def test_the_knowledge_list_says_who_wrote_each_note_and_when(seeded, clie
     assert row["editable"] is True and row["locked_why"] is None
     assert row["updated_by"]["id"] == "7" and row["updated_by"]["name"] == "Lead"
     assert row["characters"] == len("Doors at six, food at seven.")
-    assert payload["budget"]["sections"] == 3 and payload["budget"]["word"]
+    assert payload["budget"]["sections"] == knowledge.HITS_DEFAULT and payload["budget"]["word"]
 
 
 async def test_a_note_can_be_written_edited_and_removed(seeded, client):
@@ -434,7 +404,7 @@ async def test_the_personality_page_seeds_the_ported_pool_on_the_first_read(seed
     second = client.get("/api/chat/personality").json()
 
     assert first["mode"] == "cookout" and first["mode_kind"] == "cookout"
-    assert first["counts"] == {"total": 11, "enabled": 11}
+    assert first["counts"] == {"total": len(TROPES), "enabled": len(TROPES)}
     assert [row["name"] for row in first["tropes"]] == [row["name"] for row in second["tropes"]]
     assert all(row["voice"] and row["label"] for row in first["tropes"])
     assert first["ported_from"].startswith("catalog-platform@")
@@ -444,7 +414,8 @@ async def test_the_personality_page_seeds_the_ported_pool_on_the_first_read(seed
 async def test_the_voice_can_move_to_the_pool_and_to_one_named_trope(seeded, client):
     pooled = client.put("/api/chat/personality", json={"mode": "pool"})
     assert pooled.status_code == 200, pooled.text
-    assert pooled.json()["mode_kind"] == "pool" and "11 voices" in pooled.json()["mode_word"]
+    assert pooled.json()["mode_kind"] == "pool"
+    assert f"{len(TROPES)} voices" in pooled.json()["mode_word"]
 
     pinned = client.put("/api/chat/personality", json={"mode": "noir"})
 
@@ -469,7 +440,7 @@ async def test_a_trope_can_be_switched_off_and_back_on(seeded, client):
     off = client.put("/api/chat/personality/noir", json={"enabled": False})
     assert off.status_code == 200, off.text
     assert off.json()["trope"]["enabled"] is False
-    assert client.get("/api/chat/personality").json()["counts"]["enabled"] == 10
+    assert client.get("/api/chat/personality").json()["counts"]["enabled"] == len(TROPES) - 1
 
     on = client.put("/api/chat/personality/noir", json={"enabled": True})
 
@@ -652,8 +623,8 @@ async def test_every_text_channel_is_listed_with_why_the_model_is_not_told_of_it
     assert rows["blackbloc-logs"]["category"] == "staff"
     assert "voice" not in rows
     assert payload["directory"].splitlines()[-1] == "#general"
-    assert payload["budget"]["cap"] == 4096 and payload["budget"]["used"] > 0
-    assert payload["note_chars"] == 240
+    assert payload["budget"]["cap"] == DIRECTORY_BYTES and payload["budget"]["used"] > 0
+    assert payload["note_chars"] == NOTE_CHARS
     assert payload["counts"] == {"total": 2, "shown": 1, "noted": 0}
 
 
@@ -694,11 +665,12 @@ async def test_a_note_is_set_shown_in_the_block_and_cleared(seeded, client, web,
 
 
 async def test_a_note_over_the_cap_is_refused_in_words(seeded, client, web, wf):
-    response = client.put(f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}", json={"note": "x" * 241})
+    path = f"/api/chat/channels/{wf.OTHER_CHANNEL_ID}"
+    response = client.put(path, json={"note": "x" * (NOTE_CHARS + 1)})
 
     assert response.status_code == 422
     assert response.json()["error"] == "note_too_long"
-    assert "241 characters" in response.json()["message"]
+    assert f"{NOTE_CHARS + 1} characters" in response.json()["message"]
     assert [k for k in await wf.kinds_in(web.db) if k.startswith("web.chat")] == []
 
 
@@ -1083,8 +1055,10 @@ async def test_the_queue_lists_open_items_with_their_suggestion_and_counts(seede
     assert [row["id"] for row in payload["items"]][-1] == made
     first = next(row for row in payload["items"] if row["id"] == made)
     assert first["asked"] == "yo fam" and first["reason"] == "reask"
-    assert first["reason_word"] == "they asked again straight away"
-    assert first["suggestion"]["word"] == "add **yo fam** to **greeting**"
+    assert first["reason_word"] == REVIEW_WORDS[REVIEW_REASON_REASK_KEY][0]
+    assert first["suggestion"]["word"] == REVIEW_WORDS[REVIEW_SUGGEST_PHRASE_KEY][0].format(
+        phrase="yo fam", intent="greeting"
+    )
     assert first["suggestion"]["teaches"] is True
     assert first["link"].endswith("/5/99")
     assert payload["counts"]["open"] == 2
@@ -1164,6 +1138,6 @@ async def test_the_markdown_export_reads_through_the_operator_token_and_cannot_d
     assert read.status_code == 200
     assert read.headers["content-type"].startswith("text/markdown")
     assert read.text.startswith("# Chat review queue — 1 open")
-    assert f"## Item {made} — they asked again straight away" in read.text
+    assert f"## Item {made} — {REVIEW_WORDS[REVIEW_REASON_REASK_KEY][0]}" in read.text
     refused = client.post(f"/api/chat/review/{made}/approve", headers=bearer)
     assert refused.status_code == 403 and refused.json()["error"] == "operator_read_only"

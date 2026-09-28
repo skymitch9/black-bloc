@@ -109,8 +109,12 @@ async def test_removing_a_birthday_says_so_and_refuses_when_there_is_none(
 
 def test_a_member_id_that_is_not_a_number_is_a_sentence(client, sign_in):
     sign_in(client)
-    assert client.put("/api/birthdays/nobody", json={"month": 3, "day": 4}).status_code == 400
-    assert client.delete("/api/birthdays/nobody").status_code == 400
+    for answered in (
+        client.put("/api/birthdays/nobody", json={"month": 3, "day": 4}),
+        client.delete("/api/birthdays/nobody"),
+    ):
+        assert answered.status_code == 400
+        assert answered.json()["message"]
 
 
 async def test_the_wished_toggle_turns_a_birthday_off_and_on_again(
