@@ -1822,8 +1822,7 @@ def untouched(interaction):
         interaction.post_edits == []
         and interaction.original_edits == []
         and interaction.response.message_edits == []
-        and all(one.get("deferred") is not True or one["ephemeral"] for one in
-                interaction.response.messages)
+        and all(one["ephemeral"] for one in interaction.response.messages if one.get("deferred"))
     )
 
 
@@ -1979,3 +1978,24 @@ async def test_cog_load_registers_the_block_button_even_before_the_database(bot,
 
     assert bot.dynamic_items == [OpenBirthdayButton]
 
+
+
+async def test_a_failure_in_the_block_s_form_is_a_private_sentence_and_a_row(
+    cog, bot, birthday_person, monkeypatch
+):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    modal = fill((await press_block(bot, birthday_person)).response.modals[0], "08-10")
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(birthdays_cog, "typed_birthday", broken)
+    submitted = SpyInteraction(bot, birthday_person)
+    try:
+        await modal.on_submit(submitted)
+    except RuntimeError as exc:
+        await modal.on_error(submitted, exc)
+
+    assert "error.modal" in await action_kinds(bot.db)
+    assert submitted.response.messages[-1]["ephemeral"] is True
+    assert submitted.sent and untouched(submitted)
