@@ -35,7 +35,6 @@ from ...frontdoor import (
     EVENT,
     EVENT_HANDOFF_TEXT,
     EVENT_HANDOFF_TITLE,
-    KINDS,
     LABEL_DEFAULTS,
     PANEL_TIMEOUT_FOOTER,
     REQUEST,
@@ -53,6 +52,7 @@ from ...frontdoor import (
     rehearsal_copy,
     rehearsal_stamp,
     rehearsal_takes_over,
+    shown_kinds,
 )
 from ...golive import now_iso
 from ...logkinds import VIA_DISCORD, kind_via
@@ -217,7 +217,7 @@ class DoorButton(
 def door_view(bot: Any, guild: Any) -> discord.ui.View:
     """The posted door belongs to the room, so it outlives the process that posted it."""
     view = discord.ui.View(timeout=None)
-    for kind in KINDS:
+    for kind in shown_kinds(bot.store, guild.id):
         view.add_item(DoorButton(kind, guild.id, label_for(bot.store, guild.id, kind)))
     return view
 
@@ -250,7 +250,7 @@ def build_panel(bot: Any, guild: Any, actor: Any = None) -> tuple[discord.Embed,
     """The one card: the posted message wears it, and so does `/ask`."""
     store = bot.store
     view = DoorPanel(panel_minutes(store, guild.id, FRONTDOOR_PANEL_MINUTES))
-    for kind in KINDS:
+    for kind in shown_kinds(store, guild.id):
         view.add_item(DOORS[kind](label_for(store, guild.id, kind)))
     embed = door_embed(store, guild.id)
     said = staff_shadow_words(bot, guild, actor)
@@ -950,6 +950,12 @@ class FrontDoor(commands.Cog):
         ) and not carries_door(row):
             return
         await self._reconciles.run(lambda: self._redoor(guild), stamp=False)
+
+    async def redraw_now(self, guild: Any) -> bool:
+        """A block's words were saved on the site: the carrier is redrawn under the sweep's lock."""
+        if not self.bot.db.is_connected:
+            return False
+        return await self._reconciles.run(lambda: self._redoor(guild), stamp=False)
 
     async def reconcile(self, *, skip_if_recent: bool = False) -> bool:
         return await self._reconciles.run(self._sweep, skip_if_recent=skip_if_recent)

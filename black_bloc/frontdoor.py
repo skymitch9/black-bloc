@@ -19,6 +19,9 @@ from .settings_store import (
     FRONTDOOR_REQUEST_LABEL_DEFAULT,
     FRONTDOOR_SHADOW_HASH,
     FRONTDOOR_SHADOW_MESSAGE,
+    FRONTDOOR_SHOW_EVENT,
+    FRONTDOOR_SHOW_REQUEST,
+    FRONTDOOR_SHOW_TICKET,
     FRONTDOOR_TEXT,
     FRONTDOOR_TEXT_DEFAULT,
     FRONTDOOR_TICKET_LABEL,
@@ -50,6 +53,11 @@ LABEL_KEYS: dict[str, str] = {
     TICKET: FRONTDOOR_TICKET_LABEL,
     REQUEST: FRONTDOOR_REQUEST_LABEL,
     EVENT: FRONTDOOR_EVENT_LABEL,
+}
+SHOW_KEYS: dict[str, str] = {
+    TICKET: FRONTDOOR_SHOW_TICKET,
+    REQUEST: FRONTDOOR_SHOW_REQUEST,
+    EVENT: FRONTDOOR_SHOW_EVENT,
 }
 LABEL_DEFAULTS: dict[str, str] = {
     TICKET: FRONTDOOR_TICKET_LABEL_DEFAULT,
@@ -117,12 +125,13 @@ DOOR_RIDES_POST_SAID = (
     "taken down — the door is part of that post's message."
 )
 DOOR_RIDES_ELSEWHERE = (
-    "The front door rides **{title}** in {where}, so it was not moved. Turn **Carry the front "
-    "door** off on that post first, then post the door where you want it."
+    "The front door rides **{title}** in {where}, so it was not moved. Remove the front door "
+    "block from that post first (Posts page ▸ the post ▸ Blocks), then post the door where you "
+    "want it."
 )
 DOOR_OFF_THE_POST_SAID = (
-    "The front door is down. **{title}** stays up without it, and **Carry the front door** is "
-    "off on that post now."
+    "The front door is down. **{title}** stays up without it, and the front door block is off "
+    "that post now."
 )
 
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /ask again"
@@ -165,6 +174,15 @@ def label_for(store: Any, guild_id: int, kind: str) -> str:
     """A blank label reads as "leave it alone", so the shipped word is what is drawn."""
     found = str(store.get(guild_id, LABEL_KEYS[kind]) or "").strip()
     return clamp(found, LABEL_LIMIT) or LABEL_DEFAULTS[kind]
+
+
+def shows(store: Any, guild_id: int, kind: str) -> bool:
+    found = store.get(guild_id, SHOW_KEYS[kind])
+    return True if found is None else bool(found)
+
+
+def shown_kinds(store: Any, guild_id: int) -> tuple[str, ...]:
+    return tuple(kind for kind in KINDS if shows(store, guild_id, kind))
 
 
 def labels(store: Any, guild_id: int) -> dict[str, str]:
@@ -243,6 +261,9 @@ def door_hash(store: Any, guild_id: int, note: str = "") -> str:
         door_text(store, guild_id),
         *(label_for(store, guild_id, kind) for kind in KINDS),
     ]
+    hidden = [kind for kind in KINDS if not shows(store, guild_id, kind)]
+    if hidden:
+        drawn.append("hidden:" + ",".join(hidden))
     return hashlib.sha256("".join(drawn).encode("utf-8")).hexdigest()
 
 
@@ -282,6 +303,7 @@ __all__ = [
     "PANEL_TIMEOUT_FOOTER",
     "REQUEST",
     "SHADOW",
+    "SHOW_KEYS",
     "TICKET",
     "custom_id",
     "door_embed",
@@ -301,4 +323,6 @@ __all__ = [
     "rehearsal_stamp",
     "rehearsal_takes_over",
     "replaces_ticket_button",
+    "shown_kinds",
+    "shows",
 ]

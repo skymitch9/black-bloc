@@ -318,7 +318,7 @@ def spotlight_bump(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> 
 def door_parts(store: Any, guild: Any) -> tuple[Any, list[dict[str, Any]]]:
     labels = frontdoor.labels(store, guild.id)
     row = [button(labels[kind], "primary" if kind == frontdoor.TICKET else "secondary")
-           for kind in frontdoor.KINDS]
+           for kind in frontdoor.shown_kinds(store, guild.id)]
     return frontdoor.door_embed(store, guild.id), row
 
 
@@ -411,7 +411,12 @@ def post_message(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Re
     embed = found.get("embed")
     embeds = [embed] if embed is not None else []
     rows = []
-    carrying = str(sample.get("carries_door") or "").strip().lower() in ("true", "1", "on")
+    blocks = [one.strip() for one in str(sample.get("blocks") or "").split(",") if one.strip()]
+    carrying = "frontdoor" in blocks or str(sample.get("carries_door") or "").strip().lower() in (
+        "true",
+        "1",
+        "on",
+    )
     if carrying and frontdoor.door_is_on(store, guild.id):
         door, row_of_buttons = door_parts(store, guild)
         embeds.append(door)
@@ -560,6 +565,7 @@ RENDERERS: dict[str, Renderer] = {
                 "title": "Welcome",
                 "body": "**Welcome!** Start with the pinned guide, then say hello.",
                 "carries_door": False,
+                "blocks": "",
             },
         ),
         Renderer(

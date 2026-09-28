@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 77
+SCHEMA_VERSION = 78
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -847,6 +847,22 @@ CREATE TABLE IF NOT EXISTS post_versions (
 
 CREATE INDEX IF NOT EXISTS post_versions_by_post ON post_versions(post_id, n);
 
+CREATE TABLE IF NOT EXISTS post_blocks (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id  INTEGER NOT NULL,
+    post_id   INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    kind      TEXT    NOT NULL,
+    position  INTEGER NOT NULL DEFAULT 0,
+    exclusive INTEGER NOT NULL DEFAULT 0,
+    added_at  TEXT    NOT NULL,
+    added_by  INTEGER,
+    UNIQUE (post_id, kind)
+);
+
+CREATE INDEX IF NOT EXISTS post_blocks_by_post ON post_blocks(post_id, position);
+CREATE UNIQUE INDEX IF NOT EXISTS post_blocks_one_holder
+    ON post_blocks(guild_id, kind) WHERE exclusive = 1;
+
 CREATE TABLE IF NOT EXISTS meetings (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id         INTEGER NOT NULL,
@@ -1290,6 +1306,14 @@ BACKFILL_POST_VERSIONS = (
     "WHERE NOT EXISTS (SELECT 1 FROM post_versions WHERE post_versions.post_id = posts.id)"
 )
 
+BACKFILL_POST_BLOCKS = (
+    "INSERT OR IGNORE INTO post_blocks(guild_id, post_id, kind, position, exclusive, added_at, "
+    "added_by) SELECT guild_id, id, 'frontdoor', 0, 1, COALESCE(updated_at, ?), updated_by "
+    "FROM posts WHERE carries_door = 1 AND NOT EXISTS (SELECT 1 FROM post_blocks "
+    "WHERE post_blocks.post_id = posts.id AND post_blocks.kind = 'frontdoor')"
+)
+BLOCKS_SINCE = 78
+
 MOD_CASES_CARRIED_OVER = (
     "id, guild_id, user_id, kind, moderator_id, reason, duration_s, at, mode, applied, "
     "log_message_id"
@@ -1338,6 +1362,7 @@ class Database:
         self._conn = await aiosqlite.connect(self.path)
         self._conn.row_factory = aiosqlite.Row
         await self._loosen_application_form_roles()
+        before = await self._stored_schema()
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self._close_duplicate_open_sessions()
@@ -1351,6 +1376,7 @@ class Database:
         await self._restore_set_aside_fan_roles()
         await self._open_the_retired_request_statuses()
         await self._backfill_post_versions()
+        await self._backfill_post_blocks(before)
         await self._conn.execute(
             "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -1452,6 +1478,26 @@ class Database:
         )
         if cur.rowcount and cur.rowcount > 0:
             log.info("database: gave %d post(s) a first saved version", cur.rowcount)
+
+    async def _stored_schema(self) -> int:
+        if not await self._table_columns("schema_meta"):
+            return 0
+        cur = await self.conn.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'")
+        row = await cur.fetchone()
+        try:
+            return int(row["value"]) if row else 0
+        except (TypeError, ValueError):
+            return 0
+
+    async def _backfill_post_blocks(self, before: int) -> None:
+        """Schema 78: a post that carried the front door carries it as a block."""
+        if before >= BLOCKS_SINCE:
+            return
+        cur = await self.conn.execute(BACKFILL_POST_BLOCKS, (datetime.now(UTC).isoformat(),))
+        if cur.rowcount and cur.rowcount > 0:
+            log.warning(
+                "database: %d post(s) carrying the front door now carry it as a block", cur.rowcount
+            )
 
     async def _add_missing_columns(self) -> None:
         for table, column, declaration in ADDED_COLUMNS:

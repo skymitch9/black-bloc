@@ -449,6 +449,9 @@ export const LABELS = {
   frontdoor_follows_post: 'Which post the front door sits under',
   frontdoor_replaces_ticket_button: 'Whether the front door replaces the ticket button',
   frontdoor_panel_minutes: 'How long the /ask panel stays live',
+  frontdoor_show_ticket: 'Show the Ask staff privately button',
+  frontdoor_show_request: 'Show the Request something button',
+  frontdoor_show_event: 'Show the Propose an event button',
 
   automod_mode: 'Whether automod is watching',
   automod_rules: 'The rule book automod reads',
@@ -649,6 +652,7 @@ export const LABELS = {
   posts_panel_minutes: 'How long the /posts panel stays live',
   posts_log_level: 'How much of the posts is repeated into Discord',
   posts_versions_keep: 'How many saved versions of a post are kept',
+  posts_block_frontdoor_name: 'What the front door block is called',
   posts_versions_summary_chars: 'How much of a version is shown on its row',
 
   guides_mode: 'Whether members can read the guides',

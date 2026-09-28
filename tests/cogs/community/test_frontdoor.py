@@ -5,7 +5,7 @@ import re
 import discord
 import pytest
 
-from black_bloc import posts
+from black_bloc import post_blocks, posts
 from black_bloc.cogs.community.events import EVENTS_OFF, ProposeButton
 from black_bloc.cogs.community.frontdoor import (
     BELOW_POST,
@@ -1455,7 +1455,7 @@ async def test_posting_the_door_somewhere_else_is_refused_in_words_naming_the_po
     outcome = await post_door(live, live.guild, member, other)
 
     assert not outcome.ok and outcome.code == "door_rides_post"
-    assert "Welcome and rules" in outcome.message and "Carry the front door" in outcome.message
+    assert "Welcome and rules" in outcome.message and "front door block" in outcome.message
     assert other.messages == [] and len(welcome.messages) == 1
 
 
@@ -1653,3 +1653,116 @@ async def test_turning_carrying_off_leaves_the_post_and_lets_the_door_go_back_to
 
     assert len(welcome.messages) == 2, "the sweep puts the door back as a message of its own"
     assert welcome.messages[0] is message
+
+
+# --- blocks (post-blocks, 2026-09-27): the front door is the first block kind -----------------
+
+
+async def a_v180_carrier(bot):
+    """A post as v180 left it: the column on, and no block row — the migration adds the row."""
+    post_id = await posts.create_post(
+        bot.db,
+        GUILD,
+        slug="welcome",
+        title="Welcome and rules",
+        body=RULES,
+        channel_id=777,
+        pin=False,
+    )
+    await bot.db.conn.execute("UPDATE posts SET carries_door = 1 WHERE id = ?", (post_id,))
+    await bot.db.conn.commit()
+    return post_id
+
+
+async def test_the_welcome_post_carried_as_a_block_goes_out_exactly_as_v180_sent_it(live, member):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    post_id = await a_v180_carrier(live)
+    await live.db._backfill_post_blocks(77)
+    assert await post_blocks.kinds_on(live.db, post_id) == ["frontdoor"]
+
+    await published(live, await posts.get_post_by_id(live.db, post_id), member)
+
+    assert len(welcome.messages) == 1
+    message = welcome.messages[0]
+    assert message.content == RULES
+    assert [one.title for one in message.embeds] == [live.store.get(GUILD, FRONTDOOR_TITLE)]
+    assert door_ids(message) == [custom_id(kind, GUILD) for kind in KINDS]
+    assert not message.pinned, "the welcome post's pin is off, and the block changes nothing"
+    assert live.store.get(GUILD, FRONTDOOR_MESSAGE) == str(message.id)
+
+
+async def test_adding_the_block_to_a_post_already_up_adds_the_door_to_its_message(live, member):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    post_id = await posts.create_post(
+        live.db, GUILD, slug="welcome", title="Welcome and rules", body=RULES, channel_id=777
+    )
+    row = await published(live, await posts.get_post_by_id(live.db, post_id), member)
+    message = welcome.messages[0]
+
+    outcome = await post_blocks.add_block(live, live.guild, row, member, "frontdoor")
+
+    assert outcome.ok and outcome.message.endswith(posts.CARRYING_NOW_SAID)
+    assert welcome.messages == [message]
+    assert door_ids(message) == [custom_id(kind, GUILD) for kind in KINDS]
+
+    outcome = await post_blocks.remove_block(live, live.guild, outcome.value, member, "frontdoor")
+
+    assert outcome.ok and outcome.message.endswith(posts.CARRYING_STOPPED_SAID)
+    assert message.view is None and welcome.messages == [message]
+
+
+async def test_taking_the_door_down_removes_the_block_row_too(live, member):
+    await both_on(live)
+    row = await published(live, await a_carrier(live), member)
+
+    outcome = await take_door_down(live, live.guild, member)
+
+    assert outcome.ok
+    assert await post_blocks.kinds_on(live.db, int(row["id"])) == []
+    assert not posts.carries_door(await posts.get_post_by_id(live.db, int(row["id"])))
+
+
+async def test_saving_the_block_words_redraws_the_carrier_at_once_not_on_the_sweep(
+    live, cog, member
+):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    await published(live, await a_carrier(live), member)
+    message = welcome.messages[0]
+    live.cogs_by_name["FrontDoor"] = cog
+
+    await live.store.set(GUILD, FRONTDOOR_TITLE, "Need a hand?")
+    outcome = await post_blocks.redraw_kind(live, live.guild, "frontdoor")
+
+    assert outcome.ok and outcome.value is True
+    assert outcome.message == post_blocks.REDRAWN_SAID.format(name="Front door")
+    assert welcome.messages == [message]
+    assert message.edits[-1]["embeds"][-1].title == "Need a hand?"
+    assert "content" not in message.edits[-1]
+
+
+async def test_without_the_cog_the_redraw_says_the_sweep_will_carry_it(live):
+    outcome = await post_blocks.redraw_kind(live, live.guild, "frontdoor")
+
+    assert outcome.ok and outcome.value is False
+    assert outcome.message == post_blocks.REDRAWN_LATER_SAID.format(name="Front door")
+
+
+async def test_a_hidden_button_is_left_off_the_door_the_carrier_and_ask(live, cog, member):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    await live.store.set(GUILD, "frontdoor_show_event", False)
+
+    await published(live, await a_carrier(live), member)
+    _, panel = build_panel(live, live.guild, member)
+
+    message = welcome.messages[0]
+    assert door_ids(message) == [custom_id(TICKET, GUILD), custom_id(REQUEST, GUILD)]
+    assert len(panel.children) == 2
+
+    await live.store.set(GUILD, "frontdoor_show_event", True)
+    await cog.reconcile()
+
+    assert door_ids(message) == [custom_id(kind, GUILD) for kind in KINDS]

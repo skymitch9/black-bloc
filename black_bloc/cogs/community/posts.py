@@ -23,10 +23,15 @@ from ...panels import (
     retire,
     still_staff,
 )
+from ...post_blocks import KINDS as BLOCK_KINDS
+from ...post_blocks import add_block, blocks_in, name_of, remove_block
 from ...posts import (
+    ADD_A_BLOCK,
+    BLOCK_OPTION_FREE,
+    BLOCK_OPTION_HELD,
+    BLOCK_OPTION_SHARED,
+    BLOCKS_LINE,
     CAPS,
-    CARRY_THE_DOOR,
-    DO_NOT_CARRY_THE_DOOR,
     DO_NOT_PIN_IT,
     EMBED,
     MODE_SHADOW_SAID,
@@ -40,6 +45,7 @@ from ...posts import (
     PIN_IT,
     PLAIN,
     POSTS_OFF,
+    REMOVE_BLOCK,
     SITE_BUTTON,
     STYLES,
     TAKE_IT_DOWN,
@@ -52,7 +58,6 @@ from ...posts import (
     VERSIONS_TITLE,
     VIEW_IT,
     cap_for,
-    carries_door,
     count_posts,
     get_post,
     get_version,
@@ -97,6 +102,7 @@ LOOP_NAME = "reconcile"
 RECONCILE_MINUTES = 5
 BODY_BOX_MAX = 4000
 SELECT_CAP = 25
+REMOVE_CAP = 3
 MODAL_TITLE = "Edit this post"
 NEW_MODAL_TITLE = "A new post"
 PICK_A_POST = "A post…"
@@ -168,8 +174,28 @@ async def build_panel(bot: Any, guild: Any, actor: Any) -> tuple[discord.Embed, 
     return embed, view
 
 
-def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, PostsView]:
+async def block_state(bot: Any, guild: Any, row: Any) -> tuple[list[str], dict[str, str]]:
+    """This post's kinds in order, and which exclusive kind another post already holds."""
+    rows = await blocks_in(bot.db, guild.id)
+    mine = [str(one["kind"]) for one in rows if int(one["post_id"]) == int(row["id"])]
+    held = {
+        str(one["kind"]): str(one["title"])
+        for one in rows
+        if int(one["post_id"]) != int(row["id"])
+        and str(one["kind"]) in BLOCK_KINDS
+        and BLOCK_KINDS[str(one["kind"])].exclusive
+    }
+    return mine, held
+
+
+async def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, PostsView]:
+    mine, held = await block_state(bot, guild, row)
     lines = [line_for(guild, row)]
+    if mine:
+        names = ", ".join(
+            name_of(bot.store, guild.id, BLOCK_KINDS[kind]) for kind in mine if kind in BLOCK_KINDS
+        )
+        lines.append(BLOCKS_LINE.format(names=names))
     if in_shadow(bot.store, guild.id):
         lines.append(shadow_words(bot, guild, row))
     body = preview_of(row)
@@ -185,10 +211,17 @@ def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, PostsView
     if not is_seeded(row):
         view.add_item(DeleteButton(slug))
     view.add_item(VersionsButton(slug))
-    view.add_item(CarryButton(slug, carries_door(row)))
     view.add_item(BackButton())
+    for kind in mine[:REMOVE_CAP]:
+        if kind in BLOCK_KINDS:
+            view.add_item(
+                RemoveBlockButton(slug, kind, name_of(bot.store, guild.id, BLOCK_KINDS[kind]))
+            )
     view.add_item(ChannelPick(slug))
     view.add_item(StylePick(slug, str(row_value(row, "style", PLAIN))))
+    offered = [kind for kind in BLOCK_KINDS if kind not in mine]
+    if offered:
+        view.add_item(BlockPick(bot, guild, slug, offered, held))
     return embed, view
 
 
@@ -300,7 +333,7 @@ async def render_card(
     if row is None:
         await render_panel(interaction, previous)
     else:
-        embed, view = build_card(bot, interaction.guild, row)
+        embed, view = await build_card(bot, interaction.guild, row)
         retire(previous)
         view.message = await interaction.edit_original_response(
             embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
@@ -460,20 +493,49 @@ class PinButton(discord.ui.Button):
         await run_move(interaction, self.slug, save_post, self.view, pin=self.wanted)
 
 
-class CarryButton(discord.ui.Button):
-    def __init__(self, slug: str, carrying: bool) -> None:
+class RemoveBlockButton(discord.ui.Button):
+    def __init__(self, slug: str, kind: str, name: str) -> None:
         super().__init__(
-            label=DO_NOT_CARRY_THE_DOOR if carrying else CARRY_THE_DOOR,
+            label=REMOVE_BLOCK.format(name=name)[:80],
             style=discord.ButtonStyle.secondary,
             row=1,
         )
         self.slug = slug
-        self.wanted = not carrying
+        self.kind = kind
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await still_staff(interaction):
             return
-        await run_move(interaction, self.slug, save_post, self.view, carries=self.wanted)
+        await run_move(interaction, self.slug, remove_block, self.view, kind=self.kind)
+
+
+class BlockPick(discord.ui.Select):
+    def __init__(
+        self, bot: Any, guild: Any, slug: str, offered: list[str], held: dict[str, str]
+    ) -> None:
+        options = []
+        for kind in offered[:SELECT_CAP]:
+            found = BLOCK_KINDS[kind]
+            if kind in held:
+                said = BLOCK_OPTION_HELD.format(title=held[kind])
+            else:
+                said = BLOCK_OPTION_FREE if found.exclusive else BLOCK_OPTION_SHARED
+            options.append(
+                discord.SelectOption(
+                    label=name_of(bot.store, guild.id, found)[:100],
+                    value=kind,
+                    description=said[:100],
+                )
+            )
+        super().__init__(
+            placeholder=ADD_A_BLOCK, options=options, min_values=1, max_values=1, row=4
+        )
+        self.slug = slug
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await run_move(interaction, self.slug, add_block, self.view, kind=self.values[0])
 
 
 class VersionsButton(discord.ui.Button):
@@ -850,7 +912,8 @@ __all__ = [
     "NewPostButton",
     "NewPostModal",
     "PinButton",
-    "CarryButton",
+    "BlockPick",
+    "RemoveBlockButton",
     "PostPick",
     "Posts",
     "PostsView",

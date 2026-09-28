@@ -15,6 +15,11 @@ ROUTES = [
     ("GET", "/api/posts/notice/versions/1", None),
     ("POST", "/api/posts/notice/versions/1/restore", {}),
     ("DELETE", "/api/posts/notice", None),
+    ("POST", "/api/posts/notice/blocks", {"kind": "frontdoor"}),
+    ("PUT", "/api/posts/notice/blocks", {"order": []}),
+    ("DELETE", "/api/posts/notice/blocks/frontdoor", None),
+    ("GET", "/api/post-blocks", None),
+    ("POST", "/api/post-blocks/frontdoor/redraw", {}),
 ]
 
 
@@ -486,3 +491,96 @@ async def test_carry_the_front_door_is_a_saved_switch_and_only_one_post_holds_it
     assert listed == {"notice": True, "hours": False}
     details = await wf.one_web_row(web.db, "web.post.saved")
     assert details["carries_door"] is True
+
+
+# --- blocks (post-blocks, 2026-09-27) ---------------------------------------------------------
+
+
+async def test_a_block_is_added_listed_and_removed_through_the_blocks_routes(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_post(web, wf)
+
+    added = client.post("/api/posts/notice/blocks", json={"kind": "frontdoor"})
+    assert added.status_code == 200, added.text
+    found = added.json()
+    assert [one["kind"] for one in found["post"]["blocks"]] == ["frontdoor"]
+    assert found["post"]["blocks"][0]["name"] == "Front door"
+    assert found["post"]["carries_door"] is True
+    assert found["message"].startswith("The **Front door** block is on **A notice** now.")
+    kinds = {one["kind"]: one for one in found["block_kinds"]}
+    assert kinds["frontdoor"]["on"] == [{"slug": "notice", "title": "A notice"}]
+    assert kinds["frontdoor"]["exclusive"] is True
+    assert "frontdoor_title" in kinds["frontdoor"]["keys"]
+    details = await wf.one_web_row(web.db, "web.post.saved")
+    assert details["block_added"] == "frontdoor" and details["carries_door"] is True
+
+    listed = client.get("/api/posts").json()
+    assert [one["kind"] for one in listed["posts"][0]["blocks"]] == ["frontdoor"]
+
+    gone = client.delete("/api/posts/notice/blocks/frontdoor")
+    assert gone.status_code == 200, gone.text
+    assert gone.json()["post"]["blocks"] == [] and gone.json()["post"]["carries_door"] is False
+    again = client.delete("/api/posts/notice/blocks/frontdoor")
+    assert again.status_code == 409 and again.json()["error"] == "block_not_on"
+
+
+async def test_an_exclusive_block_on_a_second_post_is_refused_in_words(client, sign_in, web, wf):
+    sign_in(client)
+    await a_post(web, wf)
+    await a_post(web, wf, slug="hours")
+    assert client.post("/api/posts/notice/blocks", json={"kind": "frontdoor"}).status_code == 200
+
+    refused = client.post("/api/posts/hours/blocks", json={"kind": "frontdoor"})
+
+    assert refused.status_code == 409
+    assert refused.json()["error"] == "block_held_elsewhere"
+    assert "on **A notice**" in refused.json()["message"]
+    assert "one post at a time" in refused.json()["message"]
+    listed = {one["slug"]: one["blocks"] for one in client.get("/api/posts").json()["posts"]}
+    assert listed["hours"] == []
+
+
+async def test_an_unknown_block_and_a_bad_order_are_refused_in_words(client, sign_in, web, wf):
+    sign_in(client)
+    await a_post(web, wf)
+
+    unknown = client.post("/api/posts/notice/blocks", json={"kind": "jukebox"})
+    order = client.put("/api/posts/notice/blocks", json={"order": ["frontdoor"]})
+
+    assert unknown.status_code == 400 and unknown.json()["error"] == "unknown_block"
+    assert "**jukebox**" in unknown.json()["message"]
+    assert order.status_code == 400 and order.json()["error"] == "bad_order"
+
+
+async def test_adding_a_block_the_post_already_has_changes_nothing_and_says_so(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_post(web, wf)
+    client.post("/api/posts/notice/blocks", json={"kind": "frontdoor"})
+
+    again = client.post("/api/posts/notice/blocks", json={"kind": "frontdoor"})
+
+    assert again.status_code == 200
+    assert "already on" in again.json()["message"]
+    assert len(again.json()["post"]["blocks"]) == 1
+
+
+async def test_the_blocks_section_lists_every_kind_and_the_redraw_answers_in_words(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_post(web, wf)
+    client.post("/api/posts/notice/blocks", json={"kind": "frontdoor"})
+
+    index = client.get("/api/post-blocks").json()
+    redraw = client.post("/api/post-blocks/frontdoor/redraw", json={})
+    unknown = client.post("/api/post-blocks/jukebox/redraw", json={})
+
+    assert [one["kind"] for one in index["kinds"]] == ["frontdoor"]
+    assert index["kinds"][0]["where"] == "on A notice"
+    assert redraw.status_code == 200 and redraw.json()["kind"] == "frontdoor"
+    assert "Front door" in redraw.json()["message"]
+    assert unknown.status_code == 400 and unknown.json()["error"] == "unknown_block"

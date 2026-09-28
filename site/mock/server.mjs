@@ -491,6 +491,9 @@ const SETTING_SPECS = [
   ['frontdoor_follows_post', 'text', 'welcome', 'welcome', 'the slug of the post the front door sits directly under — welcome by default, so the door lands right after the rules and is put back there whenever that post is posted again. none never moves the door for that reason'],
   ['frontdoor_replaces_ticket_button', 'bool', true, true, 'true takes the posted Open-a-ticket message down while the front door is up in the same channel — one door per channel. modmail_panel_channel_id keeps its value, so moving the front door elsewhere or taking it down puts the ticket button back'],
   ['frontdoor_panel_minutes', 'int', 10, 10, "minutes the /ask panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
+  ['frontdoor_show_ticket', 'bool', true, true, 'true shows the button that opens a private modmail ticket on the front door and on /ask; false leaves it off both. Every other way in (a DM, /modmail) still works'],
+  ['frontdoor_show_request', 'bool', true, true, 'true shows the button that files a request on the front door and on /ask; false leaves it off both. /request still works'],
+  ['frontdoor_show_event', 'bool', true, true, 'true shows the button that starts an event proposal on the front door and on /ask; false leaves it off both. /event still works'],
   ['automod_mode', 'enum', 'shadow', 'off', 'off, shadow (log what it would do) or on (delete, warn and time out)', ['off', 'shadow', 'on']],
   ['automod_rules', 'json', null, null, 'the automod rule book; the Automod tab is what changes it'],
   ['automod_exempt_role_ids', 'roles', ['900000000000000001', '900000000000000002'], [], 'roles automod ignores'],
@@ -921,6 +924,7 @@ const SETTING_SPECS = [
   ['posts_panel_minutes', 'int', 10, 10, "minutes the /posts panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440, 1],
   ['posts_versions_keep', 'int', 0, 0, 'how many saved versions of a post are kept; 0 (the default) keeps every one of them, and 1 to 500 trims the oldest after each save. History is cheap and a lost version is not, so raise it rather than lower it. The only remaining version is never trimmed, whatever the number says', null, 500, 0],
   ['posts_versions_summary_chars', 'int', 80, 80, 'how many characters of a version’s message are shown on its row in the Versions list, 20 to 300; 80 by default. It is one line beside View and Use this version — the whole message is in View', null, 300, 20],
+  ['posts_block_frontdoor_name', 'text', 'Front door', 'Front door', "what the front-door block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Front door. Members never see it"],
   // Guides (G1) — black_bloc/settings_store.py owns them; these are the mock's copy.
   ['guides_mode', 'enum', 'on', 'on', 'on to give members the Guides page and to put a guide link beside a command in /help; off hides both. Staff can still open a guide\u2019s web address while it is off, and the page says so. There is no slash command to hide either way', ['off', 'on']],
   ['guides_who_edits', 'enum', 'staff', 'staff', 'who may change a guide\u2019s wording and screenshots: staff (anybody who can see the staff channel, the default) or manage_guild (a Lead only). It is read when Save is pressed rather than when the page is drawn, so taking the role away stops the next save', ['staff', 'manage_guild']],
@@ -1301,7 +1305,8 @@ function seedState() {
       pin: true,
       message_id: null,
       shadow_message_id: null,
-      carries_door: false,
+      carries_door: true,
+      blocks: [{ kind: 'frontdoor', position: 0, added_at: minutesAgo(500), added_by: null }],
       door_hash: null,
       posted_hash: null,
       posted_at: null,
@@ -1321,6 +1326,7 @@ function seedState() {
       message_id: '810000000000000004',
       shadow_message_id: null,
       carries_door: false,
+      blocks: [],
       door_hash: null,
       // Deliberately the hash of something else, so this one wears "changes not yet posted"
       // the moment the page opens — the pill has to be visible in the mock to be looked at.
@@ -1342,6 +1348,7 @@ function seedState() {
       message_id: null,
       shadow_message_id: null,
       carries_door: false,
+      blocks: [],
       door_hash: null,
       posted_hash: null,
       posted_at: null,
@@ -1942,6 +1949,9 @@ const NAMESPACE_OVERRIDE = {
   frontdoor_follows_post: 'modmail',
   frontdoor_replaces_ticket_button: 'modmail',
   frontdoor_panel_minutes: 'modmail',
+  frontdoor_show_ticket: 'modmail',
+  frontdoor_show_request: 'modmail',
+  frontdoor_show_event: 'modmail',
   frontdoor_shadow_channel_id: 'modmail',
   handoff_mode: 'request',
   handoff_confirm_hours: 'request',
@@ -2767,6 +2777,83 @@ const DOOR_RIDES_POST_SAID = 'The front door rides **{title}** in {where}, so no
 const DOOR_RIDES_ELSEWHERE = 'The front door rides **{title}** in {where}, so it was not moved. Turn **Carry the front door** off on that post first, then post the door where you want it.';
 const DOOR_OFF_THE_POST_SAID = 'The front door is down. **{title}** stays up without it, and **Carry the front door** is off on that post now.';
 
+// Blocks (post-blocks, 2026-09-27) — the twins of black_bloc/post_blocks.py. A row's `blocks`
+// is the table; `carries_door` is the column the Python keeps in step with it (keep_cache).
+const BLOCK_KINDS = [
+  {
+    kind: 'frontdoor',
+    name_key: 'posts_block_frontdoor_name',
+    name_default: 'Front door',
+    exclusive: true,
+    keys: ['frontdoor_title', 'frontdoor_text', 'frontdoor_ticket_label', 'frontdoor_request_label', 'frontdoor_event_label', 'frontdoor_show_ticket', 'frontdoor_show_request', 'frontdoor_show_event', 'rehearsal_note'],
+  },
+];
+const BLOCK_UNKNOWN = 'There is no block called **{kind}**, so nothing was changed. Pick one from the **Add a block…** list.';
+const BLOCK_ADDED_SAID = 'The **{name}** block is on **{title}** now.';
+const BLOCK_ALREADY_SAID = 'The **{name}** block is already on **{title}**, so nothing changed.';
+const BLOCK_REMOVED_SAID = 'The **{name}** block is off **{title}** now.';
+const BLOCK_NOT_ON = '**{title}** has no **{name}** block, so nothing was removed.';
+const BLOCK_HELD_ELSEWHERE = 'The **{name}** block is on **{other}**, and it goes on one post at a time, so **{title}** was not changed. Remove it from **{other}** first.';
+const BLOCK_BAD_ORDER = "That order does not name each of **{title}**'s blocks exactly once, so nothing moved. Reload the page and try again.";
+const BLOCK_ORDERED_SAID = "**{title}**'s blocks are in the new order.";
+const BLOCK_ORDERED_LATER = ' The message shows it the next time you press **Update the post**.';
+const BLOCK_REDRAWN_SAID = 'Every post carrying the **{name}** block is redrawn with its new words.';
+
+function fillBlockWords(text, values) {
+  let out = text;
+  for (const [key, value] of Object.entries(values)) out = out.split(`{${key}}`).join(String(value));
+  return out;
+}
+
+function blockKind(kind) {
+  return BLOCK_KINDS.find((one) => one.kind === String(kind || '').trim().toLowerCase()) || null;
+}
+
+function blockName(found) {
+  return String(state.settings.get(found.name_key) || '').trim().slice(0, 80) || found.name_default;
+}
+
+function postBlockRows(row) {
+  return [...(row.blocks || [])]
+    .sort((a, b) => a.position - b.position)
+    .map((one) => ({
+      kind: one.kind,
+      name: blockKind(one.kind) ? blockName(blockKind(one.kind)) : one.kind,
+      position: one.position,
+      added_at: one.added_at,
+      added_by: one.added_by ? String(one.added_by) : null,
+    }));
+}
+
+/** The mock's twin of post_blocks.set_carried + keep_cache. */
+function postSetCarried(row, kind, wanted) {
+  row.blocks = row.blocks || [];
+  const has = row.blocks.some((one) => one.kind === kind);
+  if (wanted && !has) {
+    const next = row.blocks.reduce((top, one) => Math.max(top, one.position), -1) + 1;
+    row.blocks.push({ kind, position: next, added_at: now(), added_by: STAFF.id });
+  }
+  if (!wanted) row.blocks = row.blocks.filter((one) => one.kind !== kind);
+  if (kind === 'frontdoor') row.carries_door = row.blocks.some((one) => one.kind === 'frontdoor');
+}
+
+function blockKindsShape() {
+  return BLOCK_KINDS.map((found) => {
+    const on = state.posts
+      .filter((row) => (row.blocks || []).some((one) => one.kind === found.kind))
+      .map((row) => ({ slug: row.slug, title: row.title }));
+    return {
+      kind: found.kind,
+      name: blockName(found),
+      name_key: found.name_key,
+      exclusive: found.exclusive,
+      keys: [...found.keys],
+      on,
+      where: on.length ? `on ${on[0].title}` : 'on no post yet',
+    };
+  });
+}
+
 function doorIsOn() {
   return String(state.settings.get('frontdoor_mode') || 'off') !== 'off';
 }
@@ -2820,6 +2907,7 @@ function postRow(row) {
     title_cap: POST_TITLE_MAX,
     pin: Boolean(row.pin),
     carries_door: Boolean(row.carries_door),
+    blocks: postBlockRows(row),
     door_drawn: Boolean(row.door_hash),
     channel_id: row.channel_id ? String(row.channel_id) : null,
     channel_name: postChannelName(row.channel_id),
@@ -2987,6 +3075,7 @@ function postVersionNow(row, made) {
 function postWhole(row, said) {
   const found = {
     post: postRow(row),
+    block_kinds: blockKindsShape(),
     styles: postStyles(),
     guard: postGuard(),
     mode: postsMode(),
@@ -3017,6 +3106,7 @@ route('GET', '/api/posts', (context) => {
   requireStaff(context.session);
   return {
     posts: state.posts.map(postRow),
+    block_kinds: blockKindsShape(),
     mode: postsMode(),
     may_edit: true,
     styles: postStyles(),
@@ -3051,6 +3141,9 @@ route('POST', '/api/posts', async (context) => {
     posted_at: null,
     posted_by: null,
     seeded: false,
+    carries_door: false,
+    blocks: [],
+    door_hash: null,
     updated_at: now(),
     updated_by: STAFF.id,
   };
@@ -3095,7 +3188,7 @@ route('PUT', '/api/posts/:slug', async (context) => {
   row.style = style;
   row.body = wanted;
   if ('pin' in body) row.pin = Boolean(body.pin);
-  row.carries_door = carrying;
+  postSetCarried(row, 'frontdoor', carrying);
   row.updated_at = now();
   row.updated_by = STAFF.id;
   const made = postRecordVersion(row, { because: 'saved' });
@@ -3214,6 +3307,79 @@ route('POST', '/api/posts/:slug/takedown', (context) => {
     logAction('web.frontdoor.taken_down', { details: { slug: row.slug, with_post: true, via: 'website' } });
   }
   return postWhole(row, `**${row.title}** is taken down. Every word is still here.${withDoor ? POST_TAKEN_DOWN_WITH_DOOR : ''}`);
+});
+
+route('POST', '/api/posts/:slug/blocks', async (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  const body = await context.body();
+  const found = blockKind(body.kind);
+  if (!found) throw new Refused(400, 'unknown_block', fillBlockWords(BLOCK_UNKNOWN, { kind: String(body.kind || '').slice(0, 40) }));
+  const name = blockName(found);
+  if ((row.blocks || []).some((one) => one.kind === found.kind)) {
+    return postWhole(row, fillBlockWords(BLOCK_ALREADY_SAID, { name, title: row.title }));
+  }
+  if (found.exclusive) {
+    const other = state.posts.find((one) => one.id !== row.id && (one.blocks || []).some((b) => b.kind === found.kind));
+    if (other) throw new Refused(409, 'block_held_elsewhere', fillBlockWords(BLOCK_HELD_ELSEWHERE, { name, other: other.title, title: row.title }));
+  }
+  postSetCarried(row, found.kind, true);
+  logAction('web.post.saved', { details: { slug: row.slug, post_id: row.id, block_added: found.kind, carries_door: true, via: 'website' } });
+  let said = fillBlockWords(BLOCK_ADDED_SAID, { name, title: row.title });
+  if (postIsUp(row) && doorIsOn()) {
+    row.door_hash = 'drawn';
+    doorRidesPost(row);
+    said += POST_CARRYING_NOW;
+  } else {
+    said += POST_CARRYING_LATER;
+  }
+  return postWhole(row, said);
+});
+
+route('PUT', '/api/posts/:slug/blocks', async (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  const body = await context.body();
+  const have = postBlockRows(row).map((one) => one.kind);
+  const wanted = (Array.isArray(body.order) ? body.order : []).map((one) => String(one || '').trim().toLowerCase());
+  if ([...wanted].sort().join() !== [...have].sort().join() || new Set(wanted).size !== wanted.length) {
+    throw new Refused(400, 'bad_order', fillBlockWords(BLOCK_BAD_ORDER, { title: row.title }));
+  }
+  let said = fillBlockWords(BLOCK_ORDERED_SAID, { title: row.title });
+  if (wanted.join() !== have.join()) {
+    for (const one of row.blocks) one.position = wanted.indexOf(one.kind);
+    logAction('web.post.saved', { details: { slug: row.slug, post_id: row.id, blocks_order: wanted, via: 'website' } });
+    if (postIsUp(row)) said += BLOCK_ORDERED_LATER;
+  }
+  return postWhole(row, said);
+});
+
+route('DELETE', '/api/posts/:slug/blocks/:kind', (context) => {
+  requireStaff(context.session);
+  const row = wantedPost(context.params.slug);
+  const found = blockKind(context.params.kind);
+  if (!found) throw new Refused(400, 'unknown_block', fillBlockWords(BLOCK_UNKNOWN, { kind: String(context.params.kind).slice(0, 40) }));
+  const name = blockName(found);
+  if (!(row.blocks || []).some((one) => one.kind === found.kind)) {
+    throw new Refused(409, 'block_not_on', fillBlockWords(BLOCK_NOT_ON, { name, title: row.title }));
+  }
+  postSetCarried(row, found.kind, false);
+  logAction('web.post.saved', { details: { slug: row.slug, post_id: row.id, block_removed: found.kind, carries_door: false, via: 'website' } });
+  if (row.door_hash) doorLeavesPost(true);
+  row.door_hash = null;
+  return postWhole(row, fillBlockWords(BLOCK_REMOVED_SAID, { name, title: row.title }) + POST_CARRYING_STOPPED);
+});
+
+route('GET', '/api/post-blocks', (context) => {
+  requireStaff(context.session);
+  return { kinds: blockKindsShape(), read_at: now() };
+});
+
+route('POST', '/api/post-blocks/:kind/redraw', (context) => {
+  requireStaff(context.session);
+  const found = blockKind(context.params.kind);
+  if (!found) throw new Refused(400, 'unknown_block', fillBlockWords(BLOCK_UNKNOWN, { kind: String(context.params.kind).slice(0, 40) }));
+  return { kind: found.kind, redrawn: true, message: fillBlockWords(BLOCK_REDRAWN_SAID, { name: blockName(found) }), kinds: blockKindsShape() };
 });
 
 route('GET', '/api/posts/:slug/versions', (context) => {
@@ -5355,7 +5521,7 @@ const PREVIEW_SAMPLES = {
   request_card: { what: '', why: '' },
   event_card: { title: '', description: '' },
   modmail_relay: { name: '', text: '' },
-  post: { style: 'plain', title: '', body: '', carries_door: false },
+  post: { style: 'plain', title: '', body: '', carries_door: false, blocks: '' },
   birthday: { name: 'Casey', age: '' },
   poll_card: { question: '', channel: '#announcements' },
   minutes_notes: { notes: '' },
@@ -5472,10 +5638,10 @@ const PREVIEW_DRAW = {
       color: PREVIEW_BLURPLE,
       fields: [],
     }], [[
-      previewButton(read('frontdoor_ticket_label'), 'primary'),
-      previewButton(read('frontdoor_request_label')),
-      previewButton(read('frontdoor_event_label')),
-    ]]);
+      ['ticket', previewButton(read('frontdoor_ticket_label'), 'primary')],
+      ['request', previewButton(read('frontdoor_request_label'))],
+      ['event', previewButton(read('frontdoor_event_label'))],
+    ].filter(([kind]) => read(`frontdoor_show_${kind}`) !== false).map(([, made]) => made)]);
   },
   ticket_button(read) {
     return previewMade('', [{
@@ -5535,7 +5701,8 @@ const PREVIEW_DRAW = {
       ? [{ title: sample.title || '', description: sample.body || '', fields: [] }]
       : [];
     const content = String(sample.style) === 'embed' ? '' : (sample.body || '');
-    const carrying = ['true', '1', 'on'].includes(String(sample.carries_door).toLowerCase());
+    const carrying = ['true', '1', 'on'].includes(String(sample.carries_door).toLowerCase())
+      || String(sample.blocks || '').split(',').map((one) => one.trim()).includes('frontdoor');
     if (!carrying || String(read('frontdoor_mode') || 'off') === 'off') {
       return embeds.length ? previewMade(content, embeds) : previewMade(content);
     }
@@ -9641,13 +9808,13 @@ route('DELETE', '/api/frontdoor/panel', (context) => {
   const messageId = state.settings.get('frontdoor_message_id');
   const carrier = doorCarrier();
   if (carrier && carrier.door_hash && postIsUp(carrier)) {
-    carrier.carries_door = false;
+    postSetCarried(carrier, 'frontdoor', false);
     carrier.door_hash = null;
     doorLeavesPost(false);
     logAction('web.frontdoor.taken_down', { target_id: channelId, details: { slug: carrier.slug, off_the_post: true } });
     return { taken_down: true, channel_id: channelId ? String(channelId) : null, message_id: messageId ? String(messageId) : null, message: DOOR_OFF_THE_POST_SAID.split('{title}').join(carrier.title) };
   }
-  if (carrier) carrier.carries_door = false;
+  if (carrier) postSetCarried(carrier, 'frontdoor', false);
   if (!channelId) {
     return { taken_down: false, channel_id: null, message_id: null, message: 'There is no front door posted anywhere, so nothing was taken down. **Post the front door** on the Modmail page is what puts one up.' };
   }

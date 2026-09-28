@@ -2385,6 +2385,9 @@ FRONTDOOR_EVENT_LABEL = "frontdoor_event_label"
 FRONTDOOR_FOLLOWS_POST = "frontdoor_follows_post"
 FRONTDOOR_REPLACES_TICKET_BUTTON = "frontdoor_replaces_ticket_button"
 FRONTDOOR_PANEL_MINUTES = "frontdoor_panel_minutes"
+FRONTDOOR_SHOW_TICKET = "frontdoor_show_ticket"
+FRONTDOOR_SHOW_REQUEST = "frontdoor_show_request"
+FRONTDOOR_SHOW_EVENT = "frontdoor_show_event"
 FRONTDOOR_FOLLOWS_NOTHING = "none"
 FRONTDOOR_MODES = ("off", "shadow", "on")
 FRONTDOOR_MODE_DEFAULT = "on"
@@ -2412,6 +2415,9 @@ KEY_TYPES.update(
         FRONTDOOR_FOLLOWS_POST: "text",
         FRONTDOOR_REPLACES_TICKET_BUTTON: "bool",
         FRONTDOOR_PANEL_MINUTES: "int",
+        FRONTDOOR_SHOW_TICKET: "bool",
+        FRONTDOOR_SHOW_REQUEST: "bool",
+        FRONTDOOR_SHOW_EVENT: "bool",
     }
 )
 KEY_CHOICES.update({FRONTDOOR_MODE: FRONTDOOR_MODES})
@@ -2468,6 +2474,18 @@ KEY_HELP.update(
             "true takes the posted Open-a-ticket message down while the front door is up in the "
             "same channel — one door per channel. modmail_panel_channel_id keeps its value, so "
             "moving the front door elsewhere or taking it down puts the ticket button back"
+        ),
+        FRONTDOOR_SHOW_TICKET: (
+            "true shows the button that opens a private modmail ticket on the front door and on "
+            "/ask; false leaves it off both. Every other way in (a DM, /modmail) still works"
+        ),
+        FRONTDOOR_SHOW_REQUEST: (
+            "true shows the button that files a request on the front door and on /ask; false "
+            "leaves it off both. /request still works"
+        ),
+        FRONTDOOR_SHOW_EVENT: (
+            "true shows the button that starts an event proposal on the front door and on /ask; "
+            "false leaves it off both. /event still works"
         ),
         FRONTDOOR_PANEL_MINUTES: (
             "minutes the /ask panel stays live before its buttons disable themselves; 10 by "
@@ -2925,6 +2943,20 @@ KEY_HELP.update(
     }
 )
 
+# Posts — blocks (owner, 2026-09-27: "lets do blocks"). A block is something a post's message
+# carries under its own words; each kind's name is what staff see in the Add a block list.
+POSTS_BLOCK_FRONTDOOR_NAME = "posts_block_frontdoor_name"
+POSTS_BLOCK_FRONTDOOR_NAME_DEFAULT = "Front door"
+KEY_TYPES.update({POSTS_BLOCK_FRONTDOOR_NAME: "text"})
+KEY_HELP.update(
+    {
+        POSTS_BLOCK_FRONTDOOR_NAME: (
+            "what the front-door block is called in the Posts page's Add a block list, its Blocks "
+            "section and the /posts card; blank restores Front door. Members never see it"
+        ),
+    }
+)
+
 # Meeting minutes (prototype) — filed under `events` in NAMESPACE_OVERRIDE below, because the
 # `/settings` group select is at its cap of 25 and a meeting is an event's cousin.
 MINUTES_MODES = ("off", "on")
@@ -3214,6 +3246,9 @@ NAMESPACE_OVERRIDE = {
     FRONTDOOR_FOLLOWS_POST: "modmail",
     FRONTDOOR_REPLACES_TICKET_BUTTON: "modmail",
     FRONTDOOR_PANEL_MINUTES: "modmail",
+    FRONTDOOR_SHOW_TICKET: "modmail",
+    FRONTDOOR_SHOW_REQUEST: "modmail",
+    FRONTDOOR_SHOW_EVENT: "modmail",
     SHADOW_HOME_KEYS["frontdoor"]: "modmail",
     HANDOFF_MODE: "request",
     HANDOFF_CONFIRM_HOURS: "request",
@@ -6719,6 +6754,10 @@ class SettingsStore:
             return True
         if key == FRONTDOOR_PANEL_MINUTES:
             return 10
+        if key in (FRONTDOOR_SHOW_TICKET, FRONTDOOR_SHOW_REQUEST, FRONTDOOR_SHOW_EVENT):
+            return True
+        if key == POSTS_BLOCK_FRONTDOOR_NAME:
+            return POSTS_BLOCK_FRONTDOOR_NAME_DEFAULT
         if key == "mod_panel_minutes":
             return 10
         if key == SETTINGS_PANEL_MINUTES:
