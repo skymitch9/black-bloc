@@ -8,7 +8,6 @@ from typing import Any
 from ... import marathon as mt
 from ... import marathon_signals as sig
 from ...actionlog import log_action
-from ...golive import parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...marathon_sources import retimes_itself
 from ...panels import Outcome, refusal
@@ -240,7 +239,3 @@ async def sheet_times(
         )
         await cog.sync_board(guild, await get_marathon(bot.db, guild.id, fresh["id"]))
     return Outcome(True, sig.SHEET_TIMES_DONE.format(name=fresh["name"], count=len(back)))
-
-
-def actual_of(row: Any) -> datetime | None:
-    return parse_ts(_cell(row, "actual_started_at"))

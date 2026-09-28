@@ -19,8 +19,6 @@ from .marathon import (
     normalise,
 )
 
-RETRO_DEFAULT = "Retro"
-RETRO_LENGTH = 60
 CHAIN_SLACK = timedelta(minutes=1)
 LOOK_AGAIN = timedelta(minutes=30)
 
