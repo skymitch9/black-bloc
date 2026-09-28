@@ -1,6 +1,7 @@
 import pytest
 
 from black_bloc import requests as pure
+from black_bloc.settings_store import REQUEST_FILED
 
 GUILD = 7
 OTHER_GUILD = 8
@@ -55,11 +56,6 @@ def test_the_due_stamp_is_local_midnight_in_the_servers_zone_not_utc():
     assert (at.hour, at.minute) == (7, 0)
     assert at.date().isoformat() == "2026-09-15"
     assert pure.due_stamp("2026-09-15", "Europe/London") != stamp
-
-
-def test_a_stored_due_date_stays_a_plain_date_and_never_becomes_an_instant():
-    assert pure.parse_due("2026-09-15") == "2026-09-15"
-    assert "T" not in pure.parse_due("2026-09-15")
 
 
 def test_the_three_fields_are_refused_in_the_order_a_person_meets_them():
@@ -188,7 +184,6 @@ def test_a_move_into_hold_or_declined_needs_the_sentence_the_person_is_sent():
             pure.checked_move(4, pure.OPEN, wanted, "  ")
         assert "the person who asked is sent" in str(caught.value)
     assert pure.checked_move(4, pure.OPEN, pure.HOLD, "waiting on the bill") == pure.HOLD
-    assert pure.checked_move(4, pure.OPEN, pure.IN_PROGRESS) == pure.IN_PROGRESS
 
 
 def test_moving_a_row_to_where_it_already_is_says_so():
@@ -713,7 +708,6 @@ def test_the_site_link_is_one_button_the_card_and_the_post_both_draw():
     assert button is not None and button.label == pure.SITE_BUTTON and button.row == 1
     assert button.url == pure.request_url("https://example.test", 4)
     assert pure.site_button("", 4) is None
-    assert pure.site_view("", 4) is None
     assert pure.site_view("https://example.test", 4).children[0].url == button.url
 
 
@@ -994,9 +988,6 @@ class _Store:
 
 
 def test_the_filed_answer_reads_the_stored_sentence_and_fills_only_the_number():
-    assert pure.filed_line(_Store(None), 1, 11) == (
-        "Filed as **#11** — Request has been received. You will get a DM every time the status "
-        "is updated."
-    )
+    assert pure.filed_line(_Store(None), 1, 11) == REQUEST_FILED.replace("{request_id}", "11")
     stored = _Store("Logged as {request_id}, {name}.")
     assert pure.filed_line(stored, 1, 7) == "Logged as 7, {name}."

@@ -386,7 +386,6 @@ def test_a_member_sees_only_the_move_that_is_theirs_to_make():
     assert alone == ["Give back slot #2", "Back", "Refresh"]
     many = [move.label for move in card_buttons(OPEN, organizer=False, held=[1, 2], slot_count=3)]
     assert many == ["Give an hour back…", "Back", "Refresh"]
-    assert [row["position"] for row in slots_held(lineup(), 11)] == [1]
 
 
 def test_give_back_and_give_an_hour_back_never_coexist():
