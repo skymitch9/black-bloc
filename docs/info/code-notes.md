@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Birthday block goes straight to the form* (branch `birthday-block-modal`, off `main` `c9ee1f46`, keyed against `8c1cb907`); the *Blocks buttons* row for `open_birthday_panel` ("The button opens the PANEL") describes code this branch changed. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Blocks live* (branch `blocks-live`, off `main` `d418ca13`, keyed against `f4c4e83c`); the *Blocks convert* row for `keep_drawn` still holds (the kinds filter is optional). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Blocks convert* (branch `blocks-convert`, off `main` `4a0e572d`, keyed against `2b2e3e32`); the *Post blocks* rows for `redraw_carrier`, `message_payload` and "Reorder never edits a message already up" describe code this branch changed. Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Post blocks* (branch `post-blocks`, off `main` `d90c9e8c`, keyed against `68040560`); the *A post carries the front door* rows for `CarryButton` and the editor's switch describe code this branch removed. Before that:
@@ -9258,3 +9259,17 @@ Design: [`blocks-live-design.md`](blocks-live-design.md). Keyed against `f4c4e83
 | `black_bloc/preview.py:512` `LIVE_SAMPLE` · `:523` `look_drawn` · `:565` `links_block` · `:589` `BLOCK_DRAWS` | Sample lists for the live pair; `live` / `events` = `none` draws the empty line. The Blocks card draws two sample links until staff set their own; the editor draws exactly its draft. |
 | `site/public/assets/blockwords.js:371` `keep` · `:386` `liveListWords` · `:507` `linkButtonsWords` · `:622` `BLOCK_EDITORS` | A blank word is cleared (DELETE) back to its shipped words. The link rows save as ONE key write, so a bad row refuses the whole save with its number. |
 | `site/mock/server.mjs:2259` `checkedLinks` · `:5861` · `:5976` | The mock's twins of `checked_links`, the three look functions and `BLOCK_DRAWS`. |
+
+## Birthday block goes straight to the form (branch `birthday-block-modal`, 2026-09-28)
+
+Design: [`blocks-buttons-design.md`](blocks-buttons-design.md#birthday-block-goes-straight-to-the-form). Keyed against `8c1cb907`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/cogs/community/birthdays.py:296` `store_birthday` · `:327` `typed_birthday` | `store_birthday` returns `(saved, said)` so a caller can tell a save from a refusal; `typed_birthday` is the parse + store both modal paths share. The panel's `date_submit` ignores `saved` and behaves as before. |
+| `black_bloc/cogs/community/birthdays.py:951` `DateModal` · `:974` `on_submit` | ONE modal. `private=True` (only the block sets it) routes the submit to `block_date_submit`; every other field, word and limit is the panel's. |
+| `black_bloc/cogs/community/birthdays.py:1037` `open_block_date_modal` | Refuses privately while birthdays are off (a stale post), else the panel's `open_date_modal` with `private=True`. No `previous`: there is no private card to retire or re-render. |
+| `black_bloc/cogs/community/birthdays.py:1419` `block_date_submit` | ⚠️ The only defer is `defer(ephemeral=True, thinking=True)`: a bare `defer()` on a modal submit raised from a posted message is `deferred_message_update`, and `edit_original_response` after it would overwrite the PUBLIC post. Answers only through `panels.answer` (an ephemeral followup). Re-checks `birthday_mode` because the form can sit open while staff turn birthdays off. |
+| `black_bloc/birthdays.py:513` `block_said` | `button_block.said` over `BUTTON_BLOCK_DEFAULTS`: a staff wording whose `{…}` will not fill falls back to the shipped one (checklist 17). |
+| `black_bloc/settings_store.py:3037` | The three `birthday_block_*_said` keys, filed under birthday by prefix — which puts that group at 28, over the `/settings` picker's 25-cap (Find a setting… now shows there). |
+| `site/public/assets/blockwords.js:262` | The birthday shape gains `said` rows, so the block's editor saves the three answers with its words. |

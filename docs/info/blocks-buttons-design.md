@@ -2,6 +2,8 @@
 
 > **Audience:** the conductor, reviewers, and the build that adds the next block kind.
 > **Status:** TRACKED · 🔨 **BUILT on branch `blocks-buttons`** (off `main` `d418ca13`), NOT merged, NOT deployed.
+> ⚠️ **2026-09-28:** the birthday block now goes straight to the date form — branch `birthday-block-modal`, see
+> [*Birthday block goes straight to the form*](#birthday-block-goes-straight-to-the-form) (BUILT, NOT merged).
 > No migration (schema stays **79**). Registry keys **651 → 671**, contract routes **272 → 276** (the four
 > `POST /api/post-blocks/<kind>/redraw` entries — the Python route already took any kind), three new log kinds
 > (`marathon.role_joined`, `marathon.role_left` routine; `marathon.role_failed` important by its suffix). Go-live page
@@ -41,7 +43,7 @@ each feature's own:
 |---|---|---|---|---|
 | `marathonrole` | `posts_block_marathonrole_name` · *Marathon role* | always (see Deviation 3) | `cogs/content/marathon_role.py:toggle_marathon_role` | `marathonrole:toggle:<guild>` |
 | `pingsfollow` | `posts_block_pingsfollow_name` · *Ping me when they go live* | `pings_mode` is `on` | `cogs/content/pings.py:open_pings_panel` = the `/pings` panel with its **Follow a streamer…** picker | `pingsblock:open:<guild>` |
-| `birthday` | `posts_block_birthday_name` · *Set your birthday* | `birthday_mode` is not `off` | `cogs/community/birthdays.py:open_birthday_panel` = the `/birthday` panel, whose **Set my birthday** raises the date modal | `bdayblock:open:<guild>` |
+| `birthday` | `posts_block_birthday_name` · *Set your birthday* | `birthday_mode` is not `off` | ~~`cogs/community/birthdays.py:open_birthday_panel` = the `/birthday` panel, whose **Set my birthday** raises the date modal~~ → since `birthday-block-modal` (`0b3b2a02`): `open_block_date_modal` = the panel's own date modal, answered privately — see [*Birthday block goes straight to the form*](#birthday-block-goes-straight-to-the-form) | `bdayblock:open:<guild>` |
 | `proposeevent` | `posts_block_proposeevent_name` · *Propose an event* | `events_mode` is not `off` | `cogs/community/events.py:open_propose` → the front door's own `open_the_event` (the private hand-off card whose **Propose** is the `/event` draft) | `eventblock:propose:<guild>` |
 
 **Non-exclusive, all four.** Nothing is stored per message and every button is guild-keyed, so two copies cannot
@@ -93,7 +95,11 @@ holds its ten.
 
 ## Deviations
 
-1. **Birthday opens the `/birthday` panel, not the date modal directly.** The brief allowed *"modal or panel"*. A
+1. ~~**Birthday opens the `/birthday` panel, not the date modal directly.**~~ ⚠️ **REVERSED 2026-09-28 by
+   `birthday-block-modal` (`0b3b2a02`)** — the owner, asked *"should the birthday block go straight to the date
+   form?"*, answered *"Straight to the form"*. The risk below was real and is closed by a separate submit path that
+   never edits (see [*Birthday block goes straight to the form*](#birthday-block-goes-straight-to-the-form)). The
+   original reasoning, kept so nobody reverts it blind: The brief allowed *"modal or panel"*. A
    modal raised straight from a button on a POSTED message would, on submit, run `date_submit` → `opened()` →
    `response.defer()` → `edit_original_response` — which for a modal raised from a message component edits **that
    message**: the public post would be overwritten with one member's birthday panel. Opening the panel first (ephemeral)
@@ -154,5 +160,64 @@ holds its ten.
 - **Which role is the Marathon role** (`marathon_role_id`) — the owner's call; blank until then.
 - **The propose hand-off wording** (Deviation 2): fine to share the door's, or give the block its own title/line/label
   keys for the hand-off card (would need `event_handoff` to take them — a change to door code, so not done here).
-- **Birthday straight to the modal** (Deviation 1): acceptable as panel-first, or build a modal submit path that answers
-  on a fresh private message (a change to `date_submit`, so not done here).
+- ~~**Birthday straight to the modal** (Deviation 1): acceptable as panel-first, or build a modal submit path that answers
+  on a fresh private message (a change to `date_submit`, so not done here).~~ DECIDED 2026-09-28 (owner: *"Straight to
+  the form"*), built on `birthday-block-modal` — see the section below.
+
+## Birthday block goes straight to the form
+
+> **Status:** 🔨 **BUILT on branch `birthday-block-modal`** (off `main` `c9ee1f46`), NOT merged, NOT deployed. No
+> migration. Registry keys **689 → 692**. **Last verified: 2026-09-28** against the branch (`8c1cb907`) by `pytest`
+> (whole suite `-n 16`, 0 failed), `ruff check .`, `node --input-type=module --check` on every
+> `site/public/assets/*.js`, the eight `site/mock/*.test.mjs` the deploy gate runs, and `site/mock/check.mjs` against a
+> mock started from the worktree on port 8881. ⚠️ Nothing here met Discord and no page was seen in a browser.
+
+**The ask** (owner, 2026-09-28 06:5x, answering *"should the birthday block go straight to the date form?"*):
+*"Straight to the form"*.
+
+### As built
+
+| Piece | What |
+|---|---|
+| Press | `OpenBirthdayButton.on_click` → `open_block_date_modal`: `birthday_ready` (guild, database) → birthdays off? `birthday_block_off_said`, privately, no modal → `open_date_modal(..., mine=True, private=True)`. The modal is the panel's own `DateModal` — same field, placeholder, 10-character cap, title, prefill of what is stored. |
+| Submit | `DateModal.on_submit` with `private=True` → `Birthdays.block_date_submit`: `response.defer(ephemeral=True, thinking=True)` → `db_ready` → birthdays turned off since the press? `birthday_block_off_said` → `typed_birthday` (the same parse + `store_birthday` the panel uses, source `self`, one `birthday.set` row) → `birthday_block_saved_said` or `birthday_block_refused_said` with `{said}` = the panel's own sentence. Every answer goes through `panels.answer` → an ephemeral **followup**. |
+| Why it cannot touch the post | A modal raised from a message component answers its submit, by default, by editing that message. The block path never calls `edit_original_response`, `response.edit_message` or a bare `defer()` (which for a modal submit is `deferred_message_update`); its only defer is `thinking=True` + `ephemeral=True` (`deferred_channel_message`, flags 64 — a NEW private message). Proved by `tests/cogs/community/test_birthdays.py` `test_the_block_s_form_saves_and_answers_privately_never_over_the_post` (defer args pinned, no post edit, no original edit, no message edit, the answer an ephemeral followup with no view/embed) and a mutation check: adding one `edit_original_response` to the block path fails two tests. |
+| Panel unchanged | `date_submit` now calls `typed_birthday` instead of inlining the parse; `store_birthday` returns `(saved, said)` so the block can tell a save from a refusal (checklist: silent failure distinguishable from success). Pinned first in `adb38464` — the panel's Set → modal → saved → panel re-rendered + private sentence, the refusal still re-rendering, staff *Set their birthday* → card re-rendered — passing before and after. |
+| Words | `birthday_block_saved_said` · `birthday_block_refused_said` · `birthday_block_off_said` — registry, mock rows, labels, filed under **birthday** by prefix, in the block's `keys` (`post_blocks.py`) and in the block editor's `said` rows (`blockwords.js`). A broken `{…}` falls back to the shipped wording (`button_block.said`). `birthday_block_label`'s help now says the button asks for the date straight away. |
+| Preview | Unchanged — it draws the card and the button, which did not change. |
+
+### Deviations
+
+1. **The birthday Settings group is now over the 25-cap** (28 keys), so `/settings` ▸ birthday shows *25 of 28 — the
+   rest are on the site* and a **Find a setting…** button, like chat / core / events / golive / marathon / modmail /
+   posts. The brief said file under birthdays; the tests that used birthday as the under-cap example now use pings.
+2. **The block's modal has no Try again.** Checklist 36 wants a `render_again`, but there is no private surface to
+   re-render (the post must not be). A failure answers the plain private sentence and writes `error.modal` (pinned by
+   `test_a_failure_in_the_block_s_form_is_a_private_sentence_and_a_row`); pressing the post's button again is the retry.
+3. **Refusal words are the panel's** (`DATE_UNREADABLE`, `date_problem`, `year_problem` — code constants today, as they
+   are for `/birthday`), wrapped by the editable `birthday_block_refused_said`. Making the panel's own refusals keys
+   was out of scope.
+4. **Off at press AND at submit.** The press checks `birthday_mode` (a stale post drawn before birthdays went off); the
+   submit checks again, so a form left open while staff turned birthdays off saves nothing.
+5. The save's `source` stays `self` (the member set it themself); the action row does not say *via the block*.
+
+### NOT verified
+
+- Nothing met Discord: no press in a client, no modal seen, no ephemeral answer seen, and in particular **Discord's own
+  handling of `deferred_channel_message` on a modal submit raised from a posted message** is known from discord.py
+  2.7.1's source, not observed.
+- No page seen: the block editor's three new rows and the Settings ▸ birthday entries are syntax- and contract-checked
+  only.
+- The block is on no post (owner: only the front door is posted), so there is nothing live to press yet.
+
+### Live check steps (after merge + deploy, only if the owner puts the block on a TEST post)
+
+1. `/birthday` ▸ **Set my birthday** / **Change my birthday**: exactly as before — the panel re-renders with the date
+   and a private sentence follows.
+2. Press the block's **Set my birthday** as a non-staff account: the date form opens at once (prefilled if stored).
+   Send `08-10`: a private *Your birthday is **August 10**… Press the button again, or use /birthday, to change it.*
+   The post itself is unchanged for everyone (check from a second account).
+3. Send `next tuesday`: the private refusal ending *Nothing was saved; press the button to try again.*; nothing stored.
+4. Set `birthday_mode` to `off` with the form open, send it: the private *Birthdays are turned off…*; nothing stored.
+   (Turning birthdays off also removes the block on the next redraw.)
+5. Logs ▸ birthday: one `birthday.set` per save, none for refusals.

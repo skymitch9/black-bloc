@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `birthday-block-modal`)** — ONE row APPENDED (`BB-g`, BUILT, NOT MERGED); `BB-e`'s *Set my birthday asks for the date* still holds for `/birthday`. Before that,
 > **2026-09-28 (branch `blocks-buttons`)** — ONE section APPENDED (`BB-a`…`BB-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-28 (branch `blocks-live`)** — ONE section APPENDED (`BL-a`…`BL-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-28 (branch `blocks-convert`)** — ONE section APPENDED (`BC-a`…`BC-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3709,6 +3710,7 @@ and do not pick a Marathon role, unless the owner says so. Lettered; the conduct
 | **`BB-d`** | Settings ▸ **marathon**, **birthday**, **events**, **posts**; Go-live ▸ Settings | Each lists its new words (and marathon lists *The Marathon role members can take with its block*, blank); Go-live has a drawer **The ping block on a post** with three rows, and *Ping roles* is unchanged. |
 | **`BB-e`** | Type `/pings`, `/birthday`, `/event`; press the front door's **Propose an event** in #welcome-test | Exactly as today: the same panels, the Follow picker on `/pings`, **Set my birthday** asks for the date, the door's private card with **Propose**. |
 | **`BB-f`** | Only if the owner asks for the Marathon role block live: pick the role, add the block to a TEST post, press the button twice (as a non-staff account) | First press: a private *You have the **Marathon** role now…*; the role is on you; Logs ▸ marathon shows `marathon.role_joined`. Second press: *…off you now…*, the role is gone, `marathon.role_left`. Nobody is pinged. Picking a role with a staff permission instead makes the press say it is not set up and logs `marathon.role_failed` (`reason: unsafe`). |
+| **`BB-g`** | Branch `birthday-block-modal` (BUILT, NOT merged). Only if the owner puts the birthday block on a TEST post: press its **Set my birthday** as a non-staff account, send `08-10`; then send `next tuesday`; then look at the post from a second account | The date form opens straight away (no panel first). `08-10`: a private *Your birthday is **August 10**… Press the button again, or use /birthday, to change it.* `next tuesday`: a private refusal ending *Nothing was saved; press the button to try again.* The post is unchanged for everyone. Logs ▸ birthday: one `birthday.set`. Settings ▸ birthday and the block's editor list the three new answers. Design: [`../info/blocks-buttons-design.md`](../info/blocks-buttons-design.md#birthday-block-goes-straight-to-the-form). |
 
 
 ## Rows `BL-a` … `BL-e` — who's live now, upcoming events, link buttons (branch `blocks-live`, 2026-09-28)
