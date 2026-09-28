@@ -1,8 +1,9 @@
-/* Rich-clipboard HTML (Google Docs' flavour) to Discord markdown, for the post editor's
-   paste. A STRING goes in and a STRING comes out — no DOM, no DOMParser, so
-   site/mock/clipmd.test.mjs feeds it the same fixtures under plain node with no dependency.
-   See docs/info/code-notes.md § site/public/assets/clipmd.js and
-   docs/info/posts-paste-design.md. */
+/* Rich-clipboard HTML (Google Docs' flavour) and Google Docs' HTML export to Discord
+   markdown, for the post editor's paste and its Import from a Google Doc. A STRING goes in and
+   a STRING comes out — no DOM, no DOMParser, so site/mock/clipmd.test.mjs feeds it the same
+   fixtures under plain node with no dependency. See docs/info/code-notes.md
+   § site/public/assets/clipmd.js, docs/info/posts-paste-design.md and
+   docs/info/posts-doc-import-design.md. */
 
 const VOID = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param',
@@ -27,6 +28,14 @@ const STRIKE_TAGS = new Set(['s', 'strike', 'del']);
 const CODE_TAGS = new Set(['code', 'kbd', 'samp', 'tt', 'pre']);
 const MONO = /mono|courier|consolas|menlo|monaco|lucida console/;
 const LINKABLE = /^(?:https?:|mailto:|discord:)/i;
+const GOOGLE_HOSTS = new Set(['google.com', 'www.google.com']);
+const STYLE_BLOCK = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi;
+const ONE_CLASS = /^\.([A-Za-z_][\w-]*)$/;
+const KIX_LEVEL = /(?:^|\s)lst-kix_\w+-(\d+)(?:\s|$)/;
+const CLASS_KEPT = new Set([
+  'font-weight', 'font-style', 'text-decoration', 'text-decoration-line', 'font-size',
+  'font-family',
+]);
 
 /** Body text in Google Docs is 11pt; everything here is measured against that. */
 const BASE_PT = 11;
@@ -115,14 +124,68 @@ function parse(html) {
   return root;
 }
 
-function styleOf(attrs) {
+function declarationsOf(text) {
   const out = {};
-  for (const one of String(attrs.style || '').split(';')) {
+  for (const one of String(text || '').split(';')) {
     const split = one.indexOf(':');
     if (split < 0) continue;
     out[one.slice(0, split).trim().toLowerCase()] = one.slice(split + 1).trim().toLowerCase();
   }
   return out;
+}
+
+/** Google's export marks words by class (`.c3{font-weight:700}`), not inline like the clipboard. */
+function classRules(html) {
+  const rules = new Map();
+  let order = 0;
+  for (const block of String(html === null || html === undefined ? '' : html).matchAll(STYLE_BLOCK)) {
+    const css = block[1].replace(/\/\*[\s\S]*?\*\//g, '').replace(/@import[^;]*;/gi, '');
+    for (const rule of css.split('}')) {
+      const at = rule.indexOf('{');
+      if (at < 0) continue;
+      const kept = {};
+      for (const [key, value] of Object.entries(declarationsOf(rule.slice(at + 1)))) {
+        if (CLASS_KEPT.has(key)) kept[key] = value;
+      }
+      if (!Object.keys(kept).length) continue;
+      for (const selector of rule.slice(0, at).split(',')) {
+        const found = ONE_CLASS.exec(selector.trim());
+        if (!found) continue;
+        const had = rules.get(found[1]);
+        order += 1;
+        rules.set(found[1], { order, said: { ...(had ? had.said : {}), ...kept } });
+      }
+    }
+  }
+  return rules;
+}
+
+function styleOf(attrs, rules) {
+  const out = {};
+  if (rules && rules.size && attrs.class) {
+    const found = String(attrs.class).split(/\s+/).map((name) => rules.get(name)).filter(Boolean);
+    found.sort((a, b) => a.order - b.order);
+    for (const one of found) Object.assign(out, one.said);
+  }
+  return Object.assign(out, declarationsOf(attrs.style));
+}
+
+/** Docs' export wraps every link as `https://www.google.com/url?q=<the real one>&sa=…`. */
+function realHref(href) {
+  let url = null;
+  try {
+    url = new URL(href);
+  } catch (error) {
+    return href;
+  }
+  if (!GOOGLE_HOSTS.has(url.hostname.toLowerCase()) || url.pathname !== '/url') return href;
+  const real = String(url.searchParams.get('q') || url.searchParams.get('url') || '').trim();
+  return LINKABLE.test(real) ? real : href;
+}
+
+function kixLevel(attrs) {
+  const found = KIX_LEVEL.exec(String(attrs.class || ''));
+  return found ? Math.min(8, Number(found[1])) : 0;
 }
 
 function decorationOf(style) {
@@ -275,6 +338,7 @@ function blank() {
  * is stripped rather than approximated.
  */
 export function htmlToDiscordMarkdown(html) {
+  const rules = classRules(html);
   const blocks = [];
   let open = null;
 
@@ -331,25 +395,29 @@ export function htmlToDiscordMarkdown(html) {
         continue;
       }
       if (tag === 'img' || tag === 'input' || tag === 'button' || tag === 'select') continue;
-      const style = styleOf(node.attrs);
+      const style = styleOf(node.attrs, rules);
       const next = { ...ctx, marks: marksOf(tag, style, ctx.marks), pt: ptOf(style, ctx.pt) };
       if (tag === 'a') {
         const href = String(node.attrs.href || '').trim();
-        if (LINKABLE.test(href)) next.href = href;
+        if (LINKABLE.test(href)) next.href = realHref(href);
       }
       if (next.href) next.marks = { ...next.marks, u: false };
       if (tag === 'pre') next.pre = true;
       if (tag === 'ul' || tag === 'ol') {
         shut();
-        const list = { ordered: tag === 'ol', at: Number(node.attrs.start) || 1 };
+        const list = {
+          ordered: tag === 'ol',
+          at: Number(node.attrs.start) || 1,
+          level: kixLevel(node.attrs),
+        };
         walk(node.children, { ...next, lists: ctx.lists.concat([list]) });
         shut();
         continue;
       }
       if (tag === 'li') {
-        const list = ctx.lists[ctx.lists.length - 1] || { ordered: false, at: 1 };
+        const list = ctx.lists[ctx.lists.length - 1] || { ordered: false, at: 1, level: 0 };
         start('li', {
-          depth: Math.max(0, ctx.lists.length - 1),
+          depth: Math.max(0, ctx.lists.length - 1) + list.level,
           ordered: list.ordered,
           number: list.at,
         });
@@ -391,7 +459,7 @@ export function htmlToDiscordMarkdown(html) {
     if (!line) continue;
     if (out) {
       const run = before && before.kind === 'li' && block.kind === 'li'
-        && before.ordered === block.ordered;
+        && (before.ordered === block.ordered || before.depth !== block.depth);
       out += run ? '\n' : '\n\n';
     }
     out += line;
