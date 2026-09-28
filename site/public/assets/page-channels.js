@@ -7,9 +7,11 @@ import {
   card,
   el,
   foldout,
+  matches,
   notice,
   run,
   sayNothing,
+  searchField,
   section,
   segment,
   settingsPanel,
@@ -101,9 +103,7 @@ function wanted(row) {
   if (view.filter === 'left' && row.status !== 'draft') return false;
   if (view.filter === 'reviewed' && !(row.status && row.status !== 'draft')) return false;
   if (view.category && (row.category || NO_CATEGORY) !== view.category) return false;
-  if (!view.query) return true;
-  const said = `${row.name} ${row.category || ''} ${row.topic || ''} ${row.note || ''} ${row.draft || ''}`;
-  return said.toLowerCase().includes(view.query);
+  return matches(`${row.name} ${row.category || ''} ${row.topic || ''} ${row.note || ''} ${row.draft || ''}`, view.query);
 }
 
 function statusChip(row) {
@@ -322,17 +322,16 @@ function filterBar(rows, apply) {
     view.kept = null;
     apply();
   });
-  const search = el('input', {
-    class: 'input review-search',
-    type: 'search',
+  const search = searchField({
+    label: 'Search the channels',
     placeholder: 'a channel name, or a word from a note',
-    'aria-label': 'Search the channels',
-  });
-  search.value = view.query;
-  search.addEventListener('input', () => {
-    view.query = search.value.trim().toLowerCase();
-    view.kept = null;
-    apply();
+    value: view.query,
+    className: 'review-search',
+    onQuery: (query) => {
+      view.query = query;
+      view.kept = null;
+      apply();
+    },
   });
   view.choice = choice;
   return el('div', { class: 'review-filter' }, [choice, category, search]);
