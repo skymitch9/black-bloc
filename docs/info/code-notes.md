@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import fidelity* (branch `doc-import-fidelity`, off `main` `2072eac0`, keyed against `919853a0`); the *posts-paste* rows for `clipmd.js` still hold except that nested lists are now indented to the parent's content column and Doc-sourced HTML joins blocks with one newline. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *One search module* (branch `search-module`, off `main` `93c0bbb5`, keyed against `c9bd673a`); the *Blocks section: fold, search, filter* row for `blockmatch.js` is SUPERSEDED (file deleted). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import — the embed box and New post choices* (branch `posts-doc-import-2`, off `main` `d1d5807a`, keyed against `959bc310`); the *Import from a Google Doc* rows for `page-posts.js` `forgetImport` / `replaceBody` / `importDoc` / `importFold` hold in substance but their line numbers moved (~+30). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Import from a Google Doc* (branch `posts-doc-import`, off `main` `05a8fc0c`, keyed against `f91e014c`); the *posts-paste* rows for `clipmd.js` still hold (the inline path is unchanged; classes and the link unwrap are added). Before that:
@@ -9355,3 +9356,20 @@ Design: [`search-module-design.md`](search-module-design.md). Keyed against `c9b
 | `site/public/assets/page-channels.js:106` `wanted` | Channels keeps its own filter (segment, category, the kept row) and only borrows `matches` and `searchField`; a full `listFilter` would fight the row replacement in `answer`. |
 | `site/public/assets/page-moderation.js:48` `CASE_FILTERS` | The kinds lists become rules once, so `FILTERS` keeps its shape for anything else reading it. |
 | `site/public/assets/page-posts.js:127` `BOX_WORDS` | *like the welcome post*, no title — the payload carries no front-door post name to derive one from. |
+
+## Doc import fidelity: the welcome post as the acceptance test (branch `doc-import-fidelity`, 2026-09-28)
+
+Design: [`posts-doc-import-design.md`](posts-doc-import-design.md) § *Fidelity*. Keyed against `919853a0`.
+
+| Where | Why |
+|---|---|
+| `site/public/assets/clipmd.js:43` `BODY_BELOW_PT` · `:248` `bodySized` | A heading whose every visible run has a RESOLVED size under 14pt reads as body text in the Doc (the owner's rules Doc styles paragraphs Heading 1 and shrinks them to 12pt). A run with no size (`pt === null`) keeps the heading, because the export sizes `h1` by a TAG rule `classRules` never reads. |
+| `site/public/assets/clipmd.js:44` `DOCS_SOURCE` · `:348` `fromDocs` | Blank lines from empty paragraphs only for HTML that is Google's (clipboard guid, export body class, list classes); a web page's `<p>`s keep one blank line each, since their margins are the only paragraph break they have. |
+| `site/public/assets/clipmd.js:356` | An explicit block with no visible words is a `gap`; an IMPLICIT block (loose whitespace between tags) is one only if it holds a `<br>`, which is how the Docs clipboard writes an empty line. `li` never gaps. |
+| `site/public/assets/clipmd.js:377` | An `h*` fills an empty open `li` like a `<p>` does: the export writes some list items as `<li><h1 style="display:inline">`. |
+| `site/public/assets/clipmd.js:380` | An empty explicit block that is followed by a child block is a wrapper, not an empty paragraph, so it is dropped rather than shut into a gap. |
+| `site/public/assets/clipmd.js:482` · `:488` `columns` | Indent = the widths of the markers last printed at each shallower depth. Discord only nests a line under `1. ` at 3 spaces (`10. ` at 4); the old 2 per level did not nest under a number. |
+| `site/public/assets/clipmd.js:495` `leavesList` | From Docs, leaving a list takes a blank line even with no empty paragraph: a single newline after a list item folds the next line into it in Discord, and the live welcome post has the blank line. |
+| `site/public/assets/clipmd.js:506` `CODE_SPANS` · `:507` `CHANNEL_NAME` · `:522` `mentionChannels` | Split on code spans (odd parts are code, untouched). The look-behind refuses a `#` after a letter, digit or URL punctuation, and after `#` (so `## ` headings stay). Exact, case-sensitive names only; an unknown name keeps its words. |
+| `site/public/assets/page-posts.js:361` `markdownOfDoc` | Async now: the channel list comes from the page's own `refs()` (read once per load); a failed read is an empty list, so the import still lands with `#names` as typed. Both callers `await` it; the paste path is untouched. |
+| `site/mock/docimport.test.mjs` `UNDERLINE_SETTLED` | The one allowed difference, settled by the owner 2026-09-28: the live post drops the Doc's underline on *Banworthy Offenses*; the converter stays faithful and the test swaps that single line. |

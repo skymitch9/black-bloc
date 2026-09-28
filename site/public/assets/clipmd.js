@@ -40,6 +40,8 @@ const CLASS_KEPT = new Set([
 /** Body text in Google Docs is 11pt; everything here is measured against that. */
 const BASE_PT = 11;
 const HEADING_PT = [[20, 1], [16, 2], [13.5, 3]];
+const BODY_BELOW_PT = 14;
+const DOCS_SOURCE = /docs-internal-guid|\bdoc-content\b|\blst-kix_/;
 
 const ENTITIES = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ensp: ' ', emsp: ' ',
@@ -243,6 +245,10 @@ function headingFromAttrs(attrs) {
   return /(^|[\s_-])heading/.test(klass) ? 2 : 0;
 }
 
+function bodySized(runs) {
+  return runs.every((one) => one.pt !== null && one.pt !== undefined && one.pt < BODY_BELOW_PT);
+}
+
 function headingFromRuns(runs) {
   let least = Infinity;
   for (const one of runs) {
@@ -314,7 +320,7 @@ function inlineOf(runs) {
   return out;
 }
 
-function lineOf(block) {
+function lineOf(block, indent = '') {
   const runs = block.kind === 'h'
     ? block.runs.map((one) => (one.br ? one : { ...one, marks: { ...one.marks, b: false } }))
     : block.runs;
@@ -323,7 +329,7 @@ function lineOf(block) {
   if (block.kind === 'h') return `${'#'.repeat(block.level)} ${said}`;
   if (block.kind === 'li') {
     const mark = block.ordered ? `${block.number}. ` : '- ';
-    return `${'  '.repeat(block.depth)}${mark}${said.replace(/\n+/g, ' ')}`;
+    return `${indent}${mark}${said.replace(/\n+/g, ' ')}`;
   }
   return said;
 }
@@ -339,14 +345,22 @@ function blank() {
  */
 export function htmlToDiscordMarkdown(html) {
   const rules = classRules(html);
+  const fromDocs = DOCS_SOURCE.test(String(html === null || html === undefined ? '' : html));
   const blocks = [];
   let open = null;
 
   const shut = () => {
     if (!open) return;
     const said = open.runs.filter((one) => one.text && one.text.trim());
-    if (said.length) {
-      if (open.kind === 'p') {
+    if (!said.length) {
+      if (open.kind !== 'li' && (!open.implicit || open.runs.some((one) => one.br))) {
+        blocks.push({ kind: 'gap' });
+      }
+    } else {
+      if ((open.kind === 'h' || open.heading) && bodySized(said)) {
+        open.kind = 'p';
+        open.heading = 0;
+      } else if (open.kind === 'p') {
         const level = open.heading || headingFromRuns(said);
         if (level) {
           open.kind = 'h';
@@ -359,15 +373,17 @@ export function htmlToDiscordMarkdown(html) {
   };
 
   const start = (kind, extra = {}) => {
-    if (open && !open.runs.length && kind === 'p' && (open.kind === 'li' || open.kind === 'h')) {
+    if (open && !open.runs.length && (kind === 'p' || kind === 'h')
+      && (open.kind === 'li' || (open.kind === 'h' && kind === 'p'))) {
       return;
     }
+    if (open && !open.runs.length && !open.implicit) open = null;
     shut();
     open = { kind, runs: [], ...extra };
   };
 
   const into = (run) => {
-    if (!open) open = { kind: 'p', runs: [] };
+    if (!open) open = { kind: 'p', runs: [], implicit: true };
     open.runs.push(run);
   };
 
@@ -454,18 +470,63 @@ export function htmlToDiscordMarkdown(html) {
 
   let out = '';
   let before = null;
+  let gap = false;
+  let columns = [];
   for (const block of blocks) {
-    const line = lineOf(block);
+    if (block.kind === 'gap') {
+      gap = Boolean(out);
+      continue;
+    }
+    let indent = '';
+    if (block.kind === 'li') {
+      for (let depth = 0; depth < block.depth; depth += 1) indent += ' '.repeat(columns[depth] ?? 2);
+    }
+    const line = lineOf(block, indent);
     if (!line) continue;
+    if (block.kind === 'li') {
+      columns = columns.slice(0, block.depth);
+      columns[block.depth] = (block.ordered ? `${block.number}. ` : '- ').length;
+    } else {
+      columns = [];
+    }
     if (out) {
       const run = before && before.kind === 'li' && block.kind === 'li'
         && (before.ordered === block.ordered || before.depth !== block.depth);
-      out += run ? '\n' : '\n\n';
+      const leavesList = before && before.kind === 'li' && block.kind !== 'li';
+      if (fromDocs) out += gap || leavesList ? '\n\n' : '\n';
+      else out += run ? '\n' : '\n\n';
     }
     out += line;
     before = block;
+    gap = false;
   }
   return out.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+const CODE_SPANS = /(```[\s\S]*?```|`[^`\n]*`)/;
+const CHANNEL_NAME = /(?<![\p{L}\p{N}_\-/&#:.?=@<])#([\p{L}\p{N}_-]+)/gu;
+
+function channelIds(channels) {
+  const ids = new Map();
+  if (Array.isArray(channels)) {
+    for (const one of channels) {
+      if (one && one.name && one.id) ids.set(String(one.name), String(one.id));
+    }
+  } else if (channels && typeof channels === 'object') {
+    for (const [name, id] of Object.entries(channels)) if (id) ids.set(name, String(id));
+  }
+  return ids;
+}
+
+/** `#name` becomes `<#id>` only where a channel of exactly that name exists. */
+export function mentionChannels(markdown, channels) {
+  const ids = channelIds(channels);
+  const text = String(markdown === null || markdown === undefined ? '' : markdown);
+  if (!ids.size) return text;
+  return text.split(CODE_SPANS).map((part, at) => (at % 2 ? part : part.replace(
+    CHANNEL_NAME,
+    (whole, name) => (ids.has(name) ? `<#${ids.get(name)}>` : whole),
+  ))).join('');
 }
 
 export default htmlToDiscordMarkdown;

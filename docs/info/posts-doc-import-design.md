@@ -248,3 +248,91 @@ rules* post uses.
 ### Live check steps
 
 Sweep rows **`DI-f` … `DI-i`** in [`../access/sweeps.md`](../access/sweeps.md).
+
+## Fidelity: the welcome post as the acceptance test
+
+> Branch `doc-import-fidelity`, 2026-09-28, off `main` `2072eac0`. Owner, verbatim (2026-09-28 09:1x):
+> *"make the tets case for our importer the link we used to create the welcome post, if it doesnt look
+> the exact same we need adjustments"*.
+> **Last verified: 2026-09-28**, in the worktree: every node test `scripts/deploy.ps1` runs exits 0
+> (incl. `clipmd` and the new `docimport`); the ES-module parse of every `site/public/assets/*.js`;
+> `node site/mock/check.mjs` against a mock on `MOCK_PORT=8901` → *22 pages, 281 routes, 26 core
+> settings, all keys present* (the 8901 listener stopped after). No Python changed, so ruff/pytest were
+> not re-run. ⚠️ **NOT checked:** no browser, no Discord render (see the last list below).
+
+### The test
+
+`site/mock/docimport.test.mjs` (in `scripts/deploy.ps1` and CI). Inputs, both TRACKED under
+`site/mock/fixtures/`:
+
+| File | What it is |
+|---|---|
+| `rules-export.html` | The REAL `export?format=html` of the owner's public Doc *BaF Server Rules Revamp* (`1NYgkvHOxIi7b8Erve1fOQKxQ7ge8IcMGdu6FWYBEAkE`), fetched by the conductor 2026-09-28 09:1x, 27,106 bytes. The first real Google export this converter has met. |
+| `welcome-live.md` | The live welcome post's body, read 09:1x. ⚠️ The file as handed over was **mojibake**: both `’` were stored as `â` + U+0080 + U+0099 (UTF-8 read as Latin-1 and re-encoded), 2,033 chars. Repaired (`encode('latin-1').decode('utf-8')`) to 2,029 chars with two real `’`, matching the Doc's `&rsquo;`. |
+
+The test converts the whole export, cuts the lines between `# Suggestions for Revamped Rules` and
+`# General Comments/Notes` (the slicing is test scaffolding; the importer imports the whole doc), runs
+`mentionChannels` with `{off-topic, recipes-and-food-pics}`, trims, and asserts byte equality with ONE
+named substitution, `banworthy-underline-settled-by-owner-2026-09-28`: the converter's
+`__**Banworthy Offenses**__` line is swapped for the live `**Banworthy Offenses**` before comparing.
+**Result: exact match.**
+
+### The rules, as built (`site/public/assets/clipmd.js`)
+
+1. **A body-sized heading is a paragraph.** An `h1`–`h6`, or a `title`/`subtitle`/heading-class block,
+   whose every VISIBLE run carries a resolved font size under 14pt (`BODY_BELOW_PT`; class + inline, the
+   same resolution bold uses, via `ptOf`) is emitted as a paragraph. A run with no size (e.g.
+   *Suggestions for Revamped Rules*, `c12{font-weight:700}`, inheriting `h1`'s 20pt from a TAG rule the
+   converter never reads) keeps the heading. Whitespace-only runs (a trailing 20pt `&nbsp;`) do not vote.
+2. **Bold comes back** once the block is a paragraph (`lineOf` strips bold only on headings); the leading
+   `&nbsp;` of `&nbsp;Black in a Flash` is already a space and already lands outside the markers
+   (`wrapped`), so nothing beyond rule 1 was needed.
+3. **Nested lists sit at the parent's content column**: the indent for depth *d* is the width of the
+   marker last printed at each shallower depth (`1. ` → 3, `10. ` → 4, `- ` → 2), so level 2 under
+   numbers is 6. An unknown parent column falls back to 2. Applies to paste AND import.
+4. **A heading inside a list item is list text**: `start()` lets an `h*` fill an empty open `li` the way
+   a `<p>` already did (`<li><h1 style="display:inline">` in the export).
+5. **Blank lines come from the Doc's own empty paragraphs**, only for HTML that comes FROM Google Docs
+   (`DOCS_SOURCE`: `docs-internal-guid`, `doc-content`, or `lst-kix_`). Consecutive blocks join with one
+   newline; an explicit block with no visible words (`<p class="c5"><span></span></p>`, an `h1` holding
+   only a `<br>`, or the clipboard's top-level `<br>`) is a gap; runs of gaps collapse to one blank line;
+   leading gaps are dropped; a wrapper block that only contains other blocks is not a gap. **One addition
+   the brief did not name:** leaving a list for a non-list block also takes a blank line. The export has
+   NO empty paragraph between rule 6's sub-item and *Banworthy Offenses*, yet the live post has one, and in
+   Discord a single newline after a list item folds the next line into that item. Any other HTML (a web
+   page's `<p>`s) keeps the old one-blank-line-per-block join. Trailing spaces were already trimmed.
+6. **Underline stays faithful** (`__**Banworthy Offenses**__`). ✅ **SETTLED by the owner 2026-09-28
+   09:2x** (*"Leave it, I think it looks better without the underline"*): the live post deliberately drops
+   the Doc's underline; the converter is not changed to match, and the test carries that one line as its
+   named substitution.
+7. **`mentionChannels(markdown, channels)`**: pure, exported. `channels` is the Posts page's
+   `/api/ref/channels` list (`[{id, name}]`) or a name→id map. `#name` → `<#id>` only for an EXACT name
+   (case-sensitive, whole name: `#off-topic-2` is left when only `off-topic` exists), never after a
+   letter, digit, `/`, `#`, `&`, `:`, `.`, `?`, `=`, `@` or `<` (URLs, anchors, `##`), never inside inline
+   or fenced code. `page-posts.js:markdownOfDoc` became `async`, reads the page's `refs()` channels, and
+   runs it after the converter; its two callers now `await` it. The paste path does NOT mention-ify.
+
+### Pinned paste/export fixtures that changed (`site/mock/clipmd.test.mjs`, each annotated in place)
+
+| Fixture | Was | Now | Why |
+|---|---|---|---|
+| *a Google Docs fragment* / *one document, pasted and exported* | a blank line between every block | one newline | rule 5: the fragment has no empty paragraph (it carries `docs-internal-guid`) |
+| *a Google Docs export* | blank lines everywhere; `## A short subtitle`; `  - sub` | blank lines only where the export has empty `<p>`s (two collapse to one); `A short subtitle` (its run is 11pt); `   - sub` | rules 5, 1, 3; a 15pt subtitle is pinned separately as `## ` |
+| *a mixed nested list* | `1. One` / `  - sub` | `1. One` / `   - sub` | rule 3: Discord does not nest a 2-space item under a number |
+
+New pins: `fidelity 1` … `fidelity 7`, one block per rule. Unchanged: plain fragments,
+`<p>One.</p><p>Two.</p>` → one blank line (not from Docs), marks, links, styled-paragraph headings,
+whitespace, classes vs inline.
+
+### What was NOT verified
+
+- 🔴 **No Discord render.** That 3/6-space indents nest under numbers, and that a single newline after a
+  list item folds into it, is Discord's markdown as observed in the live post, not rendered here. The
+  acceptance test proves the TEXT equals the live post, which already renders.
+- **No browser** ran either import drawer; `markdownOfDoc` going async and reading `refs()` is reasoned.
+- The mention step on the real page depends on `/api/ref/channels` naming the live channels exactly.
+- Only ONE real Doc has been measured. The 14pt line and the `DOCS_SOURCE` sniff rest on this Doc.
+
+### Live check steps
+
+Sweep rows **`DI-j` … `DI-l`** in [`../access/sweeps.md`](../access/sweeps.md).

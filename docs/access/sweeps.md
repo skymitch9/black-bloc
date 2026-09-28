@@ -3780,3 +3780,17 @@ wrap as before). Nothing here posts to Discord. Lettered; the conductor numbers 
 | **`SM-f`** | Raid trains: type a title word; press the three scope chips. Requests ▸ **Your requests** (as a member): chips with counts, a query, then **Clear the filters** on a no-match | Same narrowing and foot lines as before; scope chips refetch; Clear brings every request back |
 | **`SM-g`** | Events ▸ a marathon's schedule: type a runner's name, clear it; Settings: type a key fragment, clear it | Schedule: only days with a match stay, opened; clearing restores the days' own open state. Settings: groups without a match hide, counts per group, *N of M keys* |
 | **`SM-h`** | Channels ▸ Review: type a channel name, change the segment and category; Members, Guides, Logs (any feature page), Audit: press chips | Channels' box now has the magnifier and filters ~0.2 s after typing (it was instant); everything else refetches as before and the pressed chip is the one you pressed |
+
+## Rows `DI-j` … `DI-l` — the welcome post's Doc imports as the welcome post (branch `doc-import-fidelity`, 2026-09-28)
+
+🔨 **BUILT on branch `doc-import-fidelity`, NOT merged, NOT deployed.** The owner, 2026-09-28: *"make the tets
+case for our importer the link we used to create the welcome post, if it doesnt look the exact same we need
+adjustments"*. Design: [`../info/posts-doc-import-design.md`](../info/posts-doc-import-design.md) § *Fidelity*.
+The node test already proves the TEXT; these rows are what a browser and Discord add. Do not press Save
+Changes or Post it. Lettered; the conductor numbers it.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`DI-j`** | Posts ▸ **New post** ▸ **Import a Google Doc**, paste `https://docs.google.com/document/d/1NYgkvHOxIi7b8Erve1fOQKxQ7ge8IcMGdu6FWYBEAkE/edit`, press **Read the doc**, then **Create the post** | The new draft's box, from the line after *# Suggestions for Revamped Rules* to the line before *# General Comments/Notes*, reads exactly like the live welcome post: the *Welcome to **Black in a Flash**…* paragraph (not a `# ` heading), a blank line, rules `1.`–`6.` each `**bold**` with sub-items at 3 spaces (the level-2 item under rule 5 at 6), rule 6's sub-line under it (not a heading), a blank line, `__**Banworthy Offenses**__` (the Doc's underline; the live post drops it, owner-settled), the six `- ` lines directly under it. `#off-topic` and `#recipes-and-food-pics` are `<#…>` mentions and the preview NAMES them. Delete the scratch post afterwards |
+| **`DI-k`** | In that draft's preview (the Discord mock), and if you like in a real Discord test message with the same text | Sub-items are drawn NESTED under their numbers (3 spaces), the level-2 item nested one step further; *Banworthy Offenses* is its own line, not folded into rule 6's last item |
+| **`DI-l`** | Open a Google Doc of plain paragraphs with no empty lines between them, copy all, paste into a post box | One newline between paragraphs (no blank lines added); add an empty line in the Doc and paste again: that one blank line appears. Paste from an ordinary web page: paragraphs still get a blank line each |
