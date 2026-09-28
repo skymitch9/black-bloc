@@ -29,8 +29,11 @@ DONE = "done"
 DROPPED = "dropped"
 RUN_STATES = (UPCOMING, LIVE, DONE, DROPPED)
 BY_TITLE = "title"
+BY_CATEGORY = "category"
+BY_BOTH = "title+category"
 BY_SCHEDULE = "schedule"
 BY_STAFF = "staff"
+BY_STREAM = (BY_TITLE, BY_CATEGORY, BY_BOTH)
 
 FAR = "far"
 NEAR = "near"
@@ -491,7 +494,7 @@ def diff(rows: Any, runs: list[Run], *, move_minutes: int) -> Plan:
         if row is None:
             plan.inserts.append(run)
             continue
-        shift = moved_by(_cell(row, "scheduled_at"), run.starts_at)
+        shift = moved_by(_cell(row, "sheet_at") or _cell(row, "scheduled_at"), run.starts_at)
         plan.updates.append((row, run, shift is not None and shift >= int(move_minutes)))
         if _cell(row, "state") == DROPPED:
             plan.reappeared.append(row)
@@ -637,6 +640,7 @@ class Change(NamedTuple):
     to: str
     because: str
     skipped: bool = False
+    confirmed: bool = False
 
 
 def _when(row: Any) -> tuple[datetime, int]:
@@ -644,10 +648,25 @@ def _when(row: Any) -> tuple[datetime, int]:
     return (at, int(_cell(row, "order_no") or 0))
 
 
+def confirms(row: Any, because: str) -> bool:
+    """A run already live is re-recorded only when the stream is a stronger reason than the one
+    it went live by: the schedule's clock, or one signal where both now agree."""
+    was = _cell(row, "live_because")
+    if was == BY_STAFF or was == because:
+        return False
+    return was not in BY_STREAM or because == BY_BOTH
+
+
 def advance(
-    runs: Any, now: datetime, *, hit: Any = None, watching: bool, grace_minutes: int
+    runs: Any,
+    now: datetime,
+    *,
+    hit: Any = None,
+    watching: bool,
+    grace_minutes: int,
+    because: str = BY_TITLE,
 ) -> list[Change]:
-    """Every state move one tick makes. `watching` means a live title can confirm runs, so the
+    """Every state move one tick makes. `watching` means the stream can confirm runs, so the
     schedule alone waits out the grace; without it the schedule decides at the start time."""
     grace = timedelta(minutes=int(grace_minutes))
     rows = sorted((one for one in runs or () if _cell(one, "state") != DROPPED), key=_when)
@@ -656,14 +675,16 @@ def advance(
     if hit is not None:
         hit_at = _when(hit)
         if _cell(hit, "state") != LIVE:
-            changes.append(Change(hit, LIVE, BY_TITLE))
+            changes.append(Change(hit, LIVE, because))
+        elif confirms(hit, because):
+            changes.append(Change(hit, LIVE, because, confirmed=True))
         for row in rows:
             if row is hit or _cell(row, "id") == _cell(hit, "id") or held(row):
                 continue
             if _cell(row, "state") == LIVE:
-                changes.append(Change(row, DONE, BY_TITLE))
+                changes.append(Change(row, DONE, because))
             elif _cell(row, "state") == UPCOMING and _when(row) < hit_at:
-                changes.append(Change(row, DONE, BY_TITLE, skipped=True))
+                changes.append(Change(row, DONE, because, skipped=True))
         return changes
     next_live = None
     for row in rows:

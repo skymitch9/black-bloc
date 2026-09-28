@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 80
+SCHEMA_VERSION = 81
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -925,6 +925,7 @@ CREATE TABLE IF NOT EXISTS spotlight_sessions (
     ended_at             TEXT,
     title                TEXT,
     game                 TEXT,
+    game_id              TEXT,
     url                  TEXT,
     mode                 TEXT    NOT NULL,
     announced_message_id INTEGER,
@@ -1087,6 +1088,13 @@ CREATE TABLE IF NOT EXISTS marathon_runs (
     reminders_sent        TEXT    NOT NULL DEFAULT '[]',
     first_seen_at         TEXT    NOT NULL,
     last_seen_at          TEXT    NOT NULL,
+    sheet_at              TEXT,
+    sheet_ends_at         TEXT,
+    actual_started_at     TEXT,
+    actual_ended_at       TEXT,
+    twitch_game_id        TEXT,
+    twitch_category       TEXT,
+    twitch_looked_at      TEXT,
     UNIQUE (marathon_id, external_id)
 );
 
@@ -1263,6 +1271,14 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("spotlight_sessions", "replay_reason", "TEXT"),
     ("spotlight_sessions", "replay_action", "TEXT"),
     ("spotlight_sessions", "replay_cleared", "TEXT"),
+    ("spotlight_sessions", "game_id", "TEXT"),
+    ("marathon_runs", "sheet_at", "TEXT"),
+    ("marathon_runs", "sheet_ends_at", "TEXT"),
+    ("marathon_runs", "actual_started_at", "TEXT"),
+    ("marathon_runs", "actual_ended_at", "TEXT"),
+    ("marathon_runs", "twitch_game_id", "TEXT"),
+    ("marathon_runs", "twitch_category", "TEXT"),
+    ("marathon_runs", "twitch_looked_at", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {
@@ -1294,7 +1310,13 @@ DOOR_STAMP_ONTO_ITS_BLOCK = (
     "UPDATE post_blocks SET drawn_hash = (SELECT door_hash FROM posts "
     "WHERE posts.id = post_blocks.post_id) WHERE kind = 'frontdoor'"
 )
+RUNS_ON_THE_SHEET = "UPDATE marathon_runs SET sheet_at = scheduled_at WHERE sheet_at IS NULL"
+RUNS_END_ON_THE_SHEET = (
+    "UPDATE marathon_runs SET sheet_ends_at = ends_at WHERE sheet_ends_at IS NULL"
+)
 BACKFILLS: dict[tuple[str, str], str] = {
+    ("marathon_runs", "sheet_at"): RUNS_ON_THE_SHEET,
+    ("marathon_runs", "sheet_ends_at"): RUNS_END_ON_THE_SHEET,
     ("marathons", "event_mode"): CARRIED_EVENT_WISH,
     ("marathons", "noticed_at"): STAFF_MADE_NOTICED,
     ("post_blocks", "drawn_hash"): DOOR_STAMP_ONTO_ITS_BLOCK,

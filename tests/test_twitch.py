@@ -283,3 +283,39 @@ def test_a_streams_type_is_carried_as_helix_sent_it_and_empty_when_it_sent_none(
     assert stream_from({"user_login": "gdq", "type": "Rerun"}).stream_type == "rerun"
     assert stream_from({"user_login": "gdq", "type": ""}).stream_type == ""
     assert stream_from({"user_login": "gdq"}).stream_type == ""
+
+
+async def test_games_named_asks_twitch_by_name_once_and_keys_the_answer_by_lower_case_name():
+    http = FakeHttp([token_ok(), games(("1234", "Spyro Reignited Trilogy"))])
+    client = TwitchClient("id", "secret", request=http)
+
+    asked = ["Spyro Reignited Trilogy", "spyro reignited  trilogy", "Bombun"]
+    found = await client.games_named(asked)
+
+    assert list(found) == ["spyro reignited trilogy"]
+    assert found["spyro reignited trilogy"].id == "1234"
+    assert http.calls[1]["url"] == f"{HELIX_URL}/games"
+    assert http.calls[1]["params"] == [("name", "Spyro Reignited Trilogy"), ("name", "Bombun")]
+
+
+async def test_games_named_with_nothing_to_ask_never_calls_helix():
+    client = TwitchClient("id", "secret", request=FakeHttp([]))
+    assert await client.games_named(["", "  "]) == {}
+
+
+async def test_search_categories_returns_what_twitch_suggests_with_ids():
+    http = FakeHttp([token_ok(), games(("27284", "Retro"), ("", "Nameless"))])
+    client = TwitchClient("id", "secret", request=http)
+
+    found = await client.search_categories(" Retro ")
+
+    assert [(one.id, one.name) for one in found] == [("27284", "Retro")]
+    assert http.calls[1]["url"] == f"{HELIX_URL}/search/categories"
+    assert http.calls[1]["params"] == [("query", "Retro"), ("first", "10")]
+
+
+async def test_a_helix_failure_on_a_name_lookup_reaches_the_caller():
+    http = FakeHttp([token_ok(), (500, {})])
+    client = TwitchClient("id", "secret", request=http)
+    with pytest.raises(TwitchError):
+        await client.games_named(["Spyro"])

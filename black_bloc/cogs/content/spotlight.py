@@ -399,14 +399,15 @@ async def start_session(
     try:
         cur = await db.conn.execute(
             "INSERT INTO spotlight_sessions(guild_id, spotlight_id, started_at, title, game, "
-            "url, mode, pinging_last, replay_reason, replay_action, replay_cleared) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "game_id, url, mode, pinging_last, replay_reason, replay_action, replay_cleared) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 guild_id,
                 int(spotlight_id),
                 now_iso(),
                 info.title,
                 info.game,
+                getattr(info, "game_id", None) or None,
                 info.url,
                 mode,
                 None if pinging is None else (1 if pinging else 0),
@@ -452,11 +453,22 @@ def replay_state(session: Any, said: dict[str, str]) -> dict[str, Any] | None:
     }
 
 
-async def refresh_session_info(db: Any, session_id: int, game: Any, title: Any) -> None:
+async def refresh_session_info(
+    db: Any, session_id: int, game: Any, title: Any, game_id: Any = None
+) -> None:
     await db.conn.execute(
-        "UPDATE spotlight_sessions SET game = COALESCE(?, game), title = COALESCE(?, title) "
-        "WHERE id = ?",
-        (game or None, title or None, int(session_id)),
+        "UPDATE spotlight_sessions SET game_id = CASE WHEN ? IS NOT NULL THEN ? "
+        "WHEN ? IS NOT NULL AND ? IS NOT COALESCE(game, '') THEN NULL ELSE game_id END, "
+        "game = COALESCE(?, game), title = COALESCE(?, title) WHERE id = ?",
+        (
+            game_id or None,
+            game_id or None,
+            game or None,
+            game or "",
+            game or None,
+            title or None,
+            int(session_id),
+        ),
     )
     await db.conn.commit()
 
@@ -1280,11 +1292,16 @@ class Spotlight(commands.Cog):
         return from_twitch(streams[0]) if streams else stored
 
     async def _refresh(self, session: Any, info: Any) -> bool:
-        changed = (info.game and info.game != _cell(session, "game")) or (
-            info.title and info.title != _cell(session, "title")
+        game_id = getattr(info, "game_id", None)
+        changed = (
+            (info.game and info.game != _cell(session, "game"))
+            or (info.title and info.title != _cell(session, "title"))
+            or (game_id and game_id != _cell(session, "game_id"))
         )
         if changed:
-            await refresh_session_info(self.bot.db, session["id"], info.game, info.title)
+            await refresh_session_info(
+                self.bot.db, session["id"], info.game, info.title, game_id
+            )
         return bool(changed)
 
     async def _refresh_announcement(self, guild: Any, row: Any, session: Any, info: Any) -> None:

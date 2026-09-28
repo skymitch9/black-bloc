@@ -9,6 +9,7 @@ log = logging.getLogger(__name__)
 TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 HELIX_URL = "https://api.twitch.tv/helix"
 BATCH_SIZE = 100
+SEARCH_FIRST = 10
 REQUEST_TIMEOUT_SECONDS = 15
 BOX_ART_WIDTH = 285
 BOX_ART_HEIGHT = 380
@@ -208,3 +209,27 @@ class TwitchClient:
                     self._games[game.id] = game
                 found.append(game)
         return found
+
+    async def games_named(self, names: Any) -> dict[str, TwitchGame]:
+        """The categories Twitch has under exactly these names, keyed by the lower-cased name."""
+        wanted: list[str] = []
+        for raw in names or ():
+            name = " ".join(str(raw or "").split())
+            if name and name.lower() not in {one.lower() for one in wanted}:
+                wanted.append(name)
+        found: dict[str, TwitchGame] = {}
+        for start in range(0, len(wanted), BATCH_SIZE):
+            chunk = wanted[start : start + BATCH_SIZE]
+            for row in await self._get("games", [("name", name) for name in chunk]):
+                game = game_from(row)
+                if game.id:
+                    self._games[game.id] = game
+                    found[game.name.lower()] = game
+        return found
+
+    async def search_categories(self, query: Any) -> list[TwitchGame]:
+        text = " ".join(str(query or "").split())
+        if not text:
+            return []
+        rows = await self._get("search/categories", [("query", text), ("first", str(SEARCH_FIRST))])
+        return [game for game in (game_from(row) for row in rows) if game.id]

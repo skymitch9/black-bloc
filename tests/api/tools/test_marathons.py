@@ -44,6 +44,7 @@ ROUTES = [
     ("POST", "/api/marathons/1/track"),
     ("POST", "/api/marathons/1/ignore"),
     ("POST", "/api/marathons/1/inbox"),
+    ("POST", "/api/marathons/1/sheet-times"),
 ]
 
 
@@ -399,6 +400,30 @@ async def test_a_done_run_can_be_marked_upcoming_and_then_live(client, sign_in, 
     assert "marked by staff" in live["message"]
     kinds = await wf.kinds_in(web.db)
     assert "web.marathon.run_reset" in kinds and "web.marathon.run_live" in kinds
+
+
+async def test_staff_put_a_marathon_back_on_its_sheets_times_from_the_page(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    body = add(client).json()
+    marathon_id = body["id"]
+    assert body["retimed_runs"] == 0 and body["keeps_clock"] is False
+    first = body["run_list"][0]
+    assert first["retimed"] is False and first["certain"] is False
+    assert first["sheet_at"] == first["scheduled_at"]
+    track(client, marathon_id)
+    client.post(f"/api/marathons/{marathon_id}/runs/{first['id']}/live")
+
+    back = client.post(f"/api/marathons/{marathon_id}/sheet-times")
+    assert back.status_code == 200, back.text
+    said = back.json()
+    assert "back on the sheet's times" in said["message"]
+    assert all(one["actual_started_at"] is None for one in said["run_list"])
+    assert said["retimed_runs"] == 0
+    twice = client.post(f"/api/marathons/{marathon_id}/sheet-times")
+    assert twice.status_code == 409 and twice.json()["error"] == "not_retimed"
+    assert "web.marathon.sheet_times" in await wf.kinds_in(web.db)
 
 
 async def test_a_marathons_own_read_gap_is_set_and_cleared_from_the_page(
