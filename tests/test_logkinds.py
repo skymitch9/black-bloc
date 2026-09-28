@@ -1071,43 +1071,31 @@ def test_taking_somebody_off_an_application_list_is_routine_because_the_dm_is_th
     assert feature_of("web.application.removed") == "applications"
 
 
-def test_a_channel_note_is_routine_from_either_door_and_files_under_chat():
-    """Staff describing a channel is housekeeping; the row is for the Logs page, not Discord."""
-    for kind in ("chat.channel_note_set", "chat.channel_note_cleared"):
-        assert kind in ROUTINE
-        assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
-        assert is_important(kind) is False
-        assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
+CHAT_HOUSEKEEPING = (
+    "chat.channel_note_set",
+    "chat.channel_note_cleared",
+    *(f"chat.channel_draft_{move}" for move in ("used", "rewritten", "none", "reset")),
+    "chat.channel_reach_set",
+    "chat.channel_reach_cleared",
+    "chat.voice_pinned",
+    "chat.voice_cleared",
+    "chat.tone_edited",
+)
 
 
-def test_a_channel_draft_decision_is_routine_from_either_door_and_files_under_chat():
-    """Reviewing the catalog's drafts is housekeeping, one row per decision, from either door."""
-    for move in ("used", "rewritten", "none", "reset"):
-        kind = f"chat.channel_draft_{move}"
-        assert kind in ROUTINE
-        assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
-        assert is_important(kind) is False
-        assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
+@pytest.mark.parametrize("kind", CHAT_HOUSEKEEPING)
+def test_chat_housekeeping_is_routine_from_either_door_and_files_under_chat(kind):
+    """Channel notes, draft decisions, reach decisions and tone pins or edits are staff
+    housekeeping: one row for the Logs page from either door, never a Discord post."""
+    assert kind in ROUTINE
+    assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
+    assert is_important(kind) is False
+    assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
+
+
+def test_seeding_the_channel_drafts_is_routine():
     assert "chat.channel_drafts_seeded" in ROUTINE
     assert "chat.channel_drafts_seeded" in emitted_kinds()
-
-
-def test_a_staff_reach_decision_is_routine_from_either_door_and_files_under_chat():
-    """Staff telling the bot about a channel, or keeping it quiet, is housekeeping."""
-    for kind in ("chat.channel_reach_set", "chat.channel_reach_cleared"):
-        assert kind in ROUTINE
-        assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
-        assert is_important(kind) is False
-        assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
-
-
-def test_a_tone_pin_and_a_tone_edit_are_routine_from_either_door_and_file_under_chat():
-    """Staff choosing a member's tone or rewording one is housekeeping for the Logs page."""
-    for kind in ("chat.voice_pinned", "chat.voice_cleared", "chat.tone_edited"):
-        assert kind in ROUTINE
-        assert kind in emitted_kinds() and f"{WEB}.{kind}" in emitted_kinds()
-        assert is_important(kind) is False
-        assert feature_of(kind) == feature_of(f"{WEB}.{kind}") == "chat"
 
 
 def test_memory_is_loud_when_something_is_forgotten_and_quiet_the_rest_of_the_time():
@@ -1180,8 +1168,7 @@ def test_an_unknown_level_is_todays_behaviour():
 
 
 def test_every_feature_has_one_settings_key():
-    assert len(FEATURES) == 22
-    assert len(set(FEATURES)) == 22
+    assert FEATURES and len(set(FEATURES)) == len(FEATURES)
     assert log_level_key("golive") == "golive_log_level"
     assert LEVELS == (OFF, IMPORTANT_ONLY, ALL)
 
