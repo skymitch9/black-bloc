@@ -25,6 +25,18 @@ from black_bloc.cogs.content.spotlight import (
     windows_for,
 )
 from black_bloc.golive import HISTORY_NOTHING, StreamInfo
+from black_bloc.marathon_spotlight import STAFF_OFF_CLAUSE
+from black_bloc.settings_store import (
+    GOLIVE_REPLAY_DEFAULTS,
+    GOLIVE_REPLAY_REASON_TITLE_KEY,
+    GOLIVE_REPLAY_STATE_KEY,
+    GOLIVE_REPLAY_TREATED_KEY,
+    SPOTLIGHT_PINGS_ALWAYS_WORDS,
+    SPOTLIGHT_PINGS_EVENTS_WORDS,
+    SPOTLIGHT_PINGS_NEVER_WORDS,
+    SPOTLIGHT_WINDOW_OPEN_WORDS,
+)
+from black_bloc.spotlight import WINDOW_FROM_MARATHON, WINDOW_MARATHON, WINDOW_SOURCES
 
 ROUTES = [
     ("GET", "/api/golive/links"),
@@ -167,10 +179,18 @@ async def test_a_co_stream_row_names_the_other_platform_the_page_draws_beside_it
     assert rows[0]["also_url"] is None
 
 
-async def test_the_session_limit_is_clamped(client, sign_in, web):
+async def test_the_session_limit_is_clamped(client, sign_in, web, wf):
+    for day in ("20", "21"):
+        await web.db.conn.execute(
+            "INSERT INTO golive_sessions(guild_id, user_id, source, started_at, ended_at, mode) "
+            "VALUES (?, 21, 'twitch', ?, ?, 'on')",
+            (wf.GUILD_ID, f"2026-08-{day}T00:00:00+00:00", f"2026-08-{day}T01:00:00+00:00"),
+        )
+    await web.db.conn.commit()
     sign_in(client)
-    assert client.get("/api/golive/sessions", params={"limit": 10000}).status_code == 200
-    assert client.get("/api/golive/sessions", params={"limit": 0}).status_code == 200
+
+    assert len(client.get("/api/golive/sessions", params={"limit": 10000}).json()) == 2
+    assert len(client.get("/api/golive/sessions", params={"limit": 0}).json()) == 1
 
 
 async def test_linking_a_member_stores_the_login_and_says_it_was_not_checked(
@@ -957,12 +977,14 @@ async def test_a_row_carries_its_ping_mode_its_state_and_its_windows(client, sig
 
     gdq = rows["gamesdonequick"]
     assert gdq["ping_mode"] == "events" and gdq["pinging"] is True
-    assert gdq["ping_state"].startswith("Pings: during events — open until ")
+    assert gdq["ping_state"].startswith(
+        SPOTLIGHT_PINGS_EVENTS_WORDS.format(window=SPOTLIGHT_WINDOW_OPEN_WORDS.format(end=""))
+    )
     assert [one["staff"] for one in gdq["windows"]] == [True, False]
     assert gdq["windows"][0]["open"] is True and gdq["windows"][0]["note"] == "AGDQ 2027"
-    assert gdq["windows"][1]["source_words"] == "from the marathon schedule"
+    assert gdq["windows"][1]["source_words"] == WINDOW_SOURCES[WINDOW_MARATHON]
     assert rows["esamarathon"]["ping_mode"] == "always"
-    assert rows["esamarathon"]["ping_state"] == "Pings: always"
+    assert rows["esamarathon"]["ping_state"] == SPOTLIGHT_PINGS_ALWAYS_WORDS
     assert rows["esamarathon"]["windows"] == []
 
 
@@ -974,7 +996,7 @@ async def test_a_patch_sets_the_ping_mode_and_leaves_one_row(client, sign_in, we
 
     assert answer.status_code == 200
     body = answer.json()
-    assert body["ping_mode"] == "never" and body["ping_state"] == "Pings: never"
+    assert body["ping_mode"] == "never" and body["ping_state"] == SPOTLIGHT_PINGS_NEVER_WORDS
     assert "nothing it posts mentions a role" in body["message"]
     assert await wf.kinds_in(web.db) == ["web.golive.spotlight_ping_mode_set"]
     said = await wf.one_web_row(web.db, "web.golive.spotlight_ping_mode_set")
@@ -1061,9 +1083,7 @@ async def test_a_marathon_window_cannot_be_removed_from_here(client, sign_in, we
     answer = client.delete(f"/api/golive/spotlight/{spotlight_id}/windows/{window_id}")
 
     assert answer.status_code == 409
-    assert answer.json()["message"] == (
-        "That window comes from the marathon schedule — change it there."
-    )
+    assert answer.json()["message"] == WINDOW_FROM_MARATHON
     assert len(await windows_for(web.db, spotlight_id)) == 1
 
 
@@ -1133,7 +1153,7 @@ async def test_staff_turning_the_spotlight_off_during_a_marathon_stops_that_mara
     answer = client.patch(f"/api/golive/spotlight/{spotlight_id}", json={"spotlight": False})
 
     assert answer.status_code == 200, answer.text
-    assert "**AGDQ 2027** will not spotlight it again." in answer.json()["message"]
+    assert STAFF_OFF_CLAUSE.format(name="AGDQ 2027") in answer.json()["message"]
     cur = await web.db.conn.execute(
         "SELECT spotlight_mode FROM marathons WHERE id = ?", (marathon_id,)
     )
@@ -1176,7 +1196,9 @@ async def test_a_replay_row_says_so_in_the_keys_words(client, sign_in, web, wf):
     assert found["replay"] == {
         "reason": "title:replay",
         "action": "plain",
-        "line": "Replay detected (the title says “replay”)",
+        "line": GOLIVE_REPLAY_DEFAULTS[GOLIVE_REPLAY_STATE_KEY].format(
+            reason=GOLIVE_REPLAY_DEFAULTS[GOLIVE_REPLAY_REASON_TITLE_KEY].format(word="replay")
+        ),
         "treat_label": "It is live",
     }
     assert found["session"]["replay_reason"] == "title:replay"
@@ -1209,9 +1231,8 @@ async def test_treat_as_live_from_the_page_is_one_web_row_and_the_row_comes_back
     found = client.post(f"/api/golive/spotlight/{spotlight_id}/treat-live").json()
 
     assert found["treated"] is True and found["replay"] is None
-    assert found["message"] == (
-        "**gamesdonequick** is treated as live for this stream — announced again with the full "
-        "spotlight."
+    assert found["message"] == GOLIVE_REPLAY_DEFAULTS[GOLIVE_REPLAY_TREATED_KEY].format(
+        login="gamesdonequick"
     )
     assert (await open_session(web.db, spotlight_id))["replay_cleared"] == "staff"
     assert await wf.one_web_row(web.db, "web.golive.replay_treated_live") is not None
