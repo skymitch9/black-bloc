@@ -520,6 +520,9 @@ def test_the_built_in_tables_all_line_up():
         ("staff please", "need_a_mod"),
         ("help me", "need_a_mod"),
         ("whos a lead", "who_has"),
+        ("whos a mod", "who_has"),
+        ("who is a lead", "who_has"),
+        ("who has the leads role", "who_has"),
         ("who is a mentor", "who_has"),
         ("who are the leads", "who_has"),
         ("tell me who's a mentor", "who_has"),
@@ -648,12 +651,6 @@ def test_a_trust_question_only_lands_when_somebody_was_actually_pointed_at():
     for said in ("<@4001> is a mod", "<@4001> can i trust", "<@4001> is staff"):
         assert classify(said, mentions_member=True) == "about_member", said
         assert classify(said) != "about_member", said
-
-
-def test_asking_who_holds_a_role_still_reaches_who_has_when_nobody_is_named():
-    assert classify("whos a mod") == "who_has"
-    assert classify("who is a lead") == "who_has"
-    assert classify("who has the leads role") == "who_has"
 
 
 def test_looking_for_a_mod_never_reaches_a_model():
