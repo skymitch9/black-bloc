@@ -11,7 +11,8 @@ from black_bloc.cogs.moderation.modmail import (
     get_ticket,
     set_ticket_place,
 )
-from black_bloc.modmail import IN, OPEN
+from black_bloc.modmail import FORUM_CHANNEL_NAME, FORUM_TAG_NAMES, IN, OPEN
+from black_bloc.settings_store import MODMAIL_PANEL_TITLE_DEFAULT
 
 ROUTES = [
     ("GET", "/api/modmail/tickets", None),
@@ -207,8 +208,10 @@ async def test_snippets_are_saved_listed_and_removed(client, sign_in, web, wf):
 
 def test_a_snippet_needs_a_name_and_content(client, sign_in):
     sign_in(client)
-    assert client.post("/api/modmail/snippets", json={"name": "hi"}).status_code == 400
-    assert client.post("/api/modmail/snippets", json={"content": "x"}).status_code == 400
+    for payload in ({"name": "hi"}, {"content": "x"}):
+        refused = client.post("/api/modmail/snippets", json=payload)
+        assert refused.status_code == 400, payload
+        assert refused.json()["message"]
 
 
 async def test_blocks_are_added_listed_and_lifted(client, sign_in, web, guild, wf):
@@ -230,8 +233,12 @@ async def test_blocks_are_added_listed_and_lifted(client, sign_in, web, guild, w
 
 def test_a_block_needs_a_real_id(client, sign_in):
     sign_in(client)
-    assert client.post("/api/modmail/blocks", json={"user_id": "nobody"}).status_code == 400
-    assert client.delete("/api/modmail/blocks/nobody").status_code == 400
+    for refused in (
+        client.post("/api/modmail/blocks", json={"user_id": "nobody"}),
+        client.delete("/api/modmail/blocks/nobody"),
+    ):
+        assert refused.status_code == 400
+        assert refused.json()["message"]
 
 
 async def test_the_ticket_button_is_posted_and_taken_down_from_the_website(
@@ -245,7 +252,7 @@ async def test_the_ticket_button_is_posted_and_taken_down_from_the_website(
     assert posted.json()["channel_id"] == str(wf.TEST_CHANNEL_ID)
     assert web.store.get(wf.GUILD_ID, "modmail_panel_channel_id") == wf.TEST_CHANNEL_ID
     channel = guild.get_channel(wf.TEST_CHANNEL_ID)
-    assert channel.messages[-1].kwargs["embed"].title == "Need a moderator?"
+    assert channel.messages[-1].kwargs["embed"].title == MODMAIL_PANEL_TITLE_DEFAULT
 
     down = client.delete("/api/modmail/panel")
 
@@ -327,8 +334,8 @@ async def test_the_website_makes_the_ticket_forum_and_leaves_one_web_row(
 
     assert made.status_code == 200 and made.json()["made"] is True
     forum = guild.created[-1]
-    assert forum.name == "modmail" and forum.type.name == "forum"
-    assert [tag.name for tag in forum.available_tags] == ["open", "closed"]
+    assert forum.name == FORUM_CHANNEL_NAME and forum.type.name == "forum"
+    assert [tag.name for tag in forum.available_tags] == list(FORUM_TAG_NAMES)
     assert web.store.get(wf.GUILD_ID, "modmail_forum_channel_id") == forum.id
     assert made.json()["channel_id"] == str(forum.id)
     kinds = await wf.kinds_in(web.db)
