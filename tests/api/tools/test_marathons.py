@@ -27,6 +27,7 @@ ROUTES = [
     ("GET", "/api/marathons/1/people"),
     ("POST", "/api/marathons/1/people"),
     ("DELETE", "/api/marathons/1/people/1"),
+    ("PATCH", "/api/marathons/1/people/1"),
     ("POST", "/api/marathons/1/people/somebody/spotlight"),
     ("DELETE", "/api/marathons/1/people/somebody/spotlight"),
     ("POST", "/api/marathons/1/runs/1/shout"),
@@ -709,6 +710,62 @@ async def test_patch_ping_role_turns_it_on_and_off_and_refuses_a_word_it_does_no
     assert body["ping_role"] is False and body["window"] is None
     bad = client.patch(f"/api/marathons/{marathon_id}", json={"ping_role": "loud"})
     assert bad.status_code == 422 and bad.json()["error"] == "bad_ping_role"
+
+
+async def test_patch_the_host_switches_follow_on_and_off_and_refuse_a_bad_word(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    first = client.get(f"/api/marathons/{marathon_id}").json()
+    assert first["scan_hosts"] == {"own": None, "on": False, "default": False}
+    assert first["host_events"] == {"own": None, "on": False, "default": False}
+
+    body = client.patch(
+        f"/api/marathons/{marathon_id}", json={"scan_hosts": True, "host_events": "on"}
+    ).json()
+
+    assert body["scan_hosts"] == {"own": True, "on": True, "default": False}
+    assert body["host_events"]["own"] is True
+    assert "scans its hosts now" in body["message"]
+    said = await web_row(wf, web, "web.marathon.scan_hosts_set")
+    assert (said["to"], said["via"]) == (True, "website")
+    body = client.patch(f"/api/marathons/{marathon_id}", json={"scan_hosts": None}).json()
+    assert body["scan_hosts"]["own"] is None
+    bad = client.patch(f"/api/marathons/{marathon_id}", json={"host_events": "loud"})
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_switch"
+
+
+async def test_a_pairings_twitch_fix_is_set_shown_cleared_and_refused_in_words(
+    client, sign_in, web, cog, wf
+):
+    sign_in(client)
+    marathon_id = add(client).json()["id"]
+    paired = client.post(
+        f"/api/marathons/{marathon_id}/people",
+        json={"runner_name": "Somebody", "user_id": "77", "twitch_login": "twitch.tv/some_fix"},
+    ).json()
+    pairing = paired["pairings"][0]
+    assert pairing["twitch_login"] == "some_fix"
+    board = client.get(f"/api/marathons/{marathon_id}/people").json()
+    person = next(one for one in board["baf"] if one["name"] == "Somebody")
+    assert (person["login"], person["sheet_login"]) == ("some_fix", "somebody")
+
+    cleared = client.patch(
+        f"/api/marathons/{marathon_id}/people/{pairing['id']}", json={"twitch_login": ""}
+    ).json()
+    person = next(one for one in cleared["baf"] if one["name"] == "Somebody")
+    assert (person["login"], person["sheet_login"]) == ("somebody", None)
+    assert "back to the schedule" in cleared["message"]
+    bad = client.patch(
+        f"/api/marathons/{marathon_id}/people/{pairing['id']}", json={"twitch_login": "no good"}
+    )
+    assert bad.status_code == 422 and bad.json()["error"] == "bad_twitch"
+    assert "is not a Twitch channel name" in bad.json()["message"]
+    missing = client.patch(f"/api/marathons/{marathon_id}/people/999", json={})
+    assert missing.status_code == 404
+    said = await web_row(wf, web, "web.marathon.pairing_login_set")
+    assert (said["from"], said["to"]) == ("some_fix", None)
 
 
 async def test_patch_public_highlight_turns_the_auto_switch_on_and_off_and_refuses_a_bad_word(

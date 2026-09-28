@@ -5,6 +5,7 @@ from typing import Any
 
 from ... import marathon as mt
 from ... import marathon_events as me
+from ... import marathon_hosts as mh
 from ...actionlog import log_action
 from ...events import CANCELLED as EVENT_CANCELLED
 from ...events import DESCRIPTION_LIMIT as EVENT_DESCRIPTION_LIMIT
@@ -147,13 +148,10 @@ def reviews_runs(bot: Any, guild_id: int) -> bool:
     )
 
 
-async def make_run_event(
-    bot: Any, guild: Any, marathon: Any, row: Any, *, actor: Any = None, via: str = VIA_DISCORD
-) -> Outcome:
-    """Called under the marathon's lock with a run of ours that has no event."""
-    fields = await run_fields(bot, guild, marathon, row)
-    if fields is None:
-        return refusal(me.RUN_EVENT_NO_TIME.format(game=row["game"]), NO_TIME_CODE, 409)
+async def event_from(
+    bot: Any, guild: Any, marathon: Any, fields: EventFields, *, actor: Any, via: str
+) -> tuple[Any, str, bool]:
+    """`(made, why, reviewed)`: an event of the marathon's, reviewed or approved at once."""
     requester = requester_for(guild, marathon, actor)
     reviewed = reviews_runs(bot, guild.id)
     made = None
@@ -170,8 +168,56 @@ async def make_run_event(
                 )
         except Exception as exc:
             why = f"{type(exc).__name__}: {exc}"
-            log.warning("marathon: the event for run %s was not made — %s", row["id"], why)
+    return (made, str(why), reviewed)
+
+
+async def call_off(
+    bot: Any, guild: Any, event_id: int, reason: str, *, actor: Any, via: str
+) -> tuple[bool, str | None]:
+    """`(cancelled, trouble)` for an event that is still open."""
+    event = await get_event(bot.db, event_id)
+    if event is None or event["status"] not in EVENT_KEPT_IN_STEP:
+        return (False, None)
+    trouble = None
+    try:
+        await cancel_for(
+            bot, guild, event, actor if actor is not None else 0, reason=reason, via=via
+        )
+    except Exception as exc:
+        trouble = f"{type(exc).__name__}: {exc}"[:300]
+        log.warning("marathon: calling off event #%s did not finish — %s", event_id, trouble)
+    after = await get_event(bot.db, event_id)
+    return (after is not None and after["status"] == EVENT_CANCELLED, trouble)
+
+
+async def redated(bot: Any, guild: Any, event: Any, starts: Any, finishes: Any) -> Any:
+    """Moves an open event to new times; None when it already had them, else the Discord answer."""
+    if event["status"] not in EVENT_KEPT_IN_STEP:
+        return None
+    if (parse_ts(event["starts_at"]), parse_ts(event["ends_at"])) == (starts, finishes):
+        return None
+    await update_event(
+        bot.db,
+        int(event["id"]),
+        title=event["title"],
+        description=event["description"],
+        where=read_where(event),
+        starts_at=starts,
+        finishes_at=finishes,
+    )
+    return await move_scheduled_event(bot, guild, await get_event(bot.db, int(event["id"])))
+
+
+async def make_run_event(
+    bot: Any, guild: Any, marathon: Any, row: Any, *, actor: Any = None, via: str = VIA_DISCORD
+) -> Outcome:
+    """Called under the marathon's lock with a run of ours that has no event."""
+    fields = await run_fields(bot, guild, marathon, row)
+    if fields is None:
+        return refusal(me.RUN_EVENT_NO_TIME.format(game=row["game"]), NO_TIME_CODE, 409)
+    made, why, reviewed = await event_from(bot, guild, marathon, fields, actor=actor, via=via)
     if made is None:
+        log.warning("marathon: the event for run %s was not made — %s", row["id"], why)
         await log_action(
             bot,
             guild,
@@ -220,16 +266,8 @@ async def cancel_run_event(
     await update_run(bot.db, row["id"], event_id=None)
     if event is None or event["status"] not in EVENT_KEPT_IN_STEP:
         return False
-    trouble = None
-    try:
-        await cancel_for(
-            bot, guild, event, actor if actor is not None else 0, reason=reason, via=via
-        )
-    except Exception as exc:
-        trouble = f"{type(exc).__name__}: {exc}"[:300]
-        log.warning("marathon: calling off event #%s did not finish — %s", event_id, trouble)
-    after = await get_event(bot.db, event_id)
-    if after is None or after["status"] != EVENT_CANCELLED:
+    cancelled, trouble = await call_off(bot, guild, event_id, reason, actor=actor, via=via)
+    if not cancelled:
         await log_action(
             bot,
             guild,
@@ -251,22 +289,13 @@ async def cancel_run_event(
 
 async def redate_run_event(bot: Any, guild: Any, marathon: Any, row: Any, event: Any) -> None:
     starts, finishes = parse_ts(row["scheduled_at"]), parse_ts(row["ends_at"])
-    if starts is None or event["status"] not in EVENT_KEPT_IN_STEP:
+    if starts is None:
         return
     if finishes is None or finishes <= starts:
         finishes = starts
-    if (parse_ts(event["starts_at"]), parse_ts(event["ends_at"])) == (starts, finishes):
+    moved = await redated(bot, guild, event, starts, finishes)
+    if moved is None:
         return
-    await update_event(
-        bot.db,
-        int(event["id"]),
-        title=event["title"],
-        description=event["description"],
-        where=read_where(event),
-        starts_at=starts,
-        finishes_at=finishes,
-    )
-    moved = await move_scheduled_event(bot, guild, await get_event(bot.db, int(event["id"])))
     details = run_details(
         marathon,
         row,
@@ -286,7 +315,7 @@ def makeable(row: Any, now: Any) -> bool:
     finishes = parse_ts(row["ends_at"]) or parse_ts(row["scheduled_at"])
     return (
         row["event_id"] is None
-        and mt.is_ours(row)
+        and mh.is_runner_run(row)
         and row["state"] in (mt.UPCOMING, mt.LIVE)
         and parse_ts(row["scheduled_at"]) is not None
         and finishes is not None
@@ -351,13 +380,15 @@ async def leave_run_events(
 async def cancel_every_run_event(
     bot: Any, guild: Any, marathon: Any, *, actor: Any = None, via: str = VIA_DISCORD
 ) -> int:
+    from .marathon_hosts import cancel_every_host_event
+
     cancelled = 0
     for row in await runs_of(bot.db, marathon["id"]):
         if row["event_id"]:
             cancelled += await cancel_run_event(
                 bot, guild, marathon, row, me.MARATHON_REMOVED, actor=actor, via=via
             )
-    return cancelled
+    return cancelled + await cancel_every_host_event(bot, guild, marathon, actor=actor, via=via)
 
 
 async def set_event_mode(

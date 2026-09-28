@@ -136,6 +136,8 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         "Spotlight: on now · stop",
         "Auto-highlight BaF runners when live: off · turn on",
         "Ping the marathon role: off · turn on",
+        "Scan hosts: off · turn on",
+        "BaF host events: off · turn on",
     ]
     ids = [one.custom_id for one in buttons(message)]
     assert ids == [
@@ -144,6 +146,8 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
         f"marathon:controls:{marathon['id']}:spotlight:off",
         f"marathon:controls:{marathon['id']}:highlight:on",
         f"marathon:controls:{marathon['id']}:ping:on",
+        f"marathon:controls:{marathon['id']}:hosts:on",
+        f"marathon:controls:{marathon['id']}:hostevents:on",
     ]
     assert message.kwargs["allowed_mentions"].users is False
     posted = await details_of(bot.db, "marathon.controls_posted")
@@ -659,3 +663,30 @@ async def logged(bot, kind):
         "SELECT details FROM action_log WHERE kind = ? ORDER BY id", (kind,)
     )
     return [json.loads(row["details"]) for row in await cur.fetchall()]
+
+
+# --- the host buttons ---------------------------------------------------------------------------
+
+
+async def test_the_host_buttons_flip_their_switches_through_the_writer_and_relabel(bot, cog):
+    marathon = await tracked_marathon(bot, cog)
+    message = controls_in(the_thread(bot))[0]
+    assert (await fresh(bot, marathon))["scan_hosts"] is None
+
+    said = await pressed(bot, marathon, "hosts", "on")
+
+    assert said.ok and "scans its hosts now" in said.message
+    assert (await fresh(bot, marathon))["scan_hosts"] == 1
+    assert labels(message)[5] == "Scan hosts: on · turn off"
+    assert buttons(message)[5].custom_id == f"marathon:controls:{marathon['id']}:hosts:off"
+    events = await pressed(bot, marathon, "hostevents", "on")
+    assert events.ok and (await fresh(bot, marathon))["host_events"] == 1
+    assert labels(message)[6] == "BaF host events: on · turn off"
+    again = await pressed(bot, marathon, "hosts", "off")
+    assert again.ok and (await fresh(bot, marathon))["scan_hosts"] == 0
+    assert labels(message)[5] == "Scan hosts: off · turn on"
+
+
+async def test_a_host_button_rebuilds_from_its_custom_id():
+    found = re.fullmatch(mtc.TEMPLATE, "marathon:controls:12:hostevents:off")
+    assert found and (found["action"], found["to"]) == ("hostevents", "off")

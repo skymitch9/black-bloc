@@ -6,10 +6,11 @@ from typing import Any
 import discord
 
 from ... import marathon as mt
+from ... import marathon_hosts as mh
 from ... import marathon_people as mp
 from ... import spotlight as spot
 from ...actionlog import log_action
-from ...command_errors import SafeDynamicItem
+from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...golive import now_iso, parse_ts
 from ...logkinds import VIA_DISCORD, kind_via
 from ...panels import Outcome, Panel, answer, clamped, opened, refusal, retire, still_staff
@@ -17,6 +18,7 @@ from ...settings_store import (
     DB_UNAVAILABLE,
     DEFAULT_TIMEZONE_KEY,
     MARATHON_DEFAULTS,
+    MARATHON_SPOTLIGHT_HOST_NOTE_KEY,
     MARATHON_SPOTLIGHT_LEAD_KEY,
     MARATHON_SPOTLIGHT_NOTE_KEY,
     MARATHON_SPOTLIGHT_SLACK_KEY,
@@ -32,6 +34,7 @@ from .marathon import (
     pairing_by_id,
     pairings_of,
     runs_of,
+    set_pairing_login,
     unpair_runner,
     usernames_of,
     words_for,
@@ -52,15 +55,20 @@ SPOTLIGHT = "spotlight"
 UNSPOTLIGHT = "unspotlight"
 UNLINK = "unlink"
 LINK_NEAR = "link_near"
+TWITCH = "twitch"
 BACK = "back"
 LABELS = {
     SPOTLIGHT: ("Spotlight", discord.ButtonStyle.primary),
     UNSPOTLIGHT: ("Stop spotlighting", discord.ButtonStyle.secondary),
     UNLINK: ("Unlink", discord.ButtonStyle.secondary),
     LINK_NEAR: ("Link @{username}", discord.ButtonStyle.primary),
+    TWITCH: ("Twitch name…", discord.ButtonStyle.secondary),
     BACK: ("Back", discord.ButtonStyle.secondary),
 }
 PEOPLE_BUTTON = "People…"
+TWITCH_TITLE = "Their Twitch channel"
+TWITCH_LABEL = "Twitch name (blank = the schedule's)"
+TWITCH_HINT = "junior_sm or twitch.tv/junior_sm"
 
 
 # --- the table --------------------------------------------------------------------------------
@@ -144,6 +152,12 @@ def zone_of(bot: Any, guild: Any) -> str:
 # --- Spotlight… and Stop spotlighting ----------------------------------------------------------
 
 
+def spotlit_parts(entry: dict[str, Any], run_id: Any) -> list[Any]:
+    if run_id in (None, ""):
+        return list(entry.get("parts") or ())
+    return [one["part"] for one in entry["runs"] if str(one["id"]) == str(run_id)]
+
+
 async def spotlight_runner(
     bot: Any,
     guild: Any,
@@ -154,7 +168,7 @@ async def spotlight_runner(
     run_id: Any = None,
     via: str = VIA_DISCORD,
 ) -> Outcome:
-    """A channel-only spotlight row for one runner, through the ONE path the Go-live page uses."""
+    """A channel-only spotlight row for one runner or host, through the path Go-live uses."""
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
         state = await people_state(bot, guild, marathon)
@@ -187,9 +201,11 @@ async def spotlight_runner(
             said = mp.RUNS_OVER.format(name=name, marathon=marathon["name"])
             return refusal(said, RUNS_OVER_CODE, 409)
         start_at = parse_ts(starts)
+        hosting = mh.host_only(spotlit_parts(entry, run_id))
+        note_key = MARATHON_SPOTLIGHT_HOST_NOTE_KEY if hosting else MARATHON_SPOTLIGHT_NOTE_KEY
         note = mt.render(
-            bot.store.get(guild.id, MARATHON_SPOTLIGHT_NOTE_KEY),
-            str(MARATHON_DEFAULTS[MARATHON_SPOTLIGHT_NOTE_KEY]),
+            bot.store.get(guild.id, note_key),
+            str(MARATHON_DEFAULTS[note_key]),
             name=name,
             marathon=marathon["name"],
         ).text
@@ -224,6 +240,7 @@ async def spotlight_runner(
             "login": login,
             "spotlight_id": row["id"],
             "run_id": int(run_id) if run_id not in (None, "") else None,
+            "hosting": hosting,
             "starts_at": row["starts_at"],
             "expires_at": row["expires_at"],
             "via": via,
@@ -243,6 +260,9 @@ async def unspotlight_runner(
         entry = mp.find_entry(state["entries"], given)
         remembered = await remembered_of(bot.db, marathon["id"])
         login = str((entry or {}).get("login") or given or "").strip().lower()
+        sheet = str((entry or {}).get("sheet_login") or "").strip().lower()
+        if login not in remembered and sheet in remembered:
+            login = sheet
         mine = remembered.get(login)
         name = entry["name"] if entry is not None else login
         if mine is None:
@@ -430,6 +450,7 @@ def slot_card(
             view.add_item(PeopleMove(UNSPOTLIGHT))
         if entry.get("matched_by") == mp.BY_PAIRING and entry.get("pairing_id"):
             view.add_item(PeopleMove(UNLINK))
+            view.add_item(PeopleMove(TWITCH))
         near = entry.get("looks_like")
         if near and not chosen.get("user_id"):
             view.add_item(PeopleMove(LINK_NEAR, username=near["username"]))
@@ -512,6 +533,43 @@ async def unlink_person(bot: Any, guild: Any, actor: Any, marathon: Any, name: A
     return await unpair_runner(bot, guild, actor, marathon, pairing)
 
 
+async def person_pairing(bot: Any, guild: Any, view: Any, name: Any) -> Any:
+    marathon = await get_marathon(bot.db, guild.id, view.marathon_id)
+    if marathon is None:
+        return None
+    state = await people_state(bot, guild, marathon)
+    pairing_id = (mp.find_entry(state["entries"], name) or {}).get("pairing_id")
+    return await pairing_by_id(bot.db, guild.id, pairing_id) if pairing_id else None
+
+
+async def fix_login(bot: Any, guild: Any, actor: Any, marathon: Any, name: Any, given: Any):
+    state = await people_state(bot, guild, marathon)
+    pairing_id = (mp.find_entry(state["entries"], name) or {}).get("pairing_id")
+    pairing = await pairing_by_id(bot.db, guild.id, pairing_id) if pairing_id else None
+    if pairing is None:
+        return refusal(mt.NO_SUCH_PAIRING, "no_such_pairing", 404)
+    return await set_pairing_login(bot, guild, actor, marathon, pairing, given)
+
+
+class TwitchModal(AnswersErrors, discord.ui.Modal, title=TWITCH_TITLE):
+    login = discord.ui.TextInput(
+        label=TWITCH_LABEL, placeholder=TWITCH_HINT, required=False, max_length=100
+    )
+
+    def __init__(self, previous: Any = None, current: Any = None) -> None:
+        super().__init__()
+        self.previous = previous
+        self.login.default = str(current) if current else None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        view, given = self.previous, str(self.login)
+        await people_move(
+            interaction,
+            view,
+            lambda bot, guild, actor, row: fix_login(bot, guild, actor, row, view.person, given),
+        )
+
+
 def doing_for(action: str, name: Any, run_id: Any, member_id: Any) -> Any:
     if action == SPOTLIGHT:
         return lambda bot, guild, actor, row: spotlight_runner(
@@ -547,6 +605,12 @@ class PeopleMove(discord.ui.Button):
                 from .marathon import open_root
 
                 await open_root(interaction, view)
+            return
+        if self.action == TWITCH:
+            if await still_staff(interaction):
+                pairing = await person_pairing(interaction.client, interaction.guild, view, name)
+                current = mt.pairing_login(pairing) if pairing is not None else None
+                await interaction.response.send_modal(TwitchModal(view, current))
             return
         member_id = usernames_of(interaction.guild).get(self.username)
         await people_move(interaction, view, doing_for(self.action, name, view.run_id, member_id))

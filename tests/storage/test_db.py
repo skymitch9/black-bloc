@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 81
+        assert SCHEMA_VERSION == 82
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3276,7 +3276,7 @@ async def test_a_schema_77_post_carrying_the_door_gains_a_front_door_block(tmp_p
         cur = await again.conn.execute("SELECT slug, carries_door FROM posts ORDER BY id")
         assert [tuple(row) for row in await cur.fetchall()] == [("welcome", 1), ("hours", 0)]
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "81"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "82"
         await again.conn.execute("DELETE FROM post_blocks")
         await again.conn.commit()
     finally:
@@ -3379,3 +3379,49 @@ async def test_one_exclusive_block_per_guild_is_held_by_the_database_too(tmp_pat
             )
     finally:
         await db.close()
+
+
+async def test_a_schema_81_file_gains_the_host_switches_and_the_pairing_login(tmp_path):
+    """Schema 82: two per-marathon host switches (NULL = follow the setting), the host events'
+    ids, and a pairing's Twitch login fix — all NULL for what was already there."""
+    path = tmp_path / "old81.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for column in ("scan_hosts", "host_events", "host_event_ids"):
+        await db.conn.execute(f"ALTER TABLE marathons DROP COLUMN {column}")
+        await db.conn.execute(f"ALTER TABLE marathons_archive DROP COLUMN {column}")
+    await db.conn.execute("ALTER TABLE marathon_people DROP COLUMN twitch_login")
+    await db.conn.execute("ALTER TABLE marathon_people_archive DROP COLUMN twitch_login")
+    await db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, added_at) "
+        "VALUES (1, 'GDQueer', 'https://x', 'hotfix', 'gdqueer', 'x')"
+    )
+    await db.conn.execute(
+        "INSERT INTO marathon_people(guild_id, marathon_id, runner_name, user_id, added_at) "
+        "VALUES (1, 1, 'jr', 125393218408939520, 'x')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '81')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT name, scan_hosts, host_events, host_event_ids FROM marathons"
+        )
+        assert tuple(await cur.fetchone()) == ("GDQueer", None, None, None)
+        cur = await again.conn.execute("SELECT runner_name, twitch_login FROM marathon_people")
+        assert tuple(await cur.fetchone()) == ("jr", None)
+        for table, column in (
+            ("marathons_archive", "scan_hosts"),
+            ("marathon_people_archive", "twitch_login"),
+        ):
+            cur = await again.conn.execute(f"PRAGMA table_info({table})")
+            assert column in {row["name"] for row in await cur.fetchall()}
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION) == "82"
+    finally:
+        await again.close()

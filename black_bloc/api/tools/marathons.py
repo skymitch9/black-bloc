@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from ... import marathon as mt
+from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
 from ... import marathon_people as mt_people
 from ... import marathon_signals as sig
@@ -35,6 +36,7 @@ from ...cogs.content.marathon import (
     runs_of,
     set_active,
     set_channel,
+    set_pairing_login,
     shout_now,
     unlink_the_event,
     unpair_runner,
@@ -57,6 +59,7 @@ from ...cogs.content.marathon_events import (
     unlink_run_event,
 )
 from ...cogs.content.marathon_feeds import get_feed
+from ...cogs.content.marathon_hosts import set_switch, switch_state
 from ...cogs.content.marathon_inbox import ignore as ignore_marathon
 from ...cogs.content.marathon_inbox import inbox_message_url, post_now
 from ...cogs.content.marathon_inbox import track as track_marathon
@@ -205,6 +208,7 @@ def entry_row(guild: Any, entry: dict[str, Any]) -> dict[str, Any]:
         "key": entry["key"],
         "name": entry["name"],
         "login": entry.get("login"),
+        "sheet_login": entry.get("sheet_login"),
         "user_id": _id(user_id),
         "member": bool(user_id),
         "member_name": found["display_name"] if found else None,
@@ -254,6 +258,10 @@ async def next_row(bot: Any, guild: Any, row: Any, now: datetime) -> dict[str, A
     }
 
 
+def host_switch(bot: Any, guild: Any, row: Any, which: str) -> dict[str, Any]:
+    return switch_state(bot, guild.id, row, which)
+
+
 def pairing_row(guild: Any, row: Any) -> dict[str, Any]:
     return {
         "id": row["id"],
@@ -262,6 +270,7 @@ def pairing_row(guild: Any, row: Any) -> dict[str, Any]:
         "runner_name": row["runner_name"],
         "user_id": str(row["user_id"]),
         "member_name": resolve_one(guild, row["user_id"])["display_name"],
+        "twitch_login": mt.pairing_login(row),
     }
 
 
@@ -374,6 +383,8 @@ async def marathon_row(bot: Any, guild: Any, row: Any, runs: Any = None) -> dict
         "spotlight_mode": spotlight_mode_of(row),
         "ping_role": pings_role(row),
         "public_highlight": highlights(row),
+        "scan_hosts": host_switch(bot, guild, row, mh.SCAN),
+        "host_events": host_switch(bot, guild, row, mh.EVENTS),
         "archived": False,
     } | await tracking_of(bot, guild, row)
 
@@ -664,6 +675,20 @@ def build_router(bot: Any) -> APIRouter:
                 )
             )
             said.append(done.message)
+        for which in (mh.SCAN, mh.EVENTS):
+            if which in payload:
+                done = answered(
+                    await set_switch(
+                        bot,
+                        guild,
+                        actor,
+                        await wanted(guild, marathon_id),
+                        which,
+                        payload[which],
+                        via=VIA_WEBSITE,
+                    )
+                )
+                said.append(done.message)
         if "public_highlight" in payload:
             done = answered(
                 await set_public_highlight(
@@ -926,10 +951,36 @@ def build_router(bot: Any) -> APIRouter:
                 payload.get("runner_name"),
                 wanted_id(given) if given not in (None, "") else None,
                 everywhere=bool(payload.get("everywhere")),
+                twitch_login=payload["twitch_login"] if "twitch_login" in payload else mh.KEEP,
                 via=VIA_WEBSITE,
             )
         )
         return {"pairings": await people(guild, row), "message": done.message}
+
+    @router.patch("/{marathon_id}/people/{pairing_id}")
+    async def marathon_pairing_login(
+        request: Request, marathon_id: int, pairing_id: int, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        pairing = await pairing_by_id(bot.db, guild.id, pairing_id)
+        if pairing is None or pairing["marathon_id"] not in (None, row["id"]):
+            raise Refused(404, "no_such_pairing", mt.NO_SUCH_PAIRING)
+        done = answered(
+            await set_pairing_login(
+                bot,
+                guild,
+                actor_for(bot, who, guild),
+                row,
+                pairing,
+                payload.get("twitch_login"),
+                via=VIA_WEBSITE,
+            )
+        )
+        return await board(guild, row) | {"message": done.message}
 
     @router.delete("/{marathon_id}/people/{pairing_id}")
     async def marathon_unpair(

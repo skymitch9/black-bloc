@@ -89,6 +89,31 @@ def test_a_pairing_wins_over_the_automatic_match_and_this_marathons_wins_over_ev
     assert mt.match_people(people, {"sky": 9}, pairings[:1], marathon_id=7)[0]["user_id"] == 2
 
 
+def test_a_pairings_twitch_fix_replaces_the_sheets_login_and_clearing_it_restores_it():
+    sheet = [Person("Jr", "Jr", "runner")]
+    fixed = [{"marathon_id": 9, "runner_name": "jr", "user_id": 5, "twitch_login": "junior_sm"}]
+    found = mt.match_people(sheet, {}, fixed, marathon_id=9)
+    assert found == [
+        {"name": "Jr", "login": "junior_sm", "part": "runner", "user_id": 5, "sheet_login": "Jr"}
+    ]
+    again = mt.match_people(found, {}, fixed, marathon_id=9)
+    assert again == found
+    cleared = [dict(fixed[0], twitch_login=None)]
+    back = mt.match_people(found, {}, cleared, marathon_id=9)
+    assert back == [{"name": "Jr", "login": "Jr", "part": "runner", "user_id": 5}]
+
+
+def test_an_everywhere_fix_applies_on_every_schedule_and_matches_the_go_live_link():
+    sheet = [Person("Jr", "Jr", "runner")]
+    fixed = [{"marathon_id": None, "runner_name": "jr", "user_id": 5, "twitch_login": "junior_sm"}]
+    for marathon_id in (3, 9):
+        assert mt.match_people(sheet, {}, fixed, marathon_id=marathon_id)[0]["login"] == "junior_sm"
+    here = [{"marathon_id": 9, "runner_name": "jr", "user_id": 5}]
+    assert mt.match_people(sheet, {}, here, marathon_id=9)[0]["login"] == "Jr"
+    assert mt.pairing_login({"twitch_login": " Junior_SM "}) == "junior_sm"
+    assert mt.pairing_login(None) is None
+
+
 def test_hosts_and_commentators_are_matched_only_while_the_key_says_so():
     people = [Person("Host", "hostlogin", "host"), Person("Com", "comlogin", "commentator")]
     links = {"hostlogin": 1, "comlogin": 2}
@@ -590,9 +615,10 @@ def test_every_next_word_fills_and_the_date_is_a_discord_stamp():
     for key in ("marathon_next_template", "marathon_next_added_template"):
         said = mt.render(WORDS[key], WORDS[key], **fields)
         assert said.fell_back is False and "{" not in said.text
-    assert "**Summer Games Done Quick 2027**" in mt.render(
-        WORDS["marathon_next_template"], "", **fields
-    ).text
+    assert (
+        "**Summer Games Done Quick 2027**"
+        in mt.render(WORDS["marathon_next_template"], "", **fields).text
+    )
     assert fields["when"].endswith(":D>") and fields["relative"].endswith(":R>")
     assert mt.render(WORDS["marathon_next_none_template"], "", **fields).text.startswith(
         "AGDQ 2027 is over"
