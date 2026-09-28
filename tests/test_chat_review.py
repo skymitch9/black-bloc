@@ -12,7 +12,12 @@ from black_bloc.chat_memory import set_override
 from black_bloc.config import load_settings
 from black_bloc.knowledge import add_section, list_sections
 from black_bloc.llm import GROQ, IMPORTANT, SIMPLE, LLMError, Reply, Usage, record
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import (
+    REVIEW_DIGEST_KEY,
+    REVIEW_PLACEHOLDER_KEY,
+    REVIEW_WORDS,
+    SettingsStore,
+)
 
 GUILD = 7
 CHANNEL = 111
@@ -392,7 +397,7 @@ async def test_a_new_intent_gets_the_phrase_and_a_switched_off_placeholder(bot):
     lines = await lines_for(bot.db, row["id"])
     assert taught.made and read_triggers(row["triggers"]) == ("grill hours",)
     assert len(lines) == 1 and not lines[0]["enabled"]
-    assert lines[0]["text"].startswith("Write what Black Bloc should say")
+    assert lines[0]["text"] == REVIEW_WORDS[REVIEW_PLACEHOLDER_KEY][0]
 
 
 async def test_a_new_intent_that_already_exists_takes_the_phrase_instead(bot):
@@ -466,11 +471,9 @@ async def test_the_digest_posts_once_a_local_day_after_the_hour(bot):
     assert not await review.digest(bot, bot.guild, now=NOW.replace(hour=15))
     sent = bot.guild.channels[LOG_CHANNEL].sent
     assert len(sent) == 1
-    assert sent[0].startswith(
-        "**1** chat answer(s) are waiting for review — approve, change or dismiss them on the "
-        "Chat page: https://"
-    )
-    assert sent[0].endswith("/chat.html#sect-review")
+    link = sent[0].rsplit(" ", 1)[-1]
+    assert sent[0] == REVIEW_WORDS[REVIEW_DIGEST_KEY][0].format(count=1, link=link)
+    assert link.startswith("https://") and link.endswith("/chat.html#sect-review")
     assert (await kinds(bot.db)).count("chat.review_digest") == 1
 
 
