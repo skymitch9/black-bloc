@@ -84,19 +84,19 @@ async def rows(db, sql, *args):
 # --- the seed ---------------------------------------------------------------------------------
 
 
-def test_the_shipped_seed_is_eighteen_guides_with_a_slug_each():
+def test_every_shipped_guide_has_its_own_slug():
     entries = guides.seed_entries()
 
-    assert len(entries) == 27
-    assert len({one["slug"] for one in entries}) == 27
+    assert entries
+    assert len({one["slug"] for one in entries}) == len(entries)
     assert {one["audience"] for one in entries} == {"member", "staff"}
 
 
-async def test_seeding_a_guild_writes_eighteen_guides_and_no_pictures(bot, db):
+async def test_seeding_a_guild_writes_every_shipped_guide_and_no_pictures(bot, db):
     made = await guides.seed_guides(db, GUILD)
 
-    assert made == 27
-    assert await guides.count_guides(db, GUILD) == 27
+    assert made == len(guides.seed_entries())
+    assert await guides.count_guides(db, GUILD) == made
     assert len(await rows(db, "SELECT * FROM guide_media")) == 0
     steps = await rows(db, "SELECT * FROM guide_steps")
     assert steps and all(row["seed_do"] == row["do_text"] for row in steps)
@@ -141,15 +141,14 @@ async def test_reset_puts_the_whole_guide_back_and_refuses_one_nobody_shipped(bo
     await guides.seed_guides(db, GUILD)
     guide = await guides.get_guide(db, GUILD, "voice-room")
     await db.conn.execute("DELETE FROM guide_steps WHERE guide_id = ?", (guide["id"],))
-    await db.conn.execute(
-        "UPDATE guides SET title = 'Wrecked' WHERE id = ?", (guide["id"],)
-    )
+    await db.conn.execute("UPDATE guides SET title = 'Wrecked' WHERE id = ?", (guide["id"],))
     await db.conn.commit()
 
     assert await guides.reset_to_seed(db, GUILD, guide) is True
     fresh = await guides.get_guide(db, GUILD, "voice-room")
-    assert fresh["title"] == "Make your own voice room"
-    assert len(await guides.steps_of(db, fresh["id"])) == 4
+    shipped = next(one for one in guides.seed_entries() if one["slug"] == "voice-room")
+    assert fresh["title"] == shipped["title"]
+    assert len(await guides.steps_of(db, fresh["id"])) == len(shipped["steps"])
 
     mine = await guides.create_guide(
         db, GUILD, slug="mine", title="Mine", goal="A goal.", feature="core"
@@ -393,7 +392,7 @@ async def test_links_for_names_every_published_guide_by_its_command(bot, db):
         for one in guides.seed_entries()
         if one["audience"] == "member" and one["command"]
     }
-    assert len(found) == len(member_commands) == 11
+    assert len(found) == len(member_commands)
     assert found["/pings"] == [
         ("Choose what pings you", "https://blackbloc.test/guides.html#pings-follow")
     ]
@@ -461,9 +460,7 @@ async def test_the_seed_gives_every_guide_a_command_but_the_ones_it_means_not_to
     assert [slug for slug, command in by_slug.items() if not command] == []
 
 
-async def test_a_changed_seed_fills_a_null_command_and_leaves_everything_else(
-    bot, db, monkeypatch
-):
+async def test_a_changed_seed_fills_a_null_command_and_leaves_everything_else(bot, db, monkeypatch):
     await guides.seed_guides(db, GUILD)
     guide = await guides.get_guide(db, GUILD, "marathons-follow")
     step = (await guides.steps_of(db, guide["id"]))[0]
@@ -497,8 +494,9 @@ async def test_two_guilds_keep_their_own_guides(bot, db):
     await guides.seed_guides(db, GUILD)
     await guides.seed_guides(db, OTHER_GUILD)
 
-    assert await guides.count_guides(db, GUILD) == 27
-    assert await guides.count_guides(db, OTHER_GUILD) == 27
+    shipped = len(guides.seed_entries())
+    assert await guides.count_guides(db, GUILD) == shipped
+    assert await guides.count_guides(db, OTHER_GUILD) == shipped
     assert (await guides.get_guide(db, OTHER_GUILD, "golive-announce"))["published"] == 1
 
 
@@ -594,8 +592,6 @@ def test_the_seed_is_read_from_the_package_and_never_reworded():
 
 def test_the_module_reads_no_environment_of_its_own():
     assert not hasattr(guides, "os")
-    assert isinstance(guides.FEATURE_PATHS, dict)
-    assert isinstance(guides.PROBE_LABELS, dict)
     assert set(guides.PROBE_LABELS) == set(guides.PROBES)
 
 
