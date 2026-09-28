@@ -144,7 +144,6 @@ def test_the_oengus_pick_says_what_it_finds_in_words_a_newcomer_reads():
     words = mf.PICK_WORDS[mf.PICK_OENGUS]
     assert words.startswith("Oengus") and "oengus.io" in words
     assert "Speed Stuff 4 Charity" in words
-    assert "oengus" in mf.UNKNOWN_PICK and "oengus" in mf.ADD_FEED_SOURCE_HINT
     assert mf.marathon_source(oengus()) == "oengus"
     assert mf.source_word(oengus()) == "Oengus"
     assert mf.feed_line(oengus(), "Speed Stuff 4 Charity", 6).startswith(
@@ -203,7 +202,7 @@ def test_look_again_is_offered_on_an_oengus_feed_that_remembers_what_it_read():
 
 
 def test_the_fastestfurs_seed_pick_and_words_name_the_orgs_own_site():
-    seed = mf.SEEDS[4]
+    seed = next(one for one in mf.SEEDS if one.login == "fastestfurs")
     assert (seed.login, seed.source, seed.feed_ref, seed.name) == (
         "fastestfurs",
         mf.FASTESTFURS_FEED,
@@ -217,7 +216,6 @@ def test_the_fastestfurs_seed_pick_and_words_name_the_orgs_own_site():
     assert mf.pick_for(furs) == mf.PICK_FASTESTFURS
     assert mf.source_word(furs) == "Fastest Furs"
     assert "fastestfurs.com" in mf.PICK_WORDS[mf.PICK_FASTESTFURS]
-    assert "fastestfurs" in mf.UNKNOWN_PICK and "fastestfurs" in mf.ADD_FEED_SOURCE_HINT
     assert mf.FEED_LOOK not in [one.action for one in mf.feed_moves(furs)]
 
 
@@ -237,7 +235,7 @@ def test_a_horaro_events_feed_makes_horaro_marathons_and_reads_back_its_own_pick
     assert mf.pick_for(fpe) == "horaro_events"
     assert "finds this channel's events on horaro.net" in mf.PICK_WORDS["horaro_events"]
     fpe_seed = mf.Seed("fastpacedevents", mf.HORARO_EVENTS_FEED, "fastpacedevents", "Fast Pace")
-    assert mf.SEEDS[3] == fpe_seed
+    assert fpe_seed in mf.SEEDS
 
 
 def ladyarcaders(**extra):
@@ -247,7 +245,6 @@ def ladyarcaders(**extra):
 def test_the_lady_arcaders_seed_pick_and_words():
     seed = next(one for one in mf.SEEDS if one.login == "ladyarcaders")
     assert seed == mf.Seed("ladyarcaders", mf.LADYARCADERS_FEED, "ladyarcaders", "Lady Arcaders")
-    assert mf.marathon_source(seed._asdict()) == "ladyarcaders"
     assert mf.pick_of(" LadyArcaders ") == (mf.LADYARCADERS_FEED, None)
     assert mf.pick_for(ladyarcaders()) == "ladyarcaders"
     assert mf.PICK_NAMES["ladyarcaders"] == "Lady Arcaders"

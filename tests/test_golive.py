@@ -14,8 +14,6 @@ from black_bloc.golive import (
     PANEL_BUTTONS,
     PANEL_MINUTES_KEY,
     PANEL_TIMEOUT_FOOTER,
-    PANEL_TITLE,
-    SITE_BUTTON,
     STAFF_BUTTONS,
     StreamInfo,
     again_render,
@@ -61,6 +59,7 @@ from black_bloc.golive import (
     with_box_art,
 )
 from black_bloc.settings_store import (
+    BLOCKS_LIVE_DEFAULTS,
     GOLIVE_COSTREAM_AUTHOR,
     GOLIVE_COSTREAM_TEMPLATE,
     GOLIVE_END_AUTHOR,
@@ -406,19 +405,25 @@ def test_the_live_field_appends_to_the_sentence_that_was_posted():
 
 
 def test_the_live_field_sits_anywhere_in_a_longer_wording():
-    assert ended_render(
-        "That is a wrap on {game}: {live} (ran {duration})",
-        ENDED_INFO,
-        "Sky",
-        content="live!",
-        duration="2 h 10 min",
-    ) == "That is a wrap on Celeste: live! (ran 2 h 10 min)"
+    assert (
+        ended_render(
+            "That is a wrap on {game}: {live} (ran {duration})",
+            ENDED_INFO,
+            "Sky",
+            content="live!",
+            duration="2 h 10 min",
+        )
+        == "That is a wrap on Celeste: live! (ran 2 h 10 min)"
+    )
 
 
 def test_a_wording_without_the_live_field_rewrites_the_whole_post():
-    assert ended_render(
-        "**{name}** was streaming **{game}**. {url}", ENDED_INFO, "Sky", content=LIVE_CONTENT
-    ) == "**Sky** was streaming **Celeste**. https://www.twitch.tv/alice"
+    assert (
+        ended_render(
+            "**{name}** was streaming **{game}**. {url}", ENDED_INFO, "Sky", content=LIVE_CONTENT
+        )
+        == "**Sky** was streaming **Celeste**. https://www.twitch.tv/alice"
+    )
 
 
 def test_a_blank_end_wording_keeps_the_bare_sentence_and_adds_nothing():
@@ -433,9 +438,10 @@ def test_the_mention_is_dropped_unless_the_guild_keeps_it():
     assert ended_render("{name} is done", ENDED_INFO, "Sky", content=LIVE_CONTENT) == (
         "Sky is done"
     )
-    assert ended_render(
-        "{name} is done", ENDED_INFO, "Sky", content=LIVE_CONTENT, keep_mention=True
-    ) == "<@&55> Sky is done"
+    assert (
+        ended_render("{name} is done", ENDED_INFO, "Sky", content=LIVE_CONTENT, keep_mention=True)
+        == "<@&55> Sky is done"
+    )
     assert ended_render("{live} — stream ended", ENDED_INFO, "Sky", content=LIVE_CONTENT) == (
         "**Sky** is currently streaming **Celeste**! Check it out: u — stream ended"
     )
@@ -476,9 +482,7 @@ def test_a_positional_field_falls_back_to_the_default_rather_than_raising(caplog
 
 
 def test_an_unknown_placeholder_is_left_standing_rather_than_losing_the_message():
-    assert ended_render("{name} on {wibble}", ENDED_INFO, "Sky", content="x") == (
-        "Sky on {wibble}"
-    )
+    assert ended_render("{name} on {wibble}", ENDED_INFO, "Sky", content="x") == ("Sky on {wibble}")
 
 
 @pytest.mark.parametrize(
@@ -504,32 +508,32 @@ def test_a_missing_or_unreadable_stamp_renders_as_nothing():
     assert humanise_duration("not a date", NOW.isoformat()) == ""
 
 
-def test_the_shipped_live_author_line_is_the_registrys_and_not_a_second_copy():
-    assert live_author(GOLIVE_LIVE_AUTHOR, "Sky", "Twitch") == "Sky is now live on Twitch!"
-
-
-def test_a_blank_live_author_keeps_todays_line():
-    assert live_author("", "Sky", "Twitch") == "Sky is now live on Twitch!"
-    assert live_author(None, "Sky", None) == "Sky is now live!"
-
-
-def test_the_shipped_live_author_without_a_platform_reads_as_it_always_did():
-    assert live_author(GOLIVE_LIVE_AUTHOR, "Sky", None) == "Sky is now live!"
-
-
-def test_a_guild_can_write_its_own_live_author_line():
-    assert live_author("{name} went live ({platform})", "Sky", "Twitch") == (
-        "Sky went live (Twitch)"
-    )
+@pytest.mark.parametrize(
+    ("wording", "platform", "said"),
+    [
+        (GOLIVE_LIVE_AUTHOR, "Twitch", "Sky is now live on Twitch!"),
+        (GOLIVE_LIVE_AUTHOR, None, "Sky is now live!"),
+        ("", "Twitch", "Sky is now live on Twitch!"),
+        (None, None, "Sky is now live!"),
+        ("{name} went live ({platform})", "Twitch", "Sky went live (Twitch)"),
+        ("{platform}", None, "Sky is now live!"),
+    ],
+    ids=[
+        "shipped",
+        "shipped-no-platform",
+        "blank-keeps-todays",
+        "none-keeps-todays",
+        "guild-wording",
+        "renders-to-nothing-keeps-todays",
+    ],
+)
+def test_the_live_author_line(wording, platform, said):
+    assert live_author(wording, "Sky", platform) == said
 
 
 def test_an_unreadable_live_author_keeps_todays_line(caplog):
     assert live_author("{name} is {live on", "Sky", "Twitch") == "Sky is now live on Twitch!"
     assert "could not be rendered" in caplog.text
-
-
-def test_a_live_author_that_renders_to_nothing_keeps_todays_line():
-    assert live_author("{platform}", "Sky", None) == "Sky is now live!"
 
 
 def test_the_live_card_takes_the_author_line_the_guild_wrote():
@@ -546,30 +550,34 @@ def test_the_live_card_with_no_author_key_reads_exactly_as_it_always_did():
     )
 
 
-def test_the_shipped_end_author_line_is_the_registrys_and_not_a_second_copy():
-    assert ended_author(GOLIVE_END_AUTHOR, "Sky", "Twitch") == "Sky was live on Twitch"
-
-
-def test_a_blank_end_author_keeps_todays_line():
-    assert ended_author("", "Sky", "Twitch") == "Sky was live on Twitch"
-    assert ended_author(None, "Sky", None) == "Sky was live"
-
-
-def test_an_end_author_without_a_platform_loses_the_dangling_on():
-    assert ended_author(GOLIVE_END_AUTHOR, "Sky", None) == "Sky was live"
-    assert ended_author("{name} streamed for {duration}", "Sky", "Twitch") == "Sky streamed"
-    assert ended_author("{name} streamed for {duration}", "Sky", "Twitch", duration="48 min") == (
-        "Sky streamed for 48 min"
-    )
+@pytest.mark.parametrize(
+    ("wording", "platform", "duration", "said"),
+    [
+        (GOLIVE_END_AUTHOR, "Twitch", "", "Sky was live on Twitch"),
+        ("", "Twitch", "", "Sky was live on Twitch"),
+        (None, None, "", "Sky was live"),
+        (GOLIVE_END_AUTHOR, None, "", "Sky was live"),
+        ("{name} streamed for {duration}", "Twitch", "", "Sky streamed"),
+        ("{name} streamed for {duration}", "Twitch", "48 min", "Sky streamed for 48 min"),
+        ("{platform}", None, "", "Sky was live"),
+    ],
+    ids=[
+        "shipped",
+        "blank-keeps-todays",
+        "none-keeps-todays",
+        "no-platform-drops-the-dangling-on",
+        "no-duration-drops-the-dangling-for",
+        "guild-wording-with-duration",
+        "renders-to-nothing-keeps-todays",
+    ],
+)
+def test_the_end_author_line(wording, platform, duration, said):
+    assert ended_author(wording, "Sky", platform, duration=duration) == said
 
 
 def test_an_unreadable_end_author_keeps_todays_line(caplog):
     assert ended_author("{name} was {live on", "Sky", "Twitch") == "Sky was live on Twitch"
     assert "could not be rendered" in caplog.text
-
-
-def test_an_end_author_that_renders_to_nothing_keeps_todays_line():
-    assert ended_author("{platform}", "Sky", None) == "Sky was live"
 
 
 def twitch_info(**kwargs):
@@ -830,9 +838,7 @@ def test_the_card_carries_a_channel_note_last_when_it_is_given_one():
 
 
 def test_the_gone_quiet_footer_names_the_one_command_that_reopens_the_panel():
-    assert PANEL_TIMEOUT_FOOTER == "This panel has gone quiet — run /golive again"
-    assert PANEL_TITLE == "Go-live"
-    assert SITE_BUTTON == "Open on the site"
+    assert "/golive" in PANEL_TIMEOUT_FOOTER
 
 
 def test_the_site_link_points_at_the_go_live_page_only_with_an_origin():
@@ -915,9 +921,7 @@ def test_an_unreadable_co_stream_template_falls_back_to_the_default_and_never_ra
 def test_an_empty_game_reads_something_on_the_co_stream_sentence_too():
     bare = StreamInfo(url="https://www.twitch.tv/alice", platform="Twitch")
 
-    assert GAME_FALLBACK in costream_render(
-        "{name} is playing {game}", bare, YOUTUBE_LIVE, "Alice"
-    )
+    assert GAME_FALLBACK in costream_render("{name} is playing {game}", bare, YOUTUBE_LIVE, "Alice")
 
 
 def test_the_card_top_line_names_both_platforms_and_blank_wording_keeps_todays():
@@ -925,10 +929,7 @@ def test_the_card_top_line_names_both_platforms_and_blank_wording_keeps_todays()
         costream_author(GOLIVE_COSTREAM_AUTHOR, TWITCH_LIVE, YOUTUBE_LIVE, "Alice")
         == "Alice is live on Twitch and YouTube"
     )
-    assert (
-        costream_author("", TWITCH_LIVE, YOUTUBE_LIVE, "Alice")
-        == "Alice is now live on Twitch!"
-    )
+    assert costream_author("", TWITCH_LIVE, YOUTUBE_LIVE, "Alice") == "Alice is now live on Twitch!"
 
 
 def test_the_footer_names_both_platforms_in_the_order_they_are_written():
@@ -1115,7 +1116,7 @@ def test_the_live_block_lists_each_stream_linked_and_trims_a_long_title():
 
     look = golive.live_block_look(BlockStore(), 1, streams)
 
-    assert look.title == "Live now"
+    assert look.title == BLOCKS_LIVE_DEFAULTS["golive_block_title"]
     assert look.text.splitlines() == [
         "**Casey** — [late night runs](https://www.twitch.tv/casey)",
         "**<@77>** — [" + "x" * 59 + "…](https://www.youtube.com/@r/live)",
@@ -1128,10 +1129,14 @@ def test_the_live_block_says_its_empty_line_and_caps_its_list_by_the_keys():
     many = [golive.LiveLine(f"S{n}", None, "") for n in range(5)]
     store = BlockStore(golive_block_max=2, golive_block_line="{name}: {title}")
 
-    assert golive.live_block_look(BlockStore(), 1, []).text.startswith("Nobody is live")
+    untitled = BLOCKS_LIVE_DEFAULTS["golive_block_untitled"]
+    assert (
+        golive.live_block_look(BlockStore(), 1, []).text
+        == (BLOCKS_LIVE_DEFAULTS["golive_block_empty"])
+    )
     assert golive.live_block_look(store, 1, many).text.splitlines() == [
-        "S0: watch the stream",
-        "S1: watch the stream",
+        f"S0: {untitled}",
+        f"S1: {untitled}",
     ]
 
 

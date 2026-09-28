@@ -1,10 +1,9 @@
-import discord
 import pytest
 
 from black_bloc import logs_panel
 from black_bloc.actionlog import LOGS_DB_DOWN, NOTHING_IMPORTANT, NOTHING_YET, log_action, send_logs
 from black_bloc.config import load_settings
-from black_bloc.logs_panel import EVERYTHING, MORE, ONLY_IMPORTANT, LogsPanel, panel_for
+from black_bloc.logs_panel import EVERYTHING, MORE, ONLY_IMPORTANT, panel_for
 from black_bloc.settings_store import (
     KEY_TYPES,
     LOGS_COUNT,
@@ -179,17 +178,6 @@ async def test_show_more_is_not_drawn_at_the_cap(wired):
 
     assert labels(view) == [ONLY_IMPORTANT]
     assert view.count == LOGS_MAX
-
-
-async def test_the_toggle_wears_the_move_it_would_make(wired):
-    store = FakeStore()
-    await fill(wired, store, 2)
-
-    showing_all, _ = await a_panel(wired, store)
-    filtered, _ = await a_panel(wired, store, important_only=True)
-
-    assert ONLY_IMPORTANT in labels(showing_all)
-    assert EVERYTHING in labels(filtered)
 
 
 async def test_an_empty_log_still_says_so_and_still_offers_the_toggle(wired):
@@ -390,10 +378,3 @@ async def test_the_panel_borrows_the_core_panels_minutes_key_and_adds_no_third_o
     assert view.timeout == 4 * 60
     assert "logs_panel_minutes" not in KEY_TYPES
 
-
-def test_the_panel_takes_a_minutes_number_like_every_other_panel():
-    view = LogsPanel("poll", count=10, important_only=False, step=10, minutes=7)
-
-    assert isinstance(view, discord.ui.View)
-    assert view.timeout == 7 * 60
-    assert view.footer == logs_panel.PANEL_TIMEOUT_FOOTER

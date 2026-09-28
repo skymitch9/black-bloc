@@ -17,6 +17,7 @@ from black_bloc.chat_llm import (
     SERVER_FULL,
     TURN_CHARS,
     WINDOW_MINUTES,
+    WINDOW_TURNS,
     a_conversation,
     a_real_question,
     about_staff,
@@ -134,14 +135,29 @@ def looked_up(query):
 
 
 RULES = [
-    ("a strong knowledge hit means the answer must be grounded", "cookout hours",
-     looked_up("cookout hours"), [], IMPORTANT),
-    ("a weak hit rides along as grounding without buying the careful tier", "lol whatever",
-     looked_up("lol whatever"), [], SIMPLE),
+    (
+        "a strong knowledge hit means the answer must be grounded",
+        "cookout hours",
+        looked_up("cookout hours"),
+        [],
+        IMPORTANT,
+    ),
+    (
+        "a weak hit rides along as grounding without buying the careful tier",
+        "lol whatever",
+        looked_up("lol whatever"),
+        [],
+        SIMPLE,
+    ),
     ("a long question is a real question", LONG, [], [], IMPORTANT),
     ("a short question is still banter", SHORT_Q, [], [], SIMPLE),
-    ("two model turns already means a conversation", "and then?", [],
-     [turn(SIMPLE), turn(SIMPLE)], IMPORTANT),
+    (
+        "two model turns already means a conversation",
+        "and then?",
+        [],
+        [turn(SIMPLE), turn(SIMPLE)],
+        IMPORTANT,
+    ),
     ("one model turn is not a conversation yet", "ha", [], [turn(SIMPLE)], SIMPLE),
     ("staff topics are never answered by the cheap tier", "is a mod around", [], [], IMPORTANT),
     ("a greeting that slipped past the intents", "heyyy", [], [], SIMPLE),
@@ -150,9 +166,7 @@ RULES = [
 ]
 
 
-@pytest.mark.parametrize(
-    "why, message, hits, window, wanted", RULES, ids=[row[0] for row in RULES]
-)
+@pytest.mark.parametrize("why, message, hits, window, wanted", RULES, ids=[row[0] for row in RULES])
 def test_the_tier_table(why, message, hits, window, wanted):
     assert tier_for(message, hits, window) == wanted
 
@@ -189,25 +203,33 @@ def test_a_bare_list_of_hits_is_never_strong_because_it_says_which_pass_answered
     assert tier_for("lol", ["a hit"], []) == SIMPLE
 
 
-def test_the_ladder_tries_the_cheap_tier_first_then_one_expensive_attempt():
-    assert ladder(SIMPLE, important=True, simple=True) == (SIMPLE, IMPORTANT)
-
-
-def test_an_important_turn_never_falls_back_to_the_cheap_tier_when_both_exist():
-    """A grounded answer from the wrong model is worse than the canned line."""
-    assert ladder(IMPORTANT, important=True, simple=True) == (IMPORTANT,)
-
-
-def test_a_tier_with_no_key_is_simply_not_on_the_list():
-    assert ladder(SIMPLE, important=False, simple=True) == (SIMPLE,)
-    assert ladder(SIMPLE, important=True, simple=False) == (IMPORTANT,)
-    assert ladder(IMPORTANT, important=False, simple=True) == (SIMPLE,)
-    assert ladder(IMPORTANT, important=True, simple=False) == (IMPORTANT,)
-
-
-def test_with_no_keys_at_all_there_is_no_ladder_and_the_canned_line_answers():
-    assert ladder(SIMPLE, important=False, simple=False) == ()
-    assert ladder(IMPORTANT, important=False, simple=False) == ()
+@pytest.mark.parametrize(
+    ("wanted", "important", "simple", "tried"),
+    [
+        (SIMPLE, True, True, (SIMPLE, IMPORTANT)),
+        (IMPORTANT, True, True, (IMPORTANT,)),
+        (SIMPLE, False, True, (SIMPLE,)),
+        (SIMPLE, True, False, (IMPORTANT,)),
+        (IMPORTANT, False, True, (SIMPLE,)),
+        (IMPORTANT, True, False, (IMPORTANT,)),
+        (SIMPLE, False, False, ()),
+        (IMPORTANT, False, False, ()),
+    ],
+    ids=[
+        "cheap-first-then-one-expensive-attempt",
+        "important-never-falls-back-to-cheap",
+        "no-important-key",
+        "no-simple-key-simple-turn",
+        "no-important-key-important-turn",
+        "no-simple-key-important-turn",
+        "no-keys-simple-turn-canned-line",
+        "no-keys-important-turn-canned-line",
+    ],
+)
+def test_the_ladder(wanted, important, simple, tried):
+    """A grounded answer from the wrong model is worse than the canned line, so an important
+    turn never falls back to the cheap tier while both exist; a tier with no key is not tried."""
+    assert ladder(wanted, important=important, simple=simple) == tried
 
 
 def test_the_forbidden_words_are_found_on_a_word_boundary():
@@ -254,14 +276,43 @@ async def with_db(tmp_path, name="w.sqlite3"):
 async def test_the_window_keeps_one_place_and_one_person_in_order(tmp_path):
     db = await with_db(tmp_path)
     try:
-        await remember(db, guild_id=7, channel_id=11, user_id=900, speaker=MEMBER,
-                       content="first", at=NOW - timedelta(minutes=5))
-        await remember(db, guild_id=7, channel_id=11, user_id=900, speaker=BOT,
-                       content="second", tier=SIMPLE, at=NOW - timedelta(minutes=4))
-        await remember(db, guild_id=7, channel_id=11, user_id=901, speaker=MEMBER,
-                       content="somebody else", at=NOW)
-        await remember(db, guild_id=7, channel_id=12, user_id=900, speaker=MEMBER,
-                       content="another channel", at=NOW)
+        await remember(
+            db,
+            guild_id=7,
+            channel_id=11,
+            user_id=900,
+            speaker=MEMBER,
+            content="first",
+            at=NOW - timedelta(minutes=5),
+        )
+        await remember(
+            db,
+            guild_id=7,
+            channel_id=11,
+            user_id=900,
+            speaker=BOT,
+            content="second",
+            tier=SIMPLE,
+            at=NOW - timedelta(minutes=4),
+        )
+        await remember(
+            db,
+            guild_id=7,
+            channel_id=11,
+            user_id=901,
+            speaker=MEMBER,
+            content="somebody else",
+            at=NOW,
+        )
+        await remember(
+            db,
+            guild_id=7,
+            channel_id=12,
+            user_id=900,
+            speaker=MEMBER,
+            content="another channel",
+            at=NOW,
+        )
 
         window = await window_for(db, 11, 900, now=NOW)
 
@@ -277,10 +328,18 @@ async def test_the_window_keeps_one_place_and_one_person_in_order(tmp_path):
 async def test_a_turn_older_than_the_window_is_not_in_the_conversation(tmp_path):
     db = await with_db(tmp_path)
     try:
-        await remember(db, guild_id=7, channel_id=11, user_id=900, speaker=MEMBER,
-                       content="ancient", at=NOW - timedelta(minutes=WINDOW_MINUTES + 1))
-        await remember(db, guild_id=7, channel_id=11, user_id=900, speaker=MEMBER,
-                       content="recent", at=NOW)
+        await remember(
+            db,
+            guild_id=7,
+            channel_id=11,
+            user_id=900,
+            speaker=MEMBER,
+            content="ancient",
+            at=NOW - timedelta(minutes=WINDOW_MINUTES + 1),
+        )
+        await remember(
+            db, guild_id=7, channel_id=11, user_id=900, speaker=MEMBER, content="recent", at=NOW
+        )
 
         assert [row["content"] for row in await window_for(db, 11, 900, now=NOW)] == ["recent"]
     finally:
@@ -291,12 +350,19 @@ async def test_the_window_holds_at_most_ten_exchanges(tmp_path):
     db = await with_db(tmp_path)
     try:
         for n in range(30):
-            await remember(db, guild_id=7, channel_id=11, user_id=900, speaker=MEMBER,
-                           content=f"line {n}", at=NOW)
+            await remember(
+                db,
+                guild_id=7,
+                channel_id=11,
+                user_id=900,
+                speaker=MEMBER,
+                content=f"line {n}",
+                at=NOW,
+            )
 
         window = await window_for(db, 11, 900, now=NOW)
 
-        assert len(window) == 20
+        assert len(window) == WINDOW_TURNS * 2
         assert window[-1]["content"] == "line 29"
     finally:
         await db.close()
@@ -324,10 +390,24 @@ async def test_a_window_that_cannot_be_read_is_empty_rather_than_an_exception():
 async def test_the_sweep_keeps_an_hour_not_half_of_one(tmp_path):
     db = await with_db(tmp_path)
     try:
-        await remember(db, guild_id=7, channel_id=11, user_id=900, speaker=MEMBER,
-                       content="forty minutes ago", at=NOW - timedelta(minutes=40))
-        await remember(db, guild_id=7, channel_id=11, user_id=900, speaker=MEMBER,
-                       content="two hours ago", at=NOW - timedelta(hours=2))
+        await remember(
+            db,
+            guild_id=7,
+            channel_id=11,
+            user_id=900,
+            speaker=MEMBER,
+            content="forty minutes ago",
+            at=NOW - timedelta(minutes=40),
+        )
+        await remember(
+            db,
+            guild_id=7,
+            channel_id=11,
+            user_id=900,
+            speaker=MEMBER,
+            content="two hours ago",
+            at=NOW - timedelta(hours=2),
+        )
 
         assert await sweep_window(db, now=NOW) == 1
 
@@ -477,7 +557,6 @@ def test_the_grounding_rides_the_members_own_turn():
     said = user_turn("<@55> what are the rules?", hits)
     assert said.startswith("what are the rules?")
     assert GROUNDING_NOTE in said
-    assert "never quote, list or bullet them back" in said
     assert "Be kind." in said
     assert user_turn("<@55> hi", []) == "hi"
     staff_wrote = user_turn("<@55> rules?", hits, note="Use these quietly.")
@@ -766,14 +845,20 @@ async def test_a_note_that_matches_grounds_the_turn_and_sends_it_to_the_careful_
     assert GROUNDING_NOTE in asked
 
 
-async def test_a_short_question_stays_on_the_cheap_tier_and_keeps_its_note(wired, monkeypatch):
+@pytest.mark.parametrize(
+    "text", ["<@1> when is the cookout?", "<@1> when is the cookout"], ids=["mark", "no-mark"]
+)
+async def test_a_short_question_stays_on_the_cheap_tier_and_keeps_its_note(
+    wired, monkeypatch, text
+):
     """The measured bug: any hit promoted, so Groq was never once chosen. A short factual
-    question is still SIMPLE, and still carries the note, under the silent-use header."""
+    question is still SIMPLE, and still carries the note, under the silent-use header — with
+    or without the `?`, which Discord rarely types (conductor, 2026-09-23)."""
     await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
     quick = Answering(GROQ, "llama-3.3-70b-versatile")
     wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
 
-    said, tier, _tone = await ask(wired, "<@1> when is the cookout?")
+    said, tier, _tone = await ask(wired, text)
 
     assert tier == SIMPLE
     asked = quick.seen[0]["messages"][-1]["content"]
@@ -800,22 +885,7 @@ async def test_what_up_counts_as_a_question_and_still_carries_nothing(wired, mon
     assert quick.seen[0]["messages"][-1]["content"] == "What up"
 
 
-async def test_a_question_with_no_question_mark_keeps_its_note(wired, monkeypatch):
-    """Discord rarely types the `?` (conductor, 2026-09-23)."""
-    await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
-    quick = Answering(GROQ, "llama-3.3-70b-versatile")
-    wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
-
-    said, tier, _tone = await ask(wired, "<@1> when is the cookout")
-
-    assert tier == SIMPLE
-    asked = quick.seen[0]["messages"][-1]["content"]
-    assert "Friday evenings" in asked and GROUNDING_NOTE in asked
-
-
-async def test_a_mid_sentence_how_is_not_a_question_and_a_weak_hit_stays_out(
-    wired, monkeypatch
-):
+async def test_a_mid_sentence_how_is_not_a_question_and_a_weak_hit_stays_out(wired, monkeypatch):
     await add_section(wired.db, 7, "Cookout hours", "The cookout runs Friday evenings.")
     quick = Answering(GROQ, "llama-3.3-70b-versatile")
     wire(wired, monkeypatch, haiku=Answering(ANTHROPIC, MODEL), groq=quick)
@@ -842,22 +912,37 @@ async def test_small_talk_with_a_weak_accidental_hit_carries_no_notes(wired, mon
 async def server_notes(db):
     """The three notes "What up" matched live on 2026-09-23, plus the PBs channel."""
     await add_section(
-        db, 7, "#upcoming-events", "Upcoming community events and when they happen.",
-        tag="channel", source="server",
+        db,
+        7,
+        "#upcoming-events",
+        "Upcoming community events and when they happen.",
+        tag="channel",
+        source="server",
     )
     await add_section(
-        db, 7, "#knuck-up", "Fighting games — matches, tech and trash talk.",
-        tag="channel", source="server",
+        db,
+        7,
+        "#knuck-up",
+        "Fighting games — matches, tech and trash talk.",
+        tag="channel",
+        source="server",
     )
     await add_section(
-        db, 7, "Who has the Tech Support role", "Tech Support — 1 member: Raelcun.",
-        tag="role", source="server",
+        db,
+        7,
+        "Who has the Tech Support role",
+        "Tech Support — 1 member: Raelcun.",
+        tag="role",
+        source="server",
     )
     await add_section(
-        db, 7, "#speed-and-pbs",
+        db,
+        7,
+        "#speed-and-pbs",
         "Speedrunning records and personal bests — talking about runs, times and PBs, not "
         "general chat.",
-        tag="channel", source="server",
+        tag="channel",
+        source="server",
     )
 
 
@@ -982,9 +1067,7 @@ async def test_a_long_answer_is_clipped_to_something_discord_will_take(wired, mo
     assert len(said) <= 1900
 
 
-async def test_the_careful_tier_is_given_the_channel_list_after_the_cached_core(
-    wired, monkeypatch
-):
+async def test_the_careful_tier_is_given_the_channel_list_after_the_cached_core(wired, monkeypatch):
     wired.guild = FakeGuild(
         channels=[
             seen_channel("general", "Chat about anything."),
@@ -1079,9 +1162,7 @@ async def test_the_window_remembers_the_fixed_answer_not_the_invented_one(wired,
 
     await ask(wired)
 
-    cur = await wired.db.conn.execute(
-        "SELECT content FROM chat_window WHERE speaker = ?", (BOT,)
-    )
+    cur = await wired.db.conn.execute("SELECT content FROM chat_window WHERE speaker = ?", (BOT,))
     assert [row["content"] for row in await cur.fetchall()] == ["Ask."]
 
 

@@ -278,7 +278,8 @@ def test_merged_replaces_the_same_number_and_keeps_the_rest():
     seen = [{"ref": "25", "empty_at": "a"}, {"ref": "26", "empty_at": "a"}]
     fresh = [{"ref": "25", "name": "x", "starts_at": None, "ends_at": None}]
     assert la.merged(seen, fresh) == [seen[1], fresh[0]]
-    assert len(la.merged([{"ref": str(n)} for n in range(3000)], [])) == 2000
+    many = [{"ref": str(n)} for n in range(la.SEEN_LIMIT + 5)]
+    assert len(la.merged(many, [])) == la.SEEN_LIMIT
 
 
 def test_candidates_are_the_found_events_that_have_not_ended():

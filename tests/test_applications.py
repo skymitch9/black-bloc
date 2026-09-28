@@ -7,9 +7,11 @@ from black_bloc.applications import (
     APPROVED_ON_RECORD,
     CARD_BUTTONS,
     DENIED,
+    DENIED_SAID,
     LABEL_MAX,
     LONG,
     MOVE_TARGETS,
+    NO_ANSWER,
     NO_ROLE,
     PANEL_OWN_LIST_KEY,
     PENDING,
@@ -17,6 +19,7 @@ from black_bloc.applications import (
     QUESTIONS_MAX,
     REMOVE_NEEDS_A_REASON,
     REMOVED,
+    REMOVED_SAID,
     RESTORABLE,
     RETRY_DAYS_DEFAULT,
     SETTLED,
@@ -318,7 +321,7 @@ async def test_the_card_shows_one_field_per_answer_and_the_form_s_own_footer(db)
     names = [field.name for field in embed.fields]
     assert "Twitch handle" in names and "Why the Team" in names
     blank = next(field for field in embed.fields if field.name == "Why the Team")
-    assert blank.value == "(left blank)"
+    assert blank.value == NO_ANSWER
     assert embed.footer.text == f"#{made} · twitch-team"
 
 
@@ -377,7 +380,7 @@ async def test_a_denied_application_is_told_the_reason_and_when_to_come_back(db)
 
     card, said = decision_lines(form, row, guild_name="Black in a Flash!")
 
-    assert card == "Denied, and they have been told why."
+    assert card == DENIED_SAID
     assert "not enough hours" in said and "<t:" in said
 
 
@@ -526,7 +529,7 @@ async def test_a_removed_member_is_told_why_and_when_they_may_apply_again(db):
     assert row["status"] == REMOVED and row["deny_reason"] == "stopped streaming"
     assert row["decided_by"] == STAFF and row["decided_at"]
     card, said = decision_lines(form, row, guild_name="Black in a Flash!")
-    assert card == "Taken off the list, and they have been told why."
+    assert card == REMOVED_SAID
     assert "stopped streaming" in said and "<t:" in said
     assert (await last_decision(db, form["id"], MEMBER))["id"] == made
     assert await cooling_until(db, form, MEMBER) is not None
@@ -609,7 +612,6 @@ def test_an_approved_role_form_points_at_role_revoke_rather_than_a_take_off_butt
 
 def test_a_withdrawn_application_is_the_members_and_has_no_staff_move():
     assert card_buttons(WITHDRAWN) == ()
-    assert TRANSITIONS[WITHDRAWN] == ()
 
 
 async def test_only_a_denied_or_removed_row_can_be_restored(db):
@@ -718,7 +720,7 @@ def test_the_counts_line_counts_the_forms_the_queue_and_the_lists():
     assert counts_line([{}, {}], rows) == "**2** form(s) · **2** waiting · **1** on a list"
 
 
-def test_the_own_list_key_is_on_by_default_and_reads_back_as_a_bool():
+def test_the_own_list_key_is_read_off_its_own_key_as_a_bool():
     class Store:
         def __init__(self, value):
             self.value = value

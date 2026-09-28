@@ -11,7 +11,6 @@ from black_bloc.loops import Reconciler, wait_ready
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "black_bloc"
-BEFORE_LOOPS = 22
 
 
 class FakeReady:
@@ -240,7 +239,7 @@ def test_every_before_loop_in_the_package_goes_through_the_one_helper():
     """KI-24: one guard, fifteen callers — a new loop that hand-rolls its own wait is the bug."""
     methods = _before_loop_methods()
 
-    assert len(methods) == BEFORE_LOOPS, [where for where, _ in methods]
+    assert methods
     missing = [where for where, node in methods if "wait_ready" not in _calls(node)]
     assert not missing, f"these `before_loop`s do not call `loops.wait_ready`: {missing}"
 

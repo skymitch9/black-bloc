@@ -2,6 +2,8 @@ import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
+
 from black_bloc.chat_memory import (
     DM,
     RULE_AVAILABILITY,
@@ -94,16 +96,31 @@ def test_a_profile_with_nothing_in_it_still_makes_a_prompt():
     assert "(nothing)" in messages[0]["content"]
 
 
-def test_bad_json_is_a_no_op_rather_than_a_partial_write():
-    assert parse_distilled("not json at all") is None
-    assert parse_distilled("") is None
-    assert parse_distilled("[1, 2, 3]") is None
-    assert parse_distilled('"a string"') is None
-
-
-def test_an_unknown_key_is_a_no_op():
-    assert parse_distilled('{"call_me": "Sky", "mood": "happy"}') is None
-    assert parse_distilled('{"notes": ["fine"], "extra": 1}') is None
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "not json at all",
+        "",
+        "[1, 2, 3]",
+        '"a string"',
+        '{"call_me": "Sky", "mood": "happy"}',
+        '{"notes": ["fine"], "extra": 1}',
+        '{"notes": [{"text": "x"}]}',
+        '{"notes": "one note"}',
+    ],
+    ids=[
+        "not-json",
+        "empty",
+        "a-list",
+        "a-string",
+        "unknown-key",
+        "unknown-key-beside-notes",
+        "note-not-a-string",
+        "notes-not-a-list",
+    ],
+)
+def test_an_answer_in_the_wrong_shape_is_a_no_op_rather_than_a_partial_write(answer):
+    assert parse_distilled(answer) is None
 
 
 def test_an_over_long_call_me_is_a_no_op():
@@ -120,11 +137,6 @@ def test_a_missing_key_is_an_empty_list_not_a_refusal():
     found = parse_distilled('{"call_me": null}')
     assert found is not None and found.notes == () and found.threads == ()
     assert found.empty
-
-
-def test_a_note_that_is_not_a_string_is_a_no_op():
-    assert parse_distilled('{"notes": [{"text": "x"}]}') is None
-    assert parse_distilled('{"notes": "one note"}') is None
 
 
 def test_one_bad_note_is_dropped_and_the_rest_of_the_profile_still_saves():
@@ -151,20 +163,41 @@ def test_a_note_may_not_quote_six_words_anybody_typed():
     assert found is not None and found.notes == () and found.dropped == (RULE_QUOTE,)
 
 
-def test_the_rules_each_name_themselves():
-    assert why_dropped("") == "empty"
-    assert why_dropped("x" * 121) == RULE_LONG
-    assert why_dropped('said "I go by Sky"') == RULE_QUOTE
-    assert why_dropped("namu said he is quitting") == RULE_THIRD
-    assert why_dropped("ping <@123> for this") == RULE_THIRD
-    assert why_dropped("lives in Phoenix") == RULE_AVAILABILITY
-    assert why_dropped("usually on at 9") == RULE_AVAILABILITY
-    assert why_dropped("was banned last month") == RULE_EVENT
-    assert why_dropped("is in therapy") == RULE_SENSITIVE
-    assert why_dropped("voted in the last election") == RULE_SENSITIVE
-    assert why_dropped("likes short answers") is None
-    assert why_dropped("goes by Sky") is None
-    assert why_dropped("English is their second language, keep it simple") is None
+@pytest.mark.parametrize(
+    ("note", "rule"),
+    [
+        ("", "empty"),
+        ("x" * 121, RULE_LONG),
+        ('said "I go by Sky"', RULE_QUOTE),
+        ("namu said he is quitting", RULE_THIRD),
+        ("ping <@123> for this", RULE_THIRD),
+        ("lives in Phoenix", RULE_AVAILABILITY),
+        ("usually on at 9", RULE_AVAILABILITY),
+        ("was banned last month", RULE_EVENT),
+        ("is in therapy", RULE_SENSITIVE),
+        ("voted in the last election", RULE_SENSITIVE),
+        ("likes short answers", None),
+        ("goes by Sky", None),
+        ("English is their second language, keep it simple", None),
+    ],
+    ids=[
+        "empty",
+        "too-long",
+        "quote",
+        "third-person",
+        "third-person-mention",
+        "location",
+        "availability",
+        "event",
+        "health",
+        "politics",
+        "kept-preference",
+        "kept-name",
+        "kept-language",
+    ],
+)
+def test_the_rules_each_name_themselves(note, rule):
+    assert why_dropped(note) == rule
 
 
 def test_a_thread_may_be_a_topic_but_never_an_outcome():
@@ -183,9 +216,7 @@ def test_a_note_naming_another_member_is_dropped():
     )
     names = other_names(guild, 1)
     assert names == ("namu",)
-    found = parse_distilled(
-        json.dumps({"notes": ["is close friends with namu"]}), others=names
-    )
+    found = parse_distilled(json.dumps({"notes": ["is close friends with namu"]}), others=names)
     assert found is not None and found.notes == () and found.dropped == (RULE_THIRD,)
 
 

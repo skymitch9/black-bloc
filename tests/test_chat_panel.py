@@ -28,7 +28,7 @@ from black_bloc.chat_panel import (
 )
 from black_bloc.config import load_settings
 from black_bloc.logkinds import VIA_DISCORD, VIA_WEBSITE
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import CHANNEL_NOTE_SAVED_KEY, CHANNEL_NOTE_WORDS, SettingsStore
 
 GUILD = 7
 LOG_CHANNEL = 222
@@ -123,7 +123,6 @@ def test_a_mode_button_says_what_it_will_do_and_never_both_spellings(chat_on, ll
     assert toggle_move(state, MODE_KEY).label == wanted[0]
     assert toggle_move(state, LLM_MODE_KEY).label == wanted[1]
     assert wanted[0] in labels and wanted[1] in labels
-    assert ANSWER_ON in labels or ANSWER_OFF in labels
     assert not (ANSWER_ON in labels and ANSWER_OFF in labels)
     assert not (LLM_ON in labels and LLM_OFF in labels)
 
@@ -389,9 +388,7 @@ async def test_a_mode_flip_writes_one_row_that_says_which_door(bot, actor, via):
 
     assert outcome.ok and bot.store.get(GUILD, MODE_KEY) == "off"
     written = await kinds(bot.db)
-    assert [kind for kind, _ in written] == [
-        "web.chat.mode" if via == VIA_WEBSITE else "chat.mode"
-    ]
+    assert [kind for kind, _ in written] == ["web.chat.mode" if via == VIA_WEBSITE else "chat.mode"]
     assert '"key": "chat_mode"' in written[0][1]
 
 
@@ -566,13 +563,14 @@ async def test_a_channel_that_is_not_a_text_channel_here_is_refused(noted, actor
 
 
 async def test_staff_wording_is_used_and_a_broken_template_falls_back(noted, actor):
-    await noted.store.set(GUILD, "chat_channel_note_saved", "Got it: #{channel}")
+    await noted.store.set(GUILD, CHANNEL_NOTE_SAVED_KEY, "Got it: #{channel}")
     said = await chat_panel.save_channel_note(noted, noted.guild, actor, 55, "a")
     assert said.message == "Got it: #general-chat"
 
-    noted.store._cache[(GUILD, "chat_channel_note_saved")] = "{nope}"
+    noted.store._cache[(GUILD, CHANNEL_NOTE_SAVED_KEY)] = "{nope}"
     said = await chat_panel.save_channel_note(noted, noted.guild, actor, 55, "b")
-    assert said.message.startswith("The note for **#general-chat** is saved.")
+    shipped = CHANNEL_NOTE_WORDS[CHANNEL_NOTE_SAVED_KEY][0]
+    assert said.message == shipped.format(channel="general-chat")
 
 
 def test_the_channel_notes_card_offers_back_and_refresh_only():

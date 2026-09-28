@@ -7,6 +7,12 @@ import pytest
 from black_bloc import chat_data
 from black_bloc.chat import with_extra
 from black_bloc.chat_data import (
+    MENUS_LIVE_IN,
+    NO_SUCH_ROLE,
+    NOBODY_HOLDS_IT,
+    NOBODY_ONLINE,
+    NOTHING_HELD,
+    ONLINE_NOW,
     at_local,
     clock,
     display_of,
@@ -60,9 +66,7 @@ class FakeChannel:
 
 
 class FakeMember:
-    def __init__(
-        self, user_id=MEMBER, display_name="Nia", roles=(), bot=False, status=None
-    ):
+    def __init__(self, user_id=MEMBER, display_name="Nia", roles=(), bot=False, status=None):
         self.id = user_id
         self.display_name = display_name
         self.name = display_name
@@ -253,7 +257,7 @@ async def test_my_roles_says_nothing_held_rather_than_leaving_a_hole(bot, db):
 
     tokens, filled = await asked(bot, "my_roles", member=FakeMember())
 
-    assert filled is True and tokens["roles"] == "nothing from them yet"
+    assert filled is True and tokens["roles"] == NOTHING_HELD
 
 
 async def test_my_roles_names_the_channel_the_menus_were_posted_in_when_one_is_set(bot, db):
@@ -267,7 +271,7 @@ async def test_my_roles_names_the_channel_the_menus_were_posted_in_when_one_is_s
     tokens, filled = await asked(bot, "my_roles", member=FakeMember())
 
     assert filled is True
-    assert tokens["extra"] == " The menus are posted in <#4242>."
+    assert tokens["extra"] == MENUS_LIVE_IN.format(where="<#4242>")
     assert with_extra("You can pick from Colours.", tokens).endswith("<#4242>.")
 
 
@@ -359,18 +363,24 @@ def with_roles(bot, *roles):
     return bot
 
 
-def test_the_role_a_member_asked_about_is_read_off_the_end_of_the_sentence():
-    assert wanted_role("<@1> whos a lead") == "lead"
-    assert wanted_role("who is a mentor") == "mentor"
-    assert wanted_role("who are the leads") == "leads"
-    assert wanted_role("tell me who's a mentor") == "mentor"
-    assert wanted_role("who has the Leads role") == "leads"
-    assert wanted_role("who has role mentor") == "mentor"
-    assert wanted_role("whos got the mod hat") == "mod hat"
-    assert wanted_role("whos a lead right now") == "lead"
-    assert wanted_role("whos our leads please") == "leads"
-    assert wanted_role("who is the") == ""
-    assert wanted_role("") == ""
+@pytest.mark.parametrize(
+    ("said", "role"),
+    [
+        ("<@1> whos a lead", "lead"),
+        ("who is a mentor", "mentor"),
+        ("who are the leads", "leads"),
+        ("tell me who's a mentor", "mentor"),
+        ("who has the Leads role", "leads"),
+        ("who has role mentor", "mentor"),
+        ("whos got the mod hat", "mod hat"),
+        ("whos a lead right now", "lead"),
+        ("whos our leads please", "leads"),
+        ("who is the", ""),
+        ("", ""),
+    ],
+)
+def test_the_role_a_member_asked_about_is_read_off_the_end_of_the_sentence(said, role):
+    assert wanted_role(said) == role
 
 
 def test_a_role_is_matched_whole_then_by_a_word_then_by_a_part():
@@ -444,7 +454,7 @@ async def test_a_role_nobody_holds_says_so_in_words(bot):
     tokens, filled = await asked(bot, "who_has", text="whos a lead")
 
     assert filled is False
-    assert tokens["trouble"] == "**Leads** has nobody in it right now."
+    assert tokens["trouble"] == NOBODY_HOLDS_IT.format(role="Leads")
 
 
 async def test_two_roles_that_both_fit_refuse_and_name_them(bot):
@@ -472,9 +482,7 @@ async def test_no_such_role_and_nothing_close_says_that_too(bot):
     tokens, filled = await asked(bot, "who_has", text="whos a wizard")
 
     assert filled is False
-    assert tokens["trouble"] == (
-        "there is no role here called **wizard**, and nothing else comes close."
-    )
+    assert tokens["trouble"] == NO_SUCH_ROLE.format(asked="wizard")
 
 
 async def test_who_has_with_no_role_named_asks_for_one(bot):
@@ -577,13 +585,19 @@ async def test_about_member_in_a_dm_says_it_needs_the_server(bot):
     assert found[1] is False and "inside the server" in found[0]["trouble"]
 
 
-def test_a_presence_nobody_can_read_is_not_a_promise_that_somebody_is_there():
-    assert chat_data.is_online(FakeMember(1, "A", status="online")) is True
-    assert chat_data.is_online(FakeMember(1, "A", status="idle")) is True
-    assert chat_data.is_online(FakeMember(1, "A", status="dnd")) is True
-    assert chat_data.is_online(FakeMember(1, "A", status="offline")) is False
-    assert chat_data.is_online(FakeMember(1, "A", status="invisible")) is False
-    assert chat_data.is_online(FakeMember(1, "A")) is False
+@pytest.mark.parametrize(
+    ("status", "online"),
+    [
+        ("online", True),
+        ("idle", True),
+        ("dnd", True),
+        ("offline", False),
+        ("invisible", False),
+        (None, False),
+    ],
+)
+def test_a_presence_nobody_can_read_is_not_a_promise_that_somebody_is_there(status, online):
+    assert chat_data.is_online(FakeMember(1, "A", status=status)) is online
 
 
 def test_only_online_people_are_named_and_only_as_many_as_asked_for():
@@ -609,7 +623,7 @@ async def test_asking_for_a_mod_names_two_online_staff_in_plain_words(bot):
 
     tokens, _ = await asked(bot, "need_a_mod", text="im looking for a mod")
 
-    assert tokens["extra"] == " Online right now: Pawpette and PT — give one of them a shout."
+    assert tokens["extra"] == ONLINE_NOW.format(names="Pawpette and PT")
     assert "<@" not in tokens["extra"]
 
 
@@ -619,7 +633,7 @@ async def test_nobody_online_says_so_and_the_line_still_points_somewhere(bot):
 
     tokens, filled = await asked(bot, "need_a_mod", text="i need a mod")
 
-    assert tokens["extra"] == " None of them are online right now."
+    assert tokens["extra"] == NOBODY_ONLINE
     assert filled is False and tokens["roles"] == "**Aunties / Uncles**"
 
 
@@ -640,7 +654,7 @@ async def test_who_has_on_a_staff_role_also_names_who_is_about(bot):
 
     tokens, _ = await asked(bot, "who_has", text="whos an auntie")
 
-    assert tokens["extra"] == " Online right now: Pawpette — give one of them a shout."
+    assert tokens["extra"] == ONLINE_NOW.format(names="Pawpette")
 
 
 async def test_who_has_on_an_ordinary_role_names_nobody_extra(bot):

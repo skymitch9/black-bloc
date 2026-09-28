@@ -1,3 +1,4 @@
+import zlib
 from types import SimpleNamespace
 
 from black_bloc.channel_notes import NOTE_CHARS
@@ -50,7 +51,7 @@ def channel(name, *, seen=True, cat=None, topic=None, broken=False):
         return SimpleNamespace(view_channel=seen and role is EVERYONE)
 
     return SimpleNamespace(
-        id=abs(hash(name)) % 10_000,
+        id=zlib.crc32(name.encode()),
         name=name,
         topic=topic,
         category=cat,
@@ -191,7 +192,7 @@ def member_channel(name, topic=None):
         return SimpleNamespace(view_channel=role is MEMBER)
 
     return SimpleNamespace(
-        id=abs(hash(name)) % 10_000,
+        id=zlib.crc32(name.encode()),
         name=name,
         topic=topic,
         category=None,
@@ -291,7 +292,7 @@ def read_by(name, *roles, cat=None):
         return SimpleNamespace(view_channel=any(role is one for one in roles))
 
     return SimpleNamespace(
-        id=abs(hash(name)) % 10_000,
+        id=zlib.crc32(name.encode()),
         name=name,
         topic=None,
         category=cat,
