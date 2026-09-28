@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `blocks-convert`)** — ONE section APPENDED (`BC-a`…`BC-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `post-blocks`)** — ONE section APPENDED (`PB-a`…`PB-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `golive-replays`)** — ONE section APPENDED (`GR-a`…`GR-c`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `thread-spotlight-start`)** — ONE row APPENDED to the `MTC` section (`MTC-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3674,3 +3675,19 @@ of the menus"* — then *"lets do blocks"*. Design: [`../info/post-blocks-design
 | **`PB-b`** | Posts ▸ **When staff are around** ▸ **Add a block…** | *Front door — on Welcome and rules* is greyed out, with a line saying it goes on one post at a time and to remove it there first. |
 | **`PB-c`** | Posts ▸ **Blocks** ▸ Front door ▸ **Edit the Front door block** ▸ change the heading, untick one button ▸ **Save the words** (then put both back) | The preview changes as you type; the sentence says every post carrying it is redrawn; the Welcome message's card changes IN PLACE within seconds (no second message, the rules untouched) and the unticked button is gone. The Modmail page ▸ Front door ▸ **Edit its words** shows the same editor with the new words. |
 | **`PB-d`** | `/posts` ▸ Welcome and rules; then another post | The card lists **Blocks: Front door** and a **Remove Front door** button; another post's card has an **Add a block…** select whose Front door option says it is on Welcome and rules, and picking it is refused in words. |
+
+## Rows `BC-a` … `BC-e` — several blocks, the block preview, the temp voice lobby block (branch `blocks-convert`, 2026-09-28)
+
+🔨 **BUILT on branch `blocks-convert`, NOT merged, NOT deployed.** The owner, 2026-09-27 23:5x: *"Let's make
+all the blocks you suggested but not post them yet, only the front door should be posted in welcome test"* and
+*"We also need a way to preview what blocks look like"*. Design:
+[`../info/blocks-convert-design.md`](../info/blocks-convert-design.md). ⚠️ Do not add the temp voice block to a
+post during these rows unless the owner says so.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`BC-a`** | Look at #welcome-test after the deploy, and at the Logs page (Posts / Modmail) over the next ten minutes | The welcome post is exactly as before — rules, the door card, three buttons, ONE message — and it was NOT edited by the upgrade (no `frontdoor.redrawn_on_post` row). |
+| **`BC-b`** | Posts ▸ **Blocks** | Two cards: *Front door* (on Welcome and rules) and *Temp voice lobby* (on no post yet). Each shows **What it looks like in Discord**: the door card with its buttons; the lobby card with one link button per lobby and **My voice channel**. |
+| **`BC-c`** | Posts ▸ Blocks ▸ Temp voice lobby ▸ **Edit the Temp voice lobby block**: type a heading, change the lobby button to `Hop in: {lobby}`, untick the controls button — then leave without saving | The preview changes as you type; the lobby button reads *Hop in: <lobby name>*; the controls button disappears with the tick. Nothing is posted anywhere. |
+| **`BC-d`** | Posts ▸ Welcome and rules ▸ **Add a block…** (look only) | The list offers *Temp voice lobby*; the Front door is already on. The drawer's preview still shows the rules with the door under them. |
+| **`BC-e`** | Join the join-to-create lobby; then type `/voice` | Exactly as today: a room of your own, you are moved in, its controls are posted in the room's chat; `/voice` opens the same panel it always has. |
