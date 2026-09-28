@@ -11,7 +11,7 @@ from black_bloc import pings
 from black_bloc import pings_onboarding as onboarding
 from black_bloc.cogs.community.role_menus import get_menu, set_message
 from black_bloc.config import load_settings
-from black_bloc.settings_store import SettingsStore
+from black_bloc.settings_store import PINGS_ONBOARDING_TITLE, SettingsStore
 
 GUILD = 7
 LOG_CHANNEL = 222
@@ -231,10 +231,13 @@ async def test_the_first_sync_writes_both_prompts_and_a_second_writes_nothing(bo
     assert first.ok and first.wrote and len(bot.guild.writes) == 1
     written = bot.guild.writes[0]
     assert [one.title for one in written] == [
-        "What should ping you?",
+        PINGS_ONBOARDING_TITLE,
         onboarding.STREAMER_PROMPT_TITLE,
     ]
-    assert [one.title for one in written[0].options] == ["Events and go-lives", "Raid trains"]
+    assert [one.title for one in written[0].options] == [
+        onboarding.BOTH_OPTION,
+        onboarding.RAID_OPTION,
+    ]
     assert written[1].options[0].role_ids == {role.id}
     assert all(one.single_select is False and one.required is False for one in written)
     assert "pings.onboarding_synced" in await kinds(bot.db)
@@ -255,7 +258,7 @@ async def test_a_foreign_prompt_is_carried_through_untouched(bot, streamer):
 
     written = bot.guild.writes[0]
     assert written[0] is foreign
-    assert [one.title for one in written[1:]] == ["What should ping you?"]
+    assert [one.title for one in written[1:]] == [PINGS_ONBOARDING_TITLE]
     assert result.foreign == 1
     assert (await details(bot.db, "pings.onboarding_synced"))["foreign_kept"] == 1
 
@@ -357,7 +360,7 @@ async def test_the_card_says_what_the_prompts_hold_and_what_is_not_black_blocs(b
     lines = onboarding.card_lines(bot.guild, result, managed_now=True, last="2026-09-17")
 
     said = "\n".join(lines)
-    assert "What should ping you?" in said and "Which streamers?" in said
+    assert PINGS_ONBOARDING_TITLE in said and onboarding.STREAMER_PROMPT_TITLE in said
     assert "SuperNamu pings" in said
     assert "belong to somebody else" in said
     assert "Last written: 2026-09-17" in said
