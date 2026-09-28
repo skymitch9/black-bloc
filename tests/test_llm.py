@@ -124,45 +124,36 @@ async def test_the_request_is_the_shape_the_design_pinned():
     assert answer.provider == ANTHROPIC
 
 
-async def test_each_sdk_failure_keeps_its_own_reason_rather_than_one_broad_catch(monkeypatch):
-    class Rate(Exception):
-        pass
-
-    class Status(Exception):
-        status_code = 503
-
-    class Connection(Exception):
-        pass
-
-    monkeypatch.setattr(llm, "_ERRORS", (Rate, Status, Connection))
-    for error, reason in (
-        (Rate(), RATE_LIMITED),
-        (Status(), REFUSED),
-        (Connection(), UNREACHABLE),
-        (ValueError("odd"), BROKEN),
-    ):
-        create, _ = calls_with(raises=error)
-        client = HaikuClient("k", create=create)
-        with pytest.raises(LLMError) as caught:
-            await client.reply(system=[], messages=[])
-        assert caught.value.reason == reason
+class _Rate(Exception):
+    pass
 
 
-async def test_a_refusal_carries_the_status_it_answered_with(monkeypatch):
-    class Rate(Exception):
-        pass
+class _Status(Exception):
+    status_code = 503
 
-    class Status(Exception):
-        status_code = 400
 
-    class Connection(Exception):
-        pass
+class _Connection(Exception):
+    pass
 
-    monkeypatch.setattr(llm, "_ERRORS", (Rate, Status, Connection))
-    create, _ = calls_with(raises=Status())
+
+@pytest.mark.parametrize(
+    ("error", "reason", "status"),
+    [
+        (_Rate(), RATE_LIMITED, None),
+        (_Status(), REFUSED, 503),
+        (_Connection(), UNREACHABLE, None),
+        (ValueError("odd"), BROKEN, None),
+    ],
+    ids=["rate-limited", "refused-carries-status", "unreachable", "anything-else-broken"],
+)
+async def test_each_sdk_failure_keeps_its_own_reason_rather_than_one_broad_catch(
+    monkeypatch, error, reason, status
+):
+    monkeypatch.setattr(llm, "_ERRORS", (_Rate, _Status, _Connection))
+    create, _ = calls_with(raises=error)
     with pytest.raises(LLMError) as caught:
         await HaikuClient("k", create=create).reply(system=[], messages=[])
-    assert caught.value.status == 400
+    assert (caught.value.reason, caught.value.status) == (reason, status)
 
 
 async def test_no_error_message_ever_carries_the_key(monkeypatch):
@@ -220,12 +211,15 @@ async def test_a_ledger_that_will_not_write_does_not_take_the_reply_down():
         def conn(self):
             raise RuntimeError("no database")
 
-    assert await record(
-        Broken(),
-        guild_id=7,
-        user_id=900,
-        turn="t",
-        provider=ANTHROPIC,
-        model=MODEL,
-        tier="important",
-    ) is None
+    assert (
+        await record(
+            Broken(),
+            guild_id=7,
+            user_id=900,
+            turn="t",
+            provider=ANTHROPIC,
+            model=MODEL,
+            tier="important",
+        )
+        is None
+    )

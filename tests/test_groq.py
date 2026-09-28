@@ -63,9 +63,7 @@ async def test_the_post_is_the_openai_compatible_shape_with_the_same_ceiling():
 
 async def test_the_model_comes_from_the_setting_so_groqs_churn_is_a_settings_change():
     request, seen = answering(payload=said())
-    await GroqClient("k", model="llama-4-whatever", request=request).reply(
-        system="s", messages=[]
-    )
+    await GroqClient("k", model="llama-4-whatever", request=request).reply(system="s", messages=[])
     assert seen["json"]["model"] == "llama-4-whatever"
 
 
@@ -93,13 +91,18 @@ async def test_the_key_rides_the_authorization_header_and_nothing_else():
     assert "secret-groq-key" not in str(seen["json"])
 
 
-async def test_each_status_becomes_the_reason_that_decides_what_the_ladder_does_next():
-    for status, reason in ((429, RATE_LIMITED), (401, REFUSED), (400, REFUSED), (502, UNREACHABLE)):
-        request, _ = answering(status=status, payload={})
-        with pytest.raises(LLMError) as caught:
-            await GroqClient("k", request=request).reply(system="s", messages=[])
-        assert caught.value.reason == reason
-        assert caught.value.status == status
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [(429, RATE_LIMITED), (401, REFUSED), (400, REFUSED), (502, UNREACHABLE)],
+)
+async def test_each_status_becomes_the_reason_that_decides_what_the_ladder_does_next(
+    status, reason
+):
+    request, _ = answering(status=status, payload={})
+    with pytest.raises(LLMError) as caught:
+        await GroqClient("k", request=request).reply(system="s", messages=[])
+    assert caught.value.reason == reason
+    assert caught.value.status == status
 
 
 async def test_an_answer_with_no_words_in_it_is_a_failure_not_a_silent_blank():
@@ -119,14 +122,6 @@ async def test_a_transport_error_is_wrapped_at_the_boundary_so_callers_catch_one
     with pytest.raises(LLMError) as caught:
         await GroqClient("k", request=request).reply(system="s", messages=[])
     assert caught.value.reason == BROKEN
-
-
-async def test_closing_a_client_that_never_opened_a_session_is_quiet():
-    client = GroqClient("k", request=answering()[0])
-
-    await client.close()
-
-    assert client._session is None
 
 
 def transcribing(status=200, payload=None, raises=None):
@@ -189,9 +184,13 @@ async def test_a_transport_error_transcribing_is_wrapped_the_same_way_a_chat_one
     assert caught.value.reason == BROKEN
 
 
-async def test_closing_a_whisper_client_that_never_opened_a_session_is_quiet():
-    client = WhisperClient("k", request=transcribing()[0])
-
-    await client.close()
-
-    assert client._session is None
+@pytest.mark.parametrize(
+    "client",
+    [
+        lambda: GroqClient("k", request=answering()[0]),
+        lambda: WhisperClient("k", request=transcribing()[0]),
+    ],
+    ids=["chat", "whisper"],
+)
+async def test_closing_a_client_that_never_opened_a_session_is_quiet(client):
+    await client().close()

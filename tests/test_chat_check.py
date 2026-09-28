@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from black_bloc.chat_check import (
     HOME_CHANNEL_KEY,
     check_reply,
@@ -39,9 +41,28 @@ class Store:
         return self.values.get(key)
 
 
-def test_a_real_channel_is_left_exactly_as_written():
-    found = checked("Ask in #general and somebody will help.", channels=CHANNELS, roles=ROLES)
-    assert found.text == "Ask in #general and somebody will help."
+@pytest.mark.parametrize(
+    ("text", "people"),
+    [
+        ("Ask in #general and somebody will help.", ()),
+        ("Ask @Aunties or @Leads.", ()),
+        ("I will not @everyone or @here anybody.", ()),
+        ("Try @Pawpette.", ("Pawpette",)),
+        ("Go to <#800> and ask <@&900>, <@7>.", ()),
+        ("Rule #1 and https://x.test/y#top.", ()),
+    ],
+    ids=[
+        "real-channel",
+        "role-by-first-word",
+        "everyone-and-here",
+        "member-named-in-conversation",
+        "real-mentions",
+        "number-and-url-fragment",
+    ],
+)
+def test_a_reply_that_names_only_real_things_is_left_exactly_as_written(text, people):
+    found = checked(text, channels=CHANNELS, roles=ROLES, people=people)
+    assert found.text == text
     assert found.fixed == 0
 
 
@@ -63,38 +84,11 @@ def test_with_no_home_channel_the_sentence_is_written_without_it():
 
 
 def test_an_invented_role_is_smoothed_away_whatever_the_home_channel_is():
-    found = checked("Ping @Admin and they will sort it.", channels=CHANNELS, roles=ROLES,
-                    home="<#800>")
+    found = checked(
+        "Ping @Admin and they will sort it.", channels=CHANNELS, roles=ROLES, home="<#800>"
+    )
     assert found.text == "Ping and they will sort it."
     assert found.roles == ["Admin"]
-
-
-def test_a_role_named_by_its_first_word_is_left_alone():
-    found = checked("Ask @Aunties or @Leads.", channels=CHANNELS, roles=ROLES)
-    assert found.text == "Ask @Aunties or @Leads."
-    assert found.fixed == 0
-
-
-def test_everyone_and_here_are_never_treated_as_inventions():
-    found = checked("I will not @everyone or @here anybody.", channels=CHANNELS, roles=ROLES)
-    assert found.fixed == 0
-
-
-def test_a_member_named_in_the_conversation_survives():
-    found = checked("Try @Pawpette.", channels=CHANNELS, roles=ROLES, people=("Pawpette",))
-    assert found.text == "Try @Pawpette."
-    assert found.fixed == 0
-
-
-def test_a_real_channel_mention_and_a_real_role_mention_are_never_touched():
-    found = checked("Go to <#800> and ask <@&900>, <@7>.", channels=CHANNELS, roles=ROLES)
-    assert found.text == "Go to <#800> and ask <@&900>, <@7>."
-    assert found.fixed == 0
-
-
-def test_a_hash_that_is_a_number_or_a_url_fragment_is_not_a_channel():
-    found = checked("Rule #1 and https://x.test/y#top.", channels=CHANNELS, roles=ROLES)
-    assert found.fixed == 0
 
 
 def test_a_dangling_or_is_taken_off_with_the_thing_it_joined():
