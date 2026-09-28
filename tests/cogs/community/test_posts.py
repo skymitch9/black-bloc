@@ -592,7 +592,6 @@ async def test_the_card_offers_add_a_block_and_a_remove_for_each_block_it_has(bo
     assert [option.value for option in block_pick(two).options] == [
         kind for kind in post_blocks.KINDS if kind != post_blocks.FRONTDOOR
     ]
-
     assert "Blocks: Front door" in embed_two.description
     assert "Blocks:" not in embed_one.description
     assert all(

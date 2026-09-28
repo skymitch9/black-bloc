@@ -1381,7 +1381,6 @@ async def test_the_settings_sub_panel_shows_each_value_beside_its_select(bot, db
 
 
 async def test_the_logs_button_refuses_a_stranger_in_words(bot, db):
-
     stranger = FakeMember(bot.guild, user_id=907, display_name="Nobody")
     interaction = FakeInteraction(bot, stranger)
 
