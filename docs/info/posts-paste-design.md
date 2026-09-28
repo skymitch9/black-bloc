@@ -162,6 +162,11 @@ preview draws it.
 6. **A blank line is put between a `<ul>` and an `<ol>` that touch** (and between two lists of
    different kinds), so Discord starts a second list rather than continuing the first. Two lists
    of the *same* kind separated only by a block boundary still merge into one.
+   ⚠️ **Narrowed 2026-09-28 (branch `posts-doc-import`):** the blank line now goes only between lists
+   of different kinds at the SAME depth. A list of the other kind one level in (`1. One` /
+   `  - sub` / `2. Two`) joins with one newline, so a bullet under a number stays inside the list —
+   the export writes every nested list as a sibling, and the old rule broke each of them in two.
+   See [`posts-doc-import-design.md`](posts-doc-import-design.md).
 7. **Markdown characters in the pasted words are NOT escaped.** A document containing a literal
    `*` or `_` can produce markdown Discord reads as emphasis. Escaping would have made the
    "plain fragment comes back unchanged" contract false, and the preview beside the box shows
