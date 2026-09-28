@@ -171,10 +171,44 @@ class _Member:
         self.guild_permissions = _Perms(manage_guild=manage_guild)
 
 
-async def test_defaults_follow_test_mode(store):
-    assert store.get(1, "staff_channel_id") == TEST_CH
-    assert store.get(1, "log_channel_id") == TEST_CH
-    assert store.get(1, "role_menu_channel_id") is None
+@pytest.mark.parametrize(
+    ("key", "wanted"),
+    [
+        ("staff_channel_id", TEST_CH),
+        ("log_channel_id", TEST_CH),
+        ("role_menu_channel_id", None),
+        ("poll_channel_id", TEST_CH),
+        ("request_notify_channel_id", TEST_CH),
+    ],
+)
+async def test_defaults_follow_test_mode(store, key, wanted):
+    assert store.get(1, key) == wanted
+
+
+@pytest.mark.parametrize(
+    ("key", "wanted"),
+    [
+        ("golive_channel_id", LIVE_NOW_CHANNEL_ID),
+        ("events_announce_channel_id", LIVE_NOW_CHANNEL_ID),
+        ("birthday_channel_id", BIRTHDAY_CHANNEL_ID),
+        ("modmail_category_id", MODMAIL_CATEGORY_ID),
+        ("modmail_log_channel_id", MODMAIL_LOG_CHANNEL_ID),
+        ("request_notify_channel_id", None),
+    ],
+)
+async def test_a_place_becomes_the_real_one_once_test_mode_is_off(
+    tmp_path, monkeypatch, key, wanted
+):
+    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
+    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=TEST_CH)
+    db = Database(tmp_path / "live.sqlite3")
+    await db.connect()
+    try:
+        live = SettingsStore(db, settings)
+        await live.load()
+        assert live.get(1, key) == wanted
+    finally:
+        await db.close()
 
 
 async def test_set_get_round_trip_survives_reload(store):
@@ -407,19 +441,6 @@ async def test_the_emoji_skin_tone_defaults_to_dark_and_takes_only_the_six_tones
         coerce_value("emoji_skin_tone", "teal")
 
 
-async def test_golive_channel_defaults_to_live_now_once_test_mode_is_off(tmp_path, monkeypatch):
-    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
-    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=None)
-    db = Database(tmp_path / "g.sqlite3")
-    await db.connect()
-    try:
-        s = SettingsStore(db, settings)
-        await s.load()
-        assert s.get(1, "golive_channel_id") == LIVE_NOW_CHANNEL_ID
-    finally:
-        await db.close()
-
-
 async def test_golive_settings_round_trip(store):
     assert await store.set(1, "golive_mode", "on") == "on"
     assert await store.set(1, "golive_cooldown_minutes", 15) == 15
@@ -566,19 +587,6 @@ async def test_events_defaults(store):
     assert store.get(1, "events_ping_role_id") is None
 
 
-async def test_the_announce_channel_becomes_live_now_once_test_mode_is_off(tmp_path, monkeypatch):
-    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
-    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=None)
-    db = Database(tmp_path / "e.sqlite3")
-    await db.connect()
-    try:
-        s = SettingsStore(db, settings)
-        await s.load()
-        assert s.get(1, "events_announce_channel_id") == LIVE_NOW_CHANNEL_ID
-    finally:
-        await db.close()
-
-
 async def test_birthday_defaults(store):
     assert store.get(1, "birthday_mode") == "shadow"
     assert store.get(1, "birthday_channel_id") == TEST_CH
@@ -586,21 +594,6 @@ async def test_birthday_defaults(store):
     assert store.get(1, "birthday_color") == BIRTHDAY_COLOR
     assert store.get(1, "birthday_role_id") is None
     assert store.get(1, "birthday_show_age") is False
-
-
-async def test_the_birthday_channel_defaults_to_the_incumbent_s_once_test_mode_is_off(
-    tmp_path, monkeypatch
-):
-    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
-    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=None)
-    db = Database(tmp_path / "b.sqlite3")
-    await db.connect()
-    try:
-        s = SettingsStore(db, settings)
-        await s.load()
-        assert s.get(1, "birthday_channel_id") == BIRTHDAY_CHANNEL_ID
-    finally:
-        await db.close()
 
 
 def test_the_create_scheduled_toggle_is_a_real_boolean():
@@ -832,22 +825,6 @@ async def test_modmail_defaults_point_nowhere_real_while_test_mode_is_on(store):
     assert store.get(1, "modmail_log_channel_id") == TEST_CH
 
 
-async def test_the_modmail_places_become_the_real_ones_once_test_mode_is_off(
-    tmp_path, monkeypatch
-):
-    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
-    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=None)
-    db = Database(tmp_path / "m.sqlite3")
-    await db.connect()
-    try:
-        s = SettingsStore(db, settings)
-        await s.load()
-        assert s.get(1, "modmail_category_id") == MODMAIL_CATEGORY_ID
-        assert s.get(1, "modmail_log_channel_id") == MODMAIL_LOG_CHANNEL_ID
-    finally:
-        await db.close()
-
-
 def test_the_modmail_keys_are_typed_and_the_mode_is_an_enum():
     assert coerce_value("modmail_enabled", True) is True
     assert coerce_value("modmail_mode", THREAD_MODE) == THREAD_MODE
@@ -997,10 +974,6 @@ async def test_polls_ship_on_with_staff_creating_them_and_no_review(store):
     assert store.get(1, "poll_ping_role_id") is None
 
 
-async def test_a_dashboard_poll_lands_in_the_test_channel_while_test_mode_is_on(store):
-    assert store.get(1, "poll_channel_id") == TEST_CH
-
-
 def test_a_poll_length_discord_cannot_express_is_refused_at_the_validator():
     assert coerce_value("poll_default_hours", POLL_MIN_HOURS) == POLL_MIN_HOURS
     assert coerce_value("poll_default_hours", POLL_MAX_HOURS) == POLL_MAX_HOURS
@@ -1135,10 +1108,6 @@ def test_the_ping_role_choices_refuse_anything_else():
             coerce_value(key, bad)
 
 
-def test_the_ping_role_mode_is_read_as_a_feature_switch_on_the_health_page():
-    assert "pings_mode" in mode_keys()
-
-
 async def test_every_feature_has_a_log_level_key_defaulting_to_important(store):
     keys = [f"{feature}_log_level" for feature in FEATURES]
     assert len(keys) == 22
@@ -1230,34 +1199,6 @@ async def test_the_two_ask_them_to_check_decisions_are_keys_both_ways(store):
     assert store.get(7, "request_check_on_ready") is True
 
 
-async def test_the_post_move_buttons_are_a_key_both_doors_reach(store):
-    """Checklist 33 — blackmail-threads §F: drawing the moves on a post is a decision."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert KEY_TYPES["request_post_buttons"] == "bool"
-    assert store.get(7, "request_post_buttons") is True
-    assert reachable_on_the_panel("request_post_buttons")
-    assert "forum post" in KEY_HELP["request_post_buttons"]
-    with pytest.raises(SettingError):
-        coerce_value("request_post_buttons", "true")
-    await store.set(7, "request_post_buttons", False)
-    assert store.get(7, "request_post_buttons") is False
-
-
-async def test_adopting_a_hand_made_forum_post_is_a_key_both_doors_reach(store):
-    """Checklist 33 — blackmail-threads §G: whether a post becomes a request is a decision."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert KEY_TYPES["request_forum_adopts_posts"] == "bool"
-    assert store.get(7, "request_forum_adopts_posts") is True
-    assert reachable_on_the_panel("request_forum_adopts_posts")
-    assert "by hand" in KEY_HELP["request_forum_adopts_posts"]
-    with pytest.raises(SettingError):
-        coerce_value("request_forum_adopts_posts", "true")
-    await store.set(7, "request_forum_adopts_posts", False)
-    assert store.get(7, "request_forum_adopts_posts") is False
-
-
 async def test_the_two_send_to_decisions_are_keys_both_doors_reach(store):
     """Checklist 33 — send-to-design §A: the move itself and the member's answer window.
 
@@ -1325,160 +1266,6 @@ def test_every_registry_key_is_reachable_from_the_panel_as_well_as_the_dashboard
     assert "request_channel_moves" in opened and "request_review_by_other" in opened
 
 
-async def test_the_request_panel_stays_up_ten_minutes_by_default(store):
-    """Ten, not fifteen: the footer needs Discord's 15-minute interaction window still open."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "request_panel_minutes") == 10
-    assert "15" in KEY_HELP["request_panel_minutes"]
-    assert KEY_TYPES["request_panel_minutes"] == "int"
-    assert reachable_on_the_panel("request_panel_minutes")
-    await store.set(7, "request_panel_minutes", 30)
-    assert store.get(7, "request_panel_minutes") == 30
-    with pytest.raises(SettingError):
-        coerce_value("request_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("request_panel_minutes", "15")
-    assert parse_value("request_panel_minutes", "45") == 45
-
-
-async def test_the_poll_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as the request panel: 15 loses Discord's interaction window and the footer."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "poll_panel_minutes") == 10
-    assert "15" in KEY_HELP["poll_panel_minutes"]
-    assert KEY_TYPES["poll_panel_minutes"] == "int"
-    assert reachable_on_the_panel("poll_panel_minutes")
-    await store.set(7, "poll_panel_minutes", 20)
-    assert store.get(7, "poll_panel_minutes") == 20
-    with pytest.raises(SettingError):
-        coerce_value("poll_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("poll_panel_minutes", "15")
-    assert parse_value("poll_panel_minutes", "45") == 45
-
-
-async def test_the_mod_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "mod_panel_minutes") == 10
-    assert "15" in KEY_HELP["mod_panel_minutes"]
-    assert KEY_TYPES["mod_panel_minutes"] == "int"
-    assert reachable_on_the_panel("mod_panel_minutes")
-    await store.set(7, "mod_panel_minutes", 20)
-    assert store.get(7, "mod_panel_minutes") == 20
-    with pytest.raises(SettingError):
-        coerce_value("mod_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("mod_panel_minutes", "15")
-    assert parse_value("mod_panel_minutes", "45") == 45
-
-
-async def test_the_memory_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "memory_panel_minutes") == 10
-    assert "15" in KEY_HELP["memory_panel_minutes"]
-    assert KEY_TYPES["memory_panel_minutes"] == "int"
-    assert reachable_on_the_panel("memory_panel_minutes")
-    await store.set(7, "memory_panel_minutes", 25)
-    assert store.get(7, "memory_panel_minutes") == 25
-    with pytest.raises(SettingError):
-        coerce_value("memory_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("memory_panel_minutes", "15")
-    assert parse_value("memory_panel_minutes", "45") == 45
-
-
-async def test_the_youtube_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "youtube_panel_minutes") == 10
-    assert "15" in KEY_HELP["youtube_panel_minutes"]
-    assert KEY_TYPES["youtube_panel_minutes"] == "int"
-    assert reachable_on_the_panel("youtube_panel_minutes")
-    await store.set(7, "youtube_panel_minutes", 25)
-    assert store.get(7, "youtube_panel_minutes") == 25
-    with pytest.raises(SettingError):
-        coerce_value("youtube_panel_minutes", -1)
-    assert parse_value("youtube_panel_minutes", "45") == 45
-
-
-async def test_the_pings_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "voice_panel_minutes") == 10
-    assert "15" in KEY_HELP["voice_panel_minutes"]
-    assert KEY_TYPES["voice_panel_minutes"] == "int"
-    assert reachable_on_the_panel("voice_panel_minutes")
-    await store.set(7, "voice_panel_minutes", 25)
-    assert store.get(7, "voice_panel_minutes") == 25
-    assert parse_value("voice_panel_minutes", "45") == 45
-    assert store.get(7, "pings_panel_minutes") == 10
-    assert "15" in KEY_HELP["pings_panel_minutes"]
-    assert KEY_TYPES["pings_panel_minutes"] == "int"
-    assert reachable_on_the_panel("pings_panel_minutes")
-    await store.set(7, "pings_panel_minutes", 25)
-    assert store.get(7, "pings_panel_minutes") == 25
-    with pytest.raises(SettingError):
-        coerce_value("pings_panel_minutes", -1)
-    assert parse_value("pings_panel_minutes", "45") == 45
-
-
-async def test_the_honeypot_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "honeypot_panel_minutes") == 10
-    assert "15" in KEY_HELP["honeypot_panel_minutes"]
-    assert KEY_TYPES["honeypot_panel_minutes"] == "int"
-    assert reachable_on_the_panel("honeypot_panel_minutes")
-    await store.set(7, "honeypot_panel_minutes", 25)
-    assert store.get(7, "honeypot_panel_minutes") == 25
-    with pytest.raises(SettingError):
-        coerce_value("honeypot_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("honeypot_panel_minutes", "15")
-    assert parse_value("honeypot_panel_minutes", "45") == 45
-
-
-async def test_the_settings_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "settings_panel_minutes") == 10
-    assert "15" in KEY_HELP["settings_panel_minutes"]
-    assert KEY_TYPES["settings_panel_minutes"] == "int"
-    assert reachable_on_the_panel("settings_panel_minutes")
-    await store.set(7, "settings_panel_minutes", 25)
-    assert store.get(7, "settings_panel_minutes") == 25
-    with pytest.raises(SettingError):
-        coerce_value("settings_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("settings_panel_minutes", "15")
-    assert parse_value("settings_panel_minutes", "45") == 45
-
-
-async def test_only_manage_server_re_points_the_core_channels_by_default(store):
-    """F-S3 (a): access-REDUCING, so it ships true and the rest of /settings opens either way."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "settings_core_keys_admin_only") is True
-    assert KEY_TYPES["settings_core_keys_admin_only"] == "bool"
-    assert "Manage Server" in KEY_HELP["settings_core_keys_admin_only"]
-    assert reachable_on_the_panel("settings_core_keys_admin_only")
-    await store.set(7, "settings_core_keys_admin_only", False)
-    assert store.get(7, "settings_core_keys_admin_only") is False
-    with pytest.raises(SettingError):
-        coerce_value("settings_core_keys_admin_only", "false")
-    assert parse_value("settings_core_keys_admin_only", "off") is False
-
-
 async def test_is_stored_answers_what_clear_would_find_without_deleting_it(store):
     """`Put the default back` renders only on a key with a row, so it must be askable."""
     assert store.get(7, "birthday_role_id") is None
@@ -1509,108 +1296,6 @@ async def test_both_new_settings_keys_file_under_core_not_a_group_of_their_own(s
     assert len({namespace_of(key) for key in KEY_TYPES}) == 25
 
 
-async def test_the_automod_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "automod_panel_minutes") == 10
-    assert "15" in KEY_HELP["automod_panel_minutes"]
-    assert KEY_TYPES["automod_panel_minutes"] == "int"
-    assert reachable_on_the_panel("automod_panel_minutes")
-    await store.set(7, "automod_panel_minutes", 25)
-    assert store.get(7, "automod_panel_minutes") == 25
-    with pytest.raises(SettingError):
-        coerce_value("automod_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("automod_panel_minutes", "15")
-    assert parse_value("automod_panel_minutes", "45") == 45
-
-
-async def test_whether_arming_automod_asks_twice_is_a_setting_not_a_constant(store):
-    """Owner fork F-A1 = (a): confirm by default, and a server that finds it tedious may stop it."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "automod_arm_needs_confirm") is True
-    assert KEY_TYPES["automod_arm_needs_confirm"] == "bool"
-    assert "automod_arm_needs_confirm" in KEY_HELP
-    assert reachable_on_the_panel("automod_arm_needs_confirm")
-    await store.set(7, "automod_arm_needs_confirm", False)
-    assert store.get(7, "automod_arm_needs_confirm") is False
-    with pytest.raises(SettingError):
-        coerce_value("automod_arm_needs_confirm", "yes")
-
-
-async def test_the_chat_panel_key_is_picked_up_by_the_prefix_scan_with_no_second_edit(store):
-    """`CHAT_KEYS` is `startswith('chat_')` over `KEY_TYPES`, so registering it is the only edit."""
-    from black_bloc.cogs.content.chat import CHAT_KEYS
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "chat_panel_minutes") == 10
-    assert "15" in KEY_HELP["chat_panel_minutes"]
-    assert "/chat panel" in KEY_HELP["chat_panel_minutes"]
-    assert KEY_TYPES["chat_panel_minutes"] == "int"
-    assert reachable_on_the_panel("chat_panel_minutes")
-    assert "chat_panel_minutes" in CHAT_KEYS
-    await store.set(7, "chat_panel_minutes", 25)
-    assert store.get(7, "chat_panel_minutes") == 25
-    with pytest.raises(SettingError):
-        coerce_value("chat_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("chat_panel_minutes", "15")
-    assert parse_value("chat_panel_minutes", "45") == 45
-
-
-async def test_the_raid_train_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
-    from black_bloc.raidtrain import PANEL_MINUTES_KEY
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, PANEL_MINUTES_KEY) == 10
-    assert "15" in KEY_HELP[PANEL_MINUTES_KEY]
-    assert "/raidtrain panel" in KEY_HELP[PANEL_MINUTES_KEY]
-    assert KEY_TYPES[PANEL_MINUTES_KEY] == "int"
-    assert reachable_on_the_panel(PANEL_MINUTES_KEY)
-    await store.set(7, PANEL_MINUTES_KEY, 25)
-    assert store.get(7, PANEL_MINUTES_KEY) == 25
-    with pytest.raises(SettingError):
-        coerce_value(PANEL_MINUTES_KEY, -1)
-    with pytest.raises(SettingError):
-        coerce_value(PANEL_MINUTES_KEY, "15")
-    assert parse_value(PANEL_MINUTES_KEY, "45") == 45
-
-
-async def test_how_long_the_rolemenu_panel_stays_live_is_a_setting_both_doors_reach(store):
-    from black_bloc.rolemenus import PANEL_MINUTES_KEY
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, PANEL_MINUTES_KEY) == 10
-    assert "15" in KEY_HELP[PANEL_MINUTES_KEY]
-    assert "/rolemenu panel" in KEY_HELP[PANEL_MINUTES_KEY]
-    assert KEY_TYPES[PANEL_MINUTES_KEY] == "int"
-    assert reachable_on_the_panel(PANEL_MINUTES_KEY)
-    await store.set(7, PANEL_MINUTES_KEY, 25)
-    assert store.get(7, PANEL_MINUTES_KEY) == 25
-    with pytest.raises(SettingError):
-        coerce_value(PANEL_MINUTES_KEY, -1)
-    with pytest.raises(SettingError):
-        coerce_value(PANEL_MINUTES_KEY, "15")
-    assert parse_value(PANEL_MINUTES_KEY, "45") == 45
-
-
-async def test_whether_staff_unlinking_somebody_dms_them_is_a_setting_not_a_constant(store):
-    """Staff-final-say says the person is told; checklist 33 says the server may decide."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "youtube_unlink_dms_them") is True
-    assert KEY_TYPES["youtube_unlink_dms_them"] == "bool"
-    assert "youtube_unlink_dms_them" in KEY_HELP
-    assert reachable_on_the_panel("youtube_unlink_dms_them")
-    await store.set(7, "youtube_unlink_dms_them", False)
-    assert store.get(7, "youtube_unlink_dms_them") is False
-    with pytest.raises(SettingError):
-        coerce_value("youtube_unlink_dms_them", "yes")
-
-
 async def test_the_live_half_ships_off_and_is_reachable_from_both_doors(store):
     """Checklist 33: the three decisions youtube-live adds are registry keys, not constants."""
     from black_bloc.settings_panel import reachable_on_the_panel
@@ -1637,59 +1322,6 @@ async def test_the_live_probe_gap_and_the_quiet_probe_count_are_both_bounded(sto
             coerce_value(key, high + 1)
     with pytest.raises(SettingError):
         coerce_value("youtube_live_mode", "sometimes")
-
-
-async def test_the_youtube_keys_the_panel_only_reads_keep_their_defaults(store):
-    """The panel changed the door, not the room: no surviving `youtube_*` default moved."""
-    assert store.get(7, "youtube_panel_minutes") == 10
-    assert store.get(7, "youtube_unlink_dms_them") is True
-    assert store.get(7, "youtube_live_mode") == "off"
-
-
-async def test_the_eight_chat_memory_keys_are_untouched_by_the_panel(store):
-    """The panel changed the door, not the room: no `chat_memory_*` default moved."""
-    assert store.get(7, "chat_memory_mode") == "off"
-    assert store.get(7, "chat_memory_consent") == "optout"
-    assert store.get(7, "chat_memory_retention_days") == 180
-    assert store.get(7, "chat_memory_dm_scope") == "separate"
-    assert store.get(7, "chat_memory_staff_view") == "counts"
-    assert store.get(7, "chat_memory_notes_max") == 6
-    assert store.get(7, "chat_memory_threads_max") == 5
-    assert store.get(7, "chat_memory_model") == ""
-    for key in ("chat_memory_consent", "chat_memory_staff_view"):
-        assert "/chat memory" not in KEY_HELP[key]
-        assert "/memory" in KEY_HELP[key]
-
-
-async def test_whoever_started_a_poll_may_close_it_until_a_lead_says_otherwise(store):
-    """Owner, 2026-09-03 (design fork I-2): keep today's behaviour, and make it a key."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "poll_creator_may_end") is True
-    assert KEY_TYPES["poll_creator_may_end"] == "bool"
-    assert "staff can" in KEY_HELP["poll_creator_may_end"]
-    assert reachable_on_the_panel("poll_creator_may_end")
-    await store.set(7, "poll_creator_may_end", False)
-    assert store.get(7, "poll_creator_may_end") is False
-    with pytest.raises(SettingError):
-        coerce_value("poll_creator_may_end", "false")
-    assert parse_value("poll_creator_may_end", "false") is False
-
-
-async def test_a_half_written_poll_can_be_saved_until_a_lead_turns_drafts_off(store):
-    """Owner, 2026-09-06: "B but only save 1 draft per person max" — and it is a key."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "poll_drafts") is True
-    assert KEY_TYPES["poll_drafts"] == "bool"
-    assert "Save for later" in KEY_HELP["poll_drafts"]
-    assert "kept, not deleted" in KEY_HELP["poll_drafts"]
-    assert reachable_on_the_panel("poll_drafts")
-    await store.set(7, "poll_drafts", False)
-    assert store.get(7, "poll_drafts") is False
-    with pytest.raises(SettingError):
-        coerce_value("poll_drafts", "false")
-    assert parse_value("poll_drafts", "false") is False
 
 
 async def test_a_saved_draft_is_kept_a_fortnight_and_zero_days_keeps_it_for_ever(store):
@@ -1732,90 +1364,8 @@ async def test_a_logs_button_opens_on_ten_lines_and_the_bounds_are_the_embeds_ro
     assert parse_value("logs_count", "25") == 25
 
 
-async def test_a_logs_button_opens_on_everything_until_a_lead_says_otherwise(store):
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "logs_important_only") is False
-    assert KEY_TYPES["logs_important_only"] == "bool"
-    assert "Show everything" in KEY_HELP["logs_important_only"]
-    assert reachable_on_the_panel("logs_important_only")
-    await store.set(7, "logs_important_only", True)
-    assert store.get(7, "logs_important_only") is True
-    with pytest.raises(SettingError):
-        coerce_value("logs_important_only", "true")
-    assert parse_value("logs_important_only", "true") is True
-
-
-async def test_the_panel_keeps_a_members_own_requests_to_themselves_until_a_lead_says_otherwise(
-    store,
-):
-    """Owner, 2026-09-03: viewing requests on the panel is staff-only, and it is a key."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "request_panel_own_list") is False
-    assert KEY_TYPES["request_panel_own_list"] == "bool"
-    assert "staff always see them" in KEY_HELP["request_panel_own_list"]
-    assert reachable_on_the_panel("request_panel_own_list")
-    await store.set(7, "request_panel_own_list", True)
-    assert store.get(7, "request_panel_own_list") is True
-    assert coerce_value("request_panel_own_list", True) is True
-    with pytest.raises(SettingError):
-        coerce_value("request_panel_own_list", "true")
-    assert parse_value("request_panel_own_list", "true") is True
-
-
-async def test_the_birthday_panel_stays_up_ten_minutes_by_default(store):
-    """Ten, not fifteen: the footer needs Discord's 15-minute interaction window still open."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "birthday_panel_minutes") == 10
-    assert "15" in KEY_HELP["birthday_panel_minutes"]
-    assert KEY_TYPES["birthday_panel_minutes"] == "int"
-    assert reachable_on_the_panel("birthday_panel_minutes")
-    await store.set(7, "birthday_panel_minutes", 30)
-    assert store.get(7, "birthday_panel_minutes") == 30
-    with pytest.raises(SettingError):
-        coerce_value("birthday_panel_minutes", -1)
-    assert parse_value("birthday_panel_minutes", "45") == 45
-
-
-async def test_the_birthday_panel_keeps_todays_behaviour_until_a_lead_says_otherwise(store):
-    """F-B1, owner 2026-09-03: the coming-up list and the lookup stay open to members."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    for key in ("birthday_panel_next_for_members", "birthday_panel_lookup"):
-        assert store.get(7, key) is True
-        assert KEY_TYPES[key] == "bool"
-        assert reachable_on_the_panel(key)
-        assert KEY_HELP.get(key)
-        with pytest.raises(SettingError):
-            coerce_value(key, "true")
-        await store.set(7, key, False)
-        assert store.get(7, key) is False
-        assert parse_value(key, "true") is True
-    assert "staff always see them" in KEY_HELP["birthday_panel_next_for_members"]
-    assert "staff always can" in KEY_HELP["birthday_panel_lookup"]
-
-
 async def test_the_status_channel_is_blank_so_one_channel_carries_both_kinds_of_line(store):
     assert store.get(7, "request_status_channel_id") is None
-
-
-async def test_the_request_notice_lands_in_the_test_channel_while_test_mode_is_on(store):
-    assert store.get(7, "request_notify_channel_id") == TEST_CH
-
-
-async def test_the_request_notice_points_nowhere_once_test_mode_is_off(tmp_path, monkeypatch):
-    monkeypatch.delenv("DISCORD_TOKEN", raising=False)
-    settings = load_settings(_env_file=None, test_mode=False, test_channel_id=TEST_CH)
-    db = Database(tmp_path / "r.sqlite3")
-    await db.connect()
-    try:
-        live = SettingsStore(db, settings)
-
-        assert live.get(7, "request_notify_channel_id") is None
-    finally:
-        await db.close()
 
 
 def test_the_request_switches_only_take_the_words_they_document():
@@ -1855,6 +1405,9 @@ async def test_every_memory_decision_is_a_key_the_dashboard_and_the_bot_both_rea
     assert store.get(7, "chat_memory_notes_max") == 6
     assert store.get(7, "chat_memory_threads_max") == 5
     assert store.get(7, "chat_memory_model") == ""
+    for key in ("chat_memory_consent", "chat_memory_staff_view"):
+        assert "/chat memory" not in KEY_HELP[key]
+        assert "/memory" in KEY_HELP[key]
 
 
 def test_the_memory_choices_refuse_anything_else():
@@ -1941,10 +1494,6 @@ def test_the_raid_train_calendar_name_is_held_to_the_same_rules_as_an_events():
     assert "{date}" in str(caught.value) and "{title}" in str(caught.value)
 
 
-def test_the_raid_train_mode_is_read_as_a_feature_switch_on_the_health_page():
-    assert "raidtrain_mode" in mode_keys()
-
-
 def test_the_raid_train_numbers_refuse_a_figure_that_would_break_the_sweep():
     assert coerce_value("raidtrain_slot_minutes", 15) == 15
     assert coerce_value("raidtrain_max_slots_per_member", 0) == 0
@@ -1999,80 +1548,11 @@ async def test_the_application_keys_are_typed_and_the_mode_is_the_three_way_one(
         await store.set(1, "applications_mode", "maybe")
 
 
-async def test_the_roster_shows_people_who_left_until_a_lead_says_otherwise(store):
-    assert KEY_TYPES["applications_roster_shows_left"] == "bool"
-    assert store.get(1, "applications_roster_shows_left") is True
-    assert "marked as gone" in KEY_HELP["applications_roster_shows_left"]
-    assert await store.set(1, "applications_roster_shows_left", False) is False
-    assert store.get(1, "applications_roster_shows_left") is False
-    with pytest.raises(SettingError):
-        await store.set(1, "applications_roster_shows_left", "maybe")
-
-
-async def test_the_show_panel_goes_quiet_after_ten_minutes_unless_a_lead_changes_it(store):
-    assert KEY_TYPES["applications_panel_minutes"] == "int"
-    assert store.get(1, "applications_panel_minutes") == 10
-    assert "15" in KEY_HELP["applications_panel_minutes"]
-    assert await store.set(1, "applications_panel_minutes", 5) == 5
-
-
-async def test_a_member_sees_their_own_applications_until_a_lead_says_otherwise(store):
-    """Today's permission is the default (owner, 2026-09-03), and it is a key, not a constant."""
-    assert KEY_TYPES["applications_panel_own_list"] == "bool"
-    assert store.get(1, "applications_panel_own_list") is True
-    assert "staff-only" in KEY_HELP["applications_panel_own_list"]
-    assert await store.set(1, "applications_panel_own_list", False) is False
-    assert store.get(1, "applications_panel_own_list") is False
-    with pytest.raises(SettingError):
-        await store.set(1, "applications_panel_own_list", "maybe")
-
-
-async def test_the_applications_panel_help_names_the_command_that_opens_it(store):
-    assert "/apply panel" in KEY_HELP["applications_panel_minutes"]
-    assert "15-minute interaction window" in KEY_HELP["applications_panel_minutes"]
-
-
 async def test_a_wait_longer_than_ten_years_is_refused_with_its_own_sentence(store):
     assert await store.set(1, "applications_retry_days", 0) == 0
     with pytest.raises(SettingError) as caught:
         await store.set(1, "applications_retry_days", 3651)
     assert "permanent no with extra steps" in str(caught.value)
-
-
-async def test_the_event_panel_stays_up_ten_minutes_by_default(store):
-    """Ten, not fifteen: the footer needs Discord's 15-minute interaction window still open."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "event_panel_minutes") == 10
-    assert "15" in KEY_HELP["event_panel_minutes"]
-    assert KEY_TYPES["event_panel_minutes"] == "int"
-    assert reachable_on_the_panel("event_panel_minutes")
-    assert namespace_of("event_panel_minutes") == "events"
-    await store.set(7, "event_panel_minutes", 30)
-    assert store.get(7, "event_panel_minutes") == 30
-    with pytest.raises(SettingError):
-        coerce_value("event_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("event_panel_minutes", "15")
-    assert parse_value("event_panel_minutes", "45") == 45
-
-
-async def test_the_golive_panel_stays_up_ten_minutes_by_default(store):
-    """Ten, not fifteen: the footer needs Discord's 15-minute interaction window still open."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "golive_panel_minutes") == 10
-    assert "15" in KEY_HELP["golive_panel_minutes"]
-    assert "/golive panel" in KEY_HELP["golive_panel_minutes"]
-    assert KEY_TYPES["golive_panel_minutes"] == "int"
-    assert reachable_on_the_panel("golive_panel_minutes")
-    await store.set(7, "golive_panel_minutes", 30)
-    assert store.get(7, "golive_panel_minutes") == 30
-    with pytest.raises(SettingError):
-        coerce_value("golive_panel_minutes", -1)
-    with pytest.raises(SettingError):
-        coerce_value("golive_panel_minutes", "15")
-    assert parse_value("golive_panel_minutes", "45") == 45
 
 
 async def test_the_eleven_golive_keys_the_site_owns_are_untouched(store):
@@ -2095,58 +1575,6 @@ async def test_the_eleven_golive_keys_the_site_owns_are_untouched(store):
         assert KEY_HELP[key], key
         if value is not None:
             assert store.get(7, key) == value, key
-
-
-async def test_the_event_panel_keeps_a_members_own_events_to_themselves_until_a_lead_says_so(
-    store,
-):
-    """Mirrors request_panel_own_list: staff always see the open ones, members opt in."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "event_panel_own_list") is False
-    assert KEY_TYPES["event_panel_own_list"] == "bool"
-    assert "staff always" in KEY_HELP["event_panel_own_list"]
-    assert reachable_on_the_panel("event_panel_own_list")
-    assert namespace_of("event_panel_own_list") == "events"
-    await store.set(7, "event_panel_own_list", True)
-    assert store.get(7, "event_panel_own_list") is True
-    assert coerce_value("event_panel_own_list", True) is True
-    with pytest.raises(SettingError):
-        coerce_value("event_panel_own_list", "true")
-
-
-async def test_hiding_a_turned_off_features_command_is_on_by_default_and_both_doors_reach_it(
-    store,
-):
-    """Owner, 2026-09-04: turning YouTube off on the portal should take `/youtube` away."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-    from black_bloc.settings_store import HIDE_COMMANDS_WHEN_OFF
-
-    assert store.get(7, HIDE_COMMANDS_WHEN_OFF) is True
-    assert KEY_TYPES[HIDE_COMMANDS_WHEN_OFF] == "bool"
-    assert reachable_on_the_panel(HIDE_COMMANDS_WHEN_OFF)
-    assert "shadow does not" in KEY_HELP[HIDE_COMMANDS_WHEN_OFF]
-    await store.set(7, HIDE_COMMANDS_WHEN_OFF, False)
-    assert store.get(7, HIDE_COMMANDS_WHEN_OFF) is False
-    assert coerce_value(HIDE_COMMANDS_WHEN_OFF, True) is True
-    assert parse_value(HIDE_COMMANDS_WHEN_OFF, "false") is False
-    with pytest.raises(SettingError):
-        coerce_value(HIDE_COMMANDS_WHEN_OFF, "true")
-
-
-async def test_the_modmail_panel_stays_up_ten_minutes_by_default(store):
-    """Same reason as every other panel: 15 loses Discord's window and the gone-quiet footer."""
-    from black_bloc.settings_panel import reachable_on_the_panel
-
-    assert store.get(7, "modmail_panel_minutes") == 10
-    assert "15" in KEY_HELP["modmail_panel_minutes"]
-    assert KEY_TYPES["modmail_panel_minutes"] == "int"
-    assert reachable_on_the_panel("modmail_panel_minutes")
-    await store.set(7, "modmail_panel_minutes", 25)
-    assert store.get(7, "modmail_panel_minutes") == 25
-    assert parse_value("modmail_panel_minutes", "45") == 45
-    with pytest.raises(SettingError):
-        coerce_value("modmail_panel_minutes", -1)
 
 
 async def test_the_reply_style_defaults_to_both_and_refuses_a_fourth_word(store):
@@ -2453,16 +1881,17 @@ async def test_the_rehearsal_home_is_a_core_key_reachable_from_both_doors(store)
     assert KEY_TYPES[settings_store.REHEARSAL_NOTE] == "text"
 
 
+def test_the_rehearsal_home_help_says_it_widens_test_mode_and_a_features_own_home_wins():
+    said = KEY_HELP[settings_store.SHADOW_CHANNEL]
+
+    assert "test mode" in said and "one channel" in said
+    assert "_shadow_channel_id wins over this" in said
+
+
 async def test_the_rehearsal_home_ships_blank_and_the_note_ships_written(store):
     assert store.get(7, settings_store.SHADOW_CHANNEL) is None
     assert store.get(7, settings_store.REHEARSAL_NOTE) == settings_store.REHEARSAL_NOTE_DEFAULT
     assert "{channel}" in store.get(7, settings_store.REHEARSAL_NOTE)
-
-
-async def test_the_rehearsal_home_help_says_it_widens_test_mode(store):
-    said = KEY_HELP[settings_store.SHADOW_CHANNEL]
-
-    assert "test mode" in said and "one channel" in said
 
 
 async def test_every_feature_that_rehearses_has_its_own_home_key_shipped_blank(store):
@@ -2483,10 +1912,6 @@ async def test_every_feature_that_rehearses_has_its_own_home_key_shipped_blank(s
         assert namespace_of(key) == namespace
         assert store.get(7, key) is None
         assert "shadow_channel_id" in KEY_HELP[key] and "blank" in KEY_HELP[key]
-
-
-async def test_the_global_home_says_a_features_own_home_wins(store):
-    assert "_shadow_channel_id wins over this" in KEY_HELP[settings_store.SHADOW_CHANNEL]
 
 
 async def test_the_three_boot_status_keys_are_core_and_reachable_from_both_doors(store):
@@ -2932,3 +2357,111 @@ def test_the_live_words_sit_with_the_posts_and_the_upcoming_words_with_events():
     assert settings_store.namespace_of("golive_block_title") == "posts"
     assert settings_store.namespace_of("events_upcoming_title") == "events"
     assert settings_store.namespace_of("posts_block_links_rows") == "posts"
+
+
+PANEL_MINUTES_KEYS = [
+    pytest.param("request_panel_minutes", None, id="request"),
+    pytest.param("poll_panel_minutes", None, id="poll"),
+    pytest.param("mod_panel_minutes", None, id="mod"),
+    pytest.param("memory_panel_minutes", None, id="memory"),
+    pytest.param("youtube_panel_minutes", None, id="youtube"),
+    pytest.param("voice_panel_minutes", None, id="voice"),
+    pytest.param("pings_panel_minutes", None, id="pings"),
+    pytest.param("honeypot_panel_minutes", None, id="honeypot"),
+    pytest.param("settings_panel_minutes", None, id="settings"),
+    pytest.param("automod_panel_minutes", None, id="automod"),
+    pytest.param("chat_panel_minutes", "/chat panel", id="chat"),
+    pytest.param("raidtrain_panel_minutes", "/raidtrain panel", id="raidtrain"),
+    pytest.param("rolemenu_panel_minutes", "/rolemenu panel", id="rolemenu"),
+    pytest.param("birthday_panel_minutes", None, id="birthday"),
+    pytest.param("event_panel_minutes", None, id="event"),
+    pytest.param("golive_panel_minutes", "/golive panel", id="golive"),
+    pytest.param("modmail_panel_minutes", None, id="modmail"),
+    pytest.param("applications_panel_minutes", "/apply panel", id="applications"),
+]
+
+
+@pytest.mark.parametrize(("key", "command"), PANEL_MINUTES_KEYS)
+async def test_a_panel_stays_up_ten_minutes_by_default_so_discords_window_is_still_open(
+    store, key, command
+):
+    """Ten, not fifteen: the gone-quiet footer needs Discord's 15-minute interaction window."""
+    from black_bloc.settings_panel import reachable_on_the_panel
+
+    assert store.get(7, key) == 10
+    assert "15" in KEY_HELP[key]
+    assert command is None or command in KEY_HELP[key]
+    assert KEY_TYPES[key] == "int"
+    assert reachable_on_the_panel(key)
+    await store.set(7, key, 25)
+    assert store.get(7, key) == 25
+    with pytest.raises(SettingError):
+        coerce_value(key, -1)
+    with pytest.raises(SettingError):
+        coerce_value(key, "15")
+    assert parse_value(key, "45") == 45
+
+
+def test_the_chat_panel_key_is_picked_up_by_the_prefix_scan_with_no_second_edit():
+    from black_bloc.cogs.content.chat import CHAT_KEYS
+
+    assert "chat_panel_minutes" in CHAT_KEYS
+
+
+def test_the_event_panel_keys_are_filed_under_events():
+    assert namespace_of("event_panel_minutes") == "events"
+    assert namespace_of("event_panel_own_list") == "events"
+
+
+BOOL_DECISION_KEYS = [
+    pytest.param("settings_core_keys_admin_only", True, ("Manage Server",), id="F-S3-admin-only"),
+    pytest.param("automod_arm_needs_confirm", True, (), id="F-A1-arm-confirm"),
+    pytest.param("request_post_buttons", True, ("forum post",), id="post-move-buttons"),
+    pytest.param("request_forum_adopts_posts", True, ("by hand",), id="forum-adopts-posts"),
+    pytest.param("youtube_unlink_dms_them", True, (), id="unlink-dms"),
+    pytest.param("poll_creator_may_end", True, ("staff can",), id="I-2-creator-may-end"),
+    pytest.param(
+        "poll_drafts", True, ("Save for later", "kept, not deleted"), id="poll-drafts"
+    ),
+    pytest.param("logs_important_only", False, ("Show everything",), id="logs-everything"),
+    pytest.param(
+        "request_panel_own_list", False, ("staff always see them",), id="request-own-list"
+    ),
+    pytest.param("event_panel_own_list", False, ("staff always",), id="event-own-list"),
+    pytest.param(
+        "birthday_panel_next_for_members", True, ("staff always see them",), id="F-B1-next"
+    ),
+    pytest.param("birthday_panel_lookup", True, ("staff always can",), id="F-B1-lookup"),
+    pytest.param("hide_commands_when_off", True, ("shadow does not",), id="hide-when-off"),
+    pytest.param(
+        "applications_roster_shows_left", True, ("marked as gone",), id="roster-shows-left"
+    ),
+    pytest.param("applications_panel_own_list", True, ("staff-only",), id="apply-own-list"),
+]
+
+
+@pytest.mark.parametrize(("key", "default", "help_says"), BOOL_DECISION_KEYS)
+async def test_a_decided_switch_is_a_bool_key_both_doors_reach_until_a_lead_says_otherwise(
+    store, key, default, help_says
+):
+    """Checklist 33: each is an owner decision shipped as today's behaviour, never a constant."""
+    from black_bloc.settings_panel import reachable_on_the_panel
+
+    assert store.get(7, key) is default
+    assert KEY_TYPES[key] == "bool"
+    assert KEY_HELP.get(key)
+    assert all(phrase in KEY_HELP[key] for phrase in help_says)
+    assert reachable_on_the_panel(key)
+    await store.set(7, key, not default)
+    assert store.get(7, key) is (not default)
+    assert coerce_value(key, default) is default
+    with pytest.raises(SettingError):
+        coerce_value(key, "true")
+    assert parse_value(key, "true") is True
+    assert parse_value(key, "off") is False
+
+
+@pytest.mark.parametrize("key", ["pings_mode", "raidtrain_mode"])
+def test_a_feature_mode_is_read_as_a_feature_switch_on_the_health_page(key):
+    assert key in mode_keys()
+

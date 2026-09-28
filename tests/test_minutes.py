@@ -208,20 +208,20 @@ async def test_start_refuses_without_a_speech_to_text_key_and_names_it(bot, staf
     assert "GROQ_API_KEY" in found.message
 
 
-async def test_start_refuses_without_the_receive_extension_and_never_pretends(
-    bot, staff, monkeypatch
+@pytest.mark.parametrize(
+    ("probe", "code", "named"),
+    [
+        ("extension_available", "no_extension", "discord-ext-voice-recv"),
+        ("opus_available", "no_opus", "libopus0"),
+    ],
+)
+async def test_start_refuses_without_what_the_host_needs_and_never_pretends(
+    bot, staff, monkeypatch, probe, code, named
 ):
-    monkeypatch.setattr(mins, "extension_available", lambda: False)
+    monkeypatch.setattr(mins, probe, lambda: False)
     found = await mins.may_start(bot, bot.guild, staff, FakeVoice([staff]))
-    assert not found.ok and found.code == "no_extension"
-    assert "discord-ext-voice-recv" in found.message
-
-
-async def test_start_refuses_without_opus(bot, staff, monkeypatch):
-    monkeypatch.setattr(mins, "opus_available", lambda: False)
-    found = await mins.may_start(bot, bot.guild, staff, FakeVoice([staff]))
-    assert not found.ok and found.code == "no_opus"
-    assert "libopus0" in found.message
+    assert not found.ok and found.code == code
+    assert named in found.message
 
 
 async def test_start_refuses_while_a_meeting_is_already_running_and_says_where(bot, staff):
@@ -404,13 +404,12 @@ async def test_test_mode_lands_the_notes_in_the_guarded_channel_and_says_where_t
     assert "test mode" in found.message
 
 
-async def test_landing_leaves_a_channel_the_guard_allows_exactly_where_it_was(bot):
-    bot.guard = FakeGuard({NOTES_CHANNEL})
-    where, note = mins.landing(bot, bot.guild, NOTES_CHANNEL)
-    assert where == NOTES_CHANNEL and note == ""
-
-
-async def test_with_no_guard_at_all_a_message_goes_to_the_channel_it_named(bot):
+@pytest.mark.parametrize(
+    "guard",
+    [pytest.param({NOTES_CHANNEL}, id="guard-allows-it"), pytest.param(None, id="no-guard")],
+)
+async def test_landing_leaves_a_channel_nothing_forbids_exactly_where_it_was(bot, guard):
+    bot.guard = None if guard is None else FakeGuard(guard)
     where, note = mins.landing(bot, bot.guild, NOTES_CHANNEL)
     assert where == NOTES_CHANNEL and note == ""
 

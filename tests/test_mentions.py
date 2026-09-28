@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from black_bloc.mentions import named
 
 KNUCK_UP = 1076003845232148580
@@ -26,29 +28,19 @@ class Guild:
         return self.members.get(found_id)
 
 
-def test_a_channel_mention_reads_as_the_typed_channel_name():
-    assert named(Guild(), f"what goes in <#{KNUCK_UP}>") == "what goes in #knuck-up"
-
-
-def test_a_role_mention_reads_as_the_role_name():
-    assert named(Guild(), "who has <@&22>") == "who has @Tech Support"
-
-
-def test_both_member_forms_read_as_the_display_name():
-    assert named(Guild(), "ask <@33> or <@!33>") == "ask Raelcun or Raelcun"
-
-
-def test_a_member_with_a_nickname_gives_the_nickname():
-    assert named(Guild(), "is <@44> around") == "is Big Shane around"
-
-
-def test_unknown_ids_are_left_exactly_as_they_were():
-    text = "<#9> <@&9> <@9> <@!9>"
-    assert named(Guild(), text) == text
-
-
-def test_black_blocs_own_mention_is_left_for_spoken_to_take_out():
-    assert named(Guild(), "<@1> sup") == "<@1> sup"
+@pytest.mark.parametrize(
+    ("text", "wanted"),
+    [
+        pytest.param(f"what goes in <#{KNUCK_UP}>", "what goes in #knuck-up", id="channel"),
+        pytest.param("who has <@&22>", "who has @Tech Support", id="role"),
+        pytest.param("ask <@33> or <@!33>", "ask Raelcun or Raelcun", id="both-member-forms"),
+        pytest.param("is <@44> around", "is Big Shane around", id="nickname"),
+        pytest.param("<#9> <@&9> <@9> <@!9>", "<#9> <@&9> <@9> <@!9>", id="unknown-ids-kept"),
+        pytest.param("<@1> sup", "<@1> sup", id="own-mention-left-for-spoken"),
+    ],
+)
+def test_a_mention_reads_as_the_name_a_person_would_type(text, wanted):
+    assert named(Guild(), text) == wanted
 
 
 def test_no_guild_changes_nothing():

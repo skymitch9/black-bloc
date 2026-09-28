@@ -179,7 +179,7 @@ def test_the_note_names_the_channel_the_real_one_is_aimed_at():
     bot = bot_with(guard=GUARD_CHANNEL, home=HOME)
     bot.store.values[shadow.NOTE_KEY] = shadow.NOTE_DEFAULT
 
-    assert shadow.note_line(bot, GUILD, "<#5>") == "Rehearsal — this is where it would go: <#5>"
+    assert shadow.note_line(bot, GUILD, "<#5>") == shadow.NOTE_DEFAULT.replace("{channel}", "<#5>")
 
 
 def test_a_blank_note_is_no_line_at_all():
@@ -280,7 +280,7 @@ def test_the_note_line_is_unchanged_by_a_feature_home():
     bot = bot_with_feature_home(home=HOME)
     bot.store.values[shadow.NOTE_KEY] = shadow.NOTE_DEFAULT
 
-    assert shadow.note_line(bot, GUILD, "<#5>") == "Rehearsal — this is where it would go: <#5>"
+    assert shadow.note_line(bot, GUILD, "<#5>") == shadow.NOTE_DEFAULT.replace("{channel}", "<#5>")
 
 
 def test_the_key_is_the_feature_word_and_a_fixed_tail():

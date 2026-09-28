@@ -63,29 +63,21 @@ def test_typed_options_are_split_on_pipes_and_blanks_are_dropped():
     assert polls.split_options(None) == []
 
 
-def test_a_poll_with_no_question_is_refused_in_words():
-    said = polls.validate("   ", ["Yes", "No"], 24)
-    assert said is not None and "needs a question" in said
-
-
-def test_a_question_longer_than_discord_allows_names_both_numbers():
-    said = polls.validate("q" * 301, ["Yes", "No"], 24)
-    assert said is not None and "301" in said and str(polls.QUESTION_LIMIT) in said
-
-
-def test_one_option_is_not_a_poll():
-    said = polls.validate("Pizza?", ["Pizza"], 24)
-    assert said is not None and "at least 2" in said
-
-
-def test_an_option_longer_than_the_answer_limit_names_the_option():
-    said = polls.validate("Q", ["fine", "x" * 56], 24)
-    assert said is not None and str(polls.LABEL_LIMIT) in said and "x" in said
-
-
-def test_two_options_that_read_the_same_are_refused_so_votes_do_not_split():
-    said = polls.validate("Q", ["Pizza", "pizza"], 24)
-    assert said is not None and "twice" in said
+@pytest.mark.parametrize(
+    ("question", "options", "words"),
+    [
+        pytest.param("   ", ["Yes", "No"], ["needs a question"], id="no-question"),
+        pytest.param(
+            "q" * 301, ["Yes", "No"], ["301", str(polls.QUESTION_LIMIT)], id="question-too-long"
+        ),
+        pytest.param("Pizza?", ["Pizza"], ["at least 2"], id="one-option"),
+        pytest.param("Q", ["fine", "x" * 56], [str(polls.LABEL_LIMIT), "x"], id="option-too-long"),
+        pytest.param("Q", ["Pizza", "pizza"], ["twice"], id="same-option-twice-splits-votes"),
+    ],
+)
+def test_a_poll_discord_cannot_carry_is_refused_in_words_that_name_why(question, options, words):
+    said = polls.validate(question, options, 24)
+    assert said is not None and all(word in said for word in words)
 
 
 def test_a_length_discord_cannot_express_is_refused_with_the_range():
@@ -767,9 +759,8 @@ def test_the_shadow_note_names_the_channel_the_poll_would_have_gone_to():
     guild = ShadowGuild({555: SimpleNamespace(name="announcements")})
     where = polls.where_words(guild, 555)
 
-    assert polls.shadow_note(ShadowStore(), 7, where) == (
-        "Posted here because polls are in **shadow** — it would have gone to #announcements."
-    )
+    assert where == "#announcements"
+    assert polls.shadow_note(ShadowStore(), 7, where) == polls.SHADOW_NOTE.format(channel=where)
 
 
 def test_staff_may_write_their_own_shadow_note_and_it_still_takes_the_channel():
@@ -780,19 +771,17 @@ def test_staff_may_write_their_own_shadow_note_and_it_still_takes_the_channel():
     )
 
 
-def test_a_shadow_note_that_names_something_else_falls_back_to_the_default():
-    """Checklist 17: staff-editable text never takes a poll down with it."""
-    store = ShadowStore(poll_shadow_note="It was bound for {nonsense}.")
+@pytest.mark.parametrize(
+    "written",
+    [
+        pytest.param("It was bound for {nonsense}.", id="checklist-17-bad-placeholder"),
+        pytest.param("   ", id="blank-is-not-an-empty-line"),
+    ],
+)
+def test_a_shadow_note_that_cannot_be_used_falls_back_to_the_default(written):
+    store = ShadowStore(poll_shadow_note=written)
 
-    assert polls.shadow_note(store, 7, "#announcements") == polls.SHADOW_NOTE.format(
-        channel="#announcements"
-    )
-
-
-def test_a_blank_shadow_note_is_the_default_rather_than_an_empty_line():
-    assert polls.shadow_note(ShadowStore(poll_shadow_note="   "), 7, "#here") == (
-        polls.SHADOW_NOTE.format(channel="#here")
-    )
+    assert polls.shadow_note(store, 7, "#here") == polls.SHADOW_NOTE.format(channel="#here")
 
 
 def test_the_shadow_line_sits_above_the_usual_open_line_and_never_replaces_it():

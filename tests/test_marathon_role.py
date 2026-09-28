@@ -1,9 +1,14 @@
 from types import SimpleNamespace
 
 import discord
+import pytest
 
 from black_bloc import marathon_role as mr
-from black_bloc.settings_store import BUTTON_BLOCK_DEFAULTS
+from black_bloc.settings_store import (
+    BUTTON_BLOCK_DEFAULTS,
+    MARATHON_BLOCK_LABEL,
+    MARATHON_BLOCK_TITLE,
+)
 
 GUILD = 7
 
@@ -46,11 +51,13 @@ def test_a_role_gone_from_the_server_is_not_usable():
     assert mr.usable_role(Store(marathon_role_id=99), a_guild(a_role())) == (None, mr.GONE)
 
 
-def test_a_role_with_any_staff_permission_is_never_handed_out():
-    for perms in ({"administrator": True}, {"ban_members": True}, {"manage_roles": True},
-                  {"mention_everyone": True}, {"moderate_members": True}):
-        role = a_role(**perms)
-        assert mr.usable_role(Store(marathon_role_id=55), a_guild(role)) == (None, mr.UNSAFE)
+@pytest.mark.parametrize(
+    "perm",
+    ["administrator", "ban_members", "manage_roles", "mention_everyone", "moderate_members"],
+)
+def test_a_role_with_any_staff_permission_is_never_handed_out(perm):
+    role = a_role(**{perm: True})
+    assert mr.usable_role(Store(marathon_role_id=55), a_guild(role)) == (None, mr.UNSAFE)
 
 
 def test_a_managed_role_and_everyone_are_never_handed_out():
@@ -69,8 +76,9 @@ def test_the_block_is_drawn_even_with_no_role_so_the_press_can_say_why():
 def test_the_block_says_its_shipped_words_and_a_toggle_label():
     look = mr.block_look(Store(), GUILD)
 
-    assert look.title == "The Marathon role"
-    assert look.label == "Get or drop the Marathon role"
+    assert look.title == BUTTON_BLOCK_DEFAULTS[MARATHON_BLOCK_TITLE]
+    assert look.label == BUTTON_BLOCK_DEFAULTS[MARATHON_BLOCK_LABEL]
+    assert look.label != look.title
 
 
 def test_each_answer_names_the_role_and_staff_can_reword_it():

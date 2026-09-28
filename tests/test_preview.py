@@ -8,7 +8,15 @@ from black_bloc import frontdoor as door
 from black_bloc import golive as gl
 from black_bloc import preview
 from black_bloc.config import load_settings
-from black_bloc.settings_store import SettingsStore
+from black_bloc.link_buttons import SAMPLE_ROWS
+from black_bloc.settings_store import (
+    BLOCKS_LIVE_DEFAULTS,
+    BUTTON_BLOCK_DEFAULTS,
+    GOLIVE_BLOCK_EMPTY,
+    MARATHON_BLOCK_TITLE,
+    POSTS_BLOCK_LINKS_TITLE,
+    SettingsStore,
+)
 
 
 def without_stamp(embed: dict) -> dict:
@@ -273,18 +281,23 @@ def test_an_unknown_block_in_the_sample_draws_nothing_rather_than_failing(bot, g
 # --- the four one-button blocks (blocks-buttons) ------------------------------------------------
 
 
-def test_each_button_block_s_editor_draws_one_card_and_one_button_from_its_draft(bot, guild):
-    for kind, label_key in (
+@pytest.mark.parametrize(
+    ("kind", "label_key"),
+    [
         ("marathonrole", "marathon_block_label"),
         ("pingsfollow", "pings_block_label"),
         ("birthday", "birthday_block_label"),
         ("proposeevent", "events_block_label"),
-    ):
-        found = preview.render(bot, guild, f"block_{kind}", {label_key: "Press me"}).to_dict()
+    ],
+)
+def test_each_button_block_s_editor_draws_one_card_and_one_button_from_its_draft(
+    bot, guild, kind, label_key
+):
+    found = preview.render(bot, guild, f"block_{kind}", {label_key: "Press me"}).to_dict()
 
-        assert len(found["embeds"]) == 1 and found["embeds"][0]["title"]
-        assert [one["label"] for one in found["components"][0]] == ["Press me"]
-        assert found["components"][0][0]["style"] == "primary"
+    assert len(found["embeds"]) == 1 and found["embeds"][0]["title"]
+    assert [one["label"] for one in found["components"][0]] == ["Press me"]
+    assert found["components"][0][0]["style"] == "primary"
 
 
 def test_the_post_preview_draws_a_button_block_with_its_own_renderer(bot, guild):
@@ -311,7 +324,7 @@ def test_a_button_block_whose_feature_is_off_is_drawn_only_when_asked_for_always
 def test_the_marathon_role_block_is_drawn_with_no_role_picked(bot, guild):
     found = preview.render(bot, guild, "post", None, {"body": "", "blocks": "marathonrole"})
 
-    assert found.embeds[0]["title"] == "The Marathon role"
+    assert found.embeds[0]["title"] == BUTTON_BLOCK_DEFAULTS[MARATHON_BLOCK_TITLE]
 
 
 # --- blocks-live: the three new block kinds ----------------------------------------------------
@@ -323,7 +336,7 @@ def test_the_live_block_preview_draws_sample_streams_and_its_empty_line(bot, gui
 
     assert some.embeds[0]["title"] == "On air"
     assert "[late night runs](https://www.twitch.tv/casey)" in some.embeds[0]["description"]
-    assert none.embeds[0]["description"].startswith("Nobody is live")
+    assert none.embeds[0]["description"] == BLOCKS_LIVE_DEFAULTS[GOLIVE_BLOCK_EMPTY]
 
 
 def test_the_upcoming_block_preview_draws_discord_timestamps(bot, guild):
@@ -341,7 +354,7 @@ def test_the_link_editor_draws_its_draft_rows_and_the_card_tick(bot, guild):
     found = preview.render(bot, guild, "block_links", draft)
     bare = preview.render(bot, guild, "block_links", draft, {"card": "off"})
 
-    assert found.embeds[0]["title"] == "Links"
+    assert found.embeds[0]["title"] == BLOCKS_LIVE_DEFAULTS[POSTS_BLOCK_LINKS_TITLE]
     assert [(one["label"], one["url"], one["style"]) for one in found.components[0]] == [
         ("Site", "https://example.org", "link")
     ]
@@ -351,7 +364,7 @@ def test_the_link_editor_draws_its_draft_rows_and_the_card_tick(bot, guild):
 def test_the_blocks_section_draws_sample_links_until_staff_set_their_own(bot, guild):
     found = preview.render(bot, guild, "post", None, {"blocks": "links", "always": "true"})
 
-    assert [one["label"] for one in found.components[0]] == ["Our website", "Schedule"]
+    assert [one["label"] for one in found.components[0]] == [label for label, _ in SAMPLE_ROWS]
 
 
 def test_each_new_block_kind_draws_through_its_own_feature(bot, guild):

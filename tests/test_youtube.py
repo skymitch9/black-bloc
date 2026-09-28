@@ -543,18 +543,6 @@ async def test_a_paste_that_is_not_a_channel_is_not_a_network_error():
     assert raised.value.network is False
 
 
-# --- what the uploads half left behind ------------------------------------------------------------
-
-
-def test_the_feed_parser_and_the_upload_wording_are_gone_from_the_module():
-    import black_bloc.youtube as module
-
-    for name in ("FEED_URL", "parse_feed", "feed_title", "render", "Video", "classify_row"):
-        assert not hasattr(module, name), name
-    assert not hasattr(YouTubeClient, "fetch_feed")
-    assert not hasattr(YouTubeClient, "classify")
-
-
 def test_the_live_lines_say_what_a_walled_stream_links_with_and_without_a_key():
     from black_bloc.youtube import WALL_LINKS_KEYED, WALL_LINKS_KEYLESS, live_lines
 

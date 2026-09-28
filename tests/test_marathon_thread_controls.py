@@ -48,10 +48,6 @@ def test_each_button_carries_the_move_it_makes():
     assert mtc.controls("none", ms.DARK, True)[4][1:3] == ("on", "off")
 
 
-def test_the_ping_custom_id_matches_the_template():
-    found = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, "ping", "on"))
-    assert found and (found["action"], found["to"]) == ("ping", "on")
-    assert mtc.PING in mtc.ACTIONS
 
 
 @pytest.mark.parametrize(
@@ -72,24 +68,18 @@ def test_the_spotlight_button_reads_the_row_state(state, word, to, disabled):
     assert (spot.word, spot.to, spot.disabled) == (word, to, disabled)
 
 
-def test_a_cancel_custom_id_matches_the_template():
-    found = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, "spotlight", "cancel"))
-    assert found and found["to"] == "cancel"
+@pytest.mark.parametrize(
+    ("action", "to"),
+    [("spotlight", "off"), ("spotlight", "cancel"), ("highlight", "on"), ("ping", "on")],
+)
+def test_the_custom_id_matches_the_template(action, to):
+    assert action in mtc.ACTIONS
+    found = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, action, to))
+    assert found and (found["marathon_id"], found["action"], found["to"]) == ("7", action, to)
 
 
-def test_the_custom_id_matches_the_template():
-    found = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, "spotlight", "off"))
-    assert found and (found["marathon_id"], found["action"], found["to"]) == (
-        "7",
-        "spotlight",
-        "off",
-    )
+def test_the_custom_id_fits_discords_hundred_characters():
     assert len(mtc.custom_id(10**18, "spotlight", "off")) <= 100
-
-
-def test_the_highlight_custom_id_matches_the_template():
-    found = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, "highlight", "on"))
-    assert found and (found["action"], found["to"]) == ("highlight", "on")
 
 
 def test_a_label_is_clamped_and_never_empty():

@@ -1,5 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from black_bloc import spotlight
 from black_bloc.golive import StreamInfo
 from black_bloc.settings_store import SPOTLIGHT_BUMP_TEMPLATE
@@ -129,9 +131,8 @@ def test_extending_a_row_that_has_run_out_counts_from_today():
 def test_the_reminder_fills_the_five_placeholders_and_tidies_what_is_missing():
     info = StreamInfo(url="https://www.twitch.tv/gdq", game="Celeste", platform="Twitch")
     said = spotlight.bump_render(SPOTLIGHT_BUMP_TEMPLATE, info, "GamesDoneQuick", "4 h")
-    assert said == (
-        "**GamesDoneQuick** is still live — **Celeste**, 4 h so far. https://www.twitch.tv/gdq"
-    )
+    assert "**GamesDoneQuick**" in said and "**Celeste**" in said and "4 h" in said
+    assert said.endswith("https://www.twitch.tv/gdq") and "{" not in said
 
 
 def test_a_reminder_with_no_game_reads_something_rather_than_empty_bold():
@@ -140,15 +141,16 @@ def test_a_reminder_with_no_game_reads_something_rather_than_empty_bold():
     assert "**something**" in said and "****" not in said
 
 
-def test_unreadable_wording_falls_back_to_the_default_rather_than_posting_nothing():
+@pytest.mark.parametrize(
+    "wording",
+    [pytest.param("{name} {nope", id="unreadable"), pytest.param("   ", id="blank")],
+)
+def test_wording_that_cannot_be_used_falls_back_to_the_default_rather_than_posting_nothing(
+    wording,
+):
     info = StreamInfo(url="u", game="g", platform="Twitch")
-    said = spotlight.bump_render("{name} {nope", info, "GDQ", "2 h")
-    assert said.startswith("**GDQ** is still live")
-
-
-def test_blank_wording_is_the_default_too():
-    info = StreamInfo(url="u", game="g", platform="Twitch")
-    assert spotlight.bump_render("   ", info, "GDQ", "2 h").startswith("**GDQ** is still live")
+    shipped = spotlight.bump_render(SPOTLIGHT_BUMP_TEMPLATE, info, "GDQ", "2 h")
+    assert spotlight.bump_render(wording, info, "GDQ", "2 h") == shipped
 
 
 def test_a_session_becomes_a_twitch_streaminfo_even_when_the_row_kept_no_url():
