@@ -54,3 +54,5 @@ jobs:
         run: node site/mock/discordmock.test.mjs
       - name: Marathon words
         run: node site/mock/marathon-words.test.mjs
+      - name: Post toolbar
+        run: node site/mock/mdformat.test.mjs
