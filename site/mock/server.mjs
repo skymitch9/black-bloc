@@ -6835,6 +6835,7 @@ function marathonPairingRow(one) {
     runner_name: one.runner_name,
     user_id: one.user_id,
     member_name: memberName(one.user_id),
+    twitch_login: one.twitch_login || null,
   };
 }
 
@@ -6885,6 +6886,8 @@ function marathonRow(row) {
     spotlight_mode: row.spotlight_mode === 'off' ? 'off' : 'follow',
     ping_role: Boolean(row.ping_role),
     public_highlight: Boolean(row.public_highlight),
+    scan_hosts: marathonSwitch(row, 'scan_hosts'),
+    host_events: marathonSwitch(row, 'host_events'),
     ...marathonTracking(row),
   };
 }
@@ -7021,6 +7024,100 @@ function marathonSetPingRole(row, given) {
   return marathonSaid(wanted ? 'marathon_ping_role_on_said' : 'marathon_ping_role_off_said', { marathon: row.name });
 }
 
+// The bot's cogs/content/marathon_hosts: Scan hosts and BaF host events, each on, off or following its setting.
+const MARATHON_SWITCH_DEFAULTS = { scan_hosts: 'marathon_scan_hosts_default', host_events: 'marathon_host_events_default' };
+const MARATHON_SWITCH_WHAT = { scan_hosts: 'Scan hosts', host_events: 'BaF host events' };
+const MARATHON_SWITCH_SAID = {
+  scan_hosts: ['marathon_scan_hosts_on_said', 'marathon_scan_hosts_off_said'],
+  host_events: ['marathon_host_events_on_said', 'marathon_host_events_off_said'],
+};
+
+function marathonSwitch(row, which) {
+  const fallback = Boolean(state.settings.get(MARATHON_SWITCH_DEFAULTS[which]));
+  const own = row[which] === null || row[which] === undefined ? null : Boolean(row[which]);
+  return { own, on: own === null ? fallback : own, default: fallback };
+}
+
+function marathonSetSwitch(row, which, given) {
+  const word = given === null || given === undefined ? '' : String(given).trim().toLowerCase();
+  let wanted;
+  if (['true', 'on', 'yes', '1'].includes(word)) wanted = true;
+  else if (['false', 'off', 'no', '0'].includes(word)) wanted = false;
+  else if (['', 'follow', 'default', 'setting', 'null', 'none'].includes(word)) wanted = null;
+  else throw new Refused(422, 'bad_switch', `Say on, off or follow for **${MARATHON_SWITCH_WHAT[which]}**, so nothing was changed.`);
+  const was = marathonSwitch(row, which);
+  row[which] = wanted;
+  if (which === 'scan_hosts') {
+    marathonRematch(row);
+    marathonSyncRuns(row);
+  } else {
+    marathonSyncHostEvents(row);
+  }
+  const after = marathonSwitch(row, which);
+  logAction(`web.marathon.${which}_set`, { details: { marathon_id: row.id, name: row.name, from: was.own, to: after.own, on: after.on, via: 'website' } });
+  return marathonSaid(MARATHON_SWITCH_SAID[which][after.on ? 0 : 1], { marathon: row.name });
+}
+
+// The bot's cogs/content/marathon_hosts.sync_host_events: one event per BaF host over their hosted runs.
+function marathonHostSpans(row) {
+  const spans = new Map();
+  for (const run of marathonRunsOf(row.id).filter((one) => one.state !== 'dropped')) {
+    for (const one of run.people.filter((person) => person.part === 'host' && person.user_id)) {
+      const key = String(one.user_id);
+      if (!spans.has(key)) spans.set(key, { user_id: key, name: one.name, login: one.login || null, runs: [] });
+      if (!spans.get(key).runs.includes(run)) spans.get(key).runs.push(run);
+    }
+  }
+  return [...spans.values()].map((span) => {
+    const starts = span.runs.map((one) => one.scheduled_at).filter(Boolean).sort();
+    const ends = span.runs.map((one) => one.ends_at || one.scheduled_at).filter(Boolean).sort();
+    return { ...span, starts: starts[0] || null, ends: ends[ends.length - 1] || null };
+  });
+}
+
+function marathonHostWords(key, span, row) {
+  const games = [...new Set(span.runs.map((one) => one.game))].join(', ');
+  return marathonSaid(key, { member: memberName(span.user_id) || span.name, marathon: row.name, games, runs: String(span.runs.length) });
+}
+
+function marathonSyncHostEvents(row) {
+  const ids = { ...(row.host_event_ids || {}) };
+  const wanted = row.active && marathonSwitch(row, 'host_events').on && marathonSwitch(row, 'scan_hosts').on;
+  const spans = new Map(marathonHostSpans(row).map((one) => [one.user_id, one]));
+  const cancelling = Boolean(state.settings.get('marathon_run_event_cancel_on_leave'));
+  for (const [userId, eventId] of Object.entries(ids)) {
+    const event = state.events.find((one) => one.id === eventId);
+    const span = spans.get(userId);
+    if (!event) {
+      delete ids[userId];
+      continue;
+    }
+    if (span && wanted) {
+      event.starts_at = span.starts;
+      event.ends_at = span.ends;
+      continue;
+    }
+    delete ids[userId];
+    if ((!span || cancelling) && MARATHON_KEPT_IN_STEP.includes(event.status)) {
+      event.status = 'cancelled';
+      logAction('marathon.host_event_cancelled', { target_id: userId, details: { marathon_id: row.id, member_id: userId, event_id: eventId, reason: span ? 'switched_off' : 'not_host' } });
+    }
+  }
+  if (wanted) {
+    for (const span of spans.values()) {
+      if (ids[span.user_id] || !span.starts || new Date(span.ends).getTime() <= Date.now()) continue;
+      const id = state.events.reduce((top, one) => Math.max(top, one.id), 0) + 1;
+      const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
+      const review = state.settings.get('marathon_run_events_reviewed') || state.settings.get('marathon_mode') !== 'on';
+      const login = channel ? channel.twitch_login : span.login;
+      state.events.unshift({ id, requester_id: STAFF.id, title: marathonHostWords('marathon_host_event_title_template', span, row), description: marathonHostWords('marathon_host_event_description_template', span, row), location: login ? `https://twitch.tv/${login}` : row.schedule_url, where_kind: 'other', where_channel_id: null, starts_at: span.starts, ends_at: span.ends, status: review ? 'pending' : 'approved', created_at: now(), decided_by: null, decided_at: review ? null : now(), deny_reason: null, review_channel_id: review ? '800000000000000005' : null });
+      ids[span.user_id] = id;
+      logAction('marathon.host_event_made', { target_id: span.user_id, details: { marathon_id: row.id, member_id: span.user_id, event_id: id, reviewed: Boolean(review), runs: span.runs.map((one) => one.id) } });
+    }
+  }
+  row.host_event_ids = ids;
+}
+
 // The bot's cogs/content/marathon_public.set_public_highlight: the marathon's auto-highlight switch.
 function marathonSetPublicHighlight(row, given) {
   const word = typeof given === 'boolean' ? String(given) : String(given ?? '').trim().toLowerCase();
@@ -7088,12 +7185,13 @@ function marathonSyncRuns(row) {
     }
     const ahead = new Date(run.ends_at || run.scheduled_at || 0).getTime() > Date.now();
     if (run.event_id === null || run.event_id === undefined) {
-      if (row.active && marathonWantsRunEvents(row) && marathonOurs(run) && ['upcoming', 'live'].includes(run.state) && ahead) {
+      if (row.active && marathonWantsRunEvents(row) && run.people.some((one) => one.user_id && one.part !== 'host') && ['upcoming', 'live'].includes(run.state) && ahead) {
         marathonRunEventMake(row, run);
         made += 1;
       }
     }
   }
+  marathonSyncHostEvents(row);
   return made;
 }
 
@@ -7247,17 +7345,22 @@ function marathonSpotlightOf(row) {
 function marathonRematch(row) {
   const links = new Map((state.golive.links || []).map((one) => [String(one.twitch_login).toLowerCase(), one.user_id]));
   const hosts = Boolean(state.settings.get('marathon_match_hosts'));
-  const scan = Boolean(state.settings.get('marathon_scan_hosts_default'));
+  const scan = marathonSwitch(row, 'scan_hosts').on;
   for (const run of marathonRunsOf(row.id)) {
     run.people = run.people.map((one) => {
       let userId = null;
+      const key = one.name.trim().toLowerCase();
+      const pairing = state.marathonPeople.find((p) => p.runner_name === key && p.marathon_id === row.id)
+        || state.marathonPeople.find((p) => p.runner_name === key && p.marathon_id === null);
+      const sheet = one.sheet_login || one.login || null;
+      const fixed = pairing && pairing.twitch_login ? pairing.twitch_login : null;
+      const login = fixed || sheet;
       if (one.part === 'runner' || (hosts && (one.part !== 'host' || scan))) {
-        const key = one.name.trim().toLowerCase();
-        const pairing = state.marathonPeople.find((p) => p.runner_name === key && p.marathon_id === row.id)
-          || state.marathonPeople.find((p) => p.runner_name === key && p.marathon_id === null);
-        userId = pairing ? pairing.user_id : (one.login ? links.get(String(one.login).toLowerCase()) || null : null);
+        userId = pairing ? pairing.user_id : (login ? links.get(String(login).toLowerCase()) || null : null);
       }
-      return { ...one, user_id: userId };
+      const rest = { ...one };
+      delete rest.sheet_login;
+      return fixed && fixed !== sheet ? { ...rest, login, sheet_login: sheet, user_id: userId } : { ...rest, login, user_id: userId };
     });
   }
 }
@@ -8119,6 +8222,9 @@ route('PATCH', '/api/marathons/:marathon_id', async (context) => {
   if ('event_mode' in body) said.push(marathonSetMode(row, body.event_mode));
   if ('spotlight_mode' in body) said.push(marathonSetSpotlightMode(row, body.spotlight_mode));
   if ('ping_role' in body) said.push(marathonSetPingRole(row, body.ping_role));
+  for (const which of ['scan_hosts', 'host_events']) {
+    if (which in body) said.push(marathonSetSwitch(row, which, body[which]));
+  }
   if ('public_highlight' in body) said.push(marathonSetPublicHighlight(row, body.public_highlight));
   if ('dismiss_next' in body) {
     if (body.dismiss_next !== true) throw new Refused(422, 'bad_dismiss', 'Say true to dismiss the suggested next event, so nothing was changed.');
@@ -8160,6 +8266,14 @@ route('DELETE', '/api/marathons/:marathon_id', (context) => {
     logAction('web.marathon.event_cancelled', { details: { marathon_id: row.id, event_id: event.id, via: 'website' } });
   }
   for (const run of marathonRunsOf(row.id).filter((one) => one.event_id)) marathonRunEventCancel(row, run, 'marathon_removed');
+  for (const [userId, eventId] of Object.entries(row.host_event_ids || {})) {
+    const event = state.events.find((one) => one.id === eventId);
+    if (event && MARATHON_KEPT_IN_STEP.includes(event.status)) {
+      event.status = 'cancelled';
+      logAction('marathon.host_event_cancelled', { target_id: userId, details: { marathon_id: row.id, member_id: userId, event_id: eventId, reason: 'marathon_removed' } });
+    }
+  }
+  row.host_event_ids = {};
   marathonArchive(row, 'removed', STAFF.id);
   marathonFeedIgnore(row);
   return { removed: true, archived: true, id: row.id, message: marathonSaid('marathon_removed_said', { name: row.name }) };
@@ -8287,9 +8401,10 @@ function marathonPeopleOf(row) {
   for (const run of marathonRunsOf(row.id).filter((one) => one.state !== 'dropped')) {
     for (const person of run.people) {
       const key = person.user_id ? `member:${person.user_id}` : marathonKeyOf(person);
-      if (!found.has(key)) found.set(key, { key: marathonKeyOf(person), name: person.name, login: person.login || null, user_id: person.user_id || null, parts: [], runs: [] });
+      if (!found.has(key)) found.set(key, { key: marathonKeyOf(person), name: person.name, login: person.login || null, sheet_login: person.sheet_login || null, user_id: person.user_id || null, parts: [], runs: [] });
       const entry = found.get(key);
       if (!entry.login && person.login) entry.login = person.login;
+      if (!entry.sheet_login && person.sheet_login) entry.sheet_login = person.sheet_login;
       if (!entry.parts.includes(person.part)) entry.parts.push(person.part);
       entry.runs.push({ id: run.id, game: run.game, category: run.category, scheduled_at: run.scheduled_at, ends_at: run.ends_at, state: run.state, part: person.part, name: person.name });
     }
@@ -8365,7 +8480,7 @@ function marathonBoard(row) {
 function marathonEntryFor(row, given) {
   const wanted = String(given || '').split(/\s+/).filter(Boolean).join(' ').toLowerCase();
   const entries = marathonPeopleOf(row);
-  const found = entries.find((one) => String(one.login || '').toLowerCase() === wanted || one.key === wanted)
+  const found = entries.find((one) => [one.login, one.sheet_login].some((login) => String(login || '').toLowerCase() === wanted) || one.key === wanted)
     || entries.find((one) => one.runs.some((run) => String(run.name).toLowerCase() === wanted));
   if (!found) throw new Refused(404, 'no_such_person', `Nobody called **${String(given).slice(0, 40)}** is on **${row.name}**'s schedule, so nothing was changed.`);
   return found;
@@ -8391,12 +8506,15 @@ route('POST', '/api/marathons/:marathon_id/people/:person/spotlight', async (con
   const starts = Number.isFinite(first) ? first - lead : new Date(row.starts_at).getTime();
   const ends = Number.isFinite(last) ? last + slack : new Date(row.ends_at).getTime();
   if (ends <= Date.now()) throw new Refused(409, 'runs_over', `**${entry.name}**'s runs on **${row.name}** are over, so there is nothing to spotlight.`);
-  const note = String(state.settings.get('marathon_spotlight_note_template') || '{name} at {marathon}').replaceAll('{name}', entry.name).replaceAll('{marathon}', row.name);
+  const parts = runs.map((one) => one.part);
+  const hosting = parts.includes('host') && !parts.includes('runner');
+  const noteKey = hosting ? 'marathon_spotlight_host_note_template' : 'marathon_spotlight_note_template';
+  const note = String(state.settings.get(noteKey) || (hosting ? '{name} hosting {marathon}' : '{name} at {marathon}')).replaceAll('{name}', entry.name).replaceAll('{marathon}', row.name);
   const id = state.golive.spotlights.reduce((top, one) => Math.max(top, one.id), 0) + 1;
   state.golive.spotlights.push({ id, twitch_login: login, display_name: login, note, added_by: context.session.id, added_at: now(), starts_at: starts > Date.now() ? new Date(starts).toISOString() : null, expires_at: new Date(ends).toISOString(), bump_hours: null, pin: true, event_id: null, spotlight: true, announce: true, youtube_channel_id: null, youtube_handle: null, ping_mode: 'always' });
   state.marathonSpotlights.push({ id: state.marathonSpotlights.reduce((top, one) => Math.max(top, one.id), 0) + 1, marathon_id: row.id, login, spotlight_id: id, run_id: runId ? Number(runId) : null, added_by: context.session.id, added_at: now() });
   logAction('web.golive.spotlight_added', { details: { spotlight_id: id, login, via: 'website' } });
-  logAction('web.marathon.runner_spotlit', { target_id: entry.user_id, details: { marathon_id: row.id, name: entry.name, login, spotlight_id: id, run_id: runId ? Number(runId) : null, via: 'website' } });
+  logAction('web.marathon.runner_spotlit', { target_id: entry.user_id, details: { marathon_id: row.id, name: entry.name, login, spotlight_id: id, run_id: runId ? Number(runId) : null, hosting, via: 'website' } });
   return { ...marathonBoard(row), message: `**${entry.name}** is spotlit on the Go-live page as **twitch.tv/${login}** for their runs on **${row.name}**.` };
 });
 
@@ -8404,9 +8522,12 @@ route('DELETE', '/api/marathons/:marathon_id/people/:person/spotlight', (context
   requireStaff(context.session);
   const row = marathonOf(context.params.marathon_id);
   const given = decodeURIComponent(context.params.person).toLowerCase();
-  const entry = marathonPeopleOf(row).find((one) => String(one.login || '').toLowerCase() === given || one.key === given);
-  const login = String((entry && entry.login) || given).toLowerCase();
-  const mine = state.marathonSpotlights.find((one) => one.marathon_id === row.id && one.login === login);
+  const entry = marathonPeopleOf(row).find((one) => [one.login, one.sheet_login].some((found) => String(found || '').toLowerCase() === given) || one.key === given);
+  let login = String((entry && entry.login) || given).toLowerCase();
+  const sheet = String((entry && entry.sheet_login) || '').toLowerCase();
+  const remembered = (wanted) => state.marathonSpotlights.find((one) => one.marathon_id === row.id && one.login === wanted);
+  if (!remembered(login) && sheet && remembered(sheet)) login = sheet;
+  const mine = remembered(login);
   const name = entry ? entry.name : login;
   if (!mine) throw new Refused(404, 'not_spotlit', `**${name}** is not spotlit from **${row.name}**, so nothing was changed.`);
   const channel = state.golive.spotlights.find((one) => one.id === mine.spotlight_id && one.twitch_login === login);
@@ -8432,9 +8553,11 @@ route('POST', '/api/marathons/:marathon_id/people', async (context) => {
   if (!userId) throw new Refused(422, 'no_member', 'Pick the member that name is, so nothing was paired.');
   const key = name.toLowerCase();
   const scope = body.everywhere ? null : row.id;
+  const before = state.marathonPeople.find((one) => one.runner_name === key && one.marathon_id === scope);
+  const twitchLogin = 'twitch_login' in body ? marathonCleanTwitch(body.twitch_login) : (before ? before.twitch_login || null : null);
   state.marathonPeople = state.marathonPeople.filter((one) => !(one.runner_name === key && one.marathon_id === scope));
   const id = state.marathonPeople.reduce((top, one) => Math.max(top, one.id), 0) + 1;
-  state.marathonPeople.push({ id, marathon_id: scope, runner_name: key, user_id: userId, added_by: STAFF.id, added_at: new Date().toISOString() });
+  state.marathonPeople.push({ id, marathon_id: scope, runner_name: key, user_id: userId, added_by: STAFF.id, added_at: new Date().toISOString(), twitch_login: twitchLogin });
   marathonRematch(row);
   logAction('web.marathon.paired', { target_id: userId, details: { marathon_id: row.id, runner: name, member_id: userId, via: 'website' } });
   return { pairings: marathonPairingsFor(row), message: `**${name}** on ${scope === null ? 'every schedule' : 'this schedule'} is ${memberName(userId) || userId} from now on.` };
@@ -8449,6 +8572,38 @@ route('DELETE', '/api/marathons/:marathon_id/people/:pairing_id', (context) => {
   marathonRematch(row);
   logAction('web.marathon.unpaired', { target_id: pairing.user_id, details: { marathon_id: row.id, runner: pairing.runner_name, via: 'website' } });
   return { pairings: marathonPairingsFor(row), message: `**${pairing.runner_name}** is no longer paired — the automatic match decides again.` };
+});
+
+// The bot's black_bloc/marathon_hosts.clean_login: a Twitch name or link, a blank clears the fix.
+function marathonCleanTwitch(given) {
+  const text = String(given ?? '').trim();
+  if (!text) return null;
+  const found = /^(?:https?:\/\/)?(?:www\.|m\.)?twitch\.tv\/([^/?#\s]+)/i.exec(text);
+  const login = (found ? found[1] : text).toLowerCase().replace(/^@/, '');
+  if (!/^[a-z0-9_]{1,25}$/.test(login)) throw new Refused(422, 'bad_twitch', `**${text.slice(0, 60)}** is not a Twitch channel name (letters, digits and _, up to 25, or the channel's twitch.tv link), so nothing was changed.`);
+  return login;
+}
+
+// The bot's cogs/content/marathon.set_pairing_login: an everywhere fix reaches every active schedule.
+route('PATCH', '/api/marathons/:marathon_id/people/:pairing_id', async (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const body = (await context.body()) || {};
+  const pairing = state.marathonPeople.find((one) => String(one.id) === String(context.params.pairing_id) && (one.marathon_id === null || one.marathon_id === row.id));
+  if (!pairing) throw new Refused(404, 'no_such_pairing', 'That pairing is gone already, so nothing was changed.');
+  const login = marathonCleanTwitch(body.twitch_login);
+  const was = pairing.twitch_login || null;
+  if (was === login) return { ...marathonBoard(row), message: `**${pairing.runner_name}** already has that Twitch channel, so nothing was changed.` };
+  pairing.twitch_login = login;
+  for (const one of pairing.marathon_id === null ? state.marathons.filter((found) => found.active || found.id === row.id) : [row]) {
+    marathonRematch(one);
+    marathonSyncRuns(one);
+  }
+  logAction('web.marathon.pairing_login_set', { target_id: pairing.user_id, details: { marathon_id: row.id, pairing_id: pairing.id, runner: pairing.runner_name, member_id: pairing.user_id, everywhere: pairing.marathon_id === null, from: was, to: login, via: 'website' } });
+  const message = login
+    ? `**${pairing.runner_name}** is **twitch.tv/${login}** everywhere Black Bloc uses their channel now.`
+    : `**${pairing.runner_name}** is back to the schedule's Twitch channel.`;
+  return { ...marathonBoard(row), message };
 });
 
 function marathonRunOf(row, id) {

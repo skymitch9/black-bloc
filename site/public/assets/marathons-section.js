@@ -194,6 +194,23 @@ const HIGHLIGHT_HELP = 'On: the moment a BaF run goes live its highlight posts i
   + '(marathon_public_channel_id, blank = go-live) — the thread is staff-only, so this is what members see. '
   + 'Off (the default): only the Highlight button on a run’s post in the thread does. A highlight staff took '
   + 'down never comes back by itself. marathon_public_highlight_default decides where a new marathon starts.';
+const HOSTS_FIELD = 'Scan hosts';
+const HOSTS_HELP = 'On: a host from BaF — paired, or matched by their Twitch link — shows ✦BaF on the People card and '
+  + 'can be spotlit as a host (their note reads marathon_spotlight_host_note_template). Off: only runners and '
+  + 'commentators count. Follow uses marathon_scan_hosts_default.';
+const HOST_EVENTS_FIELD = 'BaF host events';
+const HOST_EVENTS_HELP = 'On: one Discord event for each BaF host, from their first hosted run to the end of their '
+  + 'last, kept in step with the schedule and called off when they stop hosting. Needs Scan hosts on. Runner events '
+  + 'are the event select above and are not changed. Follow uses marathon_host_events_default.';
+const SWITCH_FOLLOW = 'Follow the setting ({state})';
+const TWITCH_FIX_FIELD = 'Twitch name (optional)';
+const TWITCH_FIX_HELP = 'Only when the schedule gives the wrong channel. It replaces the schedule’s everywhere Black Bloc '
+  + 'uses one — Spotlight…, the run posts and live matching. Blank keeps what the schedule says.';
+const TWITCH_FIX_TITLE = 'Twitch name for {name}';
+const TWITCH_FIX_NOTE = 'The schedule says **{sheet}**. Type the channel {name} really streams on, or leave it blank to '
+  + 'go back to the schedule’s.';
+const TWITCH_FIX_BUTTON = 'Twitch name…';
+const FIXED_FROM = ' (fixed from twitch.tv/{sheet})';
 const EVENT_SELECT_SHORT = 'Which Discord events this marathon makes; the setting explains the '
   + 'four choices.';
 const EVENT_NONE = 'No event.';
@@ -571,6 +588,52 @@ function partWords(parts) {
   return (parts || []).map((one) => PART_WORDS[one] || one).join(', ');
 }
 
+function switchPicker(state) {
+  const choices = [
+    { value: 'follow', label: said(SWITCH_FOLLOW, { state: state && state.default ? 'on' : 'off' }) },
+    { value: 'on', label: 'On' },
+    { value: 'off', label: 'Off' },
+  ];
+  const now = !state || state.own === null || state.own === undefined ? 'follow' : (state.own ? 'on' : 'off');
+  const node = segment(choices, now);
+  node.now = now;
+  return node;
+}
+
+function switchWanted(value) {
+  return value === 'follow' ? null : value === 'on';
+}
+
+function twitchInput(value = '') {
+  return el('input', { class: 'input', type: 'text', value, placeholder: 'junior_sm', autocomplete: 'off', spellcheck: 'false', 'aria-label': TWITCH_FIX_FIELD });
+}
+
+function twitchText(entry) {
+  const fixed = entry && entry.sheet_login ? said(FIXED_FROM, { sheet: entry.sheet_login }) : '';
+  return `twitch.tv/${entry.login}${fixed}`;
+}
+
+async function fixTwitch(marathon, say, entry, runId) {
+  const input = twitchInput(entry.sheet_login ? entry.login : '');
+  let done = null;
+  const sure = await askForm({
+    title: said(TWITCH_FIX_TITLE, { name: entry.name }),
+    body: [
+      el('p', { class: 'ask-body' }, boldParts(said(TWITCH_FIX_NOTE, { name: entry.name, sheet: entry.sheet_login || entry.login || '—' }))),
+      field(TWITCH_FIX_FIELD, input, TWITCH_FIX_HELP),
+    ],
+    confirmLabel: 'Save',
+    tone: 'warn',
+    onConfirm: async () => {
+      done = await send(`/api/marathons/${marathon.id}/people/${entry.pairing_id}`, 'PATCH', { twitch_login: input.value.trim() });
+      return null;
+    },
+  });
+  if (!sure || !done) return;
+  shown.focus = runId;
+  await after(marathon, { ok: true, found: done });
+}
+
 async function pairTo(marathon, say, name, userId, everywhere = false) {
   const done = await run(say, () => send(`/api/marathons/${marathon.id}/people`, 'POST', {
     runner_name: name,
@@ -585,6 +648,7 @@ async function linkPerson(marathon, say, person, entry, runId) {
   const near = entry && entry.looks_like;
   if (near) picker.set({ id: near.user_id, name: near.username });
   const scope = segment([{ value: 'this', label: 'This schedule' }, { value: 'every', label: 'Every schedule' }], 'this');
+  const twitch = twitchInput();
   let done = null;
   const sure = await askForm({
     title: said(LINK_TITLE, { name: person.name }),
@@ -592,15 +656,18 @@ async function linkPerson(marathon, say, person, entry, runId) {
       el('p', { class: 'ask-body' }, boldParts(said(LINK_NOTE, { name: person.name, marathon: marathon.name }))),
       picker.node,
       field('Where it counts', scope),
+      field(TWITCH_FIX_FIELD, twitch, TWITCH_FIX_HELP),
     ],
     confirmLabel: 'Link them',
     tone: 'warn',
     onConfirm: async () => {
-      done = await send(`/api/marathons/${marathon.id}/people`, 'POST', {
+      const body = {
         runner_name: person.name,
         user_id: picker.id,
         everywhere: scope.readValue() === 'every',
-      });
+      };
+      if (twitch.value.trim()) body.twitch_login = twitch.value.trim();
+      done = await send(`/api/marathons/${marathon.id}/people`, 'POST', body);
       return null;
     },
   });
@@ -654,6 +721,7 @@ function matchBits(marathon, say, entry, person, runId, { inSlot = false } = {})
       const done = await run(say, () => send(`/api/marathons/${marathon.id}/people/${entry.pairing_id}`, 'DELETE'), (found) => found?.message);
       await after(marathon, done);
     }, { tone: 'quiet' }));
+    bits.push(button(TWITCH_FIX_BUTTON, () => fixTwitch(marathon, say, entry, runId), { tone: 'quiet' }));
     return bits;
   }
   if (entry && entry.member) bits.push(el('span', { class: 'cell-quiet', text: entry.matched_word || '' }));
@@ -692,7 +760,7 @@ function bafLine(marathon, say, entry, timeZone) {
     ]),
     el('div', { class: 'bar mx-person-moves mx-person-body' }, [
       entry.login
-        ? el('a', { class: 'cell-quiet mono', href: `https://twitch.tv/${entry.login}`, rel: 'noreferrer', target: '_blank', text: `twitch.tv/${entry.login}` })
+        ? el('a', { class: 'cell-quiet mono', href: `https://twitch.tv/${entry.login}`, rel: 'noreferrer', target: '_blank', text: twitchText(entry) })
         : el('span', { class: 'cell-quiet', text: NO_TWITCH }),
       ...matchBits(marathon, say, entry, entry, null),
       ...spotlightBits(marathon, say, entry, null),
@@ -722,7 +790,7 @@ function slotPersonLine(marathon, say, board, run, person) {
       el('strong', { text: person.user_id ? (person.member_name || person.name) : person.name }),
       person.user_id ? el('span', { class: 'badge', 'data-tone': 'ok', text: BAF }) : null,
       el('span', { class: 'cell-quiet', text: ` ${PART_WORDS[person.part] || person.part}` }),
-      person.login ? el('span', { class: 'cell-quiet mono', text: ` · twitch.tv/${person.login}` }) : el('span', { class: 'cell-quiet', text: ` · ${NO_TWITCH}` }),
+      person.login ? el('span', { class: 'cell-quiet mono', text: ` · ${twitchText(person)}` }) : el('span', { class: 'cell-quiet', text: ` · ${NO_TWITCH}` }),
     ]),
     el('span', { class: 'bar mx-person-moves' }, [
       ...matchBits(marathon, say, entry, person, run.id, { inSlot: true }),
@@ -875,6 +943,8 @@ async function settingsFold(marathon, say) {
   const ping = segment(PING_CHOICES, pingNow);
   const highlightNow = marathon.public_highlight ? 'on' : 'off';
   const highlight = segment(PING_CHOICES, highlightNow);
+  const hosts = switchPicker(marathon.scan_hosts);
+  const hostEvents = switchPicker(marathon.host_events);
   const picker = channelPicker(await channelChoices(), marathon.spotlight_id);
   const poll = el('input', {
     class: 'input',
@@ -890,6 +960,8 @@ async function settingsFold(marathon, say) {
     if (mode.value !== (marathon.event_mode || 'none')) body.event_mode = mode.value;
     if (ping.readValue() !== pingNow) body.ping_role = ping.readValue() === 'on';
     if (highlight.readValue() !== highlightNow) body.public_highlight = highlight.readValue() === 'on';
+    if (hosts.readValue() !== hosts.now) body.scan_hosts = switchWanted(hosts.readValue());
+    if (hostEvents.readValue() !== hostEvents.now) body.host_events = switchWanted(hostEvents.readValue());
     if (String(picker.value || '') !== String(marathon.spotlight_id || '')) body.spotlight_id = picker.value || null;
     const wanted = pollWanted(poll.value);
     if (wanted !== (marathon.poll_minutes || null)) body.poll_minutes = wanted;
@@ -910,6 +982,8 @@ async function settingsFold(marathon, say) {
     field('Airs on', picker, windowWords(marathon)),
     field(PING_FIELD, ping, PING_HELP),
     field(HIGHLIGHT_FIELD, highlight, HIGHLIGHT_HELP),
+    field(HOSTS_FIELD, hosts, HOSTS_HELP),
+    field(HOST_EVENTS_FIELD, hostEvents, HOST_EVENTS_HELP),
     field(POLL_LABEL, el('span', { class: 'mx-poll' }, [poll, el('span', { text: POLL_UNIT })]), said(POLL_HELP, { minutes: cadence.near ?? '—', far: cadence.far ?? '—' })),
     bar([save]),
   ], { open: shown.settings });

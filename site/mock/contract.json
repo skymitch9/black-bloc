@@ -5221,6 +5221,8 @@
         "spotlight_mode",
         "ping_role",
         "public_highlight",
+        "scan_hosts",
+        "host_events",
         "tracked_state",
         "tracked",
         "tracked_at",
@@ -5364,6 +5366,24 @@
       "keys": [
         "id",
         "public_highlight",
+        "message"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_bare_id}",
+      "body": {
+        "scan_hosts": true,
+        "host_events": "follow"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) the drawer's Settings foldout — Scan hosts and BaF host events"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "scan_hosts",
+        "host_events",
         "message"
       ]
     },
@@ -5721,7 +5741,8 @@
           "channel_id",
           "spotlight_id",
           "spotlight_until",
-          "looks_like"
+          "looks_like",
+          "sheet_login"
         ],
         "others": [
           "key",
@@ -5903,7 +5924,33 @@
           "runner_name",
           "member_name",
           "everywhere",
-          "user_id"
+          "user_id",
+          "twitch_login"
+        ]
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/marathons/{marathon_id}/people/{marathon_pairing_id}",
+      "body": {
+        "twitch_login": "junior_sm"
+      },
+      "read_by": [
+        "marathons-section.js (events.html) a linked person's Twitch name… — the pairing's Twitch fix"
+      ],
+      "shape": "object",
+      "keys": [
+        "marathon_id",
+        "pairings",
+        "baf",
+        "others",
+        "message"
+      ],
+      "rows": {
+        "pairings": [
+          "id",
+          "runner_name",
+          "twitch_login"
         ]
       }
     },

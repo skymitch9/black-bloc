@@ -151,6 +151,7 @@ def person_row(guild: Any, person: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": person.get("name"),
         "login": person.get("login"),
+        "sheet_login": person.get("sheet_login"),
         "part": person.get("part"),
         "user_id": _id(user_id),
         "member_name": resolve_one(guild, user_id)["display_name"] if user_id else None,
