@@ -315,13 +315,16 @@ def spotlight_bump(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> 
     return made(guild, content=content)
 
 
-def front_door(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
+def door_parts(store: Any, guild: Any) -> tuple[Any, list[dict[str, Any]]]:
     labels = frontdoor.labels(store, guild.id)
     row = [button(labels[kind], "primary" if kind == frontdoor.TICKET else "secondary")
            for kind in frontdoor.KINDS]
-    return made(
-        guild, embeds=[frontdoor.door_embed(store, guild.id)], components=[row]
-    )
+    return frontdoor.door_embed(store, guild.id), row
+
+
+def front_door(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
+    embed, row = door_parts(store, guild)
+    return made(guild, embeds=[embed], components=[row])
 
 
 def ticket_button(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
@@ -406,9 +409,14 @@ def post_message(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Re
     }
     found = posts.render_message(row)
     embed = found.get("embed")
-    return made(
-        guild, content=found.get("content") or "", embeds=[embed] if embed is not None else []
-    )
+    embeds = [embed] if embed is not None else []
+    rows = []
+    carrying = str(sample.get("carries_door") or "").strip().lower() in ("true", "1", "on")
+    if carrying and frontdoor.door_is_on(store, guild.id):
+        door, row_of_buttons = door_parts(store, guild)
+        embeds.append(door)
+        rows.append(row_of_buttons)
+    return made(guild, content=found.get("content") or "", embeds=embeds, components=rows)
 
 
 def birthday(bot: Any, guild: Any, store: Any, sample: dict[str, Any]) -> Rendered:
@@ -551,6 +559,7 @@ RENDERERS: dict[str, Renderer] = {
                 "style": posts.PLAIN,
                 "title": "Welcome",
                 "body": "**Welcome!** Start with the pinned guide, then say hello.",
+                "carries_door": False,
             },
         ),
         Renderer(
