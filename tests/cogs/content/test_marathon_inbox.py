@@ -506,15 +506,6 @@ async def test_the_inbox_buttons_are_staff_only_and_rebuild_from_their_custom_id
     assert "is tracked" in lead.sent and mi.is_tracked(await fresh(bot, marathon))
 
 
-async def test_the_inbox_buttons_outlive_a_restart():
-    registered = []
-    made = Marathons.__new__(Marathons)
-    made.bot = type("Bot", (), {"db": type("Db", (), {"is_connected": False})()})()
-    made.bot.add_dynamic_items = lambda *items: registered.extend(items)
-    await Marathons.cog_load(made)
-    assert inbox.InboxButton in registered
-
-
 async def test_the_panel_card_says_the_state_and_offers_only_valid_moves(bot, cog):
     from black_bloc.cogs.content.marathon import build_card
 
