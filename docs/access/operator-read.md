@@ -129,6 +129,8 @@ value in the registry, for a shell that started before it was set), never echoes
 it, refuses in words when it is unset, and prints the server's own `message`
 sentence for any non-2xx rather than a stack trace.
 
+⚠️ **Non-ASCII text comes back mangled when you read it through Windows PowerShell 5.1 and write it to a file (measured 2026-09-28).** A curly apostrophe `’` in the welcome post came out as `â`+`U+0080`+`U+0099` (UTF-8 read as Latin-1), so the body measured 2,033 characters instead of the real 2,029 — and it became a wrong test fixture until the fidelity build caught it. The live data was fine. For any read where exact text matters (a fixture, a length, a diff), read it through the signed-in site tab (`fetch('/api/…')` in the page) or pipe the raw bytes through Python, not `ConvertFrom-Json` in PS 5.1.
+
 ## The paths worth reading
 
 Every one is a `GET`. Verified against `server.py`'s routers and each router's
