@@ -689,6 +689,52 @@ async def test_a_new_post_is_empty_and_never_posted(bot, guild):
     assert await kinds(bot.db) == ["post.created"]
 
 
+async def test_a_post_born_with_words_keeps_its_style_and_writes_its_first_version(bot, guild):
+    found = await posts.make_post(
+        bot, guild, STAFF, title="From the doc", body="## Rules\n- one", style=posts.EMBED
+    )
+
+    assert found.ok and found.message == posts.CREATED_SAID.format(title="From the doc")
+    row = await posts.get_post(bot.db, guild.id, "from-the-doc")
+    assert row["body"] == "## Rules\n- one" and row["style"] == posts.EMBED
+    assert row["message_id"] is None
+    versions = await posts.list_versions(bot.db, int(row["id"]))
+    assert [(one["n"], one["body"], one["because"]) for one in versions] == [
+        (1, "## Rules\n- one", posts.BECAUSE_SAVED)
+    ]
+    assert await kinds(bot.db) == ["post.created"]
+    details = await details_of(bot.db, "post.created")
+    assert details["style"] == posts.EMBED and details["version"] == 1
+
+
+async def test_a_born_body_over_its_style_cap_is_refused_and_nothing_is_made(bot, guild):
+    over = "x" * (posts.CAPS[posts.PLAIN] + 1)
+
+    plain = await posts.make_post(bot, guild, STAFF, title="Long", body=over, style=posts.PLAIN)
+    embed = await posts.make_post(bot, guild, STAFF, title="Long", body=over, style=posts.EMBED)
+
+    assert not plain.ok and plain.code == "body_too_long" and "embed" in plain.message
+    assert embed.ok
+    assert (await posts.get_post(bot.db, guild.id, "long"))["style"] == posts.EMBED
+    assert await kinds(bot.db) == ["post.created"]
+
+
+async def test_the_import_style_is_the_embed_until_staff_pick_plain(bot, guild):
+    assert posts.import_style(bot.store, GUILD) == posts.EMBED
+
+    await bot.store.set(GUILD, posts.IMPORT_STYLE_KEY, posts.PLAIN)
+
+    assert posts.import_style(bot.store, GUILD) == posts.PLAIN
+
+
+def test_the_import_style_choices_are_the_post_styles():
+    from black_bloc import settings_store
+
+    assert settings_store.KEY_CHOICES[posts.IMPORT_STYLE_KEY] == posts.STYLES
+    assert settings_store.KEY_TYPES[posts.IMPORT_STYLE_KEY] == "enum"
+    assert settings_store.namespace_of(posts.IMPORT_STYLE_KEY) == "posts"
+
+
 async def test_two_posts_cannot_share_a_slug_and_a_title_with_no_letters_is_refused(bot, guild):
     await posts.make_post(bot, guild, STAFF, title="Rules")
 

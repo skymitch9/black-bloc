@@ -199,6 +199,48 @@ async def test_making_one_leaves_one_row_and_no_message(client, sign_in, web, wf
     assert await wf.one_web_row(web.db, "web.post.created")
 
 
+async def test_a_new_post_can_be_born_with_a_body_and_a_style_in_one_call(client, sign_in, web, wf):
+    """New post ▸ Import a Google Doc: one call, one row, the body is version 1."""
+    sign_in(client)
+
+    found = client.post(
+        "/api/posts",
+        json={"title": "From the doc", "body": "**Hello**", "style": "embed"},
+    ).json()
+
+    assert found["post"]["body"] == "**Hello**" and found["post"]["style"] == "embed"
+    assert found["post"]["cap"] == posts.CAPS[posts.EMBED] and found["post"]["posted"] is False
+    assert found["import_style"] == posts.EMBED
+    details = await wf.one_web_row(web.db, "web.post.created")
+    assert details["version"] == 1 and details["style"] == "embed"
+    versions = client.get("/api/posts/from-the-doc/versions").json()
+    assert versions["count"] == 1
+
+
+async def test_a_born_body_over_the_cap_is_refused_in_words_and_nothing_is_made(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+
+    response = client.post(
+        "/api/posts",
+        json={"title": "Too long", "body": "x" * 2001, "style": "plain"},
+    )
+
+    assert response.status_code == 400 and response.json()["error"] == "body_too_long"
+    assert "2001 characters" in response.json()["message"]
+    assert client.get("/api/posts/too-long").status_code == 404
+
+
+async def test_the_index_says_which_style_an_import_lands_in(client, sign_in, web, wf):
+    sign_in(client)
+    assert client.get("/api/posts").json()["import_style"] == posts.EMBED
+
+    await web.store.set(wf.GUILD_ID, posts.IMPORT_STYLE_KEY, posts.PLAIN)
+
+    assert client.get("/api/posts").json()["import_style"] == posts.PLAIN
+
+
 async def test_saving_leaves_exactly_one_row_and_never_notes_it_twice(client, sign_in, web, wf):
     """Checklist 34: the shared move logs it, so the route must not note it on top."""
     sign_in(client)

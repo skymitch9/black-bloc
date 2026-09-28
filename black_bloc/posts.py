@@ -25,6 +25,7 @@ MODE_KEY = "posts_mode"
 PANEL_MINUTES_KEY = "posts_panel_minutes"
 VERSIONS_KEEP_KEY = "posts_versions_keep"
 VERSIONS_SUMMARY_KEY = "posts_versions_summary_chars"
+IMPORT_STYLE_KEY = "posts_import_style"
 LOG_CHANNEL_KEY = "log_channel_id"
 ON = "on"
 OFF = "off"
@@ -769,6 +770,10 @@ def summary_chars(store: Any, guild_id: int) -> int:
     return wanted if wanted > 0 else 80
 
 
+def import_style(store: Any, guild_id: int) -> str:
+    return wanted_style(store.get(guild_id, IMPORT_STYLE_KEY), EMBED)
+
+
 def versions_keep(store: Any, guild_id: int) -> int:
     return max(0, int(store.get(guild_id, VERSIONS_KEEP_KEY) or 0))
 
@@ -1014,25 +1019,42 @@ async def make_post(
     *,
     title: Any,
     slug: Any = None,
+    body: Any = None,
+    style: Any = None,
     via: str = VIA_DISCORD,
 ) -> Outcome:
-    """A new, empty post; posting it is somebody's press, never this."""
+    """A new post, empty or born with words; posting it is somebody's press, never this."""
     kept = str(title or "").strip()
     if not kept:
         return refusal(TITLE_NEEDED, "no_title", 400)
-    said = refused_title(kept, PLAIN)
+    words = str(body or "")
+    kept_style = wanted_style(style)
+    said = refused_title(kept, kept_style)
     if said is not None:
         return refusal(said, "title_too_long", 400)
+    said = refused_body(words, kept_style, "saved")
+    if said is not None:
+        return refusal(said, "body_too_long", 400)
     wanted = slugify(slug or kept)
     if not wanted:
         return refusal(SLUG_NEEDED, "no_slug", 400)
     if await get_post(bot.db, guild.id, wanted) is not None:
         return refusal(SLUG_TAKEN.format(slug=wanted), "slug_taken", 409)
     post_id = await create_post(
-        bot.db, guild.id, slug=wanted, title=kept, by=actor_id(actor)
+        bot.db,
+        guild.id,
+        slug=wanted,
+        title=kept,
+        body=words,
+        style=kept_style,
+        by=actor_id(actor),
     )
     row = await get_post_by_id(bot.db, post_id)
-    await note(bot, guild, row, CREATED, actor, via=via)
+    born = {}
+    if words:
+        made = await record_version(bot, guild, row, actor, via=via, because=BECAUSE_SAVED)
+        born = {"style": kept_style, "version": await version_now(bot, row, made)}
+    await note(bot, guild, row, CREATED, actor, via=via, **born)
     return Outcome(True, CREATED_SAID.format(title=kept), value=row)
 
 

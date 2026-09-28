@@ -948,6 +948,7 @@ const SETTING_SPECS = [
   ['posts_panel_minutes', 'int', 10, 10, "minutes the /posts panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it", null, 1440, 1],
   ['posts_versions_keep', 'int', 0, 0, 'how many saved versions of a post are kept; 0 (the default) keeps every one of them, and 1 to 500 trims the oldest after each save. History is cheap and a lost version is not, so raise it rather than lower it. The only remaining version is never trimmed, whatever the number says', null, 500, 0],
   ['posts_versions_summary_chars', 'int', 80, 80, 'how many characters of a version’s message are shown on its row in the Versions list, 20 to 300; 80 by default. It is one line beside View and Use this version — the whole message is in View', null, 300, 20],
+  ['posts_import_style', 'enum', 'embed', 'embed', "the style a post takes when its words come from a Google Doc — on a new post made with Import a Google Doc, and on an existing post's draft when Import replaces its message. embed (the default) is the box Welcome and rules is drawn in and holds 4096 characters; plain is an ordinary message of up to 2000. Staff can still change the style of any post afterwards", ['plain', 'embed']],
   ['posts_block_tempvoice_name', 'text', 'Temp voice lobby', 'Temp voice lobby', "what the temp voice lobby block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Temp voice lobby. Members never see it"],
   ["posts_block_marathonrole_name", "text", "Marathon role", "Marathon role", "what the Marathon role block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Marathon role. Members never see it"],
   ["posts_block_pingsfollow_name", "text", "Ping me when they go live", "Ping me when they go live", "what the ping me when they go live block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Ping me when they go live. Members never see it"],
@@ -3114,6 +3115,11 @@ function postSummaryChars() {
   return Number(state.settings.get('posts_versions_summary_chars') ?? 80) || 80;
 }
 
+function postImportStyle() {
+  const found = String(state.settings.get('posts_import_style') || 'embed');
+  return POST_CAPS[found] ? found : 'embed';
+}
+
 function postVersionsKeep() {
   return Math.max(0, Number(state.settings.get('posts_versions_keep') ?? 0) || 0);
 }
@@ -3216,6 +3222,7 @@ function postWhole(row, said) {
     styles: postStyles(),
     guard: postGuard(),
     mode: postsMode(),
+    import_style: postImportStyle(),
     shadow: postShadow(),
     notes: postNotes(),
     read_at: now(),
@@ -3246,6 +3253,7 @@ route('GET', '/api/posts', (context) => {
     block_kinds: blockKindsShape(),
     mode: postsMode(),
     may_edit: true,
+    import_style: postImportStyle(),
     styles: postStyles(),
     guard: postGuard(),
     shadow: postShadow(),
@@ -3259,6 +3267,11 @@ route('POST', '/api/posts', async (context) => {
   const body = await context.body();
   const title = String(body.title || '').trim().slice(0, POST_TITLE_MAX);
   if (!title) throw new Refused(400, 'no_title', POST_TITLE_NEEDED);
+  const words = String(body.body || '');
+  const style = POST_CAPS[body.style] ? body.style : 'plain';
+  if (words.length > postCap(style)) {
+    throw new Refused(400, 'body_too_long', postTooLong(words.length, postCap(style), style, 'saved'));
+  }
   const slug = postSlugify(body.slug || title);
   if (!slug) throw new Refused(400, 'no_slug', POST_SLUG_NEEDED);
   if (state.posts.some((one) => one.slug === slug)) {
@@ -3269,8 +3282,8 @@ route('POST', '/api/posts', async (context) => {
     slug,
     title,
     channel_id: null,
-    body: '',
-    style: 'plain',
+    body: words,
+    style,
     pin: true,
     message_id: null,
     shadow_message_id: null,
@@ -3285,7 +3298,12 @@ route('POST', '/api/posts', async (context) => {
     updated_by: STAFF.id,
   };
   state.posts.push(made);
-  logAction('web.post.created', { details: { slug, post_id: made.id, via: 'website' } });
+  const details = { slug, post_id: made.id, via: 'website' };
+  if (words) {
+    details.style = style;
+    details.version = postVersionNow(made, postRecordVersion(made, { because: 'saved' }));
+  }
+  logAction('web.post.created', { details });
   return postWhole(made, `**${title}** is made. Nothing is in Discord until you press Post it.`);
 });
 
