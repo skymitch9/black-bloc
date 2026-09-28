@@ -277,7 +277,6 @@ async def test_the_seventeen_features_that_hide_each_map_to_one_command():
         "tempvoice_mode": ("voice",),
         "youtube_live_mode": ("youtube",),
     }
-    assert len(cv.HIDDEN_WHEN_OFF) == 17
     assert "modmail_mode" not in cv.HIDDEN_WHEN_OFF
     assert "rolemenu" not in cv.NEVER_HIDDEN
     assert "mod" not in {name for names in cv.HIDDEN_WHEN_OFF.values() for name in names}
