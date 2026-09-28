@@ -14,6 +14,7 @@ from ... import marathon as mt
 from ... import marathon_archive as ma
 from ... import marathon_events as me
 from ... import marathon_feeds as mfeeds
+from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
 from ... import marathon_ping as mp
 from ... import marathon_signals as sig
@@ -358,6 +359,9 @@ MARATHON_COLUMNS = {
     "ping_role",
     "controls_message_id",
     "public_highlight",
+    "scan_hosts",
+    "host_events",
+    "host_event_ids",
 }
 RUN_COLUMNS = {
     "order_no",
@@ -447,19 +451,35 @@ async def upsert_pairing(
     runner_name: str,
     user_id: int,
     added_by: int | None,
+    twitch_login: Any = mh.KEEP,
 ) -> int:
     key = mt.runner_key(runner_name)
+    if twitch_login is mh.KEEP:
+        cur = await db.conn.execute(
+            "SELECT twitch_login FROM marathon_people WHERE guild_id = ? AND runner_name = ? "
+            "AND marathon_id IS ?",
+            (int(guild_id), key, marathon_id),
+        )
+        was = await cur.fetchone()
+        twitch_login = was["twitch_login"] if was is not None else None
     await db.conn.execute(
         "DELETE FROM marathon_people WHERE guild_id = ? AND runner_name = ? AND marathon_id IS ?",
         (int(guild_id), key, marathon_id),
     )
     cur = await db.conn.execute(
         "INSERT INTO marathon_people(guild_id, marathon_id, runner_name, user_id, added_by, "
-        "added_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (int(guild_id), marathon_id, key, int(user_id), added_by, now_iso()),
+        "added_at, twitch_login) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (int(guild_id), marathon_id, key, int(user_id), added_by, now_iso(), twitch_login),
     )
     await db.conn.commit()
     return int(cur.lastrowid)
+
+
+async def set_pairing_login_row(db: Any, pairing_id: int, login: str | None) -> None:
+    await db.conn.execute(
+        "UPDATE marathon_people SET twitch_login = ? WHERE id = ?", (login, int(pairing_id))
+    )
+    await db.conn.commit()
 
 
 async def delete_pairing(db: Any, pairing_id: int) -> bool:
@@ -904,6 +924,7 @@ async def pair_runner(
     user_id: Any,
     *,
     everywhere: bool = False,
+    twitch_login: Any = mh.KEEP,
     via: str = VIA_DISCORD,
 ) -> Outcome:
     name = " ".join(str(runner_name or "").split())[:100]
@@ -913,6 +934,11 @@ async def pair_runner(
         member_id = int(user_id)
     except (TypeError, ValueError):
         return refusal(mt.NO_MEMBER, NO_MEMBER_CODE, 422)
+    if twitch_login is not mh.KEEP:
+        understood, cleaned = mh.clean_login(twitch_login)
+        if not understood:
+            return bad_twitch(twitch_login)
+        twitch_login = cleaned
     cog = cog_of(bot)
     async with cog.lock(marathon["id"]):
         pairing_id = await upsert_pairing(
@@ -922,6 +948,7 @@ async def pair_runner(
             name,
             member_id,
             actor_id(actor),
+            twitch_login,
         )
         await cog.rematch(guild, marathon)
         await sync_runs(bot, guild, marathon, actor=actor)
@@ -938,6 +965,7 @@ async def pair_runner(
             "runner": name,
             "member_id": member_id,
             "everywhere": everywhere,
+            "twitch_login": None if twitch_login is mh.KEEP else twitch_login,
             "via": via,
         },
     )
@@ -969,6 +997,67 @@ async def unpair_runner(
         },
     )
     return Outcome(True, mt.UNPAIRED.format(runner=pairing["runner_name"]))
+
+
+async def rematched(bot: Any, guild: Any, marathon: Any, actor: Any) -> None:
+    cog = cog_of(bot)
+    await cog.rematch(guild, marathon)
+    await sync_runs(bot, guild, marathon, actor=actor)
+    await cog.sync_board(guild, await get_marathon(bot.db, guild.id, marathon["id"]))
+
+
+def bad_twitch(given: Any) -> Outcome:
+    return refusal(mh.BAD_TWITCH.format(given=str(given)[:60]), mh.BAD_TWITCH_CODE, 422)
+
+
+async def set_pairing_login(
+    bot: Any,
+    guild: Any,
+    actor: Any,
+    marathon: Any,
+    pairing: Any,
+    given: Any,
+    *,
+    via: str = VIA_DISCORD,
+) -> Outcome:
+    """Staff fix a person's Twitch channel on their pairing; a blank gives the schedule's back."""
+    understood, login = mh.clean_login(given)
+    if not understood:
+        return bad_twitch(given)
+    runner = pairing["runner_name"]
+    was = mt.pairing_login(pairing)
+    if was == login:
+        return Outcome(True, mh.LOGIN_SAME.format(runner=runner))
+    cog = cog_of(bot)
+    async with cog.lock(marathon["id"]):
+        await set_pairing_login_row(bot.db, pairing["id"], login)
+        await rematched(bot, guild, marathon, actor)
+    if pairing["marathon_id"] is None:
+        for other in await list_marathons(bot.db, guild.id):
+            if int(other["id"]) == int(marathon["id"]) or not other["active"]:
+                continue
+            async with cog.lock(other["id"]):
+                await rematched(bot, guild, other, actor)
+    await log_action(
+        bot,
+        guild,
+        kind_via("marathon.pairing_login_set", via),
+        actor=actor,
+        target=int(pairing["user_id"]),
+        details={
+            "marathon_id": marathon["id"],
+            "pairing_id": pairing["id"],
+            "runner": runner,
+            "member_id": int(pairing["user_id"]),
+            "everywhere": pairing["marathon_id"] is None,
+            "from": was,
+            "to": login,
+            "via": via,
+        },
+    )
+    if login is None:
+        return Outcome(True, mh.LOGIN_CLEARED.format(runner=runner))
+    return Outcome(True, mh.LOGIN_SET.format(runner=runner, login=login))
 
 
 async def post_board(
@@ -1511,8 +1600,10 @@ async def cancel_linked_event(
 async def sync_runs(bot: Any, guild: Any, marathon: Any, *, actor: Any = None) -> None:
     """The run events follow whatever just changed; they are the bot's own knock-on rows."""
     from .marathon_events import sync_run_events
+    from .marathon_hosts import sync_host_events
 
     await sync_run_events(bot, guild, marathon, actor=actor)
+    await sync_host_events(bot, guild, marathon, actor=actor)
 
 
 # --- the cog ----------------------------------------------------------------------------------
@@ -2153,7 +2244,10 @@ class Marathons(commands.Cog):
         links = await links_of(db)
         pairings = await pairings_of(db, guild.id)
         hosts = bool(self.bot.store.get(guild.id, MARATHON_MATCH_HOSTS_KEY))
-        scan = bool(self.bot.store.get(guild.id, MARATHON_SCAN_HOSTS_DEFAULT_KEY))
+        scan = mh.scans_hosts(
+            await get_marathon(db, guild.id, marathon["id"]) or marathon,
+            self.bot.store.get(guild.id, MARATHON_SCAN_HOSTS_DEFAULT_KEY),
+        )
         usernames = usernames_of(guild)
         newly = 0
         for row in await runs_of(db, marathon["id"]):

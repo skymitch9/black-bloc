@@ -118,6 +118,7 @@ def group_people(runs: Any) -> list[dict[str, Any]]:
                     "key": person_key(person),
                     "name": str(person.get("name") or ""),
                     "login": person.get("login") or None,
+                    "sheet_login": person.get("sheet_login") or None,
                     "user_id": int(user_id) if user_id else None,
                     "parts": [],
                     "runs": [],
@@ -125,6 +126,8 @@ def group_people(runs: Any) -> list[dict[str, Any]]:
             )
             if not entry["login"] and person.get("login"):
                 entry["login"] = person["login"]
+            if not entry["sheet_login"] and person.get("sheet_login"):
+                entry["sheet_login"] = person["sheet_login"]
             if person.get("part") not in entry["parts"]:
                 entry["parts"].append(person.get("part"))
             entry["runs"].append(run_brief(run, person))
@@ -339,7 +342,8 @@ def entry_for(entries: list[dict[str, Any]], run_id: Any, person: dict[str, Any]
 def find_entry(entries: list[dict[str, Any]], given: Any) -> Any:
     wanted = mt.runner_key(given)
     for entry in entries:
-        if wanted == str(entry.get("login") or "").lower() or wanted == entry["key"]:
+        logins = {str(entry.get(key) or "").lower() for key in ("login", "sheet_login")}
+        if wanted in logins or wanted == entry["key"]:
             return entry
     for entry in entries:
         if any(is_person(one, given) for one in entry["runs"]):

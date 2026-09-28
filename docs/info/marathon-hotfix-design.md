@@ -254,7 +254,11 @@ host"*.
   tracking a Hotfix block (feed check and picker). Second, whether hosts show ✦BaF on EVERY marathon: `rematch`
   passes it, and the mock's `marathonRematch` mirrors it. Hotfix hosts were already read as `host` people by
   `marathon-hotfix` (Deviation 6), so a Hotfix marathon's People card lists its host, ✦BaF when paired AND scanned.
-  No per-marathon toggle, no host spotlight, no host events — those are the follow-up build's.
+  ~~No per-marathon toggle, no host spotlight, no host events — those are the follow-up build's.~~ ➕ **2026-09-28,
+  branch `marathon-host-spotlight` (🔨 BUILT, NOT MERGED):** built — `marathons.scan_hosts` per marathon (NULL follows
+  this key; `rematch` reads it), Spotlight… for a host with its own note, and BaF host events
+  (`marathons.host_events`, `marathon_host_events_default`, off). The Hotfix picker and feed tracker still read this
+  global key — a show block has no marathon row to ask. [`marathon-host-spotlight-design.md`](marathon-host-spotlight-design.md).
 - **The notice** — the feed notice words are keys, so the reason lines are two keys:
   `marathon_hotfix_hosts_template` (*Tracked because **{people}** hosts it.*) and `marathon_hotfix_runs_template`
   (*Tracked because **{people}** runs in it.*), fields `{people} {show}`. They are appended on a new line to the

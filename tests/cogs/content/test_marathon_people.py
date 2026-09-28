@@ -296,3 +296,101 @@ async def test_the_notice_people_button_rebuilds_from_its_custom_id_and_opens_pr
     assert sent["content"] is None
     assert isinstance(sent["kwargs"]["view"], people.PeoplePanel)
     assert "<@9001>" in sent["kwargs"]["embed"].description
+
+
+JR = 125393218408939520
+GDQUEER = [a_run(5, 240, "Spyro", [("Jr", "Jr", "runner")])]
+
+
+async def jr_paired(bot, cog, login="junior_sm"):  # noqa: F811
+    cog.client = FakeClient(runs=SCHEDULE + GDQUEER)
+    marathon = await added(bot)
+    outcome = await cogmod.pair_runner(
+        bot, bot.guild, FakeActor(), marathon, "Jr", JR, twitch_login=login
+    )
+    assert outcome.ok, outcome.message
+    return marathon
+
+
+async def test_jr_s_twitch_fix_is_what_spotlight_uses_and_the_card_shows_it(bot, cog):  # noqa: F811
+    marathon = await jr_paired(bot, cog)
+    jr = next(one for one in (await state_of(bot, marathon))["baf"] if one["name"] == "Jr")
+    assert (jr["login"], jr["sheet_login"], jr["user_id"]) == ("junior_sm", "Jr", JR)
+    spyro = await run_named(bot, marathon, "Spyro")
+    assert mt.people_of(spyro)[0]["login"] == "junior_sm"
+    outcome = await people.spotlight_runner(bot, bot.guild, FakeActor(), marathon, "Jr")
+    assert outcome.ok, outcome.message
+    assert await channel_by_login(bot.db, GUILD, "junior_sm") is not None
+    assert await channel_by_login(bot.db, GUILD, "jr") is None
+    stopped = await people.unspotlight_runner(bot, bot.guild, FakeActor(), marathon, "jr")
+    assert stopped.ok, stopped.message
+    assert await channel_by_login(bot.db, GUILD, "junior_sm") is None
+
+
+async def test_clearing_jr_s_fix_gives_back_the_sheets_login(bot, cog):  # noqa: F811
+    marathon = await jr_paired(bot, cog)
+    jr = next(one for one in (await state_of(bot, marathon))["baf"] if one["name"] == "Jr")
+    pairing = await cogmod.pairing_by_id(bot.db, GUILD, jr["pairing_id"])
+    cleared = await cogmod.set_pairing_login(bot, bot.guild, FakeActor(), marathon, pairing, "")
+    assert cleared.ok and cleared.message == "**jr** is back to the schedule's Twitch channel."
+    jr = next(one for one in (await state_of(bot, marathon))["baf"] if one["name"] == "Jr")
+    assert (jr["login"], jr["sheet_login"]) == ("Jr", None)
+    row = await details_of(bot.db, "marathon.pairing_login_set")
+    assert (row["from"], row["to"]) == ("junior_sm", None)
+
+
+async def test_a_bad_twitch_fix_is_refused_in_words_and_nothing_changes(bot, cog):  # noqa: F811
+    marathon = await jr_paired(bot, cog)
+    jr = next(one for one in (await state_of(bot, marathon))["baf"] if one["name"] == "Jr")
+    pairing = await cogmod.pairing_by_id(bot.db, GUILD, jr["pairing_id"])
+    refused = await cogmod.set_pairing_login(
+        bot, bot.guild, FakeActor(), marathon, pairing, "junior sm!"
+    )
+    assert not refused.ok and refused.message.startswith(
+        "**junior sm!** is not a Twitch channel name"
+    )
+    paired = await cogmod.pair_runner(
+        bot, bot.guild, FakeActor(), marathon, "Jr", JR, twitch_login="no good"
+    )
+    assert not paired.ok and "is not a Twitch channel name" in paired.message
+    assert (await cogmod.pairing_by_id(bot.db, GUILD, jr["pairing_id"]))["twitch_login"] == (
+        "junior_sm"
+    )
+
+
+async def test_relinking_keeps_the_fix_unless_a_new_one_is_given(bot, cog):  # noqa: F811
+    marathon = await jr_paired(bot, cog)
+    again = await cogmod.pair_runner(bot, bot.guild, FakeActor(), marathon, "Jr", JR)
+    assert again.ok
+    assert (await cogmod.pairing_by_id(bot.db, GUILD, again.value))["twitch_login"] == "junior_sm"
+
+
+async def test_an_everywhere_fix_reaches_every_active_schedule(bot, cog):  # noqa: F811
+    cog.client = FakeClient(runs=SCHEDULE + GDQUEER)
+    first = await added(bot)
+    second = await create_marathon(
+        bot, bot.guild, FakeActor(), name="GDQueer", url=URL.replace("74", "75")
+    )
+    assert second.ok, second.message
+    paired = await cogmod.pair_runner(
+        bot, bot.guild, FakeActor(), first, "Jr", JR, everywhere=True
+    )
+    pairing = await cogmod.pairing_by_id(bot.db, GUILD, paired.value)
+    fixed = await cogmod.set_pairing_login(
+        bot, bot.guild, FakeActor(), first, pairing, "junior_sm"
+    )
+    assert fixed.ok, fixed.message
+    for marathon in (first, second.value):
+        spyro = await run_named(bot, marathon, "Spyro")
+        assert mt.people_of(spyro)[0]["login"] == "junior_sm"
+
+
+async def test_the_slot_view_offers_twitch_name_for_a_linked_person(bot, cog):  # noqa: F811
+    marathon = await jr_paired(bot, cog)
+    spyro = await run_named(bot, marathon, "Spyro")
+    embed, view = await people.build_people(
+        bot, bot.guild, FakeActor(), marathon["id"], run_id=spyro["id"], person="Jr"
+    )
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert "Twitch name…" in labels
+    assert "twitch.tv/junior_sm" in embed.description

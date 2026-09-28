@@ -4834,6 +4834,19 @@ MARATHON_CONTROLS_HIGHLIGHT_ON_KEY = "marathon_controls_highlight_on"
 MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY = "marathon_controls_highlight_off"
 MARATHON_CONTROLS_PING_ON_KEY = "marathon_controls_ping_on"
 MARATHON_CONTROLS_PING_OFF_KEY = "marathon_controls_ping_off"
+MARATHON_CONTROLS_HOSTS_ON_KEY = "marathon_controls_hosts_on"
+MARATHON_CONTROLS_HOSTS_OFF_KEY = "marathon_controls_hosts_off"
+MARATHON_CONTROLS_HOST_EVENTS_ON_KEY = "marathon_controls_host_events_on"
+MARATHON_CONTROLS_HOST_EVENTS_OFF_KEY = "marathon_controls_host_events_off"
+MARATHON_SCAN_HOSTS_ON_SAID_KEY = "marathon_scan_hosts_on_said"
+MARATHON_SCAN_HOSTS_OFF_SAID_KEY = "marathon_scan_hosts_off_said"
+MARATHON_HOST_EVENTS_DEFAULT_KEY = "marathon_host_events_default"
+MARATHON_HOST_EVENTS_ON_SAID_KEY = "marathon_host_events_on_said"
+MARATHON_HOST_EVENTS_OFF_SAID_KEY = "marathon_host_events_off_said"
+MARATHON_HOST_EVENT_TITLE_KEY = "marathon_host_event_title_template"
+MARATHON_HOST_EVENT_DESCRIPTION_KEY = "marathon_host_event_description_template"
+MARATHON_HOST_EVENT_FIELDS = ("member", "marathon", "games", "runs")
+MARATHON_SPOTLIGHT_HOST_NOTE_KEY = "marathon_spotlight_host_note_template"
 MARATHON_REMINDER_CHANNEL_KEY = "marathon_reminder_channel_id"
 MARATHON_PUBLIC_REMINDERS_KEY = "marathon_public_reminders"
 MARATHON_PUBLIC_REMINDER_TEMPLATE_KEY = "marathon_public_reminder_template"
@@ -4986,6 +4999,13 @@ MARATHON_BAD_MARKS = (
     "`120, 15`."
 )
 MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
+    MARATHON_HOST_EVENTS_DEFAULT_KEY: (
+        "bool",
+        False,
+        "whether a marathon makes one Discord event for each BaF host, from their first hosted "
+        "run to the end of their last, when its own BaF host events switch follows this "
+        "setting. A host counts only while that marathon scans its hosts. off by default",
+    ),
     MARATHON_MODE_KEY: (
         "enum",
         "shadow",
@@ -5350,6 +5370,74 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     ),
 }
 MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
+    MARATHON_SPOTLIGHT_HOST_NOTE_KEY: (
+        "{name} hosting {marathon}",
+        ("name", "marathon"),
+        "the note a host's channel row carries on the Go-live page when Spotlight… on a "
+        "marathon's People card adds it for someone who only hosts there. It takes {name} "
+        "{marathon}",
+    ),
+    MARATHON_HOST_EVENT_TITLE_KEY: (
+        "{member} hosts {marathon}",
+        MARATHON_HOST_EVENT_FIELDS,
+        "what the event made for one BaF host of a marathon is called. It takes {member} "
+        "{marathon} {games} {runs}",
+    ),
+    MARATHON_HOST_EVENT_DESCRIPTION_KEY: (
+        "{member} hosts {runs} run(s) on {marathon}: {games}. Read from the schedule; times "
+        "follow it.",
+        MARATHON_HOST_EVENT_FIELDS,
+        "the description of the event made for one BaF host of a marathon. It takes {member} "
+        "{marathon} {games} {runs}",
+    ),
+    MARATHON_CONTROLS_HOSTS_ON_KEY: (
+        "Scan hosts: on · turn off",
+        (),
+        "the thread controls' host-scanning button while the marathon's hosts are scanned for "
+        "BaF people",
+    ),
+    MARATHON_CONTROLS_HOSTS_OFF_KEY: (
+        "Scan hosts: off · turn on",
+        (),
+        "the thread controls' host-scanning button while only the marathon's runners count",
+    ),
+    MARATHON_CONTROLS_HOST_EVENTS_ON_KEY: (
+        "BaF host events: on · turn off",
+        (),
+        "the thread controls' host-events button while each BaF host gets an event",
+    ),
+    MARATHON_CONTROLS_HOST_EVENTS_OFF_KEY: (
+        "BaF host events: off · turn on",
+        (),
+        "the thread controls' host-events button while hosts get no event of their own",
+    ),
+    MARATHON_SCAN_HOSTS_ON_SAID_KEY: (
+        "**{marathon}** scans its hosts now: a host from BaF shows ✦BaF on its People card and "
+        "can be spotlit as a host.",
+        ("marathon",),
+        "what staff are told once a marathon's Scan hosts switch is turned on. It takes "
+        "{marathon}",
+    ),
+    MARATHON_SCAN_HOSTS_OFF_SAID_KEY: (
+        "**{marathon}** no longer scans its hosts: only its runners and commentators count as "
+        "BaF.",
+        ("marathon",),
+        "what staff are told once a marathon's Scan hosts switch is turned off. It takes "
+        "{marathon}",
+    ),
+    MARATHON_HOST_EVENTS_ON_SAID_KEY: (
+        "**{marathon}** makes an event for each BaF host now, from their first hosted run to "
+        "the end of their last.",
+        ("marathon",),
+        "what staff are told once a marathon's BaF host events switch is turned on. It takes "
+        "{marathon}",
+    ),
+    MARATHON_HOST_EVENTS_OFF_SAID_KEY: (
+        "**{marathon}** makes no event for its hosts now.",
+        ("marathon",),
+        "what staff are told once a marathon's BaF host events switch is turned off. It takes "
+        "{marathon}",
+    ),
     MARATHON_ARCHIVED_WORD_KEY: (
         "Archived {when} — runs, people and posts are kept.",
         ("when",),

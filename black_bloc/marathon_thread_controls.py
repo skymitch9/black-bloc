@@ -12,12 +12,14 @@ RUNS = "runs"
 SPOTLIGHT = "spotlight"
 HIGHLIGHT = "highlight"
 PING = "ping"
-ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING)
+HOSTS = "hosts"
+HOST_EVENTS = "hostevents"
+ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING, HOSTS, HOST_EVENTS)
 ON = "on"
 OFF = "off"
 CANCEL = "cancel"
 TEMPLATE = (
-    r"marathon:controls:(?P<marathon_id>[0-9]+):(?P<action>event|runs|spotlight|highlight|ping)"
+    r"marathon:controls:(?P<marathon_id>[0-9]+):(?P<action>event|runs|spotlight|highlight|ping|hosts|hostevents)"
     r":(?P<to>on|off|cancel)"
 )
 CUSTOM_ID = "marathon:controls:{marathon_id}:{action}:{to}"
@@ -94,8 +96,13 @@ def switch(action: str, on: bool) -> Control:
 
 
 def controls(
-    mode: Any, spot_state: Any, highlight: bool = False, ping: bool = False
-) -> tuple[Control, Control, Control, Control, Control]:
+    mode: Any,
+    spot_state: Any,
+    highlight: bool = False,
+    ping: bool = False,
+    hosts: bool = False,
+    host_events: bool = False,
+) -> tuple[Control, ...]:
     """Each button carries the move it makes, so a stale label can never do the opposite."""
     marathon_on, runs_on = halves(mode)
     spot = spot_word(spot_state)
@@ -105,6 +112,8 @@ def controls(
         spot_control(spot),
         switch(HIGHLIGHT, highlight),
         switch(PING, ping),
+        switch(HOSTS, hosts),
+        switch(HOST_EVENTS, host_events),
     )
 
 

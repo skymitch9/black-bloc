@@ -1,5 +1,12 @@
 # The source is a column, and a marathon opens on its people — BaF first, then everyone, each one linkable or spotlightable
 
+> ➕ **2026-09-28 (branch `marathon-host-spotlight`, 🔨 BUILT, NOT MERGED): three things below changed.** (1) A pairing
+> can carry a **Twitch name** (`marathon_people.twitch_login`) that replaces the schedule's login for that person
+> everywhere, shown as *twitch.tv/junior_sm (fixed from twitch.tv/Jr)*; (2) **Spotlight…** on someone who only HOSTS
+> uses `marathon_spotlight_host_note_template` (*{name} hosting {marathon}*); (3) hosts count as BaF only on a
+> marathon that scans them (`marathons.scan_hosts`, else `marathon_scan_hosts_default`).
+> [`marathon-host-spotlight-design.md`](marathon-host-spotlight-design.md).
+>
 > ✅ **2026-09-25 — LIVE as v166 19:30** (merge `afba30b2`; release commit `b06d4f1d`; boot `database ready` 02:30:22Z, `logged in` 02:30:27Z, no Traceback, `/health` 65 ms — `deploys.log`'s v166 line). Migration: schema **64 → 65**, `marathon_spotlights` is a NEW TABLE, so the boot log has no `database: added` line for it (it names added columns only); `SCHEMA_VERSION` 65 read at HEAD. Nothing has met Discord by hand; sweeps `MP-a`…`MP-f` are the owner's.
 >
 > ➕ **2026-09-25 (branch `marathon-drawer-lite`, 🔨 BUILT, NOT MERGED): the drawer is now two header lines · People · a shut *Settings for this marathon* · a Posts line · Read it now / Pause / Remove** — the Schedule, Event, The channel and Posts cards are gone. [`marathon-drawer-lite-design.md`](marathon-drawer-lite-design.md).
@@ -72,7 +79,9 @@ note, the states, and the staff run moves *Shout it now / Mark it upcoming / Mar
 existing path (`spotlight_channel` / `POST /api/golive/spotlight`): login = theirs, starts = the marathon's start (or
 the person's first run − `marathon_spotlight_lead_hours`, 2), ends = the marathon's end (or their last run's end +
 `marathon_spotlight_slack_hours`, 2), spotlight ON (pinned + reminded while they stream, exactly as any spotlit
-channel), announce ON, note *{name} at {marathon}*, `event_id` NULL; the marathon remembers it
+channel), announce ON, note *{name} at {marathon}* (➕ 2026-09-28, `marathon-host-spotlight`: *{name} hosting
+{marathon}* — `marathon_spotlight_host_note_template` — when the person only hosts the runs in the window; the login
+is the pairing's Twitch fix when it has one), `event_id` NULL; the marathon remembers it
 (`marathon_spotlights(marathon_id, login, spotlight_id)`, a small table, so the row shows *Spotlit until 12 Jan* and
 offers **Open on Go-live** and **Stop spotlighting** — which removes the channel row the same way the Go-live page
 does). A runner already a channel row (any reason) shows *already on the Go-live page* and the open link instead.

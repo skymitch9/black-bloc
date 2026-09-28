@@ -411,31 +411,49 @@ def match_people(
 ) -> list[dict[str, Any]]:
     """Staff pairings first, then the member's Twitch link, then — only for a name the schedule
     gave no link for — a member whose Discord username is exactly that name."""
-    here: dict[str, int] = {}
-    everywhere: dict[str, int] = {}
+    here: dict[str, Any] = {}
+    everywhere: dict[str, Any] = {}
     for row in pairings or ():
         name = runner_key(_cell(row, "runner_name"))
         owner = _cell(row, "marathon_id")
         target = everywhere if owner is None else here
         if owner is None or marathon_id is None or int(owner) == int(marathon_id):
-            target[name] = int(_cell(row, "user_id"))
+            target[name] = row
     lowered = {str(login).lower(): int(user) for login, user in (links or {}).items()}
     named = {runner_key(name): int(user) for name, user in (usernames or {}).items()}
     found: list[dict[str, Any]] = []
     for person in people or ():
-        name = str(_cell(person, "name") if isinstance(person, dict) else person.name)
-        login = _cell(person, "login") if isinstance(person, dict) else person.login
-        part = str(_cell(person, "part") if isinstance(person, dict) else person.part)
+        name = str(_person(person, "name"))
+        sheet = _person(person, "sheet_login") or _person(person, "login")
+        part = str(_person(person, "part"))
+        key = runner_key(name)
+        pairing = here.get(key) or everywhere.get(key)
+        fixed = pairing_login(pairing)
+        login = fixed or sheet
         user_id: int | None = None
         if part == RUNNER or (match_hosts and (part != HOST or scan_hosts)):
-            key = runner_key(name)
-            user_id = here.get(key) or everywhere.get(key)
+            user_id = int(_cell(pairing, "user_id")) if pairing is not None else None
             if user_id is None and login:
                 user_id = lowered.get(str(login).lower())
             if user_id is None and not login:
                 user_id = named.get(key)
-        found.append({"name": name, "login": login, "part": part, "user_id": user_id})
+        one = {"name": name, "login": login, "part": part, "user_id": user_id}
+        if fixed and fixed != sheet:
+            one["sheet_login"] = sheet
+        found.append(one)
     return found
+
+
+def _person(person: Any, key: str) -> Any:
+    if isinstance(person, dict):
+        return person.get(key)
+    return getattr(person, key, None)
+
+
+def pairing_login(pairing: Any) -> str | None:
+    """A staff-fixed Twitch login on a pairing; it replaces the schedule's everywhere."""
+    login = str(_cell(pairing, "twitch_login") or "").strip().lower()
+    return login or None
 
 
 def ours(people: Any) -> list[dict[str, Any]]:

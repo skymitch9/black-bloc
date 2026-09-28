@@ -10,6 +10,7 @@ import discord
 
 from ... import marathon as mt
 from ... import marathon_events as me
+from ... import marathon_hosts as mh
 from ... import marathon_inbox as mi
 from ... import marathon_ping as mping
 from ... import marathon_public as mp
@@ -33,6 +34,10 @@ from ...settings_store import (
     MARATHON_CONTROLS_HELP_KEY,
     MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY,
     MARATHON_CONTROLS_HIGHLIGHT_ON_KEY,
+    MARATHON_CONTROLS_HOST_EVENTS_OFF_KEY,
+    MARATHON_CONTROLS_HOST_EVENTS_ON_KEY,
+    MARATHON_CONTROLS_HOSTS_OFF_KEY,
+    MARATHON_CONTROLS_HOSTS_ON_KEY,
     MARATHON_CONTROLS_KEPT_REFUSED_KEY,
     MARATHON_CONTROLS_NO_CHANNEL_KEY,
     MARATHON_CONTROLS_NO_END_KEY,
@@ -62,6 +67,7 @@ from .marathon import (
 from .marathon import mode_of as posts_mode_of
 from .marathon_channels import locked, marathons_on_channel
 from .marathon_events import set_event_mode
+from .marathon_hosts import host_events_on, scans, set_switch
 from .marathon_inbox import find_channel, home_now, reopened, words
 from .marathon_spotlight import (
     _row_of,
@@ -94,6 +100,10 @@ LABEL_KEYS = {
     (mtc.HIGHLIGHT, mtc.OFF): MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY,
     (mtc.PING, mtc.ON): MARATHON_CONTROLS_PING_ON_KEY,
     (mtc.PING, mtc.OFF): MARATHON_CONTROLS_PING_OFF_KEY,
+    (mtc.HOSTS, mtc.ON): MARATHON_CONTROLS_HOSTS_ON_KEY,
+    (mtc.HOSTS, mtc.OFF): MARATHON_CONTROLS_HOSTS_OFF_KEY,
+    (mtc.HOST_EVENTS, mtc.ON): MARATHON_CONTROLS_HOST_EVENTS_ON_KEY,
+    (mtc.HOST_EVENTS, mtc.OFF): MARATHON_CONTROLS_HOST_EVENTS_OFF_KEY,
 }
 STYLES = {
     mtc.ON: discord.ButtonStyle.success,
@@ -122,6 +132,8 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         state["state"],
         mp.highlights(marathon),
         mping.pings_role(marathon),
+        scans(bot, guild.id, marathon),
+        host_events_on(bot, guild.id, marathon),
     )
     starts = label_moment(state.get("starts"), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY))
     labels = tuple(
@@ -495,6 +507,9 @@ async def press(
         from .marathon_ping import set_ping_role
 
         outcome = await set_ping_role(bot, guild, actor, marathon, to == mtc.ON, via=via)
+    elif action in (mtc.HOSTS, mtc.HOST_EVENTS):
+        which = mh.SCAN if action == mtc.HOSTS else mh.EVENTS
+        outcome = await set_switch(bot, guild, actor, marathon, which, to == mtc.ON, via=via)
     elif to == mtc.ON:
         outcome = await start_spotlight(bot, guild, actor, marathon, via=via)
     elif to == mtc.CANCEL:
