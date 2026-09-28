@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `blocks-live`)** — ONE section APPENDED (`BL-a`…`BL-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-28 (branch `blocks-convert`)** — ONE section APPENDED (`BC-a`…`BC-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `post-blocks`)** — ONE section APPENDED (`PB-a`…`PB-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `golive-replays`)** — ONE section APPENDED (`GR-a`…`GR-c`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3691,3 +3692,18 @@ post during these rows unless the owner says so.
 | **`BC-c`** | Posts ▸ Blocks ▸ Temp voice lobby ▸ **Edit the Temp voice lobby block**: type a heading, change the lobby button to `Hop in: {lobby}`, untick the controls button — then leave without saving | The preview changes as you type; the lobby button reads *Hop in: <lobby name>*; the controls button disappears with the tick. Nothing is posted anywhere. |
 | **`BC-d`** | Posts ▸ Welcome and rules ▸ **Add a block…** (look only) | The list offers *Temp voice lobby*; the Front door is already on. The drawer's preview still shows the rules with the door under them. |
 | **`BC-e`** | Join the join-to-create lobby; then type `/voice` | Exactly as today: a room of your own, you are moved in, its controls are posted in the room's chat; `/voice` opens the same panel it always has. |
+
+## Rows `BL-a` … `BL-e` — who's live now, upcoming events, link buttons (branch `blocks-live`, 2026-09-28)
+
+🔨 **BUILT on branch `blocks-live`, NOT merged, NOT deployed.** The owner, 2026-09-27 23:5x: *"Let's make
+all the blocks you suggested but not post them yet, only the front door should be posted in welcome test"*.
+Design: [`../info/blocks-live-design.md`](../info/blocks-live-design.md). ⚠️ Do not add any of the three
+blocks to a post during these rows unless the owner says so.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`BL-a`** | Look at #welcome-test after the deploy, and at the Logs page (Posts / Modmail) over the next ten minutes | The welcome post is exactly as before — ONE message, rules, the door card, three buttons — and nothing edits it (no `frontdoor.redrawn_on_post` or `post.redrawn` row from the new one-minute loop). |
+| **`BL-b`** | Posts ▸ **Blocks** | Five cards; the new three — *Who's live now*, *Upcoming events*, *Link buttons* — each *on no post yet*, each with **What it looks like in Discord**: two sample streams with linked titles; two sample events with dates in your own time and *in 2 days* / *in 5 days*; two sample link buttons. |
+| **`BL-c`** | Posts ▸ Blocks ▸ Who's live now ▸ **Edit…**: change *Each stream's line* to `{name} · {title}`, then tick *Show it as it looks when the list is empty* — leave without saving | The preview follows each keystroke; the tick shows *Nobody is live right now…*. Nothing is posted. |
+| **`BL-d`** | Posts ▸ Blocks ▸ Link buttons ▸ **Edit…**: **Add a link** until it hides (ten), then type `http://example.org` into one and press **Save the words** | **Add a link** disappears at ten with a line saying why; the save is refused in words naming the row (*…must start with `https://`…*) and nothing is saved. Remove the rows without saving. |
+| **`BL-e`** | Discord: `/settings` ▸ Posts ▸ pick `posts_block_links_rows` | The key card shows the list and its help; setting it to text that is not a list is refused in words. (Configurable both ways, checklist 33.) |

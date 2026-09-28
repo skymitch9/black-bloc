@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Blocks live* (branch `blocks-live`, off `main` `d418ca13`, keyed against `f4c4e83c`); the *Blocks convert* row for `keep_drawn` still holds (the kinds filter is optional). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Blocks convert* (branch `blocks-convert`, off `main` `4a0e572d`, keyed against `2b2e3e32`); the *Post blocks* rows for `redraw_carrier`, `message_payload` and "Reorder never edits a message already up" describe code this branch changed. Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Post blocks* (branch `post-blocks`, off `main` `d90c9e8c`, keyed against `68040560`); the *A post carries the front door* rows for `CarryButton` and the editor's switch describe code this branch removed. Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Go-live replays* (branch `golive-replays`, off `main` `49aeb2c2`, keyed against `69b32836`). Before that:
@@ -9209,3 +9210,27 @@ Design: [`blocks-convert-design.md`](blocks-convert-design.md). Keyed against `2
 | `site/public/assets/page-posts.js:367` · `:475` · `:891` `blockLook` | The drawer, a version, and each Blocks card (lazy, `always`). |
 | `site/public/assets/blockwords.js:167` `voiceLobbyWords` · `:240` `BLOCK_EDITORS` | The temp voice editor; saves each key through `saveSetting`, then `POST /api/post-blocks/tempvoice/redraw`. |
 | `site/mock/server.mjs:2797` · `:5736` `block_tempvoice` · `:5782` `PREVIEW_BLOCK_DRAWS` | The mock's twins. |
+
+## Blocks live (branch `blocks-live`, 2026-09-28)
+
+Design: [`blocks-live-design.md`](blocks-live-design.md). Keyed against `f4c4e83c`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/post_blocks.py:124` `BlockKind.load` · `:168` `LOADED` · `:175` `load_kinds` | `parts` stays synchronous; a live kind's list is read async just before the draw and parked per (kind, guild). Awaited only in `redraw_post` (`:657`) and `posts.publish_post` (`posts.py:1328`), the two paths that send. Door and temp voice have no `load`. |
+| `black_bloc/post_blocks.py:183` `live_parts` … `links_parts` · `:222` `KINDS` | Lazy imports of the feature cogs, like the door's. The three kinds are appended after `tempvoice` (a sibling build appends too). Footprints: live pair (1, 0, 0), links (1, 2, 10). |
+| `black_bloc/post_blocks.py:708` `keep_drawn(kinds=…)` · `:724` `carries_live` | The optional kinds filter is what the live cadence passes (`LIVE_KINDS`); the door's sweep calls it without, unchanged. |
+| `black_bloc/posts.py:462` | A block may draw no card (links with the card off); every other kind always draws one, so their bytes are unchanged. |
+| `black_bloc/block_look.py:18` `Look` · `:43` `plain` · `:55` `linked` · `:62` `lines_within` | Shared by the three kinds. `plain` escapes markdown, `[` `]` and mentions in member words; `linked` refuses anything but http(s) and any `( ) < >` or space; the stamp hashes exactly what is drawn, so an unchanged list never re-edits. |
+| `black_bloc/golive.py:824` `LiveLine` · `:840` `live_block_look` | Pure. A member not in the cache is `<@id>` (embeds never ping). |
+| `black_bloc/cogs/content/golive.py:1912` `block_is_on` · `:1919` `block_streams` | Reads go-live's and spotlight's own `open_sessions`: `mode = 'on'` only, spotlight replays out (`golive_replay.is_replay`), one line per stream URL, oldest first. |
+| `black_bloc/events.py:3079` `upcoming_of` · `:3106` `upcoming_block_look` | `{when}` / `{relative}` are Discord's `<t:…:F>` / `<t:…:R>` — rendered by each client, so time passing is not a change. An unreadable start is skipped (checklist 5). |
+| `black_bloc/cogs/community/events.py:2508` `block_events` · `:2517` `block_parts` | Lists only while `events_mode` is `on`; `off` draws nothing; `shadow` draws the empty line (design Deviation 5). |
+| `black_bloc/link_buttons.py:23` `rows_of` · `:46` `links_look` | Reads back through `checked_links`, so a stored value that no longer checks draws no buttons (logged) rather than a bad one. |
+| `black_bloc/settings_store.py:6154` `checked_links` | Refuses, never strips: row count, exact keys, label 1–80, url https + host, ≤ 512. Blank = no buttons (`TEXT_MAY_BE_BLANK`). |
+| `black_bloc/settings_store.py:6322` `NAMESPACE_OVERRIDE.update` | The who's-live words under posts: the Go-live page's drawers are pinned at 83 keys. The mock's `NAMESPACE_OVERRIDE` carries the twin (`test_the_mock_groups_a_key_the_way_the_registry_does`). |
+| `black_bloc/cogs/community/frontdoor.py:926` `keep_live_now` · `:932` `_keep_live` | The door cog still owns the ONE `Reconciler` (checklist 37); this runs under it with `stamp=False`. The door's carrier gets the door's own `keep_the_ride` only when it carries a live block. |
+| `black_bloc/cogs/community/live_blocks.py:27` `LiveBlocks` · `:64` `due` · `:69` `sweep` | Only the cadence: a 1-minute tick, each guild gated by `posts_block_live_minutes`. No door cog → nothing (no lock to share). Appended last in `bot.py:COGS` (`:58`). |
+| `black_bloc/preview.py:479` `LIVE_SAMPLE` · `:490` `look_drawn` · `:532` `links_block` · `:556` `BLOCK_DRAWS` | Sample lists for the live pair; `live` / `events` = `none` draws the empty line. The Blocks card draws two sample links until staff set their own; the editor draws exactly its draft. |
+| `site/public/assets/blockwords.js:243` `keep` · `:258` `liveListWords` · `:379` `linkButtonsWords` · `:494` `BLOCK_EDITORS` | A blank word is cleared (DELETE) back to its shipped words. The link rows save as ONE key write, so a bad row refuses the whole save with its number. |
+| `site/mock/server.mjs:2239` `checkedLinks` · `:5861` · `:5976` | The mock's twins of `checked_links`, the three look functions and `BLOCK_DRAWS`. |
