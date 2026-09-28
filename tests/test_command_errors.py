@@ -25,6 +25,7 @@ from black_bloc.settings_store import (
     ERROR_RETRY_EXPIRED_KEY,
     ERROR_RETRY_LABEL,
     ERROR_RETRY_LABEL_KEY,
+    ERROR_RETRY_MINUTES,
     ERROR_RETRY_MINUTES_KEY,
     ERROR_SENTENCE,
     ERROR_SENTENCE_KEY,
@@ -461,7 +462,7 @@ async def test_the_words_and_the_window_are_settings_both_doors_reach(wired):
     ):
         assert key in KEY_TYPES and KEY_HELP.get(key)
         assert namespace_of(key) == "core"
-    assert wired.store.get(GUILD, ERROR_RETRY_MINUTES_KEY) == 10
+    assert wired.store.get(GUILD, ERROR_RETRY_MINUTES_KEY) == ERROR_RETRY_MINUTES
 
     await wired.store.set(GUILD, ERROR_RETRY_LABEL_KEY, "Pick up where I was")
     view = retry_view(_Live(wired), lambda one: None)
