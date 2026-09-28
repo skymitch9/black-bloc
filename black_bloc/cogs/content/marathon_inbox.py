@@ -567,6 +567,9 @@ async def inbox_content(bot: Any, guild: Any, marathon: Any, home: str, feed: An
             MARATHON_FEED_ADDED_TEMPLATE_KEY,
             **mf.notice_fields(feed, record, login or ""),
         )
+        from .marathon_feeds import marathon_because
+
+        text = "\n".join([text, *await marathon_because(bot, guild, marathon)])
     if home == mi.HOME_ON:
         return text
     return note_for(bot, guild, home, real_inbox_parent(bot, guild), text).strip()

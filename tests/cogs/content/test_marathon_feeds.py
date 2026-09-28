@@ -1661,3 +1661,153 @@ async def test_add_a_feed_with_the_hotfix_pick_on_the_gdq_channel_and_never_two(
     assert "reads GDQ Hotfix, **GDQ Hotfix**" in twice.message
     embed, _view = await feeds.feed_card(bot, bot.guild, made.value["id"])
     assert "**Shows:** GDQueer" in embed.description
+
+
+# --- the Hotfix show picker and the runner/host tracker ----------------------------------------
+
+ANARCHY = 6001
+MATHCAT = 6002
+
+
+async def pair_everywhere(bot, name, user_id):  # noqa: F811
+    await cogmod.upsert_pairing(bot.db, GUILD, None, name, user_id, 7)
+
+
+async def link_twitch(bot, user_id, login):  # noqa: F811
+    await bot.db.conn.execute(
+        "INSERT INTO golive_links(user_id, twitch_login, linked_at) VALUES (?, ?, ?)",
+        (user_id, login, SEPT.isoformat()),
+    )
+    await bot.db.conn.commit()
+
+
+async def test_anarchy_hosting_hidden_heroes_adds_it_and_the_notice_says_who(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
+    await pair_everywhere(bot, "anarchy", ANARCHY)
+    await hotfix_feed(bot, cog)
+    made = await by_ref(bot)
+    assert sorted(ref for ref, row in made.items() if row["source"] == "gdq_hotfix") == [
+        "gdqueer/2026-10-03",
+        "hidden-heroes/2026-10-02",
+    ]
+    heroes = made["hidden-heroes/2026-10-02"]
+    hosts = [
+        person
+        for row in await runs_of(bot.db, heroes["id"])
+        for person in mt.people_of(row)
+        if person["part"] == "host"
+    ]
+    assert {(one["name"], one["user_id"]) for one in hosts} == {("anarchy", ANARCHY)}
+    added = {one["event"]: one for one in await logged(bot, "marathon.feed_added")}
+    assert added["hidden-heroes/2026-10-02"]["because"] == {"hosts": "anarchy"}
+    assert "because" not in added["gdqueer/2026-10-03"]
+    words = {one.embeds[0].title: one.content for one in inbox(bot)}
+    assert words["Hidden Heroes"].endswith("\nTracked because **anarchy** hosts it.")
+    assert "Tracked because" not in words["GDQueer"]
+
+
+async def test_mathcat_by_twitch_link_tracks_gdqueer_when_it_is_not_listed(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_hotfix_shows", "Fast Travel")
+    await link_twitch(bot, MATHCAT, "the_mathcat")
+    await hotfix_feed(bot, cog)
+    made = await by_ref(bot)
+    assert sorted(ref for ref, row in made.items() if row["source"] == "gdq_hotfix") == [
+        "fast-travel/2026-09-25",
+        "gdqueer/2026-10-03",
+    ]
+    words = {one.embeds[0].title: one.content for one in inbox(bot)}
+    assert words["GDQueer"].endswith("\nTracked because **The_Mathcat** runs in it.")
+
+
+async def test_a_host_is_not_tracked_until_host_scanning_is_on(bot, cog):  # noqa: F811
+    await pair_everywhere(bot, "anarchy", ANARCHY)
+    _row, feed = await hotfix_feed(bot, cog)
+    made = [ref for ref, row in (await by_ref(bot)).items() if row["source"] == "gdq_hotfix"]
+    assert made == ["gdqueer/2026-10-03"]
+    got = await feeds.hotfix_picker(bot, bot.guild, feed)
+    heroes = next(one for one in got.value["blocks"] if one["show"] == "Hidden Heroes")
+    assert (heroes["hosts"], heroes["tracked"], heroes["because"]) == (["anarchy"], False, [])
+
+
+async def test_the_tracker_off_takes_only_the_listed_shows(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
+    await bot.store.set(GUILD, "marathon_hotfix_track_people", False)
+    await pair_everywhere(bot, "anarchy", ANARCHY)
+    await hotfix_feed(bot, cog)
+    made = [ref for ref, row in (await by_ref(bot)).items() if row["source"] == "gdq_hotfix"]
+    assert made == ["gdqueer/2026-10-03"]
+
+
+async def test_listed_and_a_person_on_the_same_block_is_one_marathon_never_two(bot, cog):  # noqa: F811
+    await link_twitch(bot, MATHCAT, "the_mathcat")
+    await hotfix_feed(bot, cog)
+    later(cog, 7)
+    await cog.tick_once()
+    made = [ref for ref, row in (await by_ref(bot)).items() if row["source"] == "gdq_hotfix"]
+    assert made == ["gdqueer/2026-10-03"]
+    added = await logged(bot, "marathon.feed_added")
+    hotfix = [one for one in added if one["feed"] == "GDQ Hotfix"]
+    assert [one["event"] for one in hotfix] == ["gdqueer/2026-10-03"]
+
+
+async def test_a_suggested_block_names_the_person_it_was_taken_for(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
+    await bot.store.set(GUILD, "marathon_feed_action_default", "suggest")
+    await bot.store.set(
+        GUILD, "marathon_hotfix_hosts_template", "Anarchy watch: {people} on {show}"
+    )
+    await pair_everywhere(bot, "anarchy", ANARCHY)
+    await hotfix_feed(bot, cog)
+    said = [one.content for one in notices(bot) if "Hidden Heroes" in one.content]
+    assert len(said) == 1 and said[0].endswith("\nAnarchy watch: anarchy on Hidden Heroes")
+    suggested = {one["event"]: one for one in await logged(bot, "marathon.feed_suggested")}
+    assert suggested["hidden-heroes/2026-10-02"]["because"] == {"hosts": "anarchy"}
+
+
+async def test_the_picker_answers_every_block_and_why_each_is_tracked(bot, cog):  # noqa: F811
+    await bot.store.set(GUILD, "marathon_scan_hosts_default", True)
+    await pair_everywhere(bot, "anarchy", ANARCHY)
+    await link_twitch(bot, MATHCAT, "the_mathcat")
+    await bot.store.set(GUILD, "marathon_hotfix_shows", "GDQueer, Speedrun Sandwich")
+    _row, feed = await hotfix_feed(bot, cog)
+    calls = len(cog.client.sheet_calls)
+    got = await feeds.hotfix_picker(bot, bot.guild, feed)
+    assert got.ok and len(cog.client.sheet_calls) == calls
+    value = got.value
+    assert (value["shows"], value["missing"], value["stale"]) == (
+        ["GDQueer", "Speedrun Sandwich"],
+        ["Speedrun Sandwich"],
+        False,
+    )
+    assert len(value["blocks"]) == 11
+    tracked = {one["show"]: one["because"] for one in value["blocks"] if one["tracked"]}
+    assert tracked == {
+        "Hidden Heroes": [{"kind": "hosts", "name": "anarchy", "user_id": ANARCHY}],
+        "GDQueer": [
+            {"kind": "listed"},
+            {"kind": "runs", "name": "The_Mathcat", "user_id": MATHCAT},
+        ],
+    }
+
+
+async def test_the_picker_answers_from_its_copy_when_the_page_fails(bot, cog):  # noqa: F811
+    _row, feed = await hotfix_feed(bot, cog)
+    later(cog, 1)
+    cog.client.raises = ScheduleError("gamesdonequick.com answered 503")
+    got = await feeds.hotfix_picker(bot, bot.guild, feed)
+    assert got.ok and got.value["stale"] is True
+    assert got.value["trouble"] == "gamesdonequick.com answered 503"
+    assert len(got.value["blocks"]) == 11
+    cog.hotfix_cache = hf.SheetCache()
+    failed = await feeds.hotfix_picker(bot, bot.guild, feed)
+    assert (failed.ok, failed.status, failed.code) == (False, 502, "unreadable")
+    assert "could not be read just now (gamesdonequick.com answered 503)" in failed.message
+
+
+async def test_the_picker_refuses_a_feed_that_is_not_the_hotfix_feed(bot, cog):  # noqa: F811
+    await staff_room(bot)
+    gdq = await a_channel(bot, "gamesdonequick", "GamesDoneQuick")
+    made = await feeds.create_feed(bot, bot.guild, FakeActor(), spotlight_id=gdq, pick="gdq")
+    got = await feeds.hotfix_picker(bot, bot.guild, made.value)
+    assert (got.ok, got.status, got.code) == (False, 409, "not_hotfix")
+    assert "does not read the GDQ Hotfix schedule" in got.message

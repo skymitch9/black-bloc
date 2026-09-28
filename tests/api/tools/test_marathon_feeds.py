@@ -14,6 +14,8 @@ from black_bloc.settings_store import MARATHON_FEED_ACTION_KEY, MARATHON_FEED_HO
 
 FIXTURES = pathlib.Path(__file__).parents[2] / "fixtures" / "marathon"
 GDQ_BASE = "https://tracker.gamesdonequick.com/tracker"
+HOTFIX_PAGE = "https://gamesdonequick.com/hotfix/schedule"
+HOTFIX_CSV = "https://docs.google.com/spreadsheets/d/e/x/pub?gid=1&single=true&output=csv"
 
 ROUTES = [
     ("GET", "/api/marathons/feeds"),
@@ -24,6 +26,7 @@ ROUTES = [
     ("POST", "/api/marathons/feeds/1/look"),
     ("POST", "/api/marathons/feeds/1/forget"),
     ("POST", "/api/marathons/feeds/1/add"),
+    ("GET", "/api/marathons/feeds/1/hotfix-shows"),
 ]
 
 
@@ -55,6 +58,11 @@ class FeedClient:
 
     async def close(self):
         return None
+
+    async def hotfix_sheet(self, page_url=None, fallback=None):
+        if self.raises is not None:
+            raise self.raises
+        return ((FIXTURES / "gdq_hotfix_sheet.csv").read_text(encoding="utf-8"), HOTFIX_CSV)
 
 
 @pytest.fixture
@@ -296,3 +304,50 @@ async def test_patch_sets_a_horaro_events_feeds_owner_and_search_words(
     assert many.status_code == 422 and many.json()["error"] == "bad_words"
     refused = client.patch(f"/api/marathons/feeds/{gdq_id}", json={"owner": "someone"})
     assert refused.status_code == 409 and refused.json()["error"] == "not_horaro_events"
+
+
+async def hotfix_feed(web, wf, login="gamesdonequick"):
+    spotlight_id = await channel(web, wf, login, "GamesDoneQuick")
+    return await insert_feed(
+        web.db,
+        wf.GUILD_ID,
+        source=mf.HOTFIX_FEED,
+        feed_ref=HOTFIX_PAGE,
+        spotlight_id=spotlight_id,
+        name="GDQ Hotfix",
+        action="add",
+        added_by=7,
+    )
+
+
+async def test_the_hotfix_picker_answers_every_show_block_for_staff(client, sign_in, web, wf, cog):
+    feed_id = await hotfix_feed(web, wf)
+    await web.store.set(wf.GUILD_ID, "default_timezone", "America/Phoenix")
+    sign_in(client)
+    body = client.get(f"/api/marathons/feeds/{feed_id}/hotfix-shows").json()
+    assert (body["feed_id"], body["shows"], body["timezone"], body["stale"]) == (
+        feed_id,
+        ["GDQueer"],
+        "America/Phoenix",
+        False,
+    )
+    assert body["track_people"] is True and body["sheet_url"] == HOTFIX_CSV
+    heroes = next(one for one in body["blocks"] if one["show"] == "Hidden Heroes")
+    assert (heroes["hosts"], heroes["starts_local"], heroes["tracked"]) == (
+        ["anarchy"],
+        "Fri 2 Oct 16:00",
+        False,
+    )
+
+
+async def test_the_hotfix_picker_refuses_in_words(client, sign_in, web, wf, cog):
+    gdq_id = await gdq_feed(web, wf)
+    sign_in(client)
+    response = client.get(f"/api/marathons/feeds/{gdq_id}/hotfix-shows")
+    assert response.status_code == 409
+    assert "does not read the GDQ Hotfix" in response.json()["message"]
+    feed_id = await hotfix_feed(web, wf, "gdqhotfix")
+    cog.client.raises = ScheduleError("gamesdonequick.com answered 503")
+    response = client.get(f"/api/marathons/feeds/{feed_id}/hotfix-shows")
+    assert response.status_code == 502
+    assert "could not be read just now" in response.json()["message"]

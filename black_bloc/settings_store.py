@@ -4717,6 +4717,7 @@ MARATHON_MOVE_MINUTES_KEY = "marathon_move_minutes"
 MARATHON_TITLE_CONFIRMS_KEY = "marathon_title_confirms"
 MARATHON_LATE_GRACE_KEY = "marathon_late_grace_minutes"
 MARATHON_MATCH_HOSTS_KEY = "marathon_match_hosts"
+MARATHON_SCAN_HOSTS_DEFAULT_KEY = "marathon_scan_hosts_default"
 MARATHON_REMINDER_MINUTES_KEY = "marathon_reminder_minutes"
 MARATHON_PING_MINUTES_KEY = "marathon_ping_minutes"
 MARATHON_REMINDER_PINGS_KEY = "marathon_reminder_pings"
@@ -4921,6 +4922,10 @@ MARATHON_HOTFIX_SHOWS_KEY = "marathon_hotfix_shows"
 MARATHON_HOTFIX_SHOWS = "GDQueer"
 MARATHON_HOTFIX_SHOWS_MAX = 20
 MARATHON_HOTFIX_SHOW_LENGTH = 60
+MARATHON_HOTFIX_TRACK_PEOPLE_KEY = "marathon_hotfix_track_people"
+MARATHON_HOTFIX_HOSTS_TEMPLATE_KEY = "marathon_hotfix_hosts_template"
+MARATHON_HOTFIX_RUNS_TEMPLATE_KEY = "marathon_hotfix_runs_template"
+MARATHON_HOTFIX_BECAUSE_FIELDS = ("people", "show")
 MARATHON_FEED_ADDED_TEMPLATE_KEY = "marathon_feed_added_template"
 MARATHON_FEED_SUGGEST_TEMPLATE_KEY = "marathon_feed_suggest_template"
 MARATHON_FEED_ACTIONS = ("add", "suggest")
@@ -5028,6 +5033,13 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         True,
         "whether a host or a commentator from BaF counts as BaF, not only a runner. "
         "on by default",
+    ),
+    MARATHON_SCAN_HOSTS_DEFAULT_KEY: (
+        "bool",
+        False,
+        "whether a marathon's hosts are scanned for BaF people at all — shown ✦BaF when paired "
+        "or linked, and counted when the Hotfix feed tracks shows a BaF person is on. Runners "
+        "are always scanned; commentators follow marathon_match_hosts. off by default",
     ),
     MARATHON_REMINDER_MINUTES_KEY: (
         "text",
@@ -5158,6 +5170,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "the GDQ Hotfix shows the Hotfix feed turns into marathons, separated by commas and "
         "spelled as the sheet's Show column spells them (capitals do not matter); each run of "
         "days a show airs becomes one marathon. `GDQueer` by default",
+    ),
+    MARATHON_HOTFIX_TRACK_PEOPLE_KEY: (
+        "bool",
+        True,
+        "whether the Hotfix feed also takes any show block a BaF person runs or hosts — paired "
+        "for every schedule, matched by their Twitch link or their Discord name, the same rules "
+        "the marathon's People card uses — even when its show is not in marathon_hotfix_shows. "
+        "on by default",
     ),
     MARATHON_EVENT_MODE_DEFAULT_KEY: (
         "enum",
@@ -6113,6 +6133,18 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         MARATHON_FEED_FIELDS,
         "the staff notice when a feed in suggest mode finds a new event; it carries Add it and "
         "Not this one. It takes {feed} {event} {when} {relative} {url} {channel}",
+    ),
+    MARATHON_HOTFIX_HOSTS_TEMPLATE_KEY: (
+        "Tracked because **{people}** hosts it.",
+        MARATHON_HOTFIX_BECAUSE_FIELDS,
+        "the line under a Hotfix feed's notice when it took a show that is not in "
+        "marathon_hotfix_shows because a BaF person hosts it. It takes {people} {show}",
+    ),
+    MARATHON_HOTFIX_RUNS_TEMPLATE_KEY: (
+        "Tracked because **{people}** runs in it.",
+        MARATHON_HOTFIX_BECAUSE_FIELDS,
+        "the line under a Hotfix feed's notice when it took a show that is not in "
+        "marathon_hotfix_shows because a BaF person runs in it. It takes {people} {show}",
     ),
     MARATHON_RUN_EVENT_TITLE_KEY: (
         "{member} runs {game} at {marathon}",
