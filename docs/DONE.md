@@ -44,6 +44,10 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-27 — ESA announced in go-live, not spotlit (live-site change, no deploy)
+
+Owner 16:0x, verbatim: *"Set esam to the same settings as fastest fur. Also esam is allowed to post in go live but don't spotlight it"*. Read both rows and feeds first: row 4 `esamarathon` and row 8 `fastestfurs` were ALREADY identical (kept, spotlight off, announce off, marathons on, ping mode always, pin on, no role, no windows; feeds 4/5 both `add`, active, auto-track off) apart from row 8's note. The one change: `PATCH /api/golive/spotlight/4 {announce: true, spotlight: false}` through the owner's session — answered *esamarathon is opted back in, so the next stream it starts is announced again*; read back spotlight false / announce true / marathons true / kept. This supersedes the 2026-09-26 12:5x *"not for golive shout outs"* half of the ESA item below. Not verified: no ESA stream has gone live since.
+
 ## 2026-09-27 — v179: near-miss prompts in the staff thread; RGL found by its horaro account
 
 Deployed **15:39 Phoenix** (release `5b26f3de`; merges `7da6d0d5` near-miss, `aac58481` horaro-events-owner; gate 9,012 passed + 3 skipped; boot clean 22:39:48–52Z; snapshot `backup-2026-09-27-pre-v179.sqlite3` 3.74 MB). Keys **626**. Owner 15:0x: *"Speed stuff had cassasaur on streaming doctor Mario and Tetris. Hype piece Cass is the discord visible name. We didn't catch that"* — Cass (he/they) paired everywhere at 15:10 and his runner post appeared; the near-miss build makes the next such match ask staff in the thread. RGL: feed 8 found marathon #8 (N64 30th, 66 runs). Designs: [`info/marathon-near-miss-design.md`](info/marathon-near-miss-design.md), [`info/marathon-horaro-events-design.md`](info/marathon-horaro-events-design.md) (owner-match follow-up).
