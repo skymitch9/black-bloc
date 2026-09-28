@@ -10,8 +10,10 @@ import {
   boldParts,
   button,
   card,
+  chipBar,
   el,
   field,
+  filterChip,
   notice,
   run,
   saveBar,
@@ -207,39 +209,21 @@ function rightNowStrip(payload) {
   ]));
 }
 
-function chipRow(choices, current, onPick) {
-  return el('div', { class: 'chipbar' }, choices.map(([key, label]) => el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'aria-pressed': current === key ? 'true' : 'false',
-    text: label,
-    on: { click: () => onPick(key) },
-  })));
-}
-
 function filters(payload) {
   const rows = [];
   if (payload.may_edit) {
-    rows.push(chipRow(AUDIENCE_CHIPS, state.audience, (key) => {
+    rows.push(chipBar(AUDIENCE_CHIPS, state.audience, (key) => {
       state.audience = key;
       refresh();
     }));
   }
-  rows.push(chipRow(WHERE_CHIPS, state.where, (key) => {
+  rows.push(chipBar(WHERE_CHIPS, state.where, (key) => {
     state.where = key;
     refresh();
   }));
-  rows.push(el('div', { class: 'chipbar' }, [el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'aria-pressed': state.onlyOn ? 'true' : 'false',
-    text: 'Only what is on',
-    on: {
-      click: () => {
-        state.onlyOn = !state.onlyOn;
-        refresh();
-      },
-    },
+  rows.push(el('div', { class: 'chipbar' }, [filterChip('Only what is on', state.onlyOn, () => {
+    state.onlyOn = !state.onlyOn;
+    refresh();
   })]));
   return el('div', { class: 'guidefilters' }, rows);
 }

@@ -4,6 +4,7 @@ import { syncSubnav } from './layout.js';
 import {
   ago,
   el,
+  filterChip,
   idsIn,
   nameNode,
   pager,
@@ -175,17 +176,6 @@ export function forgetKinds() {
   kindsOnce.clear();
 }
 
-function chip(label, pressed, onPick, title = null) {
-  return el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'aria-pressed': pressed ? 'true' : 'false',
-    title: title || undefined,
-    text: label,
-    on: { click: onPick },
-  });
-}
-
 const SWITCH = 'Switch to All to see the routine lines too.';
 
 function nothingSaid(feature, state) {
@@ -243,18 +233,18 @@ export async function logsSection(feature, { title = 'Logs', note = NOTE, perPag
 
   const paintChips = () => {
     chips.replaceChildren(
-      chip('All kinds', state.kind === '', () => {
+      filterChip('All kinds', state.kind === '', () => {
         state.kind = '';
         state.page = 1;
         paintChips();
         load();
       }),
-      ...kinds.map((kind) => chip(kind, state.kind === kind, () => {
+      ...kinds.map((kind) => filterChip(kind, state.kind === kind, () => {
         state.kind = state.kind === kind ? '' : kind;
         state.page = 1;
         paintChips();
         load();
-      }, `Only ${kind}`)),
+      }, { title: `Only ${kind}` })),
     );
   };
 

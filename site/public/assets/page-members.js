@@ -2,6 +2,7 @@ import { api, listOf } from './api.js';
 import { start, tabHref } from './app.js';
 import {
   avatar,
+  chipBar,
   el,
   icon,
   pager,
@@ -119,20 +120,11 @@ function memberRow(row) {
 }
 
 function toolbar() {
-  const chips = FILTERS.map(([key, label]) => el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'data-kind': key,
-    'aria-pressed': state.filter === key ? 'true' : 'false',
-    text: label,
-    on: {
-      click: () => {
-        state.filter = key;
-        state.page = 1;
-        refresh();
-      },
-    },
-  }));
+  const chips = chipBar(FILTERS, state.filter, (key) => {
+    state.filter = key;
+    state.page = 1;
+    refresh();
+  });
   return el('div', { class: 'card-head' }, [
     searchField({
       label: 'Search members',
@@ -145,7 +137,7 @@ function toolbar() {
         refresh();
       },
     }),
-    el('div', { class: 'chipbar' }, chips),
+    chips,
   ]);
 }
 
