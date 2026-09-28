@@ -44,6 +44,12 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-27 — v181: a formatting toolbar on the Posts editor
+
+Deployed **21:00 Phoenix** (release `c8f4e0e3`; merge `035f08c1`; gate 9,074 passed + 3 skipped, 25 node test files; boot clean 04:00:31–35Z). Site only — no schema, no keys. Design: `info/posts-toolbar-design.md`.
+
+- ✍️ **A formatting toolbar on the Posts page editor (owner, 2026-09-27 20:5x, verbatim: *"on the post site i like the preview box and stuff. can we add one of those text editor control panels to the top of the edit text box? the ones that allow font bold tab italics etc. like word or a standard site"*).** Discord markdown buttons above the text box (bold, italic, underline, strikethrough, heading, list, quote, code, link, spoiler, indent/tab), wrapping the selection, feeding the existing preview. Status: ⏳ dispatch when `post-carries-door` lands (both edit `page-posts.js`). Same message, done live at 20:2x: *"Rehearsal — this is where it would go: #welcome remove this part"* → `rehearsal_note` set blank (the code treats blank as no line; the default text is kept for a revert); the rules and door copies in #welcome-test re-rendered without it. ✅ **LIVE as v181 21:00.**
+
 ## 2026-09-27 — v180: the rules post carries the front door; bot pin notices deleted; Spotlight start waits
 
 Deployed **20:48 Phoenix** (release `76281204`; merges `39e3b4f6` quiet-pins, `6db64a39` thread-spotlight-start, `6f829602` post-carries-door; gate 9,074 passed + 3 skipped; boot clean 03:48:54–58Z; snapshot `backup-2026-09-27-pre-v180.sqlite3` 3.82 MB). Schema **76**, keys **631**. Live after: the welcome post carries the door (one message in #welcome-test, pin off); SS4C's spotlight ended at the first sweep (`golive.spotlight_kept` 03:48:58Z). Designs: `info/post-carries-door-design.md`, `info/quiet-pins-design.md`, `info/marathon-thread-controls-design.md` (Start follow-up).
