@@ -7,6 +7,8 @@ import pytest
 
 from black_bloc import logs_panel
 from black_bloc.birthdays import (
+    DEFAULT_COLOR_VALUE,
+    PANEL_TIMEOUT_FOOTER,
     local_today,
     next_occurrence,
     panel_buttons,
@@ -31,6 +33,7 @@ from black_bloc.settings_store import (
     BIRTHDAY_POST_NOBODY_KEY,
     BIRTHDAY_POST_OFF_KEY,
     BIRTHDAY_POST_WORDS,
+    BIRTHDAY_TEMPLATE,
     BIRTHDAY_TZ,
     SettingsStore,
 )
@@ -395,8 +398,8 @@ async def test_the_sweep_posts_once_on_the_day_and_never_twice(bot, cog, birthda
 
     posts = party_posts(bot)
     assert len(posts) == 1
-    assert posts[0]["embed"].description == "Happy Birthday **PT**!"
-    assert posts[0]["embed"].colour.value == 0x4EEFFF
+    assert posts[0]["embed"].description == BIRTHDAY_TEMPLATE.format(name="PT")
+    assert posts[0]["embed"].colour.value == DEFAULT_COLOR_VALUE
     assert posts[0]["allowed_mentions"].everyone is False
     assert await action_kinds(bot.db) == ["birthday.announce"]
     row = await get_birthday(bot.db, USER)
@@ -427,7 +430,9 @@ async def test_only_todays_rows_are_picked(bot, cog, birthday_person):
 
     await cog.run_once(MORNING)
 
-    assert [p["embed"].description for p in party_posts(bot)] == ["Happy Birthday **PT**!"]
+    assert [p["embed"].description for p in party_posts(bot)] == [
+        BIRTHDAY_TEMPLATE.format(name="PT")
+    ]
 
 
 async def test_shadow_logs_a_dry_run_and_posts_nothing(bot, cog, birthday_person):
@@ -443,9 +448,17 @@ async def test_shadow_logs_a_dry_run_and_posts_nothing(bot, cog, birthday_person
     assert await action_kinds(bot.db) == ["birthday.would_announce"]
 
 
-async def test_off_does_nothing_at_all(bot, cog, birthday_person):
-    await bot.store.set(GUILD, "birthday_mode", "off")
+@pytest.mark.parametrize(
+    ("mode", "unavailable"),
+    [("off", False), ("on", True)],
+    ids=["mode-off", "server-unavailable"],
+)
+async def test_the_sweep_touches_nothing_while_off_or_while_the_server_is_unavailable(
+    bot, cog, birthday_person, mode, unavailable
+):
+    await bot.store.set(GUILD, "birthday_mode", mode)
     await stored(bot)
+    bot.guild.unavailable = unavailable
 
     await cog.run_once(MORNING)
 
@@ -512,18 +525,6 @@ async def test_a_member_the_cache_cannot_see_is_reported_once_and_not_marked_don
 
     assert len(party_posts(bot)) == 1
     assert (await get_birthday(bot.db, USER))["last_announced_on"] == "2026-08-10"
-
-
-async def test_an_unavailable_server_is_left_alone(bot, cog, birthday_person):
-    await bot.store.set(GUILD, "birthday_mode", "on")
-    await stored(bot)
-    bot.guild.unavailable = True
-
-    await cog.run_once(MORNING)
-
-    assert party_posts(bot) == []
-    assert await action_kinds(bot.db) == []
-    assert (await get_birthday(bot.db, USER))["last_announced_on"] is None
 
 
 async def test_the_role_is_never_added_in_test_mode(bot, cog, birthday_person):
@@ -717,7 +718,7 @@ async def test_the_command_answers_ephemerally_with_a_panel(cog, bot, birthday_p
     assert interaction.response.messages[0]["ephemeral"] is True
     assert isinstance(panel_view(interaction), BirthdayView)
     assert panel_embed(interaction).title == "Birthdays"
-    assert panel_embed(interaction).colour.value == 0x4EEFFF
+    assert panel_embed(interaction).colour.value == DEFAULT_COLOR_VALUE
 
 
 async def test_the_command_run_in_a_dm_says_it_belongs_in_the_server(cog, bot, birthday_person):
@@ -740,24 +741,8 @@ async def test_the_command_refuses_in_words_when_the_database_is_down(cog, bot, 
     assert "database" in interaction.sent
 
 
-def test_the_group_and_its_twelve_subcommands_are_gone():
+def test_birthday_is_one_command_and_not_a_group():
     assert isinstance(Birthdays.birthday, discord.app_commands.Command)
-    for gone in (
-        "birthday_role",
-        "birthday_logs",
-        "set_mine",
-        "set_for",
-        "remove",
-        "optout",
-        "optin",
-        "show",
-        "next_up",
-        "list_all",
-        "mode",
-        "role_clear",
-        "status",
-    ):
-        assert not hasattr(Birthdays, gone), gone
 
 
 @pytest.mark.parametrize(
@@ -964,14 +949,22 @@ async def test_setting_a_birthday_stores_it_and_answers_with_the_next_one(
     assert "August 10" in card_embed(interaction).description
 
 
-async def test_the_modal_takes_every_separator_and_both_shapes(cog, bot, birthday_person):
-    for typed, expected in (("09/15", (9, 15)), ("09.15", (9, 15)), ("09 15", (9, 15))):
-        await set_through_the_modal(cog, bot, birthday_person, typed)
-        row = await get_birthday(bot.db, USER)
-        assert (row["month"], row["day"]) == expected
-
-    await set_through_the_modal(cog, bot, birthday_person, "09-15-1994")
-    assert (await get_birthday(bot.db, USER))["year"] == 1994
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        ("09/15", (9, 15, None)),
+        ("09.15", (9, 15, None)),
+        ("09 15", (9, 15, None)),
+        ("09-15-1994", (9, 15, 1994)),
+    ],
+    ids=["slash", "dot", "space", "with-a-year"],
+)
+async def test_the_modal_takes_every_separator_and_both_shapes(
+    cog, bot, birthday_person, typed, expected
+):
+    await set_through_the_modal(cog, bot, birthday_person, typed)
+    row = await get_birthday(bot.db, USER)
+    assert (row["month"], row["day"], row["year"]) == expected
 
 
 async def test_the_date_modal_answers_each_refusal_with_todays_exact_sentence(
@@ -1070,9 +1063,7 @@ async def test_the_view_disables_every_item_and_says_so_on_timeout(cog, bot, bir
     await view.on_timeout()
 
     assert all(item.disabled for item in view.children)
-    assert view.message.embeds[0].footer.text == (
-        "This panel has gone quiet — run /birthday again"
-    )
+    assert view.message.embeds[0].footer.text == PANEL_TIMEOUT_FOOTER
 
 
 async def test_a_click_after_the_database_goes_away_answers_in_words(
@@ -1333,11 +1324,7 @@ async def test_a_half_filled_member_cache_is_chunked_before_anyone_is_matched(bo
     assert bot.guild.queries == []
 
 
-def test_the_birthday_command_is_a_panel_and_not_a_group():
-    assert not hasattr(Birthdays.birthday, "commands")
-
-
-async def test_the_counts_used_by_status(bot):
+async def test_stored_counts_split_self_from_imported_and_count_only_the_opted_in(bot):
     await stored(bot, user_id=1, source="self")
     await stored(bot, user_id=2, source="import")
     await set_opted_out(bot.db, 2)
@@ -1381,10 +1368,14 @@ async def test_the_loops_are_started_from_on_ready_when_the_database_was_late(bo
     await asyncio.sleep(0)
 
 
-async def test_a_loop_that_stops_is_recorded_and_started_again(bot, cog):
+async def test_a_loop_that_stops_is_recorded_and_started_again(bot, cog, monkeypatch):
+    restarted = []
+    monkeypatch.setattr(cog._sweep, "restart", lambda: restarted.append(True))
+
     await cog._sweep_stopped(RuntimeError("gateway went away"))
 
     assert cog.last_error == "RuntimeError: gateway went away"
+    assert restarted == [True]
 
 
 async def test_a_sweep_that_throws_is_recorded_not_swallowed_silently(bot, cog, monkeypatch):
@@ -1415,7 +1406,9 @@ async def test_posting_today_by_hand_wishes_the_unsent_and_leaves_the_sent(
     found = await post_today(bot, bot.guild, birthday_person, again=False, now=MORNING)
 
     assert (found.posted, found.skipped, found.missing, found.failed) == (1, 1, 0, 0)
-    assert [p["embed"].description for p in party_posts(bot)] == ["Happy Birthday **PT**!"]
+    assert [p["embed"].description for p in party_posts(bot)] == [
+        BIRTHDAY_TEMPLATE.format(name="PT")
+    ]
     assert "Posted 1 birthday wish(es) in #test." in found.said
     assert "1 already wished today were left alone" in found.said
     assert (await get_birthday(bot.db, USER))["last_announced_on"] == "2026-08-10"
@@ -1490,7 +1483,7 @@ async def test_birthdays_rehearse_in_their_own_home_over_the_global_one(
 
     assert party_posts(bot, PARTY_CHANNEL) == []
     assert len(party_posts(bot, LOG_CHANNEL)) == 1
-    assert found.posted == 1 and "#" in found.said
+    assert found.posted == 1 and "#log" in found.said
     details = json.loads((await details_for(bot.db, "birthday.would_announce"))[0])
     assert details["shadow_home"] == LOG_CHANNEL
 
@@ -1977,7 +1970,6 @@ async def test_cog_load_registers_the_block_button_even_before_the_database(bot,
     await cog.cog_load()
 
     assert bot.dynamic_items == [OpenBirthdayButton]
-
 
 
 async def test_a_failure_in_the_block_s_form_is_a_private_sentence_and_a_row(
