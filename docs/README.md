@@ -114,6 +114,7 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-28 15:2x:** v189 live (the Hotfix show picker + runner tracking, hosts optional; marathons confirm the live run by Twitch category and title, and Hotfix marathons keep their own clock; schema 81, 701 keys); see [`deploys.log`](deploys.log).
 **2026-09-28 14:4x:** v188 live (GDQ Hotfix shows become marathons from GDQ's published sheet — GDQueer added, 24 runs, Sat 10:00 → Sun 20:09 Phoenix; schema 80, 695 keys); see [`deploys.log`](deploys.log) and the TODO Hotfix item (still open: picker + category tracker).
 **2026-09-28 10:3x:** v187 live (a Google Doc import takes the doc's title, its first title line, or Untitled / Untitled-1 / …; 694 keys); see [`DONE.md`](DONE.md) 2026-09-28 v187.
 **2026-09-28 09:3x:** v186 live (import a post from a public Google Doc — New post ▸ Import a Google Doc or Import in a post's drawer, lands in the embed box, the welcome post's own Doc converts to it exactly; Posts ▸ Blocks folds, searches and filters; one shared search module on every page; 693 keys); see [`DONE.md`](DONE.md) 2026-09-28 v186.
