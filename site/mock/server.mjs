@@ -697,7 +697,9 @@ const SETTING_SPECS = [
   ["marathon_far_poll_hours", "int", 24, 24, "hours between reads of a schedule that is still weeks away. 24 by default", null, 168, 1],
   ["marathon_lead_days", "int", 7, 7, "how many days before a marathon starts its schedule counts as near and is read every marathon_poll_minutes. 7 by default", null, 60, 1],
   ["marathon_move_minutes", "int", 5, 5, "how many minutes a run's start must shift before it counts as moved — a moved BaF run is logged as important with the old and the new time. 5 by default", null, 120, 1],
-  ["marathon_title_confirms", "bool", true, true, "whether the marathon channel's live title and game decide which run is on now. on by default; off goes by the schedule's clock alone"],
+  ["marathon_title_confirms", "bool", true, true, "whether the marathon channel's live title decides which run is on now. on by default; with this and marathon_category_confirms off the schedule's clock decides alone"],
+  ["marathon_category_confirms", "bool", true, true, "whether the marathon channel's Twitch category decides which run is on now, beside the title — both on one run is certain, and a direct category wins when they disagree. on by default"],
+  ["marathon_retro_category", "text", "Retro", "Retro", "the Twitch category a run with no category of its own is played under — the channel in this category stands for such a run. `Retro` by default; capitals do not matter"],
   ["marathon_late_grace_minutes", "int", 90, 90, "minutes a run may sit past its scheduled start with no sign on the stream before the schedule alone calls it live — the run before it is probably running long. 90 by default", null, 360, 0],
   ["marathon_match_hosts", "bool", true, true, "whether a host or a commentator from BaF counts as BaF, not only a runner. on by default"],
   ["marathon_reminder_minutes", "text", "120, 15", "120, 15", "minutes before a BaF run that a reminder is posted, separated by commas; `120, 15` by default. marathon_ping_minutes is always one of them"],
@@ -2259,7 +2261,17 @@ function validate(key, value) {
   if (type === 'bool') return Boolean(value);
   if (key === 'posts_block_links_rows') return checkedLinks(value);
   if (key === 'marathon_hotfix_shows') return checkedShows(value);
+  if (key === 'marathon_retro_category') return checkedRetro(value);
   return value;
+}
+
+// The twin of settings_store.checked_retro: one Twitch category name, never blank.
+function checkedRetro(value) {
+  const text = String(value ?? '').trim().replace(/\s+/g, ' ');
+  if (!text || text.length > 60) {
+    throw new Refused(400, 'bad_value', `**${text.slice(0, 40) || 'Nothing'}** is not a Twitch category name, so nothing was changed. Write the category a run with no category of its own is played under, up to 60 characters — for example \`Retro\`.`);
+  }
+  return text;
 }
 
 // The twin of settings_store.checked_shows: one to twenty show names, each once.
@@ -6458,7 +6470,9 @@ function raidDetail(row) {
 
 const MARATHON_STATE_WORDS = { upcoming: 'coming up', live: 'on now', done: 'done', dropped: 'off the schedule' };
 const MARATHON_PHASE_WORDS = { far: 'far off', near: 'coming up', live: 'on now', over: 'over', paused: 'paused' };
-const MARATHON_BECAUSE_WORDS = { title: "the stream's title", schedule: "the schedule's clock", staff: 'staff' };
+const MARATHON_BECAUSE_WORDS = { title: "the stream's title", category: "the stream's Twitch category", 'title+category': "the stream's title and Twitch category", schedule: "the schedule's clock", staff: 'staff' };
+// The bot's marathon_sources.RETIMES_ITSELF: only the Hotfix sheet leaves the clock to Black Bloc.
+const MARATHON_KEEPS_CLOCK = new Set(['gdq_hotfix']);
 const MARATHON_GDQ = /^https?:\/\/(?:www\.)?gamesdonequick\.com\/schedule\/(\d+)\/?(?:[?#].*)?$/i;
 const MARATHON_TRACKER = /^https?:\/\/tracker\.gamesdonequick\.com\/tracker\/(?:event|runs|index)\/([A-Za-z0-9_-]+)\/?(?:[?#].*)?$/i;
 const MARATHON_SHORT = /^[A-Za-z][A-Za-z0-9_-]{2,40}$/;
@@ -6485,6 +6499,20 @@ function marathonSuggestion(extra = {}) {
 
 function marathonPerson(name, login, part, userId = null) {
   return { name, login, part, user_id: userId };
+}
+
+function hotfixRun(start, end, gameId, [atNow, endsNow] = [start, end], extra = {}) {
+  const day = (clock) => `2026-10-03T${clock}:00+00:00`;
+  return {
+    ...extra,
+    scheduled_at: day(atNow),
+    ends_at: day(endsNow),
+    sheet_at: day(start),
+    sheet_ends_at: day(end),
+    twitch_game_id: gameId,
+    twitch_category: null,
+    twitch_looked_at: '2026-10-02T17:00:00+00:00',
+  };
 }
 
 function seedMarathonRuns() {
@@ -6516,7 +6544,7 @@ function seedMarathonRuns() {
     run(2, 1, 2, -240, 'Donkey Kong Country 2', '102%', [marathonPerson('Ryan Ford', 'ryan_ford522', 'runner')]),
     run(3, 1, 3, -180, 'The Talos Principle', 'All Sigils', [marathonPerson('Gelly', 'gelly', 'runner')]),
     run(4, 1, 4, -120, 'Fire Emblem: Three Houses', 'Blue Lions', [marathonPerson('GretaIceVixen', 'greticevixen', 'runner')]),
-    run(5, 1, 5, -40, 'Super Metroid', 'Any%', [marathonPerson('Casey', 'caseyfast', 'runner', casey), marathonPerson('TheKingsPride', 'thekingspride', 'host')], { state: 'live', live_because: 'title', shout_message_id: '830000000000000301', reminders_sent: [120, 15] }),
+    run(5, 1, 5, -40, 'Super Metroid', 'Any%', [marathonPerson('Casey', 'caseyfast', 'runner', casey), marathonPerson('TheKingsPride', 'thekingspride', 'host')], { state: 'live', live_because: 'title+category', shout_message_id: '830000000000000301', reminders_sent: [120, 15] }),
     run(6, 1, 6, 20, 'Celeste', 'Any%', [marathonPerson('Flyingludicolo', 'flyingludicolo', 'runner')]),
     run(7, 1, 7, 80, 'Kirby Air Riders', 'Air Ride — All Tracks', [marathonPerson('Bluekandy', 'bluekandy', 'runner'), marathonPerson('Rivet', 'rivetplays', 'host', rivet)], { previous_scheduled_at: at(40), moved_at: minutesAgo(12), reminders_sent: [] }),
     run(8, 1, 8, 140, 'Devil May Cry 5', 'NG (Human)', [marathonPerson('DECosmic', 'decosmic', 'runner')]),
@@ -6543,6 +6571,12 @@ function seedMarathonRuns() {
     run(41, 40, 2, -129900, 'Ocarina of Time', 'Glitchless', [marathonPerson('Gelly', 'gelly', 'runner')], { state: 'done' }),
     run(42, 40, 3, -128400, 'Tunic', 'Any%', [marathonPerson('Peas', 'peasplays', 'runner')], { state: 'done' }),
     run(43, 41, 1, -60000, 'Hades', 'Fresh File', [marathonPerson('Spooty', 'spootybiscuit', 'runner')], { state: 'done' }),
+    // GDQueer (marathon 50) keeps Black Bloc's clock: the Hotfix sheet never moves itself, so the
+    // seed shows Saturday as it will look — Spyro seen by title AND category 20 minutes late, the
+    // later runs re-timed from it (marathon-category-track-design.md). Back to the sheet's times undoes it.
+    run(50, 50, 1, 0, 'Spyro Reignited Trilogy', 'Spyro the Dragon: 80 Dragons NBS', [marathonPerson('Toronite', 'toronite', 'runner')], hotfixRun('17:00', '18:08', '1', ['17:20', '18:28'], { state: 'live', live_because: 'title+category', actual_started_at: '2026-10-03T17:20:00+00:00' })),
+    run(51, 50, 2, 0, 'Hamtaro: Ham-Hams Unite!', 'Any%', [marathonPerson('PumpkinPower14', 'pumpkinpower14', 'runner')], hotfixRun('18:08', '19:00', '2', ['18:28', '19:20'])),
+    run(52, 50, 3, 0, 'Bombun', 'Any% NG+', [marathonPerson('debeaunairVT', 'debeaunairvt', 'runner')], hotfixRun('19:00', '19:46', null, ['19:20', '20:06'])),
   ];
 }
 
@@ -6734,7 +6768,47 @@ function marathonRunRow(run) {
     event_id: run.event_id || null,
     event_status: run.event_id ? ((state.events.find((one) => one.id === run.event_id) || {}).status || 'gone') : null,
     event_unlinked: run.event_id === 0,
+    sheet_at: run.sheet_at || run.scheduled_at,
+    retimed: Boolean(run.sheet_at) && run.sheet_at !== run.scheduled_at,
+    actual_started_at: run.actual_started_at || null,
+    certain: run.live_because === 'title+category',
+    twitch_category: run.twitch_category || null,
+    no_category: Boolean(run.twitch_looked_at) && !run.twitch_game_id,
   };
+}
+
+// The bot's marathon_signals.retimed, for a marathon whose schedule does not move itself: a run
+// seen starting anchors the clock and each later run of its day starts where the one before ends.
+function marathonRetime(row) {
+  if (!MARATHON_KEEPS_CLOCK.has(row.source)) return 0;
+  const sheetOf = (run) => new Date(run.sheet_at || run.scheduled_at).getTime();
+  const sheetEnd = (run) => new Date(run.sheet_ends_at || run.ends_at).getTime();
+  const runs = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped' && (one.sheet_at || one.scheduled_at))
+    .sort((a, b) => sheetOf(a) - sheetOf(b) || a.order_no - b.order_no);
+  let moved = 0;
+  let cursor = null;
+  let previous = null;
+  for (const run of runs) {
+    if (previous && Math.abs(sheetOf(run) - sheetEnd(previous)) > 60000) cursor = null;
+    previous = run;
+    const actual = run.actual_started_at ? new Date(run.actual_started_at).getTime() : null;
+    const ended = run.actual_ended_at ? new Date(run.actual_ended_at).getTime() : null;
+    let start = sheetOf(run);
+    let end = sheetEnd(run);
+    if (actual !== null || cursor !== null || ended !== null) {
+      start = actual ?? cursor ?? start;
+      end = ended ?? start + (sheetEnd(run) - sheetOf(run));
+      cursor = end;
+    }
+    if (new Date(run.scheduled_at).getTime() !== start || new Date(run.ends_at).getTime() !== end) {
+      run.sheet_at = run.sheet_at || run.scheduled_at;
+      run.sheet_ends_at = run.sheet_ends_at || run.ends_at;
+      Object.assign(run, { scheduled_at: new Date(start).toISOString(), ends_at: new Date(end).toISOString() });
+      moved += 1;
+    }
+  }
+  if (moved) logAction('marathon.retimed', { actor_id: null, details: { marathon_id: row.id, runs: moved, because: 'staff' } });
+  return moved;
 }
 
 function marathonPairingRow(one) {
@@ -7109,6 +7183,8 @@ function marathonDetail(row) {
     run_list: runs.map(marathonRunRow),
     pairings: marathonPairingsFor(row),
     unmatched: [...unmatched.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
+    retimed_runs: runs.map(marathonRunRow).filter((one) => one.state !== 'dropped' && one.retimed).length,
+    keeps_clock: MARATHON_KEEPS_CLOCK.has(row.source),
     ...marathonSpotlightOf(row),
   };
 }
@@ -7814,6 +7890,8 @@ function marathonArchivedDetail(row) {
     run_list: marathonRunsOf(row.id).map(marathonRunRow),
     pairings: state.marathonPeople.filter((one) => one.marathon_id === row.id).map(marathonPairingRow),
     unmatched: [],
+    retimed_runs: 0,
+    keeps_clock: false,
   };
 }
 
@@ -8022,6 +8100,19 @@ route('POST', '/api/marathons/:marathon_id/refresh', (context) => {
   logAction('marathon.fetched', { actor_id: null, details: { marathon_id: row.id, changed: false } });
   const found = marathonDetail(row);
   return { ...found, message: `**${row.name}** was read just now: ${found.runs} run(s), ${found.ours} of them BaF.` };
+});
+
+route('POST', '/api/marathons/:marathon_id/sheet-times', (context) => {
+  requireStaff(context.session);
+  const row = marathonOf(context.params.marathon_id);
+  const back = marathonRunsOf(row.id).filter((one) => one.state !== 'dropped'
+    && ((one.sheet_at && one.sheet_at !== one.scheduled_at) || (one.sheet_ends_at && one.sheet_ends_at !== one.ends_at) || one.actual_started_at || one.actual_ended_at));
+  if (!back.length) throw new Refused(409, 'not_retimed', `**${row.name}** is on the sheet's times already, so nothing was changed.`);
+  for (const run of back) {
+    Object.assign(run, { scheduled_at: run.sheet_at || run.scheduled_at, ends_at: run.sheet_ends_at || run.ends_at, actual_started_at: null, actual_ended_at: null });
+  }
+  logAction('web.marathon.sheet_times', { details: { marathon_id: row.id, runs: back.length, via: 'website' } });
+  return { ...marathonDetail(row), message: `**${row.name}** is back on the sheet's times (${back.length} run(s)).` };
 });
 
 route('POST', '/api/marathons/:marathon_id/board', (context) => {
@@ -8286,7 +8377,8 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/upcoming', (context) => 
   const run = marathonRunOf(row, context.params.run_id);
   if (run.state !== 'done') throw new Refused(409, 'not_resettable', `**${run.game}** is ${run.state}, so nothing was changed. Only a done run can be marked coming up again.`);
   const from = run.state;
-  Object.assign(run, { state: 'upcoming', live_because: 'staff' });
+  Object.assign(run, { state: 'upcoming', live_because: 'staff', actual_started_at: null, actual_ended_at: null });
+  marathonRetime(row);
   logAction('web.marathon.run_reset', { details: { marathon_id: row.id, run_id: run.id, from, because: 'staff', via: 'website' } });
   return { run: marathonRunRow(run), message: `**${run.game}** is coming up again. Reminders already sent stay sent.` };
 });
@@ -8297,7 +8389,8 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/live', (context) => {
   const run = marathonRunOf(row, context.params.run_id);
   if (!['upcoming', 'done'].includes(run.state)) throw new Refused(409, 'not_liveable', `**${run.game}** is ${run.state}, so nothing was changed. Only a run coming up or done can be marked live.`);
   const from = run.state;
-  Object.assign(run, { state: 'live', live_because: 'staff' });
+  Object.assign(run, { state: 'live', live_because: 'staff', actual_started_at: new Date().toISOString(), actual_ended_at: null });
+  marathonRetime(row);
   logAction('web.marathon.run_live', { details: { marathon_id: row.id, run_id: run.id, from, because: 'staff', via: 'website' } });
   if (marathonOurs(run) && !run.shout_message_id && marathonTracked(row)) {
     run.shout_message_id = String(830000000000000500 + run.id);
@@ -8311,7 +8404,9 @@ route('POST', '/api/marathons/:marathon_id/runs/:run_id/done', (context) => {
   const row = marathonOf(context.params.marathon_id);
   const run = marathonRunOf(row, context.params.run_id);
   if (['done', 'dropped'].includes(run.state)) throw new Refused(409, 'already_done', `**${run.game}** is already ${run.state}, so nothing was changed.`);
+  if (run.state === 'live') run.actual_ended_at = new Date().toISOString();
   run.state = 'done';
+  marathonRetime(row);
   logAction('web.marathon.run_done', { details: { marathon_id: row.id, run_id: run.id, because: 'staff', via: 'website' } });
   return { run: marathonRunRow(run), message: `**${run.game}** is marked done.` };
 });

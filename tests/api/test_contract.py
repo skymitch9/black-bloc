@@ -792,8 +792,8 @@ async def seed_world(client, web, guild, wf) -> dict:
         row["id"] for row in await runs_of(db, marathon_id) if row["game"] == "Celeste"
     )
     await db.conn.execute(
-        "UPDATE marathon_runs SET state = 'done', done_at = ? WHERE id = ?",
-        (datetime.now(UTC).isoformat(), marathon_done_run_id),
+        "UPDATE marathon_runs SET state = 'done', done_at = ?, actual_started_at = ? WHERE id = ?",
+        (datetime.now(UTC).isoformat(), datetime.now(UTC).isoformat(), marathon_done_run_id),
     )
     # Halo Fest is over with SGDQ 2027 suggested and still open, so Look again and Not this
     # one both reach it; its own runs are not needed by any entry.
@@ -1004,6 +1004,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "marathon_pairing_id": str(marathon_pairing_id),
         "marathon_over_id": str(marathon_over_id),
         "marathon_bare_id": str(marathon_id),
+        "marathon_retimed_id": str(marathon_id),
         "marathon_waiting_id": str(marathon_waiting_id),
         "marathon_unposted_id": str(marathon_waiting_id),
         "marathon_archived_id": str(marathon_archived_id),

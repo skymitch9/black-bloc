@@ -5192,7 +5192,9 @@
         "thread_url",
         "inbox_message_url",
         "channel_spotlight",
-        "spotlight_state"
+        "spotlight_state",
+        "retimed_runs",
+        "keeps_clock"
       ],
       "rows": {
         "run_list": [
@@ -5213,7 +5215,10 @@
           "held",
           "event_id",
           "event_status",
-          "event_unlinked"
+          "event_unlinked",
+          "sheet_at",
+          "retimed",
+          "certain"
         ],
         "pairings": [
           "id",
@@ -6021,6 +6026,29 @@
           "state_word",
           "can_mark_upcoming",
           "can_mark_live"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/marathons/{marathon_retimed_id}/sheet-times",
+      "read_by": [
+        "marathons-section.js (events.html) Back to the sheet’s times"
+      ],
+      "shape": "object",
+      "keys": [
+        "id",
+        "retimed_runs",
+        "run_list",
+        "message"
+      ],
+      "rows": {
+        "run_list": [
+          "id",
+          "scheduled_at",
+          "sheet_at",
+          "retimed",
+          "certain"
         ]
       }
     },
@@ -8821,6 +8849,7 @@
     "web.marathon.run_done",
     "web.marathon.run_reset",
     "web.marathon.run_live",
+    "web.marathon.sheet_times",
     "web.marathon.next_suggested",
     "web.marathon.would_suggest_next",
     "web.marathon.next_none",
