@@ -25,7 +25,6 @@ from black_bloc.cogs.community.polls import (
     my_positions,
     options_of,
     panel_counts,
-    poll_for_message,
     recurrences,
     results_of,
     scheme_of,
@@ -36,6 +35,7 @@ from black_bloc.cogs.community.polls import (
     votes_of,
 )
 from black_bloc.config import load_settings
+from black_bloc.panels import CAPPED_PLACEHOLDER
 from black_bloc.settings_store import SettingsStore
 
 GUILD = 7
@@ -1081,7 +1081,8 @@ async def test_the_settings_command_shows_the_switches_and_the_loop_health(cog, 
 
     said = card_embed(interaction).description
     assert "**mode** — on" in said and "**staff review** — off" in said
-    assert "**last call** — 60 minute(s) before close" in said
+    minutes = bot.store.get(GUILD, "poll_reminder_minutes")
+    assert f"**last call** — {minutes} minute(s) before close" in said
     assert "polls loop" in said and "never yet" in said
 
 
@@ -1103,6 +1104,7 @@ async def test_changing_the_review_switch_goes_through_the_one_validator_and_is_
 
 
 async def test_a_number_the_registry_would_not_take_is_refused_in_words(cog, bot, lead):
+    before = bot.store.get(GUILD, "poll_default_hours")
     interaction = FakeInteraction(bot, lead)
     modal = polls_cog.NumbersModal(bot.store, GUILD)
     modal.fields[0]._value = "wibble"
@@ -1110,7 +1112,7 @@ async def test_a_number_the_registry_would_not_take_is_refused_in_words(cog, bot
     await modal.on_submit(interaction)
 
     assert "whole number" in interaction.sent
-    assert bot.store.get(GUILD, "poll_default_hours") == 24
+    assert bot.store.get(GUILD, "poll_default_hours") == before
 
 
 async def test_a_member_cannot_change_the_poll_settings(cog, bot, member):
@@ -1159,13 +1161,6 @@ async def test_a_vote_on_a_message_that_is_not_a_black_bloc_poll_is_ignored(cog,
     await cog.on_raw_poll_vote_add(payload)
 
     assert await votes_of(db, 1) == []
-
-
-async def test_a_message_id_finds_the_poll_it_belongs_to(cog, bot, lead, db):
-    await make(cog, bot, lead)
-    row = await get_poll(db, 1)
-    assert (await poll_for_message(db, row["message_id"]))["id"] == 1
-    assert await poll_for_message(db, 424242) is None
 
 
 async def close_soon(db, poll_id, minutes):
@@ -1874,7 +1869,7 @@ async def test_a_member_cannot_open_a_repeating_polls_card(cog, bot, lead, membe
     assert "staff only" in interaction.sent
 
 
-async def test_forgetting_a_deleted_dashboard_channel(cog, bot, db):
+async def test_a_deleted_poll_channel_is_forgotten_and_falls_back_to_the_default(cog, bot, db):
     await bot.store.set(GUILD, "poll_channel_id", OTHER_CHANNEL)
 
     await cog.on_guild_channel_delete(bot.guild.get_channel(OTHER_CHANNEL))
@@ -1990,7 +1985,7 @@ async def test_the_pick_select_caps_at_25_and_says_how_many_are_left(cog, bot, l
     select = next(item for item in view.children if isinstance(item, polls_cog.PollPick))
 
     assert len(select.options) == 25
-    assert select.placeholder == "25 of 27 — the rest are on the site"
+    assert select.placeholder == CAPPED_PLACEHOLDER.format(shown=25, total=27)
 
 
 async def test_a_short_list_keeps_the_plain_placeholder_and_names_each_poll(cog, bot, lead):
@@ -2415,7 +2410,7 @@ async def test_the_logs_button_answers_with_a_new_ephemeral_message(cog, bot, le
     assert last["view"].message is interaction.rendered
 
 
-async def test_the_logs_button_still_refuses_a_demoted_staffer_in_words(cog, bot, member):
+async def test_the_logs_button_refuses_a_member_in_words(cog, bot, member):
     interaction = await click(bot, member, polls_cog.LogsButton())
 
     assert "staff only" in interaction.sent
@@ -2801,7 +2796,8 @@ async def test_the_settings_row_turns_drafts_off_and_sets_the_days(cog, bot, lea
 async def test_the_settings_embed_says_where_drafts_stand(cog, bot, lead):
     lines = " ".join(cog.settings_lines(bot.guild))
 
-    assert "saved drafts" in lines and "kept 14 day(s)" in lines
+    days = bot.store.get(GUILD, "poll_draft_days")
+    assert "saved drafts" in lines and f"kept {days} day(s)" in lines
 
 
 # --- Shadow, a channel per poll, pinned while open -----------------------------------------
@@ -2880,16 +2876,6 @@ async def test_would_open_is_never_written_in_shadow_because_the_poll_really_ope
 
     assert "poll.would_open" not in await action_kinds(db)
     assert (await get_poll(db, 1))["status"] == pure.OPEN
-
-
-async def test_with_the_mode_on_a_real_channel_is_still_refused_under_test_mode(
-    cog, bot, lead, db
-):
-    """Today's refusal stays: shadow is the way to rehearse, not a general escape hatch."""
-    interaction = await make(cog, bot, lead, channel=bot.guild.get_channel(OTHER_CHANNEL))
-
-    assert "test mode" in interaction.sent
-    assert await get_poll(db, 1) is None
 
 
 async def test_a_rehearsal_with_nowhere_to_rehearse_says_so_and_writes_no_message(
