@@ -135,11 +135,16 @@ Schema **81 → 82** · registry keys **701 → 713** · routes **+1** (`PATCH /
    hosted run became "ours" and `runs`/`both` mode made it an event — which would have given Hidden Heroes one event
    per run anarchy hosts on top of any host event. A run event that already exists on such a run is NOT called off
    (the cancel rule is still "nobody of ours is left"), and **Make it now** on that run still works (staff final say).
-6. ⚠️ **Everything else that follows "a run of ours" is unchanged, so Scan hosts ON makes every run the host is on
+6. ~~⚠️ **Everything else that follows "a run of ours" is unchanged, so Scan hosts ON makes every run the host is on
    "ours"**: the board lines, one runner post per run in the marathon's thread, reminders (and the public reminder
    copy while `marathon_public_reminders` is on), shoutouts and public highlights — each naming the host with the
    `marathon_part_host` word. That is the `hotfix-picker` rule for a scanned host, not new here, but it is what the
-   conductor's live action (Scan hosts ON for Hidden Heroes) will set off; see the live check.
+   conductor's live action (Scan hosts ON for Hidden Heroes) will set off; see the live check.~~
+   **REVERSED 2026-09-28 by the owner (*"Do the small change first, HH isn't today"* — spotlight only), branch
+   `host-spotlight-only` `ce1b090d`:** a scanned BaF host is shown, can be spotlit and gets host events, but a run is
+   ours only because a BaF person RUNS it. The old rule is `marathon_hosts_count_as_ours` (default off). Why it
+   flipped: Hidden Heroes' three runs are other people's — the old rule would have posted, reminded, shouted and
+   highlighted runs nobody from BaF runs. See *Spotlight only* at the foot of this doc.
 7. **The Hotfix show picker and feed tracker still read the global `marathon_scan_hosts_default`**: a show block they
    judge has no marathon row yet, so there is no per-marathon answer to read.
 8. **The thread controls now carry seven buttons** (two rows; Discord lays them out five a row). The `/event` card
@@ -174,9 +179,11 @@ Schema **81 → 82** · registry keys **701 → 713** · routes **+1** (`PATCH /
 
 ⚠️ Migrate before deploy is automatic here (four `ADDED_COLUMNS` through the bootstrap; the boot log names them).
 
-1. **Before Scan hosts ON for Hidden Heroes (marathon 10)** — read Deviation 6: every run anarchy hosts becomes a
+1. ~~**Before Scan hosts ON for Hidden Heroes (marathon 10)** — read Deviation 6: every run anarchy hosts becomes a
    BaF run (a runner post each in its thread, reminders, and the public reminder copy if `marathon_public_reminders`
-   is on). If that is not wanted for a hosting-only show, decide it before pressing.
+   is on). If that is not wanted for a hosting-only show, decide it before pressing.~~ **Decided 2026-09-28: spotlight
+   only** (`host-spotlight-only`) — once that branch is live, Scan hosts ON posts nothing for anarchy's hosted runs
+   while `marathon_hosts_count_as_ours` stays off. Merge + deploy it BEFORE pressing.
 2. **Scan hosts ON for Hidden Heroes (marathon 10)** — either the thread's **Scan hosts: off · turn on**, or Events ▸
    Hidden Heroes ▸ *Settings for this marathon* ▸ **Scan hosts** *On* ▸ Save, or
    `PATCH /api/marathons/10 {"scan_hosts": true}`. Expect *"**Hidden Heroes** scans its hosts now…"*, and the People
@@ -190,3 +197,53 @@ Schema **81 → 82** · registry keys **701 → 713** · routes **+1** (`PATCH /
    **twitch.tv/junior_sm** everywhere Black Bloc uses their channel now."*; the row reads **twitch.tv/junior_sm (fixed
    from twitch.tv/Jr)**; **Spotlight…** then makes a row for `junior_sm`, never `jr`. A `marathon.pairing_login_set` row
    is on the Logs page.
+
+## Spotlight only — hosts never make a run ours (owner 2026-09-28)
+
+> **BUILT 2026-09-28 on branch `host-spotlight-only` (worktree `C:/lcw/bb-host-spotlight-only`, off `main`
+> `c8e075bb`), NOT MERGED, NOT DEPLOYED.** Commit `ce1b090d` (Python, mock, site words, tests), then docs.
+> **Last verified: 2026-09-28** by the suite and `node site/mock/check.mjs` on `MOCK_PORT=8913`; nothing met Discord,
+> a browser or the live database.
+
+**The ask:** the conductor asked *"all of that, or spotlight only?"* about Deviation 6; the owner, 15:5x: *"Do the
+small change first, HH isn't today"* — spotlight only.
+
+**As built:**
+
+- **`marathon_hosts_count_as_ours`** (bool, **off**; Marathons group, registry + mock row + label, listed right after
+  `marathon_scan_hosts_default`; the drawer's Scan hosts help names it). Off: a run is ours only because a BaF person
+  runs it (commentators are not hosts and keep following `marathon_match_hosts`). On: the `hotfix-picker` rule
+  returns — a scanned BaF host makes the run ours.
+- **One decision point.** `mt.match_people(..., hosts_count=)` marks a matched host `"counts": False` when hosts do
+  not count; `mt.ours` skips that person. Every "run of ours" reader goes through `mt.ours` / `mt.is_ours` /
+  `mt.member_ids`, so all of these now follow runners only with no change of their own: the `ours` counts (API
+  marathon/list/refresh answers, the card's BaF line, the People card's day counts, `counts_of`), the board and its
+  lines, runner posts in the marathon thread, reminders and the public reminder copy, shoutouts (automatic and
+  **Shout it now** via `run_moves`), public highlights (`marathon_public.postable`), run events and their cancel rule
+  (Deviation 5's `is_runner_run` is unchanged and still stops host-only run events even with the key on),
+  `marathon.run_matched` logging, *what's next for me*, and the run-details payloads.
+- **Unchanged on purpose:** the People card still shows the host in the BaF block marked *host* (it reads `user_id`,
+  which the host keeps); **Spotlight…** on a host works as before; host events follow `host_events` + scan hosts and
+  never read the key; the Hotfix feed's person tracking (`marathon_hotfix`) calls `match_people` without the argument
+  and still tracks a show because anarchy hosts it (gated by `marathon_scan_hosts_default`, as before); near-miss is
+  about unmatched names and never read "ours". No Go-live repost path decides BaF-ness outside `mt.ours` (searched).
+- **When it takes effect:** at the marathon's next rematch — every schedule read, a pairing change, a Scan hosts
+  press. A run stored before the deploy carries no flag and counts until that rematch (one read on an active
+  marathon). Flipping the key has no settings hook either; it lands at the next read.
+- **Mock:** `marathonCounts` mirrors `mt.ours`; `marathonRematch` writes the flag; the seed's run 7 (Rivet hosting)
+  starts flagged, so AGDQ 2027's run 7 now reads *ours: false* while Rivet stays ✦BaF on it. No payload shape
+  changed (`person_row` never sends `counts`; the mock strips it), so `contract.json` is untouched.
+
+**Counts:** registry keys **713 → 714** (measured: `len(settings_store.KEY_TYPES)`); schema unchanged (82); routes
+unchanged (`check.mjs`: *22 pages, 286 routes, 26 core settings, all keys present*).
+
+**Tests:** `tests/test_marathon.py` (the flag and `ours` both ways; a runner counts either way);
+`tests/cogs/content/test_marathon_hosts.py` — a Hidden-Heroes-shaped show (Titanfall 2, VHOLUME, SPRAWL zero, anarchy
+hosting all three, paired everywhere, Scan hosts on, the clock at the 15-minute reminder): anarchy ✦BaF *host*,
+`counts_of` = (3, 0), no runner post / reminder / public reminder, no **Shout it now**, no highlight, Spotlight… makes
+the host row; the key on → (3, 3), posts and reminders return; key off again → back to 0 at the rematch; Sky's run is
+the same both ways; host events follow their switch both ways. Five older tests that asserted the old rule now set
+the key on (they still prove it).
+
+**What was NOT verified:** nothing met Discord or a browser; the live marathons 9 and 10 and their stored runs were
+not read; the one-rematch lag on stored runs was reasoned from the code, not measured live.

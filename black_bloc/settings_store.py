@@ -4722,6 +4722,7 @@ MARATHON_RETRO_LENGTH = 60
 MARATHON_LATE_GRACE_KEY = "marathon_late_grace_minutes"
 MARATHON_MATCH_HOSTS_KEY = "marathon_match_hosts"
 MARATHON_SCAN_HOSTS_DEFAULT_KEY = "marathon_scan_hosts_default"
+MARATHON_HOSTS_COUNT_AS_OURS_KEY = "marathon_hosts_count_as_ours"
 MARATHON_REMINDER_MINUTES_KEY = "marathon_reminder_minutes"
 MARATHON_PING_MINUTES_KEY = "marathon_ping_minutes"
 MARATHON_REMINDER_PINGS_KEY = "marathon_reminder_pings"
@@ -5082,6 +5083,14 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
         "whether a marathon's hosts are scanned for BaF people at all — shown ✦BaF when paired "
         "or linked, and counted when the Hotfix feed tracks shows a BaF person is on. Runners "
         "are always scanned; commentators follow marathon_match_hosts. off by default",
+    ),
+    MARATHON_HOSTS_COUNT_AS_OURS_KEY: (
+        "bool",
+        False,
+        "whether a run a BaF host hosts counts as a BaF run — its runner post, reminders, "
+        "shoutout and highlight — when nobody from BaF runs it. Off, a scanned host is shown "
+        "and can be spotlit and given a host event, but only a BaF runner makes a run ours. "
+        "off by default",
     ),
     MARATHON_REMINDER_MINUTES_KEY: (
         "text",

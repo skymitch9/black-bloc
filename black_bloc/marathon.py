@@ -408,6 +408,7 @@ def match_people(
     match_hosts: bool = True,
     usernames: dict[str, int] | None = None,
     scan_hosts: bool = True,
+    hosts_count: bool = True,
 ) -> list[dict[str, Any]]:
     """Staff pairings first, then the member's Twitch link, then — only for a name the schedule
     gave no link for — a member whose Discord username is exactly that name."""
@@ -440,6 +441,8 @@ def match_people(
         one = {"name": name, "login": login, "part": part, "user_id": user_id}
         if fixed and fixed != sheet:
             one["sheet_login"] = sheet
+        if user_id is not None and part == HOST and not hosts_count:
+            one["counts"] = False
         found.append(one)
     return found
 
@@ -460,7 +463,7 @@ def ours(people: Any) -> list[dict[str, Any]]:
     """The people of ours on a run, one line per member, the runner part first."""
     kept: dict[int, dict[str, Any]] = {}
     for person in sorted(
-        (one for one in people or () if one.get("user_id")),
+        (one for one in people or () if one.get("user_id") and one.get("counts") is not False),
         key=lambda one: PART_ORDER.index(one["part"]) if one["part"] in PART_ORDER else 9,
     ):
         kept.setdefault(int(person["user_id"]), person)

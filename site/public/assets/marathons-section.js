@@ -197,7 +197,8 @@ const HIGHLIGHT_HELP = 'On: the moment a BaF run goes live its highlight posts i
 const HOSTS_FIELD = 'Scan hosts';
 const HOSTS_HELP = 'On: a host from BaF — paired, or matched by their Twitch link — shows ✦BaF on the People card and '
   + 'can be spotlit as a host (their note reads marathon_spotlight_host_note_template). Off: only runners and '
-  + 'commentators count. Follow uses marathon_scan_hosts_default.';
+  + 'commentators count. A host never makes a run a BaF run (no runner post, reminder or shoutout) unless '
+  + 'marathon_hosts_count_as_ours is on. Follow uses marathon_scan_hosts_default.';
 const HOST_EVENTS_FIELD = 'BaF host events';
 const HOST_EVENTS_HELP = 'On: one Discord event for each BaF host, from their first hosted run to the end of their '
   + 'last, kept in step with the schedule and called off when they stop hosting. Needs Scan hosts on. Runner events '

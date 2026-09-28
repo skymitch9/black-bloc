@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `host-spotlight-only`)** — ONE row APPENDED to the `HS` table (`HS-g`, BUILT, NOT MERGED, NOT verified against a browser or Discord), and the `HS` intro's Deviation 6 warning annotated as reversed; nothing else touched. Before that,
 > **2026-09-28 (branch `marathon-host-spotlight`)** — ONE section APPENDED (`HS-a`…`HS-f`, BUILT, NOT MERGED, NOT verified against a browser or Discord); nothing else touched. Before that,
 > **2026-09-28 (branch `hotfix-picker`)** — ONE section APPENDED (`HF-e`…`HF-i`, BUILT, NOT MERGED, NOT verified against a browser or a live fetch); `HF-c`'s *type into Shows* is superseded by `HF-f` (the field is a picker now). Before that,
 
@@ -3874,7 +3875,8 @@ site/mock/server.mjs` from the branch, then <http://localhost:8907/events.html> 
 spotlight for"* and *"for gdqueer JR is a Baf member … https://www.twitch.tv/junior_sm is twitch"*. Design:
 [`../info/marathon-host-spotlight-design.md`](../info/marathon-host-spotlight-design.md). Local check first:
 `MOCK_PORT=8911 node site/mock/server.mjs` from the branch, then <http://localhost:8911/events.html#marathon-1>.
-⚠️ Read the design's Deviation 6 before `HS-a` on a live marathon: scanning a host makes every run they host a BaF run.
+~~⚠️ Read the design's Deviation 6 before `HS-a` on a live marathon: scanning a host makes every run they host a BaF run.~~
+**Reversed 2026-09-28 (`host-spotlight-only`, owner: spotlight only):** a scanned host is shown and spotlit, never makes a run ours while `marathon_hosts_count_as_ours` is off — see `HS-g`.
 
 | Row | Do | Expect |
 |---|---|---|
@@ -3884,3 +3886,4 @@ spotlight for"* and *"for gdqueer JR is a Baf member … https://www.twitch.tv/j
 | **`HS-d`** | Events ▸ **GDQueer** ▸ People ▸ **Jr** ▸ **Twitch name…** ▸ `junior_sm` ▸ Save | *"**jr** is **twitch.tv/junior_sm** everywhere…"*; the row reads **twitch.tv/junior_sm (fixed from twitch.tv/Jr)**; **Spotlight…** makes a `junior_sm` row, never `jr`. |
 | **`HS-e`** | Same, type `junior sm!` | Refused in words (*is not a Twitch channel name*), nothing changes. Then a blank ▸ Save → *back to the schedule's Twitch channel*, the row reads `twitch.tv/Jr` again. Put `junior_sm` back after. |
 | **`HS-f`** | Discord: `/event` ▸ Marathons ▸ GDQueer ▸ **People…** ▸ the Spyro day ▸ Spyro ▸ Jr | **Twitch name…** beside **Unlink**; the modal is pre-filled `junior_sm`; the slot line reads `twitch.tv/junior_sm`. |
+| **`HS-g`** | After `HS-a` (Hidden Heroes scans its hosts, `marathon_hosts_count_as_ours` still **off** on Settings ▸ Marathons, right under *Whether hosts are scanned for BaF people*): open Hidden Heroes' thread and the drawer; wait for the next read | People card: **anarchy** ✦BaF *host*, **Spotlight…** offered. The drawer's BaF count reads **0**; the thread gets **no** runner post for Titanfall 2 / VHOLUME / SPRAWL zero, and no reminder in the thread or the reminder channel before them; no **Shout it now** / **Highlight** on those runs. Host events only if *BaF host events* is on. (Local check: the mock's AGDQ 2027 run 7, Kirby Air Riders — Rivet ✦BaF *host*, the run not counted as BaF.) |

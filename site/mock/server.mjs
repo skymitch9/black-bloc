@@ -703,6 +703,7 @@ const SETTING_SPECS = [
   ["marathon_late_grace_minutes", "int", 90, 90, "minutes a run may sit past its scheduled start with no sign on the stream before the schedule alone calls it live — the run before it is probably running long. 90 by default", null, 360, 0],
   ["marathon_match_hosts", "bool", true, true, "whether a host or a commentator from BaF counts as BaF, not only a runner. on by default"],
   ["marathon_scan_hosts_default", "bool", false, false, "whether a marathon's hosts are scanned for BaF people at all — shown ✦BaF when paired or linked, and counted when the Hotfix feed tracks shows a BaF person is on. Runners are always scanned; commentators follow marathon_match_hosts. off by default"],
+  ["marathon_hosts_count_as_ours", "bool", false, false, "whether a run a BaF host hosts counts as a BaF run — its runner post, reminders, shoutout and highlight — when nobody from BaF runs it. Off, a scanned host is shown and can be spotlit and given a host event, but only a BaF runner makes a run ours. off by default"],
   ["marathon_host_events_default", "bool", false, false, "whether a marathon makes one Discord event for each BaF host, from their first hosted run to the end of their last, when its own BaF host events switch follows this setting. A host counts only while that marathon scans its hosts. off by default"],
   ["marathon_spotlight_host_note_template", "text", "{name} hosting {marathon}", "{name} hosting {marathon}", "the note a host's channel row carries on the Go-live page when Spotlight… on a marathon's People card adds it for someone who only hosts there. It takes {name} {marathon}"],
   ["marathon_host_event_title_template", "text", "{member} hosts {marathon}", "{member} hosts {marathon}", "what the event made for one BaF host of a marathon is called. It takes {member} {marathon} {games} {runs}"],
@@ -6562,7 +6563,7 @@ function seedMarathonRuns() {
     run(4, 1, 4, -120, 'Fire Emblem: Three Houses', 'Blue Lions', [marathonPerson('GretaIceVixen', 'greticevixen', 'runner')]),
     run(5, 1, 5, -40, 'Super Metroid', 'Any%', [marathonPerson('Casey', 'caseyfast', 'runner', casey), marathonPerson('TheKingsPride', 'thekingspride', 'host')], { state: 'live', live_because: 'title+category', shout_message_id: '830000000000000301', reminders_sent: [120, 15] }),
     run(6, 1, 6, 20, 'Celeste', 'Any%', [marathonPerson('Flyingludicolo', 'flyingludicolo', 'runner')]),
-    run(7, 1, 7, 80, 'Kirby Air Riders', 'Air Ride — All Tracks', [marathonPerson('Bluekandy', 'bluekandy', 'runner'), marathonPerson('Rivet', 'rivetplays', 'host', rivet)], { previous_scheduled_at: at(40), moved_at: minutesAgo(12), reminders_sent: [] }),
+    run(7, 1, 7, 80, 'Kirby Air Riders', 'Air Ride — All Tracks', [marathonPerson('Bluekandy', 'bluekandy', 'runner'), { ...marathonPerson('Rivet', 'rivetplays', 'host', rivet), counts: false }], { previous_scheduled_at: at(40), moved_at: minutesAgo(12), reminders_sent: [] }),
     run(8, 1, 8, 140, 'Devil May Cry 5', 'NG (Human)', [marathonPerson('DECosmic', 'decosmic', 'runner')]),
     run(9, 1, 9, 200, 'Crypt of the NecroDancer', 'Story Mode', [marathonPerson('Spooty', 'spootybiscuit', 'runner'), marathonPerson('Moth', null, 'commentator', moth)]),
     run(10, 1, 10, 260, 'Castlevania: Symphony of the Night', 'Any% (Luck Mode)', [marathonPerson('Dr4gonBlitz', 'dr4gonblitz', 'runner')]),
@@ -6658,8 +6659,12 @@ function marathonRunsOf(id) {
     .sort((a, b) => String(a.scheduled_at).localeCompare(String(b.scheduled_at)) || a.order_no - b.order_no);
 }
 
+function marathonCounts(one) {
+  return Boolean(one.user_id) && one.counts !== false;
+}
+
 function marathonOurs(run) {
-  return run.people.some((one) => one.user_id);
+  return run.people.some(marathonCounts);
 }
 
 function marathonPhase(row) {
@@ -6751,7 +6756,9 @@ function marathonSyncWindow(row) {
 }
 
 function marathonPersonRow(one) {
-  return { ...one, member_name: one.user_id ? memberName(one.user_id) : null };
+  const rest = { ...one };
+  delete rest.counts;
+  return { ...rest, member_name: one.user_id ? memberName(one.user_id) : null };
 }
 
 function marathonRunRow(run) {
@@ -7156,7 +7163,7 @@ function marathonCleanMode(given) {
 
 function marathonRunEventMake(row, run) {
   const id = state.events.reduce((top, one) => Math.max(top, one.id), 0) + 1;
-  const names = run.people.filter((one) => one.user_id).map((one) => memberName(one.user_id) || one.name);
+  const names = run.people.filter(marathonCounts).map((one) => memberName(one.user_id) || one.name);
   const channel = row.spotlight_id ? state.golive.spotlights.find((one) => one.id === row.spotlight_id) : null;
   const review = state.settings.get('marathon_run_events_reviewed') || state.settings.get('marathon_mode') !== 'on';
   state.events.unshift({ id, requester_id: STAFF.id, title: `${[...new Set(names)].join(' & ')} runs ${run.game} at ${row.name}`, description: `${run.category} \u00b7 ${row.name} \u00b7 read from the schedule; times follow it.`, location: channel ? `https://twitch.tv/${channel.twitch_login}` : row.schedule_url, where_kind: 'other', where_channel_id: null, starts_at: run.scheduled_at, ends_at: run.ends_at, status: review ? 'pending' : 'approved', created_at: now(), decided_by: null, decided_at: review ? null : now(), deny_reason: null, review_channel_id: review ? '800000000000000005' : null });
@@ -7346,6 +7353,7 @@ function marathonRematch(row) {
   const links = new Map((state.golive.links || []).map((one) => [String(one.twitch_login).toLowerCase(), one.user_id]));
   const hosts = Boolean(state.settings.get('marathon_match_hosts'));
   const scan = marathonSwitch(row, 'scan_hosts').on;
+  const count = Boolean(state.settings.get('marathon_hosts_count_as_ours'));
   for (const run of marathonRunsOf(row.id)) {
     run.people = run.people.map((one) => {
       let userId = null;
@@ -7360,6 +7368,8 @@ function marathonRematch(row) {
       }
       const rest = { ...one };
       delete rest.sheet_login;
+      delete rest.counts;
+      if (userId && one.part === 'host' && !count) rest.counts = false;
       return fixed && fixed !== sheet ? { ...rest, login, sheet_login: sheet, user_id: userId } : { ...rest, login, user_id: userId };
     });
   }
