@@ -4503,6 +4503,10 @@ MARATHON_CONTROLS_KEPT_REFUSED_KEY = "marathon_controls_kept_refused"
 MARATHON_CONTROLS_NO_END_KEY = "marathon_controls_no_end"
 MARATHON_CONTROLS_STARTED_KEY = "marathon_controls_started_said"
 MARATHON_CONTROLS_ALREADY_ON_KEY = "marathon_controls_already_on"
+MARATHON_CONTROLS_SPOTLIGHT_WAITING_KEY = "marathon_controls_spotlight_waiting"
+MARATHON_CONTROLS_WAITS_KEY = "marathon_controls_waits_said"
+MARATHON_CONTROLS_CANCELLED_KEY = "marathon_controls_cancelled_said"
+MARATHON_CONTROLS_CANNOT_WAIT_KEY = "marathon_controls_cannot_wait"
 MARATHON_CONTROLS_HIGHLIGHT_ON_KEY = "marathon_controls_highlight_on"
 MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY = "marathon_controls_highlight_off"
 MARATHON_CONTROLS_PING_ON_KEY = "marathon_controls_ping_on"
@@ -5336,7 +5340,7 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         "the thread controls' run-events button while BaF runs get no event of their own",
     ),
     MARATHON_CONTROLS_SPOTLIGHT_ON_KEY: (
-        "Spotlight: on · stop",
+        "Spotlight: on now · stop",
         (),
         "the thread controls' spotlight button while the marathon's channel is spotlit",
     ),
@@ -5389,6 +5393,37 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
         ("channel",),
         "the answer when Spotlight start is pressed on a channel that is already spotlit. It "
         "takes {channel}",
+    ),
+    MARATHON_CONTROLS_SPOTLIGHT_WAITING_KEY: (
+        "Spotlight: starts {starts} · cancel",
+        ("starts",),
+        "the thread controls' spotlight button while the marathon will spotlight its channel "
+        "once its first run is near. It takes {starts}, a plain date and time in the server's "
+        "zone",
+    ),
+    MARATHON_CONTROLS_WAITS_KEY: (
+        "Spotlight is set to start {lead} minutes before the first run — {when} — and end "
+        "{tail} minutes after the last.",
+        ("lead", "when", "tail", "channel", "marathon"),
+        "the answer when Spotlight start is pressed before the marathon is near: nothing is "
+        "spotlit yet, the marathon's follow turns it on in time. It takes {lead} {when} {tail} "
+        "{channel} {marathon}",
+    ),
+    MARATHON_CONTROLS_CANCELLED_KEY: (
+        "**{marathon}** will not spotlight twitch.tv/{channel} after all — the start that was "
+        "set is cancelled. Press Spotlight: start to set it again.",
+        ("marathon", "channel"),
+        "the answer when the thread controls' Spotlight cancel is pressed before the marathon "
+        "has started its spotlight. It takes {marathon} {channel}",
+    ),
+    MARATHON_CONTROLS_CANNOT_WAIT_KEY: (
+        "**{marathon}** is not near yet, and its spotlight cannot start itself — the marathon "
+        "spotlight is off in Settings, or twitch.tv/{channel} is off for marathons. Nothing was "
+        "changed; press Spotlight: start again within {lead} minutes of the first run, or set "
+        "dates on the Go-live page.",
+        ("marathon", "channel", "lead"),
+        "the refusal when Spotlight start is pressed before the marathon is near while nothing "
+        "would turn the spotlight on in time. It takes {marathon} {channel} {lead}",
     ),
     MARATHON_CONTROLS_HIGHLIGHT_ON_KEY: (
         "Auto-highlight BaF runners when live: on · turn off",

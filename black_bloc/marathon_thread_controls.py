@@ -15,9 +15,10 @@ PING = "ping"
 ACTIONS = (EVENT, RUNS, SPOTLIGHT, HIGHLIGHT, PING)
 ON = "on"
 OFF = "off"
+CANCEL = "cancel"
 TEMPLATE = (
     r"marathon:controls:(?P<marathon_id>[0-9]+):(?P<action>event|runs|spotlight|highlight|ping)"
-    r":(?P<to>on|off)"
+    r":(?P<to>on|off|cancel)"
 )
 CUSTOM_ID = "marathon:controls:{marathon_id}:{action}:{to}"
 
@@ -25,13 +26,14 @@ SPOT_ON = "on"
 SPOT_OFF = "off"
 SPOT_KEPT = "kept"
 SPOT_NONE = "none"
+SPOT_WAITING = "waiting"
 SPOT_OF_STATE = {
     ms.HELD: SPOT_ON,
     ms.HELD_OTHER: SPOT_ON,
     ms.UNTIL: SPOT_ON,
     ms.SCHEDULED: SPOT_ON,
     ms.KEPT: SPOT_KEPT,
-    ms.WAITING: SPOT_OFF,
+    ms.WAITING: SPOT_WAITING,
     ms.DARK: SPOT_OFF,
     ms.NO_CHANNEL: SPOT_NONE,
 }
@@ -79,6 +81,14 @@ def spot_word(state: Any) -> str:
     return SPOT_OF_STATE.get(str(state or ""), SPOT_OFF)
 
 
+def spot_control(spot: str) -> Control:
+    if spot == SPOT_WAITING:
+        return Control(SPOTLIGHT, CANCEL, spot)
+    return Control(
+        SPOTLIGHT, ON if spot in (SPOT_OFF, SPOT_NONE) else OFF, spot, disabled=spot == SPOT_NONE
+    )
+
+
 def switch(action: str, on: bool) -> Control:
     return Control(action, OFF if on else ON, ON if on else OFF)
 
@@ -92,12 +102,7 @@ def controls(
     return (
         Control(EVENT, OFF if marathon_on else ON, ON if marathon_on else OFF),
         Control(RUNS, OFF if runs_on else ON, ON if runs_on else OFF),
-        Control(
-            SPOTLIGHT,
-            ON if spot in (SPOT_OFF, SPOT_NONE) else OFF,
-            spot,
-            disabled=spot == SPOT_NONE,
-        ),
+        spot_control(spot),
         switch(HIGHLIGHT, highlight),
         switch(PING, ping),
     )
@@ -115,6 +120,7 @@ __all__ = [
     "halves",
     "label",
     "mode_from",
+    "spot_control",
     "spot_word",
     "switch",
     "wanted_mode",

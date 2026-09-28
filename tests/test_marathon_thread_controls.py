@@ -62,7 +62,7 @@ def test_the_ping_custom_id_matches_the_template():
         (ms.UNTIL, "on", "off", False),
         (ms.SCHEDULED, "on", "off", False),
         (ms.KEPT, "kept", "off", False),
-        (ms.WAITING, "off", "on", False),
+        (ms.WAITING, "waiting", "cancel", False),
         (ms.DARK, "off", "on", False),
         (ms.NO_CHANNEL, "none", "on", True),
     ],
@@ -70,6 +70,11 @@ def test_the_ping_custom_id_matches_the_template():
 def test_the_spotlight_button_reads_the_row_state(state, word, to, disabled):
     spot = mtc.controls("none", state)[2]
     assert (spot.word, spot.to, spot.disabled) == (word, to, disabled)
+
+
+def test_a_cancel_custom_id_matches_the_template():
+    found = re.fullmatch(mtc.TEMPLATE, mtc.custom_id(7, "spotlight", "cancel"))
+    assert found and found["to"] == "cancel"
 
 
 def test_the_custom_id_matches_the_template():

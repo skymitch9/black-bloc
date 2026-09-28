@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from datetime import timedelta
 from typing import Any
 
 import discord
@@ -19,10 +20,14 @@ from ...actionlog import log_action
 from ...command_errors import SafeDynamicItem
 from ...golive import parse_ts
 from ...logkinds import VIA_DISCORD
+from ...marathon_channels import takes_marathons
 from ...panels import Outcome, answer, refusal, still_staff
 from ...settings_store import (
     DB_UNAVAILABLE,
+    DEFAULT_TIMEZONE_KEY,
     MARATHON_CONTROLS_ALREADY_ON_KEY,
+    MARATHON_CONTROLS_CANCELLED_KEY,
+    MARATHON_CONTROLS_CANNOT_WAIT_KEY,
     MARATHON_CONTROLS_EVENT_OFF_KEY,
     MARATHON_CONTROLS_EVENT_ON_KEY,
     MARATHON_CONTROLS_HELP_KEY,
@@ -39,14 +44,34 @@ from ...settings_store import (
     MARATHON_CONTROLS_SPOTLIGHT_NONE_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_OFF_KEY,
     MARATHON_CONTROLS_SPOTLIGHT_ON_KEY,
+    MARATHON_CONTROLS_SPOTLIGHT_WAITING_KEY,
     MARATHON_CONTROLS_STARTED_KEY,
+    MARATHON_CONTROLS_WAITS_KEY,
 )
-from ...spotlight import reason_of
-from .marathon import NO_SUCH, _cell, cog_of, get_marathon, now_for, update_marathon
+from ...spotlight import reason_of, window_when
+from ...timezones import DEFAULT_TZ, zone
+from .marathon import (
+    MODE_OFF,
+    NO_SUCH,
+    _cell,
+    cog_of,
+    get_marathon,
+    now_for,
+    update_marathon,
+)
+from .marathon import mode_of as posts_mode_of
 from .marathon_channels import locked, marathons_on_channel
 from .marathon_events import set_event_mode
 from .marathon_inbox import find_channel, home_now, reopened, words
-from .marathon_spotlight import _row_of, after_staff_dim, set_spotlight_mode, state_for, tail_of
+from .marathon_spotlight import (
+    _row_of,
+    after_staff_dim,
+    enabled,
+    lead_of,
+    set_spotlight_mode,
+    state_for,
+    tail_of,
+)
 from .spotlight import changed_spotlight, set_spotlight, update_channel
 
 log = logging.getLogger(__name__)
@@ -54,6 +79,7 @@ log = logging.getLogger(__name__)
 NO_CHANNEL_CODE = "no_channel"
 KEPT_CODE = "kept"
 NO_END_CODE = "no_end"
+CANNOT_WAIT_CODE = "cannot_wait"
 LABEL_KEYS = {
     (mtc.EVENT, mtc.ON): MARATHON_CONTROLS_EVENT_ON_KEY,
     (mtc.EVENT, mtc.OFF): MARATHON_CONTROLS_EVENT_OFF_KEY,
@@ -63,6 +89,7 @@ LABEL_KEYS = {
     (mtc.SPOTLIGHT, mtc.SPOT_OFF): MARATHON_CONTROLS_SPOTLIGHT_OFF_KEY,
     (mtc.SPOTLIGHT, mtc.SPOT_KEPT): MARATHON_CONTROLS_SPOTLIGHT_KEPT_KEY,
     (mtc.SPOTLIGHT, mtc.SPOT_NONE): MARATHON_CONTROLS_SPOTLIGHT_NONE_KEY,
+    (mtc.SPOTLIGHT, mtc.SPOT_WAITING): MARATHON_CONTROLS_SPOTLIGHT_WAITING_KEY,
     (mtc.HIGHLIGHT, mtc.ON): MARATHON_CONTROLS_HIGHLIGHT_ON_KEY,
     (mtc.HIGHLIGHT, mtc.OFF): MARATHON_CONTROLS_HIGHLIGHT_OFF_KEY,
     (mtc.PING, mtc.ON): MARATHON_CONTROLS_PING_ON_KEY,
@@ -96,8 +123,10 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
         mp.highlights(marathon),
         mping.pings_role(marathon),
     )
+    starts = label_moment(state.get("starts"), bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY))
     labels = tuple(
-        mtc.label(words(bot, guild.id, LABEL_KEYS[(one.action, one.word)])) for one in controls
+        mtc.label(words(bot, guild.id, LABEL_KEYS[(one.action, one.word)], starts=starts))
+        for one in controls
     )
     content = words(bot, guild.id, MARATHON_CONTROLS_HELP_KEY, marathon=marathon["name"])
     if state["state"] == ms.NO_CHANNEL:
@@ -105,6 +134,15 @@ async def rendered(bot: Any, guild: Any, marathon: Any) -> tuple[str, tuple, tup
             bot, guild.id, MARATHON_CONTROLS_NO_CHANNEL_KEY, marathon=marathon["name"]
         )
     return (content, controls, labels)
+
+
+def label_moment(value: Any, tz_name: Any) -> str:
+    """A button cannot carry a Discord timestamp, so the date is written in the server's zone."""
+    when = parse_ts(value)
+    if when is None:
+        return "—"
+    local = when.astimezone(zone(tz_name) or zone(DEFAULT_TZ))
+    return f"{window_when(value, tz_name)} {local.tzname() or ''}".strip()
 
 
 def view_of(marathon_id: Any, controls: tuple, labels: tuple[str, ...]) -> discord.ui.View:
@@ -299,6 +337,8 @@ async def start_spotlight(
     span = ms.span_of(marathon)
     if span is None or ms.reach_end(span, tail) <= now_for(bot):
         return no_end(bot, guild, marathon)
+    if not ms.in_reach(span, now_for(bot), lead_of(bot, guild.id), tail):
+        return await start_later(bot, guild, actor, marathon, row, span, via=via)
     said: list[str] = []
     if ms.mode_of(marathon) == ms.OFF:
         moved = await set_spotlight_mode(bot, guild, actor, marathon, ms.FOLLOW, via=via)
@@ -335,6 +375,74 @@ async def start_spotlight(
         )
     )
     return Outcome(True, " ".join(one for one in said if one))
+
+
+def follow_can_start(bot: Any, guild: Any, row: Any) -> bool:
+    return (
+        enabled(bot, guild.id) and posts_mode_of(bot, guild.id) != MODE_OFF and takes_marathons(row)
+    )
+
+
+async def start_later(
+    bot: Any, guild: Any, actor: Any, marathon: Any, row: Any, span: Any, *, via: str
+) -> Outcome:
+    """Before the lead window nothing is spotlit: the marathon follows, and its follow turns the
+    row on at the lead and gives it back at span end plus the tail."""
+    lead, tail = lead_of(bot, guild.id), tail_of(bot, guild.id)
+    if not follow_can_start(bot, guild, row):
+        return refusal(
+            words(
+                bot,
+                guild.id,
+                MARATHON_CONTROLS_CANNOT_WAIT_KEY,
+                marathon=marathon["name"],
+                channel=login_of(row),
+                lead=lead,
+            ),
+            CANNOT_WAIT_CODE,
+            409,
+        )
+    if ms.mode_of(marathon) == ms.OFF:
+        moved = await set_spotlight_mode(bot, guild, actor, marathon, ms.FOLLOW, via=via)
+        if not moved.ok:
+            return moved
+    opening = span[0] - timedelta(minutes=max(0, lead))
+    return Outcome(
+        True,
+        words(
+            bot,
+            guild.id,
+            MARATHON_CONTROLS_WAITS_KEY,
+            lead=lead,
+            when=f"<t:{int(opening.timestamp())}:f>",
+            tail=tail,
+            channel=login_of(row),
+            marathon=marathon["name"],
+        ),
+    )
+
+
+async def cancel_spotlight(
+    bot: Any, guild: Any, actor: Any, marathon: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """The marathon stops following; the row is left alone unless this marathon holds it."""
+    row = await _row_of(bot, guild, marathon)
+    if row is None:
+        return no_channel(bot, guild, marathon)
+    if ms.mode_of(marathon) != ms.OFF:
+        moved = await set_spotlight_mode(bot, guild, actor, marathon, ms.OFF, via=via)
+        if not moved.ok:
+            return moved
+    return Outcome(
+        True,
+        words(
+            bot,
+            guild.id,
+            MARATHON_CONTROLS_CANCELLED_KEY,
+            marathon=marathon["name"],
+            channel=login_of(row),
+        ),
+    )
 
 
 async def stop_spotlight(
@@ -389,6 +497,8 @@ async def press(
         outcome = await set_ping_role(bot, guild, actor, marathon, to == mtc.ON, via=via)
     elif to == mtc.ON:
         outcome = await start_spotlight(bot, guild, actor, marathon, via=via)
+    elif to == mtc.CANCEL:
+        outcome = await cancel_spotlight(bot, guild, actor, marathon, via=via)
     else:
         outcome = await stop_spotlight(bot, guild, actor, marathon, via=via)
     await controls_changed(bot, guild, marathon_id)
@@ -443,6 +553,7 @@ class ControlButton(
 
 __all__ = [
     "ControlButton",
+    "cancel_spotlight",
     "controls_changed",
     "post_controls",
     "press",

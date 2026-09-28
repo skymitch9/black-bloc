@@ -139,3 +139,70 @@ through the canonical write: `golive.spotlight_updated` with `spotlight`, `expir
   spotlight tests, not re-tested here with an open session.
 - **No site change**, so nothing was rendered; the Settings page listing the fourteen keys was checked by `check.mjs` and
   the registry tests only.
+
+## Follow-up — Start waits for the marathon (2026-09-27)
+
+**Owner, 2026-09-27 20:3x Phoenix, verbatim:** *"for Fastest fur I just enabled spotlight on it in the discord thread. It
+looks like its spotlighting it until the end ends. I dont want that spotlight to start until the event starts."*
+
+**What was wrong.** Start turned the channel row on NOW and held it until span end + tail, however far off the first
+run was — Fastest Furs (Fall Fest, first run 2026-10-08) was spotlit weeks early. The conductor turned that one off by
+hand and left Fall Fest on `spotlight_mode = follow`.
+
+**As built** (branch `thread-spotlight-start`, off `main` `c015c585`, code commit `983241d3`). **Start** now means
+*"spotlight this channel while the marathon runs"*:
+
+- **In reach** (the follow's own `marathon_spotlight.in_reach`: from `marathon_spotlight_lead_minutes` before the first
+  run to span end + `marathon_spotlight_tail_minutes`): unchanged — on now, held by this marathon, until span end + tail.
+- **Not in reach yet** (`start_later`): the row is **not touched**. A marathon whose follow was off is set to
+  **follow** through `set_spotlight_mode` (which logs `marathon.spotlight_mode_set` and re-renders); the answer is the
+  key `marathon_controls_waits_said` — *"Spotlight is set to start {lead} minutes before the first run — {when} — and end
+  {tail} minutes after the last."* (`{when}` a Discord timestamp). The follow (the minute tick's `follow_spotlight`) turns
+  the row on at the lead and the expiry sweep gives it back at span end + tail, exactly as for any following marathon.
+- **Cancel** (`cancel_spotlight`, a new custom-id target `…:spotlight:cancel`): `spotlight_mode` off through
+  `set_spotlight_mode`, which lifts the row ONLY if this marathon holds it; any other spotlight (staff, kept, another
+  marathon's) is left as it is. Answer: key `marathon_controls_cancelled_said`.
+- **The button reads the three states** (keys): *Spotlight: on now · stop* (`marathon_controls_spotlight_on`, default
+  changed from *on · stop*), *Spotlight: starts {starts} · cancel* (`marathon_controls_spotlight_waiting`, new — shown
+  in `marathon_spotlight.state_of`'s `WAITING` state), *Spotlight: off · start* (unchanged). *Kept (permanent)* and
+  *no channel* are unchanged, and Stop on a kept row is still refused in words.
+- **Four keys, Marathons group** (registry + mock row + label): `marathon_controls_spotlight_waiting`,
+  `marathon_controls_waits_said`, `marathon_controls_cancelled_said`, `marathon_controls_cannot_wait`. Registry
+  **626 → 630**. No schema change, no route change, no new log kind.
+- **The site** has no Start move: the marathon drawer's Spotlight card has only the *Follow the schedule* switch
+  (`PATCH /api/marathons/{id}` `spotlight_mode` → `set_spotlight_mode`), which already waits for the lead window. Left
+  as it is.
+
+### Deviations
+
+1. **The separator is `·`, not `—`.** The brief wrote *on now — stop* / *starts <date> — cancel* / *start*; the four
+   neighbouring buttons all read *X: state · move*, so the spotlight button keeps that shape (*on now · stop*,
+   *starts … · cancel*, and the existing *off · start*). All three are keys — one Settings edit changes them.
+2. **The date on the button is plain text in the server's zone** (`default_timezone`, e.g. *starts 8 Oct 09:45 MST ·
+   cancel*): a button label cannot carry a Discord timestamp. The ephemeral answer uses a real `<t:…:f>`, read in each
+   viewer's zone.
+3. **A start that nothing would carry out is refused** (`marathon_controls_cannot_wait`, code `cannot_wait`): before
+   the lead window, when the guild's `marathon_spotlight` switch is off, `marathon_mode` is off, or the channel row is
+   off for marathons, the follow would never turn it on — so nothing is changed and the answer says so and says to press
+   again inside the lead window or use Go-live. Pressed inside the window it starts now as before, whatever those say.
+4. **Cancel is its own target** (`…:spotlight:cancel`, the template's `to` group widened to `on|off|cancel`) rather than
+   re-using `off`: a stale *cancel* label pressed after staff spotlit the row by hand must not turn their spotlight off,
+   and `off` (Stop) does. Old messages' `on`/`off` ids still match.
+5. **Start on a following marathon before the window writes nothing and logs nothing** — the mode is already follow, so
+   the press only answers when it will start. The label already read *starts … · cancel* in that state, so such a press
+   comes from a stale label.
+6. **A row scheduled on staff dates** (spotlit with a future `starts_at`, state `SCHEDULED`) still reads *on now · stop*
+   — the pre-existing mapping; "now" is not quite true there.
+7. **An early hold already on a live row is not undone by this build** — Fastest Furs' was turned off by hand; any
+   other marathon started early through the old button before this deploy stays held until span end + tail unless staff
+   press Stop.
+
+### What was NOT verified
+
+- ⚠️ **Nothing met Discord** — the new label, the cancel press, the answers, and the follow turning the row on at the
+  lead were exercised against the suite's fakes only (`tests/cogs/content/test_marathon_thread_controls.py`, the follow
+  called with the clock moved to one minute before and then to the lead).
+- **Fall Fest / Fastest Furs live rows were not read**; whether its pinned message relabels to *starts … · cancel* after
+  the deploy is the conductor's check (sweeps row `MTC-e`).
+- **The zone abbreviation** on the label comes from `zoneinfo`'s `tzname()`; only `America/Phoenix` (*MST*) was tested.
+- Not deployed; no site change was rendered (the four keys were checked by `check.mjs`'s *all keys present* only).

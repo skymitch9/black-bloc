@@ -133,7 +133,7 @@ async def test_track_posts_one_pinned_control_message_right_after_the_opening(bo
     assert labels(message) == [
         "Marathon event: off · turn on",
         "BaF run events: off · turn on",
-        "Spotlight: on · stop",
+        "Spotlight: on now · stop",
         "Auto-highlight BaF runners when live: off · turn on",
         "Ping the marathon role: off · turn on",
     ]
@@ -315,7 +315,7 @@ async def test_start_holds_the_row_for_this_marathon_and_the_lift_ends_it_at_spa
     assert "plus 60 minutes" in said.message
     updated = await details_of(bot.db, "golive.spotlight_updated")
     assert updated["spotlight"] == 1 and updated["spotlit_by_marathon"] == marathon["id"]
-    assert labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: on · stop"
+    assert labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: on now · stop"
 
     cog.clock = lambda: NOW + timedelta(minutes=215)
     assert await settle_held(bot, bot.guild, lit) == "kept"
@@ -338,7 +338,7 @@ async def test_start_after_a_staff_off_sets_the_follow_back_and_the_follow_spotl
     lit = await channel_by_id(bot.db, row["id"])
     assert (lit["spotlight"], lit["spotlit_by_marathon"]) == (1, marathon["id"])
     assert "spotlights its channel while it runs again" in said.message
-    assert labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: on · stop"
+    assert labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: on now · stop"
 
 
 async def test_start_with_no_span_ahead_is_refused_in_words(bot, cog):
@@ -397,6 +397,148 @@ async def test_the_follow_switch_from_the_drawer_re_renders_the_message(bot, cog
     await set_spotlight_mode(bot, bot.guild, FakeActor(), marathon, "off", via="website")
 
     assert labels(message)[2] == "Spotlight: off · start"
+
+
+async def far_off_marathon(bot, cog, *, follow=False):
+    row = await quiet_row(bot)
+    marathon = await tracked_marathon(bot, cog, channel=row)
+    await update_marathon(bot.db, marathon["id"], starts_at=at(5000), ends_at=at(6000))
+    await set_spotlight_mode(bot, bot.guild, FakeActor(), await fresh(bot, marathon), "off")
+    if follow:
+        await set_spotlight_mode(bot, bot.guild, FakeActor(), await fresh(bot, marathon), "on")
+    lit = await channel_by_id(bot.db, row["id"])
+    assert (lit["spotlight"], lit["spotlit_by_marathon"]) == (0, None)
+    return row, await fresh(bot, marathon)
+
+
+async def test_start_before_the_lead_window_leaves_the_row_and_sets_the_follow(bot, cog):
+    row, marathon = await far_off_marathon(bot, cog)
+    assert (await fresh(bot, marathon))["spotlight_mode"] == "off"
+    await controls.refresh_controls(bot, bot.guild, marathon["id"])
+    assert labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: off · start"
+
+    said = await pressed(bot, marathon, "spotlight", "on")
+
+    opening = int((NOW + timedelta(minutes=5000 - 15)).timestamp())
+    assert said.ok and said.message == (
+        f"Spotlight is set to start 15 minutes before the first run — <t:{opening}:f> — and "
+        "end 60 minutes after the last."
+    )
+    lit = await channel_by_id(bot.db, row["id"])
+    assert (lit["spotlight"], lit["expires_at"], lit["spotlit_by_marathon"]) == (0, None, None)
+    assert (await fresh(bot, marathon))["spotlight_mode"] == "follow"
+    button = buttons(controls_in(the_thread(bot))[0])[2]
+    assert button.label.startswith("Spotlight: starts ") and button.label.endswith(" · cancel")
+    assert button.custom_id == f"marathon:controls:{marathon['id']}:spotlight:cancel"
+
+    cog.clock = lambda: NOW + timedelta(minutes=5000 - 16)
+    assert await cog.follow_spotlight(bot.guild, marathon["id"]) is None
+    cog.clock = lambda: NOW + timedelta(minutes=5000 - 15)
+    assert await cog.follow_spotlight(bot.guild, marathon["id"]) == "set"
+    lit = await channel_by_id(bot.db, row["id"])
+    assert (lit["spotlight"], lit["expires_at"], lit["spotlit_by_marathon"]) == (
+        1,
+        at(6060),
+        marathon["id"],
+    )
+    assert labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: on now · stop"
+
+
+async def test_start_before_the_lead_window_on_a_following_marathon_changes_nothing(bot, cog):
+    row, marathon = await far_off_marathon(bot, cog, follow=True)
+
+    said = await pressed(bot, marathon, "spotlight", "on")
+
+    assert said.ok and said.message.startswith("Spotlight is set to start 15 minutes")
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 0
+    assert (await kinds(bot.db)).count("marathon.spotlight_mode_set") == 2
+
+
+async def test_the_waiting_label_is_a_key_with_the_date_in_the_server_zone(bot, cog):
+    await bot.store.set(GUILD, "default_timezone", "America/Phoenix")
+    _row, marathon = await far_off_marathon(bot, cog, follow=True)
+    await controls.refresh_controls(bot, bot.guild, marathon["id"])
+    assert (
+        labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: starts 7 Jan 22:05 MST · cancel"
+    )
+
+    await bot.store.set(GUILD, "marathon_controls_spotlight_waiting", "Waits for {starts}")
+    await controls.refresh_controls(bot, bot.guild, marathon["id"])
+    assert labels(controls_in(the_thread(bot))[0])[2] == "Waits for 7 Jan 22:05 MST"
+
+
+async def test_start_inside_the_lead_window_turns_it_on_now_and_holds_it(bot, cog):
+    await bot.store.set(GUILD, "marathon_spotlight", False)
+    row = await quiet_row(bot)
+    marathon = await tracked_marathon(bot, cog, channel=row)
+    await update_marathon(bot.db, marathon["id"], starts_at=at(10), ends_at=at(100))
+
+    said = await pressed(bot, marathon, "spotlight", "on")
+
+    assert said.ok and "is spotlit for **AGDQ 2027**" in said.message
+    lit = await channel_by_id(bot.db, row["id"])
+    assert (lit["spotlight"], lit["expires_at"], lit["spotlit_by_marathon"]) == (
+        1,
+        at(160),
+        marathon["id"],
+    )
+    assert labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: on now · stop"
+
+
+async def test_cancel_before_the_start_sets_the_follow_off_and_leaves_the_row(bot, cog):
+    row, marathon = await far_off_marathon(bot, cog, follow=True)
+    await controls.refresh_controls(bot, bot.guild, marathon["id"])
+
+    said = await pressed(bot, marathon, "spotlight", "cancel")
+
+    assert said.ok and said.message == (
+        "**AGDQ 2027** will not spotlight twitch.tv/rpglimitbreak after all — the start that "
+        "was set is cancelled. Press Spotlight: start to set it again."
+    )
+    assert (await fresh(bot, marathon))["spotlight_mode"] == "off"
+    lit = await channel_by_id(bot.db, row["id"])
+    assert (lit["spotlight"], lit["expires_at"], lit["spotlit_by_marathon"]) == (0, None, None)
+    assert labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: off · start"
+    cog.clock = lambda: NOW + timedelta(minutes=5000)
+    assert await cog.follow_spotlight(bot.guild, marathon["id"]) is None
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 0
+
+
+async def test_cancel_on_a_stale_label_leaves_a_staff_spotlight_alone(bot, cog):
+    row, marathon = await far_off_marathon(bot, cog, follow=True)
+    await change_spotlight(bot, bot.guild, FakeActor(), row["id"], spotlight=True)
+    staff = await channel_by_id(bot.db, row["id"])
+    assert staff["spotlight"] == 1 and staff["spotlit_by_marathon"] is None
+
+    said = await pressed(bot, marathon, "spotlight", "cancel")
+
+    assert said.ok and (await fresh(bot, marathon))["spotlight_mode"] == "off"
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 1
+
+
+async def test_start_before_the_lead_window_with_nothing_to_start_it_is_refused(bot, cog):
+    row, marathon = await far_off_marathon(bot, cog)
+    await bot.store.set(GUILD, "marathon_spotlight", False)
+
+    said = await pressed(bot, marathon, "spotlight", "on")
+
+    assert not said.ok and said.code == "cannot_wait"
+    assert "its spotlight cannot start itself" in said.message
+    assert (await fresh(bot, marathon))["spotlight_mode"] == "off"
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 0
+
+
+async def test_a_kept_spotlight_before_the_lead_window_is_still_refused_on_stop(bot, cog):
+    row = await gdq_row(bot)
+    marathon = await tracked_marathon(bot, cog, channel=row)
+    await update_marathon(bot.db, marathon["id"], starts_at=at(5000), ends_at=at(6000))
+    await controls.refresh_controls(bot, bot.guild, marathon["id"])
+    assert labels(controls_in(the_thread(bot))[0])[2] == "Spotlight: kept (permanent)"
+
+    said = await pressed(bot, marathon, "spotlight", "off")
+
+    assert not said.ok and said.code == "kept"
+    assert (await channel_by_id(bot.db, row["id"]))["spotlight"] == 1
 
 
 # --- the ping button ----------------------------------------------------------------------------

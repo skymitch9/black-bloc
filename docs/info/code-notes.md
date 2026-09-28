@@ -1,6 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Quiet pins* (branch `quiet-pins`, off `main` `6f1b9f9e`, keyed against `f64c74c3`). Before that:
+> **2026-09-27 — one section APPENDED, nothing re-keyed**: *Thread controls — Spotlight start waits for the marathon* (branch `thread-spotlight-start`, off `main` `c015c585`, keyed against `983241d3`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Marathon near misses ask staff in the thread* (branch `marathon-near-miss`, off `main` `7f7b99e7`, keyed against `78178b97`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *horaro.net events — owner match + several words* (branch `horaro-events-owner`, off `main` `7f7b99e7`, keyed against `9dea3428`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public reminders + the ping button* (branch `marathon-public-reminders`, off `main` `59e71860`, keyed against `fe273193`). Before that:
@@ -9069,3 +9070,15 @@ Design: [`quiet-pins-design.md`](quiet-pins-design.md).
 | `black_bloc/cogs/moderation/quiet_pins.py:77` `_failed` | `failed_channels` makes the IMPORTANT row once per channel per boot — a channel without the permission would otherwise log on every pin. |
 | `black_bloc/settings_store.py:3150` `QUIET_BOT_PINS` | Core, not its own group: the `/settings` group select is at 25. Default at `:6586`. |
 | `black_bloc/logkinds.py:248` | `quiet_pins.deleted` is ROUTINE; no `HEADS` entry, an unknown head files as Core. |
+## Thread controls — Spotlight start waits for the marathon (branch `thread-spotlight-start`, 2026-09-27)
+
+Design: [`marathon-thread-controls-design.md`](marathon-thread-controls-design.md) ▸ *Follow-up — Start waits for the marathon*. Keyed against `983241d3`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_thread_controls.py:18` `CANCEL` · `:29` `SPOT_WAITING` · `:84` `spot_control` | Pure. `marathon_spotlight.state_of`'s `WAITING` (follow on, row off, before the lead) is its own word with its own target, `cancel`, so a stale cancel label can never do Stop's job of turning a staff spotlight off (Deviation 4). |
+| `black_bloc/cogs/content/marathon_thread_controls.py:117` `rendered` · `:139` `label_moment` | Every label key is rendered with `starts=` (extra fields are ignored by `format_map`); the date is plain text in `default_timezone` because a button cannot carry a Discord timestamp. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:340` | The split uses `marathon_spotlight.in_reach` — the follow's own test — so "start now" and "the follow would start it now" can never disagree. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:380` `follow_can_start` · `:386` `start_later` | Refuses (`cannot_wait`) when nothing would carry the start out: the `marathon_spotlight` switch, `marathon_mode` off, or a row off for marathons — the same three things `state_for` / `plan` check. Otherwise only the mode moves; the row is not written. |
+| `black_bloc/cogs/content/marathon_thread_controls.py:425` `cancel_spotlight` | Mode off through `set_spotlight_mode`, which lifts only a row THIS marathon holds; no `set_spotlight`, unlike Stop. |
+| `black_bloc/settings_store.py:4489` · `:5380` | The four new key names; the four word rows (waiting label, waits / cancelled answers, cannot-wait refusal). |
