@@ -2347,6 +2347,9 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 .docimportfold { margin-top: 6px; }
 .docimport { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .docimport .input { flex: 1 1 220px; min-width: 0; }
+.newpost-choice { margin-bottom: 12px; }
+.newpost-pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.newpost-pane[hidden] { display: none; }
 .counter { color: var(--et-muted); font-family: var(--et-font-mono); font-size: var(--et-ui-2xs); }
 .counter[data-tone="warn"] { color: var(--et-warn); }
 .counter[data-tone="danger"] { color: var(--et-danger); }
