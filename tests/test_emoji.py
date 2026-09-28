@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from black_bloc.emoji import (
     SKIN_TONE_DEFAULT,
     SKIN_TONE_NAMES,
@@ -40,17 +42,25 @@ def test_every_tone_lands_on_a_hand():
         assert toned(WAVE, name) == WAVE + modifier
 
 
-def test_a_heart_is_never_given_a_skin_tone():
+@pytest.mark.parametrize(
+    "glyph",
+    [HEART, "❤️", "❤", "💜", "🍯", "⚠️", "⚠", "✅", "→"],
+    ids=[
+        "black-heart",
+        "red-heart-vs16",
+        "red-heart",
+        "purple-heart",
+        "honey",
+        "warning-vs16",
+        "warning",
+        "check",
+        "arrow",
+    ],
+)
+def test_hearts_and_status_glyphs_are_never_given_a_skin_tone(glyph):
+    assert glyph not in TONEABLE
     for name in SKIN_TONE_NAMES:
-        assert toned(HEART, name) == HEART
-        assert toned("❤️", name) == "❤️"
-        assert toned("\U0001f36f", name) == "\U0001f36f"
-        assert toned("⚠️", name) == "⚠️"
-
-
-def test_hearts_and_status_glyphs_are_outside_the_toneable_set():
-    for glyph in ("❤", "\U0001f5a4", "\U0001f49c", "⚠", "✅", "→"):
-        assert glyph not in TONEABLE
+        assert toned(glyph, name) == glyph
 
 
 def test_toning_replaces_a_tone_that_is_already_there():

@@ -3,6 +3,7 @@ import json
 import discord
 
 from black_bloc import link_buttons
+from black_bloc.settings_store import BLOCKS_LIVE_DEFAULTS as SHIPPED
 
 
 class Store:
@@ -41,7 +42,10 @@ def test_the_card_rides_above_the_buttons_unless_it_is_switched_off():
         Store(posts_block_links_rows=ROWS, posts_block_links_card=False), 1
     )
 
-    assert (on.title, on.text) == ("Links", "Handy places, one press away.")
+    assert (on.title, on.text) == (
+        SHIPPED["posts_block_links_title"],
+        SHIPPED["posts_block_links_text"],
+    )
     assert [label for label, _ in on.buttons] == ["Our site", "Schedule"]
     assert (off.title, off.text) == ("", "") and off.buttons == on.buttons
 

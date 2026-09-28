@@ -1,4 +1,5 @@
 from black_bloc import block_look
+from black_bloc.settings_store import BLOCKS_LIVE_DEFAULTS as SHIPPED
 
 
 class Store:
@@ -10,8 +11,9 @@ class Store:
 
 
 def test_a_blank_word_is_the_shipped_one_and_a_saved_one_is_cut_to_its_limit():
-    assert block_look.word(Store(), 1, "golive_block_title") == "Live now"
-    assert block_look.word(Store(golive_block_title="  "), 1, "golive_block_title") == "Live now"
+    shipped = SHIPPED["golive_block_title"]
+    assert block_look.word(Store(), 1, "golive_block_title") == shipped
+    assert block_look.word(Store(golive_block_title="  "), 1, "golive_block_title") == shipped
     assert block_look.word(Store(golive_block_title="x" * 300), 1, "golive_block_title", 256) == (
         "x" * 256
     )
@@ -19,8 +21,11 @@ def test_a_blank_word_is_the_shipped_one_and_a_saved_one_is_cut_to_its_limit():
 
 def test_a_number_that_does_not_read_falls_back_to_the_shipped_one():
     assert block_look.number(Store(golive_block_max=3), 1, "golive_block_max") == 3
-    assert block_look.number(Store(golive_block_max="many"), 1, "golive_block_max") == 10
-    assert block_look.number(Store(), 1, "events_upcoming_max") == 5
+    assert (
+        block_look.number(Store(golive_block_max="many"), 1, "golive_block_max")
+        == (SHIPPED["golive_block_max"])
+    )
+    assert block_look.number(Store(), 1, "events_upcoming_max") == SHIPPED["events_upcoming_max"]
 
 
 def test_member_words_cannot_bold_link_or_ping():
