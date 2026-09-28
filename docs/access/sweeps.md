@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-27 (branch `golive-replays`)** — ONE section APPENDED (`GR-a`…`GR-c`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `thread-spotlight-start`)** — ONE row APPENDED to the `MTC` section (`MTC-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `marathon-near-miss`)** — ONE section APPENDED (`MNM-a`…`MNM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `horaro-events-owner`)** — ONE section APPENDED (`HEO-a`…`HEO-b`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3646,3 +3647,16 @@ saved and posted as before.
 | Row | Do | Expect |
 |---|---|---|
 | **`PTB-a`** | Posts ▸ open any post ▸ select a word ▸ press **B**, then **I**, then **H ▸ Heading 2**, then **🔗** (type `example.org`, Enter); press **Tab** and **Shift+Tab** inside the box; press **B** again on the same word; try Ctrl+B / Ctrl+I / Ctrl+U; do the same on a phone | Each press changes the box (`**word**`, `***word***`, `## ` at the line start, `[word](https://example.org)`) and the preview beside it changes AT ONCE; the word stays selected; the second **B** takes the bold off; Tab indents two spaces and focus stays in the box (Ctrl+M lets Tab leave); Ctrl+Z undoes a press; on a phone the bar wraps to two rows with no sideways scroll. Nothing is saved until **Save Changes**. |
+
+## Rows `GR-a` … `GR-c` — a replay on a Go-live channel is posted plain, and staff can treat it as live (branch `golive-replays`, 2026-09-27)
+
+🔨 **BUILT on branch `golive-replays`, NOT merged, NOT deployed.** The owner, 2026-09-27 21:2x: *"Looks like GDQ is
+running a replay. I know esam does that too. We can write code to try and not spotlight replays? Error on the side of
+posting replays of it's fuzzy. Wouldn't want to miss"* — and *"It's usually on stream title"*. Design:
+[`../info/golive-replays-design.md`](../info/golive-replays-design.md). Rows lettered; the conductor numbers them.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`GR-a`** | Wait for GDQ or ESA to run a replay with no marathon on (or watch the Logs page for the next `golive.replay_detected`) | The go-live channel gets ONE plain line — *GamesDoneQuick is showing a replay — [REPLAY] …* — with no role mention, no card, and it is NOT pinned; no reminders follow. The Go-live page ▸ the channel's drawer shows **Replay detected (the title says “replay”)**. The Logs page (Go-live) has a routine `golive.replay_detected` naming the reason. If Twitch's title did NOT give it away, the row is live as before — tell the conductor the title so the words can be widened (Settings ▸ Go-live ▸ Replays). |
+| **`GR-b`** | On that replay, press **Treat as live** (the drawer, or `/golive` ▸ Channels ▸ the channel) | A normal announcement goes out — the role mention (by the channel's ping mode), the card, pinned — and the plain replay line disappears. The drawer no longer says Replay detected; Bump now is back. The Logs page shows `golive.replay_treated_live` (`web.` from the site). A second press says it is not showing a replay. |
+| **`GR-c`** | Settings ▸ Go-live ▸ Replays: set **What a replay gets** to *skip*, change the words or the sentence | *skip*: the next replay posts nothing (only the log row and the drawer's line). Words: a title with your new word is read as a replay next time. *live*: replays are announced as before. Put it back to *plain* after. |

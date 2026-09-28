@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-27 — one section APPENDED, nothing re-keyed**: *Go-live replays* (branch `golive-replays`, off `main` `49aeb2c2`, keyed against `69b32836`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Posts formatting toolbar* (branch `posts-toolbar`, off `main` `6f829602`, keyed against `f34b257c`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Quiet pins* (branch `quiet-pins`, off `main` `6f1b9f9e`, keyed against `f64c74c3`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Thread controls — Spotlight start waits for the marathon* (branch `thread-spotlight-start`, off `main` `c015c585`, keyed against `983241d3`). Before that:
@@ -9128,3 +9129,30 @@ Design: [`posts-toolbar-design.md`](posts-toolbar-design.md). Keyed against `f34
 | `site/public/assets/site.css:2344` `.fmtbar` … | Tokens only; `.fmtrow` is `flex-wrap`, so it is one row at desktop and two at 390 px with no sideways scroll (measured). |
 | `site/mock/mdformat.test.mjs` | Wired into `.github/workflows/ci.yml` and `scripts/deploy.ps1` beside the other node fixtures. |
 
+## Go-live replays (branch `golive-replays`, 2026-09-27)
+
+Design: [`golive-replays-design.md`](golive-replays-design.md). Keyed against `69b32836`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/twitch.py:33` · `:74` | `stream_type` carries Helix's `type`, lower-cased, `""` when absent. The client never read it before; only `rerun` means anything (a secondary signal — the title does the work). |
+| `black_bloc/golive_replay.py:42` `_pattern` · `:46` `word_in` | Whole word, any case: `(?<!\w)word(?!\w)` — brackets, colons, dashes and `#` separate a word; letters, digits and `_` do not, so `Replayability`, `Vodka`, `Hunt_replay_bot` never match. |
+| `black_bloc/golive_replay.py:63` `verdict` | Order matters: `type == rerun` first (certain, wins even in a marathon); then a title word; then the fuzzy overrules — a marathon in reach, or a live word in the same title — which answer LIVE with `overruled` set so the cog can log why. |
+| `black_bloc/golive_replay.py:57` `in_marathon` | Reuses `marathon_spotlight.in_reach` / `span_of`, so "in a marathon" means exactly the span the spotlight follow uses, lead and tail included. |
+| `black_bloc/golive_replay.py:94` `is_replay` · `:112` `cleared_because` | A session is a replay while `replay_reason` is set and `replay_cleared` is not; cleared says who made it live (`staff`, `title`, `type`, `marathon`, `action`). |
+| `black_bloc/storage/db.py:917` · `:1244` | Schema 77: `spotlight_sessions.replay_reason` / `replay_action` / `replay_cleared`, NULL for every session before it (reads as live). |
+| `black_bloc/settings_store.py:5910` `GOLIVE_REPLAY_SETTINGS` | Ten keys as `(kind, default, fields, help)`; `fields` feeds `checked_fields`, so a template can only name placeholders it fills. The two word lists may be blank (`TEXT_MAY_BE_BLANK`, `:5997`). |
+| `black_bloc/cogs/content/spotlight.py:850` `announce_info` | The verdict comes BEFORE `start_session`, so the session row is born with its reason and action, and `pinging` is forced off for a replay (the stored `pinging_last` is 0). |
+| `black_bloc/cogs/content/spotlight.py:884` `_verdict` | Only a title-word replay asks the database about marathons (lazy imports — `cogs/content/marathon_spotlight` imports this module). |
+| `black_bloc/cogs/content/spotlight.py:904` `_note_verdict` | Once per session by construction: it runs only when a session is created. |
+| `black_bloc/cogs/content/spotlight.py:929` `_announce_replay` · `:967` `_announce_live` | The old announcement body is `_announce_live`, now returning the message; `discard=False` is the upgrade's path, which must not delete a session that already exists. The replay post has no embed and `pinging=False` in `_post`, so `allowed_mentions.roles` is `False`. |
+| `black_bloc/cogs/content/spotlight.py:789` · `:1073` `_replay_seen` | An open replay session skips `_follow`'s live re-word, the window reminder and the bump; it either re-words plain or upgrades. |
+| ⚠️ `black_bloc/cogs/content/spotlight.py:1084` `upgrade` | Posts the full announcement FIRST; only when it is out does it mark the session cleared and delete the replay post. A failed post changes nothing, so the next poll (or press) retries. Caller holds the row lock (checklist 37). |
+| `black_bloc/cogs/content/spotlight.py:812` · `:1156` · `:2042` | The three spotlight treatments a replay never gets: the window-open reminder, the bump, and the pin when staff turn the spotlight on mid-stream (`_brighten`). |
+| `black_bloc/cogs/content/spotlight.py:589` | Boot reconcile keeps a SKIPPED replay's session — it never had a message, which otherwise reads as "gone". |
+| `black_bloc/cogs/content/spotlight.py:433` `replay_wording_for` · `:443` `replay_state` | The one shape the page (`api/tools/golive.py:231`) and the `/golive` card (`:2385`) read: `reason`, `action`, `line`, `treat_label`, all key words. |
+| `black_bloc/cogs/content/spotlight.py:2126` `treat_as_live` · `:2147` `treat_said` | Staff final say, shared by the card (`treat_live` move, `:2625`) and `POST /api/golive/spotlight/{id}/treat-live` (`api/tools/golive.py:663`). |
+| `black_bloc/cogs/content/spotlight.py:2415` | On the card Treat as live takes Bump's slot in row 1 — Discord's rows are full. |
+| `site/public/assets/spotlight-controls.js:87` · `:101` · `:118` | The drawer: no Bump while it is a replay, the Treat as live button, and the replay line above the moves. |
+| `site/public/assets/golive-join.js:419` | The Replays settings drawer; `site/mock/golive-join.test.mjs` pins its keys. |
+| `site/mock/server.mjs:4672` `replayState` · `:5296` | The mock's twin of `replay_state` and the treat-live route; the Frost Fatales fixture is a live replay. |
