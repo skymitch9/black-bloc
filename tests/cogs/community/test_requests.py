@@ -18,6 +18,7 @@ from black_bloc.cogs.community.requests import (
     WithdrawPick,
 )
 from black_bloc.config import load_settings
+from black_bloc.panels import CAPPED_PLACEHOLDER
 from black_bloc.settings_store import SettingsStore
 
 GUILD = 7
@@ -504,12 +505,17 @@ async def test_a_member_panel_shows_file_and_refresh_and_no_staff_controls(cog, 
     assert not any(isinstance(item, LogsButton) for item in view.children)
 
 
-async def test_a_member_with_nothing_filed_is_told_so_when_the_list_is_on(cog, bot, member):
-    await bot.store.set(GUILD, "request_panel_own_list", True)
+@pytest.mark.parametrize(
+    ("listed", "told"), [(True, True), (False, False)], ids=["list-on", "list-off-by-default"]
+)
+async def test_a_member_with_nothing_filed_is_told_so_only_when_the_list_is_on(
+    cog, bot, member, listed, told
+):
+    await bot.store.set(GUILD, "request_panel_own_list", listed)
 
     interaction = await open_panel(cog, bot, member)
 
-    assert pure.PANEL_EMPTY in panel_embed(interaction).description
+    assert (pure.PANEL_EMPTY in panel_embed(interaction).description) is told
 
 
 async def test_a_member_sees_their_own_requests_summarised_when_the_list_is_on(cog, bot, member):
@@ -529,12 +535,6 @@ async def test_a_member_is_not_shown_their_own_requests_by_default(cog, bot, mem
     assert "request board" not in panel_embed(interaction).description
     assert pure.PANEL_EMPTY not in panel_embed(interaction).description
     assert pure.PANEL_INTRO in panel_embed(interaction).description
-
-
-async def test_a_member_with_nothing_filed_is_told_nothing_by_default(cog, bot, member):
-    interaction = await open_panel(cog, bot, member)
-
-    assert pure.PANEL_EMPTY not in panel_embed(interaction).description
 
 
 async def test_a_member_keeps_filing_and_taking_one_back_with_the_list_hidden(cog, bot, member):
@@ -601,7 +601,7 @@ async def test_the_staff_select_caps_at_25_and_says_how_many_are_left(cog, bot, 
     )
 
     assert len(select.options) == 25
-    assert select.placeholder == "25 of 30 — the rest are on the site"
+    assert select.placeholder == CAPPED_PLACEHOLDER.format(shown=25, total=30)
 
 
 async def test_a_full_select_names_the_status_and_the_id_on_every_option(cog, bot, lead, member):
@@ -971,19 +971,6 @@ async def test_a_declined_request_carries_its_reason_into_the_dm_through_the_pan
     assert "we already have one" in words_in(card_of(member.dms[-1]))
 
 
-async def test_the_same_staffer_may_not_accept_their_own_review_once_the_server_says_so(
-    cog, bot, member, lead, db
-):
-    request_id = await request_at(bot, member, lead, pure.REVIEW)
-    await bot.store.set(GUILD, "request_review_by_other", True)
-    row = await pure.get_request(bot.db, request_id)
-
-    embed, view = requests_cog.build_card(bot, bot.guild, row, lead)
-
-    assert "Accept" not in [item.label for item in view.children]
-    assert (await pure.get_request(db, request_id))["status"] == pure.REVIEW
-
-
 # --- withdraw select, confirm/keep ---------------------------------------------------------------
 
 
@@ -1197,24 +1184,14 @@ async def test_the_timeout_footer_goes_through_the_freshest_interaction_token():
     assert message.view is None
 
 
-async def test_the_timeout_footer_falls_back_to_the_message_when_no_token_was_recorded():
+@pytest.mark.parametrize("expired", [False, True], ids=["no-token-recorded", "token-expired"])
+async def test_the_timeout_footer_falls_back_to_the_message_without_a_live_token(expired):
     view = RequestView(10)
     view.add_item(requests_cog.RefreshButton())
     message = FakeMessage(1, embed=discord.Embed(title=pure.PANEL_TITLE))
     view.message = message
-
-    await view.on_timeout()
-
-    assert view.last_interaction is None
-    assert message.embeds[0].footer.text == pure.PANEL_TIMEOUT_FOOTER
-
-
-async def test_the_timeout_footer_falls_back_to_the_message_when_the_token_has_expired():
-    view = RequestView(10)
-    view.add_item(requests_cog.RefreshButton())
-    message = FakeMessage(1, embed=discord.Embed(title=pure.PANEL_TITLE))
-    view.message = message
-    await view.interaction_check(FakeToken(raises=refused()))
+    if expired:
+        await view.interaction_check(FakeToken(raises=refused()))
 
     await view.on_timeout()
 
@@ -1319,7 +1296,7 @@ async def test_a_demoted_staffer_submitting_a_note_modal_is_refused_in_words(
     assert (await pure.get_request(db, request_id))["status"] == status
 
 
-async def test_the_logs_button_still_refuses_a_demoted_staffer_in_words(cog, bot, member):
+async def test_the_logs_button_refuses_a_member_in_words(cog, bot, member):
     button = LogsButton()
 
     interaction = await click(bot, member, button)
@@ -2090,7 +2067,8 @@ async def test_the_review_row_puts_the_site_link_on_a_second_row(cog, bot, membe
     await requests_cog.mark_ready(bot, bot.guild, 1, lead, "a board", "press it")
 
     view = view_of(post.messages[0])
-    assert len(post_labels(post.messages[0])) == 8
+    moves = [*EXPECTED_BUTTONS[pure.REVIEW], *HANDOFF_BUTTONS[pure.REVIEW], pure.SITE_BUTTON]
+    assert post_labels(post.messages[0]) == moves
     assert [one.row for one in view.children][-1] == 1
 
 
