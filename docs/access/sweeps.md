@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `marathon-hotfix`)** — ONE section APPENDED (`HF-a`…`HF-d`, BUILT, NOT MERGED, NOT verified against a browser or a live fetch); nothing else touched. Before that,
 > **2026-09-28 (branch `search-module`)** — ONE section APPENDED (`SM-a`…`SM-h`, BUILT, NOT MERGED, NOT verified against a browser); `DI-f`'s quoted note wording is superseded by `SM-c`. Before that,
 > **2026-09-28 (branch `blocks-section-tidy`)** — ONE row APPENDED (`BC-f`, BUILT, NOT MERGED, NOT verified against a browser). Before that,
 > **2026-09-28 (branch `birthday-block-modal`)** — ONE row APPENDED (`BB-g`, BUILT, NOT MERGED); `BB-e`'s *Set my birthday asks for the date* still holds for `/birthday`. Before that,
@@ -3808,3 +3809,20 @@ numbers it.
 | **`DI-m`** | Posts ▸ **New post** ▸ **Import a Google Doc**, paste the rules Doc link (`DI-j`), press **Read the doc** | The title box fills with *Current Rules (Do Not Edit this page is reference)* (the Doc's first real heading — not the long *Welcome to Black in a Flash…* line). Press **Create the post**: the post is made with that title. Read it again and Create again without touching the title: the second is *Current Rules (Do Not Edit this page is reference)-1* |
 | **`DI-n`** | Make a public Doc with only plain paragraphs (no title, no Title line, no headings); import it twice, Create each time without touching the title | The box says *Untitled*; the posts are *Untitled* then *Untitled-1*; a third is *Untitled-2*. Delete *Untitled-1* and import again: it fills that gap (*Untitled-1*) |
 | **`DI-o`** | Import that Doc once more but type *Untitled* in the title box yourself; then Settings fold ▸ set **posts_untitled_title** to *Draft* and import it again | The typed one is refused in words (*There is already a post at untitled…*) and nothing is made. After the change the box says *Draft* and the post is *Draft*. `/settings` ▸ Posts reaches the same key. Set it back to *Untitled* (or blank) |
+
+## Rows `HF-a` … `HF-d` — GDQ Hotfix: GDQueer from the Hotfix schedule sheet (branch `marathon-hotfix`, 2026-09-28)
+
+🔨 **BUILT on branch `marathon-hotfix`, NOT merged, NOT deployed.** Owner, 2026-09-28: *"We need a way to give a list
+of shows we can then dynamically pull from this hotfix lift"*. Design:
+[`../info/marathon-hotfix-design.md`](../info/marathon-hotfix-design.md). Rows lettered; the conductor numbers them.
+Local check first: `MOCK_PORT=8905 node site/mock/server.mjs` from the branch, then
+<http://localhost:8905/events.html> ▸ **Sources…** ▸ **GDQ Hotfix**.
+
+⏰ GDQueer's first run is **Sat 2026-10-03 10:00 Phoenix** — deploy before then, or `HF-b` has nothing to show.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`HF-a`** | After the first boot of the deploy: Events ▸ **Sources…** | Two rows on GamesDoneQuick: **GDQ** (GDQ tracker) and **GDQ Hotfix** (*GDQ Hotfix*). The action log has `marathon.feed_seeded` naming *GDQ Hotfix* and a `marathon.feed_checked` for it. |
+| **`HF-b`** | Events ▸ Marathons | **GDQueer** · *GDQ Hotfix · feed* on GamesDoneQuick, **24 runs**; the first *Spyro Reignited Trilogy* at **Sat 10:00** Phoenix, the second *Hamtaro* at **11:08**, the third at **12:00**; Sunday's first (*Wii Fit U*) at **10:00**; the last (*Metroid Dread*) **Sun 18:39–20:09**. Nothing pinged anyone. |
+| **`HF-c`** | Open the **GDQ Hotfix** feed drawer ▸ **Shows** ▸ type `GDQueer, Fast Travel` and leave the box; then Settings ▸ Marathons ▸ `marathon_hotfix_shows` | The drawer says *The Hotfix feed now reads GDQueer, Fast Travel …*; Settings shows the same value (one home). **Check now** adds a *Fast Travel* marathon only if one is still ahead on the sheet. Put it back to `GDQueer`. Typing only commas is refused in words. |
+| **`HF-d`** | **Add a feed…** ▸ GamesDoneQuick ▸ *Read from* **GDQ Hotfix** | Refused in words: *GamesDoneQuick already has a feed that reads GDQ Hotfix … A channel has one feed per source*. The same pick on another channel answers *GDQ Hotfix already reads that*. |

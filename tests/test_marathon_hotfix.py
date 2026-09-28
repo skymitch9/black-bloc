@@ -279,3 +279,10 @@ async def test_the_client_reads_runs_and_resolves_a_bare_show_and_remembers_the_
     assert fake.asked[-2:] == [hf.PAGE, CSV]
     with pytest.raises(ScheduleError, match="after a #"):
         await client.resolve(GDQ_HOTFIX, "")
+
+
+def test_the_sheet_reads_the_same_with_either_line_ending():
+    lf = SHEET.replace("\r\n", "\n")
+    crlf = lf.replace("\n", "\r\n")
+    assert hf.parse_hotfix(lf, ["GDQueer"]) == hf.parse_hotfix(crlf, ["GDQueer"])
+    assert len(hf.parse_hotfix(crlf, ["GDQueer"])[0].runs) == 24

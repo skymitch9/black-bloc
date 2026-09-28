@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *GDQ Hotfix* (branch `marathon-hotfix`, off `main` `6fc4a5a0`, keyed against `21f6c24c`); the *Marathon feeds* rows that say a channel has ONE feed (`feed_by_channel`, the one-per-channel index, `free_channels`) describe code this branch changed — it is one feed per source now. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import titles* (branch `doc-import-title`, off `main` `9347679a`, keyed against `cd778b2f`); the *Doc import fidelity* rows for `clipmd.js` hold in meaning but their line numbers moved down (`blocksOf` was split out of `htmlToDiscordMarkdown`). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import fidelity* (branch `doc-import-fidelity`, off `main` `2072eac0`, keyed against `919853a0`); the *posts-paste* rows for `clipmd.js` still hold except that nested lists are now indented to the parent's content column and Doc-sourced HTML joins blocks with one newline. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *One search module* (branch `search-module`, off `main` `93c0bbb5`, keyed against `c9bd673a`); the *Blocks section: fold, search, filter* row for `blockmatch.js` is SUPERSEDED (file deleted). Before that:
@@ -9391,3 +9392,31 @@ Design: [`posts-doc-import-design.md`](posts-doc-import-design.md) § *Titles*. 
 | `black_bloc/posts.py:1092` | `IntegrityError`: a numbered create moves to the next number and re-reads; a typed one answers `slug_taken` in words (it used to be a 500 when two typed creates raced). Bounded by `NUMBERED_MOST`. |
 | `black_bloc/api/tools/posts.py:256` | `title_from == "doc"` is the only way in to numbering; the Discord `/posts` door never numbers. |
 | `site/mock/server.mjs:3123` `postNumbered` | The mock's copy of `numbered`; the mock is single-threaded, so it only scans. |
+
+## GDQ Hotfix — shows read from the schedule sheet (branch `marathon-hotfix`, 2026-09-28)
+
+Design: [`marathon-hotfix-design.md`](marathon-hotfix-design.md). Keyed against `21f6c24c`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_hotfix.py:116` `show_key` | The one normaliser for a show: lower, whitespace to `-`, URL-unquoted. Refs, the settings list and the sheet's Show column all compare through it, so `GDQueer`, `gdqueer` and `GDQueer ` are one show. |
+| `black_bloc/marathon_hotfix.py:124` `ref_of` | `/` not `:` between show and date, so a suggest notice's custom id stays `buttonable`. A fragment with no ISO date is a bare show. |
+| `black_bloc/marathon_hotfix.py:169` `_columns` | Columns by NAME across every header row (the sheet's header is two rows); the first row to carry a name wins. Anything starting `show start` is the start column whatever its zone suffix. |
+| `black_bloc/marathon_hotfix.py:206` | A show-day's start is the FIRST parseable Show Start of that show on that date — the column is the show's start repeated, never a run's (owner, 14:2x). |
+| `black_bloc/marathon_hotfix.py:229` `_logins` | The link column is aligned by position when the counts match; otherwise by name, so a missing link never shifts a login onto the wrong runner. |
+| `black_bloc/marathon_hotfix.py:256` | The clock restarts only when the DATE changes; within a day each run starts where the previous one's estimate ended. A blank estimate counts as 0 for the clock and stays `None` as `run_seconds`. |
+| `black_bloc/marathon_hotfix.py:279` `blocks_of` | A gap of more than `BLOCK_GAP_DAYS` (1) between two show dates starts a new block — that is what makes a later GDQueer a second marathon. Blocks sort by first date. |
+| `black_bloc/marathon_hotfix.py:305` `block_for` | First date, else the block that holds the date (a day added before the first moves the first date), else unpublished — GDQ may clear aired shows, and that must not look like an outage. |
+| `black_bloc/marathon_hotfix.py:334` `candidates` | Recent by END. The month suffix is added when the sheet has two blocks of the show or the plain name is already a marathon of this source, so names stay apart without renaming anything already added. |
+| `black_bloc/marathon_hotfix.py:355` `sheet_url_of` | The page carries the iframe twice (HTML with `&amp;`, RSC with `\u0026` / `\/`); both are unescaped before one regex. The CSV URL is BUILT from the key and a numeric gid — nothing from the page is fetched as written. |
+| `black_bloc/marathon_hotfix.py:370` `fetch` | Every hop, including the first, passes `allowed` BEFORE the request; redirects are followed by hand. `DocImportError` from the shared transport becomes a `ScheduleError` (checklist 7). |
+| `black_bloc/marathon_hotfix.py:411` | Fallback only for a page that could not be READ; a page read fine with no iframe is a failure (the page changed). The fallback URL passes the same allowlist. |
+| `black_bloc/marathon_sources.py:613` `hotfix_sheet` | The client's own memory of the last good CSV URL — schedule refreshes have no feed row to read `sheet_url` from. |
+| `black_bloc/doc_import.py:155` `hop_allowed` | Host-parameterised for the Hotfix reader; the defaults are the Doc import's exact rules, unchanged. |
+| `black_bloc/marathon_feeds.py:76` `seed_marker` | A login's first seed marks the bare login (every marker ever written); later seeds mark `login/source`, so adding a seed for an already-seeded channel runs once. |
+| `black_bloc/cogs/content/marathon_feeds.py:196` `feed_by_channel` | Takes the source: a channel has one feed per source (schema 80). `feeds_of_channel` is the list for hold / release / channel removal. |
+| `black_bloc/cogs/content/marathon_feeds.py:431` | The feed's `sheet_url` is written only when it changed — a check that fell back leaves it as it was. |
+| `black_bloc/cogs/content/marathon_feeds.py:1577` `free_channels` | Add: any channel that takes marathons (the pick decides the source, the refusal is per source). Move: channels with no feed of the moving feed's source. |
+| `black_bloc/storage/db.py:1333` `RETIRED_INDEXES` | `marathon_feeds_one_per_channel` is dropped AFTER the schema script creates the looser per-source index, so an old file never goes without one. |
+| `site/public/assets/marathons-section.js:1198` `hotfixFields` | The drawer writes the settings KEY through the settings route — the Settings page's writer — not a feed PATCH, so the list has one home. |
+| `site/mock/server.mjs:2266` `checkedShows` | The mock's twin of `settings_store.checked_shows`. |
