@@ -574,3 +574,30 @@ async def test_the_command_says_so_when_the_database_is_not_there(bot, staff):
     await found.posts_panel_command.callback(found, interaction)
 
     assert "database" in interaction.said.lower()
+
+
+# --- carry the front door (post-carries-door, 2026-09-27) --------------------------------------
+
+
+async def test_the_carry_button_is_labelled_with_the_move_it_makes(bot, staff):
+    loose = await a_post(bot, slug="one")
+    carrying = await a_post(bot, slug="two")
+    await posts.set_carries_door(bot.db, int(carrying["id"]), True)
+    carrying = await posts.get_post_by_id(bot.db, int(carrying["id"]))
+
+    _, one = cog.build_card(bot, bot.guild, loose)
+    _, two = cog.build_card(bot, bot.guild, carrying)
+
+    assert posts.CARRY_THE_DOOR in labels(one) and posts.DO_NOT_CARRY_THE_DOOR not in labels(one)
+    assert posts.DO_NOT_CARRY_THE_DOOR in labels(two) and posts.CARRY_THE_DOOR not in labels(two)
+
+
+async def test_the_carry_button_saves_through_the_one_shared_path(bot, staff):
+    row = await a_post(bot)
+    interaction = FakeInteraction(bot, staff)
+
+    await cog.run_move(interaction, "notice", posts.save_post, carries=True)
+
+    fresh = await posts.get_post_by_id(bot.db, int(row["id"]))
+    assert posts.carries_door(fresh)
+    assert await kinds(bot.db) == ["post.saved"], "one press, one row"

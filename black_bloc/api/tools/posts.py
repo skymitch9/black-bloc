@@ -59,6 +59,8 @@ def post_row(bot: Any, guild: Any, row: Any) -> dict[str, Any]:
         "cap": posts.cap_for(style),
         "title_cap": posts.TITLE_MAX,
         "pin": bool(posts.row_value(row, "pin")),
+        "carries_door": posts.carries_door(row),
+        "door_drawn": posts.door_drawn(row),
         "channel_id": str(channel_id) if channel_id else None,
         "channel_name": posts.channel_name(guild, channel_id),
         "posted": posts.is_posted(row),
@@ -248,6 +250,7 @@ def build_router(bot: Any) -> APIRouter:
             channel_id=payload.get("channel_id", ...),
             style=payload.get("style", ...),
             pin=payload.get("pin", ...),
+            carries=payload.get("carries_door", ...),
         )
 
     @router.post("/{slug}/publish")

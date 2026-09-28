@@ -126,6 +126,15 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "frontdoor.gone",
     ),
     "black_bloc/cogs/community/frontdoor.py::BELOW_POST": ("frontdoor.below_post",),
+    # A post that carries the door: the door's keys following it, and its part re-drawn.
+    "black_bloc/cogs/community/frontdoor.py::RIDES_POST": (
+        "frontdoor.rides_post",
+        "web.frontdoor.rides_post",
+    ),
+    "black_bloc/cogs/community/frontdoor.py::REDRAWN_ON_POST": (
+        "frontdoor.redrawn_on_post",
+        "web.frontdoor.redrawn_on_post",
+    ),
     "black_bloc/cogs/community/frontdoor.py::POST_FAILED": ("frontdoor.post_failed",),
     "black_bloc/cogs/community/frontdoor.py::TICKET_BUTTON_HIDDEN": (
         "frontdoor.ticket_button_hidden",

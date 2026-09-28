@@ -152,6 +152,10 @@ SLUG_NEEDED = (
     "so nothing was made. Use some letters or numbers in the title."
 )
 TITLE_NEEDED = "A post needs a title, so nothing was saved. Fill it in and save again."
+DOOR_CARRIED_ELSEWHERE = (
+    "**{other}** already carries the front door, so **{title}** was not changed. Turn **Carry "
+    "the front door** off on **{other}** first — one message holds the door."
+)
 
 SHADOW_LINE = "shadow — this goes to {shadow}, not {where}, until posts are on."
 SHADOW_LINE_NOWHERE = (
@@ -173,6 +177,15 @@ SHADOW_UPDATED_SAID = (
     "went to its own channel."
 )
 TAKEN_DOWN_SAID = "**{title}** is taken down. Every word is still here."
+TAKEN_DOWN_WITH_DOOR_SAID = (
+    " The front door was part of that message, so it is down too — **Post it** puts both back."
+)
+CARRYING_NOW_SAID = " The front door now rides this post's message."
+CARRYING_LATER_SAID = " The front door joins this post's message the next time it is posted."
+CARRYING_STOPPED_SAID = (
+    " The front door is off this post's message, and goes back to a message of its own on the "
+    "door's next sweep, within five minutes."
+)
 RESTORED_SAID = (
     "**{title}** is back to version {n}. What it said a moment ago is kept as version {new}, so "
     "nothing is lost either way. Press **Post it** to send the change to Discord."
@@ -205,6 +218,8 @@ VIEW_IT = "View"
 USE_THIS_VERSION = "Use this version"
 PIN_IT = "Pin it"
 DO_NOT_PIN_IT = "Do not pin it"
+CARRY_THE_DOOR = "Carry the front door"
+DO_NOT_CARRY_THE_DOOR = "Do not carry the front door"
 
 BECAUSE_WORDS: dict[str, str] = {
     BECAUSE_SAVED: "saved",
@@ -228,6 +243,7 @@ STATUS_POSTED_SHADOW = "posted (shadow)"
 STATUS_PINNED = "pinned"
 STATUS_NOT_POSTED = "not posted"
 STATUS_PENDING = "changes not yet posted"
+STATUS_CARRIES_DOOR = "carries the front door"
 
 
 def now() -> str:
@@ -295,6 +311,15 @@ def changes_pending(row: Any) -> bool:
     if not is_posted(row):
         return False
     return str(row_value(row, "posted_hash", "")) != hash_of(row)
+
+
+def carries_door(row: Any) -> bool:
+    return bool(row_value(row, "carries_door"))
+
+
+def door_drawn(row: Any) -> bool:
+    """The door is part of the message as it stands in Discord, not just asked for."""
+    return bool(row_value(row, "door_hash"))
 
 
 def is_seeded(row: Any) -> bool:
@@ -377,6 +402,8 @@ def status_words(row: Any) -> list[str]:
     found = [STATUS_POSTED_SHADOW if posted_where(row) == SHADOW else STATUS_POSTED]
     if row_value(row, "pin"):
         found.append(STATUS_PINNED)
+    if door_drawn(row):
+        found.append(STATUS_CARRIES_DOOR)
     if changes_pending(row):
         found.append(STATUS_PENDING)
     return found
@@ -405,6 +432,36 @@ def render_message(row: Any) -> dict[str, Any]:
             ),
         }
     return {"content": body, "embed": None}
+
+
+def with_door(base: dict[str, Any], parts: Any) -> dict[str, Any]:
+    """The post's own message with the door's card as its last embed and the door's buttons."""
+    embeds = [base["embed"]] if base.get("embed") is not None else []
+    if parts is not None:
+        embeds.append(parts[0])
+    return {
+        "content": base.get("content"),
+        "embeds": embeds,
+        "view": parts[1] if parts is not None else None,
+    }
+
+
+def door_parts(bot: Any, guild: Any, row: Any) -> Any:
+    """(embed, view, stamp) while this row carries a door that is on, else None."""
+    if not carries_door(row):
+        return None
+    from .cogs.community.frontdoor import carried_parts
+
+    return carried_parts(bot, guild, row)
+
+
+def message_payload(bot: Any, guild: Any, row: Any) -> tuple[dict[str, Any], Any]:
+    """What a publish sends: the post alone, or the post carrying the door, and the door's stamp."""
+    base = render_message(row)
+    parts = door_parts(bot, guild, row)
+    if parts is None and not carries_door(row) and not door_drawn(row):
+        return base, None
+    return with_door(base, parts), (parts[2] if parts is not None else None)
 
 
 def allowed_mentions_for(guild: Any, body: Any, actor: Any) -> discord.AllowedMentions:
@@ -454,6 +511,31 @@ async def get_post(db: Any, guild_id: int, slug: str) -> Any:
         "SELECT * FROM posts WHERE guild_id = ? AND slug = ?", (int(guild_id), str(slug))
     )
     return await cur.fetchone()
+
+
+async def door_carrier(db: Any, guild_id: int, *, but: Any = None) -> Any:
+    """The one post whose message holds the front door, if any."""
+    cur = await db.conn.execute(
+        "SELECT * FROM posts WHERE guild_id = ? AND carries_door = 1 AND id != ? "
+        "ORDER BY id LIMIT 1",
+        (int(guild_id), int(but or 0)),
+    )
+    return await cur.fetchone()
+
+
+async def set_door_drawn(db: Any, post_id: int, stamp: Any) -> None:
+    await db.conn.execute(
+        "UPDATE posts SET door_hash = ? WHERE id = ?",
+        (str(stamp) if stamp else None, int(post_id)),
+    )
+    await db.conn.commit()
+
+
+async def set_carries_door(db: Any, post_id: int, wanted: bool) -> None:
+    await db.conn.execute(
+        "UPDATE posts SET carries_door = ? WHERE id = ?", (1 if wanted else 0, int(post_id))
+    )
+    await db.conn.commit()
 
 
 async def get_post_by_id(db: Any, post_id: int) -> Any:
@@ -544,7 +626,8 @@ async def forget_message(db: Any, post_id: int, *, shadow: bool = False) -> None
     if row_value(row, "message_id") or row_value(row, "shadow_message_id"):
         return
     await db.conn.execute(
-        "UPDATE posts SET posted_hash = NULL, posted_at = NULL, posted_by = NULL WHERE id = ?",
+        "UPDATE posts SET posted_hash = NULL, posted_at = NULL, posted_by = NULL, "
+        "door_hash = NULL WHERE id = ?",
         (int(post_id),),
     )
     await db.conn.commit()
@@ -553,7 +636,7 @@ async def forget_message(db: Any, post_id: int, *, shadow: bool = False) -> None
 async def clear_posted(db: Any, post_id: int) -> None:
     await db.conn.execute(
         "UPDATE posts SET message_id = NULL, shadow_message_id = NULL, posted_hash = NULL, "
-        "posted_at = NULL, posted_by = NULL WHERE id = ?",
+        "posted_at = NULL, posted_by = NULL, door_hash = NULL WHERE id = ?",
         (int(post_id),),
     )
     await db.conn.commit()
@@ -910,6 +993,7 @@ async def save_post(
     channel_id: Any = ...,
     style: Any = ...,
     pin: Any = ...,
+    carries: Any = ...,
     via: str = VIA_DISCORD,
 ) -> Outcome:
     """The one write both doors make. Anything left out keeps what the row already says."""
@@ -939,6 +1023,18 @@ async def save_post(
     said = refused_body(wanted_body, kept_style, "saved")
     if said is not None:
         return refusal(said, "body_too_long", 400)
+    was_carrying = carries_door(row)
+    kept_carrying = was_carrying if carries is ... else bool(carries)
+    if kept_carrying and not was_carrying:
+        other = await door_carrier(bot.db, guild.id, but=int(row["id"]))
+        if other is not None:
+            return refusal(
+                DOOR_CARRIED_ELSEWHERE.format(
+                    other=row_value(other, "title", ""), title=wanted_title
+                ),
+                "door_carried_elsewhere",
+                409,
+            )
     await set_post_fields(
         bot.db,
         int(row["id"]),
@@ -948,6 +1044,7 @@ async def save_post(
         channel_id=kept_channel,
         style=kept_style,
         pin=1 if kept_pin else 0,
+        carries_door=1 if kept_carrying else 0,
     )
     fresh = await get_post_by_id(bot.db, int(row["id"]))
     made = await record_version(bot, guild, fresh, actor, via=via, because=BECAUSE_SAVED)
@@ -960,8 +1057,42 @@ async def save_post(
         via=via,
         pending=changes_pending(fresh),
         version=await version_now(bot, fresh, made),
+        **({"carries_door": kept_carrying} if kept_carrying != was_carrying else {}),
     )
-    return Outcome(True, SAVED_SAID.format(title=wanted_title), value=fresh)
+    said = SAVED_SAID.format(title=wanted_title)
+    if kept_carrying != was_carrying:
+        fresh, more = await turn_carrying(bot, guild, fresh, actor, kept_carrying, via=via)
+        said += more
+    return Outcome(True, said, value=fresh)
+
+
+async def turn_carrying(
+    bot: Any, guild: Any, row: Any, actor: Any, wanted: bool, *, via: str = VIA_DISCORD
+) -> tuple[Any, str]:
+    """Carrying on or off: a message already up gains or loses the door at once."""
+    post_id = int(row["id"])
+    from .cogs.community.frontdoor import door_follows_post
+
+    await door_follows_post(bot, guild, row, actor, via=via)
+    fresh = await get_post_by_id(bot.db, post_id)
+    if not wanted:
+        return fresh, CARRYING_STOPPED_SAID
+    return fresh, CARRYING_NOW_SAID if door_drawn(fresh) else CARRYING_LATER_SAID
+
+
+async def posted_message(bot: Any, guild: Any, row: Any) -> Any:
+    """The message the row's `posted_hash` describes — the real one, else the shadow copy."""
+    real = row_value(row, "message_id")
+    if real:
+        channel = channel_of(bot, guild, row_value(row, "channel_id"))
+        if channel is None:
+            return None
+        try:
+            return await channel.fetch_message(int(real))
+        except discord.HTTPException:
+            return None
+    ghost = shadow_id(row)
+    return await _shadow_message(bot, guild, ghost) if ghost else None
 
 
 def guard_allows(bot: Any, channel_id: Any) -> bool:
@@ -1135,9 +1266,8 @@ async def publish_post(
         return refusal(
             POST_FAILED_SAID.format(title=title, reason=CHANNEL_GONE), "post_failed", 409
         )
-    payload = render_message(row) | {
-        "allowed_mentions": allowed_mentions_for(guild, body, actor)
-    }
+    drawn, stamp = message_payload(bot, guild, row)
+    payload = drawn | {"allowed_mentions": allowed_mentions_for(guild, body, actor)}
     message = await _existing_message(bot, guild, row, channel, actor, via, shadow=shadow)
     try:
         if message is not None:
@@ -1155,6 +1285,7 @@ async def publish_post(
         )
     write = set_shadow_posted if shadow else set_posted
     await write(bot.db, int(row["id"]), int(message.id), hash_of(row), by=actor_id(actor))
+    await set_door_drawn(bot.db, int(row["id"]), stamp)
     made = await record_version(bot, guild, row, actor, via=via, because=BECAUSE_POSTED)
     await note(
         bot,
@@ -1171,6 +1302,10 @@ async def publish_post(
         await _drop_shadow(bot, guild, row, actor, via)
     await _pin(bot, guild, row, message, actor, via)
     fresh = await get_post_by_id(bot.db, int(row["id"]))
+    if stamp:
+        from .cogs.community.frontdoor import door_rides_post
+
+        await door_rides_post(bot, guild, fresh, actor, via=via)
     dispatch = getattr(bot, "dispatch", None)
     if dispatch is not None:
         dispatch("post_published", guild, fresh)
@@ -1244,7 +1379,13 @@ async def take_down_post(
         shadow_message_id=int(ghost) if ghost else None,
     )
     fresh = await get_post_by_id(bot.db, int(row["id"]))
-    return Outcome(True, TAKEN_DOWN_SAID.format(title=title), value=fresh)
+    said = TAKEN_DOWN_SAID.format(title=title)
+    if door_drawn(row):
+        from .cogs.community.frontdoor import door_leaves_post
+
+        await door_leaves_post(bot, guild, row, actor, via=via)
+        said += TAKEN_DOWN_WITH_DOOR_SAID
+    return Outcome(True, said, value=fresh)
 
 
 async def restore_version(
@@ -1393,6 +1534,24 @@ async def reconcile_posts(bot: Any) -> dict[str, int]:
 
 
 __all__ = [
+    "with_door",
+    "turn_carrying",
+    "set_door_drawn",
+    "set_carries_door",
+    "posted_message",
+    "message_payload",
+    "door_parts",
+    "door_drawn",
+    "door_carrier",
+    "carries_door",
+    "TAKEN_DOWN_WITH_DOOR_SAID",
+    "STATUS_CARRIES_DOOR",
+    "DO_NOT_CARRY_THE_DOOR",
+    "DOOR_CARRIED_ELSEWHERE",
+    "CARRY_THE_DOOR",
+    "CARRYING_STOPPED_SAID",
+    "CARRYING_NOW_SAID",
+    "CARRYING_LATER_SAID",
     "AGO",
     "AGO_UNITS",
     "BECAUSE_BACKFILL",

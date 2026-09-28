@@ -21,9 +21,12 @@ from ...frontdoor import (
     DOOR_NO_HOME,
     DOOR_NOT_UP,
     DOOR_OFF,
+    DOOR_OFF_THE_POST_SAID,
     DOOR_POSTED_SAID,
     DOOR_REHEARSAL_DOWN_SAID,
     DOOR_REHEARSING_SAID,
+    DOOR_RIDES_ELSEWHERE,
+    DOOR_RIDES_POST_SAID,
     DOOR_SHADOW_LINE,
     DOOR_SHADOW_LINE_HOMELESS,
     DOOR_SHADOW_LINE_NOWHERE,
@@ -57,7 +60,21 @@ from ...loops import Reconciler, wait_ready
 from ...modmail import panel_rehearsal_copy
 from ...panels import Outcome, Panel, answer, panel_minutes, refusal
 from ...posted import drop_message, duplicates_near, message_is_there, overtaken_by
-from ...posts import row_value, where_words
+from ...posts import (
+    carries_door,
+    door_carrier,
+    door_drawn,
+    get_post_by_id,
+    guard_allows,
+    is_posted,
+    posted_message,
+    row_value,
+    set_carries_door,
+    set_door_drawn,
+    shadow_channel_id,
+    shadow_id,
+    where_words,
+)
 from ...settings_store import (
     FRONTDOOR_CHANNEL,
     FRONTDOOR_MESSAGE,
@@ -92,6 +109,8 @@ DUPLICATE_SEEN = "frontdoor.duplicate_seen"
 POSTED_SHADOW = "frontdoor.posted_shadow"
 UPDATED_SHADOW = "frontdoor.updated_shadow"
 TAKEN_DOWN_SHADOW = "frontdoor.taken_down_shadow"
+RIDES_POST = "frontdoor.rides_post"
+REDRAWN_ON_POST = "frontdoor.redrawn_on_post"
 
 
 async def open_the_ticket(interaction: discord.Interaction) -> None:
@@ -500,6 +519,272 @@ async def _rehearsal_stuck(
     return refusal(DOOR_STUCK, "door_stuck", 500)
 
 
+def carried_note(bot: Any, guild: Any, row: Any) -> str:
+    """The rehearsal note rides the door's own card while the door is in shadow."""
+    if not door_rehearses(bot.store, guild.id):
+        return ""
+    wanted = row_value(row, "channel_id") or bot.store.get(guild.id, FRONTDOOR_CHANNEL)
+    return shadow.note_line(bot, guild, where_words(guild, wanted))
+
+
+def carried_parts(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Any, str] | None:
+    """The door's card, its buttons and the stamp of both, for a post that carries it."""
+    store = bot.store
+    if not door_is_on(store, guild.id):
+        return None
+    note = carried_note(bot, guild, row)
+    embed = door_embed(store, guild.id)
+    if note:
+        embed.set_footer(text=note)
+    return embed, door_view(bot, guild), door_hash(store, guild.id, note)
+
+
+def ours(row: Any) -> set[int]:
+    return {int(found) for found in (row_value(row, "message_id"), shadow_id(row)) if found}
+
+
+async def carrier_up(bot: Any, guild: Any) -> Any:
+    """The post carrying the door, while it has a message for the door to ride."""
+    row = await door_carrier(bot.db, guild.id)
+    return row if row is not None and is_posted(row) else None
+
+
+async def redraw_carrier(
+    bot: Any, guild: Any, row: Any, actor: Any = None, *, via: str = VIA_DISCORD
+) -> bool:
+    """Only the door's part of the message changes; the post's words stay as they were posted."""
+    parts = carried_parts(bot, guild, row) if carries_door(row) else None
+    stamp = parts[2] if parts is not None else None
+    if (stamp or None) == (row_value(row, "door_hash") or None):
+        return False
+    if row_value(row, "message_id") and not guard_allows(bot, row_value(row, "channel_id")):
+        return False
+    message = await posted_message(bot, guild, row)
+    if message is None:
+        return False
+    kept = [] if getattr(message, "content", "") else list(getattr(message, "embeds", [])[:1])
+    try:
+        await message.edit(
+            embeds=kept + ([parts[0]] if parts is not None else []),
+            view=parts[1] if parts is not None else None,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+    except discord.HTTPException as exc:
+        log.warning("frontdoor: could not redraw the door on its post: %s", exc)
+        await log_action(
+            bot,
+            guild,
+            POST_FAILED,
+            actor=actor,
+            details={
+                "slug": row_value(row, "slug"),
+                "message_id": int(message.id),
+                "reason": f"{type(exc).__name__}: {exc}",
+            },
+        )
+        return False
+    await set_door_drawn(bot.db, int(row["id"]), stamp)
+    await log_action(
+        bot,
+        guild,
+        kind_via(REDRAWN_ON_POST, via),
+        actor=actor,
+        details={
+            "slug": row_value(row, "slug"),
+            "post_id": int(row["id"]),
+            "message_id": int(message.id),
+            "drawn": stamp is not None,
+            "via": via,
+        },
+    )
+    return True
+
+
+async def drop_the_doors_own(bot: Any, guild: Any, row: Any) -> None:
+    """The door's own message, wherever it is, goes — the post's message is never one of them."""
+    kept = ours(row)
+    channel, message_id = where_the_door_is(bot, guild)
+    if message_id and message_id not in kept and channel is not None:
+        await drop_message(bot, guild, channel, message_id, would_kind=WOULD_TAKE_DOWN)
+    copy = rehearsal_copy(bot.store, guild.id)
+    if copy and copy not in kept:
+        where, _ = await shadow.find_copy(bot, guild, copy, feature=SHADOW_FEATURE)
+        if where is not None:
+            await drop_message(bot, guild, where, copy, would_kind=WOULD_TAKE_DOWN)
+
+
+async def mirror_the_ride(bot: Any, guild: Any, row: Any, actor: Any = None) -> bool:
+    """The door's own keys point at the post's message, so every door path finds it there."""
+    store = bot.store
+    real, ghost = row_value(row, "message_id"), shadow_id(row)
+    wanted = {
+        FRONTDOOR_CHANNEL: row_value(row, "channel_id"),
+        FRONTDOOR_MESSAGE: str(real) if real else None,
+        FRONTDOOR_SHADOW_MESSAGE: str(ghost) if ghost else None,
+        FRONTDOOR_SHADOW_HASH: None,
+    }
+    changed = False
+    for key, value in wanted.items():
+        have = store.get(guild.id, key)
+        if (str(have) if have else None) == (str(value) if value else None):
+            continue
+        if value:
+            await store.set(guild.id, key, value, by=getattr(actor, "id", actor))
+        else:
+            await store.clear(guild.id, key)
+        changed = True
+    return changed
+
+
+async def release_the_ride(bot: Any, guild: Any, row: Any, *, keep_channel: bool) -> bool:
+    """The keys that point at the post's message are let go; nothing is deleted."""
+    store = bot.store
+    kept = ours(row)
+    cleared = False
+    for key in (FRONTDOOR_MESSAGE, FRONTDOOR_SHADOW_MESSAGE):
+        found = store.get(guild.id, key)
+        if found and int(found) in kept:
+            await store.clear(guild.id, key)
+            cleared = True
+    if cleared or not store.get(guild.id, FRONTDOOR_SHADOW_MESSAGE):
+        await store.clear(guild.id, FRONTDOOR_SHADOW_HASH)
+    if cleared and not keep_channel:
+        await store.clear(guild.id, FRONTDOOR_CHANNEL)
+    return cleared
+
+
+async def door_rides_post(
+    bot: Any, guild: Any, row: Any, actor: Any = None, *, via: str = VIA_DISCORD
+) -> None:
+    """The door is on the post's message: its own copies go and its keys follow the post."""
+    await drop_the_doors_own(bot, guild, row)
+    if await mirror_the_ride(bot, guild, row, actor):
+        await log_action(
+            bot,
+            guild,
+            kind_via(RIDES_POST, via),
+            actor=actor,
+            details={
+                "slug": row_value(row, "slug"),
+                "post_id": int(row["id"]),
+                "channel_id": row_value(row, "channel_id"),
+                "message_id": row_value(row, "message_id"),
+                "shadow_message_id": shadow_id(row),
+                "via": via,
+            },
+        )
+    await hide_ticket_button(bot, guild)
+    await hide_rehearsed_ticket_button(bot, guild)
+
+
+async def door_leaves_post(
+    bot: Any, guild: Any, row: Any, actor: Any = None, *, via: str = VIA_DISCORD
+) -> None:
+    """The post's message went, and the door was part of it."""
+    if not await release_the_ride(bot, guild, row, keep_channel=False):
+        return
+    await log_action(
+        bot,
+        guild,
+        kind_via(TAKEN_DOWN, via),
+        actor=actor,
+        details={
+            "slug": row_value(row, "slug"),
+            "channel_id": row_value(row, "channel_id"),
+            "message_id": row_value(row, "message_id") or shadow_id(row),
+            "with_post": True,
+            "via": via,
+        },
+    )
+
+
+async def door_follows_post(
+    bot: Any, guild: Any, row: Any, actor: Any = None, *, via: str = VIA_DISCORD
+) -> None:
+    """Carry the front door was switched on this post: a message already up changes at once."""
+    if not is_posted(row):
+        return
+    await redraw_carrier(bot, guild, row, actor, via=via)
+    fresh = await get_post_by_id(bot.db, int(row["id"]))
+    if door_drawn(fresh):
+        await door_rides_post(bot, guild, fresh, actor, via=via)
+    elif not carries_door(fresh):
+        await release_the_ride(bot, guild, row, keep_channel=True)
+
+
+async def keep_the_ride(
+    bot: Any, guild: Any, row: Any, actor: Any = None, *, via: str = VIA_DISCORD
+) -> None:
+    """The sweep's half: the door's words re-drawn in place, its keys kept on the post."""
+    await redraw_carrier(bot, guild, row, actor, via=via)
+    fresh = await get_post_by_id(bot.db, int(row["id"]))
+    if not door_is_on(bot.store, guild.id):
+        await release_the_ride(bot, guild, row, keep_channel=False)
+        return
+    if door_drawn(fresh):
+        await door_rides_post(bot, guild, fresh, actor, via=via)
+
+
+async def door_on_the_post(
+    bot: Any, guild: Any, actor: Any, channel: Any, row: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Posting the door where a post already carries it posts nothing and deletes nothing."""
+    title = str(row_value(row, "title", ""))
+    aimed = row_value(row, "channel_id")
+    homes = {int(found) for found in (aimed,) if found}
+    if shadow_id(row):
+        home = shadow_channel_id(bot, guild)
+        if home:
+            homes.add(int(home))
+    where = where_words(guild, aimed or next(iter(homes), None))
+    if int(channel.id) not in homes:
+        return refusal(
+            DOOR_RIDES_ELSEWHERE.format(title=title, where=where), "door_rides_post", 409
+        )
+    if not door_is_on(bot.store, guild.id):
+        return refusal(DOOR_OFF, "door_off", 409)
+    await keep_the_ride(bot, guild, row, actor, via=via)
+    return Outcome(
+        True,
+        DOOR_RIDES_POST_SAID.format(title=title, where=where),
+        value=row_value(row, "message_id") or shadow_id(row),
+    )
+
+
+async def take_the_door_off_its_post(
+    bot: Any, guild: Any, actor: Any, row: Any, *, via: str = VIA_DISCORD
+) -> Outcome:
+    """Down means down here too: the post stays up without the door, and stops carrying it."""
+    await set_carries_door(bot.db, int(row["id"]), False)
+    fresh = await get_post_by_id(bot.db, int(row["id"]))
+    await redraw_carrier(bot, guild, fresh, actor, via=via)
+    await drop_the_doors_own(bot, guild, row)
+    for key in (
+        FRONTDOOR_MESSAGE,
+        FRONTDOOR_SHADOW_MESSAGE,
+        FRONTDOOR_SHADOW_HASH,
+        FRONTDOOR_CHANNEL,
+    ):
+        await bot.store.clear(guild.id, key)
+    message_id = row_value(row, "message_id") or shadow_id(row)
+    await log_action(
+        bot,
+        guild,
+        kind_via(TAKEN_DOWN, via),
+        actor=actor,
+        details={
+            "slug": row_value(row, "slug"),
+            "channel_id": row_value(row, "channel_id"),
+            "message_id": message_id,
+            "off_the_post": True,
+            "via": via,
+        },
+    )
+    return Outcome(
+        True, DOOR_OFF_THE_POST_SAID.format(title=row_value(row, "title", "")), value=message_id
+    )
+
+
 async def post_door(
     bot: Any,
     guild: Any,
@@ -512,6 +797,9 @@ async def post_door(
     """One front door per guild, posted from Discord or from the website."""
     if channel is None:
         return refusal(DOOR_NO_CHANNEL, "no_such_channel", 400)
+    carrier = await carrier_up(bot, guild)
+    if carrier is not None:
+        return await door_on_the_post(bot, guild, actor, channel, carrier, via=via)
     guard = getattr(bot, "guard", None)
     rehearsing = door_rehearses(bot.store, guild.id)
     if rehearsing or (guard is not None and not guard.allows_channel(channel.id)):
@@ -575,6 +863,11 @@ async def take_door_down(
     bot: Any, guild: Any, actor: Any, *, via: str = VIA_DISCORD
 ) -> Outcome:
     """Down means down: the message goes and both keys are cleared, so nothing puts it back."""
+    carrier = await door_carrier(bot.db, guild.id)
+    if carrier is not None and door_drawn(carrier) and is_posted(carrier):
+        return await take_the_door_off_its_post(bot, guild, actor, carrier, via=via)
+    if carrier is not None:
+        await set_carries_door(bot.db, int(carrier["id"]), False)
     channel, message_id = where_the_door_is(bot, guild)
     if not bot.store.get(guild.id, FRONTDOOR_CHANNEL) and not rehearsal_copy(
         bot.store, guild.id
@@ -652,7 +945,9 @@ class FrontDoor(commands.Cog):
         """A re-posted rules message moves what follows it, at once and on the next sweep."""
         if not self.bot.db.is_connected:
             return
-        if str(row_value(row, "slug", "")) != followed_slug(self.bot.store, guild.id):
+        if str(row_value(row, "slug", "")) != followed_slug(
+            self.bot.store, guild.id
+        ) and not carries_door(row):
             return
         await self._reconciles.run(lambda: self._redoor(guild), stamp=False)
 
@@ -671,6 +966,10 @@ class FrontDoor(commands.Cog):
         posted again so it stays directly under the rules."""
         bot = self.bot
         store = bot.store
+        carrier = await carrier_up(bot, guild)
+        if carrier is not None:
+            await keep_the_ride(bot, guild, carrier)
+            return
         channel, message_id = where_the_door_is(bot, guild)
         if not door_is_on(store, guild.id):
             if store.get(guild.id, FRONTDOOR_CHANNEL) or rehearsal_copy(store, guild.id):
@@ -774,6 +1073,8 @@ __all__ = [
     "POSTED",
     "POSTED_SHADOW",
     "POST_FAILED",
+    "REDRAWN_ON_POST",
+    "RIDES_POST",
     "TAKEN_DOWN",
     "TAKEN_DOWN_SHADOW",
     "TICKET_BUTTON_HIDDEN",
@@ -789,6 +1090,20 @@ __all__ = [
     "RequestDoor",
     "TicketDoor",
     "build_panel",
+    "carried_note",
+    "carried_parts",
+    "carrier_up",
+    "door_follows_post",
+    "door_leaves_post",
+    "door_on_the_post",
+    "door_rides_post",
+    "drop_the_doors_own",
+    "keep_the_ride",
+    "mirror_the_ride",
+    "ours",
+    "redraw_carrier",
+    "release_the_ride",
+    "take_the_door_off_its_post",
     "door_view",
     "drop_rehearsal",
     "event_handoff",

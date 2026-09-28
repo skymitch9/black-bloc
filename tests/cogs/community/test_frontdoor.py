@@ -1,9 +1,11 @@
 import asyncio
 import json
+import re
 
 import discord
 import pytest
 
+from black_bloc import posts
 from black_bloc.cogs.community.events import EVENTS_OFF, ProposeButton
 from black_bloc.cogs.community.frontdoor import (
     BELOW_POST,
@@ -12,6 +14,8 @@ from black_bloc.cogs.community.frontdoor import (
     MOVED,
     POSTED,
     POSTED_SHADOW,
+    REDRAWN_ON_POST,
+    RIDES_POST,
     TAKEN_DOWN,
     TAKEN_DOWN_SHADOW,
     TICKET_BUTTON_HIDDEN,
@@ -33,6 +37,7 @@ from black_bloc.cogs.community.requests import REQUESTS_OFF, FileButton
 from black_bloc.cogs.moderation.modmail import Modmail, TicketModal
 from black_bloc.config import load_settings
 from black_bloc.frontdoor import (
+    CUSTOM_ID_TEMPLATE,
     DOOR_GUARDED,
     DOOR_NO_CHANNEL,
     DOOR_NO_HOME,
@@ -90,11 +95,19 @@ class FakeMessage:
         embed = kwargs.get("embed")
         self.embeds = list(kwargs.get("embeds") or ([embed] if embed is not None else []))
         self.view = kwargs.get("view")
+        self.pinned = False
+        self.edits = []
 
     async def edit(self, **kwargs):
+        self.edits.append(kwargs)
         self.kwargs = {**self.kwargs, **kwargs}
         if "view" in kwargs:
             self.view = kwargs["view"]
+        if "embeds" in kwargs:
+            self.embeds = list(kwargs["embeds"])
+
+    async def pin(self, reason=None):
+        self.pinned = True
 
     async def delete(self):
         self.deleted = True
@@ -1305,3 +1318,338 @@ async def test_the_duplicate_row_names_both_ids_so_staff_can_find_them(
     )
     details = json.loads((await cur.fetchall())[-1]["details"])
     assert details["message_id"] == stored and details["also"] == [stray.id]
+
+
+# --- a post that carries the door (post-carries-door, 2026-09-27) -----------------------------
+
+
+RULES = "Welcome to Black in a Flash.\n# Read the rules."
+
+
+async def a_carrier(bot, *, slug="welcome", channel_id=777, pin=False, style="plain"):
+    post_id = await posts.create_post(
+        bot.db,
+        GUILD,
+        slug=slug,
+        title="Welcome and rules",
+        body=RULES,
+        channel_id=channel_id,
+        style=style,
+        pin=pin,
+    )
+    await posts.set_carries_door(bot.db, post_id, True)
+    return await posts.get_post_by_id(bot.db, post_id)
+
+
+async def both_on(bot):
+    await bot.store.set(GUILD, SHADOW_CHANNEL, 888)
+    await bot.store.set(GUILD, "posts_mode", "on")
+    await bot.store.set(GUILD, FRONTDOOR_MODE, "on")
+
+
+async def published(bot, row, member):
+    outcome = await posts.publish_post(bot, bot.guild, row, member)
+    assert outcome.ok, outcome.message
+    return await posts.get_post_by_id(bot.db, int(row["id"]))
+
+
+def door_ids(message):
+    return [one.custom_id for one in message.view.children]
+
+
+async def test_a_carrying_post_goes_out_as_one_message_with_the_door_last(live, member):
+    """The owner's ask: the rules and the Need something? box are the same message."""
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    row = await published(live, await a_carrier(live), member)
+
+    assert len(welcome.messages) == 1
+    message = welcome.messages[0]
+    assert message.content == RULES
+    assert [one.title for one in message.embeds] == [live.store.get(GUILD, FRONTDOOR_TITLE)]
+    assert door_ids(message) == [custom_id(kind, GUILD) for kind in KINDS]
+    assert door_labels(message) == [label_for(live.store, GUILD, kind) for kind in KINDS]
+    assert posts.door_drawn(row) and posts.STATUS_CARRIES_DOOR in posts.status_words(row)
+    assert live.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
+    assert live.store.get(GUILD, FRONTDOOR_MESSAGE) == str(message.id)
+    assert RIDES_POST in await kinds_in(live.db)
+
+
+async def test_an_embed_post_keeps_its_own_embed_first_and_the_door_second(live, member):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    await published(live, await a_carrier(live, style="embed"), member)
+
+    message = welcome.messages[0]
+    assert [one.description for one in message.embeds][0] == RULES
+    assert message.embeds[-1].title == live.store.get(GUILD, FRONTDOOR_TITLE)
+
+
+async def test_a_door_already_up_on_its_own_is_taken_down_when_the_post_carries_it(
+    live, member
+):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    await post_door(live, live.guild, member, welcome)
+    alone = welcome.messages[0].id
+
+    await published(live, await a_carrier(live), member)
+
+    assert [one.id for one in welcome.messages] != [alone]
+    assert len(welcome.messages) == 1 and alone in welcome.deleted
+
+
+async def test_rewording_the_door_redraws_the_carrying_message_in_place(live, cog, member):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    await published(live, await a_carrier(live), member)
+    message = welcome.messages[0]
+
+    await live.store.set(GUILD, FRONTDOOR_TITLE, "Need a hand?")
+    await live.store.set(GUILD, FRONTDOOR_TICKET_LABEL, "Talk to staff")
+    await cog.reconcile()
+
+    assert welcome.messages == [message], "edited in place, never a second message"
+    last = message.edits[-1]
+    assert "content" not in last, "the post's own words are left exactly as they were posted"
+    assert last["embeds"][-1].title == "Need a hand?"
+    assert door_labels(message)[0] == "Talk to staff"
+    assert REDRAWN_ON_POST in await kinds_in(live.db)
+
+
+async def test_the_sweep_leaves_a_carrying_message_alone_while_nothing_changed(
+    live, cog, member
+):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    await published(live, await a_carrier(live), member)
+
+    await cog.reconcile()
+    await cog.reconcile()
+
+    assert welcome.messages[0].edits == []
+    assert len(welcome.messages) == 1
+
+
+async def test_posting_the_door_where_it_rides_posts_nothing_and_deletes_nothing(live, member):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    await published(live, await a_carrier(live), member)
+    message = welcome.messages[0]
+
+    outcome = await post_door(live, live.guild, member, welcome)
+
+    assert outcome.ok and "rides **Welcome and rules**" in outcome.message
+    assert welcome.messages == [message] and welcome.deleted == []
+    assert outcome.value == message.id
+
+
+async def test_posting_the_door_somewhere_else_is_refused_in_words_naming_the_post(
+    live, member
+):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    other = live.guild.add(FakeText(999, name="general"))
+    await published(live, await a_carrier(live), member)
+
+    outcome = await post_door(live, live.guild, member, other)
+
+    assert not outcome.ok and outcome.code == "door_rides_post"
+    assert "Welcome and rules" in outcome.message and "Carry the front door" in outcome.message
+    assert other.messages == [] and len(welcome.messages) == 1
+
+
+async def test_taking_the_post_down_takes_the_door_with_it_and_says_so(live, member):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    row = await published(live, await a_carrier(live), member)
+    message = welcome.messages[0]
+
+    outcome = await posts.take_down_post(live, live.guild, row, member)
+
+    assert outcome.ok and "front door was part of that message" in outcome.message
+    assert message.deleted is True
+    assert not live.store.get(GUILD, FRONTDOOR_MESSAGE)
+    assert not live.store.get(GUILD, FRONTDOOR_CHANNEL)
+    fresh = await posts.get_post_by_id(live.db, int(row["id"]))
+    assert posts.carries_door(fresh), "Post it puts both back"
+
+
+async def test_the_sweep_posts_no_door_of_its_own_after_the_post_took_it_down(
+    live, cog, member
+):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    row = await published(live, await a_carrier(live), member)
+    gone = welcome.messages[0]
+    await posts.take_down_post(live, live.guild, row, member)
+    welcome.messages.remove(gone)
+
+    await cog.reconcile()
+
+    assert welcome.messages == []
+
+
+async def test_taking_the_door_down_redraws_the_post_without_it_and_turns_carrying_off(
+    live, member
+):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    row = await published(live, await a_carrier(live), member)
+    message = welcome.messages[0]
+
+    outcome = await take_door_down(live, live.guild, member)
+
+    assert outcome.ok and "stays up without it" in outcome.message
+    assert welcome.messages == [message] and welcome.deleted == []
+    assert message.edits[-1]["embeds"] == [] and message.edits[-1]["view"] is None
+    fresh = await posts.get_post_by_id(live.db, int(row["id"]))
+    assert not posts.carries_door(fresh) and not posts.door_drawn(fresh)
+    for key in (FRONTDOOR_CHANNEL, FRONTDOOR_MESSAGE, FRONTDOOR_SHADOW_MESSAGE):
+        assert not live.store.get(GUILD, key)
+
+
+async def test_switching_the_door_off_drops_its_part_and_keeps_the_post_carrying(
+    live, cog, member
+):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    row = await published(live, await a_carrier(live), member)
+    message = welcome.messages[0]
+
+    await live.store.set(GUILD, FRONTDOOR_MODE, "off")
+    await cog.reconcile()
+
+    assert welcome.messages == [message]
+    assert message.edits[-1]["embeds"] == [] and message.edits[-1]["view"] is None
+    fresh = await posts.get_post_by_id(live.db, int(row["id"]))
+    assert posts.carries_door(fresh) and not posts.door_drawn(fresh)
+    assert not live.store.get(GUILD, FRONTDOOR_MESSAGE)
+
+
+async def test_in_shadow_the_one_message_goes_to_the_posts_rehearsal_home(live, member):
+    """Both modes shadow: #welcome-test gets the combined message, #welcome gets nothing."""
+    welcome = live.guild.get_channel(777)
+    home = live.guild.get_channel(888)
+    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
+    await live.store.set(GUILD, "posts_mode", "shadow")
+    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
+
+    await published(live, await a_carrier(live), member)
+
+    assert welcome.messages == [] and len(home.messages) == 1
+    copy = home.messages[0]
+    assert copy.content == RULES
+    assert copy.embeds[-1].footer.text == "Rehearsal — this is where it would go: #welcome"
+    assert door_ids(copy) == [custom_id(kind, GUILD) for kind in KINDS]
+    assert live.store.get(GUILD, FRONTDOOR_SHADOW_MESSAGE) == str(copy.id)
+    assert not live.store.get(GUILD, FRONTDOOR_MESSAGE)
+    assert live.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
+
+
+async def test_the_posts_own_rehearsal_home_wins_where_the_one_message_goes(live, member):
+    home = live.guild.get_channel(888)
+    elsewhere = live.guild.add(FakeText(889, name="door-test"))
+    await live.store.set(GUILD, SHADOW_CHANNEL, 889)
+    await live.store.set(GUILD, "posts_shadow_channel_id", 888)
+    await live.store.set(GUILD, "posts_mode", "shadow")
+    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
+
+    await published(live, await a_carrier(live), member)
+
+    assert len(home.messages) == 1 and elsewhere.messages == []
+
+
+async def test_a_shadowed_door_on_a_live_post_rides_it_with_the_rehearsal_note(live, member):
+    """The modes differ: the post's decides where the message goes."""
+    welcome = live.guild.get_channel(777)
+    home = live.guild.get_channel(888)
+    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
+    await live.store.set(GUILD, "posts_mode", "on")
+    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
+
+    await published(live, await a_carrier(live), member)
+
+    assert home.messages == [] and len(welcome.messages) == 1
+    assert welcome.messages[0].embeds[-1].footer.text.startswith("Rehearsal")
+
+
+async def test_the_shadow_copy_of_the_door_on_its_own_goes_when_the_post_carries_it(
+    live, member
+):
+    welcome = live.guild.get_channel(777)
+    home = live.guild.get_channel(888)
+    await live.store.set(GUILD, SHADOW_CHANNEL, 888)
+    await live.store.set(GUILD, "posts_mode", "shadow")
+    await live.store.set(GUILD, FRONTDOOR_MODE, "shadow")
+    await post_door(live, live.guild, member, welcome)
+    alone = home.messages[0].id
+
+    await published(live, await a_carrier(live), member)
+
+    assert len(home.messages) == 1 and alone in home.deleted
+
+
+async def test_the_buttons_on_the_carrying_message_still_open_a_ticket_after_a_restart(
+    live, cog, member
+):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    await published(live, await a_carrier(live), member)
+    await cog.cog_load()
+    ticket = door_ids(welcome.messages[0])[0]
+
+    match = re.fullmatch(CUSTOM_ID_TEMPLATE, ticket)
+    item = await DoorButton.from_custom_id(None, None, match)
+    interaction = FakeInteraction(live, member)
+    await item.callback(interaction)
+
+    assert DoorButton in live.dynamic_items
+    assert isinstance(interaction.response.modals[0], TicketModal)
+
+
+@pytest.mark.parametrize("pin", [False, True])
+async def test_the_one_message_is_pinned_only_when_the_post_says_pin_it(live, member, pin):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+
+    await published(live, await a_carrier(live, pin=pin), member)
+
+    assert welcome.messages[0].pinned is pin
+
+
+async def test_turning_carrying_on_for_a_post_already_up_adds_the_door_at_once(live, member):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    post_id = await posts.create_post(
+        live.db, GUILD, slug="welcome", title="Welcome and rules", body=RULES, channel_id=777
+    )
+    row = await published(live, await posts.get_post_by_id(live.db, post_id), member)
+    message = welcome.messages[0]
+    assert message.view is None
+
+    outcome = await posts.save_post(live, live.guild, row, member, carries=True)
+
+    assert outcome.ok and outcome.message.endswith(posts.CARRYING_NOW_SAID)
+    assert welcome.messages == [message]
+    assert door_ids(message) == [custom_id(kind, GUILD) for kind in KINDS]
+    assert "content" not in message.edits[-1]
+    assert live.store.get(GUILD, FRONTDOOR_MESSAGE) == str(message.id)
+
+
+async def test_turning_carrying_off_leaves_the_post_and_lets_the_door_go_back_to_its_own(
+    live, cog, member
+):
+    await both_on(live)
+    welcome = live.guild.get_channel(777)
+    row = await published(live, await a_carrier(live), member)
+    message = welcome.messages[0]
+
+    outcome = await posts.save_post(live, live.guild, row, member, carries=False)
+    assert outcome.ok and outcome.message.endswith(posts.CARRYING_STOPPED_SAID)
+    assert message.view is None and live.store.get(GUILD, FRONTDOOR_CHANNEL) == 777
+
+    await cog.reconcile()
+
+    assert len(welcome.messages) == 2, "the sweep puts the door back as a message of its own"
+    assert welcome.messages[0] is message

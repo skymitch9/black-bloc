@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 75
+SCHEMA_VERSION = 76
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -814,6 +814,8 @@ CREATE TABLE IF NOT EXISTS posts (
     pin         INTEGER NOT NULL DEFAULT 1,
     message_id  INTEGER,
     shadow_message_id INTEGER,
+    carries_door INTEGER NOT NULL DEFAULT 0,
+    door_hash   TEXT,
     posted_hash TEXT,
     posted_at   TEXT,
     posted_by   INTEGER,
@@ -1234,6 +1236,8 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathon_runs", "public_message_id", "INTEGER"),
     ("marathon_runs", "public_channel_id", "INTEGER"),
     ("marathon_runs", "public_removed", "INTEGER NOT NULL DEFAULT 0"),
+    ("posts", "carries_door", "INTEGER NOT NULL DEFAULT 0"),
+    ("posts", "door_hash", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {
