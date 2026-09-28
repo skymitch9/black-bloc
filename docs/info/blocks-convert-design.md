@@ -143,3 +143,48 @@
 - ~~**Shadow mode and the temp voice block**~~ — settled 2026-09-28: draw nothing until temp voice is `on`.
 - **Where the non-door sweep lives** (Deviation 5): fine in the door cog, or move the `Reconciler` to a small
   posts-level owner when `blocks-live` adds the auto-updating kinds (which will want their own cadence).
+
+## Blocks section: fold, search, filter
+
+> Built on branch `blocks-section-tidy` (owner, 2026-09-28: *"in blocks add a way to minimize each block and
+> search and filter on blocks"*). **AS BUILT, NOT VERIFIED — no browser was used.**
+
+- Each Blocks card is now a native `<details class="block-card">`; the `<summary>` is the one-line header
+  (name + the two badges), a click toggles it, and the fold state is remembered per kind in `localStorage`
+  (`bb_blocks_fold`, via `site/public/assets/layout.js`'s existing `remembered`/`remember`, both already
+  try/catch-guarded). Default folded when there are more than 3 block kinds
+  (`BLOCKS_FOLD_MANY` in `page-posts.js`).
+- **No new lazy-loading code was needed for "don't draw the preview until first opened."** The preview
+  (`blockLook` → `blockPreview({ lazy: true })` → `discordMock`'s `IntersectionObserver`) already only
+  paints once its holder is on-screen and intersecting; a closed native `<details>` gives its children no
+  box at all, so the observer cannot fire while folded. Opening the card is what gives the holder a box,
+  which is what lets the observer fire — the existing lazy mechanism became the trigger for free.
+- Search and the four filter chips (All · On a post · On no post · One at a time) reuse `searchField` and
+  the `chipbar`/`chip-filter` pattern from `postsSection` exactly (same DOM shape, same `aria-pressed`
+  wiring). The matching itself is a new pure function, `blockMatches(kind, query, filterKey)` in the new
+  `site/public/assets/blockmatch.js`, proved by `site/mock/blockmatch.test.mjs` (added to
+  `scripts/deploy.ps1`'s gate list) — kept in its own module rather than inline in `page-posts.js` so it
+  is testable without a browser, following the `clipmd.js`/`labels.js` precedent.
+- "The words of its keys" is each kind's `keys` array (e.g. `frontdoor_ticket_label`) with underscores
+  turned to spaces and folded into the same lowercased haystack as the name and `where` text — a
+  substring search, not per-word tokenizing.
+- The section head count (`section()`'s own badge) reads `{shown} of {total}` while filtered, the plain
+  total otherwise; a hidden card sets `hidden` on its `<details>`, and a `sayNothing` line
+  ("No block matches this filter.") shows when nothing does.
+- ⚠️ **Per the owner's follow-up clarification (2026-09-28)**: this build deliberately does NOT create a
+  second shared search/filter module in `ui.js` — that is scoped to a later, dedicated build that moves
+  `postsSection`'s own chip/search logic there too and switches every page to it. This build's
+  `blockmatch.js` is the small, self-contained interim home for the Blocks-only matcher.
+
+### Live check steps (not yet run)
+
+1. Posts ▸ Blocks: with more than 3 kinds, every card loads folded; each summary shows the name and both
+   badges with no preview drawn yet (Network tab: no `/api/preview/message` call for a folded card).
+2. Click a folded card's header — it opens, the "What it looks like in Discord" preview draws exactly once,
+   and reloading the page shows that same card still open.
+3. **Fold all** / **Open all** at the section head do what they say, and the state each leaves behind
+   survives a reload (per-card, in `localStorage`).
+4. Type in the search box — cards whose name/where/key words do not match hide, the section count reads
+   "N of 9", and clearing the box brings every card back. Try each filter chip alone and combined with a
+   search term; with zero results the "No block matches this filter." line appears and the buttons/cards
+   stay clear of horizontal scroll at phone width.

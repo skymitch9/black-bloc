@@ -2317,6 +2317,13 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 .postblock-name { flex: 1 1 auto; min-width: 0; font-size: var(--et-ui-sm); font-weight: var(--et-weight-strong); }
 .blockwords { display: grid; gap: 10px; }
 .blockwords-preview { display: grid; gap: 6px; }
+
+/* Blocks section: each block a <details>, folded to name + badges (owner, 2026-09-28). */
+.block-card-head { cursor: pointer; list-style: none; }
+.block-card-head::-webkit-details-marker { display: none; }
+.block-card-head .sect-mark { transform: rotate(-90deg); }
+.block-card[open] > .block-card-head .sect-mark { transform: none; }
+.block-card-name { flex: 1 1 auto; min-width: 0; font-size: var(--et-ui-md); font-weight: var(--et-weight-strong); }
 .crumb {
   align-self: start;
   padding: 0;

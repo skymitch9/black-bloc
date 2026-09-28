@@ -9305,3 +9305,14 @@ Design: [`posts-doc-import-design.md`](posts-doc-import-design.md). Keyed agains
 | `site/public/assets/page-posts.js:565` `importFold` | A closed `foldout` under the note, so the drawer's default look gains one line. |
 | `site/public/assets/site.css:2347` `.docimport*` | One flex row that wraps; the link box takes the room (`flex: 1 1 220px; min-width: 0`), so 390 px has no sideways scroll (reasoned, not rendered). |
 | `site/mock/server.mjs:3653` | The mock route: `MOCK_DOC_PUBLIC` answers a canned export, `MOCK_DOC_PRIVATE` the not-public refusal, any other Drive id *not a Doc*, any other Docs id *no doc there*. |
+
+## Blocks section: fold, search, filter (branch `blocks-section-tidy`, 2026-09-28)
+
+Design: [`blocks-convert-design.md`](blocks-convert-design.md#blocks-section-fold-search-filter). Keyed against this branch's own tip.
+
+| Where | Why |
+|---|---|
+| `site/public/assets/blockmatch.js:16` `blockMatches` · `:5` `BLOCK_FILTERS` | The Blocks section's pure search+filter matcher, split out of `page-posts.js` so `site/mock/blockmatch.test.mjs` can prove it without a browser — the `clipmd.js`/`labels.js` pattern. Haystack is name + `where` + each `keys` entry with `_` turned to a space; a substring search over that, not per-word tokenizing. |
+| `site/public/assets/page-posts.js` `blockCard` · `readBlockFold` · `writeBlockFold` · `blockFoldMap` | Each Blocks card is a native `<details class="block-card">`; folding it is what stops `blockLook`'s already-`lazy` `IntersectionObserver` preview from painting — a closed `<details>`'s children have no box, so the observer cannot fire until the card is opened. Fold state is one object at `layout.js`'s `remembered`/`remember` key `bb_blocks_fold` (`{kind: folded}`), not new storage code. |
+| `site/public/assets/page-posts.js` `setAllBlockFolds` | Sets `.open` on every card's `<details>`; relies on the browser firing `toggle` on a programmatic `.open` set (it does, per spec) so `blockCard`'s own `toggle` listener is the only place fold state is written. |
+| `site/public/assets/site.css` `.block-card-head` | The `<summary>`'s chevron rotation and marker-hiding, copied from `.foldout-head`'s existing rule shape; `.card-head`'s flex/padding/border is reused as-is (the summary carries both classes). |

@@ -2,8 +2,10 @@ import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespa
 import { start } from './app.js';
 import { htmlToDiscordMarkdown } from './clipmd.js';
 import { blockPreview } from './blockpreview.js';
+import { BLOCK_FILTERS, blockMatches } from './blockmatch.js';
 import { BLOCK_EDITORS } from './blockwords.js';
 import { logsSection } from './logs.js';
+import { remember, remembered } from './layout.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
 import {
   ago,
@@ -87,6 +89,13 @@ const ON_NO_POST = 'On no post yet — open a post and use Add a block….';
 const LOOKS_LIKE = 'What it looks like in Discord';
 const LOOKS_LIKE_HELP = 'Drawn by the bot from the saved words, alone — on a post it rides under '
   + 'the post\'s own message. A list that changes by itself is drawn with sample entries.';
+const BLOCKS_FOLD_KEY = 'bb_blocks_fold';
+const BLOCKS_FOLD_MANY = 3;
+const FOLD_ALL = 'Fold all';
+const OPEN_ALL = 'Open all';
+const SEARCH_BLOCKS = 'Search the blocks';
+const SEARCH_BLOCKS_PLACEHOLDER = 'Search the blocks…';
+const NO_BLOCK_MATCH = 'No block matches this filter.';
 const STYLE_WORDS = { plain: 'a plain message', embed: 'an embed' };
 // Site words, not posted words: the "every word the bot posts is editable on the site" rule
 // is about what Discord shows. These are the dashboard talking to staff.
@@ -161,6 +170,7 @@ const FILTERS = [
 ];
 
 const state = { refs: null, filter: 'all', query: '' };
+const blockState = { filter: 'all', query: '' };
 const shown = { slug: null };
 let refresh = () => {};
 let deepLinked = false;
@@ -990,18 +1000,37 @@ function postsSection(payload, say) {
   return full(list.node);
 }
 
-async function blocksSection(payload) {
-  const kinds = payload.block_kinds || [];
-  const one = section('Blocks', BLOCKS_SECTION_NOTE, { id: 'blocks', count: kinds.length });
-  const cards = [];
-  for (const kind of kinds) {
-    const editor = BLOCK_EDITORS[kind.kind];
-    const on = kind.on || [];
-    cards.push(card(kind.name, [
+function blockFoldMap() {
+  return remembered(BLOCKS_FOLD_KEY) || {};
+}
+
+function readBlockFold(kind, fallback) {
+  const found = blockFoldMap()[kind];
+  return typeof found === 'boolean' ? found : fallback;
+}
+
+function writeBlockFold(kind, folded) {
+  const map = blockFoldMap();
+  map[kind] = folded;
+  remember(BLOCKS_FOLD_KEY, map);
+}
+
+/** One card, folded to its name and badges until opened; opening is what triggers the lazy preview. */
+function blockCard(kind, editorNode, defaultFolded) {
+  const on = kind.on || [];
+  const details = el('details', {
+    class: 'card block-card',
+    open: readBlockFold(kind.kind, defaultFolded) ? undefined : true,
+  }, [
+    el('summary', { class: 'card-head block-card-head' }, [
+      icon('chevronDown', 14, 'sect-mark'),
+      el('span', { class: 'block-card-name', text: kind.name }),
       el('div', { class: 'postmarks' }, [
         badge(kind.exclusive ? ONE_AT_A_TIME : ANY_NUMBER, null),
         badge(kind.where, on.length ? 'info' : null),
       ]),
+    ]),
+    el('div', { class: 'card-body' }, [
       on.length
         ? bar(on.map((holder) => button(
           OPEN_IT.replace('{title}', holder.title),
@@ -1010,12 +1039,77 @@ async function blocksSection(payload) {
         )))
         : sayNothing(ON_NO_POST),
       blockLook(kind),
-      editor
-        ? foldout(EDIT_BLOCK.replace('{name}', kind.name), [await editor()])
-        : null,
-    ]));
+      editorNode ? foldout(EDIT_BLOCK.replace('{name}', kind.name), [editorNode]) : null,
+    ]),
+  ]);
+  details.addEventListener('toggle', () => writeBlockFold(kind.kind, !details.open));
+  return details;
+}
+
+function setAllBlockFolds(cards, folded) {
+  for (const { node } of cards) node.open = !folded;
+}
+
+async function blocksSection(payload) {
+  const kinds = payload.block_kinds || [];
+  const defaultFolded = kinds.length > BLOCKS_FOLD_MANY;
+  const one = section('Blocks', BLOCKS_SECTION_NOTE, { id: 'blocks', count: kinds.length });
+  const cards = [];
+  for (const kind of kinds) {
+    const editor = BLOCK_EDITORS[kind.kind];
+    const editorNode = editor ? await editor() : null;
+    cards.push({ kind, node: blockCard(kind, editorNode, defaultFolded) });
   }
-  one.body.append(...cards);
+
+  const noMatch = sayNothing(NO_BLOCK_MATCH);
+  const paint = () => {
+    let hits = 0;
+    for (const found of cards) {
+      const hit = blockMatches(found.kind, blockState.query, blockState.filter);
+      found.node.hidden = !hit;
+      if (hit) hits += 1;
+    }
+    noMatch.hidden = hits > 0;
+    one.count(hits === cards.length ? cards.length : `${hits} of ${cards.length}`);
+  };
+
+  const chips = el('div', { class: 'chipbar' }, BLOCK_FILTERS.map(([key, label]) => el('button', {
+    class: 'chip-filter',
+    type: 'button',
+    'data-kind': key,
+    'aria-pressed': blockState.filter === key ? 'true' : 'false',
+    text: label,
+    on: {
+      click: (event) => {
+        blockState.filter = key;
+        for (const chip of event.currentTarget.parentElement.children) {
+          chip.setAttribute('aria-pressed', chip.getAttribute('data-kind') === key ? 'true' : 'false');
+        }
+        paint();
+      },
+    },
+  })));
+  const search = searchField({
+    label: SEARCH_BLOCKS,
+    placeholder: SEARCH_BLOCKS_PLACEHOLDER,
+    value: blockState.query,
+    onQuery: (query) => {
+      blockState.query = query;
+      paint();
+    },
+  });
+  const foldButtons = bar([
+    button(FOLD_ALL, () => setAllBlockFolds(cards, true), { tone: 'quiet' }),
+    button(OPEN_ALL, () => setAllBlockFolds(cards, false), { tone: 'quiet' }),
+  ]);
+  foldButtons.style.marginLeft = 'auto';
+  paint();
+
+  one.body.append(
+    card(null, [el('div', { class: 'card-head' }, [search, chips, foldButtons])]),
+    noMatch,
+    ...cards.map((found) => found.node),
+  );
   return full(one.node);
 }
 
