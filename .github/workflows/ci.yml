@@ -56,3 +56,5 @@ jobs:
         run: node site/mock/marathon-words.test.mjs
       - name: Post toolbar
         run: node site/mock/mdformat.test.mjs
+      - name: Shared search and filter
+        run: node site/mock/listfilter.test.mjs

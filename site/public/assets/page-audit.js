@@ -7,6 +7,7 @@ import {
   button,
   el,
   field,
+  filterChip,
   idsIn,
   looksLikeId,
   memberPicker,
@@ -142,26 +143,17 @@ function logsSurface() {
       const pressed = prefix
         ? state.kind === prefix
         : state.feature === value && (value !== '' || !state.kind);
-      return el('button', {
-        class: 'chip-filter',
-        type: 'button',
-        'aria-pressed': pressed ? 'true' : 'false',
-        title,
-        text: label,
-        on: {
-          click: () => {
-            if (prefix) {
-              state.kind = pressed ? '' : prefix;
-              state.feature = '';
-              showKind();
-            } else {
-              state.feature = pressed ? '' : value;
-            }
-            paintChips();
-            again();
-          },
-        },
-      });
+      return filterChip(label, pressed, () => {
+        if (prefix) {
+          state.kind = pressed ? '' : prefix;
+          state.feature = '';
+          showKind();
+        } else {
+          state.feature = pressed ? '' : value;
+        }
+        paintChips();
+        again();
+      }, { title });
     };
     chips.replaceChildren(
       one('Everything', {}, 'Every part of Black Bloc'),

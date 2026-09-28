@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *One search module* (branch `search-module`, off `main` `93c0bbb5`, keyed against `c9bd673a`); the *Blocks section: fold, search, filter* row for `blockmatch.js` is SUPERSEDED (file deleted). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import — the embed box and New post choices* (branch `posts-doc-import-2`, off `main` `d1d5807a`, keyed against `959bc310`); the *Import from a Google Doc* rows for `page-posts.js` `forgetImport` / `replaceBody` / `importDoc` / `importFold` hold in substance but their line numbers moved (~+30). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Import from a Google Doc* (branch `posts-doc-import`, off `main` `05a8fc0c`, keyed against `f91e014c`); the *posts-paste* rows for `clipmd.js` still hold (the inline path is unchanged; classes and the link unwrap are added). Before that:
 > **2026-09-28 — RE-KEYED against `f4ba0f2b`** (after the six test-audit merges): 769 anchors moved, 556 unchanged, 24 ambiguous (nearest taken), 36 fuzzy, 31 not found, 2251 bare line numbers left as they are, 0 rows naming a missing file. Before that:
@@ -9313,7 +9314,7 @@ Design: [`blocks-convert-design.md`](blocks-convert-design.md#blocks-section-fol
 
 | Where | Why |
 |---|---|
-| `site/public/assets/blockmatch.js:16` `blockMatches` · `:5` `BLOCK_FILTERS` | The Blocks section's pure search+filter matcher, split out of `page-posts.js` so `site/mock/blockmatch.test.mjs` can prove it without a browser — the `clipmd.js`/`labels.js` pattern. Haystack is name + `where` + each `keys` entry with `_` turned to a space; a substring search over that, not per-word tokenizing. |
+| ~~`site/public/assets/blockmatch.js:16` `blockMatches` · `:5` `BLOCK_FILTERS`~~ **SUPERSEDED 2026-09-28 by *One search module* below — file deleted; `BLOCK_FILTERS`/`blockText` live in `listfilter.js`, fixtures in `site/mock/listfilter.test.mjs`.** | The Blocks section's pure search+filter matcher, split out of `page-posts.js` so `site/mock/blockmatch.test.mjs` can prove it without a browser — the `clipmd.js`/`labels.js` pattern. Haystack is name + `where` + each `keys` entry with `_` turned to a space; a substring search over that, not per-word tokenizing. |
 | `site/public/assets/page-posts.js` `blockCard` · `readBlockFold` · `writeBlockFold` · `blockFoldMap` | Each Blocks card is a native `<details class="block-card">`; folding it is what stops `blockLook`'s already-`lazy` `IntersectionObserver` preview from painting — a closed `<details>`'s children have no box, so the observer cannot fire until the card is opened. Fold state is one object at `layout.js`'s `remembered`/`remember` key `bb_blocks_fold` (`{kind: folded}`), not new storage code. |
 | `site/public/assets/page-posts.js` `setAllBlockFolds` | Sets `.open` on every card's `<details>`; relies on the browser firing `toggle` on a programmatic `.open` set (it does, per spec) so `blockCard`'s own `toggle` listener is the only place fold state is written. |
 | `site/public/assets/site.css` `.block-card-head` | The `<summary>`'s chevron rotation and marker-hiding, copied from `.foldout-head`'s existing rule shape; `.card-head`'s flex/padding/border is reused as-is (the summary carries both classes). |
@@ -9334,3 +9335,23 @@ Design: [`posts-doc-import-design.md`](posts-doc-import-design.md) § *Follow-up
 | `site/public/assets/page-posts.js:960` `typed` | The doc's title fills the box only if staff have not typed one (or it is empty). |
 | `site/public/assets/page-posts.js:963` `createIt` · `:991` `readIt` | *Create the post* renders only after a good read and hides again when the link changes; it re-checks the link so a stale read cannot create the wrong doc. The over-cap refusal happens at read time, before anything exists; the server refuses again on its own. |
 | `site/mock/server.mjs:3118` `postImportStyle` · `:3270` | The mock's twin: the key's value, and `POST /api/posts` with `body`/`style`, the cap refusal, version 1, one `web.post.created` row. |
+
+## One search module (branch `search-module`, 2026-09-28)
+
+Design: [`search-module-design.md`](search-module-design.md). Keyed against `c9bd673a`.
+
+| Where | Why |
+|---|---|
+| `site/public/assets/listfilter.js:1` `matches` · `:6` `ruleOf` · `:12` `passes` · `:17` `applyFilters` | The one matcher every list uses: trimmed, case-insensitive substring; chip rule AND search; an unknown chip key falls back to the first chip. Pure (no DOM) so `site/mock/listfilter.test.mjs` proves it under node; `ui.js:20` re-exports it so pages import from one place. |
+| `site/public/assets/listfilter.js:22` `BLOCK_FILTERS` · `:29` `blockText` | The Blocks section's chips and haystack (name + `where` + key words with `_` → space), folded in from the deleted `blockmatch.js` so the fixtures pin the page's real config. |
+| `site/public/assets/ui.js:213` `filterChip` | The only place `class: 'chip-filter'` is written; `data-kind` only when keyed, so toggle chips (Logs, Audit, Guides' *Only what is on*) stay plain. |
+| `site/public/assets/ui.js:226` `chipBar` | Single-choice chips: presses the clicked chip BEFORE `onPick`, so pages that re-render on pick (Members, Guides, Raid train scope) and pages that do not (New post choice) both show the right chip. Compares `String(key)`, so a `''` key (Guides' *Anywhere*/*Everyone*) works. |
+| `site/public/assets/ui.js:242` `listFilter` | Returns `parts` rather than one wrapper so each page keeps its own toolbar row and extra buttons (no new chrome). `value` maps an item to what rules/text see (`{row, node}` lists). Counts and remembered state are the page's, written in `onChange`. |
+| `site/public/assets/ui.js:271` | The no-match line hides on an EMPTY list too — unified from Blocks, which showed it with zero blocks. |
+| `site/public/assets/ui.js:201` `searchField` `className` | Lets Channels keep its `review-search` sizing while using the shared box. |
+| `site/public/assets/marathons-section.js:733` `scheduleBlock` · `:756` | `apply()` is NOT called at build: the day folds open from remembered slots (`shown.slots`), and a first `apply()` with an empty query would reset them to `data-open`. |
+| `site/public/assets/marathon-words.js:301` `slotText` | The schedule haystack; `slotMatches` is now `matches(slotText(run), query)` — one matcher for the page and the test. |
+| `site/public/assets/page-settings.js:76` `filterBox` | Rows are collected once at build (the settings rows are never replaced in place); per-group counts, hiding and `details.open` happen in `onChange`. |
+| `site/public/assets/page-channels.js:106` `wanted` | Channels keeps its own filter (segment, category, the kept row) and only borrows `matches` and `searchField`; a full `listFilter` would fight the row replacement in `answer`. |
+| `site/public/assets/page-moderation.js:48` `CASE_FILTERS` | The kinds lists become rules once, so `FILTERS` keeps its shape for anything else reading it. |
+| `site/public/assets/page-posts.js:127` `BOX_WORDS` | *like the welcome post*, no title — the payload carries no front-door post name to derive one from. |

@@ -2,8 +2,8 @@ import { api, refChannels, refMembers, refRoles, send, settings, settingsNamespa
 import { start } from './app.js';
 import { htmlToDiscordMarkdown } from './clipmd.js';
 import { blockPreview } from './blockpreview.js';
-import { BLOCK_FILTERS, blockMatches } from './blockmatch.js';
 import { BLOCK_EDITORS } from './blockwords.js';
+import { BLOCK_FILTERS, blockText } from './listfilter.js';
 import { logsSection } from './logs.js';
 import { remember, remembered } from './layout.js';
 import { VIEWING, useItQuestion, versionsFoldout } from './postversions.js';
@@ -16,6 +16,7 @@ import {
   button,
   card,
   channelSelect,
+  chipBar,
   closeDrawer,
   el,
   field,
@@ -23,6 +24,7 @@ import {
   formatBar,
   icon,
   keepSaying,
+  listFilter,
   modeChip,
   notice,
   openDrawer,
@@ -30,7 +32,6 @@ import {
   run,
   sayAgain,
   sayNothing,
-  searchField,
   section,
   sentenceFor,
   settingsPanel,
@@ -123,7 +124,7 @@ const IMPORT_DONE = 'Imported from “{title}” — the box is an unsaved draft
 const IMPORT_OVER = ' It runs past this style’s limit, so the counter is red and Save refuses until '
   + 'it is shorter.';
 const IMPORT_UNTITLED = 'the Google Doc';
-const BOX_WORDS = { embed: 'the embed box, like Welcome and rules', plain: 'a plain message' };
+const BOX_WORDS = { embed: 'the embed box, like the welcome post', plain: 'a plain message' };
 const IMPORT_RESTYLED = ' The style is set to {box} too — also unsaved.';
 const NEW_SCRATCH = 'Start from scratch';
 const NEW_IMPORT = 'Import a Google Doc';
@@ -894,12 +895,15 @@ async function openPost(slug, title) {
  * The row IS the control — `button.grid-row`, the construct `page-moderation.js:144`
  * already uses, with the hover, focus and cursor rules `site.css:910` gives it.
  */
+function postText(post) {
+  return `${post.title} ${post.channel_name || ''} ${(post.status || []).join(' ')} ${post.body || ''}`;
+}
+
 function postRow(post, payload) {
   return el('button', {
     class: 'grid-row',
     type: 'button',
     style: COLUMNS,
-    'data-search': `${post.title} ${post.channel_name || ''} ${(post.status || []).join(' ')} ${post.body || ''}`.toLowerCase(),
     on: { click: () => openPost(post.slug, post.title) },
   }, [
     el('span', { class: 'dot-sm', 'data-tone': leadState(post) }),
@@ -1051,23 +1055,11 @@ function newPostDrawer(index) {
   fromDoc.hidden = true;
 
   const panes = { scratch, doc: fromDoc };
-  const chips = el('div', { class: 'chipbar newpost-choice', role: 'group' });
-  const choose = (key) => {
-    for (const chip of chips.children) {
-      chip.setAttribute('aria-pressed', chip.getAttribute('data-kind') === key ? 'true' : 'false');
-    }
+  const chips = chipBar([['scratch', NEW_SCRATCH], ['doc', NEW_IMPORT]], 'scratch', (key) => {
     for (const [name, pane] of Object.entries(panes)) pane.hidden = name !== key;
     say.say('');
     (key === 'doc' ? link : title).focus();
-  };
-  chips.replaceChildren(...[['scratch', NEW_SCRATCH], ['doc', NEW_IMPORT]].map(([key, label]) => el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'data-kind': key,
-    'aria-pressed': key === 'scratch' ? 'true' : 'false',
-    text: label,
-    on: { click: () => choose(key) },
-  })));
+  }, { className: 'newpost-choice', role: 'group' });
 
   return [chips, scratch, fromDoc, say];
 }
@@ -1082,52 +1074,30 @@ function postsSection(payload, say) {
     foot,
   ]);
 
-  const paint = () => {
-    const rule = (FILTERS.find(([key]) => key === state.filter) || FILTERS[0])[2];
-    let hits = 0;
-    for (const one of rows) {
-      const hit = (rule === null || rule(one.post))
-        && (state.query === '' || (one.node.getAttribute('data-search') || '').includes(state.query));
-      one.node.hidden = !hit;
-      if (hit) hits += 1;
-    }
-    foot.textContent = hits === rows.length
-      ? SHOWING_ALL.replace(/\{n\}/g, String(rows.length)).replace('{s}', plural(rows.length))
-      : SHOWING_SOME
-        .replace('{shown}', String(hits))
-        .replace('{n}', String(rows.length))
-        .replace('{s}', plural(rows.length));
-  };
-
-  const chips = el('div', { class: 'chipbar' }, FILTERS.map(([key, label]) => el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'data-kind': key,
-    'aria-pressed': state.filter === key ? 'true' : 'false',
-    text: label,
-    on: {
-      click: (event) => {
-        state.filter = key;
-        for (const chip of event.currentTarget.parentElement.children) {
-          chip.setAttribute('aria-pressed', chip.getAttribute('data-kind') === key ? 'true' : 'false');
-        }
-        paint();
-      },
-    },
-  })));
-  const search = searchField({
+  const filter = listFilter({
+    items: rows,
+    value: (one) => one.post,
+    text: postText,
+    filters: FILTERS,
+    filter: state.filter,
+    query: state.query,
     label: 'Search the posts',
     placeholder: 'Search the posts…',
-    value: state.query,
-    onQuery: (query) => {
+    onChange: ({ query, filter: key, shown }) => {
       state.query = query;
-      paint();
+      state.filter = key;
+      foot.textContent = shown === rows.length
+        ? SHOWING_ALL.replace(/\{n\}/g, String(rows.length)).replace('{s}', plural(rows.length))
+        : SHOWING_SOME
+          .replace('{shown}', String(shown))
+          .replace('{n}', String(rows.length))
+          .replace('{s}', plural(rows.length));
     },
   });
 
   const newPost = button('New post', () => openDrawer('A new post', newPostDrawer(payload)), { tone: 'warn' });
   newPost.style.marginLeft = 'auto';
-  paint();
+  filter.apply();
 
   list.body.append(
     el('p', { class: 'field-help' }, [
@@ -1141,7 +1111,7 @@ function postsSection(payload, say) {
       ? el('p', { class: 'field-help' }, boldParts(payload.guard.said))
       : null,
     card(null, [
-      el('div', { class: 'card-head' }, [search, chips, newPost]),
+      el('div', { class: 'card-head' }, [...filter.parts, newPost]),
       payload.posts.length === 0
         ? sayNothing(NOTHING_YET)
         : el('div', { class: 'table-scroll' }, [grid]),
@@ -1212,41 +1182,20 @@ async function blocksSection(payload) {
     cards.push({ kind, node: blockCard(kind, editorNode, defaultFolded) });
   }
 
-  const noMatch = sayNothing(NO_BLOCK_MATCH);
-  const paint = () => {
-    let hits = 0;
-    for (const found of cards) {
-      const hit = blockMatches(found.kind, blockState.query, blockState.filter);
-      found.node.hidden = !hit;
-      if (hit) hits += 1;
-    }
-    noMatch.hidden = hits > 0;
-    one.count(hits === cards.length ? cards.length : `${hits} of ${cards.length}`);
-  };
-
-  const chips = el('div', { class: 'chipbar' }, BLOCK_FILTERS.map(([key, label]) => el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'data-kind': key,
-    'aria-pressed': blockState.filter === key ? 'true' : 'false',
-    text: label,
-    on: {
-      click: (event) => {
-        blockState.filter = key;
-        for (const chip of event.currentTarget.parentElement.children) {
-          chip.setAttribute('aria-pressed', chip.getAttribute('data-kind') === key ? 'true' : 'false');
-        }
-        paint();
-      },
-    },
-  })));
-  const search = searchField({
+  const filter = listFilter({
+    items: cards,
+    value: (found) => found.kind,
+    text: blockText,
+    filters: BLOCK_FILTERS,
+    filter: blockState.filter,
+    query: blockState.query,
     label: SEARCH_BLOCKS,
     placeholder: SEARCH_BLOCKS_PLACEHOLDER,
-    value: blockState.query,
-    onQuery: (query) => {
+    empty: NO_BLOCK_MATCH,
+    onChange: ({ query, filter: key, shown, total }) => {
       blockState.query = query;
-      paint();
+      blockState.filter = key;
+      one.count(shown === total ? total : `${shown} of ${total}`);
     },
   });
   const foldButtons = bar([
@@ -1254,11 +1203,11 @@ async function blocksSection(payload) {
     button(OPEN_ALL, () => setAllBlockFolds(cards, false), { tone: 'quiet' }),
   ]);
   foldButtons.style.marginLeft = 'auto';
-  paint();
+  filter.apply();
 
   one.body.append(
-    card(null, [el('div', { class: 'card-head' }, [search, chips, foldButtons])]),
-    noMatch,
+    card(null, [el('div', { class: 'card-head' }, [...filter.parts, foldButtons])]),
+    filter.none,
     ...cards.map((found) => found.node),
   );
   return full(one.node);

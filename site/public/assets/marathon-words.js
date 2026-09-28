@@ -2,6 +2,8 @@
    site/mock/marathon-words.test.mjs proves them under plain node.
    See docs/info/code-notes.md § site/public/assets/marathon-words.js. */
 
+import { matches } from './listfilter.js';
+
 export const BAF = 'BaF';
 
 export const CARD_PEOPLE = 'People';
@@ -295,12 +297,15 @@ export function slotPeople(run) {
   return [...people.filter((one) => one.part === 'runner'), ...people.filter((one) => one.part !== 'runner')];
 }
 
-/** The schedule filter: names, Twitch logins and games. */
+/** The schedule filter's haystack: names, Twitch logins and games. */
+export function slotText(run) {
+  return [run.game, run.category, ...(run.people || []).flatMap((one) => [one.name, one.login, one.member_name])]
+    .filter(Boolean)
+    .join(' ');
+}
+
 export function slotMatches(run, query) {
-  const wanted = String(query || '').trim().toLowerCase();
-  if (!wanted) return true;
-  const words = [run.game, run.category, ...(run.people || []).flatMap((one) => [one.name, one.login, one.member_name])];
-  return words.some((one) => String(one || '').toLowerCase().includes(wanted));
+  return matches(slotText(run), query);
 }
 
 const ARCHIVE_TITLE = 'Archive';

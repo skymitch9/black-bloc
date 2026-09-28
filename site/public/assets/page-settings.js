@@ -3,7 +3,7 @@ import { start } from './app.js';
 import { syncSubnav } from './layout.js';
 import { logsSection } from './logs.js';
 import { JUMP } from './palette.js';
-import { el, keysSwitch, sayNothing, searchField, section, settingsEditor } from './ui.js';
+import { el, keysSwitch, listFilter, sayNothing, section, settingsEditor } from './ui.js';
 
 const FIRST = 'core';
 const FLASH_MS = 2400;
@@ -75,33 +75,29 @@ function share(groups) {
 
 function filterBox(groups, keys) {
   const said = el('span', { class: 'table-count' });
-  const paint = (query) => {
-    let shown = 0;
-    for (const group of groups) {
-      let here = 0;
-      for (const row of group.node.querySelectorAll('.setrow')) {
-        const hit = query === '' || (row.getAttribute('data-search') || '').includes(query);
-        row.hidden = !hit;
-        if (hit) here += 1;
-      }
-      shown += here;
-      group.node.hidden = query !== '' && here === 0;
-      group.count(here);
-      const details = group.node.querySelector('details.sect-card');
-      if (details && query !== '') details.open = here > 0;
-    }
-    said.textContent = query === ''
-      ? `${keys} keys · ${groups.length} groups`
-      : `${shown} of ${keys} keys`;
-    syncSubnav();
-  };
-  const box = searchField({
+  const rows = groups.flatMap((group, at) => [...group.node.querySelectorAll('.setrow')]
+    .map((node) => ({ node, group: at })));
+  const filter = listFilter({
+    items: rows,
+    text: (one) => one.node.getAttribute('data-search'),
     label: 'Filter settings',
     placeholder: `Filter ${keys} keys…`,
-    onQuery: paint,
+    onChange: ({ query, hits, shown }) => {
+      groups.forEach((group, at) => {
+        const here = rows.filter((one, index) => one.group === at && hits[index]).length;
+        group.node.hidden = query !== '' && here === 0;
+        group.count(here);
+        const details = group.node.querySelector('details.sect-card');
+        if (details && query !== '') details.open = here > 0;
+      });
+      said.textContent = query === ''
+        ? `${keys} keys · ${groups.length} groups`
+        : `${shown} of ${keys} keys`;
+      syncSubnav();
+    },
   });
-  paint('');
-  return { box, said };
+  filter.apply();
+  return { box: filter.search, said };
 }
 
 /**

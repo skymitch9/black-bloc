@@ -8,6 +8,7 @@ import {
   boldParts,
   button,
   card,
+  chipBar,
   closeDrawer,
   el,
   field,
@@ -15,6 +16,7 @@ import {
   icon,
   idsIn,
   keepSaying,
+  listFilter,
   localWhen,
   modeChip,
   nameNode,
@@ -23,7 +25,6 @@ import {
   run,
   sayAgain,
   sayNothing,
-  searchField,
   section,
   segment,
   sentenceFor,
@@ -126,7 +127,6 @@ function trainRow(row) {
     class: 'grid-row',
     type: 'button',
     style: COLUMNS,
-    'data-search': `${row.title} ${row.status} ${row.organizer_name || ''}`.toLowerCase(),
     on: { click: () => openTrain(row.id, row.title) },
   }, [
     el('span', { class: 'dot-sm', 'data-tone': STATE_OF[row.status] || null }),
@@ -377,46 +377,29 @@ function trainsSection(rows, status, eventDefault, say) {
     foot,
   ]);
 
-  const paint = () => {
-    let hits = 0;
-    for (const one of built) {
-      const hit = state.query === ''
-        || (one.node.getAttribute('data-search') || '').includes(state.query);
-      one.node.hidden = !hit;
-      if (hit) hits += 1;
-    }
-    foot.textContent = hits === built.length
-      ? said(SHOWING_ALL, { n: built.length, s: plural(built.length) })
-      : said(SHOWING_SOME, { shown: hits, n: built.length, s: plural(built.length) });
-  };
-
-  const chips = el('div', { class: 'chipbar' }, SCOPES.map(([key, label]) => el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'data-kind': key,
-    'aria-pressed': state.scope === key ? 'true' : 'false',
-    text: label,
-    on: {
-      click: () => {
-        state.scope = key;
-        refresh();
-      },
-    },
-  })));
-  const search = searchField({
+  const filter = listFilter({
+    items: built,
+    value: (one) => one.row,
+    text: (row) => `${row.title} ${row.status} ${row.organizer_name || ''}`,
+    query: state.query,
     label: 'Search the trains',
     placeholder: 'Search the trains…',
-    value: state.query,
-    onQuery: (query) => {
+    onChange: ({ query, shown }) => {
       state.query = query;
-      paint();
+      foot.textContent = shown === built.length
+        ? said(SHOWING_ALL, { n: built.length, s: plural(built.length) })
+        : said(SHOWING_SOME, { shown, n: built.length, s: plural(built.length) });
     },
+  });
+  const chips = chipBar(SCOPES, state.scope, (key) => {
+    state.scope = key;
+    refresh();
   });
   const startIt = button('Start a raid train', () => {
     openDrawer('Start a raid train', newTrainDrawer(eventDefault));
   }, { tone: 'warn' });
   startIt.style.marginLeft = 'auto';
-  paint();
+  filter.apply();
 
   list.body.append(
     el('p', { class: 'field-help' }, [
@@ -429,7 +412,7 @@ function trainsSection(rows, status, eventDefault, say) {
       : null,
     healthLine(status),
     card(null, [
-      el('div', { class: 'card-head' }, [search, chips, startIt]),
+      el('div', { class: 'card-head' }, [filter.search, chips, startIt]),
       built.length === 0
         ? sayNothing(NOTHING_YET)
         : el('div', { class: 'table-scroll' }, [grid]),

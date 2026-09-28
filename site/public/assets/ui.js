@@ -14,9 +14,10 @@ import {
 import { messageTree, mountTree } from './discordmock.js';
 import { ICONS } from './icons.js';
 import { channelLabel, humanLabel } from './labels.js';
+import { applyFilters, matches, passes } from './listfilter.js';
 import * as md from './mdformat.js';
 
-export { channelLabel, humanLabel };
+export { applyFilters, channelLabel, humanLabel, matches, passes };
 
 const OUTAGE_WRITE = 'Black Bloc did not answer, so nothing was changed. That is an outage, not a ' +
   'permission problem — try again in a minute.';
@@ -197,7 +198,8 @@ export function searchBox({ label = 'Search', placeholder = 'type to filter', on
 /** The mock's search control: a magnifier and a borderless input in one box. */
 export function searchField(options = {}) {
   const input = searchBox(options);
-  return el('div', { class: 'searchfield' }, [icon('search', 14, 'search-mark'), input]);
+  const extra = options.className ? ` ${options.className}` : '';
+  return el('div', { class: `searchfield${extra}` }, [icon('search', 14, 'search-mark'), input]);
 }
 
 /** Empties the box a searchField wraps and re-runs its filter. */
@@ -208,13 +210,100 @@ export function clearSearch(wrapper) {
   input.dispatchEvent(new Event('search'));
 }
 
+export function filterChip(label, pressed, onClick, { key = null, title = null } = {}) {
+  return el('button', {
+    class: 'chip-filter',
+    type: 'button',
+    'data-kind': key === null ? undefined : String(key),
+    'aria-pressed': pressed ? 'true' : 'false',
+    title: title || undefined,
+    text: label,
+    on: { click: onClick },
+  });
+}
+
+/** choices are [key, label, ...]; the pressed chip moves on click, then onPick(key). */
+export function chipBar(choices, current, onPick = null, { className = null, role = null } = {}) {
+  const node = el('div', { class: className ? `chipbar ${className}` : 'chipbar', role: role || undefined });
+  const press = (key) => {
+    for (const chip of node.children) {
+      chip.setAttribute('aria-pressed', chip.getAttribute('data-kind') === String(key) ? 'true' : 'false');
+    }
+  };
+  node.append(...choices.map(([key, label]) => filterChip(label, key === current, () => {
+    press(key);
+    if (onPick) onPick(key);
+  }, { key })));
+  node.setValue = press;
+  return node;
+}
+
+/** One search box + optional chips over a list; see docs/info/search-module-design.md. */
+export function listFilter({
+  items = [],
+  node = (item) => item.node,
+  value = (item) => item,
+  text = () => '',
+  filters = null,
+  filter = null,
+  query = '',
+  label = 'Search',
+  placeholder = 'type to filter',
+  empty = null,
+  chipClass = null,
+  onChange = null,
+} = {}) {
+  const chosen = filters && filters.length ? filters : null;
+  const firstKey = chosen ? chosen[0][0] : null;
+  const state = {
+    query: String(query || '').trim().toLowerCase(),
+    filter: chosen && chosen.some(([key]) => key === filter) ? filter : firstKey,
+  };
+  const none = typeof empty === 'string' ? sayNothing(empty) : empty;
+  if (none) none.hidden = true;
+
+  const apply = () => {
+    const found = applyFilters(items.map(value), { text, filters: chosen, filter: state.filter, query: state.query });
+    items.forEach((item, at) => {
+      const target = node(item);
+      if (target) target.hidden = !found.hits[at];
+    });
+    if (none) none.hidden = found.total === 0 || found.shown > 0;
+    if (onChange) onChange({ query: state.query, filter: state.filter, ...found });
+    return found;
+  };
+
+  const search = searchField({
+    label,
+    placeholder,
+    value: state.query,
+    onQuery: (value) => {
+      state.query = value;
+      apply();
+    },
+  });
+  const chips = chosen ? chipBar(chosen, state.filter, (key) => {
+    state.filter = key;
+    apply();
+  }, { className: chipClass }) : null;
+
+  const clear = () => {
+    state.query = '';
+    state.filter = firstKey;
+    search.querySelector('input').value = '';
+    if (chips) chips.setValue(firstKey);
+    return apply();
+  };
+
+  return { search, chips, none, parts: [search, chips].filter(Boolean), state, apply, clear };
+}
 export function filterRows(root, query) {
   let shown = 0;
   let total = 0;
   for (const body of root.querySelectorAll('tbody')) {
     for (const line of body.children) {
       total += 1;
-      const hit = query === '' || line.textContent.toLowerCase().includes(query);
+      const hit = matches(line.textContent, query);
       line.hidden = !hit;
       if (hit) shown += 1;
     }
@@ -244,7 +333,7 @@ export function searchOver(root, {
     let total = 0;
     for (const node of root.querySelectorAll(selector)) {
       total += 1;
-      const hit = query === '' || node.textContent.toLowerCase().includes(query);
+      const hit = matches(node.textContent, query);
       node.hidden = !hit;
       if (hit) shown += 1;
     }

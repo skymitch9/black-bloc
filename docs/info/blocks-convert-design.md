@@ -175,6 +175,8 @@
   second shared search/filter module in `ui.js` — that is scoped to a later, dedicated build that moves
   `postsSection`'s own chip/search logic there too and switches every page to it. This build's
   `blockmatch.js` is the small, self-contained interim home for the Blocks-only matcher.
+  **Superseded 2026-09-28:** that later build is [`search-module-design.md`](search-module-design.md);
+  `blockmatch.js` is deleted and its matcher and fixtures live in `listfilter.js` / `listfilter.test.mjs`.
 
 ### Live check steps (not yet run)
 

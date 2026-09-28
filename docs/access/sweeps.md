@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `search-module`)** — ONE section APPENDED (`SM-a`…`SM-h`, BUILT, NOT MERGED, NOT verified against a browser); `DI-f`'s quoted note wording is superseded by `SM-c`. Before that,
 > **2026-09-28 (branch `blocks-section-tidy`)** — ONE row APPENDED (`BC-f`, BUILT, NOT MERGED, NOT verified against a browser). Before that,
 > **2026-09-28 (branch `birthday-block-modal`)** — ONE row APPENDED (`BB-g`, BUILT, NOT MERGED); `BB-e`'s *Set my birthday asks for the date* still holds for `/birthday`. Before that,
 > **2026-09-28 (branch `blocks-buttons`)** — ONE section APPENDED (`BB-a`…`BB-f`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3760,3 +3761,22 @@ Lettered; the conductor numbers it.
 | **`DI-g`** | Posts ▸ **New post** | Two chips: **Start from scratch** (pressed) with the title box and **Create the post** — make one and it opens as before; and **Import a Google Doc** |
 | **`DI-h`** | **New post** ▸ **Import a Google Doc**, paste the `DI-a` link, press **Read the doc** | The title box fills with the doc's name (type over it if you like); a line says *Read "<name>" — N characters, as the embed box…*; **Create the post** appears. Press it: the new post's drawer opens with the doc's words, style embed, **not posted**; its Versions list shows v1. Logs ▸ posts: one `web.post.imported` and one `web.post.created` row. Change the link after reading and Create says to read it again. Delete the scratch post afterwards |
 | **`DI-i`** | **New post** ▸ **Import a Google Doc** with the `DI-b` private doc, then a non-Google link, then an empty box; then Settings fold ▸ set **posts_import_style** to *plain* and read a doc over 2000 characters | Each refuses in words and **no post appears** in the list. The long doc under *plain* says it is N characters and a plain message holds 2,000, so nothing was made. `/settings` ▸ Posts reaches the same key (checklist 33). Set it back to *embed* |
+
+## Rows `SM-a` … `SM-h` — one search module on every list (branch `search-module`, 2026-09-28)
+
+🔨 **BUILT on branch `search-module`, NOT merged, NOT deployed, NOT looked at in a browser.** The owner,
+2026-09-28: *"try and use the same search module everywhere for code reusability and stuff"*. Design:
+[`../info/search-module-design.md`](../info/search-module-design.md). Every page should look exactly as
+before (Channels gains the magnifier); check each at desktop and at 390 px (no sideways scroll, toolbars
+wrap as before). Nothing here posts to Discord. Lettered; the conductor numbers it.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`SM-a`** | Posts ▸ **The posts**: type part of a title, then a word from a body; press each chip (All / Posted / Changed since posted / Not posted) with and without a query; refresh the page area (open and close a post) | Rows narrow as you type (chips AND search); the foot reads *Showing N of the M posts on this page* then back to *Showing M of M*; the chip and the typed query are still there after the refresh. **New post**: the two chips switch panes as before |
+| **`SM-b`** | Posts ▸ **Blocks**: type *ticket*, then *birthday*; press **On a post** / **On no post** / **One at a time** | *ticket* keeps the Front door; *birthday* with **On a post** shows *No block matches this filter*; the section count reads *N of M*; folds still remember themselves |
+| **`SM-c`** | Posts ▸ New post ▸ **Import a Google Doc** into a plain-style draft (as `DI-f`) | The note reads *…the embed box, like the welcome post…* (no post title). `DI-f`'s quoted wording is superseded by this |
+| **`SM-d`** | Moderation ▸ cases: type a reason word, press **Bans**, then page to 2 and back | Same rows as before narrow; after paging the search box SHOWS the query it is still filtering by (it used to come back empty) |
+| **`SM-e`** | Go-live ▸ **Streamers**: type a Twitch handle; press each chip; type nonsense | Foot *N of the M people here*, section count follows, nonsense shows *nothing matches*. Preview-as chips and the Logs drawer chips still switch |
+| **`SM-f`** | Raid trains: type a title word; press the three scope chips. Requests ▸ **Your requests** (as a member): chips with counts, a query, then **Clear the filters** on a no-match | Same narrowing and foot lines as before; scope chips refetch; Clear brings every request back |
+| **`SM-g`** | Events ▸ a marathon's schedule: type a runner's name, clear it; Settings: type a key fragment, clear it | Schedule: only days with a match stay, opened; clearing restores the days' own open state. Settings: groups without a match hide, counts per group, *N of M keys* |
+| **`SM-h`** | Channels ▸ Review: type a channel name, change the segment and category; Members, Guides, Logs (any feature page), Audit: press chips | Channels' box now has the magnifier and filters ~0.2 s after typing (it was instant); everything else refetches as before and the pressed chip is the one you pressed |

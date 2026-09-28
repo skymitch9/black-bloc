@@ -9,6 +9,7 @@ import {
   button,
   el,
   field,
+  filterChip,
   foldout,
   idsIn,
   keepSaying,
@@ -134,16 +135,6 @@ function unsectioned(node, id) {
   return el('div', { id }, inner ? [...inner.childNodes] : [node]);
 }
 
-function chipButton(label, pressed, onPick) {
-  return el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'aria-pressed': pressed ? 'true' : 'false',
-    text: label,
-    on: { click: onPick },
-  });
-}
-
 async function settingsFold(namespace, title, note, extra = {}) {
   const specs = settingsNamespace(await settings(), namespace);
   const panel = await settingsPanel(specs, {
@@ -162,7 +153,7 @@ async function logFold() {
   const chips = el('div', { class: 'chipbar' });
   const state = { pick: LOG_CHIPS[0].feature };
   const paint = () => {
-    chips.replaceChildren(...LOG_CHIPS.map((one) => chipButton(one.label, state.pick === one.feature, () => {
+    chips.replaceChildren(...LOG_CHIPS.map((one) => filterChip(one.label, state.pick === one.feature, () => {
       state.pick = one.feature;
       paint();
     })));
