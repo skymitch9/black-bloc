@@ -459,3 +459,18 @@ def test_the_birthday_block_says_its_shipped_words_until_staff_change_them():
     assert shipped.label == "Set my birthday"
     assert changed.label == "Press me" and changed.stamp() != shipped.stamp()
     assert found.BLOCK_HEAD == "bdayblock:open"
+
+
+def test_the_birthday_block_s_private_answers_fill_said_or_fall_back():
+    from black_bloc import birthdays as found
+
+    shipped = found.block_said(BlockStore(), 7, "birthday_block_saved_said", said="Saved.")
+    typed = BlockStore(birthday_block_refused_said="Oops: {said}")
+    broken = BlockStore(birthday_block_refused_said="Oops: {nope}")
+
+    assert shipped.startswith("Saved. Press the button again")
+    assert found.block_said(typed, 7, "birthday_block_refused_said", said="No.") == "Oops: No."
+    assert found.block_said(broken, 7, "birthday_block_refused_said", said="No.").startswith(
+        "No. Nothing was saved"
+    )
+    assert found.block_said(BlockStore(), 7, "birthday_block_off_said").startswith("Birthdays")

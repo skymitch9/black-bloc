@@ -37,6 +37,7 @@ from ...birthdays import (
     SKIPPED,
     PostedToday,
     age,
+    block_said,
     card_lines,
     celebrates_today,
     channel_words,
@@ -76,12 +77,16 @@ from ...panels import (
     answer,
     confirm,
     confirm_items,
+    db_ready,
     opened,
     retire,
     still_staff,
 )
 from ...settings_store import (
     BIRTHDAY_BLOCK_LABEL,
+    BIRTHDAY_BLOCK_OFF_SAID,
+    BIRTHDAY_BLOCK_REFUSED_SAID,
+    BIRTHDAY_BLOCK_SAVED_SAID,
     BIRTHDAY_MODES,
     BIRTHDAY_POST_AGAIN_KEY,
     BIRTHDAY_POST_BUTTON_KEY,
@@ -297,13 +302,13 @@ async def store_birthday(
     day: Any,
     year: Any,
     source: str,
-) -> str:
-    """The one path a birthday is written by — the refusal sentence, or the confirmation."""
+) -> tuple[bool, str]:
+    """The one path a birthday is written by — (saved, the confirmation or the refusal)."""
     bot = cog.bot
     zone = await member_zone_name(bot.db, member.id)
     problem = date_problem(month, day) or year_problem(year, local_today(zone))
     if problem is not None:
-        return problem
+        return False, problem
     m, d = clamp_month_day(month, day)
     async with cog._lock(member.id):
         await save_birthday(bot.db, guild.id, member.id, m, d, year, source)
@@ -316,7 +321,19 @@ async def store_birthday(
         target=member,
         details={"date": month_day_text(m, d), "year": year, "source": source},
     )
-    return stored_sentence(whose, m, d, year, zone, next_occurrence(m, d, zone))
+    return True, stored_sentence(whose, m, d, year, zone, next_occurrence(m, d, zone))
+
+
+async def typed_birthday(
+    cog: Any, interaction: discord.Interaction, member: Any, typed: str, source: str
+) -> tuple[bool, str]:
+    parsed = parse_birthday_input(typed)
+    if parsed is None:
+        return False, DATE_UNREADABLE
+    month, day, year = parsed
+    return await store_birthday(
+        cog, interaction.guild, interaction.user, member, month, day, year, source
+    )
 
 
 async def forget_birthday(
@@ -944,22 +961,32 @@ class DateModal(AnswersErrors, discord.ui.Modal):
         mine: bool,
         previous: Any = None,
         current: str | None = None,
+        private: bool = False,
     ) -> None:
         super().__init__(title=date_modal_title(mine, getattr(member, "display_name", "")))
         self.cog = cog
         self.member = member
         self.mine = mine
         self.previous = previous
+        self.private = private
         self.typed.default = current or None
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        if self.private:
+            await self.cog.block_date_submit(interaction, self.member, str(self.typed))
+            return
         await self.cog.date_submit(
             interaction, self.member, str(self.typed), mine=self.mine, previous=self.previous
         )
 
 
 async def open_date_modal(
-    interaction: discord.Interaction, member: Any, *, mine: bool, previous: Any = None
+    interaction: discord.Interaction,
+    member: Any,
+    *,
+    mine: bool,
+    previous: Any = None,
+    private: bool = False,
 ) -> None:
     """A modal cannot follow a defer, so the prefill is read before anything is acknowledged."""
     bot = interaction.client
@@ -972,7 +999,12 @@ async def open_date_modal(
     )
     await interaction.response.send_modal(
         DateModal(
-            bot.get_cog(COG_NAME), member, mine=mine, previous=previous, current=current
+            bot.get_cog(COG_NAME),
+            member,
+            mine=mine,
+            previous=previous,
+            current=current,
+            private=private,
         )
     )
 
@@ -989,7 +1021,7 @@ async def birthday_ready(interaction: discord.Interaction) -> bool:
 
 
 async def open_birthday_panel(interaction: discord.Interaction) -> None:
-    """The /birthday panel, opened by the command or by the birthday block's button."""
+    """The /birthday panel, opened by the command."""
     if not await birthday_ready(interaction):
         return
     embed, view = await build_panel(interaction.client, interaction.guild, interaction.user)
@@ -1002,6 +1034,19 @@ async def open_birthday_panel(interaction: discord.Interaction) -> None:
     view.message = await interaction.original_response()
 
 
+async def open_block_date_modal(interaction: discord.Interaction) -> None:
+    """The birthday block's button: the /birthday date modal itself, answered privately."""
+    if not await birthday_ready(interaction):
+        return
+    store = interaction.client.store
+    if not birthday_words.block_drawn(store, interaction.guild.id):
+        await answer(
+            interaction, block_said(store, interaction.guild.id, BIRTHDAY_BLOCK_OFF_SAID)
+        )
+        return
+    await open_date_modal(interaction, interaction.user, mine=True, private=True)
+
+
 BLOCK_LABEL_DEFAULT = str(BUTTON_BLOCK_DEFAULTS[BIRTHDAY_BLOCK_LABEL])
 
 
@@ -1010,8 +1055,7 @@ class OpenBirthdayButton(
     discord.ui.DynamicItem[discord.ui.Button],
     template=button_block.template(birthday_words.BLOCK_HEAD),
 ):
-    """The birthday block's button: the same /birthday panel, so its Set my birthday modal is
-    raised from a private card and never over the post."""
+    """The birthday block's button: straight to the date modal, never answered over the post."""
 
     def __init__(self, guild_id: Any, label: str | None = None) -> None:
         self.guild_id = int(guild_id)
@@ -1029,7 +1073,7 @@ class OpenBirthdayButton(
         return cls(int(match["guild_id"]))
 
     async def on_click(self, interaction: discord.Interaction) -> None:
-        await open_birthday_panel(interaction)
+        await open_block_date_modal(interaction)
 
 
 def block_parts(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Any, str] | None:
@@ -1363,26 +1407,30 @@ class Birthdays(commands.Cog):
             return
         if not await opened(interaction, staff=False):
             return
-        parsed = parse_birthday_input(typed)
-        if parsed is None:
-            said = DATE_UNREADABLE
-        else:
-            month, day, year = parsed
-            said = await store_birthday(
-                self,
-                interaction.guild,
-                interaction.user,
-                member,
-                month,
-                day,
-                year,
-                "self" if mine else "staff",
-            )
+        _, said = await typed_birthday(
+            self, interaction, member, typed, "self" if mine else "staff"
+        )
         if mine:
             await render_panel(interaction, previous)
         else:
             await render_card(interaction, member, previous)
         await said_after(interaction, said)
+
+    async def block_date_submit(
+        self, interaction: discord.Interaction, member: Any, typed: str
+    ) -> None:
+        """The block's modal: the same save, answered in a new private message, never an edit."""
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        if not await db_ready(interaction):
+            return
+        store = self.bot.store
+        guild_id = interaction.guild.id
+        if not birthday_words.block_drawn(store, guild_id):
+            await answer(interaction, block_said(store, guild_id, BIRTHDAY_BLOCK_OFF_SAID))
+            return
+        saved, said = await typed_birthday(self, interaction, member, typed, "self")
+        key = BIRTHDAY_BLOCK_SAVED_SAID if saved else BIRTHDAY_BLOCK_REFUSED_SAID
+        await answer(interaction, block_said(store, guild_id, key, said=said))
 
 
 async def setup(bot: commands.Bot) -> None:

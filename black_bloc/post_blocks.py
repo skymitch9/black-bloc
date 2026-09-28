@@ -15,6 +15,9 @@ from .logkinds import VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
 from .settings_store import (
     BIRTHDAY_BLOCK_LABEL,
+    BIRTHDAY_BLOCK_OFF_SAID,
+    BIRTHDAY_BLOCK_REFUSED_SAID,
+    BIRTHDAY_BLOCK_SAVED_SAID,
     BIRTHDAY_BLOCK_TEXT,
     BIRTHDAY_BLOCK_TITLE,
     EVENTS_BLOCK_LABEL,
@@ -350,7 +353,14 @@ KINDS: dict[str, BlockKind] = {
         name_default=POSTS_BLOCK_BIRTHDAY_NAME_DEFAULT,
         exclusive=False,
         cache_column="",
-        keys=(BIRTHDAY_BLOCK_TITLE, BIRTHDAY_BLOCK_TEXT, BIRTHDAY_BLOCK_LABEL),
+        keys=(
+            BIRTHDAY_BLOCK_TITLE,
+            BIRTHDAY_BLOCK_TEXT,
+            BIRTHDAY_BLOCK_LABEL,
+            BIRTHDAY_BLOCK_SAVED_SAID,
+            BIRTHDAY_BLOCK_REFUSED_SAID,
+            BIRTHDAY_BLOCK_OFF_SAID,
+        ),
         parts=birthday_parts,
         turned=blocks_turned,
         redraw=blocks_redraw,
