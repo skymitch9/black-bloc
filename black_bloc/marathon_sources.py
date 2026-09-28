@@ -18,8 +18,9 @@ HORARO = "horaro"
 OENGUS = "oengus"
 FASTESTFURS = "fastestfurs"
 LADYARCADERS = "ladyarcaders"
+GDQ_HOTFIX = "gdq_hotfix"
 TRACKER_SOURCES = (GDQ, RPGLB)
-SOURCES = (*TRACKER_SOURCES, HORARO, OENGUS, FASTESTFURS, LADYARCADERS)
+SOURCES = (*TRACKER_SOURCES, HORARO, OENGUS, FASTESTFURS, LADYARCADERS, GDQ_HOTFIX)
 SOURCE_WORDS = {
     GDQ: "GDQ tracker",
     RPGLB: "RPG Limit Break tracker",
@@ -27,6 +28,7 @@ SOURCE_WORDS = {
     OENGUS: "Oengus",
     FASTESTFURS: "Fastest Furs",
     LADYARCADERS: "Lady Arcaders",
+    GDQ_HOTFIX: "GDQ Hotfix",
 }
 SITE_WORDS = {
     GDQ: "the GDQ tracker",
@@ -35,6 +37,7 @@ SITE_WORDS = {
     OENGUS: "oengus.io",
     FASTESTFURS: "fastestfurs.com",
     LADYARCADERS: "ladyarcaders.com",
+    GDQ_HOTFIX: "the GDQ Hotfix schedule",
 }
 RUNNER = "runner"
 HOST = "host"
@@ -189,6 +192,9 @@ def read_url(url: Any) -> tuple[str, str] | None:
     found = LADYARCADERS_URL.match(text)
     if found:
         return (LADYARCADERS, str(int(found.group(1))))
+    found = _hf().read_ref(text)
+    if found is not None:
+        return (GDQ_HOTFIX, found)
     if GDQ_SHORT.match(text) and not text.isdigit() and "." not in text:
         return (GDQ, SHORT_PREFIX + text)
     return None
@@ -230,6 +236,8 @@ def schedule_page(source: str, ref: Any) -> str:
         return _ff().schedule_page(ref)
     if source == LADYARCADERS and str(ref or "").isdigit():
         return LADYARCADERS_PAGE.format(number=ref)
+    if source == GDQ_HOTFIX and ref:
+        return _hf().page_of(ref)
     return ""
 
 
@@ -237,6 +245,12 @@ def _ff() -> Any:
     from . import marathon_fastestfurs
 
     return marathon_fastestfurs
+
+
+def _hf() -> Any:
+    from . import marathon_hotfix
+
+    return marathon_hotfix
 
 
 def oengus_ref(ref: Any) -> tuple[str, str | None]:
@@ -544,9 +558,13 @@ def event_from(payload: Any) -> dict[str, Any] | None:
 class ScheduleClient:
     """One GET per page through the bot's own agent; every failure is a ScheduleError."""
 
-    def __init__(self, *, request: Any = None, text_request: Any = None) -> None:
+    def __init__(
+        self, *, request: Any = None, text_request: Any = None, hop_request: Any = None
+    ) -> None:
         self._request = request or self._aiohttp_request
         self._text_request = text_request or self._aiohttp_text
+        self._hop_request = hop_request
+        self._hotfix_sheet: str | None = None
         self._session: Any = None
 
     def _open(self) -> Any:
@@ -591,6 +609,23 @@ class ScheduleClient:
         """One GET whose body is read as text (a calendar), not JSON."""
         status, body = await self._text_request(url)
         return (status, body if isinstance(body, str) else "")
+
+    async def hotfix_sheet(self, page_url: Any = None, fallback: Any = None) -> tuple[str, str]:
+        """The Hotfix schedule's CSV and its URL; the last good URL is the fallback."""
+        from .doc_import import aiohttp_hop
+
+        found = await _hf().read_sheet(
+            self._hop_request or aiohttp_hop,
+            BROWSER_AGENT,
+            str(page_url or _hf().PAGE),
+            fallback or self._hotfix_sheet,
+        )
+        self._hotfix_sheet = found[1]
+        return found
+
+    async def hotfix_block(self, ref: str) -> Any:
+        text, _url = await self.hotfix_sheet()
+        return _hf().block_for(_hf().blocks_of(text), ref, datetime.now(UTC))
 
     async def close(self) -> None:
         if self._session is not None and not self._session.closed:
@@ -701,6 +736,9 @@ class ScheduleClient:
             return (ref, _text(record.get("name")) or marathon)
         if source == FASTESTFURS:
             return await _ff().resolve(self._request, ref)
+        if source == GDQ_HOTFIX:
+            block = await self.hotfix_block(ref)
+            return (block.ref, block.show)
         if source == LADYARCADERS:
             from .marathon_ladyarcaders import calendar_resolve
 
@@ -754,6 +792,8 @@ class ScheduleClient:
             return await self.oengus_runs(ref)
         if source == FASTESTFURS:
             return await _ff().read_runs(self._request, ref)
+        if source == GDQ_HOTFIX:
+            return list((await self.hotfix_block(ref)).runs)
         if source == LADYARCADERS:
             from .marathon_ladyarcaders import calendar_runs
 
@@ -790,6 +830,7 @@ __all__ = [
     "COMMENTATOR",
     "FASTESTFURS",
     "GDQ",
+    "GDQ_HOTFIX",
     "HORARO",
     "HOST",
     "LADYARCADERS",
