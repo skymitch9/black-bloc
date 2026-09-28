@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `marathon-category-track`)** — ONE section APPENDED (`CT-a`…`CT-e`, BUILT, NOT MERGED, NOT verified against a browser or live Twitch); nothing else touched. Before that,
 > **2026-09-28 (branch `marathon-hotfix`)** — ONE section APPENDED (`HF-a`…`HF-d`, BUILT, NOT MERGED, NOT verified against a browser or a live fetch); nothing else touched. Before that,
 > **2026-09-28 (branch `search-module`)** — ONE section APPENDED (`SM-a`…`SM-h`, BUILT, NOT MERGED, NOT verified against a browser); `DI-f`'s quoted note wording is superseded by `SM-c`. Before that,
 > **2026-09-28 (branch `blocks-section-tidy`)** — ONE row APPENDED (`BC-f`, BUILT, NOT MERGED, NOT verified against a browser). Before that,
@@ -3826,3 +3827,22 @@ Local check first: `MOCK_PORT=8905 node site/mock/server.mjs` from the branch, t
 | **`HF-b`** | Events ▸ Marathons | **GDQueer** · *GDQ Hotfix · feed* on GamesDoneQuick, **24 runs**; the first *Spyro Reignited Trilogy* at **Sat 10:00** Phoenix, the second *Hamtaro* at **11:08**, the third at **12:00**; Sunday's first (*Wii Fit U*) at **10:00**; the last (*Metroid Dread*) **Sun 18:39–20:09**. Nothing pinged anyone. |
 | **`HF-c`** | Open the **GDQ Hotfix** feed drawer ▸ **Shows** ▸ type `GDQueer, Fast Travel` and leave the box; then Settings ▸ Marathons ▸ `marathon_hotfix_shows` | The drawer says *The Hotfix feed now reads GDQueer, Fast Travel …*; Settings shows the same value (one home). **Check now** adds a *Fast Travel* marathon only if one is still ahead on the sheet. Put it back to `GDQueer`. Typing only commas is refused in words. |
 | **`HF-d`** | **Add a feed…** ▸ GamesDoneQuick ▸ *Read from* **GDQ Hotfix** | Refused in words: *GamesDoneQuick already has a feed that reads GDQ Hotfix … A channel has one feed per source*. The same pick on another channel answers *GDQ Hotfix already reads that*. |
+
+## Rows `CT-a` … `CT-e` — marathon category track: the stream's Twitch category, and Black Bloc keeping the clock (branch `marathon-category-track`, 2026-09-28)
+
+🔨 **BUILT on branch `marathon-category-track`, NOT merged, NOT deployed.** Owner, 2026-09-28: *"the times are all
+wrong, we need to take the times of each run and progress the clock ourself, lets also add a tracker for twitch
+activity to see if the game matches the category"*. Design:
+[`../info/marathon-category-track-design.md`](../info/marathon-category-track-design.md) (its *Live check* table is the
+Saturday walk-through). Rows lettered; the conductor numbers them. Local check first: `MOCK_PORT=8907 node
+site/mock/server.mjs` from the branch, then <http://localhost:8907/events.html> ▸ Marathons ▸ **GDQueer**.
+
+⏰ GDQueer starts **Sat 2026-10-03 10:00 Phoenix** — deploy before then, or `CT-b`…`CT-d` have nothing to show.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`CT-a`** | Settings ▸ Marathons | `marathon_category_confirms` (on) beside `marathon_title_confirms`, and `marathon_retro_category` (`Retro`). Typing only spaces into the Retro box is refused in words. The `/settings` panel's key cards reach the same two keys. |
+| **`CT-b`** | After the deploy, before 10:00: Logs ▸ Marathon | One `marathon.categories_found` for GDQueer (found N, none M — write both numbers down: they are the first real answer to what Twitch has); no `marathon.category_lookup_failed`. |
+| **`CT-c`** | Sat, when Spyro actually starts: Events ▸ Marathons ▸ **GDQueer** | Spyro **on now** (because *the stream's Twitch category*, or the **certain** badge when the title names it too); Hamtaro's time is Spyro's real start + 1:08 with *· sheet said 11:08*; later runs follow. `marathon.retimed` in the log. Nothing pinged anyone. |
+| **`CT-d`** | Through the day | Each hand-over moves the clock; a game with no Twitch category is the run on now while the channel is in *Retro*; any `marathon.signals_disagree` row names both runs and which was trusted. Sunday's first run still starts 10:00. |
+| **`CT-e`** | The drawer ▸ **Back to the sheet's times** (or `/event` ▸ Marathons ▸ GDQueer ▸ **Schedule…** ▸ the same button) | Every run back on the sheet's times; the button disappears; `web.marathon.sheet_times` (or `marathon.sheet_times`). The next run the stream shows starting re-times from there. **Mark it live** on a run also moves every later run. |

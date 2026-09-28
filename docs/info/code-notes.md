@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Marathon category track* (branch `marathon-category-track`, off `main` `97f0f1bd`, keyed against `f42cb3cb`); the *Marathon schedules* rows for `mt.title_hit` / `mt.advance` still hold, except that the cog now calls `title_hit` with no game (the category is Signal 3) and `advance` takes `because`. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *GDQ Hotfix* (branch `marathon-hotfix`, off `main` `6fc4a5a0`, keyed against `21f6c24c`); the *Marathon feeds* rows that say a channel has ONE feed (`feed_by_channel`, the one-per-channel index, `free_channels`) describe code this branch changed — it is one feed per source now. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import titles* (branch `doc-import-title`, off `main` `9347679a`, keyed against `cd778b2f`); the *Doc import fidelity* rows for `clipmd.js` hold in meaning but their line numbers moved down (`blocksOf` was split out of `htmlToDiscordMarkdown`). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import fidelity* (branch `doc-import-fidelity`, off `main` `2072eac0`, keyed against `919853a0`); the *posts-paste* rows for `clipmd.js` still hold except that nested lists are now indented to the parent's content column and Doc-sourced HTML joins blocks with one newline. Before that:
@@ -9420,3 +9421,34 @@ Design: [`marathon-hotfix-design.md`](marathon-hotfix-design.md). Keyed against 
 | `black_bloc/storage/db.py:1333` `RETIRED_INDEXES` | `marathon_feeds_one_per_channel` is dropped AFTER the schema script creates the looser per-source index, so an old file never goes without one. |
 | `site/public/assets/marathons-section.js:1198` `hotfixFields` | The drawer writes the settings KEY through the settings route — the Settings page's writer — not a feed PATCH, so the list has one home. |
 | `site/mock/server.mjs:2266` `checkedShows` | The mock's twin of `settings_store.checked_shows`. |
+
+## Marathon category track — the stream's category, and the kept clock (branch `marathon-category-track`, 2026-09-28)
+
+Design: [`marathon-category-track-design.md`](marathon-category-track-design.md). Keyed against `f42cb3cb`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/cogs/content/spotlight.py:456` `refresh_session_info` | `game_id`: a given id wins; a game change with NO id clears the stored one (a presence update must not leave the old game's id beside the new name); otherwise kept. |
+| `black_bloc/cogs/content/spotlight.py:1295` `_refresh` | A new category id alone is a change worth writing — the marathon tick compares ids. |
+| `black_bloc/twitch.py:213` `games_named` | Keyed by the LOWER-cased name Twitch answers with; names are de-duplicated whatever their capitals. Not `batches()` — that lower-cases, and names are sent as written. |
+| `black_bloc/marathon_signals.py:79` `found_in` | Exact name first; a search answer is taken only when its name IS the run's own once normalised — a near game is never adopted, because "none found" is what the Retro rule trusts. |
+| `black_bloc/marathon_signals.py:108` `category_matches` | Retro is decided BEFORE any id or name test: it stands only for looked-up runs with no id. A looked-up run with an id compares ids and nothing else. |
+| `black_bloc/marathon_signals.py:144` `_rank` | Direct, then already live, then nearest. The live preference is what stops a repeated game (or two Retro runs) handing over at the midpoint by distance alone. |
+| `black_bloc/marathon_signals.py:155` `decide` | The title's run being ANY of the category's matches is certain — that is how the title picks among several Retro runs. |
+| `black_bloc/marathon_signals.py:193` `chains` | A chain is runs the SHEET puts back to back (±`CHAIN_SLACK`); sorted by sheet time, never by the kept time, so a re-timing never reorders a chain. |
+| `black_bloc/marathon_signals.py:222` `retimed` | Before the first anchor a run is put back on the sheet's exact strings (not re-formatted); after it, start = actual or the cursor, end = actual end or start + estimate. A run with no estimate breaks the cursor, and the rest of the chain goes back to the sheet. |
+| `black_bloc/marathon_signals.py:262` `on_the_sheet` | Also picks up rows whose times match the sheet but still carry an anchor — clearing the anchor is the point. |
+| `black_bloc/marathon.py:497` | `moved` compares the sheet's new start with `sheet_at`, never the kept time, so a re-timed run is not "moved" on every read. |
+| `black_bloc/marathon.py:651` `confirms` | A run already live is re-recorded only for a stronger reason than it went live by (the clock, or one signal where both now agree); staff-held runs never. |
+| `black_bloc/marathon_sources.py:33` `RETIMES_ITSELF` | Unknown sources default to True (never re-timed) — a new reader must opt in to Black Bloc keeping its clock. |
+| `black_bloc/cogs/content/marathon_signals.py:49` `resolve_categories` | The back-off (`LOOK_AGAIN`) is only for a refusal or no Helix; a good pass clears it, and the next tick takes the next 25. Rows are marked looked-up only when every one of their names was asked. |
+| `black_bloc/cogs/content/marathon_signals.py:111` `verdict_of` | The disagreement is remembered per marathon as the (title run, category run) pair, so it logs once, not every minute. |
+| `black_bloc/cogs/content/marathon_signals.py:162` `retime` | Returns at once for a source that re-times itself. Reminder marks re-arm only past `marathon_move_minutes`, the same rule a sheet move uses. |
+| `black_bloc/cogs/content/marathon.py:1984` | The re-timing runs straight after a sheet-changing write, before the span, the events and the rematch read the runs. |
+| `black_bloc/cogs/content/marathon.py:2110` | A run whose names changed on the sheet is looked up on Twitch again. |
+| `black_bloc/cogs/content/marathon.py:2321` | A confirmed change writes only `live_because` (and the anchor if the run had none) — no shout, no `run_live` row: the run was already live. |
+| `black_bloc/cogs/content/marathon.py:3396` `build_schedule` | The Discord door for the staff clear lives on the Schedule view, not the card (the card already carries a dozen moves). |
+| `black_bloc/api/tools/marathons.py:790` `sheet-times` | The route returns the whole detail so the drawer redraws every run's time. |
+| `black_bloc/storage/db.py:1313` `RUNS_ON_THE_SHEET` | Backfills run once, when the column is added: an old row's sheet time is the time it had. |
+| `site/public/assets/marathons-section.js:722` | *sheet said HH:MM* only for a re-timed run; `moved from` stays the sheet's own move. |
+| `site/mock/server.mjs:6782` `marathonRetime` | The mock's twin of `retimed`, run on staff moves only (the mock has no stream). |
