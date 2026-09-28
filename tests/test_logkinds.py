@@ -126,6 +126,12 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "frontdoor.gone",
     ),
     "black_bloc/cogs/community/frontdoor.py::BELOW_POST": ("frontdoor.below_post",),
+    # A replay that became live: staff pressed Treat as live, or the stream stopped reading as one.
+    "black_bloc/cogs/content/spotlight.py::upgraded_kind": (
+        "golive.replay_treated_live",
+        "web.golive.replay_treated_live",
+        "golive.replay_upgraded",
+    ),
     # A post that carries the door: the door's keys following it, and its part re-drawn.
     "black_bloc/cogs/community/frontdoor.py::RIDES_POST": (
         "frontdoor.rides_post",

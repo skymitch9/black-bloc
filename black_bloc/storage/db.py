@@ -9,7 +9,7 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 76
+SCHEMA_VERSION = 77
 
 APPLICATION_FORMS_COLUMNS = """    id                INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id          INTEGER NOT NULL,
@@ -913,7 +913,10 @@ CREATE TABLE IF NOT EXISTS spotlight_sessions (
     announced_message_id INTEGER,
     last_bump_at         TEXT,
     bump_count           INTEGER NOT NULL DEFAULT 0,
-    pinging_last         INTEGER
+    pinging_last         INTEGER,
+    replay_reason        TEXT,
+    replay_action        TEXT,
+    replay_cleared       TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS spotlight_open_session
@@ -1238,6 +1241,9 @@ ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ("marathon_runs", "public_removed", "INTEGER NOT NULL DEFAULT 0"),
     ("posts", "carries_door", "INTEGER NOT NULL DEFAULT 0"),
     ("posts", "door_hash", "TEXT"),
+    ("spotlight_sessions", "replay_reason", "TEXT"),
+    ("spotlight_sessions", "replay_action", "TEXT"),
+    ("spotlight_sessions", "replay_cleared", "TEXT"),
 )
 
 ARCHIVED_TABLES: dict[str, str] = {

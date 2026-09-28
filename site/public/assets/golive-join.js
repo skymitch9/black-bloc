@@ -251,7 +251,8 @@ export function spotlightCards(spotlight) {
       mode: one.session.mode || null,
       started_at: one.session.started_at || null,
       held_by: null,
-      pinned: Boolean(one.pin) && one.spotlight !== false,
+      pinned: Boolean(one.pin) && one.spotlight !== false && !one.replay,
+      replay: one.replay ? one.replay.line || null : null,
       bump_count: one.session.bump_count || 0,
     }));
 }
@@ -413,6 +414,24 @@ export const DRAWERS = [
     note: 'What ONE announcement says when somebody is live on Twitch and YouTube at the same '
       + 'time, instead of two posts about one stream.',
     keys: ['golive_costream_mode', 'golive_costream_template', 'golive_costream_author'],
+  },
+  {
+    id: 'replays',
+    title: 'Replays',
+    note: 'What a spotlighted channel gets when its stream is a replay rather than live — the '
+      + 'words that give one away, the plain post, and the Treat as live button staff press.',
+    keys: [
+      'golive_replay_action',
+      'golive_replay_words',
+      'golive_replay_live_words',
+      'golive_replay_template',
+      'golive_replay_state',
+      'golive_replay_reason_type',
+      'golive_replay_reason_title',
+      'golive_replay_treat_live_label',
+      'golive_replay_treated_said',
+      'golive_replay_not_replay_said',
+    ],
   },
   {
     id: 'pings',

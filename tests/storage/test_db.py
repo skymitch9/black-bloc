@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 76
+        assert SCHEMA_VERSION == 77
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -3106,6 +3106,37 @@ async def test_a_schema_75_file_gains_the_carry_the_door_columns_off_and_empty(t
         cur = await again.conn.execute("SELECT slug, body, pin, carries_door, door_hash FROM posts")
         assert tuple(await cur.fetchone()) == ("welcome", "be nice", 0, 0, None)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "76"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_76_file_gains_the_replay_columns_empty(tmp_path):
+    """Schema 77: spotlight_sessions.replay_reason / replay_action / replay_cleared, all empty,
+    so an open session from before reads as live."""
+    path = tmp_path / "old76.sqlite3"
+    db = Database(path)
+    await db.connect()
+    for column in ("replay_reason", "replay_action", "replay_cleared"):
+        await db.conn.execute(f"ALTER TABLE spotlight_sessions DROP COLUMN {column}")
+    await db.conn.execute(
+        "INSERT INTO spotlight_sessions(guild_id, spotlight_id, started_at, title, mode) "
+        "VALUES (1, 1, '2026-09-27', 'AGDQ', 'on')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '76')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        cur = await again.conn.execute(
+            "SELECT title, replay_reason, replay_action, replay_cleared FROM spotlight_sessions"
+        )
+        assert tuple(await cur.fetchone()) == ("AGDQ", None, None, None)
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "77"
     finally:
         await again.close()

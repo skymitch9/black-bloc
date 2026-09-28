@@ -371,6 +371,17 @@ const SETTING_SPECS = [
   ['golive_end_keep_mention', 'bool', false, false, 'whether the role mention stays at the front of the announcement after it is rewritten to say the stream ended. off — the default — drops it. Nobody is pinged by an edit either way, so this is only about how the finished post reads'],
   ['golive_costream_mode', 'enum', 'on', 'on', 'what happens when somebody already live on one platform goes live on the other as well. on — the default — edits the announcement that is already out so ONE post names both platforms; off leaves the first post alone and the second platform is not announced at all', ['off', 'on']],
   ['golive_costream_template', 'text', '**{name}** is streaming on **{platform}** and **{also_platform}**! Watch on {platform}: {url} · also live on {also_platform}: {also_url}', '**{name}** is streaming on **{platform}** and **{also_platform}**! Watch on {platform}: {url} · also live on {also_platform}: {also_url}', 'the sentence used while somebody is live on two platforms at once. It takes {name} {game} {title} {url} {platform} {also_url} {also_platform}. Twitch is always written first and is the only link Discord shows a preview for — the second link is always posted with its preview suppressed'],
+  // Replays (docs/info/golive-replays-design.md).
+  ["golive_replay_action", "enum", "plain", "plain", "what a channel on the Go-live list gets when its stream is a replay (Twitch marks it a rerun, or its title carries a golive_replay_words word outside a marathon on the channel). plain — the default — posts the golive_replay_template sentence with no pin, no role mention and no reminders; skip posts nothing and only logs it; live treats it as a live stream, the way it was before replays were looked for. Anything uncertain is treated as live", ["plain", "skip", "live"]],
+  ["golive_replay_words", "text", "replay, rerun, rebroadcast, re-broadcast, vod, encore", "replay, rerun, rebroadcast, re-broadcast, vod, encore", "the words that make a stream title read as a replay, separated by commas. Each is matched as a whole word in any case — [REPLAY], Replay:, (Rerun) all match, and a longer word that merely contains one does not. Blank leaves only Twitch's own rerun mark"],
+  ["golive_replay_live_words", "text", "live", "live", "the words that overrule a replay word in the same title, separated by commas — a title that says both replay and live is treated as live, because a missed live stream is the worse mistake. Blank lets a replay word decide on its own"],
+  ["golive_replay_template", "text", "**{name}** is showing a replay — {title} {url}", "**{name}** is showing a replay — {title} {url}", "the sentence posted for a replay when golive_replay_action is plain — no pin, no role mention, no reminders. It takes {name} {game} {title} {url} {platform}"],
+  ["golive_replay_state", "text", "Replay detected ({reason})", "Replay detected ({reason})", "the line the Go-live page and the /golive Channels card show for a channel whose stream right now was read as a replay. {reason} is golive_replay_reason_type or golive_replay_reason_title"],
+  ["golive_replay_reason_type", "text", "Twitch marks the stream a rerun", "Twitch marks the stream a rerun", "the reason in golive_replay_state when Twitch itself marked the stream a rerun"],
+  ["golive_replay_reason_title", "text", "the title says “{word}”", "the title says “{word}”", "the reason in golive_replay_state when the title carried a golive_replay_words word; {word} is the word it matched"],
+  ["golive_replay_treat_live_label", "text", "Treat as live", "Treat as live", "the button beside a replay on the Go-live page and the /golive Channels card that announces this stream again with the full spotlight — pin, role mentions, reminders"],
+  ["golive_replay_treated_said", "text", "**{login}** is treated as live for this stream — announced again with the full spotlight.", "**{login}** is treated as live for this stream — announced again with the full spotlight.", "what staff are told after Treat as live; {login} is the channel"],
+  ["golive_replay_not_replay_said", "text", "**{login}** is not showing a replay right now, so there was nothing to change.", "**{login}** is not showing a replay right now, so there was nothing to change.", "what staff are told when Treat as live finds no replay to treat — the stream ended, or it is already treated as live; {login} is the channel"],
   ['golive_costream_author', 'text', '{name} is live on {platform} and {also_platform}', '{name} is live on {platform} and {also_platform}', "the small top line of the announcement card while two platforms are live. It takes {name} {game} {title} {url} {platform} {also_url} {also_platform}"],
   ['golive_live_role_id', 'role', '900000000000000003', null, 'a role Black Bloc puts on somebody while they are streaming and takes off again when the stream ends. Blank — the default — means no role is handed out at all'],
   ['golive_require_role_id', 'role', null, null, 'when this is set, only people wearing that role are ever announced. Blank — the default — announces anybody the bot sees streaming'],
@@ -1588,6 +1599,8 @@ function seedState() {
     ],
     spotlightSessions: [
       { id: 5, spotlight_id: 1, started_at: minutesAgo(560), ended_at: null, title: 'AGDQ 2027 — Day 4', game: 'Celeste', url: 'https://www.twitch.tv/gamesdonequick', mode: 'shadow', announced_message_id: '830000000000000020', last_bump_at: minutesAgo(80), bump_count: 2 },
+      // A replay (golive-replays): Frost Fatales is showing last year's run, posted plain.
+      { id: 6, spotlight_id: 3, started_at: minutesAgo(45), ended_at: null, title: '[REPLAY] Frost Fatales 2026 — Celeste Any%', game: 'Celeste', url: 'https://www.twitch.tv/frostfatales', mode: 'shadow', announced_message_id: '830000000000000021', last_bump_at: null, bump_count: 0, replay_reason: 'title:replay', replay_action: 'plain', replay_cleared: null },
       { id: 4, spotlight_id: 1, started_at: minutesAgo(40000), ended_at: minutesAgo(38500), title: 'SGDQ 2026 — finale', game: 'Super Metroid', url: 'https://www.twitch.tv/gamesdonequick', mode: 'shadow', announced_message_id: '830000000000000019', last_bump_at: minutesAgo(38800), bump_count: 6 },
     ],
   },
@@ -4649,6 +4662,24 @@ function spotlightSessionRow(row) {
     mode: row.mode,
     bump_count: row.bump_count,
     announced_message_id: row.announced_message_id === null ? null : String(row.announced_message_id),
+    replay_reason: row.replay_reason || null,
+    replay_action: row.replay_action || null,
+    replay_cleared: row.replay_cleared || null,
+  };
+}
+
+// The bot's replay_state (cogs/content/spotlight.py): null unless the open session is a replay.
+function replayState(live) {
+  if (!live || !live.replay_reason || live.replay_cleared) return null;
+  const read = (key) => String(state.settings.get(key) ?? '');
+  const reason = String(live.replay_reason).startsWith('title:')
+    ? read('golive_replay_reason_title').replace('{word}', String(live.replay_reason).slice(6))
+    : read('golive_replay_reason_type');
+  return {
+    reason: live.replay_reason,
+    action: live.replay_action || null,
+    line: read('golive_replay_state').replace('{reason}', reason),
+    treat_label: read('golive_replay_treat_live_label'),
   };
 }
 
@@ -4829,6 +4860,7 @@ function spotlightRow(row) {
     url: `https://www.twitch.tv/${row.twitch_login}`,
     live: live !== null,
     session: live === null ? null : spotlightSessionRow(live),
+    replay: replayState(live),
     sessions: state.golive.spotlightSessions
       .filter((one) => one.spotlight_id === row.id)
       .map(spotlightSessionRow),
@@ -5259,6 +5291,20 @@ route('DELETE', '/api/golive/spotlight/:spotlight_id/windows/:window_id', (conte
     window_id: one.id,
     message: `The ping window ${windowWhen(one.starts_at)} \u2013 ${windowWhen(one.ends_at)} is off **${row.twitch_login}**'s row. Nothing it already posted was changed.`,
   };
+});
+
+route('POST', '/api/golive/spotlight/:spotlight_id/treat-live', (context) => {
+  requireStaff(context.session);
+  const row = wantedSpotlight(context.params);
+  const live = spotlightOpen(row.id);
+  const said = (key) => String(state.settings.get(key) ?? '').replace('{login}', row.twitch_login);
+  if (replayState(live) === null) {
+    throw new Refused(409, 'not_replay', said('golive_replay_not_replay_said'));
+  }
+  live.replay_cleared = 'staff';
+  live.announced_message_id = String(BigInt(live.announced_message_id || '830000000000000100') + 1n);
+  logAction('web.golive.replay_treated_live', { details: { login: row.twitch_login, session_id: live.id } });
+  return { ...spotlightRow(row), treated: true, message: said('golive_replay_treated_said') };
 });
 
 route('POST', '/api/golive/spotlight/:spotlight_id/bump', (context) => {

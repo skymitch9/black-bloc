@@ -40,6 +40,7 @@ ROUTES = [
     ("PATCH", "/api/golive/spotlight/1"),
     ("DELETE", "/api/golive/spotlight/1"),
     ("POST", "/api/golive/spotlight/1/bump"),
+    ("POST", "/api/golive/spotlight/1/treat-live"),
     ("GET", "/api/golive/spotlight/1/windows"),
     ("POST", "/api/golive/spotlight/1/windows"),
     ("DELETE", "/api/golive/spotlight/1/windows/1"),
@@ -1141,3 +1142,89 @@ async def test_staff_turning_the_spotlight_off_during_a_marathon_stops_that_mara
     assert list(rows) == ["web.golive.spotlight_updated", "web.marathon.spotlight_mode_set"]
     said = rows["web.marathon.spotlight_mode_set"]
     assert said["because"] == "staff_turned_the_spotlight_off" and said["via"] == "website"
+
+
+# --- replays (docs/info/golive-replays-design.md) ---------------------------------------------
+
+
+async def a_replay(web, wf, action="plain"):
+    spotlight_id = await a_spotlight(web, wf)
+    session_id = await start_session(
+        web.db,
+        wf.GUILD_ID,
+        spotlight_id,
+        StreamInfo(
+            url="https://www.twitch.tv/gamesdonequick",
+            game="Celeste",
+            title="[REPLAY] AGDQ 2026",
+        ),
+        "on",
+        False,
+        replay_reason="title:replay",
+        replay_action=action,
+    )
+    return spotlight_id, session_id
+
+
+async def test_a_replay_row_says_so_in_the_keys_words(client, sign_in, web, wf):
+    await a_replay(web, wf)
+    await web.store.set(wf.GUILD_ID, "golive_replay_treat_live_label", "It is live")
+    sign_in(client)
+
+    found = client.get("/api/golive/spotlight").json()[0]
+
+    assert found["replay"] == {
+        "reason": "title:replay",
+        "action": "plain",
+        "line": "Replay detected (the title says “replay”)",
+        "treat_label": "It is live",
+    }
+    assert found["session"]["replay_reason"] == "title:replay"
+
+
+async def test_a_live_row_carries_no_replay(client, sign_in, web, wf):
+    spotlight_id = await a_spotlight(web, wf)
+    await start_session(
+        web.db,
+        wf.GUILD_ID,
+        spotlight_id,
+        StreamInfo(url="https://www.twitch.tv/gamesdonequick", game="Celeste", title="AGDQ"),
+        "on",
+    )
+    sign_in(client)
+
+    assert client.get("/api/golive/spotlight").json()[0]["replay"] is None
+
+
+async def test_treat_as_live_from_the_page_is_one_web_row_and_the_row_comes_back(
+    client, sign_in, web, wf
+):
+    from black_bloc.cogs.content.spotlight import Spotlight, open_session
+
+    spotlight_id, _ = await a_replay(web, wf, action="skip")
+    await web.store.set(wf.GUILD_ID, "golive_channel_id", wf.TEST_CHANNEL_ID)
+    web.cogs["Spotlight"] = Spotlight(web)
+    sign_in(client)
+
+    found = client.post(f"/api/golive/spotlight/{spotlight_id}/treat-live").json()
+
+    assert found["treated"] is True and found["replay"] is None
+    assert found["message"] == (
+        "**gamesdonequick** is treated as live for this stream — announced again with the full "
+        "spotlight."
+    )
+    assert (await open_session(web.db, spotlight_id))["replay_cleared"] == "staff"
+    assert await wf.one_web_row(web.db, "web.golive.replay_treated_live") is not None
+
+
+async def test_treat_as_live_with_no_replay_is_a_409_in_words(client, sign_in, web, wf):
+    from black_bloc.cogs.content.spotlight import Spotlight
+
+    spotlight_id = await a_spotlight(web, wf)
+    web.cogs["Spotlight"] = Spotlight(web)
+    sign_in(client)
+
+    response = client.post(f"/api/golive/spotlight/{spotlight_id}/treat-live")
+
+    assert response.status_code == 409
+    assert "not showing a replay right now" in response.json()["message"]

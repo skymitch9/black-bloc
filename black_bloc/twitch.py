@@ -30,6 +30,7 @@ class TwitchStream:
     started_at: str
     game_id: str = ""
     thumbnail_url: str = ""
+    stream_type: str = ""
 
     @property
     def url(self) -> str:
@@ -70,6 +71,7 @@ def stream_from(row: dict[str, Any]) -> TwitchStream:
         started_at=str(row.get("started_at") or ""),
         game_id=str(row.get("game_id") or ""),
         thumbnail_url=sized(row.get("thumbnail_url"), THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT),
+        stream_type=str(row.get("type") or "").lower(),
     )
 
 

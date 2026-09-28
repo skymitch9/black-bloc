@@ -43,6 +43,8 @@ from black_bloc.cogs.content.spotlight import (
     set_spotlight,
     spotlight_channel,
     start_session,
+    treat_as_live,
+    treat_said,
     unlink_youtube,
     update_channel,
     windows_for,
@@ -2548,3 +2550,344 @@ async def test_a_cancelled_event_keeps_a_marathon_channel_too(bot, cog):
     ]
     details = await details_of(bot.db, "golive.spotlight_kept")
     assert details["expired_because"] == "event_cancelled"
+
+
+# --- replays (docs/info/golive-replays-design.md) ---------------------------------------------
+
+REPLAY_TITLE = "[REPLAY] AGDQ 2026 — Celeste Any%"
+
+
+def replay_stream(title=REPLAY_TITLE, stream_type="live", game="Celeste"):
+    return TwitchStream(
+        "10", GDQ, "GamesDoneQuick", game, title, "2026-09-20T12:00:00Z", "1", "", stream_type
+    )
+
+
+async def replay_row(bot):
+    await bot.store.set(GUILD, "pings_mode", "on")
+    await bot.store.set(GUILD, "golive_ping_role_id", PING_ROLE)
+    bot.guild.roles.append(FakeRole(PING_ROLE, "Events"))
+    return await a_row(bot)
+
+
+async def a_marathon_now(bot, row, *, starts=-60, ends=120):
+    now = datetime.now(UTC)
+    await bot.db.conn.execute(
+        "INSERT INTO marathons(guild_id, name, schedule_url, source, source_ref, spotlight_id, "
+        "starts_at, ends_at, added_at) VALUES (?, 'AGDQ 2027', "
+        "'https://gamesdonequick.com/schedule', 'gdq', 'agdq2027', ?, ?, ?, ?)",
+        (
+            GUILD,
+            row["id"],
+            (now + timedelta(minutes=starts)).isoformat(),
+            (now + timedelta(minutes=ends)).isoformat(),
+            now.isoformat(),
+        ),
+    )
+    await bot.db.conn.commit()
+
+
+def assert_plain(message):
+    assert "<@&" not in message.content
+    assert message.kwargs["allowed_mentions"].roles is False
+    assert message.pinned is False
+    assert message.embed is None
+
+
+async def test_twitchs_rerun_type_posts_the_replay_sentence_plain(bot, cog):
+    row = await replay_row(bot)
+    helix_of(bot, replay_stream("AGDQ 2026 — Celeste", stream_type="rerun"))
+
+    await cog.poll_once()
+
+    posted = bot.guild.channel.messages
+    assert len(posted) == 1
+    assert posted[0].content.startswith("**GamesDoneQuick** is showing a replay — AGDQ 2026")
+    assert_plain(posted[0])
+    session = await open_session(bot.db, row["id"])
+    assert session["replay_reason"] == "type" and session["replay_action"] == "plain"
+    assert session["announced_message_id"] == posted[0].id
+    detected = await details_of(bot.db, "golive.replay_detected")
+    assert detected["reason"] == "type" and detected["action"] == "plain"
+    assert "golive.replay_announced" in await kinds(bot.db)
+    assert "golive.spotlight_pinned" not in await kinds(bot.db)
+
+
+async def test_a_replay_title_outside_a_marathon_is_posted_plain_and_logged_once(bot, cog):
+    row = await replay_row(bot)
+    helix_of(bot, replay_stream())
+
+    await cog.poll_once()
+    await cog.poll_once()
+
+    assert len(bot.guild.channel.messages) == 1
+    assert_plain(bot.guild.channel.messages[0])
+    assert (await open_session(bot.db, row["id"]))["replay_reason"] == "title:replay"
+    assert (await kinds(bot.db)).count("golive.replay_detected") == 1
+
+
+async def test_a_replay_title_inside_a_marathon_span_is_treated_as_live(bot, cog):
+    row = await replay_row(bot)
+    await a_marathon_now(bot, row)
+    helix_of(bot, replay_stream())
+
+    await cog.poll_once()
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.startswith(f"<@&{PING_ROLE}> ") and posted.pinned is True
+    assert (await open_session(bot.db, row["id"]))["replay_reason"] is None
+    overruled = await details_of(bot.db, "golive.replay_overruled")
+    assert overruled["because"] == "marathon" and overruled["matched"] == "replay"
+    assert "golive.replay_detected" not in await kinds(bot.db)
+
+
+async def test_a_replay_title_just_before_a_marathon_counts_through_its_lead(bot, cog):
+    row = await replay_row(bot)
+    await a_marathon_now(bot, row, starts=10, ends=240)
+    helix_of(bot, replay_stream())
+
+    await cog.poll_once()
+
+    assert bot.guild.channel.messages[0].pinned is True
+
+
+async def test_a_replay_title_that_also_says_live_is_treated_as_live(bot, cog):
+    row = await replay_row(bot)
+    helix_of(bot, replay_stream("[REPLAY] + LIVE commentary — AGDQ"))
+
+    await cog.poll_once()
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.content.startswith(f"<@&{PING_ROLE}> ") and posted.pinned is True
+    assert (await details_of(bot.db, "golive.replay_overruled"))["because"] == "live:live"
+    assert (await open_session(bot.db, row["id"]))["replay_reason"] is None
+
+
+async def test_a_live_title_with_a_replay_word_inside_a_name_is_live(bot, cog):
+    row = await replay_row(bot)
+    helix_of(bot, replay_stream("Replayability tier list — any%"))
+
+    await cog.poll_once()
+
+    assert bot.guild.channel.messages[0].pinned is True
+    assert (await open_session(bot.db, row["id"]))["replay_reason"] is None
+    assert "golive.replay_overruled" not in await kinds(bot.db)
+
+
+async def test_skip_posts_nothing_but_logs_it_and_keeps_the_session(bot, cog):
+    await bot.store.set(GUILD, "golive_replay_action", "skip")
+    row = await replay_row(bot)
+    helix_of(bot, replay_stream())
+
+    await cog.poll_once()
+    await cog.poll_once()
+
+    assert bot.guild.channel.messages == []
+    session = await open_session(bot.db, row["id"])
+    assert session["replay_action"] == "skip" and session["announced_message_id"] is None
+    assert (await kinds(bot.db)).count("golive.replay_detected") == 1
+    assert (await details_of(bot.db, "golive.replay_detected"))["action"] == "skip"
+
+
+async def test_action_live_gives_a_replay_the_full_treatment_and_still_logs_it(bot, cog):
+    await bot.store.set(GUILD, "golive_replay_action", "live")
+    row = await replay_row(bot)
+    helix_of(bot, replay_stream())
+
+    await cog.poll_once()
+
+    posted = bot.guild.channel.messages[0]
+    assert posted.pinned is True and posted.content.startswith(f"<@&{PING_ROLE}> ")
+    session = await open_session(bot.db, row["id"])
+    assert session["replay_reason"] == "title:replay" and session["replay_cleared"] == "action"
+    assert (await details_of(bot.db, "golive.replay_detected"))["action"] == "live"
+
+
+async def test_a_replay_never_bumps_and_never_takes_the_window_reminder(bot, cog):
+    row = await replay_row(bot)
+    helix_of(bot, replay_stream())
+    await cog.poll_once()
+    session = await open_session(bot.db, row["id"])
+    await bot.db.conn.execute(
+        "UPDATE spotlight_sessions SET started_at = ? WHERE id = ?",
+        ((datetime.now(UTC) - timedelta(hours=9)).isoformat(), session["id"]),
+    )
+    await bot.db.conn.commit()
+
+    await cog.poll_once()
+
+    assert len(bot.guild.channel.messages) == 1
+    assert "golive.spotlight_bumped" not in await kinds(bot.db)
+    fresh = await open_session(bot.db, row["id"])
+    assert await cog._window_opened(bot.guild, row, fresh, None, False) is False
+
+
+async def test_a_replay_that_turns_live_mid_stream_is_upgraded_at_once(bot, cog):
+    row = await replay_row(bot)
+    helix = helix_of(bot, replay_stream())
+    await cog.poll_once()
+    replay_post = bot.guild.channel.messages[0]
+
+    helix.streams = [replay_stream("AGDQ 2027 — Day 1 from Pittsburgh")]
+    await cog.poll_once()
+
+    assert replay_post.deleted is True
+    live = bot.guild.channel.messages
+    assert len(live) == 1 and live[0].pinned is True
+    assert live[0].content.startswith(f"<@&{PING_ROLE}> ")
+    session = await open_session(bot.db, row["id"])
+    assert session["replay_cleared"] == "title" and session["announced_message_id"] == live[0].id
+    upgraded = await details_of(bot.db, "golive.replay_upgraded")
+    assert upgraded["because"] == "title" and upgraded["reason"] == "title:replay"
+
+    helix.streams = [replay_stream("[REPLAY] back to the vault")]
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1
+    assert bot.guild.channel.messages[0].pinned is True
+
+
+async def test_a_skipped_replay_that_turns_live_is_announced_in_full(bot, cog):
+    await bot.store.set(GUILD, "golive_replay_action", "skip")
+    row = await replay_row(bot)
+    helix = helix_of(bot, replay_stream())
+    await cog.poll_once()
+    assert bot.guild.channel.messages == []
+
+    helix.streams = [replay_stream("AGDQ 2027 — Day 1")]
+    await cog.poll_once()
+
+    assert len(bot.guild.channel.messages) == 1
+    assert bot.guild.channel.messages[0].pinned is True
+    assert (await open_session(bot.db, row["id"]))["replay_cleared"] == "title"
+
+
+async def test_a_replay_retitled_as_another_replay_is_re_worded_plain(bot, cog):
+    await replay_row(bot)
+    helix = helix_of(bot, replay_stream())
+    await cog.poll_once()
+
+    helix.streams = [replay_stream("[REPLAY] SGDQ 2025 — Super Metroid", game="Super Metroid")]
+    await cog.poll_once()
+
+    posted = bot.guild.channel.messages
+    assert len(posted) == 1 and "SGDQ 2025" in posted[0].content
+    assert_plain(posted[0])
+
+
+async def test_treat_as_live_announces_it_again_with_the_full_spotlight(bot, cog):
+    row = await replay_row(bot)
+    helix_of(bot, replay_stream())
+    await cog.poll_once()
+    replay_post = bot.guild.channel.messages[0]
+
+    outcome, _ = await treat_as_live(bot, bot.guild, FakeActor(), row["id"])
+
+    assert outcome == "treated"
+    assert replay_post.deleted is True
+    live = bot.guild.channel.messages
+    assert len(live) == 1 and live[0].pinned is True
+    assert [one.id for one in live[0].kwargs["allowed_mentions"].roles] == [PING_ROLE]
+    session = await open_session(bot.db, row["id"])
+    assert session["replay_cleared"] == "staff"
+    treated = await details_of(bot.db, "golive.replay_treated_live")
+    assert treated["because"] == "staff" and treated["replay_message_id"] == str(replay_post.id)
+
+    again, _ = await treat_as_live(bot, bot.guild, FakeActor(), row["id"])
+    assert again == "not_replay"
+    await cog.poll_once()
+    assert len(bot.guild.channel.messages) == 1
+
+
+async def test_treat_as_live_works_on_a_skipped_replay(bot, cog):
+    await bot.store.set(GUILD, "golive_replay_action", "skip")
+    row = await replay_row(bot)
+    helix_of(bot, replay_stream())
+    await cog.poll_once()
+
+    outcome, _ = await treat_as_live(bot, bot.guild, FakeActor(), row["id"])
+
+    assert outcome == "treated"
+    assert len(bot.guild.channel.messages) == 1 and bot.guild.channel.messages[0].pinned
+
+
+async def test_treat_as_live_refuses_in_words_when_nothing_is_a_replay(bot, cog):
+    row = await a_row(bot)
+    outcome, found = await treat_as_live(bot, bot.guild, FakeActor(), row["id"])
+    assert outcome == "not_replay"
+    assert treat_said(bot, bot.guild, outcome, found["twitch_login"]) == (
+        f"**{GDQ}** is not showing a replay right now, so there was nothing to change."
+    )
+
+
+async def test_a_failed_treat_as_live_keeps_the_replay_post_and_the_replay(bot, cog):
+    row = await a_row(bot)
+    helix_of(bot, replay_stream())
+    await cog.poll_once()
+    bot.guild.channel.send_raises = RuntimeError("Missing Access")
+
+    outcome, _ = await treat_as_live(bot, bot.guild, FakeActor(), row["id"])
+
+    assert outcome == "post_failed"
+    assert bot.guild.channel.messages[0].deleted is False
+    assert (await open_session(bot.db, row["id"]))["replay_cleared"] is None
+
+
+async def test_the_card_shows_the_replay_and_offers_treat_as_live_instead_of_bump(bot, cog):
+    await bot.store.set(GUILD, "golive_replay_treat_live_label", "It is live")
+    await bot.store.set(GUILD, "golive_replay_state", "Replay here ({reason})")
+    row = await a_row(bot)
+    helix_of(bot, replay_stream())
+    await cog.poll_once()
+
+    embed, view = await build_spotlight(bot, bot.guild, row["id"])
+
+    assert "Replay here (the title says “replay”)" in embed.description
+    labels = [getattr(one, "label", None) for one in view.children]
+    assert "It is live" in labels and words.BUMP_NOW not in labels
+
+    said, _ = await run_spotlight_move(bot, bot.guild, FakeActor(), row["id"], "treat_live")
+    assert said == (
+        f"**{GDQ}** is treated as live for this stream — announced again with the full spotlight."
+    )
+
+
+async def test_edited_replay_words_and_sentence_change_what_is_posted(bot, cog):
+    await bot.store.set(GUILD, "golive_replay_words", "throwback")
+    await bot.store.set(GUILD, "golive_replay_template", "Throwback time on {name}: {title}")
+    row = await a_row(bot)
+    helix = helix_of(bot, replay_stream("Throwback Thursday: SGDQ 2019"))
+
+    await cog.poll_once()
+
+    assert bot.guild.channel.messages[0].content == (
+        "Throwback time on GamesDoneQuick: Throwback Thursday: SGDQ 2019"
+    )
+    assert (await open_session(bot.db, row["id"]))["replay_reason"] == "title:throwback"
+
+    await forget_spotlight(bot, bot.guild, FakeActor(), row["id"])
+    row = await a_row(bot)
+    helix.streams = [replay_stream()]
+    await cog.poll_once()
+    assert (await open_session(bot.db, row["id"]))["replay_reason"] is None
+
+
+async def test_turning_the_spotlight_on_never_pins_a_replay(bot, cog):
+    row = await a_row(bot, spotlight=False)
+    helix_of(bot, replay_stream())
+    await cog.poll_once()
+
+    await set_spotlight(bot, bot.guild, FakeActor(), row["id"], True)
+
+    assert bot.guild.channel.messages[0].pinned is False
+
+
+async def test_a_boot_keeps_a_skipped_replays_session_open(bot, cog):
+    await bot.store.set(GUILD, "golive_replay_action", "skip")
+    row = await a_row(bot)
+    helix_of(bot, replay_stream())
+    await cog.poll_once()
+
+    await cog.reconcile_open_sessions()
+
+    assert await open_session(bot.db, row["id"]) is not None
+    assert "golive.spotlight_reconciled" not in await kinds(bot.db)

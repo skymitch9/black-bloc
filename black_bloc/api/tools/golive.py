@@ -33,8 +33,12 @@ from ...cogs.content.spotlight import (
     open_session,
     ping_wording_for,
     remove_ping_window,
+    replay_state,
+    replay_wording_for,
     set_ping_mode,
     spotlight_channel,
+    treat_as_live,
+    treat_said,
     unlink_youtube,
     windows_for,
     windows_in_guild,
@@ -145,6 +149,9 @@ def spotlight_session_row(row: Any) -> dict[str, Any]:
         "announced_message_id": (
             str(row["announced_message_id"]) if row["announced_message_id"] else None
         ),
+        "replay_reason": row["replay_reason"],
+        "replay_action": row["replay_action"],
+        "replay_cleared": row["replay_cleared"],
     }
 
 
@@ -180,6 +187,7 @@ def spotlight_row(
     windows: list[Any] | None = None,
     pinged: dict[str, Any] | None = None,
     marathon_help: str | None = None,
+    replay_said: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """A spotlight as the Go-live page reads it: a streamer row with no member behind it."""
     said = dict(said or {})
@@ -220,6 +228,7 @@ def spotlight_row(
         "url": spot.channel_url(row["twitch_login"]),
         "live": live is not None,
         "session": spotlight_session_row(live) if live is not None else None,
+        "replay": replay_state(live, replay_said) if live is not None and replay_said else None,
         "sessions": [spotlight_session_row(one) for one in sessions],
         "ping_mode": spot.ping_mode_of(row),
         "pinging": spot.pings_now(row, windows),
@@ -235,6 +244,7 @@ async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
     said = wording_for(bot, guild.id)
     pinged = ping_wording_for(bot, guild.id)
     marathon_help = bot.store.get(guild.id, MARATHON_CHANNEL_PING_HELP_KEY)
+    replay_said = replay_wording_for(bot, guild.id)
     windows = await windows_in_guild(bot.db, guild.id)
     found = []
     for row in await channels_for(bot.db, guild.id):
@@ -250,6 +260,7 @@ async def spotlight_rows(bot: Any, guild: Any) -> list[dict[str, Any]]:
                 [one for one in windows if int(one["spotlight_id"]) == int(row["id"])],
                 pinged,
                 marathon_help,
+                replay_said,
             )
         )
     return found
@@ -269,6 +280,7 @@ async def one_spotlight(bot: Any, guild: Any, spotlight_id: int) -> dict[str, An
         await windows_for(bot.db, spotlight_id),
         ping_wording_for(bot, guild.id),
         bot.store.get(guild.id, MARATHON_CHANNEL_PING_HELP_KEY),
+        replay_wording_for(bot, guild.id),
     )
 
 
@@ -647,6 +659,26 @@ def build_router(bot: Any) -> APIRouter:
             "bumped": True,
             "message": SPOTLIGHT_BUMPED.format(login=row["twitch_login"]),
         }
+
+    @router.post("/spotlight/{spotlight_id}/treat-live")
+    async def golive_spotlight_treat_live(request: Request, spotlight_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        await one_spotlight(bot, guild, spotlight_id)
+        outcome, row = await treat_as_live(
+            bot, guild, actor_for(bot, who, guild), spotlight_id, via=VIA_WEBSITE
+        )
+        if outcome == "no_row":
+            raise Refused(404, "no_spotlight", spot.NO_SUCH_ROW)
+        said = treat_said(bot, guild, outcome, row["twitch_login"])
+        if outcome == "not_replay":
+            raise Refused(409, "not_replay", said)
+        if outcome == "no_cog":
+            raise Refused(503, "no_cog", said)
+        if outcome == "post_failed":
+            raise Refused(502, "post_failed", said)
+        return await one_spotlight(bot, guild, spotlight_id) | {"treated": True, "message": said}
 
     @router.get("/spotlight/{spotlight_id}/windows")
     async def golive_spotlight_windows(spotlight_id: int) -> list[dict[str, Any]]:

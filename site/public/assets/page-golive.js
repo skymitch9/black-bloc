@@ -403,6 +403,7 @@ function liveCard(one) {
         : null,
       one.spotlight_id ? badge(CHANNEL_ONLY) : null,
       one.pinned ? badge('pinned') : null,
+      one.replay ? badge(one.replay, 'warn') : null,
       one.bump_count ? muted(`${one.bump_count} reminder(s) so far`) : null,
       one.started_at ? muted(`started ${ago(one.started_at).text}`) : null,
       one.url ? el('a', { class: 'mono', href: one.url, rel: 'noreferrer', text: one.url }) : null,
