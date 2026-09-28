@@ -3609,3 +3609,17 @@ applied after the deploy.
 |---|---|---|
 | **`HEO-a`** | Events ▸ **Sources…** ▸ the **Retro Gaming Live** feed (row 7, RetroGamingLiveTV) — its drawer | Under Auto-track, **Search words** reads `RGL, RGLtv, Retrothon` and **Owner** reads `RGLtvMarathons`. Change a word and click away: the drawer reopens saying *…searches horaro.net for **…** now.* In Discord, `/event` ▸ Sources ▸ the same feed: the card says *Searches horaro.net for **RGL, RGLtv, Retrothon**.* and *Also keeps every event the horaro.net account **RGLtvMarathons** owns.*, and **Search words…** opens a window with both boxes filled. The Fast Pace feed's drawer shows the same two fields EMPTY (the placeholder says *Fast Pace*). |
 | **`HEO-b`** | Once RGL publishes its next horaro.net schedule (A Fistful of Brawlers, Oct 17, or Halloween Horror, Oct 30 — the slugs are unknown until then): **Check now** on the feed (or wait ≤ 6 h) | That event appears on the Marathons list as a plain *horaro.net* marathon on the RetroGamingLiveTV channel — even if its name has no *RGL* in it as long as one of the words finds it, and even if its event-level Twitch is blank (the owner keeps it). Nothing from another owner that the *RGL* search lists (Germench, Kongcakes, LRock617) is added. **Look again** keeps both fields. |
+
+## Rows `PCD-a` … `PCD-c` — the rules post carries the front door: one message in #welcome (branch `post-carries-door`, 2026-09-27)
+
+🔨 **BUILT on branch `post-carries-door`, NOT merged, NOT deployed.** The owner, 2026-09-27 19:5x: *"is there a way we
+can combine the 2 post so the when rules is posted to welcome it also post the something needed box in the same post"*.
+Design: [`../info/post-carries-door-design.md`](../info/post-carries-door-design.md). Rows lettered; the conductor
+numbers them. Both features are in shadow today, so everything lands in #welcome-test.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PCD-a`** | Posts ▸ **Welcome and rules** ▸ tick **Carry the front door** ▸ Save Changes ▸ **Update the post** | #welcome-test holds ONE message: the rules, then the *Need something?* card (its footer is the rehearsal note), then the three buttons. The door's own rehearsal copy is gone, nothing is pinned, and the post wears **carries the front door**. Press **Ask staff privately** — the ticket form opens. |
+| **`PCD-b`** | Settings ▸ change **frontdoor_title** (or a button label), wait ≤ 5 min | The SAME message changes its card in place — no second message, and the rules text is untouched. |
+| **`PCD-c`** | Modmail ▸ Front door ▸ **Take it down** (then tick the switch again and Update the post) | The rules stay up without the card or buttons and the switch on the post is off; ticking it again and updating puts the door back on the one message. |
+

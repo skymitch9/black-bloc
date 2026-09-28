@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-27 — one section APPENDED, nothing re-keyed**: *A post carries the front door* (branch `post-carries-door`, off `main` `91d1daa7`, keyed against `56e4b9b0`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Marathon near misses ask staff in the thread* (branch `marathon-near-miss`, off `main` `7f7b99e7`, keyed against `78178b97`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *horaro.net events — owner match + several words* (branch `horaro-events-owner`, off `main` `7f7b99e7`, keyed against `9dea3428`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public reminders + the ping button* (branch `marathon-public-reminders`, off `main` `59e71860`, keyed against `fe273193`). Before that:
@@ -9054,3 +9055,27 @@ Design: [`marathon-horaro-events-design.md`](marathon-horaro-events-design.md) �
 | `black_bloc/settings_store.py:5172` | The 13 `marathon_feed_*` search keys (Marathons words). |
 | `site/public/assets/marathon-words.js:164` `feedSearchFields` · `site/public/assets/marathons-section.js:1176` `feedSearchInput` | The pure field list (tested in node) and the drawer input that PATCHes one field on change. |
 | `site/mock/server.mjs:6537` `feedSearch` · `:6559` `feedSetSearch` | The mock's mirror of `search_of` / `set_search`. |
+
+## A post carries the front door (branch `post-carries-door`, 2026-09-27)
+
+Design: [`post-carries-door-design.md`](post-carries-door-design.md). Keyed against `56e4b9b0`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/storage/db.py:817` · `:1239` | `posts.carries_door` (off) and `posts.door_hash` (NULL = the message carries no door) — schema 76, in both the CREATE and `ADDED_COLUMNS`. |
+| `black_bloc/posts.py:437` `with_door` · `:449` `door_parts` · `:458` `message_payload` | The send/edit payload. A post that has never carried the door sends exactly `render_message` (existing tests untouched); a carrier (or a row still drawn) switches to the `embeds` + `view` shape so an edit can also REMOVE the door. `door_parts` imports the cog inside the function (Deviation 4). |
+| `black_bloc/posts.py:516` `door_carrier` · `:1027` | One carrier per guild; `save_post` refuses a second in words naming the first BEFORE writing. The switch rides `set_post_fields`, so one press is one `post.saved` row with `carries_door` in its details (checklist 34). Not a version field — restoring a version never moves the door. |
+| `black_bloc/posts.py:1069` `turn_carrying` · `:1083` `posted_message` | A switch on a post already up changes the message at once through the cog's `door_follows_post`. `posted_message` is the copy `posted_hash` describes — real first, else the shadow copy. |
+| `black_bloc/posts.py:1269` · `:1288` · `:1306` · `:1384` | Publish writes `door_hash` (the door's stamp or NULL) beside `posted_hash`, then `door_rides_post`; take-down clears it (`clear_posted`/`forget_message`) and `door_leaves_post` lets the door's keys go. |
+| `black_bloc/cogs/community/frontdoor.py:522` `carried_note` · `:530` `carried_parts` | The door part: `door_embed`, the rehearsal note as its FOOTER while the door is in shadow (the message's `content` is the post's), `door_view`, and `door_hash(note)` as the stamp. None while `frontdoor_mode` is off. |
+| ⚠️ `black_bloc/cogs/community/frontdoor.py:552` `redraw_carrier` | Edits ONLY `embeds` + `view` — never `content` — so a door re-word never publishes a staffer's unposted post edits. The post's own embed is `message.embeds[0]` when the message has no content (embed style). Skipped under the guard and when the stamp already matches. |
+| `black_bloc/cogs/community/frontdoor.py:603` `drop_the_doors_own` · `:616` `mirror_the_ride` · `:639` `release_the_ride` | The door's own messages that are NOT the post's go; the door's keys are MIRRORED onto the post's ids (Deviation 3) so every synchronous reader resolves there; `release` clears only keys that point at the post. |
+| `black_bloc/cogs/community/frontdoor.py:656` `door_rides_post` · `:715` `keep_the_ride` | Called after a carrying publish and by every sweep; the sweep also redraws when the door's words changed, and strips the door part while the door is off (the switch is kept). |
+| ⚠️ `black_bloc/cogs/community/frontdoor.py:800` · `:866` · `:969` | The three destructive door entry points (`post_door`, `take_door_down`, `_redoor`) check for a carrier FIRST — that is what stops a mirrored `frontdoor_message_id` from ever reaching `drop_message` on the post's message. |
+| `black_bloc/cogs/community/frontdoor.py:728` `door_on_the_post` · `:754` `take_the_door_off_its_post` | `post_door` where the door rides: nothing posted, nothing deleted, words; elsewhere: refused (409 `door_rides_post`). Taking the door down edits the post without it and turns the switch off. |
+| `black_bloc/cogs/community/frontdoor.py:950` | `on_post_published` also re-runs the door for a carrier, not only for the followed slug. |
+| `black_bloc/cogs/community/posts.py:463` `CarryButton` | The Discord door to the switch: row 1 beside Versions/Back (row 0 is full). |
+| `black_bloc/api/tools/posts.py:62` · `:253` | Row fields `carries_door`, `door_drawn`; `PUT` body `carries_door`. |
+| `black_bloc/preview.py:414` · `:562` | The post preview draws the door under the words while the sample says `carries_door` and the door is on. Sample values arrive as strings. |
+| `site/public/assets/page-posts.js:65` · `:334` · `:358` · `:443` | The switch beside Pin it, part of the draft (pending count, Discard, Save), the preview sample, and one sentence on the "how it will post" line. |
+| `site/mock/server.mjs:2755` `doorCarrier` · `:2760` `doorRidesPost` · `:3072` · `:9569` | The mock's twins: one carrier, the refusal, the mirrored door keys, and the two front-door routes answering for a carried door. |
