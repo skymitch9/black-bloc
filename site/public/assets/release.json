@@ -1,8 +1,13 @@
 {
-  "release": "v185",
-  "commit": "dabf04d0",
+  "release": "v186",
+  "commit": "ad9381b2",
   "changed_features": [
-    "birthday",
-    "tempvoice"
+    "events",
+    "golive",
+    "guides",
+    "marathon",
+    "mod",
+    "posts",
+    "request"
   ]
 }
