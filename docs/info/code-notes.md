@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-27 — one section APPENDED, nothing re-keyed**: *Quiet pins* (branch `quiet-pins`, off `main` `6f1b9f9e`, keyed against `f64c74c3`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Marathon near misses ask staff in the thread* (branch `marathon-near-miss`, off `main` `7f7b99e7`, keyed against `78178b97`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *horaro.net events — owner match + several words* (branch `horaro-events-owner`, off `main` `7f7b99e7`, keyed against `9dea3428`). Before that:
 > **2026-09-26 — one section APPENDED, nothing re-keyed**: *Marathon public reminders + the ping button* (branch `marathon-public-reminders`, off `main` `59e71860`, keyed against `fe273193`). Before that:
@@ -9054,3 +9055,17 @@ Design: [`marathon-horaro-events-design.md`](marathon-horaro-events-design.md) �
 | `black_bloc/settings_store.py:5172` | The 13 `marathon_feed_*` search keys (Marathons words). |
 | `site/public/assets/marathon-words.js:164` `feedSearchFields` · `site/public/assets/marathons-section.js:1176` `feedSearchInput` | The pure field list (tested in node) and the drawer input that PATCHes one field on change. |
 | `site/mock/server.mjs:6537` `feedSearch` · `:6559` `feedSetSearch` | The mock's mirror of `search_of` / `set_search`. |
+
+## Quiet pins (branch `quiet-pins`, keyed against `f64c74c3`)
+
+Design: [`quiet-pins-design.md`](quiet-pins-design.md).
+
+| Where | Note |
+|---|---|
+| `black_bloc/cogs/moderation/quiet_pins.py:15` `pinned_by_this_bot` | Discord authors a `pins_add` notice as whoever pinned, so "author is `bot.user`" IS "an automatic pin"; no feature has to tell this cog it pinned. |
+| `black_bloc/cogs/moderation/quiet_pins.py:21` `should_quiet` | `type is pins_add` first — nothing else is ever deleted. The key is read from the store cache, so a down database still deletes. |
+| `black_bloc/cogs/moderation/quiet_pins.py:48` `failure_reason` | Forbidden names Manage Messages; NotFound (someone deleted it first) is also a `delete_failed`, as briefed. |
+| `black_bloc/cogs/moderation/quiet_pins.py:62` `on_message` | Each `log_action` call carries its kind as a literal because `tests/test_logkinds.py` finds kinds by AST; `_safely` swallows a failed row so the listener never raises. |
+| `black_bloc/cogs/moderation/quiet_pins.py:77` `_failed` | `failed_channels` makes the IMPORTANT row once per channel per boot — a channel without the permission would otherwise log on every pin. |
+| `black_bloc/settings_store.py:3150` `QUIET_BOT_PINS` | Core, not its own group: the `/settings` group select is at 25. Default at `:6586`. |
+| `black_bloc/logkinds.py:248` | `quiet_pins.deleted` is ROUTINE; no `HEADS` entry, an unknown head files as Core. |

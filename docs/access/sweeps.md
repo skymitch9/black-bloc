@@ -3609,3 +3609,15 @@ applied after the deploy.
 |---|---|---|
 | **`HEO-a`** | Events ▸ **Sources…** ▸ the **Retro Gaming Live** feed (row 7, RetroGamingLiveTV) — its drawer | Under Auto-track, **Search words** reads `RGL, RGLtv, Retrothon` and **Owner** reads `RGLtvMarathons`. Change a word and click away: the drawer reopens saying *…searches horaro.net for **…** now.* In Discord, `/event` ▸ Sources ▸ the same feed: the card says *Searches horaro.net for **RGL, RGLtv, Retrothon**.* and *Also keeps every event the horaro.net account **RGLtvMarathons** owns.*, and **Search words…** opens a window with both boxes filled. The Fast Pace feed's drawer shows the same two fields EMPTY (the placeholder says *Fast Pace*). |
 | **`HEO-b`** | Once RGL publishes its next horaro.net schedule (A Fistful of Brawlers, Oct 17, or Halloween Horror, Oct 30 — the slugs are unknown until then): **Check now** on the feed (or wait ≤ 6 h) | That event appears on the Marathons list as a plain *horaro.net* marathon on the RetroGamingLiveTV channel — even if its name has no *RGL* in it as long as one of the words finds it, and even if its event-level Twitch is blank (the owner keeps it). Nothing from another owner that the *RGL* search lists (Germench, Kongcakes, LRock617) is added. **Look again** keeps both fields. |
+
+## Rows `QP-a` … `QP-b` — the bot's own pin notices are deleted (branch `quiet-pins`, 2026-09-27)
+
+The owner, 2026-09-27 20:4x: *"also whenever the bot pins something it leaves that message in chat that the bot has
+pinned something, can we have that message be auto deleted if its pinned by a bot automatic process. it looks
+unsightly"*. Design: [`../info/quiet-pins-design.md`](../info/quiet-pins-design.md). Rows lettered; the conductor
+numbers them.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`QP-a`** | Let the bot pin something (a marathon board, a runner post, a spotlight) — or watch the next one it makes. Then pin any message yourself by hand | The bot's *Black Bloc pinned a message* line vanishes within a second or two, in channels and in threads/forum posts alike; the Logs page (Core) shows a routine *quiet_pins.deleted* row naming the channel. **Your** pin notice stays. |
+| **`QP-b`** | Settings ▸ Core ▸ **quiet_bot_pins** off, let the bot pin again; then back on | Off: the notice stays. On: gone again. Where the bot lacks Manage Messages, ONE *quiet_pins.delete_failed* card per channel per boot in the log channel, saying it is missing Manage Messages. |

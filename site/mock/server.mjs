@@ -866,6 +866,8 @@ const SETTING_SPECS = [
   ['shutdown_status_text', 'text', 'Restarting — back in a moment', 'Restarting — back in a moment', 'the status Black Bloc carries on its way down, beside the red dot. Discord keeps a bot\'s status only while it is connected, so this shows for the last second and then it reads offline'],
   // The orphaned-click sentence (docs/info/panels-orphaned-click-design.md); core too.
   ['panel_expired_text', 'text', 'This panel has gone quiet — it timed out, or Black Bloc restarted since it was opened, so its buttons no longer reach anything. Run {command} again for a fresh one.', 'This panel has gone quiet — it timed out, or Black Bloc restarted since it was opened, so its buttons no longer reach anything. Run {command} again for a fresh one.', 'what somebody is told when they press a button, pick from a menu or submit a form on a panel Black Bloc no longer holds — it timed out, or the bot restarted (every deploy is a restart) while it was open. `{command}` is filled in with the slash command that opened the panel when Discord says which, and with \'the command\' when it does not'],
+  // The pin-notice cleanup (docs/info/quiet-pins-design.md); core too.
+  ["quiet_bot_pins", "bool", true, true, "whether Black Bloc deletes the 'pinned a message' notice Discord posts under a pin Black Bloc made itself (marathon boards, runner posts, spotlights, posts). on — the default — keeps channels tidy; off leaves the notice. A pin a person makes is never touched. It needs Manage Messages in the channel"],
   // The sixteen registry keys the mock never had a row for, generated from black_bloc/settings_store.py.
   // contract.json's `settings` block is what keeps this list and the registry's bounds in step from now on.
   ["applications_panel_own_list", "bool", true, true, "whether the /apply panel writes a member's own applications out for them; true by default, and false makes that list staff-only"],
@@ -1892,7 +1894,7 @@ function withRunEvents(seeded) {
   return seeded;
 }
 
-const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text'];
+const CORE_KEYS = ['log_channel_id', 'shadow_channel_id', 'rehearsal_note', 'staff_channel_id', 'role_menu_channel_id', 'bot_bio', 'status_prefix', 'operator_read_log', 'spawned_channels_staff_reach', 'settings_panel_minutes', 'settings_core_keys_admin_only', 'selftest_on_boot', 'selftest_channel_id', 'selftest_purge_minutes', 'selftest_log_level', 'personality_pool_sync', 'personality_pool_peer_url', 'error_sentence', 'error_retry_label', 'error_retry_minutes', 'error_retry_expired', 'boot_status_mode', 'boot_status_text', 'shutdown_status_text', 'panel_expired_text', 'quiet_bot_pins'];
 const NOT_A_FEATURE = [];
 const NAMESPACE_OVERRIDE = {
   modlog_channel_id: 'automod',

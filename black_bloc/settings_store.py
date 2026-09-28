@@ -3146,6 +3146,22 @@ KEY_HELP.update(
 )
 
 
+# The "X pinned a message" notice under a pin Black Bloc made itself.
+QUIET_BOT_PINS = "quiet_bot_pins"
+QUIET_BOT_PINS_DEFAULT = True
+KEY_TYPES.update({QUIET_BOT_PINS: "bool"})
+KEY_HELP.update(
+    {
+        QUIET_BOT_PINS: (
+            "whether Black Bloc deletes the 'pinned a message' notice Discord posts under a pin "
+            "Black Bloc made itself (marathon boards, runner posts, spotlights, posts). on — the "
+            "default — keeps channels tidy; off leaves the notice. A pin a person makes is never "
+            "touched. It needs Manage Messages in the channel"
+        ),
+    }
+)
+
+
 # The one grouping of the registry, read by the dashboard's Settings page and by /settings.
 CORE_KEYS = (
     "log_channel_id",
@@ -3173,6 +3189,7 @@ CORE_KEYS = (
     BOOT_STATUS_TEXT_KEY,
     SHUTDOWN_STATUS_TEXT_KEY,
     PANEL_EXPIRED_TEXT_KEY,
+    QUIET_BOT_PINS,
 )
 NAMESPACE_OVERRIDE = {
     "modlog_channel_id": "automod",
@@ -6566,6 +6583,8 @@ class SettingsStore:
             return 10
         if key == SETTINGS_CORE_KEYS_ADMIN_ONLY:
             return SETTINGS_CORE_KEYS_ADMIN_ONLY_DEFAULT
+        if key == QUIET_BOT_PINS:
+            return QUIET_BOT_PINS_DEFAULT
         if key == ERROR_SENTENCE_KEY:
             return ERROR_SENTENCE
         if key == ERROR_RETRY_LABEL_KEY:

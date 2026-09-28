@@ -317,6 +317,7 @@ export const LABELS = {
   boot_status_text: 'What its status says while it is starting up',
   shutdown_status_text: 'What its status says on the way down',
   panel_expired_text: 'What a button on a panel that has gone quiet says',
+  quiet_bot_pins: 'Whether the bot deletes the pinned-a-message notice under its own pins',
 
   tempvoice_mode: 'Whether people can make their own voice rooms, and who sees the lobby',
   tempvoice_creator_ids: 'Which channels people join to get a room',
