@@ -6062,8 +6062,8 @@ MARATHON_WORDS: dict[str, tuple[str, tuple[str, ...], str]] = {
     ),
     MARATHON_UNKNOWN_SITE_KEY: (
         "I can read the GDQ and RPG Limit Break trackers, horaro.net schedules, Oengus "
-        "marathons, Fastest Furs schedules and Lady Arcaders calendars — that link is none of "
-        "them.",
+        "marathons, Fastest Furs schedules, Lady Arcaders calendars and the GDQ Hotfix schedule "
+        "— that link is none of them.",
         (),
         "what staff are told when a schedule link is from a site Black Bloc cannot read",
     ),
