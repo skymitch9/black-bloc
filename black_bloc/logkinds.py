@@ -245,6 +245,7 @@ IMPORTANT: frozenset[str] = frozenset(
 
 ROUTINE: frozenset[str] = frozenset(
     {
+        "quiet_pins.deleted",
         "marathon.added",
         "marathon.board_pinned",
         "marathon.board_posted",
