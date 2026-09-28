@@ -193,6 +193,9 @@ class FakeBot:
     def get_cog(self, name):
         return self._cog
 
+    def add_dynamic_items(self, *items):
+        self.dynamic_items = [*getattr(self, "dynamic_items", []), *items]
+
 
 class FakeMessage:
     def __init__(self, message_id, **kwargs):
@@ -1669,3 +1672,65 @@ async def test_pinned_the_panel_s_set_button_opens_the_date_modal_for_the_member
     modal = clicked.response.modals[0]
     assert isinstance(modal, DateModal)
     assert modal.mine is True and modal.member is birthday_person
+
+
+# --- the birthday block (blocks-buttons): a second door onto the same /birthday panel ----------
+
+
+async def test_the_block_is_one_card_and_one_guild_keyed_button(bot):
+    from black_bloc.cogs.community.birthdays import OpenBirthdayButton, block_parts
+
+    await bot.store.set(GUILD, "birthday_mode", "on")
+
+    embed, view, stamp = block_parts(bot, bot.guild, None)
+
+    (press,) = view.children
+    assert isinstance(press, OpenBirthdayButton)
+    assert press.custom_id == f"bdayblock:open:{GUILD}"
+    assert press.item.label == "Set my birthday"
+    assert embed.title == "Your birthday" and view.timeout is None and stamp
+
+
+async def test_the_block_draws_nothing_while_birthdays_are_off(bot):
+    from black_bloc.cogs.community.birthdays import block_parts
+
+    await bot.store.set(GUILD, "birthday_mode", "off")
+
+    assert block_parts(bot, bot.guild, None) is None
+
+
+async def test_pressing_the_block_opens_exactly_the_birthday_panel(cog, bot, birthday_person):
+    from black_bloc.cogs.community.birthdays import OpenBirthdayButton
+
+    by_command = await open_panel(cog, bot, birthday_person)
+    by_block = FakeInteraction(bot, birthday_person)
+    await OpenBirthdayButton(GUILD).callback(by_block)
+
+    command, block = by_command.response.messages[0], by_block.response.messages[0]
+    assert block["ephemeral"] is True
+    assert isinstance(block["view"], BirthdayView)
+    assert block["embed"].description == command["embed"].description
+    assert labels(block["view"]) == labels(command["view"])
+    assert not by_block.response.modals
+
+
+async def test_the_block_s_button_keeps_the_panel_s_own_refusals(bot, birthday_person):
+    from black_bloc.cogs.community.birthdays import OpenBirthdayButton
+
+    outside = FakeInteraction(bot, birthday_person, guild=False)
+    await OpenBirthdayButton(GUILD).callback(outside)
+
+    assert "in the server itself" in outside.sent
+
+
+async def test_cog_load_registers_the_block_button_even_before_the_database(bot, cog):
+    from black_bloc.cogs.community.birthdays import OpenBirthdayButton
+
+    class Closed:
+        is_connected = False
+
+    bot.db = Closed()
+    await cog.cog_load()
+
+    assert bot.dynamic_items == [OpenBirthdayButton]
+

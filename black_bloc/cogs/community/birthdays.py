@@ -10,6 +10,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import birthdays as birthday_words
+from ... import button_block
 from ... import shadow as shadow_home
 from ...actionlog import log_action, send_logs
 from ...birthdays import (
@@ -64,7 +66,7 @@ from ...birthdays import (
     upcoming_lines,
     year_problem,
 )
-from ...command_errors import AnswersErrors
+from ...command_errors import AnswersErrors, SafeDynamicItem
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import wait_ready
 from ...panels import (
@@ -79,11 +81,13 @@ from ...panels import (
     still_staff,
 )
 from ...settings_store import (
+    BIRTHDAY_BLOCK_LABEL,
     BIRTHDAY_MODES,
     BIRTHDAY_POST_AGAIN_KEY,
     BIRTHDAY_POST_BUTTON_KEY,
     BIRTHDAY_POST_CONFIRM_KEY,
     BIRTHDAY_POST_UNSENT_KEY,
+    BUTTON_BLOCK_DEFAULTS,
     DB_UNAVAILABLE,
     GUILD_ONLY,
     staff_roles_sentence,
@@ -973,6 +977,69 @@ async def open_date_modal(
     )
 
 
+async def birthday_ready(interaction: discord.Interaction) -> bool:
+    if interaction.guild is None:
+        await answer(interaction, GUILD_ONLY)
+        return False
+    if not interaction.client.db.is_connected:
+        log.warning("birthdays: refused a command — the database is not connected")
+        await answer(interaction, DB_UNAVAILABLE)
+        return False
+    return True
+
+
+async def open_birthday_panel(interaction: discord.Interaction) -> None:
+    """The /birthday panel, opened by the command or by the birthday block's button."""
+    if not await birthday_ready(interaction):
+        return
+    embed, view = await build_panel(interaction.client, interaction.guild, interaction.user)
+    await interaction.response.send_message(
+        embed=embed,
+        view=view,
+        ephemeral=True,
+        allowed_mentions=discord.AllowedMentions.none(),
+    )
+    view.message = await interaction.original_response()
+
+
+BLOCK_LABEL_DEFAULT = str(BUTTON_BLOCK_DEFAULTS[BIRTHDAY_BLOCK_LABEL])
+
+
+class OpenBirthdayButton(
+    SafeDynamicItem,
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=button_block.template(birthday_words.BLOCK_HEAD),
+):
+    """The birthday block's button: the same /birthday panel, so its Set my birthday modal is
+    raised from a private card and never over the post."""
+
+    def __init__(self, guild_id: Any, label: str | None = None) -> None:
+        self.guild_id = int(guild_id)
+        super().__init__(
+            discord.ui.Button(
+                label=label or BLOCK_LABEL_DEFAULT,
+                style=discord.ButtonStyle.primary,
+                custom_id=button_block.custom_id(birthday_words.BLOCK_HEAD, guild_id),
+                row=0,
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: Any):
+        return cls(int(match["guild_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        await open_birthday_panel(interaction)
+
+
+def block_parts(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Any, str] | None:
+    """The birthday block a post carries: nothing while birthdays are off."""
+    if not birthday_words.block_drawn(bot.store, guild.id):
+        return None
+    look = birthday_words.block_look(bot.store, guild.id)
+    return button_block.parts(look, OpenBirthdayButton(guild.id, look.label))
+
+
 class Birthdays(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -987,6 +1054,7 @@ class Birthdays(commands.Cog):
         return (None, None)
 
     async def cog_load(self) -> None:
+        self.bot.add_dynamic_items(OpenBirthdayButton)
         if not self.bot.db.is_connected:
             return
         self._sweep.start()
@@ -1270,14 +1338,7 @@ class Birthdays(commands.Cog):
         return lock
 
     async def _ready(self, interaction: discord.Interaction) -> bool:
-        if interaction.guild is None:
-            await answer(interaction, GUILD_ONLY)
-            return False
-        if not self.bot.db.is_connected:
-            log.warning("birthdays: refused a command — the database is not connected")
-            await answer(interaction, DB_UNAVAILABLE)
-            return False
-        return True
+        return await birthday_ready(interaction)
 
     async def _zone_of(self, user_id: int) -> str:
         return await member_zone_name(self.bot.db, user_id)
@@ -1286,16 +1347,7 @@ class Birthdays(commands.Cog):
         name="birthday", description="Your birthday, and whose is coming up"
     )
     async def birthday(self, interaction: discord.Interaction) -> None:
-        if not await self._ready(interaction):
-            return
-        embed, view = await build_panel(self.bot, interaction.guild, interaction.user)
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        view.message = await interaction.original_response()
+        await open_birthday_panel(interaction)
 
     async def date_submit(
         self,

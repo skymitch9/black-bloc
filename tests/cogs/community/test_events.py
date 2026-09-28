@@ -5401,3 +5401,59 @@ async def test_an_events_card_with_no_marathon_says_nothing_about_one(cog, bot, 
 
 def test_pinned_the_events_cog_s_commands(cog):
     assert [one.name for one in cog.get_app_commands()] == ["event"]
+
+
+# --- the propose block (blocks-buttons): the front door's own private hand-off --------------------
+
+
+async def test_the_propose_block_is_one_card_and_one_guild_keyed_button(bot):
+    embed, view, stamp = events_cog.block_parts(bot, bot.guild, None)
+
+    (press,) = view.children
+    assert isinstance(press, events_cog.ProposeBlockButton)
+    assert press.custom_id == f"eventblock:propose:{GUILD}"
+    assert press.item.label == "Propose an event"
+    assert embed.title == "Propose an event" and view.timeout is None and stamp
+
+
+async def test_the_propose_block_draws_nothing_while_proposals_are_off(bot):
+    await bot.store.set(GUILD, "events_mode", "off")
+
+    assert events_cog.block_parts(bot, bot.guild, None) is None
+
+
+async def test_pressing_the_propose_block_opens_the_door_s_private_card_never_over_the_post(
+    bot, member
+):
+    from black_bloc.cogs.community.frontdoor import EventDoor, EventHandoff
+
+    pressed = FakeInteraction(bot, member)
+
+    await events_cog.ProposeBlockButton(GUILD).callback(pressed)
+
+    sent = pressed.response.messages[-1]
+    assert sent["ephemeral"] is True
+    assert isinstance(sent["view"], EventHandoff)
+    assert isinstance(sent["view"].children[0], EventDoor)
+    assert isinstance(sent["view"].children[0], ProposeButton)
+
+
+async def test_a_press_left_up_while_proposals_went_off_is_refused_in_words(bot, member):
+    await bot.store.set(GUILD, "events_mode", "off")
+    pressed = FakeInteraction(bot, member)
+
+    await events_cog.ProposeBlockButton(GUILD).callback(pressed)
+
+    assert pressed.sent == events_pure.EVENTS_OFF
+
+
+async def test_cog_load_registers_the_propose_block_beside_the_decision_buttons(
+    cog, bot, monkeypatch
+):
+    class Closed:
+        is_connected = False
+
+    monkeypatch.setattr(bot, "db", Closed())
+    await cog.cog_load()
+
+    assert bot.dynamic == [DecisionButton, events_cog.ProposeBlockButton]

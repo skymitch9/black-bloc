@@ -14,6 +14,12 @@ from .events import clamp
 from .logkinds import VIA_DISCORD, kind_via
 from .panels import Outcome, refusal
 from .settings_store import (
+    BIRTHDAY_BLOCK_LABEL,
+    BIRTHDAY_BLOCK_TEXT,
+    BIRTHDAY_BLOCK_TITLE,
+    EVENTS_BLOCK_LABEL,
+    EVENTS_BLOCK_TEXT,
+    EVENTS_BLOCK_TITLE,
     FRONTDOOR_EVENT_LABEL,
     FRONTDOOR_REQUEST_LABEL,
     FRONTDOOR_SHOW_EVENT,
@@ -22,8 +28,26 @@ from .settings_store import (
     FRONTDOOR_TEXT,
     FRONTDOOR_TICKET_LABEL,
     FRONTDOOR_TITLE,
+    MARATHON_BLOCK_ADDED_SAID,
+    MARATHON_BLOCK_LABEL,
+    MARATHON_BLOCK_REMOVED_SAID,
+    MARATHON_BLOCK_TEXT,
+    MARATHON_BLOCK_TITLE,
+    MARATHON_BLOCK_UNSET_SAID,
+    MARATHON_ROLE_ID,
+    PINGS_BLOCK_LABEL,
+    PINGS_BLOCK_TEXT,
+    PINGS_BLOCK_TITLE,
+    POSTS_BLOCK_BIRTHDAY_NAME,
+    POSTS_BLOCK_BIRTHDAY_NAME_DEFAULT,
     POSTS_BLOCK_FRONTDOOR_NAME,
     POSTS_BLOCK_FRONTDOOR_NAME_DEFAULT,
+    POSTS_BLOCK_MARATHONROLE_NAME,
+    POSTS_BLOCK_MARATHONROLE_NAME_DEFAULT,
+    POSTS_BLOCK_PINGSFOLLOW_NAME,
+    POSTS_BLOCK_PINGSFOLLOW_NAME_DEFAULT,
+    POSTS_BLOCK_PROPOSEEVENT_NAME,
+    POSTS_BLOCK_PROPOSEEVENT_NAME_DEFAULT,
     POSTS_BLOCK_TEMPVOICE_NAME,
     POSTS_BLOCK_TEMPVOICE_NAME_DEFAULT,
     REHEARSAL_NOTE,
@@ -38,6 +62,10 @@ log = logging.getLogger(__name__)
 
 FRONTDOOR = "frontdoor"
 TEMPVOICE = "tempvoice"
+MARATHONROLE = "marathonrole"
+PINGSFOLLOW = "pingsfollow"
+BIRTHDAY = "birthday"
+PROPOSEEVENT = "proposeevent"
 NAME_MAX = 80
 MAX_EMBEDS = 10
 MAX_ROWS = 5
@@ -140,6 +168,30 @@ def voice_parts(bot: Any, guild: Any, row: Any) -> Any:
     return block_parts(bot, guild, row)
 
 
+def marathon_role_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .cogs.content.marathon_role import block_parts
+
+    return block_parts(bot, guild, row)
+
+
+def pings_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .cogs.content.pings import block_parts
+
+    return block_parts(bot, guild, row)
+
+
+def birthday_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .cogs.community.birthdays import block_parts
+
+    return block_parts(bot, guild, row)
+
+
+def propose_parts(bot: Any, guild: Any, row: Any) -> Any:
+    from .cogs.community.events import block_parts
+
+    return block_parts(bot, guild, row)
+
+
 async def blocks_redraw(bot: Any, guild: Any) -> bool:
     finder = getattr(bot, "get_cog", None)
     cog = finder("FrontDoor") if finder is not None else None
@@ -189,6 +241,62 @@ KINDS: dict[str, BlockKind] = {
         turned=blocks_turned,
         redraw=blocks_redraw,
         footprint=(1, 1, 5),
+    ),
+    MARATHONROLE: BlockKind(
+        key=MARATHONROLE,
+        name_key=POSTS_BLOCK_MARATHONROLE_NAME,
+        name_default=POSTS_BLOCK_MARATHONROLE_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(
+            MARATHON_BLOCK_TITLE,
+            MARATHON_BLOCK_TEXT,
+            MARATHON_BLOCK_LABEL,
+            MARATHON_BLOCK_ADDED_SAID,
+            MARATHON_BLOCK_REMOVED_SAID,
+            MARATHON_BLOCK_UNSET_SAID,
+            MARATHON_ROLE_ID,
+        ),
+        parts=marathon_role_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 1, 1),
+    ),
+    PINGSFOLLOW: BlockKind(
+        key=PINGSFOLLOW,
+        name_key=POSTS_BLOCK_PINGSFOLLOW_NAME,
+        name_default=POSTS_BLOCK_PINGSFOLLOW_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(PINGS_BLOCK_TITLE, PINGS_BLOCK_TEXT, PINGS_BLOCK_LABEL),
+        parts=pings_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 1, 1),
+    ),
+    BIRTHDAY: BlockKind(
+        key=BIRTHDAY,
+        name_key=POSTS_BLOCK_BIRTHDAY_NAME,
+        name_default=POSTS_BLOCK_BIRTHDAY_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(BIRTHDAY_BLOCK_TITLE, BIRTHDAY_BLOCK_TEXT, BIRTHDAY_BLOCK_LABEL),
+        parts=birthday_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 1, 1),
+    ),
+    PROPOSEEVENT: BlockKind(
+        key=PROPOSEEVENT,
+        name_key=POSTS_BLOCK_PROPOSEEVENT_NAME,
+        name_default=POSTS_BLOCK_PROPOSEEVENT_NAME_DEFAULT,
+        exclusive=False,
+        cache_column="",
+        keys=(EVENTS_BLOCK_TITLE, EVENTS_BLOCK_TEXT, EVENTS_BLOCK_LABEL),
+        parts=propose_parts,
+        turned=blocks_turned,
+        redraw=blocks_redraw,
+        footprint=(1, 1, 1),
     ),
 }
 
@@ -666,6 +774,14 @@ __all__ = [
     "FRONTDOOR",
     "TEMPVOICE",
     "KINDS",
+    "BIRTHDAY",
+    "MARATHONROLE",
+    "PINGSFOLLOW",
+    "PROPOSEEVENT",
+    "birthday_parts",
+    "marathon_role_parts",
+    "pings_parts",
+    "propose_parts",
     "ORDERED_LATER_SAID",
     "ORDERED_SAID",
     "REDRAWN_LATER_SAID",

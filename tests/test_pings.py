@@ -1610,3 +1610,33 @@ async def test_the_unworn_prune_never_reaches_a_channels_role(bot):
     assert await pings.prune_empty_roles(bot, bot.guild, now=later) == []
     assert await pings.prune_empty_roles(bot, bot.guild, now=later) == []
     assert bot.guild.get_role(made.role_id) is not None
+
+
+# --- the ping block's words (blocks-buttons) ----------------------------------------------
+
+
+class BlockStore:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+
+def test_the_ping_block_is_drawn_only_while_pings_are_on():
+    from black_bloc import pings as found
+
+    assert found.block_drawn(BlockStore(pings_mode="on"), 7)
+    assert not found.block_drawn(BlockStore(pings_mode="off"), 7)
+
+
+def test_the_ping_block_says_its_shipped_words_until_staff_change_them():
+    from black_bloc import pings as found
+
+    shipped = found.block_look(BlockStore(), 7)
+    changed = found.block_look(BlockStore(pings_block_label="Press me"), 7)
+
+    assert shipped.title == "Get pinged when someone goes live"
+    assert shipped.label == "Choose my pings"
+    assert changed.label == "Press me" and changed.stamp() != shipped.stamp()
+    assert found.BLOCK_HEAD == "pingsblock:open"

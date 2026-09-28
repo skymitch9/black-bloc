@@ -9,6 +9,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import button_block
+from ... import events as event_words
 from ... import spotlight as spotlight_words
 from ...actionlog import log_action, send_logs
 from ...command_errors import NETWORK_ERRORS, AnswersErrors, SafeDynamicItem
@@ -205,8 +207,10 @@ from ...panels import (
 )
 from ...panels import NoteModal as PanelNoteModal
 from ...settings_store import (
+    BUTTON_BLOCK_DEFAULTS,
     DB_UNAVAILABLE,
     EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_BLOCK_LABEL,
     EVENTS_FORUM_CHANNEL_KEY,
     EVENTS_MODES,
     EVENTS_POSTS_WHERE_KEY,
@@ -2063,6 +2067,57 @@ class EventTextModal(AnswersErrors, discord.ui.Modal, title=TEXT_MODAL_TITLE):
         await open_draft(interaction, fields, self.previous)
 
 
+async def open_propose(interaction: discord.Interaction) -> None:
+    """The propose block's press: the front door's own private hand-off card, whose Propose
+    button opens the same /event draft; a draft never replaces the post it was raised from."""
+    from .frontdoor import open_the_event
+
+    if interaction.guild is None:
+        await answer(interaction, GUILD_ONLY)
+        return
+    if not event_words.block_drawn(interaction.client.store, interaction.guild.id):
+        await answer(interaction, EVENTS_OFF)
+        return
+    await open_the_event(interaction)
+
+
+BLOCK_LABEL_DEFAULT = str(BUTTON_BLOCK_DEFAULTS[EVENTS_BLOCK_LABEL])
+
+
+class ProposeBlockButton(
+    SafeDynamicItem,
+    discord.ui.DynamicItem[discord.ui.Button],
+    template=button_block.template(event_words.BLOCK_HEAD),
+):
+    """The propose block's button: persistent, guild-keyed, its whole answer private."""
+
+    def __init__(self, guild_id: Any, label: str | None = None) -> None:
+        self.guild_id = int(guild_id)
+        super().__init__(
+            discord.ui.Button(
+                label=label or BLOCK_LABEL_DEFAULT,
+                style=discord.ButtonStyle.primary,
+                custom_id=button_block.custom_id(event_words.BLOCK_HEAD, guild_id),
+                row=0,
+            )
+        )
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: Any, match: Any):
+        return cls(int(match["guild_id"]))
+
+    async def on_click(self, interaction: discord.Interaction) -> None:
+        await open_propose(interaction)
+
+
+def block_parts(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Any, str] | None:
+    """The propose block a post carries: nothing while proposals are off."""
+    if not event_words.block_drawn(bot.store, guild.id):
+        return None
+    look = event_words.block_look(bot.store, guild.id)
+    return button_block.parts(look, ProposeBlockButton(guild.id, look.label))
+
+
 class Events(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -2073,6 +2128,7 @@ class Events(commands.Cog):
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(DecisionButton)
+        self.bot.add_dynamic_items(ProposeBlockButton)
         if not self.bot.db.is_connected:
             return
         await self.reconcile_events()

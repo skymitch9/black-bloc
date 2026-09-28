@@ -1756,3 +1756,34 @@ def test_a_message_link_needs_the_guild_the_channel_and_the_message():
 def test_a_scheduled_event_links_to_the_servers_events_list():
     assert scheduled_event_url(7, 66) == "https://discord.com/events/7/66"
     assert scheduled_event_url(7, None) is None
+
+
+# --- the propose block's words (blocks-buttons) ----------------------------------------------
+
+
+class BlockStore:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+
+def test_the_propose_block_is_drawn_only_while_proposals_are_not_off():
+    from black_bloc import events as found
+
+    assert found.block_drawn(BlockStore(events_mode="on"), 7)
+    assert found.block_drawn(BlockStore(events_mode="shadow"), 7)
+    assert not found.block_drawn(BlockStore(events_mode="off"), 7)
+
+
+def test_the_propose_block_says_its_shipped_words_until_staff_change_them():
+    from black_bloc import events as found
+
+    shipped = found.block_look(BlockStore(), 7)
+    changed = found.block_look(BlockStore(events_block_label="Press me"), 7)
+
+    assert shipped.title == "Propose an event"
+    assert shipped.label == "Propose an event"
+    assert changed.label == "Press me" and changed.stamp() != shipped.stamp()
+    assert found.BLOCK_HEAD == "eventblock:propose"

@@ -3019,6 +3019,167 @@ KEY_HELP.update(
     }
 )
 
+# Button blocks (blocks-buttons, 2026-09-28) — four one-button blocks, each drawn and answered by
+# its own feature's code; every word they post is one of these. Filed under each feature by prefix.
+MARATHON_ROLE_ID = "marathon_role_id"
+MARATHON_BLOCK_TITLE = "marathon_block_title"
+MARATHON_BLOCK_TEXT = "marathon_block_text"
+MARATHON_BLOCK_LABEL = "marathon_block_label"
+MARATHON_BLOCK_ADDED_SAID = "marathon_block_added_said"
+MARATHON_BLOCK_REMOVED_SAID = "marathon_block_removed_said"
+MARATHON_BLOCK_UNSET_SAID = "marathon_block_unset_said"
+PINGS_BLOCK_TITLE = "pings_block_title"
+PINGS_BLOCK_TEXT = "pings_block_text"
+PINGS_BLOCK_LABEL = "pings_block_label"
+BIRTHDAY_BLOCK_TITLE = "birthday_block_title"
+BIRTHDAY_BLOCK_TEXT = "birthday_block_text"
+BIRTHDAY_BLOCK_LABEL = "birthday_block_label"
+EVENTS_BLOCK_TITLE = "events_block_title"
+EVENTS_BLOCK_TEXT = "events_block_text"
+EVENTS_BLOCK_LABEL = "events_block_label"
+POSTS_BLOCK_MARATHONROLE_NAME = "posts_block_marathonrole_name"
+POSTS_BLOCK_MARATHONROLE_NAME_DEFAULT = "Marathon role"
+POSTS_BLOCK_PINGSFOLLOW_NAME = "posts_block_pingsfollow_name"
+POSTS_BLOCK_PINGSFOLLOW_NAME_DEFAULT = "Ping me when they go live"
+POSTS_BLOCK_BIRTHDAY_NAME = "posts_block_birthday_name"
+POSTS_BLOCK_BIRTHDAY_NAME_DEFAULT = "Set your birthday"
+POSTS_BLOCK_PROPOSEEVENT_NAME = "posts_block_proposeevent_name"
+POSTS_BLOCK_PROPOSEEVENT_NAME_DEFAULT = "Propose an event"
+BUTTON_BLOCK_DEFAULTS: dict[str, Any] = {
+    MARATHON_ROLE_ID: None,
+    MARATHON_BLOCK_TITLE: "The Marathon role",
+    MARATHON_BLOCK_TEXT: (
+        "Here for the marathons? Press the button to take the Marathon role, and press it again "
+        "any time to hand it back."
+    ),
+    MARATHON_BLOCK_LABEL: "Get or drop the Marathon role",
+    MARATHON_BLOCK_ADDED_SAID: (
+        "You have the **{role}** role now. Press the button again any time to hand it back."
+    ),
+    MARATHON_BLOCK_REMOVED_SAID: (
+        "The **{role}** role is off you now. Press the button again any time to take it back."
+    ),
+    MARATHON_BLOCK_UNSET_SAID: (
+        "Staff have not set up the Marathon role yet, so nothing was changed. Try again later, "
+        "or ask an Auntie/Uncle."
+    ),
+    PINGS_BLOCK_TITLE: "Get pinged when someone goes live",
+    PINGS_BLOCK_TEXT: (
+        "Pick the streamers and channels you want a ping for when they go live. Nothing pings "
+        "you until you choose it, and you can stop any time. /pings opens the same choices."
+    ),
+    PINGS_BLOCK_LABEL: "Choose my pings",
+    BIRTHDAY_BLOCK_TITLE: "Your birthday",
+    BIRTHDAY_BLOCK_TEXT: (
+        "Tell Black Bloc your birthday and the server can celebrate you on the day. Change or "
+        "remove it any time; /birthday opens the same choices."
+    ),
+    BIRTHDAY_BLOCK_LABEL: "Set my birthday",
+    EVENTS_BLOCK_TITLE: "Propose an event",
+    EVENTS_BLOCK_TEXT: (
+        "Got an idea for a movie night, a game session or a watch party? Propose it here and "
+        "staff take it from there. /event opens the same form."
+    ),
+    EVENTS_BLOCK_LABEL: "Propose an event",
+    POSTS_BLOCK_MARATHONROLE_NAME: POSTS_BLOCK_MARATHONROLE_NAME_DEFAULT,
+    POSTS_BLOCK_PINGSFOLLOW_NAME: POSTS_BLOCK_PINGSFOLLOW_NAME_DEFAULT,
+    POSTS_BLOCK_BIRTHDAY_NAME: POSTS_BLOCK_BIRTHDAY_NAME_DEFAULT,
+    POSTS_BLOCK_PROPOSEEVENT_NAME: POSTS_BLOCK_PROPOSEEVENT_NAME_DEFAULT,
+}
+BLOCK_HEADING_HELP = (
+    "the heading on the {what} block, when a post carries it; blank restores the shipped wording"
+)
+BLOCK_TEXT_HELP = (
+    "the line under that heading on the {what} block; blank restores the shipped wording"
+)
+BLOCK_LABEL_HELP = (
+    "what the {what} block's button says, at most 80 characters; the button {does}. Blank "
+    "restores the shipped wording"
+)
+BLOCK_NAME_HELP = (
+    "what the {what} block is called in the Posts page's Add a block list, its Blocks section "
+    "and the /posts card; blank restores {name}. Members never see it"
+)
+KEY_TYPES.update(
+    {
+        MARATHON_ROLE_ID: "role",
+        MARATHON_BLOCK_TITLE: "text",
+        MARATHON_BLOCK_TEXT: "text",
+        MARATHON_BLOCK_LABEL: "text",
+        MARATHON_BLOCK_ADDED_SAID: "text",
+        MARATHON_BLOCK_REMOVED_SAID: "text",
+        MARATHON_BLOCK_UNSET_SAID: "text",
+        PINGS_BLOCK_TITLE: "text",
+        PINGS_BLOCK_TEXT: "text",
+        PINGS_BLOCK_LABEL: "text",
+        BIRTHDAY_BLOCK_TITLE: "text",
+        BIRTHDAY_BLOCK_TEXT: "text",
+        BIRTHDAY_BLOCK_LABEL: "text",
+        EVENTS_BLOCK_TITLE: "text",
+        EVENTS_BLOCK_TEXT: "text",
+        EVENTS_BLOCK_LABEL: "text",
+        POSTS_BLOCK_MARATHONROLE_NAME: "text",
+        POSTS_BLOCK_PINGSFOLLOW_NAME: "text",
+        POSTS_BLOCK_BIRTHDAY_NAME: "text",
+        POSTS_BLOCK_PROPOSEEVENT_NAME: "text",
+    }
+)
+KEY_HELP.update(
+    {
+        MARATHON_ROLE_ID: (
+            "the Marathon role: the one the Marathon role block hands to a member who presses "
+            "its button and takes back on the next press. Blank until staff pick it, and the "
+            "button then says staff have not set it up yet. A role with staff permissions is "
+            "never handed out. Picking it pings nobody"
+        ),
+        MARATHON_BLOCK_TITLE: BLOCK_HEADING_HELP.format(what="Marathon role"),
+        MARATHON_BLOCK_TEXT: BLOCK_TEXT_HELP.format(what="Marathon role"),
+        MARATHON_BLOCK_LABEL: BLOCK_LABEL_HELP.format(
+            what="Marathon role", does="gives the member the Marathon role, or takes it back"
+        ),
+        MARATHON_BLOCK_ADDED_SAID: (
+            "what a member is told, privately, once the Marathon role block's button gave them "
+            "the role; {role} is its name"
+        ),
+        MARATHON_BLOCK_REMOVED_SAID: (
+            "what a member is told, privately, once the Marathon role block's button took the "
+            "role back; {role} is its name"
+        ),
+        MARATHON_BLOCK_UNSET_SAID: (
+            "what a member is told, privately, when they press the Marathon role block's button "
+            "and no usable Marathon role is picked (marathon_role_id)"
+        ),
+        PINGS_BLOCK_TITLE: BLOCK_HEADING_HELP.format(what="ping me when they go live"),
+        PINGS_BLOCK_TEXT: BLOCK_TEXT_HELP.format(what="ping me when they go live"),
+        PINGS_BLOCK_LABEL: BLOCK_LABEL_HELP.format(
+            what="ping me when they go live", does="opens the same /pings panel and its picker"
+        ),
+        BIRTHDAY_BLOCK_TITLE: BLOCK_HEADING_HELP.format(what="set your birthday"),
+        BIRTHDAY_BLOCK_TEXT: BLOCK_TEXT_HELP.format(what="set your birthday"),
+        BIRTHDAY_BLOCK_LABEL: BLOCK_LABEL_HELP.format(
+            what="set your birthday", does="opens the same /birthday panel"
+        ),
+        EVENTS_BLOCK_TITLE: BLOCK_HEADING_HELP.format(what="propose an event"),
+        EVENTS_BLOCK_TEXT: BLOCK_TEXT_HELP.format(what="propose an event"),
+        EVENTS_BLOCK_LABEL: BLOCK_LABEL_HELP.format(
+            what="propose an event",
+            does="opens the same private proposal card the front door opens",
+        ),
+        POSTS_BLOCK_MARATHONROLE_NAME: BLOCK_NAME_HELP.format(
+            what="Marathon role", name=POSTS_BLOCK_MARATHONROLE_NAME_DEFAULT
+        ),
+        POSTS_BLOCK_PINGSFOLLOW_NAME: BLOCK_NAME_HELP.format(
+            what="ping me when they go live", name=POSTS_BLOCK_PINGSFOLLOW_NAME_DEFAULT
+        ),
+        POSTS_BLOCK_BIRTHDAY_NAME: BLOCK_NAME_HELP.format(
+            what="set your birthday", name=POSTS_BLOCK_BIRTHDAY_NAME_DEFAULT
+        ),
+        POSTS_BLOCK_PROPOSEEVENT_NAME: BLOCK_NAME_HELP.format(
+            what="propose an event", name=POSTS_BLOCK_PROPOSEEVENT_NAME_DEFAULT
+        ),
+    }
+)
+
 # Meeting minutes (prototype) — filed under `events` in NAMESPACE_OVERRIDE below, because the
 # `/settings` group select is at its cap of 25 and a meeting is an event's cousin.
 MINUTES_MODES = ("off", "on")
@@ -6666,6 +6827,8 @@ class SettingsStore:
             return GOLIVE_REPLAY_DEFAULTS[key]
         if key in TEMPVOICE_BLOCK_DEFAULTS:
             return TEMPVOICE_BLOCK_DEFAULTS[key]
+        if key in BUTTON_BLOCK_DEFAULTS:
+            return BUTTON_BLOCK_DEFAULTS[key]
         if key in REVIEW_SETTINGS:
             return REVIEW_SETTINGS[key][1]
         if key in REVIEW_WORDS:

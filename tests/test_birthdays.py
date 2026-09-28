@@ -428,3 +428,34 @@ def test_a_channel_reads_as_its_name_or_its_mention():
     assert channel_words(ChannelGuild(), 5) == "#birthdays"
     assert channel_words(ChannelGuild(), 6) == "<#6>"
     assert channel_words(ChannelGuild(), None) == ""
+
+
+# --- the birthday block's words (blocks-buttons) ----------------------------------------------
+
+
+class BlockStore:
+    def __init__(self, **values):
+        self.values = values
+
+    def get(self, guild_id, key):
+        return self.values.get(key)
+
+
+def test_the_birthday_block_is_drawn_only_while_birthdays_are_not_off():
+    from black_bloc import birthdays as found
+
+    assert found.block_drawn(BlockStore(birthday_mode="shadow"), 7)
+    assert found.block_drawn(BlockStore(birthday_mode="on"), 7)
+    assert not found.block_drawn(BlockStore(birthday_mode="off"), 7)
+
+
+def test_the_birthday_block_says_its_shipped_words_until_staff_change_them():
+    from black_bloc import birthdays as found
+
+    shipped = found.block_look(BlockStore(), 7)
+    changed = found.block_look(BlockStore(birthday_block_label="Press me"), 7)
+
+    assert shipped.title == "Your birthday"
+    assert shipped.label == "Set my birthday"
+    assert changed.label == "Press me" and changed.stamp() != shipped.stamp()
+    assert found.BLOCK_HEAD == "bdayblock:open"

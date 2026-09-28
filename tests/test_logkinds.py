@@ -511,6 +511,9 @@ KNOWN_DYNAMIC: dict[str, tuple[str, ...]] = {
         "web.post.would_post",
         "web.post.would_take_down",
     ),
+    "black_bloc/cogs/content/marathon_role.py::helpers.FAILED": ("marathon.role_failed",),
+    "black_bloc/cogs/content/marathon_role.py::helpers.JOINED": ("marathon.role_joined",),
+    "black_bloc/cogs/content/marathon_role.py::helpers.LEFT": ("marathon.role_left",),
 }
 
 

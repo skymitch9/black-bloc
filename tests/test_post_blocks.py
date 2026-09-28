@@ -83,7 +83,14 @@ async def logged(db):
 def test_the_front_door_is_the_first_kind_and_goes_on_one_post_at_a_time():
     found = post_blocks.KINDS["frontdoor"]
 
-    assert list(post_blocks.KINDS) == ["frontdoor", "tempvoice"]
+    assert list(post_blocks.KINDS) == [
+        "frontdoor",
+        "tempvoice",
+        "marathonrole",
+        "pingsfollow",
+        "birthday",
+        "proposeevent",
+    ]
     assert found.exclusive and found.cache_column == "carries_door"
     assert found.parts is post_blocks.door_parts
     assert {"frontdoor_title", "frontdoor_text", "frontdoor_ticket_label", "rehearsal_note"} <= set(
@@ -573,3 +580,76 @@ async def test_the_shipped_seed_attaches_the_lobby_block_to_nothing(bot, guild):
 
     assert "tempvoice" not in [str(one["kind"]) for one in rows]
     assert all("tempvoice" not in entry.get("blocks", []) for entry in posts.seed_entries())
+
+
+# --- the four one-button blocks (blocks-buttons) ------------------------------------------------
+
+BUTTON_KINDS = ("marathonrole", "pingsfollow", "birthday", "proposeevent")
+
+
+def test_the_four_button_blocks_are_kinds_any_number_of_posts_may_carry():
+    for kind in BUTTON_KINDS:
+        found = post_blocks.KINDS[kind]
+        assert not found.exclusive and found.cache_column == ""
+        assert found.footprint == (1, 1, 1)
+        assert found.name_key == f"posts_block_{kind}_name"
+        assert found.turned is post_blocks.blocks_turned
+        assert found.redraw is post_blocks.blocks_redraw
+    assert "marathon_role_id" in post_blocks.KINDS["marathonrole"].keys
+    assert post_blocks.KINDS["pingsfollow"].parts is post_blocks.pings_parts
+
+
+async def test_a_post_carrying_all_four_goes_out_as_one_message_with_four_buttons(
+    bot, guild, room
+):
+    row = await a_room_post(bot)
+    await bot.store.set(GUILD, "pings_mode", "on")
+    for kind in BUTTON_KINDS:
+        outcome = await post_blocks.add_block(bot, guild, row, STAFF, kind)
+        assert outcome.ok, outcome.message
+
+    await posts.publish_post(bot, guild, await fresh_row(bot, row), STAFF)
+
+    sent = room.messages[0]
+    assert sent.content == "Hello."
+    assert [one.title for one in sent.embeds] == [
+        "The Marathon role",
+        "Get pinged when someone goes live",
+        "Your birthday",
+        "Propose an event",
+    ]
+    assert [one.custom_id for one in sent.view.children] == [
+        f"marathonrole:toggle:{GUILD}",
+        f"pingsblock:open:{GUILD}",
+        f"bdayblock:open:{GUILD}",
+        f"eventblock:propose:{GUILD}",
+    ]
+    drawn = await post_blocks.drawn_of(bot.db, int(row["id"]))
+    assert all(drawn[kind] for kind in BUTTON_KINDS)
+
+
+async def test_a_feature_switched_off_takes_its_block_off_the_message_on_the_sweep(
+    bot, guild, room
+):
+    row = await a_room_post(bot)
+    await bot.store.set(GUILD, "pings_mode", "on")
+    for kind in ("pingsfollow", "proposeevent"):
+        assert (await post_blocks.add_block(bot, guild, row, STAFF, kind)).ok
+    await posts.publish_post(bot, guild, await fresh_row(bot, row), STAFF)
+    message = room.messages[0]
+
+    assert await post_blocks.keep_drawn(bot, guild) == 0
+    await bot.store.set(GUILD, "pings_mode", "off")
+    assert await post_blocks.keep_drawn(bot, guild) == 1
+
+    assert [one.title for one in message.embeds] == ["Propose an event"]
+
+
+async def test_the_shipped_seed_attaches_none_of_the_four_button_blocks(bot, guild):
+    await posts.seed_posts(bot, guild)
+
+    rows = await post_blocks.blocks_in(bot.db, GUILD)
+
+    assert not {str(one["kind"]) for one in rows} & set(BUTTON_KINDS)
+    for entry in posts.seed_entries():
+        assert not set(entry.get("blocks", [])) & set(BUTTON_KINDS)

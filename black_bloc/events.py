@@ -11,6 +11,8 @@ from typing import Any, NamedTuple
 import discord
 
 from .actionlog import log_action
+from .button_block import ButtonLook, Words
+from .button_block import look as button_look
 from .command_errors import NETWORK_ERRORS
 from .forums import AUTO_ARCHIVE_MINUTES, forum_overwrites, parent_id_of, tag_named
 from .forums import forum_tags as library_forum_tags
@@ -21,8 +23,12 @@ from .panels import Outcome, capped_placeholder, refusal
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
 from .settings_store import (
+    BUTTON_BLOCK_DEFAULTS,
     DEFAULT_TIMEZONE_KEY,
     EVENTS_APPROVER_ROLE_KEY,
+    EVENTS_BLOCK_LABEL,
+    EVENTS_BLOCK_TEXT,
+    EVENTS_BLOCK_TITLE,
     EVENTS_FORUM_CHANNEL_KEY,
     EVENTS_LATE_CEILING_MINUTES,
     EVENTS_MOVED_LINE,
@@ -3056,3 +3062,16 @@ async def write_settings(
         else:
             changed[key] = await store.set(guild_id, key, value, by=actor_id)
     return changed
+
+
+BLOCK_HEAD = "eventblock:propose"
+BLOCK_WORDS = Words(EVENTS_BLOCK_TITLE, EVENTS_BLOCK_TEXT, EVENTS_BLOCK_LABEL)
+
+
+def block_drawn(store: Any, guild_id: int) -> bool:
+    """The propose block is drawn unless proposals are off, the rule the Propose press keeps."""
+    return str(store.get(guild_id, "events_mode") or "off") != "off"
+
+
+def block_look(store: Any, guild_id: int) -> ButtonLook:
+    return button_look(store, guild_id, BLOCK_WORDS, BUTTON_BLOCK_DEFAULTS)
