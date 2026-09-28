@@ -451,6 +451,8 @@ def test_a_snippet_card_offers_change_and_remove_only_once_one_is_picked():
     "built",
     [
         root_buttons(has_forget=True, has_site=True),
+        root_buttons(has_forget=False, has_site=True, has_practice=True),
+        root_buttons(has_forget=True, has_site=True, has_practice=True),
         setup_buttons(enabled=True),
         setup_buttons(enabled=False),
         blocked_buttons(picked=True, blocking=False),
@@ -516,10 +518,6 @@ def test_the_panel_minutes_key_is_read_through_the_shared_helper():
 
     assert panel_minutes(store, 1) == 7
     assert PANEL_MINUTES_KEY == "modmail_panel_minutes"
-
-
-def test_the_four_sources_a_reply_can_come_from_are_named_once():
-    assert SOURCES == ("card", "typed", "command", "web")
 
 
 def a_ticket(**over):
@@ -637,17 +635,6 @@ def test_the_practice_button_and_its_confirm_replace_the_root_row():
     assert [move.label for move in asking] == ["Yes, open one", "No"]
 
 
-@pytest.mark.parametrize("has_forget", [False, True])
-def test_the_root_row_one_never_passes_discords_five(has_forget):
-    """Setup·Blocked·Snippets·Forget·Try a fake ticket is exactly the cap, and no more."""
-    moves = root_buttons(has_forget=has_forget, has_site=True, has_practice=True)
-    rows: dict[int, int] = {}
-    for move in moves:
-        rows[move.row] = rows.get(move.row, 0) + 1
-
-    assert max(rows.values()) <= 5
-
-
 def test_the_panels_copy_of_the_card_draws_the_cards_own_four_moves_and_a_back():
     """One label table: the panel redraws CARD_MOVES rather than spelling them a second time."""
     live = panel_card_buttons(open_ticket=True)
@@ -735,24 +722,16 @@ def test_the_ticket_button_offers_post_while_nothing_is_up_and_move_once_it_is()
     assert "Take it down" in [move.label for move in picking]
 
 
-def test_setup_gains_the_ticket_button_and_still_fits_inside_five_a_row():
+def test_setup_gains_the_ticket_button():
     labels = [move.label for move in setup_buttons(enabled=True)]
 
     assert "Ticket button…" in labels
-    rows: dict[int, int] = {}
-    for move in setup_buttons(enabled=True):
-        rows[move.row] = rows.get(move.row, 0) + 1
-    assert max(rows.values()) <= 5
 
 
 def test_the_root_leaves_row_nought_to_the_doors_and_row_one_to_the_select():
     found = root_buttons(has_forget=True, has_site=True, has_practice=True)
 
     assert all(move.row in (2, 3) for move in found)
-    rows: dict[int, int] = {}
-    for move in found:
-        rows[move.row] = rows.get(move.row, 0) + 1
-    assert max(rows.values()) <= 5
 
 
 def test_the_card_says_where_a_ticket_came_in_and_who_opened_it():

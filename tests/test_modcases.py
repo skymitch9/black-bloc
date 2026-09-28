@@ -388,7 +388,6 @@ async def test_the_card_row_never_offers_void_and_restore_at_once(db):
     assert card_buttons(row) == (
         EDIT_REASON_MOVE, EDIT_NOTE_MOVE, VOID_MOVE, BACK_MOVE, CARD_REFRESH_MOVE
     )
-    assert ADD_NOTE_MOVE not in card_buttons(row)
 
     await mark_case_void(db, case_id, MOD, "wrong")
     row = await get_case(db, case_id)
@@ -396,8 +395,6 @@ async def test_the_card_row_never_offers_void_and_restore_at_once(db):
     assert card_buttons(row) == (
         RESTORE_MOVE, EDIT_REASON_MOVE, EDIT_NOTE_MOVE, BACK_MOVE, CARD_REFRESH_MOVE
     )
-    assert VOID_MOVE not in card_buttons(row)
-    assert len(card_buttons(row)) == 5
 
 
 @pytest.mark.parametrize(
