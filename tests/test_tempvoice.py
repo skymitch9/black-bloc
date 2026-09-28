@@ -155,6 +155,13 @@ def test_shadow_counts_as_working_everywhere_the_mode_is_read():
     assert set(helpers.MODE_MEANS) == {"off", "shadow", "on"}
 
 
+def test_the_lobby_block_shows_only_while_members_can_see_the_lobby():
+    assert helpers.shows_block("on") is True
+    assert helpers.shows_block("shadow") is False
+    assert helpers.shows_block("off") is False
+    assert helpers.shows_block(None) is False
+
+
 def test_the_panel_minutes_key_reads_the_registry_and_the_site_page_is_the_shared_one():
     assert panel_minutes(FakeStore(12), 7) == 12
     assert site_page_url("https://x.test/") == "https://x.test/tempvoice.html"

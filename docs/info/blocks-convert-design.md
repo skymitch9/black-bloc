@@ -116,9 +116,9 @@
   added; the new pieces reuse `.preview`, `.field`, `.blockwords`.
 - A Discord link button to a VOICE channel: whether a press opens the channel, or joins it, on desktop /
   mobile / web — not tried.
-- While `tempvoice_mode` is **shadow**, the block still draws its lobby links, but shadow hides the lobby from
-  members — a member would see a link to a channel they cannot open. Not a live case (the block is on no
-  post); see *For the conductor*.
+- ~~While `tempvoice_mode` is **shadow**, the block still draws its lobby links~~ — **settled 2026-09-28 02:2x**
+  (owner, verbatim: *"Show nothing"*): the block draws nothing unless `tempvoice_mode` is `on`
+  (`tempvoice.shows_block`); the preview and the mock follow the same rule.
 - The live database has not run 78 → 79; the migration is tested on schema-78 and schema-77 files built in
   tests.
 
@@ -140,7 +140,6 @@
 
 ## For the conductor to decide
 
-- **Shadow mode and the temp voice block**: draw it while temp voice is in shadow (today), or draw nothing
-  until temp voice is `on`? One line in `cogs/community/tempvoice.py:block_parts`.
+- ~~**Shadow mode and the temp voice block**~~ — settled 2026-09-28: draw nothing until temp voice is `on`.
 - **Where the non-door sweep lives** (Deviation 5): fine in the door cog, or move the `Reconciler` to a small
   posts-level owner when `blocks-live` adds the auto-updating kinds (which will want their own cadence).

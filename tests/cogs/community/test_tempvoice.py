@@ -2934,6 +2934,14 @@ async def test_the_block_draws_nothing_with_the_mode_off(bot, creator):
     assert block_parts(bot, bot.guild, None) is None
 
 
+async def test_the_block_draws_nothing_while_temp_voice_is_in_shadow(bot, creator):
+    from black_bloc.cogs.community.tempvoice import block_parts
+
+    await bot.store.set(GUILD, "tempvoice_mode", "shadow")
+
+    assert block_parts(bot, bot.guild, None) is None
+
+
 async def test_the_block_links_each_lobby_and_carries_the_voice_button(bot, creator):
     from black_bloc.cogs.community.tempvoice import OpenVoiceButton, block_parts
 

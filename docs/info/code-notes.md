@@ -9205,7 +9205,7 @@ Design: [`blocks-convert-design.md`](blocks-convert-design.md). Keyed against `2
 | `black_bloc/tempvoice.py:339` `BlockLook` · `:348` `block_look` · `:322` `lobby_label` | Pure: the block's words, its buttons (label, url or None) and its stamp. `{lobby}` is a plain replace, so no staff wording can raise. Labels are clamped to 80. |
 | `black_bloc/cogs/community/tempvoice.py:2528` `open_voice_panel` · `:2914` | `/voice`'s body, moved so the block's button opens the SAME panel; `/voice` calls it. |
 | `black_bloc/cogs/community/tempvoice.py:2543` `OpenVoiceButton` · `:2608` | `tvblock:open:<guild>` — deliberately not under `tempvoice:` (the in-room controls' persistent view). Registered in `cog_load`. |
-| `black_bloc/cogs/community/tempvoice.py:2585` `block_parts` | Nothing while `tempvoice_mode` is off; draws in shadow (a conductor question in the design). |
+| `black_bloc/cogs/community/tempvoice.py:2585` `block_parts` | Nothing unless `tempvoice_mode` is `on` — shadow hides the lobby from members, so the block would link a channel they cannot open (owner 2026-09-28: *"Show nothing"*). `black_bloc/tempvoice.py` `shows_block` is the rule; `preview.py` `voice_block` and the mock's twin use it too. |
 | `site/public/assets/blockpreview.js:15` `blockPreview` | The one client preview. `post` → the post renderer with its blocks; no `post` → the blocks alone; `feature` + `draft` → an editor on its kind's own renderer. |
 | `site/public/assets/page-posts.js:367` · `:475` · `:891` `blockLook` | The drawer, a version, and each Blocks card (lazy, `always`). |
 | `site/public/assets/blockwords.js:167` `voiceLobbyWords` · `:240` `BLOCK_EDITORS` | The temp voice editor; saves each key through `saveSetting`, then `POST /api/post-blocks/tempvoice/redraw`. |

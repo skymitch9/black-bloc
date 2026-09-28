@@ -213,6 +213,11 @@ def makes_rooms(mode: Any) -> bool:
     return str(mode or "") in (SHADOW_MODE, ON_MODE)
 
 
+def shows_block(mode: Any) -> bool:
+    """The lobby block is drawn only while members can see the lobby."""
+    return str(mode or "") == ON_MODE
+
+
 def named_regions() -> tuple[str, ...]:
     """Discord's regions without `auto`, which is a button — exactly 25, so no select is capped."""
     return tuple(name for name in VOICE_REGIONS if name != AUTO_REGION)
@@ -452,6 +457,7 @@ __all__ = [
     "VoiceMove",
     "card_buttons",
     "makes_rooms",
+    "shows_block",
     "named_regions",
     "panel_minutes",
     "panel_state",

@@ -6037,7 +6037,7 @@ const PREVIEW_BLOCK_DRAWS = {
     return PREVIEW_DRAW.frontdoor(read);
   },
   tempvoice(read, sample, always) {
-    if (!always && String(read('tempvoice_mode') || 'off') === 'off') return null;
+    if (!always && String(read('tempvoice_mode') || 'off') !== 'on') return null;
     return PREVIEW_DRAW.block_tempvoice(read);
   },
   marathonrole(read) {

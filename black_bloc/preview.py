@@ -469,7 +469,7 @@ def voice_parts(bot: Any, guild: Any, store: Any, controls: Any = "") -> Drawn:
 
 
 def voice_block(bot: Any, guild: Any, store: Any, sample: dict[str, Any], always: bool) -> Any:
-    if not always and not voice.makes_rooms(store.get(guild.id, "tempvoice_mode")):
+    if not always and not voice.shows_block(store.get(guild.id, "tempvoice_mode")):
         return None
     return voice_parts(bot, guild, store)
 

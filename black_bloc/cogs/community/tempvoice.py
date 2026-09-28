@@ -2583,8 +2583,8 @@ def block_view(guild: Any, look: helpers.BlockLook) -> discord.ui.View:
 
 
 def block_parts(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, Any, str] | None:
-    """The lobby block a post carries: nothing while join-to-create is off."""
-    if not helpers.makes_rooms(bot.store.get(guild.id, "tempvoice_mode")):
+    """The lobby block a post carries: nothing unless temp voice is on for members."""
+    if not helpers.shows_block(bot.store.get(guild.id, "tempvoice_mode")):
         return None
     look = helpers.block_look(bot.store, guild.id, block_lobbies(bot, guild))
     embed = discord.Embed(title=look.title, description=look.text)
