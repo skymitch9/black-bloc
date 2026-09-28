@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `blocks-section-tidy`)** — ONE row APPENDED (`BC-f`, BUILT, NOT MERGED, NOT verified against a browser). Before that,
 > **2026-09-28 (branch `birthday-block-modal`)** — ONE row APPENDED (`BB-g`, BUILT, NOT MERGED); `BB-e`'s *Set my birthday asks for the date* still holds for `/birthday`. Before that,
 > **2026-09-28 (branch `blocks-buttons`)** — ONE section APPENDED (`BB-a`…`BB-f`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-28 (branch `blocks-live`)** — ONE section APPENDED (`BL-a`…`BL-e`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3694,6 +3695,7 @@ post during these rows unless the owner says so.
 | **`BC-c`** | Posts ▸ Blocks ▸ Temp voice lobby ▸ **Edit the Temp voice lobby block**: type a heading, change the lobby button to `Hop in: {lobby}`, untick the controls button — then leave without saving | The preview changes as you type; the lobby button reads *Hop in: <lobby name>*; the controls button disappears with the tick. Nothing is posted anywhere. |
 | **`BC-d`** | Posts ▸ Welcome and rules ▸ **Add a block…** (look only) | The list offers *Temp voice lobby*; the Front door is already on. The drawer's preview still shows the rules with the door under them. |
 | **`BC-e`** | Join the join-to-create lobby; then type `/voice` | Exactly as today: a room of your own, you are moved in, its controls are posted in the room's chat; `/voice` opens the same panel it always has. |
+| **`BC-f`** | Branch `blocks-section-tidy` (BUILT, NOT merged). Posts ▸ **Blocks**: with more than 3 kinds, note every card loads folded (name + badges only, no preview drawn yet); open one, reload the page | The opened card's preview draws once it is opened, not before; after reload that same card is still open and the others still folded. Try **Fold all** / **Open all**, the search box (a kind's name, its "on {post}" text, and a word from one of its setting keys, e.g. `ticket`) and each filter chip (All · On a post · On no post · One at a time) alone and combined — the section count reads "N of 9" while filtered, and typing something nothing matches shows *No block matches this filter.* with no horizontal scroll at phone width. Design: [`../info/blocks-convert-design.md`](../info/blocks-convert-design.md#blocks-section-fold-search-filter). |
 
 ## Rows `BB-a` … `BB-f` — four one-button blocks: Marathon role, ping me, birthday, propose (branch `blocks-buttons`, 2026-09-28)
 
