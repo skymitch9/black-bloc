@@ -7,7 +7,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  BAF,
   dayTitle,
   daysOf,
   datesWords,
@@ -33,7 +32,7 @@ const NOW = Date.parse('2026-09-25T18:00:00Z');
 const at = (minutes) => new Date(NOW + minutes * 60000).toISOString();
 const CADENCE = { near: 30, far: 24 };
 
-test('the drawer is five parts: the header, People, the shut Settings, the posts line, the moves', () => {
+test('the drawer draws its parts in order, header first and the moves last', () => {
   assert.deepEqual(drawerParts(), ['the header', 'Spotlight', 'Pings', 'People', 'Settings for this marathon', 'the posts line', 'the moves']);
 });
 
@@ -53,10 +52,6 @@ test('the header dates read in the guild zone, weekday first', () => {
   const row = { starts_at: '2026-09-25T19:59:00Z', ends_at: '2026-09-27T16:59:00Z' };
   assert.equal(datesWords(row, 'America/Phoenix'), 'Fri 25 Sep 12:59 – Sun 27 Sep 09:59');
   assert.equal(datesWords({}, 'America/Phoenix'), 'dates not published');
-});
-
-test('the word a person reads is BaF', () => {
-  assert.equal(BAF, 'BaF');
 });
 
 test('a healthy read says when it was, when it is next, and the cadence', () => {

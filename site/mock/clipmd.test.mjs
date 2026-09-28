@@ -21,10 +21,6 @@ function has(where, found, wanted) {
   if (!found.includes(wanted)) fail(where, `is missing ${JSON.stringify(wanted)}\n      got: ${JSON.stringify(found)}`);
 }
 
-function hasNot(where, found, unwanted) {
-  if (found.includes(unwanted)) fail(where, `still holds ${JSON.stringify(unwanted)}\n      got: ${JSON.stringify(found)}`);
-}
-
 // --- a Google Docs fragment: a heading, bold, italic, a link, a nested bullet, numbers -----
 // Docs wraps the whole selection in <b style="font-weight:normal" id="docs-internal-guid-…">,
 // puts font-weight:400 on ordinary words, styles its own links with text-decoration:underline,
@@ -76,10 +72,6 @@ const DOCS_WANTED = [
   const where = 'a Google Docs fragment';
   const found = htmlToDiscordMarkdown(DOCS);
   is(where, found, DOCS_WANTED);
-  // The wrapper <b> must not bold the document, and the link's own underline is not the
-  // author's underline. Both are asserted by the exact match above; these name them.
-  hasNot(where, found, '**Welcome');
-  hasNot(where, found, '__');
 }
 
 // --- nothing rich in it: the words come back as they went in -------------------------------
@@ -100,9 +92,6 @@ const DOCS_WANTED = [
       + '<style type="text/css">.c1 { font-weight: 700 }</style>',
   );
   is(where, found, 'Before and after');
-  hasNot(where, found, 'alert');
-  hasNot(where, found, 'color:red');
-  hasNot(where, found, 'font-weight');
 }
 
 {
@@ -155,7 +144,6 @@ const DOCS_WANTED = [
     '<p>  lots    of\n\n   space   </p><p>&nbsp;</p><p></p><p>then this</p>',
   );
   is(where, found, 'lots of space\n\nthen this');
-  hasNot(where, found, '\n\n\n');
   has(where, htmlToDiscordMarkdown('<div><div><p>nested</p></div></div>'), 'nested');
 }
 
