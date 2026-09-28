@@ -44,6 +44,10 @@
 > Entries are moved here WHOLE from [`TODO.md`](TODO.md), never summarised, and
 > never edited afterwards. A wrong entry gets a superseding one above it.
 
+## 2026-09-27 — the Welcome and rules post takes the revamped rules (live-site change, no deploy)
+
+Owner 23:0x, verbatim: *"all the stuff in suggestions for Revamped rules and below are what i want that rules post to say, formatting and all. can you make it happen"* (Google Doc *BaF Server Rules Revamp*, id `1NYgkvHOxIi7b8Erve1fOQKxQ7ge8IcMGdu6FWYBEAkE`). Taken: the section *Suggestions for Revamped Rules* through *Banworthy Offenses*; NOT taken: *General Comments/Notes* (staff notes). Written in Discord markdown — the welcome paragraph with **Black in a Flash** bold, six numbered bold rules with numbered sub-points (the voice-chat rule's third point nests one level deeper), **Banworthy Offenses** as a bullet list; every word as the doc has it (typos included: *Moderators reserves … who breaks*, *bigory*). The text is 2,015 characters — over Discord's 2,000 for a plain message — so the post's style went `plain` → `embed` (4,096); the card's title is the post's title *Welcome and rules*. Saved + republished to the shadow home #welcome-test (still carries the front door, pin off). Verified by reading the rendered Discord message in the owner's browser (read-only): 8 ordered lists, 9 nested, 24 items, 8 bold spans, no literal `**`. The previous body is in the post's version history.
+
 ## 2026-09-27 — v182: replays by title get a plain post, not the spotlight
 
 Deployed **22:51 Phoenix** (release `a7a805a5`; merge `555d749e`; gate 9,151 passed + 3 skipped; boot clean 05:51:47–51Z; snapshot `backup-2026-09-27-pre-v182.sqlite3` 3.83 MB). Schema **77**, keys **641**. Design: `info/golive-replays-design.md`.
