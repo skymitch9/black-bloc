@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-27 (branch `thread-spotlight-start`)** — ONE row APPENDED to the `MTC` section (`MTC-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `marathon-near-miss`)** — ONE section APPENDED (`MNM-a`…`MNM-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `horaro-events-owner`)** — ONE section APPENDED (`HEO-a`…`HEO-b`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-26 (branch `marathon-public-reminders`)** — ONE section APPENDED (`MPR-a`…`MPR-b`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3542,6 +3543,7 @@ numbers them. Nothing to see in the mock (no threads) — these are Discord-only
 | **`MTC-b`** | Press **BaF run events: off · turn on**, then **Marathon event: off · turn on**, then both again | Each press answers privately (*…now makes one event per BaF run…* / *…one event for the marathon and one per BaF run…*) and the buttons flip; the drawer's Event select shows the same mode; Logs `marathon.event_mode_set` from → to per press. A non-staff member pressing gets the staff-only sentence and nothing changes |
 | **`MTC-c`** | On a marathon whose channel is spotlit by it (e.g. during SS4C), press **Spotlight: on · stop**; then **Spotlight: off · start** | Stop: the channel's spotlight goes off (Go-live shows it), the answer says the marathon will not spotlight it again, the drawer's *Follow the schedule* reads Off. Start: the channel is spotlit again until the last run plus 60 minutes (the answer names the time), *Follow the schedule* On, the button back to *on · stop*. On a GDQ-kept channel the button reads *Spotlight: kept (permanent)* and a press is refused in words |
 | **`MTC-d`** | Change the marathon's Event select on the site drawer, and turn the channel's spotlight off on Go-live | The pinned message's buttons change to match within a moment, without anyone pressing them |
+| **`MTC-e`** | *(branch `thread-spotlight-start`, 2026-09-27 — owner: "I dont want that spotlight to start until the event starts")* Open Fall Fest's thread (Fastest Furs, first run 2026-10-08). Its spotlight button should read **Spotlight: starts (a date) · cancel** (15 minutes before the first run, in the server's zone). Press **cancel**, then **Spotlight: off · start** | Cancel: the answer says Fall Fest will not spotlight the channel after all; Go-live shows the channel NOT spotlit; the drawer's *Follow the schedule* reads Off; the button reads *off · start*. Start: the channel is STILL not spotlit; the answer reads *Spotlight is set to start 15 minutes before the first run — (a date) — and end 60 minutes after the last*; *Follow the schedule* On; the button back to *starts … · cancel*. On 2026-10-08, 15 minutes before the first run, the channel lights by itself and the button reads *Spotlight: on now · stop* |
 
 ## Rows `MRP-a` … `MRP-d` — each BaF run its own pinned post in the marathon's thread (branch `marathon-runner-posts`, 2026-09-26)
 
