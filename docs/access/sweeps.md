@@ -2,6 +2,7 @@
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
 > **2026-09-28 (branch `blocks-buttons`)** — ONE section APPENDED (`BB-a`…`BB-f`, BUILT, NOT MERGED); nothing else touched. Before that,
+> **2026-09-28 (branch `blocks-live`)** — ONE section APPENDED (`BL-a`…`BL-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-28 (branch `blocks-convert`)** — ONE section APPENDED (`BC-a`…`BC-e`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `post-blocks`)** — ONE section APPENDED (`PB-a`…`PB-d`, BUILT, NOT MERGED); nothing else touched. Before that,
 > **2026-09-27 (branch `golive-replays`)** — ONE section APPENDED (`GR-a`…`GR-c`, BUILT, NOT MERGED); nothing else touched. Before that,
@@ -3702,10 +3703,25 @@ and do not pick a Marathon role, unless the owner says so. Lettered; the conduct
 
 | Row | Do | Expect |
 |---|---|---|
-| **`BB-a`** | Posts ▸ **Blocks** | Six cards. The four new ones — *Marathon role*, *Ping me when they go live*, *Set your birthday*, *Propose an event* — each read *on no post yet* and show **What it looks like in Discord**: a card and one blue button (*Get or drop the Marathon role*, *Choose my pings*, *Set my birthday*, *Propose an event*). |
+| **`BB-a`** | Posts ▸ **Blocks** | Nine cards (with blocks-live merged). The four button ones — *Marathon role*, *Ping me when they go live*, *Set your birthday*, *Propose an event* — each read *on no post yet* and show **What it looks like in Discord**: a card and one blue button (*Get or drop the Marathon role*, *Choose my pings*, *Set my birthday*, *Propose an event*). |
 | **`BB-b`** | Posts ▸ Blocks ▸ Marathon role ▸ **Edit the Marathon role block** — type in the heading and the button, then leave without saving | The role picker reads *not set* with an amber line saying a press answers that staff have not set it up; the preview changes as you type. Nothing is saved or posted. |
 | **`BB-c`** | Posts ▸ Blocks ▸ each of the other three ▸ **Edit …** — change the button label, look, leave without saving | The preview's button follows the label; under it, a line says when the block is not drawn (pings off, birthdays off, proposals off). |
 | **`BB-d`** | Settings ▸ **marathon**, **birthday**, **events**, **posts**; Go-live ▸ Settings | Each lists its new words (and marathon lists *The Marathon role members can take with its block*, blank); Go-live has a drawer **The ping block on a post** with three rows, and *Ping roles* is unchanged. |
 | **`BB-e`** | Type `/pings`, `/birthday`, `/event`; press the front door's **Propose an event** in #welcome-test | Exactly as today: the same panels, the Follow picker on `/pings`, **Set my birthday** asks for the date, the door's private card with **Propose**. |
 | **`BB-f`** | Only if the owner asks for the Marathon role block live: pick the role, add the block to a TEST post, press the button twice (as a non-staff account) | First press: a private *You have the **Marathon** role now…*; the role is on you; Logs ▸ marathon shows `marathon.role_joined`. Second press: *…off you now…*, the role is gone, `marathon.role_left`. Nobody is pinged. Picking a role with a staff permission instead makes the press say it is not set up and logs `marathon.role_failed` (`reason: unsafe`). |
 
+
+## Rows `BL-a` … `BL-e` — who's live now, upcoming events, link buttons (branch `blocks-live`, 2026-09-28)
+
+🔨 **BUILT on branch `blocks-live`, NOT merged, NOT deployed.** The owner, 2026-09-27 23:5x: *"Let's make
+all the blocks you suggested but not post them yet, only the front door should be posted in welcome test"*.
+Design: [`../info/blocks-live-design.md`](../info/blocks-live-design.md). ⚠️ Do not add any of the three
+blocks to a post during these rows unless the owner says so.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`BL-a`** | Look at #welcome-test after the deploy, and at the Logs page (Posts / Modmail) over the next ten minutes | The welcome post is exactly as before — ONE message, rules, the door card, three buttons — and nothing edits it (no `frontdoor.redrawn_on_post` or `post.redrawn` row from the new one-minute loop). |
+| **`BL-b`** | Posts ▸ **Blocks** | Nine cards (with blocks-buttons merged); the three live ones — *Who's live now*, *Upcoming events*, *Link buttons* — each *on no post yet*, each with **What it looks like in Discord**: two sample streams with linked titles; two sample events with dates in your own time and *in 2 days* / *in 5 days*; two sample link buttons. |
+| **`BL-c`** | Posts ▸ Blocks ▸ Who's live now ▸ **Edit…**: change *Each stream's line* to `{name} · {title}`, then tick *Show it as it looks when the list is empty* — leave without saving | The preview follows each keystroke; the tick shows *Nobody is live right now…*. Nothing is posted. |
+| **`BL-d`** | Posts ▸ Blocks ▸ Link buttons ▸ **Edit…**: **Add a link** until it hides (ten), then type `http://example.org` into one and press **Save the words** | **Add a link** disappears at ten with a line saying why; the save is refused in words naming the row (*…must start with `https://`…*) and nothing is saved. Remove the rows without saving. |
+| **`BL-e`** | Discord: `/settings` ▸ Posts ▸ pick `posts_block_links_rows` | The key card shows the list and its help; setting it to text that is not a list is refused in words. (Configurable both ways, checklist 33.) |

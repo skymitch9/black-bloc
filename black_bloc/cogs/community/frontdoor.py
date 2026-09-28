@@ -59,7 +59,7 @@ from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
 from ...modmail import panel_rehearsal_copy
 from ...panels import Outcome, Panel, answer, panel_minutes, refusal
-from ...post_blocks import keep_drawn, redraw_post
+from ...post_blocks import LIVE_KINDS, carries_live, keep_drawn, redraw_post
 from ...posted import drop_message, duplicates_near, message_is_there, overtaken_by
 from ...posts import (
     carries_door,
@@ -922,6 +922,18 @@ class FrontDoor(commands.Cog):
     async def _redraw_all(self, guild: Any) -> None:
         await self._redoor(guild)
         await keep_drawn(self.bot, guild)
+
+    async def keep_live_now(self, guild: Any) -> bool:
+        """A live block's list may have moved: its carriers are redrawn under the same lock."""
+        if not self.bot.db.is_connected:
+            return False
+        return await self._reconciles.run(lambda: self._keep_live(guild), stamp=False)
+
+    async def _keep_live(self, guild: Any) -> None:
+        carrier = await carrier_up(self.bot, guild)
+        if carrier is not None and await carries_live(self.bot.db, int(carrier["id"])):
+            await keep_the_ride(self.bot, guild, carrier)
+        await keep_drawn(self.bot, guild, LIVE_KINDS)
 
     async def reconcile(self, *, skip_if_recent: bool = False) -> bool:
         return await self._reconciles.run(self._sweep, skip_if_recent=skip_if_recent)

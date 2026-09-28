@@ -600,6 +600,9 @@ async def test_the_card_offers_add_a_block_and_a_remove_for_each_block_it_has(bo
         "pingsfollow",
         "birthday",
         "proposeevent",
+        "livenow",
+        "upcoming",
+        "links",
     ]
     assert "Blocks: Front door" in embed_two.description
     assert "Blocks:" not in embed_one.description

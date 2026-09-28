@@ -6258,6 +6258,243 @@ GOLIVE_REPLAY_DEFAULTS: dict[str, Any] = {
 }
 
 
+# Blocks live (blocks-live, 2026-09-28) — who's live now, upcoming events and link buttons. Every
+# word the three blocks post is one of these. Filed under posts, except the upcoming words
+# (events, by prefix): the Go-live page's drawers are pinned by golive-join.test.mjs.
+GOLIVE_BLOCK_TITLE = "golive_block_title"
+GOLIVE_BLOCK_LINE = "golive_block_line"
+GOLIVE_BLOCK_UNTITLED = "golive_block_untitled"
+GOLIVE_BLOCK_EMPTY = "golive_block_empty"
+GOLIVE_BLOCK_MAX = "golive_block_max"
+GOLIVE_BLOCK_TITLE_CHARS = "golive_block_title_chars"
+EVENTS_UPCOMING_TITLE = "events_upcoming_title"
+EVENTS_UPCOMING_LINE = "events_upcoming_line"
+EVENTS_UPCOMING_EMPTY = "events_upcoming_empty"
+EVENTS_UPCOMING_MAX = "events_upcoming_max"
+POSTS_BLOCK_LINKS_ROWS = "posts_block_links_rows"
+POSTS_BLOCK_LINKS_TITLE = "posts_block_links_title"
+POSTS_BLOCK_LINKS_TEXT = "posts_block_links_text"
+POSTS_BLOCK_LINKS_CARD = "posts_block_links_card"
+POSTS_BLOCK_LIVE_MINUTES = "posts_block_live_minutes"
+POSTS_BLOCK_LIVENOW_NAME = "posts_block_livenow_name"
+POSTS_BLOCK_LIVENOW_NAME_DEFAULT = "Who's live now"
+POSTS_BLOCK_UPCOMING_NAME = "posts_block_upcoming_name"
+POSTS_BLOCK_UPCOMING_NAME_DEFAULT = "Upcoming events"
+POSTS_BLOCK_LINKS_NAME = "posts_block_links_name"
+POSTS_BLOCK_LINKS_NAME_DEFAULT = "Link buttons"
+LIVE_LINE_FIELDS = ("name", "title")
+UPCOMING_LINE_FIELDS = ("title", "when", "relative")
+LINKS_MAX = 10
+LINK_LABEL_MAX = 80
+LINK_URL_MAX = 512
+LINKS_NOT_JSON = (
+    "The link buttons must be a list like `[{{\"label\": \"Our site\", \"url\": "
+    "\"https://example.org\"}}]`, and that is not one ({why}), so nothing was changed."
+)
+LINKS_TOO_MANY = (
+    "That is {count} link buttons and a block carries at most {limit} (two rows of five), so "
+    "nothing was changed. Take {over} out and save again."
+)
+LINKS_BAD_ROW = "Link button {n} must have exactly a `label` and a `url`, so nothing was changed."
+LINKS_NO_LABEL = "Link button {n} has no label, so nothing was changed. Give it a few words."
+LINKS_LONG_LABEL = (
+    "Link button {n}'s label is {length} characters and Discord allows {limit}, so nothing was "
+    "changed. Shorten it and save again."
+)
+LINKS_BAD_URL = (
+    "Link button {n}'s address must start with `https://` and name a site, with no spaces, and "
+    "`{url}` does not, so nothing was changed."
+)
+LINKS_LONG_URL = (
+    "Link button {n}'s address is {length} characters and Discord allows {limit}, so nothing "
+    "was changed."
+)
+LINK_HOST = re.compile(r"^https://[^\s/?#@]+\.[^\s/?#@]+(?:[/?#]\S*)?$", re.IGNORECASE)
+
+
+def checked_links(given: Any) -> str:
+    """The link buttons as one JSON list; a bad row is refused in words, never dropped."""
+    rows = given
+    if isinstance(given, str):
+        if not given.strip():
+            return ""
+        try:
+            rows = json.loads(given)
+        except ValueError as exc:
+            raise SettingError(LINKS_NOT_JSON.format(why=str(exc)[:80])) from exc
+    if not isinstance(rows, list):
+        raise SettingError(LINKS_NOT_JSON.format(why="it is not a list"))
+    if len(rows) > LINKS_MAX:
+        raise SettingError(
+            LINKS_TOO_MANY.format(count=len(rows), limit=LINKS_MAX, over=len(rows) - LINKS_MAX)
+        )
+    kept: list[dict[str, str]] = []
+    for n, row in enumerate(rows, start=1):
+        if not isinstance(row, dict) or set(row) != {"label", "url"}:
+            raise SettingError(LINKS_BAD_ROW.format(n=n))
+        label = row["label"].strip() if isinstance(row["label"], str) else ""
+        url = row["url"].strip() if isinstance(row["url"], str) else ""
+        if not label:
+            raise SettingError(LINKS_NO_LABEL.format(n=n))
+        if len(label) > LINK_LABEL_MAX:
+            raise SettingError(
+                LINKS_LONG_LABEL.format(n=n, length=len(label), limit=LINK_LABEL_MAX)
+            )
+        if len(url) > LINK_URL_MAX:
+            raise SettingError(LINKS_LONG_URL.format(n=n, length=len(url), limit=LINK_URL_MAX))
+        if not LINK_HOST.match(url):
+            raise SettingError(LINKS_BAD_URL.format(n=n, url=url[:80]))
+        kept.append({"label": label, "url": url})
+    return json.dumps(kept, ensure_ascii=False) if kept else ""
+
+
+BLOCKS_LIVE_DEFAULTS: dict[str, Any] = {
+    GOLIVE_BLOCK_TITLE: "Live now",
+    GOLIVE_BLOCK_LINE: "**{name}** — {title}",
+    GOLIVE_BLOCK_UNTITLED: "watch the stream",
+    GOLIVE_BLOCK_EMPTY: "Nobody is live right now. This card updates itself when someone is.",
+    GOLIVE_BLOCK_MAX: 10,
+    GOLIVE_BLOCK_TITLE_CHARS: 60,
+    EVENTS_UPCOMING_TITLE: "Coming up",
+    EVENTS_UPCOMING_LINE: "**{title}** — {when} ({relative})",
+    EVENTS_UPCOMING_EMPTY: "Nothing is on the calendar yet. This card updates itself.",
+    EVENTS_UPCOMING_MAX: 5,
+    POSTS_BLOCK_LINKS_ROWS: "",
+    POSTS_BLOCK_LINKS_TITLE: "Links",
+    POSTS_BLOCK_LINKS_TEXT: "Handy places, one press away.",
+    POSTS_BLOCK_LINKS_CARD: True,
+    POSTS_BLOCK_LIVE_MINUTES: 1,
+    POSTS_BLOCK_LIVENOW_NAME: POSTS_BLOCK_LIVENOW_NAME_DEFAULT,
+    POSTS_BLOCK_UPCOMING_NAME: POSTS_BLOCK_UPCOMING_NAME_DEFAULT,
+    POSTS_BLOCK_LINKS_NAME: POSTS_BLOCK_LINKS_NAME_DEFAULT,
+}
+KEY_TYPES.update(
+    {
+        GOLIVE_BLOCK_TITLE: "text",
+        GOLIVE_BLOCK_LINE: "text",
+        GOLIVE_BLOCK_UNTITLED: "text",
+        GOLIVE_BLOCK_EMPTY: "text",
+        GOLIVE_BLOCK_MAX: "int",
+        GOLIVE_BLOCK_TITLE_CHARS: "int",
+        EVENTS_UPCOMING_TITLE: "text",
+        EVENTS_UPCOMING_LINE: "text",
+        EVENTS_UPCOMING_EMPTY: "text",
+        EVENTS_UPCOMING_MAX: "int",
+        POSTS_BLOCK_LINKS_ROWS: "text",
+        POSTS_BLOCK_LINKS_TITLE: "text",
+        POSTS_BLOCK_LINKS_TEXT: "text",
+        POSTS_BLOCK_LINKS_CARD: "bool",
+        POSTS_BLOCK_LIVE_MINUTES: "int",
+        POSTS_BLOCK_LIVENOW_NAME: "text",
+        POSTS_BLOCK_UPCOMING_NAME: "text",
+        POSTS_BLOCK_LINKS_NAME: "text",
+    }
+)
+KEY_HELP.update(
+    {
+        GOLIVE_BLOCK_TITLE: "the heading on the who's-live-now block, when a post carries it",
+        GOLIVE_BLOCK_LINE: (
+            "one line per stream on the who's-live-now block; {name} is who is live and {title} "
+            "is the stream's title, linked to the stream"
+        ),
+        GOLIVE_BLOCK_UNTITLED: (
+            "the linked words on the who's-live-now block for a stream with no title"
+        ),
+        GOLIVE_BLOCK_EMPTY: (
+            "what the who's-live-now block says while nobody at all is live, in place of the list"
+        ),
+        GOLIVE_BLOCK_MAX: (
+            "how many streams the who's-live-now block lists at most, 1 to 25; 10 by default"
+        ),
+        GOLIVE_BLOCK_TITLE_CHARS: (
+            "how many characters of a stream's title the who's-live-now block shows, 10 to 200; "
+            "a longer title is cut with an ellipsis"
+        ),
+        EVENTS_UPCOMING_TITLE: "the heading on the upcoming-events block, when a post carries it",
+        EVENTS_UPCOMING_LINE: (
+            "one line per event on the upcoming-events block; {title} is the event (linked to "
+            "it in Discord once it has a scheduled event), {when} its start in each reader's "
+            "own time and {relative} how long until then"
+        ),
+        EVENTS_UPCOMING_EMPTY: "what the upcoming-events block says while no event is coming up",
+        EVENTS_UPCOMING_MAX: (
+            "how many events the upcoming-events block lists at most, 1 to 20; 5 by default"
+        ),
+        POSTS_BLOCK_LINKS_ROWS: (
+            "the link-buttons block's buttons, as a list of label and url pairs: at most 10, "
+            "each label at most 80 characters and each url starting https://. The Posts page's "
+            "Blocks section edits it row by row; blank means no buttons"
+        ),
+        POSTS_BLOCK_LINKS_TITLE: "the heading on the card above the link buttons",
+        POSTS_BLOCK_LINKS_TEXT: "the line under that heading",
+        POSTS_BLOCK_LINKS_CARD: (
+            "true puts a card with the heading and line above the link buttons; false leaves "
+            "the buttons alone under the post"
+        ),
+        POSTS_BLOCK_LIVE_MINUTES: (
+            "how often, in minutes, the who's-live-now and upcoming-events blocks are checked, "
+            "1 to 60; 1 by default. A message is edited only when what it lists has changed"
+        ),
+        POSTS_BLOCK_LIVENOW_NAME: (
+            "what the who's-live-now block is called in the Posts page's Add a block list, its "
+            "Blocks section and the /posts card. Members never see it"
+        ),
+        POSTS_BLOCK_UPCOMING_NAME: (
+            "what the upcoming-events block is called in the Posts page's Add a block list, its "
+            "Blocks section and the /posts card. Members never see it"
+        ),
+        POSTS_BLOCK_LINKS_NAME: (
+            "what the link-buttons block is called in the Posts page's Add a block list, its "
+            "Blocks section and the /posts card. Members never see it"
+        ),
+    }
+)
+KEY_MIN.update(
+    {
+        GOLIVE_BLOCK_MAX: 1,
+        GOLIVE_BLOCK_TITLE_CHARS: 10,
+        EVENTS_UPCOMING_MAX: 1,
+        POSTS_BLOCK_LIVE_MINUTES: 1,
+    }
+)
+KEY_MAX.update(
+    {
+        GOLIVE_BLOCK_MAX: 25,
+        GOLIVE_BLOCK_TITLE_CHARS: 200,
+        EVENTS_UPCOMING_MAX: 20,
+        POSTS_BLOCK_LIVE_MINUTES: 60,
+    }
+)
+TEXT_CHECKS.update(
+    {
+        GOLIVE_BLOCK_TITLE: checked_plain,
+        GOLIVE_BLOCK_LINE: checked_fields(LIVE_LINE_FIELDS),
+        GOLIVE_BLOCK_UNTITLED: checked_plain,
+        GOLIVE_BLOCK_EMPTY: checked_plain,
+        EVENTS_UPCOMING_TITLE: checked_plain,
+        EVENTS_UPCOMING_LINE: checked_fields(UPCOMING_LINE_FIELDS),
+        EVENTS_UPCOMING_EMPTY: checked_plain,
+        POSTS_BLOCK_LINKS_ROWS: checked_links,
+        POSTS_BLOCK_LINKS_TITLE: checked_plain,
+        POSTS_BLOCK_LINKS_TEXT: checked_plain,
+    }
+)
+TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, POSTS_BLOCK_LINKS_ROWS)
+NAMESPACE_OVERRIDE.update(
+    {
+        key: "posts"
+        for key in (
+            GOLIVE_BLOCK_TITLE,
+            GOLIVE_BLOCK_LINE,
+            GOLIVE_BLOCK_UNTITLED,
+            GOLIVE_BLOCK_EMPTY,
+            GOLIVE_BLOCK_MAX,
+            GOLIVE_BLOCK_TITLE_CHARS,
+        )
+    }
+)
+
+
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
     kind = KEY_TYPES.get(key)
@@ -6829,6 +7066,8 @@ class SettingsStore:
             return TEMPVOICE_BLOCK_DEFAULTS[key]
         if key in BUTTON_BLOCK_DEFAULTS:
             return BUTTON_BLOCK_DEFAULTS[key]
+        if key in BLOCKS_LIVE_DEFAULTS:
+            return BLOCKS_LIVE_DEFAULTS[key]
         if key in REVIEW_SETTINGS:
             return REVIEW_SETTINGS[key][1]
         if key in REVIEW_WORDS:

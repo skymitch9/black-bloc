@@ -1092,3 +1092,54 @@ def test_the_opt_out_sentence_gains_a_clause_only_when_a_session_was_open():
     assert "has been deleted" in optout_said(plain, "delete")
     assert "left exactly as it was posted" in optout_said(plain, "leave")
     assert set(OPTED_OUT_POST_SAID) == {"end", "delete", "leave"}
+
+
+# --- the who's-live-now block (blocks-live) ----------------------------------------------------
+
+
+class BlockStore:
+    def __init__(self, **saved):
+        self.saved = saved
+
+    def get(self, guild_id, key):
+        return self.saved.get(key)
+
+
+def test_the_live_block_lists_each_stream_linked_and_trims_a_long_title():
+    from black_bloc import golive
+
+    streams = [
+        golive.LiveLine("Casey", "https://www.twitch.tv/casey", "late night runs"),
+        golive.LiveLine("", "https://www.youtube.com/@r/live", "x" * 90, user_id=77),
+    ]
+
+    look = golive.live_block_look(BlockStore(), 1, streams)
+
+    assert look.title == "Live now"
+    assert look.text.splitlines() == [
+        "**Casey** — [late night runs](https://www.twitch.tv/casey)",
+        "**<@77>** — [" + "x" * 59 + "…](https://www.youtube.com/@r/live)",
+    ]
+
+
+def test_the_live_block_says_its_empty_line_and_caps_its_list_by_the_keys():
+    from black_bloc import golive
+
+    many = [golive.LiveLine(f"S{n}", None, "") for n in range(5)]
+    store = BlockStore(golive_block_max=2, golive_block_line="{name}: {title}")
+
+    assert golive.live_block_look(BlockStore(), 1, []).text.startswith("Nobody is live")
+    assert golive.live_block_look(store, 1, many).text.splitlines() == [
+        "S0: watch the stream",
+        "S1: watch the stream",
+    ]
+
+
+def test_a_streamer_name_or_title_cannot_ping_or_inject_a_link():
+    from black_bloc import golive
+
+    line = golive.LiveLine("@everyone", "https://www.twitch.tv/x", "[free](https://evil)")
+
+    said = golive.live_block_look(BlockStore(), 1, [line]).text
+
+    assert "@everyone" not in said and "\\[free\\]" in said

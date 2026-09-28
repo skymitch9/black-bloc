@@ -4,13 +4,20 @@ import logging
 import re
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 
 import discord
 
+from . import block_look as look
 from .panels import panel_minutes as library_panel_minutes
 from .panels import site_page_url as library_site_page_url
 from .settings_store import (
+    GOLIVE_BLOCK_EMPTY,
+    GOLIVE_BLOCK_LINE,
+    GOLIVE_BLOCK_MAX,
+    GOLIVE_BLOCK_TITLE,
+    GOLIVE_BLOCK_TITLE_CHARS,
+    GOLIVE_BLOCK_UNTITLED,
     GOLIVE_COSTREAM_AUTHOR,
     GOLIVE_COSTREAM_ON,
     GOLIVE_COSTREAM_TEMPLATE,
@@ -812,3 +819,30 @@ def panel_minutes(store: Any, guild_id: int) -> int:
 
 def site_page_url(origin: Any) -> str | None:
     return library_site_page_url(origin, "golive")
+
+
+class LiveLine(NamedTuple):
+    name: str
+    url: str | None
+    title: str
+    user_id: int | None = None
+
+
+def live_line(store: Any, guild_id: int, template: str, one: LiveLine) -> str:
+    chars = look.number(store, guild_id, GOLIVE_BLOCK_TITLE_CHARS)
+    title = look.clipped(one.title, chars) or look.word(store, guild_id, GOLIVE_BLOCK_UNTITLED)
+    who = look.plain(one.name) if one.name else (f"<@{one.user_id}>" if one.user_id else "")
+    shown = look.linked(look.plain(title), one.url)
+    said = template.replace("{name}", who).replace("{title}", shown)
+    return " ".join(said.split())
+
+
+def live_block_look(store: Any, guild_id: int, streams: Any) -> Any:
+    """Who is live now, one line each, or the empty line while nobody is."""
+    template = look.word(store, guild_id, GOLIVE_BLOCK_LINE)
+    wanted = list(streams or ())[: look.number(store, guild_id, GOLIVE_BLOCK_MAX)]
+    lines = [live_line(store, guild_id, template, one) for one in wanted]
+    return look.Look(
+        look.word(store, guild_id, GOLIVE_BLOCK_TITLE, look.TITLE_MAX),
+        look.lines_within(lines) or look.word(store, guild_id, GOLIVE_BLOCK_EMPTY),
+    )

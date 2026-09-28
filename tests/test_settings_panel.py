@@ -221,9 +221,10 @@ def test_three_groups_are_over_the_cap_and_find_is_what_reaches_the_rest():
     """`events` joined them when meeting minutes filed its eleven keys there, and `golive` when
     spotlight filed its nine — the group select is at its 25-cap, so a `spotlight` namespace
     would have been dropped silently instead. `core` joined at `panel_expired_text`, and
-    `marathon` — the 25th group, the select's last slot — arrived with its 36 keys."""
+    `marathon` — the 25th group, the select's last slot — arrived with its 36 keys. `posts`
+    reached 26 when the button blocks and the live blocks merged."""
     over = [group for group in groups() if needs_find(group)]
-    assert over == ["chat", "core", "events", "golive", "marathon", "modmail"]
+    assert over == ["chat", "core", "events", "golive", "marathon", "modmail", "posts"]
 
     every = editable_options("chat")
     assert len(every.keys) == SELECT_LIMIT
