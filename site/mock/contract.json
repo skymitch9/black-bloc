@@ -38,9 +38,13 @@
       "events_channel_retention_days": 1,
       "events_default_minutes": 5,
       "events_test_retention_minutes": 1,
+      "events_upcoming_max": 1,
       "events_where_link_check_seconds": 1,
+      "golive_block_max": 1,
+      "golive_block_title_chars": 10,
       "handoff_confirm_hours": 1,
       "logs_count": 1,
+      "marathon_archive_after_days": 0,
       "marathon_far_poll_hours": 1,
       "marathon_feed_hours": 1,
       "marathon_feed_recent_days": 0,
@@ -53,9 +57,8 @@
       "marathon_reminder_stale_minutes": 1,
       "marathon_spotlight_lead_hours": 0,
       "marathon_spotlight_lead_minutes": 0,
-      "marathon_spotlight_tail_minutes": 0,
-      "marathon_archive_after_days": 0,
       "marathon_spotlight_slack_hours": 0,
+      "marathon_spotlight_tail_minutes": 0,
       "marathon_window_slack_hours": 0,
       "minutes_chunk_seconds": 30,
       "minutes_keep_days": 1,
@@ -66,6 +69,7 @@
       "pings_streamer_stale_days": 7,
       "poll_archive_days": 1,
       "poll_default_hours": 1,
+      "posts_block_live_minutes": 1,
       "posts_panel_minutes": 1,
       "posts_versions_keep": 0,
       "posts_versions_summary_chars": 20,
@@ -102,10 +106,14 @@
       "events_default_minutes": 10080,
       "events_max_late_minutes": 1440,
       "events_test_retention_minutes": 1440,
+      "events_upcoming_max": 20,
       "events_where_link_check_seconds": 3,
+      "golive_block_max": 25,
+      "golive_block_title_chars": 200,
       "handoff_confirm_hours": 168,
       "honeypot_purge_days": 7,
       "logs_count": 50,
+      "marathon_archive_after_days": 365,
       "marathon_far_poll_hours": 168,
       "marathon_feed_hours": 168,
       "marathon_feed_recent_days": 30,
@@ -118,9 +126,8 @@
       "marathon_reminder_stale_minutes": 240,
       "marathon_spotlight_lead_hours": 48,
       "marathon_spotlight_lead_minutes": 240,
-      "marathon_spotlight_tail_minutes": 720,
-      "marathon_archive_after_days": 365,
       "marathon_spotlight_slack_hours": 48,
+      "marathon_spotlight_tail_minutes": 720,
       "marathon_window_slack_hours": 24,
       "minutes_chunk_seconds": 120,
       "minutes_keep_days": 365,
@@ -133,6 +140,7 @@
       "poll_default_hours": 768,
       "poll_draft_days": 365,
       "poll_reminder_minutes": 10080,
+      "posts_block_live_minutes": 60,
       "posts_panel_minutes": 1440,
       "posts_versions_keep": 500,
       "posts_versions_summary_chars": 300,
@@ -7809,6 +7817,84 @@
       "body": {},
       "read_by": [
         "blockwords.js Save the words (Posts ▸ Blocks ▸ Propose an event)"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "redrawn",
+        "message",
+        "kinds"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/post-blocks/livenow/redraw",
+      "body": {},
+      "read_by": [
+        "blockwords.js Save the words (Posts ▸ Blocks ▸ Who's live now)"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "redrawn",
+        "message",
+        "kinds"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/post-blocks/upcoming/redraw",
+      "body": {},
+      "read_by": [
+        "blockwords.js Save the words (Posts ▸ Blocks ▸ Upcoming events)"
+      ],
+      "shape": "object",
+      "keys": [
+        "kind",
+        "redrawn",
+        "message",
+        "kinds"
+      ],
+      "rows": {
+        "kinds": [
+          "kind",
+          "name",
+          "name_key",
+          "exclusive",
+          "keys",
+          "on",
+          "where"
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/post-blocks/links/redraw",
+      "body": {},
+      "read_by": [
+        "blockwords.js Save the words (Posts ▸ Blocks ▸ Link buttons)"
       ],
       "shape": "object",
       "keys": [

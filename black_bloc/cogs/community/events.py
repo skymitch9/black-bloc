@@ -9,6 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import block_look as look
 from ... import button_block
 from ... import events as event_words
 from ... import spotlight as spotlight_words
@@ -158,6 +159,8 @@ from ...events import (
     submit_event,
     swept_anchor,
     tell_or_log,
+    upcoming_block_look,
+    upcoming_of,
     when_line,
     where_aliases,
     where_button_label,
@@ -221,6 +224,7 @@ from ...settings_store import (
     EVENTS_ROOM_DELETE_WHOS,
     EVENTS_ROOM_NOTICE_KEY,
     EVENTS_TEST_RETENTION_KEY,
+    EVENTS_UPCOMING_MAX,
     GUILD_ONLY,
     MARATHON_MODE_KEY,
     SPOTLIGHT_EVENT_SLACK_KEY,
@@ -2552,6 +2556,25 @@ class Events(commands.Cog):
             await answer(interaction, why)
             return
         await change_settings(interaction, changes, previous)
+
+
+BLOCK_SHOWN_MODE = "on"
+
+
+async def upcoming_block_events(bot: Any, guild: Any) -> list[Any]:
+    """The events still ahead, from the events feature's own store, while events are on."""
+    if bot.store.get(guild.id, "events_mode") != BLOCK_SHOWN_MODE:
+        return []
+    rows = await events_by_status(bot.db, guild.id, (APPROVED,))
+    limit = look.number(bot.store, guild.id, EVENTS_UPCOMING_MAX)
+    return upcoming_of(guild.id, rows, datetime.now(UTC), limit)
+
+
+def upcoming_block_parts(bot: Any, guild: Any, events: Any) -> Any:
+    """The upcoming-events block a post carries: nothing while events are off."""
+    if bot.store.get(guild.id, "events_mode") == "off":
+        return None
+    return look.parts_of(upcoming_block_look(bot.store, guild.id, events or ()))
 
 
 async def setup(bot: commands.Bot) -> None:

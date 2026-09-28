@@ -11,6 +11,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from ... import block_look as look
 from ... import pings
 from ...actionlog import log_action, send_logs
 from ...command_errors import AnswersErrors
@@ -22,6 +23,7 @@ from ...golive import (
     SITE_BUTTON,
     TWITCH,
     YOUTUBE,
+    LiveLine,
     StreamInfo,
     again_render,
     announcement_embed,
@@ -30,6 +32,7 @@ from ...golive import (
     costream_embed,
     costream_order,
     costream_render,
+    display_name,
     embed_summary,
     end_summary,
     ended_embed,
@@ -41,6 +44,7 @@ from ...golive import (
     history_urls,
     humanise_duration,
     joins_session,
+    live_block_look,
     now_iso,
     optout_said,
     panel_buttons,
@@ -56,6 +60,7 @@ from ...golive import (
     twitch_login_from_url,
     with_box_art,
 )
+from ...golive_replay import is_replay
 from ...logkinds import VIA_DISCORD, kind_via
 from ...loops import Reconciler, wait_ready
 from ...panels import (
@@ -83,6 +88,8 @@ from ...settings_store import (
     MEMBER_OPTOUT_POST_KEY,
     carry_end_wording,
 )
+from ...spotlight import CHANNEL_URL as SPOT_CHANNEL_URL
+from ...spotlight import display_for as spot_name
 from ...twitch import TwitchClient, TwitchError
 
 log = logging.getLogger(__name__)
@@ -1897,6 +1904,55 @@ def minutes_for(bot: Any, guild_id: int) -> int:
 def cog_of(bot: Any) -> Any:
     getter = getattr(bot, "get_cog", None)
     return getter(COG_NAME) if callable(getter) else None
+
+
+BLOCK_SHOWN_MODE = "on"
+
+
+def block_is_on(store: Any, guild_id: int) -> bool:
+    """The who's-live-now block draws while go-live or spotlight is on at all."""
+    return any(
+        store.get(guild_id, key) not in (None, "off") for key in ("golive_mode", "spotlight_mode")
+    )
+
+
+async def block_streams(bot: Any, guild: Any) -> list[LiveLine]:
+    """Who is live now as go-live and spotlight already know it: open, announced sessions."""
+    from . import spotlight as spot
+
+    found: list[tuple[str, LiveLine]] = []
+    for row in await open_sessions(bot.db, guild.id):
+        if row["mode"] != BLOCK_SHOWN_MODE:
+            continue
+        member = guild.get_member(int(row["user_id"]))
+        name = display_name(member) if member is not None else ""
+        line = LiveLine(name, row["url"], str(row["title"] or ""), int(row["user_id"]))
+        found.append((str(row["started_at"]), line))
+    for session in await spot.open_sessions(bot.db, guild.id):
+        if session["mode"] != BLOCK_SHOWN_MODE or is_replay(session):
+            continue
+        channel = await spot.channel_by_id(bot.db, int(session["spotlight_id"]))
+        if channel is None:
+            continue
+        url = session["url"] or SPOT_CHANNEL_URL.format(login=channel["twitch_login"])
+        line = LiveLine(spot_name(channel), url, str(session["title"] or ""))
+        found.append((str(session["started_at"]), line))
+    seen: set[str] = set()
+    streams: list[LiveLine] = []
+    for _, line in sorted(found, key=lambda pair: pair[0]):
+        key = str(line.url or "").casefold().rstrip("/")
+        if key and key in seen:
+            continue
+        seen.add(key)
+        streams.append(line)
+    return streams
+
+
+def block_parts(bot: Any, guild: Any, streams: Any) -> Any:
+    """The who's-live-now block a post carries: nothing while go-live and spotlight are off."""
+    if not block_is_on(bot.store, guild.id):
+        return None
+    return look.parts_of(live_block_look(bot.store, guild.id, streams or ()))
 
 
 def add_site_link(view: Any, bot: Any, row: int) -> None:

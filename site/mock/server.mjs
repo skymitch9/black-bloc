@@ -951,6 +951,24 @@ const SETTING_SPECS = [
   ["posts_block_birthday_name", "text", "Set your birthday", "Set your birthday", "what the set your birthday block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Set your birthday. Members never see it"],
   ["posts_block_proposeevent_name", "text", "Propose an event", "Propose an event", "what the propose an event block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Propose an event. Members never see it"],
   ['posts_block_frontdoor_name', 'text', 'Front door', 'Front door', "what the front-door block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Front door. Members never see it"],
+  ["golive_block_title", "text", "Live now", "Live now", "the heading on the who's-live-now block, when a post carries it"],
+  ["golive_block_line", "text", "**{name}** — {title}", "**{name}** — {title}", "one line per stream on the who's-live-now block; {name} is who is live and {title} is the stream's title, linked to the stream"],
+  ["golive_block_untitled", "text", "watch the stream", "watch the stream", "the linked words on the who's-live-now block for a stream with no title"],
+  ["golive_block_empty", "text", "Nobody is live right now. This card updates itself when someone is.", "Nobody is live right now. This card updates itself when someone is.", "what the who's-live-now block says while nobody at all is live, in place of the list"],
+  ["golive_block_max", "int", 10, 10, "how many streams the who's-live-now block lists at most, 1 to 25; 10 by default", null, 25, 1],
+  ["golive_block_title_chars", "int", 60, 60, "how many characters of a stream's title the who's-live-now block shows, 10 to 200; a longer title is cut with an ellipsis", null, 200, 10],
+  ["events_upcoming_title", "text", "Coming up", "Coming up", "the heading on the upcoming-events block, when a post carries it"],
+  ["events_upcoming_line", "text", "**{title}** — {when} ({relative})", "**{title}** — {when} ({relative})", "one line per event on the upcoming-events block; {title} is the event (linked to it in Discord once it has a scheduled event), {when} its start in each reader's own time and {relative} how long until then"],
+  ["events_upcoming_empty", "text", "Nothing is on the calendar yet. This card updates itself.", "Nothing is on the calendar yet. This card updates itself.", "what the upcoming-events block says while no event is coming up"],
+  ["events_upcoming_max", "int", 5, 5, "how many events the upcoming-events block lists at most, 1 to 20; 5 by default", null, 20, 1],
+  ["posts_block_links_rows", "text", "", "", "the link-buttons block's buttons, as a list of label and url pairs: at most 10, each label at most 80 characters and each url starting https://. The Posts page's Blocks section edits it row by row; blank means no buttons"],
+  ["posts_block_links_title", "text", "Links", "Links", "the heading on the card above the link buttons"],
+  ["posts_block_links_text", "text", "Handy places, one press away.", "Handy places, one press away.", "the line under that heading"],
+  ["posts_block_links_card", "bool", true, true, "true puts a card with the heading and line above the link buttons; false leaves the buttons alone under the post"],
+  ["posts_block_live_minutes", "int", 1, 1, "how often, in minutes, the who's-live-now and upcoming-events blocks are checked, 1 to 60; 1 by default. A message is edited only when what it lists has changed", null, 60, 1],
+  ["posts_block_livenow_name", "text", "Who's live now", "Who's live now", "what the who's-live-now block is called in the Posts page's Add a block list, its Blocks section and the /posts card. Members never see it"],
+  ["posts_block_upcoming_name", "text", "Upcoming events", "Upcoming events", "what the upcoming-events block is called in the Posts page's Add a block list, its Blocks section and the /posts card. Members never see it"],
+  ["posts_block_links_name", "text", "Link buttons", "Link buttons", "what the link-buttons block is called in the Posts page's Add a block list, its Blocks section and the /posts card. Members never see it"],
   // Guides (G1) — black_bloc/settings_store.py owns them; these are the mock's copy.
   ['guides_mode', 'enum', 'on', 'on', 'on to give members the Guides page and to put a guide link beside a command in /help; off hides both. Staff can still open a guide\u2019s web address while it is off, and the page says so. There is no slash command to hide either way', ['off', 'on']],
   ['guides_who_edits', 'enum', 'staff', 'staff', 'who may change a guide\u2019s wording and screenshots: staff (anybody who can see the staff channel, the default) or manage_guild (a Lead only). It is read when Save is pressed rather than when the page is drawn, so taking the role away stops the next save', ['staff', 'manage_guild']],
@@ -2020,6 +2038,12 @@ const NAMESPACE_OVERRIDE = {
   spotlight_window_open_words: 'golive',
   spotlight_window_next_words: 'golive',
   spotlight_window_none_words: 'golive',
+  golive_block_title: 'posts',
+  golive_block_line: 'posts',
+  golive_block_untitled: 'posts',
+  golive_block_empty: 'posts',
+  golive_block_max: 'posts',
+  golive_block_title_chars: 'posts',
 };
 
 function namespaceOf(key) {
@@ -2227,7 +2251,35 @@ function validate(key, value) {
     throw new Refused(400, 'bad_value', `${key} is a list, and that was not one.`);
   }
   if (type === 'bool') return Boolean(value);
+  if (key === 'posts_block_links_rows') return checkedLinks(value);
   return value;
+}
+
+// The twin of settings_store.checked_links: a bad row is refused in words, never dropped.
+function checkedLinks(value) {
+  const text = typeof value === 'string' ? value.trim() : JSON.stringify(value);
+  if (!text) return '';
+  let rows;
+  try {
+    rows = JSON.parse(text);
+  } catch (error) {
+    throw new Refused(400, 'bad_value', `The link buttons must be a list of label and url pairs, and that is not one (${String(error.message).slice(0, 80)}), so nothing was changed.`);
+  }
+  if (!Array.isArray(rows)) throw new Refused(400, 'bad_value', 'The link buttons must be a list of label and url pairs, and that is not one (it is not a list), so nothing was changed.');
+  if (rows.length > 10) throw new Refused(400, 'bad_value', `That is ${rows.length} link buttons and a block carries at most 10 (two rows of five), so nothing was changed. Take ${rows.length - 10} out and save again.`);
+  const kept = rows.map((row, at) => {
+    const n = at + 1;
+    const keys = row && typeof row === 'object' && !Array.isArray(row) ? Object.keys(row).sort() : [];
+    if (keys.join(',') !== 'label,url') throw new Refused(400, 'bad_value', `Link button ${n} must have exactly a \`label\` and a \`url\`, so nothing was changed.`);
+    const label = typeof row.label === 'string' ? row.label.trim() : '';
+    const url = typeof row.url === 'string' ? row.url.trim() : '';
+    if (!label) throw new Refused(400, 'bad_value', `Link button ${n} has no label, so nothing was changed. Give it a few words.`);
+    if (label.length > 80) throw new Refused(400, 'bad_value', `Link button ${n}'s label is ${label.length} characters and Discord allows 80, so nothing was changed. Shorten it and save again.`);
+    if (url.length > 512) throw new Refused(400, 'bad_value', `Link button ${n}'s address is ${url.length} characters and Discord allows 512, so nothing was changed.`);
+    if (!/^https:\/\/[^\s/?#@]+\.[^\s/?#@]+(?:[/?#]\S*)?$/i.test(url)) throw new Refused(400, 'bad_value', `Link button ${n}'s address must start with \`https://\` and name a site, with no spaces, and \`${url.slice(0, 80)}\` does not, so nothing was changed.`);
+    return { label, url };
+  });
+  return kept.length ? JSON.stringify(kept) : '';
 }
 
 function armingRefusal(key, value) {
@@ -2847,6 +2899,27 @@ const BLOCK_KINDS = [
     name_default: 'Propose an event',
     exclusive: false,
     keys: ['events_block_title', 'events_block_text', 'events_block_label'],
+  },
+  {
+    kind: 'livenow',
+    name_key: 'posts_block_livenow_name',
+    name_default: "Who's live now",
+    exclusive: false,
+    keys: ['golive_block_title', 'golive_block_line', 'golive_block_untitled', 'golive_block_empty', 'golive_block_max', 'golive_block_title_chars'],
+  },
+  {
+    kind: 'upcoming',
+    name_key: 'posts_block_upcoming_name',
+    name_default: 'Upcoming events',
+    exclusive: false,
+    keys: ['events_upcoming_title', 'events_upcoming_line', 'events_upcoming_empty', 'events_upcoming_max'],
+  },
+  {
+    kind: 'links',
+    name_key: 'posts_block_links_name',
+    name_default: 'Link buttons',
+    exclusive: false,
+    keys: ['posts_block_links_rows', 'posts_block_links_title', 'posts_block_links_text', 'posts_block_links_card'],
   },
 ];
 const BLOCK_UNKNOWN = 'There is no block called **{kind}**, so nothing was changed. Pick one from the **Add a block…** list.';
@@ -5575,6 +5648,9 @@ const PREVIEW_FEATURES = [
   ['block_pingsfollow', 'The ping me when they go live block', 'posts.html', ['pings_block_title', 'pings_block_text', 'pings_block_label']],
   ['block_birthday', 'The set your birthday block', 'posts.html', ['birthday_block_title', 'birthday_block_text', 'birthday_block_label']],
   ['block_proposeevent', 'The propose an event block', 'posts.html', ['events_block_title', 'events_block_text', 'events_block_label']],
+  ['block_livenow', "The who's-live-now block", 'posts.html', ['golive_block_title', 'golive_block_line', 'golive_block_untitled', 'golive_block_empty']],
+  ['block_upcoming', 'The upcoming-events block', 'posts.html', ['events_upcoming_title', 'events_upcoming_line', 'events_upcoming_empty']],
+  ['block_links', 'The link-buttons block', 'posts.html', ['posts_block_links_rows', 'posts_block_links_title', 'posts_block_links_text']],
 ];
 
 const PREVIEW_SAMPLES = {
@@ -5594,6 +5670,9 @@ const PREVIEW_SAMPLES = {
   frontdoor: { shows: '' },
   block_tempvoice: { controls: '' },
   ticket_button: {},
+  block_livenow: { live: '' },
+  block_upcoming: { events: '' },
+  block_links: { card: '' },
 };
 
 const PREVIEW_NO_FEATURE = 'Black Bloc draws no preview for **{feature}**, so nothing was shown. That is a fault in the page rather than a problem with your access — reload the dashboard, and tell a Lead if it keeps happening.';
@@ -5845,6 +5924,112 @@ function previewButtonBlock(read, head) {
   }], [[previewButton(word(`${head}_label`, 80), 'primary')]]);
 }
 
+// The twins of golive.live_block_look, events.upcoming_block_look and link_buttons.links_look.
+const PREVIEW_LIVE_SAMPLE = [
+  { name: 'Casey', url: 'https://www.twitch.tv/casey', title: 'late night runs' },
+  { name: 'Robin', url: 'https://www.youtube.com/@robin/live', title: 'Speedrun practice, any%' },
+];
+const PREVIEW_LINK_SAMPLE = [
+  { label: 'Our website', url: 'https://example.org' },
+  { label: 'Schedule', url: 'https://example.org/when' },
+];
+
+function blockWord(read, key, fallback) {
+  return String(read(key) || '').trim() || fallback;
+}
+
+function blockNumber(read, key, fallback) {
+  const found = Number(read(key));
+  return Number.isFinite(found) && found > 0 ? found : fallback;
+}
+
+function blockPlain(text) {
+  return String(text || '').replace(/([\\*_`~|>\[\]])/g, '\\$1');
+}
+
+function blockClipped(text, limit) {
+  const said = String(text || '').split(/\s+/).filter(Boolean).join(' ');
+  return said.length <= limit ? said : `${said.slice(0, limit - 1)}…`;
+}
+
+function blockLines(lines) {
+  const kept = [];
+  let used = 0;
+  for (const line of lines) {
+    const cost = line.length + (kept.length ? 1 : 0);
+    if (used + cost > 4000) break;
+    kept.push(line);
+    used += cost;
+  }
+  return kept.join('\n');
+}
+
+function blockLinkRows(read) {
+  try {
+    const rows = JSON.parse(String(read('posts_block_links_rows') || '') || '[]');
+    return Array.isArray(rows) ? rows.filter((one) => one && one.label && one.url).slice(0, 10) : [];
+  } catch {
+    return [];
+  }
+}
+
+function blockButtons(rows) {
+  const out = [];
+  rows.forEach((one, at) => {
+    if (at % 5 === 0) out.push([]);
+    out[out.length - 1].push(previewButton(String(one.label).slice(0, 80), 'secondary', one.url));
+  });
+  return out;
+}
+
+Object.assign(PREVIEW_DRAW, {
+  block_livenow(read, sample = {}) {
+    const streams = String(sample.live || '') === 'none' ? [] : PREVIEW_LIVE_SAMPLE;
+    const template = blockWord(read, 'golive_block_line', '**{name}** — {title}');
+    const chars = blockNumber(read, 'golive_block_title_chars', 60);
+    const lines = streams.slice(0, blockNumber(read, 'golive_block_max', 10)).map((one) => {
+      const title = blockClipped(one.title, chars) || blockWord(read, 'golive_block_untitled', 'watch the stream');
+      return template.split('{name}').join(blockPlain(one.name)).split('{title}').join(`[${blockPlain(title)}](${one.url})`).split(/\s+/).join(' ');
+    });
+    return previewMade('', [{
+      title: blockWord(read, 'golive_block_title', 'Live now'),
+      description: blockLines(lines) || blockWord(read, 'golive_block_empty', 'Nobody is live right now.'),
+      fields: [],
+    }], []);
+  },
+  block_upcoming(read, sample = {}) {
+    const hour = new Date();
+    hour.setUTCMinutes(0, 0, 0);
+    const at = (days) => Math.floor((hour.getTime() + days * 86400000 + (20 - hour.getUTCHours()) * 3600000) / 1000);
+    const events = String(sample.events || '') === 'none' ? [] : [
+      { title: 'Movie night — Paprika', ts: at(2), url: `https://discord.com/events/${REVIEW_GUILD_ID}/424242424242424242` },
+      { title: 'Community game night', ts: at(5), url: null },
+    ];
+    const template = blockWord(read, 'events_upcoming_line', '**{title}** — {when} ({relative})');
+    const lines = events.slice(0, blockNumber(read, 'events_upcoming_max', 5)).map((one) => {
+      const title = one.url ? `[${blockPlain(one.title)}](${one.url})` : blockPlain(one.title);
+      return template.split('{title}').join(title).split('{when}').join(`<t:${one.ts}:F>`).split('{relative}').join(`<t:${one.ts}:R>`).split(/\s+/).join(' ');
+    });
+    return previewMade('', [{
+      title: blockWord(read, 'events_upcoming_title', 'Coming up'),
+      description: blockLines(lines) || blockWord(read, 'events_upcoming_empty', 'Nothing is on the calendar yet.'),
+      fields: [],
+    }], []);
+  },
+  block_links(read, sample = {}, rows = null) {
+    const tick = String(sample.card || '').trim().toLowerCase();
+    const stored = !['false', '0', 'off', 'no'].includes(String(read('posts_block_links_card')).trim().toLowerCase());
+    const card = tick ? ['on', 'true', '1'].includes(tick) : stored;
+    const buttons = blockButtons(rows || blockLinkRows(read));
+    const cards = card ? [{
+      title: blockWord(read, 'posts_block_links_title', 'Links'),
+      description: blockWord(read, 'posts_block_links_text', ''),
+      fields: [],
+    }] : [];
+    return previewMade('', cards, buttons);
+  },
+});
+
 // The twin of black_bloc/preview.py:BLOCK_DRAWS — each block drawn by its own feature's draw.
 const PREVIEW_BLOCK_DRAWS = {
   frontdoor(read, sample, always) {
@@ -5869,6 +6054,19 @@ const PREVIEW_BLOCK_DRAWS = {
   proposeevent(read, sample, always) {
     if (!always && String(read('events_mode') || 'off') === 'off') return null;
     return PREVIEW_DRAW.block_proposeevent(read);
+  },
+  livenow(read, sample, always) {
+    const off = ['golive_mode', 'spotlight_mode'].every((key) => String(read(key) || 'off') === 'off');
+    if (!always && off) return null;
+    return PREVIEW_DRAW.block_livenow(read, sample);
+  },
+  upcoming(read, sample, always) {
+    if (!always && String(read('events_mode') || 'off') === 'off') return null;
+    return PREVIEW_DRAW.block_upcoming(read, sample);
+  },
+  links(read) {
+    const rows = blockLinkRows(read);
+    return PREVIEW_DRAW.block_links(read, {}, rows.length ? rows : PREVIEW_LINK_SAMPLE);
   },
 };
 
