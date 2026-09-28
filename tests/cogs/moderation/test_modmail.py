@@ -918,21 +918,24 @@ async def test_a_transcripts_channel_the_guard_refuses_gets_a_would_row_and_no_c
     assert "modmail.would_log_open" in await action_kinds(db)
 
 
-async def test_a_refused_send_is_a_log_row_and_the_ticket_opens_anyway(cog, bot, member, db):
-    bot.guard = FakeGuard()
-    bot.guild.channels[TEST_CHANNEL].send_raises = discord.HTTPException(
-        _Response(403), "no"
-    )
-
-    await cog.on_message(dm_from(member))
-
-    assert await open_ticket_for(db, GUILD, member.id) is not None
-    assert "modmail.log_open_failed" in await action_kinds(db)
+async def refuse_every_send(bot):
+    bot.guild.channels[TEST_CHANNEL].send_raises = discord.HTTPException(_Response(403), "no")
 
 
-async def test_no_transcripts_channel_is_a_log_row_not_a_raise(cog, bot, member, db):
-    bot.guard = FakeGuard()
+async def point_at_a_missing_channel(bot):
     await bot.store.set(GUILD, "modmail_log_channel_id", 4242)
+
+
+@pytest.mark.parametrize(
+    "breaks",
+    [refuse_every_send, point_at_a_missing_channel],
+    ids=["discord-refuses-the-send", "no-transcripts-channel"],
+)
+async def test_an_open_card_that_cannot_land_is_a_log_row_and_the_ticket_opens_anyway(
+    cog, bot, member, db, breaks
+):
+    bot.guard = FakeGuard()
+    await breaks(bot)
 
     await cog.on_message(dm_from(member))
 
@@ -945,27 +948,21 @@ def staff_overwrite(channel):
     return next(value for key, value in given.items() if getattr(key, "id", None) == STAFF_ROLE)
 
 
-async def test_the_ticket_channel_is_the_staff_s_to_delete_by_hand(cog, bot, member):
+@pytest.mark.parametrize(
+    ("reach", "manage"), [(True, True), (False, None)], ids=["reach-key-on", "reach-key-off"]
+)
+async def test_the_ticket_channel_is_the_staff_s_to_delete_by_hand_while_the_reach_key_is_on(
+    cog, bot, member, reach, manage
+):
     await live(bot)
     bot.guild.channels[TEST_CHANNEL].visible_to = {STAFF_ROLE}
+    await bot.store.set(GUILD, STAFF_REACH_KEY, reach)
 
     await cog.on_message(dm_from(member))
 
     staff = staff_overwrite(bot.guild.created[0])
     assert staff.view_channel is True and staff.send_messages is True
-    assert staff.manage_channels is True
-
-
-async def test_with_the_reach_key_off_the_ticket_channel_is_as_it_was(cog, bot, member):
-    await live(bot)
-    bot.guild.channels[TEST_CHANNEL].visible_to = {STAFF_ROLE}
-    await bot.store.set(GUILD, STAFF_REACH_KEY, False)
-
-    await cog.on_message(dm_from(member))
-
-    staff = staff_overwrite(bot.guild.created[0])
-    assert staff.view_channel is True and staff.send_messages is True
-    assert staff.manage_channels is None
+    assert staff.manage_channels is manage
 
 
 async def test_reply_from_the_test_channel_finds_the_only_open_ticket(cog, bot, member, lead, db):
@@ -1039,11 +1036,14 @@ async def test_an_unknown_snippet_sends_nothing(cog, bot, member, lead):
     assert "no snippet called" in interaction.sent
 
 
-async def test_naming_a_ticket_that_is_not_a_number_is_refused(cog, bot, member, lead):
+@pytest.mark.parametrize(
+    "typed", ["banana", "²"], ids=["a-word", "an-exotic-digit-isdigit-accepts"]
+)
+async def test_naming_a_ticket_that_is_not_a_number_is_refused(cog, bot, member, lead, typed):
     await open_one(cog, bot, member)
     interaction = FakeInteraction(bot, lead)
 
-    await cog.reply.callback(cog, interaction, text="hi", ticket="banana")
+    await cog.reply.callback(cog, interaction, text="hi", ticket=typed)
 
     assert "not a ticket number" in interaction.sent
 
@@ -1479,7 +1479,21 @@ async def test_a_stranger_is_told_nothing_at_all_while_no_guild_has_modmail_on(c
     assert (await cur.fetchone())["n"] == 0
 
 
-async def test_a_refusal_is_sent_once_per_member_until_the_cooldown_is_over(cog, bot, member):
+class LaterClock(datetime):
+    moment: datetime
+
+    @classmethod
+    def at(cls, moment):
+        return type("LaterClock", (cls,), {"moment": moment})
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls.moment
+
+
+async def test_a_refusal_is_sent_once_per_member_until_the_cooldown_is_over(
+    cog, bot, member, monkeypatch
+):
     bot.guard = FakeGuard()
     await bot.store.set(GUILD, "modmail_enabled", False)
 
@@ -1488,7 +1502,9 @@ async def test_a_refusal_is_sent_once_per_member_until_the_cooldown_is_over(cog,
     await cog.on_message(dm_from(member, "third"))
 
     assert len(member.dms) == 1
-    cog._refused.clear()
+
+    later = datetime.now(UTC) + timedelta(minutes=modmail_cog.REFUSAL_COOLDOWN_MINUTES + 1)
+    monkeypatch.setattr(modmail_cog, "datetime", LaterClock.at(later))
     await cog.on_message(dm_from(member, "much later"))
     assert len(member.dms) == 2
 
@@ -1734,15 +1750,6 @@ async def test_a_reply_into_an_archived_thread_unarchives_it_first(cog, bot, mem
 
     assert thread.archived is False
     assert thread.messages[-1].kwargs["embed"].description == "still here"
-
-
-async def test_a_ticket_number_written_in_exotic_digits_is_refused(cog, bot, member, lead):
-    await open_one(cog, bot, member)
-    interaction = FakeInteraction(bot, lead)
-
-    await cog.reply.callback(cog, interaction, text="hi", ticket="²")
-
-    assert "not a ticket number" in interaction.sent
 
 
 async def test_forget_clears_one_place_and_says_which(cog, bot, lead, db):

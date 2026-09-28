@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -119,7 +120,7 @@ def test_a_second_run_that_changes_nothing_says_so(tmp_path):
 def test_the_shipped_script_exits_non_zero_while_the_canonical_does_not_exist(tmp_path):
     """Today's real state: GABI's half is not built, so the script must fail loudly."""
     found = subprocess.run(
-        ["python", str(SCRIPT), "--from", str(tmp_path / "nope.json")],
+        [sys.executable, str(SCRIPT), "--from", str(tmp_path / "nope.json")],
         capture_output=True,
         text=True,
     )

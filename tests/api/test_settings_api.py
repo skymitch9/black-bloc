@@ -7,7 +7,7 @@ import types
 from black_bloc.api import auth
 from black_bloc.api.settings_api import CORE_KEYS, namespace_of
 from black_bloc.api.writes import WRITE_RATE
-from black_bloc.settings_store import KEY_TYPES
+from black_bloc.settings_store import KEY_CHOICES, KEY_TYPES
 
 
 def test_every_registry_key_lands_in_a_namespace():
@@ -172,16 +172,7 @@ def test_a_multi_enum_round_trips_and_comes_back_in_the_registrys_own_order(
     assert response.status_code == 200
     assert response.json()["value"] == ["filed", "done"]
     assert web.store.get(wf.GUILD_ID, "request_channel_moves") == ["filed", "done"]
-    assert response.json()["choices"] == [
-        "filed",
-        "in_progress",
-        "review",
-        "sent_back",
-        "done",
-        "hold",
-        "declined",
-        "check_asked",
-    ]
+    assert response.json()["choices"] == list(KEY_CHOICES["request_channel_moves"])
 
     empty = client.put("/api/settings/request_channel_moves", json={"value": []})
     assert empty.status_code == 200 and empty.json()["value"] == []

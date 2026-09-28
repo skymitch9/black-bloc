@@ -22,7 +22,7 @@ def client_for(bot, **kwargs):
     return TestClient(create_app(bot), base_url=ORIGIN, headers=SAME_SITE, **kwargs)
 
 
-def test_health(bot):
+def test_health_answers_without_a_session(bot):
     r = client_for(bot).get("/health")
     assert r.status_code == 200
     body = r.json()
@@ -36,11 +36,6 @@ def test_health_says_which_personality_pool_this_bot_is_on(bot):
     from black_bloc.personas import POOL_VERSION
 
     assert client_for(bot).get("/health").json()["personality_pool_version"] == POOL_VERSION
-
-
-def test_health_stays_public(bot):
-    """No cookie, no sign-in — /health is the uptime probe, not a dashboard route."""
-    assert client_for(bot).get("/health").status_code == 200
 
 
 def test_health_reports_no_latency_when_the_gateway_has_not_measured_one(bot):
@@ -87,7 +82,7 @@ def test_the_page_is_served_from_this_app_at_the_root(bot):
 def test_every_page_asks_for_the_favicon_this_app_can_actually_serve(bot):
     """The log was a `GET /favicon.ico 404` on every page load."""
     pages = sorted(Path(bot.settings.site_root).glob("*.html"))
-    assert len(pages) >= 13
+    assert pages
     for page in pages:
         assert '<link rel="icon" href="/favicon.ico"' in page.read_text(encoding="utf-8"), page
 

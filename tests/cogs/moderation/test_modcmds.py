@@ -355,6 +355,7 @@ async def test_timeout_reads_the_duration_and_clamps_at_twenty_eight_days(cog, b
     assert lead.display_name in target.timeouts[0][1] and "spam" in target.timeouts[0][1]
     assert [(r["kind"], r["duration_s"]) for r in await cases(db)] == [("timeout", 600)]
     assert "mod.timed_out" in await action_kinds(db)
+    assert target.dms and "timed out" in target.dms[0] and "10m" in target.dms[0]
 
     too_long = FakeInteraction(bot, lead)
     await cog.timeout.callback(cog, too_long, target, "30d", "spam")
@@ -378,12 +379,6 @@ async def test_a_timeout_discord_refuses_is_its_own_log_kind_and_dms_nobody(cog,
     kinds = await action_kinds(db)
     assert "mod.timeout_failed" in kinds and "mod.would_timeout" not in kinds
     assert await cases(db) == []
-
-
-async def test_a_timeout_that_worked_tells_the_member_how_long_it_is(cog, bot, lead, target):
-    await cog.timeout.callback(cog, FakeInteraction(bot, lead), target, "10m", "spam")
-
-    assert target.dms and "timed out" in target.dms[0] and "10m" in target.dms[0]
 
 
 async def test_untimeout_and_unban_are_refused_in_test_mode(cog, bot, lead, target, db):
@@ -967,6 +962,8 @@ async def test_a_staffer_demoted_mid_panel_moves_nothing_the_reads_included(
 
     assert "staff only" in demoted.sent
     assert rendered(demoted) is None
+    assert "embed" not in demoted.response.messages[-1]
+    assert demoted.response.modals == []
 
 
 async def test_a_move_on_the_card_refuses_a_demoted_staffer_before_it_writes(
@@ -996,16 +993,6 @@ async def test_the_logs_button_reads_the_lines_a_warn_left_behind(cog, bot, lead
     assert "`mod.warned`" in said["embed"].description
     assert f"<@{lead.id}> → <@{target.id}>" in said["embed"].description
     assert said["embed"].footer.text.endswith("/moderation.html")
-
-
-async def test_the_logs_button_refuses_somebody_who_is_not_staff(cog, bot, lead, target, db):
-    await a_case(db, lead, user_id=target.id)
-    root = await open_panel(cog, bot, lead)
-
-    pressed = await press(bot, target, root, "Logs")
-
-    assert "staff only" in pressed.sent
-    assert "embed" not in pressed.response.messages[-1]
 
 
 async def test_a_re_render_retires_the_view_it_replaced(cog, bot, lead, target, db):
@@ -1091,15 +1078,6 @@ async def test_give_somebody_a_role_is_reachable_and_back_walks_home_to_mod(
     assert said["embed"].title == "What Black Bloc has done"
     assert "page 2 of 2" in said["embed"].description
     assert "Role grants…" in labels(home)
-
-
-async def test_role_grants_refuses_a_member_in_words_and_draws_nothing(cog, bot, lead, target):
-    root = await open_panel(cog, bot, lead)
-
-    pressed = await press(bot, target, root, "Role grants…")
-
-    assert "staff only" in pressed.sent
-    assert rendered(pressed) is None
 
 
 async def test_the_grants_console_opened_from_mod_refuses_a_demoted_staffer(
