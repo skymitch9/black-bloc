@@ -274,3 +274,12 @@ async def test_a_helix_failure_on_games_reaches_the_caller():
 
     with pytest.raises(TwitchError, match="500"):
         await client.get_games(["509658"])
+
+
+def test_a_streams_type_is_carried_as_helix_sent_it_and_empty_when_it_sent_none():
+    from black_bloc.twitch import stream_from
+
+    assert stream_from({"user_login": "gdq", "type": "live"}).stream_type == "live"
+    assert stream_from({"user_login": "gdq", "type": "Rerun"}).stream_type == "rerun"
+    assert stream_from({"user_login": "gdq", "type": ""}).stream_type == ""
+    assert stream_from({"user_login": "gdq"}).stream_type == ""

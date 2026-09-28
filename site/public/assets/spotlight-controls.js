@@ -84,7 +84,7 @@ export function spotlightMoves(one, say, after) {
     } else {
       moves.push(button('Keep for ever', async () => after(await patch({ keep: true }, 'Kept for ever.')), { tone: 'quiet' }));
     }
-    if (one.live && one.announce !== false) {
+    if (one.live && one.announce !== false && !one.replay) {
       moves.push(button('Bump now', async () => {
         const done = await run(
           say,
@@ -98,7 +98,26 @@ export function spotlightMoves(one, say, after) {
       after(await patch({ pin: !one.pin }, one.pin ? 'It will not be pinned.' : 'It will be pinned.'))
     ), { tone: 'quiet' }));
   }
+  if (one.replay) moves.push(treatLiveMove(one, say, after));
   return moves;
+}
+
+/** Staff final say on a replay: this stream is live, announced again with the full spotlight. */
+function treatLiveMove(one, say, after) {
+  return button(one.replay.treat_label || 'Treat as live', async () => {
+    const done = await run(
+      say,
+      () => send(rowPath(one, '/treat-live'), 'POST', {}),
+      (found) => found?.message || 'Treated as live.',
+    );
+    after(done);
+  }, { tone: 'warn' });
+}
+
+/** The open session's replay read, in the key's words; nothing when it is live. */
+export function replayLine(one) {
+  if (!one.replay || !one.replay.line) return null;
+  return el('p', { class: 'field-help', 'data-replay': 'true' }, [badge(one.replay.line, 'warn')]);
 }
 
 /** The owner's date range: two pickers and one Save. */
@@ -145,6 +164,7 @@ export function spotlightQuiet(one) {
 export function spotlightCard(one, say, after, { head = [], foot = [] } = {}) {
   return card(SPOTLIGHT_TITLE, [
     ...head,
+    replayLine(one),
     spotlightQuiet(one),
     el('div', { class: 'bar' }, spotlightMoves(one, say, after)),
     datesCard(one, say, after),

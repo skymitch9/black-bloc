@@ -538,6 +538,7 @@ const NAMESPACE_KEYS = Object.keys(CONTRACT.settings.help);
   same(`${where} — how a stream is spotted`, home('spotted'), sorted(drawerOf('spotted').keys));
   same(`${where} — spotlighted channels`, home('spotlight'), sorted(drawerOf('spotlight').keys));
   same(`${where} — two platforms at once`, home('costream'), sorted(drawerOf('costream').keys));
+  same(`${where} — replays`, home('replays'), sorted(drawerOf('replays').keys));
   same(`${where} — what a spotlight's dates say`, home('dates'), sorted(drawerOf('dates').keys));
   same(`${where} — when a channel pings`, home('pingwindows'), sorted(drawerOf('pingwindows').keys));
   same(`${where} — slash panels and log lines`, home('panels'), sorted(drawerOf('panels').keys));

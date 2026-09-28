@@ -5895,6 +5895,111 @@ MARATHON_DEFAULTS: dict[str, Any] = {
 }
 
 
+# Replays on a go-live channel: detected, posted plain or skipped, and staff can treat one as live.
+GOLIVE_REPLAY_ACTION_KEY = "golive_replay_action"
+GOLIVE_REPLAY_WORDS_KEY = "golive_replay_words"
+GOLIVE_REPLAY_LIVE_WORDS_KEY = "golive_replay_live_words"
+GOLIVE_REPLAY_TEMPLATE_KEY = "golive_replay_template"
+GOLIVE_REPLAY_STATE_KEY = "golive_replay_state"
+GOLIVE_REPLAY_REASON_TYPE_KEY = "golive_replay_reason_type"
+GOLIVE_REPLAY_REASON_TITLE_KEY = "golive_replay_reason_title"
+GOLIVE_REPLAY_TREAT_LIVE_KEY = "golive_replay_treat_live_label"
+GOLIVE_REPLAY_TREATED_KEY = "golive_replay_treated_said"
+GOLIVE_REPLAY_NOT_REPLAY_KEY = "golive_replay_not_replay_said"
+GOLIVE_REPLAY_ACTIONS = ("plain", "skip", "live")
+GOLIVE_REPLAY_SETTINGS: dict[str, tuple[str, Any, tuple[str, ...] | None, str]] = {
+    GOLIVE_REPLAY_ACTION_KEY: (
+        "enum",
+        "plain",
+        None,
+        "what a channel on the Go-live list gets when its stream is a replay (Twitch marks it a "
+        "rerun, or its title carries a golive_replay_words word outside a marathon on the "
+        "channel). plain — the default — posts the golive_replay_template sentence with no pin, "
+        "no role mention and no reminders; skip posts nothing and only logs it; live treats it "
+        "as a live stream, the way it was before replays were looked for. Anything uncertain is "
+        "treated as live",
+    ),
+    GOLIVE_REPLAY_WORDS_KEY: (
+        "text",
+        "replay, rerun, rebroadcast, re-broadcast, vod, encore",
+        (),
+        "the words that make a stream title read as a replay, separated by commas. Each is "
+        "matched as a whole word in any case — [REPLAY], Replay:, (Rerun) all match, and a longer "
+        "word that merely contains one does not. Blank leaves only Twitch's own rerun mark",
+    ),
+    GOLIVE_REPLAY_LIVE_WORDS_KEY: (
+        "text",
+        "live",
+        (),
+        "the words that overrule a replay word in the same title, separated by commas — a title "
+        "that says both replay and live is treated as live, because a missed live stream is the "
+        "worse mistake. Blank lets a replay word decide on its own",
+    ),
+    GOLIVE_REPLAY_TEMPLATE_KEY: (
+        "text",
+        "**{name}** is showing a replay — {title} {url}",
+        ("name", "game", "title", "url", "platform"),
+        "the sentence posted for a replay when golive_replay_action is plain — no pin, no role "
+        "mention, no reminders. It takes {name} {game} {title} {url} {platform}",
+    ),
+    GOLIVE_REPLAY_STATE_KEY: (
+        "text",
+        "Replay detected ({reason})",
+        ("reason",),
+        "the line the Go-live page and the /golive Channels card show for a channel whose "
+        "stream right now was read as a replay. {reason} is golive_replay_reason_type or "
+        "golive_replay_reason_title",
+    ),
+    GOLIVE_REPLAY_REASON_TYPE_KEY: (
+        "text",
+        "Twitch marks the stream a rerun",
+        (),
+        "the reason in golive_replay_state when Twitch itself marked the stream a rerun",
+    ),
+    GOLIVE_REPLAY_REASON_TITLE_KEY: (
+        "text",
+        "the title says “{word}”",
+        ("word",),
+        "the reason in golive_replay_state when the title carried a golive_replay_words word; "
+        "{word} is the word it matched",
+    ),
+    GOLIVE_REPLAY_TREAT_LIVE_KEY: (
+        "text",
+        "Treat as live",
+        (),
+        "the button beside a replay on the Go-live page and the /golive Channels card that "
+        "announces this stream again with the full spotlight — pin, role mentions, reminders",
+    ),
+    GOLIVE_REPLAY_TREATED_KEY: (
+        "text",
+        "**{login}** is treated as live for this stream — announced again with the full spotlight.",
+        ("login",),
+        "what staff are told after Treat as live; {login} is the channel",
+    ),
+    GOLIVE_REPLAY_NOT_REPLAY_KEY: (
+        "text",
+        "**{login}** is not showing a replay right now, so there was nothing to change.",
+        ("login",),
+        "what staff are told when Treat as live finds no replay to treat — the stream ended, "
+        "or it is already treated as live; {login} is the channel",
+    ),
+}
+KEY_TYPES.update({key: kind for key, (kind, _, _, _) in GOLIVE_REPLAY_SETTINGS.items()})
+KEY_HELP.update({key: said for key, (_, _, _, said) in GOLIVE_REPLAY_SETTINGS.items()})
+KEY_CHOICES[GOLIVE_REPLAY_ACTION_KEY] = GOLIVE_REPLAY_ACTIONS
+TEXT_CHECKS.update(
+    {
+        key: checked_fields(fields)
+        for key, (kind, _, fields, _) in GOLIVE_REPLAY_SETTINGS.items()
+        if kind == "text" and fields is not None
+    }
+)
+TEXT_MAY_BE_BLANK = (*TEXT_MAY_BE_BLANK, GOLIVE_REPLAY_WORDS_KEY, GOLIVE_REPLAY_LIVE_WORDS_KEY)
+GOLIVE_REPLAY_DEFAULTS: dict[str, Any] = {
+    key: default for key, (_, default, _, _) in GOLIVE_REPLAY_SETTINGS.items()
+}
+
+
 def coerce_value(key: str, value: Any) -> Any:
     """Validate a value against the registry and return what gets stored."""
     kind = KEY_TYPES.get(key)
@@ -6460,6 +6565,8 @@ class SettingsStore:
             return VOICE_WORDS[key][0]
         if key in MARATHON_DEFAULTS:
             return MARATHON_DEFAULTS[key]
+        if key in GOLIVE_REPLAY_DEFAULTS:
+            return GOLIVE_REPLAY_DEFAULTS[key]
         if key in REVIEW_SETTINGS:
             return REVIEW_SETTINGS[key][1]
         if key in REVIEW_WORDS:

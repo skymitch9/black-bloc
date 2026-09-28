@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+from datetime import UTC, datetime
 from typing import Any
 
 import discord
 from discord.ext import commands, tasks
 
+from ... import golive_replay as replays
 from ... import pings
 from ... import shadow as shadow_home
 from ... import spotlight as words
@@ -50,6 +52,16 @@ from ...settings_store import (
     CHANNEL_SPOTLIGHT_DEFAULT_KEY,
     DEFAULT_TIMEZONE_KEY,
     GOLIVE_EXPIRY_KEEPS_MARATHON_CHANNELS_KEY,
+    GOLIVE_REPLAY_ACTION_KEY,
+    GOLIVE_REPLAY_LIVE_WORDS_KEY,
+    GOLIVE_REPLAY_NOT_REPLAY_KEY,
+    GOLIVE_REPLAY_REASON_TITLE_KEY,
+    GOLIVE_REPLAY_REASON_TYPE_KEY,
+    GOLIVE_REPLAY_STATE_KEY,
+    GOLIVE_REPLAY_TEMPLATE_KEY,
+    GOLIVE_REPLAY_TREAT_LIVE_KEY,
+    GOLIVE_REPLAY_TREATED_KEY,
+    GOLIVE_REPLAY_WORDS_KEY,
     MARATHON_CHANNEL_PING_MODE_DEFAULT_KEY,
     SPOTLIGHT_BAD_DATE_KEY,
     SPOTLIGHT_BUMP_CLEANUP_KEY,
@@ -373,12 +385,22 @@ async def pings_for(db: Any, row: Any) -> bool:
 
 
 async def start_session(
-    db: Any, guild_id: int, spotlight_id: int, info: Any, mode: str, pinging: Any = None
+    db: Any,
+    guild_id: int,
+    spotlight_id: int,
+    info: Any,
+    mode: str,
+    pinging: Any = None,
+    *,
+    replay_reason: Any = None,
+    replay_action: Any = None,
+    replay_cleared: Any = None,
 ) -> int | None:
     try:
         cur = await db.conn.execute(
             "INSERT INTO spotlight_sessions(guild_id, spotlight_id, started_at, title, game, "
-            "url, mode, pinging_last) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "url, mode, pinging_last, replay_reason, replay_action, replay_cleared) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 guild_id,
                 int(spotlight_id),
@@ -388,6 +410,9 @@ async def start_session(
                 info.url,
                 mode,
                 None if pinging is None else (1 if pinging else 0),
+                replay_reason,
+                replay_action,
+                replay_cleared,
             ),
         )
     except sqlite3.IntegrityError:
@@ -395,6 +420,36 @@ async def start_session(
         return None
     await db.conn.commit()
     return cur.lastrowid
+
+
+async def set_replay_cleared(db: Any, session_id: int, because: str) -> None:
+    await db.conn.execute(
+        "UPDATE spotlight_sessions SET replay_cleared = ? WHERE id = ?",
+        (because, int(session_id)),
+    )
+    await db.conn.commit()
+
+
+def replay_wording_for(bot: Any, guild_id: int) -> dict[str, str]:
+    store = bot.store
+    return {
+        "state": str(store.get(guild_id, GOLIVE_REPLAY_STATE_KEY) or ""),
+        "type_words": str(store.get(guild_id, GOLIVE_REPLAY_REASON_TYPE_KEY) or ""),
+        "title_words": str(store.get(guild_id, GOLIVE_REPLAY_REASON_TITLE_KEY) or ""),
+        "treat_label": str(store.get(guild_id, GOLIVE_REPLAY_TREAT_LIVE_KEY) or ""),
+    }
+
+
+def replay_state(session: Any, said: dict[str, str]) -> dict[str, Any] | None:
+    """The open session's replay, as the page and the card read it; None when it is live."""
+    if not replays.is_replay(session):
+        return None
+    return {
+        "reason": _cell(session, "replay_reason"),
+        "action": _cell(session, "replay_action"),
+        "line": replays.state_line(session, said["state"], said["type_words"], said["title_words"]),
+        "treat_label": said["treat_label"],
+    }
 
 
 async def refresh_session_info(db: Any, session_id: int, game: Any, title: Any) -> None:
@@ -531,7 +586,10 @@ class Spotlight(commands.Cog):
         for guild in self._guilds():
             for session in await open_sessions(self.bot.db, guild.id):
                 row = await channel_by_id(self.bot.db, session["spotlight_id"])
-                if row is not None and await self._message(guild, session) is not None:
+                skipped = (
+                    replays.is_replay(session) and _cell(session, "replay_action") == replays.SKIP
+                )
+                if row is not None and (skipped or await self._message(guild, session) is not None):
                     await set_pinging_last(
                         self.bot.db, session["id"], await pings_for(self.bot.db, row)
                     )
@@ -728,6 +786,8 @@ class Spotlight(commands.Cog):
                 self.misses[int(fresh["id"])] = 0
                 if session is None:
                     await self._announce(guild, fresh, stream)
+                elif replays.is_replay(session):
+                    await self._replay_seen(guild, fresh, session, stream)
                 else:
                     info, refreshed = await self._follow(
                         guild, fresh, session, from_twitch(stream)
@@ -749,6 +809,8 @@ class Spotlight(commands.Cog):
     ) -> bool:
         """The gate remembered per session: closed → open posts ONE pinged reminder; a first
         look (NULL) and every other change only write the new answer. True when it posted."""
+        if replays.is_replay(session):
+            return False
         windows = await windows_for(self.bot.db, row["id"])
         pinging = words.pings_now(row, windows)
         was = _cell(session, "pinging_last")
@@ -781,18 +843,139 @@ class Spotlight(commands.Cog):
         name = str(getattr(stream, "user_name", "") or "").strip() or words.display_for(row)
         if name != words.display_for(row):
             await update_channel(self.bot.db, row["id"], display_name=name)
-        await self.announce_info(guild, row, info, name)
+        await self.announce_info(
+            guild, row, info, name, stream_type=getattr(stream, "stream_type", None)
+        )
 
-    async def announce_info(self, guild: Any, row: Any, info: Any, name: str) -> None:
-        """The one announcement, whichever sweep saw it: spotlight only decides the pin.
-        An opted-out channel stops here — no session, so no end and no reminders either."""
+    async def announce_info(
+        self, guild: Any, row: Any, info: Any, name: str, *, stream_type: Any = None
+    ) -> None:
+        """The one announcement, whichever sweep saw it: spotlight only decides the pin, and a
+        replay is posted plain or not at all. An opted-out channel stops here — no session."""
         if not words.announces(row):
             return
         mode = self._mode(guild.id)
-        pinging = await pings_for(self.bot.db, row)
-        session_id = await start_session(self.bot.db, guild.id, row["id"], info, mode, pinging)
+        seen = await self._verdict(guild, row, info, stream_type)
+        action = self._replay_action(guild.id)
+        replay = seen.replay and action != replays.LIVE
+        pinging = False if replay else await pings_for(self.bot.db, row)
+        session_id = await start_session(
+            self.bot.db,
+            guild.id,
+            row["id"],
+            info,
+            mode,
+            pinging,
+            replay_reason=seen.reason if seen.replay else None,
+            replay_action=action if seen.replay else None,
+            replay_cleared=replays.CLEARED_ACTION if seen.replay and not replay else None,
+        )
         if session_id is None:
             return
+        await self._note_verdict(guild, row, session_id, info, seen, action)
+        if not replay:
+            await self._announce_live(guild, row, session_id, info, name, mode, pinging)
+        elif action == replays.PLAIN:
+            await self._announce_replay(guild, row, session_id, info, name, mode)
+
+    def _replay_action(self, guild_id: int) -> str:
+        return str(self.bot.store.get(guild_id, GOLIVE_REPLAY_ACTION_KEY) or replays.PLAIN)
+
+    async def _verdict(self, guild: Any, row: Any, info: Any, stream_type: Any = None) -> Any:
+        """Only a title word asks about marathons, and a marathon in reach makes it live."""
+        store = self.bot.store
+        said = {
+            "words": replays.words_of(store.get(guild.id, GOLIVE_REPLAY_WORDS_KEY)),
+            "live_words": replays.words_of(store.get(guild.id, GOLIVE_REPLAY_LIVE_WORDS_KEY)),
+        }
+        title = getattr(info, "title", None)
+        seen = replays.verdict(title, stream_type, **said)
+        if not seen.replay or seen.reason == replays.REASON_TYPE:
+            return seen
+        from .marathon_channels import marathons_on_channel
+        from .marathon_spotlight import lead_of, tail_of
+
+        marathons = await marathons_on_channel(self.bot.db, guild.id, row["id"])
+        inside = replays.in_marathon(
+            marathons, datetime.now(UTC), lead_of(self.bot, guild.id), tail_of(self.bot, guild.id)
+        )
+        return replays.verdict(title, stream_type, marathon=inside, **said) if inside else seen
+
+    async def _note_verdict(
+        self, guild: Any, row: Any, session_id: int, info: Any, seen: Any, action: str
+    ) -> None:
+        """Once per session: a replay read, or a replay word that fuzzy turned live."""
+        details = {
+            "spotlight_id": row["id"],
+            "session_id": session_id,
+            "login": row["twitch_login"],
+            "title": getattr(info, "title", None),
+        }
+        if seen.replay:
+            await log_action(
+                self.bot,
+                guild,
+                "golive.replay_detected",
+                details=details | {"reason": seen.reason, "action": action},
+            )
+        elif seen.overruled:
+            await log_action(
+                self.bot,
+                guild,
+                "golive.replay_overruled",
+                details=details | {"matched": seen.matched, "because": seen.overruled},
+            )
+
+    async def _announce_replay(
+        self, guild: Any, row: Any, session_id: int, info: Any, name: str, mode: str
+    ) -> Any:
+        """The plain post: the replay sentence, no card, no role mention, never pinned."""
+        text = render(self.bot.store.get(guild.id, GOLIVE_REPLAY_TEMPLATE_KEY), info, name=name)
+        message, reason = await self._post(guild, text, None, mode, pinging=False)
+        details = {
+            "spotlight_id": row["id"],
+            "session_id": session_id,
+            "login": row["twitch_login"],
+            "mode": mode,
+            "url": info.url,
+            "game": info.game,
+            "title": info.title,
+            "text": text,
+            "replay": True,
+            "pinged": False,
+        }
+        if message is None:
+            await log_action(
+                self.bot,
+                guild,
+                "golive.spotlight_post_failed",
+                details=details | {"reason": reason},
+            )
+            await discard_session(self.bot.db, session_id)
+            return None
+        await set_announced(self.bot.db, session_id, message.id)
+        details["message_id"] = str(message.id)
+        details["channel_id"] = str(getattr(getattr(message, "channel", None), "id", "") or "")
+        await log_action(
+            self.bot,
+            guild,
+            "golive.replay_announced" if mode == MODE_ON else "golive.would_replay_announce",
+            details=details,
+        )
+        return message
+
+    async def _announce_live(
+        self,
+        guild: Any,
+        row: Any,
+        session_id: int,
+        info: Any,
+        name: str,
+        mode: str,
+        pinging: bool,
+        *,
+        discard: bool = True,
+    ) -> Any:
         store = self.bot.store
         fan_role_id = (
             await pings.announced_spotlight_fan_role(self.bot, guild, row["id"])
@@ -845,8 +1028,9 @@ class Spotlight(commands.Cog):
                 "golive.spotlight_post_failed",
                 details=details | {"reason": reason},
             )
-            await discard_session(self.bot.db, session_id)
-            return
+            if discard:
+                await discard_session(self.bot.db, session_id)
+            return None
         await set_announced(self.bot.db, session_id, message.id)
         details["message_id"] = str(message.id)
         details["channel_id"] = str(getattr(getattr(message, "channel", None), "id", "") or "")
@@ -872,6 +1056,7 @@ class Spotlight(commands.Cog):
         )
         if row["pin"] and words.is_spotlit(row):
             await self._pin(guild, row, message)
+        return message
 
     async def _follow(
         self, guild: Any, row: Any, session: Any, info: Any
@@ -885,10 +1070,90 @@ class Spotlight(commands.Cog):
         await self._refresh_announcement(guild, row, session, info)
         return info, True
 
+    async def _replay_seen(self, guild: Any, row: Any, session: Any, stream: Any) -> None:
+        """A replay that stops reading as one is upgraded at once; otherwise only re-worded."""
+        info = from_twitch(stream)
+        seen = await self._verdict(guild, row, info, getattr(stream, "stream_type", None))
+        action = self._replay_action(guild.id)
+        if seen.replay and action != replays.LIVE:
+            await self._follow(guild, row, session, info)
+            return
+        because = replays.cleared_because(_cell(session, "replay_reason"), seen, action)
+        await self.upgrade(guild, row, session, info, because=because)
+
+    async def upgrade(
+        self,
+        guild: Any,
+        row: Any,
+        session: Any,
+        info: Any = None,
+        *,
+        because: str,
+        actor: Any = None,
+        via: str = VIA_DISCORD,
+    ) -> Any:
+        """The caller holds the row's lock. A fresh full announcement goes out first; only once
+        it is out is the replay post deleted and the session marked live."""
+        stream = info if info is not None else await self._current(row, session)
+        await self._refresh(session, stream)
+        stream = await self._box_art(guild, stream)
+        pinging = await pings_for(self.bot.db, row)
+        old = await self._message(guild, session)
+        mode = str(_cell(session, "mode") or self._mode(guild.id))
+        message = await self._announce_live(
+            guild,
+            row,
+            session["id"],
+            stream,
+            words.display_for(row),
+            mode,
+            pinging,
+            discard=False,
+        )
+        if message is None:
+            return None
+        await set_replay_cleared(self.bot.db, session["id"], because)
+        await set_pinging_last(self.bot.db, session["id"], pinging)
+        if old is not None:
+            try:
+                await old.delete()
+            except Exception as exc:
+                log.warning(
+                    "spotlight: could not delete the replay post of %s — %s",
+                    row["twitch_login"],
+                    words.reason_of(exc),
+                )
+        upgraded_kind = (
+            "golive.replay_treated_live"
+            if because == replays.CLEARED_STAFF
+            else "golive.replay_upgraded"
+        )
+        await log_action(
+            self.bot,
+            guild,
+            kind_via(upgraded_kind, via),
+            actor=actor,
+            details={
+                "spotlight_id": row["id"],
+                "session_id": session["id"],
+                "login": row["twitch_login"],
+                "reason": _cell(session, "replay_reason"),
+                "action": _cell(session, "replay_action"),
+                "because": because,
+                "title": stream.title,
+                "message_id": str(message.id),
+                "replay_message_id": str(getattr(old, "id", "") or "") or None,
+                "via": via,
+            },
+        )
+        return message
+
     async def _maybe_bump(
         self, guild: Any, row: Any, session: Any, info: Any, *, refreshed: bool | None = None
     ) -> None:
         if not words.is_spotlit(row) or not words.announces(row):
+            return
+        if replays.is_replay(session):
             return
         hours = words.bump_hours_for(row, self.bot.store.get(guild.id, SPOTLIGHT_BUMP_HOURS_KEY))
         if not words.bump_due(session, hours).due:
@@ -1032,8 +1297,10 @@ class Spotlight(commands.Cog):
         store = self.bot.store
         name = words.display_for(row)
         head, body = self._shadow_head(guild, session, message.content)
-        text = head + again_render(store.get(guild.id, TEMPLATE_KEY), info, name, content=body)
-        embed = self._card_again(guild, info, name, message)
+        replay = replays.is_replay(session)
+        template = store.get(guild.id, GOLIVE_REPLAY_TEMPLATE_KEY if replay else TEMPLATE_KEY)
+        text = head + again_render(template, info, name, content=body)
+        embed = None if replay else self._card_again(guild, info, name, message)
         details = {
             "spotlight_id": row["id"],
             "session_id": session["id"],
@@ -1772,7 +2039,7 @@ async def _brighten(cog: Any, bot: Any, guild: Any, row: Any, session: Any) -> s
     """Toggle time only: the poller never re-pins what staff unpinned by hand mid-stream."""
     because = words.SPOTLIGHT_ON_BECAUSE
     if session is not None:
-        if not row["pin"] or not words.announces(row):
+        if not row["pin"] or not words.announces(row) or replays.is_replay(session):
             return None
         message = await cog._message(guild, session)
         if message is None or bool(getattr(message, "pinned", False)):
@@ -1854,6 +2121,37 @@ async def bump_now(
             return ("not_live", row)
         message = await cog.bump(guild, row, fresh, via=via, actor=actor)
     return ("bumped" if message is not None else "bump_failed", row)
+
+
+async def treat_as_live(
+    bot: Any, guild: Any, actor: Any, spotlight_id: int, *, via: str = VIA_DISCORD
+) -> tuple[str, Any]:
+    """Staff final say: this stream is live, whatever the replay read said."""
+    row = await channel_by_id(bot.db, spotlight_id)
+    if row is None or int(row["guild_id"]) != int(guild.id):
+        return ("no_row", None)
+    cog = cog_of(bot)
+    if cog is None:
+        return ("no_cog", row)
+    async with cog._lock(spotlight_id):
+        fresh = await channel_by_id(bot.db, spotlight_id)
+        session = await open_session(bot.db, spotlight_id)
+        if fresh is None or session is None or not replays.is_replay(session):
+            return ("not_replay", row)
+        message = await cog.upgrade(
+            guild, fresh, session, because=replays.CLEARED_STAFF, actor=actor, via=via
+        )
+    return ("treated" if message is not None else "post_failed", row)
+
+
+def treat_said(bot: Any, guild: Any, outcome: str, login: str) -> str:
+    if outcome == "treated":
+        return str(bot.store.get(guild.id, GOLIVE_REPLAY_TREATED_KEY)).replace("{login}", login)
+    if outcome == "not_replay":
+        return str(bot.store.get(guild.id, GOLIVE_REPLAY_NOT_REPLAY_KEY)).replace("{login}", login)
+    if outcome == "no_cog":
+        return words.NO_COG.format(login=login)
+    return words.BUMP_FAILED.format(login=login, reason=words.NO_CHANNEL)
 
 
 def window_details(window: Any) -> dict[str, Any]:
@@ -2084,6 +2382,9 @@ async def build_spotlight(
             )
         )
         lines.append(marathons_line(chosen))
+        replay = replay_state(open_by_id.get(int(chosen["id"])), replay_wording_for(bot, guild.id))
+        if replay is not None and replay["line"]:
+            lines.append(replay["line"])
         if words.ping_mode_of(chosen) == words.PING_EVENTS:
             lines += [
                 words.PANEL_WINDOW.format(line=words.window_line(one, None, tz_name))
@@ -2107,8 +2408,12 @@ async def build_spotlight(
             else:
                 view.add_item(SpotlightMoveButton("extend", chosen["id"]))
                 view.add_item(SpotlightMoveButton("keep", chosen["id"]))
-            if live and words.announces(chosen):
+            if live and words.announces(chosen) and replay is None:
                 view.add_item(SpotlightMoveButton("bump", chosen["id"]))
+        if replay is not None:
+            view.add_item(
+                SpotlightMoveButton("treat_live", chosen["id"], label=replay["treat_label"])
+            )
         view.add_item(
             SpotlightMoveButton(
                 "opt_in" if not words.announces(chosen) else "opt_out", chosen["id"]
@@ -2189,6 +2494,7 @@ class SpotlightMoveButton(discord.ui.Button):
         "keep": words.KEEP_FOREVER,
         "expire": "Let it expire",
         "bump": words.BUMP_NOW,
+        "treat_live": "Treat as live",
         "spotlight_on": words.SPOTLIGHT_ON,
         "spotlight_off": words.SPOTLIGHT_OFF,
         "opt_out": words.OPT_OUT,
@@ -2208,6 +2514,7 @@ class SpotlightMoveButton(discord.ui.Button):
         "keep": discord.ButtonStyle.success,
         "expire": discord.ButtonStyle.secondary,
         "bump": discord.ButtonStyle.primary,
+        "treat_live": discord.ButtonStyle.success,
         "spotlight_on": discord.ButtonStyle.success,
         "spotlight_off": discord.ButtonStyle.secondary,
         "opt_out": discord.ButtonStyle.secondary,
@@ -2236,9 +2543,9 @@ class SpotlightMoveButton(discord.ui.Button):
         "ping_events": 3,
     }
 
-    def __init__(self, action: str, spotlight_id: Any) -> None:
+    def __init__(self, action: str, spotlight_id: Any, label: Any = None) -> None:
         super().__init__(
-            label=self.LABELS[action],
+            label=str(label or self.LABELS[action])[:80],
             style=self.STYLES[action],
             row=self.ROWS.get(action, 1),
         )
@@ -2315,6 +2622,9 @@ async def run_spotlight_move(
         if outcome is None:
             return (words.NO_SUCH_ROW, False)
         return (outcome.message, True)
+    if action == "treat_live":
+        outcome, _ = await treat_as_live(bot, guild, actor, spotlight_id)
+        return (treat_said(bot, guild, outcome, login), True)
     if action == "bump":
         outcome, _ = await bump_now(bot, guild, actor, spotlight_id)
         if outcome == "bumped":
