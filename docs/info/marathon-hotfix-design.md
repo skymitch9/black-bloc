@@ -199,3 +199,111 @@ No test makes a network call.
    first check (`marathon.feed_checked` *GDQ Hotfix* found ≥ 1) adds **GDQueer** with **24 runs**, the first
    **Sat 2026-10-03 10:00 Phoenix** (17:00Z), the last **Sun 2026-10-04 18:39 Phoenix** (01:39Z Mon), ending 20:09
    Phoenix. The feed drawer shows *Shows: GDQueer* and the sheet link. Sweeps `HF-a…d`.
+
+
+## Show picker and runner/host tracker (branch `hotfix-picker`, 2026-09-28)
+
+> 🔨 **BUILT on branch `hotfix-picker`** (off `main` `9e708194`; commits `cf6dd819` route + tracker + keys + tests,
+> `2fc24074` drawer + mock + contract, and the docs commit) — **NOT merged, NOT deployed, nothing has met Discord or
+> Fly, no live fetch.** Schema **80** unchanged; registry keys **695 → 699**; routes **+1** (`check.mjs`: *22 pages,
+> 283 routes*). **Last verified: 2026-09-28** against the conductor's fixture `gdq_hotfix_sheet.csv` only.
+
+**The ask, verbatim** (owner, 2026-09-28 14:5x): *"can we also have a section where hotfix schedule loads and we can
+manually enter or check which shows off a list that we want to track? Also lets do runner trackers. It looks like
+Anarchy is in the host category, thats a BaF member so lets track that too"* — narrowed 15:0x: *"make it optional to
+scan and spotlight for. that way we do runners scanned and shown by default ... for host we can choose to check for
+host"*.
+
+### As built
+
+- **Route** `GET /api/marathons/feeds/{id}/hotfix-shows` (staff; the feeds router's gate). The shared function is
+  `cogs/content/marathon_feeds.py:hotfix_picker`. It reads the sheet through the feed's own guarded reader
+  (`client.hotfix_sheet(feed_ref, feed.sheet_url)` — the same page → CSV walk, allowlist, caps and last-good-URL
+  fallback) and keeps a **five-minute in-memory copy** on the cog (`marathon_hotfix.SheetCache`, `cache_of(cog)`,
+  `CACHE_SECONDS = 300`). Every feed check refreshes that copy too. While the copy is fresh, opening the drawer asks
+  GDQ nothing. When a read fails and a copy exists, the answer is that copy with `stale: true` and `trouble` (the
+  reason in words). With no copy it is **502 `unreadable`**: *The GDQ Hotfix schedule could not be read just now
+  (…), and there is no earlier copy to show.* A feed that is not the Hotfix feed is **409 `not_hotfix`**. The GET
+  writes nothing (the feed's `sheet_url` is written only by checks).
+- **Answer**: `feed_id, shows, missing` (listed names the sheet does not hold), `track_people, timezone, sheet_url,
+  read_at, stale, trouble, blocks[]`. Each block has `ref, show, key, first, last, starts_at, ends_at, starts_local`
+  (the guild's `default_timezone`, `Fri 2 Oct 16:00`), `days[]` (`date, starts_at, starts_local` for each show-day),
+  `hosts, runs, listed, tracked` and `because[]`: `{kind: listed}` and/or `{kind: runs|hosts, name, user_id}` (the id
+  is a string, so JavaScript does not round it).
+- **The drawer** (`marathons-section.js:hotfixFields` → `hotfixPicker`): the *Shows* field loads the route and draws
+  one row per show, grouped by show name. Each row has a tick (= listed), the show-days as date chips (lit ✦ when a
+  BaF person is on it; the chip's title gives the run count and host), *hosted by …*, and why:
+  *tracked — on the list* / *tracked because anarchy hosts* / *not tracked*. **Add** takes a typed show name. A
+  name the sheet already holds ticks its row; a name it does not hold becomes a row *listed, not on the sheet this
+  week · Remove*. Listed names the sheet no longer holds get the same **Remove**. **Save the shows** (enabled once
+  something changed) writes `marathon_hotfix_shows` through `saveSetting` — the settings route, the one writer — and
+  the settings validator's refusals (blank, more than 20, over 60 characters) come back in words. The search box is
+  the shared `listFilter` (owner rule: one search module); it appears above eight shows. A failed load draws
+  `sentenceFor(error)`, so an outage reads as an outage and a 403 as access. The two lines of chrome (the tracker
+  on/off note and the stale note) are page constants, the staff-chrome convention.
+- **The tracker** — `marathon_hotfix_track_people` (bool, **on**). When it is on, a check takes every block a listed
+  show owns **plus** every block a BaF person is on (`marathon_hotfix.tracked`), each with its reasons. People are
+  matched by `marathon.match_people`, the People card's rule (**one rule, not a new one**), against the **everywhere**
+  pairings only (`marathon_id IS NULL`; a pairing made for one marathon never tracks a show), the members' Twitch
+  links (`golive_links`) and the exact Discord-username rule for a name with no Twitch link.
+  **A block that is listed and has a person on it is one candidate with both reasons.** It is still one marathon,
+  never two, because it has one ref (`fresh()` never takes a ref twice).
+- **Hosts** — `marathon_scan_hosts_default` (bool, **OFF**; owner narrowing 15:0x). `match_people` gained
+  `scan_hosts`, so a `host` part is matched only while BOTH `marathon_match_hosts` and this key are on. Commentators
+  still follow `marathon_match_hosts` alone. This one key decides two things. First, whether hosts count toward
+  tracking a Hotfix block (feed check and picker). Second, whether hosts show ✦BaF on EVERY marathon: `rematch`
+  passes it, and the mock's `marathonRematch` mirrors it. Hotfix hosts were already read as `host` people by
+  `marathon-hotfix` (Deviation 6), so a Hotfix marathon's People card lists its host, ✦BaF when paired AND scanned.
+  No per-marathon toggle, no host spotlight, no host events — those are the follow-up build's.
+- **The notice** — the feed notice words are keys, so the reason lines are two keys:
+  `marathon_hotfix_hosts_template` (*Tracked because **{people}** hosts it.*) and `marathon_hotfix_runs_template`
+  (*Tracked because **{people}** runs in it.*), fields `{people} {show}`. They are appended on a new line to the
+  suggest notice (from the candidate) and to the inbox line of an added Hotfix marathon (re-derived at render from
+  its stored runs' matched people, `marathon_because`). They appear **only when the show is not listed** — a listed
+  show needs no explanation. `marathon.feed_added` / `feed_suggested` / `would_*` rows carry
+  `because: {hosts: "anarchy"}` / `{runs: "…"}` the same way.
+
+### Deviations
+
+1. ⚠️ **The fixture holds 11 show blocks, not the brief's 13 blocks / 12 shows.** There are 14 show-DAYS and 11
+   shows. Special Event (9/25–9/27) and GDQueer (10/3–10/4) are each ONE block under the existing grouping (a gap of
+   more than a day starts a new block), and the feed makes one marathon per block. The picker keeps that unit and
+   shows each block's days as chips, so all 14 show-days are visible (`days[]`, new `Block.days`).
+2. ⚠️ **`The_Mathcat` is NOT matched by an everywhere pairing named `mathcat`.** The existing rule compares pairing
+   names exactly (case- and space-folded, `runner_key`), and the brief said not to invent a fuzzy one. GDQueer
+   tracks for Mathcat when their Go-live Twitch link is `the_mathcat` (the sheet links `twitch.tv/The_Mathcat`) or
+   when a pairing names `The_Mathcat`. The People card's near-miss rule may OFFER the link (*looks like @…*); it does
+   not make it. Tested both ways.
+3. ⚠️ **Hosts behind `marathon_scan_hosts_default` (default off) is a behaviour change for EVERY marathon.** A GDQ
+   host who showed ✦BaF through a pairing or a Twitch link stops counting at the next rematch, until staff turn the
+   key on. Commentators are unaffected. Four existing tests that relied on a host matching now turn the key on first.
+4. **Anarchy is NOT tracked by default**: Hidden Heroes is tracked because anarchy hosts it only after BOTH (a) the
+   conductor pairs `anarchy` → `anarchyasf` for every schedule and (b) `marathon_scan_hosts_default` is turned on.
+   With the key off the picker shows *hosted by anarchy · not tracked*.
+5. **The near-miss posts** (`marathon_near_miss`) still consider hosts under `marathon_match_hosts` alone — not
+   touched (out of scope). With host scanning off, a host-only near miss can still be posted, and linking it has no
+   effect until scanning is on.
+6. **The mock's sample** is the real 2026-09-28 sheet reduced to runners and hosts, with **Casey** (`caseyfast`, a
+   linked mock member) added to GDQueer so the mock shows a person reason. The mock's feed check still acts on the
+   GDQ feed only.
+7. The first commit's test run had `labels.js` unstaged (the label test reads it). Each commit's suite was green in
+   the tree it was run in; `cf6dd819` alone lacks the three labels, and `2fc24074` completes it.
+
+### What was NOT verified
+
+1. **No live fetch** — the picker reads through the same reader `marathon-hotfix` built, which is itself unproven
+   against gamesdonequick.com / docs.google.com from Fly (see above).
+2. **The drawer was never rendered or clicked** — no browser use in this build. `node --input-type=module --check`
+   parses it, and `check.mjs` proves the route's shape against the mock. Ticking, Add, Remove, Save, the search box
+   and the stale line have not been seen by anyone.
+3. **Nothing met Discord**: the reason lines were checked against the suite's fake inbox and notice only.
+4. **The `rematch` change on live data** — which live marathons have BaF hosts today (and so lose ✦BaF at the next
+   read with scanning off) was not measured.
+
+### Live check after merge + deploy (the owner's; sweeps `HF-e…HF-i`)
+
+1. Events ▸ Sources… ▸ **GDQ Hotfix** ▸ *Shows*: 11 rows, GDQueer ticked, *hosted by anarchy* on Hidden Heroes (Fri 2
+   Oct 16:00 Phoenix), *not tracked*.
+2. Pair `anarchy` → @anarchyasf for every schedule, turn `marathon_scan_hosts_default` on, reopen the drawer: Hidden
+   Heroes reads *tracked because anarchy hosts*; **Check now** adds it; the inbox line ends *Tracked because
+   **anarchy** hosts it.*
