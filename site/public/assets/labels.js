@@ -702,6 +702,7 @@ export const LABELS = {
   events_upcoming_max: 'How many events the upcoming-events block lists',
   posts_versions_summary_chars: 'How much of a version is shown on its row',
   posts_import_style: 'The style a post imported from a Google Doc gets',
+  posts_untitled_title: 'The title an imported doc with no title gets',
 
   guides_mode: 'Whether members can read the guides',
   guides_who_edits: 'Who may rewrite a guide',

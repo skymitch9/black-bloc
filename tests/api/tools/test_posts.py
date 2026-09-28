@@ -241,6 +241,35 @@ async def test_the_index_says_which_style_an_import_lands_in(client, sign_in, we
     assert client.get("/api/posts").json()["import_style"] == posts.PLAIN
 
 
+async def test_an_imported_title_is_numbered_and_a_typed_one_is_refused(client, sign_in, web, wf):
+    sign_in(client)
+    doc = {"title": "Untitled", "body": "words", "style": "embed", "title_from": "doc"}
+
+    first = client.post("/api/posts", json=doc).json()
+    second = client.post("/api/posts", json=doc).json()
+    third = client.post("/api/posts", json={**doc, "title": ""}).json()
+    typed = client.post("/api/posts", json={"title": "Untitled", "body": "words", "style": "embed"})
+
+    assert [one["post"]["title"] for one in (first, second, third)] == [
+        "Untitled",
+        "Untitled-1",
+        "Untitled-2",
+    ]
+    assert third["post"]["slug"] == "untitled-2"
+    assert typed.status_code == 409 and typed.json()["error"] == "slug_taken"
+
+
+async def test_the_index_says_what_an_untitled_import_is_called(client, sign_in, web, wf):
+    sign_in(client)
+    assert client.get("/api/posts").json()["untitled_title"] == "Untitled"
+
+    await web.store.set(wf.GUILD_ID, posts.UNTITLED_KEY, "Nameless")
+
+    assert client.get("/api/posts").json()["untitled_title"] == "Nameless"
+    made = client.post("/api/posts", json={"title": "", "body": "x", "title_from": "doc"}).json()
+    assert made["post"]["title"] == "Nameless" and made["untitled_title"] == "Nameless"
+
+
 async def test_saving_leaves_exactly_one_row_and_never_notes_it_twice(client, sign_in, web, wf):
     """Checklist 34: the shared move logs it, so the route must not note it on top."""
     sign_in(client)

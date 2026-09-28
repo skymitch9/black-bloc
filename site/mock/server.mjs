@@ -949,6 +949,7 @@ const SETTING_SPECS = [
   ['posts_versions_keep', 'int', 0, 0, 'how many saved versions of a post are kept; 0 (the default) keeps every one of them, and 1 to 500 trims the oldest after each save. History is cheap and a lost version is not, so raise it rather than lower it. The only remaining version is never trimmed, whatever the number says', null, 500, 0],
   ['posts_versions_summary_chars', 'int', 80, 80, 'how many characters of a version’s message are shown on its row in the Versions list, 20 to 300; 80 by default. It is one line beside View and Use this version — the whole message is in View', null, 300, 20],
   ['posts_import_style', 'enum', 'embed', 'embed', "the style a post takes when its words come from a Google Doc — on a new post made with Import a Google Doc, and on an existing post's draft when Import replaces its message. embed (the default) is the box Welcome and rules is drawn in and holds 4096 characters; plain is an ordinary message of up to 2000. Staff can still change the style of any post afterwards", ['plain', 'embed']],
+  ['posts_untitled_title', 'text', 'Untitled', 'Untitled', "the title a post made with Import a Google Doc gets when the doc has no title of its own and no title line or heading; blank restores Untitled. A second one is numbered Untitled-1, then Untitled-2. It can become the embed's title members see"],
   ['posts_block_tempvoice_name', 'text', 'Temp voice lobby', 'Temp voice lobby', "what the temp voice lobby block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Temp voice lobby. Members never see it"],
   ["posts_block_marathonrole_name", "text", "Marathon role", "Marathon role", "what the Marathon role block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Marathon role. Members never see it"],
   ["posts_block_pingsfollow_name", "text", "Ping me when they go live", "Ping me when they go live", "what the ping me when they go live block is called in the Posts page's Add a block list, its Blocks section and the /posts card; blank restores Ping me when they go live. Members never see it"],
@@ -3115,6 +3116,16 @@ function postSummaryChars() {
   return Number(state.settings.get('posts_versions_summary_chars') ?? 80) || 80;
 }
 
+function postUntitledTitle() {
+  return String(state.settings.get('posts_untitled_title') || '').trim() || 'Untitled';
+}
+
+function postNumbered(title, slug, n) {
+  if (!n) return [title, slug];
+  const tail = `-${n}`;
+  return [`${title}${tail}`, `${slug.slice(0, 60 - tail.length).replace(/^-+|-+$/g, '')}${tail}`];
+}
+
 function postImportStyle() {
   const found = String(state.settings.get('posts_import_style') || 'embed');
   return POST_CAPS[found] ? found : 'embed';
@@ -3223,6 +3234,7 @@ function postWhole(row, said) {
     guard: postGuard(),
     mode: postsMode(),
     import_style: postImportStyle(),
+    untitled_title: postUntitledTitle(),
     shadow: postShadow(),
     notes: postNotes(),
     read_at: now(),
@@ -3254,6 +3266,7 @@ route('GET', '/api/posts', (context) => {
     mode: postsMode(),
     may_edit: true,
     import_style: postImportStyle(),
+    untitled_title: postUntitledTitle(),
     styles: postStyles(),
     guard: postGuard(),
     shadow: postShadow(),
@@ -3265,18 +3278,25 @@ route('GET', '/api/posts', (context) => {
 route('POST', '/api/posts', async (context) => {
   requireStaff(context.session);
   const body = await context.body();
-  const title = String(body.title || '').trim().slice(0, POST_TITLE_MAX);
+  const number = body.title_from === 'doc';
+  let title = String(body.title || '').trim() || (number ? postUntitledTitle() : '');
+  title = title.slice(0, POST_TITLE_MAX);
   if (!title) throw new Refused(400, 'no_title', POST_TITLE_NEEDED);
   const words = String(body.body || '');
   const style = POST_CAPS[body.style] ? body.style : 'plain';
   if (words.length > postCap(style)) {
     throw new Refused(400, 'body_too_long', postTooLong(words.length, postCap(style), style, 'saved'));
   }
-  const slug = postSlugify(body.slug || title);
-  if (!slug) throw new Refused(400, 'no_slug', POST_SLUG_NEEDED);
-  if (state.posts.some((one) => one.slug === slug)) {
-    throw new Refused(409, 'slug_taken', POST_SLUG_TAKEN.split('{slug}').join(slug));
+  const wanted = postSlugify(number ? title : body.slug || title);
+  if (!wanted) throw new Refused(400, 'no_slug', POST_SLUG_NEEDED);
+  let n = 0;
+  if (number) {
+    while (state.posts.some((one) => one.slug === postNumbered(title, wanted, n)[1])) n += 1;
+  } else if (state.posts.some((one) => one.slug === wanted)) {
+    throw new Refused(409, 'slug_taken', POST_SLUG_TAKEN.split('{slug}').join(wanted));
   }
+  const [named, slug] = postNumbered(title, wanted, n);
+  title = named;
   const made = {
     id: state.nextPost++,
     slug,

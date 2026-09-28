@@ -204,6 +204,7 @@ def build_router(bot: Any) -> APIRouter:
             "guard": guard_line(bot, guild),
             "mode": posts.mode_of(bot.store, guild.id),
             "import_style": posts.import_style(bot.store, guild.id),
+            "untitled_title": posts.untitled_title(bot.store, guild.id),
             "shadow": shadow_line(bot, guild),
             "notes": _notes(guild),
             "read_at": now(),
@@ -233,6 +234,7 @@ def build_router(bot: Any) -> APIRouter:
             "mode": posts.mode_of(bot.store, guild.id),
             "may_edit": True,
             "import_style": posts.import_style(bot.store, guild.id),
+            "untitled_title": posts.untitled_title(bot.store, guild.id),
             "styles": styles(),
             "guard": guard_line(bot, guild),
             "shadow": shadow_line(bot, guild),
@@ -251,6 +253,7 @@ def build_router(bot: Any) -> APIRouter:
             slug=payload.get("slug"),
             body=payload.get("body"),
             style=payload.get("style"),
+            number=payload.get("title_from") == "doc",
             via=VIA_WEBSITE,
         )
         if not found.ok:

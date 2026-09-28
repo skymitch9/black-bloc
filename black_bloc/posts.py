@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import re
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,9 @@ PANEL_MINUTES_KEY = "posts_panel_minutes"
 VERSIONS_KEEP_KEY = "posts_versions_keep"
 VERSIONS_SUMMARY_KEY = "posts_versions_summary_chars"
 IMPORT_STYLE_KEY = "posts_import_style"
+UNTITLED_KEY = "posts_untitled_title"
+UNTITLED_DEFAULT = "Untitled"
+NUMBERED_MOST = 1000
 LOG_CHANNEL_KEY = "log_channel_id"
 ON = "on"
 OFF = "off"
@@ -774,6 +778,25 @@ def import_style(store: Any, guild_id: int) -> str:
     return wanted_style(store.get(guild_id, IMPORT_STYLE_KEY), EMBED)
 
 
+def untitled_title(store: Any, guild_id: int) -> str:
+    return str(store.get(guild_id, UNTITLED_KEY) or "").strip() or UNTITLED_DEFAULT
+
+
+def numbered(title: str, slug: str, n: int) -> tuple[str, str]:
+    if not n:
+        return title, slug
+    tail = f"-{n}"
+    return f"{title}{tail}", f"{slug[: SLUG_MAX - len(tail)].strip('-')}{tail}"
+
+
+async def taken_slugs(db: Any, guild_id: int, slug: str) -> set[str]:
+    cur = await db.conn.execute(
+        "SELECT slug FROM posts WHERE guild_id = ? AND (slug = ? OR slug LIKE ?)",
+        (int(guild_id), str(slug), f"{slug[: SLUG_MAX - 5]}%-%"),
+    )
+    return {str(one[0]) for one in await cur.fetchall()}
+
+
 def versions_keep(store: Any, guild_id: int) -> int:
     return max(0, int(store.get(guild_id, VERSIONS_KEEP_KEY) or 0))
 
@@ -1021,10 +1044,13 @@ async def make_post(
     slug: Any = None,
     body: Any = None,
     style: Any = None,
+    number: bool = False,
     via: str = VIA_DISCORD,
 ) -> Outcome:
     """A new post, empty or born with words; posting it is somebody's press, never this."""
     kept = str(title or "").strip()
+    if not kept and number:
+        kept = untitled_title(bot.store, guild.id)
     if not kept:
         return refusal(TITLE_NEEDED, "no_title", 400)
     words = str(body or "")
@@ -1035,27 +1061,45 @@ async def make_post(
     said = refused_body(words, kept_style, "saved")
     if said is not None:
         return refusal(said, "body_too_long", 400)
-    wanted = slugify(slug or kept)
+    wanted = slugify(kept if number else slug or kept)
     if not wanted:
         return refusal(SLUG_NEEDED, "no_slug", 400)
-    if await get_post(bot.db, guild.id, wanted) is not None:
-        return refusal(SLUG_TAKEN.format(slug=wanted), "slug_taken", 409)
-    post_id = await create_post(
-        bot.db,
-        guild.id,
-        slug=wanted,
-        title=kept,
-        body=words,
-        style=kept_style,
-        by=actor_id(actor),
-    )
+    post_id = None
+    n = 0
+    while post_id is None:
+        if number:
+            taken = await taken_slugs(bot.db, guild.id, wanted)
+            while numbered(kept, wanted, n)[1] in taken:
+                n += 1
+        elif await get_post(bot.db, guild.id, wanted) is not None:
+            return refusal(SLUG_TAKEN.format(slug=wanted), "slug_taken", 409)
+        if n > NUMBERED_MOST:
+            return refusal(SLUG_TAKEN.format(slug=wanted), "slug_taken", 409)
+        named, at = numbered(kept, wanted, n)
+        said = refused_title(named, kept_style)
+        if said is not None:
+            return refusal(said, "title_too_long", 400)
+        try:
+            post_id = await create_post(
+                bot.db,
+                guild.id,
+                slug=at,
+                title=named,
+                body=words,
+                style=kept_style,
+                by=actor_id(actor),
+            )
+        except sqlite3.IntegrityError:
+            if not number:
+                return refusal(SLUG_TAKEN.format(slug=wanted), "slug_taken", 409)
+            n += 1
     row = await get_post_by_id(bot.db, post_id)
     born = {}
     if words:
         made = await record_version(bot, guild, row, actor, via=via, because=BECAUSE_SAVED)
         born = {"style": kept_style, "version": await version_now(bot, row, made)}
     await note(bot, guild, row, CREATED, actor, via=via, **born)
-    return Outcome(True, CREATED_SAID.format(title=kept), value=row)
+    return Outcome(True, CREATED_SAID.format(title=named), value=row)
 
 
 async def save_post(
