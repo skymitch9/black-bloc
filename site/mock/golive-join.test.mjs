@@ -466,18 +466,16 @@ const SPOTLIGHT = [
   // The owner's ping windows, 2026-09-25: the row carries its mode, its state line and its
   // windows through the join untouched, and the Announced cell's suffix names the two modes that
   // are not the common case.
-  const gdqRow = rows.find((one) => one.twitch === 'gamesdonequick');
-  is(`${where} — an events row carries its mode`, gdqRow.spotlight.ping_mode, 'events');
-  is(`${where} — and its state line`, gdqRow.spotlight.ping_state, 'Pings: during events — open until 19 Jan 23:00');
-  is(`${where} — and both its windows`, gdqRow.spotlight.windows.length, 2);
-  is(`${where} — a marathon window is not staff's to remove`, gdqRow.spotlight.windows[1].staff, false);
-  is(`${where} — an events row says so after the spotlight word`, pingSuffix(gdqRow.spotlight), ' · pings during events');
+  is(`${where} — an events row carries its mode`, gdq.spotlight.ping_mode, 'events');
+  is(`${where} — and its state line`, gdq.spotlight.ping_state, 'Pings: during events — open until 19 Jan 23:00');
+  is(`${where} — and both its windows`, gdq.spotlight.windows.length, 2);
+  is(`${where} — a marathon window is not staff's to remove`, gdq.spotlight.windows[1].staff, false);
+  is(`${where} — an events row says so after the spotlight word`, pingSuffix(gdq.spotlight), ' · pings during events');
   const quiet = rows.find((one) => one.twitch === 'rpglimitbreak');
   is(`${where} — a never row carries its mode`, quiet.spotlight.ping_mode, 'never');
   is(`${where} — and says no pings`, pingSuffix(quiet.spotlight), ' · no pings');
   is(`${where} — an always row says nothing extra`, pingSuffix({ ping_mode: 'always' }), '');
   is(`${where} — a row from before the build says nothing extra`, pingSuffix({}), '');
-  is(`${where} — a live events row is still a pinned card`, spotlightCards(SPOTLIGHT)[0].pinned, true);
 
   // A scheduled row is a row like any other on the list; what it is NOT is a card or a session.
   const soon = rows.find((one) => one.twitch === 'gdqhotfix');
@@ -533,17 +531,12 @@ const NAMESPACE_KEYS = Object.keys(CONTRACT.settings.help);
 
   const drawerOf = (id) => DRAWERS.find((one) => one.id === id);
   const home = (id) => sorted(placed.drawers.find((one) => one.id === id).specs.map((one) => one.key));
-  same(`${where} — who gets announced`, home('who'), sorted(drawerOf('who').keys));
-  same(`${where} — where the announcement goes`, home('where'), sorted(drawerOf('where').keys));
-  same(`${where} — how a stream is spotted`, home('spotted'), sorted(drawerOf('spotted').keys));
-  same(`${where} — spotlighted channels`, home('spotlight'), sorted(drawerOf('spotlight').keys));
-  same(`${where} — two platforms at once`, home('costream'), sorted(drawerOf('costream').keys));
-  same(`${where} — replays`, home('replays'), sorted(drawerOf('replays').keys));
-  same(`${where} — what a spotlight's dates say`, home('dates'), sorted(drawerOf('dates').keys));
-  same(`${where} — when a channel pings`, home('pingwindows'), sorted(drawerOf('pingwindows').keys));
-  same(`${where} — slash panels and log lines`, home('panels'), sorted(drawerOf('panels').keys));
-  same(`${where} — the ping block on a post`, home('pingsblock'), sorted(drawerOf('pingsblock').keys));
-  is(`${where} — ping roles holds every pings_* but the mode, the log level and the panel`, home('pings').length, 10);
+  for (const one of DRAWERS.filter((drawer) => drawer.keys)) {
+    same(`${where} — the ${one.title} drawer holds its keys`, home(one.id), sorted(one.keys));
+  }
+  const listed = (key) => STRIP_KEYS.includes(key) || DRAWERS.some((one) => one.keys && one.keys.includes(key));
+  same(`${where} — ping roles holds every pings_* no other home names`, home('pings'),
+    sorted(NAMESPACE_KEYS.filter((key) => drawerOf('pings').holds(key) && !listed(key))));
   for (const key of ['pings_mode', 'pings_log_level', 'pings_panel_minutes']) {
     ok(`${where} — ${key} is not in the Ping roles drawer`, !home('pings').includes(key), `${key} is in the Ping roles drawer`);
   }

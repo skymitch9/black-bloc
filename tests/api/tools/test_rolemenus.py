@@ -89,8 +89,10 @@ async def test_a_second_menu_with_the_same_name_is_refused_with_a_sentence(clien
 
 def test_a_menu_needs_a_name_and_a_heading(client, sign_in):
     sign_in(client)
-    assert client.post("/api/rolemenus", json={"name": "x"}).status_code == 400
-    assert client.post("/api/rolemenus", json={"title": "x"}).status_code == 400
+    for payload in ({"name": "x"}, {"title": "x"}):
+        refused = client.post("/api/rolemenus", json=payload)
+        assert refused.status_code == 400, payload
+        assert refused.json()["message"]
 
 
 def test_an_unknown_mode_is_refused_by_name(client, sign_in):
@@ -132,19 +134,6 @@ async def test_the_put_body_is_the_whole_option_list(client, sign_in, web, wf):
     assert [row["role_id"] for row in second["options"]] == [str(wf.STAFF_ROLE_ID)]
     menu = await get_menu(web.db, wf.GUILD_ID, "colours")
     assert len(await get_options(web.db, menu["id"])) == 1
-
-
-def test_a_role_that_is_gone_leaves_the_menu_alone(client, sign_in, wf):
-    sign_in(client)
-    client.post("/api/rolemenus", json={"name": "colours", "title": "C"})
-
-    response = client.put(
-        "/api/rolemenus/colours", json={"options": [{"role_id": "999999", "label": "Ghost"}]}
-    )
-
-    assert response.status_code == 400
-    assert response.json()["error"] == "no_such_role"
-    assert client.get("/api/rolemenus").json()[0]["options"] == []
 
 
 def test_a_menu_nobody_has_is_a_404_with_a_sentence(client, sign_in):
@@ -550,6 +539,7 @@ async def test_a_bad_role_late_in_the_list_leaves_the_heading_alone(client, sign
     )
 
     assert response.status_code == 400
+    assert response.json()["error"] == "no_such_role"
     listed = client.get("/api/rolemenus").json()[0]
     assert listed["title"] == "Pick a colour"
     assert listed["options"] == []
@@ -592,7 +582,7 @@ async def test_a_label_past_the_limit_and_a_twenty_sixth_option_are_refused(clie
 
     assert long_label.status_code == 400 and long_label.json()["error"] == "too_long"
     assert too_many.status_code == 400
-    assert "at most 25 roles" in too_many.json()["message"]
+    assert f"at most {OPTIONS_MAX} roles" in too_many.json()["message"]
     assert client.get("/api/rolemenus").json()[0]["options"] == []
 
 

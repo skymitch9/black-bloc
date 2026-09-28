@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from black_bloc import rolegrants as grants
+from black_bloc.api.tools.members import PER_PAGE, PER_PAGE_MAX
 from black_bloc.modcases import add_case
 
 ROUTE = "/api/members"
@@ -62,7 +63,7 @@ async def test_the_roster_comes_back_with_the_counts_the_stat_strip_reads(
     assert found["staff"] == 1
     assert found["new_7d"] == 1
     assert found["shown"] == 6
-    assert found["page"] == 1 and found["per_page"] == 50
+    assert found["page"] == 1 and found["per_page"] == PER_PAGE
 
 
 async def test_a_row_carries_the_name_the_username_and_the_roles(client, sign_in, roster, wf):
@@ -166,9 +167,9 @@ async def test_per_page_is_capped_so_one_call_cannot_ask_for_the_whole_server(
 ):
     sign_in(client)
 
-    assert client.get(f"{ROUTE}?per_page=9999").json()["per_page"] == 100
+    assert client.get(f"{ROUTE}?per_page=9999").json()["per_page"] == PER_PAGE_MAX
     assert client.get(f"{ROUTE}?per_page=0").json()["per_page"] == 1
-    assert client.get(f"{ROUTE}?per_page=nonsense").json()["per_page"] == 50
+    assert client.get(f"{ROUTE}?per_page=nonsense").json()["per_page"] == PER_PAGE
 
 
 async def test_the_case_counts_come_from_one_grouped_query_for_the_page(

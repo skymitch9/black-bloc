@@ -5,6 +5,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from black_bloc.events import (
+    FORUM_CHANNEL_NAME,
+    STATUSES,
     WHERE_OTHER,
     WHERE_TEXT,
     WHERE_UNSET,
@@ -13,6 +15,7 @@ from black_bloc.events import (
     create_event,
     get_event,
 )
+from black_bloc.settings_store import EVENTS_MOVED_LINE
 
 ROUTES = [
     ("GET", "/api/events", None),
@@ -531,15 +534,8 @@ async def test_the_website_makes_the_events_forum_and_leaves_one_web_row(
 
     assert made.status_code == 200 and made.json()["made"] is True
     forum = guild.created[-1]
-    assert forum.name == "events" and forum.type.name == "forum"
-    assert [tag.name for tag in forum.available_tags] == [
-        "pending",
-        "approved",
-        "denied",
-        "live",
-        "done",
-        "cancelled",
-    ]
+    assert forum.name == FORUM_CHANNEL_NAME and forum.type.name == "forum"
+    assert [tag.name for tag in forum.available_tags] == list(STATUSES)
     assert web.store.get(wf.GUILD_ID, "events_forum_channel_id") == forum.id
     found = await wf.kinds_in(web.db)
     assert "web.event.forum_made" in found and "event.forum_made" not in found
@@ -664,9 +660,8 @@ async def test_the_old_room_is_told_where_the_event_went(client, sign_in, web, g
 
     client.post(f"/api/events/{event_id}/forum", json={})
 
-    assert room.messages[-1].content == (
-        f"This event now lives in its own post: <#{forum.threads[0].id}>. "
-        "This room is being removed."
+    assert room.messages[-1].content == EVENTS_MOVED_LINE.format(
+        post=f"<#{forum.threads[0].id}>"
     )
 
 
@@ -730,6 +725,7 @@ async def test_moving_an_event_black_bloc_never_heard_of_is_a_404(client, sign_i
     answer = client.post("/api/events/9999/forum", json={})
 
     assert answer.status_code == 404
+    assert "no event" in answer.json()["message"]
 
 
 def test_moving_an_event_into_the_forum_needs_a_session(client):

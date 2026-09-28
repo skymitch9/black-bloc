@@ -7,7 +7,10 @@ import pytest
 
 from black_bloc.cogs.content.marathon import Marathons, get_marathon, runs_of
 from black_bloc.cogs.content.spotlight import add_channel, channel_by_id
+from black_bloc.marathon import BAD_POLL
+from black_bloc.marathon_people import BY_LINK, MATCHED_WORDS
 from black_bloc.marathon_sources import Person, Run, ScheduleError
+from black_bloc.settings_store import MARATHON_EVENT_MODES
 
 URL = "https://gamesdonequick.com/schedule/74"
 SKY = 21
@@ -408,7 +411,7 @@ async def test_a_marathons_own_read_gap_is_set_and_cleared_from_the_page(
     body = client.patch(f"/api/marathons/{marathon_id}", json={"poll_minutes": None}).json()
     assert body["poll_minutes"] is None
     words = client.patch(f"/api/marathons/{marathon_id}", json={"poll_minutes": "soon"})
-    assert words.status_code == 422 and "10 to 120 minutes" in words.json()["message"]
+    assert words.status_code == 422 and words.json()["message"] == BAD_POLL
 
 
 # --- a marathon is an event (docs/info/marathon-events-page-design.md §B) --------------------
@@ -469,7 +472,7 @@ async def test_the_list_carries_the_add_forms_default_and_each_rows_event(
     add(client, make_event=False)
     payload = client.get("/api/marathons").json()
     assert payload["event_mode_default"] == "none"
-    assert [one["value"] for one in payload["event_modes"]] == ["none", "marathon", "runs", "both"]
+    assert [one["value"] for one in payload["event_modes"]] == list(MARATHON_EVENT_MODES)
     assert payload["marathons"][0]["event"]["id"] is None
     assert payload["marathons"][0]["event_mode"] == "none"
     await web.store.set(wf.GUILD_ID, "marathon_event_mode_default", "runs")
@@ -591,7 +594,7 @@ async def test_the_people_answer_is_baf_then_everyone_with_how_each_matched(
     assert [one["name"] for one in body["baf"]] == ["Sky"]
     sky = body["baf"][0]
     assert sky["member"] is True and sky["user_id"] == str(SKY) and sky["login"] == "skyruns"
-    assert sky["matched_by"] == "link" and sky["matched_word"] == "matched by their Twitch link"
+    assert sky["matched_by"] == BY_LINK and sky["matched_word"] == MATCHED_WORDS[BY_LINK]
     assert [one["game"] for one in sky["runs"]] == ["Super Metroid"]
     assert sky["spotlight_id"] is None and sky["channel_id"] is None
     assert [one["name"] for one in body["others"]] == ["Interview Crew", "Somebody"]

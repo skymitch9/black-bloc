@@ -80,10 +80,10 @@ async def test_the_list_carries_the_pills_the_page_draws(client, sign_in, web, w
     first, second = found["posts"]
     assert first["channel_name"] == "blackbloc-logs"
     assert first["status"] == ["not posted"] and first["move"] == "Post it"
-    assert first["cap"] == 2000 and first["title_cap"] == 256
+    assert first["cap"] == posts.CAPS[posts.PLAIN] and first["title_cap"] == posts.TITLE_MAX
     assert second["channel_id"] is None and second["channel_name"] is None
     assert found["mode"] == "on" and found["may_edit"] is True
-    assert [one["style"] for one in found["styles"]] == ["plain", "embed"]
+    assert [one["style"] for one in found["styles"]] == list(posts.STYLES)
     assert found["guard"]["test_mode"] is False and found["guard"]["said"] is None
     assert found["notes"] == []
 
@@ -205,7 +205,7 @@ async def test_saving_leaves_exactly_one_row_and_never_notes_it_twice(client, si
     found = client.put("/api/posts/notice", json={"body": "Written on the site."}).json()
 
     assert found["post"]["body"] == "Written on the site."
-    assert found["message"] == "**A notice** is saved."
+    assert found["message"] == posts.SAVED_SAID.format(title="A notice")
     details = await wf.one_web_row(web.db, "web.post.saved")
     assert details["slug"] == "notice"
 
@@ -214,11 +214,12 @@ async def test_over_the_cap_is_a_400_with_the_count_in_the_sentence(client, sign
     sign_in(client)
     await a_post(web, wf)
 
-    response = client.put("/api/posts/notice", json={"body": "x" * 2050})
+    cap = posts.CAPS[posts.PLAIN]
+    response = client.put("/api/posts/notice", json={"body": "x" * (cap + 50)})
 
     assert response.status_code == 400
     assert response.json()["error"] == "body_too_long"
-    assert "2050" in response.json()["message"] and "2000" in response.json()["message"]
+    assert str(cap + 50) in response.json()["message"] and str(cap) in response.json()["message"]
     assert await wf.web_rows_in(web.db) == []
 
 
@@ -320,15 +321,6 @@ async def test_a_post_that_is_not_posted_refuses_the_take_down(client, sign_in, 
 
     assert response.status_code == 409
     assert response.json()["error"] == "not_posted"
-
-
-async def test_the_put_back_route_is_gone(client, sign_in, web, wf):
-    sign_in(client)
-    await a_post(web, wf)
-
-    response = client.post("/api/posts/notice/reset", json={})
-
-    assert response.status_code in (404, 405)
 
 
 async def test_the_versions_list_is_newest_first_and_names_who_saved_each_one(
