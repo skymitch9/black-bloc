@@ -1647,3 +1647,25 @@ async def test_a_demoted_staffer_cannot_post_todays_wishes(cog, bot, birthday_pe
     assert "staff only" in (await click(bot, birthday_person, move)).sent
     assert party_posts(bot) == []
     assert "birthday.posted_now" not in await action_kinds(bot.db)
+
+
+# --- pinned before the birthday block (blocks-buttons): today's /birthday entry flow -----------
+
+
+def test_pinned_birthday_is_the_cog_s_only_command(cog):
+    assert [one.name for one in cog.get_app_commands()] == ["birthday"]
+
+
+async def test_pinned_the_panel_s_set_button_opens_the_date_modal_for_the_member(
+    cog, bot, birthday_person
+):
+    interaction = await open_panel(cog, bot, birthday_person)
+    view = panel_view(interaction)
+    press = next(one for one in view.children if getattr(one, "label", None) == "Set my birthday")
+    clicked = FakeInteraction(bot, birthday_person)
+
+    await press.callback(clicked)
+
+    modal = clicked.response.modals[0]
+    assert isinstance(modal, DateModal)
+    assert modal.mine is True and modal.member is birthday_person

@@ -370,3 +370,29 @@ async def test_a_highlight_a_person_deleted_is_forgotten_not_posted_again(bot, c
     row = await run_of(bot, marathon, "Super Metroid")
     assert row["public_message_id"] is None and public_posts(bot) == []
     assert "marathon.public_highlight_lost" in await kinds(bot.db)
+
+
+async def test_pinned_the_marathon_cog_registers_its_eight_buttons_before_the_role_block():
+    from black_bloc.cogs.content.marathon import NextButton
+    from black_bloc.cogs.content.marathon_feeds import FeedButton, NoticeModePick
+    from black_bloc.cogs.content.marathon_inbox import InboxButton
+    from black_bloc.cogs.content.marathon_near_miss import NearMissButton
+    from black_bloc.cogs.content.marathon_people import PeopleButton
+    from black_bloc.cogs.content.marathon_thread_controls import ControlButton
+
+    registered = []
+    made = Marathons.__new__(Marathons)
+    made.bot = type("Bot", (), {"db": type("Db", (), {"is_connected": False})()})()
+    made.bot.add_dynamic_items = lambda *items: registered.extend(items)
+    await Marathons.cog_load(made)
+
+    assert registered[:8] == [
+        NextButton,
+        FeedButton,
+        NoticeModePick,
+        PeopleButton,
+        InboxButton,
+        ControlButton,
+        public.HighlightButton,
+        NearMissButton,
+    ]

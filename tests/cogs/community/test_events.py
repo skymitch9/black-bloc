@@ -5394,3 +5394,10 @@ async def test_an_events_card_with_no_marathon_says_nothing_about_one(cog, bot, 
     interaction = FakeInteraction(bot, lead)
     await events_cog.open_card(interaction, event_id)
     assert "Marathon:" not in (card_embed(interaction).description or "")
+
+
+# --- pinned before the propose block (blocks-buttons): today's entry commands ------------------
+
+
+def test_pinned_the_events_cog_s_commands(cog):
+    assert [one.name for one in cog.get_app_commands()] == ["event"]

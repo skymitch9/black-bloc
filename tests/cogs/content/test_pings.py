@@ -1437,3 +1437,37 @@ async def test_staff_take_a_channels_role_away_from_its_card(bot, lead, db):
     await button(view, helpers.CARD_REMOVE_YES).callback(FakeInteraction(bot, lead))
 
     assert await helpers.get_spotlight_fan_role(db, GUILD, GDQ) is None
+
+
+# --- pinned before the ping block (blocks-buttons): today's /pings entry flow -------------------
+
+
+def test_pinned_pings_is_the_cog_s_only_command(cog):
+    assert [one.name for one in cog.get_app_commands()] == ["pings"]
+
+
+async def test_pinned_the_command_s_panel_carries_the_follow_picker(cog, bot, streamer, fan):
+    staff_is(bot, False)
+    await a_fan_role(bot, streamer)
+    interaction = FakeInteraction(bot, fan)
+
+    await cog.pings_panel.callback(cog, interaction)
+
+    sent = interaction.response.messages[0]
+    assert sent["ephemeral"] is True and sent["embed"].title == helpers.PANEL_TITLE
+    assert placeholders(sent["view"])[0] == FOLLOW_PLACEHOLDER
+    assert picker(sent["view"], FollowPick).row == 0
+    assert "SuperNamu" in [option.label for option in picker(sent["view"], FollowPick).options]
+
+
+async def test_pinned_the_command_is_refused_while_pings_are_off_by_offering_no_picker(
+    cog, bot, streamer, fan
+):
+    staff_is(bot, False)
+    await a_fan_role(bot, streamer)
+    await bot.store.set(GUILD, "pings_mode", "off")
+    interaction = FakeInteraction(bot, fan)
+
+    await cog.pings_panel.callback(cog, interaction)
+
+    assert FOLLOW_PLACEHOLDER not in placeholders(interaction.response.messages[0]["view"])
