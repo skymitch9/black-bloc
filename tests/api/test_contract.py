@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pathlib
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -119,6 +120,10 @@ class ContractSchedule:
 
     async def horaro_schedules(self, slug):
         return []
+
+    async def hotfix_sheet(self, page_url=None, fallback=None):
+        sheet = pathlib.Path(__file__).parents[1] / "fixtures" / "marathon" / "gdq_hotfix_sheet.csv"
+        return (sheet.read_text(encoding="utf-8"), "https://docs.google.com/spreadsheets/d/e/x/pub")
 
     async def events(self, source="gdq"):
         ahead = (datetime.now(UTC) + timedelta(days=90)).replace(microsecond=0)
@@ -943,6 +948,19 @@ async def seed_world(client, web, guild, wf) -> dict:
         action="add",
         added_by=7,
     )
+    hotfix_spotlight_id = await add_spotlight(
+        db, guild_id, "gdqhotfix", added_by=7, expires_at=None, pin=False
+    )
+    feed_hotfix_id = await insert_feed(
+        db,
+        guild_id,
+        source="gdq_hotfix",
+        feed_ref="https://gamesdonequick.com/hotfix/schedule",
+        spotlight_id=hotfix_spotlight_id,
+        name="GDQ Hotfix",
+        action="add",
+        added_by=7,
+    )
     meeting_id, recording_meeting_id = await seed_meetings(db, guild_id, wf.TEST_CHANNEL_ID)
     await db.conn.execute(
         "INSERT OR IGNORE INTO channel_drafts(guild_id, channel_id, draft) VALUES (?, ?, ?)",
@@ -1014,6 +1032,7 @@ async def seed_world(client, web, guild, wf) -> dict:
         "feed_id": str(feed_id),
         "feed_suggest_id": str(feed_suggest_id),
         "feed_horaro_events_id": str(feed_horaro_events_id),
+        "feed_hotfix_id": str(feed_hotfix_id),
         "feed_event_ref": "22",
         "feedless_spotlight_id": str(role_spotlight_id),
         "recording_meeting_id": str(recording_meeting_id),

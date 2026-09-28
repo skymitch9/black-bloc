@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, unquote, urljoin, urlsplit
 
 from .doc_import import CONTENT_HOST_TAIL, DOCS_HOST, REDIRECTS, DocImportError, hop_allowed
 from .golive import twitch_login_from_url
+from .marathon import match_people, runner_key
 from .marathon_feeds import Candidate
 from .marathon_sources import (
     ANSWERED,
@@ -75,6 +76,16 @@ NAME_THE_SHOW = (
 )
 NO_SUCH_SHOW = "the Hotfix sheet lists no {show} block ahead"
 NOT_LISTED = "the Hotfix sheet does not list {show} on {day} any more"
+NOT_HOTFIX = "**{name}** does not read the GDQ Hotfix schedule, so it has no shows to pick from."
+PICKER_UNREADABLE = (
+    "The GDQ Hotfix schedule could not be read just now ({why}), and there is no earlier copy "
+    "to show. Nothing was changed — try again in a few minutes."
+)
+LISTED = "listed"
+BY_RUNNER = "runs"
+BY_HOST = "hosts"
+PARTS = {RUNNER: BY_RUNNER, HOST: BY_HOST}
+CACHE_SECONDS = 300
 
 
 @dataclass(frozen=True)
@@ -84,6 +95,7 @@ class Block:
     first: date
     last: date
     runs: tuple[Run, ...]
+    days: tuple[tuple[date, str | None], ...] = ()
 
     @property
     def ref(self) -> str:
@@ -276,6 +288,14 @@ def _runs(rows: list[_Row]) -> tuple[Run, ...]:
     return tuple(found)
 
 
+def _block(key: str, chunk: list[_Row]) -> Block:
+    runs = _runs(chunk)
+    days: dict[date, str | None] = {}
+    for row, run in zip(chunk, runs, strict=True):
+        days.setdefault(row.day, run.starts_at)
+    return Block(chunk[0].show, key, chunk[0].day, chunk[-1].day, runs, tuple(days.items()))
+
+
 def blocks_of(text: str) -> list[Block]:
     """Every show's rows, split where two show dates are more than a day apart."""
     by_show: dict[str, list[_Row]] = {}
@@ -287,11 +307,11 @@ def blocks_of(text: str) -> list[Block]:
         chunk: list[_Row] = []
         for row in rows:
             if chunk and (row.day - chunk[-1].day).days > BLOCK_GAP_DAYS:
-                found.append(Block(chunk[0].show, key, chunk[0].day, chunk[-1].day, _runs(chunk)))
+                found.append(_block(key, chunk))
                 chunk = []
             chunk.append(row)
         if chunk:
-            found.append(Block(chunk[0].show, key, chunk[0].day, chunk[-1].day, _runs(chunk)))
+            found.append(_block(key, chunk))
     found.sort(key=lambda one: (one.first, one.key))
     return found
 
@@ -332,7 +352,11 @@ def _at(stamp: Any) -> datetime | None:
 
 
 def candidates(
-    blocks: list[Block], now: datetime, recent_days: int, taken: set[str]
+    blocks: list[Block],
+    now: datetime,
+    recent_days: int,
+    taken: set[str],
+    because: dict[str, Any] | None = None,
 ) -> list[Candidate]:
     """Each listed block not over (by END) more than `recent_days` ago. A show's name alone,
     unless the sheet holds two of its blocks or a marathon already has that name."""
@@ -348,7 +372,172 @@ def candidates(
         name = one.show
         if per_show[one.key] > 1 or name.lower() in taken:
             name = f"{one.show} ({one.first.strftime('%b %Y')})"
-        found.append(Candidate(one.ref, name[:100], one.starts_at, one.ends_at, page_of(one.ref)))
+        why = tuple((because or {}).get(one.ref, ()))
+        found.append(
+            Candidate(one.ref, name[:100], one.starts_at, one.ends_at, page_of(one.ref), why)
+        )
+    return found
+
+
+def _owner(row: Any) -> Any:
+    try:
+        return row["marathon_id"]
+    except (IndexError, KeyError, TypeError):
+        return None
+
+
+def matched_of(
+    block: Block,
+    links: dict[str, int],
+    pairings: Any,
+    *,
+    match_hosts: bool,
+    usernames: dict[str, int] | None = None,
+    scan_hosts: bool = False,
+) -> list[dict[str, Any]]:
+    """Every person on the block, matched by the people feature's rule with the pairings made
+    for every schedule only."""
+    wide = [row for row in pairings or () if _owner(row) is None]
+    return [
+        person
+        for run in block.runs
+        for person in match_people(
+            run.people,
+            links,
+            wide,
+            match_hosts=match_hosts,
+            usernames=usernames,
+            scan_hosts=scan_hosts,
+        )
+    ]
+
+
+def reasons_of(key: str, wanted: set[str], matched: Any) -> list[dict[str, Any]]:
+    """Why a show block is tracked: listed, and each BaF person who runs or hosts it once."""
+    found: list[dict[str, Any]] = [{"kind": LISTED}] if key in wanted else []
+    seen: set[tuple[str, str]] = set()
+    for person in matched or ():
+        kind = PARTS.get(str(person.get("part")))
+        if kind is None or not person.get("user_id"):
+            continue
+        mark = (kind, runner_key(person.get("name")))
+        if mark in seen:
+            continue
+        seen.add(mark)
+        found.append(
+            {"kind": kind, "name": str(person.get("name") or ""), "user_id": int(person["user_id"])}
+        )
+    return found
+
+
+def tracked(
+    blocks: list[Block], shows: Any, matched: dict[str, Any] | None = None
+) -> list[tuple[Block, list[dict[str, Any]]]]:
+    """The blocks the feed takes, each with its reasons: a listed show, or a BaF person on it."""
+    wanted = {show_key(one) for one in shows or ()}
+    found: list[tuple[Block, list[dict[str, Any]]]] = []
+    for one in blocks:
+        why = reasons_of(one.key, wanted, (matched or {}).get(one.ref, ()))
+        if why:
+            found.append((one, why))
+    return found
+
+
+def because_of(reasons: Any) -> dict[str, str]:
+    """The people a block was taken for, by part — nothing when its show is listed."""
+    given = [dict(one) for one in reasons or () if isinstance(one, dict)]
+    if any(one.get("kind") == LISTED for one in given):
+        return {}
+    found: dict[str, str] = {}
+    for kind in (BY_HOST, BY_RUNNER):
+        names = [str(one.get("name")) for one in given if one.get("kind") == kind]
+        if names:
+            found[kind] = ", ".join(names)
+    return found
+
+
+def hosts_of(block: Block) -> list[str]:
+    found: list[str] = []
+    for run in block.runs:
+        for person in run.people:
+            if person.part == HOST and person.name not in found:
+                found.append(person.name)
+    return found
+
+
+def local_words(stamp: Any, zone_name: Any) -> str | None:
+    at = _at(stamp)
+    where = zone(zone_name) if zone_name else None
+    if at is None:
+        return None
+    here = at.astimezone(where) if where is not None else at
+    return f"{here:%a} {here.day} {here:%b} {here:%H:%M}"
+
+
+def picker_rows(
+    blocks: list[Block], shows: Any, matched: dict[str, Any], zone_name: Any
+) -> list[dict[str, Any]]:
+    """Every show block on the sheet for the drawer's picker, each with why it is tracked."""
+    wanted = {show_key(one) for one in shows or ()}
+    rows: list[dict[str, Any]] = []
+    for one in blocks:
+        why = reasons_of(one.key, wanted, matched.get(one.ref, ()))
+        rows.append(
+            {
+                "ref": one.ref,
+                "show": one.show,
+                "key": one.key,
+                "first": one.first.isoformat(),
+                "last": one.last.isoformat(),
+                "starts_at": one.starts_at,
+                "ends_at": one.ends_at,
+                "starts_local": local_words(one.starts_at, zone_name),
+                "days": [
+                    {
+                        "date": day.isoformat(),
+                        "starts_at": starts,
+                        "starts_local": local_words(starts, zone_name),
+                    }
+                    for day, starts in one.days
+                ],
+                "hosts": hosts_of(one),
+                "runs": len(one.runs),
+                "listed": one.key in wanted,
+                "tracked": bool(why),
+                "because": [
+                    one | {"user_id": str(one["user_id"])} if "user_id" in one else one
+                    for one in why
+                ],
+            }
+        )
+    return rows
+
+
+def missing_shows(blocks: list[Block], shows: Any) -> list[str]:
+    on_sheet = {one.key for one in blocks}
+    return [one for one in shows or () if show_key(one) not in on_sheet]
+
+
+@dataclass
+class SheetCache:
+    text: str | None = None
+    url: str | None = None
+    read_at: datetime | None = None
+
+    def keep(self, text: str, url: str, now: datetime) -> None:
+        self.text, self.url, self.read_at = text, url, now
+
+    def fresh(self, now: datetime, seconds: int = CACHE_SECONDS) -> bool:
+        if self.text is None or self.read_at is None:
+            return False
+        return now - self.read_at < timedelta(seconds=seconds)
+
+
+def cache_of(owner: Any) -> SheetCache:
+    found = getattr(owner, "hotfix_cache", None)
+    if not isinstance(found, SheetCache):
+        found = SheetCache()
+        owner.hotfix_cache = found
     return found
 
 
@@ -424,20 +613,32 @@ def _checked(text: str) -> str:
 
 
 __all__ = [
+    "BY_HOST",
+    "BY_RUNNER",
+    "LISTED",
     "PAGE",
     "SHOWS_DEFAULT",
     "Block",
+    "SheetCache",
     "allowed",
+    "because_of",
     "block_for",
     "blocks_of",
+    "cache_of",
     "candidates",
     "fetch",
+    "hosts_of",
+    "matched_of",
+    "missing_shows",
     "page_of",
+    "picker_rows",
     "parse_hotfix",
     "read_ref",
     "read_sheet",
+    "reasons_of",
     "ref_of",
     "sheet_url_of",
     "show_key",
     "shows_of",
+    "tracked",
 ]

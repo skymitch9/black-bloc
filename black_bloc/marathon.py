@@ -404,6 +404,7 @@ def match_people(
     marathon_id: Any = None,
     match_hosts: bool = True,
     usernames: dict[str, int] | None = None,
+    scan_hosts: bool = True,
 ) -> list[dict[str, Any]]:
     """Staff pairings first, then the member's Twitch link, then — only for a name the schedule
     gave no link for — a member whose Discord username is exactly that name."""
@@ -423,7 +424,7 @@ def match_people(
         login = _cell(person, "login") if isinstance(person, dict) else person.login
         part = str(_cell(person, "part") if isinstance(person, dict) else person.part)
         user_id: int | None = None
-        if part == RUNNER or match_hosts:
+        if part == RUNNER or (match_hosts and (part != HOST or scan_hosts)):
             key = runner_key(name)
             user_id = here.get(key) or everywhere.get(key)
             if user_id is None and login:

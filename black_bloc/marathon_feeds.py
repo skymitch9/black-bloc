@@ -259,6 +259,7 @@ class Candidate(NamedTuple):
     starts_at: str | None
     ends_at: str | None
     url: str
+    because: tuple[Any, ...] = ()
 
 
 def _cell(row: Any, key: str, fallback: Any = None) -> Any:

@@ -286,3 +286,117 @@ def test_the_sheet_reads_the_same_with_either_line_ending():
     crlf = lf.replace("\n", "\r\n")
     assert hf.parse_hotfix(lf, ["GDQueer"]) == hf.parse_hotfix(crlf, ["GDQueer"])
     assert len(hf.parse_hotfix(crlf, ["GDQueer"])[0].runs) == 24
+
+
+# --- the show picker and the runner/host tracker -----------------------------------------------
+
+ANARCHY = 501
+MATHCAT = 502
+
+
+def everywhere(name, user_id):
+    return {"runner_name": name.lower(), "user_id": user_id, "marathon_id": None}
+
+
+def matched(links=None, pairings=(), hosts=True, scan=True):
+    return {
+        one.ref: hf.matched_of(one, links or {}, pairings, match_hosts=hosts, scan_hosts=scan)
+        for one in hf.blocks_of(SHEET)
+    }
+
+
+def test_the_picker_reads_every_show_block_on_the_sheet_with_its_days_and_hosts():
+    rows = hf.picker_rows(hf.blocks_of(SHEET), ["GDQueer"], {}, "America/Phoenix")
+    assert len(rows) == 11
+    assert len({one["show"] for one in rows}) == 11
+    assert sum(len(one["days"]) for one in rows) == 14
+    special = next(one for one in rows if one["show"] == "Special Event")
+    assert [day["date"] for day in special["days"]] == ["2026-09-25", "2026-09-26", "2026-09-27"]
+    heroes = next(one for one in rows if one["show"] == "Hidden Heroes")
+    assert (heroes["ref"], heroes["hosts"], heroes["runs"]) == (
+        "hidden-heroes/2026-10-02",
+        ["anarchy"],
+        3,
+    )
+    assert (heroes["starts_at"], heroes["starts_local"]) == (
+        "2026-10-02T23:00:00+00:00",
+        "Fri 2 Oct 16:00",
+    )
+    assert (heroes["listed"], heroes["tracked"], heroes["because"]) == (False, False, [])
+    queer = next(one for one in rows if one["show"] == "GDQueer")
+    assert (queer["hosts"], queer["tracked"], queer["because"]) == ([], True, [{"kind": "listed"}])
+
+
+def test_anarchy_paired_everywhere_tracks_hidden_heroes_because_a_baf_person_hosts_it():
+    people = matched(pairings=[everywhere("anarchy", ANARCHY)])
+    chosen = hf.tracked(hf.blocks_of(SHEET), ["GDQueer"], people)
+    assert [(block.ref, why) for block, why in chosen] == [
+        (
+            "hidden-heroes/2026-10-02",
+            [{"kind": "hosts", "name": "anarchy", "user_id": ANARCHY}],
+        ),
+        ("gdqueer/2026-10-03", [{"kind": "listed"}]),
+    ]
+    assert hf.because_of(chosen[0][1]) == {"hosts": "anarchy"}
+    assert hf.because_of(chosen[1][1]) == {}
+
+
+def test_a_host_counts_only_while_hosts_are_scanned_and_count_as_people():
+    for hosts, scan in ((False, True), (True, False)):
+        people = matched(pairings=[everywhere("anarchy", ANARCHY)], hosts=hosts, scan=scan)
+        assert hf.tracked(hf.blocks_of(SHEET), [], people) == []
+
+
+def test_a_pairing_made_for_one_marathon_does_not_track_a_show():
+    pairing = {"runner_name": "anarchy", "user_id": ANARCHY, "marathon_id": 9}
+    people = matched(pairings=[pairing])
+    assert hf.tracked(hf.blocks_of(SHEET), [], people) == []
+
+
+def test_mathcat_by_twitch_link_tracks_gdqueer_even_when_it_is_not_listed():
+    people = matched(links={"the_mathcat": MATHCAT})
+    chosen = hf.tracked(hf.blocks_of(SHEET), ["Fast Travel"], people)
+    assert [(block.ref, why) for block, why in chosen] == [
+        ("fast-travel/2026-09-25", [{"kind": "listed"}]),
+        ("gdqueer/2026-10-03", [{"kind": "runs", "name": "The_Mathcat", "user_id": MATHCAT}]),
+    ]
+
+
+def test_the_name_rule_is_exact_so_a_mathcat_pairing_is_not_the_mathcat():
+    blocks = hf.blocks_of(SHEET)
+    assert hf.tracked(blocks, [], matched(pairings=[everywhere("mathcat", MATHCAT)])) == []
+    chosen = hf.tracked(blocks, [], matched(pairings=[everywhere("The_Mathcat", MATHCAT)]))
+    assert [block.ref for block, _ in chosen] == ["gdqueer/2026-10-03"]
+
+
+def test_the_tracker_off_leaves_only_the_listed_shows():
+    chosen = hf.tracked(hf.blocks_of(SHEET), ["GDQueer", "Hidden Heroes"], {})
+    assert [block.ref for block, _ in chosen] == ["hidden-heroes/2026-10-02", "gdqueer/2026-10-03"]
+
+
+def test_listed_and_a_person_on_the_same_block_is_one_candidate_with_both_reasons():
+    people = matched(links={"the_mathcat": MATHCAT})
+    chosen = hf.tracked(hf.blocks_of(SHEET), ["GDQueer"], people)
+    assert chosen[0][1] == [
+        {"kind": "listed"},
+        {"kind": "runs", "name": "The_Mathcat", "user_id": MATHCAT},
+    ]
+    because = {block.ref: why for block, why in chosen}
+    found = hf.candidates([block for block, _ in chosen], SEPT, 1, set(), because)
+    assert [one.ref for one in found] == ["gdqueer/2026-10-03"]
+    assert hf.because_of(found[0].because) == {}
+
+
+def test_a_listed_name_the_sheet_does_not_hold_is_missing():
+    blocks = hf.blocks_of(SHEET)
+    assert hf.missing_shows(blocks, ["GDQueer", "Speedrun Sandwich"]) == ["Speedrun Sandwich"]
+
+
+def test_the_sheet_cache_is_fresh_for_five_minutes():
+    cache = hf.SheetCache()
+    assert not cache.fresh(SEPT)
+    cache.keep(SHEET, CSV, SEPT)
+    assert cache.fresh(SEPT.replace(minute=4))
+    assert not cache.fresh(SEPT.replace(minute=5))
+    owner = type("Owner", (), {})()
+    assert hf.cache_of(owner) is hf.cache_of(owner)

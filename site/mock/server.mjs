@@ -700,6 +700,7 @@ const SETTING_SPECS = [
   ["marathon_title_confirms", "bool", true, true, "whether the marathon channel's live title and game decide which run is on now. on by default; off goes by the schedule's clock alone"],
   ["marathon_late_grace_minutes", "int", 90, 90, "minutes a run may sit past its scheduled start with no sign on the stream before the schedule alone calls it live — the run before it is probably running long. 90 by default", null, 360, 0],
   ["marathon_match_hosts", "bool", true, true, "whether a host or a commentator from BaF counts as BaF, not only a runner. on by default"],
+  ["marathon_scan_hosts_default", "bool", false, false, "whether a marathon's hosts are scanned for BaF people at all — shown ✦BaF when paired or linked, and counted when the Hotfix feed tracks shows a BaF person is on. Runners are always scanned; commentators follow marathon_match_hosts. off by default"],
   ["marathon_reminder_minutes", "text", "120, 15", "120, 15", "minutes before a BaF run that a reminder is posted, separated by commas; `120, 15` by default. marathon_ping_minutes is always one of them"],
   ["marathon_ping_minutes", "int", 15, 15, "the one reminder that pings: this many minutes before a BaF run, the member's own ping role and the marathon channel's ping role are mentioned. 15 by default; 0 pings at the scheduled start", null, 240, 0],
   ["marathon_reminder_pings", "bool", true, true, "whether the marathon_ping_minutes reminder mentions any role at all. on by default"],
@@ -882,8 +883,11 @@ const SETTING_SPECS = [
   ["marathon_feed_recent_days", "int", 1, 1, "how many days after it started (a tracker event) or ended (a horaro.net schedule, an Oengus marathon, a Fastest Furs event or a Lady Arcaders event) an event still counts as new to a feed. 1 by default", null, 30, 0],
   ["marathon_ladyarcaders_floor", "int", 24, 24, "the event number the Lady Arcaders feed probes upward from — it asks the next numbers above this or above the highest event it already knows, whichever is higher; staff raise it after a link is pasted. 24 by default", null, 99999, 1],
   ["marathon_hotfix_shows", "text", "GDQueer", "GDQueer", "the GDQ Hotfix shows the Hotfix feed turns into marathons, separated by commas and spelled as the sheet's Show column spells them (capitals do not matter); each run of days a show airs becomes one marathon. `GDQueer` by default"],
+  ["marathon_hotfix_track_people", "bool", true, true, "whether the Hotfix feed also takes any show block a BaF person runs or hosts — paired for every schedule, matched by their Twitch link or their Discord name, the same rules the marathon's People card uses — even when its show is not in marathon_hotfix_shows. on by default"],
   ["marathon_feed_added_template", "text", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "{feed} has a new event: **{event}**, {when} — added. It will be read from its schedule.", "the line above a feed-found marathon's message in the marathon inbox thread, where Track and Ignore are. It takes {feed} {event} {when} {relative} {url} {channel}"],
   ["marathon_feed_suggest_template", "text", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "{feed} has a new event: **{event}**, {when} ({relative}). Add it?", "the staff notice when a feed in suggest mode finds a new event; it carries Add it and Not this one. It takes {feed} {event} {when} {relative} {url} {channel}"],
+  ["marathon_hotfix_hosts_template", "text", "Tracked because **{people}** hosts it.", "Tracked because **{people}** hosts it.", "the line under a Hotfix feed's notice when it took a show that is not in marathon_hotfix_shows because a BaF person hosts it. It takes {people} {show}"],
+  ["marathon_hotfix_runs_template", "text", "Tracked because **{people}** runs in it.", "Tracked because **{people}** runs in it.", "the line under a Hotfix feed's notice when it took a show that is not in marathon_hotfix_shows because a BaF person runs in it. It takes {people} {show}"],
   ["marathon_event_description_template", "text", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "{marathon} — read from the GDQ schedule. BaF runs are boarded in {channel}.", "what a marathon's event says about itself in the events review, the announcement and the Discord scheduled event. It takes {marathon} {channel}"],
   ['rolemenu_panel_minutes', 'int', 10, 10, "minutes the /rolemenu panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
   ['honeypot_panel_minutes', 'int', 10, 10, "minutes the /honeypot panel stays live before its buttons disable themselves; 10 by default. The 'this panel has gone quiet' footer can only be written while Discord's 15-minute interaction window is still open, so 15 or more means the buttons simply stop working with no footer to explain it"],
@@ -7155,10 +7159,11 @@ function marathonSpotlightOf(row) {
 function marathonRematch(row) {
   const links = new Map((state.golive.links || []).map((one) => [String(one.twitch_login).toLowerCase(), one.user_id]));
   const hosts = Boolean(state.settings.get('marathon_match_hosts'));
+  const scan = Boolean(state.settings.get('marathon_scan_hosts_default'));
   for (const run of marathonRunsOf(row.id)) {
     run.people = run.people.map((one) => {
       let userId = null;
-      if (one.part === 'runner' || hosts) {
+      if (one.part === 'runner' || (hosts && (one.part !== 'host' || scan))) {
         const key = one.name.trim().toLowerCase();
         const pairing = state.marathonPeople.find((p) => p.runner_name === key && p.marathon_id === row.id)
           || state.marathonPeople.find((p) => p.runner_name === key && p.marathon_id === null);
@@ -7320,6 +7325,83 @@ function hotfixShows() {
     if (name && !found.some((one) => one.toLowerCase() === name.toLowerCase())) found.push(name);
   }
   return found;
+}
+
+// The GDQ Hotfix sheet as the conductor fetched it 2026-09-28, one row per show block:
+// [ref, show, first, last, ends_at, [[day, day's start]], hosts, run count, [[runner, login]]].
+// Casey (caseyfast, a linked member here) is added to GDQueer so the picker shows a person reason.
+const HOTFIX_SAMPLE = [
+  ["fast-travel/2026-09-25", "Fast Travel", "2026-09-25", "2026-09-25", "2026-09-26T01:25:00+00:00", [["2026-09-25", "2026-09-25T23:00:00+00:00"]], ["NickRPGreen"], 2, [["DistroTV", "distrotv"], ["jayell", "jayell"]]],
+  ["special-event/2026-09-25", "Special Event", "2026-09-25", "2026-09-27", "2026-09-27T21:53:00+00:00", [["2026-09-25", "2026-09-26T02:00:00+00:00"], ["2026-09-26", "2026-09-26T17:00:00+00:00"], ["2026-09-27", "2026-09-27T17:00:00+00:00"]], ["ChurchnSarge"], 11, [["a10cj", "a10cj"], ["Cubsrule21", "cubsrule21"], ["halqery", "halqery"], ["Liqquify", "liqquify"], ["FailedUplink", "faileduplink"], ["dubiasu", "dubiasu"], ["SloaTheDemon", "sloathedemon"], ["ViridianAdventure", "viridianadventure"], ["Rushibald", "rushibald"], ["Pessilist", "pessilist"], ["foreverdirtch", "foreverdirtch"]]],
+  ["creature-corner/2026-09-28", "Creature Corner", "2026-09-28", "2026-09-28", "2026-09-29T04:40:00+00:00", [["2026-09-28", "2026-09-29T02:10:00+00:00"]], ["SatanHerself"], 2, [["araneacharlotte", "araneacharlotte"], ["Xenblad3", "xenblad3"]]],
+  ["perilous-paths/2026-09-28", "Perilous Paths", "2026-09-28", "2026-09-28", "2026-09-29T01:58:00+00:00", [["2026-09-28", "2026-09-28T23:00:00+00:00"]], ["Queuety"], 1, [["Toronite", "toronite"]]],
+  ["do-all-the-things/2026-09-29", "Do All The Things", "2026-09-29", "2026-09-29", "2026-09-30T04:53:00+00:00", [["2026-09-29", "2026-09-30T02:00:00+00:00"]], ["Mr_Shasta"], 2, [["Zeus1265", "zeus1265"], ["killingpepsi", "killingpepsi"]]],
+  ["random-number-generation/2026-09-29", "Random Number Generation", "2026-09-29", "2026-09-29", "2026-09-30T01:50:00+00:00", [["2026-09-29", "2026-09-29T23:00:00+00:00"]], ["Skybilz"], 1, [["Eddie", "eddie"]]],
+  ["out-of-the-box/2026-09-30", "Out of the Box", "2026-09-30", "2026-09-30", "2026-10-01T01:32:00+00:00", [["2026-09-30", "2026-09-30T23:00:00+00:00"]], ["ateatree"], 2, [["Bradley_Gam1ng", "bradley_gam1ng"], ["CptGallant", "cptgallant"]]],
+  ["passion-project/2026-09-30", "Passion Project", "2026-09-30", "2026-09-30", "2026-10-01T04:35:00+00:00", [["2026-09-30", "2026-10-01T02:00:00+00:00"]], ["AmberCyprian"], 2, [["Ian_LC", "ian_lc"], ["furisketoakio", "furisketoakio"]]],
+  ["hidden-heroes/2026-10-02", "Hidden Heroes", "2026-10-02", "2026-10-02", "2026-10-03T01:50:00+00:00", [["2026-10-02", "2026-10-02T23:00:00+00:00"]], ["anarchy"], 3, [["clipboardenthusiast", "clipboardenthusiast"], ["typedef_sorbet", "typedef_sorbet"], ["sylllphie", "sylllphie"]]],
+  ["the-scenic-route/2026-10-02", "The Scenic Route", "2026-10-02", "2026-10-02", "2026-10-03T04:45:00+00:00", [["2026-10-02", "2026-10-03T02:00:00+00:00"]], ["Ozmourn"], 3, [["yoyofruits", "yoyofruits"], ["wildcherrymeteor", "wildcherrymeteor"], ["cutefangies", "cutefangies"], ["ozokerite11", "ozokerite11"]]],
+  ["gdqueer/2026-10-03", "GDQueer", "2026-10-03", "2026-10-04", "2026-10-05T03:09:00+00:00", [["2026-10-03", "2026-10-03T17:00:00+00:00"], ["2026-10-04", "2026-10-04T17:00:00+00:00"]], [], 24, [["Toronite", "toronite"], ["PumpkinPower14", "pumpkinpower14"], ["Bloupeuh", "bloupeuh"], ["Mr_Shasta", "mr_shasta"], ["Jr", "jr"], ["debeaunairVT", "debeaunairvt"], ["LaurieDBunnykins", "lauriedbunnykins"], ["Mouseshy", "mouseshy"], ["dubiasu", "dubiasu"], ["ProfessorBurtch", "professorburtch"], ["threepup", "threepup"], ["BehemothSteve", "behemothsteve"], ["CrispyHanako", "crispyhanako"], ["caitlin_hr", "caitlin_hr"], ["dragonz4477", "dragonz4477"], ["Starwindx9", "starwindx9"], ["Casey", "caseyfast"], ["The_Mathcat", "the_mathcat"], ["BashPrime", "bashprime"], ["Demasu", "demasu"], ["Ramseyfox", "ramseyfox"], ["LMMotoss", "lmmotoss"], ["fletchisafurry", "fletchisafurry"], ["218_vt", "218_vt"], ["Chilling_Willow", "chilling_willow"], ["Jaxler1", "jaxler1"], ["araneacharlotte", "araneacharlotte"]]],
+];
+
+function hotfixKey(name) {
+  return String(name || '').toLowerCase().split(/\s+/).filter(Boolean).join('-');
+}
+
+function hotfixLocal(stamp, zoneName) {
+  if (!stamp) return null;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: zoneName || 'UTC' })
+    .formatToParts(new Date(stamp)).map((one) => [one.type, one.value]));
+  return `${parts.weekday} ${parts.day} ${parts.month} ${parts.hour}:${parts.minute}`;
+}
+
+// The bot's marathon_hotfix.reasons_of over marathon.match_people: everywhere pairings, then a
+// linked Twitch login; runners always, hosts only while marathon_scan_hosts_default is on.
+function hotfixReasons(block, wanted) {
+  const [ref, , , , , , hosts, , runners] = block;
+  const found = wanted.has(ref.split('/')[0]) ? [{ kind: 'listed' }] : [];
+  if (!state.settings.get('marathon_hotfix_track_people')) return found;
+  const links = new Map((state.golive.links || []).map((one) => [String(one.twitch_login).toLowerCase(), one.user_id]));
+  const paired = (name) => state.marathonPeople.find((one) => one.marathon_id === null && one.runner_name === name.trim().toLowerCase());
+  const scanHosts = Boolean(state.settings.get('marathon_match_hosts')) && Boolean(state.settings.get('marathon_scan_hosts_default'));
+  const seen = new Set();
+  const add = (kind, name, userId) => {
+    const mark = `${kind}/${name.toLowerCase()}`;
+    if (!userId || seen.has(mark)) return;
+    seen.add(mark);
+    found.push({ kind, name, user_id: String(userId) });
+  };
+  for (const [name, login] of runners) add('runs', name, (paired(name) || {}).user_id || (login ? links.get(login) : null));
+  if (scanHosts) for (const name of hosts) add('hosts', name, (paired(name) || {}).user_id);
+  return found;
+}
+
+function hotfixPicker(feed) {
+  const shows = hotfixShows();
+  const wanted = new Set(shows.map(hotfixKey));
+  const zoneName = String(state.settings.get('default_timezone') || '');
+  const onSheet = new Set(HOTFIX_SAMPLE.map((one) => one[0].split('/')[0]));
+  return {
+    feed_id: feed.id,
+    shows,
+    missing: shows.filter((one) => !onSheet.has(hotfixKey(one))),
+    track_people: Boolean(state.settings.get('marathon_hotfix_track_people')),
+    timezone: zoneName,
+    sheet_url: feed.sheet_url || null,
+    read_at: feed.last_checked_at || null,
+    stale: false,
+    trouble: null,
+    blocks: HOTFIX_SAMPLE.map((block) => {
+      const [ref, show, first, last, endsAt, days, hosts, runs] = block;
+      const because = hotfixReasons(block, wanted);
+      return {
+        ref, show, key: ref.split('/')[0], first, last,
+        starts_at: days[0][1], ends_at: endsAt, starts_local: hotfixLocal(days[0][1], zoneName),
+        days: days.map(([date, startsAt]) => ({ date, starts_at: startsAt, starts_local: hotfixLocal(startsAt, zoneName) })),
+        hosts, runs, listed: wanted.has(ref.split('/')[0]), tracked: because.length > 0, because,
+      };
+    }),
+  };
 }
 
 // The bot stores a pick's source: gdq and rpglb are both `tracker`, the rest are themselves.
@@ -7622,6 +7704,13 @@ route('POST', '/api/marathons/feeds/:feed_id/forget', (context) => {
   logAction('web.marathon.feed_forgot', { details: { feed_id: feed.id, forgot: [...feed.ignored], via: 'website' } });
   feed.ignored = [];
   return { ...feedRow(feed), message: `**${feed.name}** forgot ${count} removed event(s); the next check may add them again.` };
+});
+
+route('GET', '/api/marathons/feeds/:feed_id/hotfix-shows', (context) => {
+  requireStaff(context.session);
+  const feed = feedOf(context.params.feed_id);
+  if (feed.source !== 'gdq_hotfix') throw new Refused(409, 'not_hotfix', `**${feed.name}** does not read the GDQ Hotfix schedule, so it has no shows to pick from.`);
+  return hotfixPicker(feed);
 });
 
 route('POST', '/api/marathons/feeds/:feed_id/add', async (context) => {

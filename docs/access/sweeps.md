@@ -1,6 +1,7 @@
 ﻿# Owner sweeps — what is shipped but never exercised by a person
 
 > **Audience:** the owner. **Status:** TRACKED (owner, 2026-08-31 — permanently, not temporarily). Last verified:
+> **2026-09-28 (branch `hotfix-picker`)** — ONE section APPENDED (`HF-e`…`HF-i`, BUILT, NOT MERGED, NOT verified against a browser or a live fetch); `HF-c`'s *type into Shows* is superseded by `HF-f` (the field is a picker now). Before that,
 > **2026-09-28 (branch `marathon-hotfix`)** — ONE section APPENDED (`HF-a`…`HF-d`, BUILT, NOT MERGED, NOT verified against a browser or a live fetch); nothing else touched. Before that,
 > **2026-09-28 (branch `search-module`)** — ONE section APPENDED (`SM-a`…`SM-h`, BUILT, NOT MERGED, NOT verified against a browser); `DI-f`'s quoted note wording is superseded by `SM-c`. Before that,
 > **2026-09-28 (branch `blocks-section-tidy`)** — ONE row APPENDED (`BC-f`, BUILT, NOT MERGED, NOT verified against a browser). Before that,
@@ -3826,3 +3827,20 @@ Local check first: `MOCK_PORT=8905 node site/mock/server.mjs` from the branch, t
 | **`HF-b`** | Events ▸ Marathons | **GDQueer** · *GDQ Hotfix · feed* on GamesDoneQuick, **24 runs**; the first *Spyro Reignited Trilogy* at **Sat 10:00** Phoenix, the second *Hamtaro* at **11:08**, the third at **12:00**; Sunday's first (*Wii Fit U*) at **10:00**; the last (*Metroid Dread*) **Sun 18:39–20:09**. Nothing pinged anyone. |
 | **`HF-c`** | Open the **GDQ Hotfix** feed drawer ▸ **Shows** ▸ type `GDQueer, Fast Travel` and leave the box; then Settings ▸ Marathons ▸ `marathon_hotfix_shows` | The drawer says *The Hotfix feed now reads GDQueer, Fast Travel …*; Settings shows the same value (one home). **Check now** adds a *Fast Travel* marathon only if one is still ahead on the sheet. Put it back to `GDQueer`. Typing only commas is refused in words. |
 | **`HF-d`** | **Add a feed…** ▸ GamesDoneQuick ▸ *Read from* **GDQ Hotfix** | Refused in words: *GamesDoneQuick already has a feed that reads GDQ Hotfix … A channel has one feed per source*. The same pick on another channel answers *GDQ Hotfix already reads that*. |
+
+## Rows `HF-e` … `HF-i` — GDQ Hotfix show picker and runner/host tracker (branch `hotfix-picker`, 2026-09-28)
+
+🔨 **BUILT on branch `hotfix-picker`, NOT merged, NOT deployed, NOT verified in a browser.** Owner, 2026-09-28 14:5x:
+*"a section where hotfix schedule loads and we can manually enter or check which shows off a list that we want to
+track … lets do runner trackers … Anarchy is in the host category"*. Design:
+[`../info/marathon-hotfix-design.md`](../info/marathon-hotfix-design.md) § *Show picker and runner/host tracker*.
+Rows lettered; the conductor numbers them. Local check first: `MOCK_PORT=8909 node site/mock/server.mjs` from the
+branch, then <http://localhost:8909/events.html> ▸ **Sources…** ▸ **GDQ Hotfix**.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`HF-e`** | Events ▸ **Sources…** ▸ **GDQ Hotfix** ▸ *Shows* | *Reading the Hotfix schedule…*, then one row per show on the sheet (11 on the 2026-09-28 sheet). Each row has a tick, date chips in Phoenix time (Special Event has three, GDQueer two), *hosted by …* and why. GDQueer is ticked, *tracked — on the list*. Hidden Heroes reads *hosted by anarchy · not tracked*. A *Find a show* box filters the rows. |
+| **`HF-f`** | Tick **Fast Travel**, type `Speedrun Sandwich` ▸ **Add**, press **Save the shows**; then Settings ▸ Marathons ▸ `marathon_hotfix_shows` | *The Hotfix feed now reads GDQueer, Fast Travel, Speedrun Sandwich …*; the drawer reopens with Fast Travel ticked and *Speedrun Sandwich · listed, not on the sheet this week · Remove*. Settings shows the same value. **Remove** it, untick Fast Travel, **Save**: back to `GDQueer`. Unticking everything and saving is refused in words. |
+| **`HF-g`** | Pair `anarchy` → @anarchyasf **for every schedule** (People card ▸ Link, or the panel), turn **`marathon_scan_hosts_default`** on, reopen the drawer | Hidden Heroes reads *tracked because anarchy hosts*, its chip lit. **Check now** adds *Hidden Heroes*; its inbox line ends *Tracked because **anarchy** hosts it.*; its People card shows anarchy ✦BaF as host. With the key off again, the next check adds nothing new and the picker says *not tracked*. |
+| **`HF-h`** | Settings ▸ `marathon_hotfix_track_people` **off**, reopen the drawer | The line reads *Only the ticked shows are tracked …*; no row says *tracked because*. Turn it back on. |
+| **`HF-i`** | With Mathcat's Go-live Twitch link `the_mathcat` (or a pairing named `The_Mathcat`), untick GDQueer, save, reopen | GDQueer still reads *tracked because The_Mathcat runs* — a BaF runner keeps it tracked. A pairing named only `mathcat` does NOT (the name rule is exact). Tick GDQueer again. |

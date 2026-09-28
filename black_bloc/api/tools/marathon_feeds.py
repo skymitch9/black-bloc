@@ -17,6 +17,7 @@ from ...cogs.content.marathon_feeds import (
     dismiss_suggestion,
     forget_ignored,
     get_feed,
+    hotfix_picker,
     hours_of,
     list_feeds,
     look_again,
@@ -261,6 +262,12 @@ def build_router(bot: Any) -> APIRouter:
     @router.post("/{feed_id}/forget")
     async def feed_forget(request: Request, feed_id: int) -> dict[str, Any]:
         return await step(request, feed_id, forget_ignored)
+
+    @router.get("/{feed_id}/hotfix-shows")
+    async def feed_hotfix_shows(feed_id: int) -> dict[str, Any]:
+        guild = writable()
+        row = await wanted(guild, feed_id)
+        return answered(await hotfix_picker(bot, guild, row)).value
 
     @router.post("/{feed_id}/add")
     async def feed_take(request: Request, feed_id: int, payload: dict[str, Any]) -> dict[str, Any]:

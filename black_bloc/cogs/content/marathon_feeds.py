@@ -36,6 +36,7 @@ from ...panels import (
 )
 from ...settings_store import (
     DB_UNAVAILABLE,
+    DEFAULT_TIMEZONE_KEY,
     MARATHON_AUTO_TRACK_DEFAULT_KEY,
     MARATHON_FEED_ACTION_KEY,
     MARATHON_FEED_HOURS_KEY,
@@ -55,8 +56,13 @@ from ...settings_store import (
     MARATHON_FEED_WORDS_LABEL_KEY,
     MARATHON_FEED_WORDS_SAID_KEY,
     MARATHON_FEEDS_KEY,
+    MARATHON_HOTFIX_HOSTS_TEMPLATE_KEY,
+    MARATHON_HOTFIX_RUNS_TEMPLATE_KEY,
     MARATHON_HOTFIX_SHOWS_KEY,
+    MARATHON_HOTFIX_TRACK_PEOPLE_KEY,
     MARATHON_LADYARCADERS_FLOOR_KEY,
+    MARATHON_MATCH_HOSTS_KEY,
+    MARATHON_SCAN_HOSTS_DEFAULT_KEY,
 )
 from ...timezones import unix
 from .marathon import (
@@ -76,11 +82,13 @@ from .marathon import (
     create_marathon,
     event_status_of,
     get_marathon,
+    links_of,
     minutes_for,
     mode_of,
     open_root,
     opted_out_channel,
     opted_out_said,
+    pairings_of,
     reading_of,
     refresh_marathon,
     refused_with,
@@ -92,6 +100,7 @@ from .marathon import (
     set_active,
     source_of,
     update_marathon,
+    usernames_of,
 )
 from .marathon_events import BAD_MODE_CODE, default_mode, set_event_mode
 from .spotlight import channel_by_id
@@ -105,6 +114,7 @@ UNKNOWN_PICK_CODE = "unknown_source"
 NO_SLUG_CODE = "no_slug"
 SLUG_UNREADABLE_CODE = "slug_unreadable"
 NO_SUCH_FEED_CODE = "no_such_feed"
+NOT_HOTFIX_CODE = "not_hotfix"
 BAD_ACTION_CODE = "bad_action"
 BAD_NAME_CODE = "bad_name"
 SUGGESTION_GONE_CODE = "suggestion_gone"
@@ -426,14 +436,111 @@ async def hotfix_candidates_of(
 ) -> list[mf.Candidate]:
     """The Hotfix page's sheet, one block per run of days a listed show airs; the sheet's URL
     is remembered so a page hiccup can fall back to it."""
+    cog = cog_of(bot)
     before = _cell(feed, "sheet_url")
-    text, url = await cog_of(bot).client.hotfix_sheet(feed["feed_ref"], before)
+    text, url = await cog.client.hotfix_sheet(feed["feed_ref"], before)
+    hf.cache_of(cog).keep(text, url, now)
     if url != before:
         await update_feed(bot.db, feed["id"], sheet_url=url)
     shows = hf.shows_of(bot.store.get(guild.id, MARATHON_HOTFIX_SHOWS_KEY))
     known = await marathons_by_ref(bot.db, guild.id, GDQ_HOTFIX)
     taken = {str(row["name"]).lower() for row in known.values()}
-    return hf.candidates(hf.parse_hotfix(text, shows), now, recent, taken)
+    blocks = hf.blocks_of(text)
+    chosen = hf.tracked(blocks, shows, await people_on_blocks(bot, guild, blocks))
+    because = {block.ref: why for block, why in chosen}
+    return hf.candidates([block for block, _ in chosen], now, recent, taken, because)
+
+
+async def people_on_blocks(bot: Any, guild: Any, blocks: list[Any]) -> dict[str, Any]:
+    """Each block's people matched as the People card matches them; nothing when the tracker
+    key is off."""
+    if not bot.store.get(guild.id, MARATHON_HOTFIX_TRACK_PEOPLE_KEY):
+        return {}
+    links = await links_of(bot.db)
+    pairings = await pairings_of(bot.db, guild.id)
+    hosts = bool(bot.store.get(guild.id, MARATHON_MATCH_HOSTS_KEY))
+    scan = bool(bot.store.get(guild.id, MARATHON_SCAN_HOSTS_DEFAULT_KEY))
+    usernames = usernames_of(guild)
+    return {
+        one.ref: hf.matched_of(
+            one, links, pairings, match_hosts=hosts, usernames=usernames, scan_hosts=scan
+        )
+        for one in blocks
+    }
+
+
+def because_lines(bot: Any, guild: Any, reasons: Any, show: Any = "") -> list[str]:
+    """The notice's staff lines naming who a Hotfix block was taken for."""
+    found = hf.because_of(reasons)
+    keys = (
+        (hf.BY_HOST, MARATHON_HOTFIX_HOSTS_TEMPLATE_KEY),
+        (hf.BY_RUNNER, MARATHON_HOTFIX_RUNS_TEMPLATE_KEY),
+    )
+    return [
+        words(bot, guild, key, {"people": found[kind], "show": str(show or "")})
+        for kind, key in keys
+        if kind in found
+    ]
+
+
+async def marathon_because(bot: Any, guild: Any, marathon: Any) -> list[str]:
+    """A Hotfix marathon's because lines from its stored runs, when its show is not listed."""
+    if _cell(marathon, "source") != GDQ_HOTFIX:
+        return []
+    key = str(_cell(marathon, "source_ref") or "").partition("/")[0]
+    shows = hf.shows_of(bot.store.get(guild.id, MARATHON_HOTFIX_SHOWS_KEY))
+    wanted = {hf.show_key(one) for one in shows}
+    people = [one for row in await runs_of(bot.db, marathon["id"]) for one in mt.people_of(row)]
+    return because_lines(bot, guild, hf.reasons_of(key, wanted, people), _cell(marathon, "name"))
+
+
+async def hotfix_sheet_cached(bot: Any, feed: Any, now: Any) -> tuple[str, Any, Any, str | None]:
+    """The sheet for the picker: the cache while it is fresh, else a read through the feed's
+    guarded reader; a failed read answers the last good copy with the reason."""
+    cog = cog_of(bot)
+    cache = hf.cache_of(cog)
+    if cache.fresh(now):
+        return (str(cache.text), cache.url, cache.read_at, None)
+    try:
+        text, url = await cog.client.hotfix_sheet(feed["feed_ref"], _cell(feed, "sheet_url"))
+    except ScheduleError as exc:
+        if cache.text is None:
+            raise
+        log.info("marathon: the Hotfix picker read failed (%s); the last good copy", exc)
+        return (cache.text, cache.url, cache.read_at, str(exc)[:300])
+    cache.keep(text, url, now)
+    return (text, url, now, None)
+
+
+async def hotfix_picker(bot: Any, guild: Any, feed: Any) -> Outcome:
+    """Every show block the Hotfix sheet holds, each with whether the feed takes it and why."""
+    if feed["source"] != mf.HOTFIX_FEED:
+        return refusal(hf.NOT_HOTFIX.format(name=feed["name"]), NOT_HOTFIX_CODE, 409)
+    now = cog_of(bot).clock()
+    try:
+        text, url, read_at, trouble = await hotfix_sheet_cached(bot, feed, now)
+        blocks = hf.blocks_of(text)
+    except ScheduleError as exc:
+        return refusal(hf.PICKER_UNREADABLE.format(why=str(exc)[:300]), UNREADABLE, 502)
+    shows = hf.shows_of(bot.store.get(guild.id, MARATHON_HOTFIX_SHOWS_KEY))
+    zone_name = str(bot.store.get(guild.id, DEFAULT_TIMEZONE_KEY) or "")
+    matched = await people_on_blocks(bot, guild, blocks)
+    return Outcome(
+        True,
+        "",
+        value={
+            "feed_id": feed["id"],
+            "shows": shows,
+            "missing": hf.missing_shows(blocks, shows),
+            "track_people": bool(bot.store.get(guild.id, MARATHON_HOTFIX_TRACK_PEOPLE_KEY)),
+            "timezone": zone_name,
+            "sheet_url": url,
+            "read_at": read_at.isoformat() if read_at else None,
+            "stale": trouble is not None,
+            "trouble": trouble,
+            "blocks": hf.picker_rows(blocks, shows, matched, zone_name),
+        },
+    )
 
 
 async def check_failed(
@@ -527,6 +634,11 @@ async def run_check(
 NOTICE_PUBLISHED = "published"
 
 
+def taken_for(candidate: mf.Candidate) -> dict[str, Any]:
+    found = hf.because_of(candidate.because)
+    return {"because": found} if found else {}
+
+
 async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate) -> bool:
     """`add` mode: the marathon exactly as a staff Add makes it, with its inbox message; the
     first read that finds runs is its schedule-out moment."""
@@ -542,6 +654,7 @@ async def add_candidate(bot: Any, guild: Any, feed: Any, candidate: mf.Candidate
         noticed=False,
     )
     details = feed_details(feed, mf.VIA_FEED, event=candidate.ref, name=candidate.name)
+    details |= taken_for(candidate)
     if not made.ok:
         await log_action(
             bot, guild, "marathon.feed_add_failed", details=details | {"reason": made.message}
@@ -608,7 +721,7 @@ async def suggest(
         event=candidate.ref,
         name=candidate.name,
         starts_at=candidate.starts_at,
-    )
+    ) | taken_for(candidate)
     await log_action(
         bot,
         guild,
@@ -616,6 +729,7 @@ async def suggest(
         details=details | rehearsal_details(bot, guild),
     )
     text = words(bot, guild, MARATHON_FEED_SUGGEST_TEMPLATE_KEY, await fields_of(bot, feed, record))
+    text = "\n".join([text, *because_lines(bot, guild, candidate.because, candidate.name)])
     view = notice_view(feed["id"], candidate.ref, (TAKE, DISMISS))
     message, channel_id = await post_notice(bot, guild, feed, text, view, details)
     if message is None:

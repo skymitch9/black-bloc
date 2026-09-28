@@ -66,6 +66,18 @@ def test_a_name_with_no_login_is_ours_through_a_staff_pairing():
     assert found[0]["user_id"] == 5
 
 
+def test_a_host_is_matched_only_while_hosts_are_scanned_and_a_commentator_is_not_affected():
+    people = [Person("Crew", None, "host"), Person("Couch", None, "commentator")]
+    pairings = [
+        {"marathon_id": None, "runner_name": "crew", "user_id": 5},
+        {"marathon_id": None, "runner_name": "couch", "user_id": 6},
+    ]
+    off = mt.match_people(people, {}, pairings, scan_hosts=False)
+    assert [one["user_id"] for one in off] == [None, 6]
+    on = mt.match_people(people, {}, pairings, scan_hosts=True)
+    assert [one["user_id"] for one in on] == [5, 6]
+
+
 def test_a_pairing_wins_over_the_automatic_match_and_this_marathons_wins_over_everywhere():
     people = [Person("Sky", "sky", "runner")]
     pairings = [

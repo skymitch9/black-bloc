@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *GDQ Hotfix — show picker and runner/host tracker* (branch `hotfix-picker`, off `main` `9e708194`, keyed against `2fc24074`); the *GDQ Hotfix* row for `marathons-section.js` `hotfixFields` now describes a picker, not a text field, and `marathon.py`'s `match_people` gained `scan_hosts`. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *GDQ Hotfix* (branch `marathon-hotfix`, off `main` `6fc4a5a0`, keyed against `21f6c24c`); the *Marathon feeds* rows that say a channel has ONE feed (`feed_by_channel`, the one-per-channel index, `free_channels`) describe code this branch changed — it is one feed per source now. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import titles* (branch `doc-import-title`, off `main` `9347679a`, keyed against `cd778b2f`); the *Doc import fidelity* rows for `clipmd.js` hold in meaning but their line numbers moved down (`blocksOf` was split out of `htmlToDiscordMarkdown`). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import fidelity* (branch `doc-import-fidelity`, off `main` `2072eac0`, keyed against `919853a0`); the *posts-paste* rows for `clipmd.js` still hold except that nested lists are now indented to the parent's content column and Doc-sourced HTML joins blocks with one newline. Before that:
@@ -9420,3 +9421,27 @@ Design: [`marathon-hotfix-design.md`](marathon-hotfix-design.md). Keyed against 
 | `black_bloc/storage/db.py:1333` `RETIRED_INDEXES` | `marathon_feeds_one_per_channel` is dropped AFTER the schema script creates the looser per-source index, so an old file never goes without one. |
 | `site/public/assets/marathons-section.js:1198` `hotfixFields` | The drawer writes the settings KEY through the settings route — the Settings page's writer — not a feed PATCH, so the list has one home. |
 | `site/mock/server.mjs:2266` `checkedShows` | The mock's twin of `settings_store.checked_shows`. |
+
+## GDQ Hotfix — show picker and runner/host tracker (branch `hotfix-picker`, 2026-09-28)
+
+Design: [`marathon-hotfix-design.md`](marathon-hotfix-design.md) § *Show picker and runner/host tracker*. Keyed
+against `2fc24074`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon_hotfix.py:291` `_block` | A block remembers each show-day's first run start (`Block.days`), so the picker can show every day of a multi-day block as its own chip without splitting the marathon unit. |
+| `black_bloc/marathon_hotfix.py:389` `matched_of` | The People card's `match_people`, fed only the pairings with `marathon_id IS NULL` — a pairing made for one marathon must not pull a different show in. |
+| `black_bloc/marathon_hotfix.py:415` `reasons_of` | One reason per (part, person); `listed` first. Anything but a runner or a host (a commentator) is never a reason. |
+| `black_bloc/marathon_hotfix.py:446` `because_of` | Empty when the show is listed: the notice explains only a block the list did not ask for. |
+| `black_bloc/marathon_hotfix.py:477` `picker_rows` | User ids go out as strings — a Discord id does not survive a JavaScript number. |
+| `black_bloc/marathon_hotfix.py:522` `SheetCache` | Lives on the cog (`cache_of`), so every check refreshes the picker's copy and the picker never adds a fetch while a check's copy is under five minutes old. |
+| `black_bloc/marathon.py:427` | A `host` needs `match_hosts` AND `scan_hosts`; a commentator needs `match_hosts` only. `scan_hosts` defaults True so any caller that does not pass it keeps the old rule; `rematch` and the Hotfix tracker pass the key. |
+| `black_bloc/cogs/content/marathon.py:2139` | `rematch` reads `marathon_scan_hosts_default` — the one switch a later per-marathon toggle will override. |
+| `black_bloc/cogs/content/marathon_feeds.py:434` `hotfix_candidates_of` | Every block on the sheet goes through `tracked`, not only the listed ones; a listed block with a person on it is still ONE candidate (one ref). |
+| `black_bloc/cogs/content/marathon_feeds.py:454` `people_on_blocks` | Returns nothing when `marathon_hotfix_track_people` is off, which reduces `tracked` to the list alone. |
+| `black_bloc/cogs/content/marathon_feeds.py:486` `marathon_because` | The inbox line is re-derived from the marathon's stored, already-matched people at every render, so a later unpairing or a newly listed show changes the line without a stored reason to go stale. |
+| `black_bloc/cogs/content/marathon_feeds.py:497` `hotfix_sheet_cached` | A failed read with a copy answers the copy with the reason; without one it re-raises, and `hotfix_picker` turns that into a 502 in words. The GET never writes the feed row. |
+| `black_bloc/cogs/content/marathon_inbox.py:570` | Imported inside the function: the feeds cog already imports the inbox lazily, and a top-level import would make the two a cycle. |
+| `site/public/assets/marathons-section.js:1256` `hotfixPicker` | Ticks, Add and Remove edit one local `Map` (key → name as the sheet spells it); only **Save the shows** writes, through `saveSetting`, so the validator's words come back through the drawer's `say`. |
+| `site/public/assets/marathons-section.js:1321` `hotfixFields` | The route loads after the drawer opens; a failure is `sentenceFor(error)`, so an outage never reads as a permission problem. |
+| `site/mock/server.mjs:7360` `hotfixReasons` | The mock's twin of `reasons_of` + `match_people` over its own pairings and links, host scanning included. |

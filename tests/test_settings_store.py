@@ -2295,7 +2295,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 695
+    assert len(settings_store.KEY_TYPES) == 699
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2477,3 +2477,18 @@ def test_the_hotfix_shows_are_a_list_of_names_each_once_and_never_empty():
     for bad in (" , ", ",".join(f"s{n}" for n in range(21)), "x" * 61):
         with pytest.raises(settings_store.SettingError, match="names no Hotfix show"):
             settings_store.coerce_value(key, bad)
+
+
+def test_the_hotfix_tracker_is_a_bool_on_by_default_and_its_notice_lines_are_words():
+    key = settings_store.MARATHON_HOTFIX_TRACK_PEOPLE_KEY
+    assert (settings_store.KEY_TYPES[key], settings_store.MARATHON_DEFAULTS[key]) == ("bool", True)
+    hosts = settings_store.MARATHON_HOTFIX_HOSTS_TEMPLATE_KEY
+    runs = settings_store.MARATHON_HOTFIX_RUNS_TEMPLATE_KEY
+    for key, said in (
+        (hosts, "Tracked because **{people}** hosts it."),
+        (runs, "Tracked because **{people}** runs in it."),
+    ):
+        assert settings_store.MARATHON_DEFAULTS[key] == said
+        assert settings_store.coerce_value(key, "{people} on {show}") == "{people} on {show}"
+        with pytest.raises(settings_store.SettingError):
+            settings_store.coerce_value(key, "{member}")

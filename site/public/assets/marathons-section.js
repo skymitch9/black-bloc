@@ -224,9 +224,33 @@ const FEED_ADD_NOTE = 'Pick the channel first — a feed belongs to a channel Bl
   + 'itself, Fastest Furs’ own event list, Lady Arcaders’ next events on ladyarcaders.com, or '
   + 'the GDQ Hotfix shows on the Hotfix schedule sheet.';
 const HOTFIX_SHOWS_FIELD = 'Shows';
-const HOTFIX_SHOWS_HELP = 'The Hotfix shows that become marathons, separated by commas and '
-  + 'spelled as the sheet’s Show column spells them — each run of days a show airs is one '
-  + 'marathon. This is marathon_hotfix_shows in Settings; changing it here changes it there.';
+const HOTFIX_SHOWS_HELP = 'Every show on the Hotfix schedule this week. A ticked show becomes a '
+  + 'marathon each run of days it airs. This is marathon_hotfix_shows in Settings; saving here '
+  + 'changes it there.';
+const HOTFIX_LOADING = 'Reading the Hotfix schedule…';
+const HOTFIX_SAVE = 'Save the shows';
+const HOTFIX_ADD = 'Add';
+const HOTFIX_ADD_PLACEHOLDER = 'a show that is not on the sheet this week';
+const HOTFIX_REMOVE = 'Remove';
+const HOTFIX_OFF_SHEET = 'listed, not on the sheet this week';
+const HOTFIX_TRACKED_LISTED = 'tracked — on the list';
+const HOTFIX_TRACKED_BECAUSE = 'tracked because {who}';
+const HOTFIX_NOT_TRACKED = 'not tracked';
+const HOTFIX_PERSON = { runs: '{name} runs', hosts: '{name} hosts' };
+const HOTFIX_HOSTED_BY = 'hosted by {hosts}';
+const HOTFIX_NO_HOST = 'no host of its own';
+const HOTFIX_CHIP_TITLE = '{runs} run(s) · host: {hosts}';
+const HOTFIX_PEOPLE_ON = 'Shows a BaF person runs are tracked too, ticked or not '
+  + '(marathon_hotfix_track_people). Hosts count only while marathon_scan_hosts_default is on.';
+const HOTFIX_PEOPLE_OFF = 'Only the ticked shows are tracked — marathon_hotfix_track_people is '
+  + 'off, so a BaF runner on another show does not add it.';
+const HOTFIX_STALE = 'The Hotfix schedule could not be read just now ({why}), so this is the copy '
+  + 'read {when}.';
+const HOTFIX_EMPTY_SHEET = 'The Hotfix sheet lists no shows right now.';
+const HOTFIX_SEARCH_FROM = 8;
+const HOTFIX_SEARCH_LABEL = 'Find a show';
+const HOTFIX_SEARCH_PLACEHOLDER = 'a show, a host or a BaF name';
+const HOTFIX_NO_HIT = 'No show matches that.';
 const HOTFIX_SHOWS_SAVED = 'The Hotfix feed now reads {shows}. The next check uses them.';
 const HOTFIX_SHEET_LINE = 'Reads the sheet the Hotfix page embeds: ';
 const PICK_HELP = {
@@ -1195,21 +1219,116 @@ function feedSearchInput(feed, say, one) {
   return field(one.label, input, one.help);
 }
 
+function hotfixKey(name) {
+  return String(name || '').toLowerCase().split(/\s+/).filter(Boolean).join('-');
+}
+
+function hotfixWhy(because) {
+  const people = (because || []).filter((one) => one.kind !== 'listed');
+  if (!people.length) return (because || []).length ? HOTFIX_TRACKED_LISTED : HOTFIX_NOT_TRACKED;
+  return said(HOTFIX_TRACKED_BECAUSE, { who: people.map((one) => said(HOTFIX_PERSON[one.kind], { name: one.name })).join(', ') });
+}
+
+function hotfixShowRow(show, blocks, wanted, redraw) {
+  const box = el('input', { type: 'checkbox' });
+  box.checked = wanted.has(show.key);
+  box.addEventListener('change', () => {
+    if (box.checked) wanted.set(show.key, show.name);
+    else wanted.delete(show.key);
+    redraw();
+  });
+  const chips = blocks.flatMap((block) => (block.days || []).map((day) => el('span', {
+    class: 'mx-chip',
+    'data-baf': block.because.some((one) => one.kind !== 'listed') ? 'true' : undefined,
+    title: said(HOTFIX_CHIP_TITLE, { runs: block.runs, hosts: (block.hosts || []).join(', ') || HOTFIX_NO_HOST }),
+    text: day.starts_local || day.date,
+  })));
+  const hosts = [...new Set(blocks.flatMap((block) => block.hosts || []))];
+  const why = blocks.map((block) => hotfixWhy(block.because)).filter((one, at, all) => all.indexOf(one) === at);
+  return el('div', { class: 'field-help mx-line' }, [
+    el('label', { class: 'checkline' }, [box, el('strong', { text: show.name })]),
+    el('span', { class: 'mx-chips' }, chips),
+    hosts.length ? el('span', { class: 'cell-quiet', text: ` · ${said(HOTFIX_HOSTED_BY, { hosts: hosts.join(', ') })}` }) : null,
+    el('span', { class: 'cell-quiet', text: ` · ${why.join(' · ')}` }),
+  ]);
+}
+
+function hotfixPicker(feed, say, answer) {
+  const blocks = answer.blocks || [];
+  const shows = [];
+  for (const block of blocks) {
+    let show = shows.find((one) => one.key === block.key);
+    if (!show) shows.push(show = { key: block.key, name: block.show, blocks: [] });
+    show.blocks.push(block);
+  }
+  const listed = (answer.shows || []).map((name) => [hotfixKey(name), name]);
+  const wanted = new Map(listed);
+  const before = listed.map(([key]) => key).join(',');
+  const save = button(HOTFIX_SAVE, () => {
+    const value = [...wanted.values()].join(', ');
+    feedDrawerStep(feed, say, async () => {
+      const stored = await saveSetting('marathon_hotfix_shows', value);
+      const kept = stored && typeof stored === 'object' && 'value' in stored ? stored.value : value;
+      return { message: said(HOTFIX_SHOWS_SAVED, { shows: kept }) };
+    });
+  }, { tone: 'warn' });
+  const extra = el('div', {});
+  const redraw = () => {
+    save.disabled = [...wanted.keys()].join(',') === before;
+    const offSheet = [...wanted].filter(([key]) => !shows.some((one) => one.key === key));
+    extra.replaceChildren(...offSheet.map(([key, name]) => el('p', { class: 'field-help mx-line' }, [
+      el('strong', { text: name }),
+      el('span', { class: 'cell-quiet', text: ` · ${HOTFIX_OFF_SHEET} ` }),
+      textAction(HOTFIX_REMOVE, () => { wanted.delete(key); redraw(); }),
+    ])));
+  };
+  const typed = el('input', { class: 'input', type: 'text', placeholder: HOTFIX_ADD_PLACEHOLDER });
+  const addTyped = () => {
+    const name = typed.value.trim().replace(/\s+/g, ' ');
+    if (!name) return;
+    const key = hotfixKey(name);
+    const onSheet = shows.find((one) => one.key === key);
+    wanted.set(key, onSheet ? onSheet.name : name);
+    typed.value = '';
+    const box = rows.find((one) => one.show.key === key);
+    if (box) box.node.querySelector('input[type=checkbox]').checked = true;
+    redraw();
+  };
+  typed.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addTyped(); } });
+  const rows = shows.map((show) => ({ show, node: hotfixShowRow(show, show.blocks, wanted, redraw) }));
+  const filter = rows.length > HOTFIX_SEARCH_FROM ? listFilter({
+    items: rows,
+    value: (one) => one.show,
+    text: (show) => [show.name, ...show.blocks.flatMap((block) => [...(block.hosts || []), ...block.because.map((one) => one.name || '')])].join(' '),
+    label: HOTFIX_SEARCH_LABEL,
+    placeholder: HOTFIX_SEARCH_PLACEHOLDER,
+    empty: line(HOTFIX_NO_HIT),
+  }) : null;
+  redraw();
+  return [
+    answer.stale ? line(said(HOTFIX_STALE, { why: answer.trouble || '', when: relative(answer.read_at) }), 'warn') : null,
+    line(answer.track_people ? HOTFIX_PEOPLE_ON : HOTFIX_PEOPLE_OFF),
+    filter ? el('div', { class: 'table-tools' }, [filter.search]) : null,
+    filter ? filter.none : null,
+    ...rows.map((one) => one.node),
+    rows.length ? null : line(HOTFIX_EMPTY_SHEET),
+    extra,
+    el('div', { class: 'bar' }, [typed, button(HOTFIX_ADD, addTyped, { tone: 'quiet' })]),
+    bar([save]),
+  ];
+}
+
 function hotfixFields(feed, say) {
   if (feed.source !== 'gdq_hotfix') return [];
-  const shown = (feed.shows || []).join(', ');
-  const input = el('input', { class: 'input', type: 'text', value: shown, placeholder: 'GDQueer' });
-  input.addEventListener('change', () => {
-    const wanted = input.value.trim();
-    if (wanted === shown) return;
-    feedDrawerStep(feed, say, async () => {
-      const stored = await saveSetting('marathon_hotfix_shows', wanted);
-      const value = stored && typeof stored === 'object' && 'value' in stored ? stored.value : wanted;
-      return { message: said(HOTFIX_SHOWS_SAVED, { shows: value }) };
+  const box = el('div', { class: 'mx-hotfix-picker' }, [line(HOTFIX_LOADING)]);
+  api(`/api/marathons/feeds/${feed.id}/hotfix-shows`)
+    .then((answer) => box.replaceChildren(...hotfixPicker(feed, say, answer).filter(Boolean)))
+    .catch((error) => {
+      const sentence = sentenceFor(error);
+      box.replaceChildren(notice(sentence.text, sentence.tone));
     });
-  });
   return [
-    field(HOTFIX_SHOWS_FIELD, input, HOTFIX_SHOWS_HELP),
+    field(HOTFIX_SHOWS_FIELD, box, HOTFIX_SHOWS_HELP),
     feed.sheet_url ? el('p', { class: 'field-help mx-line' }, [
       el('span', { text: HOTFIX_SHEET_LINE }),
       el('a', { href: feed.sheet_url, text: 'the sheet ↗', rel: 'noreferrer', target: '_blank' }),

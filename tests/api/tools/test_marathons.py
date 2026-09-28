@@ -218,6 +218,7 @@ async def test_patch_pauses_resumes_renames_and_sets_the_channel(client, sign_in
 async def test_pairing_a_name_makes_the_run_ours_and_unpairing_undoes_it(
     client, sign_in, web, cog, wf
 ):
+    await web.store.set(wf.GUILD_ID, "marathon_scan_hosts_default", True)
     sign_in(client)
     marathon_id = add(client).json()["id"]
     paired = client.post(
