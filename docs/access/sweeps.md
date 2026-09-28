@@ -3623,3 +3623,16 @@ numbers them.
 |---|---|---|
 | **`QP-a`** | Let the bot pin something (a marathon board, a runner post, a spotlight) — or watch the next one it makes. Then pin any message yourself by hand | The bot's *Black Bloc pinned a message* line vanishes within a second or two, in channels and in threads/forum posts alike; the Logs page (Core) shows a routine *quiet_pins.deleted* row naming the channel. **Your** pin notice stays. |
 | **`QP-b`** | Settings ▸ Core ▸ **quiet_bot_pins** off, let the bot pin again; then back on | Off: the notice stays. On: gone again. Where the bot lacks Manage Messages, ONE *quiet_pins.delete_failed* card per channel per boot in the log channel, saying it is missing Manage Messages. |
+## Rows `PCD-a` … `PCD-c` — the rules post carries the front door: one message in #welcome (branch `post-carries-door`, 2026-09-27)
+
+🔨 **BUILT on branch `post-carries-door`, NOT merged, NOT deployed.** The owner, 2026-09-27 19:5x: *"is there a way we
+can combine the 2 post so the when rules is posted to welcome it also post the something needed box in the same post"*.
+Design: [`../info/post-carries-door-design.md`](../info/post-carries-door-design.md). Rows lettered; the conductor
+numbers them. Both features are in shadow today, so everything lands in #welcome-test.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PCD-a`** | Posts ▸ **Welcome and rules** ▸ tick **Carry the front door** ▸ Save Changes ▸ **Update the post** | #welcome-test holds ONE message: the rules, then the *Need something?* card (its footer is the rehearsal note), then the three buttons. The door's own rehearsal copy is gone, nothing is pinned, and the post wears **carries the front door**. Press **Ask staff privately** — the ticket form opens. |
+| **`PCD-b`** | Settings ▸ change **frontdoor_title** (or a button label), wait ≤ 5 min | The SAME message changes its card in place — no second message, and the rules text is untouched. |
+| **`PCD-c`** | Modmail ▸ Front door ▸ **Take it down** (then tick the switch again and Update the post) | The rules stay up without the card or buttons and the switch on the post is off; ticking it again and updating puts the door back on the one message. |
+

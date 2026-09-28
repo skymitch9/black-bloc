@@ -1155,3 +1155,93 @@ async def test_the_shipped_chip_is_only_on_the_backfilled_words_the_bot_ships_wi
     ours = await posts.get_version(bot.db, int(mine["id"]), 1)
     assert not posts.is_shipped_version(mine, ours)
     assert posts.because_words(posts.BECAUSE_BACKFILL) == "what it said before"
+
+
+# --- carry the front door (post-carries-door, 2026-09-27) --------------------------------------
+
+
+async def test_a_new_post_carries_nothing_until_somebody_says_so(bot, guild):
+    row = await a_post(bot, guild)
+
+    assert not posts.carries_door(row) and not posts.door_drawn(row)
+    assert await posts.door_carrier(bot.db, GUILD) is None
+
+
+async def test_only_one_post_can_carry_the_door_and_the_refusal_names_the_first(bot, guild):
+    first = await a_post(bot, guild, slug="welcome")
+    second = await a_post(bot, guild, slug="hours")
+    assert (await posts.save_post(bot, guild, first, STAFF, carries=True)).ok
+
+    outcome = await posts.save_post(bot, guild, second, STAFF, carries=True)
+
+    assert not outcome.ok and outcome.code == "door_carried_elsewhere" and outcome.status == 409
+    assert "**A notice** already carries the front door" in outcome.message
+    fresh = await posts.get_post_by_id(bot.db, int(second["id"]))
+    assert not posts.carries_door(fresh)
+    carrier = await posts.door_carrier(bot.db, GUILD)
+    assert int(carrier["id"]) == int(first["id"])
+
+
+async def test_the_carrier_can_be_saved_again_without_refusing_itself(bot, guild):
+    row = await a_post(bot, guild)
+    await posts.save_post(bot, guild, row, STAFF, carries=True)
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+
+    outcome = await posts.save_post(bot, guild, row, STAFF, body="Changed.", carries=True)
+
+    assert outcome.ok
+
+
+async def test_carrying_on_an_unposted_post_says_the_door_joins_it_when_posted(bot, guild):
+    row = await a_post(bot, guild)
+
+    outcome = await posts.save_post(bot, guild, row, STAFF, carries=True)
+
+    assert outcome.message.endswith(posts.CARRYING_LATER_SAID)
+    assert await kinds(bot.db) == ["post.saved"]
+
+
+async def test_a_post_that_carries_nothing_sends_exactly_what_it_always_sent(bot, guild):
+    row = await a_post(bot, guild)
+
+    payload, stamp = posts.message_payload(bot, guild, row)
+
+    assert payload == posts.render_message(row) and stamp is None
+
+
+async def test_a_carrier_whose_door_is_switched_off_sends_its_own_words_and_no_buttons(
+    bot, guild
+):
+    await bot.store.set(GUILD, "frontdoor_mode", "off")
+    row = await a_post(bot, guild, style="embed")
+    await posts.set_carries_door(bot.db, int(row["id"]), True)
+    row = await posts.get_post_by_id(bot.db, int(row["id"]))
+
+    payload, stamp = posts.message_payload(bot, guild, row)
+
+    assert stamp is None and payload["view"] is None
+    assert [one.description for one in payload["embeds"]] == ["Hello."]
+
+
+def test_the_door_joins_as_the_last_embed_and_brings_its_buttons():
+    door = discord.Embed(title="Need something?")
+    view = object()
+    plain = posts.with_door({"content": "hi", "embed": None}, (door, view, "stamp"))
+    mine = discord.Embed(title="Rules")
+    embed = posts.with_door({"content": None, "embed": mine}, (door, view, "stamp"))
+
+    assert plain == {"content": "hi", "embeds": [door], "view": view}
+    assert embed == {"content": None, "embeds": [mine, door], "view": view}
+    assert posts.with_door({"content": "hi", "embed": None}, None) == {
+        "content": "hi",
+        "embeds": [],
+        "view": None,
+    }
+
+
+def test_the_carries_pill_shows_only_once_the_door_is_on_the_message():
+    asked = {"message_id": 1, "pin": 0, "carries_door": 1, "door_hash": None, "posted_hash": ""}
+    drawn = asked | {"door_hash": "abc"}
+
+    assert posts.STATUS_CARRIES_DOOR not in posts.status_words(asked)
+    assert posts.STATUS_CARRIES_DOOR in posts.status_words(drawn)

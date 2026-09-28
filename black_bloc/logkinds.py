@@ -415,6 +415,8 @@ ROUTINE: frozenset[str] = frozenset(
         "frontdoor.taken_down_shadow",
         "frontdoor.updated_shadow",
         "frontdoor.ticket_button_hidden",
+        "frontdoor.rides_post",
+        "frontdoor.redrawn_on_post",
         "golive.add_role",
         "golive.announce",
         "golive.autolink_refused",

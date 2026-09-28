@@ -25,6 +25,8 @@ from ...panels import (
 )
 from ...posts import (
     CAPS,
+    CARRY_THE_DOOR,
+    DO_NOT_CARRY_THE_DOOR,
     DO_NOT_PIN_IT,
     EMBED,
     MODE_SHADOW_SAID,
@@ -50,6 +52,7 @@ from ...posts import (
     VERSIONS_TITLE,
     VIEW_IT,
     cap_for,
+    carries_door,
     count_posts,
     get_post,
     get_version,
@@ -182,6 +185,7 @@ def build_card(bot: Any, guild: Any, row: Any) -> tuple[discord.Embed, PostsView
     if not is_seeded(row):
         view.add_item(DeleteButton(slug))
     view.add_item(VersionsButton(slug))
+    view.add_item(CarryButton(slug, carries_door(row)))
     view.add_item(BackButton())
     view.add_item(ChannelPick(slug))
     view.add_item(StylePick(slug, str(row_value(row, "style", PLAIN))))
@@ -454,6 +458,22 @@ class PinButton(discord.ui.Button):
         if not await still_staff(interaction):
             return
         await run_move(interaction, self.slug, save_post, self.view, pin=self.wanted)
+
+
+class CarryButton(discord.ui.Button):
+    def __init__(self, slug: str, carrying: bool) -> None:
+        super().__init__(
+            label=DO_NOT_CARRY_THE_DOOR if carrying else CARRY_THE_DOOR,
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
+        self.slug = slug
+        self.wanted = not carrying
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await still_staff(interaction):
+            return
+        await run_move(interaction, self.slug, save_post, self.view, carries=self.wanted)
 
 
 class VersionsButton(discord.ui.Button):
@@ -830,6 +850,7 @@ __all__ = [
     "NewPostButton",
     "NewPostModal",
     "PinButton",
+    "CarryButton",
     "PostPick",
     "Posts",
     "PostsView",

@@ -62,6 +62,10 @@ const WILL_SHADOW_SAME = 'shadow — this goes to {shadow}, which is where it wa
 const NO_SHADOW_CHANNEL = 'no shadow channel yet';
 const SHADOW = 'shadow';
 const PIN_WORDS = { true: 'pins it', false: 'leaves it unpinned' };
+const CARRY_IT = 'Carry the front door';
+const CARRY_HELP = 'The front door — the Need something? card and its ticket, request and event '
+  + 'buttons — rides under this post, in the same message. One post at a time can carry it.';
+const WILL_CARRY = ' The front door rides under it, in the same message.';
 const STYLE_WORDS = { plain: 'a plain message', embed: 'an embed' };
 // Site words, not posted words: the "every word the bot posts is editable on the site" rule
 // is about what Discord shows. These are the dashboard talking to staff.
@@ -96,6 +100,7 @@ const TONES = {
   posted: 'ok',
   'posted (shadow)': 'info',
   pinned: null,
+  'carries the front door': 'info',
   'changes not yet posted': 'warn',
   'not posted': 'danger',
 };
@@ -211,13 +216,14 @@ function draftOf(post) {
     body: post.body || '',
     style: post.style,
     pin: Boolean(post.pin),
+    carries_door: Boolean(post.carries_door),
     channel_id: post.channel_id || '',
     channel_name: post.channel_name || '',
   };
 }
 
 function changeCount(now, was) {
-  return ['title', 'body', 'style', 'pin', 'channel_id']
+  return ['title', 'body', 'style', 'pin', 'carries_door', 'channel_id']
     .filter((key) => String(now[key]) !== String(was[key])).length;
 }
 
@@ -325,6 +331,12 @@ async function postDrawer(payload, known, history) {
     pin,
     el('span', { class: 'field-label', text: 'Pin it' }),
   ]);
+  const carry = el('input', { class: 'input switch', type: 'checkbox', id: 'post-carries-door' });
+  carry.checked = draft.carries_door;
+  const carryLine = el('label', { class: 'switchline', title: CARRY_HELP }, [
+    carry,
+    el('span', { class: 'field-label', text: CARRY_IT }),
+  ]);
 
   const box = el('textarea', { class: 'input area postbox', id: 'post-body', rows: '14', spellcheck: 'true' });
   box.value = draft.body;
@@ -339,7 +351,12 @@ async function postDrawer(payload, known, history) {
   // so the pane asks it rather than rendering a second opinion here. See code-notes.
   const mock = discordMock({
     feature: POST_FEATURE,
-    sample: () => ({ style: draft.style, title: draft.title, body: draft.body }),
+    sample: () => ({
+      style: draft.style,
+      title: draft.title,
+      body: draft.body,
+      carries_door: draft.carries_door,
+    }),
   });
   const preview = el('div', { class: 'preview', id: 'post-preview' }, [mock.node, mock.say]);
 
@@ -348,7 +365,8 @@ async function postDrawer(payload, known, history) {
   const paintPreview = () => {
     mock.repaint();
     counter.paint(draft.body.length, capOf());
-    howLine.textContent = willPost(draft, post, payload, Boolean(changeCount(draft, was)));
+    howLine.textContent = willPost(draft, post, payload, Boolean(changeCount(draft, was)))
+      + (draft.carries_door ? WILL_CARRY : '');
   };
   const schedule = paintPreview;
 
@@ -391,6 +409,11 @@ async function postDrawer(payload, known, history) {
     refreshBar();
     paintPreview();
   });
+  carry.addEventListener('change', () => {
+    draft.carries_door = carry.checked;
+    refreshBar();
+    paintPreview();
+  });
   channel.addEventListener('change', () => {
     draft.channel_id = readSelect(channel, false) || '';
     const picked = known.channels.find((one) => String(one.id) === String(draft.channel_id));
@@ -405,6 +428,7 @@ async function postDrawer(payload, known, history) {
     box.value = draft.body;
     style.value = draft.style;
     pin.checked = draft.pin;
+    carry.checked = draft.carries_door;
     channel.value = draft.channel_id;
     say.say('');
     refreshBar();
@@ -416,6 +440,7 @@ async function postDrawer(payload, known, history) {
     body: draft.body,
     style: draft.style,
     pin: draft.pin,
+    carries_door: draft.carries_door,
     channel_id: draft.channel_id || null,
   });
 
@@ -581,7 +606,7 @@ async function postDrawer(payload, known, history) {
     ]),
     howLine,
     pending,
-    bar([pinLine, ...moves]),
+    bar([pinLine, carryLine, ...moves]),
     say,
     versionsBox,
     versionView,

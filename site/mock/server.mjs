@@ -1290,6 +1290,8 @@ function seedState() {
       pin: true,
       message_id: null,
       shadow_message_id: null,
+      carries_door: false,
+      door_hash: null,
       posted_hash: null,
       posted_at: null,
       posted_by: null,
@@ -1307,6 +1309,8 @@ function seedState() {
       pin: false,
       message_id: '810000000000000004',
       shadow_message_id: null,
+      carries_door: false,
+      door_hash: null,
       // Deliberately the hash of something else, so this one wears "changes not yet posted"
       // the moment the page opens — the pill has to be visible in the mock to be looked at.
       posted_hash: 'not-what-the-row-says-now',
@@ -1326,6 +1330,8 @@ function seedState() {
       pin: true,
       message_id: null,
       shadow_message_id: null,
+      carries_door: false,
+      door_hash: null,
       posted_hash: null,
       posted_at: null,
       posted_by: null,
@@ -2733,8 +2739,41 @@ function postStatus(row) {
   if (!postIsUp(row)) return ['not posted'];
   const found = [postWhere(row) === 'shadow' ? 'posted (shadow)' : 'posted'];
   if (row.pin) found.push('pinned');
+  if (row.door_hash) found.push('carries the front door');
   if (postPending(row)) found.push('changes not yet posted');
   return found;
+}
+
+// The twins of posts.DOOR_CARRIED_ELSEWHERE and the answers a carried front door gives.
+const POST_DOOR_CARRIED_ELSEWHERE = '**{other}** already carries the front door, so **{title}** was not changed. Turn **Carry the front door** off on **{other}** first \u2014 one message holds the door.';
+const POST_CARRYING_NOW = ' The front door now rides this post\'s message.';
+const POST_CARRYING_LATER = ' The front door joins this post\'s message the next time it is posted.';
+const POST_CARRYING_STOPPED = ' The front door is off this post\'s message, and goes back to a message of its own on the door\'s next sweep, within five minutes.';
+const POST_TAKEN_DOWN_WITH_DOOR = ' The front door was part of that message, so it is down too \u2014 **Post it** puts both back.';
+const DOOR_RIDES_POST_SAID = 'The front door rides **{title}** in {where}, so nothing new was posted and nothing was taken down \u2014 the door is part of that post\'s message.';
+const DOOR_RIDES_ELSEWHERE = 'The front door rides **{title}** in {where}, so it was not moved. Turn **Carry the front door** off on that post first, then post the door where you want it.';
+const DOOR_OFF_THE_POST_SAID = 'The front door is down. **{title}** stays up without it, and **Carry the front door** is off on that post now.';
+
+function doorIsOn() {
+  return String(state.settings.get('frontdoor_mode') || 'off') !== 'off';
+}
+
+function doorCarrier() {
+  return state.posts.find((one) => one.carries_door) || null;
+}
+
+/** The mock's twin of frontdoor.door_rides_post: the door's keys follow the carrying message. */
+function doorRidesPost(row) {
+  state.settings.set('frontdoor_channel_id', row.channel_id || null);
+  state.settings.set('frontdoor_message_id', row.message_id || null);
+  state.settings.set('frontdoor_shadow_message_id', row.shadow_message_id || null);
+  logAction('web.frontdoor.rides_post', { target_id: row.channel_id, details: { slug: row.slug, post_id: row.id, via: 'website' } });
+}
+
+function doorLeavesPost(keepChannel) {
+  state.settings.set('frontdoor_message_id', null);
+  state.settings.set('frontdoor_shadow_message_id', null);
+  if (!keepChannel) state.settings.set('frontdoor_channel_id', null);
 }
 
 function postsMode() {
@@ -2767,6 +2806,8 @@ function postRow(row) {
     cap: postCap(row.style),
     title_cap: POST_TITLE_MAX,
     pin: Boolean(row.pin),
+    carries_door: Boolean(row.carries_door),
+    door_drawn: Boolean(row.door_hash),
     channel_id: row.channel_id ? String(row.channel_id) : null,
     channel_name: postChannelName(row.channel_id),
     posted: postIsUp(row),
@@ -3029,17 +3070,40 @@ route('PUT', '/api/posts/:slug', async (context) => {
   } else if ('channel_id' in body) {
     row.channel_id = null;
   }
+  const wasCarrying = Boolean(row.carries_door);
+  const carrying = 'carries_door' in body ? Boolean(body.carries_door) : wasCarrying;
+  if (carrying && !wasCarrying) {
+    const other = state.posts.find((one) => one.carries_door && one.id !== row.id);
+    if (other) {
+      throw new Refused(409, 'door_carried_elsewhere', POST_DOOR_CARRIED_ELSEWHERE.split('{other}').join(other.title).split('{title}').join(title));
+    }
+  }
   row.title = title;
   row.style = style;
   row.body = wanted;
   if ('pin' in body) row.pin = Boolean(body.pin);
+  row.carries_door = carrying;
   row.updated_at = now();
   row.updated_by = STAFF.id;
   const made = postRecordVersion(row, { because: 'saved' });
-  logAction('web.post.saved', {
-    details: { slug: row.slug, post_id: row.id, version: postVersionNow(row, made), via: 'website' },
-  });
-  return postWhole(row, `**${row.title}** is saved.`);
+  const details = { slug: row.slug, post_id: row.id, version: postVersionNow(row, made), via: 'website' };
+  if (carrying !== wasCarrying) details.carries_door = carrying;
+  logAction('web.post.saved', { details });
+  let said = `**${row.title}** is saved.`;
+  if (carrying !== wasCarrying) {
+    if (!carrying) {
+      if (row.door_hash) doorLeavesPost(true);
+      row.door_hash = null;
+      said += POST_CARRYING_STOPPED;
+    } else if (postIsUp(row) && doorIsOn()) {
+      row.door_hash = 'drawn';
+      doorRidesPost(row);
+      said += POST_CARRYING_NOW;
+    } else {
+      said += POST_CARRYING_LATER;
+    }
+  }
+  return postWhole(row, said);
 });
 
 route('POST', '/api/posts/:slug/publish', (context) => {
@@ -3090,6 +3154,8 @@ route('POST', '/api/posts/:slug/publish', (context) => {
   if (row.pin) {
     logAction('web.post.pinned', { details: { slug: row.slug, post_id: row.id, via: 'website' } });
   }
+  row.door_hash = row.carries_door && doorIsOn() ? 'drawn' : null;
+  if (row.door_hash) doorRidesPost(row);
   const where = `#${postChannelName(target)}`;
   if (shadow) {
     return postWhole(
@@ -3122,13 +3188,19 @@ route('POST', '/api/posts/:slug/takedown', (context) => {
   }
   const was = row.message_id;
   const ghost = row.shadow_message_id;
+  const withDoor = Boolean(row.door_hash);
   row.message_id = null;
   row.shadow_message_id = null;
   row.posted_hash = null;
   row.posted_at = null;
   row.posted_by = null;
+  row.door_hash = null;
   logAction('web.post.taken_down', { details: { slug: row.slug, post_id: row.id, message_id: was, shadow_message_id: ghost, via: 'website' } });
-  return postWhole(row, `**${row.title}** is taken down. Every word is still here.`);
+  if (withDoor) {
+    doorLeavesPost(false);
+    logAction('web.frontdoor.taken_down', { details: { slug: row.slug, with_post: true, via: 'website' } });
+  }
+  return postWhole(row, `**${row.title}** is taken down. Every word is still here.${withDoor ? POST_TAKEN_DOWN_WITH_DOOR : ''}`);
 });
 
 route('GET', '/api/posts/:slug/versions', (context) => {
@@ -5237,7 +5309,7 @@ const PREVIEW_SAMPLES = {
   request_card: { what: '', why: '' },
   event_card: { title: '', description: '' },
   modmail_relay: { name: '', text: '' },
-  post: { style: 'plain', title: '', body: '' },
+  post: { style: 'plain', title: '', body: '', carries_door: false },
   birthday: { name: 'Casey', age: '' },
   poll_card: { question: '', channel: '#announcements' },
   minutes_notes: { notes: '' },
@@ -5413,10 +5485,16 @@ const PREVIEW_DRAW = {
     }]);
   },
   post(read, sample) {
-    if (String(sample.style) === 'embed') {
-      return previewMade('', [{ title: sample.title || '', description: sample.body || '', fields: [] }]);
+    const embeds = String(sample.style) === 'embed'
+      ? [{ title: sample.title || '', description: sample.body || '', fields: [] }]
+      : [];
+    const content = String(sample.style) === 'embed' ? '' : (sample.body || '');
+    const carrying = ['true', '1', 'on'].includes(String(sample.carries_door).toLowerCase());
+    if (!carrying || String(read('frontdoor_mode') || 'off') === 'off') {
+      return embeds.length ? previewMade(content, embeds) : previewMade(content);
     }
-    return previewMade(sample.body || '');
+    const door = PREVIEW_DRAW.frontdoor(read);
+    return previewMade(content, [...embeds, ...door.embeds], door.components);
   },
   birthday(read, sample) {
     const text = String(read('birthday_template') || '')
@@ -9489,6 +9567,15 @@ route('POST', '/api/frontdoor/panel', async (context) => {
   if (!channelId || !CHANNELS.some((one) => one.id === channelId)) {
     throw new Refused(400, 'no_such_channel', 'That is not a channel Black Bloc can see, so the front door was not posted. Pick one from the list and try again.');
   }
+  const carrier = doorCarrier();
+  if (carrier && carrier.door_hash && postIsUp(carrier)) {
+    const homes = [carrier.channel_id, carrier.shadow_message_id ? postShadowChannel() : null].filter(Boolean).map(String);
+    const where = `#${postChannelName(carrier.channel_id || homes[0]) || ''}`;
+    if (!homes.includes(channelId)) {
+      throw new Refused(409, 'door_rides_post', DOOR_RIDES_ELSEWHERE.split('{title}').join(carrier.title).split('{where}').join(where));
+    }
+    return { posted: true, channel_id: channelId, message_id: String(carrier.message_id || carrier.shadow_message_id), message: DOOR_RIDES_POST_SAID.split('{title}').join(carrier.title).split('{where}').join(where) };
+  }
   guard('putting the front door up');
   const moving = Boolean(state.settings.get('frontdoor_message_id'));
   const messageId = String(Date.now());
@@ -9506,6 +9593,15 @@ route('DELETE', '/api/frontdoor/panel', (context) => {
   requireStaff(context.session);
   const channelId = state.settings.get('frontdoor_channel_id');
   const messageId = state.settings.get('frontdoor_message_id');
+  const carrier = doorCarrier();
+  if (carrier && carrier.door_hash && postIsUp(carrier)) {
+    carrier.carries_door = false;
+    carrier.door_hash = null;
+    doorLeavesPost(false);
+    logAction('web.frontdoor.taken_down', { target_id: channelId, details: { slug: carrier.slug, off_the_post: true } });
+    return { taken_down: true, channel_id: channelId ? String(channelId) : null, message_id: messageId ? String(messageId) : null, message: DOOR_OFF_THE_POST_SAID.split('{title}').join(carrier.title) };
+  }
+  if (carrier) carrier.carries_door = false;
   if (!channelId) {
     return { taken_down: false, channel_id: null, message_id: null, message: 'There is no front door posted anywhere, so nothing was taken down. **Post the front door** on the Modmail page is what puts one up.' };
   }

@@ -6985,7 +6985,9 @@
           "updated_by",
           "updated_by_name",
           "posted_where",
-          "shadow_message_id"
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn"
         ],
         "styles": [
           "style",
@@ -7036,7 +7038,9 @@
           "updated_by",
           "updated_by_name",
           "posted_where",
-          "shadow_message_id"
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn"
         ],
         "guard": [
           "test_mode",
@@ -7102,7 +7106,9 @@
           "updated_by",
           "updated_by_name",
           "posted_where",
-          "shadow_message_id"
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn"
         ],
         "guard": [
           "test_mode",
@@ -7172,7 +7178,9 @@
           "updated_by",
           "updated_by_name",
           "posted_where",
-          "shadow_message_id"
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn"
         ],
         "guard": [
           "test_mode",
@@ -7236,7 +7244,9 @@
           "updated_by",
           "updated_by_name",
           "posted_where",
-          "shadow_message_id"
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn"
         ],
         "guard": [
           "test_mode",
@@ -7300,7 +7310,9 @@
           "updated_by",
           "updated_by_name",
           "posted_where",
-          "shadow_message_id"
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn"
         ],
         "guard": [
           "test_mode",
@@ -7441,7 +7453,9 @@
           "updated_by",
           "updated_by_name",
           "posted_where",
-          "shadow_message_id"
+          "shadow_message_id",
+          "carries_door",
+          "door_drawn"
         ],
         "guard": [
           "test_mode",

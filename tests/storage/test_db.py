@@ -13,7 +13,7 @@ async def test_connect_bootstraps_schema(tmp_path):
         cur = await db.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
         row = await cur.fetchone()
         assert row is not None and row["value"] == str(SCHEMA_VERSION)
-        assert SCHEMA_VERSION == 75
+        assert SCHEMA_VERSION == 76
         cur = await db.conn.execute("PRAGMA table_info(spotlight_channels)")
         assert {
             "spotlight",
@@ -1782,6 +1782,8 @@ async def test_a_schema_35_file_gains_the_posts_table_and_keeps_its_rows(tmp_pat
             "pin",
             "message_id",
             "shadow_message_id",
+            "carries_door",
+            "door_hash",
             "posted_hash",
             "posted_at",
             "posted_by",
@@ -3074,6 +3076,36 @@ async def test_a_schema_74_file_gains_the_public_highlight_columns_empty_and_off
         )
         assert tuple(await cur.fetchone()) == ("Super Mario Sunshine", None, None, 0)
         cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
-        assert (await cur.fetchone())["value"] == "75"
+        assert (await cur.fetchone())["value"] == str(SCHEMA_VERSION)
+    finally:
+        await again.close()
+
+
+async def test_a_schema_75_file_gains_the_carry_the_door_columns_off_and_empty(tmp_path):
+    """Schema 76: posts.carries_door (off) and posts.door_hash (empty); an existing post keeps
+    its words and does not start carrying the front door."""
+    path = tmp_path / "old75.sqlite3"
+    db = Database(path)
+    await db.connect()
+    await db.conn.execute("ALTER TABLE posts DROP COLUMN carries_door")
+    await db.conn.execute("ALTER TABLE posts DROP COLUMN door_hash")
+    await db.conn.execute(
+        "INSERT INTO posts(guild_id, slug, title, body, pin, updated_at) "
+        "VALUES (1, 'welcome', 'Welcome and rules', 'be nice', 0, '2026-09-27')"
+    )
+    await db.conn.execute(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '75')"
+    )
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.connect()
+    try:
+        assert {"carries_door", "door_hash"} <= set(await _columns(again, "posts"))
+        cur = await again.conn.execute("SELECT slug, body, pin, carries_door, door_hash FROM posts")
+        assert tuple(await cur.fetchone()) == ("welcome", "be nice", 0, 0, None)
+        cur = await again.conn.execute("SELECT value FROM schema_meta WHERE key='schema_version'")
+        assert (await cur.fetchone())["value"] == "76"
     finally:
         await again.close()

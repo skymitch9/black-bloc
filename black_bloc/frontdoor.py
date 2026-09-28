@@ -112,6 +112,18 @@ DOOR_REHEARSAL_DOWN_SAID = (
 )
 DOOR_MOVED_SAID = "The front door has moved to <#{where}>."
 DOOR_DOWN_SAID = "The front door is down. Nothing else changed, and `/ask` still works."
+DOOR_RIDES_POST_SAID = (
+    "The front door rides **{title}** in {where}, so nothing new was posted and nothing was "
+    "taken down — the door is part of that post's message."
+)
+DOOR_RIDES_ELSEWHERE = (
+    "The front door rides **{title}** in {where}, so it was not moved. Turn **Carry the front "
+    "door** off on that post first, then post the door where you want it."
+)
+DOOR_OFF_THE_POST_SAID = (
+    "The front door is down. **{title}** stays up without it, and **Carry the front door** is "
+    "off on that post now."
+)
 
 PANEL_TIMEOUT_FOOTER = "This panel has gone quiet — run /ask again"
 EVENT_HANDOFF_TITLE = "Propose an event"
@@ -245,6 +257,9 @@ __all__ = [
     "DOOR_NOT_UP",
     "DOOR_NO_CHANNEL",
     "DOOR_NO_HOME",
+    "DOOR_OFF_THE_POST_SAID",
+    "DOOR_RIDES_ELSEWHERE",
+    "DOOR_RIDES_POST_SAID",
     "DOOR_OFF",
     "DOOR_POSTED_SAID",
     "DOOR_REHEARSAL_DOWN_SAID",

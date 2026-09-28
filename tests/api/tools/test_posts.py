@@ -465,3 +465,24 @@ async def test_the_seeded_flag_and_the_move_label_travel_with_the_row(
     assert before["seeded"] is True and before["move"] == "Post it"
     assert after["move"] == "Update the post"
     assert after["posted_by"] == "7" and after["posted_at"]
+
+
+async def test_carry_the_front_door_is_a_saved_switch_and_only_one_post_holds_it(
+    client, sign_in, web, wf
+):
+    sign_in(client)
+    await a_post(web, wf)
+    await a_post(web, wf, slug="hours")
+
+    found = client.put("/api/posts/notice", json={"carries_door": True}).json()
+    refused = client.put("/api/posts/hours", json={"carries_door": True})
+
+    assert found["post"]["carries_door"] is True and found["post"]["door_drawn"] is False
+    assert found["message"].endswith(posts.CARRYING_LATER_SAID)
+    assert refused.status_code == 409
+    assert refused.json()["error"] == "door_carried_elsewhere"
+    assert "**A notice** already carries the front door" in refused.json()["message"]
+    listed = {one["slug"]: one["carries_door"] for one in client.get("/api/posts").json()["posts"]}
+    assert listed == {"notice": True, "hours": False}
+    details = await wf.one_web_row(web.db, "web.post.saved")
+    assert details["carries_door"] is True

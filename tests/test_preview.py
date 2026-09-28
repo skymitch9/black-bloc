@@ -216,3 +216,15 @@ def test_a_move_tuple_becomes_discord_s_own_rows():
         ({"label": "Decline", "style": "danger", "url": None, "disabled": False, "emoji": None},),
     )
     assert preview.moves_to_rows(()) == ()
+
+
+def test_a_post_that_carries_the_door_previews_the_door_under_its_own_words(bot, guild, store):
+    alone = preview.render(bot, guild, "post", None, {"body": "Rules.", "carries_door": False})
+    carried = preview.render(bot, guild, "post", None, {"body": "Rules.", "carries_door": True})
+
+    assert alone.content == carried.content == "Rules."
+    assert alone.embeds == () and alone.components == ()
+    assert carried.embeds[-1]["title"] == door.door_title(store, guild.id)
+    assert [one["label"] for one in carried.components[0]] == list(
+        door.labels(store, guild.id).values()
+    )
