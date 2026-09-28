@@ -1,7 +1,7 @@
 {
-  "release": "v181",
-  "commit": "035f08c1",
+  "release": "v182",
+  "commit": "555d749e",
   "changed_features": [
-    "posts"
+    "golive"
   ]
 }
