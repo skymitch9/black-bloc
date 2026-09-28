@@ -348,25 +348,23 @@ async def test_claim_notice_is_taken_once(bot, cog):
 # --- the cadence ----------------------------------------------------------------------------
 
 
-async def test_a_near_marathon_is_read_every_poll_gap_and_a_far_one_is_not(bot, cog):
+@pytest.mark.parametrize(
+    ("starts_in", "early", "due"),
+    [
+        (None, timedelta(minutes=10), timedelta(minutes=31)),
+        (60 * 24 * 40, timedelta(hours=5), timedelta(hours=25)),
+    ],
+    ids=["near-poll-gap", "far-gap"],
+)
+async def test_a_marathon_is_read_again_only_once_its_gap_is_up(bot, cog, starts_in, early, due):
+    if starts_in is not None:
+        cog.client.runs_given = [a_run(1, starts_in)]
     marathon = await added(bot, cog)
     calls = cog.client.calls
-    cog.clock = lambda: NOW + timedelta(minutes=10)
+    cog.clock = lambda: NOW + early
     await cog.tick_marathon(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
     assert cog.client.calls == calls
-    cog.clock = lambda: NOW + timedelta(minutes=31)
-    await cog.tick_marathon(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
-    assert cog.client.calls == calls + 1
-
-
-async def test_a_far_marathon_waits_the_far_gap(bot, cog):
-    cog.client.runs_given = [a_run(1, 60 * 24 * 40)]
-    marathon = await added(bot, cog)
-    calls = cog.client.calls
-    cog.clock = lambda: NOW + timedelta(hours=5)
-    await cog.tick_marathon(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
-    assert cog.client.calls == calls
-    cog.clock = lambda: NOW + timedelta(hours=25)
+    cog.clock = lambda: NOW + due
     await cog.tick_marathon(bot.guild, await get_marathon(bot.db, GUILD, marathon["id"]))
     assert cog.client.calls == calls + 1
 
