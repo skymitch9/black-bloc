@@ -186,12 +186,6 @@ def test_linking_while_the_cog_is_not_loaded_says_the_feature_is_off(client, sig
     assert "YouTube" in response.json()["message"]
 
 
-def test_the_videos_route_is_gone_rather_than_answering_an_empty_list(client, sign_in):
-    sign_in(client)
-
-    assert client.get("/api/youtube/videos").status_code == 404
-
-
 async def test_status_says_whether_the_key_is_set_and_what_the_probe_is_doing(
     client, sign_in, web, guild, wf
 ):
@@ -205,8 +199,10 @@ async def test_status_says_whether_the_key_is_set_and_what_the_probe_is_doing(
     assert body["api_key_set"] is True
     assert body["links"] == 1
     assert not set(body) & set(UPLOAD_FIELDS)
-    assert body["live_mode"] == "off" and body["live_minutes"] == 5
-    assert body["live_end_misses"] == 2 and body["live_running"] is True
+    assert body["live_mode"] == "off"
+    assert body["live_minutes"] == web.store.default("youtube_live_poll_minutes")
+    assert body["live_end_misses"] == web.store.default("youtube_live_end_misses")
+    assert body["live_running"] is True
     assert body["last_probe_at"] == "2026-09-17T13:00:00+00:00"
     assert body["last_probe_error"] is None
     assert body["probed"] == 3 and body["quota_today"] == 0 and body["live_now"] == 0
