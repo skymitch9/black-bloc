@@ -114,6 +114,7 @@ dumps, indexed by [`archive/README.md`](archive/README.md).
 
 ## Where the bot stands right now (2026-09-19)
 
+**2026-09-28 07:1x:** v185 live (the temp voice block hides while temp voice is in shadow; the birthday block opens the date form straight away and answers privately; the Marathon role is set to Marathons; 692 keys); see [`DONE.md`](DONE.md) 2026-09-28 v185.
 **2026-09-28 01:5x:** v184 live (eight more block kinds on NO post — temp voice, Marathon role, ping me, birthday, propose an event, who's live, upcoming events, link buttons — plus a block preview in Posts ▸ Blocks; schema 79, 689 keys); see [`DONE.md`](DONE.md) 2026-09-28 v184.
 **2026-09-28 00:2x:** v183 live (posts attach blocks; the front door is the first kind and the welcome post carries it as its one block; a Blocks section on the Posts page; schema 78, 645 keys); see [`DONE.md`](DONE.md) 2026-09-28 v183.
 **2026-09-27 22:5x:** v182 live (a replay by stream title gets a plain post with no spotlight treatment; fuzzy counts as live; schema 77, 641 keys); see [`DONE.md`](DONE.md) 2026-09-27 v182.
