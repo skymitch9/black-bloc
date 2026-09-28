@@ -2344,6 +2344,9 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 .pastehint { white-space: nowrap; }
 .pastenote { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .pastenote[hidden] { display: none; }
+.docimportfold { margin-top: 6px; }
+.docimport { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.docimport .input { flex: 1 1 220px; min-width: 0; }
 .counter { color: var(--et-muted); font-family: var(--et-font-mono); font-size: var(--et-ui-2xs); }
 .counter[data-tone="warn"] { color: var(--et-warn); }
 .counter[data-tone="danger"] { color: var(--et-danger); }

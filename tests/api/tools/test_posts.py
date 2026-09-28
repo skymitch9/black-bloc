@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from black_bloc import posts
+from black_bloc import doc_import, posts
+from black_bloc.doc_import import Hop
 
 ROUTES = [
     ("GET", "/api/posts", None),
@@ -18,6 +19,7 @@ ROUTES = [
     ("POST", "/api/posts/notice/blocks", {"kind": "frontdoor"}),
     ("PUT", "/api/posts/notice/blocks", {"order": []}),
     ("DELETE", "/api/posts/notice/blocks/frontdoor", None),
+    ("POST", "/api/posts/import-doc", {"url": "https://docs.google.com/document/d/x/edit"}),
     ("GET", "/api/post-blocks", None),
     ("POST", "/api/post-blocks/frontdoor/redraw", {}),
 ]
@@ -587,3 +589,95 @@ async def test_the_blocks_section_lists_every_kind_and_the_redraw_answers_in_wor
     assert redraw.status_code == 200 and redraw.json()["kind"] == "frontdoor"
     assert "Front door" in redraw.json()["message"]
     assert unknown.status_code == 400 and unknown.json()["error"] == "unknown_block"
+
+
+DOC = "1AbCdEfGhIjKlMnOpQrStUvWxYz_0123456789-xy"
+EXPORTED = (
+    '<html><head><style type="text/css">.c1{font-weight:700}</style><title>The rules</title>'
+    '</head><body><p><span class="c1">Be kind</span></p></body></html>'
+)
+
+
+def google_answers(monkeypatch, answers):
+    asked: list[str] = []
+
+    async def hop(url, *, seconds, limit):
+        asked.append(url)
+        return answers[url]
+
+    monkeypatch.setattr(doc_import, "aiohttp_hop", hop)
+    return asked
+
+
+async def test_an_import_answers_the_export_html_and_leaves_one_web_row(
+    client, sign_in, web, wf, monkeypatch
+):
+    sign_in(client)
+    export = doc_import.EXPORT_URL.format(id=DOC)
+    asked = google_answers(
+        monkeypatch, {export: Hop(200, None, "text/html", EXPORTED.encode("utf-8"))}
+    )
+
+    found = client.post(
+        "/api/posts/import-doc",
+        json={"url": f"https://docs.google.com/document/d/{DOC}/edit", "slug": "welcome"},
+    )
+
+    assert found.status_code == 200, found.json()
+    said = found.json()
+    assert said["html"] == EXPORTED and said["title"] == "The rules"
+    assert "**The rules**" in said["message"] and "Nothing is saved or posted" in said["message"]
+    assert asked == [export]
+    details = await wf.one_web_row(web.db, "web.post.imported")
+    assert details["slug"] == "welcome" and details["doc_id"] == DOC
+    assert details["bytes"] == len(EXPORTED.encode("utf-8"))
+    assert "Be kind" not in str(details)
+
+
+async def test_a_private_doc_is_a_409_in_words_and_logs_nothing(
+    client, sign_in, web, wf, monkeypatch
+):
+    sign_in(client)
+    export = doc_import.EXPORT_URL.format(id=DOC)
+    google_answers(
+        monkeypatch, {export: Hop(302, "https://accounts.google.com/ServiceLogin?x=1")}
+    )
+
+    found = client.post(
+        "/api/posts/import-doc", json={"url": f"https://drive.google.com/file/d/{DOC}/view"}
+    )
+
+    assert found.status_code == 409
+    assert found.json()["error"] == "doc_not_public"
+    assert "Anyone with the link" in found.json()["message"]
+    assert await wf.web_rows_in(web.db) == []
+
+
+async def test_a_link_that_is_not_google_docs_is_refused_without_a_fetch(
+    client, sign_in, web, wf, monkeypatch
+):
+    sign_in(client)
+    asked = google_answers(monkeypatch, {})
+
+    found = client.post("/api/posts/import-doc", json={"url": "https://evil.example/doc"})
+
+    assert found.status_code == 400
+    assert found.json()["error"] == "not_a_google_doc_link"
+    assert "not a Google Docs link" in found.json()["message"]
+    assert asked == []
+
+
+async def test_a_redirect_off_google_is_a_fetch_problem_in_words(
+    client, sign_in, web, wf, monkeypatch
+):
+    sign_in(client)
+    export = doc_import.EXPORT_URL.format(id=DOC)
+    asked = google_answers(monkeypatch, {export: Hop(302, "http://169.254.169.254/")})
+
+    found = client.post(
+        "/api/posts/import-doc", json={"url": f"https://docs.google.com/document/d/{DOC}/"}
+    )
+
+    assert found.status_code == 502
+    assert found.json()["error"] == "doc_redirect_refused"
+    assert asked == [export]

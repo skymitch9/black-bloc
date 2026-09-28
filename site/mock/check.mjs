@@ -487,6 +487,10 @@ async function checkActionKinds() {
   await post(`/api/posts/${IDS.post_slug}/takedown`, {});
   await post(`/api/posts/${IDS.posted_post_slug}/versions/${IDS.post_version_n}/restore`, {});
   await send('DELETE', `/api/posts/${IDS.scratch_post_slug}`, undefined);
+  await post('/api/posts/import-doc', {
+    url: 'https://docs.google.com/document/d/1MockPublicDocAbcdefghijklmnopqrstuvwxyz0123/edit',
+    slug: IDS.post_slug,
+  });
   // The four web.minutes.* kinds a staff move can leave. The meeting is deleted last, so the
   // other three act on a row that is still there.
   await post('/api/birthdays/post-today', { again: false });

@@ -3607,6 +3607,72 @@ route('DELETE', '/api/posts/:slug', (context) => {
   return { deleted: row.slug, message: `**${row.title}** is gone.` };
 });
 
+// --- Import from a Google Doc: black_bloc/doc_import.py's shapes, with no network ------------
+// MOCK_DOC_PUBLIC answers a canned export-shaped page; MOCK_DOC_PRIVATE answers the not-public
+// refusal; any other id answers "no doc there". The words are doc_import.py's own.
+const MOCK_DOC_PUBLIC = '1MockPublicDocAbcdefghijklmnopqrstuvwxyz0123';
+const MOCK_DOC_PRIVATE = '1MockPrivateDocAbcdefghijklmnopqrstuvwxyz012';
+const DOC_ID = '[A-Za-z0-9_-]{20,}';
+const DOC_LINK = new RegExp(`^https?://docs\\.google\\.com/document(?:/u/\\d+)?/d/(${DOC_ID})(?:/.*)?$`, 'i');
+const DRIVE_LINK = new RegExp(`^https?://drive\\.google\\.com/file(?:/u/\\d+)?/d/(${DOC_ID})(?:/.*)?$`, 'i');
+const DRIVE_OPEN = new RegExp(`^https?://drive\\.google\\.com/(?:open|uc)\\?(?:.*&)?id=(${DOC_ID})(?:&.*)?$`, 'i');
+const DOC_NO_LINK = "Paste a Google Doc's link into the box first — nothing was fetched.";
+const DOC_NOT_A_LINK = 'That is not a Google Docs link, so nothing was fetched. Paste the address of a Google Doc — it starts https://docs.google.com/document/d/ — or its Drive link (https://drive.google.com/file/d/…).';
+const DOC_NOT_PUBLIC = 'Google would not show that doc to Black Bloc because it is not shared publicly, so nothing was imported. In the doc press **Share → General access → Anyone with the link → Viewer**, then press Import again. Black Bloc never signs in to Google, so it can only read a doc anyone with the link can open.';
+const DOC_NOT_FOUND = 'Google says there is no doc at that link, so nothing was imported. Check the link is the whole address and that the doc has not been deleted.';
+const DOC_NOT_A_DOC = 'That link is a file in Drive that is not a Google Doc (a Word file or a PDF uploaded to Drive), so it cannot be converted — only Google Docs convert. Open it and use **File → Save as Google Docs**, share the new copy (Anyone with the link → Viewer) and import that link.';
+const DOC_IMPORTED = 'Imported **{title}** into the box. Nothing is saved or posted until you press Save Changes or Post it.';
+const MOCK_DOC_TITLE = 'Welcome post (mock)';
+const MOCK_DOC_HTML = '<html><head><meta content="text/html; charset=UTF-8" http-equiv="content-type">'
+  + '<style type="text/css">.c1{color:#000000;font-weight:400;text-decoration:none;font-size:11pt;'
+  + 'font-family:"Arial";font-style:normal}.c2{padding-top:0pt;line-height:1.15}'
+  + '.c3{font-weight:700}.c4{font-style:italic}.c5{color:#1155cc;text-decoration:underline}'
+  + '.c6{color:inherit;text-decoration:inherit}.c7{font-size:20pt;font-weight:400}'
+  + '.c8{padding:0;margin:0}</style>'
+  + `<title>${MOCK_DOC_TITLE}</title></head><body class="doc-content">`
+  + '<h1 class="c2" id="h.m1"><span class="c7">Welcome to Black in a Flash</span></h1>'
+  + '<p class="c2"><span class="c1">Read the </span><span class="c1 c3">rules</span>'
+  + '<span class="c1"> before you post, and </span><span class="c1 c4">be kind</span>'
+  + '<span class="c1">.</span></p>'
+  + '<p class="c2"><span class="c5"><a class="c6" href="https://www.google.com/url?q='
+  + 'https://blackbloc.heygabi.ai/guides&amp;sa=D&amp;source=editors">Read the guides</a></span></p>'
+  + '<ul class="c8 lst-kix_mock-0 start"><li class="c2"><span class="c1">Be excellent</span></li></ul>'
+  + '<ul class="c8 lst-kix_mock-1 start"><li class="c2"><span class="c1">to each other</span></li></ul>'
+  + '<ol class="c8 lst-kix_mock2-0 start" start="1"><li class="c2"><span class="c1">First</span></li>'
+  + '<li class="c2"><span class="c1">Second</span></li></ol></body></html>';
+
+function mockDocLink(url) {
+  const said = String(url || '').trim();
+  for (const [shape, where] of [[DOC_LINK, 'doc'], [DRIVE_LINK, 'drive'], [DRIVE_OPEN, 'drive']]) {
+    const found = shape.exec(said);
+    if (found) return { id: found[1], where };
+  }
+  return null;
+}
+
+route('POST', '/api/posts/import-doc', async (context) => {
+  requireStaff(context.session);
+  const body = await context.body();
+  if (!String(body.url || '').trim()) throw new Refused(400, 'no_link', DOC_NO_LINK);
+  const link = mockDocLink(body.url);
+  if (!link) throw new Refused(400, 'not_a_google_doc_link', DOC_NOT_A_LINK);
+  if (link.id === MOCK_DOC_PRIVATE) throw new Refused(409, 'doc_not_public', DOC_NOT_PUBLIC);
+  if (link.id !== MOCK_DOC_PUBLIC) {
+    if (link.where === 'drive') throw new Refused(422, 'not_a_google_doc', DOC_NOT_A_DOC);
+    throw new Refused(404, 'doc_not_found', DOC_NOT_FOUND);
+  }
+  const bytes = Buffer.byteLength(MOCK_DOC_HTML, 'utf8');
+  const slug = String(body.slug || '').slice(0, 60) || null;
+  logAction('web.post.imported', { details: { slug, doc_id: link.id, bytes, via: 'website' } });
+  return {
+    html: MOCK_DOC_HTML,
+    title: MOCK_DOC_TITLE,
+    doc_id: link.id,
+    bytes,
+    message: DOC_IMPORTED.split('{title}').join(MOCK_DOC_TITLE),
+  };
+});
+
 // --- meeting minutes (prototype) ---------------------------------------------------------------
 // The shapes black_bloc/api/tools/minutes.py answers with. The feature ships OFF, so the list
 // carries the "it is off" note, and every staff move still works on a meeting already recorded.

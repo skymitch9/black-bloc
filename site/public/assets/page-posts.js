@@ -94,6 +94,26 @@ const PASTE_HINT = 'Paste keeps formatting';
 const PASTE_KEPT = 'Pasted with formatting kept (headings, bold, bullets, links). '
   + 'Undo with Ctrl+Z.';
 const PASTE_DISMISS = 'Dismiss';
+const IMPORT_FOLD = 'Import from a Google Doc';
+const IMPORT_PLACEHOLDER = 'https://docs.google.com/document/d/…';
+const IMPORT_IT = 'Import';
+const IMPORT_HELP = 'The doc must be shared Anyone with the link → Viewer. Its words replace the '
+  + 'message box as an unsaved draft — nothing is saved or posted until you press Save Changes or '
+  + 'Post it.';
+const IMPORT_NO_LINK = "Paste a Google Doc's link into the box first — nothing was fetched.";
+const IMPORT_REPLACE_TITLE = 'Replace the message with the doc?';
+const IMPORT_REPLACE_BODY = 'The message box already has words in it. The doc replaces them as an '
+  + 'unsaved draft; Put back what was there brings them back, and Discard throws the draft away.';
+const IMPORT_REPLACE_OK = 'Replace it';
+const IMPORT_EMPTY = 'That doc came back with no words Black Bloc can post, so the box was left '
+  + 'as it was.';
+const IMPORT_DONE = 'Imported from “{title}” — the box is an unsaved draft. Nothing is saved or '
+  + 'posted until you press Save Changes or Post it.';
+const IMPORT_OVER = ' It runs past this style’s limit, so the counter is red and Save refuses until '
+  + 'it is shorter.';
+const IMPORT_UNTITLED = 'the Google Doc';
+const IMPORT_PUT_BACK = 'Put back what was there';
+const IMPORT_PUT_BACK_DONE = 'Put back — the box holds what it had before the import.';
 const DELETE_QUESTION = 'Every word goes with it. Nothing puts it back.';
 const USE_IT_CONFIRM = 'Use version {n}';
 const VERSIONS_UNREADABLE = 'The version history could not be read just now. Everything else on '
@@ -436,9 +456,118 @@ async function postDrawer(payload, known, history) {
     pin.checked = draft.pin;
     channel.value = draft.channel_id;
     say.say('');
+    forgetImport();
     refreshBar();
     paintPreview();
   };
+
+  const docLink = el('input', {
+    class: 'input',
+    type: 'url',
+    id: 'post-import-url',
+    placeholder: IMPORT_PLACEHOLDER,
+    spellcheck: 'false',
+    autocomplete: 'off',
+  });
+  const importSay = notice();
+  const importNote = el('p', { class: 'notice pastenote', id: 'post-import-note' });
+  importNote.hidden = true;
+  let beforeImport = null;
+
+  function forgetImport() {
+    beforeImport = null;
+    importNote.hidden = true;
+  }
+
+  /** Through `insertText` like a paste, so Ctrl+Z still reaches the words the import replaced. */
+  const replaceBody = (text) => {
+    box.focus();
+    box.select();
+    if (text) insertAtCaret(box, text);
+    if (box.value !== text) box.value = text;
+    draft.body = box.value;
+    refreshBar();
+    paintPreview();
+  };
+
+  const putBack = () => {
+    if (beforeImport === null) return;
+    replaceBody(beforeImport);
+    forgetImport();
+    importSay.say(IMPORT_PUT_BACK_DONE, 'ok');
+  };
+
+  const paintImportNote = (named, over) => {
+    importNote.replaceChildren(
+      el('span', { text: IMPORT_DONE.replace('{title}', named) + (over ? IMPORT_OVER : '') }),
+      ' ',
+      button(IMPORT_PUT_BACK, putBack, { tone: 'quiet' }),
+      el('button', {
+        class: 'say-nothing-do',
+        type: 'button',
+        text: PASTE_DISMISS,
+        on: { click: () => { importNote.hidden = true; } },
+      }),
+    );
+    importNote.hidden = false;
+  };
+
+  const importDoc = async () => {
+    const url = docLink.value.trim();
+    if (!url) {
+      importSay.say(IMPORT_NO_LINK, 'warn');
+      return;
+    }
+    if (draft.body.trim()) {
+      const sure = await ask({
+        title: IMPORT_REPLACE_TITLE,
+        body: [IMPORT_REPLACE_BODY],
+        confirmLabel: IMPORT_REPLACE_OK,
+        tone: 'warn',
+      });
+      if (!sure) return;
+    }
+    importButton.disabled = true;
+    let done = null;
+    try {
+      done = await run(
+        importSay,
+        () => send('/api/posts/import-doc', 'POST', { url, slug: post.slug }),
+        () => '',
+      );
+    } finally {
+      importButton.disabled = false;
+    }
+    if (!done.ok) return;
+    let made = '';
+    try {
+      made = htmlToDiscordMarkdown(done.found.html || '');
+    } catch (error) {
+      made = '';
+    }
+    if (!made.trim()) {
+      importSay.say(IMPORT_EMPTY, 'warn');
+      return;
+    }
+    const kept = draft.body;
+    replaceBody(made);
+    beforeImport = kept;
+    pasteNote.hidden = true;
+    paintImportNote(done.found.title || IMPORT_UNTITLED, draft.body.length > capOf());
+  };
+
+  const importButton = button(IMPORT_IT, () => importDoc(), { tone: 'quiet' });
+  docLink.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    importDoc();
+  });
+  const importFold = foldout(IMPORT_FOLD, [
+    el('div', { class: 'docimport' }, [docLink, importButton]),
+    el('p', { class: 'field-help', text: IMPORT_HELP }),
+    importSay,
+  ]);
+  importFold.classList.add('docimportfold');
 
   const saveDraft = () => send(where(post.slug), 'PUT', {
     title: draft.title.trim(),
@@ -592,6 +721,7 @@ async function postDrawer(payload, known, history) {
     const done = await run(say, () => saveDraft(), (found) => found?.message || 'Saved.');
     if (!done.ok) return;
     settle(done.found);
+    forgetImport();
     paintVersions(await versionsOf(post.slug));
     refresh();
   }, { tone: 'warn', small: false });
@@ -669,6 +799,8 @@ async function postDrawer(payload, known, history) {
         formatBar(box),
         box,
         pasteNote,
+        importNote,
+        importFold,
       ]),
       el('div', { class: 'postcol' }, [
         el('div', { class: 'postboxhead' }, [

@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Import from a Google Doc* (branch `posts-doc-import`, off `main` `05a8fc0c`, keyed against `f91e014c`); the *posts-paste* rows for `clipmd.js` still hold (the inline path is unchanged; classes and the link unwrap are added). Before that:
 > **2026-09-28 — RE-KEYED against `f4ba0f2b`** (after the six test-audit merges): 769 anchors moved, 556 unchanged, 24 ambiguous (nearest taken), 36 fuzzy, 31 not found, 2251 bare line numbers left as they are, 0 rows naming a missing file. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Birthday block goes straight to the form* (branch `birthday-block-modal`, off `main` `c9ee1f46`, keyed against `8c1cb907`); the *Blocks buttons* row for `open_birthday_panel` ("The button opens the PANEL") describes code this branch changed. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Blocks live* (branch `blocks-live`, off `main` `d418ca13`, keyed against `f4c4e83c`); the *Blocks convert* row for `keep_drawn` still holds (the kinds filter is optional). Before that:
@@ -9274,3 +9275,33 @@ Design: [`blocks-buttons-design.md`](blocks-buttons-design.md#birthday-block-goe
 | `black_bloc/birthdays.py:513` `block_said` | `button_block.said` over `BUTTON_BLOCK_DEFAULTS`: a staff wording whose `{…}` will not fill falls back to the shipped one (checklist 17). |
 | `black_bloc/settings_store.py:3037` | The three `birthday_block_*_said` keys, filed under birthday by prefix — which puts that group at 28, over the `/settings` picker's 25-cap (Find a setting… now shows there). |
 | `site/public/assets/blockwords.js:262` | The birthday shape gains `said` rows, so the block's editor saves the three answers with its words. |
+
+## Import from a Google Doc (branch `posts-doc-import`, 2026-09-28)
+
+Design: [`posts-doc-import-design.md`](posts-doc-import-design.md). Keyed against `f91e014c`.
+
+| Where | Why |
+|---|---|
+| `black_bloc/doc_import.py:112` `parse_link` | Only the id leaves a pasted link. Host must be exactly `docs.google.com` or `drive.google.com` (so `docs.google.com.evil.example` and `docs.google.com@evil.example` fail), no port, no userinfo, http(s) only, no whitespace, ≤ 2048 chars; the id is `[A-Za-z0-9_-]{20,}`. A link typed without `https://` is accepted. It also says whether the link was Docs or Drive, which only picks the 404 sentence. |
+| `black_bloc/doc_import.py:149` `export_url` | ⚠️ The SSRF guard's first half: the URL fetched is BUILT from the id (`EXPORT_URL`, `:15`), never taken from staff; the id is re-checked here so no caller can smuggle a path in. |
+| `black_bloc/doc_import.py:155` `hop_allowed` | The second half: every hop, the first included, must be `https`, port 443/none, no userinfo, host `docs.google.com` or `*.googleusercontent.com`. Checked BEFORE the request, so a refused host is never contacted. |
+| `black_bloc/doc_import.py:169` `is_sign_in` | `accounts.google.com` is checked before `hop_allowed`, so the sign-in wall reads *not public* rather than *went elsewhere*. |
+| `black_bloc/doc_import.py:176` `looks_like_sign_in` | A guess (NOT measured): a 200 answer that has a `<form` AND an `accounts.google.com/…signin` address. The `<form` half is what stops a doc that merely LINKS to the sign-in page reading as private. |
+| `black_bloc/doc_import.py:186` `aiohttp_hop` | One GET, `allow_redirects=False`, a fresh session per hop (at most six). Reads in 64 KB chunks to one byte past the cap, so a huge body costs 2 MB at most; a `Content-Length` over the cap is refused unread. Transport errors become `DocImportError` here (checklist 7): `TimeoutError` → 504, `ClientError`/`OSError` → 502. The User-Agent is `linkcheck.USER_AGENT` (one home). |
+| `black_bloc/doc_import.py:227` `_walk` | Redirects by hand (`urljoin` on each `Location`); 401/403 → not public; 404/410 → by source; any other non-200 → a fetch problem; then the size, the content type (`text/html` or not a Doc), the sign-in sniff. |
+| `black_bloc/doc_import.py:260` `fetch_doc` | `asyncio.timeout(TIMEOUT_SECONDS)` over the whole walk (8 s — under the page's own 10 s abort, so the server's sentence arrives first). Any other exception is a fetch problem, never an access one. `get` is the transport; the default is looked up at call time so tests can patch `aiohttp_hop`. |
+| `black_bloc/api/tools/posts.py:256` | The route: `_editor` (the same gate as every posts write), `import_link`, `DocImportError` → `Refused`. One `note()` of `web.post.imported` on success with `slug`/`doc_id`/`bytes`/`via` — never the doc's words. The server does NOT convert: `clipmd.js` is the one converter. |
+| `tests/conftest.py:73` `refuse_hop` | Every test that forgets to fake the transport fails by name. It uses `pytest.fail` (a `BaseException`) because `fetch_doc`'s catch-all would turn an `AssertionError` into a quiet 502. |
+| `tests/api/test_contract.py:1065` | The contract entry's one fetch, canned, so the real router answers the same shape the mock does without a network. |
+| `site/public/assets/clipmd.js:138` `classRules` | The export marks words by CLASS. Only single-class selectors count (`.c3`; `p.c3`, `ul.lst-kix_…` and `… > li:before` are skipped), only the six properties the walk reads are kept, and `@import`/comments are stripped first. A class seen twice merges, the later rule's properties winning. |
+| `site/public/assets/clipmd.js:163` `styleOf` | An element's classes apply in STYLESHEET order (the cascade for equal specificity — `class="c15 c1"` still lets `.c15` beat `.c1` if `.c15` comes later), then the inline `style` over them, so the clipboard path is untouched. |
+| `site/public/assets/clipmd.js:174` `realHref` | `google.com/url?q=` (and `url=`) unwrapped only when the inner address is linkable; a wrapper around `javascript:` keeps the wrapper, which is a harmless https link. Uses `URL`, which node and browsers both have — not a DOM API. |
+| `site/public/assets/clipmd.js:186` `kixLevel` · `:420` | The export never nests lists; the sub-level is the `-N` on `lst-kix_<id>-N`, added to whatever real nesting there is (none in the export, all of it in the clipboard). |
+| `site/public/assets/clipmd.js:462` | Two list items join with one newline when they are the same kind OR at different depths, so a bullet under a number stays in the list; two top-level lists of different kinds still get the blank line (paste design deviation 6). |
+| `site/public/assets/page-posts.js:97` `IMPORT_*` | Site words to staff, page constants like `PASTE_*` — not settings keys (Discord never sees them). |
+| `site/public/assets/page-posts.js:477` `forgetImport` | A function declaration so `discardDraft` (above it) can call it; Save and Discard both hide the note, because *unsaved draft* stops being true. |
+| `site/public/assets/page-posts.js:483` `replaceBody` | Select-all + `insertAtCaret`, the paste's own `insertText` path, so Ctrl+Z reaches the words the import replaced and the box's `input` listener fires; the value write after it is the fallback. |
+| `site/public/assets/page-posts.js:515` `importDoc` | Asks (`ask()`, never `confirm()`) only when the box has words, and BEFORE fetching; the button is disabled while the request runs; an empty conversion changes nothing. The previous body is kept only after the replace succeeds. |
+| `site/public/assets/page-posts.js:565` `importFold` | A closed `foldout` under the note, so the drawer's default look gains one line. |
+| `site/public/assets/site.css:2347` `.docimport*` | One flex row that wraps; the link box takes the room (`flex: 1 1 220px; min-width: 0`), so 390 px has no sideways scroll (reasoned, not rendered). |
+| `site/mock/server.mjs:3653` | The mock route: `MOCK_DOC_PUBLIC` answers a canned export, `MOCK_DOC_PRIVATE` the not-public refusal, any other Drive id *not a Doc*, any other Docs id *no doc there*. |

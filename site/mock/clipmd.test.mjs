@@ -147,6 +147,156 @@ const DOCS_WANTED = [
   has(where, htmlToDiscordMarkdown('<div><div><p>nested</p></div></div>'), 'nested');
 }
 
+// --- Google Docs' HTML EXPORT (File → Download → Web page; what Import from a Google Doc gets) --
+// Hand-built in the export's shape, not captured: marks live in a <style> block of classes and
+// `class="c1 c13"` on spans; links are wrapped `https://www.google.com/url?q=<real>&sa=…`; a
+// nested bullet is NOT nested — it is a sibling <ul class="lst-kix_…-1">, and a list that is
+// interrupted resumes as a new <ol start="3">; the doc's name sits in <head><title>.
+const EXPORT_HEAD = '<html><head><meta content="text/html; charset=UTF-8" http-equiv="content-type">'
+  + '<style type="text/css">@import url(https://themes.googleusercontent.com/fonts/css?kit=abc);'
+  + 'ul.lst-kix_q1w2e3r4t5y6-1{list-style-type:none}.lst-kix_q1w2e3r4t5y6-0 > li:before'
+  + '{content:"\\0025cf   "}ol.lst-kix_z9x8c7v6b5n4-0.start{counter-reset:lst-ctn-kix_z9x8c7v6b5n4-0 0}'
+  + 'ol{margin:0;padding:0}table td,table th{padding:0}'
+  + '.c1{color:#000000;font-weight:400;text-decoration:none;vertical-align:baseline;font-size:11pt;'
+  + 'font-family:"Arial";font-style:normal}'
+  + '.c2{padding-top:0pt;padding-bottom:0pt;line-height:1.15;orphans:2;widows:2;text-align:left}'
+  + '.c3{color:#000000;font-weight:700;text-decoration:none;vertical-align:baseline;font-size:11pt;'
+  + 'font-family:"Arial";font-style:normal}'
+  + '.c4{color:#000000;font-weight:400;text-decoration:none;vertical-align:baseline;font-size:11pt;'
+  + 'font-family:"Arial";font-style:italic}'
+  + '.c5{color:#1155cc;font-weight:400;text-decoration:underline;vertical-align:baseline;'
+  + 'font-size:11pt;font-family:"Arial";font-style:normal}'
+  + '.c6{color:inherit;text-decoration:inherit}.c7{margin-left:36pt;padding-left:0pt}'
+  + '.c8{margin-left:72pt;padding-left:0pt}.c9{padding-top:20pt;padding-bottom:6pt;line-height:1.15}'
+  + '.c10{color:#000000;font-weight:400;text-decoration:none;font-size:20pt;font-family:"Arial"}'
+  + '.c11{background-color:#ffffff;max-width:468pt;padding:72pt 72pt 72pt 72pt}.c12{padding:0;margin:0}'
+  + '.c13{font-weight:700}.c14{text-decoration:line-through}.c15{text-decoration:underline}'
+  + '.c16{font-family:"Courier New"}.c17{height:11pt}'
+  + '.c18{color:#000000;font-weight:400;font-size:26pt;font-family:"Arial"}'
+  + '.c19{color:#000000;font-weight:400;font-size:16pt;font-family:"Arial"}'
+  + '.c20{color:#434343;font-weight:400;font-size:14pt;font-family:"Arial"}'
+  + '.title{padding-top:0pt;color:#000000;font-size:26pt;padding-bottom:3pt;font-family:"Arial"}'
+  + '.subtitle{padding-top:0pt;color:#666666;font-size:15pt;padding-bottom:16pt;font-family:"Arial"}'
+  + 'li{color:#000000;font-size:11pt;font-family:"Arial"}'
+  + 'p{margin:0;color:#000000;font-size:11pt;font-family:"Arial"}'
+  + 'h1{padding-top:20pt;color:#000000;font-size:20pt;padding-bottom:6pt;font-family:"Arial"}'
+  + '</style><title>Secret head title</title></head><body class="c11 doc-content">';
+const EXPORT_FOOT = '</body></html>';
+const GURL = (real) => `https://www.google.com/url?q=${real}&amp;sa=D&amp;source=editors`
+  + '&amp;ust=1759100000000000&amp;usg=AOvVaw0abcdefghijklmnop';
+
+// The SAME document as DOCS above, as the export writes it.
+const EXPORT_DOCS = EXPORT_HEAD
+  + '<h1 class="c9" id="h.abc123"><span class="c10">Welcome to Black in a Flash</span></h1>'
+  + '<p class="c2"><span class="c1">Read the </span><span class="c3">rules</span>'
+  + '<span class="c1"> before you post, and </span><span class="c4">be kind</span>'
+  + '<span class="c1">.</span></p>'
+  + '<p class="c2"><span class="c1">Questions?&nbsp;</span><span class="c5">'
+  + `<a class="c6" href="${GURL('https://blackbloc.heygabi.ai/guides')}">Read the guides</a>`
+  + '</span><span class="c1">.</span></p>'
+  + '<ul class="c12 lst-kix_q1w2e3r4t5y6-0 start"><li class="c2 c7 li-bullet-0">'
+  + '<span class="c1">Be excellent</span></li></ul>'
+  + '<ul class="c12 lst-kix_q1w2e3r4t5y6-1 start"><li class="c2 c8 li-bullet-1">'
+  + '<span class="c1">to each other</span></li></ul>'
+  + '<ul class="c12 lst-kix_q1w2e3r4t5y6-0"><li class="c2 c7 li-bullet-0">'
+  + '<span class="c1">No spoilers</span></li></ul>'
+  + '<ol class="c12 lst-kix_z9x8c7v6b5n4-0 start" start="1">'
+  + '<li class="c2 c7 li-bullet-0"><span class="c1">First</span></li>'
+  + '<li class="c2 c7 li-bullet-0"><span class="c1">Second</span></li></ol>'
+  + EXPORT_FOOT;
+
+{
+  const where = 'one document, pasted and exported';
+  is(where, htmlToDiscordMarkdown(EXPORT_DOCS), DOCS_WANTED);
+  is(where, htmlToDiscordMarkdown(EXPORT_DOCS), htmlToDiscordMarkdown(DOCS));
+}
+
+// Everything else the export does: title and subtitle paragraphs, h2/h3, marks by class where
+// the LATER rule wins (CSS order, not attribute order), <br>, empty paragraphs, a wrapped link
+// whose real address is percent-encoded, a wrapper hiding a javascript: link, and a numbered
+// list that resumes at start="3" after a nested bullet.
+const EXPORT_MORE = EXPORT_HEAD
+  + '<p class="c2 title" id="h.t1"><span class="c18">Welcome</span></p>'
+  + '<p class="c2 subtitle" id="h.s1"><span class="c1">A short subtitle</span></p>'
+  + '<p class="c2 c17"><span class="c1"></span></p>'
+  + '<h2 class="c9" id="h.h2"><span class="c19">Section</span></h2>'
+  + '<h3 class="c9" id="h.h3"><span class="c20">Smaller</span></h3>'
+  + '<p class="c2"><span class="c1 c13">bold</span><span class="c1"> and </span>'
+  + '<span class="c1 c14">gone</span><span class="c1"> and </span>'
+  + '<span class="c15 c1">under</span><span class="c1"> and </span>'
+  + '<span class="c1 c16">code</span></p>'
+  + '<p class="c2 c17"><span class="c1"></span></p><p class="c2 c17"><span class="c1"></span></p>'
+  + '<p class="c2"><span class="c1">line one<br>line two</span></p>'
+  + '<p class="c2"><span class="c5">'
+  + `<a class="c6" href="${GURL('https://example.com/a?b%3D1%26c%3D2')}">the page</a></span>`
+  + '<span class="c1"> and </span><span class="c5">'
+  + '<a class="c6" href="https://www.google.com/url?q=javascript:void0&amp;sa=D">odd</a></span></p>'
+  + '<ol class="c12 lst-kix_z9x8c7v6b5n4-0 start" start="1">'
+  + '<li class="c2 c7 li-bullet-0"><span class="c1">One</span></li>'
+  + '<li class="c2 c7 li-bullet-0"><span class="c1">Two</span></li></ol>'
+  + '<ul class="c12 lst-kix_z9x8c7v6b5n4-1 start"><li class="c2 c8 li-bullet-1">'
+  + '<span class="c1">sub</span></li></ul>'
+  + '<ol class="c12 lst-kix_z9x8c7v6b5n4-0" start="3">'
+  + '<li class="c2 c7 li-bullet-0"><span class="c1">Three</span></li></ol>'
+  + EXPORT_FOOT;
+
+const EXPORT_MORE_WANTED = [
+  '# Welcome',
+  '',
+  '## A short subtitle',
+  '',
+  '## Section',
+  '',
+  '### Smaller',
+  '',
+  '**bold** and ~~gone~~ and __under__ and `code`',
+  '',
+  'line one',
+  'line two',
+  '',
+  '[the page](https://example.com/a?b=1&c=2) and '
+    + '[odd](https://www.google.com/url?q=javascript:void0&sa=D)',
+  '',
+  '1. One',
+  '2. Two',
+  '  - sub',
+  '3. Three',
+].join('\n');
+
+{
+  const where = 'a Google Docs export';
+  const found = htmlToDiscordMarkdown(EXPORT_MORE);
+  is(where, found, EXPORT_MORE_WANTED);
+  if (found.includes('Secret head title')) fail(where, 'the <head> title leaked into the body');
+  if (found.includes('lst-kix') || found.includes('font-weight')) fail(where, 'CSS leaked into the body');
+}
+
+// A class the stylesheet never defines is ignored; an inline style still beats a class.
+{
+  const where = 'classes against inline styles';
+  const sheet = '<style>.b{font-weight:700}.n{font-weight:400}</style>';
+  is(where, htmlToDiscordMarkdown(`${sheet}<p><span class="b">A</span> <span class="nope">B</span></p>`),
+    '**A** B');
+  is(where, htmlToDiscordMarkdown(`${sheet}<p><span class="b" style="font-weight:400">A</span></p>`), 'A');
+  is(where, htmlToDiscordMarkdown(`${sheet}<p><span class="n b">A</span></p>`), 'A');
+  is(where, htmlToDiscordMarkdown('<style>p.b{font-weight:700}</style><p class="b">A</p>'), 'A');
+}
+
+// A bullet nested under a number stays in the list: no blank line where the depth changes.
+{
+  const where = 'a mixed nested list';
+  is(where, htmlToDiscordMarkdown('<ol><li>One<ul><li>sub</li></ul></li><li>Two</li></ol>'),
+    '1. One\n  - sub\n2. Two');
+}
+
+// The paste path gets the unwrapping too: a Docs link copied from a published page.
+{
+  const where = 'a wrapped link in a paste';
+  is(where, htmlToDiscordMarkdown(
+    `<p><a href="${GURL('https://example.com/x')}">https://example.com/x</a></p>`,
+  ), 'https://example.com/x');
+}
+
 process.stdout.write('clipmd: the paste converter against its fixtures\n');
 if (failures.length) {
   process.stdout.write(`clipmd: ${failures.length} problem(s)\n`);
@@ -155,5 +305,6 @@ if (failures.length) {
 }
 process.stdout.write(
   "clipmd: ok - a Google Docs fragment arrives as headings, bold, italic, nested bullets, "
-    + 'numbers and a masked link; a plain fragment is unchanged; script and style are dropped\n',
+    + 'numbers and a masked link; the same doc from the export converts the same; a plain '
+    + 'fragment is unchanged; script and style are dropped\n',
 );

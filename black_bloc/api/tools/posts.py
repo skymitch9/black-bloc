@@ -6,11 +6,18 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from ... import post_blocks, posts
+from ... import doc_import, post_blocks, posts
 from ...logkinds import VIA_WEBSITE
 from ..auth import Refused
 from ..names import resolve_one
-from ..writes import actor_for, reader_dependency, require_db, require_guild, writer_dependency
+from ..writes import (
+    actor_for,
+    note,
+    reader_dependency,
+    require_db,
+    require_guild,
+    writer_dependency,
+)
 
 log = logging.getLogger(__name__)
 
@@ -245,6 +252,35 @@ def build_router(bot: Any) -> APIRouter:
         if not found.ok:
             refused(found)
         return await _whole(guild, found.value, found.message)
+
+    @router.post("/import-doc")
+    async def post_import_doc(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        who, guild = await _editor(request)
+        try:
+            found = await doc_import.import_link(payload.get("url"))
+        except doc_import.DocImportError as exc:
+            raise Refused(exc.status, exc.code, exc.message) from exc
+        slug = str(payload.get("slug") or "")[:60]
+        await note(
+            bot,
+            guild,
+            "web.post.imported",
+            who,
+            details={
+                "slug": slug or None,
+                "doc_id": found.doc_id,
+                "bytes": found.size,
+                "via": VIA_WEBSITE,
+            },
+        )
+        title = found.title or "the doc"
+        return {
+            "html": found.html,
+            "title": found.title,
+            "doc_id": found.doc_id,
+            "bytes": found.size,
+            "message": doc_import.IMPORTED.format(title=title),
+        }
 
     @router.get("/{slug}")
     async def post_one(request: Request, slug: str) -> dict[str, Any]:

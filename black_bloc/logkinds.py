@@ -639,6 +639,7 @@ ROUTINE: frozenset[str] = frozenset(
         "guide.unpublished",
         "post.created",
         "post.deleted",
+        "post.imported",
         "post.message_gone",
         "post.mode",
         "post.pinned",
