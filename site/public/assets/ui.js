@@ -242,6 +242,7 @@ export function chipBar(choices, current, onPick = null, { className = null, rol
 export function listFilter({
   items = [],
   node = (item) => item.node,
+  value = (item) => item,
   text = () => '',
   filters = null,
   filter = null,
@@ -262,7 +263,7 @@ export function listFilter({
   if (none) none.hidden = true;
 
   const apply = () => {
-    const found = applyFilters(items, { text, filters: chosen, filter: state.filter, query: state.query });
+    const found = applyFilters(items.map(value), { text, filters: chosen, filter: state.filter, query: state.query });
     items.forEach((item, at) => {
       const target = node(item);
       if (target) target.hidden = !found.hits[at];
