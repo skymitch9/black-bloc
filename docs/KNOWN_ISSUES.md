@@ -169,6 +169,16 @@
 > - Work in flight → [`TODO.md`](TODO.md)
 > - Traps you fall INTO while working → [`info/gotchas.md`](info/gotchas.md)
 
+## KI-40 — The OLD machine's marathon loop can tick once after shutdown closed the database, logging a Traceback during a deploy — `WATCHING`
+
+**Symptom:** during the v184 deploy (2026-09-28 08:54:28Z), after Fly sent SIGINT to the old machine and uvicorn logged *Application shutdown complete*, `black_bloc.cogs.content.marathon` logged `marathon: the tick failed` with `sqlite3.ProgrammingError: Cannot operate on a closed database` (`marathon.py` `ticker` → `loops.py` `run`). Six seconds later the new machine booted cleanly. A log grep for `Traceback` right after a deploy therefore finds one that is not the new boot's.
+
+**Status:** `WATCHING` — first recorded 2026-09-28 01:5x Phoenix; whether earlier deploys logged the same is NOT checked (Fly's buffer did not reach them).
+
+**Why tolerated:** it happens only in the dying process, after the web server stopped; the tick's write is refused rather than half-done (SQLite raises before touching the file), and the new machine's first tick redoes the work. Nothing live was affected.
+
+**What would change it:** **2 more deploys** that log it (then stop the loops before closing the database on shutdown), or **1** case where the Traceback comes from the NEW machine, or any sign a tick's work was lost. Conductor check after each deploy: a Traceback timestamped BEFORE `database ready` is this; one after it is real.
+
 ## KI-39 — A spotlighted marathon's PINNED announcement is edited (and logged) on every title change — `ACCEPTED`
 
 **Symptom.** Since v156 (2026-09-22 21:18) every poller tick (`spotlight_poll_minutes`, 5) that sees a changed GAME **or TITLE** on an
