@@ -1,7 +1,7 @@
 {
-  "release": "v187",
-  "commit": "e47070c7",
+  "release": "v188",
+  "commit": "97f0f1bd",
   "changed_features": [
-    "posts"
+    "marathon"
   ]
 }
