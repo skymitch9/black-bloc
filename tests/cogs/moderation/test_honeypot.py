@@ -460,7 +460,7 @@ async def test_a_post_that_cannot_be_deleted_is_still_acted_on(cog, bot, post, d
     assert "honeypot.delete_failed" in kinds and "honeypot.would_ban" in kinds
 
 
-async def test_staff_and_bots_are_ignored_and_their_posts_are_left_alone(cog, bot, db):
+async def test_a_bot_in_the_trap_is_logged_exempt_and_carded_only_at_log_level_all(cog, bot, db):
     trap = bot.guild.get_channel(TRAP)
     a_bot = FakeMember(bot.guild, user_id=USER + 1, bot=True)
 
@@ -657,13 +657,6 @@ async def test_setup_posts_and_pins_the_notice_when_the_guard_is_off(cog, bot, l
     assert made.messages[0].content.startswith("This channel is a trap for bots.")
     assert made.messages[0].pinned is True
     assert "pinned" in interaction.sent
-
-
-async def test_setup_is_staff_only(cog, bot, spammer):
-    interaction = await open_panel(cog, bot, spammer)
-
-    assert bot.guild.created == [] and "staff only" in interaction.sent
-    assert interaction.view is None
 
 
 async def test_the_role_picker_is_the_whole_list_and_one_write_does_add_and_remove(
@@ -935,8 +928,9 @@ async def test_forgetting_the_same_id_twice_is_answered_in_words(cog, bot, lead)
 async def test_the_panel_is_staff_only_and_says_so_in_words(cog, bot, spammer):
     interaction = await open_panel(cog, bot, spammer)
 
-    assert bot.store.get(GUILD, "honeypot_channel_ids") == [TRAP]
     assert "staff only" in interaction.sent
+    assert interaction.view is None and bot.guild.created == []
+    assert bot.store.get(GUILD, "honeypot_channel_ids") == [TRAP]
 
 
 async def test_deleting_the_trap_channel_makes_black_bloc_forget_it(cog, bot, db):
@@ -1048,9 +1042,8 @@ async def test_a_word_where_a_number_belongs_is_refused_in_one_sentence(cog, bot
     assert "honeypot.settings" not in await action_kinds(db)
 
 
-async def test_the_settings_card_says_how_to_get_the_command_back_when_the_mode_is_off(bot):
-    _embed, view = honeypot_cog.build_settings(bot, bot.guild)
-    embed, _again = honeypot_cog.build_settings(bot, bot.guild)
+async def test_the_settings_card_says_where_the_settings_live_and_offers_numbers_and_back(bot):
+    embed, view = honeypot_cog.build_settings(bot, bot.guild)
 
     assert "`/settings` ▸ **A setting group…** ▸ honeypot" in embed.description
     assert labels(view) == ["Numbers…", "Back"]
