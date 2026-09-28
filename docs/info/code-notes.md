@@ -1,5 +1,7 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Spotlight only — hosts never make a run ours* (branch `host-spotlight-only`, off `main` `c8e075bb`, keyed against `ce1b090d`). Earlier rows keyed in `black_bloc/cogs/content/marathon.py` below its imports now sit ONE line lower (one import added); `black_bloc/marathon.py` rows after line 411 sit one to three lower. The anchor text holds. Before that:
+
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Marathon hosts and the pairing's Twitch fix* (branch `marathon-host-spotlight`, off `main` `aba4ca00`, keyed against `7511e9b6`); the *GDQ Hotfix — show picker* row for `match_people` still holds, and the function now also swaps in a pairing's Twitch login. Before that:
 
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *GDQ Hotfix — show picker and runner/host tracker* (branch `hotfix-picker`, off `main` `9e708194`, keyed against `2fc24074`); the *GDQ Hotfix* row for `marathons-section.js` `hotfixFields` now describes a picker, not a text field, and `marathon.py`'s `match_people` gained `scan_hosts`. Before that:
@@ -9504,3 +9506,15 @@ Design: [`marathon-category-track-design.md`](marathon-category-track-design.md)
 | `site/public/assets/marathons-section.js:616` `fixTwitch` | Pre-filled only when a fix exists (`sheet_login` set); the fix itself is the entry's `login` then. |
 | `site/mock/server.mjs:7356` `marathonRematch` | The mock's twin of the fix and the per-marathon scan. |
 | `site/mock/server.mjs:7083` `marathonSyncHostEvents` | The mock's twin; dates are written, no Discord move is modelled. |
+
+## Spotlight only — hosts never make a run ours (branch `host-spotlight-only`, 2026-09-28)
+
+| Where | Why |
+|---|---|
+| `black_bloc/marathon.py:411` `match_people(hosts_count=True)` | The default is the OLD rule so the Hotfix tracker (`marathon_hotfix.py`), which calls it without the argument, is untouched: tracking a show is not a run being ours. Only `Marathons.rematch` passes the key. |
+| `black_bloc/marathon.py:445` | A matched host keeps its `user_id` (the People card, Spotlight… and host events read it) and gains `"counts": False` when hosts do not count. Written only for that case, so a runner's person and the key-on shape are exactly what they were. |
+| `black_bloc/marathon.py:466` `ours` | The one place "a run of ours" is decided: `is_ours`, `member_ids`, `run_url`, `run_fields`, `run_logins` and every post, reminder, shoutout, highlight, board line and count read it, so none of them needed its own change. `is not False` so a stored person with no flag (older rows, the key on) still counts. |
+| `black_bloc/cogs/content/marathon.py:2252` `rematch` | Read once per rematch, not per run. Flipping the key takes effect at the marathon's next rematch (every schedule read, pairing change or Scan hosts press) — there is no settings hook. |
+| `black_bloc/cogs/content/marathon.py:4014` `_merged_people` | Carries `counts` across a schedule re-write, so between `_write_plan` and the `rematch` right after it a hosted run never flickers back to ours. |
+| `site/mock/server.mjs:6662` `marathonCounts` | The mock's `mt.ours` twin; `marathonPersonRow` (6760) strips `counts` because the bot's `person_row` never sends it. |
+| `site/mock/server.mjs:7372` `marathonRematch` | Mirrors `match_people`: a matched host is `counts: false` unless `marathon_hosts_count_as_ours`. The seed's Rivet (run 7) carries the flag so the mock starts in the default shape. |
