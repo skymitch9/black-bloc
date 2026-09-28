@@ -21,6 +21,7 @@ import {
   said,
   scheduleCell,
   slotPeople,
+  slotText,
   slotTime,
   sourceCell,
   sourcesTitle,
@@ -46,6 +47,7 @@ import {
   foldout,
   keepSaying,
   linkAction,
+  listFilter,
   memberPicker,
   modeChip,
   modeSwitch,
@@ -55,7 +57,6 @@ import {
   run,
   sayAgain,
   sayNothing,
-  searchField,
   section,
   segment,
   sentenceFor,
@@ -726,7 +727,6 @@ function slotRow(marathon, say, board, run, timeZone) {
     if (node.open) shown.slots.add(String(run.id));
     else shown.slots.delete(String(run.id));
   });
-  node.dataset.search = [run.game, run.category, ...(run.people || []).flatMap((one) => [one.name, one.login, one.member_name])].filter(Boolean).join(' ').toLowerCase();
   return node;
 }
 
@@ -734,34 +734,34 @@ function scheduleBlock(marathon, say, board) {
   const timeZone = board.timezone || undefined;
   const days = daysOf(marathon.run_list, timeZone);
   if (!days.length) return [line(NO_RUNS)];
-  const folds = days.map((day) => {
-    const fold = foldout(dayTitle(day), day.runs.map((one) => slotRow(marathon, say, board, one, timeZone)), { open: day.open || day.runs.some((one) => shown.slots.has(String(one.id))) });
+  const slots = [];
+  const folds = days.map((day, at) => {
+    const nodes = day.runs.map((one) => {
+      const node = slotRow(marathon, say, board, one, timeZone);
+      slots.push({ run: one, node, fold: at });
+      return node;
+    });
+    const fold = foldout(dayTitle(day), nodes, { open: day.open || day.runs.some((one) => shown.slots.has(String(one.id))) });
     fold.classList.add('mx-day');
     fold.dataset.open = day.open ? 'true' : 'false';
     return fold;
   });
-  const none = line(NO_HIT);
-  none.hidden = true;
-  const filter = searchField({
+  const filter = listFilter({
+    items: slots,
+    value: (one) => one.run,
+    text: slotText,
     label: 'Filter the schedule',
     placeholder: FILTER_PLACEHOLDER,
-    onQuery: (query) => {
-      let hits = 0;
-      for (const fold of folds) {
-        let here = 0;
-        for (const slot of fold.querySelectorAll('.mx-slot')) {
-          const hit = !query || slot.dataset.search.includes(query);
-          slot.hidden = !hit;
-          if (hit) here += 1;
-        }
+    empty: line(NO_HIT),
+    onChange: ({ query, hits }) => {
+      folds.forEach((fold, at) => {
+        const here = slots.filter((one, index) => one.fold === at && hits[index]).length;
         fold.hidden = Boolean(query) && here === 0;
         fold.open = query ? here > 0 : fold.dataset.open === 'true';
-        hits += here;
-      }
-      none.hidden = !query || hits > 0;
+      });
     },
   });
-  return [el('div', { class: 'table-tools' }, [filter]), none, ...folds];
+  return [el('div', { class: 'table-tools' }, [filter.search]), filter.none, ...folds];
 }
 
 function otherPairings(marathon, say, board) {
