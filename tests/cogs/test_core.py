@@ -465,7 +465,7 @@ async def test_a_setting_group_reaches_a_key_card_with_its_value_default_and_hel
 
     opened = FakeInteraction(bot, lead)
     await choose(groups, opened, ["birthday"])
-    keys = picker(opened.view, "A setting…")
+    keys = picker(opened.view, "25 of 28 — the rest are on the site")
 
     card = FakeInteraction(bot, lead)
     await choose(keys, card, ["birthday_color"])
@@ -481,13 +481,13 @@ async def test_find_a_setting_is_offered_only_on_the_group_that_outgrew_the_pick
 
     chat = FakeInteraction(bot, lead)
     await choose(groups, chat, ["chat"])
-    birthday = FakeInteraction(bot, lead)
-    await choose(groups, birthday, ["birthday"])
+    pings = FakeInteraction(bot, lead)
+    await choose(groups, pings, ["pings"])
 
     assert has_button(chat.view, "Find a setting…")
-    assert not has_button(birthday.view, "Find a setting…")
+    assert not has_button(pings.view, "Find a setting…")
     assert "25 of 128 — the rest are on the site" in placeholders(chat.view)
-    assert "A setting…" in placeholders(birthday.view)
+    assert "A setting…" in placeholders(pings.view)
 
 
 async def test_find_a_setting_filters_and_says_so_when_nothing_matches(bot, cog, lead):

@@ -1674,7 +1674,116 @@ async def test_pinned_the_panel_s_set_button_opens_the_date_modal_for_the_member
     assert modal.mine is True and modal.member is birthday_person
 
 
-# --- the birthday block (blocks-buttons): a second door onto the same /birthday panel ----------
+class SpyResponse(FakeResponse):
+    def __init__(self):
+        super().__init__()
+        self.defers = []
+        self.message_edits = []
+
+    async def defer(self, ephemeral=False, **kwargs):
+        self.defers.append({"ephemeral": ephemeral, **kwargs})
+        await super().defer(ephemeral=ephemeral, **kwargs)
+
+    async def edit_message(self, **kwargs):
+        self.done = True
+        self.message_edits.append(kwargs)
+
+
+class SpyInteraction(FakeInteraction):
+    """A press or a submit that remembers the post it came from and every way it was answered."""
+
+    def __init__(self, bot, user, **kwargs):
+        super().__init__(bot, user, **kwargs)
+        self.response = SpyResponse()
+        self.followup = FakeFollowup(self.response)
+        self.post = FakeMessage(4242, content="the public post")
+        self.post_edits = []
+        self.original_edits = []
+
+        async def edit_post(**changes):
+            self.post_edits.append(changes)
+
+        self.post.edit = edit_post
+
+    async def edit_original_response(self, **kwargs):
+        self.original_edits.append(kwargs)
+        return await super().edit_original_response(**kwargs)
+
+
+def fill(modal, typed):
+    modal.typed._value = typed
+    return modal
+
+
+async def test_pinned_the_panel_s_set_modal_saves_and_re_renders_the_panel(
+    cog, bot, birthday_person
+):
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    press = find_item(view, "Set my birthday")
+    pressed = FakeInteraction(bot, birthday_person)
+    await press.callback(pressed)
+    modal = fill(pressed.response.modals[0], "08-10-1987")
+    submitted = SpyInteraction(bot, birthday_person)
+
+    await modal.on_submit(submitted)
+
+    row = await get_birthday(bot.db, USER)
+    assert (row["month"], row["day"], row["year"], row["source"]) == (8, 10, 1987, "self")
+    assert modal.previous is view and view.is_finished()
+    assert submitted.response.defers == [{"ephemeral": False}]
+    (render,) = submitted.original_edits
+    assert isinstance(render["view"], BirthdayView)
+    assert "August 10" in render["embed"].description
+    said = submitted.response.messages[-1]
+    assert said["ephemeral"] is True and "August 10" in said["content"]
+    assert await action_kinds(bot.db) == ["birthday.set"]
+
+
+async def test_pinned_the_panel_s_set_modal_refuses_in_words_and_still_re_renders(
+    cog, bot, birthday_person
+):
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    pressed = FakeInteraction(bot, birthday_person)
+    await find_item(view, "Set my birthday").callback(pressed)
+    submitted = SpyInteraction(bot, birthday_person)
+
+    await fill(pressed.response.modals[0], "next tuesday").on_submit(submitted)
+
+    assert await get_birthday(bot.db, USER) is None
+    assert len(submitted.original_edits) == 1
+    assert submitted.sent.startswith("Black Bloc could not read that as a date.")
+    assert submitted.response.messages[-1]["ephemeral"] is True
+
+
+async def test_pinned_staff_set_their_modal_saves_and_re_renders_the_card(
+    cog, bot, birthday_person
+):
+    give_staff(bot, birthday_person)
+    other = FakeMember(bot.guild, user_id=901, display_name="Other")
+    card = await open_card_for(bot, birthday_person, other)
+    pressed = FakeInteraction(bot, birthday_person)
+    await find_item(card, "Set their birthday").callback(pressed)
+    modal = fill(pressed.response.modals[0], "01-02")
+    submitted = SpyInteraction(bot, birthday_person)
+
+    await modal.on_submit(submitted)
+
+    row = await get_birthday(bot.db, 901)
+    assert (row["month"], row["day"], row["source"]) == (1, 2, "staff")
+    (render,) = submitted.original_edits
+    assert render["embed"].title == "Other — birthday"
+    assert submitted.response.messages[-1]["ephemeral"] is True
+
+
+async def open_card_for(bot, who, member):
+    from black_bloc.cogs.community.birthdays import open_card
+
+    interaction = FakeInteraction(bot, who)
+    await open_card(interaction, member)
+    return card_view(interaction)
+
+
+# --- the birthday block: straight to the /birthday date modal, answered privately -------------
 
 
 async def test_the_block_is_one_card_and_one_guild_keyed_button(bot):
@@ -1699,19 +1808,154 @@ async def test_the_block_draws_nothing_while_birthdays_are_off(bot):
     assert block_parts(bot, bot.guild, None) is None
 
 
-async def test_pressing_the_block_opens_exactly_the_birthday_panel(cog, bot, birthday_person):
+async def press_block(bot, who):
     from black_bloc.cogs.community.birthdays import OpenBirthdayButton
 
-    by_command = await open_panel(cog, bot, birthday_person)
-    by_block = FakeInteraction(bot, birthday_person)
-    await OpenBirthdayButton(GUILD).callback(by_block)
+    pressed = SpyInteraction(bot, who)
+    await OpenBirthdayButton(GUILD).callback(pressed)
+    return pressed
 
-    command, block = by_command.response.messages[0], by_block.response.messages[0]
-    assert block["ephemeral"] is True
-    assert isinstance(block["view"], BirthdayView)
-    assert block["embed"].description == command["embed"].description
-    assert labels(block["view"]) == labels(command["view"])
-    assert not by_block.response.modals
+
+def untouched(interaction):
+    """Nothing the interaction came from was edited: no post edit, no original, no update."""
+    return (
+        interaction.post_edits == []
+        and interaction.original_edits == []
+        and interaction.response.message_edits == []
+        and all(one["ephemeral"] for one in interaction.response.messages if one.get("deferred"))
+    )
+
+
+async def test_pressing_the_block_opens_the_panel_s_own_date_modal(cog, bot, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await stored(bot, year=1987)
+    view = panel_view(await open_panel(cog, bot, birthday_person))
+    by_panel = FakeInteraction(bot, birthday_person)
+    await find_item(view, "Change my birthday").callback(by_panel)
+
+    by_block = await press_block(bot, birthday_person)
+
+    (modal,) = by_block.response.modals
+    (panel_modal,) = by_panel.response.modals
+    assert type(modal) is type(panel_modal) is DateModal
+    assert modal.private is True and panel_modal.private is False
+    assert modal.mine is True and modal.member is birthday_person and modal.previous is None
+    assert modal.title == panel_modal.title
+    assert modal.typed.default == panel_modal.typed.default == "08-10-1987"
+    assert by_block.response.messages == [] and untouched(by_block)
+
+
+async def test_the_block_s_form_saves_and_answers_privately_never_over_the_post(
+    cog, bot, birthday_person
+):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    modal = fill((await press_block(bot, birthday_person)).response.modals[0], "08-10-1987")
+    submitted = SpyInteraction(bot, birthday_person)
+
+    await modal.on_submit(submitted)
+
+    row = await get_birthday(bot.db, USER)
+    assert (row["month"], row["day"], row["year"], row["source"]) == (8, 10, 1987, "self")
+    assert await action_kinds(bot.db) == ["birthday.set"]
+    assert submitted.response.defers == [{"ephemeral": True, "thinking": True}]
+    assert untouched(submitted)
+    said = submitted.response.messages[-1]
+    assert said["ephemeral"] is True and "view" not in said and "embed" not in said
+    assert said["content"].startswith("Your birthday is **August 10** (1987).")
+    assert said["content"].endswith("Press the button again, or use /birthday, to change it.")
+
+
+async def test_the_block_s_form_refuses_in_the_panel_s_words_and_saves_nothing(
+    cog, bot, birthday_person
+):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    for typed, start in (
+        ("next tuesday", "Black Bloc could not read that as a date."),
+        ("02-30", "**February** has no day **30**"),
+        ("08-10-1800", "**1800** is not a birth year"),
+    ):
+        modal = fill((await press_block(bot, birthday_person)).response.modals[0], typed)
+        submitted = SpyInteraction(bot, birthday_person)
+
+        await modal.on_submit(submitted)
+
+        assert await get_birthday(bot.db, USER) is None
+        assert untouched(submitted)
+        assert submitted.response.messages[-1]["ephemeral"] is True
+        assert submitted.sent.startswith(start)
+        assert submitted.sent.endswith("Nothing was saved; press the button to try again.")
+    assert await action_kinds(bot.db) == []
+
+
+async def test_the_block_refuses_in_words_while_birthdays_are_off(cog, bot, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "off")
+
+    pressed = await press_block(bot, birthday_person)
+
+    assert pressed.response.modals == []
+    assert pressed.sent.startswith("Birthdays are turned off in this server right now")
+    assert pressed.response.messages[-1]["ephemeral"] is True and untouched(pressed)
+
+
+async def test_birthdays_turned_off_while_the_form_is_open_save_nothing(
+    cog, bot, birthday_person
+):
+    await bot.store.set(GUILD, "birthday_mode", "shadow")
+    modal = fill((await press_block(bot, birthday_person)).response.modals[0], "08-10")
+    await bot.store.set(GUILD, "birthday_mode", "off")
+    submitted = SpyInteraction(bot, birthday_person)
+
+    await modal.on_submit(submitted)
+
+    assert await get_birthday(bot.db, USER) is None
+    assert submitted.sent.startswith("Birthdays are turned off in this server right now")
+    assert untouched(submitted)
+
+
+async def test_the_block_s_answers_are_the_saved_words(cog, bot, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await bot.store.set(GUILD, "birthday_block_saved_said", "Got it! {said}")
+    await bot.store.set(GUILD, "birthday_block_refused_said", "Hmm. {said}")
+    for typed, start in (("08-10", "Got it! Your birthday is"), ("nope", "Hmm. Black Bloc")):
+        modal = fill((await press_block(bot, birthday_person)).response.modals[0], typed)
+        submitted = SpyInteraction(bot, birthday_person)
+        await modal.on_submit(submitted)
+        assert submitted.sent.startswith(start)
+
+    await bot.store.set(GUILD, "birthday_block_off_said", "Not now.")
+    await bot.store.set(GUILD, "birthday_mode", "off")
+    assert (await press_block(bot, birthday_person)).sent == "Not now."
+
+
+async def test_a_broken_saved_word_falls_back_to_the_shipped_one(cog, bot, birthday_person):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    await bot.store.set(GUILD, "birthday_block_saved_said", "Saved {nope}")
+    modal = fill((await press_block(bot, birthday_person)).response.modals[0], "08-10")
+    submitted = SpyInteraction(bot, birthday_person)
+
+    await modal.on_submit(submitted)
+
+    assert submitted.sent.endswith("Press the button again, or use /birthday, to change it.")
+
+
+async def test_the_block_s_form_with_the_database_gone_answers_privately(
+    cog, bot, birthday_person
+):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    modal = fill((await press_block(bot, birthday_person)).response.modals[0], "08-10")
+
+    class Closed:
+        is_connected = False
+
+    real = bot.db
+    bot.db = Closed()
+    submitted = SpyInteraction(bot, birthday_person)
+    await modal.on_submit(submitted)
+    bot.db = real
+
+    assert await get_birthday(bot.db, USER) is None
+    assert submitted.response.messages[-1]["ephemeral"] is True
+    assert submitted.sent and untouched(submitted)
 
 
 async def test_the_block_s_button_keeps_the_panel_s_own_refusals(bot, birthday_person):
@@ -1734,3 +1978,24 @@ async def test_cog_load_registers_the_block_button_even_before_the_database(bot,
 
     assert bot.dynamic_items == [OpenBirthdayButton]
 
+
+
+async def test_a_failure_in_the_block_s_form_is_a_private_sentence_and_a_row(
+    cog, bot, birthday_person, monkeypatch
+):
+    await bot.store.set(GUILD, "birthday_mode", "on")
+    modal = fill((await press_block(bot, birthday_person)).response.modals[0], "08-10")
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(birthdays_cog, "typed_birthday", broken)
+    submitted = SpyInteraction(bot, birthday_person)
+    try:
+        await modal.on_submit(submitted)
+    except RuntimeError as exc:
+        await modal.on_error(submitted, exc)
+
+    assert "error.modal" in await action_kinds(bot.db)
+    assert submitted.response.messages[-1]["ephemeral"] is True
+    assert submitted.sent and untouched(submitted)

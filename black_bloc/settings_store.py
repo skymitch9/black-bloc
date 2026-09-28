@@ -3034,6 +3034,9 @@ PINGS_BLOCK_LABEL = "pings_block_label"
 BIRTHDAY_BLOCK_TITLE = "birthday_block_title"
 BIRTHDAY_BLOCK_TEXT = "birthday_block_text"
 BIRTHDAY_BLOCK_LABEL = "birthday_block_label"
+BIRTHDAY_BLOCK_SAVED_SAID = "birthday_block_saved_said"
+BIRTHDAY_BLOCK_REFUSED_SAID = "birthday_block_refused_said"
+BIRTHDAY_BLOCK_OFF_SAID = "birthday_block_off_said"
 EVENTS_BLOCK_TITLE = "events_block_title"
 EVENTS_BLOCK_TEXT = "events_block_text"
 EVENTS_BLOCK_LABEL = "events_block_label"
@@ -3075,6 +3078,12 @@ BUTTON_BLOCK_DEFAULTS: dict[str, Any] = {
         "remove it any time; /birthday opens the same choices."
     ),
     BIRTHDAY_BLOCK_LABEL: "Set my birthday",
+    BIRTHDAY_BLOCK_SAVED_SAID: "{said} Press the button again, or use /birthday, to change it.",
+    BIRTHDAY_BLOCK_REFUSED_SAID: "{said} Nothing was saved; press the button to try again.",
+    BIRTHDAY_BLOCK_OFF_SAID: (
+        "Birthdays are turned off in this server right now, so nothing was saved. Ask an "
+        "Auntie/Uncle if you think they should be on."
+    ),
     EVENTS_BLOCK_TITLE: "Propose an event",
     EVENTS_BLOCK_TEXT: (
         "Got an idea for a movie night, a game session or a watch party? Propose it here and "
@@ -3115,6 +3124,9 @@ KEY_TYPES.update(
         BIRTHDAY_BLOCK_TITLE: "text",
         BIRTHDAY_BLOCK_TEXT: "text",
         BIRTHDAY_BLOCK_LABEL: "text",
+        BIRTHDAY_BLOCK_SAVED_SAID: "text",
+        BIRTHDAY_BLOCK_REFUSED_SAID: "text",
+        BIRTHDAY_BLOCK_OFF_SAID: "text",
         EVENTS_BLOCK_TITLE: "text",
         EVENTS_BLOCK_TEXT: "text",
         EVENTS_BLOCK_LABEL: "text",
@@ -3157,7 +3169,21 @@ KEY_HELP.update(
         BIRTHDAY_BLOCK_TITLE: BLOCK_HEADING_HELP.format(what="set your birthday"),
         BIRTHDAY_BLOCK_TEXT: BLOCK_TEXT_HELP.format(what="set your birthday"),
         BIRTHDAY_BLOCK_LABEL: BLOCK_LABEL_HELP.format(
-            what="set your birthday", does="opens the same /birthday panel"
+            what="set your birthday",
+            does="asks for the date straight away, in the same form /birthday's Set my birthday "
+            "opens",
+        ),
+        BIRTHDAY_BLOCK_SAVED_SAID: (
+            "what a member is told, privately, once the birthday block's form saved their date; "
+            "{said} is the same sentence /birthday answers with"
+        ),
+        BIRTHDAY_BLOCK_REFUSED_SAID: (
+            "what a member is told, privately, when the birthday block's form could not use the "
+            "date they typed; {said} is the same refusal /birthday answers with"
+        ),
+        BIRTHDAY_BLOCK_OFF_SAID: (
+            "what a member is told, privately, when they press the birthday block's button or "
+            "send its form while birthdays are off (birthday_mode); nothing is saved"
         ),
         EVENTS_BLOCK_TITLE: BLOCK_HEADING_HELP.format(what="propose an event"),
         EVENTS_BLOCK_TEXT: BLOCK_TEXT_HELP.format(what="propose an event"),

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from .button_block import ButtonLook, Words
 from .button_block import look as button_look
+from .button_block import said as button_said
 from .panels import panel_minutes as library_panel_minutes
 from .settings_store import (
     BIRTHDAY_BLOCK_LABEL,
@@ -507,3 +508,7 @@ def block_drawn(store: Any, guild_id: int) -> bool:
 
 def block_look(store: Any, guild_id: int) -> ButtonLook:
     return button_look(store, guild_id, BLOCK_WORDS, BUTTON_BLOCK_DEFAULTS)
+
+
+def block_said(store: Any, guild_id: int, key: str, **values: Any) -> str:
+    return button_said(store, guild_id, key, BUTTON_BLOCK_DEFAULTS, **values)

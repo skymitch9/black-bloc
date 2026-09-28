@@ -263,8 +263,16 @@ const BUTTON_BLOCKS = {
     feature: 'block_birthday',
     words: { title: 'birthday_block_title', text: 'birthday_block_text', label: 'birthday_block_label' },
     labelName: 'Button',
-    labelHelp: 'Opens the same /birthday panel, privately; its Set my birthday button asks for the '
-      + 'date. At most 80 characters.',
+    labelHelp: 'Asks for the date straight away, in the same form /birthday’s Set my birthday '
+      + 'button opens. The answer is private; the post is never changed. At most 80 characters.',
+    said: [
+      ['birthday_block_saved_said', 'Once the date is saved', '{said} is the same sentence '
+        + '/birthday answers with.'],
+      ['birthday_block_refused_said', 'When the date cannot be used', '{said} is the same '
+        + 'refusal /birthday answers with. Nothing is saved.'],
+      ['birthday_block_off_said', 'While birthdays are off', 'Said on the press, or on the '
+        + 'form, if birthdays were turned off after the post was drawn. Nothing is saved.'],
+    ],
     previewHelp: 'Nothing is drawn on a post while birthdays are off (Settings ▸ birthday).',
   },
   proposeevent: {
