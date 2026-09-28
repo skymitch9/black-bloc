@@ -12,9 +12,11 @@ import {
   closeDrawer,
   el,
   field,
+  filterChip,
   foldout,
   icon,
   keepSaying,
+  listFilter,
   memberPicker,
   notice,
   openDrawer,
@@ -966,7 +968,6 @@ function mineRow(row) {
     class: 'grid-row',
     type: 'button',
     style: MINE_COLUMNS,
-    'data-search': `${row.what} ${row.why || ''} ${SAID[row.status] || row.status}`.toLowerCase(),
     on: { click: () => openRequest(row.id, `Request #${row.id}`, { row }) },
   }, [
     el('span', { class: 'dot-sm', 'data-tone': STATE_OF[row.status] || null }),
@@ -1070,39 +1071,25 @@ function fileButton(note) {
 function statusChips(tally) {
   return el('div', { class: 'chipbar' }, CHIPS.map((one) => {
     const count = tally.get(one.key);
-    return el('button', {
-      class: 'chip-filter',
-      type: 'button',
-      'data-kind': one.key,
-      title: one.note,
-      'aria-pressed': state.status === one.key ? 'true' : 'false',
-      text: count === null || count === undefined ? one.label : `${one.label} · ${count}`,
-      on: {
-        click: () => {
-          state.status = one.key;
-          state.page = 1;
-          refresh();
-        },
+    return filterChip(
+      count === null || count === undefined ? one.label : `${one.label} · ${count}`,
+      state.status === one.key,
+      () => {
+        state.status = one.key;
+        state.page = 1;
+        refresh();
       },
-    });
+      { key: one.key, title: one.note },
+    );
   }));
 }
 
 function assigneeChips() {
-  return ASSIGNEE_CHIPS.map(([key, label]) => el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'data-kind': key,
-    'aria-pressed': state.assignee === key ? 'true' : 'false',
-    text: label,
-    on: {
-      click: () => {
-        state.assignee = state.assignee === key ? '' : key;
-        state.page = 1;
-        refresh();
-      },
-    },
-  }));
+  return ASSIGNEE_CHIPS.map(([key, label]) => filterChip(label, state.assignee === key, () => {
+    state.assignee = state.assignee === key ? '' : key;
+    state.page = 1;
+    refresh();
+  }, { key }));
 }
 
 /** One thing to do about an empty list: go back, widen, or file something. */
@@ -1230,58 +1217,34 @@ function mineSection(payload, rows, say) {
     state.query = '';
     refresh();
   }));
-  none.hidden = true;
-
-  const paint = () => {
-    const rule = (MINE_CHIPS.find((chip) => chip.key === state.chip) || MINE_CHIPS[0]).has;
-    let hits = 0;
-    for (const item of built) {
-      const hit = (rule === null || rule(item.row))
-        && (state.query === '' || (item.node.getAttribute('data-search') || '').includes(state.query));
-      item.node.hidden = !hit;
-      if (hit) hits += 1;
-    }
-    none.hidden = built.length === 0 || hits > 0;
-    foot.textContent = hits === built.length
-      ? said(SHOWING_ALL, { n: built.length })
-      : said(SHOWING_SOME, { shown: hits, n: built.length });
-  };
-
-  const chips = el('div', { class: 'chipbar' }, MINE_CHIPS.map((chip) => el('button', {
-    class: 'chip-filter',
-    type: 'button',
-    'data-kind': chip.key,
-    'aria-pressed': state.chip === chip.key ? 'true' : 'false',
-    text: chip.has === null
-      ? `All · ${rows.length}`
-      : `${chip.label} · ${rows.filter(chip.has).length}`,
-    on: {
-      click: (event) => {
-        state.chip = chip.key;
-        for (const other of event.currentTarget.parentElement.children) {
-          other.setAttribute('aria-pressed', other.getAttribute('data-kind') === chip.key ? 'true' : 'false');
-        }
-        paint();
-      },
-    },
-  })));
-
-  const search = searchField({
+  const filter = listFilter({
+    items: built,
+    value: (item) => item.row,
+    text: (row) => `${row.what} ${row.why || ''} ${SAID[row.status] || row.status}`,
+    filters: MINE_CHIPS.map((chip) => [
+      chip.key,
+      chip.has === null ? `All · ${rows.length}` : `${chip.label} · ${rows.filter(chip.has).length}`,
+      chip.has,
+    ]),
+    filter: state.chip,
+    query: state.query,
     label: 'Search your requests',
     placeholder: 'Search your requests…',
-    value: state.query,
-    onQuery: (query) => {
+    empty: none,
+    onChange: ({ query, filter: key, shown }) => {
       state.query = query;
-      paint();
+      state.chip = key;
+      foot.textContent = shown === built.length
+        ? said(SHOWING_ALL, { n: built.length })
+        : said(SHOWING_SOME, { shown, n: built.length });
     },
   });
-  paint();
+  filter.apply();
 
   list.body.append(
     card(null, [
       el('div', { class: 'card-head' }, [
-        search,
-        chips,
+        ...filter.parts,
         el('span', { class: 'topbar-gap' }),
         fileButton(MEMBER_FILE_NOTE),
       ]),
