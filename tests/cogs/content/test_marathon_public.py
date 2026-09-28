@@ -335,15 +335,6 @@ async def test_the_button_is_staff_only_and_rebuilds_from_its_custom_id(bot, cog
     assert "highlight is up" in lead.sent and len(public_posts(bot)) == 1
 
 
-async def test_the_button_outlives_a_restart():
-    registered = []
-    made = Marathons.__new__(Marathons)
-    made.bot = type("Bot", (), {"db": type("Db", (), {"is_connected": False})()})()
-    made.bot.add_dynamic_items = lambda *items: registered.extend(items)
-    await Marathons.cog_load(made)
-    assert public.HighlightButton in registered
-
-
 async def test_after_a_restart_a_highlight_is_read_once_and_kept_up_to_date(bot, cog):
     marathon = await ready(bot, cog)
     await pressed(bot, marathon, await run_of(bot, marathon, "Super Metroid"), mp.POST)

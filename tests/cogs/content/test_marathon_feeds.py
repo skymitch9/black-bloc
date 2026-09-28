@@ -770,7 +770,6 @@ async def test_every_notice_custom_id_round_trips_through_from_custom_id():
     assert re.fullmatch(feeds.FEED_TEMPLATE, pick.item.custom_id) is None
 
 
-
 class NotConnected:
     is_connected = False
 
@@ -945,22 +944,6 @@ async def logged(bot, kind):  # noqa: F811
         "SELECT details FROM action_log WHERE kind = ? ORDER BY id", (kind,)
     )
     return [json.loads(row["details"]) for row in await cur.fetchall()]
-
-
-async def test_the_seed_gives_the_ss4c_channel_row_an_oengus_feed_once(bot, cog):  # noqa: F811
-    row, feed = await ss4c_feed(bot, cog)
-    assert (feed["name"], feed["feed_ref"], feed["spotlight_id"]) == (
-        "Speed Stuff 4 Charity",
-        "speedstuff4charity",
-        row,
-    )
-    await feeds.remove_feed(bot, bot.guild, FakeActor(), feed)
-    again = Marathons(bot)
-    again.client = FeedClient()
-    again.clock = lambda: SEPT
-    bot.cogs[cogmod.COG_NAME] = again
-    await again.tick_once()
-    assert await all_feeds(bot) == []
 
 
 async def test_an_oengus_check_keeps_the_channels_marathon_and_remembers_every_record_read(
@@ -1303,22 +1286,6 @@ async def furs_feed(bot, cog, when="published"):  # noqa: F811
     return row, feed
 
 
-async def test_the_seed_gives_the_fastestfurs_channel_row_its_feed_once(bot, cog):  # noqa: F811
-    row, feed = await furs_feed(bot, cog)
-    assert (feed["name"], feed["feed_ref"], feed["spotlight_id"]) == (
-        "Fastest Furs",
-        "fastestfurs",
-        row,
-    )
-    await feeds.remove_feed(bot, bot.guild, FakeActor(), feed)
-    again = Marathons(bot)
-    again.client = FeedClient()
-    again.clock = lambda: SEPT
-    bot.cogs[cogmod.COG_NAME] = again
-    await again.tick_once()
-    assert await all_feeds(bot) == []
-
-
 async def test_a_fastestfurs_check_adds_the_upcoming_event_quietly_and_skips_past_ones(
     bot,  # noqa: F811
     cog,
@@ -1409,13 +1376,18 @@ async def la_feed(bot, cog, when="published"):  # noqa: F811
     return row, feed
 
 
-async def test_the_seed_gives_the_lady_arcaders_row_its_feed_once(bot, cog):  # noqa: F811
-    row, feed = await la_feed(bot, cog)
-    assert (feed["name"], feed["feed_ref"], feed["spotlight_id"]) == (
-        "Lady Arcaders",
-        "ladyarcaders",
-        row,
-    )
+@pytest.mark.parametrize(
+    ("made", "name", "ref"),
+    [
+        (ss4c_feed, "Speed Stuff 4 Charity", "speedstuff4charity"),
+        (furs_feed, "Fastest Furs", "fastestfurs"),
+        (la_feed, "Lady Arcaders", "ladyarcaders"),
+    ],
+    ids=["oengus-ss4c", "fastestfurs", "ladyarcaders"],
+)
+async def test_the_seed_gives_the_channel_row_its_feed_once(bot, cog, made, name, ref):  # noqa: F811
+    row, feed = await made(bot, cog)
+    assert (feed["name"], feed["feed_ref"], feed["spotlight_id"]) == (name, ref, row)
     await feeds.remove_feed(bot, bot.guild, FakeActor(), feed)
     again = Marathons(bot)
     again.client = FeedClient()

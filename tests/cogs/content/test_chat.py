@@ -414,8 +414,10 @@ async def test_an_insult_writes_an_action_row_and_a_greeting_does_not(cog, bot, 
 async def test_a_failed_reply_leaves_no_cooldown_and_no_action_row(cog, bot, member, db):
     message = pinged(bot, member, "<@55> you suck", raises=RuntimeError("boom"))
     await cog.on_message(message)
+    retry = pinged(bot, member, "<@55> hi")
+    await cog.on_message(retry)
 
-    assert USER not in cog._answered
+    assert len(retry.replies) == 1
     assert await rows(db, "chat.insult") == []
 
 
@@ -438,7 +440,6 @@ async def test_the_cog_seeds_the_code_tables_the_first_time_it_loads(cog, bot, d
     stored = await loaded_intents(db, GUILD)
 
     assert {row["name"] for row in stored} == set(BUILTIN_ORDER) | {UNKNOWN}
-    assert bot.guild.id in cog._seeded
     assert await seed_defaults(db, GUILD) == 0
 
 
@@ -513,7 +514,9 @@ async def test_a_bare_hello_gets_a_toned_wave_instead_of_a_sentence(cog, bot, me
 
     assert message.replies == []
     assert message.reactions == ["\U0001f44b\U0001f3ff"]
-    assert USER in cog._answered
+    again = pinged(bot, member, "<@55> hi")
+    await cog.on_message(again)
+    assert again.replies == [] and again.reactions == []
 
 
 async def test_a_greeting_with_a_question_after_it_still_gets_words(cog, bot, member):
@@ -1528,14 +1531,14 @@ async def test_a_number_outside_its_range_names_the_field_and_the_range(
     await button(interaction.view, "Limits…").callback(interaction)
 
     modal = interaction.response.modals[-1]
+    before = bot.store.get(GUILD, "chat_monthly_cap_usd")
     fill(modal, cooldown="9", hourly="11", daily="150", cap="999999", stays="12")
     await modal.on_submit(interaction)
 
     assert "chat_monthly_cap_usd" in interaction.sent
     assert "cannot be more than" in interaction.sent
-    assert bot.store.get(GUILD, "chat_monthly_cap_usd") == 20
+    assert bot.store.get(GUILD, "chat_monthly_cap_usd") == before
     assert await kinds_of(db) == []
-
 
 
 async def test_the_daily_ingest_writes_the_server_rows_and_leaves_staff_rows_alone(

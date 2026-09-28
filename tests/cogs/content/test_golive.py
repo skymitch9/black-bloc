@@ -699,16 +699,6 @@ async def test_the_ping_role_prefixes_the_announcement(cog, bot, member):
     assert bot.guild.channel.messages[0].content.startswith("<@&77> REGULATORS!")
 
 
-async def test_presence_enrichment_fills_a_missing_game(cog, bot, member, db):
-    await set_link(db, member.id, "alice")
-    cog.helix = FakeHelix(streams=[twitch_stream()])
-
-    await cog._go_live(member, StreamInfo(url="https://www.twitch.tv/alice"), "presence")
-
-    session = await open_session_for(db, GUILD, USER)
-    assert session["game"] == "Hades" and session["title"] == "a title"
-
-
 async def test_enrichment_is_skipped_when_presence_already_says_everything(cog, bot, member, db):
     await set_link(db, member.id, "alice")
     cog.helix = FakeHelix(streams=[twitch_stream()])
@@ -765,6 +755,7 @@ async def test_a_twitch_presence_is_still_enriched(cog, bot, member, db):
     assert cog.helix.stream_calls == [["alice"]]
     session = await open_session_for(db, GUILD, USER)
     assert session["platform"] == "Twitch" and session["game"] == "Hades"
+    assert session["title"] == "a title"
 
 
 async def test_a_youtube_session_is_kept_alive_by_presence_alone(cog, bot, db):
@@ -1595,36 +1586,27 @@ async def test_the_status_channel_line_says_test_mode_is_why_nothing_real_posts(
     assert "**channel** — <#999> — but test mode means nothing is posted" in interaction.words
 
 
-async def test_the_status_lines_quote_the_end_wording_that_appends(cog, bot, member, db):
-    as_staff(bot)
-    await bot.store.set(GUILD, "golive_end_template", "{live} (that's a wrap)")
-
-    interaction = await open_panel(cog, bot, member)
-
-    assert "**stream end** — edited (appended: \"{live} (that's a wrap)\")" in interaction.words
-
-
-async def test_the_status_lines_quote_the_rewrite_when_one_is_set(cog, bot, member, db):
-    as_staff(bot)
-    await bot.store.set(GUILD, "golive_end_template", "**{name}** was streaming **{game}**")
-
-    interaction = await open_panel(cog, bot, member)
-
-    assert (
-        '**stream end** — edited (rewritten: "**{name}** was streaming **{game}**")'
-        in interaction.words
-    )
-
-
-async def test_the_status_lines_say_the_sentence_stays_when_the_end_wording_is_blank(
-    cog, bot, member, db
+@pytest.mark.parametrize(
+    ("template", "line"),
+    [
+        ("{live} (that's a wrap)", "edited (appended: \"{live} (that's a wrap)\")"),
+        (
+            "**{name}** was streaming **{game}**",
+            'edited (rewritten: "**{name}** was streaming **{game}**")',
+        ),
+        ("", "edited (the sentence as posted, nothing added)"),
+    ],
+    ids=["appends", "rewrites", "blank"],
+)
+async def test_the_status_lines_quote_what_the_end_wording_does(
+    cog, bot, member, db, template, line
 ):
     as_staff(bot)
-    await bot.store.set(GUILD, "golive_end_template", "")
+    await bot.store.set(GUILD, "golive_end_template", template)
 
     interaction = await open_panel(cog, bot, member)
 
-    assert "**stream end** — edited (the sentence as posted, nothing added)" in interaction.words
+    assert f"**stream end** — {line}" in interaction.words
 
 
 async def test_the_status_lines_name_the_platform_of_everyone_live(cog, bot, member, db):

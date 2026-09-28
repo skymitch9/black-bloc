@@ -1662,10 +1662,6 @@ async def test_the_sweep_gap_is_re_read_rather_than_frozen_at_boot(bot, cog):
     assert cog.sweep.minutes == 2
 
 
-def test_the_test_channel_constants_are_still_what_the_fakes_expect():
-    assert CARL not in (ALICE, BOB, ORGANIZER)
-
-
 # --- a train that is also an event ----------------------------------------------------------------
 
 

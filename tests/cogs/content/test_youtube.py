@@ -530,25 +530,17 @@ async def test_linking_stores_the_channel_renders_the_card_and_leaves_one_row(
     assert "Kurzgesagt" in interaction.embed.description
 
 
-async def test_linking_never_claims_anything_was_counted_as_seen(bot, cog, db, member):
-    """Nothing reads the uploads feed any more, so nothing may say it was read."""
+async def test_linking_says_announcements_are_off_and_never_claims_anything_was_seen(
+    bot, cog, db, member
+):
     cog.client = _Client(resolves=(CHANNEL, "Kurzgesagt"))
     interaction = FakeInteraction(bot, member)
 
     await run_link(interaction, member, CHANNEL, mine=True)
 
+    assert youtube_cog.LIVE_MODE_OFF_NOTE.strip() in interaction.sent
     assert "counted as seen" not in interaction.sent
     assert "upload" not in interaction.sent.lower()
-
-
-async def test_linking_says_out_loud_that_live_announcements_are_off(bot, cog, db, member):
-    cog.client = _Client(resolves=(CHANNEL, "Kurzgesagt"))
-    interaction = FakeInteraction(bot, member)
-
-    await run_link(interaction, member, CHANNEL, mine=True)
-
-    assert "off" in interaction.sent
-    assert "Live streams are…" in interaction.sent
 
 
 async def test_the_two_ways_a_link_can_fail_each_get_their_own_sentence(
@@ -766,20 +758,7 @@ async def test_logs_answers_a_new_message_and_leaves_the_panel_where_it_was(
     assert interaction.ephemeral
 
 
-async def test_logs_still_refuses_a_staffer_who_was_demoted_since_the_panel_opened(
-    bot, cog, db, member
-):
-    _staff(bot)
-    _embed, view = await build_panel(bot, bot.guild, member)
-    _staff(bot, False)
-    interaction = FakeInteraction(bot, member)
-
-    await button(view, "Logs").callback(interaction)
-
-    assert "staff only" in interaction.sent
-
-
-@pytest.mark.parametrize("label", ["Link for somebody…"])
+@pytest.mark.parametrize("label", ["Logs", "Link for somebody…"], ids=["logs", "link-for"])
 async def test_a_staffer_demoted_while_the_panel_is_open_moves_nothing(
     bot, cog, db, member, label
 ):

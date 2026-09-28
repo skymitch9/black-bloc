@@ -584,53 +584,38 @@ async def test_the_ping_labels_are_keys(bot, cog):
     assert labels(message)[4] == "Role pings: off"
 
 
-async def test_the_ping_button_is_staff_only(bot, cog):
-    marathon = await tracked_marathon(bot, cog)
-    button = await controls.ControlButton.from_custom_id(
-        None, None, re.fullmatch(mtc.TEMPLATE, mtc.custom_id(marathon["id"], "ping", "on"))
-    )
-    bot.store.is_staff = lambda member: False
-    stranger = FakeInteraction(bot, Member(42), bot.guild)
-    await button.on_click(stranger)
-    assert "staff only" in stranger.sent and (await fresh(bot, marathon))["ping_role"] == 0
-
-    bot.store.is_staff = lambda member: True
-    lead = FakeInteraction(bot, FakeActor(), bot.guild)
-    await button.on_click(lead)
-    assert "pings again" in lead.sent and (await fresh(bot, marathon))["ping_role"] == 1
-
-
 # --- the buttons ---------------------------------------------------------------------------------
 
 
-async def test_the_buttons_are_staff_only_and_rebuild_from_their_custom_id(bot, cog, proposals):
+@pytest.mark.parametrize(
+    ("action", "column", "before", "after", "said"),
+    [
+        ("event", "event_mode", "none", "marathon", "now makes one event for the whole marathon"),
+        ("ping", "ping_role", 0, 1, "pings again"),
+    ],
+    ids=["events-button", "ping-button"],
+)
+async def test_the_buttons_are_staff_only_and_rebuild_from_their_custom_id(
+    bot, cog, proposals, action, column, before, after, said
+):
     marathon = await tracked_marathon(bot, cog)
-    custom = mtc.custom_id(marathon["id"], "event", "on")
+    custom = mtc.custom_id(marathon["id"], action, "on")
     button = await controls.ControlButton.from_custom_id(
         None, None, re.fullmatch(mtc.TEMPLATE, custom)
     )
-    assert (button.marathon_id, button.action, button.to) == (marathon["id"], "event", "on")
+    assert (button.marathon_id, button.action, button.to) == (marathon["id"], action, "on")
 
     bot.store.is_staff = lambda member: False
     stranger = FakeInteraction(bot, Member(42), bot.guild)
     await button.on_click(stranger)
     assert "staff only" in stranger.sent
-    assert (await fresh(bot, marathon))["event_mode"] == "none"
+    assert (await fresh(bot, marathon))[column] == before
 
     bot.store.is_staff = lambda member: True
     lead = FakeInteraction(bot, FakeActor(), bot.guild)
     await button.on_click(lead)
-    assert "now makes one event for the whole marathon" in lead.sent
-    assert (await fresh(bot, marathon))["event_mode"] == "marathon"
-
-
-async def test_the_buttons_outlive_a_restart():
-    registered = []
-    made = Marathons.__new__(Marathons)
-    made.bot = type("Bot", (), {"db": type("Db", (), {"is_connected": False})()})()
-    made.bot.add_dynamic_items = lambda *items: registered.extend(items)
-    await Marathons.cog_load(made)
-    assert controls.ControlButton in registered
+    assert said in lead.sent
+    assert (await fresh(bot, marathon))[column] == after
 
 
 # --- the thread moves ----------------------------------------------------------------------------

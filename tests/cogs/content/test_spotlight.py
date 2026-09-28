@@ -5,7 +5,6 @@ import pytest
 
 from black_bloc import pings
 from black_bloc import spotlight as words
-from black_bloc.cogs.content.golive import GoLive
 from black_bloc.cogs.content.spotlight import (
     AddChannelModal,
     AddWindowButton,
@@ -1127,9 +1126,10 @@ async def test_keeping_a_row_for_ever_clears_its_date(bot, cog):
     assert (await channel_by_id(bot.db, row["id"]))["expires_at"] is None
 
 
-async def test_a_move_on_a_row_that_has_gone_says_so_rather_than_crashing(bot, cog):
-    said, kept = await run_spotlight_move(bot, bot.guild, FakeActor(), 4242, "remove")
-    assert said == words.NO_SUCH_ROW and kept is False
+@pytest.mark.parametrize("move", ["remove", "give_role"])
+async def test_a_move_on_a_row_that_has_gone_says_so_in_words(bot, cog, move):
+    said, done = await run_spotlight_move(bot, bot.guild, FakeActor(), 4242, move)
+    assert said == words.NO_SUCH_ROW and done is False
 
 
 # --- the storage round trip --------------------------------------------------------------------
@@ -1155,10 +1155,6 @@ async def test_the_channel_and_session_tables_round_trip(db):
     assert [one["id"] for one in await recent_sessions(db, GUILD)] == [session_id]
     assert await delete_channel(db, spotlight_id) is True
     assert await delete_channel(db, spotlight_id) is False
-
-
-def test_the_cog_and_the_golive_cog_are_two_different_things():
-    assert Spotlight.__name__ != GoLive.__name__
 
 
 # --- the channel's own ping role (info/spotlight-pings-design.md §B) ---------------------------
@@ -1318,12 +1314,6 @@ async def test_staff_give_and_take_a_channels_role_from_the_sub_panel(bot, cog):
     assert await pings.get_spotlight_fan_role(bot.db, GUILD, row["id"]) is None
     _embed, view = await build_spotlight(bot, bot.guild, row["id"])
     assert words.GIVE_PING_ROLE in [getattr(one, "label", None) for one in view.children]
-
-
-async def test_a_move_on_a_row_that_has_gone_says_so_rather_than_a_bare_status(bot, cog):
-    said, picked = await run_spotlight_move(bot, bot.guild, FakeActor(), 9999, "give_role")
-
-    assert said == words.NO_SUCH_ROW and picked is False
 
 
 async def test_the_first_announcement_writes_twitchs_own_spelling_onto_the_row(bot, cog):
@@ -2060,32 +2050,28 @@ async def test_the_add_modal_takes_a_start_and_an_end_instead_of_days(bot, cog):
     assert row["expires_at"] == "2026-11-08T09:00:00+00:00"
 
 
-async def test_the_add_modal_refuses_a_backwards_range_and_adds_nothing(bot, cog):
+@pytest.mark.parametrize(
+    ("spotlight", "starts", "ends", "said"),
+    [
+        ("yes", "2026-11-08 09:00", "2026-11-01 09:00", "ends before it starts"),
+        ("", "next tuesday", "", "next tuesday"),
+    ],
+    ids=["backwards-range", "unreadable-date-named"],
+)
+async def test_the_add_modal_refuses_a_bad_date_in_words_and_adds_nothing(
+    bot, cog, spotlight, starts, ends, said
+):
     await bot.store.set(GUILD, DEFAULT_TIMEZONE_KEY, "UTC")
     modal = AddChannelModal(None, bot, bot.guild)
     modal.channel._value = "esamarathon"
-    modal.spotlight._value = "yes"
+    modal.spotlight._value = spotlight
     modal.youtube._value = ""
-    modal.starts._value = "2026-11-08 09:00"
-    modal.ends._value = "2026-11-01 09:00"
+    modal.starts._value = starts
+    modal.ends._value = ends
     interaction = FakeInteraction(bot, FakeActor(), bot.guild)
     await modal.on_submit(interaction)
-    assert "ends before it starts" in (interaction.sent or "")
+    assert said in (interaction.sent or "")
     assert await channel_by_login(bot.db, GUILD, "esamarathon") is None
-
-
-async def test_the_add_modal_refuses_an_unreadable_date_by_name(bot, cog):
-    modal = AddChannelModal(None, bot, bot.guild)
-    modal.channel._value = "esamarathon"
-    modal.spotlight._value = ""
-    modal.youtube._value = ""
-    modal.starts._value = "next tuesday"
-    modal.ends._value = ""
-    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
-    await modal.on_submit(interaction)
-    assert "next tuesday" in (interaction.sent or "")
-    assert await channel_by_login(bot.db, GUILD, "esamarathon") is None
-
 
 async def test_the_panel_marks_a_scheduled_row_with_the_key_the_owner_can_change(bot, cog):
     await a_row(bot, starts_at=ahead(3))
