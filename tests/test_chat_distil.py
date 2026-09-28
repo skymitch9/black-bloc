@@ -147,11 +147,21 @@ async def action_kinds(db):
 
 def test_a_conversation_is_one_person_in_one_place():
     rows = [
-        {"guild_id": GUILD, "channel_id": 1, "user_id": MEMBER, "speaker": "member",
-         "content": "a"},
+        {
+            "guild_id": GUILD,
+            "channel_id": 1,
+            "user_id": MEMBER,
+            "speaker": "member",
+            "content": "a",
+        },
         {"guild_id": GUILD, "channel_id": 1, "user_id": MEMBER, "speaker": "bot", "content": "b"},
-        {"guild_id": GUILD, "channel_id": 2, "user_id": MEMBER, "speaker": "member",
-         "content": "c"},
+        {
+            "guild_id": GUILD,
+            "channel_id": 2,
+            "user_id": MEMBER,
+            "speaker": "member",
+            "content": "c",
+        },
         {"guild_id": None, "channel_id": 3, "user_id": MEMBER, "speaker": "member", "content": "d"},
     ]
 
@@ -225,46 +235,42 @@ async def test_the_log_line_carries_counts_and_never_the_words_themselves(bot, d
     assert "Sky" not in json.dumps(details) and "short answers" not in json.dumps(details)
 
 
-async def test_mode_off_distils_nothing_at_all(bot, db):
-    client = with_client(bot, FakeGroq())
+async def _memory_off(bot, db):
     await bot.store.set(GUILD, "chat_memory_mode", "off")
-    await a_conversation(db)
-
-    found = await run_it.run(bot)
-
-    assert found["looked"] == 0 and client.calls == []
-    assert await profile_for(db, MEMBER, GUILD) is None
 
 
-async def test_somebody_who_opted_out_is_skipped(bot, db):
-    client = with_client(bot, FakeGroq())
+async def _opted_out(bot, db):
     await set_override(db, MEMBER, GUILD)
-    await a_conversation(db)
-
-    found = await run_it.run(bot)
-
-    assert found["looked"] == 0 and client.calls == []
 
 
-async def test_a_staff_conversation_is_never_sent(bot, db):
+async def _month_capped(bot, db):
+    await bot.store.set(GUILD, "chat_monthly_cap_usd", 0)
+
+
+async def _nothing(bot, db):
+    return None
+
+
+@pytest.mark.parametrize(
+    ("before", "said"),
+    [
+        (_memory_off, None),
+        (_opted_out, None),
+        (_nothing, ["I go by Sky", "can I appeal the timeout a mod gave me last night"]),
+        (_nothing, ["lol"]),
+        (_month_capped, None),
+    ],
+    ids=["mode-off", "opted-out", "staff-conversation-never-sent", "one-liner", "month-capped"],
+)
+async def test_a_conversation_the_sweep_must_not_send_is_never_looked_at(bot, db, before, said):
     client = with_client(bot, FakeGroq())
-    await a_conversation(
-        db, said=["I go by Sky", "can I appeal the timeout a mod gave me last night"]
-    )
+    await before(bot, db)
+    await a_conversation(db, said=said)
 
     found = await run_it.run(bot)
 
     assert found["looked"] == 0 and client.calls == []
     assert await profile_for(db, MEMBER, GUILD) is None
-
-
-async def test_a_one_liner_is_not_worth_a_call(bot, db):
-    client = with_client(bot, FakeGroq())
-    await a_conversation(db, said=["lol"])
-
-    found = await run_it.run(bot)
-
-    assert found["looked"] == 0 and client.calls == []
 
 
 async def test_a_dm_is_filed_under_the_one_server_with_a_dm_scoped_note(bot, db):
@@ -302,24 +308,12 @@ async def test_an_answer_in_the_wrong_shape_writes_nothing_at_all(bot, db):
     assert await profile_for(db, MEMBER, GUILD) is None
 
 
-async def test_a_capped_month_distils_nothing(bot, db):
-    client = with_client(bot, FakeGroq())
-    await bot.store.set(GUILD, "chat_monthly_cap_usd", 0)
-    await a_conversation(db)
-
-    found = await run_it.run(bot)
-
-    assert found["looked"] == 0 and client.calls == []
-
-
 async def test_a_profile_nobody_has_added_to_expires_on_the_same_sweep(bot, db):
     with_client(bot, FakeGroq())
     from black_bloc.chat_memory import Profile, save_profile
 
     old = (datetime.now(UTC) - timedelta(days=200)).isoformat()
-    await save_profile(
-        db, OTHER, GUILD, Profile(call_me="Gone", created_at=old, updated_at=old)
-    )
+    await save_profile(db, OTHER, GUILD, Profile(call_me="Gone", created_at=old, updated_at=old))
 
     found = await run_it.run(bot)
 
