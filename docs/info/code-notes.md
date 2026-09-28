@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import titles* (branch `doc-import-title`, off `main` `9347679a`, keyed against `cd778b2f`); the *Doc import fidelity* rows for `clipmd.js` hold in meaning but their line numbers moved down (`blocksOf` was split out of `htmlToDiscordMarkdown`). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import fidelity* (branch `doc-import-fidelity`, off `main` `2072eac0`, keyed against `919853a0`); the *posts-paste* rows for `clipmd.js` still hold except that nested lists are now indented to the parent's content column and Doc-sourced HTML joins blocks with one newline. Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *One search module* (branch `search-module`, off `main` `93c0bbb5`, keyed against `c9bd673a`); the *Blocks section: fold, search, filter* row for `blockmatch.js` is SUPERSEDED (file deleted). Before that:
 > **2026-09-28 — one section APPENDED, nothing re-keyed**: *Doc import — the embed box and New post choices* (branch `posts-doc-import-2`, off `main` `d1d5807a`, keyed against `959bc310`); the *Import from a Google Doc* rows for `page-posts.js` `forgetImport` / `replaceBody` / `importDoc` / `importFold` hold in substance but their line numbers moved (~+30). Before that:
@@ -9373,3 +9374,20 @@ Design: [`posts-doc-import-design.md`](posts-doc-import-design.md) § *Fidelity*
 | `site/public/assets/clipmd.js:506` `CODE_SPANS` · `:507` `CHANNEL_NAME` · `:522` `mentionChannels` | Split on code spans (odd parts are code, untouched). The look-behind refuses a `#` after a letter, digit or URL punctuation, and after `#` (so `## ` headings stay). Exact, case-sensitive names only; an unknown name keeps its words. |
 | `site/public/assets/page-posts.js:361` `markdownOfDoc` | Async now: the channel list comes from the page's own `refs()` (read once per load); a failed read is an empty list, so the import still lands with `#names` as typed. Both callers `await` it; the paste path is untouched. |
 | `site/mock/docimport.test.mjs` `UNDERLINE_SETTLED` | The one allowed difference, settled by the owner 2026-09-28: the live post drops the Doc's underline on *Banworthy Offenses*; the converter stays faithful and the test swaps that single line. |
+
+## Doc import titles: the doc's, its first title line, or Untitled-N (branch `doc-import-title`, 2026-09-28)
+
+Design: [`posts-doc-import-design.md`](posts-doc-import-design.md) § *Titles*. Keyed against `cd778b2f`.
+
+| Where | Why |
+|---|---|
+| `site/public/assets/clipmd.js:345` `blocksOf` | Split out of `htmlToDiscordMarkdown` so `docTitle` reads the SAME blocks, after the same body-sized demotion — one heading rule, not two. Blocks now also remember their source `tag` and whether their class says `title`. |
+| `site/public/assets/clipmd.js:248` `titledOf` | `title` as a whole class word; `subtitle` does not match (the `b` before it is not a separator). |
+| `site/public/assets/clipmd.js:523` `docTitle` | Order: `<title>` with words, then a Title-class block anywhere (not inside a list item), then the first block still `kind === 'h'` whose TAG is `h1`–`h3` — a paragraph promoted by font size has no tag and does not count. Plain text; `''` means none. |
+| `site/public/assets/page-posts.js:363` `titleOfDoc` | The server's `title` first (it is the export's `<title>`), else `docTitle`; a throw is `''` so a converter bug never blocks the import. |
+| `site/public/assets/page-posts.js:1009` | `title_from: 'doc'` only while `typed` is false — a title staff typed is theirs and gets today's refusal, never a number. |
+| `black_bloc/posts.py:785` `numbered` | The slug is cut BEFORE the `-N` is added, so a 60-character slug keeps its number. `n == 0` is the plain name. |
+| `black_bloc/posts.py:792` `taken_slugs` | An optimisation, not the guarantee: the LIKE prefix is loose on purpose and may miss or over-match; the UNIQUE `(guild_id, slug)` INSERT is what decides. |
+| `black_bloc/posts.py:1092` | `IntegrityError`: a numbered create moves to the next number and re-reads; a typed one answers `slug_taken` in words (it used to be a 500 when two typed creates raced). Bounded by `NUMBERED_MOST`. |
+| `black_bloc/api/tools/posts.py:256` | `title_from == "doc"` is the only way in to numbering; the Discord `/posts` door never numbers. |
+| `site/mock/server.mjs:3123` `postNumbered` | The mock's copy of `numbered`; the mock is single-threaded, so it only scans. |

@@ -336,3 +336,102 @@ whitespace, classes vs inline.
 ### Live check steps
 
 Sweep rows **`DI-j` … `DI-l`** in [`../access/sweeps.md`](../access/sweeps.md).
+
+## Titles: the doc's, its first title line, or Untitled-N
+
+> 🔨 **BUILT on branch `doc-import-title`** (off `main` `9347679a`) — **NOT merged, NOT deployed.**
+> **Last verified: 2026-09-28**, in the worktree on the committed tree: `ruff check .` clean;
+> `pytest -q -n 16` **9593 passed, 0 failed**; every node test `scripts/deploy.ps1` runs exits 0
+> (incl. `clipmd` and `docimport` — the welcome acceptance test untouched and green); the ES-module parse
+> of all 48 `site/public/assets/*.js`; `node site/mock/check.mjs` against a mock on `MOCK_PORT=8903` →
+> *22 pages, 282 routes, 26 core settings, all keys present* (the 8903 listener stopped after).
+> ⚠️ **NOT checked:** no browser ran the New post drawer; nothing met Discord or Google.
+
+Owner, 2026-09-28 09:4x, verbatim: *"for the title fix leave it untitled if no title is on the google doc
+and no title header is used in the doc. then add -1 -2 -3 etc if there are multiple untitleds. does that
+make sense"*. Measured the same morning: Google's export of the owner's rules Doc carries no usable
+`<title>`, so the title box stayed empty.
+
+### As built
+
+- **One rule for the title — `clipmd.js` `docTitle(html)`**, pure and exported, in this order:
+  1. the export's `<title>` when it has words;
+  2. else the first **Title-style** block (`class` holding the word `title` — `p.title` in the export;
+     `subtitle` is NOT a title) with visible words, wherever it sits;
+  3. else the first **real heading**: an `h1`–`h3` that clipmd itself keeps as a heading — the SAME
+     block walk (`blocksOf`, split out of `htmlToDiscordMarkdown`) and the same `bodySized` 14pt rule, so a
+     body-sized `h1` (the rules Doc's welcome paragraph) is never a title. A heading inside a list item,
+     `h4`–`h6`, and a paragraph promoted by font size do not count;
+  4. else `''`.
+  The text is plain (marks, links and line breaks flattened to single spaces). **The rules fixture gets
+  *Current Rules (Do Not Edit this page is reference)*** — pinned in `site/mock/clipmd.test.mjs` with the
+  other cases (own title wins; Title line beats an earlier heading; body-sized heading skipped; subtitle
+  and `h4` ignored; no title → `''`).
+- **`posts_untitled_title`** — a new registry key (text, default **`Untitled`**, blank restores it),
+  filed under `posts` by prefix, with help, a default, a mock row and a label; on the Posts page's
+  **Settings** fold (`SETTING_KEYS` now six keys) and `/settings` (checklist 33). It is a key because it can
+  become the embed's title members see (the every-word rule). `posts.untitled_title(store, guild_id)` is
+  the one reading. `GET /api/posts` and every post-shaped answer carry **`untitled_title`**, the way
+  `import_style` does.
+- **Numbering happens on the SERVER.** `POST /api/posts` takes **`title_from: "doc"`** (anything else, or
+  nothing, is today's behaviour — backward compatible) and passes `number=True` to `posts.make_post`.
+  A numbered create:
+  - takes the untitled title when the title is blank;
+  - makes the slug from the title (a sent `slug` is ignored) and picks the first free of
+    `title`, `title-1`, `title-2`, … — plain first, then `-1` (the conductor's reading); the title and
+    the slug get the same `-N`, and a long slug is cut BEFORE the suffix so the number survives
+    `SLUG_MAX`;
+  - reads the taken slugs once (`taken_slugs`), then INSERTS; the `(guild_id, slug)` **UNIQUE**
+    constraint is the arbiter — an `IntegrityError` moves to the next number and re-reads. So two creates
+    at once can never land on one name; bounded at `NUMBERED_MOST` (1000) attempts, then the usual
+    *slug taken* refusal.
+  A **typed** title (Start from scratch, or an import title staff edited) is never numbered: it keeps
+  the `slug_taken` refusal, which now also answers (in words, 409) when a concurrent create wins the
+  INSERT, instead of a 500.
+- **The page (New post ▸ Import a Google Doc).** After *Read the doc*, the title box fills with
+  `titleOfDoc(found)` — the server's `title`, else `docTitle(found.html)` — or, when both are empty, the
+  payload's `untitled_title`. *Create the post* sends `title_from: "doc"` unless staff typed in the title
+  box (the existing `typed` flag); a typed title gets today's refusal. The box's help line says so.
+  Nothing else in the page changed (the existing-post drawer's import note still uses `found.title`).
+- **Mock** mirrors it: `postUntitledTitle`, `postNumbered`, `untitled_title` on both shapes,
+  `title_from` on `POST /api/posts`. Contract: `untitled_title` required on `GET /api/posts`,
+  `GET /api/posts/{post_slug}` and both `POST /api/posts` entries; a third `POST /api/posts` entry sends
+  `title_from: "doc"`.
+
+### Race safety, proved
+
+`tests/test_posts.py`:
+`test_two_imports_at_once_never_share_a_name` (four `make_post` under `asyncio.gather` → *Untitled,
+Untitled-1, -2, -3*), `test_a_stale_view_of_the_taken_names_is_caught_by_the_unique_slug` (the read of taken
+names patched to say *nothing taken* while `untitled` exists → the INSERT fails and the create lands on
+*Untitled-1*: the race itself, deterministically), and
+`test_a_typed_create_losing_the_race_is_refused_in_words_not_an_error`. Numbering order, gap filling,
+the untitled key, and the long-slug cut have their own tests; the route half is
+`tests/api/tools/test_posts.py::test_an_imported_title_is_numbered_and_a_typed_one_is_refused`.
+
+### Deviations
+
+1. **Numbering applies to ANY import-created title**, not only the untitled one (the brief's *or a
+   doc-derived title*): two imports of the rules Doc become *Current Rules (…)* and *Current Rules (…)-1*.
+2. **The suffix is appended to the title as is** — `Untitled-1`, no space, exactly as the owner wrote it.
+3. **The Title-style match is by class word**, so a clipboard block with a class like `doc-title` also
+   counts; only the export path uses `docTitle`.
+4. **`posts_untitled_title` has no length check** (like the block-name keys); an untitled title at the
+   256-character cap is refused in words when a `-N` would push it over (`title_too_long`).
+5. **The server fills a blank `title_from: "doc"` title with the untitled key itself**, so the numbering
+   holds even for a client that sends no title.
+
+### What was NOT verified
+
+- 🔴 **No browser ran the New post drawer** — the filled title, the help line and the flag on Create are
+  reasoned and exercised through the mock by curl only (three `title_from` creates → *Untitled,
+  Untitled-1, Untitled-2*; a typed *Untitled* → `slug_taken`).
+- **Two creates racing on the live SQLite/Fly database** — proved against the test database's one
+  connection; the UNIQUE constraint is the same one live.
+- Only ONE real export has been measured: whether Google ever writes a non-empty `<title>` or
+  `class="title"` in the export is unmeasured (the Title-style case is a hand-built fixture).
+- Nothing met Discord.
+
+### Live check steps
+
+Sweep rows **`DI-m` … `DI-o`** in [`../access/sweeps.md`](../access/sweeps.md).
