@@ -14,6 +14,7 @@ import {
 import { messageTree, mountTree } from './discordmock.js';
 import { ICONS } from './icons.js';
 import { channelLabel, humanLabel } from './labels.js';
+import * as md from './mdformat.js';
 
 export { channelLabel, humanLabel };
 
@@ -1721,4 +1722,201 @@ export function sayAgain(where, say) {
   outcomes.delete(where);
   say.say(found.text, found.tone);
   return say;
+}
+
+export const FORMAT_HINT = 'Discord formatting — what the preview shows is what Discord shows.';
+const FORMAT_TAB_NOTE = 'Tab indents inside the box; Ctrl+M lets Tab leave it.';
+const LINK_TITLE = 'Add a link';
+const LINK_ASK = 'The web address the words should open.';
+const LINK_BAD = 'That is not a web address. Start it with https:// — for example https://example.org.';
+const LINK_OK = 'Add the link';
+const HEADING_LABEL = 'Heading';
+
+const FORMAT_MOVES = [
+  { key: 'bold', text: 'B', label: 'Bold', keys: 'Ctrl+B', move: (v, s, e) => md.wrap(v, s, e, '**') },
+  { key: 'italic', text: 'I', label: 'Italic', keys: 'Ctrl+I', move: (v, s, e) => md.wrap(v, s, e, '*') },
+  { key: 'underline', text: 'U', label: 'Underline', keys: 'Ctrl+U', move: (v, s, e) => md.wrap(v, s, e, '__') },
+  { key: 'strike', text: 'S', label: 'Strikethrough', move: (v, s, e) => md.wrap(v, s, e, '~~') },
+  { key: 'heading' },
+  { key: 'bullets', icon: 'fmtBullets', label: 'Bullet list', move: (v, s, e) => md.prefixLines(v, s, e, '- ') },
+  { key: 'numbers', icon: 'fmtNumbers', label: 'Numbered list', move: md.numberLines },
+  { key: 'quote', icon: 'fmtQuote', label: 'Quote', move: (v, s, e) => md.prefixLines(v, s, e, '> ') },
+  { key: 'code', icon: 'fmtCode', label: 'Inline code', move: (v, s, e) => md.wrap(v, s, e, '`') },
+  { key: 'block', icon: 'fmtBlock', label: 'Code block', move: md.codeBlock },
+  { key: 'link', icon: 'fmtLink', label: 'Link' },
+  { key: 'spoiler', icon: 'fmtSpoiler', label: 'Spoiler', move: (v, s, e) => md.wrap(v, s, e, '||') },
+  { key: 'outdent', icon: 'fmtOutdent', label: 'Outdent', keys: 'Shift+Tab', move: md.outdent },
+  { key: 'indent', icon: 'fmtIndent', label: 'Indent', keys: 'Tab', move: md.indent },
+];
+
+const HEADINGS = [1, 2, 3].map((level) => ({
+  level,
+  label: `Heading ${level}`,
+  move: (v, s, e) => md.heading(v, s, e, level),
+}));
+
+function putText(box, made) {
+  const old = box.value;
+  let head = 0;
+  while (head < old.length && head < made.value.length && old[head] === made.value[head]) head += 1;
+  let tail = 0;
+  while (tail < old.length - head && tail < made.value.length - head
+    && old[old.length - 1 - tail] === made.value[made.value.length - 1 - tail]) tail += 1;
+  const middle = made.value.slice(head, made.value.length - tail);
+  box.focus();
+  box.setSelectionRange(head, old.length - tail);
+  let done = false;
+  try {
+    done = document.execCommand(middle ? 'insertText' : 'delete', false, middle);
+  } catch (error) {
+    done = false;
+  }
+  if (!done || box.value !== made.value) {
+    box.value = made.value;
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  box.setSelectionRange(made.start, made.end);
+}
+
+function applyMove(box, move) {
+  putText(box, move(box.value, box.selectionStart, box.selectionEnd));
+}
+
+async function askLink(box) {
+  const start = box.selectionStart;
+  const end = box.selectionEnd;
+  if (md.linkedText(box.value, start, end) !== null) {
+    putText(box, md.unlink(box.value, start, end));
+    return;
+  }
+  const input = el('input', { class: 'input', type: 'url', id: 'format-link-url', placeholder: 'https://' });
+  let url = null;
+  const agreed = await askForm({
+    title: LINK_TITLE,
+    body: [field('Web address', input, LINK_ASK)],
+    confirmLabel: LINK_OK,
+    tone: null,
+    onConfirm: () => {
+      url = md.cleanUrl(input.value);
+      return url ? null : LINK_BAD;
+    },
+    ready: ({ confirm }) => {
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          confirm.click();
+        }
+      });
+      input.focus();
+    },
+  });
+  box.focus();
+  box.setSelectionRange(start, end);
+  if (agreed && url) putText(box, md.link(box.value, start, end, url));
+}
+
+function tipOf(one) {
+  return one.keys ? `${one.label} (${one.keys})` : one.label;
+}
+
+function headingMenu(box) {
+  const menu = el('div', { class: 'fmtmenu', role: 'menu', hidden: true });
+  const toggle = el('button', {
+    class: 'fmtbtn fmt-heading',
+    type: 'button',
+    text: 'H',
+    title: HEADING_LABEL,
+    'aria-label': HEADING_LABEL,
+    'aria-haspopup': 'menu',
+    'aria-expanded': 'false',
+  });
+  const close = (refocus) => {
+    menu.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+    if (refocus) toggle.focus();
+  };
+  for (const one of HEADINGS) {
+    menu.append(el('button', {
+      class: `fmtitem fmt-h${one.level}`,
+      type: 'button',
+      role: 'menuitem',
+      text: one.label,
+      on: {
+        mousedown: (event) => event.preventDefault(),
+        click: () => {
+          close(false);
+          applyMove(box, one.move);
+        },
+      },
+    }));
+  }
+  toggle.addEventListener('mousedown', (event) => event.preventDefault());
+  toggle.addEventListener('click', () => {
+    const opening = menu.hidden;
+    menu.hidden = !opening;
+    toggle.setAttribute('aria-expanded', String(opening));
+    if (opening) menu.querySelector('button').focus();
+  });
+  const wrapper = el('span', { class: 'fmtmenuwrap' }, [toggle, menu]);
+  wrapper.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !menu.hidden) {
+      event.preventDefault();
+      event.stopPropagation();
+      close(true);
+    }
+  });
+  wrapper.addEventListener('focusout', (event) => {
+    if (!wrapper.contains(event.relatedTarget)) close(false);
+  });
+  return wrapper;
+}
+
+const SHORTCUTS = { b: 'bold', i: 'italic', u: 'underline' };
+
+/** A Discord-markdown toolbar for a textarea: returns the bar node; the textarea gains the shortcuts. */
+export function formatBar(box) {
+  const byKey = new Map(FORMAT_MOVES.filter((one) => one.move).map((one) => [one.key, one.move]));
+  const buttons = FORMAT_MOVES.map((one) => {
+    if (one.key === 'heading') return headingMenu(box);
+    return el('button', {
+      class: `fmtbtn fmt-${one.key}`,
+      type: 'button',
+      text: one.icon ? undefined : one.text,
+      title: tipOf(one),
+      'aria-label': tipOf(one),
+      on: {
+        mousedown: (event) => event.preventDefault(),
+        click: () => (one.key === 'link' ? askLink(box) : applyMove(box, one.move)),
+      },
+    }, one.icon ? [icon(one.icon, 16, 'fmticon')] : []);
+  });
+  let tabLeaves = false;
+  box.addEventListener('keydown', (event) => {
+    const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
+    const letter = event.key.toLowerCase();
+    if (mod && letter === 'm' && !event.shiftKey) {
+      event.preventDefault();
+      tabLeaves = !tabLeaves;
+      return;
+    }
+    if (mod && !event.shiftKey && SHORTCUTS[letter]) {
+      event.preventDefault();
+      applyMove(box, byKey.get(SHORTCUTS[letter]));
+      return;
+    }
+    if (event.key === 'Tab' && !mod && !event.altKey && !tabLeaves) {
+      event.preventDefault();
+      applyMove(box, event.shiftKey ? md.outdent : md.indent);
+    }
+  });
+  box.addEventListener('blur', () => { tabLeaves = false; });
+  return el('div', { class: 'fmtbar' }, [
+    el('div', {
+      class: 'fmtrow',
+      role: 'toolbar',
+      'aria-label': 'Formatting',
+      'aria-controls': box.id || undefined,
+    }, buttons),
+    el('p', { class: 'field-help fmthint', text: FORMAT_HINT, title: FORMAT_TAB_NOTE }),
+  ]);
 }

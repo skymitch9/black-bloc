@@ -1,5 +1,6 @@
 ﻿# Code notes — the comments the source no longer carries
 
+> **2026-09-27 — one section APPENDED, nothing re-keyed**: *Posts formatting toolbar* (branch `posts-toolbar`, off `main` `6f829602`, keyed against `f34b257c`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Quiet pins* (branch `quiet-pins`, off `main` `6f1b9f9e`, keyed against `f64c74c3`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *Thread controls — Spotlight start waits for the marathon* (branch `thread-spotlight-start`, off `main` `c015c585`, keyed against `983241d3`). Before that:
 > **2026-09-27 — one section APPENDED, nothing re-keyed**: *A post carries the front door* (branch `post-carries-door`, off `main` `91d1daa7`, keyed against `56e4b9b0`). Before that:
@@ -9106,3 +9107,24 @@ Design: [`post-carries-door-design.md`](post-carries-door-design.md). Keyed agai
 | `black_bloc/preview.py:414` · `:562` | The post preview draws the door under the words while the sample says `carries_door` and the door is on. Sample values arrive as strings. |
 | `site/public/assets/page-posts.js:65` · `:334` · `:358` · `:443` | The switch beside Pin it, part of the draft (pending count, Discard, Save), the preview sample, and one sentence on the "how it will post" line. |
 | `site/mock/server.mjs:2755` `doorCarrier` · `:2760` `doorRidesPost` · `:3072` · `:9569` | The mock's twins: one carrier, the refusal, the mirrored door keys, and the two front-door routes answering for a carried door. |
+## Posts formatting toolbar (branch `posts-toolbar`, 2026-09-27)
+
+Design: [`posts-toolbar-design.md`](posts-toolbar-design.md). Keyed against `f34b257c`.
+
+| Where | Why |
+|---|---|
+| `site/public/assets/mdformat.js` | Pure (no DOM, no imports) so `site/mock/mdformat.test.mjs` proves every move in node. Each move takes `(value, start, end)` and answers `{ value, start, end }`. |
+| `site/public/assets/mdformat.js:17` `holds` | Toggle-off is decided by the RUN of marker characters around the selection: `*` is on when the run is odd (1 italic, 3 bold-italic), `**` when ≥ 2, `` ` `` only at exactly 1 (a run of 3 is a fence). So Italic on `**x**` makes `***x***` instead of stripping one star of the bold. |
+| `site/public/assets/mdformat.js:38` `wrap` | Checks the markers INSIDE the selection first (`**x**` selected), then OUTSIDE (`x` selected between them), else wraps; a caret gets `****` with the caret in the middle, and a second press removes them. |
+| `site/public/assets/mdformat.js:92` `rewriteLines` | Line moves act on every line the selection touches; blank lines are skipped when any line has text. A caret moves with its line's change; a selection keeps its text (a selection that starts at a line start keeps starting there, so the new prefix is inside it). |
+| `site/public/assets/mdformat.js:186` `cleanUrl` | `http(s)://` kept, a bare domain gets `https://`, anything else (spaces, `javascript:`) is refused in words by the ask dialog — the preview only draws `https?://` links anyway. |
+| `site/public/assets/ui.js:1735` `FORMAT_MOVES` | The fourteen controls, in order; labels are site constants (site words, not posted words — no settings keys). Icon controls use the sprite, letter controls style their letter. |
+| `site/public/assets/ui.js:1758` `putText` | Replaces only the changed middle through `execCommand('insertText')` so Ctrl+Z undoes a toolbar press and the browser fires the `input` event the page already listens to; falls back to a value write + a dispatched `input` when the command is refused. |
+| `site/public/assets/ui.js:1785` `askLink` | A selection that already is `[text](url)` is unlinked without asking. Otherwise `askForm` (never `window.prompt`) — Enter confirms; a bad address is refused inside the dialog; the selection is restored before the write. |
+| `site/public/assets/ui.js:1822` `headingMenu` | `aria-haspopup`/`aria-expanded`; Escape closes it and `stopPropagation`s so the drawer (a modal `<dialog>`) does not close too; focus leaving the menu closes it. |
+| `site/public/assets/ui.js:1877` `formatBar` | Buttons `preventDefault` on `mousedown` so the textarea keeps focus and selection. Tab/Shift+Tab indent/outdent and do not leave the box; ⚠️ Ctrl+M (the VS Code/CodeMirror convention) toggles Tab back to moving focus until the box blurs — the escape hatch for keyboard users, named in the hint's tooltip. |
+| `site/public/assets/page-posts.js:598` | The one mount: between the box's head (label, counter) and the box. It is the only multi-line body box on the page. |
+| `site/public/assets/icons.js:34` … `:42` | `fmt*` glyphs; stroke `currentColor`, so theme tokens colour them. |
+| `site/public/assets/site.css:2344` `.fmtbar` … | Tokens only; `.fmtrow` is `flex-wrap`, so it is one row at desktop and two at 390 px with no sideways scroll (measured). |
+| `site/mock/mdformat.test.mjs` | Wired into `.github/workflows/ci.yml` and `scripts/deploy.ps1` beside the other node fixtures. |
+

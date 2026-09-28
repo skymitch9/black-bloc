@@ -29,4 +29,14 @@ export const ICONS = {
   navPosts: { body: '<rect x="3.5" y="4" width="17" height="13" rx="2"></rect><path d="M7 8.5h10M7 12h6"></path><path d="M8.5 17 7 21l4.5-4"></path>', width: 1.7 },
   navGuides: { body: '<path d="M4 5.2A1.7 1.7 0 0 1 5.7 3.5H10a2 2 0 0 1 2 2v13a1.7 1.7 0 0 0-1.7-1.7H4z"></path><path d="M20 5.2a1.7 1.7 0 0 0-1.7-1.7H14a2 2 0 0 0-2 2v13a1.7 1.7 0 0 1 1.7-1.7H20z"></path>', width: 1.7 },
   navSettings: { body: '<path d="M4 8h16M4 16h16"></path><circle cx="9.5" cy="8" r="2.3"></circle><circle cx="14.5" cy="16" r="2.3"></circle>', width: 1.7 },
+
+  fmtBullets: { body: '<circle cx="5" cy="7" r="1"></circle><circle cx="5" cy="12" r="1"></circle><circle cx="5" cy="17" r="1"></circle><path d="M9.5 7H20M9.5 12H20M9.5 17H20"></path>', width: 1.8 },
+  fmtNumbers: { body: '<path d="M4 5h1.5v4M4 9h3M4 13.5c0-.8.7-1.5 1.5-1.5S7 12.6 7 13.3c0 1.2-3 2-3 3.7h3M10.5 7H20M10.5 12H20M10.5 17H20"></path>', width: 1.6 },
+  fmtQuote: { body: '<path d="M5 5v14M9.5 8H20M9.5 12H20M9.5 16H16"></path>', width: 1.8 },
+  fmtCode: { body: '<path d="M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5"></path>', width: 1.8 },
+  fmtBlock: { body: '<rect x="3.5" y="4" width="17" height="16" rx="2"></rect><path d="M9.5 9.5 7 12l2.5 2.5M14.5 9.5 17 12l-2.5 2.5"></path>', width: 1.6 },
+  fmtLink: { body: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"></path><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"></path>', width: 1.8 },
+  fmtSpoiler: { body: '<path d="M3 12s3.3-6 9-6 9 6 9 6-3.3 6-9 6-9-6-9-6z"></path><circle cx="12" cy="12" r="2.5"></circle><path d="M4 20 20 4"></path>', width: 1.6 },
+  fmtIndent: { body: '<path d="M4 6h16M11 12h9M4 18h16M4 9.5 7 12l-3 2.5"></path>', width: 1.8 },
+  fmtOutdent: { body: '<path d="M4 6h16M11 12h9M4 18h16M7 9.5 4 12l3 2.5"></path>', width: 1.8 },
 };

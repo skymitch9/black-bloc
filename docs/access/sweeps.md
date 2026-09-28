@@ -3636,3 +3636,13 @@ numbers them. Both features are in shadow today, so everything lands in #welcome
 | **`PCD-b`** | Settings ▸ change **frontdoor_title** (or a button label), wait ≤ 5 min | The SAME message changes its card in place — no second message, and the rules text is untouched. |
 | **`PCD-c`** | Modmail ▸ Front door ▸ **Take it down** (then tick the switch again and Update the post) | The rules stay up without the card or buttons and the switch on the post is off; ticking it again and updating puts the door back on the one message. |
 
+## Row `PTB-a` — the Posts editor's formatting toolbar (branch `posts-toolbar`, 2026-09-27)
+
+🔨 **BUILT on branch `posts-toolbar`, NOT merged, NOT deployed.** The owner, 2026-09-27 20:5x: *"can we add one of those
+text editor control panels to the top of the edit text box? the ones that allow font bold tab italics etc."* Design:
+[`../info/posts-toolbar-design.md`](../info/posts-toolbar-design.md). Site only — nothing reaches Discord until a post is
+saved and posted as before.
+
+| Row | Do | Expect |
+|---|---|---|
+| **`PTB-a`** | Posts ▸ open any post ▸ select a word ▸ press **B**, then **I**, then **H ▸ Heading 2**, then **🔗** (type `example.org`, Enter); press **Tab** and **Shift+Tab** inside the box; press **B** again on the same word; try Ctrl+B / Ctrl+I / Ctrl+U; do the same on a phone | Each press changes the box (`**word**`, `***word***`, `## ` at the line start, `[word](https://example.org)`) and the preview beside it changes AT ONCE; the word stays selected; the second **B** takes the bold off; Tab indents two spaces and focus stays in the box (Ctrl+M lets Tab leave); Ctrl+Z undoes a press; on a phone the bar wraps to two rows with no sideways scroll. Nothing is saved until **Save Changes**. |

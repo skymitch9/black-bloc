@@ -2341,6 +2341,72 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 .counter { color: var(--et-muted); font-family: var(--et-font-mono); font-size: var(--et-ui-2xs); }
 .counter[data-tone="warn"] { color: var(--et-warn); }
 .counter[data-tone="danger"] { color: var(--et-danger); }
+.fmtbar { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fmtrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-bg-2);
+}
+.fmtbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  border: var(--et-border-w) solid transparent;
+  border-radius: calc(var(--et-radius) * .6);
+  background: transparent;
+  color: var(--et-fg);
+  font: inherit;
+  font-size: var(--et-ui-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+.fmtbtn:hover { background: var(--et-bg); border-color: var(--et-hairline); }
+.fmtbtn:focus-visible, .fmtitem:focus-visible { outline: 2px solid var(--et-accent); outline-offset: 1px; }
+.fmtbtn[aria-expanded="true"] { background: var(--et-bg); border-color: var(--et-hairline); }
+.fmticon { display: block; }
+.fmt-bold { font-weight: var(--et-weight-heavy, 700); }
+.fmt-italic { font-style: italic; }
+.fmt-underline { text-decoration: underline; }
+.fmt-strike { text-decoration: line-through; }
+.fmt-heading { font-weight: var(--et-weight-heavy, 700); }
+.fmtmenuwrap { position: relative; display: inline-flex; }
+.fmtmenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 10rem;
+  padding: 4px;
+  border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline));
+  border-radius: var(--et-radius);
+  background: var(--et-bg);
+  box-shadow: var(--et-shadow-lift, var(--et-shadow));
+}
+.fmtmenu[hidden] { display: none; }
+.fmtitem {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: calc(var(--et-radius) * .6);
+  background: transparent;
+  color: var(--et-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fmtitem:hover { background: var(--et-bg-2); }
+.fmt-h1 { font-size: var(--et-ui-lg); font-weight: var(--et-weight-heavy, 700); }
+.fmt-h2 { font-size: var(--et-ui-md); font-weight: var(--et-weight-heavy, 700); }
+.fmt-h3 { font-size: var(--et-ui-sm); font-weight: var(--et-weight-heavy, 700); }
+.fmthint { margin: 0; }
 .input.postbox {
   min-height: 22rem;
   font-family: var(--et-font-mono);
