@@ -8279,6 +8279,8 @@
     "web.frontdoor.moved",
     "web.frontdoor.taken_down",
     "web.frontdoor.would_post",
+    "web.frontdoor.rides_post",
+    "web.frontdoor.redrawn_on_post",
     "web.role.approved",
     "web.role.denied",
     "web.role.granted",

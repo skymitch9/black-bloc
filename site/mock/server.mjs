@@ -5525,7 +5525,7 @@ const PREVIEW_SAMPLES = {
   birthday: { name: 'Casey', age: '' },
   poll_card: { question: '', channel: '#announcements' },
   minutes_notes: { notes: '' },
-  frontdoor: {},
+  frontdoor: { shows: '' },
   ticket_button: {},
 };
 
@@ -5631,7 +5631,8 @@ const PREVIEW_DRAW = {
   spotlight_bump(read, sample) {
     return previewMade(fillWording(read('spotlight_bump_template'), previewStreamFacts(sample)));
   },
-  frontdoor(read) {
+  frontdoor(read, sample = {}) {
+    const wanted = String(sample.shows || '').split(',').map((one) => one.trim()).filter(Boolean);
     return previewMade('', [{
       title: String(read('frontdoor_title') || ''),
       description: String(read('frontdoor_text') || ''),
@@ -5641,7 +5642,10 @@ const PREVIEW_DRAW = {
       ['ticket', previewButton(read('frontdoor_ticket_label'), 'primary')],
       ['request', previewButton(read('frontdoor_request_label'))],
       ['event', previewButton(read('frontdoor_event_label'))],
-    ].filter(([kind]) => read(`frontdoor_show_${kind}`) !== false).map(([, made]) => made)]);
+    ].filter(([kind]) => (wanted.length
+      ? wanted.includes(kind)
+      : !['false', '0', 'off', 'no'].includes(String(read(`frontdoor_show_${kind}`)).trim().toLowerCase())))
+      .map(([, made]) => made)]);
   },
   ticket_button(read) {
     return previewMade('', [{

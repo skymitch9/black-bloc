@@ -177,7 +177,10 @@ def label_for(store: Any, guild_id: int, kind: str) -> str:
 
 
 def shows(store: Any, guild_id: int, kind: str) -> bool:
+    """A preview's draft arrives as text, so "false" reads as false there too."""
     found = store.get(guild_id, SHOW_KEYS[kind])
+    if isinstance(found, str):
+        return found.strip().casefold() not in ("false", "0", "off", "no")
     return True if found is None else bool(found)
 
 

@@ -2311,6 +2311,12 @@ a.spend-figure:hover, a.spend-figure:focus-visible { text-decoration: underline;
 .posthead { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .posttitle { margin: 0; font-size: var(--bb-page-title-size); line-height: 1.2; }
 .postmarks { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.postblocks { display: grid; gap: 6px; margin: 4px 0 8px; }
+.postblock-list { display: grid; gap: 4px; }
+.postblock { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 10px; border: var(--et-border-w) solid var(--et-panel-border, var(--et-hairline)); border-radius: var(--et-radius); }
+.postblock-name { flex: 1 1 auto; min-width: 0; font-size: var(--et-ui-sm); font-weight: var(--et-weight-strong); }
+.blockwords { display: grid; gap: 10px; }
+.blockwords-preview { display: grid; gap: 6px; }
 .crumb {
   align-self: start;
   padding: 0;

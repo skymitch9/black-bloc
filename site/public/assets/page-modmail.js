@@ -1,5 +1,6 @@
 import { api, listOf, names, send, settings, settingsNamespace } from './api.js';
 import { start } from './app.js';
+import { frontDoorWords } from './blockwords.js';
 import { logsSection } from './logs.js';
 import {
   ask,
@@ -10,6 +11,7 @@ import {
   channelSelect,
   el,
   field,
+  foldout,
   idsIn,
   keepSaying,
   memberPicker,
@@ -42,7 +44,9 @@ const BUTTON_HELP = 'One message with an Open a ticket button under it. Pressing
 const DOOR_HELP = 'One message with three buttons: Ask staff privately opens a ticket, Request '
   + 'something files a request, and Propose an event starts an event proposal. Each press opens '
   + 'the flow that already exists, so each one answers with its own words when it is switched '
-  + 'off. Its heading, wording and the three button labels are the frontdoor_ settings below.';
+  + 'off. Edit its words (below) changes the heading, the line, the three labels and which '
+  + 'buttons show — the same editor as the Posts page’s Blocks section.';
+const DOOR_WORDS = 'Edit its words';
 const DOOR_OFF_LINE = 'frontdoor_mode is off, so /ask is hidden and no front door stays posted.';
 const DOOR_SHADOW_HOMELESS = 'shadow — the door has nowhere to rehearse, so it is posted nowhere '
   + 'at all. Set shadow_channel_id on the Settings page.';
@@ -305,6 +309,7 @@ function doorPreview(door) {
 
 async function frontDoorCard(door) {
   const say = notice();
+  const wordsSay = notice();
   const posted = door.channel_id;
   const where = await channelSelect(posted || null);
   const post = button(posted ? 'Move the front door' : 'Post the front door', async () => {
@@ -350,6 +355,13 @@ async function frontDoorCard(door) {
     el('p', { class: 'muted', text: door.mode === 'shadow' ? DOOR_SHADOW_FOLLOWS : DOOR_ONE_PER_CHANNEL }),
     el('div', { class: 'formrow' }, [field('Put it in', where), bar(posted ? [post, down] : [post])]),
     say,
+    foldout(DOOR_WORDS, [await frontDoorWords({
+      say: wordsSay,
+      onSaved: () => {
+        keepSaying('modmail', wordsSay);
+        refresh();
+      },
+    })]),
   ].filter(Boolean));
 }
 
