@@ -11,7 +11,7 @@ import pytest
 import pytest_asyncio
 from discord.ext import tasks
 
-from black_bloc import applications, guides, knowledge, minutes, pings, posts
+from black_bloc import applications, doc_import, guides, knowledge, minutes, pings, posts
 from black_bloc import rolegrants as grants
 from black_bloc.api.auth import SESSION_COOKIE, SESSION_TTL_SECONDS, sign_session
 from black_bloc.api.settings_api import grouped
@@ -1056,6 +1056,21 @@ async def contract_seed(module_client, module_web, wf):
     sent = [dict(one.kwargs) for one in guild.get_channel(wf.TEST_CHANNEL_ID).messages]
     rows = await wf.take(module_web.db)
     return Seed(module_web, wf, ids, rows, sent, dict(module_web.cogs))
+
+
+CONTRACT_DOC = "1MockPublicDocAbcdefghijklmnopqrstuvwxyz0123"
+
+
+@pytest.fixture(autouse=True)
+def google_answers_the_contract_doc(monkeypatch):
+    """The import entry's one fetch, canned: the contract proves the shape, never the network."""
+
+    async def hop(url, *, seconds, limit):
+        assert url == doc_import.EXPORT_URL.format(id=CONTRACT_DOC), url
+        page = b"<html><head><title>Contract doc</title></head><body><p>Hi</p></body></html>"
+        return doc_import.Hop(200, None, "text/html; charset=utf-8", page)
+
+    monkeypatch.setattr(doc_import, "aiohttp_hop", hop)
 
 
 @pytest.fixture

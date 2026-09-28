@@ -8099,6 +8099,25 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/posts/import-doc",
+      "body": {
+        "url": "https://docs.google.com/document/d/1MockPublicDocAbcdefghijklmnopqrstuvwxyz0123/edit?usp=sharing",
+        "slug": "{post_slug}"
+      },
+      "read_by": [
+        "page-posts.js post drawer ▸ Import from a Google Doc"
+      ],
+      "shape": "object",
+      "keys": [
+        "html",
+        "title",
+        "doc_id",
+        "bytes",
+        "message"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/preview/features",
       "read_by": [
@@ -8570,6 +8589,7 @@
     "web.guide.unpublished",
     "web.post.created",
     "web.post.deleted",
+    "web.post.imported",
     "web.post.message_gone",
     "web.post.pin_failed",
     "web.post.pinned",
