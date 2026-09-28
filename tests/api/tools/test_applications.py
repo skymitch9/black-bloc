@@ -90,13 +90,22 @@ async def test_a_form_is_created_listed_and_logged(client, sign_in, web, wf):
     assert "web.application.form_created" in await wf.kinds_in(web.db)
 
 
-def test_a_form_needs_a_name_a_heading_and_a_role(client, sign_in, wf):
+@pytest.mark.parametrize(
+    ("payload", "said"),
+    [
+        ({"name": "team"}, "needs a short name"),
+        ({"title": "Stream Team"}, "short name and a heading"),
+    ],
+)
+def test_a_form_without_both_a_name_and_a_heading_is_refused_in_words(
+    client, sign_in, payload, said
+):
     sign_in(client)
 
-    response = client.post("/api/applications/forms", json={"name": "team"})
+    response = client.post("/api/applications/forms", json=payload)
 
     assert response.status_code == 400
-    assert "needs a short name" in response.json()["message"]
+    assert said in response.json()["message"]
 
 
 def test_a_form_name_that_is_not_a_slug_is_refused_in_the_same_words(client, sign_in, wf):
@@ -172,7 +181,7 @@ def test_a_form_number_that_is_not_this_server_s_is_a_404_in_words(client, sign_
     assert "no application form with that number" in response.json()["message"]
 
 
-async def test_the_whole_question_list_is_saved_at_once_and_capped_at_five(
+async def test_the_whole_question_list_is_saved_at_once_and_capped(
     client, sign_in, web, wf
 ):
     sign_in(client)
@@ -200,10 +209,10 @@ async def test_the_whole_question_list_is_saved_at_once_and_capped_at_five(
 
     too_many = client.put(
         f"/api/applications/forms/{made['id']}/questions",
-        json={"questions": [{"label": f"Q{n}"} for n in range(6)]},
+        json={"questions": [{"label": f"Q{n}"} for n in range(forms.QUESTIONS_MAX + 1)]},
     )
     assert too_many.status_code == 400
-    assert "at most 5 boxes" in too_many.json()["message"]
+    assert f"at most {forms.QUESTIONS_MAX} boxes" in too_many.json()["message"]
 
 
 def test_questions_that_arrive_in_the_wrong_shape_are_refused_in_words(client, sign_in, wf):
@@ -453,17 +462,6 @@ async def test_a_form_can_be_made_with_no_role_and_never_resolves_one(
     assert [one["role_id"] for one in listed] == [None]
 
 
-async def test_a_form_created_with_neither_a_name_nor_a_heading_is_refused_in_words(
-    client, sign_in
-):
-    sign_in(client)
-
-    response = client.post("/api/applications/forms", json={"title": "Stream Team"})
-
-    assert response.status_code == 400
-    assert "short name and a heading" in response.json()["message"]
-
-
 async def test_a_blank_role_on_a_patch_clears_it_and_a_real_one_puts_it_back(
     client, sign_in, wf
 ):
@@ -572,7 +570,6 @@ async def test_the_site_can_take_somebody_off_a_list_and_logs_the_web_kind(
     assert body["application"]["deny_reason"] == "stopped streaming"
     assert any("stopped streaming" in said for said in member.dms)
     kinds = await wf.kinds_in(web.db)
-    assert "web.application.removed" in kinds
     assert kinds.count("web.application.removed") == 1
     assert client.get(f"/api/applications/roster?form={made['id']}").json() == []
 
