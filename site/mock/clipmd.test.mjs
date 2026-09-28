@@ -8,7 +8,7 @@
 // Exits 0 when every fixture matched, 1 with a list of what did not.
 // scripts/deploy.ps1 and .github/workflows/ci.yml run it beside check.mjs.
 
-import { htmlToDiscordMarkdown } from '../public/assets/clipmd.js';
+import { htmlToDiscordMarkdown, mentionChannels } from '../public/assets/clipmd.js';
 
 const failures = [];
 const fail = (where, said) => failures.push(`${where}: ${said}`);
@@ -53,17 +53,16 @@ const DOCS = '<meta charset="utf-8">'
   + '<li dir="ltr"><p dir="ltr">'
   + '<span style="font-size:11pt;font-weight:400;">Second</span></p></li></ol></b>';
 
+// Changed 2026-09-28 (doc-import-fidelity): this pin used to put a blank line between every
+// block. A Doc's blank lines are its own EMPTY paragraphs (posts-doc-import-design.md
+// section Fidelity), and this fragment has none, so its blocks now join with one newline.
 const DOCS_WANTED = [
   '# Welcome to Black in a Flash',
-  '',
   'Read the **rules** before you post, and *be kind*.',
-  '',
   'Questions? [Read the guides](https://blackbloc.heygabi.ai/guides).',
-  '',
   '- Be excellent',
   '  - to each other',
   '- No spoilers',
-  '',
   '1. First',
   '2. Second',
 ].join('\n');
@@ -240,26 +239,25 @@ const EXPORT_MORE = EXPORT_HEAD
   + '<li class="c2 c7 li-bullet-0"><span class="c1">Three</span></li></ol>'
   + EXPORT_FOOT;
 
+// Changed 2026-09-28 (doc-import-fidelity), three ways: blank lines now come only from the
+// export's empty paragraphs (after the subtitle, after the marks line - two collapse to one);
+// the subtitle's words are 11pt (class c1), so it reads as body text and is no longer `## `
+// (a 15pt subtitle is pinned below); and `- sub` sits under `2. ` at column 3, not 2.
 const EXPORT_MORE_WANTED = [
   '# Welcome',
-  '',
-  '## A short subtitle',
+  'A short subtitle',
   '',
   '## Section',
-  '',
   '### Smaller',
-  '',
   '**bold** and ~~gone~~ and __under__ and `code`',
   '',
   'line one',
   'line two',
-  '',
   '[the page](https://example.com/a?b=1&c=2) and '
     + '[odd](https://www.google.com/url?q=javascript:void0&sa=D)',
-  '',
   '1. One',
   '2. Two',
-  '  - sub',
+  '   - sub',
   '3. Three',
 ].join('\n');
 
@@ -283,10 +281,95 @@ const EXPORT_MORE_WANTED = [
 }
 
 // A bullet nested under a number stays in the list: no blank line where the depth changes.
+// Changed 2026-09-28 (doc-import-fidelity): the sub-list sits at the number's content column
+// (3 spaces under `1. `), not 2 - Discord does not nest a 2-space item under a number.
 {
   const where = 'a mixed nested list';
   is(where, htmlToDiscordMarkdown('<ol><li>One<ul><li>sub</li></ul></li><li>Two</li></ol>'),
-    '1. One\n  - sub\n2. Two');
+    '1. One\n   - sub\n2. Two');
+}
+
+// --- doc-import-fidelity: one pin per rule the welcome post's Doc needed -------------------
+const FID_SHEET = '<style>.s12{font-size:12pt}.s18{font-size:18pt}.s11{font-size:11pt}'
+  + '.b{font-weight:700}.bu{font-weight:700;text-decoration:underline}.s15{font-size:15pt}</style>';
+const FID = (body) => `<html><head>${FID_SHEET}</head><body class="doc-content">${body}</body></html>`;
+
+{
+  const where = 'fidelity 1: a body-sized heading is a paragraph';
+  is(where, htmlToDiscordMarkdown(FID('<h1><span class="s12">Looks like body</span></h1>')),
+    'Looks like body');
+  is(where, htmlToDiscordMarkdown(FID('<h1><span class="b">Real heading</span></h1>')), '# Real heading');
+  is(where, htmlToDiscordMarkdown(FID('<h2><span class="s18">Big enough</span></h2>')), '## Big enough');
+  is(where, htmlToDiscordMarkdown(FID('<h1><span style="font-size:13pt">Inline small</span></h1>')),
+    'Inline small');
+  is(where, htmlToDiscordMarkdown(FID('<h1><span class="s12">half</span><span> not</span></h1>')),
+    '# half not');
+  is(where, htmlToDiscordMarkdown(FID('<p class="subtitle"><span class="s15">Sub</span></p>')), '## Sub');
+  is(where, htmlToDiscordMarkdown(FID('<p class="title"><span class="s11">Plain</span></p>')), 'Plain');
+}
+
+{
+  const where = 'fidelity 2: bold inside a demoted heading';
+  is(where, htmlToDiscordMarkdown(FID('<h1><span class="s12">Welcome to</span>'
+    + '<span class="b s12">&nbsp;Black in a Flash</span><span class="s12">, hi.</span></h1>')),
+  'Welcome to **Black in a Flash**, hi.');
+}
+
+{
+  const where = 'fidelity 3: nested lists at the parent content column';
+  const ol = (level, start, words) => `<ol class="lst-kix_ab-${level}" start="${start}">`
+    + words.map((one) => `<li><span>${one}</span></li>`).join('') + '</ol>';
+  is(where, htmlToDiscordMarkdown(FID(ol(0, 9, ['nine', 'ten']) + ol(1, 1, ['sub']) + ol(2, 1, ['deep']))),
+    '9. nine\n10. ten\n    1. sub\n       1. deep');
+  is(where, htmlToDiscordMarkdown(FID('<ul class="lst-kix_cd-0"><li>a</li></ul>'
+    + '<ul class="lst-kix_cd-1"><li>b</li></ul><ul class="lst-kix_cd-2"><li>c</li></ul>')),
+  '- a\n  - b\n    - c');
+  is(where, htmlToDiscordMarkdown('<ul><li>a<ul><li>b</li></ul></li></ul>'), '- a\n  - b');
+}
+
+{
+  const where = 'fidelity 4: a heading inside a list item stays list text';
+  is(where, htmlToDiscordMarkdown(FID('<ol class="lst-kix_ef-0" start="6"><li><span class="b">Six</span></li></ol>'
+    + '<ol class="lst-kix_ef-1" start="1"><li><h1 style="display:inline">'
+    + '<span class="s12">If you cannot abide</span></h1></li></ol>')),
+  '6. **Six**\n   1. If you cannot abide');
+  is(where, htmlToDiscordMarkdown(FID('<ul><li><h1 style="display:inline"><span class="s18">Big</span></h1></li></ul>')),
+    '- Big');
+}
+
+{
+  const where = 'fidelity 5: blank lines only from empty paragraphs';
+  const empty = '<p class="c5"><span class="s11"></span></p>';
+  is(where, htmlToDiscordMarkdown(FID(`<p>one</p><p>two</p>${empty}${empty}${empty}<p>three </p>`)),
+    'one\ntwo\n\nthree');
+  is(where, htmlToDiscordMarkdown(FID('<p><span class="b">Head </span></p><ul class="lst-kix_gh-0"><li>x</li></ul><p>after</p>')),
+    '**Head**\n- x\n\nafter');
+  is(where, htmlToDiscordMarkdown(FID('<h1><span><br></span></h1><p>first</p>')), 'first');
+  is(where, htmlToDiscordMarkdown(FID('<div><p>a</p></div><div><p>b</p></div>')), 'a\nb');
+  is(where, htmlToDiscordMarkdown('<b style="font-weight:normal" id="docs-internal-guid-1"><p>a</p><br><p>b</p><p>c</p></b>'),
+    'a\n\nb\nc');
+  is(where, htmlToDiscordMarkdown('<p>web</p><p>page</p>'), 'web\n\npage');
+}
+
+{
+  const where = 'fidelity 6: bold AND underline stays faithful';
+  is(where, htmlToDiscordMarkdown(FID('<p><span class="s12 bu">Banworthy Offenses </span></p>')),
+    '__**Banworthy Offenses**__');
+}
+
+{
+  const where = 'fidelity 7: channel names become mentions';
+  const map = { 'off-topic': '11', general: '22' };
+  is(where, mentionChannels('in #off-topic. and #general', map), 'in <#11>. and <#22>');
+  is(where, mentionChannels('in #off-topic-2 and #nope', map), 'in #off-topic-2 and #nope');
+  is(where, mentionChannels('see https://x.com/#general and a#general', map),
+    'see https://x.com/#general and a#general');
+  is(where, mentionChannels('`#general` and ```\n#general\n``` but #general', map),
+    '`#general` and ```\n#general\n``` but <#22>');
+  is(where, mentionChannels('# Heading and ## two', map), '# Heading and ## two');
+  is(where, mentionChannels('(#general)', [{ id: '22', name: 'general' }]), '(<#22>)');
+  is(where, mentionChannels('#General', map), '#General');
+  is(where, mentionChannels('#general', []), '#general');
 }
 
 // The paste path gets the unwrapping too: a Docs link copied from a published page.
