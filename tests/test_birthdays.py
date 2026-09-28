@@ -36,12 +36,21 @@ from black_bloc.birthdays import (
     year_problem,
 )
 from black_bloc.settings_store import (
+    BIRTHDAY_BLOCK_LABEL,
+    BIRTHDAY_BLOCK_OFF_SAID,
+    BIRTHDAY_BLOCK_REFUSED_SAID,
+    BIRTHDAY_BLOCK_SAVED_SAID,
+    BIRTHDAY_BLOCK_TITLE,
+    BIRTHDAY_COLOR,
+    BIRTHDAY_POST_FAILED_KEY,
     BIRTHDAY_POST_NOBODY_KEY,
     BIRTHDAY_POST_OFF_KEY,
     BIRTHDAY_POST_POSTED_KEY,
+    BIRTHDAY_POST_SKIPPED_KEY,
     BIRTHDAY_POST_WORDS,
     BIRTHDAY_TEMPLATE,
     BIRTHDAY_TZ,
+    BUTTON_BLOCK_DEFAULTS,
 )
 
 PHOENIX = ZoneInfo(BIRTHDAY_TZ)
@@ -140,16 +149,18 @@ def test_age_is_the_years_they_turn_this_year():
 
 
 def test_the_colour_falls_back_when_it_is_not_a_hex_code():
-    assert parse_color("#4eefff") == 0x4EEFFF
-    assert parse_color("4eefff") == 0x4EEFFF
-    assert parse_color("blue") == 0x4EEFFF
-    assert parse_color(None) == 0x4EEFFF
+    shipped = int(BIRTHDAY_COLOR.lstrip("#"), 16)
+    assert parse_color("#12ab34") == 0x12AB34
+    assert parse_color("12ab34") == 0x12AB34
+    assert parse_color("blue") == shipped
+    assert parse_color(None) == shipped
 
 
 def test_a_broken_template_falls_back_to_the_default_wording():
-    assert render_description(BIRTHDAY_TEMPLATE, "PT") == "Happy Birthday **PT**!"
+    shipped = BIRTHDAY_TEMPLATE.format(name="PT")
+    assert render_description(BIRTHDAY_TEMPLATE, "PT") == shipped
     assert render_description("{name} turns {age}!", "PT", 39) == "PT turns 39!"
-    assert render_description("{nope}", "PT") == "Happy Birthday **PT**!"
+    assert render_description("{nope}", "PT") == shipped
     assert "@everyone" in render_description(BIRTHDAY_TEMPLATE, "@everyone")
     assert len(render_description("{name}", "x" * 5000)) == DESCRIPTION_LIMIT
 
@@ -226,11 +237,6 @@ def test_a_date_is_read_from_both_shapes_and_all_four_separators(typed, expected
 )
 def test_anything_that_is_not_two_or_three_numbers_is_unreadable(typed):
     assert parse_birthday_input(typed) is None
-
-
-def test_the_modal_never_guesses_a_year():
-    assert parse_birthday_input("09-15")[2] is None
-    assert parse_birthday_input("09-15-1994")[2] == 1994
 
 
 @pytest.mark.parametrize(
@@ -374,11 +380,13 @@ class ChannelGuild:
 
 def test_off_and_nobody_are_their_own_sentences():
     store = WordStore()
-    assert post_today_said(store, 1, PostedToday(mode="off", posted=3)) == (
-        BIRTHDAY_POST_WORDS[BIRTHDAY_POST_OFF_KEY]
+    assert (
+        post_today_said(store, 1, PostedToday(mode="off", posted=3))
+        == (BIRTHDAY_POST_WORDS[BIRTHDAY_POST_OFF_KEY])
     )
-    assert post_today_said(store, 1, PostedToday(mode="on")) == (
-        BIRTHDAY_POST_WORDS[BIRTHDAY_POST_NOBODY_KEY]
+    assert (
+        post_today_said(store, 1, PostedToday(mode="on"))
+        == (BIRTHDAY_POST_WORDS[BIRTHDAY_POST_NOBODY_KEY])
     )
 
 
@@ -389,9 +397,9 @@ def test_each_count_is_a_line_and_a_zero_count_says_nothing():
         PostedToday(mode="on", posted=2, skipped=1, failed=1, channel="#birthdays"),
     )
     assert said.splitlines() == [
-        "Posted 2 birthday wish(es) in #birthdays.",
-        "1 already wished today were left alone — **Post them all again** posts those too.",
-        "1 could not be posted — **Logs** on `/birthday` or the Birthdays page says why.",
+        BIRTHDAY_POST_WORDS[BIRTHDAY_POST_POSTED_KEY].format(n=2, channel="#birthdays"),
+        BIRTHDAY_POST_WORDS[BIRTHDAY_POST_SKIPPED_KEY].format(n=1),
+        BIRTHDAY_POST_WORDS[BIRTHDAY_POST_FAILED_KEY].format(n=1),
     ]
 
 
@@ -455,8 +463,8 @@ def test_the_birthday_block_says_its_shipped_words_until_staff_change_them():
     shipped = found.block_look(BlockStore(), 7)
     changed = found.block_look(BlockStore(birthday_block_label="Press me"), 7)
 
-    assert shipped.title == "Your birthday"
-    assert shipped.label == "Set my birthday"
+    assert shipped.title == BUTTON_BLOCK_DEFAULTS[BIRTHDAY_BLOCK_TITLE]
+    assert shipped.label == BUTTON_BLOCK_DEFAULTS[BIRTHDAY_BLOCK_LABEL]
     assert changed.label == "Press me" and changed.stamp() != shipped.stamp()
     assert found.BLOCK_HEAD == "bdayblock:open"
 
@@ -464,13 +472,17 @@ def test_the_birthday_block_says_its_shipped_words_until_staff_change_them():
 def test_the_birthday_block_s_private_answers_fill_said_or_fall_back():
     from black_bloc import birthdays as found
 
-    shipped = found.block_said(BlockStore(), 7, "birthday_block_saved_said", said="Saved.")
-    typed = BlockStore(birthday_block_refused_said="Oops: {said}")
-    broken = BlockStore(birthday_block_refused_said="Oops: {nope}")
+    shipped = found.block_said(BlockStore(), 7, BIRTHDAY_BLOCK_SAVED_SAID, said="Saved.")
+    typed = BlockStore(**{BIRTHDAY_BLOCK_REFUSED_SAID: "Oops: {said}"})
+    broken = BlockStore(**{BIRTHDAY_BLOCK_REFUSED_SAID: "Oops: {nope}"})
+    refused = BUTTON_BLOCK_DEFAULTS[BIRTHDAY_BLOCK_REFUSED_SAID]
 
-    assert shipped.startswith("Saved. Press the button again")
-    assert found.block_said(typed, 7, "birthday_block_refused_said", said="No.") == "Oops: No."
-    assert found.block_said(broken, 7, "birthday_block_refused_said", said="No.").startswith(
-        "No. Nothing was saved"
+    assert shipped == BUTTON_BLOCK_DEFAULTS[BIRTHDAY_BLOCK_SAVED_SAID].format(said="Saved.")
+    assert found.block_said(typed, 7, BIRTHDAY_BLOCK_REFUSED_SAID, said="No.") == "Oops: No."
+    assert found.block_said(broken, 7, BIRTHDAY_BLOCK_REFUSED_SAID, said="No.") == (
+        refused.format(said="No.")
     )
-    assert found.block_said(BlockStore(), 7, "birthday_block_off_said").startswith("Birthdays")
+    assert (
+        found.block_said(BlockStore(), 7, BIRTHDAY_BLOCK_OFF_SAID)
+        == (BUTTON_BLOCK_DEFAULTS[BIRTHDAY_BLOCK_OFF_SAID])
+    )
