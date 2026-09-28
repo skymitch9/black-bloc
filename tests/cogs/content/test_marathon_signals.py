@@ -7,6 +7,7 @@ import pytest
 
 from black_bloc import marathon as mt
 from black_bloc import marathon_hotfix as hf
+from black_bloc.cogs.content import marathon as cogmod
 from black_bloc.cogs.content import marathon_signals as signals
 from black_bloc.cogs.content.marathon import (
     get_marathon,
@@ -30,7 +31,13 @@ from tests.cogs.content.test_marathon import (
     runs_by_game,
     tracked,
 )
-from tests.cogs.content.test_spotlight import FakeActor, FakeGoLive, details_of, kinds
+from tests.cogs.content.test_spotlight import (
+    FakeActor,
+    FakeGoLive,
+    FakeInteraction,
+    details_of,
+    kinds,
+)
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "marathon"
 HOTFIX_URL = "https://gamesdonequick.com/hotfix/schedule#gdqueer/2026-10-03"
@@ -369,3 +376,28 @@ async def test_a_run_of_ours_seen_by_its_category_is_shouted_without_a_ping(bot,
     await tick(cog)
     assert "<@&" not in "".join(one.content for one in posts(bot))
     assert (await details_of(bot.db, "marathon.run_live"))["because"] == mt.BY_CATEGORY
+
+
+async def test_the_discord_schedule_view_says_the_clock_and_puts_it_back_on_the_sheet(
+    bot, cog, helix
+):
+    channel, marathon = await gdqueer(bot, cog)
+    embed, view = await cogmod.build_schedule(bot, bot.guild, marathon["id"])
+    assert "Back to the sheet's times" not in [getattr(one, "label", None) for one in view.children]
+    await tick(cog)
+    await stream(bot, channel, game=SPYRO, game_id="1")
+    at_show(cog, 20)
+    await tick(cog)
+
+    embed, view = await cogmod.build_schedule(bot, bot.guild, marathon["id"])
+    assert "13 run(s) re-timed from the stream" in embed.description
+    interaction = FakeInteraction(bot, FakeActor(), bot.guild)
+    button = next(
+        one for one in view.children if getattr(one, "label", None) == "Back to the sheet's times"
+    )
+    await button.callback(interaction)
+    assert interaction.view.where == cogmod.SCHEDULE_VIEW
+    assert "re-timed" not in interaction.words
+    assert "web.marathon.sheet_times" not in await kinds(bot.db)
+    assert "marathon.sheet_times" in await kinds(bot.db)
+    assert (await times(bot, marathon))[HAMTARO]["scheduled_at"] == z(68)
