@@ -1528,14 +1528,14 @@ async def test_a_number_outside_its_range_names_the_field_and_the_range(
     await button(interaction.view, "Limits…").callback(interaction)
 
     modal = interaction.response.modals[-1]
+    before = bot.store.get(GUILD, "chat_monthly_cap_usd")
     fill(modal, cooldown="9", hourly="11", daily="150", cap="999999", stays="12")
     await modal.on_submit(interaction)
 
     assert "chat_monthly_cap_usd" in interaction.sent
     assert "cannot be more than" in interaction.sent
-    assert bot.store.get(GUILD, "chat_monthly_cap_usd") == 20
+    assert bot.store.get(GUILD, "chat_monthly_cap_usd") == before
     assert await kinds_of(db) == []
-
 
 
 async def test_the_daily_ingest_writes_the_server_rows_and_leaves_staff_rows_alone(
