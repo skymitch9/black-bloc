@@ -2295,7 +2295,7 @@ def test_the_banter_hint_and_the_notes_header_are_two_chat_text_keys_with_shippe
         with pytest.raises(settings_store.SettingError):
             settings_store.TEXT_CHECKS[key]("x" * 601)
     assert list(settings_store.KEY_TYPES).count(BANTER_STYLE_KEY) == 1
-    assert len(settings_store.KEY_TYPES) == 699
+    assert len(settings_store.KEY_TYPES) == 701
 
 
 async def test_marathon_feed_notice_when_is_a_marathon_enum_defaulting_to_published(store):
@@ -2492,3 +2492,16 @@ def test_the_hotfix_tracker_is_a_bool_on_by_default_and_its_notice_lines_are_wor
         assert settings_store.coerce_value(key, "{people} on {show}") == "{people} on {show}"
         with pytest.raises(settings_store.SettingError):
             settings_store.coerce_value(key, "{member}")
+
+
+def test_the_category_signal_is_a_bool_and_the_retro_category_a_name_never_blank():
+    assert settings_store.KEY_TYPES[settings_store.MARATHON_CATEGORY_CONFIRMS_KEY] == "bool"
+    assert settings_store.MARATHON_DEFAULTS[settings_store.MARATHON_CATEGORY_CONFIRMS_KEY] is True
+    key = settings_store.MARATHON_RETRO_CATEGORY_KEY
+    assert settings_store.KEY_TYPES[key] == "text"
+    assert settings_store.MARATHON_DEFAULTS[key] == "Retro"
+    assert settings_store.coerce_value(key, "  Retro   Games ") == "Retro Games"
+    with pytest.raises(settings_store.SettingError):
+        settings_store.coerce_value(key, "  ")
+    with pytest.raises(settings_store.SettingError, match="not a Twitch category name"):
+        settings_store.coerce_value(key, "x" * 61)

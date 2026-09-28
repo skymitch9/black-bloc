@@ -81,6 +81,9 @@ const IDS = {
   // The event link: GDQx 2026 (3) has no dates and no event, so Make an event now answers
   // "waiting for the schedule"; AGDQ 2027 (1) carries event 5, so Unlink reaches it.
   marathon_bare_id: '3',
+  // marathon-category-track: GDQueer (50) keeps its own clock and is re-timed in the seed, so
+  // Back to the sheet's times reaches it.
+  marathon_retimed_id: '50',
   // The archive: SGDQ 2026 (40) was moved by the sweep with Rivet as BaF, so the Archive list,
   // the read-only drawer, its People card and Restore all reach it.
   marathon_archived_id: '40',

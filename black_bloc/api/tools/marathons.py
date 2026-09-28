@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from ... import marathon as mt
 from ... import marathon_inbox as mi
 from ... import marathon_people as mt_people
+from ... import marathon_signals as sig
 from ...cogs.content.marathon import (
     add_next,
     change_link,
@@ -68,6 +69,7 @@ from ...cogs.content.marathon_people import (
 )
 from ...cogs.content.marathon_ping import set_ping_role
 from ...cogs.content.marathon_public import set_public_highlight
+from ...cogs.content.marathon_signals import sheet_times
 from ...cogs.content.marathon_spotlight import set_spotlight_mode
 from ...cogs.content.marathon_spotlight import state_for as spotlight_state_for
 from ...cogs.content.spotlight import channel_by_id
@@ -78,7 +80,7 @@ from ...marathon_events import MODE_WORDS, MODES
 from ...marathon_events import mode_of as event_mode_of
 from ...marathon_ping import pings_role
 from ...marathon_public import highlights
-from ...marathon_sources import SOURCE_WORDS, schedule_page
+from ...marathon_sources import SOURCE_WORDS, retimes_itself, schedule_page
 from ...marathon_spotlight import mode_of as spotlight_mode_of
 from ...settings_store import (
     MARATHON_FAR_POLL_HOURS_KEY,
@@ -103,6 +105,8 @@ STATE_WORDS = {
 }
 BECAUSE_WORDS = {
     mt.BY_TITLE: "the stream's title",
+    mt.BY_CATEGORY: "the stream's Twitch category",
+    mt.BY_BOTH: "the stream's title and Twitch category",
     mt.BY_SCHEDULE: "the schedule's clock",
     mt.BY_STAFF: "staff",
 }
@@ -182,6 +186,12 @@ def run_row(guild: Any, row: Any, statuses: dict[int, str] | None = None) -> dic
         "can_mark_live": mt.can_mark_live(row),
         "held": mt.held(row),
         "reminders_sent": mt.marks_of(row),
+        "sheet_at": mt._cell(row, "sheet_at") or row["scheduled_at"],
+        "retimed": sig.is_retimed(row),
+        "actual_started_at": mt._cell(row, "actual_started_at"),
+        "certain": sig.is_certain(row),
+        "twitch_category": mt._cell(row, "twitch_category"),
+        "no_category": sig.no_category(row),
     }
 
 
@@ -454,6 +464,8 @@ def build_router(bot: Any) -> APIRouter:
             "run_list": [run_row(guild, one, statuses) for one in runs],
             "pairings": [pairing_row(guild, one) for one in pairings],
             "unmatched": [],
+            "retimed_runs": 0,
+            "keeps_clock": False,
         }
 
     async def detail(guild: Any, marathon_id: Any) -> dict[str, Any]:
@@ -473,6 +485,8 @@ def build_router(bot: Any) -> APIRouter:
                 "run_list": [run_row(guild, one, statuses) for one in runs],
                 "pairings": pairings,
                 "unmatched": mt.unmatched_names(runs),
+                "retimed_runs": sig.retimed_count(runs),
+                "keeps_clock": not retimes_itself(row["source"]),
             }
             | await spotlight_of(bot, guild, row)
         )
@@ -772,6 +786,18 @@ def build_router(bot: Any) -> APIRouter:
                 ours=len([one for one in await runs_of(bot.db, row["id"]) if mt.is_ours(one)]),
             )
         }
+
+    @router.post("/{marathon_id}/sheet-times")
+    async def marathon_sheet_times(request: Request, marathon_id: int) -> dict[str, Any]:
+        who = await writer(request)
+        guild = require_guild(bot)
+        require_db(bot)
+        require_cog(bot, COG, FEATURE)
+        row = await wanted(guild, marathon_id)
+        done = answered(
+            await sheet_times(bot, guild, actor_for(bot, who, guild), row, via=VIA_WEBSITE)
+        )
+        return await detail(guild, marathon_id) | {"message": done.message}
 
     @router.post("/{marathon_id}/next")
     async def marathon_next(request: Request, marathon_id: int) -> dict[str, Any]:

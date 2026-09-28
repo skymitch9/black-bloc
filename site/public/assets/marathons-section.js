@@ -166,6 +166,10 @@ const NEXT_NOT_YET = '{marathon} is over. Black Bloc has not looked up the next 
 const NEXT_NOTE = 'Staff decide: nothing is added until someone presses **Add it**. It is read '
   + 'from the tracker link and airs on this marathon’s channel.';
 const HELD_NOTE = 'held by staff';
+const CERTAIN_NOTE = 'certain';
+const CERTAIN_HELP = 'The stream’s title and its Twitch category both name this run.';
+const SHEET_SAID = ' · sheet said {time}';
+const SHEET_TIMES_ACTION = 'Back to the sheet’s times';
 const EVENT_SELECT = 'Event';
 const EVENT_SELECT_HELP = 'No event by default. One event for the marathon goes into the events '
   + 'review above, dated from the schedule. An event per ' + BAF + ' run is approved at once and '
@@ -738,11 +742,15 @@ function slotRow(marathon, say, board, run, timeZone) {
       run.moved && run.previous_scheduled_at
         ? el('span', { class: 'cell-quiet', 'data-tone': 'warn', text: ` · moved from ${slotTime(run.previous_scheduled_at, timeZone)}` })
         : null,
+      run.retimed && run.sheet_at
+        ? el('span', { class: 'cell-quiet', text: SHEET_SAID.replace('{time}', slotTime(run.sheet_at, timeZone)) })
+        : null,
     ]),
     el('span', { class: 'mx-chips' }, people.map(slotChip)),
     el('span', { class: 'cell-kind' }, [
       badge(run.state_word, STATE_TONE[run.state] || null),
       run.held ? badge(HELD_NOTE, 'warn') : null,
+      run.certain ? el('span', { class: 'badge', 'data-tone': 'ok', title: CERTAIN_HELP, text: CERTAIN_NOTE }) : null,
       run.event_id ? badge(`event #${run.event_id}`, EVENT_TONE[run.event_status] || null) : null,
     ]),
   ]);
@@ -1009,6 +1017,7 @@ function moveBar(marathon, say) {
     ...trackButtons(marathon, say),
     marathon.inbox_message_url ? null : step(marathon, say, POST_NOW, () => send(`/api/marathons/${marathon.id}/inbox`, 'POST', {}), 'quiet'),
     marathon.active ? step(marathon, say, 'Read it now', () => send(`/api/marathons/${marathon.id}/refresh`, 'POST', {}), 'warn') : null,
+    marathon.retimed_runs ? step(marathon, say, SHEET_TIMES_ACTION, () => send(`/api/marathons/${marathon.id}/sheet-times`, 'POST', {}), 'quiet') : null,
     step(marathon, say, marathon.active ? 'Pause' : 'Resume', () => send(`/api/marathons/${marathon.id}`, 'PATCH', { active: !marathon.active }), null),
     button('Archive it', async () => {
       const sure = await ask({ title: `Archive ${marathon.name}?`, body: [ARCHIVE_BODY], confirmLabel: 'Archive it' });

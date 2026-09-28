@@ -4715,6 +4715,10 @@ MARATHON_FAR_POLL_HOURS_KEY = "marathon_far_poll_hours"
 MARATHON_LEAD_DAYS_KEY = "marathon_lead_days"
 MARATHON_MOVE_MINUTES_KEY = "marathon_move_minutes"
 MARATHON_TITLE_CONFIRMS_KEY = "marathon_title_confirms"
+MARATHON_CATEGORY_CONFIRMS_KEY = "marathon_category_confirms"
+MARATHON_RETRO_CATEGORY_KEY = "marathon_retro_category"
+MARATHON_RETRO_CATEGORY = "Retro"
+MARATHON_RETRO_LENGTH = 60
 MARATHON_LATE_GRACE_KEY = "marathon_late_grace_minutes"
 MARATHON_MATCH_HOSTS_KEY = "marathon_match_hosts"
 MARATHON_SCAN_HOSTS_DEFAULT_KEY = "marathon_scan_hosts_default"
@@ -4971,6 +4975,11 @@ MARATHON_BAD_SHOWS = (
     "as the Show column spells them, up to {longest} characters each, separated by commas — for "
     "example `GDQueer`. To stop the Hotfix feed, pause it instead."
 )
+MARATHON_BAD_RETRO = (
+    "**{given}** is not a Twitch category name, so nothing was changed. Write the category a run "
+    "with no category of its own is played under, up to {longest} characters — for example "
+    "`Retro`."
+)
 MARATHON_BAD_MARKS = (
     "**{given}** is not a list Black Bloc can remind on, so nothing was changed. Write one to "
     "{most} whole numbers of minutes between 1 and {limit}, separated by commas — for example "
@@ -5018,8 +5027,21 @@ MARATHON_SETTINGS: dict[str, tuple[str, Any, str]] = {
     MARATHON_TITLE_CONFIRMS_KEY: (
         "bool",
         True,
-        "whether the marathon channel's live title and game decide which run is on now. on by "
-        "default; off goes by the schedule's clock alone",
+        "whether the marathon channel's live title decides which run is on now. on by default; "
+        "with this and marathon_category_confirms off the schedule's clock decides alone",
+    ),
+    MARATHON_CATEGORY_CONFIRMS_KEY: (
+        "bool",
+        True,
+        "whether the marathon channel's Twitch category decides which run is on now, beside the "
+        "title — both on one run is certain, and a direct category wins when they disagree. on "
+        "by default",
+    ),
+    MARATHON_RETRO_CATEGORY_KEY: (
+        "text",
+        MARATHON_RETRO_CATEGORY,
+        "the Twitch category a run with no category of its own is played under — the channel "
+        "in this category stands for such a run. `Retro` by default; capitals do not matter",
     ),
     MARATHON_LATE_GRACE_KEY: (
         "int",
@@ -6220,6 +6242,16 @@ def checked_marks(given: Any) -> str:
     return ", ".join(str(one) for one in sorted(set(found), reverse=True))
 
 
+def checked_retro(given: Any) -> str:
+    """One Twitch category name, trimmed, never blank."""
+    text = " ".join(str(given or "").split())
+    if not text or len(text) > MARATHON_RETRO_LENGTH:
+        raise SettingError(
+            MARATHON_BAD_RETRO.format(given=text[:40] or "Nothing", longest=MARATHON_RETRO_LENGTH)
+        )
+    return text
+
+
 def checked_shows(given: Any) -> str:
     """One to twenty show names, each once whatever its capitals, trimmed."""
     text = str(given or "").strip()
@@ -6274,6 +6306,7 @@ KEY_MIN.update({key: floor for key, (floor, _) in MARATHON_RANGES.items()})
 KEY_MAX.update({key: ceiling for key, (_, ceiling) in MARATHON_RANGES.items()})
 TEXT_CHECKS[MARATHON_REMINDER_MINUTES_KEY] = checked_marks
 TEXT_CHECKS[MARATHON_HOTFIX_SHOWS_KEY] = checked_shows
+TEXT_CHECKS[MARATHON_RETRO_CATEGORY_KEY] = checked_retro
 TEXT_CHECKS.update(
     {key: checked_marathon(fields) for key, (_, fields, _) in MARATHON_WORDS.items()}
 )

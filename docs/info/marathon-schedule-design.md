@@ -120,6 +120,18 @@ the owner sets GDQ's ping mode to *During events* once, and every marathon staff
 
 ## C. Live, late, and out of order — the two signals
 
+> 🔨 **2026-09-28 — a THIRD signal and a kept clock (branch `marathon-category-track`, NOT merged; design
+> [`marathon-category-track-design.md`](marathon-category-track-design.md)).** Checklist 35: this section still
+> describes Signals 1 and 2 as built, but (a) **Signal 3, the stream's Twitch category** (`marathon_category_confirms`,
+> bool, true) now decides beside the title — each run's category looked up once, `marathon_retro_category` (`Retro`)
+> standing for runs Twitch has no category for, title + category on one run = `live_because: title+category`
+> (*certain*), a direct category trusted over the title when they disagree (`marathon.signals_disagree`); (b) the
+> stream-category match described below as part of Signal 2 (*"the stream's category equal to the run's Twitch
+> game"*) **moved into Signal 3** — the title signal is the title alone now; (c) **"Signal 1 … the GDQ tracker re-times
+> every later run" is not true of every source**: for a source that does not re-time itself (`gdq_hotfix`), a run the
+> stream shows starting anchors the clock and every later run of its day is re-timed from it; `scheduled_at` is the
+> kept time and the sheet's own time is `sheet_at`. Staff **Back to the sheet's times** undoes it.
+
 **Signal 1, the schedule.** The re-fetch is what tracks an official delay: the GDQ tracker re-times every later run
 as the day slips, so a 30-minute re-read is a schedule that is at most 30 minutes wrong.
 

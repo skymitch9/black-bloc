@@ -32,6 +32,7 @@ from black_bloc.cogs.content.spotlight import (
     open_sessions,
     read_dates,
     recent_sessions,
+    refresh_session_info,
     remove_ping_window,
     render_spotlight,
     run_spotlight_move,
@@ -750,6 +751,26 @@ async def test_a_poll_with_a_new_game_re_words_the_pinned_announcement_at_once(b
     assert said["message_id"] == str(announcement.id)
     assert said["embed"]["image"] == "hk-art"
     assert (await open_session(bot.db, row["id"]))["game"] == "Hollow Knight"
+
+
+async def test_the_poll_keeps_the_streams_category_id_beside_its_title_and_game(bot, cog):
+    """The marathon's third signal reads the category id the same five-minute poll writes."""
+    row, helix = await a_live_session(bot, cog)
+    session = await open_session(bot.db, row["id"])
+    assert (session["title"], session["game"], session["game_id"]) == ("AGDQ 2027", "Celeste", "1")
+    helix.streams = [twitch_stream(game="Retro", title="GDQueer - Kirby", game_id="27284")]
+    helix.games = [TwitchGame("27284", "Retro", "retro-art")]
+
+    await cog.poll_once()
+
+    session = await open_session(bot.db, row["id"])
+    assert (session["title"], session["game"], session["game_id"]) == (
+        "GDQueer - Kirby",
+        "Retro",
+        "27284",
+    )
+    await refresh_session_info(bot.db, session["id"], "Hollow Knight", None)
+    assert (await open_session(bot.db, row["id"]))["game_id"] is None
 
 
 async def test_a_poll_with_the_same_game_edits_nothing_and_logs_nothing(bot, cog):

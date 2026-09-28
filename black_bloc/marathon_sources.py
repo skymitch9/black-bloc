@@ -30,6 +30,15 @@ SOURCE_WORDS = {
     LADYARCADERS: "Lady Arcaders",
     GDQ_HOTFIX: "GDQ Hotfix",
 }
+RETIMES_ITSELF = {
+    GDQ: True,
+    RPGLB: True,
+    HORARO: True,
+    OENGUS: True,
+    FASTESTFURS: True,
+    LADYARCADERS: True,
+    GDQ_HOTFIX: False,
+}
 SITE_WORDS = {
     GDQ: "the GDQ tracker",
     RPGLB: "the RPG Limit Break tracker",
@@ -871,3 +880,8 @@ __all__ = [
     "unlinked",
     "utc_iso",
 ]
+
+
+def retimes_itself(source: Any) -> bool:
+    """A source that re-times later runs itself; for the rest Black Bloc keeps the clock."""
+    return RETIMES_ITSELF.get(str(source or ""), True)

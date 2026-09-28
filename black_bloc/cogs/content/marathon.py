@@ -16,6 +16,7 @@ from ... import marathon_events as me
 from ... import marathon_feeds as mfeeds
 from ... import marathon_inbox as mi
 from ... import marathon_ping as mp
+from ... import marathon_signals as sig
 from ... import marathon_spotlight as ms
 from ... import pings
 from ... import shadow as shadow_home
@@ -110,12 +111,12 @@ from ...settings_store import (
     MARATHON_SCAN_HOSTS_DEFAULT_KEY,
     MARATHON_SHOUT_WHEN_RUN_HAS_EVENT_KEY,
     MARATHON_SUGGEST_NEXT_KEY,
-    MARATHON_TITLE_CONFIRMS_KEY,
     MARATHON_UNKNOWN_SITE_KEY,
     MARATHON_WINDOW_SLACK_KEY,
     MARATHON_WORDS,
 )
 from ...timezones import unix
+from . import marathon_signals as signals
 from .spotlight import channel_by_id, channel_by_login, open_session, windows_for
 
 log = logging.getLogger(__name__)
@@ -386,6 +387,13 @@ RUN_COLUMNS = {
     "public_message_id",
     "public_channel_id",
     "public_removed",
+    "sheet_at",
+    "sheet_ends_at",
+    "actual_started_at",
+    "actual_ended_at",
+    "twitch_game_id",
+    "twitch_category",
+    "twitch_looked_at",
 }
 
 
@@ -1023,6 +1031,9 @@ async def mark_done(
                 409,
             )
         await cog.finish(guild, marathon, row, because=mt.BY_STAFF, actor=actor, via=via)
+        if row["state"] == mt.LIVE:
+            await update_run(bot.db, row["id"], actual_ended_at=cog.clock().isoformat())
+            await signals.retime(cog, guild, marathon, because=mt.BY_STAFF)
         await cog.sync_board(guild, await get_marathon(bot.db, guild.id, marathon["id"]))
     return Outcome(True, mt.MARKED_DONE.format(game=row["game"]))
 
@@ -1180,7 +1191,10 @@ async def mark_upcoming(
             live_at=None,
             done_at=None,
             live_because=mt.BY_STAFF,
+            actual_started_at=None,
+            actual_ended_at=None,
         )
+        await signals.retime(cog, guild, marathon, because=mt.BY_STAFF)
         await log_action(
             bot,
             guild,
@@ -1217,7 +1231,10 @@ async def mark_live(
             live_at=cog.clock().isoformat(),
             done_at=None,
             live_because=mt.BY_STAFF,
+            actual_started_at=cog.clock().isoformat(),
+            actual_ended_at=None,
         )
+        await signals.retime(cog, guild, marathon, because=mt.BY_STAFF)
         await log_action(
             bot,
             guild,
@@ -1686,6 +1703,7 @@ class Marathons(commands.Cog):
             return
         await self.follow_spotlight(guild, marathon["id"])
         if mt.is_near(marathon, now, lead_days=int(store.get(guild.id, MARATHON_LEAD_DAYS_KEY))):
+            await signals.resolve_categories(self, guild, marathon)
             await self.follow(guild, marathon)
         await self.maybe_suggest(guild, marathon["id"])
 
@@ -1964,6 +1982,7 @@ class Marathons(commands.Cog):
         stamp = now.isoformat()
         if changed:
             counts = await self._write_plan(guild, marathon, plan, now) | {"runs": len(runs)}
+            await signals.retime(self, guild, marathon, because="schedule_read")
         starts, ends = mt.span(runs)
         await update_marathon(
             db,
@@ -2051,8 +2070,8 @@ class Marathons(commands.Cog):
             await db.conn.execute(
                 "INSERT INTO marathon_runs(marathon_id, external_id, order_no, game, "
                 "display_name, twitch_game, category, runners_text, people, scheduled_at, "
-                "ends_at, run_seconds, first_seen_at, last_seen_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "ends_at, run_seconds, first_seen_at, last_seen_at, sheet_at, sheet_ends_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     int(marathon["id"]),
                     run.external_id,
@@ -2068,6 +2087,8 @@ class Marathons(commands.Cog):
                     run.run_seconds,
                     stamp,
                     stamp,
+                    run.starts_at,
+                    run.ends_at,
                 ),
             )
         await db.conn.commit()
@@ -2082,9 +2103,17 @@ class Marathons(commands.Cog):
                 "people": json.dumps(_merged_people(row, run)),
                 "scheduled_at": run.starts_at,
                 "ends_at": run.ends_at,
+                "sheet_at": run.starts_at,
+                "sheet_ends_at": run.ends_at,
                 "run_seconds": run.run_seconds,
                 "last_seen_at": stamp,
             }
+            if (row["game"], row["display_name"], row["twitch_game"]) != (
+                run.game,
+                run.display_name,
+                run.twitch_game,
+            ):
+                fields |= dict.fromkeys(("twitch_game_id", "twitch_category", "twitch_looked_at"))
             if row["state"] == mt.DROPPED:
                 fields["state"] = mt.UPCOMING
             if moved:
@@ -2271,25 +2300,34 @@ class Marathons(commands.Cog):
         store = self.bot.store
         rows = await runs_of(self.bot.db, marathon["id"])
         session = None
-        if marathon["spotlight_id"] and store.get(guild.id, MARATHON_TITLE_CONFIRMS_KEY):
+        if marathon["spotlight_id"] and signals.watching(self.bot, guild.id):
             if await channel_by_id(self.bot.db, int(marathon["spotlight_id"])) is not None:
                 session = await open_session(self.bot.db, int(marathon["spotlight_id"]))
-        hit = (
-            mt.title_hit(_cell(session, "title"), _cell(session, "game"), rows, now)
+        verdict = (
+            await signals.verdict_of(self, guild, marathon, session, rows, now)
             if session is not None
             else None
         )
         changes = mt.advance(
             rows,
             now,
-            hit=hit,
+            hit=verdict.row if verdict is not None else None,
             watching=session is not None,
             grace_minutes=int(store.get(guild.id, MARATHON_LATE_GRACE_KEY)),
+            because=verdict.because if verdict is not None else mt.BY_TITLE,
         )
         touched = False
+        anchored = False
         for change in changes:
             ours = mt.is_ours(change.row)
             touched = touched or ours
+            if change.to == mt.LIVE and change.confirmed:
+                fields: dict[str, Any] = {"live_because": change.because}
+                if not change.row["actual_started_at"]:
+                    fields |= {"actual_started_at": now.isoformat(), "actual_ended_at": None}
+                    anchored = True
+                await update_run(self.bot.db, change.row["id"], **fields)
+                continue
             if change.to == mt.LIVE:
                 await update_run(
                     self.bot.db,
@@ -2298,6 +2336,9 @@ class Marathons(commands.Cog):
                     live_at=now.isoformat(),
                     live_because=change.because,
                 )
+                if change.because in mt.BY_STREAM:
+                    await signals.anchor(self.bot.db, change.row, now)
+                    anchored = True
                 if not ours:
                     continue
                 await log_action(
@@ -2322,6 +2363,8 @@ class Marathons(commands.Cog):
                 )
                 continue
             await self.finish(guild, marathon, change.row, because=change.because, quiet=not ours)
+        if anchored:
+            await signals.retime(self, guild, marathon, because="stream")
         return touched
 
     def run_details(self, marathon: Any, row: Any) -> dict[str, Any]:
@@ -3353,7 +3396,12 @@ async def build_schedule(bot: Any, guild: Any, marathon_id: Any) -> tuple[Any, A
         title=row["name"], description=clamped(await schedule_lines(bot, guild, row))
     )
     view = MarathonPanel(minutes_for(bot, guild.id), SCHEDULE_VIEW, row["id"])
-    add_moves(view, mi.schedule_moves(row))
+    moved = sig.retimed_count(await runs_of(bot.db, row["id"]))
+    if moved:
+        embed.description = clamped(
+            [embed.description or "", sig.RETIMED_LINE.format(count=moved)]
+        )
+    add_moves(view, ((sig.SHEET_TIMES_MOVE,) if moved else ()) + mi.schedule_moves(row))
     return (embed, view)
 
 
@@ -3561,6 +3609,8 @@ class MarathonMoveButton(discord.ui.Button):
             await open_next(interaction, view.marathon_id, view)
         elif action == mt.SCHEDULE:
             await open_schedule(interaction, view.marathon_id, view)
+        elif action == sig.SHEET_TIMES:
+            await run_move(interaction, view, signals.sheet_times, back=back_to_schedule)
         elif action == mi.POST_NOW:
             from .marathon_inbox import post_now
 
