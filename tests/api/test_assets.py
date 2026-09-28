@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from black_bloc import __version__
 from black_bloc.api.assets import build_id, stamp
 
@@ -16,23 +18,21 @@ def test_the_build_id_carries_the_version(tmp_path):
     assert build_id(site(tmp_path)).startswith(f"{__version__}-")
 
 
-def test_the_build_id_changes_when_an_asset_changes(tmp_path):
+@pytest.mark.parametrize(
+    ("name", "text"),
+    [("site.css", "body{color:red}"), ("extra.js", "")],
+    ids=["an-asset-changes", "an-asset-is-added"],
+)
+def test_the_build_id_changes_when_the_assets_do(tmp_path, name, text):
     root = site(tmp_path)
     before = build_id(root)
-    (root / "assets" / "site.css").write_text("body{color:red}", encoding="utf-8")
+    (root / "assets" / name).write_text(text, encoding="utf-8")
     assert build_id(root) != before
 
 
 def test_the_build_id_is_the_same_when_nothing_changed(tmp_path):
     root = site(tmp_path)
     assert build_id(root) == build_id(root)
-
-
-def test_the_build_id_changes_when_an_asset_is_added(tmp_path):
-    root = site(tmp_path)
-    before = build_id(root)
-    (root / "assets" / "extra.js").write_text("", encoding="utf-8")
-    assert build_id(root) != before
 
 
 def test_stamp_puts_the_build_id_on_every_asset_url():

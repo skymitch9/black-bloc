@@ -109,9 +109,9 @@ def test_the_cache_cannot_grow_without_bound():
     for n in range(25):
         cache.put(str(n), True, now=0)
 
-    assert len(cache._seen) == 10
-    assert cache.get("0", now=0) is None
-    assert cache.get("24", now=0) is True
+    kept = [str(n) for n in range(25) if cache.get(str(n), now=0) is True]
+
+    assert kept == [str(n) for n in range(15, 25)]
 
 
 def test_every_session_id_is_its_own():
